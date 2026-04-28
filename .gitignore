@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.env
+.envrc
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Atomistic / ML artifacts
+*.traj
+*.vasp
+*.cif
+*.xyz
+*.pk
+*.pt
+*.ckpt
+*_optimization.csv
+multidataset_hpo-*/
+mlp_branch_weights.pt
+runs/
+outputs/
+logs/
+
+# Vendored third-party clones (bootstrapped by scripts/setup_env.sh)
+third_party/
+/tmp/
