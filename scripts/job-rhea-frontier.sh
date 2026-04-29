@@ -40,6 +40,12 @@ export https_proxy=http://proxy.ccs.ornl.gov:3128/
 export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
 
 # ── modules & conda env ──────────────────────────────────────────────────────
+# Initialize conda shell functions BEFORE module reset.
+# lmod's miniforge3 module runs 'source activate base' on both load and
+# unload; without conda init the 'activate' function is undefined and the
+# batch job fails immediately with "activate: No such file or directory".
+source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
+
 module reset
 ml cpe/24.07
 ml rocm/7.1.1
