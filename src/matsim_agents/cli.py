@@ -94,7 +94,7 @@ def chat(
     mlp_device: str = typer.Option("cuda", help="Device for the auxiliary MLP (cuda|cpu)."),
     precision: str | None = typer.Option(None, help="HydraGNN precision override."),
     mlp_precision: str | None = typer.Option(None, help="MLP precision override."),
-    optimizer: str = typer.Option("FIRE", help="ASE optimizer for relaxations."),
+    optimizer: str = typer.Option("FIRE", "--ase-structure-optimizer", help="ASE structure optimizer for relaxations."),
     maxiter: int = typer.Option(200, help="Max relaxation steps per phase."),
     fmax: float = typer.Option(0.02, help="Stop relaxation when max force < fmax (eV/Å)."),
     min_atoms: int = typer.Option(32, help="Auto-tile each prototype to at least this many atoms."),
