@@ -57,6 +57,7 @@ export MIOPEN_DISABLE_CACHE=1
 export MIOPEN_USER_DB_PATH=/tmp/miopen-$SLURM_JOB_ID
 mkdir -p "$MIOPEN_USER_DB_PATH"
 export PYTHONNOUSERSITE=1
+export PYTHONUNBUFFERED=1   # flush vLLM / matsim-agents output immediately
 
 # ── vLLM server ──────────────────────────────────────────────────────────────
 VLLM_PORT=8000
