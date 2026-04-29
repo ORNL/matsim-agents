@@ -3,10 +3,9 @@
 #SBATCH -J matsim-rhea
 #SBATCH -o /lustre/orion/mat746/proj-shared/runs/rhea-%j/job-%j.out
 #SBATCH -e /lustre/orion/mat746/proj-shared/runs/rhea-%j/job-%j.out
-#SBATCH -t 00:30:00
+#SBATCH -t 02:00:00
 #SBATCH -N 1
 #SBATCH -p batch
-#SBATCH -q debug
 # ---------------------------------------------------------------------------
 # matsim-agents: RHEA discovery run on Frontier (1 node, 8 GCDs)
 #
@@ -80,10 +79,11 @@ echo "[$(date)] vLLM PID: $VLLM_PID"
 # Kill vLLM on script exit (normal or error)
 trap 'echo "[$(date)] Killing vLLM (PID $VLLM_PID)"; kill $VLLM_PID 2>/dev/null; wait $VLLM_PID 2>/dev/null' EXIT
 
-# ── wait for vLLM to be ready (up to 10 min) ────────────────────────────────
+# ── wait for vLLM to be ready (up to 20 min) ────────────────────────────────
+# Loading 133 GB Qwen2.5-72B from Lustre onto 8 GCDs takes ~15 min.
 echo "[$(date)] Waiting for vLLM server on port $VLLM_PORT ..."
 READY=0
-for i in $(seq 1 120); do
+for i in $(seq 1 240); do
     if curl -fsS --max-time 3 "http://localhost:${VLLM_PORT}/health" > /dev/null 2>&1; then
         echo "[$(date)] vLLM server is ready (attempt $i)."
         READY=1
@@ -92,7 +92,7 @@ for i in $(seq 1 120); do
     sleep 5
 done
 if [[ $READY -eq 0 ]]; then
-    echo "[$(date)] ERROR: vLLM server did not start within 10 minutes. Check $VLLM_LOG"
+    echo "[$(date)] ERROR: vLLM server did not start within 20 minutes. Check $VLLM_LOG"
     exit 1
 fi
 
