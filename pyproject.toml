@@ -8,13 +8,13 @@ version = "0.1.0"
 description = "Multi-agent AI framework for atomistic materials simulation and discovery."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { text = "BSD-3-Clause" }
 authors = [{ name = "ORNL Multi-Agentic AI for Materials" }]
 keywords = ["agents", "langgraph", "materials", "atomistic", "hydragnn", "ase", "mlff"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Physics",
