@@ -72,14 +72,18 @@ VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
 
 echo "[$(date)] Starting vLLM server (tensor-parallel-size=8) ..."
-python -m vllm.entrypoints.openai.api_server \
-    --model "$MODEL_DIR" \
-    --served-model-name Qwen/Qwen2.5-72B-Instruct \
-    --tensor-parallel-size 8 \
-    --dtype bfloat16 \
-    --max-model-len 8192 \
-    --port $VLLM_PORT \
-    --host 0.0.0.0 \
+# On Frontier compute nodes GPU access requires srun; launching python directly
+# causes HIP/ROCm to hang silently.  Use --ntasks=1 --gpus=8 so all 8 GCDs on
+# the node are visible, and --gpu-bind=closest for locality.
+srun --ntasks=1 --gpus=8 --gpu-bind=closest \
+    python -m vllm.entrypoints.openai.api_server \
+        --model "$MODEL_DIR" \
+        --served-model-name Qwen/Qwen2.5-72B-Instruct \
+        --tensor-parallel-size 8 \
+        --dtype bfloat16 \
+        --max-model-len 8192 \
+        --port $VLLM_PORT \
+        --host 0.0.0.0 \
     > "$VLLM_LOG" 2>&1 &
 
 VLLM_PID=$!
