@@ -21,16 +21,18 @@ in via the same interfaces.
 1. [Architecture](#architecture)
 2. [Installation](#installation)
 3. [LLM backends](#llm-backends)
-4. [Quick start](#quick-start)
-5. [The agent graph](#the-agent-graph)
-6. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
-7. [Programmatic API](#programmatic-api)
-8. [CLI reference](#cli-reference)
-9. [Project layout](#project-layout)
-10. [Configuration reference](#configuration-reference)
-11. [Limitations and roadmap](#limitations-and-roadmap)
-12. [Contributing](#contributing)
-13. [License & citation](#license--citation)
+4. [Downloading models for vLLM](#downloading-models-for-vllm)
+5. [Quick start](#quick-start)
+5. [Quick start](#quick-start)
+6. [The agent graph](#the-agent-graph)
+7. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
+8. [Programmatic API](#programmatic-api)
+9. [CLI reference](#cli-reference)
+10. [Project layout](#project-layout)
+11. [Configuration reference](#configuration-reference)
+12. [Limitations and roadmap](#limitations-and-roadmap)
+13. [Contributing](#contributing)
+14. [License & citation](#license--citation)
 
 ---
 
@@ -155,6 +157,22 @@ code. Local/open-source backends are the default.
 | **`vllm`** | Run a vLLM server (`vllm serve <model> --port 8000`) | `meta-llama/Llama-3.1-8B-Instruct` | OpenAI-compatible; great for HPC. |
 | **`openai`** | `pip install matsim-agents[openai]` | `gpt-4o-mini` | Hosted. Set `OPENAI_API_KEY`. |
 | **`anthropic`** | `pip install matsim-agents[anthropic]` | `claude-3-5-sonnet-latest` | Hosted. Set `ANTHROPIC_API_KEY`. |
+
+### Downloading models for vLLM
+
+For the vLLM backend you need to download the model weights locally before
+starting the server. The recommended model for matsim-agents on HPC is
+`Qwen/Qwen2.5-72B-Instruct`. A quick one-liner using the `hf` CLI that ships
+with `huggingface_hub>=1.12`:
+
+```bash
+hf download Qwen/Qwen2.5-72B-Instruct \
+    --local-dir /path/to/models/Qwen2.5-72B-Instruct
+```
+
+For detailed instructions — including Frontier-specific steps, running the
+download as a background job, and resuming interrupted downloads — see
+[docs/model-download.md](docs/model-download.md).
 
 Configuration knobs:
 
