@@ -68,11 +68,25 @@ mkdir -p "$CACHE_DIR" "$PROJ/runs"
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 module reset
 ml cpe/24.07 rocm/7.1.1 amd-mixed/7.1.1 PrgEnv-gnu miniforge3/23.11.0-0
+# Cray's PrgEnv-gnu loads gcc-native/13.2 but ONLY exposes Cray's `cc`/`CC`
+# wrappers. The actual `gcc`/`g++` 13.3 binaries live in the gcc-native
+# module's bin dir, which is NOT in PATH after PrgEnv-gnu alone. Loading
+# `gcc-native` explicitly puts /opt/cray/pe/gcc-native/13/bin first in PATH,
+# overriding the SLES system /usr/bin/gcc (GCC 7.5) which PyTorch rejects.
+ml gcc-native
 module unload darshan-runtime
 source activate "$VENV"
 
 # torch's cpp_extension.include_paths() demands CUDA_HOME, even for ROCm.
 export CUDA_HOME="${ROCM_PATH:-/opt/rocm-7.1.1}"
+
+# Force the build to use Cray's gcc-native (GCC 13.3, satisfies PyTorch's
+# >=9 requirement). After `ml gcc-native`, `which g++` returns the Cray path.
+export CC="$(which gcc)"
+export CXX="$(which g++)"
+echo "Using CC=$CC"
+echo "Using CXX=$CXX"
+"$CXX" --version | head -1
 
 # CRITICAL: prevent tvm_ffi from auto-spawning its OWN build at import time.
 # `python -m tvm_ffi.utils._build_optional_torch_c_dlpack` triggers
