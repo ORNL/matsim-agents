@@ -3,9 +3,10 @@
 #SBATCH -J matsim-rhea
 #SBATCH -o /lustre/orion/mat746/proj-shared/runs/rhea-%j/job-%j.out
 #SBATCH -e /lustre/orion/mat746/proj-shared/runs/rhea-%j/job-%j.out
-#SBATCH -t 02:00:00
+#SBATCH -t 00:30:00
 #SBATCH -N 1
 #SBATCH -p batch
+#SBATCH -q debug
 # ---------------------------------------------------------------------------
 # matsim-agents: RHEA discovery run on Frontier (1 node, 8 GCDs)
 #
