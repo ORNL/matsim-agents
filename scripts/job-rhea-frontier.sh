@@ -74,6 +74,11 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 
+# Use the project-shared, prebuilt tvm-ffi torch<->DLPack ROCm bridge.
+# Built once by install_matsim_frontier.sh; skips a ~5 min on-the-fly compile
+# the first time vLLM imports tvm_ffi on a compute node.
+export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
+
 # ── vLLM server ──────────────────────────────────────────────────────────────
 VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
@@ -134,7 +139,7 @@ echo "$QUERY" | matsim-agents chat \
     --llm-provider    vllm \
     --llm-model       Qwen/Qwen2.5-72B-Instruct \
     --llm-base-url    "http://localhost:${VLLM_PORT}/v1" \
-    --optimizer       FIRE \
+    --ase-structure-optimizer FIRE \
     --maxiter         500 \
     --fmax            0.02 \
     --min-atoms       64 \

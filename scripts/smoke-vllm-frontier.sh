@@ -44,6 +44,10 @@ export MIOPEN_DISABLE_CACHE=1
 export MIOPEN_USER_DB_PATH=/tmp/miopen-${SLURM_JOB_ID:-local}
 mkdir -p "$MIOPEN_USER_DB_PATH"
 
+# Use the project-shared, prebuilt tvm-ffi torch<->DLPack ROCm bridge.
+# Built once by install_matsim_frontier.sh; skips a ~5 min on-the-fly compile.
+export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
+
 VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
 
