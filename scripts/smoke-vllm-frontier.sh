@@ -30,9 +30,8 @@ mkdir -p "$RUN_DIR"
 
 # ── conda + modules ─────────────────────────────────────────────────────────
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
-module reset
-ml cpe/24.07 rocm/7.1.1 amd-mixed/7.1.1 PrgEnv-gnu miniforge3/23.11.0-0
-module unload darshan-runtime
+source "$PROJ/matsim-agents/scripts/frontier-module-stack.sh"
+load_frontier_rocm_modules
 source activate "$VENV"
 
 export PYTHONUNBUFFERED=1

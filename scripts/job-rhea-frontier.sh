@@ -46,13 +46,8 @@ export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
 # batch job fails immediately with "activate: No such file or directory".
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 
-module reset
-ml cpe/24.07
-ml rocm/7.1.1
-ml amd-mixed/7.1.1
-ml PrgEnv-gnu
-ml miniforge3/23.11.0-0
-module unload darshan-runtime        # avoids ADIOS2 / darshan conflicts
+source "$PROJ/matsim-agents/scripts/frontier-module-stack.sh"
+load_frontier_rocm_modules
 
 source activate "$VENV"
 
