@@ -48,11 +48,18 @@ mkdir -p "$MIOPEN_USER_DB_PATH"
 # Instead, point VLLM_CUDART_SO_PATH so flashinfer can find the HIP runtime.
 export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 
-# Force vLLM to use the system RCCL (ROCm 7.1.1, compiled for gfx90a) instead
-# of the PyTorch-bundled librccl.so whose arch support may differ. PyTorch
-# prepends its lib dir to LD_LIBRARY_PATH, which can cause the wrong librccl
-# to be loaded → HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION in ncclDevKernel.
-export VLLM_NCCL_SO_PATH=/opt/rocm-7.1.1/lib/librccl.so.1
+# Run C: use PyTorch-bundled RCCL instead of system RCCL.
+# Runs A & B with system RCCL (/opt/rocm-7.1.1/lib/librccl.so.1) both crashed
+# with HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION in ncclDevKernel_Generic_4 — env-var
+# fixes had no effect, suggesting the system RCCL fat binary for gfx90a has a
+# code-gen issue. The PyTorch-bundled librccl is built against the same HIP stack
+# as torch itself and may have a different (working) gfx90a code object.
+# Per ROCm/pytorch FAQ: prepend torch lib dir so the loader picks bundled libs
+# before any /opt/rocm path that might shadow them.
+# VLLM_NCCL_SO_PATH is intentionally unset — vLLM will auto-discover torch/lib/librccl.so.
+TORCH_LIB=$VENV/lib/python3.11/site-packages/torch/lib
+export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
+unset VLLM_NCCL_SO_PATH
 
 # RCCL env controls are documented in AMD RCCL env-variables docs.
 # IMPORTANT: ncclDevKernel_Generic_4 is an unroll variant, not proof of LL128.
