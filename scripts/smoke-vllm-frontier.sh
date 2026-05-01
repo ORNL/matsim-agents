@@ -87,11 +87,20 @@ export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 #           forcing it on large messages causes the LL kernel path in RCCL
 #           2.27.7 to misbehave on gfx90a → illegal instruction.
 #
-# Run E (job 4510276) — fix: switch to Simple protocol
+# Run E (job 4510276) — hypothesis: NCCL_PROTO=LL crashes on large messages
 #   Tried:  NCCL_PROTO=Simple, removed NCCL_ALGO=Ring pin
-#   Rationale: Simple uses direct DMA copies and is the correct protocol for
-#              large collective messages. RCCL auto-selects Ring for AllGather
-#              which is appropriate; no need to pin it explicitly.
+#   Result: FAILED — RCCL log confirmed Algo=RING proto=SIMPLE, but same
+#           illegal instruction in ncclDevKernel_Generic_4. Proto is irrelevant;
+#           the crash occurs regardless of LL or Simple.
+#   Why:    NCCL_P2P_DISABLE=1 + NCCL_SHM_DISABLE=1 forces RCCL away from
+#           xGMI (the native MI250X intra-node interconnect) and shared memory,
+#           falling back to NET/Socket for all intra-node collectives. That
+#           network kernel dispatch path is broken on Frontier gfx90a and causes
+#           the illegal instruction regardless of which protocol is pinned.
+#
+# Run F: remove NCCL_P2P_DISABLE and NCCL_SHM_DISABLE.
+#   Rationale: MI250X GCDs on a single node communicate via xGMI P2P — that
+#              is the native, well-tested path. Let RCCL use it.
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Use PyTorch-bundled RCCL (established in Run C; kept for consistency).
@@ -104,12 +113,11 @@ unset VLLM_NCCL_SO_PATH
 # kernel private scratch memory during RCCL collective init.
 export HSA_NO_SCRATCH_RECLAIM=1
 
-# Protocol fix (Run E): Simple is correct for large message AllGather on gfx90a.
-# Do NOT use NCCL_PROTO=LL — it crashes on messages > ~256 KB with RCCL 2.27.7.
+# Run F: let RCCL use xGMI P2P and SHM — the native intra-node paths on MI250X.
+# Do NOT set NCCL_P2P_DISABLE or NCCL_SHM_DISABLE; those force a NET/Socket
+# fallback that causes illegal instruction in ncclDevKernel_Generic_4.
 export NCCL_PROTO=Simple
 # NCCL_ALGO: unset — RCCL auto-selects Ring for AllGather (correct default).
-export NCCL_P2P_DISABLE=1
-export NCCL_SHM_DISABLE=1
 export NCCL_DEBUG=INFO
 export NCCL_DEBUG_SUBSYS=INIT,COLL,TUNING
 export RCCL_LOG_LEVEL=3
