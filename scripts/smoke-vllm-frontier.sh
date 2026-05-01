@@ -43,12 +43,9 @@ export MIOPEN_DISABLE_CACHE=1
 export MIOPEN_USER_DB_PATH=/tmp/miopen-${SLURM_JOB_ID:-local}
 mkdir -p "$MIOPEN_USER_DB_PATH"
 
-# flashinfer/comm/cuda_ipc.py instantiates CudaRTLibrary() at module-import
-# time (before torch loads in worker subprocs), so /proc/self/maps has neither
-# libcudart nor libamdhip64 yet.  LD_PRELOAD forces libamdhip64 into the maps
-# immediately on process start, satisfying both flashinfer and vLLM's check.
-# VLLM_CUDART_SO_PATH is kept as a belt-and-suspenders fallback.
-export LD_PRELOAD=/opt/rocm-7.1.1/lib/libamdhip64.so${LD_PRELOAD:+:${LD_PRELOAD}}
+# LD_PRELOAD of libamdhip64.so causes hipErrorInvalidKernelFile on Frontier
+# because it interferes with HIP fat binary extraction in RCCL worker processes.
+# Instead, point VLLM_CUDART_SO_PATH so flashinfer can find the HIP runtime.
 export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 
 # Use the project-shared, prebuilt tvm-ffi torch<->DLPack ROCm bridge.
