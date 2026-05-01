@@ -116,24 +116,36 @@ export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 #           LL/Simple → Generic_4 crash on AllGather; LL128 → no valid combo
 #           for fp32 AllReduce.
 #
-# Run H: unset NCCL_PROTO entirely.
-#   Rationale: Let RCCL auto-select the protocol per collective + datatype.
-#              The auto-tuner will avoid protocol/algo combos that don't work.
+# Run H (job 4510825) — hypothesis: RCCL auto-select avoids the broken kernel path
+#   Tried:  unset NCCL_PROTO (auto-select per collective + datatype)
+#   Result: FAILED — RCCL correctly auto-selected LL for small AllReduce (passed),
+#           then auto-selected RING+SIMPLE for 9.3MB AllGather → same crash in
+#           ncclDevKernel_Generic_4. RCCL always picks Simple for messages above
+#           the LL threshold (~8MB with 16 channels), and Simple always dispatches
+#           Generic_4. There is no way to avoid Generic_4 for large AllGather
+#           without using a different RCCL binary.
+#   Why:    ncclDevKernel_Generic_4 in RCCL 2.27.7-HEAD:84d2752 has a broken
+#           gfx90a code object. LL also dispatches Generic_4 for large messages,
+#           and LL128 is not supported for all collective+dtype combos.
+#           The only fix is a different RCCL build.
+#
+# Run I: use ROCm 7.2.0 RCCL (/opt/rocm-7.2.0/lib/librccl.so.1)
+#   Rationale: Frontier ships ROCm 7.2.0 alongside 7.1.1. The 7.2.0 RCCL may
+#              have fixed the gfx90a code-gen issue in ncclDevKernel_Generic_4.
+#              VLLM_NCCL_SO_PATH overrides vLLM's auto-discovery.
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Use PyTorch-bundled RCCL (established in Run C; kept for consistency).
-# VLLM_NCCL_SO_PATH is intentionally unset — vLLM auto-discovers torch/lib/librccl.so.
+# Use PyTorch-bundled RCCL path for LD_LIBRARY_PATH (keeps torch HIP deps aligned),
+# but override the RCCL itself to ROCm 7.2.0 via VLLM_NCCL_SO_PATH.
 TORCH_LIB=$VENV/lib/python3.11/site-packages/torch/lib
 export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
-unset VLLM_NCCL_SO_PATH
+export VLLM_NCCL_SO_PATH=/opt/rocm-7.2.0/lib/librccl.so.1
 
 # HSA scratch reclaim fix (established in Run D): prevents HSA from reclaiming
 # kernel private scratch memory during RCCL collective init.
 export HSA_NO_SCRATCH_RECLAIM=1
 
-# Run H: NCCL_PROTO unset — let RCCL auto-select protocol per collective + datatype.
-# Do NOT pin NCCL_PROTO: Simple/LL → Generic_4 crash; LL128 → no valid combo for fp32 AllReduce.
-# NCCL_ALGO: unset — RCCL auto-selects Ring for AllGather (correct default).
+# Run I: using ROCm 7.2.0 RCCL; NCCL_PROTO auto-selected.
 export NCCL_DEBUG=INFO
 export NCCL_DEBUG_SUBSYS=INIT,COLL,TUNING
 export RCCL_LOG_LEVEL=3
