@@ -58,6 +58,10 @@ export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
 # write temp files concurrently. Lustre handles this correctly.
 export VLLM_CACHE_ROOT=$PROJ/cache/vllm-cache
 export TRITON_CACHE_DIR=$PROJ/cache/vllm-cache/triton
+# Wipe any stale compiled kernels before each run. Past runs with wrong
+# HSA_OVERRIDE_GFX_VERSION=9.0.0 left gfx900 binaries in cache that cause
+# HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION on the actual gfx90a hardware.
+rm -rf "$VLLM_CACHE_ROOT"
 mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 
 # Ensure torch.compile / triton JIT targets the correct GPU architecture.
