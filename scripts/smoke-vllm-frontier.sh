@@ -65,8 +65,9 @@ mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 # cause HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION at runtime.
 export PYTORCH_ROCM_ARCH=gfx90a
 export ROCM_ARCH=gfx90a
-# HSA_OVERRIDE_GFX_VERSION forces ROCm to treat the GCD as gfx90a.
-export HSA_OVERRIDE_GFX_VERSION=9.0.0
+# Do NOT set HSA_OVERRIDE_GFX_VERSION. Frontier's MI250X already reports
+# gfx90a (major=9, minor=0, stepping=0xa=10). Setting it to 9.0.0 (gfx900)
+# causes RCCL to look for a non-existent gfx900 code object → hipErrorInvalidKernelFile.
 
 VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
