@@ -63,6 +63,14 @@ export VLLM_CACHE_ROOT=$PROJ/cache/vllm-cache
 export TRITON_CACHE_DIR=$PROJ/cache/vllm-cache/triton
 mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 
+# Ensure torch.compile / triton JIT targets the correct GPU architecture.
+# Without this, triton may auto-detect or compile for a wrong arch and
+# cause HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION at runtime.
+export PYTORCH_ROCM_ARCH=gfx90a
+export ROCM_ARCH=gfx90a
+# HSA_OVERRIDE_GFX_VERSION forces ROCm to treat the GCD as gfx90a.
+export HSA_OVERRIDE_GFX_VERSION=9.0.0
+
 VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
 
