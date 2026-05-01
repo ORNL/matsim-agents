@@ -51,7 +51,17 @@ export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 # Run C result: bundled RCCL also crashed with same _Generic_4 kernel.
 # Switching RCCL library had no effect → the problem is not library version.
 #
-# Run D: HSA_NO_SCRATCH_RECLAIM=1
+# Run D (job 4509240): HSA_NO_SCRATCH_RECLAIM=1
+# Result: FAILED — RCCL comm init now completed on all 8 ranks, but the first
+# AllGather (opCount 0, BF16, 4866048 elems ≈ 9.3 MB) still crashed with the
+# same _Generic_4 illegal instruction. Scratch reclaim was not the root cause.
+#
+# Run E: NCCL_PROTO=Simple (was LL).
+# Root cause identified: NCCL_PROTO=LL forces the Low-Latency protocol which
+# is designed for small messages (<~256 KB). Forcing LL on a 9.3 MB AllGather
+# causes the LL kernel path in RCCL 2.27.7 to misbehave on gfx90a → illegal
+# instruction in ncclDevKernel_Generic_4. Switching to Simple lets RCCL use
+# direct DMA copies, which is correct for large messages.
 # Every RCCL unit test in the official test suite sets this variable.
 # RCCL source (src/init.cc checkHsaEnvSetting) validates it at startup.
 # ncclDevKernel_Generic_4 uses private scratch memory for stack frames.
@@ -78,12 +88,12 @@ unset VLLM_NCCL_SO_PATH
 # IMPORTANT: ncclDevKernel_Generic_4 is an unroll variant, not proof of LL128.
 # Pin a conservative transport/protocol set for MI250X and enable logging so
 # job logs show the exact RCCL algo/proto decision per collective.
-export NCCL_PROTO=LL
-export NCCL_ALGO=Ring
+export NCCL_PROTO=Simple
+# NCCL_ALGO: leave unset — let RCCL auto-select (Ring is the default for AllGather anyway)
 export NCCL_P2P_DISABLE=1
 export NCCL_SHM_DISABLE=1
 export NCCL_DEBUG=INFO
-export NCCL_DEBUG_SUBSYS=INIT,COLL
+export NCCL_DEBUG_SUBSYS=INIT,COLL,TUNING
 export RCCL_LOG_LEVEL=3
 
 # Run A result: RCCL_UNROLL_FACTOR=0 had no effect — kernel still showed _Generic_4.
