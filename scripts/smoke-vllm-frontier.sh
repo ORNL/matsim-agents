@@ -80,27 +80,26 @@ export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 #           crashed during init). However, the first actual AllGather after init
 #           (opCount 0, BF16, 4866048 elems ≈ 9.3 MB) still crashed with the
 #           same _Generic_4 illegal instruction.
-#   Why:    HSA_NO_SCRATCH_RECLAIM fixed a secondary issue that was masking the
-#           real problem. With init now completing, the true root cause became
-#           visible: NCCL_PROTO=LL was forcing the Low-Latency protocol on a
-#           9.3 MB AllGather. LL is designed for small messages (<~256 KB);
-#           forcing it on large messages causes the LL kernel path in RCCL
-#           2.27.7 to misbehave on gfx90a → illegal instruction.
+#   Why:    HSA_NO_SCRATCH_RECLAIM fixed a secondary masking issue (init crash),
+#           revealing that the illegal instruction persists during the first real
+#           collective. The root cause was not yet identified at this point.
 #
 # Run E (job 4510276) — hypothesis: NCCL_PROTO=LL crashes on large messages
 #   Tried:  NCCL_PROTO=Simple, removed NCCL_ALGO=Ring pin
-#   Result: FAILED — RCCL log confirmed Algo=RING proto=SIMPLE, but same
-#           illegal instruction in ncclDevKernel_Generic_4. Proto is irrelevant;
-#           the crash occurs regardless of LL or Simple.
-#   Why:    NCCL_P2P_DISABLE=1 + NCCL_SHM_DISABLE=1 forces RCCL away from
-#           xGMI (the native MI250X intra-node interconnect) and shared memory,
-#           falling back to NET/Socket for all intra-node collectives. That
+#   Result: FAILED — RCCL log confirmed "Algo=RING proto=SIMPLE", but the same
+#           illegal instruction in ncclDevKernel_Generic_4 occurred immediately
+#           after. Protocol choice is irrelevant; the crash is transport-level.
+#   Why:    NCCL_P2P_DISABLE=1 + NCCL_SHM_DISABLE=1 was still set, which strips
+#           RCCL of both xGMI (native MI250X inter-GCD interconnect) and shared
+#           memory, forcing all intra-node collectives through NET/Socket. That
 #           network kernel dispatch path is broken on Frontier gfx90a and causes
-#           the illegal instruction regardless of which protocol is pinned.
+#           the illegal instruction regardless of protocol.
 #
-# Run F: remove NCCL_P2P_DISABLE and NCCL_SHM_DISABLE.
-#   Rationale: MI250X GCDs on a single node communicate via xGMI P2P — that
-#              is the native, well-tested path. Let RCCL use it.
+# Run F (job 4510596) — hypothesis: NET/Socket fallback (forced by P2P+SHM disable) is broken
+#   Tried:  removed NCCL_P2P_DISABLE and NCCL_SHM_DISABLE entirely
+#   Rationale: MI250X GCDs on a single Frontier node communicate via xGMI P2P,
+#              which is the native, well-tested intra-node path. Disabling it
+#              was never necessary and forced an unsupported code path.
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Use PyTorch-bundled RCCL (established in Run C; kept for consistency).
