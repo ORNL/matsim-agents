@@ -66,13 +66,19 @@ export NCCL_DEBUG=INFO
 export NCCL_DEBUG_SUBSYS=INIT,COLL
 export RCCL_LOG_LEVEL=3
 
-# Run A: RCCL_UNROLL_FACTOR=0 forces unroll-1 kernel variants (ncclDevKernel_Generic_1)
-# instead of the default unroll-4 (ncclDevKernel_Generic_4) for gfx90a.
-# The crash is in _Generic_4; lowering unroll reduces register pressure and
-# eliminates the ISA variant that triggers HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION.
-# Values: 0=unroll-1, 1=unroll-2, 2=unroll-4 (default for gfx90a with >80 CUs).
-# Source: ROCm/rccl src/rccl_wrap.cc commSetUnrollFactor()
+# Run A result: RCCL_UNROLL_FACTOR=0 had no effect — kernel still showed _Generic_4.
+# The system RCCL fat binary for gfx90a has the unroll variant baked in at compile time;
+# the env var only affects runtime dispatch in builds that support runtime switching.
 export RCCL_UNROLL_FACTOR=0
+
+# Run B: Disable the new P2P batching kernel path added in ROCm 7.1.0.
+# RCCL_P2P_BATCH_ENABLE defaults to 0 in 7.1.0 source but may be on in this build.
+# The batching path introduces a different collective kernel dispatch sequence that
+# is not fully vetted on MI250X (gfx90a) and is a candidate for the illegal instruction.
+# Source: ROCm/rccl src/enqueue.cc RCCL_PARAM(P2pBatchEnable, "P2P_BATCH_ENABLE", 0)
+#         ROCm/rccl releases/tag/rocm-7.1.0 release notes
+export RCCL_P2P_BATCH_ENABLE=0
+export RCCL_P2P_BATCH_THRESHOLD=0
 
 # Use the project-shared, prebuilt tvm-ffi torch<->DLPack ROCm bridge.
 # Built once by install_matsim_frontier.sh; skips a ~5 min on-the-fly compile.
