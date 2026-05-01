@@ -56,11 +56,14 @@ export VLLM_NCCL_SO_PATH=/opt/rocm-7.1.1/lib/librccl.so.1
 
 # ncclDevKernel_Generic_4 is the LL128 protocol kernel; LL128 uses 128-byte
 # machine-level atomics not supported on Frontier's MI250X GCDs, causing
-# HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION. Force Simple protocol to avoid it.
+# HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION. Force Simple protocol and Ring algo.
+# NCCL_PROTO=Simple alone is not enough — must also set NCCL_ALGO=Ring and
+# disable XGMI P2P which triggers LL128 selection on RCCL's XGMI transport.
 export NCCL_PROTO=Simple
-# Also disable P2P (XGMI/PCIe) and SHM transports between GCDs to keep
-# RCCL on the tree/ring Simple path.
-export NCCL_P2P_LEVEL=0
+export NCCL_ALGO=Ring
+# Disable XGMI/NVLink-style P2P between GCDs; forces standard PCIe/socket path
+# where LL128 is not available, keeping RCCL on Simple+Ring.
+export NCCL_P2P_DISABLE=1
 export NCCL_SHM_DISABLE=1
 
 # Use the project-shared, prebuilt tvm-ffi torch<->DLPack ROCm bridge.
