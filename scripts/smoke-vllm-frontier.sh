@@ -48,65 +48,74 @@ mkdir -p "$MIOPEN_USER_DB_PATH"
 # Instead, point VLLM_CUDART_SO_PATH so flashinfer can find the HIP runtime.
 export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 
-# Run C result: bundled RCCL also crashed with same _Generic_4 kernel.
-# Switching RCCL library had no effect → the problem is not library version.
+# ── RCCL crash history: HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION in ncclDevKernel_Generic_4 ──
 #
-# Run D (job 4509240): HSA_NO_SCRATCH_RECLAIM=1
-# Result: FAILED — RCCL comm init now completed on all 8 ranks, but the first
-# AllGather (opCount 0, BF16, 4866048 elems ≈ 9.3 MB) still crashed with the
-# same _Generic_4 illegal instruction. Scratch reclaim was not the root cause.
+# All runs used TP=8 on a single Frontier node (8× MI250X GCDs, gfx90a),
+# RCCL 2.27.7-HEAD:84d2752, vLLM with Qwen2.5-72B-Instruct (BF16).
 #
-# Run E: NCCL_PROTO=Simple (was LL).
-# Root cause identified: NCCL_PROTO=LL forces the Low-Latency protocol which
-# is designed for small messages (<~256 KB). Forcing LL on a 9.3 MB AllGather
-# causes the LL kernel path in RCCL 2.27.7 to misbehave on gfx90a → illegal
-# instruction in ncclDevKernel_Generic_4. Switching to Simple lets RCCL use
-# direct DMA copies, which is correct for large messages.
-# Every RCCL unit test in the official test suite sets this variable.
-# RCCL source (src/init.cc checkHsaEnvSetting) validates it at startup.
-# ncclDevKernel_Generic_4 uses private scratch memory for stack frames.
-# HSA scratch reclaim can reclaim that memory mid-execution → illegal instruction.
-# This is hardware-level, independent of which RCCL .so is loaded.
-# Source: ROCm/rccl tools/scripts/test_runner/README.md (HSA_NO_SCRATCH_RECLAIM)
-#         ROCm/rccl src/init.cc checkHsaEnvSetting() / validHsaScratchEnvSetting()
-export HSA_NO_SCRATCH_RECLAIM=1
+# Run A (job 4509130) — hypothesis: wrong unroll variant selected at runtime
+#   Tried:  RCCL_UNROLL_FACTOR=0
+#   Result: FAILED — kernel name unchanged (_Generic_4 still appeared).
+#   Why:    RCCL_UNROLL_FACTOR only affects runtime dispatch in RCCL builds
+#           that support runtime switching. The PyTorch-bundled librccl fat
+#           binary for gfx90a has the unroll-4 variant baked in at compile
+#           time; the env var is silently ignored.
+#
+# Run B (job 4509146) — hypothesis: new P2P batching kernel path introduced in ROCm 7.1.0
+#   Tried:  RCCL_P2P_BATCH_ENABLE=0, RCCL_P2P_BATCH_THRESHOLD=0
+#   Result: FAILED — same HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION in _Generic_4.
+#   Why:    The P2P batching path was not involved in the crash; disabling it
+#           had no effect on the collective that crashed.
+#
+# Run C (job 4509167) — hypothesis: system librccl has a code-gen bug for gfx90a
+#   Tried:  unset VLLM_NCCL_SO_PATH, prepend torch/lib so bundled librccl is used
+#           (RCCL 2.27.7-HEAD:84d2752 from PyTorch wheel, same version as system)
+#   Result: FAILED — bundled librccl crashed identically.
+#   Why:    Both libraries are the same version and appear to share the same
+#           gfx90a code object. The crash is not library-specific.
+#
+# Run D (job 4509240) — hypothesis: HSA scratch memory reclaimed mid-kernel
+#   Tried:  HSA_NO_SCRATCH_RECLAIM=1
+#   Result: PARTIAL — RCCL comm init now completed on all 8 ranks (previously
+#           crashed during init). However, the first actual AllGather after init
+#           (opCount 0, BF16, 4866048 elems ≈ 9.3 MB) still crashed with the
+#           same _Generic_4 illegal instruction.
+#   Why:    HSA_NO_SCRATCH_RECLAIM fixed a secondary issue that was masking the
+#           real problem. With init now completing, the true root cause became
+#           visible: NCCL_PROTO=LL was forcing the Low-Latency protocol on a
+#           9.3 MB AllGather. LL is designed for small messages (<~256 KB);
+#           forcing it on large messages causes the LL kernel path in RCCL
+#           2.27.7 to misbehave on gfx90a → illegal instruction.
+#
+# Run E (job 4510276) — fix: switch to Simple protocol
+#   Tried:  NCCL_PROTO=Simple, removed NCCL_ALGO=Ring pin
+#   Rationale: Simple uses direct DMA copies and is the correct protocol for
+#              large collective messages. RCCL auto-selects Ring for AllGather
+#              which is appropriate; no need to pin it explicitly.
+# ──────────────────────────────────────────────────────────────────────────────
 
-# Run C: use PyTorch-bundled RCCL instead of system RCCL.
-# Runs A & B with system RCCL (/opt/rocm-7.1.1/lib/librccl.so.1) both crashed
-# with HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION in ncclDevKernel_Generic_4 — env-var
-# fixes had no effect, suggesting the system RCCL fat binary for gfx90a has a
-# code-gen issue. The PyTorch-bundled librccl is built against the same HIP stack
-# as torch itself and may have a different (working) gfx90a code object.
-# Per ROCm/pytorch FAQ: prepend torch lib dir so the loader picks bundled libs
-# before any /opt/rocm path that might shadow them.
-# VLLM_NCCL_SO_PATH is intentionally unset — vLLM will auto-discover torch/lib/librccl.so.
+# Use PyTorch-bundled RCCL (established in Run C; kept for consistency).
+# VLLM_NCCL_SO_PATH is intentionally unset — vLLM auto-discovers torch/lib/librccl.so.
 TORCH_LIB=$VENV/lib/python3.11/site-packages/torch/lib
 export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
 unset VLLM_NCCL_SO_PATH
 
-# RCCL env controls are documented in AMD RCCL env-variables docs.
-# IMPORTANT: ncclDevKernel_Generic_4 is an unroll variant, not proof of LL128.
-# Pin a conservative transport/protocol set for MI250X and enable logging so
-# job logs show the exact RCCL algo/proto decision per collective.
+# HSA scratch reclaim fix (established in Run D): prevents HSA from reclaiming
+# kernel private scratch memory during RCCL collective init.
+export HSA_NO_SCRATCH_RECLAIM=1
+
+# Protocol fix (Run E): Simple is correct for large message AllGather on gfx90a.
+# Do NOT use NCCL_PROTO=LL — it crashes on messages > ~256 KB with RCCL 2.27.7.
 export NCCL_PROTO=Simple
-# NCCL_ALGO: leave unset — let RCCL auto-select (Ring is the default for AllGather anyway)
+# NCCL_ALGO: unset — RCCL auto-selects Ring for AllGather (correct default).
 export NCCL_P2P_DISABLE=1
 export NCCL_SHM_DISABLE=1
 export NCCL_DEBUG=INFO
 export NCCL_DEBUG_SUBSYS=INIT,COLL,TUNING
 export RCCL_LOG_LEVEL=3
 
-# Run A result: RCCL_UNROLL_FACTOR=0 had no effect — kernel still showed _Generic_4.
-# The system RCCL fat binary for gfx90a has the unroll variant baked in at compile time;
-# the env var only affects runtime dispatch in builds that support runtime switching.
+# Retained from Run A/B (harmless, kept for reproducibility):
 export RCCL_UNROLL_FACTOR=0
-
-# Run B: Disable the new P2P batching kernel path added in ROCm 7.1.0.
-# RCCL_P2P_BATCH_ENABLE defaults to 0 in 7.1.0 source but may be on in this build.
-# The batching path introduces a different collective kernel dispatch sequence that
-# is not fully vetted on MI250X (gfx90a) and is a candidate for the illegal instruction.
-# Source: ROCm/rccl src/enqueue.cc RCCL_PARAM(P2pBatchEnable, "P2P_BATCH_ENABLE", 0)
-#         ROCm/rccl releases/tag/rocm-7.1.0 release notes
 export RCCL_P2P_BATCH_ENABLE=0
 export RCCL_P2P_BATCH_THRESHOLD=0
 
