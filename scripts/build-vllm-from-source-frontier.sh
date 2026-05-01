@@ -82,8 +82,9 @@ which cmake ninja >/dev/null || {
 
 echo "[$(date)] Building and installing vLLM from source ($VLLM_REF)"
 cd "$SRC_DIR/vllm"
-# Clear stale CMake FetchContent cache so it picks up TRITON_KERNELS_SRC_DIR cleanly.
-rm -rf "$SRC_DIR/vllm/.deps"
+# Clear stale CMake FetchContent cache and build directory so cmake re-configures
+# from scratch, picking up the correct CXX/CC and TRITON_KERNELS_SRC_DIR.
+rm -rf "$SRC_DIR/vllm/.deps" "$SRC_DIR/vllm/build"
 # Dependencies are pre-installed from requirements/rocm.txt on the login node.
 # Compute nodes have no external network, so avoid any dependency resolution.
 python -m pip install -v --no-build-isolation --no-deps .
