@@ -71,7 +71,9 @@ which cmake ninja >/dev/null || {
 
 echo "[$(date)] Building and installing vLLM from source ($VLLM_REF)"
 cd "$SRC_DIR/vllm"
-python -m pip install -v --no-build-isolation .
+# Dependencies are pre-installed from requirements/rocm.txt on the login node.
+# Compute nodes have no external network, so avoid any dependency resolution.
+python -m pip install -v --no-build-isolation --no-deps .
 
 echo "[$(date)] Validating install"
 python - <<'PY'
