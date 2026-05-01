@@ -67,7 +67,7 @@ mkdir -p "$CACHE_DIR" "$PROJ/runs"
 # ── conda + modules (must mirror install-time exactly) ──────────────────────
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 source "$PROJ/matsim-agents/scripts/frontier-module-stack.sh"
-load_frontier_rocm_modules
+load_frontier_rocm711_modules
 # Cray's PrgEnv-gnu loads gcc-native/13.2 but ONLY exposes Cray's `cc`/`CC`
 # wrappers. The actual `gcc`/`g++` 13.3 binaries live in the gcc-native
 # module's bin dir, which is NOT in PATH after PrgEnv-gnu alone. Loading

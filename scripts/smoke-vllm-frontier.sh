@@ -23,7 +23,8 @@
 set -uo pipefail
 
 PROJ=/lustre/orion/mat746/proj-shared
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv
+# Run J: switched to ROCm 7.2 venv (ROCm 7.1 venv was $PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv)
+VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 MODEL_DIR=$PROJ/models/Qwen2.5-72B-Instruct
 RUN_DIR=$PROJ/runs/smoke-vllm-${SLURM_JOB_ID:-local}
 mkdir -p "$RUN_DIR"
@@ -31,7 +32,8 @@ mkdir -p "$RUN_DIR"
 # ── conda + modules ─────────────────────────────────────────────────────────
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 source "$PROJ/matsim-agents/scripts/frontier-module-stack.sh"
-load_frontier_rocm_modules
+# Run J: full ROCm 7.2 environment (previously load_frontier_rocm711_modules)
+load_frontier_rocm72_modules
 source activate "$VENV"
 
 export PYTHONUNBUFFERED=1
@@ -46,7 +48,8 @@ mkdir -p "$MIOPEN_USER_DB_PATH"
 # LD_PRELOAD of libamdhip64.so causes hipErrorInvalidKernelFile on Frontier
 # because it interferes with HIP fat binary extraction in RCCL worker processes.
 # Instead, point VLLM_CUDART_SO_PATH so flashinfer can find the HIP runtime.
-export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
+# Run J: updated to ROCm 7.2 (was /opt/rocm-7.1.1/lib/libamdhip64.so)
+export VLLM_CUDART_SO_PATH=/opt/rocm-7.2.0/lib/libamdhip64.so
 
 # ── RCCL crash history: HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION in ncclDevKernel_Generic_4 ──
 #
@@ -129,14 +132,24 @@ export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 #           and LL128 is not supported for all collective+dtype combos.
 #           The only fix is a different RCCL build.
 #
-# Run I: use ROCm 7.2.0 RCCL (/opt/rocm-7.2.0/lib/librccl.so.1)
-#   Rationale: Frontier ships ROCm 7.2.0 alongside 7.1.1. The 7.2.0 RCCL may
-#              have fixed the gfx90a code-gen issue in ncclDevKernel_Generic_4.
-#              VLLM_NCCL_SO_PATH overrides vLLM's auto-discovery.
+# Run I (job 4511391, CANCELLED before running)
+#   Rationale: Test ROCm 7.2.0 RCCL via VLLM_NCCL_SO_PATH while keeping the
+#              ROCm 7.1 venv. ROCm 7.2.0 RCCL is commit fc0010cf6a vs ROCm 7.1.1
+#              commit 26aae437f6 — different build, may fix Generic_4 on gfx90a.
+#   Result:    CANCELLED by user; migrated to full ROCm 7.2 environment instead.
+#
+# Run J: full ROCm 7.2 environment
+#   Rationale: Rather than just swapping the RCCL .so, rebuild the entire venv
+#              against ROCm 7.2 + torch+rocm7.2 + vLLM from source.
+#              No pre-built vLLM pip wheels exist for ROCm 7.2 (only Docker images).
+#              ROCm 7.2.0 RCCL (commit fc0010cf6a, build 7.2.0.0-43) differs from
+#              ROCm 7.1.1 RCCL (commit 26aae437f6, build 7.1.1.0-38); may fix
+#              ncclDevKernel_Generic_4 HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION.
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Use PyTorch-bundled RCCL path for LD_LIBRARY_PATH (keeps torch HIP deps aligned),
-# but override the RCCL itself to ROCm 7.2.0 via VLLM_NCCL_SO_PATH.
+# Use PyTorch-bundled RCCL path for LD_LIBRARY_PATH (keeps torch HIP deps aligned).
+# VLLM_NCCL_SO_PATH: point to ROCm 7.2.0 RCCL (loaded from the ROCm 7.2 venv's
+# system path). Both the venv and RCCL are now ROCm 7.2 (consistent).
 TORCH_LIB=$VENV/lib/python3.11/site-packages/torch/lib
 export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
 export VLLM_NCCL_SO_PATH=/opt/rocm-7.2.0/lib/librccl.so.1
@@ -145,7 +158,7 @@ export VLLM_NCCL_SO_PATH=/opt/rocm-7.2.0/lib/librccl.so.1
 # kernel private scratch memory during RCCL collective init.
 export HSA_NO_SCRATCH_RECLAIM=1
 
-# Run I: using ROCm 7.2.0 RCCL; NCCL_PROTO auto-selected.
+# Run J: full ROCm 7.2 environment; NCCL_PROTO auto-selected.
 export NCCL_DEBUG=INFO
 export NCCL_DEBUG_SUBSYS=INIT,COLL,TUNING
 export RCCL_LOG_LEVEL=3
