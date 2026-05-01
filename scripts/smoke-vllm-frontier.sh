@@ -66,6 +66,14 @@ export NCCL_DEBUG=INFO
 export NCCL_DEBUG_SUBSYS=INIT,COLL
 export RCCL_LOG_LEVEL=3
 
+# Run A: RCCL_UNROLL_FACTOR=0 forces unroll-1 kernel variants (ncclDevKernel_Generic_1)
+# instead of the default unroll-4 (ncclDevKernel_Generic_4) for gfx90a.
+# The crash is in _Generic_4; lowering unroll reduces register pressure and
+# eliminates the ISA variant that triggers HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION.
+# Values: 0=unroll-1, 1=unroll-2, 2=unroll-4 (default for gfx90a with >80 CUs).
+# Source: ROCm/rccl src/rccl_wrap.cc commSetUnrollFactor()
+export RCCL_UNROLL_FACTOR=0
+
 # Use the project-shared, prebuilt tvm-ffi torch<->DLPack ROCm bridge.
 # Built once by install_matsim_frontier.sh; skips a ~5 min on-the-fly compile.
 export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
