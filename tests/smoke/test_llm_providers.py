@@ -10,13 +10,11 @@ They verify that:
 
 from __future__ import annotations
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
-
 
 # ── provider instantiation ────────────────────────────────────────────────────
 
