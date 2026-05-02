@@ -25,7 +25,8 @@ set -uo pipefail
 PROJ=/lustre/orion/mat746/proj-shared
 # Run J: switched to ROCm 7.2 venv (ROCm 7.1 venv was $PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv)
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
-MODEL_DIR=$PROJ/models/Qwen2.5-72B-Instruct
+MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
+MODEL_NAME=${MATSIM_MODEL_NAME:-Qwen/Qwen2.5-72B-Instruct}
 RUN_DIR=$PROJ/runs/smoke-vllm-${SLURM_JOB_ID:-local}
 mkdir -p "$RUN_DIR"
 
@@ -217,7 +218,7 @@ echo "Log:           $VLLM_LOG"
 srun -N1 -n1 -c56 --gpus-per-task=8 --gpu-bind=closest \
     python -m vllm.entrypoints.openai.api_server \
         --model "$MODEL_DIR" \
-        --served-model-name Qwen/Qwen2.5-72B-Instruct \
+        --served-model-name "$MODEL_NAME" \
         --tensor-parallel-size 8 \
         --dtype bfloat16 \
         --max-model-len 8192 \
@@ -266,7 +267,7 @@ echo ""
 echo "[$(date)] === Smoke success: vLLM is up. Sending one tiny completion ==="
 curl -sS -X POST "http://localhost:${VLLM_PORT}/v1/chat/completions" \
     -H 'Content-Type: application/json' \
-    -d '{"model":"Qwen/Qwen2.5-72B-Instruct","messages":[{"role":"user","content":"Reply with the single word: OK"}],"max_tokens":4,"temperature":0}' \
+    -d "{\"model\":\"$MODEL_NAME\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word: OK\"}],\"max_tokens\":4,\"temperature\":0}" \
     | tee "$RUN_DIR/completion.json"
 
 echo ""
