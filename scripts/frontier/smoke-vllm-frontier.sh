@@ -273,10 +273,37 @@ fi
 
 echo ""
 echo "[$(date)] === Smoke success: vLLM is up. Sending one tiny completion ==="
+if [[ "$MODEL_NAME" == *"Qwen3"* ]]; then
+    REQUEST_PAYLOAD="{\"model\":\"$MODEL_NAME\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word: OK\"}],\"max_tokens\":512,\"temperature\":0,\"chat_template_kwargs\":{\"enable_thinking\":true}}"
+else
+    REQUEST_PAYLOAD="{\"model\":\"$MODEL_NAME\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word: OK\"}],\"max_tokens\":512,\"temperature\":0}"
+fi
+
 curl -sS -X POST "http://localhost:${VLLM_PORT}/v1/chat/completions" \
     -H 'Content-Type: application/json' \
-    -d "{\"model\":\"$MODEL_NAME\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word: OK\"}],\"max_tokens\":512,\"temperature\":0,\"chat_template_kwargs\":{\"enable_thinking\":false}}" \
+    -d "$REQUEST_PAYLOAD" \
     | tee "$RUN_DIR/completion.json"
+
+echo ""
+echo "[$(date)] Parsed completion fields:"
+python - "$RUN_DIR/completion.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+choice = (data.get("choices") or [{}])[0]
+message = choice.get("message") or {}
+content = message.get("content")
+reasoning = message.get("reasoning_content")
+if reasoning is None:
+    reasoning = message.get("reasoning")
+
+print(f"finish_reason={choice.get('finish_reason')}")
+print(f"content={content!r}")
+print(f"reasoning_content={reasoning!r}")
+PY
 
 echo ""
 echo "[$(date)] DONE."
