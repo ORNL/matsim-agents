@@ -34,8 +34,11 @@ def planner_node(state: MatSimState) -> dict:
     if not state.objective:
         return {"plan": [], "pending_tasks": []}
 
-    structure_paths = [tok for tok in state.objective.split() if os.path.splitext(tok)[1]
-                       in {".vasp", ".cif", ".xyz", ".extxyz", ".poscar", ".pdb"}]
+    structure_paths = [
+        tok
+        for tok in state.objective.split()
+        if os.path.splitext(tok)[1] in {".vasp", ".cif", ".xyz", ".extxyz", ".poscar", ".pdb"}
+    ]
 
     try:
         from matsim_agents.llm import get_chat_model
@@ -46,8 +49,10 @@ def planner_node(state: MatSimState) -> dict:
             base_url=state.llm_base_url,
         ).with_structured_output(_Plan)
         plan: _Plan = llm.invoke(
-            [SystemMessage(content=_SYSTEM_PROMPT),
-             AIMessage(content=f"Objective: {state.objective}")]
+            [
+                SystemMessage(content=_SYSTEM_PROMPT),
+                AIMessage(content=f"Objective: {state.objective}"),
+            ]
         )
         tasks = plan.tasks
         rationale = plan.rationale
@@ -58,5 +63,7 @@ def planner_node(state: MatSimState) -> dict:
     return {
         "plan": tasks,
         "pending_tasks": list(tasks),
-        "messages": [AIMessage(content=f"[planner] {rationale or f'{len(tasks)} task(s) queued.'}")],
+        "messages": [
+            AIMessage(content=f"[planner] {rationale or f'{len(tasks)} task(s) queued.'}")
+        ],
     }

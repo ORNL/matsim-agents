@@ -105,20 +105,22 @@ def explore_composition(
         if on_phase_start is not None:
             on_phase_start(cand)
         try:
-            result = relax(RelaxStructureInput(
-                structure_path=cand.structure_path,
-                logdir=logdir,
-                mlp_checkpoint=mlp_checkpoint,
-                checkpoint=checkpoint,
-                optimizer=optimizer,
-                maxiter=maxiter,
-                maxstep=maxstep,
-                fmax=fmax,
-                precision=precision,
-                mlp_precision=mlp_precision,
-                mlp_device=mlp_device,
-                output_dir=relax_dir,
-            ))
+            result = relax(
+                RelaxStructureInput(
+                    structure_path=cand.structure_path,
+                    logdir=logdir,
+                    mlp_checkpoint=mlp_checkpoint,
+                    checkpoint=checkpoint,
+                    optimizer=optimizer,
+                    maxiter=maxiter,
+                    maxstep=maxstep,
+                    fmax=fmax,
+                    precision=precision,
+                    mlp_precision=mlp_precision,
+                    mlp_device=mlp_device,
+                    output_dir=relax_dir,
+                )
+            )
             relaxations.append(result)
             if on_phase_done is not None:
                 on_phase_done(cand, result)

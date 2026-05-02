@@ -18,15 +18,19 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 # ── provider instantiation ────────────────────────────────────────────────────
 
+
 class TestGetChatModelInstantiation:
     """get_chat_model() returns the right class without calling remote services."""
 
     def test_ollama_provider(self):
         """ChatOllama is returned for the 'ollama' provider."""
         mock_ollama = MagicMock()
-        with patch("matsim_agents.llm.ChatOllama", mock_ollama, create=True), \
-             patch.dict("sys.modules", {"langchain_ollama": MagicMock(ChatOllama=mock_ollama)}):
+        with (
+            patch("matsim_agents.llm.ChatOllama", mock_ollama, create=True),
+            patch.dict("sys.modules", {"langchain_ollama": MagicMock(ChatOllama=mock_ollama)}),
+        ):
             from matsim_agents.llm import get_chat_model
+
             get_chat_model(provider="ollama", model="test:model")
             mock_ollama.assert_called_once()
 
@@ -35,28 +39,36 @@ class TestGetChatModelInstantiation:
         mock_openai = MagicMock()
         with patch.dict("sys.modules", {"langchain_openai": MagicMock(ChatOpenAI=mock_openai)}):
             from matsim_agents.llm import get_chat_model
-            get_chat_model(provider="vllm", model="Qwen/Qwen2.5-72B-Instruct",
-                           base_url="http://localhost:8000/v1", api_key="EMPTY")
+
+            get_chat_model(
+                provider="vllm",
+                model="Qwen/Qwen2.5-72B-Instruct",
+                base_url="http://localhost:8000/v1",
+                api_key="EMPTY",
+            )
             mock_openai.assert_called_once()
 
     def test_openai_provider(self):
         mock_openai = MagicMock()
         with patch.dict("sys.modules", {"langchain_openai": MagicMock(ChatOpenAI=mock_openai)}):
             from matsim_agents.llm import get_chat_model
+
             get_chat_model(provider="openai", model="gpt-4o-mini")
             mock_openai.assert_called_once()
 
     def test_anthropic_provider(self):
         mock_anthropic = MagicMock()
-        with patch.dict("sys.modules", {
-            "langchain_anthropic": MagicMock(ChatAnthropic=mock_anthropic)
-        }):
+        with patch.dict(
+            "sys.modules", {"langchain_anthropic": MagicMock(ChatAnthropic=mock_anthropic)}
+        ):
             from matsim_agents.llm import get_chat_model
+
             get_chat_model(provider="anthropic", model="claude-3-5-sonnet-latest")
             mock_anthropic.assert_called_once()
 
     def test_unknown_provider_raises(self):
         from matsim_agents.llm import get_chat_model
+
         with pytest.raises(ValueError, match="Unknown LLM provider"):
             get_chat_model(provider="nonexistent_provider")
 
@@ -67,11 +79,13 @@ class TestGetChatModelInstantiation:
         mock_openai = MagicMock()
         with patch.dict("sys.modules", {"langchain_openai": MagicMock(ChatOpenAI=mock_openai)}):
             from matsim_agents.llm import get_chat_model
+
             get_chat_model()
             mock_openai.assert_called_once()
 
 
 # ── huggingface provider ──────────────────────────────────────────────────────
+
 
 class TestHuggingFaceProvider:
     """The huggingface provider builds correctly when the pipeline is mocked."""
@@ -94,6 +108,7 @@ class TestHuggingFaceProvider:
         mock_module, fake_pipeline, _ = self._make_hf_mocks()
         with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
             from matsim_agents.llm import get_chat_model
+
             get_chat_model(provider="huggingface", model=str(tmp_path))
         fake_pipeline.from_model_id.assert_called_once()
         call_kwargs = fake_pipeline.from_model_id.call_args[1]
@@ -106,6 +121,7 @@ class TestHuggingFaceProvider:
         mock_module, fake_pipeline, _ = self._make_hf_mocks()
         with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
             from matsim_agents.llm import get_chat_model
+
             get_chat_model(provider="huggingface", model=str(tmp_path), temperature=0.0)
         kwargs = fake_pipeline.from_model_id.call_args[1]
         pkwargs = kwargs.get("pipeline_kwargs", {})
@@ -118,6 +134,7 @@ class TestHuggingFaceProvider:
         mock_module, fake_pipeline, _ = self._make_hf_mocks()
         with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
             from matsim_agents.llm import get_chat_model
+
             get_chat_model(provider="huggingface", model=str(tmp_path), temperature=0.7)
         kwargs = fake_pipeline.from_model_id.call_args[1]
         pkwargs = kwargs.get("pipeline_kwargs", {})
@@ -131,6 +148,7 @@ class TestHuggingFaceProvider:
         mock_module, _, fake_chat = self._make_hf_mocks()
         with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
             from matsim_agents.llm import get_chat_model
+
             model = get_chat_model(provider="huggingface", model=str(tmp_path))
 
         result = model.invoke([HumanMessage(content="What is 2 + 2?")])
@@ -139,6 +157,7 @@ class TestHuggingFaceProvider:
 
 
 # ── stub LLM end-to-end invocation ───────────────────────────────────────────
+
 
 class TestStubLLMInference:
     """Verify that a FakeListChatModel works as a matsim-agents drop-in."""

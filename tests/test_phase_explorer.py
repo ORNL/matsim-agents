@@ -38,9 +38,7 @@ def test_elemental_supercell_autotile(tmp_path: Path):
 
 
 def test_explicit_supercell_overrides_min_atoms(tmp_path: Path):
-    cands = enumerate_phases(
-        _comp("Si"), str(tmp_path), supercell=(2, 2, 2), min_atoms=10_000
-    )
+    cands = enumerate_phases(_comp("Si"), str(tmp_path), supercell=(2, 2, 2), min_atoms=10_000)
     for c in cands:
         assert c.supercell == (2, 2, 2)
 
@@ -72,9 +70,7 @@ def test_2d_monolayer_and_multilayer(tmp_path: Path):
 
 
 def test_graphene_only_for_single_element(tmp_path: Path):
-    cands = enumerate_phases(
-        _comp("C"), str(tmp_path), min_atoms=8, include_2d=True
-    )
+    cands = enumerate_phases(_comp("C"), str(tmp_path), min_atoms=8, include_2d=True)
     twod = [c for c in cands if c.dimensionality == "2D"]
     assert {c.phase for c in twod} == {"graphene"}
 
@@ -102,9 +98,7 @@ def test_n_orderings_collapses_for_single_element(tmp_path: Path):
 
 
 def test_n_orderings_produces_distinct_files(tmp_path: Path):
-    cands = enumerate_phases(
-        _comp("GaAs"), str(tmp_path), min_atoms=32, n_orderings=4
-    )
+    cands = enumerate_phases(_comp("GaAs"), str(tmp_path), min_atoms=32, n_orderings=4)
     rs = [c for c in cands if c.phase == "rocksalt"]
     assert len(rs) >= 2
     indices = {c.ordering_index for c in rs}
@@ -116,8 +110,11 @@ def test_n_orderings_produces_distinct_files(tmp_path: Path):
 def test_lattice_scales_replicate_each_ordering(tmp_path: Path):
     scales = (0.97, 1.0, 1.03)
     cands = enumerate_phases(
-        _comp("Si"), str(tmp_path), min_atoms=8,
-        n_orderings=1, lattice_scales=scales,
+        _comp("Si"),
+        str(tmp_path),
+        min_atoms=8,
+        n_orderings=1,
+        lattice_scales=scales,
     )
     by_phase: dict[str, list[PhaseCandidate]] = {}
     for c in cands:
@@ -130,8 +127,11 @@ def test_lattice_scaling_actually_scales_cell(tmp_path: Path):
     from ase.io import read
 
     cands = enumerate_phases(
-        _comp("Si"), str(tmp_path), min_atoms=8,
-        n_orderings=1, lattice_scales=(1.0, 1.05),
+        _comp("Si"),
+        str(tmp_path),
+        min_atoms=8,
+        n_orderings=1,
+        lattice_scales=(1.0, 1.05),
     )
     fcc = sorted(
         (c for c in cands if c.phase == "fcc"),
@@ -140,13 +140,16 @@ def test_lattice_scaling_actually_scales_cell(tmp_path: Path):
     v0 = read(fcc[0].structure_path).get_volume()
     v1 = read(fcc[1].structure_path).get_volume()
     # Volume scales as the cube of the linear scale factor.
-    assert (v1 / v0) == pytest.approx(1.05 ** 3, rel=1e-3)
+    assert (v1 / v0) == pytest.approx(1.05**3, rel=1e-3)
 
 
 def test_orderings_times_scales_count(tmp_path: Path):
     cands = enumerate_phases(
-        _comp("GaAs"), str(tmp_path), min_atoms=32,
-        n_orderings=3, lattice_scales=(0.98, 1.0, 1.02),
+        _comp("GaAs"),
+        str(tmp_path),
+        min_atoms=32,
+        n_orderings=3,
+        lattice_scales=(0.98, 1.0, 1.02),
     )
     rs = [c for c in cands if c.phase == "rocksalt"]
     # At most 3 orderings x 3 scales; orderings can collapse if dedup hits.
