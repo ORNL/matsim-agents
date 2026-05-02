@@ -105,6 +105,9 @@ cd matsim-agents
 # Local workstation (CPU or single GPU)
 ./scripts/setup_env.sh
 
+# Frontier (OLCF, ROCm 7.2)
+bash scripts/frontier/install-rocm72.sh
+
 # Frontier (OLCF, ROCm 7.1)
 PLATFORM=frontier-rocm71 ./scripts/setup_env.sh
 
@@ -114,7 +117,8 @@ PLATFORM=perlmutter ./scripts/setup_env.sh
 
 Available `PLATFORM` values:
 `workstation` (default), `frontier-rocm71`, `frontier-rocm64`,
-`perlmutter`, `aurora`, `andes`.
+`perlmutter`, `aurora`, `andes`. For Frontier ROCm 7.2 use
+`scripts/frontier/install-rocm72.sh` directly (see above).
 
 Environment overrides accepted by the installer:
 
@@ -125,7 +129,7 @@ Environment overrides accepted by the installer:
 | `HYDRAGNN_REF` | Branch/tag/commit | `main` |
 | `HYDRAGNN_DIR` | Reuse an existing HydraGNN checkout | `third_party/HydraGNN` |
 | `HYDRAGNN_EXTRAS` | Args forwarded to `install_dependencies.sh` | `all dev` |
-| `LLM_BACKENDS` | Subset of `ollama vllm openai anthropic` | `ollama vllm` |
+| `LLM_BACKENDS` | Subset of `ollama vllm openai anthropic huggingface` | `ollama vllm` |
 | `BOOTSTRAP_OLLAMA` | Set to `1` to install the Ollama daemon, start it, and pull `OLLAMA_MODELS` (workstation only) | `0` |
 | `OLLAMA_MODELS` | Space-separated list of models to pull when `BOOTSTRAP_OLLAMA=1` | `qwen2.5:14b` |
 | `SKIP_HYDRAGNN` | Set to `1` to skip HydraGNN install | `0` |
@@ -161,6 +165,7 @@ for Frontier (ROCm) — see [docs/llm-backends-comparison.md](docs/llm-backends-
 | **`vllm`** | Run a vLLM server (`vllm serve <model> --port 8000`) | `meta-llama/Llama-3.1-8B-Instruct` | OpenAI-compatible; great for HPC. |
 | **`openai`** | `pip install matsim-agents[openai]` | `gpt-4o-mini` | Hosted. Set `OPENAI_API_KEY`. |
 | **`anthropic`** | `pip install matsim-agents[anthropic]` | `claude-3-5-sonnet-latest` | Hosted. Set `ANTHROPIC_API_KEY`. |
+| **`huggingface`** | `pip install matsim-agents[huggingface]` | `Qwen/Qwen2.5-72B-Instruct` | Direct HF Transformers + Accelerate; no server needed. Ideal as fallback on HPC when vLLM is unavailable. Set `MATSIM_HF_MODEL_PATH` to a local model directory. |
 
 ### Downloading models for vLLM
 
@@ -181,10 +186,11 @@ download as a background job, and resuming interrupted downloads — see
 Configuration knobs:
 
 ```bash
-export MATSIM_LLM_PROVIDER=ollama          # or vllm | openai | anthropic
+export MATSIM_LLM_PROVIDER=ollama          # or vllm | openai | anthropic | huggingface
 export MATSIM_OLLAMA_BASE_URL=http://...    # optional
 export MATSIM_VLLM_BASE_URL=http://node:8000/v1
 export MATSIM_VLLM_API_KEY=EMPTY            # only if vLLM is auth-protected
+export MATSIM_HF_MODEL_PATH=/path/to/model  # huggingface provider: local model dir
 ```
 
 ---
@@ -434,7 +440,7 @@ Common options (all commands that touch HydraGNN):
 | `--mlp-device {cuda,cpu}` | Device for the auxiliary MLP. |
 | `--precision {fp32,fp64,bf16}` | HydraGNN precision override. |
 | `--mlp-precision {fp32,fp64,bf16}` | MLP precision override. |
-| `--llm-provider {ollama,vllm,openai,anthropic}` | Chat backend. |
+| `--llm-provider {ollama,vllm,openai,anthropic,huggingface}` | Chat backend. |
 | `--llm-model NAME` | Provider-specific model identifier. |
 | `--llm-base-url URL` | Override server URL (Ollama / vLLM). |
 
@@ -464,11 +470,19 @@ Common options (all commands that touch HydraGNN):
 matsim-agents/
 ├── pyproject.toml
 ├── scripts/
-│   └── setup_env.sh              # delegates to HydraGNN installers
+│   ├── setup_env.sh              # delegates to HydraGNN installers (laptop / legacy HPC)
+│   └── frontier/                 # Frontier (OLCF) ROCm 7.2 scripts
+│       ├── install-rocm72.sh     # login-node master install (Phase 1-3)
+│       ├── install-rocm72-phase23.sh  # re-run Phase 2+3 only
+│       ├── build-vllm-rocm72.sh  # SLURM compute job: build vLLM from source
+│       ├── frontier-module-stack.sh   # shared module-load helpers
+│       ├── smoke-vllm-frontier.sh     # vLLM TP=8 smoke test
+│       ├── smoke-transformers-frontier.sh  # HF Transformers smoke test
+│       └── ...                   # other frontier job scripts
 ├── src/matsim_agents/
 │   ├── state.py                  # typed shared LangGraph state
 │   ├── graph.py                  # planner -> executor -> analyst
-│   ├── llm.py                    # Ollama | vLLM | OpenAI | Anthropic
+│   ├── llm.py                    # Ollama | vLLM | OpenAI | Anthropic | HuggingFace
 │   ├── cli.py                    # `matsim-agents run|plan|chat`
 │   ├── chat.py                   # interactive discovery REPL
 │   ├── agents/
