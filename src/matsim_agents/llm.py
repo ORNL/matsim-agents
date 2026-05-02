@@ -107,9 +107,14 @@ def get_chat_model(
         pipeline_kwargs: dict[str, Any] = {
             "max_new_tokens": kwargs.pop("max_new_tokens", 2048),
             "do_sample": temperature > 0.0,
+            # Suppress warnings from model's generation_config by not passing
+            # conflicting/irrelevant parameters. Only add temperature if sampling.
         }
         if temperature > 0.0:
             pipeline_kwargs["temperature"] = temperature
+            # top_p, top_k are only relevant when do_sample=True
+            if "top_p" not in pipeline_kwargs:
+                pipeline_kwargs["top_p"] = 0.9
         hf_pipeline = HuggingFacePipeline.from_model_id(
             model_id=model_path,
             task="text-generation",
