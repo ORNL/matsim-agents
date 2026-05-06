@@ -25,14 +25,13 @@
 #   SERVE_MODEL_NAME   – HF model id for --served-model-name (default: dir basename)
 #   SERVE_PORT         – vLLM HTTP port (default 8000)
 #   SERVE_TP_SIZE      – tensor parallel size; default = SLURM_NNODES * 8
-#   SERVE_DTYPE        – model dtype: auto|bfloat16|float16|fp8 (default: auto)
+#   SERVE_DTYPE        – model dtype: bfloat16|float16 (default: bfloat16; MI250X has no FP8 support)
 #   SERVE_MAX_MODEL_LEN – max context length in tokens (default: 32768)
 #   SERVE_EXTRA_ARGS   – extra flags passed verbatim to vllm serve
 #   RAY_PORT           – Ray head port (default 6379)
 #
-# Example submission (4 nodes, FP8, DeepSeek-V4-Pro):
+# Example submission (4 nodes, DeepSeek-V4-Pro):
 #   SERVE_MODEL_PATH=/lustre/orion/mat746/proj-shared/models/DeepSeek-V4-Pro \
-#   SERVE_DTYPE=fp8 \
 #   sbatch --nodes=4 scripts/frontier/job-serve-multinode-frontier.sh
 #
 # Example submission (2 nodes, Mixtral 8x22B sanity check):
@@ -67,7 +66,7 @@ fi
 # Configuration
 # ---------------------------------------------------------------------------
 SERVE_PORT=${SERVE_PORT:-8000}
-SERVE_DTYPE=${SERVE_DTYPE:-auto}
+SERVE_DTYPE=${SERVE_DTYPE:-bfloat16}
 SERVE_MAX_MODEL_LEN=${SERVE_MAX_MODEL_LEN:-32768}
 RAY_PORT=${RAY_PORT:-6379}
 MODEL_NAME=${SERVE_MODEL_NAME:-$(basename "$SERVE_MODEL_PATH")}
