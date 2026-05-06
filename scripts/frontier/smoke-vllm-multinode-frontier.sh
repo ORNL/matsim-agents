@@ -76,6 +76,9 @@ export VLLM_CUDART_SO_PATH=/opt/rocm-7.2.0/lib/libamdhip64.so
 export NCCL_SOCKET_IFNAME=hsn
 export GLOO_SOCKET_IFNAME=hsn
 export FI_CXI_ATS=0
+export NCCL_IB_DISABLE=1
+export NCCL_DEBUG=INFO
+export NCCL_DEBUG_FILE="$RUN_DIR/nccl-debug-%h-%p.log"
 
 unset ROCR_VISIBLE_DEVICES
 unset HIP_VISIBLE_DEVICES
@@ -100,7 +103,7 @@ echo "[ray] Starting head ..."
   --port="$RAY_PORT" \
   --num-cpus=56 \
   --num-gpus="$GPUS_PER_NODE" \
-  --block &
+  --block > "$RUN_DIR/ray-head.log" 2>&1 &
 RAY_HEAD_PID=$!
 sleep 10
 
@@ -110,7 +113,8 @@ for node in "${ALL_NODES[@]:1}"; do
   echo "[ray] Starting worker on $node ..."
   srun --nodes=1 --ntasks=1 --ntasks-per-node=1 -w "$node" --export=ALL \
     "$VENV/bin/ray" start --address="$RAY_ADDRESS" \
-      --num-cpus=56 --num-gpus="$GPUS_PER_NODE" --block &
+      --num-cpus=56 --num-gpus="$GPUS_PER_NODE" --block \
+    > "$RUN_DIR/ray-worker-$node.log" 2>&1 &
   WORKER_PIDS+=($!)
 done
 sleep 20
@@ -141,6 +145,7 @@ echo "[vllm] Starting server TP=${TP_SIZE} ..."
   --port "$SMOKE_PORT" \
   --trust-remote-code \
   --disable-log-requests \
+  --enforce-eager \
   > "$RUN_DIR/vllm.log" 2>&1 &
 VLLM_PID=$!
 
@@ -153,6 +158,12 @@ while true; do
   if curl -sf "http://localhost:${SMOKE_PORT}/health" > /dev/null 2>&1; then
     echo "[vllm] Server ready after ${ELAPSED}s."
     break
+  fi
+  if ! kill -0 "$VLLM_PID" 2>/dev/null; then
+    echo "[FAIL] vLLM process (PID $VLLM_PID) exited before becoming ready." >&2
+    echo "Last 40 lines of vllm.log:" >&2
+    tail -40 "$RUN_DIR/vllm.log" >&2
+    exit 1
   fi
   if (( ELAPSED >= MAX_WAIT )); then
     echo "[FAIL] vLLM did not become ready within ${MAX_WAIT}s." >&2
