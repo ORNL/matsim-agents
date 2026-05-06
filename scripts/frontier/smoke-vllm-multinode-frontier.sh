@@ -31,8 +31,8 @@ PROJ=/lustre/orion/mat746/proj-shared
 [[ -z "${SCRIPT_DIR:-}" || ! -f "$SCRIPT_DIR/_rocr_to_hip.sh" ]] && \
   SCRIPT_DIR="$PROJ/matsim-agents/scripts/frontier"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
-SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/DeepSeek-V4-Pro}
-SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-deepseek-ai/DeepSeek-V4-Pro}
+SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/Qwen2.5-72B-Instruct}
+SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-Qwen/Qwen2.5-72B-Instruct}
 SMOKE_PORT=${SMOKE_PORT:-8000}
 SMOKE_DTYPE=${SMOKE_DTYPE:-bfloat16}            # MI250X does not support FP8; use bfloat16
 SMOKE_MAX_MODEL_LEN=${SMOKE_MAX_MODEL_LEN:-4096}  # short context for smoke test
