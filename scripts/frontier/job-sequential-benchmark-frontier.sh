@@ -245,7 +245,7 @@ for entry in "${MODEL_LIST[@]}"; do
     --tensor-parallel-size "$TP_SIZE" \
     --port "$VLLM_PORT" \
     --trust-remote-code \
-    --disable-log-requests \
+    --no-enable-log-requests \
     ${MAX_MODEL_LEN:+--max-model-len "$MAX_MODEL_LEN"} \
     > "$RUN_DIR/vllm-${MODEL_NAME}.log" 2>&1 &
   VLLM_PID=$!
