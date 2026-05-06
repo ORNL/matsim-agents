@@ -1,26 +1,23 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# smoke-vllm-multinode-frontier.sh
+# smoke-vllm-singlenode-frontier.sh
 #
-# Smoke test: boot a multi-node vLLM Ray cluster on Frontier, load
-# DeepSeek-V4-Pro (789 GB, bfloat16), verify /health, then run one inference
-# request to confirm end-to-end generation works.
-#
-# Default: 4 nodes × 8 GCDs = 32 GCDs total (TP=32), ~2 TB GPU memory.
+# Single-node smoke test: verify vLLM + ROCm works on Frontier (1 node,
+# 8 GCDs, multiprocessing backend) before attempting multi-node runs.
 #
 # Submit:
-#   sbatch --nodes=4 scripts/frontier/smoke-vllm-multinode-frontier.sh
+#   sbatch --nodes=1 scripts/frontier/smoke-vllm-singlenode-frontier.sh
 #
 # Override model:
 #   SMOKE_MODEL_PATH=... SMOKE_MODEL_NAME=... \
-#   sbatch --nodes=4 scripts/frontier/smoke-vllm-multinode-frontier.sh
+#   sbatch --nodes=1 scripts/frontier/smoke-vllm-singlenode-frontier.sh
 # ---------------------------------------------------------------------------
 #SBATCH -A mat746
-#SBATCH -J smoke-multinode
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/smoke-multinode-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/smoke-multinode-%j/job-%j.out
-#SBATCH -t 01:00:00
-#SBATCH -N 4
+#SBATCH -J smoke-singlenode
+#SBATCH -o /lustre/orion/mat746/proj-shared/runs/smoke-singlenode-%j/job-%j.out
+#SBATCH -e /lustre/orion/mat746/proj-shared/runs/smoke-singlenode-%j/job-%j.out
+#SBATCH -t 00:30:00
+#SBATCH -N 1
 #SBATCH -p batch
 #SBATCH -q debug
 
@@ -28,27 +25,24 @@ set -uo pipefail
 
 PROJ=/lustre/orion/mat746/proj-shared
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
-SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/DeepSeek-V4-Pro}
-SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-deepseek-ai/DeepSeek-V4-Pro}
+# Default: small model that loads quickly
+SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/Llama-3.1-8B-Instruct}
+SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-meta-llama/Llama-3.1-8B-Instruct}
 SMOKE_PORT=${SMOKE_PORT:-8000}
-SMOKE_DTYPE=${SMOKE_DTYPE:-bfloat16}            # MI250X does not support FP8; use bfloat16
-SMOKE_MAX_MODEL_LEN=${SMOKE_MAX_MODEL_LEN:-4096}  # short context for smoke test
-RAY_PORT=${RAY_PORT:-6379}
+SMOKE_DTYPE=${SMOKE_DTYPE:-bfloat16}
+SMOKE_MAX_MODEL_LEN=${SMOKE_MAX_MODEL_LEN:-4096}
 GPUS_PER_NODE=8
 
-RUN_DIR=$PROJ/runs/smoke-multinode-${SLURM_JOB_ID:-local}
+RUN_DIR=$PROJ/runs/smoke-singlenode-${SLURM_JOB_ID:-local}
 mkdir -p "$RUN_DIR"
 
-N_NODES=$SLURM_NNODES
-TP_SIZE=$(( N_NODES * GPUS_PER_NODE ))
-
 echo "=========================================="
-echo "Multi-node vLLM smoke test"
+echo "Single-node vLLM smoke test"
 echo "Date:    $(date)"
-echo "Nodes:   $N_NODES  ($SLURM_JOB_NODELIST)"
+echo "Node:    $(hostname)"
 echo "Model:   $SMOKE_MODEL_NAME"
 echo "Path:    $SMOKE_MODEL_PATH"
-echo "TP:      $TP_SIZE"
+echo "TP:      $GPUS_PER_NODE"
 echo "dtype:   $SMOKE_DTYPE"
 echo "Run dir: $RUN_DIR"
 echo "=========================================="
@@ -72,80 +66,27 @@ mkdir -p "$MIOPEN_USER_DB_PATH"
 
 export VLLM_CUDART_SO_PATH=/opt/rocm-7.2.0/lib/libamdhip64.so
 
-# Inter-node networking over Slingshot (libfabric / HSN)
 export NCCL_SOCKET_IFNAME=hsn
 export GLOO_SOCKET_IFNAME=hsn
 export FI_CXI_ATS=0
-export NCCL_IB_DISABLE=1
-export NCCL_DEBUG=INFO
-export NCCL_DEBUG_FILE="$RUN_DIR/nccl-debug-%h-%p.log"
 
 unset ROCR_VISIBLE_DEVICES
 unset HIP_VISIBLE_DEVICES
 
-# ── Discover nodes ───────────────────────────────────────────────────────────
-mapfile -t ALL_NODES < <(scontrol show hostnames "$SLURM_JOB_NODELIST")
-HEAD_NODE=${ALL_NODES[0]}
-HEAD_NODE_IP=$(hostname -I | awk '{print $1}')
-RAY_ADDRESS="${HEAD_NODE_IP}:${RAY_PORT}"
-
-echo ""
-echo "Head: $HEAD_NODE ($HEAD_NODE_IP)"
-echo "Workers: ${ALL_NODES[*]:1}"
-echo ""
-
-RAY="$VENV/bin/ray"
-
-# ── Start Ray head ───────────────────────────────────────────────────────────
-echo "[ray] Starting head ..."
-"$RAY" start --head \
-  --node-ip-address="$HEAD_NODE_IP" \
-  --port="$RAY_PORT" \
-  --num-cpus=56 \
-  --num-gpus="$GPUS_PER_NODE" \
-  --block > "$RUN_DIR/ray-head.log" 2>&1 &
-RAY_HEAD_PID=$!
-sleep 10
-
-# ── Start Ray workers ────────────────────────────────────────────────────────
-WORKER_PIDS=()
-for node in "${ALL_NODES[@]:1}"; do
-  echo "[ray] Starting worker on $node ..."
-  srun --nodes=1 --ntasks=1 --ntasks-per-node=1 -w "$node" --export=ALL \
-    "$VENV/bin/ray" start --address="$RAY_ADDRESS" \
-      --num-cpus=56 --num-gpus="$GPUS_PER_NODE" --block \
-    > "$RUN_DIR/ray-worker-$node.log" 2>&1 &
-  WORKER_PIDS+=($!)
-done
-sleep 20
-
-echo "[ray] Cluster status:"
-"$RAY" status --address="$RAY_ADDRESS" 2>&1 | head -20 || true
-echo ""
-
 # ── Cleanup trap ─────────────────────────────────────────────────────────────
 cleanup() {
-  echo "[cleanup] Stopping vLLM and Ray ..."
+  echo "[cleanup] Stopping vLLM ..."
   kill "$VLLM_PID" 2>/dev/null || true
   wait "$VLLM_PID" 2>/dev/null || true
-  # Copy Ray session logs for post-mortem before stopping Ray
-  RAY_SESSION=$(ls -td /tmp/ray/session_* 2>/dev/null | head -1)
-  if [[ -n "$RAY_SESSION" ]]; then
-    echo "[cleanup] Copying Ray session logs to $RUN_DIR/ray-session-logs/ ..."
-    cp -r "$RAY_SESSION/logs" "$RUN_DIR/ray-session-logs/" 2>/dev/null || true
-  fi
-  "$RAY" stop --force 2>/dev/null || true
-  for pid in "${WORKER_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
-  kill "$RAY_HEAD_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # ── Start vLLM ───────────────────────────────────────────────────────────────
-echo "[vllm] Starting server TP=${TP_SIZE} ..."
+echo "[vllm] Starting server TP=${GPUS_PER_NODE} (mp backend) ..."
 "$VENV/bin/vllm" serve "$SMOKE_MODEL_PATH" \
   --served-model-name "$SMOKE_MODEL_NAME" \
-  --tensor-parallel-size "$TP_SIZE" \
-  --distributed-executor-backend ray \
+  --tensor-parallel-size "$GPUS_PER_NODE" \
+  --distributed-executor-backend mp \
   --dtype "$SMOKE_DTYPE" \
   --max-model-len "$SMOKE_MAX_MODEL_LEN" \
   --port "$SMOKE_PORT" \
@@ -156,10 +97,10 @@ echo "[vllm] Starting server TP=${TP_SIZE} ..."
 VLLM_PID=$!
 
 # ── Wait for /health ─────────────────────────────────────────────────────────
-echo "[vllm] Waiting for server (up to 20 min for weight loading) ..."
-MAX_WAIT=1200
+echo "[vllm] Waiting for server (up to 10 min) ..."
+MAX_WAIT=600
 ELAPSED=0
-INTERVAL=15
+INTERVAL=10
 while true; do
   if curl -sf "http://localhost:${SMOKE_PORT}/health" > /dev/null 2>&1; then
     echo "[vllm] Server ready after ${ELAPSED}s."
@@ -202,14 +143,13 @@ RESPONSE=$(curl -sf "http://localhost:${SMOKE_PORT}/v1/chat/completions" \
 echo "[smoke] Response:"
 echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
 
-# Check for non-empty content in the response
 if echo "$RESPONSE" | grep -q '"content"'; then
   echo ""
   echo "=========================================="
   echo "PASS: inference returned a response"
   echo "  Model:  $SMOKE_MODEL_NAME"
-  echo "  Nodes:  $N_NODES"
-  echo "  TP:     $TP_SIZE"
+  echo "  Node:   $(hostname)"
+  echo "  TP:     $GPUS_PER_NODE"
   echo "  Job:    $SLURM_JOB_ID"
   echo "=========================================="
   EXIT_CODE=0
