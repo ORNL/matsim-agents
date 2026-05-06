@@ -164,15 +164,21 @@ DIAG1_EXIT=$?
 echo "[diag] Step 1 exit: $DIAG1_EXIT"
 echo ""
 
-echo "[diag] Step 2: vllm --help inside srun (timeout 90s) ..."
-timeout 90 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
+echo "[diag] Step 2: vllm api_server module import inside srun (timeout 60s, with stack traces) ..."
+timeout --signal=ABRT --kill-after=10 60 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
   env RAY_ADDRESS="" \
-  "$VENV/bin/python" -m vllm.entrypoints.openai.api_server --help \
+  "$VENV/bin/python" -u -X faulthandler -c "
+import faulthandler, sys, threading, time
+faulthandler.dump_traceback_later(45, repeat=False, file=sys.stderr)
+print('about to import api_server module ...', flush=True)
+import vllm.entrypoints.openai.api_server as m
+print('api_server module imported OK', flush=True)
+" \
   > "$RUN_DIR/vllm-help.log" 2>&1
 DIAG2_EXIT=$?
 echo "[diag] Step 2 exit: $DIAG2_EXIT"
-echo "[diag] First 10 lines of vllm-help.log:"
-head -10 "$RUN_DIR/vllm-help.log" 2>/dev/null || echo "(empty)"
+echo "[diag] Full vllm-help.log:"
+cat "$RUN_DIR/vllm-help.log" 2>/dev/null || echo "(empty)"
 echo ""
 
 if [[ $DIAG1_EXIT -ne 0 ]]; then
