@@ -3,16 +3,18 @@
 # launch-test-all-models-frontier.sh
 #
 # Submits one Slurm job per supported vLLM model (skipping known-broken
-# DeepSeek-V4-Pro FP8). Jobs are chained via --dependency=afterany so they
-# run sequentially regardless of debug-QOS one-job-at-a-time limits.
+# DeepSeek-V4-Pro FP8). Because debug QOS allows only MaxSubmitPU=1, this
+# script polls Slurm and submits the next job only when the previous one
+# clears the queue. Run in background or in a tmux/screen session.
 #
 # Each job uses the existing smoke-vllm-{single,multi}node script with
 # SMOKE_MODEL_PATH/SMOKE_MODEL_NAME overrides via sbatch --export.
 #
 # Usage:
-#   bash scripts/frontier/launch-test-all-models-frontier.sh
+#   nohup bash scripts/frontier/launch-test-all-models-frontier.sh \
+#     > $PROJ/runs/launch-test-all.log 2>&1 &
 #
-# The summary table of (jobid, model, nodes) is written to:
+# Summary table written to:
 #   $PROJ/runs/test-all-models-<timestamp>.tsv
 # ---------------------------------------------------------------------------
 set -euo pipefail
@@ -25,11 +27,9 @@ MULTI="$SCRIPT_DIR/smoke-vllm-multinode-frontier.sh"
 TS=$(date +%Y%m%d-%H%M%S)
 SUMMARY="$PROJ/runs/test-all-models-$TS.tsv"
 mkdir -p "$PROJ/runs"
-printf "jobid\tmodel\tnodes\trun_dir\n" > "$SUMMARY"
+printf "jobid\tstate\tmodel\tnodes\trun_dir\n" > "$SUMMARY"
 
 # Format: <node_count> <local_dir_name> <served_model_name>
-# Single-node (≤ ~35B): TP=8 on 1 node
-# Multi-node  (≥ 70B):  TP=32 on 4 nodes
 MODELS=(
   # --- single node ---
   "1 SmolLM3-3B                       HuggingFaceTB/SmolLM3-3B"
@@ -48,9 +48,22 @@ MODELS=(
   "4 Mixtral-8x22B-Instruct-v0.1      mistralai/Mixtral-8x22B-Instruct-v0.1"
 )
 
-PREV_JOB=""
-echo "Submitting ${#MODELS[@]} chained jobs (debug QOS, --dependency=afterany)"
-echo "Summary file: $SUMMARY"
+wait_for_job() {
+  local jid=$1
+  local timeout=${2:-7200}   # 2 hr cap
+  local start=$SECONDS
+  while squeue -h -j "$jid" 2>/dev/null | grep -q .; do
+    if (( SECONDS - start > timeout )); then
+      echo "[WARN] timeout waiting for $jid" >&2
+      return 1
+    fi
+    sleep 30
+  done
+}
+
+echo "Launcher PID $$  log file: tail -f \$0.log"
+echo "Will submit ${#MODELS[@]} jobs sequentially (debug QOS = 1 at a time)"
+echo "Summary: $SUMMARY"
 echo ""
 
 for entry in "${MODELS[@]}"; do
@@ -59,7 +72,7 @@ for entry in "${MODELS[@]}"; do
 
   if [[ ! -d "$MODEL_PATH" ]]; then
     echo "[SKIP] $SERVED_NAME — not in $MODEL_PATH"
-    printf "SKIP\t%s\t%s\tmissing local dir\n" "$SERVED_NAME" "$NODES" >> "$SUMMARY"
+    printf "SKIP\t-\t%s\t%s\tmissing local dir\n" "$SERVED_NAME" "$NODES" >> "$SUMMARY"
     continue
   fi
 
@@ -71,17 +84,25 @@ for entry in "${MODELS[@]}"; do
     JOBNAME="t${NODES}-$LOCAL_DIR"
   fi
 
-  DEP=""
-  [[ -n "$PREV_JOB" ]] && DEP="--dependency=afterany:$PREV_JOB"
-
   EXPORT="ALL,SMOKE_MODEL_PATH=$MODEL_PATH,SMOKE_MODEL_NAME=$SERVED_NAME"
 
-  JID=$(sbatch --parsable --nodes="$NODES" -J "$JOBNAME" \
-    --export="$EXPORT" $DEP "$SCRIPT")
+  # Retry submit if queue is full
+  while :; do
+    if JID=$(sbatch --parsable --nodes="$NODES" -J "$JOBNAME" \
+                    --export="$EXPORT" "$SCRIPT" 2>/tmp/sbatch.err); then
+      [[ -n "$JID" ]] && break
+    fi
+    if grep -q "QOSMaxSubmitJobPerUserLimit" /tmp/sbatch.err; then
+      sleep 30
+      continue
+    fi
+    echo "[FAIL] sbatch error for $SERVED_NAME:"
+    cat /tmp/sbatch.err
+    printf "FAIL\t-\t%s\t%s\tsbatch error\n" "$SERVED_NAME" "$NODES" >> "$SUMMARY"
+    break
+  done
 
-  if [[ -z "$JID" ]]; then
-    echo "[FAIL] sbatch returned empty for $SERVED_NAME"
-    printf "FAIL\t%s\t%s\tsbatch error\n" "$SERVED_NAME" "$NODES" >> "$SUMMARY"
+  if [[ -z "${JID:-}" ]]; then
     continue
   fi
 
@@ -91,12 +112,15 @@ for entry in "${MODELS[@]}"; do
     RUN_DIR="$PROJ/runs/smoke-multinode-$JID"
   fi
 
-  echo "[$JID] $JOBNAME  nodes=$NODES  $SERVED_NAME"
-  printf "%s\t%s\t%s\t%s\n" "$JID" "$SERVED_NAME" "$NODES" "$RUN_DIR" >> "$SUMMARY"
-  PREV_JOB="$JID"
+  echo "[$JID submitted] $JOBNAME  nodes=$NODES  $SERVED_NAME"
+
+  wait_for_job "$JID" || true
+
+  STATE=$(sacct -X -j "$JID" --format=State -P --noheader 2>/dev/null | head -1 | tr -d ' ')
+  echo "[$JID done] state=$STATE"
+  printf "%s\t%s\t%s\t%s\t%s\n" "$JID" "$STATE" "$SERVED_NAME" "$NODES" "$RUN_DIR" >> "$SUMMARY"
 done
 
 echo ""
-echo "All submitted. Watch with:"
-echo "  squeue -u \$USER"
-echo "  cat $SUMMARY"
+echo "All done. Summary: $SUMMARY"
+column -t -s $'\t' "$SUMMARY"
