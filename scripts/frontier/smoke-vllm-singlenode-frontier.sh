@@ -108,6 +108,24 @@ echo "torch:   $(python -c 'import torch; print(torch.__version__, torch.cuda.is
 echo "vllm:    $(python -c 'import vllm; print(vllm.__version__)' 2>&1)"
 echo ""
 
+# ── GPU warm-up (post-reboot KFD/HSA driver init) ────────────────────────────
+# After a fresh node reboot the HSA runtime can hang on the first multi-process
+# HIP init. Running a lightweight GPU job via srun first warms up /dev/kfd so
+# subsequent srun steps (vLLM) don't deadlock.
+echo "[warmup] Warming up GPUs on $(hostname) ..."
+srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
+  "$VENV/bin/python" -c "
+import torch, time
+n = torch.cuda.device_count()
+print(f'  HIP devices: {n}')
+for i in range(n):
+    x = torch.zeros(1024, device=f'cuda:{i}')
+    _ = x + 1
+print('  Warm-up tensors OK')
+"
+echo "[warmup] Done."
+echo ""
+
 # ── Start vLLM ───────────────────────────────────────────────────────────────
 echo "[vllm] Starting server TP=${GPUS_PER_NODE} ..."
 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
