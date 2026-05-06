@@ -158,55 +158,6 @@ print('  Warm-up tensors OK')
 echo "[warmup] Done."
 echo ""
 
-# ── Extended srun-context diagnostics ────────────────────────────────────────
-# Determine where the hang is:
-#   step1 - vllm package import inside srun
-#   step2 - vllm API server module load (--help) inside srun
-echo "[diag] Step 1: vllm import inside srun (timeout 90s) ..."
-timeout 90 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
-  "$VENV/bin/python" -u -c "
-import sys
-print('srun-python started', flush=True)
-print('Importing torch...', flush=True)
-import torch
-print(f'torch {torch.__version__} OK, cuda:{torch.cuda.is_available()} devs:{torch.cuda.device_count()}', flush=True)
-print('Importing vllm...', flush=True)
-import vllm
-print(f'vllm {vllm.__version__} imported OK', flush=True)
-" 2>&1
-DIAG1_EXIT=$?
-echo "[diag] Step 1 exit: $DIAG1_EXIT"
-echo ""
-
-echo "[diag] Step 2: vllm api_server module import inside srun (timeout 60s, with stack traces) ..."
-timeout --signal=ABRT --kill-after=10 60 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
-  env RAY_ADDRESS="" \
-  "$VENV/bin/python" -u -X faulthandler -c "
-import faulthandler, sys, threading, time
-faulthandler.dump_traceback_later(45, repeat=False, file=sys.stderr)
-print('about to import api_server module ...', flush=True)
-import vllm.entrypoints.openai.api_server as m
-print('api_server module imported OK', flush=True)
-" \
-  > "$RUN_DIR/vllm-help.log" 2>&1
-DIAG2_EXIT=$?
-echo "[diag] Step 2 exit: $DIAG2_EXIT"
-echo "[diag] Full vllm-help.log:"
-cat "$RUN_DIR/vllm-help.log" 2>/dev/null || echo "(empty)"
-echo ""
-
-if [[ $DIAG1_EXIT -ne 0 ]]; then
-  echo "[FAIL] vllm import hangs/fails in srun context (exit $DIAG1_EXIT). Aborting." >&2
-  exit 1
-fi
-if [[ $DIAG2_EXIT -ne 0 ]]; then
-  echo "[FAIL] vllm --help hangs/fails in srun context (exit $DIAG2_EXIT). Aborting." >&2
-  exit 1
-fi
-
-echo "[diag] Both diagnostic steps passed. Proceeding to server launch."
-echo ""
-
 # ── Start vLLM ───────────────────────────────────────────────────────────────
 echo "[vllm] Starting server TP=${GPUS_PER_NODE} ..."
 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
@@ -229,8 +180,8 @@ tail -f "$RUN_DIR/vllm.log" &
 TAIL_PID=$!
 
 # ── Wait for /health ─────────────────────────────────────────────────────────
-echo "[vllm] Waiting for server (up to 10 min) ..."
-MAX_WAIT=600
+echo "[vllm] Waiting for server (up to 20 min) ..."
+MAX_WAIT=1200
 ELAPSED=0
 INTERVAL=10
 while true; do
