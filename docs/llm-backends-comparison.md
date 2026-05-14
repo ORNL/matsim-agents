@@ -132,9 +132,40 @@ sbatch scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh   # then s
 
 ---
 
+## Choosing for Perlmutter (NERSC, NVIDIA A100)
+
+The Perlmutter `hydragnn_venv` ships with `transformers` + `accelerate` but
+**no vLLM and no DeepSpeed**, so all bundled smoke jobs use the
+HuggingFace `transformers` backend. Multi-node sharding is done with
+`transformers`' built-in `tp_plan="auto"` tensor-parallel planner over
+`torch.distributed` (NCCL on Slingshot, one rank per GPU under `srun` —
+no `torchrun` agent).
+
+| Scenario | Recommended backend |
+|---|---|
+| Validate the GPU stack on a single node | **Transformers + Accelerate** ([scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh](../scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh)) |
+| Sweep all locally-cached models | [scripts/launchers/perlmutter/launch-test-all-models-perlmutter.sh](../scripts/launchers/perlmutter/launch-test-all-models-perlmutter.sh) |
+| Multi-node TP (Qwen2.5-72B, Mixtral-8x22B) | **Transformers `tp_plan="auto"`** ([scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh](../scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh)) |
+| LLM + HydraGNN + QE end-to-end | [scripts/advanced/perlmutter/job-rhea-transformers-perlmutter.sh](../scripts/advanced/perlmutter/job-rhea-transformers-perlmutter.sh) |
+
+```bash
+# Single-node smoke (defaults to Qwen2.5-72B; override via MATSIM_MODEL_DIR)
+sbatch scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh
+
+# Multi-node TP smoke (2 nodes × 4 A100s = 8 ranks, NCCL + tp_plan="auto")
+sbatch scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh
+
+# End-to-end discovery validation
+sbatch scripts/advanced/perlmutter/job-rhea-transformers-perlmutter.sh
+```
+
+---
+
 ## Related docs
 
 - [docs/model-download.md](model-download.md) — downloading Qwen2.5-72B-Instruct
-- [scripts/smoke-transformers-frontier.sh](../scripts/smoke-transformers-frontier.sh)
-- [scripts/smoke-vllm-frontier.sh](../scripts/smoke-vllm-frontier.sh)
-- [scripts/build-vllm-from-source-frontier.sh](../scripts/build-vllm-from-source-frontier.sh)
+- [scripts/smoke-tests/frontier/smoke-transformers-frontier.sh](../scripts/smoke-tests/frontier/smoke-transformers-frontier.sh)
+- [scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh](../scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh)
+- [scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh](../scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh)
+- [scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh](../scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh)
+- [scripts/setup/perlmutter/README.md](../scripts/setup/perlmutter/README.md)
