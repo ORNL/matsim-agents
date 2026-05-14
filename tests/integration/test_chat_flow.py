@@ -16,12 +16,11 @@ from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 
 from matsim_agents.chat import DiscoveryChatConfig, DiscoveryChatSession, chat_once
 from matsim_agents.discovery.composition import Composition
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

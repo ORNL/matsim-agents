@@ -11,15 +11,13 @@ Test categories:
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 
 from matsim_agents.state import MatSimState, RelaxationResult, TaskSpec
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -112,7 +110,7 @@ class TestAnalystNode:
         assert "No relaxation results" in result["analysis"]
 
     def test_deterministic_summary_picks_best(self, fake_relaxation_result):
-        from matsim_agents.agents.analyst import analyst_node, _deterministic_summary
+        from matsim_agents.agents.analyst import _deterministic_summary
 
         # Two results; summary should pick the lower energy one
         worse = RelaxationResult(
@@ -201,8 +199,6 @@ class TestFullGraphEndToEnd:
         fake_structured.invoke.return_value = plan_obj
         fake_planner_llm = MagicMock()
         fake_planner_llm.with_structured_output.return_value = fake_structured
-        # FakeListChatModel for analyst (returns a plain string response)
-        analyst_llm = FakeListChatModel(responses=["Summary of results."])
 
         def _fake_get_chat_model(**kwargs):
             # Planner calls with_structured_output; analyst calls invoke directly.

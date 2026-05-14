@@ -6,10 +6,8 @@ from pathlib import Path
 
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage
 
 from matsim_agents.state import RelaxationResult, TaskSpec
-
 
 # ── fake LLM helpers ──────────────────────────────────────────────────────────
 
