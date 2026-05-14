@@ -1,93 +1,550 @@
 # matsim-agents
 
+**Multi-agent AI framework for atomistic materials simulation and discovery.**
 
+`matsim-agents` orchestrates large language models, machine-learned
+interatomic potentials, and ASE-based atomistic workflows into a single
+agentic loop. The user states a research objective in natural language;
+agents plan, run HydraGNN-driven simulations, score chemical and
+dynamical stability, and report the findings — with optional human
+review at every gate.
 
-## Getting started
+The framework is **backend-agnostic**: HydraGNN is the default MLFF
+backend, but the relaxation tool, phase explorer, and stability scorer
+are written so other potentials (MACE, NequIP, Orb, ...) can be plugged
+in via the same interfaces.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+---
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Table of contents
 
-## Add your files
+1. [Architecture](#architecture)
+2. [Installation](#installation)
+3. [LLM backends](#llm-backends)
+4. [Quick start](#quick-start)
+5. [The agent graph](#the-agent-graph)
+6. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
+7. [Programmatic API](#programmatic-api)
+8. [CLI reference](#cli-reference)
+9. [Project layout](#project-layout)
+10. [Configuration reference](#configuration-reference)
+11. [Limitations and roadmap](#limitations-and-roadmap)
+12. [Contributing](#contributing)
+13. [License & citation](#license--citation)
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+---
+
+## Architecture
 
 ```
-cd existing_repo
-git remote add origin https://code.ornl.gov/multi-agentic-ai-materials/matsim-agents.git
-git branch -M main
-git push -uf origin main
+                ┌──────────────────────────────────────────────┐
+                │                  USER                        │
+                │  natural-language objective / chat dialogue  │
+                └───────────────────────┬──────────────────────┘
+                                        │
+                ┌───────────────────────▼──────────────────────┐
+                │              LangGraph workflow              │
+                │                                              │
+                │   planner ───► executor ──┐                  │
+                │                  ▲        │                  │
+                │                  └────────┤  while pending   │
+                │                           ▼                  │
+                │                        analyst ──► END       │
+                └───────────────────────┬──────────────────────┘
+                                        │  tool calls
+                ┌───────────────────────▼──────────────────────┐
+                │              Discovery wrapper               │
+                │   composition parsing → phase enumeration    │
+                │   → relaxation (HydraGNN+ASE) → stability    │
+                └───────────────────────┬──────────────────────┘
+                                        │
+                ┌───────────────────────▼──────────────────────┐
+                │             Atomistic backends               │
+                │   HydraGNN (fused MLFF + BranchWeightMLP)    │
+                │   ASE (FIRE / BFGS / BFGSLineSearch)         │
+                │   pymatgen (optional prototypes)             │
+                └──────────────────────────────────────────────┘
 ```
 
-## Integrate with your tools
+### Capabilities
 
-* [Set up project integrations](https://code.ornl.gov/multi-agentic-ai-materials/matsim-agents/-/settings/integrations)
+- **Multi-agent orchestration** with LangGraph: typed shared state, checkpointed steps, conditional routing, human-in-the-loop gates.
+- **Hypothesis-generation chat** with any local LLM (Qwen 2.5 via Ollama by default).
+- **Automatic composition detection** in user/LLM messages — when a new chemical formula is proposed, the system offers to run a substantial atomistic exploration.
+- **HydraGNN-powered structure relaxation** using the fused MLFF + branch-weight MLP stack from `examples/multidataset_hpo_sc26/structure_optimization_ASE.py`.
+- **3-D crystal-phase enumeration** across common prototypes:
+  - elemental: fcc, bcc, hcp, sc, diamond
+  - binary: rocksalt, CsCl, zincblende, wurtzite, fluorite, rutile
+  - ternary: cubic perovskite (ABX₃), normal spinel (AB₂X₄)
+  - quaternary: rocksalt-ordered double perovskite (A₂BB'X₆, Fm-3̄m)
+- **2-D phase enumeration** (opt-in via `--include-2d`):
+  - graphene-like (1 element honeycomb)
+  - h-BN-like (binary 1:1 honeycomb)
+  - MoS₂-family monolayers in trigonal-prismatic 2H and octahedral 1T (binary 1:2)
+  - configurable **multilayer stacking** with adjustable interlayer separation and vacuum gap
+- **Supercell control**: explicit `NxNxN` tiling or auto-tile each prototype to a minimum atom count so dopants, AFM ordering, and symmetry-breaking distortions can develop.
+- **Stability scoring**: relative chemical stability (ΔE/atom rankings) and a dynamical-stability proxy (residual force tolerance).
+- **Local & HPC ready**: setup script delegates to HydraGNN's own installers for laptops and DOE supercomputers (Frontier, Perlmutter, Aurora, Andes), and auto-relaxes HydraGNN's overly-tight `click==8.0.0` / `tqdm==4.67.1` pins so the env is conflict-free.
+- **Pluggable LLMs**: Ollama, vLLM, OpenAI, Anthropic via a single factory.
 
-## Collaborate with your team
-
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+---
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+`matsim-agents` depends on HydraGNN (which itself wraps PyTorch + PyTorch
+Geometric). The provided installer delegates the heavy install to
+HydraGNN's official scripts so the same code path works on a laptop and
+on a DOE supercomputer.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```bash
+git clone git@code.ornl.gov:multi-agentic-ai-materials/matsim-agents.git
+cd matsim-agents
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+# Local workstation (CPU or single GPU)
+./scripts/setup_env.sh
+
+# Frontier (OLCF, ROCm 7.1)
+PLATFORM=frontier-rocm71 ./scripts/setup_env.sh
+
+# Perlmutter (NERSC)
+PLATFORM=perlmutter ./scripts/setup_env.sh
+```
+
+Available `PLATFORM` values:
+`workstation` (default), `frontier-rocm71`, `frontier-rocm64`,
+`perlmutter`, `aurora`, `andes`.
+
+Environment overrides accepted by the installer:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `PYTHON` | Python interpreter | `python3` |
+| `HYDRAGNN_REPO` | HydraGNN git URL | `https://github.com/ORNL/HydraGNN.git` |
+| `HYDRAGNN_REF` | Branch/tag/commit | `main` |
+| `HYDRAGNN_DIR` | Reuse an existing HydraGNN checkout | `third_party/HydraGNN` |
+| `HYDRAGNN_EXTRAS` | Args forwarded to `install_dependencies.sh` | `all dev` |
+| `LLM_BACKENDS` | Subset of `ollama vllm openai anthropic` | `ollama vllm` |
+| `BOOTSTRAP_OLLAMA` | Set to `1` to install the Ollama daemon, start it, and pull `OLLAMA_MODELS` (workstation only) | `0` |
+| `OLLAMA_MODELS` | Space-separated list of models to pull when `BOOTSTRAP_OLLAMA=1` | `qwen2.5:14b` |
+| `SKIP_HYDRAGNN` | Set to `1` to skip HydraGNN install | `0` |
+
+After the script finishes:
+
+```bash
+source .venv/bin/activate    # workstation case
+matsim-agents --help
+```
+
+To bootstrap the local Ollama daemon and pull a model in one go:
+
+```bash
+BOOTSTRAP_OLLAMA=1 OLLAMA_MODELS="qwen2.5:14b llama3.1:8b" \
+    ./scripts/setup_env.sh
+```
+
+---
+
+## LLM backends
+
+Set the provider at runtime via CLI flag, environment variable, or in
+code. Local/open-source backends are the default.
+
+| Provider | Install | Typical model | Notes |
+|---|---|---|---|
+| **`ollama`** *(default)* | `brew install ollama && ollama pull qwen2.5:14b` | `qwen2.5:14b`, `llama3.1:8b`, `deepseek-r1:14b` | Fully local, CPU/GPU/Metal. |
+| **`vllm`** | Run a vLLM server (`vllm serve <model> --port 8000`) | `meta-llama/Llama-3.1-8B-Instruct` | OpenAI-compatible; great for HPC. |
+| **`openai`** | `pip install matsim-agents[openai]` | `gpt-4o-mini` | Hosted. Set `OPENAI_API_KEY`. |
+| **`anthropic`** | `pip install matsim-agents[anthropic]` | `claude-3-5-sonnet-latest` | Hosted. Set `ANTHROPIC_API_KEY`. |
+
+Configuration knobs:
+
+```bash
+export MATSIM_LLM_PROVIDER=ollama          # or vllm | openai | anthropic
+export MATSIM_OLLAMA_BASE_URL=http://...    # optional
+export MATSIM_VLLM_BASE_URL=http://node:8000/v1
+export MATSIM_VLLM_API_KEY=EMPTY            # only if vLLM is auth-protected
+```
+
+---
+
+## Quick start
+
+### 1. Run the agent graph end-to-end
+
+```bash
+matsim-agents run \
+  "Relax structures/mos2-B_Defect-Free_PBE.vasp and report the final energy." \
+  --logdir ./multidataset_hpo-BEST6-fp64 \
+  --mlp-checkpoint ./mlp_branch_weights.pt \
+  --llm-provider ollama --llm-model qwen2.5:14b
+```
+
+### 2. Hypothesis-generation chat with auto-triggered exploration
+
+```bash
+ollama pull qwen2.5:14b
+
+matsim-agents chat \
+  --logdir ./multidataset_hpo-BEST6-fp64 \
+  --mlp-checkpoint ./mlp_branch_weights.pt \
+  --min-atoms 64
+```
+
+A typical session:
+
+```
+you> I want a Pb-free halide double perovskite for photovoltaics with band gap near 1.5 eV.
+
+assistant> A promising candidate is Cs2AgBiBr6 ...
+
+Proposed composition detected: AgBiBr6Cs2. Run HydraGNN-based phase exploration? [y/N]: y
+
+>>> Exploring composition AgBiBr6Cs2
+  starting double_perovskite   .../AgBiBr6Cs2_double_perovskite.vasp
+  done    double_perovskite   E=-365.4123 eV  |F|max=0.0118 eV/Å  steps=112
+
+Stability report for AgBiBr6Cs2:
+  Predicted ground state: AgBiBr6Cs2_double_perovskite_optimized_structure.vasp
+  E/atom = -9.1353 eV   |F|max = 0.012 eV/Å   dynamically_stable_proxy = True
+  Chemical-stability proxy: PASS
+
+you> Now suggest a Sb-substituted variant.
+```
+
+### 3. 2-D and multilayer materials discovery
+
+```bash
+matsim-agents chat \
+  --logdir ./multidataset_hpo-BEST6-fp64 \
+  --mlp-checkpoint ./mlp_branch_weights.pt \
+  --include-2d --num-layers 3 --vacuum 20.0 --min-atoms 36
+```
+
+When the conversation introduces a 1-element (graphene-like), 1:1 binary
+(h-BN-like), or 1:2 binary (MoS₂-family) composition, the discovery
+wrapper additionally enumerates 2-D monolayer / multilayer slabs
+alongside the 3-D bulk prototypes.
+
+---
+
+## The agent graph
+
+Three nodes share a typed `MatSimState`:
+
+- **planner** — turns the objective into a list of `TaskSpec` items
+  (kinds: `relax`, `analyze`, `report`). Uses the LLM with structured
+  output; falls back to a deterministic plan when the LLM is unavailable.
+- **executor** — pops the next task, dispatches the matching tool
+  (currently `relax_structure`), appends a `RelaxationResult` to the
+  state, increments `iteration`. Routed back to itself until the queue
+  drains or `max_iterations` is reached.
+- **analyst** — summarizes the accumulated results into a human-readable
+  report (LLM-assisted when available, deterministic baseline otherwise).
+
+State is checkpointed via LangGraph's `MemorySaver`, so every node
+transition is replayable and inspectable.
+
+---
+
+## Hypothesis-driven discovery chat
+
+The `chat` REPL is more than a wrapper around the LLM — it is a
+**closed loop between dialogue and atomistic simulation**:
+
+1. The user and the assistant exchange messages about a target property.
+2. After each turn, [`extract_compositions`](src/matsim_agents/discovery/composition.py) scans both messages for chemical formulas (validates element symbols, reduces stoichiometry, ignores English words like "Carbon" or "Hello").
+3. For every newly-seen formula the user is asked (or `--auto-confirm` is honored) whether to launch a substantial atomistic exploration.
+4. The wrapper [`explore_composition`](src/matsim_agents/discovery/wrapper.py) then:
+   - **enumerates** plausible crystal phases. The selection is
+     stoichiometry-aware:
+     - 1 element → fcc, bcc, hcp, sc, diamond (and graphene if `--include-2d`)
+     - binary 1:1 → rocksalt, CsCl, zincblende, wurtzite, fluorite, rutile (and h-BN if 2-D enabled)
+     - binary 1:2 → same bulk set + MoS₂-family 2H/1T monolayers if 2-D enabled
+     - ternary 1:1:3 → cubic perovskite
+     - ternary 1:2:4 → perovskite + normal spinel
+     - quaternary 1:1:2:6 → rocksalt-ordered double perovskite (proper 2×2×2 Fm-3̄m cell)
+   - **expands** every prototype into a supercell large enough for
+     dopants, AFM ordering, and symmetry-breaking distortions to develop
+     (`--min-atoms` auto-tile or explicit `--supercell NxNxN`).
+   - **samples site decorations** within that supercell
+     (`--n-orderings N`): for multi-species prototypes, generates up to
+     `N` symmetrically-distinct cation/anion arrangements (random label
+     shuffling, deduplicated with pymatgen's `StructureMatcher`).
+     Captures normal vs. (partially) inverse spinel, ordered vs.
+     antisite-disordered double perovskite, alloy / solid-solution
+     decorations, and antisites in general. Single-element cells
+     correctly collapse to one ordering.
+   - **sweeps lattice constants** (`--lattice-scales 0.96,1.0,1.04`):
+     each ordering is replicated at every isotropic cell-scale factor,
+     bracketing the equilibrium volume so the relaxer starts from a
+     reasonable basin even when the per-prototype default lattice
+     parameter is off.
+   - **stacks** 2-D prototypes into multilayers when `--num-layers > 1`,
+     with a per-prototype default interlayer separation and a
+     configurable vacuum gap.
+   - **relaxes** each seed with HydraGNN + ASE (FIRE/BFGS).
+   - **scores** chemical stability (ΔE/atom ranking, near-degeneracy
+     warning) and a dynamical-stability proxy (max residual force).
+5. The summary is fed back into the conversation as a system message so
+   the LLM can refine its hypothesis on the next turn.
+
+Output artifacts per composition (under `--output-dir`):
+
+```
+outputs/discovery/<formula>/
+  seeds/    <formula>_<phase>[_L<n>][_sc<NxNxN>].vasp     # initial structures
+  relaxed/  <formula>_<phase>..._optimized_structure.vasp
+            <formula>_<phase>..._optimization.traj        # ASE trajectory
+            <formula>_<phase>..._optimization.csv         # per-step E, |F|max, branch weights
+```
+
+File-name tags reflect the cell that was actually built:
+`_L3` = 3 stacked layers (2-D), `_sc2x2x2` = 2×2×2 supercell.
+
+> **Honest caveats.** Phase enumeration is intentionally seed-only (a
+> handful of common prototypes) and the dynamical-stability check is a
+> force-residual proxy — not a full phonon analysis. Plug in phonopy or
+> a richer prototype generator (e.g. `pymatgen.Structure.from_prototype`,
+> CALYPSO, USPEX, AIRSS) when the wrapper signature gives you the hook.
+
+---
+
+## Programmatic API
+
+### Single relaxation
+
+```python
+from matsim_agents.tools.relaxation import RelaxStructureInput, _run
+
+result = _run(RelaxStructureInput(
+    structure_path="structures/mos2.vasp",
+    logdir="./multidataset_hpo-BEST6-fp64",
+    mlp_checkpoint="./mlp_branch_weights.pt",
+    optimizer="FIRE",
+    maxiter=200,
+))
+print(result.final_energy_eV, result.optimized_structure_path)
+```
+
+### Composition exploration
+
+```python
+from matsim_agents.discovery import explore_composition
+
+# 3-D bulk discovery with a 40-atom minimum cell
+result = explore_composition(
+    "Cs2AgBiBr6",
+    logdir="./multidataset_hpo-BEST6-fp64",
+    mlp_checkpoint="./mlp_branch_weights.pt",
+    output_dir="./outputs",
+    min_atoms=40,
+)
+print(result.stability.summary)
+
+# 2-D / multilayer discovery (graphene, h-BN, MoS2-family)
+result = explore_composition(
+    "MoS2",
+    logdir="./multidataset_hpo-BEST6-fp64",
+    mlp_checkpoint="./mlp_branch_weights.pt",
+    output_dir="./outputs",
+    include_2d=True,
+    num_layers=3,
+    vacuum=20.0,
+    min_atoms=24,
+)
+```
+
+### Run the LangGraph workflow
+
+```python
+import uuid
+from matsim_agents.graph import build_graph
+from matsim_agents.state import MatSimState
+
+graph = build_graph()
+final = graph.invoke(
+    MatSimState(
+        objective="Relax structures/foo.vasp and summarize.",
+        llm_provider="ollama",
+        llm_model="qwen2.5:14b",
+    ),
+    config={"configurable": {
+        "thread_id": str(uuid.uuid4()),
+        "logdir": "./multidataset_hpo-BEST6-fp64",
+        "mlp_checkpoint": "./mlp_branch_weights.pt",
+    }},
+)
+print(final["analysis"])
+```
+
+### Embed the chat loop in your own app
+
+```python
+from matsim_agents.chat import DiscoveryChatConfig, DiscoveryChatSession, chat_once
+
+session = DiscoveryChatSession(config=DiscoveryChatConfig(
+    logdir="./multidataset_hpo-BEST6-fp64",
+    mlp_checkpoint="./mlp_branch_weights.pt",
+    output_dir="./outputs",
+    llm_model="qwen2.5:14b",
+    auto_confirm=True,
+))
+reply = chat_once(session, "Propose a Pb-free perovskite for PV.")
+```
+
+---
+
+## CLI reference
+
+```text
+matsim-agents run     OBJECTIVE [options]   # planner -> executor -> analyst
+matsim-agents plan    OBJECTIVE             # show the planner's task list
+matsim-agents chat    [options]             # interactive discovery REPL
+```
+
+Common options (all commands that touch HydraGNN):
+
+| Flag | Description |
+|---|---|
+| `--logdir PATH` | HydraGNN logdir with `config.json` and checkpoint. |
+| `--mlp-checkpoint PATH` | BranchWeightMLP `.pt` file. |
+| `--checkpoint NAME` | HydraGNN checkpoint filename or absolute path. |
+| `--mlp-device {cuda,cpu}` | Device for the auxiliary MLP. |
+| `--precision {fp32,fp64,bf16}` | HydraGNN precision override. |
+| `--mlp-precision {fp32,fp64,bf16}` | MLP precision override. |
+| `--llm-provider {ollama,vllm,openai,anthropic}` | Chat backend. |
+| `--llm-model NAME` | Provider-specific model identifier. |
+| `--llm-base-url URL` | Override server URL (Ollama / vLLM). |
+
+`chat`-specific:
+
+| Flag | Description |
+|---|---|
+| `--output-dir PATH` | Where discovery artifacts are written (default `./outputs`). |
+| `--optimizer {FIRE,BFGS,BFGSLineSearch}` | ASE optimizer for relaxations. |
+| `--maxiter INT` | Max relaxation steps per phase. |
+| `--min-atoms INT` | Auto-tile every prototype to at least this many atoms (default `32`). |
+| `--supercell NxNxN` | Explicit tiling for every prototype. Overrides `--min-atoms`. For 2-D slabs the z component is forced to 1. |
+| `--include-2d / --no-include-2d` | Also enumerate 2-D prototypes (graphene, h-BN, MoS₂-family). Default off. |
+| `--num-layers INT` | Number of monolayers stacked for every 2-D prototype (default `1`). |
+| `--vacuum FLOAT` | Vacuum gap (Å) along z for 2-D prototypes (default `15.0`). |
+| `--interlayer FLOAT` | Override the per-prototype default interlayer separation (Å). |
+| `--n-orderings INT` | Sample up to N symmetrically-distinct site decorations per multi-species prototype (default `1`). |
+| `--lattice-scales LIST` | Comma-separated isotropic cell-scale factors per ordering, e.g. `0.96,1.0,1.04`. |
+| `--ordering-seed INT` | RNG seed for the ordering sampler (reproducibility). |
+| `--auto-confirm / --ask` | Skip the y/N prompt for every detected composition. |
+
+---
+
+## Project layout
+
+```
+matsim-agents/
+├── pyproject.toml
+├── scripts/
+│   └── setup_env.sh              # delegates to HydraGNN installers
+├── src/matsim_agents/
+│   ├── state.py                  # typed shared LangGraph state
+│   ├── graph.py                  # planner -> executor -> analyst
+│   ├── llm.py                    # Ollama | vLLM | OpenAI | Anthropic
+│   ├── cli.py                    # `matsim-agents run|plan|chat`
+│   ├── chat.py                   # interactive discovery REPL
+│   ├── agents/
+│   │   ├── planner.py
+│   │   ├── executor.py
+│   │   └── analyst.py
+│   ├── tools/
+│   │   └── relaxation.py         # HydraGNN + ASE relaxation tool
+│   └── discovery/
+│       ├── composition.py        # formula parsing
+│       ├── phase_explorer.py     # crystal-phase seed enumeration
+│       ├── stability.py          # ΔE/atom ranking & |F|max proxy
+│       └── wrapper.py            # explore_composition()
+├── examples/
+│   ├── single_relaxation.py
+│   └── discovery_chat.py
+├── tests/
+│   ├── test_state_and_graph.py
+│   └── test_discovery.py
+└── third_party/HydraGNN/         # cloned by setup_env.sh
+```
+
+---
+
+## Configuration reference
+
+### `MatSimState`
+
+| Field | Type | Purpose |
+|---|---|---|
+| `objective` | `str` | Free-form research goal. |
+| `plan` | `list[TaskSpec]` | Tasks emitted by the planner. |
+| `pending_tasks` | `list[TaskSpec]` | Queue consumed by the executor. |
+| `results` | `list[RelaxationResult]` | Accumulated tool outputs. |
+| `analysis` | `str \| None` | Final analyst summary. |
+| `iteration` / `max_iterations` | `int` | Executor loop guard. |
+| `llm_provider` / `llm_model` / `llm_base_url` | `str \| None` | LLM selection. |
+
+### `TaskSpec`
+
+```python
+TaskSpec(
+    kind="relax",                  # relax | analyze | report
+    structure_path="foo.vasp",
+    optimizer="FIRE",              # FIRE | BFGS | BFGSLineSearch
+    maxiter=200,
+    maxstep=1e-2,
+    charge=0.0,
+    spin=0.0,
+    random_displacement=False,
+)
+```
+
+### `RelaxStructureInput` / `RelaxationResult`
+
+See [`src/matsim_agents/tools/relaxation.py`](src/matsim_agents/tools/relaxation.py) — fields mirror the
+options of the upstream HydraGNN ASE script
+(`structure_optimization_ASE.py`).
+
+---
+
+## Limitations and roadmap
+
+- [ ] **Phonon-based dynamical stability** (phonopy / finite differences).
+- [ ] **Formation-energy reference set** for absolute (not relative) chemical stability.
+- [ ] **Richer phase enumeration** via pymatgen prototypes / CALYPSO / USPEX hooks.
+- [ ] **Symmetry-aware ordering enumeration** via `enumlib` (currently random-shuffle + `StructureMatcher` dedup).
+- [ ] **Anisotropic / per-axis lattice scans** (currently isotropic only).
+- [ ] **AB / AA' stacking** for 2-D multilayers (currently AA-stacked only).
+- [ ] **2-D heterostructures** (e.g. graphene/h-BN, MoS₂/WSe₂) with lattice-mismatch search.
+- [ ] **MD agent**: NVT/NPT runs with the same HydraGNN calculator.
+- [ ] **MCP tool server** so external clients (Claude Desktop, IDE agents) can call the discovery wrapper directly.
+- [ ] **Distributed executor** for parallel composition exploration on HPC.
+- [ ] **Pluggable MLFF backends** (MACE, NequIP, Orb) behind the same calculator interface.
+
+---
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+1. Fork and create a feature branch.
+2. `pip install -e .[dev]`
+3. `pytest` and `ruff check .` before pushing.
+4. Open a merge request on
+   [code.ornl.gov/multi-agentic-ai-materials/matsim-agents](https://code.ornl.gov/multi-agentic-ai-materials/matsim-agents).
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+---
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## License & citation
 
-## License
-For open source projects, say how it is licensed.
+Released under the **MIT License** (see [LICENSE](LICENSE)).
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+If you use `matsim-agents` in academic work, please cite both this
+repository and HydraGNN:
+
+> *HydraGNN: Distributed PyTorch implementation of multi-headed graph
+> convolutional neural networks*, Copyright ID #81929619,
+> <https://doi.org/10.11578/dc.20211019.2>
+
+---
+
+*Maintained by the ORNL Multi-Agentic AI for Materials team.*
