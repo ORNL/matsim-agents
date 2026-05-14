@@ -96,11 +96,14 @@ module reset
 module load PrgEnv-cray
 module load cce                          # default 18.0.1 on Frontier
 module load craype-accel-amd-gfx90a      # enables -fopenmp offload to gfx90a
-# ROCm version is selectable via env (default: rocm/7.2.0 for newest
-# rocBLAS/rocFFT/rocSOLVER on MI250X). Fall back to 6.2.4 if a future
-# upgrade breaks ABI compatibility with the cce/18.0.1 + craype/2.7.33
-# wrapper; that combo was the original Frontier-validated stack.
-ROCM_MODULE="${ROCM_MODULE:-rocm/7.2.0}"
+# ROCm version is selectable via env. Default rocm/6.2.4 is the only option
+# that is ABI-compatible with Frontier's cray-mpich/8.1.31 GTL: the GTL library
+# /opt/cray/pe/mpich/8.1.31/gtl/lib/libmpi_gtl_hsa.so is hard-linked against
+# libamdhip64.so.6 (rocm 6.x SONAME). rocm/7.x ships libamdhip64.so.7 and
+# breaks the MPI Fortran link probe at CMake configure. Frontier does not yet
+# ship a cray-mpich built against rocm 7. Override with ROCM_MODULE=rocm/6.4.x
+# only if needed.
+ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.4}"
 module load "${ROCM_MODULE}"             # rocFFT, rocBLAS, rocSOLVER
 module load cray-fftw                    # CPU-side FFTW3 headers
 module load cmake/3.30.5
@@ -242,7 +245,7 @@ run_make_with_ice_workaround() {
     fi
     echo ">>> ICE'd this iter:"
     echo "${ice_paths}" | sed 's/^/    /'
-    local fullp srcf rel subsys base tgt objsub ff defs incs flags objf
+    local fullp srcf rel subsys base ff objf objrel build_make defs incs flags compile_dir
     for fullp in ${ice_paths}; do
       srcf="${fullp}"
       [[ ! -f "${srcf}" ]] && srcf="/$(echo "${fullp}" | sed 's,^\.\./\.\./\.\./,,')"
@@ -250,26 +253,35 @@ run_make_with_ice_workaround() {
       rel="${srcf#${SRC_DIR}/}"
       subsys="$(echo "${rel}" | cut -d/ -f1)"
       base="$(basename "${srcf}" .f90)"
-      case "${subsys}" in
-        PW)      tgt=qe_pw      ; objsub="src" ;;
-        Modules) tgt=qe_modules ; objsub=""    ;;
-        PHonon)  tgt=qe_ph      ; objsub="src" ;;
-        PP)      tgt=qe_pp      ; objsub="src" ;;
-        *)       echo "    >> unknown subsys ${subsys} for ${srcf}"; return 6 ;;
-      esac
-      ff="${BUILD_DIR}/${subsys}/CMakeFiles/${tgt}.dir/flags.make"
-      [[ ! -f "${ff}" ]] && { echo "    >> no flags.make at ${ff}"; return 7; }
+      # Find the build.make whose rule lists this exact source path. The rule
+      # line looks like: "<objpath>.f90.o: <absolute source path>". The
+      # captured objpath is BUILD_DIR-relative (e.g. PW/CMakeFiles/qe_pw.dir/src/foo.f90.o).
+      build_make=""
+      objrel=""
+      while IFS= read -r cand; do
+        local m
+        m=$(grep -E "^[^[:space:]]+\.f90\.o:[[:space:]]+${srcf}\$" "${cand}" 2>/dev/null | head -1)
+        if [[ -n "${m}" ]]; then
+          objrel="${m%%:*}"
+          build_make="${cand}"
+          break
+        fi
+      done < <(find "${BUILD_DIR}/${subsys}/CMakeFiles" -name build.make 2>/dev/null)
+      if [[ -z "${objrel}" ]]; then
+        echo "    >> could not locate build.make rule for ${rel}"
+        return 7
+      fi
+      ff="$(dirname "${build_make}")/flags.make"
+      objf="${BUILD_DIR}/${objrel}"
+      # cmake's compile rule cd's into the dir containing the target (e.g. PW),
+      # so we must run ftn from the same dir for include paths to resolve.
+      compile_dir="${BUILD_DIR}/${objrel%%/CMakeFiles/*}"
       defs=$(grep '^Fortran_DEFINES'  "${ff}" | sed -E 's/^Fortran_DEFINES *= *//')
       incs=$(grep '^Fortran_INCLUDES' "${ff}" | sed -E 's/^Fortran_INCLUDES *= *//')
       flags=$(grep '^Fortran_FLAGS'   "${ff}" | sed -E 's/^Fortran_FLAGS *= *//; s/-target-accel=amd_gfx90a//g; s/-h[[:space:]]+omp/-h noomp/g')
-      if [[ -n "${objsub}" ]]; then
-        objf="${BUILD_DIR}/${subsys}/CMakeFiles/${tgt}.dir/${objsub}/${base}.f90.o"
-      else
-        objf="${BUILD_DIR}/${subsys}/CMakeFiles/${tgt}.dir/${base}.f90.o"
-      fi
       mkdir -p "$(dirname "${objf}")"
-      cd "${BUILD_DIR}/${subsys}"
-      echo "    >> recompiling ${rel} (offload stripped)"
+      cd "${compile_dir}"
+      echo "    >> recompiling ${rel} -> ${objrel}"
       # shellcheck disable=SC2086
       if ! ftn ${defs} ${incs} ${flags} -c "${srcf}" -o "${objf}" 2>>"${logdir}/workaround.log"; then
         echo "    >> FAILED to compile ${rel} even without offload"
@@ -277,6 +289,8 @@ run_make_with_ice_workaround() {
         return 4
       fi
       [[ ! -s "${objf}" ]] && { echo "    >> ${objf} empty after compile"; return 4; }
+      # Touch the object newer than its sources so make does not rebuild it.
+      touch "${objf}"
     done
     cd "${BUILD_DIR}"
   done
