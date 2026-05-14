@@ -56,6 +56,7 @@ class DiscoveryChatConfig:
     optimizer: str = "FIRE"
     maxiter: int = 200
     maxstep: float = 1e-2
+    fmax: float = 0.02
     supercell: tuple[int, int, int] | None = None
     min_atoms: int = 32
     include_2d: bool = False
@@ -133,6 +134,7 @@ def _kickoff_exploration(
         optimizer=cfg.optimizer,
         maxiter=cfg.maxiter,
         maxstep=cfg.maxstep,
+        fmax=cfg.fmax,
         supercell=cfg.supercell,
         min_atoms=cfg.min_atoms,
         include_2d=cfg.include_2d,
