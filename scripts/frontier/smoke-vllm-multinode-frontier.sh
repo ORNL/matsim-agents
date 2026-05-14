@@ -128,6 +128,12 @@ cleanup() {
   echo "[cleanup] Stopping vLLM and Ray ..."
   kill "$VLLM_PID" 2>/dev/null || true
   wait "$VLLM_PID" 2>/dev/null || true
+  # Copy Ray session logs for post-mortem before stopping Ray
+  RAY_SESSION=$(ls -td /tmp/ray/session_* 2>/dev/null | head -1)
+  if [[ -n "$RAY_SESSION" ]]; then
+    echo "[cleanup] Copying Ray session logs to $RUN_DIR/ray-session-logs/ ..."
+    cp -r "$RAY_SESSION/logs" "$RUN_DIR/ray-session-logs/" 2>/dev/null || true
+  fi
   "$RAY" stop --force 2>/dev/null || true
   for pid in "${WORKER_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
   kill "$RAY_HEAD_PID" 2>/dev/null || true
