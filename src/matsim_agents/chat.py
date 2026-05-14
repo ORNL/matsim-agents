@@ -187,7 +187,9 @@ def chat_once(
         base_url=cfg.llm_base_url,
     )
     response = llm.invoke(session.messages)
-    assistant_text = response.content if isinstance(response.content, str) else str(response.content)
+    assistant_text = (
+        response.content if isinstance(response.content, str) else str(response.content)
+    )
     session.messages.append(AIMessage(content=assistant_text))
     if on_assistant is not None:
         on_assistant(assistant_text)
