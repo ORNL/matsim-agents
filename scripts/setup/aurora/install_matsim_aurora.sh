@@ -2,11 +2,12 @@
 # =============================================================================
 # install_matsim_aurora.sh
 #
-# Two-phase Python venv install for matsim-agents + HydraGNN on Aurora-like
-# environments.
+# Frontier/Perlmutter-style phased install for matsim-agents + HydraGNN on
+# Aurora.
 #
-# Phase 1: Create venv and install HydraGNN dependencies first.
-# Phase 2: Install matsim-agents and additional runtime/tooling dependencies.
+# Phase 1: Run HydraGNN's Aurora installer to create/configure the venv and
+#          install HydraGNN dependencies from installation_DOE_supercomputers.
+# Phase 2: Activate that environment and install matsim-agents dependencies.
 #
 # Usage:
 #   bash install_matsim_aurora.sh
@@ -15,8 +16,10 @@
 #   PROJECT_DIR       Root project directory
 #   MATSIM_DIR        matsim-agents checkout path
 #   HYDRAGNN_DIR      HydraGNN checkout path
-#   VENV_PATH         Python virtual environment path
-#   PYTHON_BIN        Python binary used to create venv (default: auto-detect)
+#   HYDRAGNN_INSTALLER  Aurora installer script path
+#   INSTALL_ROOT      Base install directory for HydraGNN Aurora installer
+#   VENV_PATH         Environment path created by HydraGNN installer
+#   RECREATE_ENV      Passed to HydraGNN installer (default: 0)
 #   LLM_BACKENDS      matsim-agents extras (default: dev)
 #   INSTALL_VLLM_SERVER  Install vllm package (default: 0)
 # =============================================================================
@@ -26,37 +29,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${PROJECT_DIR:-${SCRIPT_DIR}/../../..}"
 MATSIM_DIR="${MATSIM_DIR:-${PROJECT_DIR}}"
 HYDRAGNN_DIR="${HYDRAGNN_DIR:-$(cd "${MATSIM_DIR}/.." && pwd)/HydraGNN}"
-VENV_PATH="${VENV_PATH:-${PROJECT_DIR}/aurora_venv}"
+HYDRAGNN_INSTALLER="${HYDRAGNN_INSTALLER:-${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_aurora.sh}"
+INSTALL_ROOT="${INSTALL_ROOT:-${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Aurora}"
+VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
+RECREATE_ENV="${RECREATE_ENV:-0}"
 LLM_BACKENDS="${LLM_BACKENDS:-dev}"
 INSTALL_VLLM_SERVER="${INSTALL_VLLM_SERVER:-0}"
 
 log()  { printf '\033[1;34m[install]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[install]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[install]\033[0m %s\n' "$*" >&2; exit 1; }
-
-pick_python() {
-    if [[ -n "${PYTHON_BIN:-}" ]]; then
-        echo "${PYTHON_BIN}"
-        return 0
-    fi
-
-    for cand in python3.11 python3.10 python3.12 python3; do
-        if command -v "$cand" >/dev/null 2>&1; then
-            echo "$cand"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-parse_major_minor() {
-    local pybin="$1"
-    "$pybin" - <<'PYEOF'
-import sys
-print(f"{sys.version_info.major}.{sys.version_info.minor}")
-PYEOF
-}
 
 pip_retry() {
     local tries=3 delay=3
@@ -73,47 +55,41 @@ pip_retry() {
 
 [[ -d "${MATSIM_DIR}" ]] || die "matsim-agents directory not found: ${MATSIM_DIR}"
 [[ -d "${HYDRAGNN_DIR}" ]] || die "HydraGNN directory not found: ${HYDRAGNN_DIR}"
+[[ -f "${HYDRAGNN_INSTALLER}" ]] || die "HydraGNN Aurora installer not found: ${HYDRAGNN_INSTALLER}"
 
-PYTHON_BIN="$(pick_python)" || die "No suitable Python interpreter found. Set PYTHON_BIN explicitly."
-PY_MM="$(parse_major_minor "${PYTHON_BIN}")"
-log "Using Python interpreter: ${PYTHON_BIN} (${PY_MM})"
+# -- Phase 1: Delegate to HydraGNN Aurora installer ----------------------------
+log "Phase 1: running HydraGNN Aurora installer"
+log "Installer: ${HYDRAGNN_INSTALLER}"
+log "INSTALL_ROOT=${INSTALL_ROOT}"
+log "VENV_PATH=${VENV_PATH}"
 
-PY_MAJOR="${PY_MM%%.*}"
-PY_MINOR="${PY_MM##*.}"
-if (( PY_MAJOR < 3 || (PY_MAJOR == 3 && PY_MINOR < 10) )); then
-    die "Python >= 3.10 required, found ${PY_MM}. Set PYTHON_BIN to a newer interpreter."
-fi
+(
+    cd "$(dirname "${HYDRAGNN_INSTALLER}")"
+    INSTALL_ROOT="${INSTALL_ROOT}" \
+    VENV_PATH="${VENV_PATH}" \
+    RECREATE_ENV="${RECREATE_ENV}" \
+    bash "$(basename "${HYDRAGNN_INSTALLER}")"
+)
 
-# -- Phase 1: HydraGNN environment --------------------------------------------
-log "Phase 1: creating virtual environment at ${VENV_PATH}"
-"${PYTHON_BIN}" -m venv "${VENV_PATH}"
+[[ -d "${VENV_PATH}" ]] || die "Expected Aurora environment not found at ${VENV_PATH}"
+
+log "Activating environment: ${VENV_PATH}"
 # shellcheck disable=SC1091
 source "${VENV_PATH}/bin/activate"
 
-log "Upgrading pip/setuptools/wheel"
-pip install -U pip setuptools wheel
-
-HY_REQS=(
-    "${HYDRAGNN_DIR}/requirements-base.txt"
-    "${HYDRAGNN_DIR}/requirements-torch.txt"
-    "${HYDRAGNN_DIR}/requirements-pyg.txt"
-)
-
-for req in "${HY_REQS[@]}"; do
-    if [[ -f "$req" ]]; then
-        log "Installing HydraGNN dependencies from $(basename "$req")"
-        pip_retry -r "$req"
-    else
-        warn "Missing HydraGNN requirement file: $req"
-    fi
-done
-
-if [[ -f "${HYDRAGNN_DIR}/setup.py" || -f "${HYDRAGNN_DIR}/pyproject.toml" ]]; then
-    log "Installing HydraGNN editable package from ${HYDRAGNN_DIR}"
-    pip_retry -e "${HYDRAGNN_DIR}" --no-deps
-else
-    die "HydraGNN project metadata not found in ${HYDRAGNN_DIR}"
+PY_MM="$(python - <<'PYEOF'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PYEOF
+)"
+PY_MAJOR="${PY_MM%%.*}"
+PY_MINOR="${PY_MM##*.}"
+if (( PY_MAJOR < 3 || (PY_MAJOR == 3 && PY_MINOR < 10) )); then
+    die "Python >= 3.10 required by matsim-agents, found ${PY_MM} in ${VENV_PATH}."
 fi
+
+log "Upgrading pip/setuptools/wheel in active environment"
+pip install -U pip setuptools wheel
 
 # -- Phase 2: matsim-agents extras --------------------------------------------
 if [[ -f "${MATSIM_DIR}/pyproject.toml" ]]; then
@@ -133,12 +109,6 @@ pip_retry "huggingface_hub>=1.12" "transformers>=4.45" "accelerate>=1.13"
 if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     log "INSTALL_VLLM_SERVER=1 -> installing vllm"
     pip_retry vllm
-fi
-
-# Re-assert HydraGNN base pins after optional extras change transitive versions.
-if [[ -f "${HYDRAGNN_DIR}/requirements-base.txt" ]]; then
-    log "Re-asserting HydraGNN base pins"
-    pip_retry -r "${HYDRAGNN_DIR}/requirements-base.txt"
 fi
 
 log "Verifying installation imports"
