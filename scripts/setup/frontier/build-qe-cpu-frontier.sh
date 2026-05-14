@@ -30,10 +30,15 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+PROJ="$(dirname "${REPO}")"
+
 # ---- Configuration ----------------------------------------------------------
 QE_VERSION="develop"                    # git tag (e.g. "7.4") or "develop"
 QE_REPO="https://gitlab.com/QEF/q-e.git"
-BASE_DIR="/lustre/orion/mat746/proj-shared"
+BASE_DIR="${PROJ}"
 SRC_DIR="${BASE_DIR}/quantum-espresso/src"
 BUILD_DIR="${BASE_DIR}/quantum-espresso/build-cpu"
 INSTALL_DIR="${BASE_DIR}/quantum-espresso/install-cpu"
