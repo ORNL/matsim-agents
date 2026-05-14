@@ -11,7 +11,7 @@
 # Phase 3: Submit build-vllm-rocm72.sh as a compute batch job.
 #
 # Usage (on a login node):
-#   bash /lustre/orion/mat746/proj-shared/matsim-agents/scripts/frontier/install-rocm72.sh
+#   bash /lustre/orion/mat746/proj-shared/matsim-agents/scripts/setup/frontier/install-rocm72.sh
 
 set -euo pipefail
 

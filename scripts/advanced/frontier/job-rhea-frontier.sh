@@ -15,11 +15,11 @@
 #   • matsim-agents: CPU-only (chat --auto-confirm, piped query)
 #
 # Usage:
-#   sbatch scripts/frontier/job-rhea-frontier.sh
+#   sbatch scripts/advanced/frontier/job-rhea-frontier.sh
 #
 # Override model at submission:
 #   MATSIM_MODEL_DIR=.../Qwen3-32B MATSIM_MODEL_NAME=Qwen/Qwen3-32B \
-#     sbatch scripts/frontier/job-rhea-frontier.sh
+#     sbatch scripts/advanced/frontier/job-rhea-frontier.sh
 # ---------------------------------------------------------------------------
 
 set -euo pipefail

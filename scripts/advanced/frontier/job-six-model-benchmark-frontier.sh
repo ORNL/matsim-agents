@@ -32,7 +32,7 @@
 # Example:
 #   BENCHMARK_PROMPT="Search for a Pb-free halide double perovskite candidate and justify stability." \
 #   BENCHMARK_SPEC_FILE="scripts/six_model_specs.example.json" \
-#   sbatch scripts/frontier/job-six-model-benchmark-frontier.sh
+#   sbatch scripts/advanced/frontier/job-six-model-benchmark-frontier.sh
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -48,7 +48,7 @@ mkdir -p "$RUN_DIR"
 if [[ -z "${BENCHMARK_PROMPT:-}" ]]; then
   echo "Error: BENCHMARK_PROMPT is required." >&2
   echo "Example:" >&2
-  echo "  BENCHMARK_PROMPT='Search for a Pb-free halide double perovskite candidate and justify stability.' sbatch scripts/frontier/job-six-model-benchmark-frontier.sh" >&2
+  echo "  BENCHMARK_PROMPT='Search for a Pb-free halide double perovskite candidate and justify stability.' sbatch scripts/advanced/frontier/job-six-model-benchmark-frontier.sh" >&2
   exit 2
 fi
 
@@ -85,7 +85,7 @@ export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
 TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
 if [[ ! -s "$TVM_FFI_SO" ]]; then
   echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
-  echo "       Rebuild with: scripts/frontier/prebuild-tvm-ffi-frontier.sh" >&2
+  echo "       Rebuild with: scripts/setup/frontier/prebuild-tvm-ffi-frontier.sh" >&2
   exit 1
 fi
 rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true

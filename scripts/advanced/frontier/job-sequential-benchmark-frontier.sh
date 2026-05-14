@@ -37,7 +37,7 @@
 #
 # Example submission:
 #   BENCHMARK_PROMPT="Search for a Pb-free halide double perovskite and justify stability." \
-#   sbatch scripts/frontier/job-sequential-benchmark-frontier.sh
+#   sbatch scripts/advanced/frontier/job-sequential-benchmark-frontier.sh
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -93,7 +93,7 @@ export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
 TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
 if [[ ! -s "$TVM_FFI_SO" ]]; then
   echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
-  echo "       Rebuild with: scripts/frontier/prebuild-tvm-ffi-frontier.sh" >&2
+  echo "       Rebuild with: scripts/setup/frontier/prebuild-tvm-ffi-frontier.sh" >&2
   exit 1
 fi
 rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true

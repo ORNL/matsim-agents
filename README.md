@@ -94,14 +94,34 @@ in via the same interfaces.
 ## Running on Frontier (OLCF)
 
 > **⚠️ Frontier users — read this first:**
-> See [`scripts/frontier/README-frontier.md`](scripts/frontier/README-frontier.md)
+> See [`scripts/docs/frontier/README-frontier.md`](scripts/docs/frontier/README-frontier.md)
 > for required setup and known issues. **Critically: a prebuilt `tvm_ffi`
 > shared library must exist at
 > `$PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so`
 > (where `$PROJ` is your project's proj-shared directory) or every vLLM job
 > will silently hang forever** (the script preflight check will fail-fast in
 > 2 seconds with a clear error message). If missing, rebuild with
-> `sbatch scripts/frontier/prebuild-tvm-ffi-frontier.sh`.
+> `sbatch scripts/setup/frontier/prebuild-tvm-ffi-frontier.sh`.
+
+### Quantum ESPRESSO (DFT) backend on Frontier
+
+The repo also ships a fully reproducible recipe for building Quantum
+ESPRESSO `develop` with **AMD MI250X (gfx90a) OpenMP target offload**:
+
+- Build script: [`scripts/setup/frontier/build-qe-gpu-frontier.sh`](scripts/setup/frontier/build-qe-gpu-frontier.sh)
+- Run launcher: [`scripts/launchers/frontier/run-pw-gpu-frontier.sh`](scripts/launchers/frontier/run-pw-gpu-frontier.sh)
+- Full docs: [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md)
+
+The build is cross-compiled on a login node and produces ~92 binaries
+(`pw.x`, `cp.x`, `ph.x`, `pp.x`, `neb.x`, `epw.x`, `kcw.x`, `tddfpt`/
+`turbo_*` suite, `pioud.x`, `all_currents.x`, …) under
+`external/quantum-espresso/install-gpu/bin/` (gitignored). The recipe
+includes baked-in workarounds for the cce/18.0.1 ftn-7991 ICE, the
+PIOUD `etime()` link error (rewritten to F95 `cpu_time`), and the
+rocm/7.x cray-mpich SONAME mismatch.
+
+QE uses a different module stack than matsim-agents' Python; the two
+are deliberately kept isolated and coupled only through Slurm + files.
 
 ---
 
@@ -120,7 +140,7 @@ cd matsim-agents
 ./scripts/setup_env.sh
 
 # Frontier (OLCF, ROCm 7.2)
-bash scripts/frontier/install-rocm72.sh
+bash scripts/setup/frontier/install-rocm72.sh
 
 # Frontier (OLCF, ROCm 7.1)
 PLATFORM=frontier-rocm71 ./scripts/setup_env.sh
@@ -132,7 +152,7 @@ PLATFORM=perlmutter ./scripts/setup_env.sh
 Available `PLATFORM` values:
 `workstation` (default), `frontier-rocm71`, `frontier-rocm64`,
 `perlmutter`, `aurora`, `andes`. For Frontier ROCm 7.2 use
-`scripts/frontier/install-rocm72.sh` directly (see above).
+`scripts/setup/frontier/install-rocm72.sh` directly (see above).
 
 Environment overrides accepted by the installer:
 
@@ -483,16 +503,36 @@ Common options (all commands that touch HydraGNN):
 ```
 matsim-agents/
 ├── pyproject.toml
+├── docs/
+│   ├── llm-backends-comparison.md          # vLLM vs HF Transformers on ROCm
+│   ├── model-download.md                   # HF model download how-to
+│   └── quantum-espresso-frontier.md        # QE GPU build/run on Frontier
 ├── scripts/
-│   ├── setup_env.sh              # delegates to HydraGNN installers (laptop / legacy HPC)
-│   └── frontier/                 # Frontier (OLCF) ROCm 7.2 scripts
-│       ├── install-rocm72.sh     # login-node master install (Phase 1-3)
-│       ├── install-rocm72-phase23.sh  # re-run Phase 2+3 only
-│       ├── build-vllm-rocm72.sh  # SLURM compute job: build vLLM from source
-│       ├── frontier-module-stack.sh   # shared module-load helpers
-│       ├── smoke-vllm-frontier.sh     # vLLM TP=8 smoke test
-│       ├── smoke-transformers-frontier.sh  # HF Transformers smoke test
-│       └── ...                   # other frontier job scripts
+│   ├── setup_env.sh                        # workstation / legacy HPC env install
+│   ├── setup/
+│   │   └── frontier/                       # Frontier login-node installers
+│   │       ├── install-rocm72.sh           # vLLM ROCm 7.2 master install
+│   │       ├── install_matsim_frontier.sh  # matsim-agents env on Frontier
+│   │       ├── prebuild-tvm-ffi-frontier.sh
+│   │       ├── build-vllm-rocm72.sh        # vLLM source build
+│   │       ├── build-qe-cpu-frontier.sh    # Quantum ESPRESSO CPU build
+│   │       ├── build-qe-gpu-frontier.sh    # Quantum ESPRESSO MI250X build
+│   │       └── frontier-module-stack.sh    # shared module-load helpers
+│   ├── launchers/
+│   │   └── frontier/                       # Frontier sbatch launchers
+│   │       ├── launch-test-singlenode-resume-frontier.sh
+│   │       ├── launch-test-multinode-frontier.sh
+│   │       ├── launch-test-all-models-frontier.sh
+│   │       └── run-pw-gpu-frontier.sh      # QE pw.x GPU launcher
+│   ├── smoke-tests/
+│   │   └── frontier/
+│   │       ├── smoke-vllm-singlenode-frontier.sh
+│   │       ├── smoke-vllm-multinode-frontier.sh
+│   │       └── smoke-transformers-frontier.sh
+│   └── docs/
+│       └── frontier/                       # Frontier-specific docs
+│           ├── README-frontier.md
+│           └── README-six-model-benchmark.md
 ├── src/matsim_agents/
 │   ├── state.py                  # typed shared LangGraph state
 │   ├── graph.py                  # planner -> executor -> analyst
@@ -516,6 +556,8 @@ matsim-agents/
 ├── tests/
 │   ├── test_state_and_graph.py
 │   └── test_discovery.py
+├── external/                     # gitignored: large external builds
+│   └── quantum-espresso/         # src/, build-gpu/, install-gpu/
 └── third_party/HydraGNN/         # cloned by setup_env.sh
 ```
 
