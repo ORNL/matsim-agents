@@ -299,11 +299,16 @@ run_make_with_ice_workaround() {
 }
 
 # ---- Build ------------------------------------------------------------------
-# Build EVERYTHING with the retry loop so the subsequent `make install` (which
-# depends on the `all` target) doesn't trigger fresh compiles of CPV/etc. that
-# would hit the same ftn-7991 ICE class outside the loop's coverage.
-echo "--- Building all QE GPU targets with retry loop ---"
-run_make_with_ice_workaround all all
+# Build the QE target groups we actually need under the ICE retry loop.
+# We deliberately avoid `make all` because it pulls in PIOUD (path-integral
+# MD), whose pimd_subrout.f90 calls the GNU intrinsic `etime()` that Cray
+# Fortran does not provide -> link error on pioud.x. PIOUD is not part of any
+# group target the user typically invokes, and excluding it lets the rest of
+# the suite (pw, ph, pp, cp, hp, ld1, neb, pwall, tddfpt, upf, xspectra,
+# epw, kcw) install cleanly.
+QE_TARGETS=(pw cp ph pp neb hp ld1 pwall tddfpt upf xspectra epw kcw)
+echo "--- Building QE GPU targets: ${QE_TARGETS[*]} ---"
+run_make_with_ice_workaround targets "${QE_TARGETS[@]}"
 MAKE_RC=$?
 if (( MAKE_RC != 0 )); then
   echo "BUILD FAILED with rc=${MAKE_RC}; see ${BUILD_DIR}/ice-workaround-logs/"
@@ -314,10 +319,13 @@ echo ""
 echo "--- Build complete ---"
 
 # ---- Install ----------------------------------------------------------------
-echo "--- Installing to ${INSTALL_DIR} ---"
-cd "${BUILD_DIR}"
-make install > "${BUILD_DIR}/install.log" 2>&1
-echo "  (log: ${BUILD_DIR}/install.log)"
+# `make install` triggers a `make all` dependency check which tries to build
+# pioud.x and fails. Instead, install only the executables that built OK by
+# copying them straight from build-gpu/bin to install-gpu/bin.
+echo "--- Installing executables from ${BUILD_DIR}/bin to ${INSTALL_DIR}/bin ---"
+mkdir -p "${INSTALL_DIR}/bin"
+cp "${BUILD_DIR}"/bin/*.x "${INSTALL_DIR}/bin/"
+echo "  installed $(ls "${INSTALL_DIR}/bin/" | wc -l) executables"
 
 echo ""
 echo "========================================="
