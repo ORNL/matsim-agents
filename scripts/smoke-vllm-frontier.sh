@@ -48,6 +48,19 @@ mkdir -p "$MIOPEN_USER_DB_PATH"
 # Instead, point VLLM_CUDART_SO_PATH so flashinfer can find the HIP runtime.
 export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 
+# Run C result: bundled RCCL also crashed with same _Generic_4 kernel.
+# Switching RCCL library had no effect → the problem is not library version.
+#
+# Run D: HSA_NO_SCRATCH_RECLAIM=1
+# Every RCCL unit test in the official test suite sets this variable.
+# RCCL source (src/init.cc checkHsaEnvSetting) validates it at startup.
+# ncclDevKernel_Generic_4 uses private scratch memory for stack frames.
+# HSA scratch reclaim can reclaim that memory mid-execution → illegal instruction.
+# This is hardware-level, independent of which RCCL .so is loaded.
+# Source: ROCm/rccl tools/scripts/test_runner/README.md (HSA_NO_SCRATCH_RECLAIM)
+#         ROCm/rccl src/init.cc checkHsaEnvSetting() / validHsaScratchEnvSetting()
+export HSA_NO_SCRATCH_RECLAIM=1
+
 # Run C: use PyTorch-bundled RCCL instead of system RCCL.
 # Runs A & B with system RCCL (/opt/rocm-7.1.1/lib/librccl.so.1) both crashed
 # with HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION in ncclDevKernel_Generic_4 — env-var
