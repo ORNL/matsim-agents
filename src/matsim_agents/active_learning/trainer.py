@@ -13,11 +13,10 @@ training-launcher bash script (which itself handles ``srun`` + module setup).
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from ase import Atoms
 from ase.io import write as ase_write
@@ -141,10 +140,14 @@ def retrain_hydragnn(
         argv = [
             "python",
             str(trainer_cfg.train_script),
-            "--dataset", str(dataset_path),
-            "--logdir", str(out_logdir),
-            "--resume_from", str(hydragnn_cfg.logdir),
-            "--epochs", str(trainer_cfg.epochs_per_iter),
+            "--dataset",
+            str(dataset_path),
+            "--logdir",
+            str(out_logdir),
+            "--resume_from",
+            str(hydragnn_cfg.logdir),
+            "--epochs",
+            str(trainer_cfg.epochs_per_iter),
         ]
 
     log.info("Launching retrain: %s", " ".join(argv))
@@ -152,8 +155,6 @@ def retrain_hydragnn(
     with open(log_path, "w") as f:
         proc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, check=False)
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"HydraGNN retrain failed with exit {proc.returncode}; see {log_path}"
-        )
+        raise RuntimeError(f"HydraGNN retrain failed with exit {proc.returncode}; see {log_path}")
 
     return out_logdir

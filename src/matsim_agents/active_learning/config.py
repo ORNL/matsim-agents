@@ -12,7 +12,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-
 # --------------------------------------------------------------------------- #
 # Sub-configs                                                                 #
 # --------------------------------------------------------------------------- #
@@ -50,7 +49,7 @@ class MDConfig(BaseModel):
     validator promotes it to ``seed_source.kind='paths'``.
     """
 
-    seed_source: "SeedSourceConfig" = Field(
+    seed_source: SeedSourceConfig = Field(
         ...,
         description=(
             "Where the initial seed structures come from. Three modes: "
@@ -124,13 +123,11 @@ class SeedSourceConfig(BaseModel):
     n_orderings: int = 1
 
     @model_validator(mode="after")
-    def _check_required_fields(self) -> "SeedSourceConfig":
+    def _check_required_fields(self) -> SeedSourceConfig:
         if self.kind == "paths" and not self.paths:
             raise ValueError("seed_source.kind='paths' requires non-empty 'paths'.")
         if self.kind == "compositions" and not self.compositions:
-            raise ValueError(
-                "seed_source.kind='compositions' requires non-empty 'compositions'."
-            )
+            raise ValueError("seed_source.kind='compositions' requires non-empty 'compositions'.")
         if self.kind == "prompt":
             if not self.prompt:
                 raise ValueError("seed_source.kind='prompt' requires 'prompt'.")
@@ -147,9 +144,7 @@ MDConfig.model_rebuild()
 class AcquisitionConfig(BaseModel):
     """Which uncertainty measure(s) to use to pick frames for VASP labelling."""
 
-    strategy: Literal[
-        "ensemble", "mc_dropout", "random", "ensemble_then_dropout"
-    ] = "ensemble"
+    strategy: Literal["ensemble", "mc_dropout", "random", "ensemble_then_dropout"] = "ensemble"
     n_select: int = 256  # how many candidates to label per AL iteration
     mc_dropout_passes: int = 8
     mc_dropout_p: float = 0.1
@@ -160,9 +155,7 @@ class AcquisitionConfig(BaseModel):
 class VASPConfig(BaseModel):
     """How to run VASP single-point calculations."""
 
-    vasp_bin: Path = Field(
-        ..., description="Path to vasp_std (or vasp_gam/vasp_ncl) on Frontier."
-    )
+    vasp_bin: Path = Field(..., description="Path to vasp_std (or vasp_gam/vasp_ncl) on Frontier.")
     vasp_wrapper: Path = Field(
         ...,
         description=(
@@ -207,6 +200,21 @@ class QEBackendConfig(BaseModel):
             "backend auto-detects ``<symbol>.*.UPF`` per element."
         ),
     )
+    pw_template: Path | None = Field(
+        None,
+        description=(
+            "Optional pw.in namelist template (analogue of VASP's INCAR "
+            "template). When set, the backend reads this file, runs "
+            "``str.format(nat=, ntyp=, pseudo_dir=, prefix=, outdir=)`` on "
+            "it, and APPENDS the auto-generated structure cards "
+            "(ATOMIC_SPECIES, CELL_PARAMETERS, ATOMIC_POSITIONS, K_POINTS). "
+            "When None, the backend generates the full pw.in programmatically "
+            "via recommend_settings(). The two paths are mutually exclusive: "
+            "the namelist-level pins below (ecutwfc_ry, occupations, "
+            "extra_control, ...) are IGNORED when pw_template is set — put "
+            "those values in the template directly."
+        ),
+    )
     # Optional explicit overrides (None ⇒ auto from element table).
     ecutwfc_ry: float | None = None
     ecutrho_ry: float | None = None
@@ -241,7 +249,7 @@ class DFTConfig(BaseModel):
     qe: QEBackendConfig | None = None
 
     @model_validator(mode="after")
-    def _check_backend_block(self) -> "DFTConfig":
+    def _check_backend_block(self) -> DFTConfig:
         if self.backend == "vasp" and self.vasp is None:
             raise ValueError("dft.backend='vasp' requires a dft.vasp block.")
         if self.backend == "qe" and self.qe is None:
@@ -320,7 +328,7 @@ class ALConfig(BaseModel):
         return data
 
     @model_validator(mode="after")
-    def _check_ensemble_for_strategy(self) -> "ALConfig":
+    def _check_ensemble_for_strategy(self) -> ALConfig:
         s = self.acquisition.strategy
         needs_ensemble = s in {"ensemble", "ensemble_then_dropout"}
         if needs_ensemble and not self.hydragnn.ensemble_paths:
@@ -331,7 +339,7 @@ class ALConfig(BaseModel):
         return self
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "ALConfig":
+    def from_yaml(cls, path: str | Path) -> ALConfig:
         """Load and validate an active-learning config YAML.
 
         Supports shell-style variable substitution in **all string values**:
@@ -352,6 +360,7 @@ class ALConfig(BaseModel):
         """
         import os
         import re
+
         import yaml
 
         path = Path(path)

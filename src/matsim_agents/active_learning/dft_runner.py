@@ -9,10 +9,10 @@ only owns concurrency, timeouts, and exception capture.
 
 from __future__ import annotations
 
+import os
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Callable, Iterable
-import os
 
 from matsim_agents.active_learning.dft_backend import (
     DFTBackend,
@@ -43,8 +43,7 @@ def run_dft_batch(
         return []
 
     nworkers = (
-        max_workers if max_workers is not None
-        else _max_concurrent_jobs(backend.nodes_per_job)
+        max_workers if max_workers is not None else _max_concurrent_jobs(backend.nodes_per_job)
     )
     nworkers = max(1, min(nworkers, len(specs_list)))
 

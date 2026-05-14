@@ -25,19 +25,18 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     its own logdir while reusing the rest of ``cfg``.
     """
     # Heavy imports kept inside the function so this module stays cheap to import.
+    import json
+
     import torch
+    from hydragnn.utils.model.load_existing_model import load_existing_model_config
 
     from matsim_agents.tools.relaxation import (
-        _atoms_to_graph,  # type: ignore[attr-defined]  # used only for shape parity
         _build_calculator,  # type: ignore[attr-defined]
     )
 
     # We replicate the loading sequence from tools/relaxation.py inline to
     # avoid coupling to the LangGraph @tool wrapper there. If/when that module
     # exposes a public loader, this should switch to it.
-    import json
-
-    from hydragnn.utils.model.load_existing_model import load_existing_model_config
 
     logdir = Path(logdir_override) if logdir_override is not None else cfg.logdir
     config_path = logdir / "config.json"
@@ -47,7 +46,9 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     with open(config_path) as f:
         hcfg = json.load(f)
 
-    radius = cfg.radius if cfg.radius is not None else hcfg["NeuralNetwork"]["Architecture"]["radius"]
+    radius = (
+        cfg.radius if cfg.radius is not None else hcfg["NeuralNetwork"]["Architecture"]["radius"]
+    )
     max_neighbours = (
         cfg.max_neighbours
         if cfg.max_neighbours is not None
@@ -57,13 +58,12 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = load_existing_model_config(
-        config=hcfg, model_name=hcfg["NeuralNetwork"].get("model_name", "EquivariantPNAStack"),
+        config=hcfg,
+        model_name=hcfg["NeuralNetwork"].get("model_name", "EquivariantPNAStack"),
     )
     if cfg.checkpoint:
         ckpt_path = (
-            cfg.checkpoint
-            if os.path.isabs(cfg.checkpoint)
-            else str(logdir / cfg.checkpoint)
+            cfg.checkpoint if os.path.isabs(cfg.checkpoint) else str(logdir / cfg.checkpoint)
         )
         state = torch.load(ckpt_path, map_location=device)
         model.load_state_dict(state.get("model_state_dict", state), strict=False)
