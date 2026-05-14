@@ -1,9 +1,14 @@
-# Test fixtures for the HydraGNN warm-start vs Quantum ESPRESSO cold-start
-# benchmark (tests/integration/test_qe_warmstart.py).
+# Test fixtures for the HydraGNN warm-start vs DFT cold-start benchmarks
+# (tests/integration/test_qe_warmstart.py and test_vasp_warmstart.py).
 #
-# Each entry tells the test how to run pw.x for that structure (cell vs atoms-
-# only relax, smearing flags, etc.) and what to expect from the comparison
-# (final energy / step-count assertions). All paths are relative to this file.
+# Each entry tells the test how to run the DFT engine for that structure
+# (cell vs atoms-only relax, max ionic steps, etc.) and what to expect from
+# the comparison (final energy / step-count assertions). All paths are
+# relative to this file.
+#
+# Per-engine knobs live under separate sub-blocks:
+#   qe:    forwarded to qe_relax.recommend_settings   (calculation, nstep, ...)
+#   vasp:  forwarded to vasp_relax.recommend_settings (calculation, nsw, ...)
 #
 # When you add a new fixture, also drop the corresponding .vasp/.cif/.xyz file
 # next to this YAML.
@@ -18,6 +23,9 @@ fixtures:
     qe:
       calculation: vc-relax
       nstep: 60
+    vasp:
+      calculation: vc-relax
+      nsw: 60
     is_2d: false
     energy_tolerance_ev: 0.005     # |E_warm - E_cold| should be small for the same minimum
     expect_warm_le_cold: true       # warm BFGS step count should not exceed cold
@@ -29,6 +37,9 @@ fixtures:
     qe:
       calculation: vc-relax
       nstep: 60
+    vasp:
+      calculation: vc-relax
+      nsw: 60
     is_2d: false
     energy_tolerance_ev: 0.005
     expect_warm_le_cold: true
@@ -40,6 +51,9 @@ fixtures:
     qe:
       calculation: vc-relax
       nstep: 60
+    vasp:
+      calculation: vc-relax
+      nsw: 60
     is_2d: false
     energy_tolerance_ev: 0.005
     expect_warm_le_cold: true
@@ -52,6 +66,11 @@ fixtures:
     qe:
       calculation: vc-relax
       nstep: 80
+    vasp:
+      # 2-D slab — keep cell shape free but volume fixed so the vacuum gap
+      # doesn't collapse during the cold run.
+      calculation: vc-relax-shape
+      nsw: 80
     is_2d: true
     energy_tolerance_ev: 0.02
     expect_warm_le_cold: true
@@ -65,6 +84,9 @@ fixtures:
     qe:
       calculation: vc-relax
       nstep: 100
+    vasp:
+      calculation: vc-relax
+      nsw: 100
     is_2d: false
     energy_tolerance_ev: 0.05
     expect_warm_le_cold: true
