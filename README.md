@@ -855,7 +855,10 @@ matsim-agents/
 │   │   ├── executor.py
 │   │   └── analyst.py
 │   ├── tools/
-│   │   └── relaxation.py         # HydraGNN + ASE relaxation tool
+│   │   ├── relaxation.py         # HydraGNN + ASE relaxation tool
+│   │   ├── qe_relax.py           # Quantum ESPRESSO pw.x relaxer (scf|relax|vc-relax)
+│   │   ├── vasp_relax.py         # VASP relaxer (scf|relax|vc-relax|vc-relax-shape)
+│   │   └── warmstart_benchmark.py # HydraGNN warm-start vs cold-start QE benchmark
 │   └── discovery/
 │       ├── composition.py        # formula parsing
 │       ├── phase_explorer.py     # crystal-phase seed enumeration
@@ -870,9 +873,10 @@ matsim-agents/
 │       ├── trainer.py            # HydraGNN retraining wrapper
 │       ├── dft_backend.py        # backend-agnostic Protocol
 │       ├── dft_runner.py         # in-allocation parallel job dispatcher
+│       ├── vasp_io.py            # POSCAR/INCAR/KPOINTS/POTCAR writers + parser
 │       └── backends/
-│           ├── vasp.py           # VASP 6.6 labeller
-│           └── qe.py             # Quantum ESPRESSO pw.x labeller
+│           ├── vasp.py           # VASP 6.6 single-point labeller
+│           └── qe.py             # Quantum ESPRESSO pw.x single-point labeller
 ├── examples/
 │   ├── single_relaxation.py
 │   ├── discovery_chat.py
@@ -884,7 +888,15 @@ matsim-agents/
 │       └── README.md
 ├── tests/
 │   ├── test_state_and_graph.py
-│   └── test_discovery.py
+│   ├── test_discovery.py
+│   ├── test_phase_explorer.py
+│   ├── test_al_config.py         # AL config: ${VAR} substitution + validators + legacy shims
+│   ├── test_al_uncertainty.py    # acquisition strategies (ensemble / random / FPS)
+│   ├── test_al_seeds.py          # seed resolution: paths + LLM-prompted (stubbed)
+│   ├── test_vasp_relax.py        # vasp_relax driver + parser
+│   └── integration/
+│       ├── test_al_loop_dryrun.py    # one full AL iteration, all heavy parts mocked
+│       └── test_qe_warmstart.py      # end-to-end QE warm-start (env-gated)
 ├── external/                     # gitignored: large external builds
 │   └── quantum-espresso/         # src/, build-gpu/, install-gpu/
 └── third_party/HydraGNN/         # cloned by setup_env.sh
@@ -926,6 +938,47 @@ TaskSpec(
 See [`src/matsim_agents/tools/relaxation.py`](src/matsim_agents/tools/relaxation.py) — fields mirror the
 options of the upstream HydraGNN ASE script
 (`structure_optimization_ASE.py`).
+
+### Standalone DFT relaxers (outside the AL loop)
+
+For cases where the user wants a *real* DFT relaxation rather than the
+cheap HydraGNN one (e.g. validating a discovered structure, refining a
+final candidate), two sibling drivers ship under `src/matsim_agents/tools/`
+with matching APIs:
+
+| Module | Backend | Calculation modes | Composition-aware defaults |
+|---|---|---|---|
+| [`qe_relax.py`](src/matsim_agents/tools/qe_relax.py) | Quantum ESPRESSO `pw.x` | `scf`, `relax`, `vc-relax` | `ecutwfc` (SSSP-PBE-eff-1.3 table), smearing, k-mesh |
+| [`vasp_relax.py`](src/matsim_agents/tools/vasp_relax.py) | VASP `vasp_std` | `scf`, `relax`, `vc-relax`, `vc-relax-shape` | `ENCUT` = 1.3 × max(ENMAX) from POTCARs (else 520 eV); `ISMEAR/SIGMA/KSPACING` flip metallic vs insulator |
+
+Both follow the same workflow:
+
+```python
+from ase.build import bulk
+from matsim_agents.tools.vasp_relax import (
+    recommend_settings, prepare_relax_workdir, run_vasp,
+)
+
+atoms    = bulk("Si")
+settings = recommend_settings(atoms, potcar_dir="/path/to/potcars",
+                              calculation="vc-relax")
+workdir  = prepare_relax_workdir(atoms, "./Si_vcrelax", settings,
+                                 potcar_dir="/path/to/potcars")
+result   = run_vasp(workdir, launcher_cmd=["bash", "run-vasp-frontier.sh"])
+print(result.final_energy_eV, result.n_ionic_steps, result.converged)
+```
+
+`qe_relax` has the same shape; both honour an env-overridable launcher
+(`MATSIM_QE_LAUNCHER` / `MATSIM_VASP_LAUNCHER`) and parse the per-ionic-step
+trajectory + walltime + convergence flag from the native output files
+(`pw.out` for QE, `vasprun.xml` + `OUTCAR` for VASP).
+
+> **Note:** the active-learning loop itself never calls these relaxers —
+> AL labelling always uses the SCF-only backends under
+> [`src/matsim_agents/active_learning/backends/`](src/matsim_agents/active_learning/backends/).
+> A relaxation per AL candidate would defeat the point of uncertainty-driven
+> sampling. The standalone relaxers are intended for one-off DFT validation
+> work outside the AL pipeline.
 
 ---
 
