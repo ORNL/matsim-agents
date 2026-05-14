@@ -115,6 +115,15 @@ mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 # Use prebuilt tvm_ffi torch-c-dlpack .so from proj-shared (avoids JIT rebuild hang at import)
 export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
 
+# Preflight: tvm_ffi will silently hang at import if its prebuilt .so is missing.
+TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
+if [[ ! -s "$TVM_FFI_SO" ]]; then
+  echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
+  echo "       Rebuild with: scripts/frontier/build-tvm-ffi-frontier.sh (or copy from a backup)" >&2
+  exit 1
+fi
+rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true
+
 unset ROCR_VISIBLE_DEVICES
 unset HIP_VISIBLE_DEVICES
 
