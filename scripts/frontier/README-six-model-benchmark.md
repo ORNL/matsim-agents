@@ -44,4 +44,4 @@ sbatch scripts/frontier/job-six-model-benchmark-frontier.sh
 
 Outputs are written under:
 
-- `/lustre/orion/mat746/proj-shared/runs/six-model-bench-<jobid>/`
+- `$PROJ/runs/six-model-bench-<jobid>/`
