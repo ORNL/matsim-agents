@@ -1,7 +1,7 @@
 # Active-learning workflow: HydraGNN ↔ DFT (VASP or Quantum ESPRESSO)
 
 End-to-end loop that uses HydraGNN as a fast surrogate force field and either
-**VASP 6.x** or **Quantum ESPRESSO `pw.x`** as the ground-truth labeller for
+**VASP 6.6** or **Quantum ESPRESSO `pw.x`** as the ground-truth labeller for
 high-uncertainty structures discovered by HydraGNN-driven MD. The choice is
 a single YAML field (`dft.backend: vasp | qe`).
 
