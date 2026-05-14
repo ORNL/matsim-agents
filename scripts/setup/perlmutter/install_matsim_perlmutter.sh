@@ -2,79 +2,82 @@
 # =============================================================================
 # install_matsim_perlmutter.sh
 #
-# Full two-phase installation of matsim-agents + HydraGNN dependencies on
-# NERSC Perlmutter (CUDA 12.4 / A100).
-#
-# This script mimics the methodology used for Frontier, providing a complete,
-# isolated conda environment for matsim-agents development and execution.
+# Frontier-style phased install for matsim-agents + HydraGNN on Perlmutter.
 #
 # Phases:
-# -------
-# Phase 1 – Create/activate conda environment
-# Phase 2 – Install HydraGNN dependencies + PyTorch + matsim-agents
+#   Phase 0  - Load Perlmutter modules
+#   Phase 1  - Build fresh HydraGNN Perlmutter environment
+#   Phase 2  - Activate env and install matsim-agents + runtime extras
 #
 # Usage:
-# ------
-#   bash install_matsim_perlmutter.sh [--skip-hydragnn] [--gpu]
+#   bash install_matsim_perlmutter.sh [--gpu]
 #
 # Flags:
-# ------
-#   --skip-hydragnn   Skip Phase 1 (conda env creation). Useful when the env
-#                     already exists and only matsim-agents needs reinstalling.
-#   --gpu             Load GPU-specific modules (craype-accel-nvidia80).
+#   --gpu             Kept for compatibility; installer already targets A100.
 #
-# Configurable variables (set via environment before calling this script):
-# -------------------------------------------------------------------------
-#   PROJECT_DIR      Root project directory       (default: directory of this script)
-#   MATSIM_DIR       matsim-agents checkout path  (default: $PROJECT_DIR)
-#   HYDRAGNN_DIR     HydraGNN checkout path       (default: parent dir of MATSIM_DIR)
-#   VENV_PATH        Conda env path               (default: $HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv)
-#   PYTHON_VERSION   Python version               (default: 3.11)
-#   TORCH_CUDA_TAG   PyTorch CUDA version tag     (default: cu124)
-#   TORCH_CUDA_ARCH  GPU compute capability       (default: 8.0 for A100)
-#   MAX_JOBS         Parallel build jobs          (default: 16)
-#
-# Examples:
-# ---------
-#   # First-time full installation
-#   bash install_matsim_perlmutter.sh --gpu
-#
-#   # Reinstall in existing environment (faster)
-#   bash install_matsim_perlmutter.sh --skip-hydragnn --gpu
-#
+# Configurable variables (override via environment before calling script):
+#   PROJECT_DIR       Project root                     (default: script/../..)
+#   MATSIM_DIR        matsim-agents checkout path      (default: PROJECT_DIR)
+#   HYDRAGNN_DIR      HydraGNN checkout path           (default: ../HydraGNN)
+#   HYDRAGNN_REPO     HydraGNN git remote              (default: ORNL/HydraGNN)
+#   HYDRAGNN_BRANCH   HydraGNN branch                  (default: main)
+#   MATSIM_REPO       matsim-agents git remote         (default: ORNL/matsim-agents)
+#   VENV_PATH         Target conda env path            (default: HydraGNN-Installation-Perlmutter/hydragnn_venv)
+#   PYTHON_VERSION    Python version for env creation  (default: 3.11)
+#   EXPECTED_CUDA_MM  CUDA major.minor                 (default: 12.4)
+#   TORCH_CUDA_TAG    PyTorch wheel tag                (default: cu124)
+#   TORCH_CUDA_ARCH   GPU arch list                    (default: 8.0)
+#   MAX_JOBS          Build parallelism                (default: 16)
+#   LLM_BACKENDS      matsim extras                    (default: dev)
+#   INSTALL_VLLM_SERVER  Install vLLM package          (default: 0)
 # =============================================================================
 set -euo pipefail
 
-# ── Configurable paths ────────────────────────────────────────────────────────
+# -- Configurable paths --------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="${PROJECT_DIR:-${SCRIPT_DIR}/../..}"
+PROJECT_DIR="${PROJECT_DIR:-${SCRIPT_DIR}/../../..}"
 MATSIM_DIR="${MATSIM_DIR:-${PROJECT_DIR}}"
 HYDRAGNN_DIR="${HYDRAGNN_DIR:-$(cd "${MATSIM_DIR}/.." && pwd)/HydraGNN}"
+HYDRAGNN_REPO="${HYDRAGNN_REPO:-https://github.com/ORNL/HydraGNN.git}"
+HYDRAGNN_BRANCH="${HYDRAGNN_BRANCH:-main}"
+MATSIM_REPO="${MATSIM_REPO:-https://github.com/ORNL/matsim-agents.git}"
 
-# Environment configuration
 DEFAULT_VENV_PATH="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
 VENV_PATH="${VENV_PATH:-${DEFAULT_VENV_PATH}}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
+EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.4}"
 TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu124}"
-TORCH_CUDA_ARCH="${TORCH_CUDA_ARCH:-8.0}"  # A100
+TORCH_CUDA_ARCH="${TORCH_CUDA_ARCH:-8.0}"
 MAX_JOBS="${MAX_JOBS:-16}"
+LLM_BACKENDS="${LLM_BACKENDS:-dev}"
 INSTALL_VLLM_SERVER="${INSTALL_VLLM_SERVER:-0}"
 
-# Parse command-line arguments
-SKIP_HYDRAGNN=0
-USE_GPU=0
-
-for arg in "$@"; do
-    [[ "$arg" == "--skip-hydragnn" ]] && SKIP_HYDRAGNN=1
-    [[ "$arg" == "--gpu" ]] && USE_GPU=1
-done
-
-# ── Helper functions ──────────────────────────────────────────────────────────
+# -- Helpers ------------------------------------------------------------------
 log()  { printf '\033[1;34m[install]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[install]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[install]\033[0m %s\n' "$*" >&2; exit 1; }
 
-# ── Step 0: Load Perlmutter modules ───────────────────────────────────────────
+PIP_FLAGS=(--upgrade-strategy only-if-needed)
+pip_retry() {
+    local tries=3 delay=3
+    for ((i=1; i<=tries; i++)); do
+        if pip install "${PIP_FLAGS[@]}" "$@"; then
+            return 0
+        fi
+        warn "pip install failed (attempt $i/$tries). Retrying in ${delay}s..."
+        sleep "$delay"
+        delay=$((delay * 2))
+    done
+    return 1
+}
+
+# -- Parse args ----------------------------------------------------------------
+USE_GPU=0
+for arg in "$@"; do
+    [[ "$arg" == "--gpu" ]] && USE_GPU=1
+done
+
+# -- Phase 0: Load modules -----------------------------------------------------
 log "Loading Perlmutter modules..."
 
 if ! command -v module >/dev/null 2>&1; then
@@ -91,7 +94,6 @@ if ! command -v module >/dev/null 2>&1; then
     die "module command not found. Ensure you're running on a Perlmutter login node."
 fi
 
-# Perform Cray "hard reset"
 if [[ -f /opt/cray/pe/cpe/24.07/restore_lmod_system_defaults.sh ]]; then
     source /opt/cray/pe/cpe/24.07/restore_lmod_system_defaults.sh || true
 fi
@@ -101,22 +103,35 @@ ml nersc-default/1.0 || true
 ml cpe/24.07
 ml PrgEnv-gnu/8.5.0
 ml cray-mpich/8.1.30
-
-if [[ "$USE_GPU" -eq 1 ]]; then
-    log "Loading GPU (A100) support..."
-    ml craype-accel-nvidia80
-fi
-
-ml cudatoolkit/12.4
+ml craype-accel-nvidia80
+ml "cudatoolkit/${EXPECTED_CUDA_MM}"
 ml gcc-native/13.2
 ml cmake/3.30.2 || ml cmake/3.24.3 || true
 ml conda/Miniforge3-24.11.3-0 || ml conda/Miniforge3-24.7.1-0 || true
 
-log "✓ Perlmutter modules loaded (ROCm $(if [[ "$USE_GPU" -eq 1 ]]; then echo "GPU"; else echo "CPU"; fi))."
+if [[ "$USE_GPU" -eq 0 ]]; then
+    warn "--gpu not provided; proceeding anyway because Perlmutter install targets A100/CUDA by default."
+fi
 
-# ── Step 1: Initialize Conda and create/activate environment ──────────────────
-log "Initializing conda environment..."
+log "Modules loaded (CUDA ${EXPECTED_CUDA_MM})."
 
+# -- Bootstrap repos if missing (Frontier parity) ------------------------------
+if [[ ! -d "${MATSIM_DIR}/.git" ]]; then
+    log "Cloning matsim-agents -> ${MATSIM_DIR}"
+    git clone "${MATSIM_REPO}" "${MATSIM_DIR}"
+else
+    log "matsim-agents already present at ${MATSIM_DIR}"
+fi
+
+if [[ ! -d "${HYDRAGNN_DIR}/.git" ]]; then
+    log "Cloning HydraGNN (${HYDRAGNN_BRANCH}) -> ${HYDRAGNN_DIR}"
+    git clone --branch "${HYDRAGNN_BRANCH}" "${HYDRAGNN_REPO}" "${HYDRAGNN_DIR}" \
+        || git clone "${HYDRAGNN_REPO}" "${HYDRAGNN_DIR}"
+else
+    log "HydraGNN already present at ${HYDRAGNN_DIR}"
+fi
+
+# -- Conda shell init ----------------------------------------------------------
 if ! command -v conda >/dev/null 2>&1; then
     die "conda command not found (Miniforge module not loaded?)"
 fi
@@ -128,186 +143,89 @@ else
     eval "$("${CONDA_BASE}/bin/conda" shell.bash hook)" 2>/dev/null || true
 fi
 
-log "Virtual environment path: ${VENV_PATH}"
-log "Python version: ${PYTHON_VERSION}"
+# -- Phase 1: Build fresh HydraGNN env ----------------------------------------
+SC_INSTALLER="${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_perlmutter.sh"
+[[ -f "${SC_INSTALLER}" ]] || die "HydraGNN Perlmutter installer not found: ${SC_INSTALLER}"
 
-if [[ "$SKIP_HYDRAGNN" -eq 0 ]]; then
-    if [[ -d "$VENV_PATH" ]]; then
-        warn "Conda environment already exists at ${VENV_PATH}"
-        warn "To recreate, remove it first: rm -rf ${VENV_PATH}"
-    else
-        log "Creating conda environment at ${VENV_PATH} with Python ${PYTHON_VERSION}..."
-        conda create -y -p "$VENV_PATH" python="${PYTHON_VERSION}"
-    fi
-else
-    warn "--skip-hydragnn set: skipping Phase 1."
-    if [[ ! -d "$VENV_PATH" ]]; then
-        die "Expected conda env not found at: ${VENV_PATH}\nRun without --skip-hydragnn first."
-    fi
-fi
+INSTALL_ROOT="$(dirname "${VENV_PATH}")"
+mkdir -p "${INSTALL_ROOT}"
 
-conda activate "$VENV_PATH"
-log "✓ Conda environment activated: $(which python)"
-python --version
+log "Running HydraGNN Perlmutter installer (Frontier-style delegated Phase 1)..."
+log "Installer: ${SC_INSTALLER}"
+INSTALL_ROOT="${INSTALL_ROOT}" \
+VENV_PATH="${VENV_PATH}" \
+PYTHON_VERSION="${PYTHON_VERSION}" \
+EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM}" \
+TORCH_CUDA_TAG="${TORCH_CUDA_TAG}" \
+TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH}" \
+MAX_JOBS="${MAX_JOBS}" \
+bash "${SC_INSTALLER}"
 
-# ── Step 2: Install dependencies and matsim-agents ──────────────────────────
-log "Installing Python packages and matsim-agents..."
+log "HydraGNN environment build complete."
 
-# Cray libs (often helpful)
-export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH:-}:${LD_LIBRARY_PATH:-}"
+[[ -d "${VENV_PATH}" ]] \
+    || die "Expected conda env not found at: ${VENV_PATH}"
 
-# Force modern compiler for C++ extensions
-export CC="${CC:-gcc}"
-export CXX="${CXX:-g++}"
+# -- Phase 2: Activate env and install matsim-agents ---------------------------
+log "Activating conda env: ${VENV_PATH}"
+conda activate "${VENV_PATH}"
 
-log "Compiler check (must be GCC >= 9)"
-echo "CC=$(which ${CC})"
-echo "CXX=$(which ${CXX})"
-${CXX} --version | head -n 1
-
-# CUDA/PyTorch build environment hints
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH}"
-export MAX_JOBS="${MAX_JOBS}"
-
-if command -v nvcc >/dev/null 2>&1; then
-    export CUDA_HOME="$(cd "$(dirname "$(dirname "$(which nvcc)")")" && pwd)"
-    log "CUDA_HOME=${CUDA_HOME}"
-fi
-
-# ── pip helpers ───────────────────────────────────────────────────────────────
-log "Upgrading pip/setuptools/wheel..."
-
-PIP_FLAGS=(--upgrade-strategy only-if-needed)
-
-pip_retry() {
-    local tries=3 delay=3
-    for ((i=1; i<=tries; i++)); do
-        if pip install "${PIP_FLAGS[@]}" "$@"; then
-            return 0
-        fi
-        warn "pip install failed (attempt $i/$tries). Retrying in ${delay}s..."
-        sleep "$delay"; delay=$((delay*2))
-    done
-    return 1
-}
+PYTHON_VER="$(python --version 2>&1)"
+log "Active Python: ${PYTHON_VER}"
+[[ "${PYTHON_VER}" == *"3.11"* ]] || warn "Expected Python 3.11 - got ${PYTHON_VER}. Proceeding anyway."
 
 pip_retry --disable-pip-version-check -U pip setuptools wheel
 
-# ── Install NumPy with version pin ────────────────────────────────────────────
-log "Installing NumPy 1.26.4 (pinned)..."
-pip_retry "numpy==1.26.4"
-
-python -c "import numpy as np; assert np.__version__=='1.26.4', f'NumPy is {np.__version__}, expected 1.26.4'"
-log "✓ NumPy 1.26.4 installed"
-
-# ── Install core scientific Python deps ────────────────────────────────────────
-log "Installing core Python packages (ninja, cython, packaging)..."
-pip_retry ninja cython packaging
-
-# ── Install PyTorch with CUDA support ─────────────────────────────────────────
-log "Installing PyTorch from CUDA ${TORCH_CUDA_TAG} index..."
-PYTORCH_INDEX_URL="https://download.pytorch.org/whl/${TORCH_CUDA_TAG}"
-log "PyTorch index: ${PYTORCH_INDEX_URL}"
-
-pip_retry --index-url "${PYTORCH_INDEX_URL}" torch torchvision
-log "✓ PyTorch installed with CUDA support"
-
-# Verify PyTorch + CUDA
-python -c "import torch; print(f'PyTorch {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')"
-
-# ── Install HydraGNN and dependencies ──────────────────────────────────────────
-log "Installing HydraGNN dependencies (PyG, PyTorch Scatter, etc.)..."
-
-# PyTorch Geometric (may need source build on Perlmutter to avoid GLIBC issues)
-pip_retry torch-scatter torch-sparse torch-cluster torch-geometric
-
-# HydraGNN core dependencies
-pip_retry "ase>=3.22.1" h5py "setuptools>=68.0" "cmake>=3.24"
-pip_retry "scikit-learn==1.5.1" "vesin==0.4.2"
-
-log "✓ HydraGNN dependencies installed"
-
-# ── Install matsim-agents ─────────────────────────────────────────────────────
-log "Installing matsim-agents..."
-
-if [[ ! -d "${MATSIM_DIR}" ]]; then
-    die "matsim-agents directory not found at: ${MATSIM_DIR}"
-fi
-
-cd "${MATSIM_DIR}"
-
-if [[ -f "pyproject.toml" ]]; then
-    log "Installing matsim-agents from ${MATSIM_DIR}..."
-    pip_retry -e ".[dev]"
-elif [[ -f "setup.py" ]]; then
-    log "Installing matsim-agents from ${MATSIM_DIR} (setup.py)..."
-    pip_retry -e "."
+if [[ -f "${HYDRAGNN_DIR}/setup.py" || -f "${HYDRAGNN_DIR}/pyproject.toml" ]]; then
+    log "Installing HydraGNN editable package from ${HYDRAGNN_DIR}..."
+    pip_retry -e "${HYDRAGNN_DIR}"
 else
-    warn "No pyproject.toml or setup.py found; attempting to add PYTHONPATH instead"
-    export PYTHONPATH="${MATSIM_DIR}/src:${PYTHONPATH:-}"
-    log "PYTHONPATH=${PYTHONPATH}"
+    warn "HydraGNN package metadata not found at ${HYDRAGNN_DIR}; import may fail."
 fi
 
-log "✓ matsim-agents installed"
+if [[ -f "${MATSIM_DIR}/pyproject.toml" ]]; then
+    log "Installing matsim-agents[${LLM_BACKENDS}] (editable) into ${VENV_PATH}..."
+    pip_retry -e "${MATSIM_DIR}[${LLM_BACKENDS}]"
+elif [[ -f "${MATSIM_DIR}/setup.py" ]]; then
+    log "Installing matsim-agents editable from setup.py..."
+    pip_retry -e "${MATSIM_DIR}"
+else
+    die "matsim-agents project metadata not found at ${MATSIM_DIR}"
+fi
 
-# ── Ensure core runtime/test deps are present even on partial reinstalls ─────
-# These are required by the test suite (tests/conftest.py imports
-# langchain_core.fake_chat_models) and by local sanity checks.
+# Keep runtime/test extras aligned across Perlmutter and Frontier installers.
 log "Ensuring core runtime/test dependencies (langchain-core, pytest, pytest-cov)..."
 pip_retry "langchain-core>=0.3.0" "pytest>=8.0" "pytest-cov>=5.0"
 
-# ── Install LLM download/runtime tooling (session-learned extras) ───────────
-# We explicitly install huggingface_hub so `hf` is available for resumable
-# model downloads on login nodes, and transformers for local model loading.
-log "Installing LLM tooling extras (huggingface_hub CLI + transformers)..."
-pip_retry "huggingface_hub>=1.12"
-pip_retry "transformers>=4.45"
-pip_retry "accelerate>=1.13"
+log "Ensuring runtime dependencies used by fused HydraGNN path..."
+pip_retry "scikit-learn==1.5.1" "vesin==0.4.2"
+
+log "Installing LLM tooling extras (huggingface_hub CLI + transformers + accelerate)..."
+pip_retry "huggingface_hub>=1.12" "transformers>=4.45" "accelerate>=1.13"
 
 if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     log "INSTALL_VLLM_SERVER=1 -> installing vLLM server package"
     pip_retry vllm
 fi
 
-log "✓ LLM tooling extras installed"
-
-# ── Final verification ────────────────────────────────────────────────────────
+# -- Verification ---------------------------------------------------------------
 log "Verifying installation..."
-
 python -c "import torch; print(f'PyTorch: {torch.__version__}')"
-python -c "import torch_geometric; print(f'PyTorch Geometric installed')" 2>/dev/null || warn "PyTorch Geometric not fully available (may be OK)"
-python -c "import ase; print(f'ASE: {ase.__version__}')"
-python -c "import huggingface_hub; print(f'huggingface_hub: {huggingface_hub.__version__}')"
-python -c "import transformers; print(f'transformers: {transformers.__version__}')"
-python -c "import accelerate; print(f'accelerate: {accelerate.__version__}')"
-if command -v hf >/dev/null 2>&1; then
-    log "hf CLI: $(hf --version)"
-else
-    warn "hf CLI not found in PATH after install"
-fi
+python -c "import hydragnn; print('HydraGNN import: OK')"
+python -c "import matsim_agents; print('matsim-agents import: OK')"
+python -c "import huggingface_hub, transformers, accelerate; print('LLM tooling imports: OK')"
 
-if python -c "import matsim_agents" 2>/dev/null; then
-    log "✓ matsim-agents Python module imported successfully"
-else
-    warn "matsim-agents module not importable; check installation"
-fi
-
-# ── Summary ────────────────────────────────────────────────────────────────────
-log ""
-log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+# -- Summary -------------------------------------------------------------------
+log "================================================================"
 log "Installation complete!"
-log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 log ""
-log "Environment details:"
-log "  Conda environment: ${VENV_PATH}"
-log "  Python:           $(which python) ($(python --version 2>&1))"
-log "  CUDA:             $(which nvcc 2>/dev/null || echo 'not found')"
-log ""
-log "To activate this environment in future sessions:"
-log "  source ${SCRIPT_DIR}/perlmutter-module-stack.sh"
-log "  load_perlmutter_modules$(if [[ "$USE_GPU" -eq 1 ]]; then echo "_gpu"; fi)"
-log "  conda activate ${VENV_PATH}"
-log ""
-log "Or use the quick setup script:"
+log "To activate the environment in a new shell:"
 log "  source ${SCRIPT_DIR}/setup_matsim_perlmutter.sh$(if [[ "$USE_GPU" -eq 1 ]]; then echo " --gpu"; fi)"
 log ""
+log "Direct conda activation path:"
+log "  conda activate ${VENV_PATH}"
+log ""
+log "Then verify:"
+log "  python -c \"import torch; print(torch.__version__, torch.cuda.is_available())\""
+log "  matsim-agents --help"
+log "================================================================"
