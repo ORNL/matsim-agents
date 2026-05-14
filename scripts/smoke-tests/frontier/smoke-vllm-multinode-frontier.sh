@@ -32,8 +32,8 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 PROJ=/lustre/orion/mat746/proj-shared
-[[ -z "${SCRIPT_DIR:-}" ]] && SCRIPT_DIR="$PROJ/matsim-agents/scripts/frontier/smoke-tests"
-UTILS_DIR="$SCRIPT_DIR/../utils"
+[[ -z "${SCRIPT_DIR:-}" ]] && SCRIPT_DIR="$PROJ/matsim-agents/scripts/smoke-tests/frontier"
+UTILS_DIR="$SCRIPT_DIR/../../utils/frontier"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/DeepSeek-R1-Distill-Qwen-32B}
 SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-deepseek-ai/DeepSeek-R1-Distill-Qwen-32B}
