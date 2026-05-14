@@ -96,7 +96,12 @@ module reset
 module load PrgEnv-cray
 module load cce                          # default 18.0.1 on Frontier
 module load craype-accel-amd-gfx90a      # enables -fopenmp offload to gfx90a
-module load rocm                         # rocFFT, rocBLAS, rocSOLVER
+# ROCm version is selectable via env (default: rocm/7.2.0 for newest
+# rocBLAS/rocFFT/rocSOLVER on MI250X). Fall back to 6.2.4 if a future
+# upgrade breaks ABI compatibility with the cce/18.0.1 + craype/2.7.33
+# wrapper; that combo was the original Frontier-validated stack.
+ROCM_MODULE="${ROCM_MODULE:-rocm/7.2.0}"
+module load "${ROCM_MODULE}"             # rocFFT, rocBLAS, rocSOLVER
 module load cray-fftw                    # CPU-side FFTW3 headers
 module load cmake/3.30.5
 module load git/2.47.0
