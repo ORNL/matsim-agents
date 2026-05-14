@@ -30,11 +30,12 @@ in via the same interfaces.
 10. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
 11. [Programmatic API](#programmatic-api)
 12. [CLI reference](#cli-reference)
-13. [Project layout](#project-layout)
-14. [Configuration reference](#configuration-reference)
-15. [Current capabilities and planned work](#current-capabilities-and-planned-work)
-16. [Contributing](#contributing)
-17. [License & citation](#license--citation)
+13. [Active-learning loop (HydraGNN ↔ DFT)](#active-learning-loop-hydragnn--dft)
+14. [Project layout](#project-layout)
+15. [Configuration reference](#configuration-reference)
+16. [Current capabilities and planned work](#current-capabilities-and-planned-work)
+17. [Contributing](#contributing)
+18. [License & citation](#license--citation)
 
 ---
 
@@ -90,6 +91,21 @@ in via the same interfaces.
 - **Stability scoring**: relative chemical stability (ΔE/atom rankings) and a dynamical-stability proxy (residual force tolerance).
 - **Local & HPC ready**: setup script delegates to HydraGNN's own installers for laptops and DOE supercomputers (Frontier, Perlmutter, Aurora, Andes), and auto-relaxes HydraGNN's overly-tight `click==8.0.0` / `tqdm==4.67.1` pins so the env is conflict-free.
 - **Pluggable LLMs**: Ollama, vLLM, OpenAI, Anthropic via a single factory.
+- **Active-learning loop** (`matsim-agents al run`): HydraGNN-driven MD
+  generates candidates → ensemble / MC-dropout uncertainty selects the
+  most informative → a DFT backend (VASP 6.x **or** Quantum ESPRESSO
+  `pw.x`) labels them in parallel inside one SLURM allocation → dataset
+  is grown and HydraGNN is retrained → repeat. The DFT backend is a
+  single YAML toggle (`dft.backend: vasp | qe`); both share an
+  INCAR-style template path (`INCAR.template` / `pw.template`).
+- **LLM-generated MD seeds** (`md.seed_source.kind: prompt`): the LLM
+  proposes plausible chemical compositions for a target objective and
+  the loop materialises seed structures from common crystal prototypes,
+  no curated POSCAR collection required.
+- **Templated YAML configs**: `${VAR}`, `${VAR:-default}`, `${VAR:?msg}`
+  shell-style substitution with optional in-file `vars:` block, so the
+  same config can be re-targeted across users / scratch dirs / runs
+  without editing it.
 
 ---
 
@@ -518,6 +534,8 @@ reply = chat_once(session, "Propose a Pb-free perovskite for PV.")
 matsim-agents run     OBJECTIVE [options]   # planner -> executor -> analyst
 matsim-agents plan    OBJECTIVE             # show the planner's task list
 matsim-agents chat    [options]             # interactive discovery REPL
+matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)
+matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
 ```
 
 Common options (all commands that touch HydraGNN):
@@ -551,6 +569,112 @@ Common options (all commands that touch HydraGNN):
 | `--lattice-scales LIST` | Comma-separated isotropic cell-scale factors per ordering, e.g. `0.96,1.0,1.04`. |
 | `--ordering-seed INT` | RNG seed for the ordering sampler (reproducibility). |
 | `--auto-confirm / --ask` | Skip the y/N prompt for every detected composition. |
+
+---
+
+## Active-learning loop (HydraGNN ↔ DFT)
+
+The `matsim-agents al` subcommand runs an end-to-end active-learning loop
+that grows a HydraGNN training set from DFT labels of structures the
+current model is most uncertain about. Both **VASP 6.x** and **Quantum
+ESPRESSO `pw.x`** are supported as the labeller — the choice is a single
+YAML field.
+
+```
+  HydraGNN MLFF ── MD ──► candidates ────────────────────────────────────┐
+        ▲                       │                                            │
+        │                       ▼                                            │
+        │             ensemble / MC-dropout                                   │
+        │             uncertainty + diversity                                 │
+        │                       │                                            │
+        │                       ▼                                            │
+        │             top-K most informative                                  │
+        │                       │                                            │
+        │                       ▼                                            │
+        │             DFT backend (parallel, in-allocation)                   │
+        │             vasp_std  │  pw.x  (one toggle)                         │
+        │                       │                                            │
+        │                       ▼                                            │
+        │             dataset.extxyz / dataset.db  (tagged with backend)      │
+        │                       │                                            │
+        │                       ▼                                            │
+        └─ retrain HydraGNN ── next iteration ─────────────────────────────┘
+```
+
+### Quick start
+
+```bash
+# 1. Edit the templated example, or override via env vars at runtime
+export PROJ_ROOT=$PWD
+export RUNS_ROOT=/lustre/orion/<proj>/scratch/$USER/runs
+export RUN_TAG=al-mptrj-001
+export DFT_BACKEND=qe          # or: vasp
+
+# 2. Validate the resolved config (no run)
+matsim-agents al validate-config examples/active_learning/al_config.example.yaml
+
+# 3. Submit on Frontier
+sbatch --export=ALL,AL_CONFIG=$PWD/examples/active_learning/al_config.example.yaml \
+    -N 64 -t 12:00:00 \
+    scripts/launchers/frontier/run-active-learning-frontier.sh
+```
+
+### Backend toggle
+
+The example YAML carries both backend sub-blocks; flip `dft.backend:` to
+select one. The unused sub-block is ignored.
+
+```yaml
+dft:
+  backend: ${DFT_BACKEND:-vasp}    # vasp | qe
+  vasp:
+    vasp_bin: ${VASP_BIN}
+    potcar_dir: ${POTCAR_DIR}
+    incar_template: ${PROJ_ROOT}/examples/active_learning/INCAR.template
+  qe:
+    pw_bin: ${PW_BIN}
+    pseudo_dir: ${PSEUDO_DIR}
+    pw_template: ${PROJ_ROOT}/examples/active_learning/pw.template
+```
+
+### Variable substitution in YAMLs
+
+All AL example configs use shell-style placeholders that are expanded
+at load time by `ALConfig.from_yaml`:
+
+| Syntax                  | Meaning                                          |
+| ----------------------- | ------------------------------------------------ |
+| `${VAR}`                | required; raises if unset                        |
+| `${VAR:-default}`       | falls back to `default` if unset                 |
+| `${VAR:?error message}` | aborts with `error message`                      |
+
+Resolution order: (1) `os.environ`, (2) optional top-level `vars:`
+block in the YAML itself. Nested references inside `vars:` resolve
+iteratively, so `VASP_BIN: ${PROJ_ROOT}/external/.../vasp_std` just
+works. The `vars:` block is consumed before pydantic validation and
+never appears in the parsed `ALConfig`.
+
+### Seed sources for MD
+
+`md.seed_source.kind` selects how initial MD structures are obtained:
+
+- `paths` — a curated list of POSCAR / CIF / XYZ files on disk.
+- `prompt` — the LLM proposes plausible compositions for a target
+  objective (e.g. *“Pb-free halide perovskites for PV”*) and the loop
+  materialises seed structures by running the same crystal-prototype
+  enumerator used by the discovery wrapper. No curated structure
+  collection is required.
+
+### Energy-reference warning
+
+VASP PAW totals and QE pseudopotential totals are **not** directly
+comparable. Every frame written to the dataset is tagged with
+`info["dft_backend"]`; never train one HydraGNN model on a mixed
+VASP+QE dataset without an explicit per-backend energy offset.
+
+Full walkthrough — including templated INCAR / `pw.in` files, in-allocation
+launcher details, and per-backend ROCm/MPI gotchas — lives in
+[`examples/active_learning/README.md`](examples/active_learning/README.md).
 
 ---
 
@@ -606,9 +730,27 @@ matsim-agents/
 │       ├── phase_explorer.py     # crystal-phase seed enumeration
 │       ├── stability.py          # ΔE/atom ranking & |F|max proxy
 │       └── wrapper.py            # explore_composition()
+│   └── active_learning/          # HydraGNN <-> DFT active-learning loop
+│       ├── config.py             # pydantic schema + ${VAR} substitution
+│       ├── loop.py               # top-level driver (matsim-agents al run)
+│       ├── candidates.py         # MD sampling + per-step candidate capture
+│       ├── uncertainty.py        # ensemble / MC-dropout scoring + diversity
+│       ├── seeds.py              # paths or LLM-prompted seed materialisation
+│       ├── trainer.py            # HydraGNN retraining wrapper
+│       ├── dft_backend.py        # backend-agnostic Protocol
+│       ├── dft_runner.py         # in-allocation parallel job dispatcher
+│       └── backends/
+│           ├── vasp.py           # VASP 6.x labeller
+│           └── qe.py             # Quantum ESPRESSO pw.x labeller
 ├── examples/
 │   ├── single_relaxation.py
-│   └── discovery_chat.py
+│   ├── discovery_chat.py
+│   └── active_learning/
+│       ├── al_config.example.yaml          # unified VASP+QE templated config
+│       ├── al_config.prompt.example.yaml   # LLM-seeded variant
+│       ├── INCAR.template                  # VASP single-point template
+│       ├── pw.template                     # QE pw.in namelist template
+│       └── README.md
 ├── tests/
 │   ├── test_state_and_graph.py
 │   └── test_discovery.py
@@ -679,6 +821,14 @@ before building a workflow on top of it.
   optional human-in-the-loop gates.
 - **Pluggable LLM backends**: vLLM (Frontier ROCm), Hugging Face
   Transformers, and OpenAI-compatible HTTP endpoints.
+- **Active-learning loop** with HydraGNN as the surrogate and either
+  VASP 6.x or Quantum ESPRESSO `pw.x` as the DFT labeller, selectable
+  via a single `dft.backend:` YAML field. Includes ensemble /
+  MC-dropout uncertainty scoring, in-allocation parallel DFT dispatch,
+  templated INCAR / `pw.in` inputs, and shell-style `${VAR}` /
+  `${VAR:-default}` substitution in all YAML configs.
+- **LLM-generated MD seeds** as a first-class seed source
+  (`md.seed_source.kind: prompt`).
 
 ### Not yet implemented (roadmap)
 
