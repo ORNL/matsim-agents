@@ -19,20 +19,20 @@ in via the same interfaces.
 ## Table of contents
 
 1. [Architecture](#architecture)
-2. [Installation](#installation)
-3. [LLM backends](#llm-backends)
-4. [Downloading models for vLLM](#downloading-models-for-vllm)
-5. [Quick start](#quick-start)
-5. [Quick start](#quick-start)
-6. [The agent graph](#the-agent-graph)
-7. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
-8. [Programmatic API](#programmatic-api)
-9. [CLI reference](#cli-reference)
-10. [Project layout](#project-layout)
-11. [Configuration reference](#configuration-reference)
-12. [Limitations and roadmap](#limitations-and-roadmap)
-13. [Contributing](#contributing)
-14. [License & citation](#license--citation)
+2. [Running on Frontier (OLCF)](#running-on-frontier-olcf)
+3. [Installation](#installation)
+4. [LLM backends](#llm-backends)
+5. [Downloading models for vLLM](#downloading-models-for-vllm)
+6. [Quick start](#quick-start)
+7. [The agent graph](#the-agent-graph)
+8. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
+9. [Programmatic API](#programmatic-api)
+10. [CLI reference](#cli-reference)
+11. [Project layout](#project-layout)
+12. [Configuration reference](#configuration-reference)
+13. [Limitations and roadmap](#limitations-and-roadmap)
+14. [Contributing](#contributing)
+15. [License & citation](#license--citation)
 
 ---
 
@@ -88,6 +88,19 @@ in via the same interfaces.
 - **Stability scoring**: relative chemical stability (ΔE/atom rankings) and a dynamical-stability proxy (residual force tolerance).
 - **Local & HPC ready**: setup script delegates to HydraGNN's own installers for laptops and DOE supercomputers (Frontier, Perlmutter, Aurora, Andes), and auto-relaxes HydraGNN's overly-tight `click==8.0.0` / `tqdm==4.67.1` pins so the env is conflict-free.
 - **Pluggable LLMs**: Ollama, vLLM, OpenAI, Anthropic via a single factory.
+
+---
+
+## Running on Frontier (OLCF)
+
+> **⚠️ Frontier users — read this first:**
+> See [`scripts/frontier/README-frontier.md`](scripts/frontier/README-frontier.md)
+> for required setup and known issues. **Critically: a prebuilt `tvm_ffi`
+> shared library must exist at
+> `/lustre/orion/mat746/proj-shared/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so`
+> or every vLLM job will silently hang forever** (the script preflight check
+> will fail-fast in 2 seconds with a clear error message). If missing, rebuild
+> with `sbatch scripts/frontier/prebuild-tvm-ffi-frontier.sh`.
 
 ---
 
