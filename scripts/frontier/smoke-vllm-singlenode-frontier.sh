@@ -30,7 +30,11 @@
 
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 PROJ=/lustre/orion/mat746/proj-shared
+# Fallback if BASH_SOURCE is not usable under sbatch
+[[ -z "${SCRIPT_DIR:-}" || ! -f "$SCRIPT_DIR/_rocr_to_hip.sh" ]] && \
+  SCRIPT_DIR="$PROJ/matsim-agents/scripts/frontier"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 # Default: small model that loads quickly
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/Llama-3.1-8B-Instruct}
@@ -153,7 +157,7 @@ echo ""
 # subsequent srun steps (vLLM) don't deadlock.
 echo "[warmup] Warming up GPUs on $(hostname) ..."
 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
-  "$VENV/bin/python" -c "
+  "$SCRIPT_DIR/_rocr_to_hip.sh" "$VENV/bin/python" -c "
 import torch, time
 n = torch.cuda.device_count()
 print(f'  HIP devices: {n}')
@@ -168,7 +172,7 @@ echo ""
 # ── Start vLLM ───────────────────────────────────────────────────────────────
 echo "[vllm] Starting server TP=${GPUS_PER_NODE} ..."
 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
-  "$VENV/bin/python" -m vllm.entrypoints.openai.api_server \
+  "$SCRIPT_DIR/_rocr_to_hip.sh" "$VENV/bin/python" -m vllm.entrypoints.openai.api_server \
     --model "$SMOKE_MODEL_PATH" \
     --served-model-name "$SMOKE_MODEL_NAME" \
     --tensor-parallel-size "$GPUS_PER_NODE" \
