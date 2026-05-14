@@ -12,12 +12,14 @@
 # =============================================================================
 # Build Quantum ESPRESSO with NVIDIA A100 GPU support on Perlmutter
 #
-# Toolchain:
-#   PrgEnv-nvidia .................. NVIDIA Fortran/C/C++ compilers (nvfortran/nvc++)
-#   cudatoolkit/12.4 ............... CUDA libraries, nvcc compiler
-#   cray-fftw ....................... Cray-optimized FFTW3 (CPU-side)
-#   cray-libsci ..................... BLAS/LAPACK (implicit via ftn wrapper)
-#   cray-mpich ....................... NVIDIA-aware MPI
+# Toolchain (aligned with HydraGNN Perlmutter installer):
+#   PrgEnv-gnu/8.5.0, cpe/24.07, cray-mpich/8.1.30 ............ host toolchain + GPU-aware MPI
+#   craype-accel-nvidia80 ..................................... A100 (sm_80) target
+#   cudatoolkit/12.9 .......................................... CUDA libraries (matches PyTorch cu129)
+#   gcc-native/13.2 ........................................... modern host C/C++ compiler
+#   NVHPC 25.5 (nvfortran/nvc/nvc++) .......................... NVIDIA Fortran compiler bundled with CUDA 12.9
+#   cray-fftw ................................................. CPU-side FFTW3
+#   cray-libsci ............................................... BLAS/LAPACK (implicit via ftn wrapper)
 #
 # QE GPU offload is enabled with:
 #     -DQE_GPU_ARCHS=sm_80       (A100 GPU architecture)
@@ -107,9 +109,12 @@ else
   exit 1
 fi
 
-# Force use of NVHPC CUDA 12.4 toolkit for NVHPC and CMake
-export CUDA_HOME="/opt/nvidia/hpc_sdk/Linux_x86_64/24.5/cuda/12.4"
-export CUDA_MATH_LIB_DIR="/opt/nvidia/hpc_sdk/Linux_x86_64/24.5/math_libs/12.4/targets/x86_64-linux/lib"
+# Force NVHPC 25.5 (which bundles CUDA 12.9) so the QE GPU build links against
+# the same CUDA runtime that HydraGNN's PyTorch (torch 2.11.0+cu129) uses.
+# Mismatched CUDA majors between PyTorch and QE cause libcuda*.so symbol
+# conflicts when both are loaded in the same job.
+export CUDA_HOME="/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/cuda/12.9"
+export CUDA_MATH_LIB_DIR="/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/math_libs/12.9/targets/x86_64-linux/lib"
 export NVFORTRAN_FLAGS="-cuda_home=${CUDA_HOME}"
 # Ensure CUDA and CUDA math libraries are found by linker
 export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${CUDA_MATH_LIB_DIR}:${LD_LIBRARY_PATH:-}"
