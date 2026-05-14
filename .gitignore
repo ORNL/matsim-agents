@@ -33,6 +33,11 @@ htmlcov/
 *.ckpt
 *_optimization.csv
 multidataset_hpo-*/
+
+# ...but keep the bundled test fixtures.
+!tests/integration/data/*.vasp
+!tests/integration/data/*.cif
+!tests/integration/data/*.xyz
 mlp_branch_weights.pt
 runs/
 outputs/
