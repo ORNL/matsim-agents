@@ -31,7 +31,7 @@ mkdir -p "$RUN_DIR"
 
 # ── conda + modules ─────────────────────────────────────────────────────────
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
-source "$PROJ/matsim-agents/scripts/frontier-module-stack.sh"
+source "$PROJ/matsim-agents/scripts/frontier/frontier-module-stack.sh"
 # Run J: full ROCm 7.2 environment (previously load_frontier_rocm711_modules)
 load_frontier_rocm72_modules
 source activate "$VENV"
