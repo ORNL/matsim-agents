@@ -111,7 +111,7 @@ _FIXTURES = _load_fixtures() if FIXTURES_YAML.exists() else []
 @pytest.mark.parametrize("fixture", _FIXTURES, ids=_ids(_FIXTURES))
 def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None:
     """Warm-started pw.x relaxation should not need more BFGS steps than cold."""
-    from matsim_agents.tools.warmstart_benchmark import run_warmstart_benchmark
+    from matsim_agents.tools.warmstart_benchmark_qe import run_warmstart_benchmark
 
     structure = DATA_DIR / fixture["file"]
     assert structure.exists(), f"missing fixture file: {structure}"

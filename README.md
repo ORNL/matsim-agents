@@ -858,7 +858,8 @@ matsim-agents/
 │   │   ├── relaxation.py         # HydraGNN + ASE relaxation tool
 │   │   ├── qe_relax.py           # Quantum ESPRESSO pw.x relaxer (scf|relax|vc-relax)
 │   │   ├── vasp_relax.py         # VASP relaxer (scf|relax|vc-relax|vc-relax-shape)
-│   │   └── warmstart_benchmark.py # HydraGNN warm-start vs cold-start QE benchmark
+│   │   ├── warmstart_benchmark_qe.py   # HydraGNN warm-start vs cold-start QE benchmark
+│   │   └── warmstart_benchmark_vasp.py # HydraGNN warm-start vs cold-start VASP benchmark
 │   └── discovery/
 │       ├── composition.py        # formula parsing
 │       ├── phase_explorer.py     # crystal-phase seed enumeration
@@ -979,6 +980,24 @@ trajectory + walltime + convergence flag from the native output files
 > A relaxation per AL candidate would defeat the point of uncertainty-driven
 > sampling. The standalone relaxers are intended for one-off DFT validation
 > work outside the AL pipeline.
+
+### HydraGNN warm-start benchmarks
+
+A second pair of sibling drivers wraps the standalone relaxers in a
+"cold start vs HydraGNN-warm start" experiment and emits a JSON summary
+that the integration tests consume:
+
+| Module | Backend | CLI |
+|---|---|---|
+| [`warmstart_benchmark_qe.py`](src/matsim_agents/tools/warmstart_benchmark_qe.py)     | Quantum ESPRESSO `pw.x` | `python -m matsim_agents.tools.warmstart_benchmark_qe …`   |
+| [`warmstart_benchmark_vasp.py`](src/matsim_agents/tools/warmstart_benchmark_vasp.py) | VASP `vasp_std`         | `python -m matsim_agents.tools.warmstart_benchmark_vasp …` |
+
+Each driver runs (1) HydraGNN ASE relaxation, (2) DFT relaxation from the
+*original* coordinates (cold), (3) DFT relaxation from the
+HydraGNN-relaxed coordinates (warm), then reports `Δ ionic-steps`,
+`Δ total-SCF-iterations`, `Δ energy`, and a `warm_helped` boolean. If
+HydraGNN is unavailable (or `--skip-hydragnn` is passed) only the cold
+DFT run is executed and the `warm` block is left `None`.
 
 ---
 

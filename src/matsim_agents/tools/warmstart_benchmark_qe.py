@@ -1,4 +1,4 @@
-"""Warm-start benchmark: HydraGNN pre-relax then compare DFT step counts.
+"""Warm-start benchmark (Quantum ESPRESSO): HydraGNN pre-relax then compare DFT step counts.
 
 For a given input crystal we run::
 
@@ -14,6 +14,8 @@ The HydraGNN step is delegated to the existing tool
 ``matsim_agents.tools.relaxation`` (which itself is optional — if HydraGNN is
 not importable the warm-start phase is skipped and only the cold run is
 performed, with a ``warm`` block left as ``None``).
+
+For the VASP equivalent see :mod:`matsim_agents.tools.warmstart_benchmark_vasp`.
 """
 
 from __future__ import annotations
@@ -230,7 +232,7 @@ def _summarise(
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="matsim-warmstart-benchmark",
+        prog="matsim-warmstart-benchmark-qe",
         description=(
             "Run a HydraGNN warm-started vs cold-started Quantum ESPRESSO "
             "geometry-optimisation comparison and emit a JSON summary."
