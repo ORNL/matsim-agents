@@ -9,15 +9,15 @@
 # A prebuilt tvm_ffi shared library MUST exist at:
 #   $PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so
 # Otherwise vLLM hangs FOREVER at import (no log output). If missing, run:
-#   sbatch scripts/frontier/prebuild-tvm-ffi-frontier.sh
-# See scripts/frontier/README-frontier.md for full details.
+#   sbatch scripts/setup/frontier/prebuild-tvm-ffi-frontier.sh
+# See scripts/docs/frontier/README-frontier.md for full details.
 #
 # Submit:
-#   sbatch --nodes=1 scripts/frontier/smoke-vllm-singlenode-frontier.sh
+#   sbatch --nodes=1 scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh
 #
 # Override model:
 #   SMOKE_MODEL_PATH=... SMOKE_MODEL_NAME=... \
-#   sbatch --nodes=1 scripts/frontier/smoke-vllm-singlenode-frontier.sh
+#   sbatch --nodes=1 scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh
 # ---------------------------------------------------------------------------
 #SBATCH -A mat746
 #SBATCH -J smoke-singlenode
@@ -126,7 +126,7 @@ export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
 TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
 if [[ ! -s "$TVM_FFI_SO" ]]; then
   echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
-  echo "       Rebuild with: scripts/frontier/build-tvm-ffi-frontier.sh (or copy from a backup)" >&2
+  echo "       Rebuild with: scripts/setup/frontier/prebuild-tvm-ffi-frontier.sh (or copy from a backup)" >&2
   exit 1
 fi
 # Remove any stale lock files in user cache that would re-trigger the JIT path
