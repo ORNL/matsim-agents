@@ -1,0 +1,34 @@
+# INCAR template for AL VASP single-points on Frontier (MI250X / gfx90a).
+# Python str.format() slots: {natoms}
+# Per-job overrides (e.g. NCORE) are appended automatically by vasp_io.write_incar.
+
+SYSTEM = AL single-point ({natoms} atoms)
+
+# ── Electronic minimisation ───────────────────────────────────────────────
+PREC   = Accurate
+ENCUT  = 520
+EDIFF  = 1E-6
+ALGO   = Normal
+NELM   = 200
+NELMIN = 4
+ISMEAR = 0
+SIGMA  = 0.05
+LREAL  = Auto
+
+# ── Spin / output ─────────────────────────────────────────────────────────
+ISPIN  = 1
+LWAVE  = .FALSE.
+LCHARG = .FALSE.
+LORBIT = 0
+
+# ── k-mesh: rely on KSPACING (no KPOINTS file needed) ─────────────────────
+KSPACING = 0.30
+KGAMMA   = .TRUE.
+
+# ── Single-point only: no ionic relaxation by default ─────────────────────
+NSW    = 0
+IBRION = -1
+
+# ── Parallelisation hints (MI250X: 8 GCDs/node) ───────────────────────────
+KPAR   = 1
+LPLANE = .TRUE.
