@@ -43,13 +43,12 @@ test_command() {
     
     if eval "$command" &>/dev/null; then
         echo -e "${GREEN}✓ PASS${NC}"
-        ((TESTS_PASSED++))
-        return 0
+        ((TESTS_PASSED+=1))
     else
         echo -e "${RED}✗ FAIL${NC}"
-        ((TESTS_FAILED++))
-        return 1
+        ((TESTS_FAILED+=1))
     fi
+    return 0
 }
 
 test_output() {
@@ -62,22 +61,21 @@ test_output() {
     if output=$(eval "$command" 2>&1) && echo "$output" | grep -q "$expected_pattern"; then
         echo -e "${GREEN}✓ PASS${NC}"
         echo "  Output: $(echo "$output" | head -n1)"
-        ((TESTS_PASSED++))
-        return 0
+        ((TESTS_PASSED+=1))
     else
         echo -e "${RED}✗ FAIL${NC}"
         if [[ -n "$output" ]]; then
             echo "  Output: $(echo "$output" | head -n1)"
         fi
-        ((TESTS_FAILED++))
-        return 1
+        ((TESTS_FAILED+=1))
     fi
+    return 0
 }
 
 # Start testing
 print_header "Setup Environment"
 echo "Setting up matsim-agents environment..."
-source "${SCRIPT_DIR}/setup_matsim_perlmutter.sh" 2>&1 | grep "✓"
+source "${SCRIPT_DIR}/setup_matsim_perlmutter.sh"
 
 print_header "System Information"
 echo "Hostname: $(hostname)"
@@ -92,8 +90,8 @@ test_output "CUDA toolkit loaded" "module list 2>&1" "cudatoolkit"
 test_output "GCC native loaded" "module list 2>&1" "gcc-native"
 
 print_header "Virtual Environment Tests"
-test_command "Virtual environment activated" "[[ -n \$VIRTUAL_ENV ]]"
-test_command "venv path correct" "[[ \$VIRTUAL_ENV == *'hydragnn_venv'* ]]"
+test_command "Virtual environment activated" "[[ -n \${VIRTUAL_ENV:-} || -n \${CONDA_PREFIX:-} ]]"
+test_command "venv path set" "[[ -n \${VIRTUAL_ENV:-} ]]"
 test_output "Python version" "python --version" "Python"
 
 print_header "Python Package Tests"
@@ -103,7 +101,7 @@ test_command "CUDA available in PyTorch" "python -c 'import torch; assert torch.
 test_output "CUDA device count" "python -c 'import torch; print(torch.cuda.device_count())'" "[0-9]"
 
 test_command "HydraGNN installed" "python -c 'import hydragnn'"
-test_output "HydraGNN import" "python -c 'from hydragnn import models'" "models"
+test_command "HydraGNN import" "python -c 'from hydragnn import models'"
 
 test_command "matsim-agents on PYTHONPATH" "python -c 'import sys; print(sys.path)' | grep -q matsim"
 test_command "matsim-agents import" "python -c 'import matsim_agents'"

@@ -6,6 +6,8 @@ appropriate tool. For now only the "relax" task is implemented.
 
 from __future__ import annotations
 
+import os
+
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 
@@ -20,6 +22,19 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
     task = state.pending_tasks[0]
     remaining = state.pending_tasks[1:]
     cfg = (config or {}).get("configurable", {}) if config else {}
+    logdir = cfg.get("logdir") or os.environ.get("MATSIM_HYDRAGNN_LOGDIR")
+    mlp_checkpoint = cfg.get("mlp_checkpoint") or os.environ.get("MATSIM_HYDRAGNN_MLP_CKPT")
+    checkpoint = cfg.get("checkpoint") or os.environ.get("MATSIM_HYDRAGNN_CHECKPOINT")
+
+    if not logdir:
+        raise ValueError(
+            "Missing HydraGNN logdir. Provide via run config or set MATSIM_HYDRAGNN_LOGDIR."
+        )
+    if not mlp_checkpoint:
+        raise ValueError(
+            "Missing BranchWeightMLP checkpoint. Provide via run config or set "
+            "MATSIM_HYDRAGNN_MLP_CKPT."
+        )
 
     if task.kind != "relax":
         return {
@@ -29,9 +44,9 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
 
     args = RelaxStructureInput(
         structure_path=task.structure_path,
-        logdir=cfg["logdir"],
-        mlp_checkpoint=cfg["mlp_checkpoint"],
-        checkpoint=cfg.get("checkpoint"),
+        logdir=logdir,
+        mlp_checkpoint=mlp_checkpoint,
+        checkpoint=checkpoint,
         optimizer=task.optimizer,
         maxiter=task.maxiter,
         maxstep=task.maxstep,
