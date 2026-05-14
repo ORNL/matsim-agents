@@ -92,6 +92,10 @@ mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 unset ROCR_VISIBLE_DEVICES
 unset HIP_VISIBLE_DEVICES
 
+# Disable Ray auto-discovery (prevents hang when no Ray cluster is running)
+export RAY_ADDRESS=""
+export VLLM_WORKER_MULTIPROC_METHOD=spawn
+
 # ── Cleanup trap ─────────────────────────────────────────────────────────────
 TAIL_PID=""
 cleanup() {
@@ -148,6 +152,7 @@ echo ""
 
 echo "[diag] Step 2: vllm --help inside srun (timeout 90s) ..."
 timeout 90 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
+  env RAY_ADDRESS="" \
   "$VENV/bin/python" -m vllm.entrypoints.openai.api_server --help \
   > "$RUN_DIR/vllm-help.log" 2>&1
 DIAG2_EXIT=$?
@@ -182,6 +187,7 @@ srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
     --trust-remote-code \
     --disable-log-requests \
     --enforce-eager \
+    --distributed-executor-backend mp \
   > "$RUN_DIR/vllm.log" 2>&1 &
 VLLM_PID=$!
 # Mirror log to stdout in real time
