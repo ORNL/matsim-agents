@@ -103,6 +103,9 @@ export TRITON_CACHE_DIR=$RUN_DIR/vllm-cache/triton
 rm -rf "$VLLM_CACHE_ROOT"
 mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 
+# Use prebuilt tvm_ffi torch-c-dlpack .so from proj-shared (avoids JIT rebuild hang at import)
+export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
+
 unset ROCR_VISIBLE_DEVICES
 unset HIP_VISIBLE_DEVICES
 
