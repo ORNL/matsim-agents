@@ -62,6 +62,7 @@ export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 
 export MIOPEN_USER_DB_PATH="$RUN_DIR/miopen-cache"
+export MIOPEN_DISABLE_CACHE=1
 rmdir "$RUN_DIR/miopen-cache" 2>/dev/null; mkdir -p "$MIOPEN_USER_DB_PATH"
 
 export VLLM_CUDART_SO_PATH=/opt/rocm-7.2.0/lib/libamdhip64.so
@@ -101,10 +102,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# ── Diagnostics ─────────────────────────────────────────────────────────────
+echo "Python:  $(which python)  ($(python --version 2>&1))"
+echo "torch:   $(python -c 'import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.device_count())' 2>&1)"
+echo "vllm:    $(python -c 'import vllm; print(vllm.__version__)' 2>&1)"
+echo ""
+
 # ── Start vLLM ───────────────────────────────────────────────────────────────
 echo "[vllm] Starting server TP=${GPUS_PER_NODE} ..."
 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
-  python -m vllm.entrypoints.openai.api_server \
+  "$VENV/bin/python" -m vllm.entrypoints.openai.api_server \
     --model "$SMOKE_MODEL_PATH" \
     --served-model-name "$SMOKE_MODEL_NAME" \
     --tensor-parallel-size "$GPUS_PER_NODE" \
