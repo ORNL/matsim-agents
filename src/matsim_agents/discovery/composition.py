@@ -28,9 +28,7 @@ _ELEMENT_PATTERN = "|".join(sorted(set(_ELEMENT_SYMBOLS), key=len, reverse=True)
 _FORMULA_TOKEN_RE = re.compile(rf"({_ELEMENT_PATTERN})(\d*)")
 # A formula must contain at least two tokens (or one token followed by digit)
 # to be meaningfully identified inside free text.
-_FORMULA_RE = re.compile(
-    rf"\b((?:(?:{_ELEMENT_PATTERN})\d*){{1,}})\b"
-)
+_FORMULA_RE = re.compile(rf"\b((?:(?:{_ELEMENT_PATTERN})\d*){{1,}})\b")
 
 
 class Composition(BaseModel):

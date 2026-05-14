@@ -72,16 +72,18 @@ def score_stability(
     for r in relaxations:
         n_atoms = _atoms_count_from_path(r.optimized_structure_path)
         e_per_atom = r.final_energy_eV / max(n_atoms, 1)
-        items.append(PhaseStability(
-            structure_path=r.structure_path,
-            optimized_structure_path=r.optimized_structure_path,
-            final_energy_eV=r.final_energy_eV,
-            energy_per_atom_eV=e_per_atom,
-            delta_e_above_min_eV_per_atom=0.0,  # filled in below
-            final_max_force_eV_per_A=r.final_max_force_eV_per_A,
-            converged=r.converged,
-            dynamically_stable_proxy=r.final_max_force_eV_per_A <= force_tol_eV_per_A,
-        ))
+        items.append(
+            PhaseStability(
+                structure_path=r.structure_path,
+                optimized_structure_path=r.optimized_structure_path,
+                final_energy_eV=r.final_energy_eV,
+                energy_per_atom_eV=e_per_atom,
+                delta_e_above_min_eV_per_atom=0.0,  # filled in below
+                final_max_force_eV_per_A=r.final_max_force_eV_per_A,
+                converged=r.converged,
+                dynamically_stable_proxy=r.final_max_force_eV_per_A <= force_tol_eV_per_A,
+            )
+        )
 
     if not items:
         raise ValueError("score_stability requires at least one relaxation result.")
@@ -93,8 +95,9 @@ def score_stability(
     ranking = sorted(items, key=lambda it: it.energy_per_atom_eV)
     ground = ranking[0]
 
-    near_degenerate = [it for it in ranking[1:]
-                       if it.delta_e_above_min_eV_per_atom < degeneracy_tol_eV_per_atom]
+    near_degenerate = [
+        it for it in ranking[1:] if it.delta_e_above_min_eV_per_atom < degeneracy_tol_eV_per_atom
+    ]
     chem_stable = ground.dynamically_stable_proxy and not near_degenerate
 
     summary_lines = [
@@ -109,9 +112,7 @@ def score_stability(
             f"WARNING: {len(near_degenerate)} other phase(s) within "
             f"{degeneracy_tol_eV_per_atom:.3f} eV/atom; ground-state assignment is uncertain."
         )
-    summary_lines.append(
-        f"Chemical-stability proxy: {'PASS' if chem_stable else 'INCONCLUSIVE'}."
-    )
+    summary_lines.append(f"Chemical-stability proxy: {'PASS' if chem_stable else 'INCONCLUSIVE'}.")
 
     return StabilityReport(
         formula=formula,

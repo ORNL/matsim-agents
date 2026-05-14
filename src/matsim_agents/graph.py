@@ -35,8 +35,9 @@ def build_graph(checkpointer=None):
 
     graph.set_entry_point("planner")
     graph.add_edge("planner", "executor")
-    graph.add_conditional_edges("executor", _route_after_executor,
-                                {"executor": "executor", "analyst": "analyst"})
+    graph.add_conditional_edges(
+        "executor", _route_after_executor, {"executor": "executor", "analyst": "analyst"}
+    )
     graph.add_edge("analyst", END)
 
     return graph.compile(checkpointer=checkpointer or MemorySaver())

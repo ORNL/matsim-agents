@@ -23,10 +23,18 @@ from matsim_agents.state import RelaxationResult
 class RelaxStructureInput(BaseModel):
     """Inputs for :func:`relax_structure`."""
 
-    structure_path: str = Field(..., description="Path to the input structure file (e.g. .vasp, .cif, .xyz).")
-    logdir: str = Field(..., description="Directory containing the HydraGNN config.json and checkpoint.")
-    mlp_checkpoint: str = Field(..., description="Path to the auxiliary BranchWeightMLP checkpoint (.pt).")
-    checkpoint: str | None = Field(None, description="Optional HydraGNN checkpoint filename or absolute path.")
+    structure_path: str = Field(
+        ..., description="Path to the input structure file (e.g. .vasp, .cif, .xyz)."
+    )
+    logdir: str = Field(
+        ..., description="Directory containing the HydraGNN config.json and checkpoint."
+    )
+    mlp_checkpoint: str = Field(
+        ..., description="Path to the auxiliary BranchWeightMLP checkpoint (.pt)."
+    )
+    checkpoint: str | None = Field(
+        None, description="Optional HydraGNN checkpoint filename or absolute path."
+    )
     optimizer: Literal["FIRE", "BFGS", "BFGSLineSearch"] = "FIRE"
     maxiter: int = 200
     maxstep: float = 1e-2
@@ -74,9 +82,21 @@ def _atoms_to_graph(atoms, graph_attr, radius: float, max_neighbours: int):
     return add_edges_pbc(data)
 
 
-def _build_calculator(model, mlp, radius, max_neighbours, param_dtype, autocast_ctx,
-                     device, num_branches, mlp_device, mlp_autocast_ctx,
-                     unified_mlp_gnn_stack, charge, spin):
+def _build_calculator(
+    model,
+    mlp,
+    radius,
+    max_neighbours,
+    param_dtype,
+    autocast_ctx,
+    device,
+    num_branches,
+    mlp_device,
+    mlp_autocast_ctx,
+    unified_mlp_gnn_stack,
+    charge,
+    spin,
+):
     """Construct the FusedHydraGNNCalculator class lazily."""
     import torch
     from ase.calculators.calculator import Calculator, all_changes
@@ -103,7 +123,9 @@ def _build_calculator(model, mlp, radius, max_neighbours, param_dtype, autocast_
                 _total_timed_structures,
                 _stage_stats,
             ) = run_fused_inference(
-                model, mlp, [structure],
+                model,
+                mlp,
+                [structure],
                 batch_size=1,
                 param_dtype=param_dtype,
                 autocast_ctx=autocast_ctx,
@@ -141,7 +163,9 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
     from inference_fused import load_fused_stack
 
     structure_path = os.path.abspath(args.structure_path)
-    out_dir = os.path.abspath(args.output_dir) if args.output_dir else os.path.dirname(structure_path)
+    out_dir = (
+        os.path.abspath(args.output_dir) if args.output_dir else os.path.dirname(structure_path)
+    )
     os.makedirs(out_dir, exist_ok=True)
 
     stem, ext = os.path.splitext(os.path.basename(structure_path))
@@ -153,10 +177,26 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
         f"{'_from_initial_randomly_perturbed_structure' if args.random_displacement else ''}{ext}",
     )
 
-    (model, mlp, config, device, autocast_ctx, param_dtype, num_branches,
-     mlp_device, mlp_autocast_ctx, unified_mlp_gnn_stack, _gnn_prec, _mlp_prec) = load_fused_stack(
-        args.logdir, args.checkpoint, args.mlp_checkpoint,
-        args.precision, args.mlp_precision, args.mlp_device,
+    (
+        model,
+        mlp,
+        config,
+        device,
+        autocast_ctx,
+        param_dtype,
+        num_branches,
+        mlp_device,
+        mlp_autocast_ctx,
+        unified_mlp_gnn_stack,
+        _gnn_prec,
+        _mlp_prec,
+    ) = load_fused_stack(
+        args.logdir,
+        args.checkpoint,
+        args.mlp_checkpoint,
+        args.precision,
+        args.mlp_precision,
+        args.mlp_device,
     )
 
     arch = config["NeuralNetwork"]["Architecture"]
@@ -164,9 +204,19 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
     max_neighbours = int(arch.get("max_neighbours", 20))
 
     calculator = _build_calculator(
-        model, mlp, radius, max_neighbours, param_dtype, autocast_ctx,
-        device, num_branches, mlp_device, mlp_autocast_ctx,
-        unified_mlp_gnn_stack, args.charge, args.spin,
+        model,
+        mlp,
+        radius,
+        max_neighbours,
+        param_dtype,
+        autocast_ctx,
+        device,
+        num_branches,
+        mlp_device,
+        mlp_autocast_ctx,
+        unified_mlp_gnn_stack,
+        args.charge,
+        args.spin,
     )
 
     atoms = read(structure_path)
@@ -176,8 +226,11 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
         rng = np.random.default_rng(args.seed)
         atoms.set_positions(
             atoms.get_positions()
-            + rng.uniform(-args.random_displacement_scale, args.random_displacement_scale,
-                          size=atoms.get_positions().shape)
+            + rng.uniform(
+                -args.random_displacement_scale,
+                args.random_displacement_scale,
+                size=atoms.get_positions().shape,
+            )
         )
 
     atoms.get_potential_energy()
@@ -208,17 +261,25 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
 
                 energy = atoms.get_potential_energy()
                 forces = atoms.get_forces()
-                max_force = float(np.sqrt((forces ** 2).sum(axis=1).max()))
+                max_force = float(np.sqrt((forces**2).sum(axis=1).max()))
                 weights = calculator.last_branch_weights
                 top_branch = int(np.argmax(weights)) if weights is not None else -1
                 top_weight = float(weights[top_branch]) if weights is not None else float("nan")
 
                 traj_writer.write()
 
-                row = [str(steps_taken), f"{energy:.8e}", f"{max_force:.8e}",
-                       str(top_branch), f"{top_weight:.6f}"]
-                row += ([f"{float(w):.6f}" for w in weights]
-                        if weights is not None else ["nan"] * int(num_branches))
+                row = [
+                    str(steps_taken),
+                    f"{energy:.8e}",
+                    f"{max_force:.8e}",
+                    str(top_branch),
+                    f"{top_weight:.6f}",
+                ]
+                row += (
+                    [f"{float(w):.6f}" for w in weights]
+                    if weights is not None
+                    else ["nan"] * int(num_branches)
+                )
                 csv_file.write(",".join(row) + "\n")
                 csv_file.flush()
 

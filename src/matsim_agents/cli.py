@@ -22,10 +22,14 @@ def run(
     objective: str = typer.Argument(..., help="Free-form objective for the agent system."),
     logdir: Path = typer.Option(..., help="HydraGNN logdir with config.json and checkpoint."),
     mlp_checkpoint: Path = typer.Option(..., help="Path to BranchWeightMLP checkpoint (.pt)."),
-    checkpoint: str | None = typer.Option(None, help="HydraGNN checkpoint filename or absolute path."),
+    checkpoint: str | None = typer.Option(
+        None, help="HydraGNN checkpoint filename or absolute path."
+    ),
     output_dir: Path | None = typer.Option(None, help="Where to write artifacts."),
     mlp_device: str = typer.Option("cuda", help="Device for the auxiliary MLP (cuda|cpu)."),
-    precision: str | None = typer.Option(None, help="HydraGNN precision override (fp32|fp64|bf16)."),
+    precision: str | None = typer.Option(
+        None, help="HydraGNN precision override (fp32|fp64|bf16)."
+    ),
     mlp_precision: str | None = typer.Option(None, help="MLP precision override (fp32|fp64|bf16)."),
     max_iterations: int = typer.Option(5, help="Maximum executor iterations."),
     llm_provider: str = typer.Option(
@@ -89,28 +93,48 @@ def plan(objective: str):
 def chat(
     logdir: Path = typer.Option(..., help="HydraGNN logdir with config.json and checkpoint."),
     mlp_checkpoint: Path = typer.Option(..., help="Path to BranchWeightMLP checkpoint (.pt)."),
-    output_dir: Path = typer.Option(Path("./outputs"), help="Root directory for discovery artifacts."),
+    output_dir: Path = typer.Option(
+        Path("./outputs"), help="Root directory for discovery artifacts."
+    ),
     checkpoint: str | None = typer.Option(None, help="HydraGNN checkpoint filename or path."),
     mlp_device: str = typer.Option("cuda", help="Device for the auxiliary MLP (cuda|cpu)."),
     precision: str | None = typer.Option(None, help="HydraGNN precision override."),
     mlp_precision: str | None = typer.Option(None, help="MLP precision override."),
-    optimizer: str = typer.Option("FIRE", "--ase-structure-optimizer", help="ASE structure optimizer for relaxations."),
+    optimizer: str = typer.Option(
+        "FIRE", "--ase-structure-optimizer", help="ASE structure optimizer for relaxations."
+    ),
     maxiter: int = typer.Option(200, help="Max relaxation steps per phase."),
     fmax: float = typer.Option(0.02, help="Stop relaxation when max force < fmax (eV/Å)."),
     min_atoms: int = typer.Option(32, help="Auto-tile each prototype to at least this many atoms."),
-    supercell: str | None = typer.Option(None, help="Explicit supercell, e.g. '2x2x2'. Overrides --min-atoms."),
-    include_2d: bool = typer.Option(False, "--include-2d/--no-include-2d", help="Also enumerate 2-D prototypes (graphene, h-BN, MX2)."),
+    supercell: str | None = typer.Option(
+        None, help="Explicit supercell, e.g. '2x2x2'. Overrides --min-atoms."
+    ),
+    include_2d: bool = typer.Option(
+        False,
+        "--include-2d/--no-include-2d",
+        help="Also enumerate 2-D prototypes (graphene, h-BN, MX2).",
+    ),
     num_layers: int = typer.Option(1, help="Layers stacked for every 2-D prototype."),
     vacuum: float = typer.Option(15.0, help="Vacuum gap (Å) along z for 2-D prototypes."),
-    interlayer: float | None = typer.Option(None, help="Override interlayer separation (Å) for 2-D prototypes."),
-    n_orderings: int = typer.Option(1, help="Sample up to N symmetrically-distinct site decorations per prototype (multi-species only)."),
-    lattice_scales: str | None = typer.Option(None, help="Comma-separated isotropic cell-scale factors, e.g. '0.96,1.0,1.04'."),
-    ordering_seed: int = typer.Option(0, help="RNG seed for the ordering sampler (reproducibility)."),
+    interlayer: float | None = typer.Option(
+        None, help="Override interlayer separation (Å) for 2-D prototypes."
+    ),
+    n_orderings: int = typer.Option(
+        1,
+        help="Sample up to N symmetrically-distinct site decorations per prototype (multi-species only).",
+    ),
+    lattice_scales: str | None = typer.Option(
+        None, help="Comma-separated isotropic cell-scale factors, e.g. '0.96,1.0,1.04'."
+    ),
+    ordering_seed: int = typer.Option(
+        0, help="RNG seed for the ordering sampler (reproducibility)."
+    ),
     llm_provider: str = typer.Option("ollama", "--llm-provider", case_sensitive=False),
     llm_model: str = typer.Option("qwen2.5:14b", "--llm-model"),
     llm_base_url: str | None = typer.Option(None, "--llm-base-url"),
     auto_confirm: bool = typer.Option(
-        False, "--auto-confirm/--ask",
+        False,
+        "--auto-confirm/--ask",
         help="If set, skip the y/N prompt and explore every detected composition.",
     ),
 ):
@@ -168,8 +192,7 @@ def chat(
     )
     session = run_chat(cfg)
     console.print(
-        f"\n[bold]Session finished.[/bold] "
-        f"{len(session.explorations)} composition(s) explored."
+        f"\n[bold]Session finished.[/bold] {len(session.explorations)} composition(s) explored."
     )
 
 

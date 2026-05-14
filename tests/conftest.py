@@ -11,6 +11,7 @@ from matsim_agents.state import RelaxationResult, TaskSpec
 
 # ── fake LLM helpers ──────────────────────────────────────────────────────────
 
+
 def make_fake_llm(*responses: str) -> FakeListChatModel:
     """Return a FakeListChatModel that yields each response in order."""
     return FakeListChatModel(responses=list(responses))
@@ -69,6 +70,7 @@ def fake_task(si_vasp: str) -> TaskSpec:
 
 
 # ── chat config fixture ───────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def discovery_config(tmp_path: Path, si_vasp: str):
