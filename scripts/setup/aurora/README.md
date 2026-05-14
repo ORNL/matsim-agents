@@ -6,9 +6,10 @@ install style used by the Frontier and Perlmutter scripts.
 ## Script
 
 ### install_matsim_aurora.sh
-Creates a Python virtual environment and performs a two-stage install:
+Runs a two-stage install:
 
-1. Install HydraGNN dependencies first (base/torch/pyg + editable HydraGNN).
+1. Run HydraGNN's Aurora installer from installation_DOE_supercomputers to
+	create/configure the environment and install HydraGNN dependencies.
 2. Install matsim-agents and additional runtime dependencies.
 
 Usage:
@@ -33,6 +34,12 @@ LLM_BACKENDS="huggingface,dev" bash scripts/setup/aurora/install_matsim_aurora.s
 INSTALL_VLLM_SERVER=1 bash scripts/setup/aurora/install_matsim_aurora.sh
 ```
 
+Default environment path created by this flow:
+
+```bash
+$HYDRAGNN_ROOT/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv
+```
+
 ### setup_matsim_aurora.sh
 Quick setup script for daily use after installation.
 
@@ -46,4 +53,57 @@ Override environment path:
 
 ```bash
 MATSIM_AURORA_VENV=/path/to/venv source scripts/setup/aurora/setup_matsim_aurora.sh
+```
+
+### build-qe-cpu-aurora.sh
+Builds Quantum ESPRESSO on Aurora (CPU-focused), mirroring the workflow used by
+the Frontier/Perlmutter QE build scripts.
+
+Usage:
+
+```bash
+bash scripts/setup/aurora/build-qe-cpu-aurora.sh
+```
+
+Common overrides:
+
+```bash
+QE_VERSION=develop bash scripts/setup/aurora/build-qe-cpu-aurora.sh
+QE_PREFIX=/path/to/quantum-espresso bash scripts/setup/aurora/build-qe-cpu-aurora.sh
+NCORES=32 bash scripts/setup/aurora/build-qe-cpu-aurora.sh
+```
+
+### build-qe-gpu-aurora.sh
+Builds Quantum ESPRESSO on Aurora with Intel GPU offload intent, using the same
+clone/configure/build/install flow as the other machine scripts.
+
+Usage:
+
+```bash
+bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+```
+
+Common overrides:
+
+```bash
+QE_GPU_ARCHS=intel_gpu_pvc bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+QE_GPU="openmp;oneapi" bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+EXTRA_CMAKE_ARGS="-DVAR=VALUE" bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+```
+
+Validated results from the current repository run:
+
+- build/install completed successfully (exit code 0)
+- install prefix populated under `external/quantum-espresso/install-gpu/`
+- 106 executables installed in `install-gpu/bin/`
+- core binaries present: `pw.x`, `cp.x`, `ph.x`, `pp.x`, `epw.x`
+
+See full Aurora QE documentation:
+
+- `docs/quantum-espresso-aurora.md`
+
+Run `pw.x` with the Aurora launcher after building:
+
+```bash
+bash scripts/launchers/aurora/run-pw-gpu-aurora.sh path/to/pw.in
 ```
