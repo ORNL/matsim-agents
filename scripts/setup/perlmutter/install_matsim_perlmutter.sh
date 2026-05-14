@@ -24,8 +24,8 @@
 #   MATSIM_REPO       matsim-agents git remote         (default: ORNL/matsim-agents)
 #   VENV_PATH         Target conda env path            (default: HydraGNN-Installation-Perlmutter/hydragnn_venv)
 #   PYTHON_VERSION    Python version for env creation  (default: 3.11)
-#   EXPECTED_CUDA_MM  CUDA major.minor                 (default: 12.4)
-#   TORCH_CUDA_TAG    PyTorch wheel tag                (default: cu124)
+#   EXPECTED_CUDA_MM  CUDA major.minor                 (default: 12.9)
+#   TORCH_CUDA_TAG    PyTorch wheel tag                (default: cu129)
 #   TORCH_CUDA_ARCH   GPU arch list                    (default: 8.0)
 #   MAX_JOBS          Build parallelism                (default: 16)
 #   LLM_BACKENDS      matsim extras                    (default: dev)
@@ -45,8 +45,10 @@ MATSIM_REPO="${MATSIM_REPO:-https://github.com/ORNL/matsim-agents.git}"
 DEFAULT_VENV_PATH="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
 VENV_PATH="${VENV_PATH:-${DEFAULT_VENV_PATH}}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
-EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.4}"
-TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu124}"
+EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
+# Pin to HydraGNN's torch==2.11.0 wheels (published as cu129). cu129 binaries
+# match the loaded cudatoolkit/12.9 module exactly.
+TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu129}"
 TORCH_CUDA_ARCH="${TORCH_CUDA_ARCH:-8.0}"
 MAX_JOBS="${MAX_JOBS:-16}"
 LLM_BACKENDS="${LLM_BACKENDS:-dev}"
@@ -178,7 +180,10 @@ pip_retry --disable-pip-version-check -U pip setuptools wheel
 
 if [[ -f "${HYDRAGNN_DIR}/setup.py" || -f "${HYDRAGNN_DIR}/pyproject.toml" ]]; then
     log "Installing HydraGNN editable package from ${HYDRAGNN_DIR}..."
-    pip_retry -e "${HYDRAGNN_DIR}"
+    # Keep the CUDA/PyG stack built in Phase 1 intact.
+    # Re-resolving HydraGNN deps here can downgrade torch and break ABI-compatible
+    # extensions (e.g., torch-scatter).
+    pip_retry -e "${HYDRAGNN_DIR}" --no-deps
 else
     warn "HydraGNN package metadata not found at ${HYDRAGNN_DIR}; import may fail."
 fi
@@ -206,6 +211,16 @@ pip_retry "huggingface_hub>=1.12" "transformers>=4.45" "accelerate>=1.13"
 if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     log "INSTALL_VLLM_SERVER=1 -> installing vLLM server package"
     pip_retry vllm
+fi
+
+# -- Re-assert HydraGNN-pinned versions ----------------------------------------
+# matsim-agents and its extras pull transitive deps (typer→click, ase→matplotlib, ...)
+# that may upgrade packages HydraGNN pins. Reinstall HydraGNN's base requirements
+# so the final environment matches HydraGNN's source-of-truth pins exactly.
+HYDRAGNN_BASE_REQ="${HYDRAGNN_DIR}/requirements-base.txt"
+if [[ -f "${HYDRAGNN_BASE_REQ}" ]]; then
+    log "Re-asserting HydraGNN base pins from ${HYDRAGNN_BASE_REQ}"
+    pip_retry -r "${HYDRAGNN_BASE_REQ}"
 fi
 
 # -- Verification ---------------------------------------------------------------

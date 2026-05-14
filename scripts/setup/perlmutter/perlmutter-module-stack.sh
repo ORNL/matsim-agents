@@ -31,7 +31,7 @@ load_perlmutter_modules() {
     ml cray-mpich/8.1.30
 
     # CUDA toolkit
-    ml cudatoolkit/12.4
+    ml cudatoolkit/12.9
 
     # Modern compiler toolchain for C++ extensions
     ml gcc-native/13.2
@@ -74,7 +74,7 @@ load_perlmutter_modules_gpu() {
     ml craype-accel-nvidia80
 
     # CUDA toolkit (match PyTorch GPU requirements)
-    ml cudatoolkit/12.4
+    ml cudatoolkit/12.9
 
     # Modern compiler toolchain for C++ extensions
     ml gcc-native/13.2
@@ -103,17 +103,22 @@ load_perlmutter_modules_nvidia() {
         fi
     fi
 
-    # Load basic modules
-    ml PrgEnv-gnu 2>/dev/null || true
-    ml cudatoolkit/12.4 2>/dev/null || ml cudatoolkit 2>/dev/null || true
+    # Load basic modules (versions match HydraGNN Perlmutter installer)
+    ml cpe/24.07 2>/dev/null || true
+    ml PrgEnv-gnu/8.5.0 2>/dev/null || ml PrgEnv-gnu 2>/dev/null || true
+    ml cray-mpich/8.1.30 2>/dev/null || true
+    ml gcc-native/13.2 2>/dev/null || true
+    ml cudatoolkit/12.9 2>/dev/null || ml cudatoolkit 2>/dev/null || true
     ml cray-fftw 2>/dev/null || true
     ml cmake 2>/dev/null || true
     ml git 2>/dev/null || true
 
     # Manually add nvfortran to PATH (located in NVIDIA HPC SDK)
-    # Find the latest version available
+    # Pin to NVHPC 25.5: it is the most recent bundle that ships CUDA 12.9,
+    # matching HydraGNN's cudatoolkit/12.9 + PyTorch cu129 wheels. NVHPC 25.9
+    # jumped to CUDA 13.0 and would create a CUDA-major mismatch with PyTorch.
     export NVIDIA_HPC_SDK_DIR="${NVIDIA_HPC_SDK_DIR:-/opt/nvidia/hpc_sdk/Linux_x86_64}"
-    export NVIDIA_COMPILER_VERSION="${NVIDIA_COMPILER_VERSION:-25.9}"
+    export NVIDIA_COMPILER_VERSION="${NVIDIA_COMPILER_VERSION:-25.5}"
     NVFORTRAN_BIN="${NVIDIA_HPC_SDK_DIR}/${NVIDIA_COMPILER_VERSION}/compilers/bin"
     if [[ -d "${NVFORTRAN_BIN}" ]]; then
         export PATH="${NVFORTRAN_BIN}:${PATH}"
@@ -126,14 +131,14 @@ load_perlmutter_modules_nvidia() {
         export PATH="/opt/nvidia/hpc_sdk/Linux_x86_64/23.1/compilers/bin:${PATH}"
     fi
 
-    # Set CUDA paths for CMake
-    if [[ -z "${CUDA_HOME}" ]]; then
-        export CUDA_HOME="${CUDA_HOME:-/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/cuda/12.4}"
+    # Set CUDA paths for CMake (NVHPC 25.5 bundles CUDA 12.9)
+    if [[ -z "${CUDA_HOME:-}" ]]; then
+        export CUDA_HOME="/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/cuda/12.9"
         if [[ ! -d "${CUDA_HOME}" ]]; then
             export CUDA_HOME="/opt/nvidia/hpc_sdk/Linux_x86_64/24.5/cuda/12.4"
         fi
         if [[ ! -d "${CUDA_HOME}" ]]; then
-            export CUDA_HOME="/usr/local/cuda-12.4"
+            export CUDA_HOME="/usr/local/cuda-12.9"
         fi
     fi
 
