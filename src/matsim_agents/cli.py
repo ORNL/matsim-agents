@@ -202,7 +202,7 @@ def chat(
 
 al_app = typer.Typer(
     add_completion=False,
-    help="HydraGNN <-> VASP active-learning loop.",
+    help="HydraGNN <-> DFT (VASP or Quantum ESPRESSO) active-learning loop.",
 )
 app.add_typer(al_app, name="al")
 
