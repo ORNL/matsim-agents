@@ -170,7 +170,7 @@ srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
     --port "$SMOKE_PORT" \
     --host 0.0.0.0 \
     --trust-remote-code \
-    --disable-log-requests \
+    --no-enable-log-requests \
     --enforce-eager \
     --distributed-executor-backend mp \
   > "$RUN_DIR/vllm.log" 2>&1 &
