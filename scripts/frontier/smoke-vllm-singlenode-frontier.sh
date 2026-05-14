@@ -135,6 +135,13 @@ unset HIP_VISIBLE_DEVICES
 export RAY_ADDRESS=""
 export VLLM_WORKER_MULTIPROC_METHOD=spawn
 
+# Single-node TP: keep all collectives on loopback (no network).
+# Frontier interfaces are hsn0..hsn3; vLLM defaults to "hsn" which doesn't
+# exist as a literal name → gloo "Unable to find address for: hsn".
+export GLOO_SOCKET_IFNAME=lo
+export NCCL_SOCKET_IFNAME=lo
+export TP_SOCKET_IFNAME=lo
+
 # ── Cleanup trap ─────────────────────────────────────────────────────────────
 TAIL_PID=""
 cleanup() {
