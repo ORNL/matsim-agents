@@ -48,6 +48,15 @@ mkdir -p "$MIOPEN_USER_DB_PATH"
 # Built once by install_matsim_frontier.sh; skips a ~5 min on-the-fly compile.
 export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
 
+# vLLM 0.20 detects ROCm by reading HIP_VISIBLE_DEVICES, not
+# ROCR_VISIBLE_DEVICES (which is what SLURM sets on Frontier). Without this,
+# `vllm.config.device.__post_init__` raises "Failed to infer device type"
+# even though `torch.cuda.is_available()` returns True. Mirror SLURM's
+# ROCR_VISIBLE_DEVICES into HIP_VISIBLE_DEVICES inside the srun shell.
+export HIP_VISIBLE_DEVICES="${ROCR_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
+# Belt-and-braces: tell vLLM explicitly that the platform is ROCm.
+export VLLM_PLATFORM=rocm
+
 VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
 
@@ -69,7 +78,8 @@ echo "Log:           $VLLM_LOG"
 
 # Single task, all 8 GCDs of the node visible to that task.
 # vLLM spawns 8 worker subprocesses internally (TP=8), each binds 1 GCD.
-srun -N1 -n1 -c56 --gpus-per-task=8 --gpu-bind=closest \
+# --export=ALL propagates HIP_VISIBLE_DEVICES + VLLM_PLATFORM into the srun env.
+srun -N1 -n1 -c56 --gpus-per-task=8 --gpu-bind=closest --export=ALL \
     python -m vllm.entrypoints.openai.api_server \
         --model "$MODEL_DIR" \
         --served-model-name Qwen/Qwen2.5-72B-Instruct \
