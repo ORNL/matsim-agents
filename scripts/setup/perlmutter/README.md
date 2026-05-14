@@ -43,7 +43,7 @@ Loads the necessary Perlmutter module stack for CPU and GPU computing.
 - Cray Programming Environment (cpe/24.07)
 - GNU compiler suite (PrgEnv-gnu/8.5.0)
 - Cray MPI (cray-mpich/8.1.30)
-- CUDA toolkit (12.4)
+- CUDA toolkit (12.9)
 - Modern GCC compiler (gcc-native/13.2)
 - CMake, Conda, and build tools
 
@@ -304,18 +304,18 @@ MAX_JOBS=4 bash install_matsim_perlmutter.sh --gpu
 ### Compute Hardware
 - **A100 GPUs:** Compute Capability SM80 (Ampere)
 - **Node Configuration:** NVIDIA A100 with CPU support
-- **CUDA Version:** 12.4 (matches PyTorch cu124 wheels)
+- **CUDA Version:** 12.9 (matches PyTorch cu129 wheels)
 
 ### Important Environment Variables
 - `TORCH_CUDA_ARCH_LIST`: Set to `8.0` (A100 compute capability)
 - `MAX_JOBS`: Parallel build jobs (default: 16)
-- `TORCH_CUDA_TAG`: PyTorch CUDA version tag (default: cu124)
+- `TORCH_CUDA_TAG`: PyTorch CUDA version tag (default: cu129)
 
 ### Module Stack Details
 - **Cray Programming Environment:** cpe/24.07
 - **PrgEnv-gnu/8.5.0:** GNU compiler suite
 - **gcc-native/13.2:** Modern GCC for C++ extensions
-- **cudatoolkit/12.4:** NVIDIA CUDA (matches PyTorch wheels)
+- **cudatoolkit/12.9:** NVIDIA CUDA (matches PyTorch wheels)
 - **Miniforge3:** Conda package manager
 
 ---
