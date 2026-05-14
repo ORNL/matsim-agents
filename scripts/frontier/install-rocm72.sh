@@ -40,6 +40,14 @@ pip install --force-reinstall \
     "setuptools==79.0.1" \
     "grpcio==1.78.0" \
     "grpcio-reflection==1.78.0"
+
+# Install matsim-agents with all required extras.
+# langgraph: required by matsim_agents package init (state.py imports it)
+# langchain-huggingface: required for the huggingface provider
+# accelerate: required by HuggingFacePipeline for device_map="auto"
+echo "=== Phase 1 post-step: matsim-agents install ==="
+pip install -e "$PROJ/matsim-agents[huggingface]" --no-deps
+pip install langgraph langchain-huggingface accelerate
 conda deactivate
 
 # ── Phase 2: Pre-download vLLM build deps into the venv ──────────────────────
