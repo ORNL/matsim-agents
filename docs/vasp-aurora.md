@@ -88,3 +88,19 @@ When reproducing the Aurora build, confirm these points before compiling:
 - Aurora setup overview: `scripts/setup/aurora/README.md`
 - HPC index: `docs/hpc-platforms.md`
 - Top-level project guide: `README.md`
+
+## Driving VASP from Python
+
+Two paths are exposed:
+
+- **Active-learning labelling (single-point SCF, no ionic motion):**
+  driven by [`src/matsim_agents/active_learning/backends/vasp.py`](../src/matsim_agents/active_learning/backends/vasp.py)
+  using a user-supplied `INCAR.template`. This is what `matsim-agents al run`
+  invokes when `dft.backend: vasp` is set in the AL config.
+- **Standalone DFT relaxations** (`scf` / `relax` / `vc-relax` /
+  `vc-relax-shape`): driven by [`src/matsim_agents/tools/vasp_relax.py`](../src/matsim_agents/tools/vasp_relax.py),
+  the symmetric pair to `tools/qe_relax.py`. It writes a self-contained
+  INCAR (no template required for the common case), composition-aware
+  `ENCUT/ISMEAR/SIGMA/KSPACING`, and parses `vasprun.xml`+`OUTCAR` for the
+  full per-ionic-step trajectory. Set `MATSIM_VASP_LAUNCHER` to point at a
+  wrapper script (analogue of the QE launcher pattern).
