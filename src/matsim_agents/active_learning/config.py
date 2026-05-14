@@ -332,8 +332,73 @@ class ALConfig(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "ALConfig":
+        """Load and validate an active-learning config YAML.
+
+        Supports shell-style variable substitution in **all string values**:
+
+        * ``${VAR}``                  — required; raises if unset.
+        * ``${VAR:-default}``          — falls back to ``default`` if unset.
+        * ``${VAR:?error message}``    — raises with that message if unset.
+
+        Variables are resolved in this order:
+
+        1. ``os.environ``
+        2. An optional top-level ``vars:`` mapping inside the YAML itself.
+
+        The ``vars:`` block is consumed (stripped) before pydantic validation,
+        so it never appears in the parsed :class:`ALConfig`. Substitution runs
+        on the raw YAML text, so you can interpolate inside paths, lists, and
+        even keys.
+        """
+        import os
+        import re
         import yaml
 
-        with open(path) as f:
-            data = yaml.safe_load(f)
+        path = Path(path)
+        raw_text = path.read_text()
+
+        # First parse to extract the optional `vars:` block as fallback values.
+        try:
+            preview = yaml.safe_load(raw_text) or {}
+        except yaml.YAMLError:
+            preview = {}
+        defaults: dict[str, str] = {}
+        if isinstance(preview, dict) and isinstance(preview.get("vars"), dict):
+            defaults = {str(k): str(v) for k, v in preview["vars"].items()}
+
+        # ${VAR}, ${VAR:-default}, ${VAR:?msg}.  Nested braces not supported.
+        pattern = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:[-?][^}]*)?\}")
+
+        def _resolve(match: re.Match[str]) -> str:
+            name = match.group(1)
+            modifier = match.group(2) or ""
+            if name in os.environ and os.environ[name] != "":
+                return os.environ[name]
+            if name in defaults:
+                return defaults[name]
+            if modifier.startswith(":-"):
+                return modifier[2:]
+            if modifier.startswith(":?"):
+                msg = modifier[2:].strip() or f"required variable {name!r} is unset"
+                raise ValueError(f"{path}: {msg}")
+            raise ValueError(
+                f"{path}: undefined variable ${{{name}}} "
+                "(set it in the environment, in the YAML 'vars:' block, "
+                "or use ${VAR:-default} syntax)."
+            )
+
+        substituted = raw_text
+        for _ in range(10):  # iterate so vars can reference other vars
+            new_text = pattern.sub(_resolve, substituted)
+            if new_text == substituted:
+                break
+            substituted = new_text
+        else:
+            raise ValueError(
+                f"{path}: variable substitution did not converge after 10 passes "
+                "(possible circular reference in 'vars:')."
+            )
+        data = yaml.safe_load(substituted)
+        if isinstance(data, dict):
+            data.pop("vars", None)
         return cls.model_validate(data)

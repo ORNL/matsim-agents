@@ -9,12 +9,42 @@
 # their total-energy zero is different. The dataset writer tags every frame
 # with info["dft_backend"] so you can filter at training time.
 #
-# Validate before submitting:
-#   matsim-agents al validate-config examples/active_learning/al_config.example.yaml
+# ---------------------------------------------------------------------------
+# Variable substitution
+# ---------------------------------------------------------------------------
+# Every string in this file may contain shell-style placeholders:
+#   ${VAR}                — required; error if unset.
+#   ${VAR:-default}       — falls back to `default` if unset.
+#   ${VAR:?error message} — aborts validate-config with `error message`.
+# Resolution order: (1) os.environ, (2) the `vars:` block below.
+#
+# Override at runtime without editing this file, e.g.:
+#   PROJ_ROOT=/path/to/checkout RUN_TAG=run-123 \
+#       matsim-agents al validate-config examples/active_learning/al_config.example.yaml
 # =============================================================================
 
+vars:
+  # Project + scratch roots (override via env to redeploy on another machine).
+  PROJ_ROOT:    /lustre/orion/mat746/proj-shared/matsim-agents
+  RUNS_ROOT:    /lustre/orion/mat746/proj-shared/runs
+  HYDRAGNN_DIR: /lustre/orion/mat746/proj-shared/HydraGNN
+
+  # Per-run identifier (lets you run many AL campaigns side by side).
+  RUN_TAG: al-run-001
+
+  # DFT executables and pseudopotential libraries.
+  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  POTCAR_DIR: /lustre/orion/mat746/proj-shared/POTCAR/PBE.54
+  PW_BIN:     ${PROJ_ROOT}/external/quantum-espresso/install-gpu/bin/pw.x
+  PSEUDO_DIR: /lustre/orion/mat746/proj-shared/SSSP_PBE_efficiency_v1.3
+
+  # Initial (pre-AL) HydraGNN model that produces the first surrogate forces.
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+# ---------------------------------------------------------------------------
+
 hydragnn:
-  logdir: /lustre/orion/mat746/proj-shared/runs/al-models/iter0_logdir
+  logdir: ${INITIAL_LOGDIR}
   checkpoint: best_model.pt           # filename inside logdir, OR absolute path
   mlp_checkpoint: null                 # set if your model uses BranchWeightMLP
   charge: 0.0
@@ -24,8 +54,8 @@ hydragnn:
   # For ensemble / ensemble_then_dropout strategies, list 1-4 sibling logdirs:
   ensemble_paths: []
   # ensemble_paths:
-  #   - /lustre/orion/mat746/proj-shared/runs/al-models/iter0_logdir_seed1
-  #   - /lustre/orion/mat746/proj-shared/runs/al-models/iter0_logdir_seed2
+  #   - ${RUNS_ROOT}/al-models/iter0_logdir_seed1
+  #   - ${RUNS_ROOT}/al-models/iter0_logdir_seed2
 
 md:
   # New schema: pick ONE of the three seed sources below.
@@ -35,8 +65,8 @@ md:
   seed_source:
     kind: paths
     paths:
-      - /lustre/orion/mat746/proj-shared/matsim-agents/examples/active_learning/seeds/Si_diamond.vasp
-      - /lustre/orion/mat746/proj-shared/matsim-agents/examples/active_learning/seeds/SiO2_alpha.vasp
+      - ${PROJ_ROOT}/examples/active_learning/seeds/Si_diamond.vasp
+      - ${PROJ_ROOT}/examples/active_learning/seeds/SiO2_alpha.vasp
   timestep_fs: 1.0
   n_steps: 200
   temperature_K: 600.0
@@ -58,32 +88,32 @@ acquisition:
 # Only the matching sub-block is required by the validator; the other may be
 # left in place (handy for quickly A/B-testing the two codes on the same run).
 dft:
-  backend: vasp                  # vasp | qe
+  backend: ${DFT_BACKEND:-vasp}        # vasp | qe
 
   vasp:
-    vasp_bin: /lustre/orion/mat746/proj-shared/matsim-agents/external/vasp6/src/vasp.6.6.0/bin/vasp_std
-    vasp_wrapper: /lustre/orion/mat746/proj-shared/matsim-agents/scripts/launchers/frontier/_vasp-step-frontier.sh
-    incar_template: /lustre/orion/mat746/proj-shared/matsim-agents/examples/active_learning/INCAR.template
-    kpoints_template: null         # use KSPACING in INCAR
-    potcar_dir: /lustre/orion/mat746/proj-shared/POTCAR/PBE.54
+    vasp_bin:        ${VASP_BIN}
+    vasp_wrapper:    ${PROJ_ROOT}/scripts/launchers/frontier/_vasp-step-frontier.sh
+    incar_template:  ${PROJ_ROOT}/examples/active_learning/INCAR.template
+    kpoints_template: null               # use KSPACING in INCAR
+    potcar_dir:      ${POTCAR_DIR}
     nodes_per_job: 1
-    ranks_per_node: 8              # 8 GCDs per MI250X node
+    ranks_per_node: 8                    # 8 GCDs per MI250X node
     threads_per_rank: 7
     timeout_sec: 7200
     extra_incar:
       NCORE: "8"
 
   qe:
-    pw_bin: /lustre/orion/mat746/proj-shared/matsim-agents/external/quantum-espresso/install-gpu/bin/pw.x
-    pw_wrapper: /lustre/orion/mat746/proj-shared/matsim-agents/scripts/launchers/frontier/_qe-step-frontier.sh
-    pseudo_dir: /lustre/orion/mat746/proj-shared/SSSP_PBE_efficiency_v1.3
+    pw_bin:      ${PW_BIN}
+    pw_wrapper:  ${PROJ_ROOT}/scripts/launchers/frontier/_qe-step-frontier.sh
+    pseudo_dir:  ${PSEUDO_DIR}
     # Optional explicit overrides; comment out to let the QE backend pick
     # element-aware defaults from SSSP-efficiency-1.3 recommendations.
     # ecutwfc_ry: 60.0
     # ecutrho_ry: 480.0
     # kpts: [4, 4, 4]
     # koffset: [0, 0, 0]
-    occupations: smearing            # set to 'fixed' for non-metallic systems
+    occupations: smearing                # set to 'fixed' for non-metallic systems
     smearing: gaussian
     degauss_ry: 0.01
     extra_control: {}
@@ -97,15 +127,15 @@ dft:
 
 trainer:
   enabled: true
-  train_script: /lustre/orion/mat746/proj-shared/HydraGNN/examples/mptrj/train.py
-  train_launcher: /lustre/orion/mat746/proj-shared/matsim-agents/scripts/launchers/frontier/_hydragnn-train-step-frontier.sh
+  train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
+  train_launcher: ${PROJ_ROOT}/scripts/launchers/frontier/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5
   nodes_for_train: 8
   ranks_per_node: 8
 
 loop:
   n_iterations: 10
-  out_dir: /lustre/orion/mat746/proj-shared/runs/al-run-001
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
   dataset_format: extxyz
   resume: true
   fail_fast: false
