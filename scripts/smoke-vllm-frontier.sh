@@ -97,6 +97,7 @@ srun -N1 -n1 -c56 --gpus-per-task=8 --gpu-bind=closest \
         --tensor-parallel-size 8 \
         --dtype bfloat16 \
         --max-model-len 8192 \
+        --enforce-eager \
         --port $VLLM_PORT \
         --host 0.0.0.0 \
     > "$VLLM_LOG" 2>&1 &
