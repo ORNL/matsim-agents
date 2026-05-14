@@ -217,9 +217,11 @@ echo "--- CMake configure done ---"
 # All other sources keep -DHIP, -D__ROCBLAS, -D__OPENMP_GPU and the offload
 # codegen flags, so rocFFT/rocBLAS linkage is preserved.
 run_make_with_ice_workaround() {
+  # Args: <log-prefix> <make target args...>
+  local logprefix="$1"; shift
   local logdir="${BUILD_DIR}/ice-workaround-logs"
   mkdir -p "${logdir}"
-  local max_iter=40
+  local max_iter=80
   local iter=0
   while true; do
     iter=$((iter+1))
@@ -227,11 +229,11 @@ run_make_with_ice_workaround() {
       echo ">>> ABORT: hit max_iter=${max_iter}"
       return 2
     fi
-    local ml="${logdir}/make-iter-${iter}.log"
-    echo ">>> [iter ${iter}] make -j${NCORES} pw ph pp  -> ${ml}"
+    local ml="${logdir}/${logprefix}-iter-${iter}.log"
+    echo ">>> [${logprefix} iter ${iter}] make -j${NCORES} $* -> ${ml}"
     cd "${BUILD_DIR}"
-    if make -j"${NCORES}" pw ph pp > "${ml}" 2>&1; then
-      echo ">>> make succeeded on iter ${iter}"
+    if make -j"${NCORES}" "$@" > "${ml}" 2>&1; then
+      echo ">>> ${logprefix} make succeeded on iter ${iter}"
       return 0
     fi
     # Extract sources that hit ftn-7991 ICE this iter.
@@ -297,8 +299,11 @@ run_make_with_ice_workaround() {
 }
 
 # ---- Build ------------------------------------------------------------------
-echo "--- Building QE GPU targets with retry loop (max 40 iters) ---"
-run_make_with_ice_workaround
+# Build EVERYTHING with the retry loop so the subsequent `make install` (which
+# depends on the `all` target) doesn't trigger fresh compiles of CPV/etc. that
+# would hit the same ftn-7991 ICE class outside the loop's coverage.
+echo "--- Building all QE GPU targets with retry loop ---"
+run_make_with_ice_workaround all all
 MAKE_RC=$?
 if (( MAKE_RC != 0 )); then
   echo "BUILD FAILED with rc=${MAKE_RC}; see ${BUILD_DIR}/ice-workaround-logs/"
@@ -311,7 +316,8 @@ echo "--- Build complete ---"
 # ---- Install ----------------------------------------------------------------
 echo "--- Installing to ${INSTALL_DIR} ---"
 cd "${BUILD_DIR}"
-make install 2>&1 | tee "${BUILD_DIR}/install.log"
+make install > "${BUILD_DIR}/install.log" 2>&1
+echo "  (log: ${BUILD_DIR}/install.log)"
 
 echo ""
 echo "========================================="
