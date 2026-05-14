@@ -90,6 +90,9 @@ rm -rf "$SRC_DIR/vllm/.deps" "$SRC_DIR/vllm/build"
 python -m pip install -v --no-build-isolation --no-deps .
 
 echo "[$(date)] Validating install"
+# cd away from source dir so Python doesn't shadow the installed package
+# with the local vllm/ subdirectory.
+cd /tmp
 python - <<'PY'
 import vllm
 print('vllm', vllm.__version__)
