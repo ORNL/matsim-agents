@@ -300,9 +300,25 @@ reasoning = message.get("reasoning_content")
 if reasoning is None:
     reasoning = message.get("reasoning")
 
-print(f"finish_reason={choice.get('finish_reason')}")
+finish_reason = choice.get('finish_reason')
+print(f"finish_reason={finish_reason!r}")
 print(f"content={content!r}")
 print(f"reasoning_content={reasoning!r}")
+
+# Strict validation: for thinking-enabled models, both fields must be non-empty
+if "Qwen3" in "$MODEL_NAME" or "Qwen3" in str("$MODEL_DIR"):
+    if not content:
+        print(f"ERROR: content is empty or None (finish_reason={finish_reason})")
+        sys.exit(1)
+    if not reasoning:
+        print(f"ERROR: reasoning_content is empty or None")
+        sys.exit(1)
+    print("✓ Thinking mode validation: content and reasoning_content both present")
+else:
+    if not content:
+        print(f"ERROR: content is empty or None (finish_reason={finish_reason})")
+        sys.exit(1)
+    print("✓ Standard mode validation: content present")
 PY
 
 echo ""
