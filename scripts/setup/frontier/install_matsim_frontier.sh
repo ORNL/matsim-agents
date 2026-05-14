@@ -194,6 +194,11 @@ log "Installing matsim-agents[${LLM_BACKENDS}] (editable) into ${VENV_PATH}..."
 pip install --upgrade pip setuptools wheel
 pip install -e "${MATSIM_DIR}[${LLM_BACKENDS}]"
 
+# Ensure core runtime/test deps are always present even when LLM_BACKENDS is
+# overridden to omit dev extras.
+log "Ensuring core runtime/test dependencies (langchain-core, pytest, pytest-cov)..."
+pip install "langchain-core>=0.3.0" "pytest>=8.0" "pytest-cov>=5.0"
+
 # Pre-install the full vLLM ROCm dependency set on the login node.
 # Frontier compute nodes do not have outbound internet, so the SLURM build job
 # must run with dependencies already present in this environment.
@@ -210,6 +215,10 @@ fi
 # (device_map="auto"), used by the smoke-transformers-frontier.sh smoke test.
 log "Installing accelerate (required for Transformers device_map=auto)..."
 pip install accelerate
+
+# Keep model download/inference tooling aligned with Perlmutter installs.
+log "Installing LLM tooling extras (huggingface_hub CLI + transformers)..."
+pip install "huggingface_hub>=1.12" "transformers>=4.45"
 
 # ── Phase 2.5: Patch flashinfer for ROCm (no libcudart, only libamdhip64) ─────
 #
