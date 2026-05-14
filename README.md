@@ -97,10 +97,11 @@ in via the same interfaces.
 > See [`scripts/frontier/README-frontier.md`](scripts/frontier/README-frontier.md)
 > for required setup and known issues. **Critically: a prebuilt `tvm_ffi`
 > shared library must exist at
-> `/lustre/orion/mat746/proj-shared/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so`
-> or every vLLM job will silently hang forever** (the script preflight check
-> will fail-fast in 2 seconds with a clear error message). If missing, rebuild
-> with `sbatch scripts/frontier/prebuild-tvm-ffi-frontier.sh`.
+> `$PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so`
+> (where `$PROJ` is your project's proj-shared directory) or every vLLM job
+> will silently hang forever** (the script preflight check will fail-fast in
+> 2 seconds with a clear error message). If missing, rebuild with
+> `sbatch scripts/frontier/prebuild-tvm-ffi-frontier.sh`.
 
 ---
 
