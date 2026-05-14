@@ -26,13 +26,21 @@
 # through the OpenMP 5.x `target` directive. ROCm libraries are picked up
 # via the cray wrappers when craype-accel-amd-gfx90a is loaded.
 #
-# IMPORTANT:
-#   - Run ON A COMPUTE NODE (sbatch). The cce + offload toolchain refuses
-#     to link some objects on login nodes (no rocm runtime visible).
-#   - Use the develop branch (or qe-7.4+); older QE lacks QE_ENABLE_OFFLOAD.
+# Where to run this:
+#   COMPILATION DOES NOT REQUIRE A GPU. The Cray + ROCm toolchain is fully
+#   available on Frontier login nodes and cross-compiles gfx90a device code
+#   without an MI250X being present. Login-node build is the recommended path.
 #
 # Usage:
+#   # Login-node build (recommended) — survives disconnect via nohup:
+#   mkdir -p runs/build-qe-gpu-login
+#   nohup bash scripts/setup/frontier/build-qe-gpu-frontier.sh \
+#         > runs/build-qe-gpu-login/build.log 2>&1 &
+#
+#   # Or as a batch job (sbatch headers below remain valid):
 #   sbatch scripts/setup/frontier/build-qe-gpu-frontier.sh
+#
+# Use the develop branch (or qe-7.4+); older QE lacks QE_ENABLE_OFFLOAD.
 # =============================================================================
 
 set -euo pipefail
@@ -50,14 +58,19 @@ SRC_DIR="${BASE_DIR}/quantum-espresso/src"
 BUILD_DIR="${BASE_DIR}/quantum-espresso/build-gpu"
 INSTALL_DIR="${BASE_DIR}/quantum-espresso/install-gpu"
 
-# Compute parallelism for compilation
-NCORES="${NCORES:-32}"
+# Compute parallelism for compilation. Frontier login nodes are shared,
+# so default to a modest count; raise via `NCORES=64 bash …` if needed.
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  NCORES="${NCORES:-64}"   # dedicated compute node
+else
+  NCORES="${NCORES:-16}"   # shared login node — be a good neighbour
+fi
 
 # AMD GPU architecture for Frontier MI250X
 AMDGPU_TARGETS="gfx90a"
 
-# ---- Create output directory (Slurm needs it for log files) -----------------
-mkdir -p "${PROJ}/runs/build-qe-gpu-${SLURM_JOB_ID:-manual}" 2>/dev/null || true
+# ---- Create output directory (used for sbatch log files) --------------------
+mkdir -p "${PROJ}/runs/build-qe-gpu-${SLURM_JOB_ID:-login}" 2>/dev/null || true
 
 echo "=========================================="
 echo "Quantum ESPRESSO GPU (gfx90a) build on Frontier"
