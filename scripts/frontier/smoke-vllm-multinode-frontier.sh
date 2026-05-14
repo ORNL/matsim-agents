@@ -112,6 +112,17 @@ echo "Head: $HEAD_NODE ($HEAD_NODE_IP)"
 echo "Workers: ${ALL_NODES[*]:1}"
 echo ""
 
+# ── GPU warm-up on all nodes (post-reboot KFD/HSA driver init) ───────────────
+echo "[warmup] Warming up GPUs on all $N_NODES nodes ..."
+WARMUP_PY="import torch; n=torch.cuda.device_count(); [torch.zeros(1024,device=f'cuda:{i}')+1 for i in range(n)]; print(f'  {__import__(\"socket\").gethostname()}: {n} GPUs OK')"
+for node in "${ALL_NODES[@]}"; do
+  srun --nodes=1 --ntasks=1 -w "$node" --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
+    "$VENV/bin/python" -c "$WARMUP_PY" &
+done
+wait
+echo "[warmup] Done."
+echo ""
+
 RAY="$VENV/bin/ray"
 
 # ── Start Ray head ───────────────────────────────────────────────────────────
