@@ -130,7 +130,9 @@ def run_active_learning(cfg: ALConfig) -> None:
     root = Path(cfg.loop.out_dir)
     root.mkdir(parents=True, exist_ok=True)
 
-    dataset_path = root / ("dataset.extxyz" if cfg.loop.dataset_format == "extxyz" else "dataset.db")
+    dataset_path = root / (
+        "dataset.extxyz" if cfg.loop.dataset_format == "extxyz" else "dataset.db"
+    )
 
     # Resolve MD seed structures once per run. For ``kind='prompt'`` this
     # invokes the LLM exactly once and caches the resulting JSON under
@@ -165,9 +167,7 @@ def run_active_learning(cfg: ALConfig) -> None:
             # --- 2. Generate candidates via MD --------------------------------
             t0 = time.time()
             md_dir = it_dir / "md"
-            candidates = sample_md_candidates(
-                cfg.md, primary_calc, md_dir, seed_paths=seed_paths
-            )
+            candidates = sample_md_candidates(cfg.md, primary_calc, md_dir, seed_paths=seed_paths)
             state.n_candidates = len(candidates)
             state.timings_sec["md_sampling"] = time.time() - t0
             log.info("Iter %d: produced %d MD candidates", i, len(candidates))
@@ -196,8 +196,12 @@ def run_active_learning(cfg: ALConfig) -> None:
             state.timings_sec["acquisition"] = time.time() - t0
             log.info(
                 "Iter %d: selected %d/%d candidates (score min/mean/max = %s/%s/%s)",
-                i, len(selected), len(candidates),
-                state.score_min, state.score_mean, state.score_max,
+                i,
+                len(selected),
+                len(candidates),
+                state.score_min,
+                state.score_mean,
+                state.score_max,
             )
 
             # --- 4. DFT labelling (VASP or QE) --------------------------------
@@ -220,7 +224,10 @@ def run_active_learning(cfg: ALConfig) -> None:
             state.timings_sec["dft"] = time.time() - t0
             log.info(
                 "Iter %d: %s converged=%d failed=%d",
-                i, backend.name.upper(), n_ok, len(results) - n_ok,
+                i,
+                backend.name.upper(),
+                n_ok,
+                len(results) - n_ok,
             )
 
             if cfg.loop.fail_fast and state.n_dft_failed:

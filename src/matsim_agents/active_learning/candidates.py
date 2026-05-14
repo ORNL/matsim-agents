@@ -13,11 +13,11 @@ calls ``calculator.calculate(atoms)`` via ASE and reads ``calc.results``.
 
 from __future__ import annotations
 
+import contextlib
 import logging
-import os
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 import numpy as np
 from ase import Atoms
@@ -142,7 +142,9 @@ def sample_md_candidates(
             except Exception as exc:  # noqa: BLE001 — calculator may diverge
                 log.warning(
                     "MD step %d for seed %s crashed (%s); ending trajectory.",
-                    step, seed_stem, exc,
+                    step,
+                    seed_stem,
+                    exc,
                 )
                 break
 
@@ -159,10 +161,8 @@ def sample_md_candidates(
                 continue
 
             energy = None
-            try:
+            with contextlib.suppress(Exception):
                 energy = float(atoms.get_potential_energy())
-            except Exception:  # noqa: BLE001
-                pass
 
             cand_atoms = atoms.copy()
             cand_atoms.calc = None  # detach calculator before serialising
@@ -180,7 +180,10 @@ def sample_md_candidates(
 
         log.info(
             "MD seed=%s: accepted=%d, skipped_force=%d, skipped_drift=%d",
-            seed_stem, accepted, skipped_force, skipped_drift,
+            seed_stem,
+            accepted,
+            skipped_force,
+            skipped_drift,
         )
 
     return candidates

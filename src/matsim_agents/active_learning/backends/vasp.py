@@ -28,7 +28,7 @@ class VASPBackend:
 
     name = "vasp"
 
-    def __init__(self, cfg: "VASPConfig") -> None:
+    def __init__(self, cfg: VASPConfig) -> None:
         self.cfg = cfg
         self.nodes_per_job = cfg.nodes_per_job
         self.ranks_per_node = cfg.ranks_per_node

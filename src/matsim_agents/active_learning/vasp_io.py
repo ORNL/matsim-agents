@@ -10,6 +10,7 @@ flat directory of element-named POTCAR files.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -21,7 +22,6 @@ from typing import Any
 from ase import Atoms
 from ase.io import read as ase_read
 from ase.io.vasp import write_vasp
-
 
 # --------------------------------------------------------------------------- #
 # Result dataclass                                                            #
@@ -36,7 +36,7 @@ class VASPResult:
     return_code: int
     converged: bool
     energy_eV: float | None
-    forces_eV_per_A: Any | None  # numpy array, shape (N, 3) — kept Any to avoid hard numpy import here
+    forces_eV_per_A: Any | None  # numpy array (N, 3); Any avoids a hard numpy import
     stress_eV_per_A3: Any | None  # numpy array, shape (3, 3) or (6,)
     n_atoms: int | None
     wall_time_sec: float | None
@@ -91,11 +91,15 @@ def write_kpoints_auto(out_path: str | Path, kspacing_per_A: float = 0.3) -> str
     """
     out_path = os.path.abspath(str(out_path))
     n = max(1, int(round(2 * 3.141592653589793 / kspacing_per_A)))
-    Path(out_path).write_text("K-Points\n0\nAuto\n%d\n" % n)
+    Path(out_path).write_text(f"K-Points\n0\nAuto\n{n}\n")
     return out_path
 
 
-def concat_potcar(symbols_in_poscar_order: list[str], potcar_dir: str | Path, out_path: str | Path) -> str:
+def concat_potcar(
+    symbols_in_poscar_order: list[str],
+    potcar_dir: str | Path,
+    out_path: str | Path,
+) -> str:
     """Concatenate per-element POTCAR files in the order they appear in POSCAR.
 
     Looks for ``potcar_dir/<Symbol>/POTCAR`` first, then ``potcar_dir/<Symbol>``,
@@ -242,10 +246,8 @@ def parse_vasp_workdir(work_dir: str | Path, return_code: int = 0) -> VASPResult
         if os.path.isfile(oszicar):
             with open(oszicar) as f:
                 for m in _OSZICAR_E_RE.finditer(f.read()):
-                    try:
+                    with contextlib.suppress(ValueError):
                         energy = float(m.group(1))
-                    except ValueError:
-                        pass
         # Try ASE's OUTCAR reader too (slower)
         try:
             final_atoms = final_atoms or ase_read(outcar, index=-1, format="vasp-out")

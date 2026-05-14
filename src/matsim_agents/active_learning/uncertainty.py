@@ -22,7 +22,7 @@ A simple greedy-farthest-point diversity filter on (composition fingerprint
 from __future__ import annotations
 
 import logging
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from ase import Atoms
@@ -190,8 +190,10 @@ def select_candidates(
         keep_n = min(len(candidates), max(cfg.n_select * 4, cfg.n_select))
         top = np.argsort(coarse)[-keep_n:]
         refined = score_mc_dropout(
-            [candidates[i] for i in top], primary_calculator,
-            cfg.mc_dropout_passes, cfg.mc_dropout_p,
+            [candidates[i] for i in top],
+            primary_calculator,
+            cfg.mc_dropout_passes,
+            cfg.mc_dropout_p,
         )
         scores = np.full(len(candidates), -np.inf, dtype=np.float64)
         scores[top] = refined
@@ -205,7 +207,8 @@ def select_candidates(
             log.warning(
                 "All %d candidates fall below min_uncertainty_eV_per_A=%g; "
                 "selecting top-N anyway to keep the loop progressing.",
-                len(candidates), cfg.min_uncertainty_eV_per_A,
+                len(candidates),
+                cfg.min_uncertainty_eV_per_A,
             )
             keep_mask = np.ones_like(scores, dtype=bool)
     else:

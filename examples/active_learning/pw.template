@@ -1,0 +1,43 @@
+! pw.in template for AL Quantum ESPRESSO single-points on Frontier (MI250X / gfx90a).
+!
+! Python str.format() slots filled by qe.py:
+!   {nat}        — number of atoms
+!   {natoms}     — alias for {nat}
+!   {ntyp}       — number of atomic species
+!   {pseudo_dir} — absolute path to UPF directory
+!   {prefix}     — pwscf prefix
+!   {outdir}     — scratch dir for wavefunctions/charge
+!
+! The backend AUTO-APPENDS these structure-dependent cards after this file:
+!   ATOMIC_SPECIES, CELL_PARAMETERS angstrom, ATOMIC_POSITIONS angstrom,
+!   K_POINTS automatic   (k-mesh from qe.kpts / qe.koffset in the YAML)
+
+&CONTROL
+  calculation   = 'scf'
+  prefix        = '{prefix}'
+  outdir        = '{outdir}'
+  pseudo_dir    = '{pseudo_dir}'
+  verbosity     = 'high'
+  tprnfor       = .true.
+  tstress       = .true.
+  etot_conv_thr = 1.0d-5
+  forc_conv_thr = 1.0d-4
+  nstep         = 1
+/
+
+&SYSTEM
+  ibrav       = 0
+  nat         = {nat}
+  ntyp        = {ntyp}
+  ecutwfc     = 60.0
+  ecutrho     = 480.0
+  occupations = 'smearing'
+  smearing    = 'gaussian'
+  degauss     = 0.01
+/
+
+&ELECTRONS
+  conv_thr         = 1.0d-7
+  mixing_beta      = 0.4
+  electron_maxstep = 200
+/

@@ -71,7 +71,7 @@ REQUIREMENTS:
 
 def _ask_llm_for_compositions(
     prompt: str,
-    llm_cfg: "LLMSeedConfig",
+    llm_cfg: LLMSeedConfig,
     n_target: int,
 ) -> list[str]:
     """Send ``prompt`` to the LLM and parse a JSON list of formulas back."""
@@ -79,20 +79,19 @@ def _ask_llm_for_compositions(
 
     from matsim_agents.llm import get_chat_model
 
-    user_msg = (
-        f"Target: {prompt.strip()}\n"
-        f"Return up to {n_target} distinct compositions."
-    )
+    user_msg = f"Target: {prompt.strip()}\nReturn up to {n_target} distinct compositions."
     llm = get_chat_model(
         provider=llm_cfg.provider,
         model=llm_cfg.model,
         base_url=llm_cfg.base_url,
         temperature=llm_cfg.temperature,
     )
-    response = llm.invoke([
-        SystemMessage(content=_SEED_SYSTEM_PROMPT),
-        HumanMessage(content=user_msg),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(content=_SEED_SYSTEM_PROMPT),
+            HumanMessage(content=user_msg),
+        ]
+    )
     text = response.content if isinstance(response.content, str) else str(response.content)
     return _extract_formula_list(text)
 
@@ -171,7 +170,7 @@ def _compositions_to_seed_files(
 
 
 def resolve_seed_structures(
-    cfg: "SeedSourceConfig",
+    cfg: SeedSourceConfig,
     out_dir: Path,
 ) -> list[Path]:
     """Resolve a :class:`SeedSourceConfig` to a concrete list of seed files.
@@ -191,9 +190,7 @@ def resolve_seed_structures(
             raise ValueError("seed_source.kind='paths' requires a non-empty paths list.")
         missing = [p for p in cfg.paths if not Path(p).is_file()]
         if missing:
-            raise FileNotFoundError(
-                f"Seed structures not found: {missing}"
-            )
+            raise FileNotFoundError(f"Seed structures not found: {missing}")
         return [Path(p) for p in cfg.paths]
 
     if cfg.kind == "compositions":
@@ -213,12 +210,15 @@ def resolve_seed_structures(
 
     if cfg.kind == "prompt":
         if not cfg.prompt or not cfg.llm:
-            raise ValueError(
-                "seed_source.kind='prompt' requires both 'prompt' and 'llm' fields."
-            )
+            raise ValueError("seed_source.kind='prompt' requires both 'prompt' and 'llm' fields.")
         n_target = max(1, cfg.max_compositions)
-        log.info("Asking LLM (%s/%s) for up to %d compositions for prompt: %r",
-                 cfg.llm.provider, cfg.llm.model, n_target, cfg.prompt[:120])
+        log.info(
+            "Asking LLM (%s/%s) for up to %d compositions for prompt: %r",
+            cfg.llm.provider,
+            cfg.llm.model,
+            n_target,
+            cfg.prompt[:120],
+        )
         formulas = _ask_llm_for_compositions(cfg.prompt, cfg.llm, n_target)
         if not formulas:
             raise RuntimeError(
