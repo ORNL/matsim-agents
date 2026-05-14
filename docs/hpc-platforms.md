@@ -39,6 +39,20 @@ Highlights:
 - QE CMake GPU flags: `QE_GPU="openmp;oneapi"`, `QE_GPU_ARCHS=intel_gpu_pvc`
 - validated repository run with full install to `external/quantum-espresso/install-gpu/`
 
+## VASP by platform
+
+### Aurora (ALCF, Intel PVC)
+
+- Guide: [docs/vasp-aurora.md](vasp-aurora.md)
+- Build script: [scripts/setup/aurora/build-vasp-gpu-aurora.sh](../scripts/setup/aurora/build-vasp-gpu-aurora.sh)
+
+Highlights:
+
+- documents the exact VASP 6.6.0 makefile lineage used on Aurora
+- records that the build started from `arch/makefile.include.oneapi_omp_off`
+- uses one Aurora script invocation to build `vasp_std`, `vasp_gam`, and `vasp_ncl`
+- keeps only build provenance in git, not the proprietary VASP source tree
+
 ### Perlmutter (NERSC, NVIDIA A100)
 
 - Guide: [docs/quantum-espresso-perlmutter.md](quantum-espresso-perlmutter.md)

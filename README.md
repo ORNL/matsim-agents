@@ -153,6 +153,14 @@ bash scripts/launchers/aurora/run-pw-gpu-aurora.sh path/to/pw.in
 Aurora QE and the Python/ML environment are intentionally isolated and
 typically coupled only via files and scheduler jobs.
 
+For VASP on Aurora, the repository keeps only build provenance, not the vendor
+source itself. The recorded makefile lineage is documented in
+[`docs/vasp-aurora.md`](docs/vasp-aurora.md), including the upstream template
+used (`arch/makefile.include.oneapi_omp_off`) and the local working makefile
+path under `external/vasp6/`. The Aurora build entry point is
+[`scripts/setup/aurora/build-vasp-gpu-aurora.sh`](scripts/setup/aurora/build-vasp-gpu-aurora.sh),
+which defaults to building `vasp_std`, `vasp_gam`, and `vasp_ncl` in one run.
+
 ---
 
 ## HPC Documentation Index

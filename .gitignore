@@ -51,6 +51,10 @@ test_matsim_perlmutter.out
 # clones, build trees, install prefixes) are too large for git.
 external/
 
+# Explicit proprietary VASP inputs used for Aurora builds.
+external/vasp6/src/vasp.6.6.0/
+external/vasp6/src/vasp.6.6.0.tgz
+
 # Vendored third-party clones (bootstrapped by scripts/setup_env.sh)
 third_party/
 /tmp/
