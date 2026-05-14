@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "dev", "feature/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # ── Tier 1: smoke tests – LLM provider factory (CPU only, no model weights) ──
+  smoke:
+    name: Smoke tests (LLM providers)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package + dev extras
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+          # langchain extras needed by the smoke tests (no GPU providers)
+          pip install langchain-ollama langchain-openai langchain-anthropic
+
+      - name: Run smoke tests
+        run: |
+          pytest tests/smoke/ -v --tb=short \
+            --cov=matsim_agents --cov-report=term-missing \
+            -p no:warnings
+        env:
+          # Ensure no accidental real LLM calls
+          MATSIM_LLM_PROVIDER: "ollama"
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+
+  # ── Tier 2: integration tests – full agent graph + chat flow ─────────────────
+  integration:
+    name: Integration tests (agent graph + chat)
+    runs-on: ubuntu-latest
+    needs: smoke
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package + dev extras
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+          # langchain extras needed by integration tests
+          pip install langchain-ollama langchain-openai langchain-anthropic
+
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ -v --tb=short \
+            --cov=matsim_agents --cov-report=term-missing \
+            -p no:warnings
+        env:
+          MATSIM_LLM_PROVIDER: "ollama"
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+
+  # ── Tier 3: full test suite with coverage report ──────────────────────────────
+  full:
+    name: Full test suite + coverage
+    runs-on: ubuntu-latest
+    needs: [smoke, integration]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package + all CI extras
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install langchain-ollama langchain-openai langchain-anthropic
+
+      - name: Run full test suite (all tiers, skip GPU-marked)
+        run: |
+          pytest tests/ -v --tb=short \
+            -m "not gpu" \
+            --cov=matsim_agents \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            -p no:warnings
+        env:
+          MATSIM_LLM_PROVIDER: "ollama"
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 7
+
+  # ── Tier 0: linting and type-checking ────────────────────────────────────────
+  lint:
+    name: Lint + type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install lint tools
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install langchain-ollama langchain-openai langchain-anthropic
+
+      - name: Ruff lint
+        run: ruff check src/ tests/
+
+      - name: Ruff format check
+        run: ruff format --check src/ tests/
+
+      - name: mypy type check (src only)
+        run: mypy src/matsim_agents --ignore-missing-imports
+        continue-on-error: true  # type errors are informational for now
