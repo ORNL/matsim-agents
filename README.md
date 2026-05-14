@@ -20,19 +20,21 @@ in via the same interfaces.
 
 1. [Architecture](#architecture)
 2. [Running on Frontier (OLCF)](#running-on-frontier-olcf)
-3. [Installation](#installation)
-4. [LLM backends](#llm-backends)
-5. [Downloading models for vLLM](#downloading-models-for-vllm)
-6. [Quick start](#quick-start)
-7. [The agent graph](#the-agent-graph)
-8. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
-9. [Programmatic API](#programmatic-api)
-10. [CLI reference](#cli-reference)
-11. [Project layout](#project-layout)
-12. [Configuration reference](#configuration-reference)
-13. [Current capabilities and planned work](#current-capabilities-and-planned-work)
-14. [Contributing](#contributing)
-15. [License & citation](#license--citation)
+3. [Running on Aurora (ALCF)](#running-on-aurora-alcf)
+4. [HPC Documentation Index](#hpc-documentation-index)
+5. [Installation](#installation)
+6. [LLM backends](#llm-backends)
+7. [Downloading models for vLLM](#downloading-models-for-vllm)
+8. [Quick start](#quick-start)
+9. [The agent graph](#the-agent-graph)
+10. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
+11. [Programmatic API](#programmatic-api)
+12. [CLI reference](#cli-reference)
+13. [Project layout](#project-layout)
+14. [Configuration reference](#configuration-reference)
+15. [Current capabilities and planned work](#current-capabilities-and-planned-work)
+16. [Contributing](#contributing)
+17. [License & citation](#license--citation)
 
 ---
 
@@ -111,6 +113,7 @@ ESPRESSO `develop` with **AMD MI250X (gfx90a) OpenMP target offload**:
 - Build script: [`scripts/setup/frontier/build-qe-gpu-frontier.sh`](scripts/setup/frontier/build-qe-gpu-frontier.sh)
 - Run launcher: [`scripts/launchers/frontier/run-pw-gpu-frontier.sh`](scripts/launchers/frontier/run-pw-gpu-frontier.sh)
 - Full docs: [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md)
+- Platform index: [`docs/hpc-platforms.md`](docs/hpc-platforms.md)
 
 The build is cross-compiled on a login node and produces ~92 binaries
 (`pw.x`, `cp.x`, `ph.x`, `pp.x`, `neb.x`, `epw.x`, `kcw.x`, `tddfpt`/
@@ -122,6 +125,40 @@ rocm/7.x cray-mpich SONAME mismatch.
 
 QE uses a different module stack than matsim-agents' Python; the two
 are deliberately kept isolated and coupled only through Slurm + files.
+
+---
+
+## Running on Aurora (ALCF)
+
+The repository also includes a validated build/run path for Quantum
+ESPRESSO with Intel GPU offload on Aurora.
+
+- Build script: [`scripts/setup/aurora/build-qe-gpu-aurora.sh`](scripts/setup/aurora/build-qe-gpu-aurora.sh)
+- Run launcher: [`scripts/launchers/aurora/run-pw-gpu-aurora.sh`](scripts/launchers/aurora/run-pw-gpu-aurora.sh)
+- Full docs: [`docs/quantum-espresso-aurora.md`](docs/quantum-espresso-aurora.md)
+- Platform index: [`docs/hpc-platforms.md`](docs/hpc-platforms.md)
+
+Validated outcome in this repo:
+
+- successful CMake build + install (exit code 0)
+- 106 installed executables in `external/quantum-espresso/install-gpu/bin/`
+- core binaries verified: `pw.x`, `cp.x`, `ph.x`, `pp.x`, `epw.x`
+
+Quick run pattern:
+
+```bash
+bash scripts/launchers/aurora/run-pw-gpu-aurora.sh path/to/pw.in
+```
+
+Aurora QE and the Python/ML environment are intentionally isolated and
+typically coupled only via files and scheduler jobs.
+
+---
+
+## HPC Documentation Index
+
+For a single entry point across Frontier, Aurora, Perlmutter, and model-serving
+docs, see [`docs/hpc-platforms.md`](docs/hpc-platforms.md).
 
 ---
 
