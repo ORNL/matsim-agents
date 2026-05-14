@@ -1,0 +1,92 @@
+# =============================================================================
+# Active-learning configuration with LLM-generated seed structures.
+#
+# At launch, the LLM (vLLM/Ollama/HF/etc.) is asked to expand the natural-
+# language `prompt` below into a list of chemical formulas. Each formula is
+# turned into prototype crystal seeds via matsim_agents.discovery and used as
+# the starting set for the HydraGNN-driven MD sampler.
+#
+# The list of compositions returned by the LLM is persisted under
+#   <out_dir>/seeds/llm_proposed_compositions.json
+# so the run is fully reproducible.
+#
+# Validate before submitting:
+#   matsim-agents al validate-config examples/active_learning/al_config.prompt.example.yaml
+# =============================================================================
+
+hydragnn:
+  logdir: /lustre/orion/mat746/proj-shared/runs/al-models/iter0_logdir
+  checkpoint: best_model.pt
+  mlp_checkpoint: null
+  charge: 0.0
+  spin: 0.0
+  precision: fp32
+  mlp_device: cuda
+  ensemble_paths: []
+
+md:
+  # LLM-driven seed source. Set MATSIM_LLM_PROVIDER / MATSIM_VLLM_BASE_URL
+  # in the launcher environment, or override the defaults inline below.
+  seed_source:
+    kind: prompt
+    prompt: >
+      Pb-free halide double perovskites with band gap near 1.5 eV
+      for thin-film photovoltaics. Include both Sn-substituted and
+      Ag/Bi-based compositions.
+    llm:
+      provider: vllm                 # ollama | vllm | openai | anthropic | huggingface
+      model: Qwen/Qwen2.5-72B-Instruct
+      base_url: http://localhost:8000/v1
+      temperature: 0.0
+    max_compositions: 6              # cap on LLM output
+    max_phases_per_composition: 2    # discovery returns up to N prototypes/formula
+    min_atoms: 32
+    include_2d: false
+    num_layers: 1
+    n_orderings: 1
+  timestep_fs: 1.0
+  n_steps: 200
+  temperature_K: 600.0
+  thermostat: langevin
+  friction_inv_ps: 0.1
+  sample_every: 10
+  max_force_threshold_eV_per_A: 50.0
+  max_displacement_A: 5.0
+
+acquisition:
+  strategy: random
+  n_select: 256
+  mc_dropout_passes: 8
+  mc_dropout_p: 0.1
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: vasp
+  vasp:
+    vasp_bin: /lustre/orion/mat746/proj-shared/matsim-agents/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+    vasp_wrapper: /lustre/orion/mat746/proj-shared/matsim-agents/scripts/launchers/frontier/_vasp-step-frontier.sh
+    incar_template: /lustre/orion/mat746/proj-shared/matsim-agents/examples/active_learning/INCAR.template
+    kpoints_template: null
+    potcar_dir: /lustre/orion/mat746/proj-shared/POTCAR/PBE.54
+    nodes_per_job: 1
+    ranks_per_node: 8
+    threads_per_rank: 7
+    timeout_sec: 7200
+    extra_incar:
+      NCORE: "8"
+
+trainer:
+  enabled: true
+  train_script: /lustre/orion/mat746/proj-shared/HydraGNN/examples/mptrj/train.py
+  train_launcher: /lustre/orion/mat746/proj-shared/matsim-agents/scripts/launchers/frontier/_hydragnn-train-step-frontier.sh
+  epochs_per_iter: 5
+  nodes_for_train: 8
+  ranks_per_node: 8
+
+loop:
+  n_iterations: 10
+  out_dir: /lustre/orion/mat746/proj-shared/runs/al-run-prompt-001
+  dataset_format: extxyz
+  resume: true
+  fail_fast: false
