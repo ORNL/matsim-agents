@@ -146,9 +146,7 @@ def _make_candidate(idx: int) -> Candidate:
     )
 
 
-def test_one_iteration_dryrun(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _make_cfg(tmp_path)
 
     # Patch the heavy components inside `loop` (where they are imported).

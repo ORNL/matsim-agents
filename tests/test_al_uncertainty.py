@@ -178,9 +178,7 @@ def test_select_candidates_ensemble_strategy_picks_high_disagreement() -> None:
         c.atoms.info["idx"] = i
 
     calcs = [_PerCandCalc(signature="A"), _PerCandCalc(signature="B")]
-    cfg = AcquisitionConfig(
-        strategy="ensemble", n_select=1, diversity_filter=False
-    )
+    cfg = AcquisitionConfig(strategy="ensemble", n_select=1, diversity_filter=False)
     selected, scores = select_candidates(
         cands, cfg, primary_calculator=None, ensemble_calculators=calcs, seed=0
     )
