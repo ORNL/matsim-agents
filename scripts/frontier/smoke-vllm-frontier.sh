@@ -215,11 +215,11 @@ echo "Log:           $VLLM_LOG"
 
 # Single task, all 8 GCDs of the node visible to that task.
 # vLLM spawns 8 worker subprocesses internally (TP=8), each binds 1 GCD.
-# Qwen3 models use a hybrid thinking mode; vLLM needs --enable-reasoning to
+# Qwen3 models use a hybrid thinking mode; vLLM needs --reasoning-parser to
 # strip <think>...</think> tokens and expose reasoning_content separately.
 REASONING_ARGS=""
 if [[ "$MODEL_NAME" == *"Qwen3"* ]]; then
-    REASONING_ARGS="--enable-reasoning --reasoning-parser deepseek_r1"
+    REASONING_ARGS="--reasoning-parser deepseek_r1"
 fi
 
 srun -N1 -n1 -c56 --gpus-per-task=8 --gpu-bind=closest \
