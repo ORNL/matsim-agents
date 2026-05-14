@@ -239,10 +239,7 @@ def test_env_overrides_vars_block(
 ) -> None:
     """os.environ takes precedence over the inline `vars:` defaults."""
     body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
-    body = (
-        "vars:\n"
-        "  OUT_DIR: /this/should/be/overridden\n"
-    ) + body
+    body = ("vars:\n  OUT_DIR: /this/should/be/overridden\n") + body
     cfg_path = _write(tmp_path, "al.yaml", body)
 
     for k, v in required_paths.items():
@@ -281,9 +278,7 @@ def test_ensemble_strategy_requires_ensemble_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`acquisition.strategy='ensemble'` without ensemble_paths must fail."""
-    body = _minimal_yaml(strategy="ensemble").replace(
-        "__SEED_PATH__", required_paths["seed_path"]
-    )
+    body = _minimal_yaml(strategy="ensemble").replace("__SEED_PATH__", required_paths["seed_path"])
     cfg_path = _write(tmp_path, "al.yaml", body)
 
     for k, v in required_paths.items():
