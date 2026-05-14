@@ -14,20 +14,25 @@ set -euo pipefail
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 MATSIM_AGENTS_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-$(cd "${MATSIM_AGENTS_ROOT}/.." && pwd)/HydraGNN}"
 
-# Check for local environment first (from fresh installation)
+# Legacy local env path (kept for backward compatibility)
 LOCAL_VENV="${MATSIM_AGENTS_ROOT}/perlmutter_venv"
 
-# Fall back to shared HydraGNN environment
-SHARED_VENV="/global/cfs/projectdirs/amsc001/cm2us/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
+# Default install/runtime env path (matches install_matsim_perlmutter.sh)
+SHARED_VENV="${HYDRAGNN_ROOT}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
+PREFERRED_VENV="${MATSIM_PERLMUTTER_VENV:-${SHARED_VENV}}"
 
-# Choose which environment to use (prefer local, fall back to shared)
-if [[ -d "${LOCAL_VENV}" ]]; then
+# Choose which environment to use (prefer explicit/default shared path)
+if [[ -d "${PREFERRED_VENV}" ]]; then
+    HYDRAGNN_VENV="${PREFERRED_VENV}"
+    ENV_SOURCE="preferred"
+elif [[ -d "${LOCAL_VENV}" ]]; then
     HYDRAGNN_VENV="${LOCAL_VENV}"
-    USING_LOCAL_ENV=1
+    ENV_SOURCE="legacy-local"
 else
-    HYDRAGNN_VENV="${SHARED_VENV}"
-    USING_LOCAL_ENV=0
+    HYDRAGNN_VENV="${PREFERRED_VENV}"
+    ENV_SOURCE="missing"
 fi
 
 # Check if we should use GPU modules
@@ -55,27 +60,21 @@ if [[ ! -d "${HYDRAGNN_VENV}" ]]; then
     echo "❌ Error: HydraGNN environment not found at:"
     echo "   ${HYDRAGNN_VENV}"
     echo ""
-    if [[ "$USING_LOCAL_ENV" -eq 1 ]]; then
-        echo "Local environment not found. Install it first:"
-        echo "   bash ${SCRIPT_DIR}/install_matsim_perlmutter.sh [--gpu]"
-    else
-        echo "Shared environment not found. Please install it:"
-        echo "   bash ${SCRIPT_DIR}/install_matsim_perlmutter.sh [--gpu]"
-    fi
+    echo "Install it with:"
+    echo "   bash ${SCRIPT_DIR}/install_matsim_perlmutter.sh [--gpu]"
+    echo ""
+    echo "Tip: override env path with MATSIM_PERLMUTTER_VENV=/path/to/env"
     return 1 2>/dev/null || exit 1
 fi
 
 echo "Activating HydraGNN environment..."
-if [[ "$USING_LOCAL_ENV" -eq 1 ]]; then
-    echo "Using local environment: ${HYDRAGNN_VENV}"
-else
-    echo "Using shared environment: ${HYDRAGNN_VENV}"
-fi
+echo "Using ${ENV_SOURCE} environment: ${HYDRAGNN_VENV}"
 
 # This is a conda environment, activate it by updating PATH
 export PATH="${HYDRAGNN_VENV}/bin:${PATH}"
 export CONDA_PREFIX="${HYDRAGNN_VENV}"
 export CONDA_DEFAULT_ENV="matsim-agents"
+export VIRTUAL_ENV="${HYDRAGNN_VENV}"
 
 # Set PYTHONPATH to include matsim-agents
 MATSIM_AGENTS_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
