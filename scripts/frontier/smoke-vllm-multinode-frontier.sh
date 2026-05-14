@@ -63,9 +63,23 @@ module load rocm/7.2.0
 
 export PYTHONUNBUFFERED=1
 export PYTHONNOUSERSITE=1
+
+# ── No outbound connections (HPC: no internet access) ────────────────────────
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
+# vLLM usage telemetry
+export VLLM_NO_USAGE_STATS=1
+export DO_NOT_TRACK=1
+# Ray telemetry
+export RAY_USAGE_STATS_ENABLED=0
+export RAY_DISABLE_IMPORT_WARNING=1
+# Triton: disable remote kernel downloads
+export TRITON_DISABLE_AUTOTUNE_CACHE=1
+# Block all HTTP/S proxies
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY
+export no_proxy='*'
+export NO_PROXY='*'
 
 export MIOPEN_USER_DB_PATH="$RUN_DIR/miopen-cache"
 rmdir "$RUN_DIR/miopen-cache" 2>/dev/null; mkdir -p "$MIOPEN_USER_DB_PATH"
