@@ -275,7 +275,7 @@ echo ""
 echo "[$(date)] === Smoke success: vLLM is up. Sending one tiny completion ==="
 curl -sS -X POST "http://localhost:${VLLM_PORT}/v1/chat/completions" \
     -H 'Content-Type: application/json' \
-    -d "{\"model\":\"$MODEL_NAME\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word: OK\"}],\"max_tokens\":4,\"temperature\":0}" \
+    -d "{\"model\":\"$MODEL_NAME\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word: OK\"}],\"max_tokens\":512,\"temperature\":0,\"chat_template_kwargs\":{\"enable_thinking\":false}}" \
     | tee "$RUN_DIR/completion.json"
 
 echo ""
