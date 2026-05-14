@@ -25,7 +25,8 @@ set -uo pipefail
 
 PROJ=/lustre/orion/mat746/proj-shared
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
-MODEL_DIR=$PROJ/models/Qwen2.5-72B-Instruct
+MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
+MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename $MODEL_DIR)}
 RUN_DIR=$PROJ/runs/smoke-transformers-${SLURM_JOB_ID:-local}
 mkdir -p "$RUN_DIR"
 
@@ -60,7 +61,7 @@ for i in range(torch.cuda.device_count()):
     print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
 PY
 
-echo "[$(date)] Loading Qwen2.5-72B-Instruct via matsim_agents HuggingFace provider ..."
+echo "[$(date)] Loading $(basename $MODEL_DIR) via matsim_agents HuggingFace provider ..."
 python - <<PY
 import os
 os.environ["MATSIM_LLM_PROVIDER"] = "huggingface"
