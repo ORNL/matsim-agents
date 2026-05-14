@@ -19,10 +19,10 @@ Use the **quick setup** scripts to activate an existing HydraGNN environment.
 source setup_matsim_perlmutter.sh [--gpu]
 ```
 
-#### Option 2: Fresh Installation (Create Isolated Environment)
-Use the **full installation** script to create a dedicated conda environment.
+#### Option 2: Fresh Installation (Aligned Shared Environment by Default)
+Use the **full installation** script to create/update the HydraGNN-aligned conda environment.
 
-**Best for:** Production, reproducibility, ensuring dependency isolation, setting up for team collaboration
+**Best for:** Reproducible installs aligned with HydraGNN runtime expectations
 
 ```bash
 bash install_matsim_perlmutter.sh [--skip-hydragnn] [--gpu]
@@ -68,7 +68,7 @@ source setup_matsim_perlmutter.sh --gpu
 ```
 
 ### `install_matsim_perlmutter.sh` (Fresh Installation)
-Complete two-phase installation creating an isolated environment for matsim-agents:
+Complete two-phase installation that creates/updates the Perlmutter HydraGNN environment used at runtime:
 
 **Phase 1:** Create/activate conda environment
 **Phase 2:** Install HydraGNN dependencies + PyTorch + matsim-agents
@@ -86,13 +86,16 @@ bash install_matsim_perlmutter.sh --skip-hydragnn [--gpu]
 ```
 
 **Flags:**
-- `--skip-hydragnn` - Skip conda environment creation (update only matsim-agents)
+- `--skip-hydragnn` - Skip conda environment creation (update packages in existing environment)
 - `--gpu` - Load GPU-specific modules for A100 nodes
 
 **Customization via environment variables:**
 ```bash
 # Custom environment location
 VENV_PATH=/custom/path bash install_matsim_perlmutter.sh --gpu
+
+# Runtime setup override (quick setup script)
+MATSIM_PERLMUTTER_VENV=/custom/path source setup_matsim_perlmutter.sh --gpu
 
 # Python version
 PYTHON_VERSION=3.12 bash install_matsim_perlmutter.sh --gpu
@@ -107,14 +110,20 @@ INSTALL_VLLM_SERVER=1 bash install_matsim_perlmutter.sh --gpu
 **Packages installed by the script (high level):**
 - Core HydraGNN + PyTorch/PyG stack
 - matsim-agents (editable)
+- Core runtime/test dependencies (`langchain-core`, `pytest`, `pytest-cov`)
+- HydraGNN runtime dependencies (`scikit-learn==1.5.1`, `vesin==0.4.2`)
 - `huggingface_hub` (includes `hf` CLI for resumable model downloads)
+- `transformers` + `accelerate`
 - Optional: `vllm` server package when `INSTALL_VLLM_SERVER=1`
 
-**Environment created at:**
+**Environment path (default):**
 ```
-$MATSIM_DIR/perlmutter_venv/
+$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 ```
-(Default: `matsim-agents/perlmutter_venv/`)
+Override with `VENV_PATH=/custom/path` when needed.
+
+Quick setup (`setup_matsim_perlmutter.sh`) prefers this shared path, but will
+fall back to legacy local `matsim-agents/perlmutter_venv` if present.
 ### `job_perlmutter.sh`
 Example SLURM job submission script with proper environment setup.
 
@@ -164,11 +173,11 @@ bash test_matsim_perlmutter.sh
 | Aspect | Quick Setup | Fresh Installation |
 |--------|------------|-------------------|
 | **Speed** | Minutes (1-2 min) | 30-45 minutes |
-| **Disk Usage** | None (shared env) | ~15-20 GB |
-| **Isolation** | Shared with others | Complete isolation |
-| **Reproducibility** | Less control | Full control |
-| **Best for** | Development, testing | Production, collaboration |
-| **Env location** | Global (shared) | Project-local |
+| **Disk Usage** | None (shared env) | ~10-20 GB (at configured env path) |
+| **Isolation** | Shared unless overridden | Shared by default, isolated if `VENV_PATH` is custom |
+| **Reproducibility** | Fast reuse | Rebuildable from script |
+| **Best for** | Development, testing | Aligned install/runtime and rebuilds |
+| **Env location** | Global (shared default) | Shared default (`VENV_PATH` configurable) |
 
 ---
 
@@ -191,7 +200,7 @@ python -m matsim_agents ...
 bash scripts/setup/perlmutter/install_matsim_perlmutter.sh --gpu
 
 # Every session
-conda activate ./perlmutter_venv
+source scripts/setup/perlmutter/setup_matsim_perlmutter.sh --gpu
 python -m matsim_agents ...
 
 # Update matsim-agents only (faster)
@@ -212,8 +221,8 @@ bash scripts/setup/perlmutter/install_matsim_perlmutter.sh --skip-hydragnn --gpu
 # Option 1: Quick setup (if HydraGNN env exists)
 source scripts/setup/perlmutter/setup_matsim_perlmutter.sh --gpu
 
-# Option 2: Activate local environment (if installed)
-# conda activate ./perlmutter_venv
+# Option 2: Activate a custom env path used during install
+# conda activate /path/used/as/VENV_PATH
 
 python -m matsim_agents.run --config config.yaml
 ```
@@ -237,6 +246,10 @@ Contact the project maintainers if it needs to be re-created.
 The environment wasn't created. Run the installation without `--skip-hydragnn`:
 ```bash
 bash install_matsim_perlmutter.sh --gpu
+```
+Default expected path:
+```
+/global/cfs/projectdirs/amsc001/cm2us/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 ```
 
 ### CUDA not available
