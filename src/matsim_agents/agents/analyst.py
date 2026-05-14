@@ -41,8 +41,10 @@ def analyst_node(state: MatSimState) -> dict:
         )
         results_json = [r.model_dump() for r in state.results]
         rsp = llm.invoke(
-            [SystemMessage(content=_SYSTEM_PROMPT),
-             AIMessage(content=f"Results: {results_json}\nDeterministic summary: {summary}")]
+            [
+                SystemMessage(content=_SYSTEM_PROMPT),
+                AIMessage(content=f"Results: {results_json}\nDeterministic summary: {summary}"),
+            ]
         )
         summary = rsp.content if isinstance(rsp.content, str) else str(rsp.content)
     except Exception:  # pragma: no cover - LLM is optional

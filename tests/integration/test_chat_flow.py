@@ -24,6 +24,7 @@ from matsim_agents.discovery.wrapper import CompositionExplorationResult
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _fake_exploration_result(comp: Composition, cfg=None) -> CompositionExplorationResult:
     return CompositionExplorationResult(composition=comp, phase_candidates=[])
 
@@ -47,6 +48,7 @@ def _make_session(
 
 
 # ── composition detection ─────────────────────────────────────────────────────
+
 
 class TestCompositionDetection:
     """extract_compositions is called on every assistant response."""
@@ -85,6 +87,7 @@ class TestCompositionDetection:
 
 # ── auto_confirm behaviour ────────────────────────────────────────────────────
 
+
 class TestAutoConfirm:
     """auto_confirm=True explores without prompting; False skips exploration."""
 
@@ -106,12 +109,14 @@ class TestAutoConfirm:
             monkeypatch=monkeypatch,
         )
         import builtins
+
         monkeypatch.setattr(builtins, "input", lambda _: "n")
         chat_once(session, "Suggest a spinel")
         mock_explore.assert_not_called()
 
 
 # ── error resilience ──────────────────────────────────────────────────────────
+
 
 class TestExplorationErrors:
     """Errors during _kickoff_exploration propagate (no silent catch in chat_once)."""
@@ -133,6 +138,7 @@ class TestExplorationErrors:
 
 
 # ── message history ───────────────────────────────────────────────────────────
+
 
 class TestMessageHistory:
     """Session maintains correct conversation history in session.messages."""
