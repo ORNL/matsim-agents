@@ -28,7 +28,7 @@
 #   PROJECT_DIR      Root project directory       (default: directory of this script)
 #   MATSIM_DIR       matsim-agents checkout path  (default: $PROJECT_DIR)
 #   HYDRAGNN_DIR     HydraGNN checkout path       (default: parent dir of MATSIM_DIR)
-#   VENV_PATH        Conda env path               (default: $MATSIM_DIR/perlmutter_venv)
+#   VENV_PATH        Conda env path               (default: $HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv)
 #   PYTHON_VERSION   Python version               (default: 3.11)
 #   TORCH_CUDA_TAG   PyTorch CUDA version tag     (default: cu124)
 #   TORCH_CUDA_ARCH  GPU compute capability       (default: 8.0 for A100)
@@ -52,7 +52,8 @@ MATSIM_DIR="${MATSIM_DIR:-${PROJECT_DIR}}"
 HYDRAGNN_DIR="${HYDRAGNN_DIR:-$(cd "${MATSIM_DIR}/.." && pwd)/HydraGNN}"
 
 # Environment configuration
-VENV_PATH="${VENV_PATH:-${MATSIM_DIR}/perlmutter_venv}"
+DEFAULT_VENV_PATH="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
+VENV_PATH="${VENV_PATH:-${DEFAULT_VENV_PATH}}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
 TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu124}"
 TORCH_CUDA_ARCH="${TORCH_CUDA_ARCH:-8.0}"  # A100
@@ -222,6 +223,7 @@ pip_retry torch-scatter torch-sparse torch-cluster torch-geometric
 
 # HydraGNN core dependencies
 pip_retry "ase>=3.22.1" h5py "setuptools>=68.0" "cmake>=3.24"
+pip_retry "scikit-learn==1.5.1" "vesin==0.4.2"
 
 log "✓ HydraGNN dependencies installed"
 
