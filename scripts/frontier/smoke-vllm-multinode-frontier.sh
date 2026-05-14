@@ -205,7 +205,7 @@ echo "[vllm] Starting server TP=${TP_SIZE} ..."
   --max-model-len "$SMOKE_MAX_MODEL_LEN" \
   --port "$SMOKE_PORT" \
   --trust-remote-code \
-  --disable-log-requests \
+  --no-enable-log-requests \
   --enforce-eager \
   > "$RUN_DIR/vllm.log" 2>&1 &
 VLLM_PID=$!

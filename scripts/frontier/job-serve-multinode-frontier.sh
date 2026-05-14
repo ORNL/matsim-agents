@@ -222,7 +222,7 @@ echo "[vllm] Starting server TP=${SERVE_TP_SIZE} on port ${SERVE_PORT} ..."
   --max-model-len "$SERVE_MAX_MODEL_LEN" \
   --port "$SERVE_PORT" \
   --trust-remote-code \
-  --disable-log-requests \
+  --no-enable-log-requests \
   ${SERVE_EXTRA_ARGS:-} \
   > "$RUN_DIR/vllm-serve.log" 2>&1 &
 VLLM_PID=$!
