@@ -118,16 +118,24 @@ echo "CRAY_FFTW_PREFIX= ${CRAY_FFTW_PREFIX:-unset}"
 echo ""
 
 # ---- Clone or update source -------------------------------------------------
+# NOTE: full clone (no --depth=1) so QE's GitInfo.cmake `git describe` succeeds
+# and produces a complete git-rev.h. Shallow clones leave GIT_BRANCH_RAW and
+# GIT_HASH_RAW undefined, which breaks Modules/environment.f90 compilation.
 if [[ ! -d "${SRC_DIR}/.git" ]]; then
     echo "Cloning QE ${QE_VERSION} from ${QE_REPO} ..."
     mkdir -p "$(dirname "${SRC_DIR}")"
     if [[ "${QE_VERSION}" == "develop" ]]; then
-        git clone --depth=1 --branch develop "${QE_REPO}" "${SRC_DIR}"
+        git clone --branch develop "${QE_REPO}" "${SRC_DIR}"
     else
-        git clone --depth=1 --branch "qe-${QE_VERSION}" "${QE_REPO}" "${SRC_DIR}"
+        git clone --branch "qe-${QE_VERSION}" "${QE_REPO}" "${SRC_DIR}"
     fi
 else
     echo "Source already present at ${SRC_DIR}, skipping clone."
+    # Unshallow if a previous run did a shallow clone (so git describe works).
+    if [[ -f "${SRC_DIR}/.git/shallow" ]]; then
+        echo "  unshallowing existing repo so git describe succeeds ..."
+        (cd "${SRC_DIR}" && git fetch --unshallow 2>/dev/null || true)
+    fi
     echo "  HEAD = $(cd "${SRC_DIR}" && git rev-parse --short HEAD)"
 fi
 
@@ -180,61 +188,122 @@ cmake \
 echo ""
 echo "--- CMake configure done ---"
 
-# ---- Workaround: cce/18.0.1 ICE on two PW/src files -------------------------
-# Cray Fortran 18.0.1 hits an internal compiler error on
-#   PW/src/gen_at_dj.f90  (Hubbard stress tensor)
-#   PW/src/gen_at_dy.f90  (internal stress tensor)
-# when `-target-accel=amd_gfx90a -h omp` is in effect. Both files are pure
-# host Fortran (no `!$omp target` directives), so we strip the AMD-offload
-# codegen flags from their per-file compile commands. This keeps the rest of
-# the build at full GPU offload while letting these two routines compile
-# host-only on the same cce 18.0.1 frontend.
-# ---- Workaround: cce/18.0.1 ICE on two PW/src files -------------------------
-# Cray Fortran 18.0.1 hits an internal compiler error on
-#   PW/src/gen_at_dj.f90  (Hubbard stress tensor)
-#   PW/src/gen_at_dy.f90  (internal stress tensor)
-# when `-target-accel=amd_gfx90a -h omp` is in effect (ftn-7991 in
-# /workspace/crayftn/pdgcs/v_fei.c). Both files are pure host Fortran
-# (no `!$omp target` directives), so we precompile their .o objects with
-# the offload flags stripped, then let `make` consume the cached objects.
-# This keeps every other source in qe_pw at full GPU offload.
-echo "--- Workaround: pre-compiling gen_at_d{j,y}.f90 without GPU offload ---"
-PW_FLAGS_FILE="${BUILD_DIR}/PW/src/CMakeFiles/qe_pw.dir/flags.make"
-PW_OBJ_DIR="${BUILD_DIR}/PW/src/CMakeFiles/qe_pw.dir/src"
-mkdir -p "${PW_OBJ_DIR}"
-if [[ -f "${PW_FLAGS_FILE}" ]]; then
-  PW_DEFINES=$(grep   '^Fortran_DEFINES'  "${PW_FLAGS_FILE}" | sed -E 's/^Fortran_DEFINES *= *//')
-  PW_INCLUDES=$(grep  '^Fortran_INCLUDES' "${PW_FLAGS_FILE}" | sed -E 's/^Fortran_INCLUDES *= *//')
-  PW_FFLAGS=$(grep    '^Fortran_FLAGS'    "${PW_FLAGS_FILE}" | sed -E 's/^Fortran_FLAGS *= *//; s/-target-accel=amd_gfx90a//g; s/-h[[:space:]]+omp/-h noomp/g')
-  for src in gen_at_dj gen_at_dy; do
-    SRCF="${SRC_DIR}/PW/src/${src}.f90"
-    OBJF="${PW_OBJ_DIR}/${src}.f90.o"
-    echo "  compiling ${src}.f90 -> ${OBJF}"
-    # shellcheck disable=SC2086
-    ftn ${PW_DEFINES} ${PW_INCLUDES} ${PW_FFLAGS} -c "${SRCF}" -o "${OBJF}"
+# ---- Workaround: cce/18.0.1 ICE retry loop ----------------------------------
+# Cray Fortran 18.0.1 hits an internal compiler error (ftn-7991 in
+# /workspace/crayftn/pdgcs/v_fei.c:3564, "Found inner_ref/inner_def object
+# without Fortran internal procedure") on a number of QE PW/Modules sources
+# whenever `-target-accel=amd_gfx90a -h omp` is in effect. The full set of
+# affected files is QE-version dependent; observed on develop @ 0f3d904 are at
+# least: PW/src/{gen_at_dj,gen_at_dy,stres_us,data_structure,s_psi,esm,exx,
+# h_psi,pw_restart_new,wfcinit,setup,usnldiag}.f90.
+#
+# Switching to cce/{19,20,21}.x is not viable on Frontier today: those
+# compilers' ftn wrappers require libopenacc.pc which is not installed in the
+# site config (`Error invoking pkg-config!`).
+#
+# Strategy: run `make` in a loop. After each failure, parse the ftn-7991 lines
+# from the make log, recompile each ICE'd source manually with the AMD-offload
+# flags stripped (-target-accel=... removed; -h omp -> -h noomp), then resume.
+# This is safe because none of the affected files contain `!$omp target`
+# directives, so disabling device codegen for them changes no semantics.
+# All other sources keep -DHIP, -D__ROCBLAS, -D__OPENMP_GPU and the offload
+# codegen flags, so rocFFT/rocBLAS linkage is preserved.
+run_make_with_ice_workaround() {
+  local logdir="${BUILD_DIR}/ice-workaround-logs"
+  mkdir -p "${logdir}"
+  local max_iter=40
+  local iter=0
+  while true; do
+    iter=$((iter+1))
+    if (( iter > max_iter )); then
+      echo ">>> ABORT: hit max_iter=${max_iter}"
+      return 2
+    fi
+    local ml="${logdir}/make-iter-${iter}.log"
+    echo ">>> [iter ${iter}] make -j${NCORES} pw ph pp  -> ${ml}"
+    cd "${BUILD_DIR}"
+    if make -j"${NCORES}" pw ph pp > "${ml}" 2>&1; then
+      echo ">>> make succeeded on iter ${iter}"
+      return 0
+    fi
+    # Extract sources that hit ftn-7991 ICE this iter.
+    local ice_paths
+    ice_paths=$(grep -E '^ftn-7991 ftn: INTERNAL , File = ' "${ml}" \
+                | sed -E 's/.*File = ([^,]+),.*/\1/' | sort -u)
+    if [[ -z "${ice_paths}" ]]; then
+      echo ">>> make failed on iter ${iter} but no ftn-7991 ICE detected; aborting"
+      tail -40 "${ml}"
+      return 3
+    fi
+    echo ">>> ICE'd this iter:"
+    echo "${ice_paths}" | sed 's/^/    /'
+    local fullp srcf rel subsys base tgt objsub ff defs incs flags objf
+    for fullp in ${ice_paths}; do
+      srcf="${fullp}"
+      [[ ! -f "${srcf}" ]] && srcf="/$(echo "${fullp}" | sed 's,^\.\./\.\./\.\./,,')"
+      [[ ! -f "${srcf}" ]] && { echo "    >> cannot locate source for: ${fullp}"; return 5; }
+      rel="${srcf#${SRC_DIR}/}"
+      subsys="$(echo "${rel}" | cut -d/ -f1)"
+      base="$(basename "${srcf}" .f90)"
+      case "${subsys}" in
+        PW)      tgt=qe_pw      ; objsub="src" ;;
+        Modules) tgt=qe_modules ; objsub=""    ;;
+        PHonon)  tgt=qe_ph      ; objsub="src" ;;
+        PP)      tgt=qe_pp      ; objsub="src" ;;
+        *)       echo "    >> unknown subsys ${subsys} for ${srcf}"; return 6 ;;
+      esac
+      ff="${BUILD_DIR}/${subsys}/CMakeFiles/${tgt}.dir/flags.make"
+      [[ ! -f "${ff}" ]] && { echo "    >> no flags.make at ${ff}"; return 7; }
+      defs=$(grep '^Fortran_DEFINES'  "${ff}" | sed -E 's/^Fortran_DEFINES *= *//')
+      incs=$(grep '^Fortran_INCLUDES' "${ff}" | sed -E 's/^Fortran_INCLUDES *= *//')
+      flags=$(grep '^Fortran_FLAGS'   "${ff}" | sed -E 's/^Fortran_FLAGS *= *//; s/-target-accel=amd_gfx90a//g; s/-h[[:space:]]+omp/-h noomp/g')
+      if [[ -n "${objsub}" ]]; then
+        objf="${BUILD_DIR}/${subsys}/CMakeFiles/${tgt}.dir/${objsub}/${base}.f90.o"
+      else
+        objf="${BUILD_DIR}/${subsys}/CMakeFiles/${tgt}.dir/${base}.f90.o"
+      fi
+      mkdir -p "$(dirname "${objf}")"
+      cd "${BUILD_DIR}/${subsys}"
+      echo "    >> recompiling ${rel} (offload stripped)"
+      # shellcheck disable=SC2086
+      if ! ftn ${defs} ${incs} ${flags} -c "${srcf}" -o "${objf}" 2>>"${logdir}/workaround.log"; then
+        echo "    >> FAILED to compile ${rel} even without offload"
+        tail -20 "${logdir}/workaround.log"
+        return 4
+      fi
+      [[ ! -s "${objf}" ]] && { echo "    >> ${objf} empty after compile"; return 4; }
+    done
+    cd "${BUILD_DIR}"
   done
-else
-  echo "WARNING: ${PW_FLAGS_FILE} not found, skipping ICE workaround"
-fi
+}
 
 # ---- Build ------------------------------------------------------------------
-# Build the targets that benefit most from GPU offload first; pp/cp can be
-# added once the pw/ph build is verified.
-echo "--- Building QE GPU targets with make -j${NCORES} ---"
-make -j"${NCORES}" pw ph pp 2>&1 | tee "${BUILD_DIR}/build.log"
+echo "--- Building QE GPU targets with retry loop (max 40 iters) ---"
+run_make_with_ice_workaround
+MAKE_RC=$?
+if (( MAKE_RC != 0 )); then
+  echo "BUILD FAILED with rc=${MAKE_RC}; see ${BUILD_DIR}/ice-workaround-logs/"
+  exit ${MAKE_RC}
+fi
 
 echo ""
 echo "--- Build complete ---"
 
 # ---- Install ----------------------------------------------------------------
 echo "--- Installing to ${INSTALL_DIR} ---"
+cd "${BUILD_DIR}"
 make install 2>&1 | tee "${BUILD_DIR}/install.log"
 
 echo ""
-echo "=========================================="
+echo "========================================="
 echo "GPU build finished: $(date)"
 echo "Executables in: ${INSTALL_DIR}/bin/"
 ls "${INSTALL_DIR}/bin/" 2>/dev/null || ls "${BUILD_DIR}/bin/"
+echo ""
+echo "--- Verifying GPU linkage of pw.x ---"
+PW_BIN="${INSTALL_DIR}/bin/pw.x"
+[[ -x "${PW_BIN}" ]] || PW_BIN="${BUILD_DIR}/bin/pw.x"
+ldd "${PW_BIN}" 2>/dev/null | grep -iE "amdhip|hsa|rocm|amd_comgr|sci_cray|fftw" | sed 's/^/  /'
 echo "=========================================="
 echo ""
 echo "To run pw.x with GPU offload, on a compute node:"
