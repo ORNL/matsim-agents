@@ -5,6 +5,7 @@ These exercise pure structure-building paths; no HydraGNN / MLP involved.
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,9 @@ from matsim_agents.discovery.phase_explorer import (
     PhaseCandidate,
     enumerate_phases,
 )
+
+pymatgen_available = importlib.util.find_spec("pymatgen") is not None
+requires_pymatgen = pytest.mark.skipif(not pymatgen_available, reason="pymatgen not installed")
 
 
 def _comp(formula: str):
@@ -75,6 +79,7 @@ def test_graphene_only_for_single_element(tmp_path: Path):
     assert {c.phase for c in twod} == {"graphene"}
 
 
+@requires_pymatgen
 def test_double_perovskite_detected(tmp_path: Path):
     cands = enumerate_phases(_comp("Cs2AgBiBr6"), str(tmp_path), min_atoms=40)
     phases = {c.phase for c in cands}
@@ -84,6 +89,7 @@ def test_double_perovskite_detected(tmp_path: Path):
     assert dp.num_atoms == 40
 
 
+@requires_pymatgen
 def test_spinel_detected_for_AB2X4(tmp_path: Path):
     cands = enumerate_phases(_comp("MgAl2O4"), str(tmp_path), min_atoms=14)
     phases = {c.phase for c in cands}
