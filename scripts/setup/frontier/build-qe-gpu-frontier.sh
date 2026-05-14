@@ -87,8 +87,11 @@ echo "=========================================="
 module reset
 
 # Switch to PrgEnv-cray (needed for OpenMP target offload to AMD GPUs).
+# Pin cce to 21.0.0 — the default cce/18.0.1 hits an internal compiler error
+# (ftn-7991 in /workspace/crayftn/pdgcs/v_fei.c) on PW/src/gen_at_d{j,y}.f90
+# when -target-accel=amd_gfx90a is in effect. cce 21 fixes it.
 module load PrgEnv-cray
-module load cce                          # latest available cce
+module load cce/21.0.0
 module load craype-accel-amd-gfx90a      # enables -fopenmp offload to gfx90a
 module load rocm                         # rocFFT, rocBLAS, rocSOLVER
 module load cray-fftw                    # CPU-side FFTW3 headers
