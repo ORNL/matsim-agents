@@ -35,18 +35,18 @@ class TestGetChatModelInstantiation:
             mock_ollama.assert_called_once()
 
     def test_vllm_provider(self):
-        """ChatOpenAI is returned for the 'vllm' provider (OpenAI-compatible)."""
-        mock_openai = MagicMock()
-        with patch.dict("sys.modules", {"langchain_openai": MagicMock(ChatOpenAI=mock_openai)}):
-            from matsim_agents.llm import get_chat_model
+        """ChatVLLM is returned for the 'vllm' provider (OpenAI-compatible, no langchain_openai)."""
+        from matsim_agents.llm import ChatVLLM, get_chat_model
 
-            get_chat_model(
-                provider="vllm",
-                model="Qwen/Qwen2.5-72B-Instruct",
-                base_url="http://localhost:8000/v1",
-                api_key="EMPTY",
-            )
-            mock_openai.assert_called_once()
+        result = get_chat_model(
+            provider="vllm",
+            model="Qwen/Qwen2.5-72B-Instruct",
+            base_url="http://localhost:8000/v1",
+            api_key="EMPTY",
+        )
+        assert isinstance(result, ChatVLLM)
+        assert result.model == "Qwen/Qwen2.5-72B-Instruct"
+        assert result.base_url == "http://localhost:8000/v1"
 
     def test_openai_provider(self):
         mock_openai = MagicMock()
@@ -76,12 +76,11 @@ class TestGetChatModelInstantiation:
         """MATSIM_LLM_PROVIDER env var is respected."""
         monkeypatch.setenv("MATSIM_LLM_PROVIDER", "vllm")
         monkeypatch.setenv("MATSIM_VLLM_BASE_URL", "http://localhost:8000/v1")
-        mock_openai = MagicMock()
-        with patch.dict("sys.modules", {"langchain_openai": MagicMock(ChatOpenAI=mock_openai)}):
-            from matsim_agents.llm import get_chat_model
+        from matsim_agents.llm import ChatVLLM, get_chat_model
 
-            get_chat_model()
-            mock_openai.assert_called_once()
+        result = get_chat_model()
+        assert isinstance(result, ChatVLLM)
+        assert result.base_url == "http://localhost:8000/v1"
 
 
 # ── huggingface provider ──────────────────────────────────────────────────────
