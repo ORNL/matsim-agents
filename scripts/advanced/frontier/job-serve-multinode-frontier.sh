@@ -32,11 +32,11 @@
 #
 # Example submission (4 nodes, DeepSeek-V4-Pro):
 #   SERVE_MODEL_PATH=/lustre/orion/mat746/proj-shared/models/DeepSeek-V4-Pro \
-#   sbatch --nodes=4 scripts/frontier/job-serve-multinode-frontier.sh
+#   sbatch --nodes=4 scripts/advanced/frontier/job-serve-multinode-frontier.sh
 #
 # Example submission (2 nodes, Mixtral 8x22B sanity check):
 #   SERVE_MODEL_PATH=/lustre/orion/mat746/proj-shared/models/Mixtral-8x22B-Instruct-v0.1 \
-#   sbatch --nodes=2 scripts/frontier/job-serve-multinode-frontier.sh
+#   sbatch --nodes=2 scripts/advanced/frontier/job-serve-multinode-frontier.sh
 #
 # The server stays alive until the job time limit. Connect clients to:
 #   http://<head_node>:${SERVE_PORT}/v1
@@ -125,7 +125,7 @@ export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
 TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
 if [[ ! -s "$TVM_FFI_SO" ]]; then
   echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
-  echo "       Rebuild with: scripts/frontier/prebuild-tvm-ffi-frontier.sh" >&2
+  echo "       Rebuild with: scripts/setup/frontier/prebuild-tvm-ffi-frontier.sh" >&2
   exit 1
 fi
 rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true

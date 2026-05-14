@@ -16,11 +16,11 @@
 #   • matsim-agents chat   : --llm-provider huggingface (loads model inline)
 #
 # Usage:
-#   sbatch scripts/frontier/job-rhea-transformers-frontier.sh
+#   sbatch scripts/advanced/frontier/job-rhea-transformers-frontier.sh
 #
 # Override model at submission:
 #   MATSIM_MODEL_DIR=.../Qwen3-32B MATSIM_MODEL_NAME=Qwen/Qwen3-32B \
-#     sbatch scripts/frontier/job-rhea-transformers-frontier.sh
+#     sbatch scripts/advanced/frontier/job-rhea-transformers-frontier.sh
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
