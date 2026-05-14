@@ -32,6 +32,13 @@ export PYTORCH_ROCM_ARCH=gfx90a
 export MAX_JOBS=${MAX_JOBS:-56}
 export CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-56}
 
+# Point CMake to a pre-cloned triton repo so it doesn't try to fetch from GitHub.
+# Pre-clone was done on the login node:
+#   git clone --depth=1 --branch v3.6.0 --filter=blob:none --sparse \
+#     https://github.com/triton-lang/triton.git $PROJ/cache/triton-src/triton
+#   cd $PROJ/cache/triton-src/triton && git sparse-checkout set python/triton_kernels
+export TRITON_KERNELS_SRC_DIR="$PROJ/cache/triton-src/triton/python/triton_kernels"
+
 # Ensure Cray runtime libs and ROCm are visible during build and import.
 export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH:-}:${LD_LIBRARY_PATH:-}"
 export LD_PRELOAD=/opt/rocm-7.1.1/lib/libamdhip64.so${LD_PRELOAD:+:${LD_PRELOAD}}
@@ -71,6 +78,8 @@ which cmake ninja >/dev/null || {
 
 echo "[$(date)] Building and installing vLLM from source ($VLLM_REF)"
 cd "$SRC_DIR/vllm"
+# Clear stale CMake FetchContent cache so it picks up TRITON_KERNELS_SRC_DIR cleanly.
+rm -rf "$SRC_DIR/vllm/.deps"
 # Dependencies are pre-installed from requirements/rocm.txt on the login node.
 # Compute nodes have no external network, so avoid any dependency resolution.
 python -m pip install -v --no-build-isolation --no-deps .
