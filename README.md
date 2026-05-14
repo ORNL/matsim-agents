@@ -554,7 +554,7 @@ options of the upstream HydraGNN ASE script
 
 ## License & citation
 
-Released under the **MIT License** (see [LICENSE](LICENSE)).
+Released under the **BSD 3-Clause License** (see [LICENSE](LICENSE)).
 
 If you use `matsim-agents` in academic work, please cite both this
 repository and HydraGNN:
