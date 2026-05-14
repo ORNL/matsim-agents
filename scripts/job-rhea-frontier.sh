@@ -5,7 +5,6 @@
 #SBATCH -e /lustre/orion/mat746/proj-shared/runs/rhea-%j/job-%j.out
 #SBATCH -t 02:00:00
 #SBATCH -N 1
-#SBATCH --gpus=8
 #SBATCH -p batch
 #SBATCH -q debug
 # ---------------------------------------------------------------------------
@@ -42,13 +41,16 @@ export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
 
 # ── modules & conda env ──────────────────────────────────────────────────────
 module reset
-module load rocm/7.1.1
-module load amd-mixed/7.1.1
-module load PrgEnv-gnu
-module load miniforge3/23.11.0-0
+ml cpe/24.07
+ml cce/18.0.0
+ml rocm/7.1.1
+ml amd-mixed/7.1.1
+ml craype-accel-amd-gfx90a
+ml PrgEnv-gnu
+ml miniforge3/23.11.0-0
 module unload darshan-runtime        # avoids ADIOS2 / darshan conflicts
 
-conda activate "$VENV"
+source activate "$VENV"
 
 # Make HydraGNN example utilities importable (inference_fused, etc.)
 export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
@@ -73,10 +75,10 @@ VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
 
 echo "[$(date)] Starting vLLM server (tensor-parallel-size=8) ..."
-# On Frontier compute nodes GPU access requires srun; launching python directly
-# causes HIP/ROCm to hang silently.  Use --ntasks=1 --gpus=8 so all 8 GCDs on
-# the node are visible, and --gpu-bind=closest for locality.
-srun --ntasks=1 --gpus-per-task=8 --gpu-bind=closest \
+# Working srun pattern from HydraGNN job: -N1 -n8 -c7 --gpus-per-task=1
+# vLLM is a single process that manages tensor-parallelism internally, so
+# we use -n1 with all 8 GCDs per task, same --gpu-bind=closest convention.
+srun -N1 -n1 -c56 --gpus-per-task=8 --gpu-bind=closest \
     python -m vllm.entrypoints.openai.api_server \
         --model "$MODEL_DIR" \
         --served-model-name Qwen/Qwen2.5-72B-Instruct \
