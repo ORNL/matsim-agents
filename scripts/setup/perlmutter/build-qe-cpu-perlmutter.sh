@@ -65,14 +65,17 @@ echo "=========================================="
 
 # ---- Load modules -----------------------------------------------------------
 echo ""
-echo "--- Loading Perlmutter modules ---"
-module reset
+echo "--- Loading Perlmutter modules (HydraGNN-aligned stack) ---"
 
-# Use GCC/gfortran for CPU build (not NVIDIA compilers)
-module load PrgEnv-gnu
+# Use the same module versions as the HydraGNN Perlmutter installer so QE-CPU
+# binaries are ABI-compatible with anything built/run from that environment.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/perlmutter-module-stack.sh"
+load_perlmutter_modules
+
+# QE-specific extras on top of HydraGNN stack
 module load cray-fftw
-module load cmake/3.30.5
-module load git/2.47.0
+module load cmake/3.30.5 2>/dev/null || module load cmake 2>/dev/null || true
+module load git/2.47.0   2>/dev/null || module load git   2>/dev/null || true
 
 echo ""
 echo "--- Loaded modules ---"

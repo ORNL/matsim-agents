@@ -8,16 +8,16 @@ Perlmutter provides:
 - **GPU partition**: 1,792 nodes with 8× NVIDIA A100 GPUs per node (sm_80 architecture)
 - **CPU partition**: 384 nodes with 128 cores each (AMD EPYC 7763)
 - **Interconnect**: Slingshot 11 (200 Gbps)
-- **CUDA toolkit**: 12.4 (cu124) with cuFFT, cuBLAS, cuSolver
-- **Compilers**: PrgEnv-nvidia (nvfortran 24.5+), PrgEnv-gnu (gfortran 13)
+- **CUDA toolkit**: 12.9 (cu129) with cuFFT, cuBLAS, cuSolver — matches HydraGNN's PyTorch cu129 wheels
+- **Compilers**: PrgEnv-gnu/8.5.0 (gcc-native/13.2) host, NVHPC 25.5 (nvfortran/nvc++/nvc) for GPU offload
 
 ## Build Scripts
 
 Two build scripts are provided:
 
 ### 1. GPU Build: `build-qe-gpu-perlmutter.sh`
-- **Compiler**: PrgEnv-nvidia (nvfortran, nvc++, nvc)
-- **CUDA**: 12.4 with GPU offload to A100 (sm_80)
+- **Compiler**: NVHPC 25.5 (nvfortran, nvc++, nvc) layered on PrgEnv-gnu/8.5.0
+- **CUDA**: 12.9 with GPU offload to A100 (sm_80) — same CUDA major as HydraGNN PyTorch cu129
 - **Libraries**: cuFFT, cuBLAS, cuSolver, cray-mpich, cray-fftw
 - **Execution time**: ~20-30 minutes on login node or compute node
 - **Produces**: pw.x, cp.x, ph.x, pp.x, neb.x, hp.x, ld1.x, epw.x, kcw.x, and 15+ more
