@@ -5,6 +5,7 @@
 #SBATCH -e /lustre/orion/mat746/proj-shared/runs/rhea-%j/job-%j.out
 #SBATCH -t 02:00:00
 #SBATCH -N 1
+#SBATCH --gpus=8
 #SBATCH -p batch
 #SBATCH -q debug
 # ---------------------------------------------------------------------------
@@ -75,7 +76,7 @@ echo "[$(date)] Starting vLLM server (tensor-parallel-size=8) ..."
 # On Frontier compute nodes GPU access requires srun; launching python directly
 # causes HIP/ROCm to hang silently.  Use --ntasks=1 --gpus=8 so all 8 GCDs on
 # the node are visible, and --gpu-bind=closest for locality.
-srun --ntasks=1 --gpus=8 --gpu-bind=closest \
+srun --ntasks=1 --gpus-per-task=8 --gpu-bind=closest \
     python -m vllm.entrypoints.openai.api_server \
         --model "$MODEL_DIR" \
         --served-model-name Qwen/Qwen2.5-72B-Instruct \
