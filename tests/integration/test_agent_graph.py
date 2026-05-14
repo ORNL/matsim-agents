@@ -21,11 +21,13 @@ from matsim_agents.state import MatSimState, RelaxationResult, TaskSpec
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _state(**kwargs) -> MatSimState:
     return MatSimState(**kwargs)
 
 
 # ── planner node ──────────────────────────────────────────────────────────────
+
 
 class TestPlannerNode:
     """planner_node() produces a plan from the objective."""
@@ -75,6 +77,7 @@ class TestPlannerNode:
             llm_model="test-model",
         )
         from matsim_agents.agents.planner import planner_node
+
         result = planner_node(state)
         assert len(result["plan"]) == 1
         assert result["plan"][0].structure_path == si_vasp
@@ -93,12 +96,14 @@ class TestPlannerNode:
 
         state = _state(objective=f"Relax {si_vasp}", llm_provider="vllm")
         from matsim_agents.agents.planner import planner_node
+
         result = planner_node(state)
         assert len(result["messages"]) == 1
         assert isinstance(result["messages"][0], AIMessage)
 
 
 # ── analyst node ──────────────────────────────────────────────────────────────
+
 
 class TestAnalystNode:
     """analyst_node() summarizes results deterministically and via LLM."""
@@ -136,6 +141,7 @@ class TestAnalystNode:
 
         state = _state(results=[fake_relaxation_result], llm_provider="vllm")
         from matsim_agents.agents.analyst import analyst_node
+
         result = analyst_node(state)
         assert result["analysis"] == "LLM-generated analysis."
         assert "LLM-generated analysis." in result["messages"][0].content
@@ -149,6 +155,7 @@ class TestAnalystNode:
         monkeypatch.setattr(llm_mod, "get_chat_model", _fail)
         state = _state(results=[fake_relaxation_result], llm_provider="vllm")
         from matsim_agents.agents.analyst import analyst_node
+
         result = analyst_node(state)
         # Should fall back to deterministic summary silently
         assert result["analysis"] is not None
@@ -156,6 +163,7 @@ class TestAnalystNode:
 
 
 # ── graph routing ─────────────────────────────────────────────────────────────
+
 
 class TestGraphRouting:
     """The conditional edge routes correctly based on pending_tasks/iteration."""
@@ -184,6 +192,7 @@ class TestGraphRouting:
 
 
 # ── full graph end-to-end (executor mocked) ───────────────────────────────────
+
 
 class TestFullGraphEndToEnd:
     """Run the compiled graph with the executor node mocked out."""
@@ -219,9 +228,11 @@ class TestFullGraphEndToEnd:
             }
 
         from matsim_agents import graph as graph_mod
+
         monkeypatch.setattr(graph_mod, "executor_node", _fake_executor)
 
         from matsim_agents.graph import build_graph
+
         return build_graph()
 
     def test_full_graph_completes(self, patched_graph, si_vasp):
@@ -246,8 +257,7 @@ class TestFullGraphEndToEnd:
         config = {"configurable": {"thread_id": "test-2"}}
         final = patched_graph.invoke(initial.model_dump(), config=config)
 
-        contents = [m["content"] if isinstance(m, dict) else m.content
-                    for m in final["messages"]]
+        contents = [m["content"] if isinstance(m, dict) else m.content for m in final["messages"]]
         full_text = " ".join(contents)
         assert "planner" in full_text.lower()
         assert "executor" in full_text.lower() or "analyst" in full_text.lower()
@@ -283,6 +293,7 @@ class TestFullGraphEndToEnd:
         monkeypatch.setattr(graph_mod, "executor_node", _counting_executor)
 
         from matsim_agents.graph import build_graph
+
         graph = build_graph()
         initial = _state(
             objective=f"Relax {si_vasp}",

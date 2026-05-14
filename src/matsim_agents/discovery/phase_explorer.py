@@ -45,29 +45,56 @@ from matsim_agents.discovery.composition import Composition
 
 PhaseTag = Literal[
     # Elemental 3-D
-    "fcc", "bcc", "hcp", "sc", "diamond",
+    "fcc",
+    "bcc",
+    "hcp",
+    "sc",
+    "diamond",
     # Binary 3-D
-    "rocksalt", "cscl", "zincblende", "wurtzite", "fluorite", "rutile",
+    "rocksalt",
+    "cscl",
+    "zincblende",
+    "wurtzite",
+    "fluorite",
+    "rutile",
     # Ternary / quaternary 3-D
-    "perovskite", "double_perovskite", "spinel",
+    "perovskite",
+    "double_perovskite",
+    "spinel",
     # 2-D
-    "graphene", "hbn", "mx2_2h", "mx2_1t",
+    "graphene",
+    "hbn",
+    "mx2_2h",
+    "mx2_1t",
 ]
 
 # Sensible default lattice constants (Å) per prototype family.
 _DEFAULT_A: dict[str, float] = {
-    "fcc": 4.0, "bcc": 3.2, "hcp": 3.0, "sc": 3.0, "diamond": 5.4,
-    "rocksalt": 5.0, "cscl": 4.0, "zincblende": 5.5, "wurtzite": 3.5,
-    "fluorite": 5.4, "rutile": 4.6,
-    "perovskite": 4.0, "double_perovskite": 8.0, "spinel": 8.0,
-    "graphene": 2.46, "hbn": 2.50, "mx2_2h": 3.18, "mx2_1t": 3.32,
+    "fcc": 4.0,
+    "bcc": 3.2,
+    "hcp": 3.0,
+    "sc": 3.0,
+    "diamond": 5.4,
+    "rocksalt": 5.0,
+    "cscl": 4.0,
+    "zincblende": 5.5,
+    "wurtzite": 3.5,
+    "fluorite": 5.4,
+    "rutile": 4.6,
+    "perovskite": 4.0,
+    "double_perovskite": 8.0,
+    "spinel": 8.0,
+    "graphene": 2.46,
+    "hbn": 2.50,
+    "mx2_2h": 3.18,
+    "mx2_1t": 3.32,
 }
 
 # Default interlayer separation for 2-D prototypes (Å).
 _DEFAULT_INTERLAYER: dict[str, float] = {
     "graphene": 3.35,
     "hbn": 3.33,
-    "mx2_2h": 6.15,   # half c-lattice of 2H-MoS2
+    "mx2_2h": 6.15,  # half c-lattice of 2H-MoS2
     "mx2_1t": 5.95,
 }
 
@@ -139,8 +166,7 @@ def _pymatgen_phase(composition: Composition, phase: PhaseTag):
         species = list(elems)
         while len(species) < 3:
             species.append(species[-1])
-        coords = [(0, 0, 0), (0.5, 0.5, 0.5),
-                  (0.5, 0.5, 0), (0.5, 0, 0.5), (0, 0.5, 0.5)]
+        coords = [(0, 0, 0), (0.5, 0.5, 0.5), (0.5, 0.5, 0), (0.5, 0, 0.5), (0, 0.5, 0.5)]
         all_species = [species[0], species[1]] + [species[2]] * 3
         return Structure(lattice, all_species, coords)
 
@@ -178,18 +204,26 @@ def _pymatgen_phase(composition: Composition, phase: PhaseTag):
         for i in (0, 1):
             for j in (0, 1):
                 for k in (0, 1):
-                    coords.append((0.25 + 0.5 * i, 0.5 * j, 0.5 * k)); species.append(X)
-                    coords.append((0.5 * i, 0.25 + 0.5 * j, 0.5 * k)); species.append(X)
-                    coords.append((0.5 * i, 0.5 * j, 0.25 + 0.5 * k)); species.append(X)
+                    coords.append((0.25 + 0.5 * i, 0.5 * j, 0.5 * k))
+                    species.append(X)
+                    coords.append((0.5 * i, 0.25 + 0.5 * j, 0.5 * k))
+                    species.append(X)
+                    coords.append((0.5 * i, 0.5 * j, 0.25 + 0.5 * k))
+                    species.append(X)
         return Structure(lattice, species, coords)
 
     if phase == "rutile" and composition.num_elements == 2:
         a, c = _DEFAULT_A[phase], _DEFAULT_A[phase] * 0.65
         lattice = Lattice.tetragonal(a, c)
         u = 0.305
-        coords = [(0, 0, 0), (0.5, 0.5, 0.5),
-                  (u, u, 0), (-u, -u, 0), (0.5 + u, 0.5 - u, 0.5),
-                  (0.5 - u, 0.5 + u, 0.5)]
+        coords = [
+            (0, 0, 0),
+            (0.5, 0.5, 0.5),
+            (u, u, 0),
+            (-u, -u, 0),
+            (0.5 + u, 0.5 - u, 0.5),
+            (0.5 - u, 0.5 + u, 0.5),
+        ]
         species = [elems[0], elems[0], elems[1], elems[1], elems[1], elems[1]]
         return Structure(lattice, species, coords)
 
@@ -206,11 +240,20 @@ def _pymatgen_phase(composition: Composition, phase: PhaseTag):
         u = 0.387
         species = [A] * 2 + [B] * 4 + [X] * 8
         coords = [
-            (0, 0, 0), (0.25, 0.25, 0.25),
-            (0.5, 0.5, 0.5), (0.5, 0, 0), (0, 0.5, 0), (0, 0, 0.5),
-            (u, u, u), (u, -u, -u), (-u, u, -u), (-u, -u, u),
-            (0.25 + u, 0.25 + u, 0.25 + u), (0.25 + u, 0.25 - u, 0.25 - u),
-            (0.25 - u, 0.25 + u, 0.25 - u), (0.25 - u, 0.25 - u, 0.25 + u),
+            (0, 0, 0),
+            (0.25, 0.25, 0.25),
+            (0.5, 0.5, 0.5),
+            (0.5, 0, 0),
+            (0, 0.5, 0),
+            (0, 0, 0.5),
+            (u, u, u),
+            (u, -u, -u),
+            (-u, u, -u),
+            (-u, -u, u),
+            (0.25 + u, 0.25 + u, 0.25 + u),
+            (0.25 + u, 0.25 - u, 0.25 - u),
+            (0.25 - u, 0.25 + u, 0.25 - u),
+            (0.25 - u, 0.25 - u, 0.25 + u),
         ]
         return Structure(lattice, species, coords)
 
@@ -233,6 +276,7 @@ def _ase_2d_monolayer(composition: Composition, phase: PhaseTag):
             return None
         try:
             from ase.build import graphene  # type: ignore
+
             return graphene(elems[0], a=_DEFAULT_A[phase], vacuum=0.0)
         except Exception:
             # Fallback: build manually using ase.Atoms.
@@ -256,10 +300,12 @@ def _ase_2d_monolayer(composition: Composition, phase: PhaseTag):
             return None
         try:
             from ase.build import mx2  # type: ignore
+
             kind = "2H" if phase == "mx2_2h" else "1T"
             # ASE's mx2 expects the formula as a string of M followed by X.
-            atoms = mx2(formula=f"{M}{X}2", kind=kind,
-                        a=_DEFAULT_A[phase], thickness=3.19, vacuum=0.0)
+            atoms = mx2(
+                formula=f"{M}{X}2", kind=kind, a=_DEFAULT_A[phase], thickness=3.19, vacuum=0.0
+            )
             return atoms
         except Exception:
             return None
@@ -274,14 +320,15 @@ def _manual_honeycomb(elem_a: str, elem_b: str, a: float):
 
     # Hexagonal lattice vectors with c chosen as a placeholder; vacuum
     # is added by the caller.
-    cell = np.array([
-        [a, 0.0, 0.0],
-        [-a / 2.0, a * math.sqrt(3) / 2.0, 0.0],
-        [0.0, 0.0, 1.0],
-    ])
+    cell = np.array(
+        [
+            [a, 0.0, 0.0],
+            [-a / 2.0, a * math.sqrt(3) / 2.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
     # Two-atom basis at fractional (1/3, 2/3) and (2/3, 1/3) on z=0.
-    scaled = np.array([[1.0 / 3.0, 2.0 / 3.0, 0.0],
-                       [2.0 / 3.0, 1.0 / 3.0, 0.0]])
+    scaled = np.array([[1.0 / 3.0, 2.0 / 3.0, 0.0], [2.0 / 3.0, 1.0 / 3.0, 0.0]])
     positions = scaled @ cell
     return Atoms(symbols=[elem_a, elem_b], positions=positions, cell=cell, pbc=True)
 
@@ -361,19 +408,22 @@ def _to_atoms(obj):
         return None
     try:
         from ase import Atoms
+
         if isinstance(obj, Atoms):
             return obj
     except Exception:
         pass
     try:
         from pymatgen.io.ase import AseAtomsAdaptor
+
         return AseAtomsAdaptor.get_atoms(obj)
     except Exception:
         return None
 
 
-def _auto_supercell(n_atoms_primitive: int, min_atoms: int,
-                    *, in_plane_only: bool) -> tuple[int, int, int]:
+def _auto_supercell(
+    n_atoms_primitive: int, min_atoms: int, *, in_plane_only: bool
+) -> tuple[int, int, int]:
     """Smallest uniform tile s.t. tiled cell has >= ``min_atoms`` atoms.
 
     For 2-D slabs we only tile in x and y; z stays at 1.
@@ -413,13 +463,13 @@ def _to_pmg_structure(atoms):
     """ASE Atoms -> pymatgen Structure (best-effort, may return None)."""
     try:
         from pymatgen.io.ase import AseAtomsAdaptor
+
         return AseAtomsAdaptor.get_structure(atoms)
     except Exception:
         return None
 
 
-def _generate_orderings(atoms, n_orderings: int, *, seed: int = 0,
-                        max_attempts_factor: int = 40):
+def _generate_orderings(atoms, n_orderings: int, *, seed: int = 0, max_attempts_factor: int = 40):
     """Return up to ``n_orderings`` symmetrically-distinct site decorations.
 
     The atomic positions and cell are kept fixed; only the species labels
@@ -441,6 +491,7 @@ def _generate_orderings(atoms, n_orderings: int, *, seed: int = 0,
     matcher = None
     try:
         from pymatgen.core.structure_matcher import StructureMatcher
+
         matcher = StructureMatcher(primitive_cell=False, attempt_supercell=False)
     except Exception:
         matcher = None
@@ -490,10 +541,12 @@ def _ordering_hash(atoms, decimals: int = 3) -> tuple:
     scaled = atoms.get_scaled_positions(wrap=True)
     syms = atoms.get_chemical_symbols()
     items = sorted(
-        (round(float(p[0]) % 1.0, decimals),
-         round(float(p[1]) % 1.0, decimals),
-         round(float(p[2]) % 1.0, decimals),
-         s)
+        (
+            round(float(p[0]) % 1.0, decimals),
+            round(float(p[1]) % 1.0, decimals),
+            round(float(p[2]) % 1.0, decimals),
+            s,
+        )
         for p, s in zip(scaled, syms, strict=False)
     )
     return tuple(items)
@@ -622,7 +675,9 @@ def enumerate_phases(
 
                 notes = f"Seed structure built via {backend}."
                 if used_sc != (1, 1, 1):
-                    notes += f" Tiled to {used_sc[0]}x{used_sc[1]}x{used_sc[2]} ({len(tiled)} atoms)."
+                    notes += (
+                        f" Tiled to {used_sc[0]}x{used_sc[1]}x{used_sc[2]} ({len(tiled)} atoms)."
+                    )
                 if is_2d:
                     notes += f" 2-D slab: {num_layers} layer(s), vacuum={vacuum:g} Å."
                 if len(orderings) > 1:
@@ -630,17 +685,19 @@ def enumerate_phases(
                 if scale != 1.0:
                     notes += f" Lattice scale {scale:.3f}."
 
-                candidates.append(PhaseCandidate(
-                    formula=composition.formula,
-                    phase=phase,
-                    structure_path=path,
-                    notes=notes,
-                    num_atoms=len(tiled),
-                    supercell=used_sc,
-                    dimensionality="2D" if is_2d else "3D",
-                    num_layers=num_layers if is_2d else None,
-                    ordering_index=o_idx,
-                    lattice_scale=float(scale),
-                ))
+                candidates.append(
+                    PhaseCandidate(
+                        formula=composition.formula,
+                        phase=phase,
+                        structure_path=path,
+                        notes=notes,
+                        num_atoms=len(tiled),
+                        supercell=used_sc,
+                        dimensionality="2D" if is_2d else "3D",
+                        num_layers=num_layers if is_2d else None,
+                        ordering_index=o_idx,
+                        lattice_scale=float(scale),
+                    )
+                )
 
     return candidates
