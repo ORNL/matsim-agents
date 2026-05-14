@@ -79,12 +79,6 @@ export HF_DATASETS_OFFLINE=1
 # the first time vLLM imports tvm_ffi on a compute node.
 export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
 
-# vLLM 0.20 detects ROCm by reading HIP_VISIBLE_DEVICES, not
-# ROCR_VISIBLE_DEVICES (which is what SLURM sets on Frontier). Without this,
-# vllm.config.device.__post_init__ raises "Failed to infer device type".
-export HIP_VISIBLE_DEVICES="${ROCR_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
-export VLLM_PLATFORM=rocm
-
 # ── vLLM server ──────────────────────────────────────────────────────────────
 VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
@@ -93,7 +87,7 @@ echo "[$(date)] Starting vLLM server (tensor-parallel-size=8) ..."
 # Working srun pattern from HydraGNN job: -N1 -n8 -c7 --gpus-per-task=1
 # vLLM is a single process that manages tensor-parallelism internally, so
 # we use -n1 with all 8 GCDs per task, same --gpu-bind=closest convention.
-srun -N1 -n1 -c56 --gpus-per-task=8 --gpu-bind=closest --export=ALL \
+srun -N1 -n1 -c56 --gpus-per-task=8 --gpu-bind=closest \
     python -m vllm.entrypoints.openai.api_server \
         --model "$MODEL_DIR" \
         --served-model-name Qwen/Qwen2.5-72B-Instruct \
