@@ -897,7 +897,8 @@ matsim-agents/
 │   ├── test_vasp_relax.py        # vasp_relax driver + parser
 │   └── integration/
 │       ├── test_al_loop_dryrun.py    # one full AL iteration, all heavy parts mocked
-│       └── test_qe_warmstart.py      # end-to-end QE warm-start (env-gated)
+│       ├── test_qe_warmstart.py      # end-to-end QE warm-start (env-gated)
+│       └── test_vasp_warmstart.py    # end-to-end VASP warm-start (env-gated)
 ├── external/                     # gitignored: large external builds
 │   └── quantum-espresso/         # src/, build-gpu/, install-gpu/
 └── third_party/HydraGNN/         # cloned by setup_env.sh
