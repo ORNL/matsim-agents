@@ -6,6 +6,10 @@ parses the resulting ``pw.out`` with ASE's ``espresso-out`` reader, which
 gives us ``Atoms`` plus a SinglePointCalculator carrying energy, forces, and
 stress.
 
+When ``QEBackendConfig.pw_template`` is set, the namelist section is taken
+verbatim from that file (analogous to VASP's INCAR template) and only the
+structure-dependent cards are appended programmatically.
+
 Energy / force / stress units returned to the caller match those of the VASP
 backend (eV, eV/Å, eV/Å³) so the rest of the AL loop never has to special-
 case the backend.
@@ -17,6 +21,7 @@ import logging
 import os
 import subprocess
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ase.io import read as ase_read
@@ -39,7 +44,7 @@ class QEBackend:
 
     name = "qe"
 
-    def __init__(self, cfg: "QEBackendConfig") -> None:
+    def __init__(self, cfg: QEBackendConfig) -> None:
         self.cfg = cfg
         self.nodes_per_job = cfg.nodes_per_job
         self.ranks_per_node = cfg.ranks_per_node
@@ -83,10 +88,22 @@ class QEBackend:
         cfg = self.cfg
         os.makedirs(spec.work_dir, exist_ok=True)
 
-        settings = self._settings_for(spec.atoms)
         input_path = os.path.join(spec.work_dir, "pw.in")
-        write_pw_input(spec.atoms, settings, input_path,
-                       prefix="pwscf", outdir="./tmp")
+        if cfg.pw_template is not None:
+            _write_pw_from_template(
+                template_path=cfg.pw_template,
+                atoms=spec.atoms,
+                pseudo_dir=str(cfg.pseudo_dir),
+                kpts=tuple(cfg.kpts) if cfg.kpts is not None else (1, 1, 1),
+                koffset=tuple(cfg.koffset) if cfg.koffset is not None else (0, 0, 0),
+                pseudopotentials=dict(cfg.pseudopotentials) if cfg.pseudopotentials else None,
+                input_path=input_path,
+                prefix="pwscf",
+                outdir="./tmp",
+            )
+        else:
+            settings = self._settings_for(spec.atoms)
+            write_pw_input(spec.atoms, settings, input_path, prefix="pwscf", outdir="./tmp")
 
         # Wrapper contract:
         #   <work_dir> <pw_bin> <input_file> <nodes> <ranks_per_node> <threads_per_rank>
@@ -199,3 +216,102 @@ def _parse_pw_out(
         final_atoms=final_atoms,
         notes="; ".join(notes_list) if notes_list else None,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Template-based pw.in writer (mirror of vasp_io.write_incar template path)   #
+# --------------------------------------------------------------------------- #
+
+
+def _write_pw_from_template(
+    template_path: str | Path,
+    atoms,
+    pseudo_dir: str,
+    kpts: tuple[int, int, int],
+    koffset: tuple[int, int, int],
+    pseudopotentials: dict[str, str] | None,
+    input_path: str,
+    prefix: str,
+    outdir: str,
+) -> str:
+    """Render a pw.in by appending structure-cards to a namelist template.
+
+    The template file may contain any of these ``str.format`` placeholders:
+    ``{nat}``, ``{ntyp}``, ``{pseudo_dir}``, ``{prefix}``, ``{outdir}``,
+    ``{natoms}`` (alias of ``nat``).
+
+    After substitution the function appends ``ATOMIC_SPECIES``,
+    ``CELL_PARAMETERS angstrom``, ``ATOMIC_POSITIONS angstrom`` and
+    ``K_POINTS automatic`` derived from ``atoms``, ``kpts`` and
+    ``koffset``. Pseudopotential filenames are taken from
+    ``pseudopotentials`` when given, else auto-detected by scanning
+    ``pseudo_dir`` for the first file matching ``<symbol>.*UPF``
+    (case-insensitive).
+    """
+    # Approximate atomic masses (g/mol). Reused from qe_relax to avoid
+    # leaking that table into the public API of this module.
+    from matsim_agents.tools.qe_relax import _ATOMIC_MASS  # noqa: PLC2701
+
+    template_path = Path(template_path)
+    text = template_path.read_text()
+
+    symbols_unique = sorted(set(atoms.get_chemical_symbols()))
+    nat = len(atoms)
+    ntyp = len(symbols_unique)
+
+    # Auto-detect UPF filenames if the user did not pin them.
+    if pseudopotentials is None:
+        pseudopotentials = {}
+        pdir = Path(pseudo_dir)
+        for sym in symbols_unique:
+            matches = sorted(
+                p.name
+                for p in pdir.iterdir()
+                if p.is_file()
+                and p.name.lower().endswith(".upf")
+                and p.name.split(".")[0].lower() == sym.lower()
+            )
+            if not matches:
+                raise FileNotFoundError(
+                    f"No UPF pseudopotential found for {sym!r} in {pdir}. "
+                    "Provide qe.pseudopotentials = {{Sym: filename}} explicitly."
+                )
+            pseudopotentials[sym] = matches[0]
+
+    fmt_kwargs = dict(
+        nat=nat,
+        natoms=nat,
+        ntyp=ntyp,
+        pseudo_dir=os.path.abspath(pseudo_dir),
+        prefix=prefix,
+        outdir=outdir,
+    )
+    try:
+        text = text.format(**fmt_kwargs)
+    except KeyError as exc:
+        raise ValueError(
+            f"pw_template {template_path} references unknown placeholder {{{exc.args[0]}}}. "
+            f"Allowed: {sorted(fmt_kwargs)}."
+        ) from exc
+
+    cards: list[str] = [text.rstrip(), ""]
+    cards.append("ATOMIC_SPECIES")
+    for sym in symbols_unique:
+        mass = _ATOMIC_MASS.get(sym, 1.0)
+        cards.append(f"  {sym}  {mass:.4f}  {pseudopotentials[sym]}")
+    cards.append("")
+    cards.append("CELL_PARAMETERS angstrom")
+    for v in atoms.cell.array:
+        cards.append(f"  {v[0]:18.10f} {v[1]:18.10f} {v[2]:18.10f}")
+    cards.append("")
+    cards.append("ATOMIC_POSITIONS angstrom")
+    for sym, pos in zip(atoms.get_chemical_symbols(), atoms.get_positions(), strict=True):
+        cards.append(f"  {sym}  {pos[0]:18.10f} {pos[1]:18.10f} {pos[2]:18.10f}")
+    cards.append("")
+    cards.append("K_POINTS automatic")
+    cards.append(f"  {kpts[0]} {kpts[1]} {kpts[2]}  {koffset[0]} {koffset[1]} {koffset[2]}")
+    cards.append("")
+
+    Path(input_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(input_path).write_text("\n".join(cards))
+    return os.path.abspath(input_path)
