@@ -24,9 +24,89 @@ to spread across all available GPUs. Install extras: ``pip install -e .[huggingf
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from typing import Any
 
+from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+
+
+class ChatVLLM(BaseChatModel):
+    """Minimal LangChain chat model that talks to a vLLM (or any OpenAI-compatible)
+    server using the ``openai`` package directly.  This avoids the ``langchain_openai``
+    dependency which is not present in the HPC conda environment.
+    """
+
+    model: str
+    base_url: str = "http://localhost:8000/v1"
+    api_key: str = "EMPTY"
+    temperature: float = 0.0
+    max_tokens: int = 2048
+
+    @property
+    def _llm_type(self) -> str:
+        return "vllm"
+
+    def _convert_messages(self, messages: list[BaseMessage]) -> list[dict]:
+        role_map = {
+            "human": "user",
+            "ai": "assistant",
+            "system": "system",
+            "tool": "tool",
+        }
+        result = []
+        for m in messages:
+            role = role_map.get(m.type, "user")
+            result.append({"role": role, "content": m.content})
+        return result
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        import openai
+
+        client = openai.OpenAI(base_url=self.base_url, api_key=self.api_key)
+        response = client.chat.completions.create(
+            model=self.model,
+            messages=self._convert_messages(messages),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            stop=stop,
+            **kwargs,
+        )
+        content = response.choices[0].message.content or ""
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
+
+    def _stream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        import openai
+
+        client = openai.OpenAI(base_url=self.base_url, api_key=self.api_key)
+        stream = client.chat.completions.create(
+            model=self.model,
+            messages=self._convert_messages(messages),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            stop=stop,
+            stream=True,
+            **kwargs,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            if delta:
+                yield ChatGenerationChunk(message=AIMessageChunk(content=delta))
+
 
 DEFAULT_PROVIDER = "ollama"
 DEFAULT_MODELS = {
@@ -73,18 +153,11 @@ def get_chat_model(
         return ChatOllama(model=model, temperature=temperature, **kwargs)
 
     if provider == "vllm":
-        # vLLM exposes an OpenAI-compatible API; reuse ChatOpenAI with a custom base_url.
-        from langchain_openai import ChatOpenAI
-
+        # vLLM exposes an OpenAI-compatible API.  Use the built-in ChatVLLM wrapper
+        # which talks directly to the openai package — no langchain_openai required.
         url = base_url or os.environ.get("MATSIM_VLLM_BASE_URL", "http://localhost:8000/v1")
         key = api_key or os.environ.get("MATSIM_VLLM_API_KEY", "EMPTY")
-        return ChatOpenAI(
-            model=model,
-            temperature=temperature,
-            base_url=url,
-            api_key=key,
-            **kwargs,
-        )
+        return ChatVLLM(model=model, temperature=temperature, base_url=url, api_key=key)
 
     if provider == "openai":
         from langchain_openai import ChatOpenAI
