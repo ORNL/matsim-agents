@@ -3,13 +3,20 @@
 This document covers Frontier-specific setup, gotchas, and troubleshooting
 for the vLLM-based agent backend.
 
+> **Note on paths**: throughout this document, `$PROJ` refers to your
+> project's proj-shared directory on Lustre (e.g.
+> `/lustre/orion/<your-project>/proj-shared`). Set it once with
+> `export PROJ=/lustre/orion/<your-project>/proj-shared` and all examples
+> below will work as written.
+
 ---
 
 ## ⚠️ CRITICAL: prebuilt `tvm_ffi` `.so` MUST exist before launching ANY vLLM job
 
 **TL;DR**: If the file
-`/lustre/orion/mat746/proj-shared/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so`
-is missing or 0 bytes, **every vLLM job will silently hang forever** with no log output.
+`$PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so`
+(where `$PROJ` is your project's proj-shared directory) is missing or 0 bytes,
+**every vLLM job will silently hang forever** with no log output.
 
 ### Symptoms
 
@@ -32,14 +39,14 @@ subsequent run.
 ### How to recover
 
 ```bash
-cd /lustre/orion/mat746/proj-shared/matsim-agents
+cd $PROJ/matsim-agents
 sbatch scripts/frontier/prebuild-tvm-ffi-frontier.sh    # rebuilds the .so
 ```
 
 After it completes, verify:
 
 ```bash
-ls -la /lustre/orion/mat746/proj-shared/cache/tvm-ffi/
+ls -la $PROJ/cache/tvm-ffi/
 # Expected: libtorch_c_dlpack_addon_torch211-rocm.so   (~200 KB)
 ```
 
@@ -72,7 +79,7 @@ All Frontier scripts source `frontier-module-stack.sh` which loads:
 - `miniforge3/23.11.0-0`
 
 Then activates the vLLM-on-ROCm-7.2 venv at:
-`/lustre/orion/mat746/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72`
+`$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72`
 
 ## Network policy
 
@@ -84,7 +91,7 @@ Compute nodes have **no outbound internet**. All scripts set:
 - `TRITON_DISABLE_AUTOTUNE_CACHE=1`
 - `unset http_proxy https_proxy ...; export NO_PROXY='*'`
 
-Models must be pre-downloaded to `/lustre/orion/mat746/proj-shared/models/`
+Models must be pre-downloaded to `$PROJ/models/`
 on the login node before submitting jobs.
 
 ## Required vLLM env vars (already set by scripts)
@@ -130,10 +137,10 @@ GPUS_PER_NODE=1 sbatch --nodes=1 scripts/frontier/smoke-vllm-singlenode-frontier
 
 ```bash
 # Watch the active job in real time
-tail -f /lustre/orion/mat746/proj-shared/runs/smoke-singlenode-<JOBID>/job-<JOBID>.out
+tail -f $PROJ/runs/smoke-singlenode-<JOBID>/job-<JOBID>.out
 
 # Watch vLLM server log
-tail -f /lustre/orion/mat746/proj-shared/runs/smoke-singlenode-<JOBID>/vllm.log
+tail -f $PROJ/runs/smoke-singlenode-<JOBID>/vllm.log
 
 # Check job status
 squeue -u $USER
@@ -145,7 +152,7 @@ scancel <JOBID>
 ## When vLLM hangs with no output
 
 1. **First check**: is `~/.cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so` present and non-empty?
-2. **Second check**: is `/lustre/orion/mat746/proj-shared/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so` present and non-empty?
+2. **Second check**: is `$PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so` present and non-empty?
 3. If the proj-shared `.so` is missing → run `prebuild-tvm-ffi-frontier.sh`.
 4. If both `.so` files exist → look at the faulthandler stack trace technique below.
 
