@@ -3,10 +3,11 @@
 Keeps the rest of the codebase agnostic to which chat model is in use.
 Supported providers (set ``MATSIM_LLM_PROVIDER`` or pass ``provider=...``):
 
-    ollama     - local Ollama daemon (default for local development)
-    vllm       - vLLM server with an OpenAI-compatible /v1 endpoint
-    openai     - hosted OpenAI API
-    anthropic  - hosted Anthropic API
+    ollama       - local Ollama daemon (default for local development)
+    vllm         - vLLM server with an OpenAI-compatible /v1 endpoint
+    openai       - hosted OpenAI API
+    anthropic    - hosted Anthropic API
+    huggingface  - local HuggingFace transformers pipeline (no server needed)
 
 For vLLM, set the server URL via ``MATSIM_VLLM_BASE_URL`` (default
 ``http://localhost:8000/v1``) and, if your server requires it,
@@ -14,6 +15,10 @@ For vLLM, set the server URL via ``MATSIM_VLLM_BASE_URL`` (default
 
 For Ollama, set ``MATSIM_OLLAMA_BASE_URL`` to point at a non-default host
 (default ``http://localhost:11434``).
+
+For HuggingFace local inference, set ``MATSIM_HF_MODEL_PATH`` to a local
+model directory (default: the ``model`` argument). Uses ``device_map="auto"``
+to spread across all available GPUs. Install extras: ``pip install -e .[huggingface]``.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ DEFAULT_MODELS = {
     "vllm": "meta-llama/Llama-3.1-8B-Instruct",
     "openai": "gpt-4o-mini",
     "anthropic": "claude-3-5-sonnet-latest",
+    "huggingface": "Qwen/Qwen2.5-72B-Instruct",
 }
 
 
@@ -94,7 +100,25 @@ def get_chat_model(
             kwargs.setdefault("api_key", api_key)
         return ChatAnthropic(model=model, temperature=temperature, **kwargs)
 
+    if provider == "huggingface":
+        from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
+
+        model_path = os.environ.get("MATSIM_HF_MODEL_PATH") or model
+        pipeline_kwargs: dict[str, Any] = {
+            "max_new_tokens": kwargs.pop("max_new_tokens", 2048),
+            "do_sample": temperature > 0.0,
+        }
+        if temperature > 0.0:
+            pipeline_kwargs["temperature"] = temperature
+        hf_pipeline = HuggingFacePipeline.from_model_id(
+            model_id=model_path,
+            task="text-generation",
+            device_map="auto",
+            pipeline_kwargs=pipeline_kwargs,
+            **kwargs,
+        )
+        return ChatHuggingFace(llm=hf_pipeline)
+
     raise ValueError(
-        f"Unknown LLM provider: {provider!r}. "
-        f"Expected one of: {sorted(DEFAULT_MODELS)}."
+        f"Unknown LLM provider: {provider!r}. Expected one of: {sorted(DEFAULT_MODELS)}."
     )
