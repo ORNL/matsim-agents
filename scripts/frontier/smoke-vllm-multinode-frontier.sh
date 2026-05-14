@@ -26,7 +26,10 @@
 
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 PROJ=/lustre/orion/mat746/proj-shared
+[[ -z "${SCRIPT_DIR:-}" || ! -f "$SCRIPT_DIR/_rocr_to_hip.sh" ]] && \
+  SCRIPT_DIR="$PROJ/matsim-agents/scripts/frontier"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/DeepSeek-V4-Pro}
 SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-deepseek-ai/DeepSeek-V4-Pro}
@@ -98,9 +101,12 @@ export HSA_NO_SCRATCH_RECLAIM=1
 export PYTORCH_ROCM_ARCH=gfx90a
 export ROCM_ARCH=gfx90a
 
-# Inter-node networking over Slingshot (libfabric / HSN)
-export NCCL_SOCKET_IFNAME=hsn
-export GLOO_SOCKET_IFNAME=hsn
+# Inter-node networking over Slingshot. Frontier interfaces are hsn0..hsn3;
+# the literal name "hsn" does not exist and causes gloo to fail with
+#   "Unable to find address for: hsn".
+export NCCL_SOCKET_IFNAME=hsn0
+export GLOO_SOCKET_IFNAME=hsn0
+export TP_SOCKET_IFNAME=hsn0
 export FI_CXI_ATS=0
 export NCCL_IB_DISABLE=1
 export NCCL_DEBUG=INFO
@@ -143,7 +149,7 @@ echo "[warmup] Warming up GPUs on all $N_NODES nodes ..."
 WARMUP_PY="import torch; n=torch.cuda.device_count(); [torch.zeros(1024,device=f'cuda:{i}')+1 for i in range(n)]; print(f'  {__import__(\"socket\").gethostname()}: {n} GPUs OK')"
 for node in "${ALL_NODES[@]}"; do
   srun --nodes=1 --ntasks=1 -w "$node" --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
-    "$VENV/bin/python" -c "$WARMUP_PY" &
+    "$SCRIPT_DIR/_rocr_to_hip.sh" "$VENV/bin/python" -c "$WARMUP_PY" &
 done
 wait
 echo "[warmup] Done."
@@ -153,6 +159,11 @@ RAY="$VENV/bin/ray"
 
 # ── Start Ray head ───────────────────────────────────────────────────────────
 echo "[ray] Starting head ..."
+# Ray head also needs ROCR→HIP translation so its accelerator detection works.
+if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
+  export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
+  unset ROCR_VISIBLE_DEVICES
+fi
 "$RAY" start --head \
   --node-ip-address="$HEAD_NODE_IP" \
   --port="$RAY_PORT" \
@@ -167,7 +178,7 @@ WORKER_PIDS=()
 for node in "${ALL_NODES[@]:1}"; do
   echo "[ray] Starting worker on $node ..."
   srun --nodes=1 --ntasks=1 --ntasks-per-node=1 -w "$node" --export=ALL \
-    "$VENV/bin/ray" start --address="$RAY_ADDRESS" \
+    "$SCRIPT_DIR/_rocr_to_hip.sh" "$VENV/bin/ray" start --address="$RAY_ADDRESS" \
       --num-cpus=56 --num-gpus="$GPUS_PER_NODE" --block \
     > "$RUN_DIR/ray-worker-$node.log" 2>&1 &
   WORKER_PIDS+=($!)
