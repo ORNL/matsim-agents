@@ -298,15 +298,58 @@ run_make_with_ice_workaround() {
   done
 }
 
+# ---- Source patch: pimd_subrout.f90 etime() -> cpu_time() -------------------
+# QE's PIOUD (Path-Integral Ornstein-Uhlenbeck Dynamics) module calls the GNU
+# Fortran extension `etime()` in its scnd() timing helper. Cray Fortran does
+# not provide etime, causing pioud.x to fail at link time with:
+#   undefined reference to `etime_'
+# We rewrite scnd() to use the F95-standard `cpu_time` intrinsic, which Cray
+# Fortran does provide and which returns the same kind of wall-time timer
+# (CPU seconds, real(8)). The patch is idempotent (a marker comment is added).
+PIMD_F="${SRC_DIR}/PIOUD/src/pimd_subrout.f90"
+if [[ -f "${PIMD_F}" ]] && ! grep -q 'patched-by-frontier-build-script' "${PIMD_F}"; then
+  echo "--- Patching ${PIMD_F#${SRC_DIR}/} (etime -> cpu_time) ---"
+  python3 - "${PIMD_F}" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1])
+text = p.read_text()
+old = ("subroutine scnd(t)\n\n"
+       "  implicit none\n"
+       "  real(8) :: t\n"
+       "  real(4) :: etime\n"
+       "  real(4), dimension (:), allocatable :: tarray\n\n"
+       "  allocate(tarray(2))\n\n"
+       "  t = etime(tarray)\n"
+       "  t = tarray(1)\n"
+       "   \n"
+       "  deallocate(tarray)\n\n"
+       "  return\n"
+       "end subroutine scnd")
+new = ("subroutine scnd(t)\n"
+       "  ! patched-by-frontier-build-script: replaced GNU etime() with\n"
+       "  ! F95-standard cpu_time() so pioud.x links under Cray Fortran.\n"
+       "  implicit none\n"
+       "  real(8) :: t\n"
+       "  call cpu_time(t)\n"
+       "  return\n"
+       "end subroutine scnd")
+if old not in text:
+    print("PATCH MARKER MISSED: scnd block has changed; aborting", file=sys.stderr)
+    sys.exit(1)
+p.write_text(text.replace(old, new))
+print("  scnd() rewritten")
+PY
+else
+  echo "--- pimd_subrout.f90 already patched (or missing); skipping ---"
+fi
+
 # ---- Build ------------------------------------------------------------------
 # Build the QE target groups we actually need under the ICE retry loop.
-# We deliberately avoid `make all` because it pulls in PIOUD (path-integral
-# MD), whose pimd_subrout.f90 calls the GNU intrinsic `etime()` that Cray
-# Fortran does not provide -> link error on pioud.x. PIOUD is not part of any
-# group target the user typically invokes, and excluding it lets the rest of
-# the suite (pw, ph, pp, cp, hp, ld1, neb, pwall, tddfpt, upf, xspectra,
-# epw, kcw) install cleanly.
-QE_TARGETS=(pw cp ph pp neb hp ld1 pwall tddfpt upf xspectra epw kcw)
+# Avoid `make all` because it pulls in dev/test targets that reference
+# uninstalled tools. The list below covers every user-facing executable QE
+# ships (pw, cp, ph, pp, neb, hp, ld1, pwall, pwcond, tddfpt, upf, xspectra,
+# epw, kcw, all_currents) including pioud (after the etime patch above).
+QE_TARGETS=(pw cp ph pp neb hp ld1 pwall pwcond tddfpt upf xspectra epw kcw all_currents pioud)
 echo "--- Building QE GPU targets: ${QE_TARGETS[*]} ---"
 run_make_with_ice_workaround targets "${QE_TARGETS[@]}"
 MAKE_RC=$?
@@ -319,9 +362,8 @@ echo ""
 echo "--- Build complete ---"
 
 # ---- Install ----------------------------------------------------------------
-# `make install` triggers a `make all` dependency check which tries to build
-# pioud.x and fails. Instead, install only the executables that built OK by
-# copying them straight from build-gpu/bin to install-gpu/bin.
+# Install only the executables we built. We don't run `make install` because
+# its dependency on `all` pulls test/dev targets we deliberately skipped.
 echo "--- Installing executables from ${BUILD_DIR}/bin to ${INSTALL_DIR}/bin ---"
 mkdir -p "${INSTALL_DIR}/bin"
 cp "${BUILD_DIR}"/bin/*.x "${INSTALL_DIR}/bin/"
