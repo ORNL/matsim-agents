@@ -30,7 +30,7 @@ in via the same interfaces.
 10. [CLI reference](#cli-reference)
 11. [Project layout](#project-layout)
 12. [Configuration reference](#configuration-reference)
-13. [Limitations and roadmap](#limitations-and-roadmap)
+13. [Current capabilities and planned work](#current-capabilities-and-planned-work)
 14. [Contributing](#contributing)
 15. [License & citation](#license--citation)
 
@@ -612,19 +612,52 @@ options of the upstream HydraGNN ASE script
 
 ---
 
-## Limitations and roadmap
+## Current capabilities and planned work
+
+This section spells out what the framework does *today* and what is on
+the roadmap but **not yet implemented**, so users know what to expect
+before building a workflow on top of it.
+
+### Available today
+
+- **Single-point energies and forces** from a HydraGNN MLFF checkpoint
+  through an ASE calculator interface.
+- **Geometry relaxation** of atoms and (optionally) cell, driven by
+  HydraGNN through the upstream `structure_optimization_ASE.py` wrapper.
+- **Isotropic lattice scans** to locate equilibrium volume / lattice
+  constant.
+- **Random-shuffle ordering enumeration** for disordered sites,
+  deduplicated with pymatgen's `StructureMatcher`.
+- **AA-stacked 2-D multilayer** construction.
+- **Relative chemical-stability scoring** (energy-above-hull style
+  comparisons within the explored phase set).
+- **LLM-driven planner / executor / reporter** agents (LangGraph) with
+  optional human-in-the-loop gates.
+- **Pluggable LLM backends**: vLLM (Frontier ROCm), Hugging Face
+  Transformers, and OpenAI-compatible HTTP endpoints.
+
+### Not yet implemented (roadmap)
 
 - [ ] **Phonon-based dynamical stability** (phonopy / finite differences).
-- [ ] **Formation-energy reference set** for absolute (not relative) chemical stability.
-- [ ] **Richer phase enumeration** via pymatgen prototypes / CALYPSO / USPEX hooks.
-- [ ] **Symmetry-aware ordering enumeration** via `enumlib` (currently random-shuffle + `StructureMatcher` dedup).
-- [ ] **Anisotropic / per-axis lattice scans** (currently isotropic only).
-- [ ] **AB / AA' stacking** for 2-D multilayers (currently AA-stacked only).
-- [ ] **2-D heterostructures** (e.g. graphene/h-BN, MoS₂/WSe₂) with lattice-mismatch search.
+- [ ] **Formation-energy reference set** for *absolute* (not relative)
+      chemical-stability scoring.
+- [ ] **Richer phase enumeration** via pymatgen prototypes / CALYPSO /
+      USPEX hooks.
+- [ ] **Symmetry-aware ordering enumeration** via `enumlib` (today's
+      enumerator is random-shuffle + `StructureMatcher` dedup).
+- [ ] **Anisotropic / per-axis lattice scans** (today's scan is
+      isotropic only).
+- [ ] **AB / AA' stacking** for 2-D multilayers (today's builder is
+      AA-stacked only).
+- [ ] **2-D heterostructures** (e.g. graphene/h-BN, MoS₂/WSe₂) with
+      lattice-mismatch search.
 - [ ] **MD agent**: NVT/NPT runs with the same HydraGNN calculator.
-- [ ] **MCP tool server** so external clients (Claude Desktop, IDE agents) can call the discovery wrapper directly.
-- [ ] **Distributed executor** for parallel composition exploration on HPC.
-- [ ] **Pluggable MLFF backends** (MACE, NequIP, Orb) behind the same calculator interface.
+- [ ] **MCP tool server** so external clients (Claude Desktop, IDE
+      agents) can call the discovery wrapper directly.
+- [ ] **Distributed executor** for parallel composition exploration on
+      HPC.
+- [ ] **Pluggable MLFF backends** (MACE, NequIP, Orb) behind the same
+      calculator interface.
 
 ---
 
