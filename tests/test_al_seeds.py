@@ -152,9 +152,7 @@ def test_prompt_with_unparseable_llm_output_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     written: list[Path] = []
-    _patch_llm_and_phases(
-        monkeypatch, llm_response="sorry, I can't help", written_files=written
-    )
+    _patch_llm_and_phases(monkeypatch, llm_response="sorry, I can't help", written_files=written)
     cfg = SeedSourceConfig(
         kind="prompt",
         prompt="anything",
