@@ -2,9 +2,13 @@
 # ---------------------------------------------------------------------------
 # smoke-vllm-multinode-frontier.sh
 #
-# Smoke test: boot a multi-node vLLM Ray cluster on Frontier, load
-# DeepSeek-V4-Pro (789 GB, bfloat16), verify /health, then run one inference
+# Smoke test: boot a multi-node vLLM Ray cluster on Frontier, load a model
+# (default: DeepSeek-R1-Distill-Qwen-32B), verify /health, then run one inference
 # request to confirm end-to-end generation works.
+#
+# *** CONSTRAINT: vLLM requires tensor-parallel-size (TP) to divide evenly into ***
+# *** the model's number of attention heads. E.g., Mixtral has 48 heads, so TP   ***
+# *** must be a divisor of 48. Frontier has 8 GPUs/node, so TP = nodes * 8.     ***
 #
 # Default: 4 nodes × 8 GCDs = 32 GCDs total (TP=32), ~2 TB GPU memory.
 #
@@ -136,8 +140,17 @@ unset HIP_VISIBLE_DEVICES
 # ── Discover nodes ───────────────────────────────────────────────────────────
 mapfile -t ALL_NODES < <(scontrol show hostnames "$SLURM_JOB_NODELIST")
 HEAD_NODE=${ALL_NODES[0]}
-HEAD_NODE_IP=$(hostname -I | awk '{print $1}')
+# Use hsn0 (Slingshot) IP explicitly so it matches NCCL/GLOO_SOCKET_IFNAME and
+# whatever vLLM picks for VLLM_HOST_IP. `hostname -I | awk '{print $1}'` is not
+# guaranteed to return the hsn0 IP, which causes a placement-group/host-IP
+# mismatch and makes the Ray engine hang in "No available node types" forever.
+HEAD_NODE_IP=$(ip -4 -o addr show hsn0 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
+[[ -z "$HEAD_NODE_IP" ]] && HEAD_NODE_IP=$(hostname -I | awk '{print $1}')
 RAY_ADDRESS="${HEAD_NODE_IP}:${RAY_PORT}"
+# NOTE: Do NOT export VLLM_HOST_IP globally — it would be inherited by all
+# worker nodes via srun --export=ALL, making every node report the same IP
+# and triggering "Every node should have a unique IP address" in vLLM.
+# Instead, scope it only to the vllm serve call below (inline assignment).
 
 echo ""
 echo "Head: $HEAD_NODE ($HEAD_NODE_IP)"
@@ -208,7 +221,7 @@ trap cleanup EXIT
 
 # ── Start vLLM ───────────────────────────────────────────────────────────────
 echo "[vllm] Starting server TP=${TP_SIZE} ..."
-"$VENV/bin/vllm" serve "$SMOKE_MODEL_PATH" \
+VLLM_HOST_IP="$HEAD_NODE_IP" "$VENV/bin/vllm" serve "$SMOKE_MODEL_PATH" \
   --served-model-name "$SMOKE_MODEL_NAME" \
   --tensor-parallel-size "$TP_SIZE" \
   --distributed-executor-backend ray \
