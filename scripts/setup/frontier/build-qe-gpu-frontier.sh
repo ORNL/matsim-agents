@@ -153,7 +153,6 @@ cmake \
     \
     -DQE_ENABLE_MPI=ON \
     -DQE_ENABLE_MPI_MODULE=OFF \
-    -DQE_ENABLE_MPI_GPU_AWARE=ON \
     -DQE_ENABLE_OPENMP=ON \
     \
     -DQE_GPU_ARCHS=gfx90a \
