@@ -260,7 +260,7 @@ run_make_with_ice_workaround() {
       objrel=""
       while IFS= read -r cand; do
         local m
-        m=$(grep -E "^[^[:space:]]+\.f90\.o:[[:space:]]+${srcf}\$" "${cand}" 2>/dev/null | head -1)
+        m=$(grep -E "^[^[:space:]]+\.f90\.o:[[:space:]]+${srcf}\$" "${cand}" 2>/dev/null | head -1 || true)
         if [[ -n "${m}" ]]; then
           objrel="${m%%:*}"
           build_make="${cand}"
