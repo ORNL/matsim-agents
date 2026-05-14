@@ -260,6 +260,7 @@ pip_retry "langchain-core>=0.3.0" "pytest>=8.0" "pytest-cov>=5.0"
 log "Installing LLM tooling extras (huggingface_hub CLI + transformers)..."
 pip_retry "huggingface_hub>=1.12"
 pip_retry "transformers>=4.45"
+pip_retry "accelerate>=1.13"
 
 if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     log "INSTALL_VLLM_SERVER=1 -> installing vLLM server package"
@@ -276,6 +277,7 @@ python -c "import torch_geometric; print(f'PyTorch Geometric installed')" 2>/dev
 python -c "import ase; print(f'ASE: {ase.__version__}')"
 python -c "import huggingface_hub; print(f'huggingface_hub: {huggingface_hub.__version__}')"
 python -c "import transformers; print(f'transformers: {transformers.__version__}')"
+python -c "import accelerate; print(f'accelerate: {accelerate.__version__}')"
 if command -v hf >/dev/null 2>&1; then
     log "hf CLI: $(hf --version)"
 else
