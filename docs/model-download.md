@@ -74,7 +74,7 @@ to activate it (activation in subshells can fail on Frontier because
 `module` commands are not available there):
 
 ```bash
-VENV=/lustre/orion/<project>/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv
+VENV=/lustre/orion/<project>/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 MODEL_DIR=/lustre/orion/<project>/proj-shared/models/Qwen2.5-72B-Instruct
 LOG=/lustre/orion/<project>/proj-shared/models/qwen_download.log
 
@@ -152,9 +152,9 @@ interactive allocation. Example for Frontier (single node, 8 GPUs):
 #SBATCH -N 1 -t 02:00:00 -A <project> -p batch
 
 module reset
-ml rocm/7.1.1 amd-mixed/7.1.1 PrgEnv-gnu miniforge3/23.11.0-0
+ml rocm/7.2.0 amd-mixed/7.2.0 PrgEnv-gnu miniforge3/23.11.0-0
 module unload darshan-runtime
-conda activate /lustre/orion/<project>/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv
+conda activate /lustre/orion/<project>/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 
 pip install vllm  # if not already installed
 

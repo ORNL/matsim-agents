@@ -110,24 +110,24 @@ internals.
 
 ---
 
-## Choosing for Frontier (OLCF, ROCm 7.1)
+## Choosing for Frontier (OLCF, ROCm 7.2)
 
 | Scenario | Recommended backend |
 |---|---|
-| Validate GPU stack and model weights quickly | **Transformers + Accelerate** (`smoke-transformers-frontier.sh`) |
-| Run matsim-agents with many concurrent agent steps | **vLLM** (`smoke-vllm-frontier.sh`) |
+| Validate GPU stack and model weights quickly | **Transformers + Accelerate** (`scripts/smoke-tests/frontier/smoke-transformers-frontier.sh`) |
+| Run matsim-agents with many concurrent agent steps | **vLLM** (`scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh`) |
 | Fine-tune or debug model internals | **Transformers + Accelerate** |
-| Production multi-node serving | **vLLM** |
+| Production multi-node serving | **vLLM** (`scripts/smoke-tests/frontier/smoke-vllm-multinode-frontier.sh`) |
 
-The smoke test scripts in `scripts/` cover both cases:
+The smoke-test scripts cover both cases:
 
 ```bash
 # HuggingFace Transformers (works today, no build needed)
-sbatch scripts/smoke-transformers-frontier.sh
+sbatch scripts/smoke-tests/frontier/smoke-transformers-frontier.sh
 
 # vLLM (requires source build first)
-sbatch scripts/build-vllm-from-source-frontier.sh   # one-time build
-sbatch scripts/smoke-vllm-frontier.sh               # then serve
+sbatch scripts/setup/frontier/build-vllm-rocm72.sh                 # one-time build
+sbatch scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh   # then serve
 ```
 
 ---

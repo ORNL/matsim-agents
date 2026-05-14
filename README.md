@@ -139,20 +139,32 @@ cd matsim-agents
 # Local workstation (CPU or single GPU)
 ./scripts/setup_env.sh
 
-# Frontier (OLCF, ROCm 7.2)
+# Frontier (OLCF, ROCm 7.2 — current standard)
 bash scripts/setup/frontier/install-rocm72.sh
-
-# Frontier (OLCF, ROCm 7.1)
-PLATFORM=frontier-rocm71 ./scripts/setup_env.sh
 
 # Perlmutter (NERSC)
 PLATFORM=perlmutter ./scripts/setup_env.sh
 ```
 
-Available `PLATFORM` values:
-`workstation` (default), `frontier-rocm71`, `frontier-rocm64`,
-`perlmutter`, `aurora`, `andes`. For Frontier ROCm 7.2 use
-`scripts/setup/frontier/install-rocm72.sh` directly (see above).
+Available `PLATFORM` values for the generic `setup_env.sh`:
+`workstation` (default), `perlmutter`, `aurora`, `andes`,
+`frontier-rocm71`, `frontier-rocm64` (legacy — the supported Frontier
+path is `scripts/setup/frontier/install-rocm72.sh`).
+
+### ROCm version matrix on Frontier
+
+The three Frontier-targeted backends in this repo do **not** all use the
+same ROCm version. The combinations below are what is actually wired up
+in the scripts and what you should expect at runtime:
+
+| Backend | Module | Why this version |
+|---|---|---|
+| **HydraGNN venv** (used by every Frontier launcher: vLLM, HF, downloaders, smoke tests, six-model bench) | `rocm/7.2.0` | Current Frontier-supported PyTorch + ROCm path; built once into `HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72/` |
+| **vLLM model server** | `rocm/7.2.0` | Shares the HydraGNN ROCm 7.2 venv; built from source via [`scripts/setup/frontier/build-vllm-rocm72.sh`](scripts/setup/frontier/build-vllm-rocm72.sh) |
+| **Quantum ESPRESSO GPU** | `rocm/6.2.4` *(forced)* | Frontier's `cray-mpich/8.1.31` GTL `libmpi_gtl_hsa.so` is hard-linked against `libamdhip64.so.6` (rocm 6.x SONAME). rocm/7.x ships `.so.7` and breaks the MPI Fortran link probe at CMake configure. Pin documented in [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md). |
+
+QE and the Python/ML stacks are deliberately never co-loaded in the same
+shell; they couple through Slurm + the filesystem.
 
 Environment overrides accepted by the installer:
 
