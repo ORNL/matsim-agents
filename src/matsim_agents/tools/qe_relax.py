@@ -32,17 +32,70 @@ import numpy as np
 # Recommended ecutwfc per element (Ry) — rounded SSSP-efficiency-1.3 values.
 # Missing entries fall back to ``_DEFAULT_ECUTWFC``.
 _ECUTWFC_RY: dict[str, int] = {
-    "H": 60, "Li": 40, "Be": 60, "B": 35, "C": 60, "N": 60, "O": 50, "F": 50,
-    "Na": 40, "Mg": 30, "Al": 30, "Si": 30, "P": 30, "S": 35, "Cl": 40,
-    "K": 60, "Ca": 30, "Sc": 40, "Ti": 40, "V": 40, "Cr": 40, "Mn": 90,
-    "Fe": 90, "Co": 45, "Ni": 45, "Cu": 55, "Zn": 40,
-    "Ga": 70, "Ge": 40, "As": 35, "Se": 30, "Br": 30,
-    "Rb": 30, "Sr": 30, "Y": 35, "Zr": 30, "Nb": 40, "Mo": 35, "Tc": 30,
-    "Ru": 35, "Rh": 35, "Pd": 45, "Ag": 50, "Cd": 60,
-    "In": 50, "Sn": 70, "Sb": 40, "Te": 30, "I": 35,
-    "Cs": 30, "Ba": 30, "La": 40,
-    "Hf": 50, "Ta": 45, "W": 30, "Re": 30, "Os": 40, "Ir": 50, "Pt": 35,
-    "Au": 45, "Hg": 50, "Tl": 50, "Pb": 40, "Bi": 45,
+    "H": 60,
+    "Li": 40,
+    "Be": 60,
+    "B": 35,
+    "C": 60,
+    "N": 60,
+    "O": 50,
+    "F": 50,
+    "Na": 40,
+    "Mg": 30,
+    "Al": 30,
+    "Si": 30,
+    "P": 30,
+    "S": 35,
+    "Cl": 40,
+    "K": 60,
+    "Ca": 30,
+    "Sc": 40,
+    "Ti": 40,
+    "V": 40,
+    "Cr": 40,
+    "Mn": 90,
+    "Fe": 90,
+    "Co": 45,
+    "Ni": 45,
+    "Cu": 55,
+    "Zn": 40,
+    "Ga": 70,
+    "Ge": 40,
+    "As": 35,
+    "Se": 30,
+    "Br": 30,
+    "Rb": 30,
+    "Sr": 30,
+    "Y": 35,
+    "Zr": 30,
+    "Nb": 40,
+    "Mo": 35,
+    "Tc": 30,
+    "Ru": 35,
+    "Rh": 35,
+    "Pd": 45,
+    "Ag": 50,
+    "Cd": 60,
+    "In": 50,
+    "Sn": 70,
+    "Sb": 40,
+    "Te": 30,
+    "I": 35,
+    "Cs": 30,
+    "Ba": 30,
+    "La": 40,
+    "Hf": 50,
+    "Ta": 45,
+    "W": 30,
+    "Re": 30,
+    "Os": 40,
+    "Ir": 50,
+    "Pt": 35,
+    "Au": 45,
+    "Hg": 50,
+    "Tl": 50,
+    "Pb": 40,
+    "Bi": 45,
 }
 
 _DEFAULT_ECUTWFC = 50  # Ry — safe floor when an element is missing from table
@@ -52,32 +105,128 @@ _DEFAULT_ECUTWFC = 50  # Ry — safe floor when an element is missing from table
 # degauss is used.
 _METALLIC: set[str] = {
     # Alkalis & alkaline earths (besides Be/Mg which are also metallic enough).
-    "Li", "Na", "K", "Rb", "Cs", "Be", "Mg", "Ca", "Sr", "Ba",
+    "Li",
+    "Na",
+    "K",
+    "Rb",
+    "Cs",
+    "Be",
+    "Mg",
+    "Ca",
+    "Sr",
+    "Ba",
     # 3d / 4d / 5d transition metals.
-    "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
-    "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd",
-    "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg",
+    "Sc",
+    "Ti",
+    "V",
+    "Cr",
+    "Mn",
+    "Fe",
+    "Co",
+    "Ni",
+    "Cu",
+    "Zn",
+    "Y",
+    "Zr",
+    "Nb",
+    "Mo",
+    "Tc",
+    "Ru",
+    "Rh",
+    "Pd",
+    "Ag",
+    "Cd",
+    "Hf",
+    "Ta",
+    "W",
+    "Re",
+    "Os",
+    "Ir",
+    "Pt",
+    "Au",
+    "Hg",
     # Post-transition / metalloid metals.
-    "Al", "Ga", "In", "Sn", "Tl", "Pb", "Bi", "La",
+    "Al",
+    "Ga",
+    "In",
+    "Sn",
+    "Tl",
+    "Pb",
+    "Bi",
+    "La",
 }
 
 # Approximate atomic masses (g/mol) for ATOMIC_SPECIES — pw.x is forgiving
 # about the exact value, but it must be present.
 _ATOMIC_MASS: dict[str, float] = {
-    "H": 1.008, "He": 4.0026, "Li": 6.94, "Be": 9.012, "B": 10.81, "C": 12.011,
-    "N": 14.007, "O": 15.999, "F": 18.998, "Ne": 20.180, "Na": 22.990,
-    "Mg": 24.305, "Al": 26.982, "Si": 28.085, "P": 30.974, "S": 32.06,
-    "Cl": 35.45, "Ar": 39.948, "K": 39.098, "Ca": 40.078, "Sc": 44.956,
-    "Ti": 47.867, "V": 50.942, "Cr": 51.996, "Mn": 54.938, "Fe": 55.845,
-    "Co": 58.933, "Ni": 58.693, "Cu": 63.546, "Zn": 65.38, "Ga": 69.723,
-    "Ge": 72.630, "As": 74.922, "Se": 78.971, "Br": 79.904, "Rb": 85.468,
-    "Sr": 87.62, "Y": 88.906, "Zr": 91.224, "Nb": 92.906, "Mo": 95.95,
-    "Tc": 98.0, "Ru": 101.07, "Rh": 102.91, "Pd": 106.42, "Ag": 107.87,
-    "Cd": 112.41, "In": 114.82, "Sn": 118.71, "Sb": 121.76, "Te": 127.60,
-    "I": 126.90, "Xe": 131.29, "Cs": 132.91, "Ba": 137.33, "La": 138.91,
-    "Hf": 178.49, "Ta": 180.95, "W": 183.84, "Re": 186.21, "Os": 190.23,
-    "Ir": 192.22, "Pt": 195.08, "Au": 196.97, "Hg": 200.59, "Tl": 204.38,
-    "Pb": 207.2, "Bi": 208.98,
+    "H": 1.008,
+    "He": 4.0026,
+    "Li": 6.94,
+    "Be": 9.012,
+    "B": 10.81,
+    "C": 12.011,
+    "N": 14.007,
+    "O": 15.999,
+    "F": 18.998,
+    "Ne": 20.180,
+    "Na": 22.990,
+    "Mg": 24.305,
+    "Al": 26.982,
+    "Si": 28.085,
+    "P": 30.974,
+    "S": 32.06,
+    "Cl": 35.45,
+    "Ar": 39.948,
+    "K": 39.098,
+    "Ca": 40.078,
+    "Sc": 44.956,
+    "Ti": 47.867,
+    "V": 50.942,
+    "Cr": 51.996,
+    "Mn": 54.938,
+    "Fe": 55.845,
+    "Co": 58.933,
+    "Ni": 58.693,
+    "Cu": 63.546,
+    "Zn": 65.38,
+    "Ga": 69.723,
+    "Ge": 72.630,
+    "As": 74.922,
+    "Se": 78.971,
+    "Br": 79.904,
+    "Rb": 85.468,
+    "Sr": 87.62,
+    "Y": 88.906,
+    "Zr": 91.224,
+    "Nb": 92.906,
+    "Mo": 95.95,
+    "Tc": 98.0,
+    "Ru": 101.07,
+    "Rh": 102.91,
+    "Pd": 106.42,
+    "Ag": 107.87,
+    "Cd": 112.41,
+    "In": 114.82,
+    "Sn": 118.71,
+    "Sb": 121.76,
+    "Te": 127.60,
+    "I": 126.90,
+    "Xe": 131.29,
+    "Cs": 132.91,
+    "Ba": 137.33,
+    "La": 138.91,
+    "Hf": 178.49,
+    "Ta": 180.95,
+    "W": 183.84,
+    "Re": 186.21,
+    "Os": 190.23,
+    "Ir": 192.22,
+    "Pt": 195.08,
+    "Au": 196.97,
+    "Hg": 200.59,
+    "Tl": 204.38,
+    "Pb": 207.2,
+    "Bi": 208.98,
 }
 
 
@@ -95,15 +244,15 @@ class QESettings:
     """
 
     pseudo_dir: str
-    calculation: str = "vc-relax"          # "relax" (atoms only) or "vc-relax"
+    calculation: str = "vc-relax"  # "relax" (atoms only) or "vc-relax"
     ecutwfc_ry: float | None = None
     ecutrho_ry: float | None = None
-    occupations: str | None = None         # "smearing" | "fixed" | "tetrahedra"
+    occupations: str | None = None  # "smearing" | "fixed" | "tetrahedra"
     smearing: str = "gaussian"
     degauss_ry: float = 0.01
     kpts: tuple[int, int, int] | None = None
     koffset: tuple[int, int, int] = (0, 0, 0)
-    is_2d: bool = False                    # if True, k-grid in vacuum dir = 1
+    is_2d: bool = False  # if True, k-grid in vacuum dir = 1
     forc_conv_thr_ry_au: float = 1.0e-3
     etot_conv_thr_ry: float = 1.0e-4
     conv_thr_ry: float = 1.0e-8
@@ -125,8 +274,7 @@ def recommend_settings(atoms, pseudo_dir: str, **overrides) -> QESettings:
     """
     symbols = sorted(set(atoms.get_chemical_symbols()))
 
-    ecutwfc = max((_ECUTWFC_RY.get(s, _DEFAULT_ECUTWFC) for s in symbols),
-                  default=_DEFAULT_ECUTWFC)
+    ecutwfc = max((_ECUTWFC_RY.get(s, _DEFAULT_ECUTWFC) for s in symbols), default=_DEFAULT_ECUTWFC)
     ecutrho = ecutwfc * 8.0
 
     metallic = any(s in _METALLIC for s in symbols)
@@ -183,7 +331,8 @@ def _autodetect_pseudos(symbols: list[str], pseudo_dir: str) -> dict[str, str]:
         prefix_us = sym.lower() + "_"
         prefix_dash = sym.lower() + "-"
         candidates = [
-            f for f in files
+            f
+            for f in files
             if f.lower().startswith((prefix_dot, prefix_us, prefix_dash))
             and f.lower().endswith((".upf", ".upf.gz"))
         ]
@@ -309,8 +458,13 @@ def write_pw_input(
 
 def _fill_defaults(atoms, s: QESettings) -> QESettings:
     """Backfill any None fields in ``s`` from element-aware defaults."""
-    if (s.ecutwfc_ry is None or s.ecutrho_ry is None or s.occupations is None
-            or s.kpts is None or not s.pseudopotentials):
+    if (
+        s.ecutwfc_ry is None
+        or s.ecutrho_ry is None
+        or s.occupations is None
+        or s.kpts is None
+        or not s.pseudopotentials
+    ):
         rec = recommend_settings(atoms, s.pseudo_dir)
         if s.ecutwfc_ry is None:
             s.ecutwfc_ry = rec.ecutwfc_ry
@@ -481,10 +635,7 @@ def run_pw(
     Path(work_dir).mkdir(parents=True, exist_ok=True)
     stdout_path = os.path.join(work_dir, stdout_name)
 
-    if isinstance(launcher_cmd, str):
-        argv = [launcher_cmd]
-    else:
-        argv = list(launcher_cmd)
+    argv = [launcher_cmd] if isinstance(launcher_cmd, str) else list(launcher_cmd)
 
     flag = os.environ.get("MATSIM_QE_LAUNCHER_APPEND_FLAG", "").strip()
     if flag:

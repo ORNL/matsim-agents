@@ -151,9 +151,7 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
     )
 
     # Always emit the JSON next to the test artefacts for later inspection.
-    (work_dir / "comparison.json").write_text(
-        json.dumps(_to_jsonable(summary), indent=2)
-    )
+    (work_dir / "comparison.json").write_text(json.dumps(_to_jsonable(summary), indent=2))
 
     cold = summary.cold
     assert cold.get("converged"), (

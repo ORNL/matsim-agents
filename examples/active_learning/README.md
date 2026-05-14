@@ -11,6 +11,9 @@ a single YAML field (`dft.backend: vasp | qe`).
   and `dft.qe:` sub-blocks; flip `dft.backend:` to choose the labeller.
 - `al_config.prompt.example.yaml`  — LLM-generated seeds (works with either backend).
 - `INCAR.template`                 — VASP single-point INCAR (MI250X-tuned).
+- `pw.template`                    — Quantum ESPRESSO `pw.in` namelist template
+  (analogue of INCAR.template; the backend appends ATOMIC_SPECIES /
+  CELL_PARAMETERS / ATOMIC_POSITIONS / K_POINTS automatically).
 - `seeds/`                          — Drop seed POSCAR/CIF/XYZ files here
   (only used when `md.seed_source.kind: paths`).
 

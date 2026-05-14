@@ -130,7 +130,7 @@ def run_warmstart_benchmark(
                 prefix="pwscf_warm",
                 outdir=os.path.join(warm_dir, "tmp"),
                 title=f"Warm-start relax (HydraGNN-prerelaxed) of "
-                      f"{os.path.basename(structure_path)}",
+                f"{os.path.basename(structure_path)}",
             )
             warm_result = run_pw(
                 warm_input,
@@ -206,7 +206,7 @@ def _summarise(
     delta_bfgs = cold.bfgs_steps - int(warm_block["bfgs_steps"])
     delta_scf = cold.scf_iterations_total - int(warm_block["scf_iterations_total"])
     delta_e = cold.final_energy_ev - float(warm_block["final_energy_ev"])
-    speedup = (cold.bfgs_steps / max(1, int(warm_block["bfgs_steps"])))
+    speedup = cold.bfgs_steps / max(1, int(warm_block["bfgs_steps"]))
     warm_helped = warm_block["bfgs_steps"] <= cold.bfgs_steps
 
     return WarmstartComparison(
@@ -238,7 +238,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--structure", required=True, help="Path to input structure (.cif/.vasp/.xyz).")
     p.add_argument("--work-dir", required=True, help="Output directory for QE inputs/outputs.")
-    p.add_argument("--pseudo-dir", required=True, help="Directory containing .UPF pseudopotentials.")
+    p.add_argument(
+        "--pseudo-dir",
+        required=True,
+        help="Directory containing .UPF pseudopotentials.",
+    )
     p.add_argument(
         "--qe-launcher",
         required=True,
@@ -254,23 +258,32 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--hydragnn-fmax", type=float, default=0.05)
     p.add_argument("--hydragnn-maxiter", type=int, default=200)
     p.add_argument("--calculation", default="vc-relax", choices=["relax", "vc-relax"])
-    p.add_argument("--is-2d", action="store_true",
-                   help="Treat as 2-D (k-mesh = 1 in the longest cell direction).")
+    p.add_argument(
+        "--is-2d",
+        action="store_true",
+        help="Treat as 2-D (k-mesh = 1 in the longest cell direction).",
+    )
     p.add_argument("--ecutwfc", type=float, default=None, help="Override ecutwfc (Ry).")
     p.add_argument("--ecutrho", type=float, default=None, help="Override ecutrho (Ry).")
     p.add_argument("--kpts", type=int, nargs=3, default=None, metavar=("KX", "KY", "KZ"))
     p.add_argument("--nstep", type=int, default=100)
     p.add_argument("--timeout-sec", type=int, default=None)
-    p.add_argument("--skip-hydragnn", action="store_true",
-                   help="Skip HydraGNN entirely; run only the cold DFT relax.")
+    p.add_argument(
+        "--skip-hydragnn",
+        action="store_true",
+        help="Skip HydraGNN entirely; run only the cold DFT relax.",
+    )
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
-    overrides: dict[str, Any] = {"calculation": args.calculation, "nstep": args.nstep,
-                                  "is_2d": args.is_2d}
+    overrides: dict[str, Any] = {
+        "calculation": args.calculation,
+        "nstep": args.nstep,
+        "is_2d": args.is_2d,
+    }
     if args.ecutwfc is not None:
         overrides["ecutwfc_ry"] = args.ecutwfc
     if args.ecutrho is not None:
@@ -291,8 +304,9 @@ def main(argv: list[str] | None = None) -> int:
 
     skip_hg = args.skip_hydragnn or not (args.logdir and args.mlp_checkpoint)
 
-    qe_launcher: list[str] | str = args.qe_launcher.split() if " " in args.qe_launcher \
-        else args.qe_launcher
+    qe_launcher: list[str] | str = (
+        args.qe_launcher.split() if " " in args.qe_launcher else args.qe_launcher
+    )
 
     summary = run_warmstart_benchmark(
         structure_path=args.structure,

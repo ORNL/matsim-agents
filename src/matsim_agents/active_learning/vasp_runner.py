@@ -8,7 +8,7 @@ returned by ``dft_backend.make_backend(cfg.dft)``.
 
 from __future__ import annotations
 
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
 
 from matsim_agents.active_learning.backends.vasp import VASPBackend
 from matsim_agents.active_learning.config import VASPConfig
