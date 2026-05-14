@@ -151,6 +151,10 @@ BOOTSTRAP_OLLAMA=1 OLLAMA_MODELS="qwen2.5:14b llama3.1:8b" \
 Set the provider at runtime via CLI flag, environment variable, or in
 code. Local/open-source backends are the default.
 
+For a detailed comparison of the two open-source local backends (vLLM vs
+HuggingFace Transformers + Accelerate) — including pros, cons, and guidance
+for Frontier (ROCm) — see [docs/llm-backends-comparison.md](docs/llm-backends-comparison.md).
+
 | Provider | Install | Typical model | Notes |
 |---|---|---|---|
 | **`ollama`** *(default)* | `brew install ollama && ollama pull qwen2.5:14b` | `qwen2.5:14b`, `llama3.1:8b`, `deepseek-r1:14b` | Fully local, CPU/GPU/Metal. |
