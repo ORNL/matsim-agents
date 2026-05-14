@@ -53,10 +53,17 @@ PROJ="$(dirname "${REPO}")"
 # ---- Configuration ----------------------------------------------------------
 QE_VERSION="${QE_VERSION:-develop}"      # git tag (e.g. "7.4") or "develop"
 QE_REPO="${QE_REPO:-https://gitlab.com/QEF/q-e.git}"
-BASE_DIR="${PROJ}"
-SRC_DIR="${BASE_DIR}/quantum-espresso/src"
-BUILD_DIR="${BASE_DIR}/quantum-espresso/build-gpu"
-INSTALL_DIR="${BASE_DIR}/quantum-espresso/install-gpu"
+
+# Where QE source/build/install live. Default: under matsim-agents/external/
+# (gitignored). The repo "owns" the location while the large build artifacts
+# stay out of version control. Override with:
+#   QE_PREFIX=/some/other/path bash scripts/setup/frontier/build-qe-gpu-frontier.sh
+# to relocate src+build+install as a unit, or override SRC_DIR/BUILD_DIR/
+# INSTALL_DIR individually for finer control.
+QE_PREFIX="${QE_PREFIX:-${REPO}/external/quantum-espresso}"
+SRC_DIR="${SRC_DIR:-${QE_PREFIX}/src}"
+BUILD_DIR="${BUILD_DIR:-${QE_PREFIX}/build-gpu}"
+INSTALL_DIR="${INSTALL_DIR:-${QE_PREFIX}/install-gpu}"
 
 # Compute parallelism for compilation. Frontier login nodes are shared,
 # so default to a modest count; raise via `NCORES=64 bash …` if needed.

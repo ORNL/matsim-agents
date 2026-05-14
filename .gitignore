@@ -38,6 +38,11 @@ runs/
 outputs/
 logs/
 
+# External code built/installed via scripts/setup/* (e.g. quantum-espresso).
+# Repo "owns" the path layout via the build scripts, but artifacts (source
+# clones, build trees, install prefixes) are too large for git.
+external/
+
 # Vendored third-party clones (bootstrapped by scripts/setup_env.sh)
 third_party/
 /tmp/
