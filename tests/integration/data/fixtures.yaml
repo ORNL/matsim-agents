@@ -1,0 +1,70 @@
+# Test fixtures for the HydraGNN warm-start vs Quantum ESPRESSO cold-start
+# benchmark (tests/integration/test_qe_warmstart.py).
+#
+# Each entry tells the test how to run pw.x for that structure (cell vs atoms-
+# only relax, smearing flags, etc.) and what to expect from the comparison
+# (final energy / step-count assertions). All paths are relative to this file.
+#
+# When you add a new fixture, also drop the corresponding .vasp/.cif/.xyz file
+# next to this YAML.
+
+fixtures:
+
+  - name: Si_diamond
+    file: Si.vasp
+    description: >
+      8-atom Si diamond conventional cell, ~1.3% stretched. Insulator.
+      Cheap; expected to converge in a small handful of BFGS steps.
+    qe:
+      calculation: vc-relax
+      nstep: 60
+    is_2d: false
+    energy_tolerance_ev: 0.005     # |E_warm - E_cold| should be small for the same minimum
+    expect_warm_le_cold: true       # warm BFGS step count should not exceed cold
+
+  - name: MgO_rocksalt
+    file: MgO.vasp
+    description: >
+      8-atom MgO rocksalt, ~2% stretched. Insulator.
+    qe:
+      calculation: vc-relax
+      nstep: 60
+    is_2d: false
+    energy_tolerance_ev: 0.005
+    expect_warm_le_cold: true
+
+  - name: NaCl_rocksalt
+    file: NaCl.vasp
+    description: >
+      8-atom NaCl rocksalt, ~2% stretched. Insulator.
+    qe:
+      calculation: vc-relax
+      nstep: 60
+    is_2d: false
+    energy_tolerance_ev: 0.005
+    expect_warm_le_cold: true
+
+  - name: CsPbI3_2D
+    file: CsPbI3_2D.vasp
+    description: >
+      Cs2PbI4 single-layer 2-D perovskite (n=1 RP analogue), 20 A vacuum
+      along c. Soft phonons + heavy elements; vc-relax tends to be slow.
+    qe:
+      calculation: vc-relax
+      nstep: 80
+    is_2d: true
+    energy_tolerance_ev: 0.02
+    expect_warm_le_cold: true
+
+  - name: MoNbTaW_HEA
+    file: MoNbTaW_HEA.vasp
+    description: >
+      16-atom MoNbTaW BCC refractory high-entropy alloy supercell.
+      Metallic; atoms are well off-equilibrium because of random-alloy
+      mixing, so this is the structure where warm-start should help most.
+    qe:
+      calculation: vc-relax
+      nstep: 100
+    is_2d: false
+    energy_tolerance_ev: 0.05
+    expect_warm_le_cold: true
