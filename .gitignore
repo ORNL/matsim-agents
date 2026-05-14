@@ -7,6 +7,8 @@ build/
 dist/
 .venv/
 venv/
+perlmutter_venv/
+scripts/perlmutter_venv/
 .env
 .envrc
 
@@ -42,6 +44,7 @@ mlp_branch_weights.pt
 runs/
 outputs/
 logs/
+test_matsim_perlmutter.out
 
 # External code built/installed via scripts/setup/* (e.g. quantum-espresso).
 # Repo "owns" the path layout via the build scripts, but artifacts (source
