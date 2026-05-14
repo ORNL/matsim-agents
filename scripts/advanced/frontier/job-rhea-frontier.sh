@@ -25,7 +25,10 @@
 set -euo pipefail
 
 # ── paths ───────────────────────────────────────────────────────────────────
-PROJ=/lustre/orion/mat746/proj-shared
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64
@@ -40,7 +43,7 @@ mkdir -p "$RUN_DIR" "$OUTPUT_DIR"
 # ── modules & conda env ──────────────────────────────────────────────────────
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 
-source "$PROJ/matsim-agents/scripts/frontier/frontier-module-stack.sh"
+source "$REPO/scripts/setup/frontier/frontier-module-stack.sh"
 load_frontier_rocm72_modules
 
 source activate "$VENV"

@@ -37,8 +37,10 @@
 
 set -euo pipefail
 
-PROJ=/lustre/orion/mat746/proj-shared
-REPO=$PROJ/matsim-agents
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 RUN_DIR=$PROJ/runs/six-model-bench-$SLURM_JOB_ID
 mkdir -p "$RUN_DIR"
@@ -51,7 +53,7 @@ if [[ -z "${BENCHMARK_PROMPT:-}" ]]; then
 fi
 
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
-source "$REPO/scripts/frontier/frontier-module-stack.sh"
+source "$REPO/scripts/setup/frontier/frontier-module-stack.sh"
 load_frontier_rocm72_modules
 source activate "$VENV"
 

@@ -15,10 +15,13 @@
 
 set -euo pipefail
 
-PROJ=/lustre/orion/mat746/proj-shared
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 VLLM_SRC=$PROJ/cache/vllm-src/vllm
-PROTECTED_REQS=$PROJ/matsim-agents/scripts/frontier/vllm-rocm72-protected-requirements.txt
+PROTECTED_REQS=$REPO/scripts/setup/frontier/vllm-rocm72-protected-requirements.txt
 
 # ── Phase 1: HydraGNN environment (login node, internet required) ─────────────
 echo "=== Phase 1: HydraGNN ROCm 7.2 environment ==="
@@ -46,7 +49,7 @@ pip install --force-reinstall \
 # langchain-huggingface: required for the huggingface provider
 # accelerate: required by HuggingFacePipeline for device_map="auto"
 echo "=== Phase 1 post-step: matsim-agents install ==="
-pip install -e "$PROJ/matsim-agents[huggingface]" --no-deps
+pip install -e "$REPO[huggingface]" --no-deps
 pip install langgraph langchain-huggingface accelerate
 conda deactivate
 
@@ -139,5 +142,5 @@ pip install --no-deps \
 
 # ── Phase 3: Submit vLLM compute build job ────────────────────────────────────
 echo "=== Phase 3: Submitting vLLM build job ==="
-sbatch "$PROJ/matsim-agents/scripts/frontier/build-vllm-rocm72.sh"
+sbatch "$REPO/scripts/setup/frontier/build-vllm-rocm72.sh"
 echo "Done. Monitor with: tail -f $PROJ/runs/build-vllm-rocm72-<jobid>.out"

@@ -44,7 +44,10 @@
 
 set -euo pipefail
 
-PROJ=/lustre/orion/mat746/proj-shared
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 RUN_DIR=$PROJ/runs/vllm-multinode-$SLURM_JOB_ID
 mkdir -p "$RUN_DIR"

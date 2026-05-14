@@ -31,10 +31,14 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-PROJ=/lustre/orion/mat746/proj-shared
-# Fallback if BASH_SOURCE is not usable under sbatch
-[[ -z "${SCRIPT_DIR:-}" ]] && SCRIPT_DIR="$PROJ/matsim-agents/scripts/smoke-tests/frontier"
+REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+PROJ="$(dirname "${REPO}")"
+# Under sbatch, BASH_SOURCE resolves to /var/spool/slurmd/jobXXX/slurm_script,
+# so SCRIPT_DIR is non-empty but wrong. Check that _rocr_to_hip.sh actually exists.
 UTILS_DIR="$SCRIPT_DIR/../../utils/frontier"
+[[ ! -f "$UTILS_DIR/_rocr_to_hip.sh" ]] && \
+  UTILS_DIR="$REPO/scripts/utils/frontier"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 # Default: small model that loads quickly
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/Llama-3.1-8B-Instruct}
@@ -60,7 +64,7 @@ echo "=========================================="
 
 # ── Environment ─────────────────────────────────────────────────────────────
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
-source "$PROJ/matsim-agents/scripts/frontier/frontier-module-stack.sh"
+source "$REPO/scripts/setup/frontier/frontier-module-stack.sh"
 load_frontier_rocm72_modules
 source activate "$VENV"
 

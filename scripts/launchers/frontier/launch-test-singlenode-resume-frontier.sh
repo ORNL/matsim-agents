@@ -3,8 +3,10 @@
 # Resumes after gemma-4-26B-A4B-it which is already running as 4535764.
 set -euo pipefail
 
-PROJ=/lustre/orion/mat746/proj-shared
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+PROJ="$(dirname "${REPO}")"
 SMOKE_DIR="$SCRIPT_DIR/../../smoke-tests/frontier"
 SINGLE="$SMOKE_DIR/smoke-vllm-singlenode-frontier.sh"
 
