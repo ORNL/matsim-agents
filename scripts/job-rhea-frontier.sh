@@ -42,10 +42,8 @@ export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
 # ── modules & conda env ──────────────────────────────────────────────────────
 module reset
 ml cpe/24.07
-ml cce/18.0.0
 ml rocm/7.1.1
 ml amd-mixed/7.1.1
-ml craype-accel-amd-gfx90a
 ml PrgEnv-gnu
 ml miniforge3/23.11.0-0
 module unload darshan-runtime        # avoids ADIOS2 / darshan conflicts
