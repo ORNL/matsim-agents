@@ -43,7 +43,7 @@ class ChatVLLM(BaseChatModel):
     base_url: str = "http://localhost:8000/v1"
     api_key: str = "EMPTY"
     temperature: float = 0.0
-    max_tokens: int = 2048
+    max_completion_tokens: int = 2048
 
     @property
     def _llm_type(self) -> str:
@@ -76,7 +76,7 @@ class ChatVLLM(BaseChatModel):
             model=self.model,
             messages=self._convert_messages(messages),
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_completion_tokens=self.max_completion_tokens,
             stop=stop,
             **kwargs,
         )
@@ -97,7 +97,7 @@ class ChatVLLM(BaseChatModel):
             model=self.model,
             messages=self._convert_messages(messages),
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_completion_tokens=self.max_completion_tokens,
             stop=stop,
             stream=True,
             **kwargs,
