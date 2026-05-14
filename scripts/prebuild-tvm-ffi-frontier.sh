@@ -7,15 +7,42 @@
 # vLLM jobs will find the prebuilt .so and skip a ~5 min cold-start compile.
 #
 # Why a SLURM job (not the install script)?
-#   The build needs the real ROCm install at /opt/rocm-7.1.1, which on
-#   Frontier is a 60-byte stub on login nodes — only populated on compute
-#   nodes via bind-mount. So the build MUST run on a compute node.
+# ------------------------------------------
+# The rest of the HydraGNN/matsim-agents install (torch+rocm wheel,
+# torch_geometric, torch_scatter/sparse/cluster, vllm, etc.) succeeds on the
+# Frontier login node because every one of those packages comes as a
+# PREBUILT BINARY WHEEL — pip just unpacks them, never invoking hipcc or
+# touching /opt/rocm-7.1.1.
+#
+# tvm-ffi is the one exception. It uses torch.utils.cpp_extension.load() to
+# JIT-compile a C++ addon against PyTorch headers AND the system ROCm
+# toolchain (hipcc, /opt/rocm-7.1.1/include/*, libamdhip64). On Frontier:
+#
+#   • Login nodes:    /opt/rocm-7.1.1 is a 60-byte stub. hipcc/headers/libs
+#                     are NOT present. The compile cannot even start —
+#                     torch._find_cuda_home() returns None and aborts.
+#   • Compute nodes:  /opt/rocm-7.1.1 is bind-mounted with the real install.
+#                     The compile succeeds.
+#
+# So the build MUST execute on a compute node — but the OUTPUT .so is
+# written to a project-shared GPFS cache (Lustre), where every future job
+# on any compute node reads it back. Compute-node-vs-login is about toolchain
+# AVAILABILITY (read /opt/rocm-7.1.1); Lustre is about output SHARING.
+# These are orthogonal — we need both, for different reasons.
 #
 # Why is this needed at all?
-#   tvm_ffi (used by vLLM) JIT-compiles this addon on first import. Without
-#   prebuilding, every job pays the cost; worse, a job killed mid-build
-#   leaves a stale lockfile in the cache that deadlocks every subsequent job
-#   sharing the same cache directory.
+# --------------------------
+# Without this prebuild, every vLLM job pays the ~5 min JIT cost on first
+# tvm_ffi import — and during that compile the job appears silently hung.
+# Worse: tvm-ffi guards the build with a FileLock; a job killed mid-compile
+# leaves a stale lock that deadlocks every subsequent job sharing the cache.
+# Doing the compile once, here, in a job we control, eliminates both issues.
+#
+# Cross-node safety: Frontier compute nodes are homogeneous (MI250X, same
+# OS image, same ROCm bind-mount). The .so is keyed by torch major.minor +
+# the --build-with-rocm flag, so any compute node consuming it from the
+# shared cache gets an ABI-compatible artifact as long as the conda env and
+# the rocm/X.Y.Z module pin match what produced it.
 #
 # Submit:
 #   sbatch scripts/prebuild-tvm-ffi-frontier.sh
