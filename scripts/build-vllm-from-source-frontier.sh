@@ -39,6 +39,10 @@ export CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-56}
 #   cd $PROJ/cache/triton-src/triton && git sparse-checkout set python/triton_kernels
 export TRITON_KERNELS_SRC_DIR="$PROJ/cache/triton-src/triton/python/triton_kernels"
 
+# CMake picks up /usr/bin/c++ (GCC 7.5) by default; force it to the module-loaded GCC 13.
+export CXX=/opt/cray/pe/gcc-native/13/bin/g++
+export CC=/opt/cray/pe/gcc-native/13/bin/gcc
+
 # Ensure Cray runtime libs and ROCm are visible during build and import.
 export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH:-}:${LD_LIBRARY_PATH:-}"
 export LD_PRELOAD=/opt/rocm-7.1.1/lib/libamdhip64.so${LD_PRELOAD:+:${LD_PRELOAD}}
