@@ -30,6 +30,7 @@ class RelaxStructureInput(BaseModel):
     optimizer: Literal["FIRE", "BFGS", "BFGSLineSearch"] = "FIRE"
     maxiter: int = 200
     maxstep: float = 1e-2
+    fmax: float = Field(0.02, description="Stop when max force drops below this value (eV/Å).")
     relative_increase_threshold: float = 0.05
     charge: float = 0.0
     spin: float = 0.0
@@ -221,11 +222,14 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 csv_file.write(",".join(row) + "\n")
                 csv_file.flush()
 
+                if max_force < args.fmax:
+                    converged = True
+                    break
+
                 if prev_max_force is not None and prev_max_force > 0.0:
                     relative_increase = (max_force - prev_max_force) / prev_max_force
                     if relative_increase > args.relative_increase_threshold:
                         atoms.set_positions(prev_positions)
-                        converged = True  # treat revert as a soft-converged stop
                         break
 
                 prev_max_force = max_force
