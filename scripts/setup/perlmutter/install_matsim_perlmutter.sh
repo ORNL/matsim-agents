@@ -248,6 +248,12 @@ fi
 
 log "✓ matsim-agents installed"
 
+# ── Ensure core runtime/test deps are present even on partial reinstalls ─────
+# These are required by the test suite (tests/conftest.py imports
+# langchain_core.fake_chat_models) and by local sanity checks.
+log "Ensuring core runtime/test dependencies (langchain-core, pytest, pytest-cov)..."
+pip_retry "langchain-core>=0.3.0" "pytest>=8.0" "pytest-cov>=5.0"
+
 # ── Install LLM download/runtime tooling (session-learned extras) ───────────
 # We explicitly install huggingface_hub so `hf` is available for resumable
 # model downloads on login nodes, and transformers for local model loading.
