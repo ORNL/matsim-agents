@@ -15,7 +15,7 @@ set -euo pipefail
 
 PROJ=/lustre/orion/mat746/proj-shared
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SMOKE_DIR="$SCRIPT_DIR/../smoke-tests"
+SMOKE_DIR="$SCRIPT_DIR/../../smoke-tests/frontier"
 MULTI="$SMOKE_DIR/smoke-vllm-multinode-frontier.sh"
 
 TS=$(date +%Y%m%d-%H%M%S)

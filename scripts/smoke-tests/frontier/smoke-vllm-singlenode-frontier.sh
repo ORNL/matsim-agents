@@ -33,8 +33,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 PROJ=/lustre/orion/mat746/proj-shared
 # Fallback if BASH_SOURCE is not usable under sbatch
-[[ -z "${SCRIPT_DIR:-}" ]] && SCRIPT_DIR="$PROJ/matsim-agents/scripts/frontier/smoke-tests"
-UTILS_DIR="$SCRIPT_DIR/../utils"
+[[ -z "${SCRIPT_DIR:-}" ]] && SCRIPT_DIR="$PROJ/matsim-agents/scripts/smoke-tests/frontier"
+UTILS_DIR="$SCRIPT_DIR/../../utils/frontier"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 # Default: small model that loads quickly
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/Llama-3.1-8B-Instruct}
