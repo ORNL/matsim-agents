@@ -104,12 +104,21 @@ export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 #           That kernel binary is broken on gfx90a in RCCL 2.27.7-HEAD:84d2752
 #           regardless of which transport carries the data.
 #
-# Run G: NCCL_PROTO=LL128
-#   Rationale: Simple → ncclDevKernel_Generic_4 (crashes on every run).
-#              LL128  → ncclDevKernel_LL128_* (completely different kernel family).
-#              LL128 is specifically optimized for AMD MI-series intra-node comms.
-#              It uses 128-bit reads and a different register/scratch layout that
-#              may not have the same gfx90a code-gen issue as Generic_4.
+# Run G (job 4510778) — hypothesis: ncclDevKernel_Generic_4 is broken; LL128 uses different kernel
+#   Tried:  NCCL_PROTO=LL128
+#   Result: FAILED — different error: "no algorithm/protocol available for
+#           function AllReduce with datatype ncclFloat32. NCCL_PROTO was set
+#           to LL128." LL128 is not supported for fp32 AllReduce in this RCCL
+#           build. No HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION this time.
+#   Why:    Pinning any single NCCL_PROTO fails because vLLM issues multiple
+#           collective types (AllGather and AllReduce) with different datatypes
+#           (BF16 and FP32). No single pinned protocol satisfies all of them.
+#           LL/Simple → Generic_4 crash on AllGather; LL128 → no valid combo
+#           for fp32 AllReduce.
+#
+# Run H: unset NCCL_PROTO entirely.
+#   Rationale: Let RCCL auto-select the protocol per collective + datatype.
+#              The auto-tuner will avoid protocol/algo combos that don't work.
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Use PyTorch-bundled RCCL (established in Run C; kept for consistency).
@@ -122,9 +131,8 @@ unset VLLM_NCCL_SO_PATH
 # kernel private scratch memory during RCCL collective init.
 export HSA_NO_SCRATCH_RECLAIM=1
 
-# Run G: LL128 dispatches ncclDevKernel_LL128_* — different kernel family from Generic_4.
-# Do NOT use NCCL_PROTO=Simple (→ Generic_4, crashes) or NCCL_PROTO=LL (falls back to Generic).
-export NCCL_PROTO=LL128
+# Run H: NCCL_PROTO unset — let RCCL auto-select protocol per collective + datatype.
+# Do NOT pin NCCL_PROTO: Simple/LL → Generic_4 crash; LL128 → no valid combo for fp32 AllReduce.
 # NCCL_ALGO: unset — RCCL auto-selects Ring for AllGather (correct default).
 export NCCL_DEBUG=INFO
 export NCCL_DEBUG_SUBSYS=INIT,COLL,TUNING
