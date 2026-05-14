@@ -10,12 +10,31 @@
 #   <out_dir>/seeds/llm_proposed_compositions.json
 # so the run is fully reproducible.
 #
-# Validate before submitting:
-#   matsim-agents al validate-config examples/active_learning/al_config.prompt.example.yaml
+# All paths use the same ${VAR} / ${VAR:-default} substitution as the main
+# example. Override at runtime e.g.:
+#   PROJ_ROOT=$PWD LLM_BASE_URL=http://node42:8000/v1 \
+#       matsim-agents al validate-config examples/active_learning/al_config.prompt.example.yaml
 # =============================================================================
 
+vars:
+  PROJ_ROOT:    /lustre/orion/mat746/proj-shared/matsim-agents
+  RUNS_ROOT:    /lustre/orion/mat746/proj-shared/runs
+  HYDRAGNN_DIR: /lustre/orion/mat746/proj-shared/HydraGNN
+  RUN_TAG:      al-run-prompt-001
+
+  VASP_BIN:     ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  POTCAR_DIR:   /lustre/orion/mat746/proj-shared/POTCAR/PBE.54
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+  # LLM endpoint (override LLM_BASE_URL when your vLLM server moves).
+  LLM_PROVIDER: vllm
+  LLM_MODEL:    Qwen/Qwen2.5-72B-Instruct
+  LLM_BASE_URL: http://localhost:8000/v1
+
+# ---------------------------------------------------------------------------
+
 hydragnn:
-  logdir: /lustre/orion/mat746/proj-shared/runs/al-models/iter0_logdir
+  logdir: ${INITIAL_LOGDIR}
   checkpoint: best_model.pt
   mlp_checkpoint: null
   charge: 0.0
@@ -25,8 +44,7 @@ hydragnn:
   ensemble_paths: []
 
 md:
-  # LLM-driven seed source. Set MATSIM_LLM_PROVIDER / MATSIM_VLLM_BASE_URL
-  # in the launcher environment, or override the defaults inline below.
+  # LLM-driven seed source.
   seed_source:
     kind: prompt
     prompt: >
@@ -34,12 +52,12 @@ md:
       for thin-film photovoltaics. Include both Sn-substituted and
       Ag/Bi-based compositions.
     llm:
-      provider: vllm                 # ollama | vllm | openai | anthropic | huggingface
-      model: Qwen/Qwen2.5-72B-Instruct
-      base_url: http://localhost:8000/v1
+      provider: ${LLM_PROVIDER}        # ollama | vllm | openai | anthropic | huggingface
+      model:    ${LLM_MODEL}
+      base_url: ${LLM_BASE_URL}
       temperature: 0.0
-    max_compositions: 6              # cap on LLM output
-    max_phases_per_composition: 2    # discovery returns up to N prototypes/formula
+    max_compositions: 6                # cap on LLM output
+    max_phases_per_composition: 2      # discovery returns up to N prototypes/formula
     min_atoms: 32
     include_2d: false
     num_layers: 1
@@ -62,13 +80,13 @@ acquisition:
   min_uncertainty_eV_per_A: 0.0
 
 dft:
-  backend: vasp
+  backend: ${DFT_BACKEND:-vasp}
   vasp:
-    vasp_bin: /lustre/orion/mat746/proj-shared/matsim-agents/external/vasp6/src/vasp.6.6.0/bin/vasp_std
-    vasp_wrapper: /lustre/orion/mat746/proj-shared/matsim-agents/scripts/launchers/frontier/_vasp-step-frontier.sh
-    incar_template: /lustre/orion/mat746/proj-shared/matsim-agents/examples/active_learning/INCAR.template
+    vasp_bin:        ${VASP_BIN}
+    vasp_wrapper:    ${PROJ_ROOT}/scripts/launchers/frontier/_vasp-step-frontier.sh
+    incar_template:  ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null
-    potcar_dir: /lustre/orion/mat746/proj-shared/POTCAR/PBE.54
+    potcar_dir:      ${POTCAR_DIR}
     nodes_per_job: 1
     ranks_per_node: 8
     threads_per_rank: 7
@@ -78,15 +96,15 @@ dft:
 
 trainer:
   enabled: true
-  train_script: /lustre/orion/mat746/proj-shared/HydraGNN/examples/mptrj/train.py
-  train_launcher: /lustre/orion/mat746/proj-shared/matsim-agents/scripts/launchers/frontier/_hydragnn-train-step-frontier.sh
+  train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
+  train_launcher: ${PROJ_ROOT}/scripts/launchers/frontier/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5
   nodes_for_train: 8
   ranks_per_node: 8
 
 loop:
   n_iterations: 10
-  out_dir: /lustre/orion/mat746/proj-shared/runs/al-run-prompt-001
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
   dataset_format: extxyz
   resume: true
   fail_fast: false
