@@ -48,6 +48,12 @@ mkdir -p "$MIOPEN_USER_DB_PATH"
 # Instead, point VLLM_CUDART_SO_PATH so flashinfer can find the HIP runtime.
 export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 
+# Force vLLM to use the system RCCL (ROCm 7.1.1, compiled for gfx90a) instead
+# of the PyTorch-bundled librccl.so whose arch support may differ. PyTorch
+# prepends its lib dir to LD_LIBRARY_PATH, which can cause the wrong librccl
+# to be loaded → HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION in ncclDevKernel.
+export VLLM_NCCL_SO_PATH=/opt/rocm-7.1.1/lib/librccl.so.1
+
 # Use the project-shared, prebuilt tvm-ffi torch<->DLPack ROCm bridge.
 # Built once by install_matsim_frontier.sh; skips a ~5 min on-the-fly compile.
 export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
