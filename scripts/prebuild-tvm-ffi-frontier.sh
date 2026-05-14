@@ -74,6 +74,18 @@ source activate "$VENV"
 # torch's cpp_extension.include_paths() demands CUDA_HOME, even for ROCm.
 export CUDA_HOME="${ROCM_PATH:-/opt/rocm-7.1.1}"
 
+# CRITICAL: prevent tvm_ffi from auto-spawning its OWN build at import time.
+# `python -m tvm_ffi.utils._build_optional_torch_c_dlpack` triggers
+# `import tvm_ffi`, whose _optional_torch_c_dlpack module checks for the addon
+# .so and, if absent, fires off its own subprocess to build it into
+# $TVM_FFI_CACHE_DIR (default: ~/.cache/tvm-ffi) BEFORE our main() runs.
+# Without this guard, two concurrent builds race on the same lockfile, the
+# auto-spawned one writes to ~/.cache (NOT our shared GPFS cache), and the
+# whole thing wedges. Also export TVM_FFI_CACHE_DIR so any tvm_ffi process
+# (auto-spawned or not) writes to the project-shared cache.
+export TVM_FFI_DISABLE_TORCH_C_DLPACK=1
+export TVM_FFI_CACHE_DIR="$CACHE_DIR"
+
 echo "[$(date)] === Prebuild diagnostics ==="
 echo "Hostname:      $(hostname)"
 echo "ROCM_PATH:     ${ROCM_PATH:-unset}"
