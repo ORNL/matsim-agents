@@ -59,6 +59,14 @@ mkdir -p "$MIOPEN_USER_DB_PATH"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1   # flush vLLM / matsim-agents output immediately
 
+# ── hard-block all remote model / dataset fetches ───────────────────────────
+# These env-vars make HuggingFace transformers / hub / datasets raise an error
+# immediately if any code attempts a network download, instead of silently
+# hitting the internet (which would also fail on Frontier compute nodes).
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export HF_DATASETS_OFFLINE=1
+
 # ── vLLM server ──────────────────────────────────────────────────────────────
 VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
