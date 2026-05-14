@@ -5,6 +5,13 @@
 # Single-node smoke test: verify vLLM + ROCm works on Frontier (1 node,
 # 8 GCDs, multiprocessing backend) before attempting multi-node runs.
 #
+# !!! REQUIRED !!!
+# A prebuilt tvm_ffi shared library MUST exist at:
+#   $PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so
+# Otherwise vLLM hangs FOREVER at import (no log output). If missing, run:
+#   sbatch scripts/frontier/prebuild-tvm-ffi-frontier.sh
+# See scripts/frontier/README-frontier.md for full details.
+#
 # Submit:
 #   sbatch --nodes=1 scripts/frontier/smoke-vllm-singlenode-frontier.sh
 #
