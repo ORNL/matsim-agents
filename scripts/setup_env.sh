@@ -28,7 +28,6 @@
 #                     OLLAMA_MODELS (workstation only). Default: 0.
 #   OLLAMA_MODELS   Space-separated models to pull when BOOTSTRAP_OLLAMA=1
 #                   (default: "qwen2.5:14b")
-#   SKIP_HYDRAGNN   set to 1 to skip HydraGNN install entirely
 #
 # Examples:
 #   # Local workstation (CPU or single GPU)
@@ -51,7 +50,6 @@ HYDRAGNN_EXTRAS="${HYDRAGNN_EXTRAS:-all dev}"
 LLM_BACKENDS="${LLM_BACKENDS:-ollama vllm}"
 BOOTSTRAP_OLLAMA="${BOOTSTRAP_OLLAMA:-0}"
 OLLAMA_MODELS="${OLLAMA_MODELS:-qwen2.5:14b}"
-SKIP_HYDRAGNN="${SKIP_HYDRAGNN:-0}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 THIRD_PARTY_DIR="${REPO_ROOT}/third_party"
@@ -65,46 +63,44 @@ command -v "$PYTHON" >/dev/null 2>&1 || die "Python interpreter '$PYTHON' not fo
 command -v git       >/dev/null 2>&1 || die "git is required."
 
 # ------------------------------- Clone HydraGNN ----------------------------
-if [[ "$SKIP_HYDRAGNN" != "1" ]]; then
-    if [[ -d "${HYDRAGNN_DIR}/.git" ]]; then
-        log "Reusing HydraGNN checkout at ${HYDRAGNN_DIR}"
-        git -C "$HYDRAGNN_DIR" fetch origin "$HYDRAGNN_REF" || true
-        git -C "$HYDRAGNN_DIR" checkout "$HYDRAGNN_REF"
-        git -C "$HYDRAGNN_DIR" pull --ff-only origin "$HYDRAGNN_REF" || true
-    else
-        log "Cloning HydraGNN (${HYDRAGNN_REF}) -> ${HYDRAGNN_DIR}"
-        mkdir -p "$(dirname "$HYDRAGNN_DIR")"
-        git clone --branch "$HYDRAGNN_REF" "$HYDRAGNN_REPO" "$HYDRAGNN_DIR" \
-            || git clone "$HYDRAGNN_REPO" "$HYDRAGNN_DIR"
-    fi
+if [[ -d "${HYDRAGNN_DIR}/.git" ]]; then
+    log "Reusing HydraGNN checkout at ${HYDRAGNN_DIR}"
+    git -C "$HYDRAGNN_DIR" fetch origin "$HYDRAGNN_REF" || true
+    git -C "$HYDRAGNN_DIR" checkout "$HYDRAGNN_REF"
+    git -C "$HYDRAGNN_DIR" pull --ff-only origin "$HYDRAGNN_REF" || true
+else
+    log "Cloning HydraGNN (${HYDRAGNN_REF}) -> ${HYDRAGNN_DIR}"
+    mkdir -p "$(dirname "$HYDRAGNN_DIR")"
+    git clone --branch "$HYDRAGNN_REF" "$HYDRAGNN_REPO" "$HYDRAGNN_DIR" \
+        || git clone "$HYDRAGNN_REPO" "$HYDRAGNN_DIR"
+fi
 
-    # ----- Relax HydraGNN's overly-tight pins ------------------------------
-    # HydraGNN's requirements-base.txt pins click==8.0.0 and tqdm==4.67.1,
-    # which conflict with Typer (needs click>=8.2.1) and pymatgen-core
-    # (needs tqdm>=4.67.3). HydraGNN imports and runs cleanly with the
-    # newer versions, so we relax these pins once and keep everything happy.
-    REQ_BASE="${HYDRAGNN_DIR}/requirements-base.txt"
-    if [[ "$(uname)" == "Darwin" ]]; then SED_INPLACE=(sed -i ''); else SED_INPLACE=(sed -i); fi
-    if [[ -f "$REQ_BASE" ]]; then
-        if grep -qE '^click==8\.0\.0$' "$REQ_BASE"; then
-            log "Relaxing HydraGNN pin: click==8.0.0 -> click>=8.2.1,<9"
-            "${SED_INPLACE[@]}" 's/^click==8\.0\.0$/click>=8.2.1,<9/' "$REQ_BASE"
-        fi
-        if grep -qE '^tqdm==4\.67\.1$' "$REQ_BASE"; then
-            log "Relaxing HydraGNN pin: tqdm==4.67.1 -> tqdm>=4.67.3,<5"
-            "${SED_INPLACE[@]}" 's/^tqdm==4\.67\.1$/tqdm>=4.67.3,<5/' "$REQ_BASE"
-        fi
+# ----- Relax HydraGNN's overly-tight pins ----------------------------------
+# HydraGNN's requirements-base.txt pins click==8.0.0 and tqdm==4.67.1,
+# which conflict with Typer (needs click>=8.2.1) and pymatgen-core
+# (needs tqdm>=4.67.3). HydraGNN imports and runs cleanly with the
+# newer versions, so we relax these pins once and keep everything happy.
+REQ_BASE="${HYDRAGNN_DIR}/requirements-base.txt"
+if [[ "$(uname)" == "Darwin" ]]; then SED_INPLACE=(sed -i ''); else SED_INPLACE=(sed -i); fi
+if [[ -f "$REQ_BASE" ]]; then
+    if grep -qE '^click==8\.0\.0$' "$REQ_BASE"; then
+        log "Relaxing HydraGNN pin: click==8.0.0 -> click>=8.2.1,<9"
+        "${SED_INPLACE[@]}" 's/^click==8\.0\.0$/click>=8.2.1,<9/' "$REQ_BASE"
     fi
-    SETUP_PY="${HYDRAGNN_DIR}/setup.py"
-    if [[ -f "$SETUP_PY" ]]; then
-        if grep -q "click==8.0.0" "$SETUP_PY"; then
-            log "Relaxing HydraGNN click pin in setup.py"
-            "${SED_INPLACE[@]}" 's/click==8\.0\.0/click>=8.2.1,<9/g' "$SETUP_PY"
-        fi
-        if grep -q "tqdm==4.67.1" "$SETUP_PY"; then
-            log "Relaxing HydraGNN tqdm pin in setup.py"
-            "${SED_INPLACE[@]}" 's/tqdm==4\.67\.1/tqdm>=4.67.3,<5/g' "$SETUP_PY"
-        fi
+    if grep -qE '^tqdm==4\.67\.1$' "$REQ_BASE"; then
+        log "Relaxing HydraGNN pin: tqdm==4.67.1 -> tqdm>=4.67.3,<5"
+        "${SED_INPLACE[@]}" 's/^tqdm==4\.67\.1$/tqdm>=4.67.3,<5/' "$REQ_BASE"
+    fi
+fi
+SETUP_PY="${HYDRAGNN_DIR}/setup.py"
+if [[ -f "$SETUP_PY" ]]; then
+    if grep -q "click==8.0.0" "$SETUP_PY"; then
+        log "Relaxing HydraGNN click pin in setup.py"
+        "${SED_INPLACE[@]}" 's/click==8\.0\.0/click>=8.2.1,<9/g' "$SETUP_PY"
+    fi
+    if grep -q "tqdm==4.67.1" "$SETUP_PY"; then
+        log "Relaxing HydraGNN tqdm pin in setup.py"
+        "${SED_INPLACE[@]}" 's/tqdm==4\.67\.1/tqdm>=4.67.3,<5/g' "$SETUP_PY"
     fi
 fi
 
@@ -122,15 +118,13 @@ case "$PLATFORM" in
         source "${VENV_DIR}/bin/activate"
         python -m pip install --upgrade pip setuptools wheel
 
-        if [[ "$SKIP_HYDRAGNN" != "1" ]]; then
-            INSTALLER="${HYDRAGNN_DIR}/install_dependencies.sh"
-            [[ -x "$INSTALLER" ]] || chmod +x "$INSTALLER" 2>/dev/null || true
-            [[ -f "$INSTALLER" ]] || die "Cannot find ${INSTALLER}"
-            log "Running HydraGNN installer: install_dependencies.sh ${HYDRAGNN_EXTRAS}"
-            ( cd "$HYDRAGNN_DIR" && bash ./install_dependencies.sh ${HYDRAGNN_EXTRAS} )
-            log "Installing HydraGNN (editable) into ${VENV_DIR}"
-            python -m pip install -e "$HYDRAGNN_DIR"
-        fi
+        INSTALLER="${HYDRAGNN_DIR}/install_dependencies.sh"
+        [[ -x "$INSTALLER" ]] || chmod +x "$INSTALLER" 2>/dev/null || true
+        [[ -f "$INSTALLER" ]] || die "Cannot find ${INSTALLER}"
+        log "Running HydraGNN installer: install_dependencies.sh ${HYDRAGNN_EXTRAS}"
+        ( cd "$HYDRAGNN_DIR" && bash ./install_dependencies.sh ${HYDRAGNN_EXTRAS} )
+        log "Installing HydraGNN (editable) into ${VENV_DIR}"
+        python -m pip install -e "$HYDRAGNN_DIR"
         ;;
 
     frontier-rocm71|frontier-rocm64|perlmutter|aurora|andes)
@@ -145,11 +139,11 @@ case "$PLATFORM" in
 
         # On HPC the supercomputer script sets up a conda/venv environment.
         # The user must activate it before re-running this script with
-        # SKIP_HYDRAGNN=1 PLATFORM=workstation, OR pass VENV_DIR pointing at
+        # PLATFORM=workstation, OR pass VENV_DIR pointing at
         # the activated env's prefix. We detect activation here:
         if [[ -z "${VIRTUAL_ENV:-}${CONDA_PREFIX:-}" ]]; then
             die "Supercomputer install finished. Activate the environment it created, then rerun:
-    SKIP_HYDRAGNN=1 PLATFORM=workstation ./scripts/setup_env.sh \$VIRTUAL_ENV"
+    PLATFORM=workstation ./scripts/setup_env.sh \$VIRTUAL_ENV"
         fi
         log "Active environment: ${VIRTUAL_ENV:-$CONDA_PREFIX}"
         ;;
@@ -290,7 +284,7 @@ cat <<EOF
 matsim-agents environment is ready.
 
 Platform:           ${PLATFORM}
-HydraGNN checkout:  $([[ "$SKIP_HYDRAGNN" == "1" ]] && echo "(skipped)" || echo "${HYDRAGNN_DIR} @ ${HYDRAGNN_REF}")
+HydraGNN checkout:  ${HYDRAGNN_DIR} @ ${HYDRAGNN_REF}
 LLM backends:       ${LLM_BACKENDS}
 Active env:         \${VIRTUAL_ENV:-\$CONDA_PREFIX}
 

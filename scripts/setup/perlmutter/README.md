@@ -10,8 +10,8 @@ This implementation mirrors the methodology used for Frontier, providing both qu
 
 You have two options:
 
-#### Option 1: Quick Setup (Reuse Shared HydraGNN Environment)
-Use the **quick setup** scripts to activate an existing HydraGNN environment.
+#### Option 1: Quick Setup (Activate Installer-Created Environment)
+Use the **quick setup** scripts to activate the HydraGNN environment created by the installer.
 
 **Best for:** Development, testing, quick runs when HydraGNN environment is stable
 
@@ -19,13 +19,13 @@ Use the **quick setup** scripts to activate an existing HydraGNN environment.
 source setup_matsim_perlmutter.sh [--gpu]
 ```
 
-#### Option 2: Fresh Installation (Aligned Shared Environment by Default)
-Use the **full installation** script to create/update the HydraGNN-aligned conda environment.
+#### Option 2: Fresh Installation (Always Recreates Environment)
+Use the **full installation** script to recreate the HydraGNN-aligned conda environment.
 
 **Best for:** Reproducible installs aligned with HydraGNN runtime expectations
 
 ```bash
-bash install_matsim_perlmutter.sh [--skip-hydragnn] [--gpu]
+bash install_matsim_perlmutter.sh [--gpu]
 ```
 
 ---
@@ -68,10 +68,10 @@ source setup_matsim_perlmutter.sh --gpu
 ```
 
 ### `install_matsim_perlmutter.sh` (Fresh Installation)
-Complete two-phase installation that creates/updates the Perlmutter HydraGNN environment used at runtime:
+Frontier-style phased installation that always recreates the Perlmutter HydraGNN environment used at runtime:
 
-**Phase 1:** Create/activate conda environment
-**Phase 2:** Install HydraGNN dependencies + PyTorch + matsim-agents
+**Phase 1:** Run HydraGNN Perlmutter installer (delegated build of CUDA/PyTorch/PyG stack)
+**Phase 2:** Activate resulting env and install matsim-agents + runtime extras
 
 **Usage:**
 
@@ -80,14 +80,8 @@ First-time full installation (creates new environment):
 bash install_matsim_perlmutter.sh [--gpu]
 ```
 
-Reinstall in existing environment (skip env creation):
-```bash
-bash install_matsim_perlmutter.sh --skip-hydragnn [--gpu]
-```
-
 **Flags:**
-- `--skip-hydragnn` - Skip conda environment creation (update packages in existing environment)
-- `--gpu` - Load GPU-specific modules for A100 nodes
+- `--gpu` - Compatibility flag (installer already targets A100/CUDA)
 
 **Customization via environment variables:**
 ```bash
@@ -107,8 +101,29 @@ MAX_JOBS=32 bash install_matsim_perlmutter.sh --gpu
 INSTALL_VLLM_SERVER=1 bash install_matsim_perlmutter.sh --gpu
 ```
 
+**Advanced module/path overrides (forwarded to the delegated HydraGNN installer):**
+```bash
+# Override where module-init scripts are sourced from
+MODULES_SH_PATH=/etc/profile.d/modules.sh \
+LMOD_INIT_BASH_PATH=/usr/share/lmod/lmod/init/bash \
+MODULES_INIT_BASH_PATH=/usr/share/Modules/init/bash \
+bash install_matsim_perlmutter.sh --gpu
+
+# Override Perlmutter module names/versions used by HydraGNN installer
+PERLMUTTER_CPE_MODULE=cpe/24.07 \
+PERLMUTTER_PRGENV_MODULE=PrgEnv-gnu/8.5.0 \
+PERLMUTTER_MPICH_MODULE=cray-mpich/8.1.30 \
+PERLMUTTER_ACCEL_MODULE=craype-accel-nvidia80 \
+PERLMUTTER_GCC_MODULE=gcc-native/13.2 \
+PERLMUTTER_CONDA_PRIMARY_MODULE=conda/Miniforge3-24.11.3-0 \
+bash install_matsim_perlmutter.sh --gpu
+```
+
+These overrides are optional and mainly useful when site module paths or
+module names differ from the defaults.
+
 **Packages installed by the script (high level):**
-- Core HydraGNN + PyTorch/PyG stack
+- Core HydraGNN + PyTorch/PyG stack (via delegated HydraGNN installer)
 - matsim-agents (editable)
 - Core runtime/test dependencies (`langchain-core`, `pytest`, `pytest-cov`)
 - HydraGNN runtime dependencies (`scikit-learn==1.5.1`, `vesin==0.4.2`)
@@ -203,8 +218,8 @@ bash scripts/setup/perlmutter/install_matsim_perlmutter.sh --gpu
 source scripts/setup/perlmutter/setup_matsim_perlmutter.sh --gpu
 python -m matsim_agents ...
 
-# Update matsim-agents only (faster)
-bash scripts/setup/perlmutter/install_matsim_perlmutter.sh --skip-hydragnn --gpu
+# Rebuild and reinstall in a fresh environment
+bash scripts/setup/perlmutter/install_matsim_perlmutter.sh --gpu
 ```
 
 ### SLURM Job Submission (Both Approaches)
@@ -243,7 +258,7 @@ Ensure the shared HydraGNN environment exists at:
 Contact the project maintainers if it needs to be re-created.
 
 ### "conda env not found" (Fresh Installation)
-The environment wasn't created. Run the installation without `--skip-hydragnn`:
+The environment was not created. Re-run the installation:
 ```bash
 bash install_matsim_perlmutter.sh --gpu
 ```
@@ -272,7 +287,7 @@ python -c "import torch; print(torch.__version__)"
 `install_matsim_perlmutter.sh` now installs `huggingface_hub`, which provides `hf`.
 If your environment predates that update, re-run:
 ```bash
-bash install_matsim_perlmutter.sh --skip-hydragnn --gpu
+bash install_matsim_perlmutter.sh --gpu
 ```
 
 ### Out of memory during build

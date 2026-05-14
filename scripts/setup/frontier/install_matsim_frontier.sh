@@ -44,10 +44,7 @@
 #
 # Usage
 # -----
-#   bash install_matsim_frontier.sh [--skip-hydragnn]
-#
-#   --skip-hydragnn   Skip Phase 1 (HydraGNN env build). Useful when the env
-#                     already exists and only matsim-agents needs reinstalling.
+#   bash install_matsim_frontier.sh
 #
 # Configurable variables (override via environment before calling this script)
 # ---------------------------------------------------------------------------
@@ -88,9 +85,7 @@ log()  { printf '\033[1;34m[install]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[install]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[install]\033[0m %s\n' "$*" >&2; exit 1; }
 
-SKIP_HYDRAGNN=0
 for arg in "$@"; do
-    [[ "$arg" == "--skip-hydragnn" ]] && SKIP_HYDRAGNN=1
     [[ "$arg" == "--rocm72" ]] && ROCM_VERSION="7.2"
 done
 
@@ -155,30 +150,26 @@ else
 fi
 
 # ── Phase 1: Build HydraGNN Frontier environment ─────────────────────────────
-if [[ "$SKIP_HYDRAGNN" == "0" ]]; then
-    if [[ "$ROCM_VERSION" == "7.2" ]]; then
-        SC_INSTALLER="${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_frontier-rocm72.sh"
-        [[ -f "$SC_INSTALLER" ]] || die "HydraGNN Frontier ROCm 7.2 installer not found: ${SC_INSTALLER}"
-        log "Running HydraGNN Frontier ROCm 7.2 installer (this takes ~1-2 hours)..."
-        log "Installer: ${SC_INSTALLER}"
-        ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
-            && bash "hydragnn_installation_bash_script_frontier-rocm72.sh" )
-    else
-        SC_INSTALLER="${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_frontier-rocm71.sh"
-        [[ -f "$SC_INSTALLER" ]] || die "HydraGNN Frontier installer not found: ${SC_INSTALLER}"
-        log "Running HydraGNN Frontier ROCm 7.1 installer (this takes ~1-2 hours)..."
-        log "Installer: ${SC_INSTALLER}"
-        ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
-            && bash "hydragnn_installation_bash_script_frontier-rocm71.sh" )
-    fi
-    log "HydraGNN environment build complete."
+if [[ "$ROCM_VERSION" == "7.2" ]]; then
+    SC_INSTALLER="${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_frontier-rocm72.sh"
+    [[ -f "$SC_INSTALLER" ]] || die "HydraGNN Frontier ROCm 7.2 installer not found: ${SC_INSTALLER}"
+    log "Running HydraGNN Frontier ROCm 7.2 installer (this takes ~1-2 hours)..."
+    log "Installer: ${SC_INSTALLER}"
+    ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
+        && bash "hydragnn_installation_bash_script_frontier-rocm72.sh" )
 else
-    warn "--skip-hydragnn set: skipping Phase 1."
+    SC_INSTALLER="${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_frontier-rocm71.sh"
+    [[ -f "$SC_INSTALLER" ]] || die "HydraGNN Frontier installer not found: ${SC_INSTALLER}"
+    log "Running HydraGNN Frontier ROCm 7.1 installer (this takes ~1-2 hours)..."
+    log "Installer: ${SC_INSTALLER}"
+    ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
+        && bash "hydragnn_installation_bash_script_frontier-rocm71.sh" )
 fi
+log "HydraGNN environment build complete."
 
 # ── Verify the conda env exists ───────────────────────────────────────────────
 [[ -d "${VENV_PATH}" ]] \
-    || die "Expected conda env not found at: ${VENV_PATH}\nRun without --skip-hydragnn first."
+    || die "Expected conda env not found at: ${VENV_PATH}"
 
 # ── Phase 2: Activate the conda env and install matsim-agents ─────────────────
 log "Activating conda env: ${VENV_PATH}"
