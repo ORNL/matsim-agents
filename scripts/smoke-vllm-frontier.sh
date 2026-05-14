@@ -54,17 +54,17 @@ export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 # to be loaded → HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION in ncclDevKernel.
 export VLLM_NCCL_SO_PATH=/opt/rocm-7.1.1/lib/librccl.so.1
 
-# ncclDevKernel_Generic_4 is the LL128 protocol kernel; LL128 uses 128-byte
-# machine-level atomics not supported on Frontier's MI250X GCDs, causing
-# HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION. Force Simple protocol and Ring algo.
-# NCCL_PROTO=Simple alone is not enough — must also set NCCL_ALGO=Ring and
-# disable XGMI P2P which triggers LL128 selection on RCCL's XGMI transport.
-export NCCL_PROTO=Simple
+# RCCL env controls are documented in AMD RCCL env-variables docs.
+# IMPORTANT: ncclDevKernel_Generic_4 is an unroll variant, not proof of LL128.
+# Pin a conservative transport/protocol set for MI250X and enable logging so
+# job logs show the exact RCCL algo/proto decision per collective.
+export NCCL_PROTO=LL
 export NCCL_ALGO=Ring
-# Disable XGMI/NVLink-style P2P between GCDs; forces standard PCIe/socket path
-# where LL128 is not available, keeping RCCL on Simple+Ring.
 export NCCL_P2P_DISABLE=1
 export NCCL_SHM_DISABLE=1
+export NCCL_DEBUG=INFO
+export NCCL_DEBUG_SUBSYS=INIT,COLL
+export RCCL_LOG_LEVEL=3
 
 # Use the project-shared, prebuilt tvm-ffi torch<->DLPack ROCm bridge.
 # Built once by install_matsim_frontier.sh; skips a ~5 min on-the-fly compile.
