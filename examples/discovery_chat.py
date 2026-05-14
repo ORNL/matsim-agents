@@ -39,7 +39,7 @@ def main() -> None:
     parser.add_argument("--mlp-device", default="cuda", choices=["cuda", "cpu"])
     parser.add_argument("--precision", default=None)
     parser.add_argument("--mlp-precision", default=None)
-    parser.add_argument("--optimizer", default="FIRE")
+    parser.add_argument("--ase-structure-optimizer", default="FIRE")
     parser.add_argument("--maxiter", type=int, default=200)
     parser.add_argument("--llm-provider", default="ollama")
     parser.add_argument("--llm-model", default="qwen2.5:14b")
@@ -56,7 +56,7 @@ def main() -> None:
         mlp_device=args.mlp_device,
         precision=args.precision,
         mlp_precision=args.mlp_precision,
-        optimizer=args.optimizer,
+        optimizer=args.ase_structure_optimizer,
         maxiter=args.maxiter,
         llm_provider=args.llm_provider,
         llm_model=args.llm_model,
