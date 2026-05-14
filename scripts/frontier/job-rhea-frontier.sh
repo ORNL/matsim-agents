@@ -11,43 +11,37 @@
 # matsim-agents: RHEA discovery run on Frontier (1 node, 8 GCDs)
 #
 # Layout:
-#   • vLLM server  : all 8 GCDs, tensor-parallel-size=8  (Qwen2.5-72B-Instruct)
+#   • vLLM server  : all 8 GCDs, tensor-parallel-size=8
 #   • matsim-agents: CPU-only (chat --auto-confirm, piped query)
 #
 # Usage:
-#   sbatch scripts/job-rhea-frontier.sh
+#   sbatch scripts/frontier/job-rhea-frontier.sh
+#
+# Override model at submission:
+#   MATSIM_MODEL_DIR=.../Qwen3-32B MATSIM_MODEL_NAME=Qwen/Qwen3-32B \
+#     sbatch scripts/frontier/job-rhea-frontier.sh
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
 
 # ── paths ───────────────────────────────────────────────────────────────────
 PROJ=/lustre/orion/mat746/proj-shared
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv
+VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64
 MLP_CHECKPOINT=$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt
-MODEL_DIR=$PROJ/models/Qwen2.5-72B-Instruct
+MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
+MODEL_NAME=${MATSIM_MODEL_NAME:-Qwen/Qwen2.5-72B-Instruct}
 RUN_DIR=$PROJ/runs/rhea-$SLURM_JOB_ID
 OUTPUT_DIR=$RUN_DIR/outputs
 
 mkdir -p "$RUN_DIR" "$OUTPUT_DIR"
 
-# ── proxy (needed for any network calls on Frontier compute nodes) ───────────
-export all_proxy=socks://proxy.ccs.ornl.gov:3128/
-export ftp_proxy=ftp://proxy.ccs.ornl.gov:3128/
-export http_proxy=http://proxy.ccs.ornl.gov:3128/
-export https_proxy=http://proxy.ccs.ornl.gov:3128/
-export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
-
 # ── modules & conda env ──────────────────────────────────────────────────────
-# Initialize conda shell functions BEFORE module reset.
-# lmod's miniforge3 module runs 'source activate base' on both load and
-# unload; without conda init the 'activate' function is undefined and the
-# batch job fails immediately with "activate: No such file or directory".
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 
 source "$PROJ/matsim-agents/scripts/frontier/frontier-module-stack.sh"
-load_frontier_rocm711_modules
+load_frontier_rocm72_modules
 
 source activate "$VENV"
 
@@ -59,38 +53,55 @@ export MIOPEN_DISABLE_CACHE=1
 export MIOPEN_USER_DB_PATH=/tmp/miopen-$SLURM_JOB_ID
 mkdir -p "$MIOPEN_USER_DB_PATH"
 export PYTHONNOUSERSITE=1
-export PYTHONUNBUFFERED=1   # flush vLLM / matsim-agents output immediately
+export PYTHONUNBUFFERED=1
 
-# ── hard-block all remote model / dataset fetches ───────────────────────────
-# These env-vars make HuggingFace transformers / hub / datasets raise an error
-# immediately if any code attempts a network download, instead of silently
-# hitting the internet (which would also fail on Frontier compute nodes).
+# Hard-block all remote fetches (compute nodes have no outbound internet)
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 
-# Use the project-shared, prebuilt tvm-ffi torch<->DLPack ROCm bridge.
-# Built once by install_matsim_frontier.sh; skips a ~5 min on-the-fly compile
-# the first time vLLM imports tvm_ffi on a compute node.
+# ROCm / vLLM env vars established during smoke tests
+export VLLM_CUDART_SO_PATH=/opt/rocm-7.2.0/lib/libamdhip64.so
+export VLLM_NCCL_SO_PATH=/opt/rocm-7.2.0/lib/librccl.so.1
+TORCH_LIB=$VENV/lib/python3.11/site-packages/torch/lib
+export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
+export HSA_NO_SCRATCH_RECLAIM=1
+export PYTORCH_ROCM_ARCH=gfx90a
+export ROCM_ARCH=gfx90a
+export NCCL_DEBUG=WARN   # reduce noise; set INFO for debugging
+export RCCL_UNROLL_FACTOR=0
+export RCCL_P2P_BATCH_ENABLE=0
+export RCCL_P2P_BATCH_THRESHOLD=0
+
+# Compile / kernel cache on Lustre (avoids NFS Stale file handle errors)
 export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
+export VLLM_CACHE_ROOT=$PROJ/cache/vllm-cache
+export TRITON_CACHE_DIR=$PROJ/cache/vllm-cache/triton
+rm -rf "$VLLM_CACHE_ROOT"
+mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 
 # ── vLLM server ──────────────────────────────────────────────────────────────
 VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
 
-echo "[$(date)] Starting vLLM server (tensor-parallel-size=8) ..."
-# Working srun pattern from HydraGNN job: -N1 -n8 -c7 --gpus-per-task=1
-# vLLM is a single process that manages tensor-parallelism internally, so
-# we use -n1 with all 8 GCDs per task, same --gpu-bind=closest convention.
+# For Qwen3 models: strip <think> tokens and route them to reasoning_content
+REASONING_ARGS=""
+if [[ "$MODEL_NAME" == *"Qwen3"* ]]; then
+    REASONING_ARGS="--reasoning-parser deepseek_r1"
+fi
+
+echo "[$(date)] Starting vLLM server (TP=8, model=$MODEL_NAME) ..."
 srun -N1 -n1 -c56 --gpus-per-task=8 --gpu-bind=closest \
     python -m vllm.entrypoints.openai.api_server \
         --model "$MODEL_DIR" \
-        --served-model-name Qwen/Qwen2.5-72B-Instruct \
+        --served-model-name "$MODEL_NAME" \
         --tensor-parallel-size 8 \
         --dtype bfloat16 \
         --max-model-len 8192 \
+        --enforce-eager \
         --port $VLLM_PORT \
         --host 0.0.0.0 \
+        $REASONING_ARGS \
     > "$VLLM_LOG" 2>&1 &
 
 VLLM_PID=$!
@@ -132,7 +143,7 @@ echo "$QUERY" | matsim-agents chat \
     --mlp-checkpoint  "$MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
     --llm-provider    vllm \
-    --llm-model       Qwen/Qwen2.5-72B-Instruct \
+    --llm-model       "$MODEL_NAME" \
     --llm-base-url    "http://localhost:${VLLM_PORT}/v1" \
     --ase-structure-optimizer FIRE \
     --maxiter         500 \
