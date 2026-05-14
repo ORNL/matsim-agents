@@ -9,6 +9,20 @@ for the vLLM-based agent backend.
 > `export PROJ=/lustre/orion/<your-project>/proj-shared` and all examples
 > below will work as written.
 
+## Frontier scripts directory layout
+
+Frontier-specific assets are split by intent:
+
+| Subdir | Purpose |
+|---|---|
+| `scripts/setup/frontier/` | Login-node installers and source builds (vLLM, Quantum ESPRESSO, tvm-ffi) |
+| `scripts/launchers/frontier/` | sbatch-able launchers (vLLM model-server tests, `pw.x` GPU runner) |
+| `scripts/smoke-tests/frontier/` | One-shot validation jobs (single-node, multi-node, HF fallback) |
+| `scripts/docs/frontier/` | This document and the six-model benchmark notes |
+
+**Other backends documented separately** (also Frontier-targeted):
+- Quantum ESPRESSO `develop` with AMD MI250X (gfx90a) OpenMP target offload — see [`docs/quantum-espresso-frontier.md`](../../../docs/quantum-espresso-frontier.md). Build script: [`scripts/setup/frontier/build-qe-gpu-frontier.sh`](../../setup/frontier/build-qe-gpu-frontier.sh); launcher: [`scripts/launchers/frontier/run-pw-gpu-frontier.sh`](../../launchers/frontier/run-pw-gpu-frontier.sh).
+
 ---
 
 ## ⚠️ CRITICAL: prebuilt `tvm_ffi` `.so` MUST exist before launching ANY vLLM job
@@ -40,7 +54,7 @@ subsequent run.
 
 ```bash
 cd $PROJ/matsim-agents
-sbatch scripts/frontier/prebuild-tvm-ffi-frontier.sh    # rebuilds the .so
+sbatch scripts/setup/frontier/prebuild-tvm-ffi-frontier.sh    # rebuilds the .so
 ```
 
 After it completes, verify:
@@ -122,15 +136,16 @@ Bare `python` will not see GPUs correctly even with `ROCR_VISIBLE_DEVICES`.
 
 | Script | Purpose |
 |---|---|
-| `smoke-vllm-singlenode-frontier.sh` | 1 node, configurable TP (default 8). **Run this first.** |
-| `smoke-vllm-multinode-frontier.sh` | 4 nodes, TP=32 via Ray, for DeepSeek-V4-Pro |
+| `scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh` | 1 node, configurable TP (default 8). **Run this first.** |
+| `scripts/smoke-tests/frontier/smoke-vllm-multinode-frontier.sh` | 4 nodes, TP=32 via Ray, for DeepSeek-V4-Pro |
+| `scripts/smoke-tests/frontier/smoke-transformers-frontier.sh` | HF Transformers + Accelerate fallback |
 
 Submit with:
 
 ```bash
-sbatch --nodes=1 scripts/frontier/smoke-vllm-singlenode-frontier.sh
+sbatch --nodes=1 scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh
 # or for TP=1 quick test:
-GPUS_PER_NODE=1 sbatch --nodes=1 scripts/frontier/smoke-vllm-singlenode-frontier.sh
+GPUS_PER_NODE=1 sbatch --nodes=1 scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh
 ```
 
 ## Common debugging commands

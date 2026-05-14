@@ -11,7 +11,7 @@
 # SMOKE_MODEL_PATH/SMOKE_MODEL_NAME overrides via sbatch --export.
 #
 # Usage:
-#   nohup bash scripts/frontier/launch-test-all-models-frontier.sh \
+#   nohup bash scripts/launchers/frontier/launch-test-all-models-frontier.sh \
 #     > $PROJ/runs/launch-test-all.log 2>&1 &
 #
 # Summary table written to:

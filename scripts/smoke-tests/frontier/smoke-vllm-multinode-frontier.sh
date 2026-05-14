@@ -13,11 +13,11 @@
 # Default: 4 nodes × 8 GCDs = 32 GCDs total (TP=32), ~2 TB GPU memory.
 #
 # Submit:
-#   sbatch --nodes=4 scripts/frontier/smoke-vllm-multinode-frontier.sh
+#   sbatch --nodes=4 scripts/smoke-tests/frontier/smoke-vllm-multinode-frontier.sh
 #
 # Override model:
 #   SMOKE_MODEL_PATH=... SMOKE_MODEL_NAME=... \
-#   sbatch --nodes=4 scripts/frontier/smoke-vllm-multinode-frontier.sh
+#   sbatch --nodes=4 scripts/smoke-tests/frontier/smoke-vllm-multinode-frontier.sh
 # ---------------------------------------------------------------------------
 #SBATCH -A mat746
 #SBATCH -J smoke-multinode
@@ -134,7 +134,7 @@ export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
 TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
 if [[ ! -s "$TVM_FFI_SO" ]]; then
   echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
-  echo "       Rebuild with: scripts/frontier/build-tvm-ffi-frontier.sh (or copy from a backup)" >&2
+  echo "       Rebuild with: scripts/setup/frontier/prebuild-tvm-ffi-frontier.sh (or copy from a backup)" >&2
   exit 1
 fi
 rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true
