@@ -3,7 +3,7 @@
 # smoke-vllm-multinode-frontier.sh
 #
 # Smoke test: boot a multi-node vLLM Ray cluster on Frontier, load
-# DeepSeek-V4-Pro (789 GB, FP8), verify /health, then run one inference
+# DeepSeek-V4-Pro (789 GB, bfloat16), verify /health, then run one inference
 # request to confirm end-to-end generation works.
 #
 # Default: 4 nodes × 8 GCDs = 32 GCDs total (TP=32), ~2 TB GPU memory.
@@ -31,7 +31,7 @@ VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Fronti
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/DeepSeek-V4-Pro}
 SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-deepseek-ai/DeepSeek-V4-Pro}
 SMOKE_PORT=${SMOKE_PORT:-8000}
-SMOKE_DTYPE=${SMOKE_DTYPE:-auto}                # auto → picks FP8 if available
+SMOKE_DTYPE=${SMOKE_DTYPE:-bfloat16}            # MI250X does not support FP8; use bfloat16
 SMOKE_MAX_MODEL_LEN=${SMOKE_MAX_MODEL_LEN:-4096}  # short context for smoke test
 RAY_PORT=${RAY_PORT:-6379}
 GPUS_PER_NODE=8
