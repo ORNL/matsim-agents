@@ -166,6 +166,58 @@ bash test_matsim_perlmutter.sh
 
 ---
 
+## Runtime launchers and smoke tests
+
+Once the environment is installed, the following script directories provide
+ready-to-submit Slurm jobs that mirror the Frontier set:
+
+### `scripts/launchers/perlmutter/`
+| Script | Purpose |
+|---|---|
+| `run-pw-gpu-perlmutter.sh` | QE `pw.x` GPU launcher used by `MATSIM_QE_LAUNCHER`. Loads NVHPC 25.5 (CUDA 12.9, matches the PyTorch wheel) inside its own subshell, `srun`s with `--gpus-per-node=4 --gpu-bind=closest`, 4 ranks × 16 OMP threads. |
+| `run-qe-warmstart-benchmark-perlmutter.sh` | SBATCH wrapper for `tests/integration/test_qe_warmstart.py` (HydraGNN warm-start vs `pw.x` cold-start). Exports the `MATSIM_QE_*` and `MATSIM_HYDRAGNN_*` env vars; restrict fixtures via `FIXTURES=Si_diamond,...`. |
+| `launch-test-all-models-perlmutter.sh` | Sequentially submits one single-node smoke job per local HF model under `$PROJ/models/`. Skips models without a local directory; retries on QOS-limit errors. |
+| `launch-test-multinode-perlmutter.sh` | 2-node TP smoke test for the largest models (Qwen2.5-72B, Mixtral-8x22B). |
+| `launch-test-singlenode-resume-perlmutter.sh` | Resumes a partial single-node sweep. Optional `RESUME_AFTER_JOBID=<jid>` blocks until the in-flight job clears; `RESUME_MODELS="A,B"` whitelists. |
+
+### `scripts/smoke-tests/perlmutter/`
+| Script | Purpose |
+|---|---|
+| `smoke-transformers-perlmutter.sh` | Single-node HuggingFace smoke (uses `matsim_agents.llm.get_chat_model`, provider `huggingface`, `device_map="auto"` over the 4 A100s). |
+| `smoke-transformers-multinode-perlmutter.sh` | Multi-node HuggingFace smoke. Pure `srun + torch.distributed` (no `torchrun` nesting, no DeepSpeed). Uses `transformers`' `tp_plan="auto"` tensor-parallel sharding over NCCL on Slingshot. |
+| `_torchrun_smoke_loader.py` | Companion loader: reads `RANK`/`LOCAL_RANK`/`WORLD_SIZE`, calls `dist.init_process_group("nccl")`, loads the model with `tp_plan="auto"` (≥ 2 ranks) or `device_map="auto"` (1 rank), runs a one-shot generate and prints from rank 0. |
+
+### `scripts/advanced/perlmutter/`
+| Script | Purpose |
+|---|---|
+| `job-rhea-transformers-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + HydraGNN MLFF (FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
+
+### Submission examples
+```bash
+# Single-node HF smoke (Qwen2.5-72B by default; override via MATSIM_MODEL_DIR)
+sbatch scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh
+
+# Multi-node TP smoke (2 nodes × 4 A100s = 8 ranks, NCCL over Slingshot)
+sbatch scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh
+
+# Sweep all local models, one job at a time
+nohup bash scripts/launchers/perlmutter/launch-test-all-models-perlmutter.sh \
+  > $PROJ/runs/launch-test-all-pm.log 2>&1 &
+
+# QE warmstart benchmark (defaults to FIXTURES=Si_diamond)
+sbatch scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh
+
+# Full discovery validation (LLM + HydraGNN + QE)
+sbatch scripts/advanced/perlmutter/job-rhea-transformers-perlmutter.sh
+```
+
+All these scripts source `perlmutter-module-stack.sh` (`load_perlmutter_modules_gpu`)
+and activate the same `hydragnn_venv` produced by `install_matsim_perlmutter.sh`,
+so they inherit the unified HydraGNN-aligned toolchain (`cudatoolkit/12.9`,
+`gcc-native/13.2`, torch `2.11.0+cu129`).
+
+---
+
 ## Requirements
 
 ### Quick Setup (`setup_matsim_perlmutter.sh`)

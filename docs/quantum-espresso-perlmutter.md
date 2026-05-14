@@ -93,7 +93,13 @@ conda activate scripts/perlmutter_venv
 
 ### GPU Execution
 
-For GPU-enabled pw.x, set up your job script:
+The canonical way to invoke `pw.x` on Perlmutter GPU nodes is via the bundled
+launcher [`scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh`](../scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh).
+It sources [`perlmutter-module-stack.sh`](../scripts/setup/perlmutter/perlmutter-module-stack.sh)
+(`load_perlmutter_modules_nvidia`), exports a CUDA-12.9 `LD_LIBRARY_PATH`,
+turns on GPU-aware MPI, and `srun`s `pw.x` with the correct A100 layout
+(4 ranks × 4 GPUs × 16 OMP threads, `--gpu-bind=closest`):
+
 ```bash
 #!/bin/bash
 #SBATCH -N 1
@@ -101,25 +107,36 @@ For GPU-enabled pw.x, set up your job script:
 #SBATCH -q regular
 #SBATCH -t 01:00:00
 #SBATCH -A amsc001
+#SBATCH --gpus-per-node=4
+#SBATCH -c 32
 #SBATCH --job-name=qe-gpu-job
 
-# Load environment
-source scripts/setup/perlmutter/perlmutter-module-stack.sh
-load_perlmutter_modules_gpu
-conda activate scripts/perlmutter_venv
+# The launcher loads its own module stack; no need to load anything here.
+./scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh test.in
+```
 
-# Set GPU offload controls (optional but recommended)
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+The launcher also accepts environment overrides (`PW_BIN=`, `QE_PREFIX=`,
+`NRANKS=`, `OMP_NUM_THREADS=`, `GPUS_PER_NODE=`) and is what
+`matsim_agents.tools.qe_relax` invokes when `MATSIM_QE_LAUNCHER` is set.
 
-# Run pw.x with 8 MPI ranks × 14 OMP threads = 112 cores
-# (A100 has 108 cores, so 8 GPU-bound ranks fit on 1 node)
-srun -N1 -n8 -c14 --gpus-per-node=8 --gpu-bind=closest \
-     external/quantum-espresso/install-gpu/bin/pw.x -in test.in
+### HydraGNN warm-start vs QE cold-start benchmark
+
+The HydraGNN-MLFF warm-start vs `pw.x` cold-start integration test
+([`tests/integration/test_qe_warmstart.py`](../tests/integration/test_qe_warmstart.py))
+has a ready-made Perlmutter SBATCH wrapper at
+[`scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh`](../scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh).
+It loads the HydraGNN-aligned module stack + `hydragnn_venv`, exports the
+`MATSIM_QE_*` and `MATSIM_HYDRAGNN_*` env vars, and runs `pytest`:
+
+```bash
+sbatch \
+  --export=ALL,PSEUDO_DIR=/path/to/pseudos,FIXTURES=Si_diamond \
+  scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh
 ```
 
 ### CPU Execution
 
-For CPU-only pw.x:
+For CPU-only `pw.x`:
 ```bash
 #!/bin/bash
 #SBATCH -N 1
@@ -129,7 +146,7 @@ For CPU-only pw.x:
 
 source scripts/setup/perlmutter/perlmutter-module-stack.sh
 load_perlmutter_modules
-conda activate scripts/perlmutter_venv
+source scripts/setup/perlmutter/setup_matsim_perlmutter.sh
 
 # Run with full 128 cores per node
 srun -N1 -n64 \
@@ -140,7 +157,7 @@ srun -N1 -n64 \
 
 | Aspect | Perlmutter (NVIDIA A100) | Frontier (AMD MI250X) |
 |--------|--------------------------|----------------------|
-| **GPU/node** | 8× A100 | 8× MI250X |
+| **GPU/node** | 4× A100 (80 GB) | 8× MI250X GCDs |
 | **Compiler** | nvfortran/PrgEnv-nvidia | cce/PrgEnv-cray |
 | **Offload method** | CUDA (native) | OpenMP target + ROCm |
 | **Build workarounds** | None | Complex ICE retry loop |
