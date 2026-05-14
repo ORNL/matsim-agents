@@ -170,6 +170,19 @@ EXTRAS+="${EXTRAS:+,}dev"
 log "Installing matsim-agents (editable) with extras: [${EXTRAS}]"
 python -m pip install -e "${REPO_ROOT}[${EXTRAS}]"
 
+# --------------------------- vLLM server -----------------------------------
+# The [vllm] matsim-agents extra only installs langchain-openai (the OpenAI-
+# compatible client). The vLLM *server* (the `vllm` Python package that runs
+# the inference engine) must be installed separately.
+#
+# On ROCm (Frontier/Aurora) the standard PyPI wheel works because vLLM pins
+# torch==<version> and pip matches it against the installed +rocm build.
+# On CUDA workstations the same wheel installs the CUDA-backed torch.
+if echo "$LLM_BACKENDS" | grep -qw "vllm"; then
+    log "Installing vLLM server package (pip install vllm)"
+    python -m pip install vllm
+fi
+
 # --------------------------- Optional: Ollama daemon -----------------------
 bootstrap_ollama() {
     [[ "$PLATFORM" != "workstation" ]] && {
@@ -250,9 +263,10 @@ fi
 # ------------------------------- Smoke test --------------------------------
 log "Running smoke import test"
 python - <<'PY'
-import importlib, sys
+import importlib, sys, os
+llm_backends = os.environ.get("LLM_BACKENDS", "")
 required = ("torch", "torch_geometric", "ase", "langgraph", "langchain_core", "matsim_agents")
-optional = ("hydragnn",)
+optional = ("hydragnn",) + (("vllm",) if "vllm" in llm_backends else ())
 ok = True
 for mod in required:
     try:
