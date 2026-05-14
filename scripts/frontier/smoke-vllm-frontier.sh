@@ -56,6 +56,15 @@ export TRITON_DISABLE_AUTOTUNE_CACHE=1
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY
 export no_proxy='*'
 export NO_PROXY='*'
+
+# Preflight: tvm_ffi will silently hang at import if its prebuilt .so is missing.
+TVM_FFI_SO=$PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so
+if [[ ! -s "$TVM_FFI_SO" ]]; then
+  echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
+  echo "       Rebuild with: scripts/frontier/prebuild-tvm-ffi-frontier.sh" >&2
+  exit 1
+fi
+rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true
 export MIOPEN_DISABLE_CACHE=1
 export MIOPEN_USER_DB_PATH=/tmp/miopen-${SLURM_JOB_ID:-local}
 mkdir -p "$MIOPEN_USER_DB_PATH"

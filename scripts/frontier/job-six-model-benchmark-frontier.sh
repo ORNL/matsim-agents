@@ -78,6 +78,16 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_prox
 export no_proxy='*'
 export NO_PROXY='*'
 
+# Use prebuilt tvm_ffi torch-c-dlpack .so from proj-shared (avoids JIT rebuild hang at import)
+export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
+TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
+if [[ ! -s "$TVM_FFI_SO" ]]; then
+  echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
+  echo "       Rebuild with: scripts/frontier/prebuild-tvm-ffi-frontier.sh" >&2
+  exit 1
+fi
+rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true
+
 OUTPUT_PREFIX=${BENCHMARK_OUTPUT_PREFIX:-$RUN_DIR/six-model-benchmark}
 SPEC_FILE=${BENCHMARK_SPEC_FILE:-}
 KEYWORDS=${BENCHMARK_KEYWORDS:-stability,band gap,formation energy,synthesis}
