@@ -46,7 +46,7 @@ export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
 # batch job fails immediately with "activate: No such file or directory".
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 
-source "$PROJ/matsim-agents/scripts/frontier-module-stack.sh"
+source "$PROJ/matsim-agents/scripts/frontier/frontier-module-stack.sh"
 load_frontier_rocm711_modules
 
 source activate "$VENV"

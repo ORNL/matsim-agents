@@ -19,7 +19,7 @@ VLLM_REF=${VLLM_REF:-v0.20.0}
 mkdir -p "$RUN_DIR" "$SRC_DIR"
 
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
-source "$PROJ/matsim-agents/scripts/frontier-module-stack.sh"
+source "$PROJ/matsim-agents/scripts/frontier/frontier-module-stack.sh"
 load_frontier_rocm711_modules
 source activate "$VENV"
 
