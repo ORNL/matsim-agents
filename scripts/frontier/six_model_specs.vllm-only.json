@@ -1,0 +1,114 @@
+[
+  {
+    "name": "qwen2.5-72b-instruct",
+    "provider": "vllm",
+    "model": "Qwen/Qwen2.5-72B-Instruct",
+    "base_url_env": "MATSIM_VLLM_QWEN72_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "qwen2.5-14b-instruct",
+    "provider": "vllm",
+    "model": "Qwen/Qwen2.5-14B-Instruct",
+    "base_url_env": "MATSIM_VLLM_QWEN14_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "llama-3.3-70b-instruct",
+    "provider": "vllm",
+    "model": "meta-llama/Llama-3.3-70B-Instruct",
+    "base_url_env": "MATSIM_VLLM_LLAMA33_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "llama-3.1-70b-instruct",
+    "provider": "vllm",
+    "model": "meta-llama/Llama-3.1-70B-Instruct",
+    "base_url_env": "MATSIM_VLLM_LLAMA70_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "llama-3.1-8b-instruct",
+    "provider": "vllm",
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "base_url_env": "MATSIM_VLLM_LLAMA8_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "mixtral-8x22b-instruct",
+    "provider": "vllm",
+    "model": "mistralai/Mixtral-8x22B-Instruct-v0.1",
+    "base_url_env": "MATSIM_VLLM_MIXTRAL_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "deepseek-r1-distill-qwen-32b",
+    "provider": "vllm",
+    "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "base_url_env": "MATSIM_VLLM_DEEPSEEK32_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "qwen3-32b",
+    "provider": "vllm",
+    "model": "Qwen/Qwen3-32B",
+    "base_url_env": "MATSIM_VLLM_QWEN3_32B_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "qwen3.6-27b",
+    "provider": "vllm",
+    "model": "Qwen/Qwen3.6-27B",
+    "base_url_env": "MATSIM_VLLM_QWEN36_27B_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "qwen3.6-35b-a3b",
+    "provider": "vllm",
+    "model": "Qwen/Qwen3.6-35B-A3B",
+    "base_url_env": "MATSIM_VLLM_QWEN36_35B_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "gemma-4-31b-it",
+    "provider": "vllm",
+    "model": "google/gemma-4-31B-it",
+    "base_url_env": "MATSIM_VLLM_GEMMA4_31B_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "gemma-4-26b-a4b-it",
+    "provider": "vllm",
+    "model": "google/gemma-4-26B-A4B-it",
+    "base_url_env": "MATSIM_VLLM_GEMMA4_26B_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "smollm3-3b",
+    "provider": "vllm",
+    "model": "HuggingFaceTB/SmolLM3-3B",
+    "base_url_env": "MATSIM_VLLM_SMOLLM3_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "deepseek-v4-pro",
+    "provider": "vllm",
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "base_url_env": "MATSIM_VLLM_DEEPSEEK_V4_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  }
+]
