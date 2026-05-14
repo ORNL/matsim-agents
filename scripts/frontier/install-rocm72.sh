@@ -119,6 +119,24 @@ assert installed.get("triton-rocm") == "3.6.0",    f"triton-rocm={installed.get(
 print("All package version assertions passed.")
 PY
 
+# ── Install Ray (multi-node vLLM backend) with explicit pinned deps ───────────
+# All packages installed with --no-deps to avoid disturbing the frozen vLLM /
+# PyTorch / HydraGNN dependency set. Versions verified against venv 2026-05-06.
+echo "=== Installing Ray 2.55.1 and dependencies (pinned, --no-deps) ==="
+pip install --no-deps \
+    "ray==2.55.1" \
+    "msgpack==1.1.2" \
+    "aiohttp_cors==0.8.1" \
+    "colorful==0.5.8" \
+    "smart_open==7.6.0" \
+    "opencensus==0.11.4" \
+    "opencensus-context==0.1.3" \
+    "opentelemetry-exporter-prometheus==0.62b1" \
+    "py-spy==0.4.2" \
+    "python-discovery==1.3.0" \
+    "virtualenv==21.3.1" \
+    "distlib==0.4.0"
+
 # ── Phase 3: Submit vLLM compute build job ────────────────────────────────────
 echo "=== Phase 3: Submitting vLLM build job ==="
 sbatch "$PROJ/matsim-agents/scripts/frontier/build-vllm-rocm72.sh"
