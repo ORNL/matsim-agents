@@ -5,7 +5,8 @@ set -euo pipefail
 
 PROJ=/lustre/orion/mat746/proj-shared
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SINGLE="$SCRIPT_DIR/smoke-vllm-singlenode-frontier.sh"
+SMOKE_DIR="$SCRIPT_DIR/../smoke-tests"
+SINGLE="$SMOKE_DIR/smoke-vllm-singlenode-frontier.sh"
 
 TS=$(date +%Y%m%d-%H%M%S)
 SUMMARY="$PROJ/runs/test-singlenode-resume-$TS.tsv"

@@ -32,8 +32,8 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 PROJ=/lustre/orion/mat746/proj-shared
-[[ -z "${SCRIPT_DIR:-}" || ! -f "$SCRIPT_DIR/_rocr_to_hip.sh" ]] && \
-  SCRIPT_DIR="$PROJ/matsim-agents/scripts/frontier"
+[[ -z "${SCRIPT_DIR:-}" ]] && SCRIPT_DIR="$PROJ/matsim-agents/scripts/frontier/smoke-tests"
+UTILS_DIR="$SCRIPT_DIR/../utils"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/DeepSeek-R1-Distill-Qwen-32B}
 SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-deepseek-ai/DeepSeek-R1-Distill-Qwen-32B}
@@ -162,7 +162,7 @@ echo "[warmup] Warming up GPUs on all $N_NODES nodes ..."
 WARMUP_PY="import torch; n=torch.cuda.device_count(); [torch.zeros(1024,device=f'cuda:{i}')+1 for i in range(n)]; print(f'  {__import__(\"socket\").gethostname()}: {n} GPUs OK')"
 for node in "${ALL_NODES[@]}"; do
   srun --nodes=1 --ntasks=1 -w "$node" --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
-    "$SCRIPT_DIR/_rocr_to_hip.sh" "$VENV/bin/python" -c "$WARMUP_PY" &
+    "$UTILS_DIR/_rocr_to_hip.sh" "$VENV/bin/python" -c "$WARMUP_PY" &
 done
 wait
 echo "[warmup] Done."
@@ -191,7 +191,7 @@ WORKER_PIDS=()
 for node in "${ALL_NODES[@]:1}"; do
   echo "[ray] Starting worker on $node ..."
   srun --nodes=1 --ntasks=1 --ntasks-per-node=1 -w "$node" --export=ALL \
-    "$SCRIPT_DIR/_rocr_to_hip.sh" "$VENV/bin/ray" start --address="$RAY_ADDRESS" \
+    "$UTILS_DIR/_rocr_to_hip.sh" "$VENV/bin/ray" start --address="$RAY_ADDRESS" \
       --num-cpus=56 --num-gpus="$GPUS_PER_NODE" --block \
     > "$RUN_DIR/ray-worker-$node.log" 2>&1 &
   WORKER_PIDS+=($!)
