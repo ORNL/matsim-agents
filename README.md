@@ -98,7 +98,7 @@ in via the same interfaces.
   installers and auto-relaxes HydraGNN's overly-tight `click==8.0.0` /
   `tqdm==4.67.1` pins so the env is conflict-free on every site.
 - **First-class DFT labellers built per platform**: validated
-  build/run recipes for both **VASP 6.x** (Frontier MI250X, Aurora PVC)
+  build/run recipes for both **VASP 6.6** (Frontier MI250X, Aurora PVC)
   and **Quantum ESPRESSO `pw.x` GPU** (Frontier MI250X via OpenMP
   target offload, Aurora PVC via `oneapi`/`openmp`, Perlmutter A100 via
   CUDA). Build scripts and SLURM/PBS launchers are checked in for each
@@ -106,7 +106,7 @@ in via the same interfaces.
 - **Pluggable LLMs**: Ollama, vLLM, OpenAI, Anthropic via a single factory.
 - **Active-learning loop** (`matsim-agents al run`): HydraGNN-driven MD
   generates candidates → ensemble / MC-dropout uncertainty selects the
-  most informative → a DFT backend (**VASP 6.x** *or* **Quantum
+  most informative → a DFT backend (**VASP 6.6** *or* **Quantum
   ESPRESSO `pw.x`**) labels them in parallel inside one SLURM
   allocation → dataset is grown and HydraGNN is retrained → repeat. The
   DFT backend is a single YAML toggle (`dft.backend: vasp | qe`); both
@@ -136,7 +136,7 @@ GTL pins, ROCm/Cray cross-builds, CUDA-aware MPI) baked in.
 | **Hardware**                        | AMD MI250X (gfx90a), 64-core EPYC | Intel Data Center GPU Max 1550 (PVC)    | NVIDIA A100 (40/80 GB), AMD EPYC|
 | **HydraGNN venv**                   | ROCm 7.2.0 + PyTorch              | oneAPI + Intel Extension for PyTorch    | CUDA 12 + PyTorch               |
 | **vLLM model server**               | ROCm 7.2.0, source build          | oneAPI                                  | CUDA                            |
-| **VASP 6.x**                        | `build-vasp-gpu-frontier.sh`      | `build-vasp-gpu-aurora.sh` (`vasp_std`/`vasp_gam`/`vasp_ncl`) | (use site module if available)  |
+| **VASP 6.6**                        | `build-vasp-gpu-frontier.sh`      | `build-vasp-gpu-aurora.sh` (`vasp_std`/`vasp_gam`/`vasp_ncl`) | (use site module if available)  |
 | **Quantum ESPRESSO `pw.x` (GPU)**   | OpenMP target offload to gfx90a   | `QE_GPU="openmp;oneapi"`, PVC arch      | CUDA build                      |
 | **Setup entry point**               | `scripts/setup/frontier/install-rocm72.sh` | `scripts/setup/aurora/install_matsim_aurora.sh` | `scripts/setup/perlmutter/install_matsim_perlmutter.sh` |
 | **Active-learning launcher**        | `scripts/launchers/frontier/run-active-learning-frontier.sh` | (file-coupled via SLURM)                | (file-coupled via SLURM)        |
@@ -199,7 +199,7 @@ are deliberately kept isolated and coupled only through Slurm + files.
 
 ### VASP (DFT) backend on Frontier
 
-VASP 6.x is also wired up on Frontier MI250X for the active-learning
+VASP 6.6 is also wired up on Frontier MI250X for the active-learning
 labeller path:
 
 - Build script: [`scripts/setup/frontier/build-vasp-gpu-frontier.sh`](scripts/setup/frontier/build-vasp-gpu-frontier.sh)
@@ -675,7 +675,7 @@ Common options (all commands that touch HydraGNN):
 
 The `matsim-agents al` subcommand runs an end-to-end active-learning loop
 that grows a HydraGNN training set from DFT labels of structures the
-current model is most uncertain about. Both **VASP 6.x** and **Quantum
+current model is most uncertain about. Both **VASP 6.6** and **Quantum
 ESPRESSO `pw.x`** are supported as the labeller — the choice is a single
 YAML field.
 
@@ -839,7 +839,7 @@ matsim-agents/
 │       ├── dft_backend.py        # backend-agnostic Protocol
 │       ├── dft_runner.py         # in-allocation parallel job dispatcher
 │       └── backends/
-│           ├── vasp.py           # VASP 6.x labeller
+│           ├── vasp.py           # VASP 6.6 labeller
 │           └── qe.py             # Quantum ESPRESSO pw.x labeller
 ├── examples/
 │   ├── single_relaxation.py
@@ -921,7 +921,7 @@ before building a workflow on top of it.
 - **Pluggable LLM backends**: vLLM (Frontier ROCm), Hugging Face
   Transformers, and OpenAI-compatible HTTP endpoints.
 - **Active-learning loop** with HydraGNN as the surrogate and either
-  VASP 6.x or Quantum ESPRESSO `pw.x` as the DFT labeller, selectable
+  VASP 6.6 or Quantum ESPRESSO `pw.x` as the DFT labeller, selectable
   via a single `dft.backend:` YAML field. Includes ensemble /
   MC-dropout uncertainty scoring, in-allocation parallel DFT dispatch,
   templated INCAR / `pw.in` inputs, and shell-style `${VAR}` /
