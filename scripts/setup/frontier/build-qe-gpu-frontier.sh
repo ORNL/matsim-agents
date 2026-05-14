@@ -87,11 +87,14 @@ echo "=========================================="
 module reset
 
 # Switch to PrgEnv-cray (needed for OpenMP target offload to AMD GPUs).
-# Pin cce to 21.0.0 — the default cce/18.0.1 hits an internal compiler error
-# (ftn-7991 in /workspace/crayftn/pdgcs/v_fei.c) on PW/src/gen_at_d{j,y}.f90
-# when -target-accel=amd_gfx90a is in effect. cce 21 fixes it.
+# NOTE: We deliberately stay on the Frontier-default cce/18.0.1 stack.
+# Newer cce versions (19/20/21) are installed but their ftn wrapper requires
+# `libopenacc.pc`, which Frontier's site config does not ship; loading them
+# breaks every Fortran compile with `Error invoking pkg-config!`.
+# A per-file workaround later in this script handles cce/18.0.1's ICE on
+# PW/src/gen_at_d{j,y}.f90.
 module load PrgEnv-cray
-module load cce/21.0.0
+module load cce                          # default 18.0.1 on Frontier
 module load craype-accel-amd-gfx90a      # enables -fopenmp offload to gfx90a
 module load rocm                         # rocFFT, rocBLAS, rocSOLVER
 module load cray-fftw                    # CPU-side FFTW3 headers
@@ -129,8 +132,10 @@ else
 fi
 
 # ---- Configure with CMake ---------------------------------------------------
-# Use a clean build dir to avoid stale CPU-build cache files.
-rm -rf "${BUILD_DIR}"
+# Reuse cached objects when CLEAN_BUILD is empty/0; otherwise wipe build dir.
+if [[ "${CLEAN_BUILD:-1}" == "1" ]]; then
+  rm -rf "${BUILD_DIR}"
+fi
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
@@ -174,6 +179,43 @@ cmake \
 
 echo ""
 echo "--- CMake configure done ---"
+
+# ---- Workaround: cce/18.0.1 ICE on two PW/src files -------------------------
+# Cray Fortran 18.0.1 hits an internal compiler error on
+#   PW/src/gen_at_dj.f90  (Hubbard stress tensor)
+#   PW/src/gen_at_dy.f90  (internal stress tensor)
+# when `-target-accel=amd_gfx90a -h omp` is in effect. Both files are pure
+# host Fortran (no `!$omp target` directives), so we strip the AMD-offload
+# codegen flags from their per-file compile commands. This keeps the rest of
+# the build at full GPU offload while letting these two routines compile
+# host-only on the same cce 18.0.1 frontend.
+# ---- Workaround: cce/18.0.1 ICE on two PW/src files -------------------------
+# Cray Fortran 18.0.1 hits an internal compiler error on
+#   PW/src/gen_at_dj.f90  (Hubbard stress tensor)
+#   PW/src/gen_at_dy.f90  (internal stress tensor)
+# when `-target-accel=amd_gfx90a -h omp` is in effect (ftn-7991 in
+# /workspace/crayftn/pdgcs/v_fei.c). Both files are pure host Fortran
+# (no `!$omp target` directives), so we precompile their .o objects with
+# the offload flags stripped, then let `make` consume the cached objects.
+# This keeps every other source in qe_pw at full GPU offload.
+echo "--- Workaround: pre-compiling gen_at_d{j,y}.f90 without GPU offload ---"
+PW_FLAGS_FILE="${BUILD_DIR}/PW/src/CMakeFiles/qe_pw.dir/flags.make"
+PW_OBJ_DIR="${BUILD_DIR}/PW/src/CMakeFiles/qe_pw.dir/src"
+mkdir -p "${PW_OBJ_DIR}"
+if [[ -f "${PW_FLAGS_FILE}" ]]; then
+  PW_DEFINES=$(grep   '^Fortran_DEFINES'  "${PW_FLAGS_FILE}" | sed -E 's/^Fortran_DEFINES *= *//')
+  PW_INCLUDES=$(grep  '^Fortran_INCLUDES' "${PW_FLAGS_FILE}" | sed -E 's/^Fortran_INCLUDES *= *//')
+  PW_FFLAGS=$(grep    '^Fortran_FLAGS'    "${PW_FLAGS_FILE}" | sed -E 's/^Fortran_FLAGS *= *//; s/-target-accel=amd_gfx90a//g; s/-h[[:space:]]+omp/-h noomp/g')
+  for src in gen_at_dj gen_at_dy; do
+    SRCF="${SRC_DIR}/PW/src/${src}.f90"
+    OBJF="${PW_OBJ_DIR}/${src}.f90.o"
+    echo "  compiling ${src}.f90 -> ${OBJF}"
+    # shellcheck disable=SC2086
+    ftn ${PW_DEFINES} ${PW_INCLUDES} ${PW_FFLAGS} -c "${SRCF}" -o "${OBJF}"
+  done
+else
+  echo "WARNING: ${PW_FLAGS_FILE} not found, skipping ICE workaround"
+fi
 
 # ---- Build ------------------------------------------------------------------
 # Build the targets that benefit most from GPU offload first; pp/cp can be
