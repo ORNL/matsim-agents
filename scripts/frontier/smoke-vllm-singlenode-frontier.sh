@@ -62,39 +62,64 @@ export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 
 export MIOPEN_USER_DB_PATH="$RUN_DIR/miopen-cache"
-mkdir -p "$MIOPEN_USER_DB_PATH"
+rmdir "$RUN_DIR/miopen-cache" 2>/dev/null; mkdir -p "$MIOPEN_USER_DB_PATH"
 
 export VLLM_CUDART_SO_PATH=/opt/rocm-7.2.0/lib/libamdhip64.so
+
+# Use ROCm 7.2.0 system RCCL (not PyTorch-bundled)
+export VLLM_NCCL_SO_PATH=/opt/rocm-7.2.0/lib/librccl.so.1
+TORCH_LIB=$VENV/lib/python3.11/site-packages/torch/lib
+export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
+
+# HSA scratch reclaim fix (prevents RCCL collective init crash on Frontier)
+export HSA_NO_SCRATCH_RECLAIM=1
+
+# Target correct GPU architecture
+export PYTORCH_ROCM_ARCH=gfx90a
+export ROCM_ARCH=gfx90a
 
 export NCCL_SOCKET_IFNAME=hsn
 export GLOO_SOCKET_IFNAME=hsn
 export FI_CXI_ATS=0
 
+# Wipe stale compiled kernel cache (old gfx900 kernels cause HSA illegal instruction)
+export VLLM_CACHE_ROOT=$RUN_DIR/vllm-cache
+export TRITON_CACHE_DIR=$RUN_DIR/vllm-cache/triton
+rm -rf "$VLLM_CACHE_ROOT"
+mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
+
 unset ROCR_VISIBLE_DEVICES
 unset HIP_VISIBLE_DEVICES
 
 # ── Cleanup trap ─────────────────────────────────────────────────────────────
+TAIL_PID=""
 cleanup() {
   echo "[cleanup] Stopping vLLM ..."
+  [[ -n "${TAIL_PID:-}" ]] && kill "$TAIL_PID" 2>/dev/null || true
   kill "$VLLM_PID" 2>/dev/null || true
   wait "$VLLM_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # ── Start vLLM ───────────────────────────────────────────────────────────────
-echo "[vllm] Starting server TP=${GPUS_PER_NODE} (mp backend) ..."
-"$VENV/bin/vllm" serve "$SMOKE_MODEL_PATH" \
-  --served-model-name "$SMOKE_MODEL_NAME" \
-  --tensor-parallel-size "$GPUS_PER_NODE" \
-  --distributed-executor-backend mp \
-  --dtype "$SMOKE_DTYPE" \
-  --max-model-len "$SMOKE_MAX_MODEL_LEN" \
-  --port "$SMOKE_PORT" \
-  --trust-remote-code \
-  --disable-log-requests \
-  --enforce-eager \
+echo "[vllm] Starting server TP=${GPUS_PER_NODE} ..."
+srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
+  python -m vllm.entrypoints.openai.api_server \
+    --model "$SMOKE_MODEL_PATH" \
+    --served-model-name "$SMOKE_MODEL_NAME" \
+    --tensor-parallel-size "$GPUS_PER_NODE" \
+    --dtype "$SMOKE_DTYPE" \
+    --max-model-len "$SMOKE_MAX_MODEL_LEN" \
+    --port "$SMOKE_PORT" \
+    --host 0.0.0.0 \
+    --trust-remote-code \
+    --disable-log-requests \
+    --enforce-eager \
   > "$RUN_DIR/vllm.log" 2>&1 &
 VLLM_PID=$!
+# Mirror log to stdout in real time
+tail -f "$RUN_DIR/vllm.log" &
+TAIL_PID=$!
 
 # ── Wait for /health ─────────────────────────────────────────────────────────
 echo "[vllm] Waiting for server (up to 10 min) ..."
