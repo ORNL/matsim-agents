@@ -19,23 +19,25 @@ in via the same interfaces.
 ## Table of contents
 
 1. [Architecture](#architecture)
-2. [Running on Frontier (OLCF)](#running-on-frontier-olcf)
-3. [Running on Aurora (ALCF)](#running-on-aurora-alcf)
-4. [HPC Documentation Index](#hpc-documentation-index)
-5. [Installation](#installation)
-6. [LLM backends](#llm-backends)
-7. [Downloading models for vLLM](#downloading-models-for-vllm)
-8. [Quick start](#quick-start)
-9. [The agent graph](#the-agent-graph)
-10. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
-11. [Programmatic API](#programmatic-api)
-12. [CLI reference](#cli-reference)
-13. [Active-learning loop (HydraGNN ↔ DFT)](#active-learning-loop-hydragnn--dft)
-14. [Project layout](#project-layout)
-15. [Configuration reference](#configuration-reference)
-16. [Current capabilities and planned work](#current-capabilities-and-planned-work)
-17. [Contributing](#contributing)
-18. [License & citation](#license--citation)
+2. [Portability across DOE supercomputers](#portability-across-doe-supercomputers)
+3. [Running on Frontier (OLCF)](#running-on-frontier-olcf)
+4. [Running on Aurora (ALCF)](#running-on-aurora-alcf)
+5. [Running on Perlmutter (NERSC)](#running-on-perlmutter-nersc)
+6. [HPC Documentation Index](#hpc-documentation-index)
+7. [Installation](#installation)
+8. [LLM backends](#llm-backends)
+9. [Downloading models for vLLM](#downloading-models-for-vllm)
+10. [Quick start](#quick-start)
+11. [The agent graph](#the-agent-graph)
+12. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
+13. [Programmatic API](#programmatic-api)
+14. [CLI reference](#cli-reference)
+15. [Active-learning loop (HydraGNN ↔ DFT)](#active-learning-loop-hydragnn--dft)
+16. [Project layout](#project-layout)
+17. [Configuration reference](#configuration-reference)
+18. [Current capabilities and planned work](#current-capabilities-and-planned-work)
+19. [Contributing](#contributing)
+20. [License & citation](#license--citation)
 
 ---
 
@@ -89,15 +91,26 @@ in via the same interfaces.
   - configurable **multilayer stacking** with adjustable interlayer separation and vacuum gap
 - **Supercell control**: explicit `NxNxN` tiling or auto-tile each prototype to a minimum atom count so dopants, AFM ordering, and symmetry-breaking distortions can develop.
 - **Stability scoring**: relative chemical stability (ΔE/atom rankings) and a dynamical-stability proxy (residual force tolerance).
-- **Local & HPC ready**: setup script delegates to HydraGNN's own installers for laptops and DOE supercomputers (Frontier, Perlmutter, Aurora, Andes), and auto-relaxes HydraGNN's overly-tight `click==8.0.0` / `tqdm==4.67.1` pins so the env is conflict-free.
+- **Local & HPC ready, portable across diverse DOE accelerators**: same
+  Python entry points run on **Frontier (OLCF, AMD MI250X)**, **Aurora
+  (ALCF, Intel PVC)**, and **Perlmutter (NERSC, NVIDIA A100)**, plus
+  Andes and laptops. The setup script delegates to HydraGNN's
+  installers and auto-relaxes HydraGNN's overly-tight `click==8.0.0` /
+  `tqdm==4.67.1` pins so the env is conflict-free on every site.
+- **First-class DFT labellers built per platform**: validated
+  build/run recipes for both **VASP 6.x** (Frontier MI250X, Aurora PVC)
+  and **Quantum ESPRESSO `pw.x` GPU** (Frontier MI250X via OpenMP
+  target offload, Aurora PVC via `oneapi`/`openmp`, Perlmutter A100 via
+  CUDA). Build scripts and SLURM/PBS launchers are checked in for each
+  site — see [Portability across DOE supercomputers](#portability-across-doe-supercomputers).
 - **Pluggable LLMs**: Ollama, vLLM, OpenAI, Anthropic via a single factory.
 - **Active-learning loop** (`matsim-agents al run`): HydraGNN-driven MD
   generates candidates → ensemble / MC-dropout uncertainty selects the
-  most informative → a DFT backend (VASP 6.x **or** Quantum ESPRESSO
-  `pw.x`) labels them in parallel inside one SLURM allocation → dataset
-  is grown and HydraGNN is retrained → repeat. The DFT backend is a
-  single YAML toggle (`dft.backend: vasp | qe`); both share an
-  INCAR-style template path (`INCAR.template` / `pw.template`).
+  most informative → a DFT backend (**VASP 6.x** *or* **Quantum
+  ESPRESSO `pw.x`**) labels them in parallel inside one SLURM
+  allocation → dataset is grown and HydraGNN is retrained → repeat. The
+  DFT backend is a single YAML toggle (`dft.backend: vasp | qe`); both
+  share an INCAR-style template path (`INCAR.template` / `pw.template`).
 - **LLM-generated MD seeds** (`md.seed_source.kind: prompt`): the LLM
   proposes plausible chemical compositions for a target objective and
   the loop materialises seed structures from common crystal prototypes,
@@ -106,6 +119,48 @@ in via the same interfaces.
   shell-style substitution with optional in-file `vars:` block, so the
   same config can be re-targeted across users / scratch dirs / runs
   without editing it.
+
+---
+
+## Portability across DOE supercomputers
+
+`matsim-agents` is designed to run **the same Python code path on three
+DOE leadership-class systems with three very different accelerators**.
+All heavy backends (HydraGNN MLFF inference/training, vLLM model
+serving, VASP, and Quantum ESPRESSO) have validated build + launcher
+recipes per site, with all platform-specific gotchas (toolchains, MPI
+GTL pins, ROCm/Cray cross-builds, CUDA-aware MPI) baked in.
+
+| Capability                          | Frontier (OLCF) MI250X            | Aurora (ALCF) PVC                       | Perlmutter (NERSC) A100         |
+|-------------------------------------|-----------------------------------|-----------------------------------------|---------------------------------|
+| **Hardware**                        | AMD MI250X (gfx90a), 64-core EPYC | Intel Data Center GPU Max 1550 (PVC)    | NVIDIA A100 (40/80 GB), AMD EPYC|
+| **HydraGNN venv**                   | ROCm 7.2.0 + PyTorch              | oneAPI + Intel Extension for PyTorch    | CUDA 12 + PyTorch               |
+| **vLLM model server**               | ROCm 7.2.0, source build          | oneAPI                                  | CUDA                            |
+| **VASP 6.x**                        | `build-vasp-gpu-frontier.sh`      | `build-vasp-gpu-aurora.sh` (`vasp_std`/`vasp_gam`/`vasp_ncl`) | (use site module if available)  |
+| **Quantum ESPRESSO `pw.x` (GPU)**   | OpenMP target offload to gfx90a   | `QE_GPU="openmp;oneapi"`, PVC arch      | CUDA build                      |
+| **Setup entry point**               | `scripts/setup/frontier/install-rocm72.sh` | `scripts/setup/aurora/install_matsim_aurora.sh` | `scripts/setup/perlmutter/install_matsim_perlmutter.sh` |
+| **Active-learning launcher**        | `scripts/launchers/frontier/run-active-learning-frontier.sh` | (file-coupled via SLURM)                | (file-coupled via SLURM)        |
+| **Per-platform docs**               | [docs/quantum-espresso-frontier.md](docs/quantum-espresso-frontier.md) | [docs/quantum-espresso-aurora.md](docs/quantum-espresso-aurora.md), [docs/vasp-aurora.md](docs/vasp-aurora.md) | [docs/quantum-espresso-perlmutter.md](docs/quantum-espresso-perlmutter.md) |
+
+Single entry-point index covering all three systems:
+[`docs/hpc-platforms.md`](docs/hpc-platforms.md).
+
+Design principles that keep the code portable:
+
+- **DFT and Python/ML stacks are never co-loaded** in the same shell
+  on any platform — each uses its own module set, and the active-
+  learning loop couples them through SLURM steps + the filesystem.
+  This avoids the pervasive ABI/toolchain conflicts (Cray MPI GTL
+  SONAMEs on Frontier, oneAPI vs PyTorch CUDA stack on Perlmutter,
+  etc.) that otherwise break shared builds.
+- **Backend-agnostic active learning** — the same `matsim-agents al
+  run` driver works whether the labeller is VASP or QE, and on any of
+  the three platforms, because the DFT backend is selected by a single
+  YAML field (`dft.backend: vasp | qe`).
+- **Templated YAML configs** — `${VAR}` / `${VAR:-default}` /
+  `${VAR:?msg}` substitution lets one config file follow you between
+  Frontier scratch, Aurora flare, and Perlmutter pscratch without
+  edits.
 
 ---
 
@@ -142,6 +197,19 @@ rocm/7.x cray-mpich SONAME mismatch.
 QE uses a different module stack than matsim-agents' Python; the two
 are deliberately kept isolated and coupled only through Slurm + files.
 
+### VASP (DFT) backend on Frontier
+
+VASP 6.x is also wired up on Frontier MI250X for the active-learning
+labeller path:
+
+- Build script: [`scripts/setup/frontier/build-vasp-gpu-frontier.sh`](scripts/setup/frontier/build-vasp-gpu-frontier.sh)
+- In-allocation step launcher (called by the AL loop):
+  [`scripts/launchers/frontier/_vasp-step-frontier.sh`](scripts/launchers/frontier/_vasp-step-frontier.sh)
+
+As with QE, the proprietary VASP source itself is **not** committed;
+only the build recipe is. The repository assumes you have a licensed
+VASP source tree under `external/vasp6/`.
+
 ---
 
 ## Running on Aurora (ALCF)
@@ -176,6 +244,37 @@ used (`arch/makefile.include.oneapi_omp_off`) and the local working makefile
 path under `external/vasp6/`. The Aurora build entry point is
 [`scripts/setup/aurora/build-vasp-gpu-aurora.sh`](scripts/setup/aurora/build-vasp-gpu-aurora.sh),
 which defaults to building `vasp_std`, `vasp_gam`, and `vasp_ncl` in one run.
+
+---
+
+## Running on Perlmutter (NERSC)
+
+Perlmutter (NERSC, NVIDIA A100) is supported as a first-class target
+for both the Python/ML stack and Quantum ESPRESSO GPU.
+
+- Setup overview: [`scripts/setup/perlmutter/README.md`](scripts/setup/perlmutter/README.md)
+- Matsim env install: [`scripts/setup/perlmutter/install_matsim_perlmutter.sh`](scripts/setup/perlmutter/install_matsim_perlmutter.sh)
+- QE GPU build: [`scripts/setup/perlmutter/build-qe-gpu-perlmutter.sh`](scripts/setup/perlmutter/build-qe-gpu-perlmutter.sh)
+  (CPU-only variant: [`build-qe-cpu-perlmutter.sh`](scripts/setup/perlmutter/build-qe-cpu-perlmutter.sh))
+- QE detailed build guide: [`scripts/setup/perlmutter/QE-BUILD-GUIDE.md`](scripts/setup/perlmutter/QE-BUILD-GUIDE.md)
+- Full QE docs: [`docs/quantum-espresso-perlmutter.md`](docs/quantum-espresso-perlmutter.md)
+- Launchers:
+  - QE `pw.x` GPU: [`scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh`](scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh)
+  - QE warm-start benchmark: [`scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh`](scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh)
+  - Single-node / multi-node / all-models LLM smoke tests:
+    `launch-test-singlenode-resume-perlmutter.sh`,
+    `launch-test-multinode-perlmutter.sh`,
+    `launch-test-all-models-perlmutter.sh`
+
+Quick run pattern:
+
+```bash
+./scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh path/to/pw.in
+```
+
+As on Frontier and Aurora, the DFT module stack and the Python/ML
+environment are intentionally isolated and coupled only through Slurm
++ files.
 
 ---
 
