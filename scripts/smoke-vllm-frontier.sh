@@ -55,6 +55,14 @@ export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 # Built once by install_matsim_frontier.sh; skips a ~5 min on-the-fly compile.
 export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
 
+# Redirect torch.compile / vLLM compile cache to Lustre scratch.
+# The home directory (/ccs/home) is NFS-mounted on compute nodes and can
+# produce "Errno 116: Stale file handle" errors when multiple TP workers
+# write temp files concurrently. Lustre handles this correctly.
+export VLLM_CACHE_ROOT=$PROJ/cache/vllm-cache
+export TRITON_CACHE_DIR=$PROJ/cache/vllm-cache/triton
+mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
+
 VLLM_PORT=8000
 VLLM_LOG=$RUN_DIR/vllm-server.log
 
