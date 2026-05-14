@@ -97,9 +97,19 @@ export VLLM_CUDART_SO_PATH=/opt/rocm-7.1.1/lib/libamdhip64.so
 #
 # Run F (job 4510596) — hypothesis: NET/Socket fallback (forced by P2P+SHM disable) is broken
 #   Tried:  removed NCCL_P2P_DISABLE and NCCL_SHM_DISABLE entirely
-#   Rationale: MI250X GCDs on a single Frontier node communicate via xGMI P2P,
-#              which is the native, well-tested intra-node path. Disabling it
-#              was never necessary and forced an unsupported code path.
+#   Result: FAILED — RCCL switched to P2P/IPC (xGMI) transport as expected
+#           (Channel 00: 0→1 via P2P/IPC), but same illegal instruction in
+#           ncclDevKernel_Generic_4. Transport path is not the cause.
+#   Why:    NCCL_PROTO=Simple always dispatches ncclDevKernel_Generic_*.
+#           That kernel binary is broken on gfx90a in RCCL 2.27.7-HEAD:84d2752
+#           regardless of which transport carries the data.
+#
+# Run G: NCCL_PROTO=LL128
+#   Rationale: Simple → ncclDevKernel_Generic_4 (crashes on every run).
+#              LL128  → ncclDevKernel_LL128_* (completely different kernel family).
+#              LL128 is specifically optimized for AMD MI-series intra-node comms.
+#              It uses 128-bit reads and a different register/scratch layout that
+#              may not have the same gfx90a code-gen issue as Generic_4.
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Use PyTorch-bundled RCCL (established in Run C; kept for consistency).
@@ -112,10 +122,9 @@ unset VLLM_NCCL_SO_PATH
 # kernel private scratch memory during RCCL collective init.
 export HSA_NO_SCRATCH_RECLAIM=1
 
-# Run F: let RCCL use xGMI P2P and SHM — the native intra-node paths on MI250X.
-# Do NOT set NCCL_P2P_DISABLE or NCCL_SHM_DISABLE; those force a NET/Socket
-# fallback that causes illegal instruction in ncclDevKernel_Generic_4.
-export NCCL_PROTO=Simple
+# Run G: LL128 dispatches ncclDevKernel_LL128_* — different kernel family from Generic_4.
+# Do NOT use NCCL_PROTO=Simple (→ Generic_4, crashes) or NCCL_PROTO=LL (falls back to Generic).
+export NCCL_PROTO=LL128
 # NCCL_ALGO: unset — RCCL auto-selects Ring for AllGather (correct default).
 export NCCL_DEBUG=INFO
 export NCCL_DEBUG_SUBSYS=INIT,COLL,TUNING
