@@ -107,3 +107,17 @@ Run `pw.x` with the Aurora launcher after building:
 ```bash
 bash scripts/launchers/aurora/run-pw-gpu-aurora.sh path/to/pw.in
 ```
+
+### VASP 6.6.0 on Aurora
+
+The repository does not commit VASP source because it is proprietary, but it
+does track the build provenance for the Aurora GPU build.
+
+- Provenance note: `docs/vasp-aurora.md`
+- Build script: `scripts/setup/aurora/build-vasp-gpu-aurora.sh`
+- Upstream template used: `arch/makefile.include.oneapi_omp_off`
+- Local working file during the build: `external/vasp6/src/vasp.6.6.0/makefile.include`
+
+This keeps the exact makefile lineage discoverable without checking any VASP
+source or vendor archive into git. The default script target builds
+`vasp_std`, `vasp_gam`, and `vasp_ncl` in one invocation.
