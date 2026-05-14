@@ -178,7 +178,6 @@ Environment overrides accepted by the installer:
 | `LLM_BACKENDS` | Subset of `ollama vllm openai anthropic huggingface` | `ollama vllm` |
 | `BOOTSTRAP_OLLAMA` | Set to `1` to install the Ollama daemon, start it, and pull `OLLAMA_MODELS` (workstation only) | `0` |
 | `OLLAMA_MODELS` | Space-separated list of models to pull when `BOOTSTRAP_OLLAMA=1` | `qwen2.5:14b` |
-| `SKIP_HYDRAGNN` | Set to `1` to skip HydraGNN install | `0` |
 
 After the script finishes:
 
