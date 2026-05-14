@@ -19,6 +19,36 @@ a single YAML field (`dft.backend: vasp | qe`).
 > `info["dft_backend"]`; never train one HydraGNN model on a mixed VASP+QE
 > dataset without an explicit per-backend energy offset.
 
+## Variable substitution in config YAMLs
+
+Both example YAMLs use shell-style placeholders that are expanded at load
+time by `ALConfig.from_yaml`:
+
+| Syntax                  | Meaning                                          |
+| ----------------------- | ------------------------------------------------ |
+| `${VAR}`                | required; raises if unset                        |
+| `${VAR:-default}`       | falls back to `default` if unset                 |
+| `${VAR:?error message}` | aborts validate-config with `error message`      |
+
+Values resolve in this order: (1) `os.environ`, (2) the optional top-level
+`vars:` block in the YAML itself. Nested references inside `vars:` are
+resolved iteratively, so e.g. `VASP_BIN: ${PROJ_ROOT}/external/.../vasp_std`
+just works.
+
+Example — re-target the same YAML at a different checkout/run without
+editing it:
+
+```bash
+PROJ_ROOT=$PWD \
+RUNS_ROOT=/path/to/scratch/runs \
+RUN_TAG=experiment-42 \
+DFT_BACKEND=qe \
+matsim-agents al validate-config examples/active_learning/al_config.example.yaml
+```
+
+The `vars:` block is consumed before pydantic validation, so it never appears
+in the parsed `ALConfig`.
+
 ## Quick start on Frontier
 
 1. Build VASP (one-time):
