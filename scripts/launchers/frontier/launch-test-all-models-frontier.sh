@@ -30,24 +30,43 @@ SUMMARY="$PROJ/runs/test-all-models-$TS.tsv"
 mkdir -p "$PROJ/runs"
 printf "jobid\tstate\tmodel\tnodes\trun_dir\n" > "$SUMMARY"
 
-# Format: <node_count> <local_dir_name> <served_model_name>
+# Format: <node_count> <local_dir_name> <served_model_name> <num_attn_heads>
+# num_attn_heads is validated: TP (= nodes*8) must divide evenly into num_heads.
+# Use 0 to skip TP validation (e.g. MoE models with non-standard head counts).
 MODELS=(
-  # --- single node ---
-  "1 SmolLM3-3B                       HuggingFaceTB/SmolLM3-3B"
-  "1 Llama-3.1-8B-Instruct            meta-llama/Llama-3.1-8B-Instruct"
-  "1 Qwen2.5-14B-Instruct             Qwen/Qwen2.5-14B-Instruct"
-  "1 gemma-4-26B-A4B-it               google/gemma-4-26B-A4B-it"
-  "1 Qwen3.6-27B                      Qwen/Qwen3.6-27B"
-  "1 gemma-4-31B-it                   google/gemma-4-31B-it"
-  "1 DeepSeek-R1-Distill-Qwen-32B     deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
-  "1 Qwen3-32B                        Qwen/Qwen3-32B"
-  "1 Qwen3.6-35B-A3B                  Qwen/Qwen3.6-35B-A3B"
-  # --- multi node (4 × 8 GCDs = TP32) ---
-  "4 Llama-3.1-70B-Instruct           meta-llama/Llama-3.1-70B-Instruct"
-  "4 Llama-3.3-70B-Instruct           meta-llama/Llama-3.3-70B-Instruct"
-  "4 Qwen2.5-72B-Instruct             Qwen/Qwen2.5-72B-Instruct"
-  "4 Mixtral-8x22B-Instruct-v0.1      mistralai/Mixtral-8x22B-Instruct-v0.1"
+  # --- single node (TP=8) ---
+  "1 SmolLM3-3B                       HuggingFaceTB/SmolLM3-3B           0"
+  "1 Llama-3.1-8B-Instruct            meta-llama/Llama-3.1-8B-Instruct   32"
+  "1 Qwen2.5-14B-Instruct             Qwen/Qwen2.5-14B-Instruct          40"
+  "1 gemma-4-26B-A4B-it               google/gemma-4-26B-A4B-it          0"
+  "1 Qwen3.6-27B                      Qwen/Qwen3.6-27B                   0"
+  "1 gemma-4-31B-it                   google/gemma-4-31B-it              0"
+  "1 DeepSeek-R1-Distill-Qwen-32B     deepseek-ai/DeepSeek-R1-Distill-Qwen-32B 64"
+  "1 Qwen3-32B                        Qwen/Qwen3-32B                     0"
+  "1 Qwen3.6-35B-A3B                  Qwen/Qwen3.6-35B-A3B               0"
+  # --- multi node ---
+  # Llama-3.x-70B: 80 heads. 80%16=0 ✓ (2N=TP16), 80%32≠0 ✗ (4N=TP32)
+  "2 Llama-3.1-70B-Instruct           meta-llama/Llama-3.1-70B-Instruct  80"
+  "2 Llama-3.3-70B-Instruct           meta-llama/Llama-3.3-70B-Instruct  80"
+  # Qwen2.5-72B: 64 heads. 64%16=0 ✓ (2N=TP16)
+  "2 Qwen2.5-72B-Instruct             Qwen/Qwen2.5-72B-Instruct          64"
+  # Mixtral-8x22B: 48 heads. 48%24=0 ✓ (3N=TP24), 48%32≠0 ✗ (4N=TP32)
+  "3 Mixtral-8x22B-Instruct-v0.1      mistralai/Mixtral-8x22B-Instruct-v0.1 48"
 )
+
+# Model head counts for TP validation (declared but lookup done inline above)
+# TP = NODES * 8 (Frontier has 8 GCDs/node)
+validate_tp() {
+  local nodes=$1 num_heads=$2 served_name=$3
+  local tp=$(( nodes * 8 ))
+  if [[ $num_heads -gt 0 ]] && [[ $(( num_heads % tp )) -ne 0 ]]; then
+    echo "[ERROR] $served_name: TP=$tp does not divide evenly into $num_heads attention heads." >&2
+    echo "        vLLM requires tensor-parallel-size to divide num_attn_heads." >&2
+    echo "        Fix: use a node count N such that (N*8) divides $num_heads." >&2
+    return 1
+  fi
+  return 0
+}
 
 wait_for_job() {
   local jid=$1
@@ -68,8 +87,13 @@ echo "Summary: $SUMMARY"
 echo ""
 
 for entry in "${MODELS[@]}"; do
-  read -r NODES LOCAL_DIR SERVED_NAME <<<"$entry"
+  read -r NODES LOCAL_DIR SERVED_NAME NUM_HEADS <<<"$entry"
   MODEL_PATH="$PROJ/models/$LOCAL_DIR"
+
+  if ! validate_tp "$NODES" "$NUM_HEADS" "$SERVED_NAME"; then
+    printf "SKIP\t-\t%s\t%s\tTP validation failed\n" "$SERVED_NAME" "$NODES" >> "$SUMMARY"
+    continue
+  fi
 
   if [[ ! -d "$MODEL_PATH" ]]; then
     echo "[SKIP] $SERVED_NAME — not in $MODEL_PATH"
