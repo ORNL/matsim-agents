@@ -11,6 +11,10 @@ module load miniforge3/23.11.0-0 2>/dev/null || true
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 conda activate "$VENV"
 
+# Ensure matsim-agents and its deps are installed.
+pip install -e "$PROJ/matsim-agents[huggingface]" --no-deps
+pip install langgraph langchain-huggingface accelerate
+
 VLLM_REF="${VLLM_REF:-v0.20.0}"
 if [[ ! -d "$VLLM_SRC/.git" ]]; then
     mkdir -p "$(dirname $VLLM_SRC)"
