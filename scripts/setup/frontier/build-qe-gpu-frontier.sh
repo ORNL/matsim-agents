@@ -133,17 +133,17 @@ cd "${BUILD_DIR}"
 
 echo "--- Running CMake configure ---"
 
-# Notes on the GPU-specific flags:
-#   QE_ENABLE_OFFLOAD=ON  : turn on QE's OpenMP target-offload code paths
-#                           (FFTXlib, LAXlib, KS_Solvers/Davidson, hot pw kernels).
-#   QE_ENABLE_CUDA=OFF    : keep the CUDA Fortran path off (no nvfortran on Frontier).
-#   QE_ENABLE_HDF5=OFF    : skip HDF5 to avoid pulling in cray-hdf5 (often clashes
-#                           with Cray Fortran modules); flip to ON if needed.
+# Notes on the GPU-specific flags (QE develop API, post-2025 rename):
+#   QE_GPU_ARCHS=gfx90a   : selects MI250X. QE auto-derives QE_GPU="openmp;rocm",
+#                            which enables OpenMP target offload AND links
+#                            rocFFT/rocBLAS/rocSOLVER for hot kernels.
+#   QE_ENABLE_HDF5=OFF    : skip HDF5 to avoid cray-hdf5 module clashes;
+#                           flip to ON if needed.
 #   QE_ENABLE_LIBXC=OFF   : skip LibXC for the first GPU build; functionals are
 #                           still available via QE's internal XC modules.
 #   QE_ENABLE_SCALAPACK=OFF: ScaLAPACK does not have a GPU-aware path here; rely
 #                            on QE's internal LAXlib offload kernels.
-#   FFTW3_ROOT            : CPU FFTW3 headers — QE still uses these for the
+#   FFTW3_ROOT            : CPU FFTW3 headers \u2014 QE still uses these for the
 #                           non-offloaded code paths.
 
 cmake \
@@ -156,10 +156,7 @@ cmake \
     -DQE_ENABLE_MPI_GPU_AWARE=ON \
     -DQE_ENABLE_OPENMP=ON \
     \
-    -DQE_ENABLE_OFFLOAD=ON \
-    -DQE_ENABLE_CUDA=OFF \
-    -DQE_OPENMP_OFFLOAD_TARGET=amd \
-    -DCMAKE_HIP_ARCHITECTURES="${AMDGPU_TARGETS}" \
+    -DQE_GPU_ARCHS=gfx90a \
     \
     -DQE_ENABLE_SCALAPACK=OFF \
     -DQE_ENABLE_HDF5=OFF \
