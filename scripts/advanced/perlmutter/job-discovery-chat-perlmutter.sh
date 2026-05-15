@@ -1,26 +1,28 @@
 #!/bin/bash
-#SBATCH -A mat746
-#SBATCH -J rhea-hf
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/rhea-hf-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/rhea-hf-%j/job-%j.out
+#SBATCH -A amsc001
+#SBATCH -J discovery-chat
+#SBATCH -o /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/discovery-chat-%j/job-%j.out
+#SBATCH -e /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/discovery-chat-%j/job-%j.out
 #SBATCH -t 01:30:00
 #SBATCH -N 1
-#SBATCH -p batch
-#SBATCH -q debug
+#SBATCH -C gpu
+#SBATCH -q regular
+#SBATCH --gpus-per-node=4
+#SBATCH -c 32
 # ---------------------------------------------------------------------------
-# matsim-agents: RHEA discovery run on Frontier using HuggingFace Transformers
-# as the LLM backend (no vLLM server required).
+# matsim-agents: RHEA discovery run on NERSC Perlmutter using HuggingFace
+# Transformers as the LLM backend (no vLLM server required).
 #
 # Layout:
-#   • HuggingFace pipeline : all 8 GCDs via device_map="auto" (Accelerate)
+#   • HuggingFace pipeline : all 4 A100s via device_map="auto" (Accelerate)
 #   • matsim-agents chat   : --llm-provider huggingface (loads model inline)
 #
 # Usage:
-#   sbatch scripts/advanced/frontier/job-rhea-transformers-frontier.sh
+#   sbatch scripts/advanced/perlmutter/job-discovery-chat-perlmutter.sh
 #
 # Override model at submission:
 #   MATSIM_MODEL_DIR=.../Qwen3-32B MATSIM_MODEL_NAME=Qwen/Qwen3-32B \
-#     sbatch scripts/advanced/frontier/job-rhea-transformers-frontier.sh
+#     sbatch scripts/advanced/perlmutter/job-discovery-chat-perlmutter.sh
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -28,32 +30,30 @@ set -euo pipefail
 # ── paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && \
+  REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
 PROJ="$(dirname "${REPO}")"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64
 MLP_CHECKPOINT=$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
 MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
-RUN_DIR=$PROJ/runs/rhea-hf-$SLURM_JOB_ID
+RUN_DIR=$PROJ/runs/discovery-chat-$SLURM_JOB_ID
 OUTPUT_DIR=$RUN_DIR/outputs
 
 mkdir -p "$RUN_DIR" "$OUTPUT_DIR"
 
 # ── modules & conda env ──────────────────────────────────────────────────────
-source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
-source "$REPO/scripts/setup/frontier/frontier-module-stack.sh"
-load_frontier_rocm72_modules
-source activate "$VENV"
+source "$REPO/scripts/setup/perlmutter/perlmutter-module-stack.sh"
+load_perlmutter_modules_gpu
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate "$VENV"
 
 # Make HydraGNN example utilities importable (inference_fused, etc.)
 export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
 
 # ── environment ──────────────────────────────────────────────────────────────
-export MIOPEN_DISABLE_CACHE=1
-export MIOPEN_USER_DB_PATH=/tmp/miopen-$SLURM_JOB_ID
-mkdir -p "$MIOPEN_USER_DB_PATH"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
@@ -66,11 +66,9 @@ export HF_DATASETS_OFFLINE=1
 export MATSIM_LLM_PROVIDER=huggingface
 export MATSIM_HF_MODEL_PATH=$MODEL_DIR
 
-# ROCm env
-export PYTORCH_ROCM_ARCH=gfx90a
-export ROCM_ARCH=gfx90a
-TORCH_LIB=$VENV/lib/python3.11/site-packages/torch/lib
-export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
+# CUDA / NCCL knobs
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 
 # ── diagnostics ──────────────────────────────────────────────────────────────
 echo "[$(date)] Python: $(which python) ($(python --version 2>&1))"

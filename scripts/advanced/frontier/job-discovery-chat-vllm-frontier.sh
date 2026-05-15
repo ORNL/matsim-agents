@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -A mat746
-#SBATCH -J matsim-rhea
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/rhea-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/rhea-%j/job-%j.out
+#SBATCH -J discovery-chat-vllm
+#SBATCH -o /lustre/orion/mat746/proj-shared/runs/discovery-chat-vllm-%j/job-%j.out
+#SBATCH -e /lustre/orion/mat746/proj-shared/runs/discovery-chat-vllm-%j/job-%j.out
 #SBATCH -t 01:30:00
 #SBATCH -N 1
 #SBATCH -p batch
@@ -15,11 +15,11 @@
 #   • matsim-agents: CPU-only (chat --auto-confirm, piped query)
 #
 # Usage:
-#   sbatch scripts/advanced/frontier/job-rhea-frontier.sh
+#   sbatch scripts/advanced/frontier/job-discovery-chat-vllm-frontier.sh
 #
 # Override model at submission:
 #   MATSIM_MODEL_DIR=.../Qwen3-32B MATSIM_MODEL_NAME=Qwen/Qwen3-32B \
-#     sbatch scripts/advanced/frontier/job-rhea-frontier.sh
+#     sbatch scripts/advanced/frontier/job-discovery-chat-vllm-frontier.sh
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -35,7 +35,7 @@ LOGDIR=$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64
 MLP_CHECKPOINT=$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
 MODEL_NAME=${MATSIM_MODEL_NAME:-Qwen/Qwen2.5-72B-Instruct}
-RUN_DIR=$PROJ/runs/rhea-$SLURM_JOB_ID
+RUN_DIR=$PROJ/runs/discovery-chat-vllm-$SLURM_JOB_ID
 OUTPUT_DIR=$RUN_DIR/outputs
 
 mkdir -p "$RUN_DIR" "$OUTPUT_DIR"
