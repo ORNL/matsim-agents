@@ -146,7 +146,7 @@ no `torchrun` agent).
 | Validate the GPU stack on a single node | **Transformers + Accelerate** ([scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh](../scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh)) |
 | Sweep all locally-cached models | [scripts/launchers/perlmutter/launch-test-all-models-perlmutter.sh](../scripts/launchers/perlmutter/launch-test-all-models-perlmutter.sh) |
 | Multi-node TP (Qwen2.5-72B, Mixtral-8x22B) | **Transformers `tp_plan="auto"`** ([scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh](../scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh)) |
-| LLM + HydraGNN + QE end-to-end | [scripts/advanced/perlmutter/job-rhea-transformers-perlmutter.sh](../scripts/advanced/perlmutter/job-rhea-transformers-perlmutter.sh) |
+| LLM + HydraGNN + QE end-to-end | [scripts/advanced/perlmutter/job-discovery-chat-perlmutter.sh](../scripts/advanced/perlmutter/job-discovery-chat-perlmutter.sh) |
 
 ```bash
 # Single-node smoke (defaults to Qwen2.5-72B; override via MATSIM_MODEL_DIR)
@@ -156,7 +156,7 @@ sbatch scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh
 sbatch scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh
 
 # End-to-end discovery validation
-sbatch scripts/advanced/perlmutter/job-rhea-transformers-perlmutter.sh
+sbatch scripts/advanced/perlmutter/job-discovery-chat-perlmutter.sh
 ```
 
 ---
