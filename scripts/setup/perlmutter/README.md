@@ -179,6 +179,7 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | `launch-test-all-models-perlmutter.sh` | Sequentially submits one single-node smoke job per local HF model under `$PROJ/models/`. Skips models without a local directory; retries on QOS-limit errors. |
 | `launch-test-multinode-perlmutter.sh` | 2-node TP smoke test for the largest models (Qwen2.5-72B, Mixtral-8x22B). |
 | `launch-test-singlenode-resume-perlmutter.sh` | Resumes a partial single-node sweep. Optional `RESUME_AFTER_JOBID=<jid>` blocks until the in-flight job clears; `RESUME_MODELS="A,B"` whitelists. |
+| `run-vasp-gpu-perlmutter.sh` | VASP GPU launcher used by `MATSIM_VASP_LAUNCHER`. Sources `perlmutter-module-stack.sh` (`load_perlmutter_modules_nvidia`), enables `MPICH_GPU_SUPPORT_ENABLED=1`, `srun`s with `--gpus-per-node=4 --gpu-bind=closest`, defaults to 4 ranks × 16 OMP threads. Reads `VASP_VARIANT=std\|gam\|ncl`, `VASP_BIN`, `NRANKS`, `OMP_NUM_THREADS`, `GPUS_PER_NODE`. Multi-node-ready (works in any `salloc`/`sbatch` allocation, adds `-N1` only when run outside Slurm). |
 
 ### `scripts/smoke-tests/perlmutter/`
 | Script | Purpose |
@@ -215,6 +216,142 @@ All these scripts source `perlmutter-module-stack.sh` (`load_perlmutter_modules_
 and activate the same `hydragnn_venv` produced by `install_matsim_perlmutter.sh`,
 so they inherit the unified HydraGNN-aligned toolchain (`cudatoolkit/12.9`,
 `gcc-native/13.2`, torch `2.11.0+cu129`).
+
+---
+
+## VASP 6.6.0 GPU build (NVHPC OpenACC, multi-node enabled)
+
+Three scripts together produce a multi-node-capable VASP 6.6.0 GPU binary on
+Perlmutter A100 nodes (sm_80) and a runtime launcher consumed by
+`matsim_agents.tools.vasp_relax` via the `MATSIM_VASP_LAUNCHER` env var.
+
+### Toolchain
+- `PrgEnv-gnu/8.5.0` + `cpe/24.07` + `cray-mpich/8.1.30` (NVIDIA variant) +
+  `cudatoolkit/12.9` + `cray-fftw/3.3.10.11` + `cray-libsci/25.09`
+  (`libsci_nvidia_mp` for BLAS/LAPACK).
+- Compilers: `nvfortran` / `nvc` / `nvc++` from NVHPC 25.5 SDK (PATH override;
+  Cray `ftn`/`cc` wrappers are bypassed).
+- VASP CPP defines: `-DACC_OFFLOAD -DNVCUDA -DUSENCCL` (NVHPC OpenACC offload).
+- scaLAPACK: built locally from netlib 2.2.0 source against the same
+  nvfortran + cray-mpich stack. The cray-libsci NVIDIA variant ships no
+  scalapack, and the NVHPC-bundled `libscalapack.a` is linked against
+  OpenMPI/HPC-X and is ABI-incompatible with cray-mpich.
+
+### Critical compatibility notes
+- For nvfortran the cray-mpich `mpi.mod` *must* come from
+  `/opt/cray/pe/mpich/8.1.30/ofi/nvidia/23.3/include` — the `gnu/12.3` variant
+  is GFortran-built and rejected by nvfortran (`Corrupt or Old Module file`).
+  `build-vasp-gpu-perlmutter.sh` auto-detects and overrides `MPICH_DIR`.
+- The scalapack build must define `CDEFS=-DAdd_` so the REDIST C wrappers emit
+  Fortran-mangled symbols (`pzgemr2d_`, `pcgemr2d_`, `pdgemr2d_`,
+  `psgemr2d_`, `pztrmr2d_`, `pdtrmr2d_`); without these VASP fails to link.
+- The upstream scalapack Makefile races on `ar cr`, so the build must be
+  serial (`make -j 1 lib`).
+
+### Scripts
+
+#### `build-scalapack-perlmutter.sh`
+Builds netlib scaLAPACK 2.2.0 against the Perlmutter NVIDIA stack.
+
+**What it does:**
+1. Sources `perlmutter-module-stack.sh` and calls `load_perlmutter_modules_nvidia`.
+2. Resolves `MPICH_DIR`, `LIBSCI_NVIDIA` (NVIDIA/.../x86_64), and `GTL_DIR`.
+3. Writes a netlib-style `SLmake.inc` with `FC=nvfortran`, `CC=nvc`,
+   `CDEFS=-DAdd_`, `BLASLIB=-L${LIBSCI_NVIDIA}/lib -lsci_nvidia_mp`.
+4. Runs `make -j 1 lib` and installs `libscalapack.a` under `external/scalapack/install/lib/`.
+
+**Usage:**
+```bash
+bash scripts/setup/perlmutter/build-scalapack-perlmutter.sh
+# Output: external/scalapack/install/lib/libscalapack.a
+```
+
+#### `build-vasp-gpu-perlmutter.sh`
+Builds VASP 6.6.0 (`vasp_std`, `vasp_gam`, `vasp_ncl`) with the NVHPC OpenACC
+GPU port. Source layout convention:
+`${REPO}/external/vasp6/src/vasp.6.6.0/...`.
+
+**What it does:**
+1. Loads the NVIDIA-variant module stack (matches the launcher).
+2. Auto-builds scaLAPACK by invoking `build-scalapack-perlmutter.sh` if
+   `${SCALAPACK_ROOT}/lib/libscalapack.a` is missing (set
+   `SCALAPACK_AUTOBUILD=0` to skip; set `SCALAPACK_ROOT=""` to disable
+   scalapack entirely and produce a single-node `-DnoSCALAPACK` build).
+3. Generates `makefile.include` (controlled by `REGENERATE_MAKEFILE=1`) with
+   `FC = nvfortran -mp -acc $(GPU)`, `LLIBS = $(MPI_LIB) -cudalib=cublas,cusolver,cufft,nccl -cuda`,
+   `BLAS = -L${libsci_nvidia}/lib -lsci_nvidia_mp`, plus the resolved
+   scalapack lib + `-DscaLAPACK` define.
+4. Runs `make PREFIX=$PREFIX DEPS=1 MODS=1 -j$NCORES <target>` for each variant.
+
+**Usage:**
+```bash
+# First-time / clean rebuild of all three variants
+REGENERATE_MAKEFILE=1 CLEAN_BUILD=1 NCORES=16 \
+  bash scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh
+
+# Build only vasp_std
+VASP_TARGET=std bash scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh
+
+# Single-node build without scalapack (faster, no multi-node parallel diag)
+SCALAPACK_ROOT="" REGENERATE_MAKEFILE=1 CLEAN_BUILD=1 \
+  bash scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh
+```
+
+**Tunables:** `VASP_ROOT`, `PREFIX=build`, `NCORES`, `CLEAN_BUILD=0|1`,
+`VASP_TARGET=all|std|gam|ncl`, `REGENERATE_MAKEFILE=0|1`, `GPU_ARCH=cc80`
+(A100; use `cc90` for H100, `cc89` for L40), `CUDA_VER=12.9`,
+`SCALAPACK_ROOT`, `SCALAPACK_AUTOBUILD=0|1`.
+
+**Outputs:** `external/vasp6/src/vasp.6.6.0/bin/{vasp_std,vasp_gam,vasp_ncl}`.
+
+**Long builds:** the full preprocess + compile + link pass takes ~25 min per
+variant on a Perlmutter login node. Launch under `setsid nohup` so the build
+survives login-node disconnects:
+```bash
+TS=$(date +%Y%m%d-%H%M%S)
+LOG="external/vasp6/logs/build-${TS}.log"
+REGENERATE_MAKEFILE=1 CLEAN_BUILD=1 NCORES=16 \
+  setsid nohup bash scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh \
+  > "$LOG" 2>&1 < /dev/null & disown
+```
+
+#### `run-vasp-gpu-perlmutter.sh`
+Runtime `MATSIM_VASP_LAUNCHER`. Invoked from the cwd containing
+`INCAR/POSCAR/KPOINTS/POTCAR`; no argv is passed. Sources the NVIDIA module
+stack, exports `CUDA_HOME`/`LD_LIBRARY_PATH`/`MPICH_GPU_SUPPORT_ENABLED=1`,
+and `srun`s the requested variant.
+
+**Usage (in a Slurm allocation):**
+```bash
+export MATSIM_VASP_LAUNCHER=$PWD/scripts/launchers/perlmutter/run-vasp-gpu-perlmutter.sh
+export VASP_VARIANT=std       # or gam / ncl
+export NRANKS=4 OMP_NUM_THREADS=16 GPUS_PER_NODE=4
+# ...then anything that calls matsim_agents.tools.vasp_relax.run_vasp(...)
+```
+
+For multi-node runs increase `NRANKS` to `4 * <num_nodes>` and keep
+`GPUS_PER_NODE=4`; the launcher inherits the Slurm allocation node count.
+
+### End-to-end build + sanity check
+```bash
+# 1. Place the source tree (one-time)
+mkdir -p external/vasp6/src external/vasp6/logs
+tar -xzf vasp.6.6.0.tar.gz -C external/vasp6/src/
+
+# 2. Build (auto-builds scalapack first time)
+REGENERATE_MAKEFILE=1 CLEAN_BUILD=1 NCORES=16 \
+  bash scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh \
+  2>&1 | tee external/vasp6/logs/build-$(date +%F).log
+
+# 3. Confirm scalapack REDIST symbols are linked in
+nm external/vasp6/src/vasp.6.6.0/bin/vasp_std | grep -E 'pzgemr2d_|pdgemr2d_'
+
+# 4. Smoke test in a 1-node allocation
+salloc -N 1 -C gpu -q interactive -t 30 -A <allocation>
+export MATSIM_VASP_LAUNCHER=$PWD/scripts/launchers/perlmutter/run-vasp-gpu-perlmutter.sh
+cd <work_dir_with_INCAR_POSCAR_KPOINTS_POTCAR>
+"$MATSIM_VASP_LAUNCHER"
+```
 
 ---
 
