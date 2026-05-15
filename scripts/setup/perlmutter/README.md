@@ -190,7 +190,7 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 ### `scripts/advanced/perlmutter/`
 | Script | Purpose |
 |---|---|
-| `job-rhea-transformers-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + HydraGNN MLFF (FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
+| `job-discovery-chat-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + HydraGNN MLFF (FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
 
 ### Submission examples
 ```bash
@@ -208,7 +208,7 @@ nohup bash scripts/launchers/perlmutter/launch-test-all-models-perlmutter.sh \
 sbatch scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh
 
 # Full discovery validation (LLM + HydraGNN + QE)
-sbatch scripts/advanced/perlmutter/job-rhea-transformers-perlmutter.sh
+sbatch scripts/advanced/perlmutter/job-discovery-chat-perlmutter.sh
 ```
 
 All these scripts source `perlmutter-module-stack.sh` (`load_perlmutter_modules_gpu`)
