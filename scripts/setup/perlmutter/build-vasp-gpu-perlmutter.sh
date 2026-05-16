@@ -350,8 +350,16 @@ if [[ "${CLEAN_BUILD}" == "1" ]]; then
 fi
 
 for target in "${BUILD_TARGETS[@]}"; do
-    log "Invoking make target '${target}'"
-    make PREFIX="${PREFIX}" DEPS=1 MODS=1 -j"${NCORES}" "${target}"
+    log "Invoking make target '${target}' (-j${NCORES})"
+    # NOTE: do NOT pass MODS=1. With MODS=1 VASP runs a single bulk
+    # `nvfortran -c <all .f90>` invocation in -j1 mode (the makefile forces
+    # disable jobserver). On a Perlmutter login node that one process exceeds
+    # the per-process memory/time limits and gets SIGKILL'd silently, leaving
+    # build/<variant>/modfiles empty. With DEPS=1 alone, VASP uses per-file
+    # pattern rules driven by the generated .depend, so -j${NCORES} actually
+    # parallelizes one nvfortran process per source file (each ~1-2 GB), which
+    # both fits comfortably on the login node and is significantly faster.
+    make PREFIX="${PREFIX}" DEPS=1 -j"${NCORES}" "${target}"
 done
 
 log "Build finished: $(date)"
