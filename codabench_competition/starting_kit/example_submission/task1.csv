@@ -1,0 +1,6 @@
+structure_id,formation_energy_eV_per_atom
+2d_monolayer_C_ideal_UC,-9.2341
+2d_monolayer_BN_ideal_UC,-8.7652
+catalysis_Pd_111_slab_ideal,-5.1234
+bcc_hea_NbTaVHfZrTi_equiatomic_128_ideal,-8.2345
+perovskite_BaTiO3_cubic_ideal,-7.4521

@@ -1,0 +1,14 @@
+# Git LFS tracking rules
+# Large / binary VASP output files tracked via LFS instead of ignored.
+
+# VASP charge density / potential (can be 100s MB)
+**/CHGCAR filter=lfs diff=lfs merge=lfs -text
+**/CHG    filter=lfs diff=lfs merge=lfs -text
+
+# VASP XML output (can be 10s–100s MB for large cells)
+**/vasprun.xml filter=lfs diff=lfs merge=lfs -text
+
+# Generic large ML / atomistic model artifacts
+*.pt   filter=lfs diff=lfs merge=lfs -text
+*.ckpt filter=lfs diff=lfs merge=lfs -text
+*.pk   filter=lfs diff=lfs merge=lfs -text

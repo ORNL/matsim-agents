@@ -25,14 +25,11 @@ htmlcov/
 *.swp
 .DS_Store
 
-# Atomistic / ML artifacts
+# Atomistic / ML artifacts — binaries tracked via Git LFS (see .gitattributes)
 *.traj
 *.vasp
 *.cif
 *.xyz
-*.pk
-*.pt
-*.ckpt
 *_optimization.csv
 multidataset_hpo-*/
 
@@ -59,6 +56,49 @@ external/vasp6/src/vasp.6.6.0.tgz
 # Layout: external/vasp6/potcar/<set>/<Element>/POTCAR
 # Point MATSIM_VASP_POTCAR_DIR at a concrete <set> (e.g. potpaw_PBE.64).
 external/vasp6/potcar/
+
+# VASP calculation outputs — never commit these anywhere in the tree.
+# POTCAR: licensed, illegal to redistribute.
+# WAVECAR / CHGCAR / CHG: binary restart files, typically gigabytes.
+**/POTCAR
+**/WAVECAR
+**/WAVECAR.gz
+**/PROCAR
+**/DOSCAR
+**/EIGENVAL
+**/IBZKPT
+**/REPORT
+# DFT result files — contain ground-truth energies/forces (competition labels).
+# These must remain server-side only; committing them would let participants cheat.
+**/OUTCAR
+**/CONTCAR
+**/CHGCAR
+**/CHG
+**/vasprun.xml
+# Structure anonymisation mapping — MUST stay in the private repo only.
+# If this file ever appears here it means someone accidentally copied it from
+# matsim-agents-dft-reference/; block it to prevent accidental exposure.
+id_mapping.json
+**/id_mapping.json
+
+# Codabench reference data labels — server-side only, never publish
+codabench_competition/reference_data/formation_energies.csv
+codabench_competition/reference_data/forces/
+codabench_competition/reference_data/relaxed/
+codabench_competition/reference_data/task4_relaxed/
+# Parsed elemental energies (derived from VASP OUTCARs — also sensitive)
+codabench_competition/dft_reference/vasp/elemental_refs/elemental_energies.json
+# VASP compound and elemental calculation output trees (contain OUTCARs)
+codabench_competition/dft_reference/vasp/compounds/
+# VASP elemental reference calculation inputs — reproducible from setup_elements.py
+# but committing them would trivially expose the exact DFT settings needed to
+# reproduce the reference energies (POSCAR + INCAR + KPOINTS → run → same result).
+codabench_competition/dft_reference/vasp/elemental_refs/calculations/
+# DFT input/collection scripts — moved to private repo (matsim-agents-dft-reference).
+# Full recipe (INCAR params, k-spacing, POTCAR map) must not be in the public repo.
+codabench_competition/dft_reference/
+# Logs from PBS jobs
+codabench_competition/dft_reference/vasp/elemental_refs/logs/
 
 # Vendored third-party clones (bootstrapped by scripts/setup_env.sh)
 third_party/
