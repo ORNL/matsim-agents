@@ -1,0 +1,20 @@
+# Competition runtime dependencies
+# Install with: pip install -r requirements.txt
+
+# Atomistic simulation environment (structure I/O, relaxation)
+ase>=3.22
+
+# MACE-MP-0 universal MLFF baseline
+mace-torch>=0.3.6
+
+# UMA and AllScAIP universal MLFF baselines (Meta FAIR Chemistry)
+# Weights require HuggingFace authentication + FAIR Chemistry License:
+#   huggingface-cli login
+#   Accept terms at https://huggingface.co/facebook/UMA
+#   Accept terms at https://huggingface.co/facebook/AllScAIP
+fairchem-core>=1.2.0
+huggingface_hub>=0.24.0
+
+# Scoring utilities
+scipy>=1.10
+numpy>=1.24
