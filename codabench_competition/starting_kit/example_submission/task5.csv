@@ -1,0 +1,7 @@
+structure_id,formation_energy_eV_per_atom
+2d_monolayer_C_ideal_UC,-9.2341
+2d_monolayer_C_vacancy_4x4,-9.1823
+2d_monolayer_C_ideal_4x4,-9.2198
+bcc_hea_NbTaVHfZrTi_equiatomic_128_ideal,-8.2345
+bcc_hea_NbTaVHfZrTi_equiatomic_128_Nb_vacancy,-8.2012
+bcc_hea_NbTaVHfZrTi_equiatomic_128_random1,-8.1987
