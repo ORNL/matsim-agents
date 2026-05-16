@@ -1,160 +1,160 @@
-structure_id,material_class,formula,file_path
-MATS-0001,2D Monolayer,BN,MATS-0001.xyz
-MATS-0002,2D Monolayer,BN,MATS-0002.xyz
-MATS-0003,2D Monolayer,BN,MATS-0003.xyz
-MATS-0004,2D Monolayer,BN,MATS-0004.xyz
-MATS-0005,2D Monolayer,BN,MATS-0005.xyz
-MATS-0006,2D Monolayer,C,MATS-0006.xyz
-MATS-0007,2D Monolayer,C,MATS-0007.xyz
-MATS-0008,2D Monolayer,C,MATS-0008.xyz
-MATS-0009,2D Monolayer,MoS2,MATS-0009.xyz
-MATS-0010,2D Monolayer,MoS2,MATS-0010.xyz
-MATS-0011,2D Monolayer,MoS2,MATS-0011.xyz
-MATS-0012,2D Monolayer,MoS2,MATS-0012.xyz
-MATS-0013,2D Monolayer,MoSe2,MATS-0013.xyz
-MATS-0014,2D Monolayer,MoSe2,MATS-0014.xyz
-MATS-0015,2D Monolayer,P,MATS-0015.xyz
-MATS-0016,2D Monolayer,P,MATS-0016.xyz
-MATS-0017,2D Monolayer,P,MATS-0017.xyz
-MATS-0018,2D Monolayer,WS2,MATS-0018.xyz
-MATS-0019,2D Monolayer,WS2,MATS-0019.xyz
-MATS-0020,2D Monolayer,WS2,MATS-0020.xyz
-MATS-0021,BCC HEA,NbTaVHfZrTi+H,MATS-0021.xyz
-MATS-0022,BCC HEA,NbTaVHfZrTi,MATS-0022.xyz
-MATS-0023,BCC HEA,NbTaVHfZrTi,MATS-0023.xyz
-MATS-0024,BCC HEA,NbTaVHfZrTi,MATS-0024.xyz
-MATS-0025,BCC HEA,NbTaVHfZrTi,MATS-0025.xyz
-MATS-0026,BCC HEA,NbTaVHfZrTi,MATS-0026.xyz
-MATS-0027,Catalysis,Au,MATS-0027.xyz
-MATS-0028,Catalysis,Co,MATS-0028.xyz
-MATS-0029,Catalysis,Co,MATS-0029.xyz
-MATS-0030,Catalysis,Cu,MATS-0030.xyz
-MATS-0031,Catalysis,Cu,MATS-0031.xyz
-MATS-0032,Catalysis,Fe,MATS-0032.xyz
-MATS-0033,Catalysis,Fe,MATS-0033.xyz
-MATS-0034,Catalysis,Ni,MATS-0034.xyz
-MATS-0035,Catalysis,Ni,MATS-0035.xyz
-MATS-0036,Catalysis,Pd0.75Cu0.25,MATS-0036.xyz
-MATS-0037,Catalysis,Pd0.75Cu0.25,MATS-0037.xyz
-MATS-0038,Catalysis,Pd,MATS-0038.xyz
-MATS-0039,Catalysis,Pd,MATS-0039.xyz
-MATS-0040,Catalysis,Pt,MATS-0040.xyz
-MATS-0041,Catalysis,Pt,MATS-0041.xyz
-MATS-0042,Catalysis,Ru,MATS-0042.xyz
-MATS-0043,Catalysis,Ru,MATS-0043.xyz
-MATS-0044,Critical Mineral,Al2O3,MATS-0044.xyz
-MATS-0045,Critical Mineral,Al2O3,MATS-0045.xyz
-MATS-0046,Critical Mineral,CeO2,MATS-0046.xyz
-MATS-0047,Critical Mineral,CeO2,MATS-0047.xyz
-MATS-0048,Critical Mineral,CeO2,MATS-0048.xyz
-MATS-0049,Critical Mineral,CeO2,MATS-0049.xyz
-MATS-0050,Critical Mineral,CoS2,MATS-0050.xyz
-MATS-0051,Critical Mineral,CoS2,MATS-0051.xyz
-MATS-0052,Critical Mineral,CoS2,MATS-0052.xyz
-MATS-0053,Critical Mineral,La2O3,MATS-0053.xyz
-MATS-0054,Critical Mineral,La2O3,MATS-0054.xyz
-MATS-0055,Critical Mineral,La2O3,MATS-0055.xyz
-MATS-0056,Critical Mineral,LiCoO2,MATS-0056.xyz
-MATS-0057,Critical Mineral,LiCoO2,MATS-0057.xyz
-MATS-0058,Critical Mineral,LiCoO2,MATS-0058.xyz
-MATS-0059,Critical Mineral,LiCoO2,MATS-0059.xyz
-MATS-0060,Critical Mineral,LiFePO4,MATS-0060.xyz
-MATS-0061,Critical Mineral,LiFePO4,MATS-0061.xyz
-MATS-0062,Critical Mineral,LiFePO4,MATS-0062.xyz
-MATS-0063,Critical Mineral,MgAl2O4,MATS-0063.xyz
-MATS-0064,Critical Mineral,MgAl2O4,MATS-0064.xyz
-MATS-0065,Critical Mineral,MgAl2O4,MATS-0065.xyz
-MATS-0066,Critical Mineral,Nd2Fe14B,MATS-0066.xyz
-MATS-0067,Critical Mineral,Nd2Fe14B,MATS-0067.xyz
-MATS-0068,Critical Mineral,SiC,MATS-0068.xyz
-MATS-0069,Critical Mineral,SiC,MATS-0069.xyz
-MATS-0070,Critical Mineral,SiC,MATS-0070.xyz
-MATS-0071,Critical Mineral,TiO2,MATS-0071.xyz
-MATS-0072,Critical Mineral,TiO2,MATS-0072.xyz
-MATS-0073,Critical Mineral,TiO2,MATS-0073.xyz
-MATS-0074,Critical Mineral,TiO2,MATS-0074.xyz
-MATS-0075,Critical Mineral,WC,MATS-0075.xyz
-MATS-0076,Critical Mineral,WC,MATS-0076.xyz
-MATS-0077,Critical Mineral,WC,MATS-0077.xyz
-MATS-0078,FCC HEA,CrMnFeCoNi+C,MATS-0078.xyz
-MATS-0079,FCC HEA,CrMnFeCoNi,MATS-0079.xyz
-MATS-0080,FCC HEA,CrMnFeCoNi,MATS-0080.xyz
-MATS-0081,FCC HEA,CrMnFeCoNi,MATS-0081.xyz
-MATS-0082,FCC HEA,CrMnFeCoNi,MATS-0082.xyz
-MATS-0083,FCC HEA,CrMnFeCoNi,MATS-0083.xyz
-MATS-0084,High-Entropy Ceramic,AlCrNbTiVN,MATS-0084.xyz
-MATS-0085,High-Entropy Ceramic,AlCrNbTiVN,MATS-0085.xyz
-MATS-0086,High-Entropy Ceramic,AlCrNbTiVN,MATS-0086.xyz
-MATS-0087,High-Entropy Ceramic,HfMoNbTaTiB2,MATS-0087.xyz
-MATS-0088,High-Entropy Ceramic,HfMoNbTaTiB2,MATS-0088.xyz
-MATS-0089,High-Entropy Ceramic,HfMoNbTaTiB2,MATS-0089.xyz
-MATS-0090,High-Entropy Ceramic,HfTaZrNbTiC,MATS-0090.xyz
-MATS-0091,High-Entropy Ceramic,HfTaZrNbTiC,MATS-0091.xyz
-MATS-0092,High-Entropy Ceramic,HfTaZrNbTiC,MATS-0092.xyz
-MATS-0093,High-Entropy Ceramic,MgCoNiCuZnO,MATS-0093.xyz
-MATS-0094,High-Entropy Ceramic,MgCoNiCuZnO,MATS-0094.xyz
-MATS-0095,High-Entropy Ceramic,MgCoNiCuZnO,MATS-0095.xyz
-MATS-0096,High-Entropy Ceramic,MgCoNiCuZnO,MATS-0096.xyz
-MATS-0097,Intermetallic,Cu3Au,MATS-0097.xyz
-MATS-0098,Intermetallic,Cu3Au,MATS-0098.xyz
-MATS-0099,Intermetallic,Cu3Au,MATS-0099.xyz
-MATS-0100,Intermetallic,Cu3Au,MATS-0100.xyz
-MATS-0101,Intermetallic,Fe3Al,MATS-0101.xyz
-MATS-0102,Intermetallic,Fe3Al,MATS-0102.xyz
-MATS-0103,Intermetallic,Fe3Al,MATS-0103.xyz
-MATS-0104,Intermetallic,FePt,MATS-0104.xyz
-MATS-0105,Intermetallic,FePt,MATS-0105.xyz
-MATS-0106,Intermetallic,FePt,MATS-0106.xyz
-MATS-0107,Intermetallic,FePt,MATS-0107.xyz
-MATS-0108,Intermetallic,Ni3Al,MATS-0108.xyz
-MATS-0109,Intermetallic,Ni3Al,MATS-0109.xyz
-MATS-0110,Intermetallic,Ni3Al,MATS-0110.xyz
-MATS-0111,Intermetallic,Ni3Al,MATS-0111.xyz
-MATS-0112,Intermetallic,NiAl,MATS-0112.xyz
-MATS-0113,Intermetallic,NiAl,MATS-0113.xyz
-MATS-0114,Intermetallic,NiAl,MATS-0114.xyz
-MATS-0115,Intermetallic,NiAl,MATS-0115.xyz
-MATS-0116,Intermetallic,NiTi,MATS-0116.xyz
-MATS-0117,Intermetallic,NiTi,MATS-0117.xyz
-MATS-0118,MAX Phase,Ti2AlC,MATS-0118.xyz
-MATS-0119,MAX Phase,Ti2AlC,MATS-0119.xyz
-MATS-0120,MAX Phase,Ti2AlC,MATS-0120.xyz
-MATS-0121,MAX Phase,Ti2AlC,MATS-0121.xyz
-MATS-0122,MAX Phase,Ti3AlC2,MATS-0122.xyz
-MATS-0123,MAX Phase,Ti3AlC2,MATS-0123.xyz
-MATS-0124,MAX Phase,Ti3AlC2,MATS-0124.xyz
-MATS-0125,Nuclear Material,U0.8Pu0.2O2,MATS-0125.xyz
-MATS-0126,Nuclear Material,UO2,MATS-0126.xyz
-MATS-0127,Nuclear Material,UO2,MATS-0127.xyz
-MATS-0128,Nuclear Material,UO2,MATS-0128.xyz
-MATS-0129,Nuclear Material,UO2,MATS-0129.xyz
-MATS-0130,Nuclear Material,Zr0.84Y0.16O2,MATS-0130.xyz
-MATS-0131,Nuclear Material,ZrO2,MATS-0131.xyz
-MATS-0132,Nuclear Material,ZrO2,MATS-0132.xyz
-MATS-0133,Nuclear Material,ZrO2,MATS-0133.xyz
-MATS-0134,Nuclear Material,ZrO2,MATS-0134.xyz
-MATS-0135,Perovskite,BaTiO3,MATS-0135.xyz
-MATS-0136,Perovskite,BaTiO3,MATS-0136.xyz
-MATS-0137,Perovskite,BaTiO3,MATS-0137.xyz
-MATS-0138,Perovskite,BaTiO3,MATS-0138.xyz
-MATS-0139,Perovskite,BaTiO3,MATS-0139.xyz
-MATS-0140,Perovskite,CsPbBr1.5I1.5,MATS-0140.xyz
-MATS-0141,Perovskite,CsPbBr3,MATS-0141.xyz
-MATS-0142,Perovskite,CsPbBr3,MATS-0142.xyz
-MATS-0143,Perovskite,CsPbBr3,MATS-0143.xyz
-MATS-0144,Perovskite,CsPbBr3,MATS-0144.xyz
-MATS-0145,Perovskite,LaFeO3,MATS-0145.xyz
-MATS-0146,Perovskite,LaFeO3,MATS-0146.xyz
-MATS-0147,Perovskite,LaFeO3,MATS-0147.xyz
-MATS-0148,Perovskite,SrTiO3,MATS-0148.xyz
-MATS-0149,Perovskite,SrTiO3,MATS-0149.xyz
-MATS-0150,Perovskite,SrTiO3,MATS-0150.xyz
-MATS-0151,Perovskite,SrTiO3,MATS-0151.xyz
-MATS-0152,Thermoelectric,Bi2Te3,MATS-0152.xyz
-MATS-0153,Thermoelectric,Bi2Te3,MATS-0153.xyz
-MATS-0154,Thermoelectric,Bi2Te3,MATS-0154.xyz
-MATS-0155,Thermoelectric,Pb0.75Sn0.25Te,MATS-0155.xyz
-MATS-0156,Thermoelectric,PbTe,MATS-0156.xyz
-MATS-0157,Thermoelectric,PbTe,MATS-0157.xyz
-MATS-0158,Thermoelectric,PbTe,MATS-0158.xyz
-MATS-0159,Thermoelectric,PbTe,MATS-0159.xyz
+structure_id,material_class,formula,variant,file_path
+2d_monolayer_C_ideal_UC,2D Monolayer,C,ideal_UC,2d_monolayer/2d_monolayer_C_ideal_UC.xyz
+2d_monolayer_C_ideal_4x4,2D Monolayer,C,ideal_4x4,2d_monolayer/2d_monolayer_C_ideal_4x4.xyz
+2d_monolayer_C_vacancy_4x4,2D Monolayer,C,vacancy_4x4,2d_monolayer/2d_monolayer_C_vacancy_4x4.xyz
+2d_monolayer_BN_ideal_UC,2D Monolayer,BN,ideal_UC,2d_monolayer/2d_monolayer_BN_ideal_UC.xyz
+2d_monolayer_BN_ideal_4x4,2D Monolayer,BN,ideal_4x4,2d_monolayer/2d_monolayer_BN_ideal_4x4.xyz
+2d_monolayer_BN_B_vacancy_4x4,2D Monolayer,BN,B_vacancy_4x4,2d_monolayer/2d_monolayer_BN_B_vacancy_4x4.xyz
+2d_monolayer_BN_N_vacancy_4x4,2D Monolayer,BN,N_vacancy_4x4,2d_monolayer/2d_monolayer_BN_N_vacancy_4x4.xyz
+2d_monolayer_BN_B_antisite_4x4,2D Monolayer,BN,B_antisite_4x4,2d_monolayer/2d_monolayer_BN_B_antisite_4x4.xyz
+2d_monolayer_MoS2_ideal_UC,2D Monolayer,MoS2,ideal_UC,2d_monolayer/2d_monolayer_MoS2_ideal_UC.xyz
+2d_monolayer_MoS2_ideal_4x4,2D Monolayer,MoS2,ideal_4x4,2d_monolayer/2d_monolayer_MoS2_ideal_4x4.xyz
+2d_monolayer_MoS2_S_vacancy_4x4,2D Monolayer,MoS2,S_vacancy_4x4,2d_monolayer/2d_monolayer_MoS2_S_vacancy_4x4.xyz
+2d_monolayer_MoS2_Mo_vacancy_4x4,2D Monolayer,MoS2,Mo_vacancy_4x4,2d_monolayer/2d_monolayer_MoS2_Mo_vacancy_4x4.xyz
+2d_monolayer_WS2_ideal_UC,2D Monolayer,WS2,ideal_UC,2d_monolayer/2d_monolayer_WS2_ideal_UC.xyz
+2d_monolayer_WS2_ideal_4x4,2D Monolayer,WS2,ideal_4x4,2d_monolayer/2d_monolayer_WS2_ideal_4x4.xyz
+2d_monolayer_WS2_S_vacancy_4x4,2D Monolayer,WS2,S_vacancy_4x4,2d_monolayer/2d_monolayer_WS2_S_vacancy_4x4.xyz
+2d_monolayer_MoSe2_ideal_UC,2D Monolayer,MoSe2,ideal_UC,2d_monolayer/2d_monolayer_MoSe2_ideal_UC.xyz
+2d_monolayer_MoSe2_Se_vacancy_4x4,2D Monolayer,MoSe2,Se_vacancy_4x4,2d_monolayer/2d_monolayer_MoSe2_Se_vacancy_4x4.xyz
+2d_monolayer_P_ideal_UC,2D Monolayer,P,ideal_UC,2d_monolayer/2d_monolayer_P_ideal_UC.xyz
+2d_monolayer_P_ideal_3x3,2D Monolayer,P,ideal_3x3,2d_monolayer/2d_monolayer_P_ideal_3x3.xyz
+2d_monolayer_P_vacancy_3x3,2D Monolayer,P,vacancy_3x3,2d_monolayer/2d_monolayer_P_vacancy_3x3.xyz
+intermetallic_Ni3Al_L12_ideal_UC,Intermetallic,Ni3Al,L12_ideal_UC,intermetallic/intermetallic_Ni3Al_L12_ideal_UC.xyz
+intermetallic_Ni3Al_L12_ideal_2x2x2,Intermetallic,Ni3Al,L12_ideal_2x2x2,intermetallic/intermetallic_Ni3Al_L12_ideal_2x2x2.xyz
+intermetallic_Ni3Al_L12_Ni_vacancy,Intermetallic,Ni3Al,L12_Ni_vacancy,intermetallic/intermetallic_Ni3Al_L12_Ni_vacancy.xyz
+intermetallic_Ni3Al_L12_Al_antisite,Intermetallic,Ni3Al,L12_Al_antisite,intermetallic/intermetallic_Ni3Al_L12_Al_antisite.xyz
+intermetallic_NiAl_B2_ideal_UC,Intermetallic,NiAl,B2_ideal_UC,intermetallic/intermetallic_NiAl_B2_ideal_UC.xyz
+intermetallic_NiAl_B2_ideal_3x3x3,Intermetallic,NiAl,B2_ideal_3x3x3,intermetallic/intermetallic_NiAl_B2_ideal_3x3x3.xyz
+intermetallic_NiAl_B2_Ni_vacancy,Intermetallic,NiAl,B2_Ni_vacancy,intermetallic/intermetallic_NiAl_B2_Ni_vacancy.xyz
+intermetallic_NiAl_B2_Ni_antisite,Intermetallic,NiAl,B2_Ni_antisite,intermetallic/intermetallic_NiAl_B2_Ni_antisite.xyz
+intermetallic_FePt_L10_ideal_UC,Intermetallic,FePt,L10_ideal_UC,intermetallic/intermetallic_FePt_L10_ideal_UC.xyz
+intermetallic_FePt_L10_ideal_3x3x2,Intermetallic,FePt,L10_ideal_3x3x2,intermetallic/intermetallic_FePt_L10_ideal_3x3x2.xyz
+intermetallic_FePt_L10_Pt_antisite,Intermetallic,FePt,L10_Pt_antisite,intermetallic/intermetallic_FePt_L10_Pt_antisite.xyz
+intermetallic_FePt_L10_Fe_vacancy,Intermetallic,FePt,L10_Fe_vacancy,intermetallic/intermetallic_FePt_L10_Fe_vacancy.xyz
+intermetallic_Fe3Al_DO3_ideal_UC,Intermetallic,Fe3Al,DO3_ideal_UC,intermetallic/intermetallic_Fe3Al_DO3_ideal_UC.xyz
+intermetallic_Fe3Al_DO3_Fe_vacancy,Intermetallic,Fe3Al,DO3_Fe_vacancy,intermetallic/intermetallic_Fe3Al_DO3_Fe_vacancy.xyz
+intermetallic_Fe3Al_DO3_Al_antisite,Intermetallic,Fe3Al,DO3_Al_antisite,intermetallic/intermetallic_Fe3Al_DO3_Al_antisite.xyz
+intermetallic_Cu3Au_L12_ideal_UC,Intermetallic,Cu3Au,L12_ideal_UC,intermetallic/intermetallic_Cu3Au_L12_ideal_UC.xyz
+intermetallic_Cu3Au_L12_ideal_2x2x2,Intermetallic,Cu3Au,L12_ideal_2x2x2,intermetallic/intermetallic_Cu3Au_L12_ideal_2x2x2.xyz
+intermetallic_Cu3Au_L12_Au_antisite,Intermetallic,Cu3Au,L12_Au_antisite,intermetallic/intermetallic_Cu3Au_L12_Au_antisite.xyz
+intermetallic_Cu3Au_L12_Cu_vacancy,Intermetallic,Cu3Au,L12_Cu_vacancy,intermetallic/intermetallic_Cu3Au_L12_Cu_vacancy.xyz
+intermetallic_NiTi_B19prime_ideal_UC,Intermetallic,NiTi,B19prime_ideal_UC,intermetallic/intermetallic_NiTi_B19prime_ideal_UC.xyz
+intermetallic_NiTi_B19prime_Ni_vacancy,Intermetallic,NiTi,B19prime_Ni_vacancy,intermetallic/intermetallic_NiTi_B19prime_Ni_vacancy.xyz
+bcc_hea_NbTaVHfZrTi_equiatomic_128_ideal,BCC HEA,NbTaVHfZrTi,equiatomic_128_ideal,bcc_hea/bcc_hea_NbTaVHfZrTi_equiatomic_128_ideal.xyz
+bcc_hea_NbTaVHfZrTi_equiatomic_128_Nb_vacancy,BCC HEA,NbTaVHfZrTi,equiatomic_128_Nb_vacancy,bcc_hea/bcc_hea_NbTaVHfZrTi_equiatomic_128_Nb_vacancy.xyz
+bcc_hea_NbTaVHfZrTi+H_equiatomic_128_H_interstitial,BCC HEA,NbTaVHfZrTi+H,equiatomic_128_H_interstitial,bcc_hea/bcc_hea_NbTaVHfZrTi+H_equiatomic_128_H_interstitial.xyz
+bcc_hea_NbTaVHfZrTi_equiatomic_128_random1,BCC HEA,NbTaVHfZrTi,equiatomic_128_random1,bcc_hea/bcc_hea_NbTaVHfZrTi_equiatomic_128_random1.xyz
+bcc_hea_NbTaVHfZrTi_equiatomic_128_random2,BCC HEA,NbTaVHfZrTi,equiatomic_128_random2,bcc_hea/bcc_hea_NbTaVHfZrTi_equiatomic_128_random2.xyz
+bcc_hea_NbTaVHfZrTi_equiatomic_128_random3,BCC HEA,NbTaVHfZrTi,equiatomic_128_random3,bcc_hea/bcc_hea_NbTaVHfZrTi_equiatomic_128_random3.xyz
+critical_minerals_TiO2_rutile_ideal,Critical Mineral,TiO2,rutile_ideal,critical_minerals/critical_minerals_TiO2_rutile_ideal.xyz
+critical_minerals_TiO2_rutile_ideal_2x2x3,Critical Mineral,TiO2,rutile_ideal_2x2x3,critical_minerals/critical_minerals_TiO2_rutile_ideal_2x2x3.xyz
+critical_minerals_TiO2_rutile_O_vacancy,Critical Mineral,TiO2,rutile_O_vacancy,critical_minerals/critical_minerals_TiO2_rutile_O_vacancy.xyz
+critical_minerals_TiO2_rutile_Ti_vacancy,Critical Mineral,TiO2,rutile_Ti_vacancy,critical_minerals/critical_minerals_TiO2_rutile_Ti_vacancy.xyz
+critical_minerals_CeO2_fluorite_ideal,Critical Mineral,CeO2,fluorite_ideal,critical_minerals/critical_minerals_CeO2_fluorite_ideal.xyz
+critical_minerals_CeO2_fluorite_ideal_2x2x2,Critical Mineral,CeO2,fluorite_ideal_2x2x2,critical_minerals/critical_minerals_CeO2_fluorite_ideal_2x2x2.xyz
+critical_minerals_CeO2_fluorite_O_vacancy,Critical Mineral,CeO2,fluorite_O_vacancy,critical_minerals/critical_minerals_CeO2_fluorite_O_vacancy.xyz
+critical_minerals_CeO2_fluorite_Ce_vacancy,Critical Mineral,CeO2,fluorite_Ce_vacancy,critical_minerals/critical_minerals_CeO2_fluorite_Ce_vacancy.xyz
+critical_minerals_LiCoO2_layered_ideal,Critical Mineral,LiCoO2,layered_ideal,critical_minerals/critical_minerals_LiCoO2_layered_ideal.xyz
+critical_minerals_LiCoO2_layered_ideal_2x2x1,Critical Mineral,LiCoO2,layered_ideal_2x2x1,critical_minerals/critical_minerals_LiCoO2_layered_ideal_2x2x1.xyz
+critical_minerals_LiCoO2_layered_Li_vacancy,Critical Mineral,LiCoO2,layered_Li_vacancy,critical_minerals/critical_minerals_LiCoO2_layered_Li_vacancy.xyz
+critical_minerals_LiCoO2_layered_Co_Li_antisite,Critical Mineral,LiCoO2,layered_Co_Li_antisite,critical_minerals/critical_minerals_LiCoO2_layered_Co_Li_antisite.xyz
+critical_minerals_LiFePO4_olivine_ideal,Critical Mineral,LiFePO4,olivine_ideal,critical_minerals/critical_minerals_LiFePO4_olivine_ideal.xyz
+critical_minerals_LiFePO4_olivine_Li_vacancy,Critical Mineral,LiFePO4,olivine_Li_vacancy,critical_minerals/critical_minerals_LiFePO4_olivine_Li_vacancy.xyz
+critical_minerals_LiFePO4_olivine_FeLi_antisite,Critical Mineral,LiFePO4,olivine_FeLi_antisite,critical_minerals/critical_minerals_LiFePO4_olivine_FeLi_antisite.xyz
+critical_minerals_MgAl2O4_spinel_ideal,Critical Mineral,MgAl2O4,spinel_ideal,critical_minerals/critical_minerals_MgAl2O4_spinel_ideal.xyz
+critical_minerals_MgAl2O4_spinel_Mg_vacancy,Critical Mineral,MgAl2O4,spinel_Mg_vacancy,critical_minerals/critical_minerals_MgAl2O4_spinel_Mg_vacancy.xyz
+critical_minerals_MgAl2O4_spinel_Al_vacancy,Critical Mineral,MgAl2O4,spinel_Al_vacancy,critical_minerals/critical_minerals_MgAl2O4_spinel_Al_vacancy.xyz
+critical_minerals_CoS2_pyrite_ideal,Critical Mineral,CoS2,pyrite_ideal,critical_minerals/critical_minerals_CoS2_pyrite_ideal.xyz
+critical_minerals_CoS2_pyrite_S_vacancy,Critical Mineral,CoS2,pyrite_S_vacancy,critical_minerals/critical_minerals_CoS2_pyrite_S_vacancy.xyz
+critical_minerals_CoS2_pyrite_Co_vacancy,Critical Mineral,CoS2,pyrite_Co_vacancy,critical_minerals/critical_minerals_CoS2_pyrite_Co_vacancy.xyz
+critical_minerals_La2O3_typeA_ideal,Critical Mineral,La2O3,typeA_ideal,critical_minerals/critical_minerals_La2O3_typeA_ideal.xyz
+critical_minerals_La2O3_typeA_La_vacancy,Critical Mineral,La2O3,typeA_La_vacancy,critical_minerals/critical_minerals_La2O3_typeA_La_vacancy.xyz
+critical_minerals_La2O3_typeA_O_vacancy,Critical Mineral,La2O3,typeA_O_vacancy,critical_minerals/critical_minerals_La2O3_typeA_O_vacancy.xyz
+critical_minerals_Al2O3_corundum_ideal,Critical Mineral,Al2O3,corundum_ideal,critical_minerals/critical_minerals_Al2O3_corundum_ideal.xyz
+critical_minerals_Al2O3_corundum_O_vacancy,Critical Mineral,Al2O3,corundum_O_vacancy,critical_minerals/critical_minerals_Al2O3_corundum_O_vacancy.xyz
+critical_minerals_SiC_zincblende_ideal,Critical Mineral,SiC,zincblende_ideal,critical_minerals/critical_minerals_SiC_zincblende_ideal.xyz
+critical_minerals_SiC_zincblende_C_vacancy,Critical Mineral,SiC,zincblende_C_vacancy,critical_minerals/critical_minerals_SiC_zincblende_C_vacancy.xyz
+critical_minerals_SiC_zincblende_C_antisite,Critical Mineral,SiC,zincblende_C_antisite,critical_minerals/critical_minerals_SiC_zincblende_C_antisite.xyz
+critical_minerals_WC_hexagonal_ideal,Critical Mineral,WC,hexagonal_ideal,critical_minerals/critical_minerals_WC_hexagonal_ideal.xyz
+critical_minerals_WC_hexagonal_C_vacancy,Critical Mineral,WC,hexagonal_C_vacancy,critical_minerals/critical_minerals_WC_hexagonal_C_vacancy.xyz
+critical_minerals_WC_hexagonal_W_vacancy,Critical Mineral,WC,hexagonal_W_vacancy,critical_minerals/critical_minerals_WC_hexagonal_W_vacancy.xyz
+critical_minerals_Nd2Fe14B_tetragonal_ideal,Critical Mineral,Nd2Fe14B,tetragonal_ideal,critical_minerals/critical_minerals_Nd2Fe14B_tetragonal_ideal.xyz
+critical_minerals_Nd2Fe14B_tetragonal_Fe_vacancy,Critical Mineral,Nd2Fe14B,tetragonal_Fe_vacancy,critical_minerals/critical_minerals_Nd2Fe14B_tetragonal_Fe_vacancy.xyz
+catalysis_Pt_111_slab_ideal,Catalysis,Pt,111_slab_ideal,catalysis/catalysis_Pt_111_slab_ideal.xyz
+catalysis_Pt_111_slab_surface_vacancy,Catalysis,Pt,111_slab_surface_vacancy,catalysis/catalysis_Pt_111_slab_surface_vacancy.xyz
+catalysis_Cu_100_slab_ideal,Catalysis,Cu,100_slab_ideal,catalysis/catalysis_Cu_100_slab_ideal.xyz
+catalysis_Cu_100_slab_surface_vacancy,Catalysis,Cu,100_slab_surface_vacancy,catalysis/catalysis_Cu_100_slab_surface_vacancy.xyz
+catalysis_Pd_111_slab_ideal,Catalysis,Pd,111_slab_ideal,catalysis/catalysis_Pd_111_slab_ideal.xyz
+catalysis_Pd_111_slab_surface_vacancy,Catalysis,Pd,111_slab_surface_vacancy,catalysis/catalysis_Pd_111_slab_surface_vacancy.xyz
+catalysis_Pd0.75Cu0.25_111_slab_alloy,Catalysis,Pd0.75Cu0.25,111_slab_alloy,catalysis/catalysis_Pd0.75Cu0.25_111_slab_alloy.xyz
+catalysis_Pd0.75Cu0.25_111_slab_alloy_vacancy,Catalysis,Pd0.75Cu0.25,111_slab_alloy_vacancy,catalysis/catalysis_Pd0.75Cu0.25_111_slab_alloy_vacancy.xyz
+catalysis_Ni_111_slab_ideal,Catalysis,Ni,111_slab_ideal,catalysis/catalysis_Ni_111_slab_ideal.xyz
+catalysis_Ni_111_slab_surface_vacancy,Catalysis,Ni,111_slab_surface_vacancy,catalysis/catalysis_Ni_111_slab_surface_vacancy.xyz
+catalysis_Au_111_slab_ideal,Catalysis,Au,111_slab_ideal,catalysis/catalysis_Au_111_slab_ideal.xyz
+catalysis_Ru_0001_slab_ideal,Catalysis,Ru,0001_slab_ideal,catalysis/catalysis_Ru_0001_slab_ideal.xyz
+catalysis_Ru_0001_slab_surface_vacancy,Catalysis,Ru,0001_slab_surface_vacancy,catalysis/catalysis_Ru_0001_slab_surface_vacancy.xyz
+catalysis_Fe_110_slab_ideal,Catalysis,Fe,110_slab_ideal,catalysis/catalysis_Fe_110_slab_ideal.xyz
+catalysis_Fe_110_slab_surface_vacancy,Catalysis,Fe,110_slab_surface_vacancy,catalysis/catalysis_Fe_110_slab_surface_vacancy.xyz
+catalysis_Co_0001_slab_ideal,Catalysis,Co,0001_slab_ideal,catalysis/catalysis_Co_0001_slab_ideal.xyz
+catalysis_Co_0001_slab_surface_vacancy,Catalysis,Co,0001_slab_surface_vacancy,catalysis/catalysis_Co_0001_slab_surface_vacancy.xyz
+hec_MgCoNiCuZnO_HEO_rocksalt_ideal,High-Entropy Ceramic,MgCoNiCuZnO,HEO_rocksalt_ideal,hec/hec_MgCoNiCuZnO_HEO_rocksalt_ideal.xyz
+hec_MgCoNiCuZnO_HEO_rocksalt_O_vacancy,High-Entropy Ceramic,MgCoNiCuZnO,HEO_rocksalt_O_vacancy,hec/hec_MgCoNiCuZnO_HEO_rocksalt_O_vacancy.xyz
+hec_MgCoNiCuZnO_HEO_rocksalt_Mg_vacancy,High-Entropy Ceramic,MgCoNiCuZnO,HEO_rocksalt_Mg_vacancy,hec/hec_MgCoNiCuZnO_HEO_rocksalt_Mg_vacancy.xyz
+hec_MgCoNiCuZnO_HEO_rocksalt_random2,High-Entropy Ceramic,MgCoNiCuZnO,HEO_rocksalt_random2,hec/hec_MgCoNiCuZnO_HEO_rocksalt_random2.xyz
+hec_HfTaZrNbTiC_HECarbide_ideal,High-Entropy Ceramic,HfTaZrNbTiC,HECarbide_ideal,hec/hec_HfTaZrNbTiC_HECarbide_ideal.xyz
+hec_HfTaZrNbTiC_HECarbide_C_vacancy,High-Entropy Ceramic,HfTaZrNbTiC,HECarbide_C_vacancy,hec/hec_HfTaZrNbTiC_HECarbide_C_vacancy.xyz
+hec_HfTaZrNbTiC_HECarbide_Ti_vacancy,High-Entropy Ceramic,HfTaZrNbTiC,HECarbide_Ti_vacancy,hec/hec_HfTaZrNbTiC_HECarbide_Ti_vacancy.xyz
+hec_AlCrNbTiVN_HENitride_ideal,High-Entropy Ceramic,AlCrNbTiVN,HENitride_ideal,hec/hec_AlCrNbTiVN_HENitride_ideal.xyz
+hec_AlCrNbTiVN_HENitride_N_vacancy,High-Entropy Ceramic,AlCrNbTiVN,HENitride_N_vacancy,hec/hec_AlCrNbTiVN_HENitride_N_vacancy.xyz
+hec_AlCrNbTiVN_HENitride_Cr_vacancy,High-Entropy Ceramic,AlCrNbTiVN,HENitride_Cr_vacancy,hec/hec_AlCrNbTiVN_HENitride_Cr_vacancy.xyz
+hec_HfMoNbTaTiB2_HEBoride_ideal,High-Entropy Ceramic,HfMoNbTaTiB2,HEBoride_ideal,hec/hec_HfMoNbTaTiB2_HEBoride_ideal.xyz
+hec_HfMoNbTaTiB2_HEBoride_B_vacancy,High-Entropy Ceramic,HfMoNbTaTiB2,HEBoride_B_vacancy,hec/hec_HfMoNbTaTiB2_HEBoride_B_vacancy.xyz
+hec_HfMoNbTaTiB2_HEBoride_Hf_vacancy,High-Entropy Ceramic,HfMoNbTaTiB2,HEBoride_Hf_vacancy,hec/hec_HfMoNbTaTiB2_HEBoride_Hf_vacancy.xyz
+perovskite_BaTiO3_cubic_ideal,Perovskite,BaTiO3,cubic_ideal,perovskite/perovskite_BaTiO3_cubic_ideal.xyz
+perovskite_BaTiO3_cubic_ideal_2x2x2,Perovskite,BaTiO3,cubic_ideal_2x2x2,perovskite/perovskite_BaTiO3_cubic_ideal_2x2x2.xyz
+perovskite_BaTiO3_cubic_O_vacancy,Perovskite,BaTiO3,cubic_O_vacancy,perovskite/perovskite_BaTiO3_cubic_O_vacancy.xyz
+perovskite_BaTiO3_cubic_Ti_vacancy,Perovskite,BaTiO3,cubic_Ti_vacancy,perovskite/perovskite_BaTiO3_cubic_Ti_vacancy.xyz
+perovskite_BaTiO3_cubic_Ba_Ti_antisite,Perovskite,BaTiO3,cubic_Ba_Ti_antisite,perovskite/perovskite_BaTiO3_cubic_Ba_Ti_antisite.xyz
+perovskite_SrTiO3_cubic_ideal,Perovskite,SrTiO3,cubic_ideal,perovskite/perovskite_SrTiO3_cubic_ideal.xyz
+perovskite_SrTiO3_cubic_ideal_2x2x2,Perovskite,SrTiO3,cubic_ideal_2x2x2,perovskite/perovskite_SrTiO3_cubic_ideal_2x2x2.xyz
+perovskite_SrTiO3_cubic_O_vacancy,Perovskite,SrTiO3,cubic_O_vacancy,perovskite/perovskite_SrTiO3_cubic_O_vacancy.xyz
+perovskite_SrTiO3_cubic_Sr_vacancy,Perovskite,SrTiO3,cubic_Sr_vacancy,perovskite/perovskite_SrTiO3_cubic_Sr_vacancy.xyz
+perovskite_CsPbBr3_cubic_ideal,Perovskite,CsPbBr3,cubic_ideal,perovskite/perovskite_CsPbBr3_cubic_ideal.xyz
+perovskite_CsPbBr3_cubic_ideal_2x2x2,Perovskite,CsPbBr3,cubic_ideal_2x2x2,perovskite/perovskite_CsPbBr3_cubic_ideal_2x2x2.xyz
+perovskite_CsPbBr3_cubic_Br_vacancy,Perovskite,CsPbBr3,cubic_Br_vacancy,perovskite/perovskite_CsPbBr3_cubic_Br_vacancy.xyz
+perovskite_CsPbBr3_cubic_Cs_vacancy,Perovskite,CsPbBr3,cubic_Cs_vacancy,perovskite/perovskite_CsPbBr3_cubic_Cs_vacancy.xyz
+perovskite_CsPbBr1.5I1.5_cubic_mixed_halide,Perovskite,CsPbBr1.5I1.5,cubic_mixed_halide,perovskite/perovskite_CsPbBr1.5I1.5_cubic_mixed_halide.xyz
+perovskite_LaFeO3_orthorhombic_ideal,Perovskite,LaFeO3,orthorhombic_ideal,perovskite/perovskite_LaFeO3_orthorhombic_ideal.xyz
+perovskite_LaFeO3_orthorhombic_O_vacancy,Perovskite,LaFeO3,orthorhombic_O_vacancy,perovskite/perovskite_LaFeO3_orthorhombic_O_vacancy.xyz
+perovskite_LaFeO3_orthorhombic_Fe_vacancy,Perovskite,LaFeO3,orthorhombic_Fe_vacancy,perovskite/perovskite_LaFeO3_orthorhombic_Fe_vacancy.xyz
+fcc_hea_CrMnFeCoNi_Cantor_108_ideal,FCC HEA,CrMnFeCoNi,Cantor_108_ideal,fcc_hea/fcc_hea_CrMnFeCoNi_Cantor_108_ideal.xyz
+fcc_hea_CrMnFeCoNi_Cantor_108_Ni_vacancy,FCC HEA,CrMnFeCoNi,Cantor_108_Ni_vacancy,fcc_hea/fcc_hea_CrMnFeCoNi_Cantor_108_Ni_vacancy.xyz
+fcc_hea_CrMnFeCoNi+C_Cantor_108_C_interstitial,FCC HEA,CrMnFeCoNi+C,Cantor_108_C_interstitial,fcc_hea/fcc_hea_CrMnFeCoNi+C_Cantor_108_C_interstitial.xyz
+fcc_hea_CrMnFeCoNi_Cantor_108_random1,FCC HEA,CrMnFeCoNi,Cantor_108_random1,fcc_hea/fcc_hea_CrMnFeCoNi_Cantor_108_random1.xyz
+fcc_hea_CrMnFeCoNi_Cantor_108_random2,FCC HEA,CrMnFeCoNi,Cantor_108_random2,fcc_hea/fcc_hea_CrMnFeCoNi_Cantor_108_random2.xyz
+fcc_hea_CrMnFeCoNi_Cantor_108_random3,FCC HEA,CrMnFeCoNi,Cantor_108_random3,fcc_hea/fcc_hea_CrMnFeCoNi_Cantor_108_random3.xyz
+max_phase_Ti2AlC_M2AX_ideal,MAX Phase,Ti2AlC,M2AX_ideal,max_phase/max_phase_Ti2AlC_M2AX_ideal.xyz
+max_phase_Ti2AlC_M2AX_ideal_2x2x1,MAX Phase,Ti2AlC,M2AX_ideal_2x2x1,max_phase/max_phase_Ti2AlC_M2AX_ideal_2x2x1.xyz
+max_phase_Ti2AlC_M2AX_C_vacancy,MAX Phase,Ti2AlC,M2AX_C_vacancy,max_phase/max_phase_Ti2AlC_M2AX_C_vacancy.xyz
+max_phase_Ti2AlC_M2AX_Al_vacancy,MAX Phase,Ti2AlC,M2AX_Al_vacancy,max_phase/max_phase_Ti2AlC_M2AX_Al_vacancy.xyz
+max_phase_Ti3AlC2_M3AX2_ideal,MAX Phase,Ti3AlC2,M3AX2_ideal,max_phase/max_phase_Ti3AlC2_M3AX2_ideal.xyz
+max_phase_Ti3AlC2_M3AX2_C_vacancy,MAX Phase,Ti3AlC2,M3AX2_C_vacancy,max_phase/max_phase_Ti3AlC2_M3AX2_C_vacancy.xyz
+max_phase_Ti3AlC2_M3AX2_Al_vacancy,MAX Phase,Ti3AlC2,M3AX2_Al_vacancy,max_phase/max_phase_Ti3AlC2_M3AX2_Al_vacancy.xyz
+thermoelectric_PbTe_rocksalt_ideal,Thermoelectric,PbTe,rocksalt_ideal,thermoelectric/thermoelectric_PbTe_rocksalt_ideal.xyz
+thermoelectric_PbTe_rocksalt_ideal_2x2x2,Thermoelectric,PbTe,rocksalt_ideal_2x2x2,thermoelectric/thermoelectric_PbTe_rocksalt_ideal_2x2x2.xyz
+thermoelectric_PbTe_rocksalt_Te_vacancy,Thermoelectric,PbTe,rocksalt_Te_vacancy,thermoelectric/thermoelectric_PbTe_rocksalt_Te_vacancy.xyz
+thermoelectric_PbTe_rocksalt_Pb_vacancy,Thermoelectric,PbTe,rocksalt_Pb_vacancy,thermoelectric/thermoelectric_PbTe_rocksalt_Pb_vacancy.xyz
+thermoelectric_Pb0.75Sn0.25Te_rocksalt_alloyed,Thermoelectric,Pb0.75Sn0.25Te,rocksalt_alloyed,thermoelectric/thermoelectric_Pb0.75Sn0.25Te_rocksalt_alloyed.xyz
+thermoelectric_Bi2Te3_rhombohedral_ideal,Thermoelectric,Bi2Te3,rhombohedral_ideal,thermoelectric/thermoelectric_Bi2Te3_rhombohedral_ideal.xyz
+thermoelectric_Bi2Te3_rhombohedral_Te_vacancy,Thermoelectric,Bi2Te3,rhombohedral_Te_vacancy,thermoelectric/thermoelectric_Bi2Te3_rhombohedral_Te_vacancy.xyz
+thermoelectric_Bi2Te3_rhombohedral_Bi_vacancy,Thermoelectric,Bi2Te3,rhombohedral_Bi_vacancy,thermoelectric/thermoelectric_Bi2Te3_rhombohedral_Bi_vacancy.xyz
+nuclear_UO2_fluorite_ideal,Nuclear Material,UO2,fluorite_ideal,nuclear/nuclear_UO2_fluorite_ideal.xyz
+nuclear_UO2_fluorite_ideal_2x2x2,Nuclear Material,UO2,fluorite_ideal_2x2x2,nuclear/nuclear_UO2_fluorite_ideal_2x2x2.xyz
+nuclear_UO2_fluorite_O_vacancy,Nuclear Material,UO2,fluorite_O_vacancy,nuclear/nuclear_UO2_fluorite_O_vacancy.xyz
+nuclear_UO2_fluorite_U_vacancy,Nuclear Material,UO2,fluorite_U_vacancy,nuclear/nuclear_UO2_fluorite_U_vacancy.xyz
+nuclear_U0.8Pu0.2O2_MOX_fluorite,Nuclear Material,U0.8Pu0.2O2,MOX_fluorite,nuclear/nuclear_U0.8Pu0.2O2_MOX_fluorite.xyz
+nuclear_ZrO2_monoclinic_ideal,Nuclear Material,ZrO2,monoclinic_ideal,nuclear/nuclear_ZrO2_monoclinic_ideal.xyz
+nuclear_ZrO2_monoclinic_ideal_2x2x2,Nuclear Material,ZrO2,monoclinic_ideal_2x2x2,nuclear/nuclear_ZrO2_monoclinic_ideal_2x2x2.xyz
+nuclear_ZrO2_monoclinic_O_vacancy,Nuclear Material,ZrO2,monoclinic_O_vacancy,nuclear/nuclear_ZrO2_monoclinic_O_vacancy.xyz
+nuclear_ZrO2_monoclinic_Zr_vacancy,Nuclear Material,ZrO2,monoclinic_Zr_vacancy,nuclear/nuclear_ZrO2_monoclinic_Zr_vacancy.xyz
+nuclear_Zr0.84Y0.16O2_YSZ_fluorite,Nuclear Material,Zr0.84Y0.16O2,YSZ_fluorite,nuclear/nuclear_Zr0.84Y0.16O2_YSZ_fluorite.xyz
