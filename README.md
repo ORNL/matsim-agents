@@ -245,7 +245,44 @@ path under `external/vasp6/`. The Aurora build entry point is
 [`scripts/setup/aurora/build-vasp-gpu-aurora.sh`](scripts/setup/aurora/build-vasp-gpu-aurora.sh),
 which defaults to building `vasp_std`, `vasp_gam`, and `vasp_ncl` in one run.
 
----
+### vLLM on Aurora (Intel PVC)
+
+Aurora supports vLLM-XPU serving and inference via the official ALCF `frameworks` module stack (Python 3.12, torch-xpu, ipex, vllm, ray, triton). The repo provides:
+
+- **Single-node smoke test:** [`scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh`](scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh)
+- **Advanced launchers:** [`scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh`](scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh) (multi-node Ray serve), plus single-relax, active-learning, and QE warmstart launchers
+
+**Key requirements and gotchas:**
+
+- **PVC visibility:** On Aurora compute nodes, bare `python` does NOT see the GPUs. Always wrap Python in `mpiexec -n 1 --ppn 1` (as in the smoke script) to expose XPUs via PALS.
+- **Device mask:** Use `ZE_FLAT_DEVICE_HIERARCHY=FLAT` and a non-dotted `ZE_AFFINITY_MASK` (e.g., `0,1` for TP=2). In FLAT, each tile is a root device; dotted notation (`0.0,0.1`) is only valid in COMPOSITE and will result in `device_count()=0` in FLAT.
+- **TMPDIR:** PBS sets `$TMPDIR` to a long path that exceeds the Unix socket limit for ZMQ IPC. Always set `export TMPDIR=/tmp` before launching vLLM.
+- **oneCCL KVS:** Do NOT set `CCL_KVS_MODE=mpi` or `CCL_PROCESS_LAUNCHER=pmix` for vLLM. vLLM's multiproc_executor uses forked workers, not MPI ranks; oneCCL must use its default internal KVS over TCP.
+- **Debug queue:** The default `debug` queue has a per-user limit of 1 queued job and short walltime. For parallel jobs, use `workq` or `prod`.
+- **Model download:** Place models in `$PROJ/models/` (e.g., Mistral-Small-24B-Instruct-2501). Use the provided `hf_download.py` script if needed.
+
+**To run the smoke test:**
+
+1. Build the vLLM XPU venv (if not already):
+  ```bash
+  bash scripts/setup/aurora/install-vllm-xpu-aurora.sh
+  ```
+2. Download a supported model (e.g., Mistral-Small-24B):
+  ```bash
+  source /path/to/hydragnn_venv/bin/activate
+  python scripts/setup/aurora/hf_download.py mistralai/Mistral-Small-24B-Instruct-2501
+  ```
+3. Submit the smoke test:
+  ```bash
+  qsub scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh
+  # or override model:
+  qsub -v SMOKE_MODEL_PATH=$PROJ/models/Qwen2.5-32B-Instruct scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh
+  ```
+4. Inspect results in `runs/smoke-vllm-singlenode-<jobid>/`.
+
+If the job fails, check `vllm.log` for device mask, TMPDIR, or oneCCL errors. Each error layer is documented in the script comments.
+
+For multi-node serving, see the advanced launchers in `scripts/advanced/aurora/`.
 
 ## Running on Perlmutter (NERSC)
 
