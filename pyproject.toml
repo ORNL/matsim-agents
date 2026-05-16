@@ -37,6 +37,7 @@ hydragnn = [
     # https://github.com/ORNL/HydraGNN. Listed here for reference.
     "torch>=2.2",
 ]
+mace = ["mace-torch>=0.3.6"]
 openai = ["langchain-openai>=0.2.0"]
 ollama = ["langchain-ollama>=0.2.0"]
 vllm = ["langchain-openai>=0.2.0"]  # vLLM uses the OpenAI-compatible client
