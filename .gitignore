@@ -55,6 +55,11 @@ external/
 external/vasp6/src/vasp.6.6.0/
 external/vasp6/src/vasp.6.6.0.tgz
 
+# VASP POTCAR pseudopotential library (licensed by VASP, NOT redistributable).
+# Layout: external/vasp6/potcar/<set>/<Element>/POTCAR
+# Point MATSIM_VASP_POTCAR_DIR at a concrete <set> (e.g. potpaw_PBE.64).
+external/vasp6/potcar/
+
 # Vendored third-party clones (bootstrapped by scripts/setup_env.sh)
 third_party/
 /tmp/
