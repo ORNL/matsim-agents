@@ -78,6 +78,7 @@ external/vasp6/potcar/
 # Structure anonymisation mapping — MUST stay in the private repo only.
 # If this file ever appears here it means someone accidentally copied it from
 # matsim-agents-dft-reference/; block it to prevent accidental exposure.
+matsim-agents-dft-reference/
 id_mapping.json
 **/id_mapping.json
 
