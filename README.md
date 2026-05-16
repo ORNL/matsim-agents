@@ -898,6 +898,10 @@ accepted before use at <https://huggingface.co/facebook/UMA> and
 codabench_competition/
 ├── competition.yaml             # Codabench bundle manifest & leaderboard config
 ├── run_baselines.py             # entry point: --model mace/hydragnn/uma/allscaip/all
+├── evaluate.py                  # local evaluation helper (mirrors the Codabench scorer)
+├── requirements.txt             # Python deps for the competition bundle
+├── install_mace_aurora.sh       # MACE-MP-0 install helper for Aurora (XPU)
+├── fix_h5py_system_conflict_aurora.sh  # h5py/HDF5 conflict workaround (Aurora)
 ├── baselines/
 │   ├── mace_mp0/model.py        # MACE-MP-0 baseline
 │   ├── hydragnn/model.py        # HydraGNN baseline
@@ -914,6 +918,7 @@ codabench_competition/
 │   └── forces/                  # per-structure force arrays (server-side, not public)
 ├── public_data/
 │   ├── generate_structures.py   # generates the 159 test structures
+│   ├── structures_metadata.csv  # anonymised MATS-XXXX → class / formula mapping
 │   └── structures/              # XYZ files of all test structures
 └── starting_kit/
     ├── README.md                # participant guide (tasks, formats, scoring)
@@ -978,6 +983,7 @@ matsim-agents/
 │   │   │   └── run-pw-gpu-aurora.sh         # QE pw.x GPU launcher
 │   │   └── perlmutter/
 │   │       ├── run-pw-gpu-perlmutter.sh
+│   │       ├── run-vasp-gpu-perlmutter.sh
 │   │       ├── run-qe-warmstart-benchmark-perlmutter.sh
 │   │       ├── launch-test-singlenode-resume-perlmutter.sh
 │   │       ├── launch-test-multinode-perlmutter.sh
@@ -987,7 +993,35 @@ matsim-agents/
 │   │   │   ├── smoke-vllm-singlenode-frontier.sh
 │   │   │   ├── smoke-vllm-multinode-frontier.sh
 │   │   │   └── smoke-transformers-frontier.sh
+│   │   ├── aurora/
+│   │   │   └── smoke-vllm-singlenode-aurora.sh   # vLLM-XPU single-node smoke (qsub)
 │   │   └── perlmutter/
+│   │       ├── smoke-transformers-perlmutter.sh
+│   │       ├── smoke-transformers-multinode-perlmutter.sh
+│   │       └── _torchrun_smoke_loader.py
+│   ├── advanced/
+│   │   ├── frontier/                        # Frontier multi-step sbatch job scripts
+│   │   │   ├── job-serve-multinode-frontier.sh
+│   │   │   ├── job-discovery-chat-frontier.sh
+│   │   │   ├── job-discovery-chat-vllm-frontier.sh
+│   │   │   ├── job-single-relaxation-frontier.sh
+│   │   │   ├── job-active-learning-uq-frontier.sh
+│   │   │   ├── job-qe-warmstart-frontier.sh
+│   │   │   ├── job-sequential-benchmark-frontier.sh
+│   │   │   └── job-six-model-benchmark-frontier.sh
+│   │   ├── aurora/                          # Aurora multi-step qsub job scripts
+│   │   │   ├── job-serve-multinode-aurora.sh
+│   │   │   ├── job-serve-multinode-vllm-aurora.sh
+│   │   │   ├── job-discovery-chat-aurora.sh
+│   │   │   ├── job-single-relaxation-aurora.sh
+│   │   │   ├── job-active-learning-uq-aurora.sh
+│   │   │   ├── job-qe-warmstart-aurora.sh
+│   │   │   └── _mpi_xpu_loader.py
+│   │   └── perlmutter/                      # Perlmutter multi-step sbatch job scripts
+│   │       ├── job-discovery-chat-perlmutter.sh
+│   │       ├── job-single-relaxation-perlmutter.sh
+│   │       ├── job-active-learning-uq-perlmutter.sh
+│   │       └── job-qe-warmstart-perlmutter.sh
 │   └── docs/
 │       └── frontier/                        # Frontier-specific docs
 │           ├── README-frontier.md
