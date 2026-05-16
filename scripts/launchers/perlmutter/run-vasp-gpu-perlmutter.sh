@@ -54,7 +54,11 @@ else
 fi
 
 export CUDA_HOME="${CUDA_HOME:-/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/cuda/12.9}"
-export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/math_libs/12.9/targets/x86_64-linux/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/compilers/lib:${LD_LIBRARY_PATH:-}"
+# NVHPC runtime paths: include the `compilers/extras/qd/lib` directory so the
+# linked-in `libqdmod.so.0` / `libqd.so.0` (NVHPC quad-double precision lib)
+# resolve at startup. Without it, vasp exits with
+# "error while loading shared libraries: libqdmod.so.0".
+export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/math_libs/12.9/targets/x86_64-linux/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/compilers/extras/qd/lib:${LD_LIBRARY_PATH:-}"
 export MPICH_GPU_SUPPORT_ENABLED=1
 
 echo "=========================================="
