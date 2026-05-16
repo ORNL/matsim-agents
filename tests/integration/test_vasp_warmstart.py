@@ -25,6 +25,17 @@ Optional::
     MATSIM_VASP_TIMEOUT_SEC    # per-vasp-run timeout (default: 3600)
     MATSIM_VASP_MLP_DEVICE     # cuda|cpu  (default: cuda)
     MATSIM_WARMSTART_FIXTURES  # comma-sep names to restrict (default: all)
+
+Perlmutter notes:
+
+  * Set ``TMPDIR`` to a CFS/SCRATCH path and pass
+    ``--basetemp="$TMPDIR/pytest-basetemp"``. The default ``/tmp`` is
+    per-node-local, so VASP launched via ``srun`` on a compute node cannot
+    see INCAR/POSCAR/POTCAR written by pytest from the login node.
+  * Export ``NRANKS=1`` and ``GPUS_PER_NODE=1`` for small-cell fixtures.
+    Over-partitioning a tiny problem (4 MPI ranks × 4 GPUs) trips the
+    OpenACC scaLAPACK redistribute path with ``CUDA_ERROR_ILLEGAL_ADDRESS``
+    in ``wave_mpi.f90:redis_pw``.
 """
 
 from __future__ import annotations
