@@ -270,11 +270,6 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--kpts", type=int, nargs=3, default=None, metavar=("KX", "KY", "KZ"))
     p.add_argument("--nstep", type=int, default=100)
     p.add_argument("--timeout-sec", type=int, default=None)
-    p.add_argument(
-        "--skip-hydragnn",
-        action="store_true",
-        help="Skip HydraGNN entirely; run only the cold DFT relax.",
-    )
     return p
 
 
@@ -304,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     hydragnn_kwargs["fmax"] = args.hydragnn_fmax
     hydragnn_kwargs["maxiter"] = args.hydragnn_maxiter
 
-    skip_hg = args.skip_hydragnn or not (args.logdir and args.mlp_checkpoint)
+    skip_hg = not (args.logdir and args.mlp_checkpoint)
 
     qe_launcher: list[str] | str = (
         args.qe_launcher.split() if " " in args.qe_launcher else args.qe_launcher
