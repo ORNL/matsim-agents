@@ -80,6 +80,13 @@ export VIRTUAL_ENV="${HYDRAGNN_VENV}"
 MATSIM_AGENTS_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 export PYTHONPATH="${MATSIM_AGENTS_DIR}/src:${PYTHONPATH:-}"
 
+# Add the HydraGNN sc26 example dir to PYTHONPATH so `inference_fused`
+# (used by src/matsim_agents/tools/relaxation.py) can be imported.
+HYDRAGNN_SC26_DIR="${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26"
+if [[ -f "${HYDRAGNN_SC26_DIR}/inference_fused.py" ]]; then
+    export PYTHONPATH="${HYDRAGNN_SC26_DIR}:${PYTHONPATH}"
+fi
+
 echo ""
 echo "✓ Environment setup complete!"
 echo "  - Python: $(which python)"
