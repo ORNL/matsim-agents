@@ -115,6 +115,34 @@ if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     pip_retry vllm
 fi
 
+# Strip any overlay torch / CUDA wheels that transitive deps (notably
+# fairchem-core) may have dragged into the venv. Aurora is XPU-only and the
+# frameworks module already ships torch 2.10/XPU + torchvision + triton-xpu
+# via --system-site-packages. A venv-local CUDA torch (e.g. torch==2.8.0+cu128
+# plus nvidia-*-cu12 + triton 3.4.0) silently shadows the frameworks build and
+# breaks vLLM-XPU at runtime with a torchvision._meta_registrations import
+# error. Uninstall is a no-op if the packages aren't present.
+log "Removing any CUDA torch overlay that transitive deps may have pulled in"
+pip uninstall -y \
+    torch torchvision torchaudio triton \
+    nvidia-cublas-cu12 nvidia-cuda-cupti-cu12 nvidia-cuda-nvrtc-cu12 \
+    nvidia-cuda-runtime-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 \
+    nvidia-cufile-cu12 nvidia-curand-cu12 nvidia-cusolver-cu12 \
+    nvidia-cusparse-cu12 nvidia-cusparselt-cu12 nvidia-nccl-cu12 \
+    nvidia-nvjitlink-cu12 nvidia-nvtx-cu12 2>/dev/null || true
+
+# Strip any overlay numpy / pandas that transitive deps may have pulled into
+# the venv. The Aurora frameworks module ships numpy 2.2.6 + pandas 3.0.0, and
+# all the C extensions in the stack (pyarrow 23.0, scipy 1.17, scikit-learn
+# 1.8, torch 2.10/XPU, IPEX 2.10) are built against that numpy 2.x ABI. A
+# venv-local numpy 2.4.x / pandas 2.3.x silently shadows the frameworks build
+# and triggers a SIGSEGV inside pyarrow.lib during the
+# `import vllm.model_executor.models` chain (which transitively pulls in
+# sklearn -> pandas.compat.pyarrow -> pyarrow.lib). Uninstall is a no-op when
+# nothing is overlayed; let --system-site-packages expose the frameworks copy.
+log "Removing any numpy/pandas overlay (Aurora frameworks ships 2.2.6 / 3.0.0)"
+pip uninstall -y numpy pandas 2>/dev/null || true
+
 log "Verifying installation imports"
 python -c "import hydragnn; print('HydraGNN import: OK')"
 python -c "import matsim_agents; print('matsim-agents import: OK')"
