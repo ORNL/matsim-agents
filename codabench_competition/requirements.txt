@@ -13,7 +13,9 @@ mace-torch>=0.3.6
 #   Accept terms at https://huggingface.co/facebook/UMA
 #   Accept terms at https://huggingface.co/facebook/AllScAIP
 fairchem-core>=1.2.0
-huggingface_hub>=0.24.0
+# Cap <1.0: huggingface_hub 1.x breaks transformers<4.58 (which is what
+# fairchem-core and the bundled Aurora frameworks transformers require).
+huggingface_hub>=0.24.0,<1.0
 
 # Scoring utilities
 scipy>=1.10
