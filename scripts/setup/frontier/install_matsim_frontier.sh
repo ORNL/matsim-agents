@@ -209,7 +209,10 @@ pip install accelerate
 
 # Keep model download/inference tooling aligned with Perlmutter installs.
 log "Installing LLM tooling extras (huggingface_hub CLI + transformers)..."
-pip install "huggingface_hub>=1.12" "transformers>=4.45"
+# Cap huggingface_hub<1.0: transformers<4.58 (and thus our 4.45..4.57 floor)
+# requires huggingface-hub<1.0. Pinned here to keep the resolver from picking
+# up the breaking 1.x line (e.g. 1.15.0) that ships with newer fairchem-core.
+pip install "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0"
 
 # ── Phase 2.5: Patch flashinfer for ROCm (no libcudart, only libamdhip64) ─────
 #

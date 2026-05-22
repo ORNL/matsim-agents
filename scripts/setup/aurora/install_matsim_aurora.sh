@@ -104,7 +104,11 @@ fi
 
 log "Installing additional runtime/tooling dependencies"
 pip_retry "langchain-core>=0.3.0" "pytest>=8.0" "pytest-cov>=5.0"
-pip_retry "huggingface_hub>=1.12" "transformers>=4.45" "accelerate>=1.13"
+# NOTE: cap huggingface_hub below 1.0. The frameworks module on Aurora ships
+# transformers 4.57.x which requires huggingface-hub<1.0; allowing the 1.x line
+# (e.g. 1.15.0) breaks `import transformers`. Keep transformers<5 for the same
+# compatibility window across Perlmutter/Frontier installers.
+pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0" "accelerate>=1.13"
 
 if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     log "INSTALL_VLLM_SERVER=1 -> installing vllm"
