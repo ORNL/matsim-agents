@@ -132,14 +132,26 @@ pip uninstall -y \
     nvidia-nvjitlink-cu12 nvidia-nvtx-cu12 2>/dev/null || true
 
 # Strip any overlay numpy / pandas that transitive deps may have pulled into
-# the venv. The Aurora frameworks module ships numpy 2.2.6 + pandas 3.0.0, and
-# all the C extensions in the stack (pyarrow 23.0, scipy 1.17, scikit-learn
-# 1.8, torch 2.10/XPU, IPEX 2.10) are built against that numpy 2.x ABI. A
-# venv-local numpy 2.4.x / pandas 2.3.x silently shadows the frameworks build
+# the venv.
+#
+# NOTE ON PROJECT-WIDE NUMPY PIN POLICY
+# The Frontier (ROCm) and Perlmutter (CUDA) installers pin numpy==1.26.4
+# because PyTorch on those systems was compiled against the numpy 1.x ABI.
+# Aurora is DIFFERENT: the `frameworks/2025.3.1` module ships numpy 2.2.6 and
+# every C extension in the stack is compiled against the numpy 2.x ABI:
+#   pyarrow 23.0, scipy 1.17, scikit-learn 1.8, torch 2.10/XPU, IPEX 2.10.
+# Pinning to numpy==1.26.4 on Aurora would cause the SAME class of ABI-
+# mismatch crash that the pin is meant to prevent on other machines.
+# The Aurora-correct equivalent of that pin is therefore NOT to install any
+# venv-local numpy at all: `pip uninstall -y numpy` lets --system-site-packages
+# expose the pre-built frameworks 2.2.6, which all C extensions expect.
+#
+# A venv-local numpy 2.4.x / pandas 2.3.x overlay (e.g. dragged in by
+# fairchem-core or other transitive deps) silently shadows the frameworks build
 # and triggers a SIGSEGV inside pyarrow.lib during the
 # `import vllm.model_executor.models` chain (which transitively pulls in
 # sklearn -> pandas.compat.pyarrow -> pyarrow.lib). Uninstall is a no-op when
-# nothing is overlayed; let --system-site-packages expose the frameworks copy.
+# nothing is overlaid; let --system-site-packages expose the frameworks copy.
 log "Removing any numpy/pandas overlay (Aurora frameworks ships 2.2.6 / 3.0.0)"
 pip uninstall -y numpy pandas 2>/dev/null || true
 
