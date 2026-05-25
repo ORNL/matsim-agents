@@ -173,30 +173,62 @@ echo ""
 # env vars and attempts to join the MPI job as a real rank — which fails with
 # SIGSEGV because the child is not a real MPI rank.
 #
-# Strategy: run the same command here with faulthandler output to a file
-# (bypassing vLLM's capture_output=True which swallows stderr), then repeat
-# with all PMI/PALS vars unset to confirm they are the cause.
+# Updated strategy: provide proper pickled stdin input to the subprocess so
+# it actually executes fn() = _ModelInfo.from_model_cls(MistralForCausalLM).
+# Use faulthandler to a file (not captured) to see the C stack on SIGSEGV.
+# Test both with PMI vars and without to identify the trigger.
 echo "[preflight] Testing vllm.model_executor.models.registry subprocess ..."
-FH_LOG="$RUN_DIR/preflight_faulthandler.txt"
 
-echo "  [1] inside mpiexec (inherits PMI vars) ..."
-mpiexec -n 1 --ppn 1 \
-  bash -c "PYTHONFAULTHANDLER=1 PYTHONFAULTHANDLER_FILE=${FH_LOG}.pmi python -m vllm.model_executor.models.registry" \
-  > "$RUN_DIR/preflight_pmi.stdout" 2>"$RUN_DIR/preflight_pmi.stderr" \
-  && echo "  [1] OK" || echo "  [1] FAILED (exit $?)"
-cat "$RUN_DIR/preflight_pmi.stderr" || true
-[[ -s "${FH_LOG}.pmi" ]] && echo "  faulthandler:" && cat "${FH_LOG}.pmi" || true
+# Write the pickled (fn, output_file) that vLLM would send via stdin.
+PREFLIGHT_PY="$RUN_DIR/preflight_input.py"
+PREFLIGHT_IN="$RUN_DIR/preflight_input.bin"
+cat > "$PREFLIGHT_PY" << 'PYEOF'
+import sys, cloudpickle, tempfile, os
+tmpdir = sys.argv[1]
+output_file = os.path.join(tmpdir, "preflight_out.tmp")
+def fn():
+    from vllm.model_executor.models.registry import _ModelInfo
+    import importlib
+    mod = importlib.import_module("vllm.model_executor.models.mistral")
+    cls = getattr(mod, "MistralForCausalLM")
+    return _ModelInfo.from_model_cls(cls)
+sys.stdout.buffer.write(cloudpickle.dumps((fn, output_file)))
+PYEOF
+python "$PREFLIGHT_PY" "$RUN_DIR" > "$PREFLIGHT_IN"
+PREFLIGHT_IN_SIZE=$(wc -c < "$PREFLIGHT_IN")
+echo "  pickled input: ${PREFLIGHT_IN_SIZE} bytes"
 
-echo "  [2] inside mpiexec, PMI/PALS vars unset ..."
-# shellcheck disable=SC2046
-mpiexec -n 1 --ppn 1 \
-  env $(printf ' -u %s' PMI_RANK PMI_SIZE PMI_FD PALS_APID PALS_RANKID \
-        PALS_NODEID PALS_SPOOL_DIR MPI_LOCALRANKID MPI_LOCALNRANKS \
-        OMPI_COMM_WORLD_RANK OMPI_COMM_WORLD_SIZE) \
-  bash -c "PYTHONFAULTHANDLER=1 python -m vllm.model_executor.models.registry" \
-  > "$RUN_DIR/preflight_nopmi.stdout" 2>"$RUN_DIR/preflight_nopmi.stderr" \
-  && echo "  [2] OK" || echo "  [2] FAILED (exit $?)"
-cat "$RUN_DIR/preflight_nopmi.stderr" || true
+run_preflight() {
+  local label="$1"; shift
+  local out="$RUN_DIR/preflight_${label}"
+  echo "  [$label] $*"
+  # faulthandler to a file so it is not swallowed by capture_output
+  local fh_file="$RUN_DIR/faulthandler_${label}.txt"
+  "$@" bash -c "
+    python -c 'import faulthandler,sys; faulthandler.enable(open(\"${fh_file}\",\"w\"))'
+    PYTHONFAULTHANDLER=1 python -m vllm.model_executor.models.registry \
+      < '${PREFLIGHT_IN}'
+  " > "${out}.stdout" 2>"${out}.stderr" \
+    && echo "  [$label] OK" || echo "  [$label] FAILED (exit $?)"
+  [[ -s "${out}.stderr" ]] && echo "  --- stderr ---" && cat "${out}.stderr"
+  [[ -s "$fh_file" ]]      && echo "  --- faulthandler ---" && cat "$fh_file"
+}
+
+echo "  [pmi]   subprocess with PMI vars inherited from mpiexec ..."
+run_preflight "pmi" mpiexec -n 1 --ppn 1
+
+echo "  [nopmi] subprocess with PMI/PALS vars unset ..."
+run_preflight "nopmi" mpiexec -n 1 --ppn 1 \
+  env -u PMI_RANK -u PMI_SIZE -u PMI_FD \
+      -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR \
+      -u MPI_LOCALRANKID -u MPI_LOCALNRANKS \
+      -u OMPI_COMM_WORLD_RANK -u OMPI_COMM_WORLD_SIZE
+
+echo "  [noipex] subprocess with PMI unset + IPEX deepspeed disabled ..."
+run_preflight "noipex" mpiexec -n 1 --ppn 1 \
+  env -u PMI_RANK -u PMI_SIZE -u PMI_FD \
+      -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR \
+      CCL_PROCESS_LAUNCHER=none DS_SKIP_CUDA_CHECK=1
 
 echo "[preflight] done."
 echo ""
