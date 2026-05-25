@@ -1,30 +1,19 @@
 #!/usr/bin/env python3
 """Aurora vLLM entrypoint.
 
-Patches vLLM's ``_run_in_subprocess`` to set ``ONEAPI_DEVICE_SELECTOR=cpu``
-for the model-registry subprocess *before* the API server starts.
+Thin wrapper that patches vLLM's ``_run_in_subprocess`` *before* the API
+server starts, so that the hook can be customised without modifying vLLM.
 
-Root cause
-----------
-On Aurora (Intel PVC / XPU), vLLM's model-registry inspection spawns a
-subprocess via ``subprocess.run([sys.executable, '-m',
-'vllm.model_executor.models.registry'], ...)`` **without** mpiexec.  That
-child process is NOT a PALS-managed rank and therefore lacks the Level Zero
-device-fabric permissions granted by PALS to mpiexec-launched ranks.  When
-the child tries to initialise the XPU (triggered by importing IPEX at
-``vllm.model_executor.models.mistral`` module level), Level Zero fails and
-the process receives SIGSEGV.
+On Aurora (frameworks/2025.3.1) the registry subprocess works correctly
+without any environment overrides: a plain ``subprocess.run()`` child
+inherits PALS device-fabric permissions from the mpiexec-launched API server
+process.  The patch currently just replicates the default behaviour; it
+exists as an extensibility point in case node-specific adjustments are
+needed (e.g. setting ``ONEAPI_DEVICE_SELECTOR=cpu:*`` to skip Level Zero
+initialisation if a future driver regression re-introduces SIGSEGV in the
+inspection subprocess).
 
-Fix
----
-The registry subprocess only needs to introspect Python class attributes
-(``supports_multimodal``, ``is_text_generation_model``, etc.) — it never
-runs any GPU kernels.  Setting ``ONEAPI_DEVICE_SELECTOR=cpu`` in the child's
-environment avoids Level Zero initialisation entirely, so PALS permissions
-are irrelevant and the subprocess completes without crashing.
-
-This entrypoint must be launched *instead of*
-``python -m vllm.entrypoints.openai.api_server``::
+Usage::
 
     mpiexec -n 1 --ppn 1 \\
       env -u PMI_RANK ... \\
@@ -51,17 +40,10 @@ def _patch_registry_subprocess() -> None:
 
             data = cloudpickle.dumps((fn, out_file))
 
-            env = os.environ.copy()
-            # Model-registry subprocess only inspects class attributes;
-            # it never needs an XPU device.  cpu selector avoids Level Zero
-            # initialisation and the SIGSEGV that follows in non-PALS processes.
-            env["ONEAPI_DEVICE_SELECTOR"] = "cpu"
-
             result = subprocess.run(
                 _reg._SUBPROCESS_COMMAND,
                 input=data,
                 capture_output=True,
-                env=env,
             )
             try:
                 result.check_returncode()
