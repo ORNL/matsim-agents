@@ -243,12 +243,11 @@ PYTHONFAULTHANDLER=1 \
 PLAIN_FH="$RUN_DIR/faulthandler_plain.txt"
 [[ -s "$PLAIN_FH" ]] && { echo "  --- faulthandler ---"; cat "$PLAIN_FH"; } || true
 
-# [cpudev] plain subprocess + ONEAPI_DEVICE_SELECTOR=cpu.
+# [cpudev] plain subprocess + ONEAPI_DEVICE_SELECTOR=cpu:*.
 # The registry only inspects class attributes -- no XPU needed.
-# cpu selector avoids Level Zero init, so PALS permissions are irrelevant.
-# This is the fix used by aurora_vllm_entrypoint.py.
-echo "  [cpudev] plain subprocess, ONEAPI_DEVICE_SELECTOR=cpu ..."
-ONEAPI_DEVICE_SELECTOR=cpu PYTHONFAULTHANDLER=1 \
+# Note: 'cpu' is invalid; the correct short form is 'cpu:*'.
+echo "  [cpudev] plain subprocess, ONEAPI_DEVICE_SELECTOR=cpu:* ..."
+ONEAPI_DEVICE_SELECTOR=cpu:* PYTHONFAULTHANDLER=1 \
   python -m vllm.model_executor.models.registry \
   < "$PREFLIGHT_IN" \
   > "$RUN_DIR/preflight_cpudev.stdout" 2>"$RUN_DIR/preflight_cpudev.stderr" \
