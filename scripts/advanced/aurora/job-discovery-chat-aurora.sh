@@ -59,6 +59,11 @@ export PYTHONPATH=$HYDRAGNN_EXAMPLE:$PROJ/HydraGNN:${PYTHONPATH:-}
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
+# executor_node reads these env vars as fallback when config injection is
+# unavailable (e.g. across LangGraph checkpoint boundaries).
+export MATSIM_HYDRAGNN_LOGDIR="${LOGDIR}"
+export MATSIM_HYDRAGNN_MLP_CKPT="${MLP_CHECKPOINT}"
+
 # Compute nodes have no outbound internet → force fully offline HF stack.
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1

@@ -57,6 +57,11 @@ export PYTHONUNBUFFERED=1
 export ZE_AFFINITY_MASK="${ZE_AFFINITY_MASK:-0}"
 export ONEAPI_DEVICE_SELECTOR="${ONEAPI_DEVICE_SELECTOR:-level_zero:gpu}"
 
+# executor_node reads these env vars as fallback when config injection is
+# unavailable (e.g. across LangGraph checkpoint boundaries).
+export MATSIM_HYDRAGNN_LOGDIR="${LOGDIR}"
+export MATSIM_HYDRAGNN_MLP_CKPT="${MLP_CHECKPOINT}"
+
 # ── diagnostics ─────────────────────────────────────────────────────────────
 echo "=========================================="
 echo "[Aurora] matsim-agents single_relaxation smoke test"
