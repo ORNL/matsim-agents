@@ -133,6 +133,14 @@ mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 # which exceeds the 107-char Unix-socket limit and breaks vLLM's ZMQ IPC.
 export TMPDIR=/tmp
 
+# Prevent core dumps from filling Lustre (~38 GB per rank per crash).
+# If a crash is suspected, comment this out and inspect with: gdb python core.<pid>
+ulimit -c 0
+
+# Enable Python's faulthandler so SIGSEGV prints a Python + C stack trace
+# into the job log instead of just "Segmentation fault (core dumped)".
+export PYTHONFAULTHANDLER=1
+
 # ── Cleanup trap ─────────────────────────────────────────────────────────────
 VLLM_PID=""
 cleanup() {
@@ -156,6 +164,43 @@ echo "ZE_FLAT_DEVICE_HIERARCHY=${ZE_FLAT_DEVICE_HIERARCHY:-<unset>}"
 echo "ONEAPI_DEVICE_SELECTOR=$ONEAPI_DEVICE_SELECTOR"
 echo ""
 
+# ── Pre-flight: test the subprocess that vLLM will spawn for model inspection ─
+# vLLM's registry._run_in_subprocess() launches:
+#   python -m vllm.model_executor.models.registry
+# as a plain subprocess.run() child of the mpiexec'd server process.  That
+# child inherits PMI_RANK / PMI_FD / PALS_* env vars set by mpiexec and, when
+# IPEX triggers the oneCCL / deepspeed initialisation chain, oneCCL finds PMI
+# env vars and attempts to join the MPI job as a real rank — which fails with
+# SIGSEGV because the child is not a real MPI rank.
+#
+# Strategy: run the same command here with faulthandler output to a file
+# (bypassing vLLM's capture_output=True which swallows stderr), then repeat
+# with all PMI/PALS vars unset to confirm they are the cause.
+echo "[preflight] Testing vllm.model_executor.models.registry subprocess ..."
+FH_LOG="$RUN_DIR/preflight_faulthandler.txt"
+
+echo "  [1] inside mpiexec (inherits PMI vars) ..."
+mpiexec -n 1 --ppn 1 \
+  bash -c "PYTHONFAULTHANDLER=1 PYTHONFAULTHANDLER_FILE=${FH_LOG}.pmi python -m vllm.model_executor.models.registry" \
+  > "$RUN_DIR/preflight_pmi.stdout" 2>"$RUN_DIR/preflight_pmi.stderr" \
+  && echo "  [1] OK" || echo "  [1] FAILED (exit $?)"
+cat "$RUN_DIR/preflight_pmi.stderr" || true
+[[ -s "${FH_LOG}.pmi" ]] && echo "  faulthandler:" && cat "${FH_LOG}.pmi" || true
+
+echo "  [2] inside mpiexec, PMI/PALS vars unset ..."
+# shellcheck disable=SC2046
+mpiexec -n 1 --ppn 1 \
+  env $(printf ' -u %s' PMI_RANK PMI_SIZE PMI_FD PALS_APID PALS_RANKID \
+        PALS_NODEID PALS_SPOOL_DIR MPI_LOCALRANKID MPI_LOCALNRANKS \
+        OMPI_COMM_WORLD_RANK OMPI_COMM_WORLD_SIZE) \
+  bash -c "PYTHONFAULTHANDLER=1 python -m vllm.model_executor.models.registry" \
+  > "$RUN_DIR/preflight_nopmi.stdout" 2>"$RUN_DIR/preflight_nopmi.stderr" \
+  && echo "  [2] OK" || echo "  [2] FAILED (exit $?)"
+cat "$RUN_DIR/preflight_nopmi.stderr" || true
+
+echo "[preflight] done."
+echo ""
+
 # ── Sanity check that the model dir exists ───────────────────────────────────
 if [[ ! -d "$SMOKE_MODEL_PATH" ]]; then
   echo "ERROR: SMOKE_MODEL_PATH does not exist: $SMOKE_MODEL_PATH" >&2
@@ -168,8 +213,19 @@ fi
 # Aurora scripts always wrap python in mpiexec for the same reason.
 # vLLM's mp backend will then spawn its TP workers as Python multiprocessing
 # children that inherit the GPU env from this rank-0 process.
+#
+# PMI/PALS vars (PMI_RANK, PMI_FD, PALS_APID, etc.) are unset for the server
+# process itself.  The server is not an MPI rank — only mpiexec is used here
+# to obtain PALS device-fabric permissions.  If PMI vars are left set, every
+# subprocess that vLLM spawns for model inspection inherits them and oneCCL
+# (triggered via IPEX → deepspeed) tries to join the MPI job as a real rank,
+# causing a SIGSEGV before Python's faulthandler can write anything.
 echo "[vllm] Starting server (TP=$TP_SIZE, device=xpu) via mpiexec ..."
 mpiexec -n 1 --ppn 1 \
+  env -u PMI_RANK -u PMI_SIZE -u PMI_FD \
+      -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR \
+      -u MPI_LOCALRANKID -u MPI_LOCALNRANKS \
+      -u OMPI_COMM_WORLD_RANK -u OMPI_COMM_WORLD_SIZE \
   python -m vllm.entrypoints.openai.api_server \
     --model "$SMOKE_MODEL_PATH" \
     --served-model-name "$SMOKE_MODEL_NAME" \
