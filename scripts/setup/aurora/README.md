@@ -3,9 +3,37 @@
 This directory provides an Aurora-focused setup flow that mirrors the phased
 install style used by the Frontier and Perlmutter scripts.
 
-## Script
+## vLLM-XPU
 
-### install_matsim_aurora.sh
+### install-vllm-xpu-aurora.sh
+
+Verifies that the `frameworks` module ships a working vLLM-XPU stack (no
+source build required as of `frameworks/2025.3.1`).  Run on a login node; XPU
+will report unavailable there — that is expected.
+
+```bash
+bash scripts/setup/aurora/install-vllm-xpu-aurora.sh
+```
+
+After verification, submit the smoke test:
+
+```bash
+qsub scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh
+```
+
+**Important Aurora-specific pitfalls** — see the full guide at
+`docs/vllm-aurora.md` for details on every challenge and fix, including:
+
+- SIGSEGV in vLLM's model-registry subprocess (node-specific, fixed via
+  `aurora_vllm_entrypoint.py`)
+- `ONEAPI_DEVICE_SELECTOR` syntax differences between node driver versions
+  (`opencl:cpu` is the canonical cross-node form)
+- Must launch the server via `mpiexec -n 1 --ppn 1` for PALS permissions
+- numpy must **not** be pinned to 1.x on Aurora (frameworks ships 2.2.6, 2.x ABI)
+
+---
+
+
 Runs a two-stage install:
 
 1. Run HydraGNN's Aurora installer from installation_DOE_supercomputers to

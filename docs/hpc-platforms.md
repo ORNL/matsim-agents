@@ -65,6 +65,28 @@ Highlights:
 - NVIDIA-focused GPU build flow (A100/sm_80)
 - Frontier-style phased setup for reproducibility
 
+## vLLM inference serving by platform
+
+### Aurora (ALCF, Intel PVC)
+
+- Full guide (install, challenges, fixes): [docs/vllm-aurora.md](vllm-aurora.md)
+- Stack verification script: [scripts/setup/aurora/install-vllm-xpu-aurora.sh](../scripts/setup/aurora/install-vllm-xpu-aurora.sh)
+- Single-node smoke test: [scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh](../scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh)
+- Multi-node serve job: [scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh](../scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh)
+
+Highlights:
+
+- `frameworks/2025.3.1` ships vLLM 0.15.0+xpu + PyTorch 2.10 (XPU) — no source build needed
+- SIGSEGV in vLLM's model-registry subprocess fixed via `aurora_vllm_entrypoint.py`
+  (sets `ONEAPI_DEVICE_SELECTOR=opencl:cpu` for the registry child process)
+- Server must be launched via `mpiexec -n 1 --ppn 1` for PALS device-fabric permissions
+- Do **not** pin numpy to 1.x on Aurora — the XPU stack requires numpy 2.2.6 (2.x ABI)
+- Smoke test confirmed passing: job 8506887, May 25 2026
+
+### Frontier (OLCF, AMD MI250X)
+
+See the Frontier vLLM smoke test: [scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh](../scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh)
+
 ## LLM and model-serving docs on HPC
 
 - Model download and resumable background transfer guide:
