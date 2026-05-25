@@ -56,7 +56,10 @@ def _patch_registry_subprocess() -> None:
             # PALS device-fabric permissions.  Setting cpu:* avoids Level Zero
             # init entirely.  On nodes where the plain subprocess already works,
             # this selector is harmless (no GPU init is skipped at runtime).
-            env["ONEAPI_DEVICE_SELECTOR"] = "cpu:*"
+            # Note: 'cpu' and 'cpu:*' are rejected by some node SYCL versions;
+            # 'opencl:cpu' is the canonical backend:device_type form and works
+            # consistently across Aurora's driver versions.
+            env["ONEAPI_DEVICE_SELECTOR"] = "opencl:cpu"
 
             result = subprocess.run(
                 _reg._SUBPROCESS_COMMAND,
