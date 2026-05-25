@@ -1,26 +1,34 @@
 #!/usr/bin/env python3
 """Aurora vLLM entrypoint.
 
-Thin wrapper that patches vLLM's ``_run_in_subprocess`` *before* the API
-server starts, so that the hook can be customised without modifying vLLM.
+Thin wrapper that patches vLLM's ``_run_in_subprocess`` to set
+``ONEAPI_DEVICE_SELECTOR=cpu:*`` for the model-registry subprocess, then
+runs the API server.
 
-On Aurora (frameworks/2025.3.1) the registry subprocess works correctly
-without any environment overrides: a plain ``subprocess.run()`` child
-inherits PALS device-fabric permissions from the mpiexec-launched API server
-process.  The patch currently just replicates the default behaviour; it
-exists as an extensibility point in case node-specific adjustments are
-needed (e.g. setting ``ONEAPI_DEVICE_SELECTOR=cpu:*`` to skip Level Zero
-initialisation if a future driver regression re-introduces SIGSEGV in the
-inspection subprocess).
+Root cause
+----------
+On some Aurora (Intel PVC / XPU) compute nodes, vLLM's model-registry
+subprocess — spawned via ``subprocess.run()`` as a plain fork+exec child of
+the mpiexec-launched API server — crashes with SIGSEGV during Level Zero
+device initialisation.  The subprocess is not an mpiexec/PALS rank and on
+those nodes it lacks the device-fabric permissions required to open the GPU
+context.  The crash is node-specific: on other nodes the plain subprocess
+works without any workaround.
+
+Fix
+---
+The registry subprocess only introspects Python class attributes
+(``supports_multimodal``, ``is_text_generation_model``, etc.) and never
+executes GPU kernels.  Setting ``ONEAPI_DEVICE_SELECTOR=cpu:*`` in its
+environment prevents IPEX/SYCL from attempting Level Zero initialisation
+altogether.  This is a no-op on nodes where the plain subprocess already
+succeeds.
 
 Usage::
 
     mpiexec -n 1 --ppn 1 \\
       env -u PMI_RANK ... \\
       python aurora_vllm_entrypoint.py [api_server_args...]
-
-All CLI arguments after the script name are forwarded unchanged to the API
-server via ``sys.argv``.
 """
 import os
 import pickle
@@ -40,10 +48,21 @@ def _patch_registry_subprocess() -> None:
 
             data = cloudpickle.dumps((fn, out_file))
 
+            env = os.environ.copy()
+            # The registry subprocess only inspects class attributes — it never
+            # runs GPU kernels.  On some Aurora compute nodes, the subprocess
+            # (a plain fork+exec child, not an mpiexec rank) crashes with SIGSEGV
+            # when importing IPEX triggers Level Zero initialisation without full
+            # PALS device-fabric permissions.  Setting cpu:* avoids Level Zero
+            # init entirely.  On nodes where the plain subprocess already works,
+            # this selector is harmless (no GPU init is skipped at runtime).
+            env["ONEAPI_DEVICE_SELECTOR"] = "cpu:*"
+
             result = subprocess.run(
                 _reg._SUBPROCESS_COMMAND,
                 input=data,
                 capture_output=True,
+                env=env,
             )
             try:
                 result.check_returncode()
