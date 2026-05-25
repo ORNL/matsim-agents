@@ -210,8 +210,8 @@ run_preflight() {
       < '${PREFLIGHT_IN}'
   " > "${out}.stdout" 2>"${out}.stderr" \
     && echo "  [$label] OK" || echo "  [$label] FAILED (exit $?)"
-  [[ -s "${out}.stderr" ]] && echo "  --- stderr ---" && cat "${out}.stderr"
-  [[ -s "$fh_file" ]]      && echo "  --- faulthandler ---" && cat "$fh_file"
+[[ -s "${out}.stderr" ]] && { echo "  --- stderr ---"; cat "${out}.stderr"; } || true
+    [[ -s "$fh_file" ]]      && { echo "  --- faulthandler ---"; cat "$fh_file"; } || true
 }
 
 echo "  [pmi]   subprocess with PMI vars inherited from mpiexec ..."
@@ -229,6 +229,33 @@ run_preflight "noipex" mpiexec -n 1 --ppn 1 \
   env -u PMI_RANK -u PMI_SIZE -u PMI_FD \
       -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR \
       CCL_PROCESS_LAUNCHER=none DS_SKIP_CUDA_CHECK=1
+
+# [plain] mimics exactly what vLLM does: subprocess.run() without mpiexec.
+# If this crashes (SIGSEGV), it confirms the root cause is that plain
+# subprocess children lack PALS Level Zero device-fabric permissions.
+echo "  [plain] plain subprocess.run() without mpiexec (mimics vLLM) ..."
+PYTHONFAULTHANDLER=1 \
+  python -m vllm.model_executor.models.registry \
+  < "$PREFLIGHT_IN" \
+  > "$RUN_DIR/preflight_plain.stdout" 2>"$RUN_DIR/preflight_plain.stderr" \
+  && echo "  [plain] OK" || echo "  [plain] FAILED (exit $?)"
+[[ -s "$RUN_DIR/preflight_plain.stderr" ]] && { echo "  --- stderr ---"; cat "$RUN_DIR/preflight_plain.stderr"; } || true
+PLAIN_FH="$RUN_DIR/faulthandler_plain.txt"
+[[ -s "$PLAIN_FH" ]] && { echo "  --- faulthandler ---"; cat "$PLAIN_FH"; } || true
+
+# [cpudev] plain subprocess + ONEAPI_DEVICE_SELECTOR=cpu.
+# The registry only inspects class attributes -- no XPU needed.
+# cpu selector avoids Level Zero init, so PALS permissions are irrelevant.
+# This is the fix used by aurora_vllm_entrypoint.py.
+echo "  [cpudev] plain subprocess, ONEAPI_DEVICE_SELECTOR=cpu ..."
+ONEAPI_DEVICE_SELECTOR=cpu PYTHONFAULTHANDLER=1 \
+  python -m vllm.model_executor.models.registry \
+  < "$PREFLIGHT_IN" \
+  > "$RUN_DIR/preflight_cpudev.stdout" 2>"$RUN_DIR/preflight_cpudev.stderr" \
+  && echo "  [cpudev] OK" || echo "  [cpudev] FAILED (exit $?)"
+[[ -s "$RUN_DIR/preflight_cpudev.stderr" ]] && { echo "  --- stderr ---"; cat "$RUN_DIR/preflight_cpudev.stderr"; } || true
+CPUDEV_FH="$RUN_DIR/faulthandler_cpudev.txt"
+[[ -s "$CPUDEV_FH" ]] && { echo "  --- faulthandler ---"; cat "$CPUDEV_FH"; } || true
 
 echo "[preflight] done."
 echo ""
@@ -248,17 +275,21 @@ fi
 #
 # PMI/PALS vars (PMI_RANK, PMI_FD, PALS_APID, etc.) are unset for the server
 # process itself.  The server is not an MPI rank — only mpiexec is used here
-# to obtain PALS device-fabric permissions.  If PMI vars are left set, every
-# subprocess that vLLM spawns for model inspection inherits them and oneCCL
-# (triggered via IPEX → deepspeed) tries to join the MPI job as a real rank,
-# causing a SIGSEGV before Python's faulthandler can write anything.
+# to obtain PALS device-fabric permissions.
+#
+# aurora_vllm_entrypoint.py patches vLLM's _run_in_subprocess to set
+# ONEAPI_DEVICE_SELECTOR=cpu for the model-registry subprocess.  That
+# subprocess is a plain fork+exec child (not an mpiexec rank) and therefore
+# lacks PALS Level Zero device-fabric permissions; trying to init the XPU
+# there causes SIGSEGV.  The registry only inspects class attributes so cpu
+# selector is sufficient and avoids Level Zero init entirely.
 echo "[vllm] Starting server (TP=$TP_SIZE, device=xpu) via mpiexec ..."
 mpiexec -n 1 --ppn 1 \
   env -u PMI_RANK -u PMI_SIZE -u PMI_FD \
       -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR \
       -u MPI_LOCALRANKID -u MPI_LOCALNRANKS \
       -u OMPI_COMM_WORLD_RANK -u OMPI_COMM_WORLD_SIZE \
-  python -m vllm.entrypoints.openai.api_server \
+  python "$REPO/scripts/smoke-tests/aurora/aurora_vllm_entrypoint.py" \
     --model "$SMOKE_MODEL_PATH" \
     --served-model-name "$SMOKE_MODEL_NAME" \
     --tensor-parallel-size "$TP_SIZE" \
