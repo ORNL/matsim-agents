@@ -116,8 +116,16 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_prox
 export no_proxy='*'
 export NO_PROXY='*'
 
-# Aurora oneCCL / fabric tunings
-export CCL_KVS_MODE=mpi
+# Aurora oneCCL / fabric tunings.
+# NOTE: do NOT set CCL_KVS_MODE=mpi or CCL_PROCESS_LAUNCHER=pmix here. Those
+# are valid only when ranks are MPI-launched (HydraGNN training pattern).
+# vLLM's TP workers are spawned by Ray (multinode) or multiproc_executor
+# (singlenode) — they are NOT MPI ranks, so oneCCL must use its default
+# internal-KVS over TCP. Setting MPI mode triggers:
+#   |CCL_ERROR| internal_kvs.cpp:42 kvs_set_value: condition
+#   can_use_internal_kvs() failed
+# and "WorkerProc initialization failed" (first seen in job 8508267,
+# single-node variant).
 export CCL_KVS_CONNECTION_TIMEOUT=900
 export FI_MR_CACHE_MONITOR=userfaultfd
 export FI_CXI_RX_MATCH_MODE=hybrid
