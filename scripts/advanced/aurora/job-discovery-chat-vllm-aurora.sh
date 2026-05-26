@@ -3,7 +3,7 @@
 #PBS -N discovery-chat-vllm
 #PBS -l select=1
 #PBS -l place=scatter
-#PBS -l walltime=02:00:00
+#PBS -l walltime=00:30:00
 #PBS -l filesystems=home:flare
 #PBS -q debug
 #PBS -k doe
@@ -76,6 +76,10 @@ fi
 export PYTHONPATH="${HYDRAGNN_EXAMPLE}:${PROJ}/HydraGNN:${PYTHONPATH:-}"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
+# PBS sets TMPDIR to /var/tmp/pbs.<jobid>.<full-hostname>/<uuid>/ which is
+# longer than the 107-char Unix socket limit.  vLLM uses TMPDIR for ZMQ IPC
+# sockets (EngineCore ↔ APIServer), so we override it before vLLM starts.
+export TMPDIR=/tmp
 
 # executor_node reads these env vars as fallback when config injection is
 # unavailable (e.g. across LangGraph checkpoint boundaries).
