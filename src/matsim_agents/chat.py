@@ -57,15 +57,8 @@ class DiscoveryChatConfig:
     maxiter: int = 200
     maxstep: float = 1e-2
     fmax: float = 0.02
-    supercell: tuple[int, int, int] | None = None
-    min_atoms: int = 32
-    include_2d: bool = False
-    num_layers: int = 1
-    vacuum: float = 15.0
-    interlayer: float | None = None
-    n_orderings: int = 1
-    lattice_scales: tuple[float, ...] | None = None
-    ordering_seed: int = 0
+    n_random: int = 50  # pyXtal random structures (per composition); 0 disables.
+    random_seed: int = 0
     llm_provider: str = "ollama"
     llm_model: str = "qwen2.5:14b"
     llm_base_url: str | None = None
@@ -111,15 +104,20 @@ def _kickoff_exploration(
     _print(f"\n[bold cyan]>>> Exploring composition {composition.formula}[/bold cyan]")
     out_dir = os.path.join(cfg.output_dir, "discovery")
 
+    def _tag(cand) -> str:
+        # Short label for live progress: prototype AFLOW id or pyxtal_sgNNN.
+        return (cand.prototype_id or cand.phase or "seed")[:24]
+
     def _on_start(cand):
-        _print(f"  [dim]starting[/dim] {cand.phase:<12} {cand.structure_path}")
+        _print(f"  [dim]starting[/dim] {_tag(cand):<26} {cand.structure_path}")
 
     def _on_done(cand, result):
+        novel = " [yellow](novel)[/yellow]" if cand.needs_dft_verification else ""
         _print(
-            f"  [green]done[/green]    {cand.phase:<12} "
+            f"  [green]done[/green]    {_tag(cand):<26} "
             f"E={result.final_energy_eV:.4f} eV  "
-            f"|F|max={result.final_max_force_eV_per_A:.4f} eV/Å  "
-            f"steps={result.num_steps}"
+            f"|F|max={result.final_max_force_eV_per_A:.4f} eV/\u00c5  "
+            f"steps={result.num_steps}{novel}"
         )
 
     result = explore_composition(
@@ -135,15 +133,8 @@ def _kickoff_exploration(
         maxiter=cfg.maxiter,
         maxstep=cfg.maxstep,
         fmax=cfg.fmax,
-        supercell=cfg.supercell,
-        min_atoms=cfg.min_atoms,
-        include_2d=cfg.include_2d,
-        num_layers=cfg.num_layers,
-        vacuum=cfg.vacuum,
-        interlayer=cfg.interlayer,
-        n_orderings=cfg.n_orderings,
-        lattice_scales=cfg.lattice_scales,
-        ordering_seed=cfg.ordering_seed,
+        n_random=cfg.n_random,
+        random_seed=cfg.random_seed,
         on_phase_start=_on_start,
         on_phase_done=_on_done,
     )
