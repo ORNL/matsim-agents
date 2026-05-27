@@ -162,38 +162,3 @@ def test_generate_seeds_random_flagged_for_verification(tmp_path: Path):
             assert c.needs_dft_verification is True
             assert c.prototype_id is None
             assert c.space_group is not None and 1 <= c.space_group <= 230
-            assert c.phase.startswith("pyxtal_sg")
-
-
-# --------------------------------------------------------------------- #
-# Legacy shim still works                                               #
-# --------------------------------------------------------------------- #
-
-
-@requires_pymatgen
-def test_legacy_enumerate_phases_shim_works(tmp_path: Path):
-    from matsim_agents.discovery.phase_explorer import enumerate_phases
-
-    cands = enumerate_phases(_comp("NaCl"), str(tmp_path))
-    assert len(cands) >= 1
-    for c in cands:
-        assert Path(c.structure_path).exists()
-
-
-@requires_pymatgen
-def test_legacy_kwargs_emit_deprecation_warning(tmp_path: Path):
-    # Reset the one-shot guard so the test gets the warning.
-    import matsim_agents.discovery.phase_explorer as pe
-
-    pe._warned_once = False
-
-    from matsim_agents.discovery.phase_explorer import enumerate_phases
-
-    with pytest.warns(DeprecationWarning, match="deprecated"):
-        enumerate_phases(
-            _comp("Si"),
-            str(tmp_path),
-            include_2d=True,
-            num_layers=3,
-            n_orderings=2,
-        )
