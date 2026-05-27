@@ -591,6 +591,32 @@ downstream scorers can filter or weight them.
 > generative coverage (CALYPSO, USPEX, AIRSS, diffusion models, …) add
 > a new branch to `generate_seeds` — every consumer already routes
 > through that single entry point.
+>
+> **Composition detection is regex-based.** The chat REPL extracts
+> target materials by pattern-matching chemical formulas (`Li2MnO3`,
+> `CrMoNbTaW`) in user and assistant text via
+> [`extract_compositions`](src/matsim_agents/discovery/composition.py).
+> This is intentionally minimal but has known failure modes:
+> - **Fires on context, not intent.** `"CO2 emissions are dominated by
+>   CaO formation"`, `"Following Smith et al. on BaTiO3 ferroelectrics
+>   we instead study SrTiO3"`, or `"avoid the toxic As2O3 phase"` will
+>   all trigger a prompt for the wrong (or every) formula. Space-group
+>   strings like `"P3"`, `"C2/c"`, and DFT-functional names like
+>   `"B3LYP"` parse as `P+3`, `C+2`, `B+3` and pass the validator.
+> - **Misses verbal proposals.** `"lithium manganate at the 2-1-3
+>   stoichiometry"`, `"the Li-Mn-O ternary"`, Unicode subscripts
+>   (`Li₂MnO₃`), parentheses-with-alternation (`(Li,Na)2MnO3`), and
+>   fractional stoichiometries (`Li2Mn0.5Ni0.5O2`) are not detected.
+> - **Cannot read polarity.** `"DO NOT explore Li2MnO3"` triggers the
+>   same prompt as `"please explore Li2MnO3"`. The interactive y/N
+>   confirmation (or `--auto-confirm` for batch runs) is what stands
+>   between these and a wasted multi-hour relaxation.
+>
+> The natural replacement is a tool-calling LLM that explicitly invokes
+> `explore_composition(formula, rationale)` when it actually means to
+> compute the material, which would eliminate every class above; a
+> migration of the chat REPL onto a LangGraph `ToolNode` is the right
+> moment to do this.
 
 ---
 
