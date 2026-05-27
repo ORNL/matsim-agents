@@ -3,7 +3,7 @@
 #PBS -N discovery-chat-vllm
 #PBS -l select=1
 #PBS -l place=scatter
-#PBS -l walltime=00:30:00
+#PBS -l walltime=01:00:00
 #PBS -l filesystems=home:flare
 #PBS -q debug
 #PBS -k doe
@@ -196,16 +196,24 @@ done
 
 export MATSIM_VLLM_BASE_URL="http://localhost:${CHAT_PORT}/v1"
 
-# ── RHEA query ───────────────────────────────────────────────────────────────
-QUERY="Propose 4 to 5 refractory high-entropy alloy compositions using elements \
-from Mo, Nb, Ta, W, V, Cr, Hf, Zr, Ti that are known for combined \
-high-temperature resistance and mechanical strength. For each composition \
-specify the relevant crystal phases (e.g. BCC, B2, HCP) and explain the \
-physical justification. Then relax each proposed structure using the MLFF \
-and report the final energies and which phases are most stable."
-
-echo "[$(date)] Submitting RHEA query to matsim-agents (vLLM provider) ..."
-echo "${QUERY}" | matsim-agents chat \
+# ── multi-turn discovery dialogue ────────────────────────────────────────────
+# Three user turns + 'exit'. Each turn exercises a different chat feature:
+#
+#   Turn 1  →  multi-formula extraction from an *assistant* reply
+#              (one Li-Mn-O cathode  +  one refractory HEA)
+#              exercises:  AFLOW-prototype decoration  (oxide)
+#                          pyXtal random search        (HEA, no AFLOW match)
+#                          --auto-confirm path, novelty flagging
+#   Turn 2  →  asks the LLM to reason over the [discovery] SystemMessages
+#              that were injected after Turn 1's relaxations.
+#              exercises:  feedback loop, multi-round chat history
+#   Turn 3  →  the user *themself* writes a formula (BaTiO3) in the prompt.
+#              exercises:  composition extraction from *user* text
+#                          AFLOW prototype path (perovskite, many SGs hit)
+#
+# Empty lines are silently skipped by the REPL; 'exit' closes it cleanly.
+echo "[$(date)] Submitting multi-turn discovery dialogue to matsim-agents (vLLM) ..."
+matsim-agents chat \
     --logdir          "${LOGDIR}" \
     --mlp-checkpoint  "${MLP_CHECKPOINT}" \
     --output-dir      "${OUTPUT_DIR}" \
@@ -215,9 +223,14 @@ echo "${QUERY}" | matsim-agents chat \
     --ase-structure-optimizer FIRE \
     --maxiter         500 \
     --fmax            0.02 \
-    --n-random        0 \
-    --random-seed     0 \
+    --n-random        10 \
+    --random-seed     42 \
     --auto-confirm \
-    2>&1 | tee "${RUN_DIR}/matsim-agents.log"
+    <<'CHAT_INPUT' 2>&1 | tee "${RUN_DIR}/matsim-agents.log"
+Propose exactly TWO candidate materials in a single concise reply: (1) one Li-Mn-O layered cathode written as a clean formula such as Li2MnO3, and (2) one body-centered refractory high-entropy alloy drawn from {Mo, Nb, Ta, W, V, Cr}. For each, give the formula on its own line followed by a one-sentence physical justification (oxidation states, ionic radii, or Hume-Rothery rules). Keep the reply under 200 words.
+The atomistic exploration results for the two compositions above were just appended to your context as [discovery] system messages. Using only those reported energies and |F|max values, answer: (a) which composition reached the lower minimum |F|max, suggesting better dynamical stability under the MLFF? (b) which composition has the lower total energy per atom? Be quantitative and quote the numbers.
+Good. Now I would like to also evaluate the canonical perovskite BaTiO3 as a reference oxide. Please briefly explain why BaTiO3 is a useful baseline, in two sentences.
+exit
+CHAT_INPUT
 
 echo "[$(date)] Discovery-chat finished. Artifacts in ${OUTPUT_DIR}"

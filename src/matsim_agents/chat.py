@@ -203,9 +203,14 @@ def chat_once(
                 exploration = _kickoff_exploration(comp, cfg)
                 session.explorations.append(exploration)
                 # Feed the result back into the conversation so the LLM can
-                # incorporate it into subsequent reasoning.
+                # incorporate it into subsequent reasoning. We use a
+                # HumanMessage (not SystemMessage) because some chat
+                # templates — notably Mistral's — reject a `system` turn
+                # appearing after an `assistant` turn (vLLM raises HTTP
+                # 400 "Unexpected role 'system' after role 'assistant'").
+                # A user-role injection is portable across providers.
                 session.messages.append(
-                    SystemMessage(content="[discovery] " + _summarize_for_llm(exploration))
+                    HumanMessage(content="[discovery] " + _summarize_for_llm(exploration))
                 )
 
     return assistant_text
