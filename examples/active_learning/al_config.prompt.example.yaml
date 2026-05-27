@@ -58,10 +58,8 @@ md:
       temperature: 0.0
     max_compositions: 6                # cap on LLM output
     max_phases_per_composition: 2      # discovery returns up to N prototypes/formula
-    min_atoms: 32
-    include_2d: false
-    num_layers: 1
-    n_orderings: 1
+    n_random: 0                        # optional pyXtal random-search seeds (requires pyxtal)
+    random_seed: 0
   timestep_fs: 1.0
   n_steps: 200
   temperature_K: 600.0

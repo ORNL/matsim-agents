@@ -115,12 +115,23 @@ class SeedSourceConfig(BaseModel):
     # Phase-enumeration knobs (apply to kind='compositions' and 'prompt').
     max_phases_per_composition: int = Field(
         3,
-        description="Per composition, keep at most N prototype phases as seeds.",
+        description=(
+            "Per composition, keep at most N prototype-derived seeds. "
+            "pyXtal random-search seeds (controlled by ``n_random``) are "
+            "appended on top of this cap."
+        ),
     )
-    min_atoms: int = 32
-    include_2d: bool = False
-    num_layers: int = 1
-    n_orderings: int = 1
+    n_random: int = Field(
+        0,
+        description=(
+            "Number of supplementary pyXtal random-search seeds per "
+            "composition (requires the optional ``pyxtal`` dependency). "
+            "Default 0: AL relies on prototype-derived seeds only."
+        ),
+    )
+    random_seed: int = Field(
+        0, description="Seed for pyXtal random search (per composition)."
+    )
 
     @model_validator(mode="after")
     def _check_required_fields(self) -> SeedSourceConfig:

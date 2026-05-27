@@ -4,8 +4,9 @@ Sources, in order of precedence:
 
 1. **paths**         — explicit list of ASE-readable structure files.
 2. **compositions**  — list of chemical formulas (e.g. ``["Cs2AgBiBr6"]``);
-                       expanded into prototype seeds via
-                       :func:`matsim_agents.discovery.enumerate_phases`.
+                       expanded into seeds via
+                       :func:`matsim_agents.discovery.generate_seeds` (AFLOW
+                       prototypes + optional pyXtal random search).
 3. **prompt**        — natural-language prompt sent to an LLM; the LLM is
                        asked to return a JSON list of formulas which is
                        then expanded as in (2).
@@ -14,10 +15,10 @@ In all cases the final output is a list of ``Path`` objects pointing at
 ``.vasp`` (or other ASE-supported) seed files on disk. The MD sampler in
 :mod:`active_learning.candidates` consumes them unchanged.
 
-Why prototype seeds (and not relaxed ones)?
+Why seed structures (and not relaxed ones)?
 -------------------------------------------
 The MD sampler immediately heats the structure (Langevin / NVT-Berendsen),
-so we deliberately do *not* relax the LLM-proposed prototypes first — that
+so we deliberately do *not* relax the proposed prototypes first — that
 would waste a HydraGNN+ASE relaxation per seed and bias the sampler towards
 already-equilibrated configurations. The very first AL iteration is the
 natural place to discover that the surrogate disagrees with VASP/QE on
@@ -61,9 +62,12 @@ REQUIREMENTS:
   closest integer formula instead).
 * Aim for the number of compositions the user requests; if unspecified,
   return between 3 and 8.
-* Prefer prototypes that the downstream phase enumerator can build:
-   - elements (1 species), binary 1:1 / 1:2, ternary 1:1:3 (perovskite)
-     and 1:2:4 (spinel), and quaternary 1:1:2:6 (double perovskite).
+* Prefer compositions whose stoichiometry matches a known crystal
+  prototype in the AFLOW encyclopedia (elements, binary 1:1 / 1:2,
+  ternary 1:1:3 perovskite and 1:2:4 spinel, quaternary 1:1:2:6 double
+  perovskite, …). Exotic stoichiometries with no prototype match will
+  produce no seeds unless ``n_random > 0`` is configured (which then
+  requires the optional ``pyxtal`` dependency).
 * No prose, no commentary outside the JSON. Do not wrap the JSON in
   Markdown code fences.
 """
@@ -128,13 +132,16 @@ def _compositions_to_seed_files(
     out_dir: Path,
     *,
     max_phases_per_composition: int,
-    min_atoms: int,
-    include_2d: bool,
-    num_layers: int,
-    n_orderings: int,
+    n_random: int,
+    random_seed: int,
 ) -> list[Path]:
-    """Expand each formula into prototype seed files via :func:`enumerate_phases`."""
-    from matsim_agents.discovery import enumerate_phases, parse_composition
+    """Expand each formula into seed files via :func:`generate_seeds`.
+
+    Per composition we keep ``max_phases_per_composition`` prototype-derived
+    seeds plus all ``n_random`` pyXtal random-search seeds (the latter are
+    flagged ``needs_dft_verification`` upstream).
+    """
+    from matsim_agents.discovery import generate_seeds, parse_composition
 
     out_dir.mkdir(parents=True, exist_ok=True)
     seed_paths: list[Path] = []
@@ -145,21 +152,27 @@ def _compositions_to_seed_files(
             log.warning("Skipping unparseable formula: %r", formula)
             continue
         phase_dir = out_dir / comp.formula
-        candidates = enumerate_phases(
+        candidates = generate_seeds(
             comp,
             str(phase_dir),
-            min_atoms=min_atoms,
-            include_2d=include_2d,
-            num_layers=num_layers,
-            n_orderings=n_orderings,
+            n_random=n_random,
+            random_seed=random_seed,
         )
         if not candidates:
-            log.warning("No prototypes built for %s", comp.formula)
+            log.warning("No seeds built for %s", comp.formula)
             continue
-        chosen = candidates[: max(1, max_phases_per_composition)]
+        proto = [c for c in candidates if c.source == "prototype"]
+        rand = [c for c in candidates if c.source == "random"]
+        chosen = proto[: max(1, max_phases_per_composition)] + rand
         for c in chosen:
             seed_paths.append(Path(c.structure_path))
-        log.info("%s: kept %d/%d prototype seeds", comp.formula, len(chosen), len(candidates))
+        log.info(
+            "%s: kept %d/%d prototype + %d random seeds",
+            comp.formula,
+            min(len(proto), max(1, max_phases_per_composition)),
+            len(proto),
+            len(rand),
+        )
 
     return seed_paths
 
@@ -202,10 +215,8 @@ def resolve_seed_structures(
             list(cfg.compositions),
             out_dir,
             max_phases_per_composition=cfg.max_phases_per_composition,
-            min_atoms=cfg.min_atoms,
-            include_2d=cfg.include_2d,
-            num_layers=cfg.num_layers,
-            n_orderings=cfg.n_orderings,
+            n_random=cfg.n_random,
+            random_seed=cfg.random_seed,
         )
 
     if cfg.kind == "prompt":
@@ -236,10 +247,8 @@ def resolve_seed_structures(
             formulas,
             out_dir,
             max_phases_per_composition=cfg.max_phases_per_composition,
-            min_atoms=cfg.min_atoms,
-            include_2d=cfg.include_2d,
-            num_layers=cfg.num_layers,
-            n_orderings=cfg.n_orderings,
+            n_random=cfg.n_random,
+            random_seed=cfg.random_seed,
         )
 
     raise ValueError(f"Unknown seed_source.kind: {cfg.kind!r}")
