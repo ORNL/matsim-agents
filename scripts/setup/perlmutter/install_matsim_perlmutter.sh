@@ -211,6 +211,16 @@ log "Installing LLM tooling extras (huggingface_hub CLI + transformers + acceler
 # up the breaking 1.x line (e.g. 1.15.0) that ships with newer fairchem-core.
 pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0" "accelerate>=1.13"
 
+# pyXtal (optional, used by matsim_agents.discovery.seeds for random-symmetry
+# crystal generation when no AFLOW prototype matches the target composition).
+# Installed with --upgrade-strategy only-if-needed (via pip_retry) so it cannot
+# upgrade the conda-env's pinned numpy/scipy/pymatgen/spglib/ase. Made
+# non-fatal: pyxtal's transitive deps (notably pyshtools) sometimes fail to
+# build on HPC systems without a working Fortran toolchain; the discovery
+# code already warns and skips random search cleanly when pyxtal is missing.
+log "Installing pyxtal (optional, for random-symmetry seed generation)..."
+pip_retry "pyxtal>=0.6" || warn "pyxtal install failed; random-symmetry seed generation will be unavailable."
+
 if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     log "INSTALL_VLLM_SERVER=1 -> installing vLLM server package"
     pip_retry vllm
