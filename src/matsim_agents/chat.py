@@ -106,7 +106,11 @@ def _kickoff_exploration(
 
     def _tag(cand) -> str:
         # Short label for live progress: prototype AFLOW id or pyxtal_sgNNN.
-        return (cand.prototype_id or cand.phase or "seed")[:24]
+        if cand.prototype_id:
+            return cand.prototype_id[:24]
+        if cand.source == "random" and cand.space_group is not None:
+            return f"pyxtal_sg{int(cand.space_group):03d}"
+        return "seed"
 
     def _on_start(cand):
         _print(f"  [dim]starting[/dim] {_tag(cand):<26} {cand.structure_path}")
