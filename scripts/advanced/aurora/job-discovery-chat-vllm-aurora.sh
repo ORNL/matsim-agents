@@ -215,8 +215,8 @@ echo "${QUERY}" | matsim-agents chat \
     --ase-structure-optimizer FIRE \
     --maxiter         500 \
     --fmax            0.02 \
-    --min-atoms       64 \
-    --n-orderings     2 \
+    --n-random        0 \
+    --random-seed     0 \
     --auto-confirm \
     2>&1 | tee "${RUN_DIR}/matsim-agents.log"
 
