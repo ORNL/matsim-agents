@@ -1,4 +1,4 @@
-"""High-level wrapper: composition -> phase enumeration -> relaxation -> stability.
+"""High-level wrapper: composition -> seed generation -> relaxation -> stability.
 
 This module ties the discovery pieces together so that an agent (or a user
 in the chat REPL) can dispatch a substantial atomistic exploration with a
@@ -8,13 +8,14 @@ single call.
 from __future__ import annotations
 
 import os
+import warnings
 from collections.abc import Sequence
 from typing import Callable
 
 from pydantic import BaseModel, Field
 
 from matsim_agents.discovery.composition import Composition, parse_composition
-from matsim_agents.discovery.phase_explorer import PhaseCandidate, enumerate_phases
+from matsim_agents.discovery.seeds import PhaseCandidate, generate_seeds
 from matsim_agents.discovery.stability import StabilityReport, score_stability
 from matsim_agents.state import RelaxationResult
 from matsim_agents.tools.relaxation import RelaxStructureInput, _run as _run_relaxation
@@ -28,6 +29,19 @@ class CompositionExplorationResult(BaseModel):
     relaxations: list[RelaxationResult] = Field(default_factory=list)
     stability: StabilityReport | None = None
     failures: list[str] = Field(default_factory=list)
+
+
+_DEPRECATED_KWARGS = (
+    "supercell",
+    "min_atoms",
+    "include_2d",
+    "num_layers",
+    "vacuum",
+    "interlayer",
+    "n_orderings",
+    "lattice_scales",
+    "ordering_seed",
+)
 
 
 def explore_composition(
@@ -44,20 +58,14 @@ def explore_composition(
     mlp_device: str = "cuda",
     precision: str | None = None,
     mlp_precision: str | None = None,
-    supercell: tuple[int, int, int] | None = None,
-    min_atoms: int = 32,
-    include_2d: bool = False,
-    num_layers: int = 1,
-    vacuum: float = 15.0,
-    interlayer: float | None = None,
-    n_orderings: int = 1,
-    lattice_scales: Sequence[float] | None = None,
-    ordering_seed: int = 0,
+    n_random: int = 50,
+    random_seed: int = 0,
     on_phase_start: Callable[[PhaseCandidate], None] | None = None,
     on_phase_done: Callable[[PhaseCandidate, RelaxationResult], None] | None = None,
     relax_fn: Callable[[RelaxStructureInput], RelaxationResult] | None = None,
+    **deprecated_kwargs,
 ) -> CompositionExplorationResult:
-    """Enumerate phases for a composition, relax each, and score stability.
+    """Enumerate seeds for a composition, relax each, and score stability.
 
     Parameters
     ----------
@@ -68,11 +76,34 @@ def explore_composition(
     output_dir:
         Where seed structures, optimized structures, trajectories, and
         per-step logs are written.
+    n_random:
+        Number of random pyXtal structures to draw as supplementary
+        seeds for novelty / characterization (in addition to every
+        applicable AFLOW prototype decoration). ``0`` disables.
+    random_seed:
+        Seed for the pyXtal RNG (reproducibility).
     on_phase_start, on_phase_done:
         Optional callbacks for live progress reporting (e.g. in the chat REPL).
     relax_fn:
         Override the relaxation backend (used by tests / stub mode).
+    **deprecated_kwargs:
+        Old kwargs from the hand-coded prototype enumerator
+        (``supercell``, ``include_2d``, ``num_layers``, ``vacuum``,
+        ``interlayer``, ``n_orderings``, ``lattice_scales``, …) are
+        accepted silently and ignored; a one-shot DeprecationWarning is
+        emitted if any are passed.
     """
+    used_deprecated = [k for k in _DEPRECATED_KWARGS if k in deprecated_kwargs]
+    if used_deprecated:
+        warnings.warn(
+            "explore_composition: the following keyword arguments are "
+            "deprecated and ignored by the unified prototype + pyXtal "
+            f"pipeline: {used_deprecated}. Use n_random=N to control the "
+            "random-search count.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     if isinstance(composition, str):
         parsed = parse_composition(composition)
         if parsed is None:
@@ -83,18 +114,11 @@ def explore_composition(
     relax_dir = os.path.join(output_dir, composition.formula, "relaxed")
     os.makedirs(relax_dir, exist_ok=True)
 
-    candidates = enumerate_phases(
+    candidates = generate_seeds(
         composition,
         seeds_dir,
-        supercell=supercell,
-        min_atoms=min_atoms,
-        include_2d=include_2d,
-        num_layers=num_layers,
-        vacuum=vacuum,
-        interlayer=interlayer,
-        n_orderings=n_orderings,
-        lattice_scales=lattice_scales,
-        ordering_seed=ordering_seed,
+        n_random=n_random,
+        random_seed=random_seed,
     )
     relax = relax_fn or _run_relaxation
 
@@ -125,11 +149,16 @@ def explore_composition(
             if on_phase_done is not None:
                 on_phase_done(cand, result)
         except Exception as exc:  # pragma: no cover - depends on HydraGNN env
-            failures.append(f"{cand.phase}: {exc!s}")
+            tag = cand.prototype_id or cand.phase or "seed"
+            failures.append(f"{tag}: {exc!s}")
 
     report: StabilityReport | None = None
     if relaxations:
-        report = score_stability(composition.formula, relaxations)
+        report = score_stability(
+            composition.formula,
+            relaxations,
+            candidates=candidates,
+        )
 
     return CompositionExplorationResult(
         composition=composition,

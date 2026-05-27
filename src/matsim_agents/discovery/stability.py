@@ -3,8 +3,8 @@
 We score two aspects:
 
 * **Chemical stability** (relative): for a fixed composition, the lowest
-  total energy per atom across the relaxed prototypes is the candidate
-  ground state. All other phases are reported as ``ΔE/atom`` above it.
+  total energy per atom across the relaxed seeds is the candidate
+  ground state. All other seeds are reported as ``ΔE/atom`` above it.
   Absolute formation energies vs. elemental references would require a
   curated reference set; we expose hooks but do not require it.
 
@@ -14,14 +14,21 @@ We score two aspects:
   (no imaginary modes at the Γ-point) is left as an optional follow-up
   because it requires either finite-difference Hessians or a phonopy
   workflow.
+
+A seed's ``source`` ("prototype" vs "random") is propagated into the
+report so that downstream agents can flag candidates that arose from
+the pyXtal random-structure path: those are novel topologies that have
+not been observed crystallographically and should be DFT-validated
+before any stability claim is published.
 """
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from pydantic import BaseModel, Field
 
+from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.state import RelaxationResult
 
 
@@ -39,6 +46,12 @@ class PhaseStability(BaseModel):
         ...,
         description="True if max residual force is below `force_tol_eV_per_A`.",
     )
+    # Seed-provenance fields (populated from the matching PhaseCandidate when
+    # provided; ``source`` defaults to "prototype" for legacy callers).
+    source: str = "prototype"
+    prototype_id: str | None = None
+    space_group: int | None = None
+    needs_dft_verification: bool = False
 
 
 class StabilityReport(BaseModel):
@@ -66,12 +79,28 @@ def score_stability(
     relaxations: Iterable[RelaxationResult],
     force_tol_eV_per_A: float = 0.05,
     degeneracy_tol_eV_per_atom: float = 0.01,
+    *,
+    candidates: Sequence[PhaseCandidate] | None = None,
 ) -> StabilityReport:
-    """Rank relaxations of the same composition and report stability."""
+    """Rank relaxations of the same composition and report stability.
+
+    Parameters
+    ----------
+    candidates:
+        Optional seed candidates to join against by ``structure_path`` so
+        that the report can carry the ``source`` / ``prototype_id`` /
+        ``space_group`` / ``needs_dft_verification`` provenance. When
+        omitted, all entries default to a "prototype" source.
+    """
+    cand_by_path: dict[str, PhaseCandidate] = {}
+    if candidates is not None:
+        cand_by_path = {c.structure_path: c for c in candidates}
+
     items: list[PhaseStability] = []
     for r in relaxations:
         n_atoms = _atoms_count_from_path(r.optimized_structure_path)
         e_per_atom = r.final_energy_eV / max(n_atoms, 1)
+        cand = cand_by_path.get(r.structure_path)
         items.append(
             PhaseStability(
                 structure_path=r.structure_path,
@@ -82,6 +111,12 @@ def score_stability(
                 final_max_force_eV_per_A=r.final_max_force_eV_per_A,
                 converged=r.converged,
                 dynamically_stable_proxy=r.final_max_force_eV_per_A <= force_tol_eV_per_A,
+                source=cand.source if cand is not None else "prototype",
+                prototype_id=cand.prototype_id if cand is not None else None,
+                space_group=cand.space_group if cand is not None else None,
+                needs_dft_verification=(
+                    cand.needs_dft_verification if cand is not None else False
+                ),
             )
         )
 
@@ -100,13 +135,28 @@ def score_stability(
     ]
     chem_stable = ground.dynamically_stable_proxy and not near_degenerate
 
+    n_prototype = sum(1 for it in ranking if it.source == "prototype")
+    n_random = sum(1 for it in ranking if it.source == "random")
+
     summary_lines = [
-        f"Composition {formula}: {len(ranking)} candidate phase(s) relaxed.",
+        f"Composition {formula}: {len(ranking)} candidate seed(s) relaxed "
+        f"({n_prototype} prototype + {n_random} random).",
         f"Predicted ground state: {ground.optimized_structure_path} "
         f"(E/atom = {ground.energy_per_atom_eV:.4f} eV, "
         f"|F|max = {ground.final_max_force_eV_per_A:.4f} eV/Å, "
-        f"dynamically_stable_proxy = {ground.dynamically_stable_proxy}).",
+        f"dynamically_stable_proxy = {ground.dynamically_stable_proxy}, "
+        f"source = {ground.source}"
+        + (f", prototype = {ground.prototype_id}" if ground.prototype_id else "")
+        + (f", SG = {ground.space_group}" if ground.space_group else "")
+        + ").",
     ]
+    if ground.needs_dft_verification:
+        summary_lines.append(
+            "NOVELTY ALERT: ground-state candidate originated from the pyXtal "
+            "random-structure search (no matching known crystal prototype). "
+            "Treat this as a HYPOTHESIS — DFT verification is required before "
+            "any stability claim can be published."
+        )
     if near_degenerate:
         summary_lines.append(
             f"WARNING: {len(near_degenerate)} other phase(s) within "
