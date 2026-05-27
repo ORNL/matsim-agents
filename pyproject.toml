@@ -38,6 +38,13 @@ hydragnn = [
     "torch>=2.2",
 ]
 mace = ["mace-torch>=0.3.6"]
+pyxtal = [
+    # Random crystal-structure generation for the unified seed pipeline
+    # (matsim_agents.discovery.seeds.random_search). The pymatgen-bundled
+    # AFLOW prototype encyclopedia is always available; pyxtal is only
+    # needed for supplementary random / novel-topology seeds.
+    "pyxtal>=0.6",
+]
 openai = ["langchain-openai>=0.2.0"]
 ollama = ["langchain-ollama>=0.2.0"]
 vllm = ["langchain-openai>=0.2.0"]  # vLLM uses the OpenAI-compatible client
