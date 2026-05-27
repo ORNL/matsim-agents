@@ -139,7 +139,7 @@ md:
     kind: compositions     # formulas → prototype seeds via discovery enumerator
     compositions: [LiCoO2, LiFePO4, Cs2AgBiBr6]
     max_phases_per_composition: 2
-    min_atoms: 32
+    n_random: 0            # set >0 to add pyXtal random-search seeds per formula
 ```
 
 ```yaml
@@ -158,9 +158,15 @@ md:
 For `kind: prompt` the LLM proposal is persisted as
 `<out_dir>/seeds/llm_proposed_compositions.json` so the run is reproducible.
 For `kind: compositions` and `kind: prompt`, formulas are expanded into
-prototype crystal seeds via
-[`matsim_agents.discovery.enumerate_phases`](../../src/matsim_agents/discovery/phase_explorer.py)
-(fcc/bcc/hcp/diamond, rocksalt/CsCl/zincblende/wurtzite/rutile, perovskite,
-spinel, double perovskite, optional 2-D graphene/h-BN/MX2 …). The seeds are
-intentionally **not** pre-relaxed — the MD heat-up immediately drives them
-off their idealised positions, which is exactly the regime AL needs.
+seed structures via
+[`matsim_agents.discovery.generate_seeds`](../../src/matsim_agents/discovery/seeds.py),
+which enumerates every AFLOW prototype whose stoichiometric signature
+matches the target composition (288 entries from
+`pymatgen.analysis.prototypes`, covering elemental phases, rocksalt/CsCl/
+zincblende/wurtzite/rutile, perovskite, spinel, double perovskite, …),
+substitutes the elements, and dedupes with `StructureMatcher`. Set
+`n_random > 0` to additionally draw pyXtal random-symmetry seeds (these
+are flagged `needs_dft_verification` so any AL discovery built on them is
+clearly marked as novel). The seeds are intentionally **not** pre-relaxed
+— the MD heat-up immediately drives them off their idealised positions,
+which is exactly the regime AL needs.

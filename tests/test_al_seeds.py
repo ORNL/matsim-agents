@@ -90,12 +90,13 @@ def _patch_llm_and_phases(
         _fake_get_chat_model,
     )
 
-    # Stub the prototype enumerator so the test does not depend on
+    # Stub the seed generator so the test does not depend on
     # pymatgen / discovery machinery at all. It just creates one VASP
     # file per requested formula and returns synthetic candidates.
     @dataclass
     class _PhaseCand:
         structure_path: str
+        source: str = "prototype"
 
     def _fake_parse_composition(formula: str):
         @dataclass
@@ -104,21 +105,21 @@ def _patch_llm_and_phases(
 
         return _C(formula=formula)
 
-    def _fake_enumerate_phases(comp, out_dir, **_kwargs):  # noqa: ANN001, ANN003
+    def _fake_generate_seeds(comp, out_dir, **_kwargs):  # noqa: ANN001, ANN003
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"{comp.formula}_proto.vasp"
         _write_dummy_structure(path)
         written_files.append(path)
-        return [_PhaseCand(structure_path=str(path))]
+        return [_PhaseCand(structure_path=str(path), source="prototype")]
 
     monkeypatch.setattr(
         "matsim_agents.discovery.parse_composition",
         _fake_parse_composition,
     )
     monkeypatch.setattr(
-        "matsim_agents.discovery.enumerate_phases",
-        _fake_enumerate_phases,
+        "matsim_agents.discovery.generate_seeds",
+        _fake_generate_seeds,
     )
 
 
