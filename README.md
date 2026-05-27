@@ -10,9 +10,9 @@ dynamical stability, and report the findings — with optional human
 review at every gate.
 
 The framework is **backend-agnostic**: HydraGNN is the default MLFF
-backend, but the relaxation tool, phase explorer, and stability scorer
-are written so other potentials (MACE, NequIP, Orb, ...) can be plugged
-in via the same interfaces.
+backend, but the relaxation tool, crystal-phase generator, and stability
+scorer are written so other potentials (MACE, NequIP, Orb, ...) can be
+plugged in via the same interfaces.
 
 ---
 
@@ -70,7 +70,8 @@ in via the same interfaces.
                 │             Atomistic backends               │
                 │   HydraGNN (fused MLFF + BranchWeightMLP)    │
                 │   ASE (FIRE / BFGS / BFGSLineSearch)         │
-                │   pymatgen (optional prototypes)             │
+                │   pymatgen (AFLOW prototype encyclopedia)    │
+                │   pyXtal (random symmetry-aware search)      │
                 └──────────────────────────────────────────────┘
 ```
 
@@ -80,17 +81,25 @@ in via the same interfaces.
 - **Hypothesis-generation chat** with any local LLM (Qwen 2.5 via Ollama by default).
 - **Automatic composition detection** in user/LLM messages — when a new chemical formula is proposed, the system offers to run a substantial atomistic exploration.
 - **HydraGNN-powered structure relaxation** using the fused MLFF + branch-weight MLP stack from `examples/multidataset_hpo_sc26/structure_optimization_ASE.py`.
-- **3-D crystal-phase enumeration** across common prototypes:
-  - elemental: fcc, bcc, hcp, sc, diamond
-  - binary: rocksalt, CsCl, zincblende, wurtzite, fluorite, rutile
-  - ternary: cubic perovskite (ABX₃), normal spinel (AB₂X₄)
-  - quaternary: rocksalt-ordered double perovskite (A₂BB'X₆, Fm-3̄m)
-- **2-D phase enumeration** (opt-in via `--include-2d`):
-  - graphene-like (1 element honeycomb)
-  - h-BN-like (binary 1:1 honeycomb)
-  - MoS₂-family monolayers in trigonal-prismatic 2H and octahedral 1T (binary 1:2)
-  - configurable **multilayer stacking** with adjustable interlayer separation and vacuum gap
-- **Supercell control**: explicit `NxNxN` tiling or auto-tile each prototype to a minimum atom count so dopants, AFM ordering, and symmetry-breaking distortions can develop.
+- **Unified crystal-phase seed generation** (`matsim_agents.discovery.seeds`)
+  combining two complementary sources into one ranked candidate list:
+  - **AFLOW prototype decoration** — every entry of the
+    pymatgen-bundled AFLOW encyclopedia (~288 prototypes covering all
+    230 3-D space groups and a wide range of stoichiometries: fcc, bcc,
+    hcp, rocksalt, zincblende, wurtzite, fluorite, rutile, perovskite,
+    spinel, Heusler, MAX phases, …) whose reduced stoichiometric ratios
+    match the target is decorated with the target's elements. All
+    symmetrically distinct element-to-Wyckoff assignments are
+    enumerated (e.g. ABX₃ *vs* BAX₃). No hand-coded prototype tables.
+  - **pyXtal random search** (`--n-random N`, novelty pass) — for
+    compositions with no AFLOW match (high-entropy alloys, exotic
+    stoichiometries) or simply for novelty exploration, draws `N`
+    random crystals uniformly across the 230 space groups, respecting
+    Wyckoff multiplicities and minimum-distance constraints. Seeds
+    from this path are tagged `needs_dft_verification=True` and called
+    out as `(novel)` in the stability report so they get DFT-validated
+    before any publication claim. Optional dependency; the pipeline
+    silently degrades to prototypes-only if pyXtal is absent.
 - **Stability scoring**: relative chemical stability (ΔE/atom rankings) and a dynamical-stability proxy (residual force tolerance).
 - **Local & HPC ready, portable across diverse DOE accelerators**: same
   Python entry points run on **Frontier (OLCF, AMD MI250X)**, **Aurora
@@ -458,7 +467,7 @@ ollama pull qwen2.5:14b
 matsim-agents chat \
   --logdir ./multidataset_hpo-BEST6-fp64 \
   --mlp-checkpoint ./mlp_branch_weights.pt \
-  --min-atoms 64
+  --n-random 50 --random-seed 0
 ```
 
 A typical session:
@@ -482,19 +491,23 @@ Stability report for AgBiBr6Cs2:
 you> Now suggest a Sb-substituted variant.
 ```
 
-### 3. 2-D and multilayer materials discovery
+### 3. Novelty-only exploration of exotic compositions
+
+For compositions that have no AFLOW prototype match (e.g. 5-element
+high-entropy alloys), disable the prototype branch entirely and let
+pyXtal characterize the configuration space:
 
 ```bash
 matsim-agents chat \
   --logdir ./multidataset_hpo-BEST6-fp64 \
   --mlp-checkpoint ./mlp_branch_weights.pt \
-  --include-2d --num-layers 3 --vacuum 20.0 --min-atoms 36
+  --n-random 200 --random-seed 42
 ```
 
-When the conversation introduces a 1-element (graphene-like), 1:1 binary
-(h-BN-like), or 1:2 binary (MoS₂-family) composition, the discovery
-wrapper additionally enumerates 2-D monolayer / multilayer slabs
-alongside the 3-D bulk prototypes.
+When the conversation introduces an unusual stoichiometry, the discovery
+wrapper will report `No AFLOW prototype match` and rely on the pyXtal
+pass; the resulting candidates are flagged `(novel)` in the stability
+table.
 
 ---
 
@@ -526,36 +539,31 @@ The `chat` REPL is more than a wrapper around the LLM — it is a
 2. After each turn, [`extract_compositions`](src/matsim_agents/discovery/composition.py) scans both messages for chemical formulas (validates element symbols, reduces stoichiometry, ignores English words like "Carbon" or "Hello").
 3. For every newly-seen formula the user is asked (or `--auto-confirm` is honored) whether to launch a substantial atomistic exploration.
 4. The wrapper [`explore_composition`](src/matsim_agents/discovery/wrapper.py) then:
-   - **enumerates** plausible crystal phases. The selection is
-     stoichiometry-aware:
-     - 1 element → fcc, bcc, hcp, sc, diamond (and graphene if `--include-2d`)
-     - binary 1:1 → rocksalt, CsCl, zincblende, wurtzite, fluorite, rutile (and h-BN if 2-D enabled)
-     - binary 1:2 → same bulk set + MoS₂-family 2H/1T monolayers if 2-D enabled
-     - ternary 1:1:3 → cubic perovskite
-     - ternary 1:2:4 → perovskite + normal spinel
-     - quaternary 1:1:2:6 → rocksalt-ordered double perovskite (proper 2×2×2 Fm-3̄m cell)
-   - **expands** every prototype into a supercell large enough for
-     dopants, AFM ordering, and symmetry-breaking distortions to develop
-     (`--min-atoms` auto-tile or explicit `--supercell NxNxN`).
-   - **samples site decorations** within that supercell
-     (`--n-orderings N`): for multi-species prototypes, generates up to
-     `N` symmetrically-distinct cation/anion arrangements (random label
-     shuffling, deduplicated with pymatgen's `StructureMatcher`).
-     Captures normal vs. (partially) inverse spinel, ordered vs.
-     antisite-disordered double perovskite, alloy / solid-solution
-     decorations, and antisites in general. Single-element cells
-     correctly collapse to one ordering.
-   - **sweeps lattice constants** (`--lattice-scales 0.96,1.0,1.04`):
-     each ordering is replicated at every isotropic cell-scale factor,
-     bracketing the equilibrium volume so the relaxer starts from a
-     reasonable basin even when the per-prototype default lattice
-     parameter is off.
-   - **stacks** 2-D prototypes into multilayers when `--num-layers > 1`,
-     with a per-prototype default interlayer separation and a
-     configurable vacuum gap.
+   - **generates seeds** through the unified
+     [`matsim_agents.discovery.seeds.generate_seeds`](src/matsim_agents/discovery/seeds.py)
+     entry point, which combines:
+     1. **AFLOW prototype decoration.** Every prototype in the
+        pymatgen-bundled AFLOW encyclopedia whose reduced stoichiometric
+        ratios match the target composition is substituted with the
+        target's elements. All symmetrically distinct
+        element-to-placeholder assignments are enumerated (e.g. ABX₃
+        vs BAX₃). This recovers fcc/bcc/hcp/rocksalt/zincblende/
+        wurtzite/fluorite/rutile/perovskite/spinel/Heusler/MAX/… from a
+        single uniform source — no per-stoichiometry rules.
+     2. **pyXtal random search** (`--n-random N`). `N` random crystals
+        are drawn uniformly across the 230 space groups, respecting
+        Wyckoff multiplicities and minimum interatomic distances. Each
+        such seed is tagged `needs_dft_verification=True` and surfaced
+        with a `(novel)` marker in the live table so it is treated as
+        a candidate for follow-up DFT validation rather than a
+        publishable claim. When the target composition has no AFLOW
+        match (e.g. a 5-element high-entropy alloy), this is the only
+        active source and `--n-random` should be raised accordingly.
    - **relaxes** each seed with HydraGNN + ASE (FIRE/BFGS).
    - **scores** chemical stability (ΔE/atom ranking, near-degeneracy
-     warning) and a dynamical-stability proxy (max residual force).
+     warning) and a dynamical-stability proxy (max residual force),
+     keeping the `source` (`prototype` vs `random`) and AFLOW
+     `prototype_id` / `space_group` of every candidate in the report.
 5. The summary is fed back into the conversation as a system message so
    the LLM can refine its hypothesis on the next turn.
 
@@ -563,20 +571,26 @@ Output artifacts per composition (under `--output-dir`):
 
 ```
 outputs/discovery/<formula>/
-  seeds/    <formula>_<phase>[_L<n>][_sc<NxNxN>].vasp     # initial structures
-  relaxed/  <formula>_<phase>..._optimized_structure.vasp
-            <formula>_<phase>..._optimization.traj        # ASE trajectory
-            <formula>_<phase>..._optimization.csv         # per-step E, |F|max, branch weights
+  seeds/    <formula>_<prototype_id>[_v<k>].vasp          # AFLOW decoration variant k
+            <formula>_random_<sg>_<i>.vasp               # pyXtal seed in space group <sg>
+  relaxed/  <formula>_<seed>_optimized_structure.vasp
+            <formula>_<seed>_optimization.traj           # ASE trajectory
+            <formula>_<seed>_optimization.csv            # per-step E, |F|max, branch weights
 ```
 
-File-name tags reflect the cell that was actually built:
-`_L3` = 3 stacked layers (2-D), `_sc2x2x2` = 2×2×2 supercell.
+Seeds carry their provenance (`source`, `prototype_id`, `space_group`,
+`needs_dft_verification`) on the `PhaseCandidate` Pydantic model so
+downstream scorers can filter or weight them.
 
-> **Honest caveats.** Phase enumeration is intentionally seed-only (a
-> handful of common prototypes) and the dynamical-stability check is a
-> force-residual proxy — not a full phonon analysis. Plug in phonopy or
-> a richer prototype generator (e.g. `pymatgen.Structure.from_prototype`,
-> CALYPSO, USPEX, AIRSS) when the wrapper signature gives you the hook.
+> **Honest caveats.** The AFLOW prototype set covers known crystal
+> topologies for stoichiometries that match an existing entry — exotic
+> ratios fall back to the pyXtal random pass, which is novelty-oriented
+> and intentionally flagged for DFT verification. The dynamical-
+> stability check is a force-residual proxy, not a full phonon
+> analysis; plug in phonopy for the rigorous version. For broader
+> generative coverage (CALYPSO, USPEX, AIRSS, diffusion models, …) add
+> a new branch to `generate_seeds` — every consumer already routes
+> through that single entry point.
 
 ---
 
@@ -602,26 +616,33 @@ print(result.final_energy_eV, result.optimized_structure_path)
 ```python
 from matsim_agents.discovery import explore_composition
 
-# 3-D bulk discovery with a 40-atom minimum cell
+# Default: every applicable AFLOW prototype + 50 pyXtal random seeds.
 result = explore_composition(
     "Cs2AgBiBr6",
     logdir="./multidataset_hpo-BEST6-fp64",
     mlp_checkpoint="./mlp_branch_weights.pt",
     output_dir="./outputs",
-    min_atoms=40,
 )
 print(result.stability.summary)
 
-# 2-D / multilayer discovery (graphene, h-BN, MoS2-family)
+# Prototype-only run (pyXtal pass disabled).
 result = explore_composition(
     "MoS2",
     logdir="./multidataset_hpo-BEST6-fp64",
     mlp_checkpoint="./mlp_branch_weights.pt",
     output_dir="./outputs",
-    include_2d=True,
-    num_layers=3,
-    vacuum=20.0,
-    min_atoms=24,
+    n_random=0,
+)
+
+# Novelty-heavy run for an exotic / high-entropy composition with no
+# AFLOW match — rely entirely on pyXtal.
+result = explore_composition(
+    "FeCoNiCrMn",
+    logdir="./multidataset_hpo-BEST6-fp64",
+    mlp_checkpoint="./mlp_branch_weights.pt",
+    output_dir="./outputs",
+    n_random=200,
+    random_seed=42,
 )
 ```
 
@@ -694,17 +715,11 @@ Common options (all commands that touch HydraGNN):
 | Flag | Description |
 |---|---|
 | `--output-dir PATH` | Where discovery artifacts are written (default `./outputs`). |
-| `--optimizer {FIRE,BFGS,BFGSLineSearch}` | ASE optimizer for relaxations. |
-| `--maxiter INT` | Max relaxation steps per phase. |
-| `--min-atoms INT` | Auto-tile every prototype to at least this many atoms (default `32`). |
-| `--supercell NxNxN` | Explicit tiling for every prototype. Overrides `--min-atoms`. For 2-D slabs the z component is forced to 1. |
-| `--include-2d / --no-include-2d` | Also enumerate 2-D prototypes (graphene, h-BN, MoS₂-family). Default off. |
-| `--num-layers INT` | Number of monolayers stacked for every 2-D prototype (default `1`). |
-| `--vacuum FLOAT` | Vacuum gap (Å) along z for 2-D prototypes (default `15.0`). |
-| `--interlayer FLOAT` | Override the per-prototype default interlayer separation (Å). |
-| `--n-orderings INT` | Sample up to N symmetrically-distinct site decorations per multi-species prototype (default `1`). |
-| `--lattice-scales LIST` | Comma-separated isotropic cell-scale factors per ordering, e.g. `0.96,1.0,1.04`. |
-| `--ordering-seed INT` | RNG seed for the ordering sampler (reproducibility). |
+| `--ase-structure-optimizer {FIRE,BFGS,BFGSLineSearch}` | ASE optimizer for relaxations. |
+| `--maxiter INT` | Max relaxation steps per seed (default `200`). |
+| `--fmax FLOAT` | Stop relaxation when max residual force is below this (eV/Å, default `0.02`). |
+| `--n-random INT` | Number of supplementary pyXtal random structures per composition, in addition to every applicable AFLOW prototype decoration (default `50`). Set to `0` to disable the pyXtal pass; silently degrades to `0` if pyXtal is not installed. |
+| `--random-seed INT` | RNG seed for the pyXtal sampler (reproducibility). |
 | `--auto-confirm / --ask` | Skip the y/N prompt for every detected composition. |
 
 ---
