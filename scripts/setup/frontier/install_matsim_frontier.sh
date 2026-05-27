@@ -185,10 +185,27 @@ log "Installing matsim-agents[${LLM_BACKENDS}] (editable) into ${VENV_PATH}..."
 pip install --upgrade pip setuptools wheel
 pip install -e "${MATSIM_DIR}[${LLM_BACKENDS}]"
 
+# pip_retry: install with --upgrade-strategy only-if-needed so subsequent
+# user-facing dep installs cannot silently upgrade the carefully pinned
+# PyTorch/ROCm/vLLM stack that Phase 1 just built. Use it for everything we
+# add on top of the HydraGNN env from here on.
+pip_retry() {
+    local tries=3 delay=3
+    for ((i=1; i<=tries; i++)); do
+        if pip install --upgrade-strategy only-if-needed "$@"; then
+            return 0
+        fi
+        warn "pip install failed (attempt $i/$tries). Retrying in ${delay}s..."
+        sleep "$delay"
+        delay=$((delay * 2))
+    done
+    return 1
+}
+
 # Ensure core runtime/test deps are always present even when LLM_BACKENDS is
 # overridden to omit dev extras.
 log "Ensuring core runtime/test dependencies (langchain-core, pytest, pytest-cov)..."
-pip install "langchain-core>=0.3.0" "pytest>=8.0" "pytest-cov>=5.0"
+pip_retry "langchain-core>=0.3.0" "pytest>=8.0" "pytest-cov>=5.0"
 
 # Pre-install the full vLLM ROCm dependency set on the login node.
 # Frontier compute nodes do not have outbound internet, so the SLURM build job
@@ -205,14 +222,24 @@ fi
 # accelerate is required for multi-GPU inference via HuggingFace Transformers
 # (device_map="auto"), used by the smoke-transformers-frontier.sh smoke test.
 log "Installing accelerate (required for Transformers device_map=auto)..."
-pip install accelerate
+pip_retry accelerate
 
 # Keep model download/inference tooling aligned with Perlmutter installs.
 log "Installing LLM tooling extras (huggingface_hub CLI + transformers)..."
 # Cap huggingface_hub<1.0: transformers<4.58 (and thus our 4.45..4.57 floor)
 # requires huggingface-hub<1.0. Pinned here to keep the resolver from picking
 # up the breaking 1.x line (e.g. 1.15.0) that ships with newer fairchem-core.
-pip install "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0"
+pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0"
+
+# pyXtal (optional, used by matsim_agents.discovery.seeds for random-symmetry
+# crystal generation when no AFLOW prototype matches the target composition).
+# Installed with --upgrade-strategy only-if-needed (via pip_retry) so it cannot
+# upgrade the venv's pinned torch/ROCm/numpy. Made non-fatal: pyxtal's
+# transitive deps (notably pyshtools) sometimes fail to build on HPC systems
+# without a working Fortran toolchain; the discovery code already warns and
+# skips random search cleanly when pyxtal is missing.
+log "Installing pyxtal (optional, for random-symmetry seed generation)..."
+pip_retry "pyxtal>=0.6" || warn "pyxtal install failed; random-symmetry seed generation will be unavailable."
 
 # ── Phase 2.5: Patch flashinfer for ROCm (no libcudart, only libamdhip64) ─────
 #
