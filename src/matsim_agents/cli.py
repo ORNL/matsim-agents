@@ -105,30 +105,14 @@ def chat(
     ),
     maxiter: int = typer.Option(200, help="Max relaxation steps per phase."),
     fmax: float = typer.Option(0.02, help="Stop relaxation when max force < fmax (eV/Å)."),
-    min_atoms: int = typer.Option(32, help="Auto-tile each prototype to at least this many atoms."),
-    supercell: str | None = typer.Option(
-        None, help="Explicit supercell, e.g. '2x2x2'. Overrides --min-atoms."
+    n_random: int = typer.Option(
+        50,
+        "--n-random",
+        help="Number of supplementary pyXtal random structures per composition "
+        "(in addition to every applicable AFLOW prototype decoration). "
+        "Set to 0 to disable. Silently degrades to 0 if pyxtal is not installed.",
     ),
-    include_2d: bool = typer.Option(
-        False,
-        "--include-2d/--no-include-2d",
-        help="Also enumerate 2-D prototypes (graphene, h-BN, MX2).",
-    ),
-    num_layers: int = typer.Option(1, help="Layers stacked for every 2-D prototype."),
-    vacuum: float = typer.Option(15.0, help="Vacuum gap (Å) along z for 2-D prototypes."),
-    interlayer: float | None = typer.Option(
-        None, help="Override interlayer separation (Å) for 2-D prototypes."
-    ),
-    n_orderings: int = typer.Option(
-        1,
-        help="Sample up to N symmetrically-distinct site decorations per prototype (multi-species only).",
-    ),
-    lattice_scales: str | None = typer.Option(
-        None, help="Comma-separated isotropic cell-scale factors, e.g. '0.96,1.0,1.04'."
-    ),
-    ordering_seed: int = typer.Option(
-        0, help="RNG seed for the ordering sampler (reproducibility)."
-    ),
+    random_seed: int = typer.Option(0, "--random-seed", help="Seed for the pyXtal RNG."),
     llm_provider: str = typer.Option("ollama", "--llm-provider", case_sensitive=False),
     llm_model: str = typer.Option("qwen2.5:14b", "--llm-model"),
     llm_base_url: str | None = typer.Option(None, "--llm-base-url"),
@@ -144,27 +128,6 @@ def chat(
     """
     from matsim_agents.chat import DiscoveryChatConfig, run_chat
 
-    sc_tuple: tuple[int, int, int] | None = None
-    if supercell:
-        try:
-            parts = [int(x) for x in supercell.lower().replace(",", "x").split("x") if x]
-            if len(parts) != 3:
-                raise ValueError
-            sc_tuple = (parts[0], parts[1], parts[2])
-        except ValueError as exc:
-            raise typer.BadParameter("--supercell must be 'NxNxN' (e.g. '2x2x2').") from exc
-
-    scales_tuple: tuple[float, ...] | None = None
-    if lattice_scales:
-        try:
-            scales_tuple = tuple(float(x) for x in lattice_scales.split(",") if x.strip())
-            if not scales_tuple:
-                scales_tuple = None
-        except ValueError as exc:
-            raise typer.BadParameter(
-                "--lattice-scales must be a comma-separated list of floats, e.g. '0.96,1.0,1.04'."
-            ) from exc
-
     cfg = DiscoveryChatConfig(
         logdir=str(logdir),
         mlp_checkpoint=str(mlp_checkpoint),
@@ -176,15 +139,8 @@ def chat(
         optimizer=optimizer,
         maxiter=maxiter,
         fmax=fmax,
-        supercell=sc_tuple,
-        min_atoms=min_atoms,
-        include_2d=include_2d,
-        num_layers=num_layers,
-        vacuum=vacuum,
-        interlayer=interlayer,
-        n_orderings=n_orderings,
-        lattice_scales=scales_tuple,
-        ordering_seed=ordering_seed,
+        n_random=n_random,
+        random_seed=random_seed,
         llm_provider=llm_provider,
         llm_model=llm_model,
         llm_base_url=llm_base_url,
