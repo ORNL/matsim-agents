@@ -108,3 +108,7 @@ third_party/
 # PBS / Slurm stdout/stderr from interactive `qsub` (`-o .`)
 matsim-*.o[0-9]*
 matsim-*.e[0-9]*
+
+# PBS / Slurm stdout/stderr from any job script
+*.o[0-9]*
+*.e[0-9]*
