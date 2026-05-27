@@ -56,11 +56,10 @@ logger = logging.getLogger(__name__)
 class PhaseCandidate(BaseModel):
     """A single seed structure generated for a target composition.
 
-    The legacy ``phase``/``dimensionality``/``num_layers``/``supercell``/
-    ``lattice_scale`` fields are kept (optional, with sensible defaults)
-    for backward compatibility with existing call sites; the new
-    ``source``/``prototype_id``/``space_group``/``needs_dft_verification``
-    fields carry the metadata of the unified prototype + random pipeline.
+    Carries the metadata of the unified prototype + random pipeline:
+    ``source`` distinguishes AFLOW-prototype decorations from pyXtal
+    random structures, and ``needs_dft_verification`` flags the latter
+    as requiring further DFT validation before any stability claim.
     """
 
     formula: str
@@ -79,18 +78,6 @@ class PhaseCandidate(BaseModel):
         "DFT-validated before any stability claim.",
     )
     notes: str | None = None
-    # Legacy / informational fields (kept so existing consumers don't break).
-    phase: str = Field(
-        default="",
-        description="Human-readable tag: prototype_id for prototype source, "
-        "'pyxtal_sgNNN' for random source.",
-    )
-    space_group_hint: str | None = None
-    dimensionality: Literal["2D", "3D"] = "3D"
-    num_layers: int | None = None
-    supercell: tuple[int, int, int] | None = None
-    ordering_index: int = 0
-    lattice_scale: float = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -444,9 +431,6 @@ def generate_seeds(
                     num_atoms=len(atoms),
                     needs_dft_verification=False,
                     notes=" ".join(notes_bits),
-                    phase=proto.aflow,
-                    space_group_hint=str(spg),
-                    ordering_index=o_idx,
                 )
             )
 
@@ -472,9 +456,6 @@ def generate_seeds(
                     f"Random pyXtal structure (space group {spg}). "
                     "Novel topology — requires DFT verification before any stability claim."
                 ),
-                phase=f"pyxtal_sg{int(spg):03d}",
-                space_group_hint=str(int(spg)),
-                ordering_index=r_idx,
             )
         )
 

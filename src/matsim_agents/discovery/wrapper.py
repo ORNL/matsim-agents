@@ -8,7 +8,6 @@ single call.
 from __future__ import annotations
 
 import os
-import warnings
 from collections.abc import Sequence
 from typing import Callable
 
@@ -31,19 +30,6 @@ class CompositionExplorationResult(BaseModel):
     failures: list[str] = Field(default_factory=list)
 
 
-_DEPRECATED_KWARGS = (
-    "supercell",
-    "min_atoms",
-    "include_2d",
-    "num_layers",
-    "vacuum",
-    "interlayer",
-    "n_orderings",
-    "lattice_scales",
-    "ordering_seed",
-)
-
-
 def explore_composition(
     composition: str | Composition,
     logdir: str,
@@ -63,7 +49,6 @@ def explore_composition(
     on_phase_start: Callable[[PhaseCandidate], None] | None = None,
     on_phase_done: Callable[[PhaseCandidate, RelaxationResult], None] | None = None,
     relax_fn: Callable[[RelaxStructureInput], RelaxationResult] | None = None,
-    **deprecated_kwargs,
 ) -> CompositionExplorationResult:
     """Enumerate seeds for a composition, relax each, and score stability.
 
@@ -86,24 +71,7 @@ def explore_composition(
         Optional callbacks for live progress reporting (e.g. in the chat REPL).
     relax_fn:
         Override the relaxation backend (used by tests / stub mode).
-    **deprecated_kwargs:
-        Old kwargs from the hand-coded prototype enumerator
-        (``supercell``, ``include_2d``, ``num_layers``, ``vacuum``,
-        ``interlayer``, ``n_orderings``, ``lattice_scales``, …) are
-        accepted silently and ignored; a one-shot DeprecationWarning is
-        emitted if any are passed.
     """
-    used_deprecated = [k for k in _DEPRECATED_KWARGS if k in deprecated_kwargs]
-    if used_deprecated:
-        warnings.warn(
-            "explore_composition: the following keyword arguments are "
-            "deprecated and ignored by the unified prototype + pyXtal "
-            f"pipeline: {used_deprecated}. Use n_random=N to control the "
-            "random-search count.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
     if isinstance(composition, str):
         parsed = parse_composition(composition)
         if parsed is None:
