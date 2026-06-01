@@ -105,6 +105,12 @@ def extract_compositions(text: str) -> list[Composition]:
     found: dict[str, Composition] = {}
     for match in _FORMULA_RE.finditer(text):
         candidate = match.group(1)
+        # Reject all-uppercase alphabetic tokens: crystal-structure abbreviations
+        # like BCC/FCC/HCP and Roman numerals like IV/VI/VII tokenize into valid
+        # element sequences (B+C+C, F+C+C, I+V, ...). Real formulas always have
+        # at least one digit or a multi-letter element in proper case.
+        if candidate.isalpha() and candidate.isupper():
+            continue
         comp = parse_composition(candidate)
         if comp is None:
             continue
