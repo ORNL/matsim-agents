@@ -168,8 +168,9 @@ matsim-agents chat \
     --llm-base-url    "http://localhost:${CHAT_PORT}/v1" \
     --ase-structure-optimizer FIRE \
     --maxiter         500 \
-    --fmax            0.02 \
-    --n-random        8 \
+    --fmax            1e-3 \
+    --relative-increase-threshold 10.0 \
+    --n-random        32 \
     --random-seed     42 \
     --auto-confirm \
     <<'CHAT_INPUT' 2>&1 | tee "${RUN_DIR}/matsim-agents.log"
