@@ -57,6 +57,7 @@ class DiscoveryChatConfig:
     maxiter: int = 200
     maxstep: float = 1e-2
     fmax: float = 0.02
+    relative_increase_threshold: float = 0.05
     n_random: int = 50  # pyXtal random structures (per composition); 0 disables.
     random_seed: int = 0
     llm_provider: str = "ollama"
@@ -137,6 +138,7 @@ def _kickoff_exploration(
         maxiter=cfg.maxiter,
         maxstep=cfg.maxstep,
         fmax=cfg.fmax,
+        relative_increase_threshold=cfg.relative_increase_threshold,
         n_random=cfg.n_random,
         random_seed=cfg.random_seed,
         on_phase_start=_on_start,
