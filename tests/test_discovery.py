@@ -37,3 +37,16 @@ def test_extract_from_prose():
 def test_rejects_garbage():
     assert parse_composition("Hello world") is None
     assert parse_composition("Xx2Yy3") is None
+
+
+def test_rejects_acronyms_and_roman_numerals():
+    # Crystal-structure abbreviations tokenize into valid element sequences
+    # (BCC -> B+C+C -> C2B, FCC -> F+C+C -> C2F, HCP -> H+C+P -> CHP) and
+    # Roman numerals do the same (IV -> I+V, VI -> V+I, ...). All such all-
+    # uppercase alphabetic tokens must be rejected.
+    text = (
+        "MoNbTaW forms a single-phase BCC solid solution. The group-IV and "
+        "group-V transition metals can also crystallize in FCC or HCP packing."
+    )
+    found = {c.formula for c in extract_compositions(text)}
+    assert found == {"MoNbTaW"}, f"unexpected matches: {found}"
