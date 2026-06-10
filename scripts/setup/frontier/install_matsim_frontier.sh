@@ -55,7 +55,8 @@
 #   HYDRAGNN_BRANCH  Branch to use for runtime    (default: fix/structure-optimization-ase-fused)
 #   MATSIM_REPO      Git remote for matsim-agents (default: https://github.com/ORNL/matsim-agents.git)
 #   LLM_BACKENDS     pip extras to install        (default: vllm,dev)
-#   VENV_PATH        Conda env path (auto-detected after Phase 1 if not set)
+#   INSTALL_ROOT     Root holding env + all build deps (default: HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Frontier[-ROCm72])
+#   VENV_PATH        Conda env path                (default: INSTALL_ROOT/hydragnn_venv[_rocm72])
 #   ROCM_VERSION     ROCm version to use: "7.1" (default) or "7.2"
 #                    Equivalent to passing --rocm72 flag.
 # =============================================================================
@@ -74,10 +75,16 @@ LLM_BACKENDS="${LLM_BACKENDS:-vllm,dev}"
 # ROCm version selection (default: 7.1; pass --rocm72 or set ROCM_VERSION=7.2)
 ROCM_VERSION="${ROCM_VERSION:-7.1}"
 
-# Auto-detect venv path: the HydraGNN Frontier installer places it here
-# (overridden below once ROCM_VERSION is known if not explicitly set)
-VENV_PATH_DEFAULT_71="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv"
-VENV_PATH_DEFAULT_72="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72"
+# INSTALL_ROOT is the single source of truth for where the conda env AND all
+# HydraGNN dependency build trees live (mirrors the Aurora/Perlmutter
+# installers). The Frontier sub-installer drops its build dirs under
+# INSTALL_ROOT and nests the venv inside it. ROCm 7.1 and 7.2 use distinct
+# install roots / venv names. VENV_PATH is DERIVED from INSTALL_ROOT (resolved
+# below once ROCM_VERSION is known) so overriding VENV_PATH alone can never
+# relocate the dependency build trees.
+INSTALL_ROOT_DEFAULT_71="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Frontier"
+INSTALL_ROOT_DEFAULT_72="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72"
+INSTALL_ROOT="${INSTALL_ROOT:-}"
 VENV_PATH="${VENV_PATH:-}"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -89,13 +96,15 @@ for arg in "$@"; do
     [[ "$arg" == "--rocm72" ]] && ROCM_VERSION="7.2"
 done
 
-# Set VENV_PATH default based on selected ROCm version
-if [[ -z "$VENV_PATH" ]]; then
-    if [[ "$ROCM_VERSION" == "7.2" ]]; then
-        VENV_PATH="$VENV_PATH_DEFAULT_72"
-    else
-        VENV_PATH="$VENV_PATH_DEFAULT_71"
-    fi
+# Resolve INSTALL_ROOT (and the venv nested inside it) for the selected ROCm
+# version. VENV_PATH is derived from INSTALL_ROOT so the env and all build deps
+# always stay together under one root.
+if [[ "$ROCM_VERSION" == "7.2" ]]; then
+    INSTALL_ROOT="${INSTALL_ROOT:-$INSTALL_ROOT_DEFAULT_72}"
+    VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv_rocm72}"
+else
+    INSTALL_ROOT="${INSTALL_ROOT:-$INSTALL_ROOT_DEFAULT_71}"
+    VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
 fi
 
 # ── Step 0: Load Frontier modules ─────────────────────────────────────────────
@@ -155,15 +164,21 @@ if [[ "$ROCM_VERSION" == "7.2" ]]; then
     [[ -f "$SC_INSTALLER" ]] || die "HydraGNN Frontier ROCm 7.2 installer not found: ${SC_INSTALLER}"
     log "Running HydraGNN Frontier ROCm 7.2 installer (this takes ~1-2 hours)..."
     log "Installer: ${SC_INSTALLER}"
+    log "INSTALL_ROOT=${INSTALL_ROOT}"
+    log "VENV_PATH=${VENV_PATH}"
     ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
-        && bash "hydragnn_installation_bash_script_frontier-rocm72.sh" )
+        && INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" \
+           bash "hydragnn_installation_bash_script_frontier-rocm72.sh" )
 else
     SC_INSTALLER="${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_frontier-rocm71.sh"
     [[ -f "$SC_INSTALLER" ]] || die "HydraGNN Frontier installer not found: ${SC_INSTALLER}"
     log "Running HydraGNN Frontier ROCm 7.1 installer (this takes ~1-2 hours)..."
     log "Installer: ${SC_INSTALLER}"
+    log "INSTALL_ROOT=${INSTALL_ROOT}"
+    log "VENV_PATH=${VENV_PATH}"
     ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
-        && bash "hydragnn_installation_bash_script_frontier-rocm71.sh" )
+        && INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" \
+           bash "hydragnn_installation_bash_script_frontier-rocm71.sh" )
 fi
 log "HydraGNN environment build complete."
 
