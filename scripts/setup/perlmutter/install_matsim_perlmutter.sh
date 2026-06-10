@@ -25,10 +25,13 @@
 #   VENV_PATH         Target conda env path            (default: HydraGNN-Installation-Perlmutter/hydragnn_venv)
 #   PYTHON_VERSION    Python version for env creation  (default: 3.11)
 #   EXPECTED_CUDA_MM  CUDA major.minor                 (default: 12.9)
-#   TORCH_CUDA_TAG    PyTorch wheel tag                (default: cu129)
+#   TORCH_CUDA_TAG    PyTorch wheel tag                (default: cu128)
+#   PYG_WHL_URL       PyG wheel index URL              (default: torch-2.8.0+cu128)
 #   TORCH_CUDA_ARCH   GPU arch list                    (default: 8.0)
 #   MAX_JOBS          Build parallelism                (default: 16)
 #   LLM_BACKENDS      matsim extras                    (default: dev)
+#   INSTALL_LLM_EXTRAS Install huggingface/transformers extras (default: 0)
+#   INSTALL_PYXTAL     Install optional pyxtal stack    (default: 0)
 #   INSTALL_VLLM_SERVER  Install vLLM package          (default: 0)
 # =============================================================================
 set -euo pipefail
@@ -48,10 +51,13 @@ PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
 EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
 # Pin to HydraGNN's torch==2.11.0 wheels (published as cu129). cu129 binaries
 # match the loaded cudatoolkit/12.9 module exactly.
-TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu129}"
+TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu128}"
+PYG_WHL_URL="${PYG_WHL_URL:-https://data.pyg.org/whl/torch-2.8.0+cu128.html}"
 TORCH_CUDA_ARCH="${TORCH_CUDA_ARCH:-8.0}"
 MAX_JOBS="${MAX_JOBS:-16}"
 LLM_BACKENDS="${LLM_BACKENDS:-dev}"
+INSTALL_LLM_EXTRAS="${INSTALL_LLM_EXTRAS:-0}"
+INSTALL_PYXTAL="${INSTALL_PYXTAL:-0}"
 INSTALL_VLLM_SERVER="${INSTALL_VLLM_SERVER:-0}"
 
 # -- Helpers ------------------------------------------------------------------
@@ -205,11 +211,15 @@ pip_retry "langchain-core>=0.3.0" "pytest>=8.0" "pytest-cov>=5.0"
 log "Ensuring runtime dependencies used by fused HydraGNN path..."
 pip_retry "scikit-learn==1.5.1" "vesin==0.4.2"
 
-log "Installing LLM tooling extras (huggingface_hub CLI + transformers + accelerate)..."
-# Cap huggingface_hub<1.0: transformers<4.58 (and thus our 4.45..4.57 floor)
-# requires huggingface-hub<1.0. Pinned here to keep the resolver from picking
-# up the breaking 1.x line (e.g. 1.15.0) that ships with newer fairchem-core.
-pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0" "accelerate>=1.13"
+if [[ "${INSTALL_LLM_EXTRAS}" == "1" ]]; then
+    log "INSTALL_LLM_EXTRAS=1 -> installing LLM tooling extras (huggingface_hub + transformers + accelerate)..."
+    # Cap huggingface_hub<1.0: transformers<4.58 (and thus our 4.45..4.57 floor)
+    # requires huggingface-hub<1.0. Pinned here to keep the resolver from picking
+    # up the breaking 1.x line (e.g. 1.15.0) that ships with newer fairchem-core.
+    pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0" "accelerate>=1.13"
+else
+    log "INSTALL_LLM_EXTRAS=0 -> skipping optional LLM tooling extras"
+fi
 
 # pyXtal (optional, used by matsim_agents.discovery.seeds for random-symmetry
 # crystal generation when no AFLOW prototype matches the target composition).
@@ -218,8 +228,12 @@ pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0" "accelerate>=
 # non-fatal: pyxtal's transitive deps (notably pyshtools) sometimes fail to
 # build on HPC systems without a working Fortran toolchain; the discovery
 # code already warns and skips random search cleanly when pyxtal is missing.
-log "Installing pyxtal (optional, for random-symmetry seed generation)..."
-pip_retry "pyxtal>=0.6" || warn "pyxtal install failed; random-symmetry seed generation will be unavailable."
+if [[ "${INSTALL_PYXTAL}" == "1" ]]; then
+    log "INSTALL_PYXTAL=1 -> installing pyxtal (optional random-symmetry seed generation)..."
+    pip_retry "pyxtal>=0.6" || warn "pyxtal install failed; random-symmetry seed generation will be unavailable."
+else
+    log "INSTALL_PYXTAL=0 -> skipping optional pyxtal install"
+fi
 
 if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     log "INSTALL_VLLM_SERVER=1 -> installing vLLM server package"
@@ -227,21 +241,47 @@ if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
 fi
 
 # -- Re-assert HydraGNN-pinned versions ----------------------------------------
-# matsim-agents and its extras pull transitive deps (typer→click, ase→matplotlib, ...)
-# that may upgrade packages HydraGNN pins. Reinstall HydraGNN's base requirements
-# so the final environment matches HydraGNN's source-of-truth pins exactly.
+# matsim-agents and its extras can drift HydraGNN pins via transitive deps.
+# Re-assert strict torch/PyG/base pin files so every scripted rebuild converges
+# to HydraGNN's version contract.
 HYDRAGNN_BASE_REQ="${HYDRAGNN_DIR}/requirements-base.txt"
+HYDRAGNN_TORCH_REQ="${HYDRAGNN_DIR}/requirements-torch.txt"
+HYDRAGNN_PYG_REQ="${HYDRAGNN_DIR}/requirements-pyg.txt"
+
+if [[ -f "${HYDRAGNN_TORCH_REQ}" ]]; then
+    log "Re-asserting HydraGNN torch pins from ${HYDRAGNN_TORCH_REQ}"
+    # torch/vision/audio wheels come from the PyTorch CUDA index; non-torch deps
+    # in the same file (e.g., e3nn/torchmetrics) resolve from PyPI.
+    pip_retry --index-url "https://download.pytorch.org/whl/${TORCH_CUDA_TAG}" \
+        --extra-index-url https://pypi.org/simple \
+        -r "${HYDRAGNN_TORCH_REQ}"
+fi
+
+if [[ -f "${HYDRAGNN_PYG_REQ}" ]]; then
+    log "Re-asserting HydraGNN PyG pins from ${HYDRAGNN_PYG_REQ}"
+    # Prefer prebuilt ABI-matched wheels for the selected torch/CUDA combo.
+    pip_retry --find-links "${PYG_WHL_URL}" -r "${HYDRAGNN_PYG_REQ}"
+fi
+
 if [[ -f "${HYDRAGNN_BASE_REQ}" ]]; then
     log "Re-asserting HydraGNN base pins from ${HYDRAGNN_BASE_REQ}"
     pip_retry -r "${HYDRAGNN_BASE_REQ}"
 fi
+
+log "Running pip dependency consistency check..."
+pip check
 
 # -- Verification ---------------------------------------------------------------
 log "Verifying installation..."
 python -c "import torch; print(f'PyTorch: {torch.__version__}')"
 python -c "import hydragnn; print('HydraGNN import: OK')"
 python -c "import matsim_agents; print('matsim-agents import: OK')"
-python -c "import huggingface_hub, transformers, accelerate; print('LLM tooling imports: OK')"
+
+if [[ "${INSTALL_LLM_EXTRAS}" == "1" ]]; then
+    python -c "import huggingface_hub, transformers, accelerate; print('LLM tooling imports: OK')"
+else
+    log "Skipping LLM tooling import verification (INSTALL_LLM_EXTRAS=0)"
+fi
 
 # -- Summary -------------------------------------------------------------------
 log "================================================================"

@@ -64,7 +64,7 @@ source setup_matsim_perlmutter.sh --gpu
 
 **Environment used:** 
 ```
-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 ```
 
 ### `install_matsim_perlmutter.sh` (Fresh Installation)
@@ -364,7 +364,7 @@ cd <work_dir_with_INCAR_POSCAR_KPOINTS_POTCAR>
 - Running on a Perlmutter login or compute node
 - Existing HydraGNN environment at:
   ```
-  /global/cfs/projectdirs/amsc001/cm2us/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+  $HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
   ```
 
 ### Full Installation (`install_matsim_perlmutter.sh`)
@@ -444,7 +444,7 @@ You must be running on a Perlmutter login node. The module system is not availab
 ### "HydraGNN virtual environment not found" (Quick Setup)
 Ensure the shared HydraGNN environment exists at:
 ```
-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 ```
 
 Contact the project maintainers if it needs to be re-created.
@@ -456,7 +456,7 @@ bash install_matsim_perlmutter.sh --gpu
 ```
 Default expected path:
 ```
-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 ```
 
 ### CUDA not available

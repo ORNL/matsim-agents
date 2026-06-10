@@ -21,17 +21,22 @@ LOCAL_VENV="${MATSIM_AGENTS_ROOT}/perlmutter_venv"
 
 # Default install/runtime env path (matches install_matsim_perlmutter.sh)
 SHARED_VENV="${HYDRAGNN_ROOT}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
-PREFERRED_VENV="${MATSIM_PERLMUTTER_VENV:-${SHARED_VENV}}"
 
-# Choose which environment to use (prefer explicit/default shared path)
-if [[ -d "${PREFERRED_VENV}" ]]; then
-    HYDRAGNN_VENV="${PREFERRED_VENV}"
-    ENV_SOURCE="preferred"
-elif [[ -d "${LOCAL_VENV}" ]]; then
+# Choose which environment to use:
+# 1) explicit override via MATSIM_PERLMUTTER_VENV
+# 2) local env in this repo (preferred for local development)
+# 3) shared HydraGNN env
+if [[ -n "${MATSIM_PERLMUTTER_VENV:-}" ]]; then
+    HYDRAGNN_VENV="${MATSIM_PERLMUTTER_VENV}"
+    ENV_SOURCE="override"
+elif [[ -d "${LOCAL_VENV}" || -L "${LOCAL_VENV}" ]]; then
     HYDRAGNN_VENV="${LOCAL_VENV}"
-    ENV_SOURCE="legacy-local"
+    ENV_SOURCE="local"
+elif [[ -d "${SHARED_VENV}" ]]; then
+    HYDRAGNN_VENV="${SHARED_VENV}"
+    ENV_SOURCE="shared"
 else
-    HYDRAGNN_VENV="${PREFERRED_VENV}"
+    HYDRAGNN_VENV="${LOCAL_VENV}"
     ENV_SOURCE="missing"
 fi
 
