@@ -22,7 +22,8 @@
 #   HYDRAGNN_REPO     HydraGNN git remote              (default: ORNL/HydraGNN)
 #   HYDRAGNN_BRANCH   HydraGNN branch                  (default: main)
 #   MATSIM_REPO       matsim-agents git remote         (default: ORNL/matsim-agents)
-#   VENV_PATH         Target conda env path            (default: HydraGNN-Installation-Perlmutter/hydragnn_venv)
+#   INSTALL_ROOT      Root holding env + all build deps (default: HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter)
+#   VENV_PATH         Target conda env path            (default: INSTALL_ROOT/hydragnn_venv)
 #   PYTHON_VERSION    Python version for env creation  (default: 3.11)
 #   EXPECTED_CUDA_MM  CUDA major.minor                 (default: 12.9)
 #   TORCH_CUDA_TAG    PyTorch wheel tag                (default: cu128)
@@ -45,8 +46,15 @@ HYDRAGNN_REPO="${HYDRAGNN_REPO:-https://github.com/ORNL/HydraGNN.git}"
 HYDRAGNN_BRANCH="${HYDRAGNN_BRANCH:-main}"
 MATSIM_REPO="${MATSIM_REPO:-https://github.com/ORNL/matsim-agents.git}"
 
-DEFAULT_VENV_PATH="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
-VENV_PATH="${VENV_PATH:-${DEFAULT_VENV_PATH}}"
+# INSTALL_ROOT is the single source of truth for where ALL build artifacts and
+# the conda env live. The HydraGNN sub-installer drops its dependency build
+# trees (ADIOS2, MPI4PY, DDStore, GPTL, DeepHyper, PyG) directly under
+# INSTALL_ROOT, and the venv nests inside it by default. Deriving VENV_PATH from
+# INSTALL_ROOT (rather than the reverse) means overriding only VENV_PATH can
+# never scatter the build dirs into an unrelated parent directory.
+DEFAULT_INSTALL_ROOT="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
+INSTALL_ROOT="${INSTALL_ROOT:-${DEFAULT_INSTALL_ROOT}}"
+VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
 EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
 # Pin to HydraGNN's torch==2.11.0 wheels (published as cu129). cu129 binaries
@@ -155,7 +163,9 @@ fi
 SC_INSTALLER="${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_perlmutter.sh"
 [[ -f "${SC_INSTALLER}" ]] || die "HydraGNN Perlmutter installer not found: ${SC_INSTALLER}"
 
-INSTALL_ROOT="$(dirname "${VENV_PATH}")"
+# INSTALL_ROOT is resolved at the top of this script (build deps + env live
+# here). Do NOT re-derive it from VENV_PATH, or overriding VENV_PATH alone would
+# scatter the dependency build trees into VENV_PATH's parent directory.
 mkdir -p "${INSTALL_ROOT}"
 
 log "Running HydraGNN Perlmutter installer (Frontier-style delegated Phase 1)..."
