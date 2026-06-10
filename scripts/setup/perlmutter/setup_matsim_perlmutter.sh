@@ -16,27 +16,28 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 MATSIM_AGENTS_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-$(cd "${MATSIM_AGENTS_ROOT}/.." && pwd)/HydraGNN}"
 
-# Legacy local env path (kept for backward compatibility)
-LOCAL_VENV="${MATSIM_AGENTS_ROOT}/perlmutter_venv"
-
-# Default install/runtime env path (matches install_matsim_perlmutter.sh)
+# Canonical install/runtime env path (matches install_matsim_perlmutter.sh:
+# the venv lives inside HydraGNN's install root alongside its build deps).
 SHARED_VENV="${HYDRAGNN_ROOT}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
+
+# Legacy local env path (deprecated; only used as a last-resort fallback).
+LOCAL_VENV="${MATSIM_AGENTS_ROOT}/perlmutter_venv"
 
 # Choose which environment to use:
 # 1) explicit override via MATSIM_PERLMUTTER_VENV
-# 2) local env in this repo (preferred for local development)
-# 3) shared HydraGNN env
+# 2) canonical shared env inside HydraGNN (matches the installer)
+# 3) legacy local env in this repo (backward compatibility only)
 if [[ -n "${MATSIM_PERLMUTTER_VENV:-}" ]]; then
     HYDRAGNN_VENV="${MATSIM_PERLMUTTER_VENV}"
     ENV_SOURCE="override"
-elif [[ -d "${LOCAL_VENV}" || -L "${LOCAL_VENV}" ]]; then
-    HYDRAGNN_VENV="${LOCAL_VENV}"
-    ENV_SOURCE="local"
 elif [[ -d "${SHARED_VENV}" ]]; then
     HYDRAGNN_VENV="${SHARED_VENV}"
     ENV_SOURCE="shared"
-else
+elif [[ -d "${LOCAL_VENV}" || -L "${LOCAL_VENV}" ]]; then
     HYDRAGNN_VENV="${LOCAL_VENV}"
+    ENV_SOURCE="local"
+else
+    HYDRAGNN_VENV="${SHARED_VENV}"
     ENV_SOURCE="missing"
 fi
 

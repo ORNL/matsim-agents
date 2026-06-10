@@ -131,14 +131,20 @@ module names differ from the defaults.
 - `transformers` + `accelerate`
 - Optional: `vllm` server package when `INSTALL_VLLM_SERVER=1`
 
-**Environment path (default):**
+**Install root + environment path (default):**
 ```
-$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+INSTALL_ROOT = $HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
+VENV_PATH    = $INSTALL_ROOT/hydragnn_venv
 ```
-Override with `VENV_PATH=/custom/path` when needed.
+`INSTALL_ROOT` is the single source of truth: the conda env AND all HydraGNN
+dependency build trees (ADIOS2, MPI4PY, DDStore, GPTL, DeepHyper, PyG) live
+inside it. Override `INSTALL_ROOT=/custom/path` to relocate everything together.
+`VENV_PATH` defaults to `$INSTALL_ROOT/hydragnn_venv`; override it alone only to
+place the env elsewhere (build deps still stay under `INSTALL_ROOT`).
 
-Quick setup (`setup_matsim_perlmutter.sh`) prefers this shared path, but will
-fall back to legacy local `matsim-agents/perlmutter_venv` if present.
+Quick setup (`setup_matsim_perlmutter.sh`) prefers this shared in-HydraGNN path,
+falling back to the legacy local `matsim-agents/perlmutter_venv` only if the
+shared env is absent.
 ### `job_perlmutter.sh`
 Example SLURM job submission script with proper environment setup.
 
