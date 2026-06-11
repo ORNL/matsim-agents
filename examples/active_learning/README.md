@@ -14,6 +14,54 @@ Surrogate selection is controlled by the `mlp` block in the AL config:
 MLP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
 ```
 
+## Methodology
+
+Each iteration of the loop performs four steps:
+
+1. **Cheap MD with the surrogate.** Short molecular-dynamics trajectories are
+   run from the seed structures using the MLP surrogate (HydraGNN or UMA) as
+   the ASE calculator — *not* DFT. The driver is ASE's `Langevin` (NVT) by
+   default (`NVTBerendsen` / `VelocityVerlet` are alternatives), started from
+   Maxwell–Boltzmann velocities at `md.temperature_K`. The heat-up deliberately
+   drives the (intentionally un-relaxed) seeds off their idealised positions to
+   explore configuration space at MLP cost.
+
+2. **Detect high-uncertainty snapshots.** Every MD snapshot is scored by a
+   force-disagreement uncertainty (in eV/Å): `ensemble` (std across ≥2
+   independently trained models), `mc_dropout` (std across stochastic forward
+   passes), `ensemble_then_dropout`, or `random` (baseline). The top
+   `acquisition.n_select` most-uncertain frames are kept, optionally after a
+   greedy farthest-point **diversity filter** so DFT is not wasted on
+   near-duplicate structures.
+
+3. **Single-point DFT labelling — no geometry optimization.** The selected
+   frames are labelled with first-principles DFT (VASP or Quantum ESPRESSO),
+   computing energy, forces, and stress **at the exact MD geometry**. These are
+   single-point calculations with **frozen ions**: VASP uses `NSW=0` /
+   `IBRION=-1` and QE uses `calculation='scf'`. The geometry is deliberately
+   *not* relaxed — the whole point is to label the off-equilibrium,
+   high-uncertainty configuration the surrogate is unsure about; relaxing it
+   would move the atoms back toward equilibrium and discard exactly the
+   information AL is trying to capture.
+
+4. **Augment the dataset and retrain.** Converged DFT results are appended to a
+   cumulative `dataset.extxyz` (each frame tagged with `al_iteration` and
+   `dft_backend`), and HydraGNN is retrained by resuming from the previous
+   iteration's checkpoint. The updated surrogate then drives the next
+   iteration's MD, closing the loop. (With a frozen UMA foundation model,
+   retraining is skipped and the labels accumulate for offline fine-tuning.)
+
+```mermaid
+flowchart LR
+  S[Seed structures] --> MD[1. Cheap MD<br/>HydraGNN/UMA surrogate]
+  MD --> UQ[2. Score uncertainty<br/>ensemble / MC-dropout]
+  UQ --> SEL[Select top-K<br/>+ diversity filter]
+  SEL --> DFT[3. Single-point DFT<br/>VASP/QE · frozen ions]
+  DFT --> DS[4. Append to dataset.extxyz]
+  DS --> RT[Retrain HydraGNN<br/>resume from checkpoint]
+  RT -->|next iteration| MD
+```
+
 ## How this relates to other workflows
 
 The repository now exposes several connected workflows. This README documents
