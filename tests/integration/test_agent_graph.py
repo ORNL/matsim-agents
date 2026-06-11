@@ -1,4 +1,4 @@
-"""Integration tests for the agent graph (planner → executor → analyst).
+"""Integration tests for the agent graph (planner -> executor -> uq_gate -> analyst).
 
 All tests use FakeListChatModel or bypass the LLM entirely so no GPU,
 model weights, or network access is required.
@@ -161,6 +161,17 @@ class TestAnalystNode:
         assert result["analysis"] is not None
         assert "-5.432" in result["analysis"]
 
+    def test_deterministic_summary_includes_handoff_events(self, fake_relaxation_result):
+        from matsim_agents.agents.analyst import _deterministic_summary
+
+        state = _state(
+            results=[fake_relaxation_result],
+            handoff_events=["AL handoff DRY-RUN triggered (...)"],
+        )
+        summary = _deterministic_summary(state)
+        assert "AL handoff events" in summary
+        assert "DRY-RUN" in summary
+
 
 # ── graph routing ─────────────────────────────────────────────────────────────
 
@@ -174,13 +185,13 @@ class TestGraphRouting:
         state = _state(pending_tasks=[TaskSpec(structure_path="a.vasp")], iteration=0)
         assert _route_after_executor(state) == "executor"
 
-    def test_routes_to_analyst_when_no_pending(self):
+    def test_routes_to_uq_gate_when_no_pending(self):
         from matsim_agents.graph import _route_after_executor
 
         state = _state(pending_tasks=[], iteration=0)
-        assert _route_after_executor(state) == "analyst"
+        assert _route_after_executor(state) == "uq_gate"
 
-    def test_routes_to_analyst_when_max_iterations_hit(self):
+    def test_routes_to_uq_gate_when_max_iterations_hit(self):
         from matsim_agents.graph import _route_after_executor
 
         state = _state(
@@ -188,7 +199,7 @@ class TestGraphRouting:
             iteration=5,
             max_iterations=5,
         )
-        assert _route_after_executor(state) == "analyst"
+        assert _route_after_executor(state) == "uq_gate"
 
 
 # ── full graph end-to-end (executor mocked) ───────────────────────────────────

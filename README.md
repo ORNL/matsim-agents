@@ -44,6 +44,10 @@ plugged in via the same interfaces.
 
 ## Architecture
 
+Reusable standalone workflow graphics:
+- [docs/workflows/agentic-ai-workflow.md](docs/workflows/agentic-ai-workflow.md)
+- [docs/workflows/agentic-ai-workflow-slides.md](docs/workflows/agentic-ai-workflow-slides.md)
+
 ```
                 ┌──────────────────────────────────────────────┐
                 │                  USER                        │
@@ -53,7 +57,8 @@ plugged in via the same interfaces.
                 ┌───────────────────────▼──────────────────────┐
                 │         LangGraph orchestration layer         │
                 │                                               │
-                │  (A) run: planner -> executor -> analyst      │
+                │  (A) run: planner -> executor -> uq_gate      │
+                │      -> [optional AL handoff] -> analyst      │
                 │  (B) supervisor-run: prepare -> explore       │
                 │      -> evaluate_uq -> [optional AL handoff]  │
                 │      -> summarize                              │
@@ -72,6 +77,34 @@ plugged in via the same interfaces.
                 │   pymatgen (AFLOW prototype encyclopedia)    │
                 │   pyXtal (random symmetry-aware search)      │
                 └──────────────────────────────────────────────┘
+```
+
+```mermaid
+flowchart TD
+    U[User objective or chat dialogue]
+    U --> R[run graph]
+    U --> C[chat REPL]
+    U --> S[supervisor graph]
+
+    subgraph RPATH[Core run path]
+      RP[planner] --> RE[executor]
+      RE --> RU[uq_gate]
+      RU -->|high confidence| RA[analyst]
+      RU -->|low confidence + policy enabled| AL[active learning loop]
+      AL --> RA
+    end
+
+    subgraph SPATH[Supervisor path]
+      SP[prepare] --> SX[explore]
+      SX --> SU[evaluate_uq]
+      SU -->|low confidence + policy enabled| AL
+      SU -->|otherwise| SS[summarize]
+    end
+
+    subgraph CPATH[Chat path]
+      CC[composition detection / optional relax] --> CU[uq policy]
+      CU -->|low confidence + policy enabled| AL
+    end
 ```
 
 ### Capabilities
@@ -134,6 +167,12 @@ plugged in via the same interfaces.
 - **Two complementary graph entry points**:
   - `matsim-agents run` for planner-executor-analyst task execution.
   - `matsim-agents supervisor-run` for discovery exploration + UQ-based decisioning + optional AL handoff.
+- **Surrogate backend switch for AL/supervisor flows**: choose HydraGNN or
+  UMA in the same YAML via `mlp.backend` (commonly
+  `backend: ${MLP_BACKEND:-hydragnn}`) and run with:
+  - `matsim-agents al run <config.yaml>` (HydraGNN default)
+  - `MLP_BACKEND=uma matsim-agents al run <config.yaml>` (frozen UMA)
+  - `MLP_BACKEND=uma matsim-agents supervisor-run <composition> ...` (UMA in supervisor path)
 
 ## Workflow selection matrix
 
@@ -141,17 +180,17 @@ Use this table to choose the right entry point quickly.
 
 | Goal | Recommended entry point | Required inputs | Typical outputs |
 |---|---|---|---|
-| One-shot objective execution with planning and summary | `matsim-agents run` | natural-language objective, `--logdir`, `--mlp-checkpoint` | planner/executor/analyst result in terminal; relaxed structures and logs |
+| One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective, `--logdir`, `--mlp-checkpoint`, optional AL handoff flags | planner/executor/UQ/analyst result; optional AL handoff + JSONL audit |
 | Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--logdir`, `--mlp-checkpoint`, LLM provider/model | chat transcript + discovery artifacts under `output_dir/discovery/` |
 | Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
 | Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--logdir`, `--mlp-checkpoint`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
-| Standalone active-learning loop (MD -> UQ -> DFT -> retrain) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlp`, `md`, `acquisition`, `dft`, `trainer`, `loop`) | iteration state dirs, dataset, optional retrained model logdirs |
+| Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlp`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `MLP_BACKEND=uma` | iteration state dirs, dataset, optional retrained model logdirs |
 | Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
 | Paper-case feasibility check without iterative AL | `python examples/paper_cases/singlepass.py --case <name>` | case name, `MLP_LOGDIR`, optional `--dft` | per-case relaxed/ranked structures, optional DFT single-point validation |
 
 Notes:
 
-- `chat` and `supervisor-run` can both escalate to AL using `--al-config` plus UQ policy flags.
+- `run`, `chat`, and `supervisor-run` can escalate to AL using `--al-config` plus UQ policy flags.
 - Handoff audit artifacts default to `<output_dir>/discovery/al_handoff_events.jsonl` unless overridden.
 
 ### Minimum viable commands
@@ -159,11 +198,20 @@ Notes:
 Use these as starter templates; replace paths with your environment.
 
 ```bash
-# 1) Core graph: planner -> executor -> analyst
+# 1) Core graph: planner -> executor -> uq_gate -> analyst
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
   --logdir /path/to/hydragnn_logdir \
   --mlp-checkpoint /path/to/mlp_branch_weights.pt
+
+# 1b) Core graph with UQ-triggered AL handoff planning
+matsim-agents run \
+  "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
+  --logdir /path/to/hydragnn_logdir \
+  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --trigger-al-handoff \
+  --al-config examples/active_learning/al_config.example.yaml \
+  --al-dry-run
 
 # 2) Interactive discovery chat
 matsim-agents chat \
@@ -180,6 +228,9 @@ matsim-agents supervisor-run Li2MnO3 \
 # 4) Standalone active learning run
 matsim-agents al validate-config examples/active_learning/al_config.example.yaml
 matsim-agents al run examples/active_learning/al_config.example.yaml
+
+# 4b) Same AL config, UMA surrogate instead of HydraGNN
+MLP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
 
 # 5) Paper-case single pass
 python examples/paper_cases/singlepass.py --case lifepo4
@@ -583,7 +634,8 @@ table.
 The repository currently exposes two LangGraph workflows that share the
 same numerical kernels (discovery wrapper, relaxations, AL loop):
 
-- **Core agent graph** (`matsim-agents run`): planner -> executor -> analyst.
+- **Core agent graph** (`matsim-agents run`): planner -> executor -> uq_gate -> analyst,
+  with optional run-path AL handoff when UQ policy is triggered.
 - **Supervisor graph** (`matsim-agents supervisor-run`):
   prepare composition -> explore composition -> evaluate UQ -> optional
   active-learning handoff -> summarize.
@@ -593,7 +645,7 @@ restart-friendly HPC kernels for heavy computation.
 
 ### Core agent graph
 
-Three nodes share a typed `MatSimState`:
+Four nodes share a typed `MatSimState`:
 
 - **planner** — turns the objective into a list of `TaskSpec` items
   (kinds: `relax`, `analyze`, `report`). Uses the LLM with structured
@@ -602,8 +654,14 @@ Three nodes share a typed `MatSimState`:
   (currently `relax_structure`), appends a `RelaxationResult` to the
   state, increments `iteration`. Routed back to itself until the queue
   drains or `max_iterations` is reached.
+- **uq_gate** — aggregates branch-weight confidence over relaxation
+  results and applies policy thresholds. If low-confidence criteria are
+  met and handoff is enabled, this node can launch active learning
+  (`--al-config`, `--al-dry-run/--al-run`) and append structured handoff
+  events to the state.
 - **analyst** — summarizes the accumulated results into a human-readable
-  report (LLM-assisted when available, deterministic baseline otherwise).
+  report (LLM-assisted when available, deterministic baseline otherwise),
+  including handoff decisions/events when present.
 
 State is checkpointed via LangGraph's `MemorySaver`, so every node
 transition is replayable and inspectable.
@@ -831,7 +889,7 @@ reply = chat_once(session, "Propose a Pb-free perovskite for PV.")
 ## CLI reference
 
 ```text
-matsim-agents run     OBJECTIVE [options]   # planner -> executor -> analyst
+matsim-agents run     OBJECTIVE [options]   # planner -> executor -> uq_gate -> analyst
 matsim-agents plan    OBJECTIVE             # show the planner's task list
 matsim-agents chat    [options]             # interactive discovery REPL
 matsim-agents supervisor-run COMPOSITION [options]  # discovery -> UQ -> optional AL handoff
@@ -871,6 +929,20 @@ Common options (all commands that touch HydraGNN):
 | `--uq-min-unreliable-fraction FLOAT` | Trigger handoff when the low-confidence fraction exceeds this value. |
 | `--uq-min-relaxations-for-handoff INT` | Minimum number of relaxations before evaluating handoff policy. |
 | `--al-handoff-audit-path PATH` | Optional JSONL path for UQ and handoff audit artifacts. |
+
+`run`-specific:
+
+| Flag | Description |
+|---|---|
+| `OBJECTIVE` | Natural-language task objective for planner/executor. |
+| `--max-iterations INT` | Maximum executor iterations before forcing analysis. |
+| `--trigger-al-handoff / --no-trigger-al-handoff` | Enable or disable UQ-driven AL escalation after run relaxations. |
+| `--al-config PATH` | Base AL YAML used when run-path handoff is triggered. |
+| `--al-dry-run / --al-run` | Plan/report run->AL handoff only, or execute AL loop. |
+| `--uq-top-weight-threshold FLOAT` | Trigger handoff when mean top branch weight is below this value. |
+| `--uq-min-unreliable-fraction FLOAT` | Trigger handoff when low-confidence fraction exceeds this value. |
+| `--uq-min-relaxations-for-handoff INT` | Minimum relaxations before evaluating run-path handoff policy. |
+| `--al-handoff-audit-path PATH` | Optional JSONL path for UQ and run->AL handoff audit artifacts. |
 
 `supervisor-run`-specific:
 
@@ -1206,7 +1278,7 @@ matsim-agents/
 │           └── README-six-model-benchmark.md
 ├── src/matsim_agents/
 │   ├── state.py                  # typed shared LangGraph state
-│   ├── graph.py                  # planner -> executor -> analyst
+│   ├── graph.py                  # planner -> executor -> uq_gate -> analyst
 │   ├── llm.py                    # Ollama | vLLM | OpenAI | Anthropic | HuggingFace
 │   ├── cli.py                    # `matsim-agents run|plan|chat|supervisor-run|al`
 │   ├── supervisor.py             # LangGraph supervisor (discovery -> UQ -> optional AL handoff)
