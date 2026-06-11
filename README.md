@@ -241,6 +241,16 @@ matsim-agents chat \
   --critic-llm-model qwen2.5:14b \
   --peer-review-rounds 2
 
+# 2c) True multi-critic panel mode (multiple critics + cross-critique)
+matsim-agents chat \
+  --logdir /path/to/hydragnn_logdir \
+  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --llm-peer-review \
+  --critic-panel-models "qwen2.5:14b,llama3.1:8b,mistral:7b" \
+  --critic-panel-providers "ollama,ollama,ollama" \
+  --peer-review-rounds 2 \
+  --critic-cross-critique
+
 # 2a) Interactive discovery chat with UMA relaxations
 matsim-agents chat \
   --mlp-backend uma \
