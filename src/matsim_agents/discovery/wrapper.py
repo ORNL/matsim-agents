@@ -32,10 +32,13 @@ class CompositionExplorationResult(BaseModel):
 
 def explore_composition(
     composition: str | Composition,
-    logdir: str,
-    mlp_checkpoint: str,
+    logdir: str | None = None,
+    mlp_checkpoint: str | None = None,
     *,
     output_dir: str,
+    mlp_backend: str = "hydragnn",
+    uma_model_name: str = "uma-s-1p1",
+    uma_task: str = "omat",
     checkpoint: str | None = None,
     optimizer: str = "FIRE",
     maxiter: int = 200,
@@ -101,9 +104,12 @@ def explore_composition(
             result = relax(
                 RelaxStructureInput(
                     structure_path=cand.structure_path,
+                    mlp_backend=mlp_backend,
                     logdir=logdir,
                     mlp_checkpoint=mlp_checkpoint,
                     checkpoint=checkpoint,
+                    uma_model_name=uma_model_name,
+                    uma_task=uma_task,
                     optimizer=optimizer,
                     maxiter=maxiter,
                     maxstep=maxstep,

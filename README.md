@@ -115,7 +115,10 @@ flowchart TD
 - **Optional single-structure relaxation inside discovery chat** via `/relax <structure_path>`.
 - **Discovery-to-active-learning escalation policy**: when branch-weight UQ indicates low confidence, discovery can hand off to AL automatically from the same run.
 - **Structured handoff audit artifacts**: JSONL records of UQ metrics, thresholds, trigger rationale, and action (`not_triggered`, `triggered_dry_run`, `triggered_run`).
-- **HydraGNN-powered structure relaxation** using the fused MLFF + branch-weight MLP stack from `examples/multidataset_hpo_sc26/structure_optimization_ASE.py`.
+- **Selectable surrogate backend for geometry relaxation**:
+  - **HydraGNN** fused MLFF + branch-weight MLP stack (default).
+  - **UMA** (Universal Models for Atoms) via fairchem (`--mlp-backend uma`).
+  - Note: branch-weight UQ is specific to HydraGNN; UMA relaxations do not emit branch-weight metrics.
 - **Unified crystal-phase seed generation** (`matsim_agents.discovery.seeds`)
   combining two complementary sources into one ranked candidate list:
   - **AFLOW prototype decoration** — every entry of the
@@ -204,6 +207,13 @@ matsim-agents run \
   --logdir /path/to/hydragnn_logdir \
   --mlp-checkpoint /path/to/mlp_branch_weights.pt
 
+# 1a) Core graph with UMA relaxation backend (no HydraGNN checkpoints needed)
+matsim-agents run \
+  "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
+  --mlp-backend uma \
+  --uma-model-name uma-s-1p1 \
+  --uma-task omat
+
 # 1b) Core graph with UQ-triggered AL handoff planning
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
@@ -218,10 +228,24 @@ matsim-agents chat \
   --logdir /path/to/hydragnn_logdir \
   --mlp-checkpoint /path/to/mlp_branch_weights.pt
 
+# 2a) Interactive discovery chat with UMA relaxations
+matsim-agents chat \
+  --mlp-backend uma \
+  --uma-model-name uma-s-1p1 \
+  --uma-task omat
+
 # 3) Supervisor orchestration with AL handoff planning
 matsim-agents supervisor-run Li2MnO3 \
   --logdir /path/to/hydragnn_logdir \
   --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --al-config examples/active_learning/al_config.example.yaml \
+  --al-dry-run
+
+# 3a) Supervisor orchestration with UMA relaxations
+matsim-agents supervisor-run Li2MnO3 \
+  --mlp-backend uma \
+  --uma-model-name uma-s-1p1 \
+  --uma-task omat \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 
