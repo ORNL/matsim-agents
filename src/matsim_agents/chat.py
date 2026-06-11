@@ -41,20 +41,23 @@ Guidelines:
 * Justify each proposal with physics/chemistry reasoning: ionic radii,
   oxidation states, expected band gap, magnetic ordering, etc.
 * When you propose a new composition, write the formula clearly so it can
-  be picked up by the system. The system will offer the user the option
-  to run a HydraGNN-driven atomistic exploration of crystal phases for
-  that composition to test chemical and dynamical stability claims.
+    be picked up by the system. The system will offer the user the option
+    to run a surrogate-driven atomistic exploration of crystal phases for
+    that composition to test chemical and dynamical stability claims.
 * Cite established materials when comparing.
 """
 
 
 @dataclass
 class DiscoveryChatConfig:
-    logdir: str
-    mlp_checkpoint: str
+    mlp_backend: str = "hydragnn"
+    logdir: str | None = None
+    mlp_checkpoint: str | None = None
     output_dir: str
     checkpoint: str | None = None
     mlp_device: str = "cuda"
+    uma_model_name: str = "uma-s-1p1"
+    uma_task: str = "omat"
     precision: str | None = None
     mlp_precision: str | None = None
     optimizer: str = "FIRE"
@@ -138,8 +141,11 @@ def _kickoff_exploration(
 
     result = explore_composition(
         composition,
+        mlp_backend=cfg.mlp_backend,
         logdir=cfg.logdir,
         mlp_checkpoint=cfg.mlp_checkpoint,
+        uma_model_name=cfg.uma_model_name,
+        uma_task=cfg.uma_task,
         checkpoint=cfg.checkpoint,
         output_dir=out_dir,
         mlp_device=cfg.mlp_device,
@@ -197,9 +203,12 @@ def _run_single_structure_relaxation(structure_path: str, cfg: DiscoveryChatConf
     result = _run_relaxation(
         RelaxStructureInput(
             structure_path=structure_path,
+            mlp_backend=cfg.mlp_backend,
             logdir=cfg.logdir,
             mlp_checkpoint=cfg.mlp_checkpoint,
             checkpoint=cfg.checkpoint,
+            uma_model_name=cfg.uma_model_name,
+            uma_task=cfg.uma_task,
             output_dir=str(out_dir),
             mlp_device=cfg.mlp_device,
             precision=cfg.precision,

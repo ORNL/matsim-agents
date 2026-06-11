@@ -30,11 +30,14 @@ class SupervisorConfig(BaseModel):
     """Inputs and policy knobs for the supervisor graph."""
 
     composition: str
-    logdir: str
-    mlp_checkpoint: str
+    mlp_backend: str = "hydragnn"
+    logdir: str | None = None
+    mlp_checkpoint: str | None = None
     output_dir: str = "./outputs"
     checkpoint: str | None = None
     mlp_device: str = "cuda"
+    uma_model_name: str = "uma-s-1p1"
+    uma_task: str = "omat"
     precision: str | None = None
     mlp_precision: str | None = None
     optimizer: str = "FIRE"
@@ -126,8 +129,11 @@ def _explore_node(state: SupervisorState) -> dict:
     out_dir = str(Path(cfg.output_dir) / "discovery")
     exploration = explore_composition(
         comp,
+        mlp_backend=cfg.mlp_backend,
         logdir=cfg.logdir,
         mlp_checkpoint=cfg.mlp_checkpoint,
+        uma_model_name=cfg.uma_model_name,
+        uma_task=cfg.uma_task,
         checkpoint=cfg.checkpoint,
         output_dir=out_dir,
         mlp_device=cfg.mlp_device,

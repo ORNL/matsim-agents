@@ -22,19 +22,21 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
     task = state.pending_tasks[0]
     remaining = state.pending_tasks[1:]
     cfg = (config or {}).get("configurable", {}) if config else {}
+    mlp_backend = str(cfg.get("mlp_backend") or os.environ.get("MATSIM_MLP_BACKEND") or "hydragnn")
     logdir = cfg.get("logdir") or os.environ.get("MATSIM_HYDRAGNN_LOGDIR")
     mlp_checkpoint = cfg.get("mlp_checkpoint") or os.environ.get("MATSIM_HYDRAGNN_MLP_CKPT")
     checkpoint = cfg.get("checkpoint") or os.environ.get("MATSIM_HYDRAGNN_CHECKPOINT")
 
-    if not logdir:
-        raise ValueError(
-            "Missing HydraGNN logdir. Provide via run config or set MATSIM_HYDRAGNN_LOGDIR."
-        )
-    if not mlp_checkpoint:
-        raise ValueError(
-            "Missing BranchWeightMLP checkpoint. Provide via run config or set "
-            "MATSIM_HYDRAGNN_MLP_CKPT."
-        )
+    if mlp_backend == "hydragnn":
+        if not logdir:
+            raise ValueError(
+                "Missing HydraGNN logdir. Provide via run config or set MATSIM_HYDRAGNN_LOGDIR."
+            )
+        if not mlp_checkpoint:
+            raise ValueError(
+                "Missing BranchWeightMLP checkpoint. Provide via run config or set "
+                "MATSIM_HYDRAGNN_MLP_CKPT."
+            )
 
     if task.kind != "relax":
         return {
@@ -44,9 +46,14 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
 
     args = RelaxStructureInput(
         structure_path=task.structure_path,
+        mlp_backend=mlp_backend,
         logdir=logdir,
         mlp_checkpoint=mlp_checkpoint,
         checkpoint=checkpoint,
+        uma_model_name=str(
+            cfg.get("uma_model_name") or os.environ.get("MATSIM_UMA_MODEL_NAME") or "uma-s-1p1"
+        ),
+        uma_task=str(cfg.get("uma_task") or os.environ.get("MATSIM_UMA_TASK") or "omat"),
         optimizer=task.optimizer,
         maxiter=task.maxiter,
         maxstep=task.maxstep,

@@ -1,4 +1,4 @@
-"""HydraGNN + ASE structure relaxation tool.
+"""ASE structure relaxation tool with selectable surrogate backend.
 
 This module wraps the workflow implemented in
 ``HydraGNN/examples/multidataset_hpo_sc26/structure_optimization_ASE.py``
@@ -15,7 +15,7 @@ from typing import Literal
 
 import numpy as np
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.state import RelaxationResult
 
@@ -26,11 +26,17 @@ class RelaxStructureInput(BaseModel):
     structure_path: str = Field(
         ..., description="Path to the input structure file (e.g. .vasp, .cif, .xyz)."
     )
-    logdir: str = Field(
-        ..., description="Directory containing the HydraGNN config.json and checkpoint."
+    mlp_backend: Literal["hydragnn", "uma"] = Field(
+        "hydragnn",
+        description="Surrogate backend used by the relaxation tool.",
     )
-    mlp_checkpoint: str = Field(
-        ..., description="Path to the auxiliary BranchWeightMLP checkpoint (.pt)."
+    logdir: str | None = Field(
+        None,
+        description="HydraGNN logdir containing config.json + checkpoint (required for mlp_backend='hydragnn').",
+    )
+    mlp_checkpoint: str | None = Field(
+        None,
+        description="HydraGNN BranchWeightMLP checkpoint (.pt), required for mlp_backend='hydragnn'.",
     )
     checkpoint: str | None = Field(
         None, description="Optional HydraGNN checkpoint filename or absolute path."
@@ -45,6 +51,14 @@ class RelaxStructureInput(BaseModel):
     precision: str | None = None
     mlp_precision: str | None = None
     mlp_device: Literal["cuda", "cpu"] = "cuda"
+    uma_model_name: str = Field(
+        "uma-s-1p1",
+        description="UMA pretrained model name/checkpoint when mlp_backend='uma'.",
+    )
+    uma_task: Literal["omat", "omol"] = Field(
+        "omat",
+        description="UMA task head when mlp_backend='uma'.",
+    )
     random_displacement: bool = False
     random_displacement_scale: float = 0.1
     seed: int = 42
@@ -53,6 +67,15 @@ class RelaxStructureInput(BaseModel):
         description="Where to write the optimized structure, trajectory, and CSV log. "
         "Defaults to the structure's parent directory.",
     )
+
+    @model_validator(mode="after")
+    def _validate_backend_inputs(self):
+        if self.mlp_backend == "hydragnn":
+            if not self.logdir:
+                raise ValueError("mlp_backend='hydragnn' requires logdir.")
+            if not self.mlp_checkpoint:
+                raise ValueError("mlp_backend='hydragnn' requires mlp_checkpoint.")
+        return self
 
 
 def _atoms_to_graph(atoms, graph_attr, radius: float, max_neighbours: int):
@@ -160,8 +183,6 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
     from ase.io import read, write
     from ase.io.trajectory import Trajectory
 
-    from inference_fused import load_fused_stack
-
     structure_path = os.path.abspath(args.structure_path)
     out_dir = (
         os.path.abspath(args.output_dir) if args.output_dir else os.path.dirname(structure_path)
@@ -177,47 +198,65 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
         f"{'_from_initial_randomly_perturbed_structure' if args.random_displacement else ''}{ext}",
     )
 
-    (
-        model,
-        mlp,
-        config,
-        device,
-        autocast_ctx,
-        param_dtype,
-        num_branches,
-        mlp_device,
-        mlp_autocast_ctx,
-        unified_mlp_gnn_stack,
-        _gnn_prec,
-        _mlp_prec,
-    ) = load_fused_stack(
-        args.logdir,
-        args.checkpoint,
-        args.mlp_checkpoint,
-        args.precision,
-        args.mlp_precision,
-        args.mlp_device,
-    )
+    if args.mlp_backend == "hydragnn":
+        from inference_fused import load_fused_stack
 
-    arch = config["NeuralNetwork"]["Architecture"]
-    radius = float(arch.get("radius", 5.0))
-    max_neighbours = int(arch.get("max_neighbours", 20))
+        (
+            model,
+            mlp,
+            config,
+            device,
+            autocast_ctx,
+            param_dtype,
+            num_branches,
+            mlp_device,
+            mlp_autocast_ctx,
+            unified_mlp_gnn_stack,
+            _gnn_prec,
+            _mlp_prec,
+        ) = load_fused_stack(
+            args.logdir,
+            args.checkpoint,
+            args.mlp_checkpoint,
+            args.precision,
+            args.mlp_precision,
+            args.mlp_device,
+        )
 
-    calculator = _build_calculator(
-        model,
-        mlp,
-        radius,
-        max_neighbours,
-        param_dtype,
-        autocast_ctx,
-        device,
-        num_branches,
-        mlp_device,
-        mlp_autocast_ctx,
-        unified_mlp_gnn_stack,
-        args.charge,
-        args.spin,
-    )
+        arch = config["NeuralNetwork"]["Architecture"]
+        radius = float(arch.get("radius", 5.0))
+        max_neighbours = int(arch.get("max_neighbours", 20))
+
+        calculator = _build_calculator(
+            model,
+            mlp,
+            radius,
+            max_neighbours,
+            param_dtype,
+            autocast_ctx,
+            device,
+            num_branches,
+            mlp_device,
+            mlp_autocast_ctx,
+            unified_mlp_gnn_stack,
+            args.charge,
+            args.spin,
+        )
+        uq_note = None
+    else:
+        from matsim_agents.active_learning.calculator import build_uma_calculator
+        from matsim_agents.active_learning.config import UMAConfig
+
+        calculator = build_uma_calculator(
+            UMAConfig(
+                model_name=args.uma_model_name,
+                task=args.uma_task,
+                device=args.mlp_device,
+            ),
+            enable_mc_dropout=False,
+        )
+        num_branches = 0
+        uq_note = "branch-weight UQ unavailable for UMA backend"
 
     atoms = read(structure_path)
     atoms.calc = calculator
@@ -262,7 +301,7 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 energy = atoms.get_potential_energy()
                 forces = atoms.get_forces()
                 max_force = float(np.sqrt((forces**2).sum(axis=1).max()))
-                weights = calculator.last_branch_weights
+                weights = getattr(calculator, "last_branch_weights", None)
                 top_branch = int(np.argmax(weights)) if weights is not None else -1
                 top_weight = float(weights[top_branch]) if weights is not None else float("nan")
 
@@ -311,14 +350,15 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
         final_max_force_eV_per_A=float(max_force),
         num_steps=steps_taken,
         converged=converged,
-        top_branch=top_branch,
-        top_branch_weight=top_weight,
+        top_branch=top_branch if top_branch >= 0 else None,
+        top_branch_weight=top_weight if np.isfinite(top_weight) else None,
+        notes=uq_note,
     )
 
 
 @tool("relax_structure", args_schema=RelaxStructureInput)
 def relax_structure(**kwargs) -> dict:
-    """Relax an atomistic structure with HydraGNN + an ASE optimizer.
+    """Relax an atomistic structure with a selected MLP backend + ASE optimizer.
 
     Returns the path of the optimized structure, trajectory, per-step CSV log,
     and the final energy and maximum force.
