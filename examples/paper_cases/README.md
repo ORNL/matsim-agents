@@ -13,6 +13,22 @@ Every system has **two entry points**:
 
 All paths use `$PROJ_ROOT` = repo root and `$RUNS_ROOT` = scratch directory.
 
+## How these cases map to repo workflows
+
+These paper cases can be executed through three complementary entry points:
+
+- Single pass (`singlepass.py`): one-shot graph execution for a quick sanity
+  check and ranking (no AL retraining loop).
+- Active learning (`matsim-agents al run al_<case>.yaml`): iterative
+  discovery -> UQ/acquisition -> DFT labeling -> retraining loop.
+- Supervisor orchestration (`matsim-agents supervisor-run`): LangGraph control
+  layer that can run discovery exploration, evaluate UQ, and conditionally
+  hand off to AL using a base AL YAML.
+
+The discovery chat path (`matsim-agents chat`) can also feed these cases by
+detecting formulas, optionally running `/relax <structure_path>`, and
+escalating to AL when configured UQ thresholds are crossed.
+
 ---
 
 ## Coverage matrix
@@ -80,11 +96,42 @@ python examples/paper_cases/singlepass.py --case lifepo4 --dft
 # 4) active learning on the same system:
 matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run            examples/paper_cases/al_lifepo4.yaml
+
+# 5) supervisor-driven discovery -> optional AL handoff:
+matsim-agents supervisor-run LiFePO4 \
+  --logdir $MLP_LOGDIR \
+  --mlp-checkpoint best_model.pt \
+  --al-config examples/paper_cases/al_lifepo4.yaml \
+  --al-dry-run
 ```
 
 > **Note:** there is no `run-active-learning-perlmutter.sh` launcher yet (only a
 > Frontier one). On Perlmutter, wrap `matsim-agents al run <config>` in your own
 > `sbatch` script, or run it on an interactive `salloc` GPU node.
+
+> **Integration note:** `--al-dry-run` in `supervisor-run` only reports the
+> planned handoff. Use `--al-run` to actually execute the AL loop.
+
+## Minimum viable commands
+
+```bash
+# 1) Generate seeds for all paper cases
+python examples/paper_cases/singlepass.py --all --seeds-only
+
+# 2) One case, single-pass feasibility run
+python examples/paper_cases/singlepass.py --case lifepo4
+
+# 3) Run one AL case directly
+matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
+matsim-agents al run examples/paper_cases/al_lifepo4.yaml
+
+# 4) Supervisor path with optional AL handoff planning
+matsim-agents supervisor-run LiFePO4 \
+  --logdir "$MLP_LOGDIR" \
+  --mlp-checkpoint best_model.pt \
+  --al-config examples/paper_cases/al_lifepo4.yaml \
+  --al-dry-run
+```
 
 The single-pass runner uses these environment variables:
 

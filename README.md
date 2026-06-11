@@ -28,7 +28,7 @@ plugged in via the same interfaces.
 8. [LLM backends](#llm-backends)
 9. [Downloading models for vLLM](#downloading-models-for-vllm)
 10. [Quick start](#quick-start)
-11. [The agent graph](#the-agent-graph)
+11. [Graph orchestration modes](#graph-orchestration-modes)
 12. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
 13. [Programmatic API](#programmatic-api)
 14. [CLI reference](#cli-reference)
@@ -51,13 +51,12 @@ plugged in via the same interfaces.
                 └───────────────────────┬──────────────────────┘
                                         │
                 ┌───────────────────────▼──────────────────────┐
-                │              LangGraph workflow              │
-                │                                              │
-                │   planner ───► executor ──┐                  │
-                │                  ▲        │                  │
-                │                  └────────┤  while pending   │
-                │                           ▼                  │
-                │                        analyst ──► END       │
+                │         LangGraph orchestration layer         │
+                │                                               │
+                │  (A) run: planner -> executor -> analyst      │
+                │  (B) supervisor-run: prepare -> explore       │
+                │      -> evaluate_uq -> [optional AL handoff]  │
+                │      -> summarize                              │
                 └───────────────────────┬──────────────────────┘
                                         │  tool calls
                 ┌───────────────────────▼──────────────────────┐
@@ -80,6 +79,9 @@ plugged in via the same interfaces.
 - **Multi-agent orchestration** with LangGraph: typed shared state, checkpointed steps, conditional routing, human-in-the-loop gates.
 - **Hypothesis-generation chat** with any local LLM (Qwen 2.5 via Ollama by default).
 - **Automatic composition detection** in user/LLM messages — when a new chemical formula is proposed, the system offers to run a substantial atomistic exploration.
+- **Optional single-structure relaxation inside discovery chat** via `/relax <structure_path>`.
+- **Discovery-to-active-learning escalation policy**: when branch-weight UQ indicates low confidence, discovery can hand off to AL automatically from the same run.
+- **Structured handoff audit artifacts**: JSONL records of UQ metrics, thresholds, trigger rationale, and action (`not_triggered`, `triggered_dry_run`, `triggered_run`).
 - **HydraGNN-powered structure relaxation** using the fused MLFF + branch-weight MLP stack from `examples/multidataset_hpo_sc26/structure_optimization_ASE.py`.
 - **Unified crystal-phase seed generation** (`matsim_agents.discovery.seeds`)
   combining two complementary sources into one ranked candidate list:
@@ -129,6 +131,59 @@ plugged in via the same interfaces.
   shell-style substitution with optional in-file `vars:` block, so the
   same config can be re-targeted across users / scratch dirs / runs
   without editing it.
+- **Two complementary graph entry points**:
+  - `matsim-agents run` for planner-executor-analyst task execution.
+  - `matsim-agents supervisor-run` for discovery exploration + UQ-based decisioning + optional AL handoff.
+
+## Workflow selection matrix
+
+Use this table to choose the right entry point quickly.
+
+| Goal | Recommended entry point | Required inputs | Typical outputs |
+|---|---|---|---|
+| One-shot objective execution with planning and summary | `matsim-agents run` | natural-language objective, `--logdir`, `--mlp-checkpoint` | planner/executor/analyst result in terminal; relaxed structures and logs |
+| Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--logdir`, `--mlp-checkpoint`, LLM provider/model | chat transcript + discovery artifacts under `output_dir/discovery/` |
+| Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
+| Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--logdir`, `--mlp-checkpoint`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
+| Standalone active-learning loop (MD -> UQ -> DFT -> retrain) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlp`, `md`, `acquisition`, `dft`, `trainer`, `loop`) | iteration state dirs, dataset, optional retrained model logdirs |
+| Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
+| Paper-case feasibility check without iterative AL | `python examples/paper_cases/singlepass.py --case <name>` | case name, `MLP_LOGDIR`, optional `--dft` | per-case relaxed/ranked structures, optional DFT single-point validation |
+
+Notes:
+
+- `chat` and `supervisor-run` can both escalate to AL using `--al-config` plus UQ policy flags.
+- Handoff audit artifacts default to `<output_dir>/discovery/al_handoff_events.jsonl` unless overridden.
+
+### Minimum viable commands
+
+Use these as starter templates; replace paths with your environment.
+
+```bash
+# 1) Core graph: planner -> executor -> analyst
+matsim-agents run \
+  "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
+  --logdir /path/to/hydragnn_logdir \
+  --mlp-checkpoint /path/to/mlp_branch_weights.pt
+
+# 2) Interactive discovery chat
+matsim-agents chat \
+  --logdir /path/to/hydragnn_logdir \
+  --mlp-checkpoint /path/to/mlp_branch_weights.pt
+
+# 3) Supervisor orchestration with AL handoff planning
+matsim-agents supervisor-run Li2MnO3 \
+  --logdir /path/to/hydragnn_logdir \
+  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --al-config examples/active_learning/al_config.example.yaml \
+  --al-dry-run
+
+# 4) Standalone active learning run
+matsim-agents al validate-config examples/active_learning/al_config.example.yaml
+matsim-agents al run examples/active_learning/al_config.example.yaml
+
+# 5) Paper-case single pass
+python examples/paper_cases/singlepass.py --case lifepo4
+```
 
 ---
 
@@ -491,6 +546,18 @@ Stability report for AgBiBr6Cs2:
 you> Now suggest a Sb-substituted variant.
 ```
 
+### 3. Supervisor orchestration (discovery -> UQ -> optional AL handoff)
+
+```bash
+matsim-agents supervisor-run Li2MnO3 \
+  --logdir ./multidataset_hpo-BEST6-fp64 \
+  --mlp-checkpoint ./mlp_branch_weights.pt \
+  --al-config examples/active_learning/al_config.example.yaml \
+  --al-dry-run
+```
+
+To execute AL instead of dry-run, replace `--al-dry-run` with `--al-run`.
+
 ### 3. Novelty-only exploration of exotic compositions
 
 For compositions that have no AFLOW prototype match (e.g. 5-element
@@ -511,7 +578,20 @@ table.
 
 ---
 
-## The agent graph
+## Graph orchestration modes
+
+The repository currently exposes two LangGraph workflows that share the
+same numerical kernels (discovery wrapper, relaxations, AL loop):
+
+- **Core agent graph** (`matsim-agents run`): planner -> executor -> analyst.
+- **Supervisor graph** (`matsim-agents supervisor-run`):
+  prepare composition -> explore composition -> evaluate UQ -> optional
+  active-learning handoff -> summarize.
+
+This split keeps decision logic agentic while preserving deterministic,
+restart-friendly HPC kernels for heavy computation.
+
+### Core agent graph
 
 Three nodes share a typed `MatSimState`:
 
@@ -564,8 +644,27 @@ The `chat` REPL is more than a wrapper around the LLM — it is a
      warning) and a dynamical-stability proxy (max residual force),
      keeping the `source` (`prototype` vs `random`) and AFLOW
      `prototype_id` / `space_group` of every candidate in the report.
-5. The summary is fed back into the conversation as a system message so
-   the LLM can refine its hypothesis on the next turn.
+5. The summary is fed back into the conversation as a discovery user-turn
+  payload so the LLM can refine its hypothesis on the next turn.
+
+Discovery chat can also run two optional control actions:
+
+- **Single-structure relaxation command**:
+  - `/relax path/to/structure.vasp`
+- **UQ-based AL handoff** (policy knobs on CLI):
+  - `--trigger-al-handoff/--no-trigger-al-handoff`
+  - `--al-config <base_al_yaml>`
+  - `--al-dry-run/--al-run`
+  - `--uq-top-weight-threshold`
+  - `--uq-min-unreliable-fraction`
+  - `--uq-min-relaxations-for-handoff`
+  - `--al-handoff-audit-path`
+
+If `--al-handoff-audit-path` is not set, handoff events default to:
+
+```
+<output_dir>/discovery/al_handoff_events.jsonl
+```
 
 Output artifacts per composition (under `--output-dir`):
 
@@ -672,7 +771,7 @@ result = explore_composition(
 )
 ```
 
-### Run the LangGraph workflow
+### Run the core LangGraph workflow
 
 ```python
 import uuid
@@ -693,6 +792,23 @@ final = graph.invoke(
     }},
 )
 print(final["analysis"])
+```
+
+### Run the supervisor LangGraph workflow
+
+```python
+from matsim_agents.supervisor import SupervisorConfig, run_supervisor
+
+final = run_supervisor(SupervisorConfig(
+  composition="Li2MnO3",
+  logdir="./multidataset_hpo-BEST6-fp64",
+  mlp_checkpoint="./mlp_branch_weights.pt",
+  output_dir="./outputs",
+  trigger_active_learning_on_high_uq=True,
+  active_learning_config="examples/active_learning/al_config.example.yaml",
+  active_learning_dry_run=True,
+))
+print(final.get("summary"))
 ```
 
 ### Embed the chat loop in your own app
@@ -718,6 +834,7 @@ reply = chat_once(session, "Propose a Pb-free perovskite for PV.")
 matsim-agents run     OBJECTIVE [options]   # planner -> executor -> analyst
 matsim-agents plan    OBJECTIVE             # show the planner's task list
 matsim-agents chat    [options]             # interactive discovery REPL
+matsim-agents supervisor-run COMPOSITION [options]  # discovery -> UQ -> optional AL handoff
 matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
 ```
@@ -747,6 +864,26 @@ Common options (all commands that touch HydraGNN):
 | `--n-random INT` | Number of supplementary pyXtal random structures per composition, in addition to every applicable AFLOW prototype decoration (default `50`). Set to `0` to disable the pyXtal pass; silently degrades to `0` if pyXtal is not installed. |
 | `--random-seed INT` | RNG seed for the pyXtal sampler (reproducibility). |
 | `--auto-confirm / --ask` | Skip the y/N prompt for every detected composition. |
+| `--trigger-al-handoff / --no-trigger-al-handoff` | Enable or disable UQ-driven escalation to active learning. |
+| `--al-config PATH` | Base AL YAML used when handoff is triggered. |
+| `--al-dry-run / --al-run` | Plan/report AL handoff only, or execute AL loop. |
+| `--uq-top-weight-threshold FLOAT` | Trigger handoff when mean top branch weight is below this value. |
+| `--uq-min-unreliable-fraction FLOAT` | Trigger handoff when the low-confidence fraction exceeds this value. |
+| `--uq-min-relaxations-for-handoff INT` | Minimum number of relaxations before evaluating handoff policy. |
+| `--al-handoff-audit-path PATH` | Optional JSONL path for UQ and handoff audit artifacts. |
+
+`supervisor-run`-specific:
+
+| Flag | Description |
+|---|---|
+| `COMPOSITION` | Target composition for one supervisor pass (e.g. `Li2MnO3`). |
+| `--trigger-al-handoff / --no-trigger-al-handoff` | Enable or disable UQ-driven AL handoff policy. |
+| `--al-config PATH` | Base AL YAML used for optional handoff execution. |
+| `--al-dry-run / --al-run` | Dry-run handoff planning or real AL execution. |
+| `--uq-top-weight-threshold FLOAT` | UQ threshold on mean top branch weight. |
+| `--uq-min-unreliable-fraction FLOAT` | UQ threshold on low-confidence fraction. |
+| `--uq-min-relaxations-for-handoff INT` | Min relaxations required before handoff is considered. |
+| `--al-handoff-audit-path PATH` | Optional JSONL path for decision artifacts. |
 
 ---
 
@@ -1071,7 +1208,8 @@ matsim-agents/
 │   ├── state.py                  # typed shared LangGraph state
 │   ├── graph.py                  # planner -> executor -> analyst
 │   ├── llm.py                    # Ollama | vLLM | OpenAI | Anthropic | HuggingFace
-│   ├── cli.py                    # `matsim-agents run|plan|chat|al`
+│   ├── cli.py                    # `matsim-agents run|plan|chat|supervisor-run|al`
+│   ├── supervisor.py             # LangGraph supervisor (discovery -> UQ -> optional AL handoff)
 │   ├── chat.py                   # interactive discovery REPL
 │   ├── agents/
 │   │   ├── planner.py
@@ -1085,7 +1223,7 @@ matsim-agents/
 │   │   └── warmstart_benchmark_vasp.py # HydraGNN warm-start vs cold-start VASP benchmark
 │   └── discovery/
 │       ├── composition.py        # formula parsing
-│       ├── phase_explorer.py     # crystal-phase seed enumeration
+│       ├── seeds.py              # crystal-phase seed generation (AFLOW + pyXtal)
 │       ├── stability.py          # ΔE/atom ranking & |F|max proxy
 │       └── wrapper.py            # explore_composition()
 │   └── active_learning/          # HydraGNN <-> DFT active-learning loop
