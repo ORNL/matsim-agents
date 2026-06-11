@@ -1,0 +1,127 @@
+# =============================================================================
+# Paper test case: Cu-BHT (copper benzenehexathiol) — 2D conductive MOF
+#
+# Scientific motivation (from Zekun Chen, 2026-06-10):
+#   Cu-BHT is a highly conductive 2D metal-organic framework with a kagome-
+#   like copper-sulphur network.  It combines ligand (BHT = C6S6^6-) and a
+#   CuS4 square-planar node.  The stability landscape to explore:
+#     * AA vs AB stacking (van der Waals interlayer coupling)
+#     * Cu1+ vs Cu2+ formal oxidation and spin arrangement
+#     * Structural flexibility of the S–Cu–S angle in response to strain
+#   Key challenge: the BHT ligand is too large for standard AFLOW prototypes,
+#   so 'paths' seed source is used with a user-supplied CIF/extxyz seed plus
+#   n_random random unit cells for vacancy-defect supercells.
+#
+# Seed file:
+#   examples/paper_cases/seeds/cu_bht_monolayer.cif
+#   (place a CIF from ICSD/COD/ChemRxiv or generate from crystallographic data;
+#    MP id mp-630956 is a validated Cu3C6S6 structure)
+#   If the CIF is absent the config falls back to 'compositions' mode.
+#
+# How to run:
+#   matsim-agents al validate-config examples/paper_cases/al_cu_bht_2d.yaml
+# =============================================================================
+
+vars:
+  PROJ_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  RUNS_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/runs
+  HYDRAGNN_DIR: /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/HydraGNN
+  RUN_TAG:      cu-bht-2d-al-001
+
+  SEED_CIF:   ${PROJ_ROOT}/examples/paper_cases/seeds/cu_bht_monolayer.cif
+  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  POTCAR_DIR: /global/cfs/projectdirs/m5216/mlupopa/POTCAR/PBE.54
+
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+mlp:
+  # Surrogate selector — switch backend with one env var, no file edits:
+  #   matsim-agents al run <cfg>                  # HydraGNN (default; retrains each iter)
+  #   MLP_BACKEND=uma matsim-agents al run <cfg>  # frozen UMA foundation model
+  backend: ${MLP_BACKEND:-hydragnn}
+  hydragnn:
+    logdir:         ${INITIAL_LOGDIR}
+    checkpoint:     best_model.pt
+    mlp_checkpoint: null
+    precision:  fp32
+    mlp_device: cuda
+    ensemble_paths: []
+  uma:
+    model_name: uma-s-1p1     # fairchem pretrained model (or local checkpoint path)
+    task_name:  omat          # 2D metal-organic framework; try omol/odac if linker chemistry dominates
+    device:     cuda
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear
+
+md:
+  seed_source:
+    # Use 'paths' if the CIF seed is available; fall back to 'compositions'
+    kind: paths
+    paths:
+      - ${SEED_CIF}
+    # ---- fallback if CIF absent (comment out 'paths' block above and uncomment below) ----
+    # kind: compositions
+    # compositions:
+    #   - Cu3C6S6        # closest compositional proxy in AFLOW prototypes
+    # max_phases_per_composition: 2
+    n_random: 3          # additional random unit cells (supercell variants / defects)
+    random_seed: 21
+  timestep_fs: 0.5       # MOF frameworks are flexible; shorter step for stability
+  n_steps: 200
+  temperature_K: 300.0   # room-temperature sampling; preserve MOF topology
+  thermostat: langevin
+  friction_inv_ps: 0.2
+  sample_every: 10
+  max_force_threshold_eV_per_A: 40.0
+  max_displacement_A: 3.0
+
+acquisition:
+  strategy: mc_dropout
+  mc_dropout_passes: 16
+  mc_dropout_p: 0.1
+  n_select: 64
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: ${DFT_BACKEND:-vasp}
+
+  vasp:
+    vasp_bin:         ${VASP_BIN}
+    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/perlmutter/_vasp-step-perlmutter.sh
+    incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
+    kpoints_template: null            # use KSPACING from INCAR (auto Gamma mesh)
+    potcar_dir:       ${POTCAR_DIR}
+    nodes_per_job: 2                  # Cu-BHT unit cell is large (~60 atoms w/ vacuum)
+    ranks_per_node: 4
+    threads_per_rank: 16
+    timeout_sec: 14400
+    # NOTE: the AL DFT backend runs single-point SCF labeling only. In-plane
+    # shape relaxation is handled by the MLP/MD discovery stage, not here.
+    # KSPACING auto-yields a single k-point along the large vacuum reciprocal
+    # vector, so a 2D slab needs no special k-mesh handling. For a *polar* slab
+    # add a dipole correction (LDIPOL=.TRUE., IDIPOL=3) in extra_incar.
+    extra_incar:
+      ENCUT: "520"
+      ISMEAR: "1"          # Methfessel-Paxton: Cu-BHT is metallic
+      SIGMA: "0.05"
+      KSPACING: "0.25"
+      LREAL: "Auto"        # real-space projection: faster for the large cell
+      NCORE: "8"
+
+trainer:
+  enabled: true
+  train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
+  train_launcher: ${PROJ_ROOT}/scripts/launchers/perlmutter/_hydragnn-train-step-perlmutter.sh
+  epochs_per_iter: 5
+  nodes_for_train: 4
+  ranks_per_node:  4
+
+loop:
+  n_iterations: 8
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: false

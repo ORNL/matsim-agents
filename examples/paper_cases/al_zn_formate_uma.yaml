@@ -1,0 +1,106 @@
+# =============================================================================
+# Paper test case: Zn(HCOO)2 zinc-formate MOF — UMA surrogate variant
+#
+# Same system as al_zn_formate.yaml, but driven by the UMA universal foundation
+# model (fairchem) instead of HydraGNN. This demonstrates the seamless surrogate
+# switch: only the `mlp:` block changes; the MD, acquisition, DFT, and loop
+# blocks are identical in spirit.
+#
+# Per the collaborator email (Zekun Chen, 2026-06-10), a universal potential
+# such as UMA is expected to label hybrid organic-inorganic MOFs better than
+# the inorganic-trained HydraGNN model.
+#
+# Two UMA-specific notes:
+#   1. UMA is a FROZEN foundation model — there is no per-iteration retraining,
+#      so `trainer.enabled: false`. The labelled DFT dataset still accumulates
+#      for optional offline fine-tuning.
+#   2. UMA has no native dropout, so `acquisition.strategy: mc_dropout` relies on
+#      TEST-TIME dropout injection (mlp.uma.dropout). This is a heuristic
+#      uncertainty; for a calibrated signal use `strategy: ensemble` with
+#      `mlp.uma.ensemble_models`.
+#
+# How to run:
+#   pip install fairchem-core          # one-time; accept UMA license on HF
+#   matsim-agents al validate-config examples/paper_cases/al_zn_formate_uma.yaml
+# =============================================================================
+
+vars:
+  PROJ_ROOT:  /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  RUNS_ROOT:  /global/cfs/projectdirs/m5216/mlupopa/runs
+  RUN_TAG:    zn-formate-mof-uma-al-001
+
+  SEED_XYZ:   ${PROJ_ROOT}/examples/paper_cases/seeds/zn_formate_alpha.extxyz
+  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  POTCAR_DIR: /global/cfs/projectdirs/m5216/mlupopa/POTCAR/PBE.54
+
+mlp:
+  backend: uma
+  uma:
+    model_name: uma-s-1p1     # fairchem pretrained model (or local checkpoint path)
+    task_name:  omol          # molecular/organic head — best fit for a hybrid MOF
+    device:     cuda
+    # Test-time dropout injection so mc_dropout yields non-zero variance.
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear   # inject after nn.Linear outputs
+    # For a calibrated ensemble instead, drop the mc_dropout strategy below and
+    # list additional UMA checkpoints here:
+    # ensemble_models:
+    #   - uma-s-1p1-seed2
+    #   - uma-s-1p1-seed3
+
+md:
+  seed_source:
+    kind: paths
+    paths:
+      - ${SEED_XYZ}
+    n_random: 3
+    random_seed: 23
+  timestep_fs: 0.5
+  n_steps: 200
+  temperature_K: 300.0
+  thermostat: langevin
+  friction_inv_ps: 0.2
+  sample_every: 10
+  max_force_threshold_eV_per_A: 40.0
+  max_displacement_A: 3.0
+
+acquisition:
+  strategy: mc_dropout        # uses injected test-time dropout (see mlp.uma.dropout)
+  mc_dropout_passes: 16
+  mc_dropout_p: 0.1
+  n_select: 64
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: ${DFT_BACKEND:-vasp}
+
+  vasp:
+    vasp_bin:         ${VASP_BIN}
+    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/perlmutter/_vasp-step-perlmutter.sh
+    incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
+    kpoints_template: null
+    potcar_dir:       ${POTCAR_DIR}
+    nodes_per_job: 2
+    ranks_per_node: 4
+    threads_per_rank: 16
+    timeout_sec: 14400
+    extra_incar:
+      ENCUT: "520"
+      ISMEAR: "0"          # Gaussian smearing: insulating MOF
+      SIGMA: "0.05"
+      KSPACING: "0.30"
+      LREAL: "Auto"
+      NCORE: "4"
+
+trainer:
+  enabled: false            # UMA is frozen — no per-iteration retraining
+
+loop:
+  n_iterations: 8
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: false

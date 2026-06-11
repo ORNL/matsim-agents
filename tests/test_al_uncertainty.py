@@ -207,3 +207,85 @@ def test_select_candidates_empty_input_returns_empty() -> None:
     selected, scores = select_candidates([], cfg, primary_calculator=None)
     assert selected == []
     assert scores.shape == (0,)
+
+
+# --------------------------------------------------------------------------- #
+# inject_inference_dropout: MC-Dropout on a model without native dropout       #
+# --------------------------------------------------------------------------- #
+
+
+def test_inject_inference_dropout_makes_mc_dropout_nonzero() -> None:
+    """A model trained without dropout yields ZERO MC-Dropout variance until
+    test-time dropout is injected; afterwards the variance is strictly positive.
+    """
+    torch = pytest.importorskip("torch")
+    import torch.nn as nn
+
+    from matsim_agents.active_learning.uncertainty import (
+        inject_inference_dropout,
+        score_mc_dropout,
+    )
+
+    class _TorchForceCalc:
+        """Minimal ASE-like calc: forces = MLP(positions), no native dropout."""
+
+        implemented_properties = ["energy", "forces"]
+
+        def __init__(self) -> None:
+            torch.manual_seed(0)
+            self.model = nn.Sequential(
+                nn.Linear(3, 16), nn.SiLU(), nn.Linear(16, 16), nn.SiLU(), nn.Linear(16, 3)
+            )
+            self.model.eval()
+
+        def get_forces(self, atoms: Atoms) -> np.ndarray:
+            x = torch.tensor(atoms.get_positions(), dtype=torch.float32)
+            out = self.model(x)
+            return out.detach().numpy().astype(np.float64)
+
+        def calculate(self, atoms=None, properties=None, system_changes=None) -> None:
+            x = torch.tensor(atoms.get_positions(), dtype=torch.float32)
+            out = self.model(x)
+            self.results = {
+                "energy": float(out.sum().item()),
+                "forces": out.detach().numpy().astype(np.float64),
+            }
+
+    cands = [_make_candidate(idx=i, n_atoms=3) for i in range(4)]
+
+    # 1) No dropout layers -> every pass identical -> zero variance.
+    calc = _TorchForceCalc()
+    before = score_mc_dropout(cands, calc, passes=8, p=0.1)
+    assert np.allclose(before, 0.0)
+
+    # 2) Inject dropout -> stochastic passes -> positive variance.
+    n = inject_inference_dropout(calc.model, p=0.2, target_layers="linear")
+    assert n >= 1
+    after = score_mc_dropout(cands, calc, passes=16, p=0.2)
+    assert (after > 0).all()
+
+    # 3) Injection is dormant for ordinary (eval-mode) prediction: two plain
+    #    force evaluations must be identical.
+    calc.model.eval()
+    a = _make_candidate(idx=99, n_atoms=3)
+    f1 = a.atoms.copy()
+    f1.calc = calc
+    forces_1 = np.asarray(f1.get_forces())
+    f2 = a.atoms.copy()
+    f2.calc = calc
+    forces_2 = np.asarray(f2.get_forces())
+    assert np.allclose(forces_1, forces_2)
+
+
+def test_inject_inference_dropout_is_idempotent() -> None:
+    torch = pytest.importorskip("torch")
+    import torch.nn as nn
+
+    from matsim_agents.active_learning.uncertainty import inject_inference_dropout
+
+    model = nn.Sequential(nn.Linear(3, 8), nn.ReLU(), nn.Linear(8, 3))
+    n1 = inject_inference_dropout(model, p=0.1)
+    n2 = inject_inference_dropout(model, p=0.1)
+    assert n1 == 2  # two Linear layers
+    assert n2 == 0  # already instrumented -> nothing new injected
+
