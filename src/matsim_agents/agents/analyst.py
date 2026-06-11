@@ -20,12 +20,15 @@ def _deterministic_summary(state: MatSimState) -> str:
     if not state.results:
         return "No relaxation results to analyze."
     best = min(state.results, key=lambda r: r.final_energy_eV)
-    return (
+    summary = (
         f"Analyzed {len(state.results)} relaxation(s). "
         f"Lowest energy: {best.final_energy_eV:.4f} eV "
         f"({best.optimized_structure_path}) in {best.num_steps} step(s); "
         f"final |F|max = {best.final_max_force_eV_per_A:.4f} eV/Å."
     )
+    if state.handoff_events:
+        summary += "\nAL handoff events:\n- " + "\n- ".join(state.handoff_events)
+    return summary
 
 
 def analyst_node(state: MatSimState) -> dict:
@@ -40,10 +43,17 @@ def analyst_node(state: MatSimState) -> dict:
             base_url=state.llm_base_url,
         )
         results_json = [r.model_dump() for r in state.results]
+        handoff_events = state.handoff_events
         rsp = llm.invoke(
             [
                 SystemMessage(content=_SYSTEM_PROMPT),
-                AIMessage(content=f"Results: {results_json}\nDeterministic summary: {summary}"),
+                AIMessage(
+                    content=(
+                        f"Results: {results_json}\n"
+                        f"AL handoff events: {handoff_events}\n"
+                        f"Deterministic summary: {summary}"
+                    )
+                ),
             ]
         )
         summary = rsp.content if isinstance(rsp.content, str) else str(rsp.content)

@@ -1,9 +1,18 @@
-# Active-learning workflow: HydraGNN ↔ DFT (VASP or Quantum ESPRESSO)
+# Active-learning workflow: MLP surrogate (HydraGNN or UMA) ↔ DFT (VASP or Quantum ESPRESSO)
 
-End-to-end loop that uses HydraGNN as a fast surrogate force field and either
+End-to-end loop that uses an MLP surrogate force field (HydraGNN or UMA) and either
 **VASP 6.6** or **Quantum ESPRESSO `pw.x`** as the ground-truth labeller for
-high-uncertainty structures discovered by HydraGNN-driven MD. The choice is
+high-uncertainty structures discovered by surrogate-driven MD. The choice is
 a single YAML field (`dft.backend: vasp | qe`).
+
+Surrogate selection is controlled by the `mlp` block in the AL config:
+
+- Default: `mlp.backend: hydragnn` (or `backend: ${MLP_BACKEND:-hydragnn}`)
+- Switch to UMA without editing YAML:
+
+```bash
+MLP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
+```
 
 ## How this relates to other workflows
 
@@ -11,7 +20,8 @@ The repository now exposes several connected workflows. This README documents
 the AL kernel itself (`matsim-agents al run`), while the other entry points
 can feed into it:
 
-- `matsim-agents run`: core planner -> executor -> analyst graph.
+- `matsim-agents run`: core planner -> executor -> uq_gate -> analyst graph,
+  with optional run-path AL handoff on low-confidence relaxations.
 - `matsim-agents chat`: interactive discovery REPL; can optionally escalate to
   AL when UQ is high (`--trigger-al-handoff`, `--al-config`).
 - `matsim-agents supervisor-run`: LangGraph supervisor that runs discovery
@@ -19,6 +29,18 @@ can feed into it:
 
 In other words, AL is both a standalone workflow and the downstream execution
 engine for automated escalation from discovery.
+
+## Agentic workflow map
+
+```mermaid
+flowchart LR
+  R[matsim-agents run] --> RU[uq_gate]
+  C[matsim-agents chat] --> CU[chat UQ policy]
+  S[matsim-agents supervisor-run] --> SU[evaluate_uq]
+  RU -->|triggered| AL[matsim-agents al run]
+  CU -->|triggered| AL
+  SU -->|triggered| AL
+```
 
 ## Files
 
@@ -118,10 +140,22 @@ matsim-agents al validate-config examples/active_learning/al_config.example.yaml
 # 2) Run AL directly
 matsim-agents al run examples/active_learning/al_config.example.yaml
 
+# 2b) Same AL config, UMA surrogate backend
+MLP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
+
 # 3) Run via supervisor orchestration (dry-run handoff)
 matsim-agents supervisor-run Li2MnO3 \
   --logdir /path/to/hydragnn_logdir \
   --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --al-config examples/active_learning/al_config.example.yaml \
+  --al-dry-run
+
+# 4) Run path with UQ-triggered AL handoff planning
+matsim-agents run \
+  "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
+  --logdir /path/to/hydragnn_logdir \
+  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --trigger-al-handoff \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 ```

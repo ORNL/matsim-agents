@@ -52,6 +52,7 @@ class MatSimState(BaseModel):
     plan: list[TaskSpec] = Field(default_factory=list)
     pending_tasks: list[TaskSpec] = Field(default_factory=list)
     results: Annotated[list[RelaxationResult], add] = Field(default_factory=list)
+    handoff_events: Annotated[list[str], add] = Field(default_factory=list)
     analysis: str | None = None
     iteration: int = 0
     max_iterations: int = 5
