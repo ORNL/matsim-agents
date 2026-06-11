@@ -1,0 +1,124 @@
+# =============================================================================
+# Paper test case: LiFePO4 (olivine battery cathode)
+#
+# Scientific motivation (from Zekun Chen, 2026-06-10):
+#   LiFePO4 is a canonical battery cathode with competing polymorphs
+#   (olivine / maricite / amorphous). Turning on n_random > 0 lets pyXtal
+#   propose novel topologies that AFLOW prototypes may miss, giving the
+#   active-learning loop something genuinely new to label and learn.
+#   Connects directly to FORUMAI's battery-design goal.
+#
+# How to run (Perlmutter):
+#   PROJ_ROOT=$PWD \
+#   RUNS_ROOT=/path/to/scratch/runs \
+#   RUN_TAG=lifepo4-al-001 \
+#   DFT_BACKEND=vasp \
+#   matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
+#
+#   sbatch --export=ALL,AL_CONFIG=$PWD/examples/paper_cases/al_lifepo4.yaml \
+#       -N 32 -t 12:00:00 \
+#       scripts/launchers/perlmutter/run-active-learning-perlmutter.sh
+#
+# Seed source: 'compositions' → discovery enumerator builds olivine/maricite
+# prototype seeds + n_random=4 pyXtal random-symmetry structures per formula.
+# acquisition strategy: mc_dropout (single HydraGNN checkpoint, no ensemble).
+# =============================================================================
+
+vars:
+  PROJ_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  RUNS_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/runs
+  HYDRAGNN_DIR: /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/HydraGNN
+  RUN_TAG:      lifepo4-al-001
+
+  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  POTCAR_DIR: /global/cfs/projectdirs/m5216/mlupopa/POTCAR/PBE.54
+
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+# ---------------------------------------------------------------------------
+
+mlp:
+  # Surrogate selector — switch backend with one env var, no file edits:
+  #   matsim-agents al run <cfg>                  # HydraGNN (default; retrains each iter)
+  #   MLP_BACKEND=uma matsim-agents al run <cfg>  # frozen UMA foundation model
+  backend: ${MLP_BACKEND:-hydragnn}
+  hydragnn:
+    logdir:         ${INITIAL_LOGDIR}
+    checkpoint:     best_model.pt
+    mlp_checkpoint: null
+    charge: 0.0
+    spin:   0.0
+    precision:  fp32
+    mlp_device: cuda
+    ensemble_paths: []
+  uma:
+    model_name: uma-s-1p1     # fairchem pretrained model (or local checkpoint path)
+    task_name:  omat          # inorganic bulk materials head
+    device:     cuda
+    # Test-time dropout injection so mc_dropout yields non-zero variance on the
+    # otherwise-deterministic frozen model (see acquisition.strategy below).
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear
+
+md:
+  seed_source:
+    kind: compositions
+    compositions:
+      - LiFePO4          # olivine prototype (AFLOW AB4C_oP12 / AB4CD_oP28)
+    max_phases_per_composition: 4    # olivine + maricite + 2 others
+    n_random: 4                      # pyXtal random-symmetry search (requires pyxtal)
+    random_seed: 42
+  timestep_fs: 1.0
+  n_steps: 300
+  temperature_K: 800.0              # above Debye temp; samples broader config space
+  thermostat: langevin
+  friction_inv_ps: 0.1
+  sample_every: 10
+  max_force_threshold_eV_per_A: 50.0
+  max_displacement_A: 5.0
+
+acquisition:
+  strategy: mc_dropout
+  mc_dropout_passes: 16
+  mc_dropout_p: 0.1
+  n_select: 128
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: ${DFT_BACKEND:-vasp}
+
+  vasp:
+    vasp_bin:         ${VASP_BIN}
+    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/perlmutter/_vasp-step-perlmutter.sh
+    incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
+    kpoints_template: null            # use KSPACING from INCAR (auto Gamma mesh)
+    potcar_dir:       ${POTCAR_DIR}
+    nodes_per_job: 1
+    ranks_per_node: 4                 # 4 A100 GPUs per Perlmutter node
+    threads_per_rank: 16
+    timeout_sec: 7200
+    extra_incar:
+      ENCUT: "520"
+      ISMEAR: "0"          # Gaussian smearing: LiFePO4 is a wide-gap insulator
+      SIGMA: "0.05"
+      ISPIN: "2"           # Fe carries a local moment
+      KSPACING: "0.30"     # olivine cell is elongated; KSPACING adapts per axis
+      NCORE: "4"
+
+trainer:
+  enabled: true
+  train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
+  train_launcher: ${PROJ_ROOT}/scripts/launchers/perlmutter/_hydragnn-train-step-perlmutter.sh
+  epochs_per_iter: 5
+  nodes_for_train: 4
+  ranks_per_node:  4
+
+loop:
+  n_iterations: 10
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: false

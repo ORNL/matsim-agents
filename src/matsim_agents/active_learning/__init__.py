@@ -19,6 +19,6 @@ Entry points:
     * CLI:     ``matsim-agents al run --config al.yaml``
 """
 
-from matsim_agents.active_learning.config import ALConfig, DFTConfig
+from matsim_agents.active_learning.config import ALConfig, DFTConfig, MLPConfig, UMAConfig
 
-__all__ = ["ALConfig", "DFTConfig"]
+__all__ = ["ALConfig", "DFTConfig", "MLPConfig", "UMAConfig"]

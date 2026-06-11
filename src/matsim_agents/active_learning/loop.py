@@ -37,7 +37,7 @@ from typing import Any
 
 import numpy as np
 
-from matsim_agents.active_learning.calculator import build_ensemble, build_hydragnn_calculator
+from matsim_agents.active_learning.calculator import build_ensemble, make_mlp_calculator
 from matsim_agents.active_learning.candidates import sample_md_candidates
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
@@ -146,8 +146,13 @@ def run_active_learning(cfg: ALConfig) -> None:
         start_iter, resumed_logdir = _scan_resume(root)
         if start_iter > 0:
             log.info("Resuming AL loop at iteration %d (logdir=%s)", start_iter, resumed_logdir)
-            if resumed_logdir is not None and resumed_logdir.exists():
-                cfg.hydragnn.logdir = resumed_logdir
+            if (
+                cfg.mlp.backend == "hydragnn"
+                and cfg.mlp.hydragnn is not None
+                and resumed_logdir is not None
+                and resumed_logdir.exists()
+            ):
+                cfg.mlp.hydragnn.logdir = resumed_logdir
 
     for i in range(start_iter, cfg.loop.n_iterations):
         it_dir = _iter_dir(root, i)
@@ -158,10 +163,11 @@ def run_active_learning(cfg: ALConfig) -> None:
         try:
             # --- 1. Build calculator(s) for this iteration --------------------
             t0 = time.time()
-            primary_calc = build_hydragnn_calculator(cfg.hydragnn)
+            enable_drop = cfg.acquisition.strategy in {"mc_dropout", "ensemble_then_dropout"}
+            primary_calc = make_mlp_calculator(cfg.mlp, enable_mc_dropout=enable_drop)
             ensemble_calcs: list = []
-            if cfg.hydragnn.ensemble_paths:
-                ensemble_calcs = build_ensemble(cfg.hydragnn)
+            if cfg.mlp.ensemble_paths:
+                ensemble_calcs = build_ensemble(cfg.mlp, enable_mc_dropout=enable_drop)
             state.timings_sec["build_calculators"] = time.time() - t0
 
             # --- 2. Generate candidates via MD --------------------------------
@@ -243,20 +249,31 @@ def run_active_learning(cfg: ALConfig) -> None:
             state.timings_sec["append_dataset"] = time.time() - t0
             log.info("Iter %d: appended %d labelled frames to %s", i, n_appended, dataset_path)
 
-            # --- 6. (Optional) retrain HydraGNN -------------------------------
+            # --- 6. (Optional) retrain the surrogate --------------------------
             t0 = time.time()
-            new_logdir = retrain_hydragnn(
-                cfg.trainer,
-                cfg.hydragnn,
-                dataset_path=dataset_path,
-                iteration=i,
-                out_logdir=it_dir / "model",
-            )
-            state.new_logdir = str(new_logdir)
+            if cfg.mlp.backend == "hydragnn" and cfg.mlp.hydragnn is not None:
+                new_logdir = retrain_hydragnn(
+                    cfg.trainer,
+                    cfg.mlp.hydragnn,
+                    dataset_path=dataset_path,
+                    iteration=i,
+                    out_logdir=it_dir / "model",
+                )
+                state.new_logdir = str(new_logdir)
+                # Update logdir for next iteration (in-memory only — we re-resolve
+                # from state.json on restart).
+                cfg.mlp.hydragnn.logdir = new_logdir
+            else:
+                # Frozen foundation model (e.g. UMA): no per-iteration retraining.
+                # The labelled dataset still accumulates for offline fine-tuning.
+                log.info(
+                    "Skipping retraining for backend=%s (frozen model); "
+                    "%d labelled frames accumulated in %s.",
+                    cfg.mlp.backend,
+                    n_appended,
+                    dataset_path,
+                )
             state.timings_sec["retrain"] = time.time() - t0
-            # Update logdir for next iteration (in-memory only — we re-resolve
-            # from state.json on restart).
-            cfg.hydragnn.logdir = new_logdir
 
             state.status = "complete"
         except Exception as exc:  # noqa: BLE001

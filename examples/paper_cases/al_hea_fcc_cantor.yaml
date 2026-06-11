@@ -1,0 +1,119 @@
+# =============================================================================
+# Paper test case: CrMnFeCoNi (Cantor alloy) FCC HEA
+#
+# Scientific motivation (from Zekun Chen, 2026-06-10):
+#   The Cantor alloy is the prototype FCC 3d-TM HEA. The goal here is to test
+#   whether the agent, starting from equimolar FCC seeds, can discover short-
+#   range order (SRO) signatures and compositional variants with higher
+#   predicted stability. ensemble_then_dropout bridges cold-start (single
+#   checkpoint, dropout) and later iterations (ensemble, cheaper inference).
+#
+# How to run:
+#   matsim-agents al validate-config examples/paper_cases/al_hea_fcc_cantor.yaml
+#
+# Notes:
+#   - magnetic elements (Cr, Mn, Fe, Co, Ni): LSDA should be used.
+#     nspin=2 is added in extra_system.  Starting magnetisation must be
+#     supplied via ISPIN=2 + MAGMOM in dft.vasp.extra_incar (collinear spin).
+#   - For a quicker non-spin-polarised baseline run, delete extra_system.nspin
+#     and set smearing/degauss as below.
+# =============================================================================
+
+vars:
+  PROJ_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  RUNS_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/runs
+  HYDRAGNN_DIR: /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/HydraGNN
+  RUN_TAG:      cantor-fcc-al-001
+
+  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  POTCAR_DIR: /global/cfs/projectdirs/m5216/mlupopa/POTCAR/PBE.54
+
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+mlp:
+  # Surrogate selector — switch backend with one env var, no file edits:
+  #   matsim-agents al run <cfg>                  # HydraGNN (default; retrains each iter)
+  #   MLP_BACKEND=uma matsim-agents al run <cfg>  # frozen UMA foundation model
+  backend: ${MLP_BACKEND:-hydragnn}
+  hydragnn:
+    logdir:         ${INITIAL_LOGDIR}
+    checkpoint:     best_model.pt
+    mlp_checkpoint: null
+    precision:  fp32
+    mlp_device: cuda
+    ensemble_paths: []
+  uma:
+    model_name: uma-s-1p1     # fairchem pretrained model (or local checkpoint path)
+    task_name:  omat          # inorganic bulk materials head
+    device:     cuda
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear
+
+md:
+  seed_source:
+    kind: compositions
+    compositions:
+      - CrMnFeCoNi             # equimolar Cantor
+      - Cr2MnFe2CoNi           # Cr/Fe-enriched variant
+      - CrMnFe2CoNi2           # Fe/Ni-enriched variant
+      - CrMnFeCoNi2            # Ni-enriched
+      - CrMn2FeCoNi            # Mn-enriched
+    max_phases_per_composition: 3    # FCC, HCP, BCC
+    n_random: 4
+    random_seed: 13
+  timestep_fs: 2.0
+  n_steps: 400
+  temperature_K: 1000.0
+  thermostat: langevin
+  friction_inv_ps: 0.08
+  sample_every: 15
+  max_force_threshold_eV_per_A: 60.0
+  max_displacement_A: 5.0
+
+acquisition:
+  strategy: mc_dropout
+  mc_dropout_passes: 8
+  mc_dropout_p: 0.1
+  n_select: 160
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: ${DFT_BACKEND:-vasp}
+
+  vasp:
+    vasp_bin:         ${VASP_BIN}
+    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/perlmutter/_vasp-step-perlmutter.sh
+    incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
+    kpoints_template: null            # use KSPACING from INCAR (auto Gamma mesh)
+    potcar_dir:       ${POTCAR_DIR}
+    nodes_per_job: 1
+    ranks_per_node: 4                 # 4 A100 GPUs per Perlmutter node
+    threads_per_rank: 16
+    timeout_sec: 10800
+    extra_incar:
+      ENCUT: "520"
+      ISMEAR: "1"          # Methfessel-Paxton for metallic FCC HEA
+      SIGMA: "0.20"
+      ISPIN: "2"           # Cr/Mn/Fe/Co/Ni carry local moments
+      KSPACING: "0.22"
+      NCORE: "4"
+      # For an explicit collinear spin guess add MAGMOM matching the POSCAR
+      # species ordering, e.g. MAGMOM: "Cr=... Mn=... Fe=... Co=... Ni=...".
+
+trainer:
+  enabled: true
+  train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
+  train_launcher: ${PROJ_ROOT}/scripts/launchers/perlmutter/_hydragnn-train-step-perlmutter.sh
+  epochs_per_iter: 5
+  nodes_for_train: 4
+  ranks_per_node:  4
+
+loop:
+  n_iterations: 12
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: false
