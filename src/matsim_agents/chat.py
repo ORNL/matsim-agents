@@ -70,6 +70,11 @@ class DiscoveryChatConfig:
     llm_provider: str = "ollama"
     llm_model: str = "qwen2.5:14b"
     llm_base_url: str | None = None
+    enable_hypothesis_debate: bool = False
+    debate_rounds: int = 1
+    critic_llm_provider: str | None = None
+    critic_llm_model: str | None = None
+    critic_llm_base_url: str | None = None
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     auto_confirm: bool = False  # if True, skip the interactive y/N prompt
     trigger_active_learning_on_high_uq: bool = True
@@ -360,6 +365,83 @@ def _handoff_to_active_learning(
     )
 
 
+def _debate_hypothesis_response(
+    *,
+    cfg: DiscoveryChatConfig,
+    user_text: str,
+    draft_response: str,
+) -> str:
+    """Run optional multi-LLM critique/revision rounds for hypothesis quality."""
+    if not cfg.enable_hypothesis_debate:
+        return draft_response
+
+    rounds = max(1, int(cfg.debate_rounds))
+    current = draft_response
+
+    critic = get_chat_model(
+        provider=cfg.critic_llm_provider or cfg.llm_provider,
+        model=cfg.critic_llm_model,
+        base_url=cfg.critic_llm_base_url,
+    )
+    primary = get_chat_model(
+        provider=cfg.llm_provider,
+        model=cfg.llm_model,
+        base_url=cfg.llm_base_url,
+    )
+
+    for _ in range(rounds):
+        critique_rsp = critic.invoke(
+            [
+                SystemMessage(
+                    content=(
+                        "You are a skeptical scientific reviewer. Critique the assistant's "
+                        "materials hypothesis response. Identify weak assumptions, missing "
+                        "alternatives, and checks that would falsify the claim. Be concise."
+                    )
+                ),
+                HumanMessage(
+                    content=(
+                        f"User query:\n{user_text}\n\n"
+                        f"Assistant draft:\n{current}\n\n"
+                        "Return: (1) key weaknesses, (2) concrete corrections, "
+                        "(3) one strongest counter-hypothesis."
+                    )
+                ),
+            ]
+        )
+        critique_text = (
+            critique_rsp.content
+            if isinstance(critique_rsp.content, str)
+            else str(critique_rsp.content)
+        )
+
+        revised_rsp = primary.invoke(
+            [
+                SystemMessage(
+                    content=(
+                        "Revise the assistant draft using the critique. Keep the response "
+                        "scientifically grounded, specific, and actionable."
+                    )
+                ),
+                HumanMessage(
+                    content=(
+                        f"User query:\n{user_text}\n\n"
+                        f"Current draft:\n{current}\n\n"
+                        f"Critique:\n{critique_text}\n\n"
+                        "Produce the improved final response only."
+                    )
+                ),
+            ]
+        )
+        current = (
+            revised_rsp.content
+            if isinstance(revised_rsp.content, str)
+            else str(revised_rsp.content)
+        )
+
+    return current
+
+
 def chat_once(
     session: DiscoveryChatSession,
     user_text: str,
@@ -398,6 +480,11 @@ def chat_once(
     assistant_text = (
         response.content if isinstance(response.content, str) else str(response.content)
     )
+    assistant_text = _debate_hypothesis_response(
+        cfg=cfg,
+        user_text=user_text,
+        draft_response=assistant_text,
+    )
     session.messages.append(AIMessage(content=assistant_text))
     if on_assistant is not None:
         on_assistant(assistant_text)
@@ -410,7 +497,7 @@ def chat_once(
             session.seen_compositions.add(comp.formula)
             if _confirm(
                 f"\nProposed composition detected: {comp.formula}. "
-                "Run HydraGNN-based phase exploration?",
+                "Run surrogate-based phase exploration?",
                 auto=cfg.auto_confirm,
             ):
                 exploration = _kickoff_exploration(comp, cfg)
@@ -467,7 +554,8 @@ def run_chat(config: DiscoveryChatConfig) -> DiscoveryChatSession:
     session = DiscoveryChatSession(config=config)
     _print(
         f"[bold]matsim-agents discovery chat[/bold]  "
-        f"(provider={config.llm_provider}, model={config.llm_model})\n"
+        f"(provider={config.llm_provider}, model={config.llm_model}, "
+        f"debate={'on' if config.enable_hypothesis_debate else 'off'})\n"
         "Type 'exit' to quit. Propose compositions like 'Li2MnO3' to trigger exploration.\n"
     )
     while True:
