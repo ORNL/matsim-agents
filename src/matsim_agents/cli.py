@@ -211,6 +211,31 @@ def chat(
     llm_provider: str = typer.Option("ollama", "--llm-provider", case_sensitive=False),
     llm_model: str = typer.Option("qwen2.5:14b", "--llm-model"),
     llm_base_url: str | None = typer.Option(None, "--llm-base-url"),
+    llm_peer_review: bool = typer.Option(
+        False,
+        "--llm-peer-review/--no-llm-peer-review",
+        help="Enable proposer/critic multi-LLM rounds to challenge and refine hypotheses.",
+    ),
+    peer_review_rounds: int = typer.Option(
+        1,
+        "--peer-review-rounds",
+        help="Number of proposer/critic revision rounds when --llm-peer-review is enabled.",
+    ),
+    critic_llm_provider: str | None = typer.Option(
+        None,
+        "--critic-llm-provider",
+        help="Critic provider (defaults to --llm-provider).",
+    ),
+    critic_llm_model: str | None = typer.Option(
+        None,
+        "--critic-llm-model",
+        help="Critic model id (provider-specific).",
+    ),
+    critic_llm_base_url: str | None = typer.Option(
+        None,
+        "--critic-llm-base-url",
+        help="Optional critic endpoint override.",
+    ),
     auto_confirm: bool = typer.Option(
         False,
         "--auto-confirm/--ask",
@@ -284,6 +309,11 @@ def chat(
         llm_provider=llm_provider,
         llm_model=llm_model,
         llm_base_url=llm_base_url,
+        enable_hypothesis_debate=llm_peer_review,
+        debate_rounds=peer_review_rounds,
+        critic_llm_provider=critic_llm_provider,
+        critic_llm_model=critic_llm_model,
+        critic_llm_base_url=critic_llm_base_url,
         auto_confirm=auto_confirm,
         trigger_active_learning_on_high_uq=trigger_active_learning_on_high_uq,
         active_learning_config=(str(active_learning_config) if active_learning_config else None),

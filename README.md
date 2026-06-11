@@ -111,6 +111,10 @@ flowchart TD
 
 - **Multi-agent orchestration** with LangGraph: typed shared state, checkpointed steps, conditional routing, human-in-the-loop gates.
 - **Hypothesis-generation chat** with any local LLM (Qwen 2.5 via Ollama by default).
+- **Optional multi-LLM hypothesis debate in chat**: a proposer model drafts a
+  hypothesis response, a critic model challenges weak assumptions and missing
+  tests, and the proposer revises for one or more rounds (`--llm-peer-review`,
+  `--critic-llm-*`, `--peer-review-rounds`).
 - **Automatic composition detection** in user/LLM messages — when a new chemical formula is proposed, the system offers to run a substantial atomistic exploration.
 - **Optional single-structure relaxation inside discovery chat** via `/relax <structure_path>`.
 - **Discovery-to-active-learning escalation policy**: when branch-weight UQ indicates low confidence, discovery can hand off to AL automatically from the same run.
@@ -227,6 +231,15 @@ matsim-agents run \
 matsim-agents chat \
   --logdir /path/to/hydragnn_logdir \
   --mlp-checkpoint /path/to/mlp_branch_weights.pt
+
+# 2b) Interactive chat with proposer/critic multi-LLM hypothesis debate
+matsim-agents chat \
+  --logdir /path/to/hydragnn_logdir \
+  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --llm-peer-review \
+  --critic-llm-provider ollama \
+  --critic-llm-model qwen2.5:14b \
+  --peer-review-rounds 2
 
 # 2a) Interactive discovery chat with UMA relaxations
 matsim-agents chat \
