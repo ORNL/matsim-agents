@@ -5,6 +5,21 @@ End-to-end loop that uses HydraGNN as a fast surrogate force field and either
 high-uncertainty structures discovered by HydraGNN-driven MD. The choice is
 a single YAML field (`dft.backend: vasp | qe`).
 
+## How this relates to other workflows
+
+The repository now exposes several connected workflows. This README documents
+the AL kernel itself (`matsim-agents al run`), while the other entry points
+can feed into it:
+
+- `matsim-agents run`: core planner -> executor -> analyst graph.
+- `matsim-agents chat`: interactive discovery REPL; can optionally escalate to
+  AL when UQ is high (`--trigger-al-handoff`, `--al-config`).
+- `matsim-agents supervisor-run`: LangGraph supervisor that runs discovery
+  exploration, evaluates UQ, and conditionally launches AL handoff.
+
+In other words, AL is both a standalone workflow and the downstream execution
+engine for automated escalation from discovery.
+
 ## Files
 
 - `al_config.example.yaml`         — Unified config: contains both `dft.vasp:`
@@ -80,6 +95,36 @@ in the parsed `ALConfig`.
        -N 64 -t 12:00:00 \
        scripts/launchers/frontier/run-active-learning-frontier.sh
    ```
+
+### Trigger this same AL flow from supervisor-run
+
+If you prefer orchestration with explicit decision nodes, run the supervisor
+graph and let it trigger this AL path when UQ policy thresholds are met:
+
+```bash
+matsim-agents supervisor-run Li2MnO3 \
+  --logdir /path/to/hydragnn_logdir \
+  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --al-config examples/active_learning/al_config.example.yaml \
+  --al-run
+```
+
+## Minimum viable commands
+
+```bash
+# 1) Validate config only
+matsim-agents al validate-config examples/active_learning/al_config.example.yaml
+
+# 2) Run AL directly
+matsim-agents al run examples/active_learning/al_config.example.yaml
+
+# 3) Run via supervisor orchestration (dry-run handoff)
+matsim-agents supervisor-run Li2MnO3 \
+  --logdir /path/to/hydragnn_logdir \
+  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --al-config examples/active_learning/al_config.example.yaml \
+  --al-dry-run
+```
 
 ## Architecture
 
