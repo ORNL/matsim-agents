@@ -103,6 +103,7 @@ codabench_competition/dft_reference/vasp/elemental_refs/logs/
 
 # Vendored third-party clones (bootstrapped by scripts/setup_env.sh)
 third_party/
+/HydraGNN/
 /tmp/
 
 # PBS / Slurm stdout/stderr from interactive `qsub` (`-o .`)

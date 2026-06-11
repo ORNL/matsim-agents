@@ -1,7 +1,7 @@
 """
 Unified single-pass (non-AL) runner for all paper test cases.
 =============================================================
-A "single pass" runs the planner -> executor -> analyst agent graph ONCE on a
+A "single pass" runs the planner -> executor -> uq_gate -> analyst agent graph ONCE on a
 supplied/built seed structure: the MLP relaxes it, ranks polymorphs, and (with
 ``--dft``) the agent may validate the lowest-energy structure with a single DFT
 single-point.  There is NO label -> retrain loop — that is what the ``al_*.yaml``

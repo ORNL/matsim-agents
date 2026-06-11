@@ -19,6 +19,8 @@ These paper cases can be executed through three complementary entry points:
 
 - Single pass (`singlepass.py`): one-shot graph execution for a quick sanity
   check and ranking (no AL retraining loop).
+- Core graph (`matsim-agents run`): planner -> executor -> uq_gate -> analyst,
+  with optional run-path AL handoff when UQ thresholds are crossed.
 - Active learning (`matsim-agents al run al_<case>.yaml`): iterative
   discovery -> UQ/acquisition -> DFT labeling -> retraining loop.
 - Supervisor orchestration (`matsim-agents supervisor-run`): LangGraph control
@@ -28,6 +30,17 @@ These paper cases can be executed through three complementary entry points:
 The discovery chat path (`matsim-agents chat`) can also feed these cases by
 detecting formulas, optionally running `/relax <structure_path>`, and
 escalating to AL when configured UQ thresholds are crossed.
+
+```mermaid
+flowchart LR
+  SP[singlepass.py] --> R[ranked feasibility output]
+  RG[matsim-agents run] --> RU[uq_gate]
+  SU[matsim-agents supervisor-run] --> SQ[evaluate_uq]
+  CH[matsim-agents chat] --> CQ[chat UQ policy]
+  RU -->|triggered| AL[matsim-agents al run al_case.yaml]
+  SQ -->|triggered| AL
+  CQ -->|triggered| AL
+```
 
 ---
 
@@ -97,6 +110,9 @@ python examples/paper_cases/singlepass.py --case lifepo4 --dft
 matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run            examples/paper_cases/al_lifepo4.yaml
 
+# 4b) same AL config, UMA surrogate backend:
+MLP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
+
 # 5) supervisor-driven discovery -> optional AL handoff:
 matsim-agents supervisor-run LiFePO4 \
   --logdir $MLP_LOGDIR \
@@ -131,6 +147,15 @@ matsim-agents supervisor-run LiFePO4 \
   --mlp-checkpoint best_model.pt \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
+
+# 5) Core run path with UQ-triggered AL handoff planning
+matsim-agents run \
+  "Relax structures/lifepo4_olivine.vasp and summarize results." \
+  --logdir "$MLP_LOGDIR" \
+  --mlp-checkpoint best_model.pt \
+  --trigger-al-handoff \
+  --al-config examples/paper_cases/al_lifepo4.yaml \
+  --al-dry-run
 ```
 
 The single-pass runner uses these environment variables:
@@ -140,6 +165,14 @@ The single-pass runner uses these environment variables:
 | `MLP_LOGDIR` | HydraGNN logdir (config.json + checkpoint) | `$RUNS_ROOT/al-models/iter0_logdir` |
 | `MLP_CKPT` | checkpoint filename | `best_model.pt` |
 | `OUT_DIR` | output root | `./out_singlepass` |
+
+For AL YAMLs in this folder, the surrogate backend can be switched with one
+env var when configs use `backend: ${MLP_BACKEND:-hydragnn}`:
+
+```bash
+matsim-agents al run examples/paper_cases/al_lifepo4.yaml        # HydraGNN (default)
+MLP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
+```
 
 ---
 
