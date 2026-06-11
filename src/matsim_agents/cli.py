@@ -236,6 +236,26 @@ def chat(
         "--critic-llm-base-url",
         help="Optional critic endpoint override.",
     ),
+    critic_panel_models: str | None = typer.Option(
+        None,
+        "--critic-panel-models",
+        help="Comma-separated critic model ids for panel mode.",
+    ),
+    critic_panel_providers: str | None = typer.Option(
+        None,
+        "--critic-panel-providers",
+        help="Optional comma-separated providers aligned with --critic-panel-models.",
+    ),
+    critic_panel_base_urls: str | None = typer.Option(
+        None,
+        "--critic-panel-base-urls",
+        help="Optional comma-separated base URLs aligned with --critic-panel-models.",
+    ),
+    critic_cross_critique: bool = typer.Option(
+        False,
+        "--critic-cross-critique/--no-critic-cross-critique",
+        help="Enable critic-to-critic challenge before proposer synthesis.",
+    ),
     auto_confirm: bool = typer.Option(
         False,
         "--auto-confirm/--ask",
@@ -289,6 +309,14 @@ def chat(
     """
     from matsim_agents.chat import DiscoveryChatConfig, run_chat
 
+    panel_models = [s.strip() for s in (critic_panel_models or "").split(",") if s.strip()]
+    panel_providers = [
+        s.strip() for s in (critic_panel_providers or "").split(",") if s.strip()
+    ]
+    panel_base_urls = [
+        s.strip() for s in (critic_panel_base_urls or "").split(",") if s.strip()
+    ]
+
     cfg = DiscoveryChatConfig(
         mlp_backend=mlp_backend,
         logdir=str(logdir) if logdir else None,
@@ -314,6 +342,10 @@ def chat(
         critic_llm_provider=critic_llm_provider,
         critic_llm_model=critic_llm_model,
         critic_llm_base_url=critic_llm_base_url,
+        critic_panel_models=panel_models,
+        critic_panel_providers=panel_providers,
+        critic_panel_base_urls=panel_base_urls,
+        critic_cross_critique=critic_cross_critique,
         auto_confirm=auto_confirm,
         trigger_active_learning_on_high_uq=trigger_active_learning_on_high_uq,
         active_learning_config=(str(active_learning_config) if active_learning_config else None),

@@ -75,6 +75,10 @@ class DiscoveryChatConfig:
     critic_llm_provider: str | None = None
     critic_llm_model: str | None = None
     critic_llm_base_url: str | None = None
+    critic_panel_models: list[str] = field(default_factory=list)
+    critic_panel_providers: list[str] = field(default_factory=list)
+    critic_panel_base_urls: list[str] = field(default_factory=list)
+    critic_cross_critique: bool = False
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     auto_confirm: bool = False  # if True, skip the interactive y/N prompt
     trigger_active_learning_on_high_uq: bool = True
@@ -378,11 +382,43 @@ def _debate_hypothesis_response(
     rounds = max(1, int(cfg.debate_rounds))
     current = draft_response
 
-    critic = get_chat_model(
-        provider=cfg.critic_llm_provider or cfg.llm_provider,
-        model=cfg.critic_llm_model,
-        base_url=cfg.critic_llm_base_url,
-    )
+    # Backward-compatible critic selection:
+    # - panel mode: critic_panel_models (optionally paired with providers/base URLs)
+    # - single critic mode: critic_llm_* fields
+    # - fallback: same model as primary
+    panel_models = [m for m in cfg.critic_panel_models if m]
+    if panel_models:
+        critic_specs: list[tuple[str, str, str | None]] = []
+        for i, model_name in enumerate(panel_models):
+            provider = (
+                cfg.critic_panel_providers[i]
+                if i < len(cfg.critic_panel_providers)
+                else (cfg.critic_llm_provider or cfg.llm_provider)
+            )
+            base_url = (
+                cfg.critic_panel_base_urls[i]
+                if i < len(cfg.critic_panel_base_urls)
+                else cfg.critic_llm_base_url
+            )
+            critic_specs.append((f"critic_{i + 1}", provider, model_name, base_url))
+    else:
+        critic_specs = [
+            (
+                "critic_1",
+                cfg.critic_llm_provider or cfg.llm_provider,
+                cfg.critic_llm_model or cfg.llm_model,
+                cfg.critic_llm_base_url,
+            )
+        ]
+
+    critics = [
+        (
+            label,
+            get_chat_model(provider=provider, model=model_name, base_url=base_url),
+        )
+        for (label, provider, model_name, base_url) in critic_specs
+    ]
+
     primary = get_chat_model(
         provider=cfg.llm_provider,
         model=cfg.llm_model,
@@ -390,37 +426,78 @@ def _debate_hypothesis_response(
     )
 
     for _ in range(rounds):
-        critique_rsp = critic.invoke(
-            [
-                SystemMessage(
-                    content=(
-                        "You are a skeptical scientific reviewer. Critique the assistant's "
-                        "materials hypothesis response. Identify weak assumptions, missing "
-                        "alternatives, and checks that would falsify the claim. Be concise."
-                    )
-                ),
-                HumanMessage(
-                    content=(
-                        f"User query:\n{user_text}\n\n"
-                        f"Assistant draft:\n{current}\n\n"
-                        "Return: (1) key weaknesses, (2) concrete corrections, "
-                        "(3) one strongest counter-hypothesis."
-                    )
-                ),
-            ]
-        )
-        critique_text = (
-            critique_rsp.content
-            if isinstance(critique_rsp.content, str)
-            else str(critique_rsp.content)
-        )
+        critiques: list[tuple[str, str]] = []
+        for label, critic in critics:
+            critique_rsp = critic.invoke(
+                [
+                    SystemMessage(
+                        content=(
+                            "You are a skeptical scientific reviewer. Critique the assistant's "
+                            "materials hypothesis response. Identify weak assumptions, missing "
+                            "alternatives, and checks that would falsify the claim. Be concise."
+                        )
+                    ),
+                    HumanMessage(
+                        content=(
+                            f"User query:\n{user_text}\n\n"
+                            f"Assistant draft:\n{current}\n\n"
+                            "Return: (1) key weaknesses, (2) concrete corrections, "
+                            "(3) one strongest counter-hypothesis."
+                        )
+                    ),
+                ]
+            )
+            critique_text = (
+                critique_rsp.content
+                if isinstance(critique_rsp.content, str)
+                else str(critique_rsp.content)
+            )
+            critiques.append((label, critique_text))
+
+        # Optional critic-to-critic challenge phase.
+        if cfg.critic_cross_critique and len(critiques) > 1:
+            refined: list[tuple[str, str]] = []
+            for label, critic in critics:
+                own = next((txt for l, txt in critiques if l == label), "")
+                others = "\n\n".join(
+                    [f"[{l}] {txt}" for l, txt in critiques if l != label]
+                )
+                cross_rsp = critic.invoke(
+                    [
+                        SystemMessage(
+                            content=(
+                                "You are in a scientific review panel. Reassess your critique "
+                                "after seeing other critics. Keep what is strongest, remove weak "
+                                "or redundant points, and produce one improved critique."
+                            )
+                        ),
+                        HumanMessage(
+                            content=(
+                                f"User query:\n{user_text}\n\n"
+                                f"Assistant draft:\n{current}\n\n"
+                                f"Your current critique ({label}):\n{own}\n\n"
+                                f"Other critics:\n{others}\n\n"
+                                "Return your final improved critique only."
+                            )
+                        ),
+                    ]
+                )
+                cross_text = (
+                    cross_rsp.content
+                    if isinstance(cross_rsp.content, str)
+                    else str(cross_rsp.content)
+                )
+                refined.append((label, cross_text))
+            critiques = refined
+
+        critique_text = "\n\n".join([f"[{label}] {txt}" for label, txt in critiques])
 
         revised_rsp = primary.invoke(
             [
                 SystemMessage(
                     content=(
-                        "Revise the assistant draft using the critique. Keep the response "
-                        "scientifically grounded, specific, and actionable."
+                        "Revise the assistant draft using all critic feedback. Keep the "
+                        "response scientifically grounded, specific, and actionable."
                     )
                 ),
                 HumanMessage(
