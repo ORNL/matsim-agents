@@ -53,7 +53,7 @@ class DiscoveryChatConfig:
     mlp_backend: str = "hydragnn"
     logdir: str | None = None
     mlp_checkpoint: str | None = None
-    output_dir: str
+    output_dir: str = "./outputs"
     checkpoint: str | None = None
     mlp_device: str = "cuda"
     uma_model_name: str = "uma-s-1p1"

@@ -12,6 +12,8 @@ verifying that:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -45,6 +47,20 @@ def _make_session(
 
     session = DiscoveryChatSession(config=config)
     return session, mock_explore
+
+
+@dataclass
+class _StubModel:
+    """Small invoke-only model stub used to test proposer/critic orchestration."""
+
+    name: str
+    outputs: list[str]
+    invoke_count: int = 0
+
+    def invoke(self, _messages):
+        idx = min(self.invoke_count, len(self.outputs) - 1)
+        self.invoke_count += 1
+        return SimpleNamespace(content=self.outputs[idx])
 
 
 # ── composition detection ─────────────────────────────────────────────────────
@@ -174,3 +190,77 @@ class TestMessageHistory:
         response = chat_once(session, "What is the answer?")
         assert response is not None
         assert "42" in response
+
+
+# ── multi-LLM critique / panel mode ──────────────────────────────────────────
+
+
+class TestHypothesisDebate:
+    def test_single_critic_revision_round(self, discovery_config, monkeypatch):
+        import matsim_agents.chat as chat_mod
+
+        cfg = discovery_config
+        cfg.enable_hypothesis_debate = True
+        cfg.debate_rounds = 1
+        cfg.llm_model = "primary-model"
+        cfg.critic_llm_model = "critic-model"
+
+        models = {
+            "primary-model": _StubModel(
+                "primary-model",
+                outputs=["Draft hypothesis.", "Revised hypothesis after critique."],
+            ),
+            "critic-model": _StubModel(
+                "critic-model",
+                outputs=["Weak assumption: missing control case."],
+            ),
+        }
+
+        def _factory(**kwargs):
+            return models[kwargs.get("model")]
+
+        monkeypatch.setattr(chat_mod, "get_chat_model", _factory)
+        monkeypatch.setattr(chat_mod, "_kickoff_exploration", MagicMock())
+
+        session = DiscoveryChatSession(config=cfg)
+        rsp = chat_once(session, "Suggest a robust hypothesis for cathodes.")
+
+        assert rsp == "Revised hypothesis after critique."
+        assert models["primary-model"].invoke_count == 2  # draft + revise
+        assert models["critic-model"].invoke_count == 1
+
+    def test_multi_critic_panel_with_cross_critique(self, discovery_config, monkeypatch):
+        import matsim_agents.chat as chat_mod
+
+        cfg = discovery_config
+        cfg.enable_hypothesis_debate = True
+        cfg.debate_rounds = 1
+        cfg.critic_cross_critique = True
+        cfg.llm_model = "primary-model"
+        cfg.critic_panel_models = ["critic-a", "critic-b", "critic-c"]
+        cfg.critic_panel_providers = ["ollama", "ollama", "ollama"]
+
+        models = {
+            "primary-model": _StubModel(
+                "primary-model",
+                outputs=["Initial draft.", "Panel-synthesized revised answer."],
+            ),
+            "critic-a": _StubModel("critic-a", outputs=["A1", "A2"]),
+            "critic-b": _StubModel("critic-b", outputs=["B1", "B2"]),
+            "critic-c": _StubModel("critic-c", outputs=["C1", "C2"]),
+        }
+
+        def _factory(**kwargs):
+            return models[kwargs.get("model")]
+
+        monkeypatch.setattr(chat_mod, "get_chat_model", _factory)
+        monkeypatch.setattr(chat_mod, "_kickoff_exploration", MagicMock())
+
+        session = DiscoveryChatSession(config=cfg)
+        rsp = chat_once(session, "Propose a hypothesis for stable spinels.")
+
+        assert rsp == "Panel-synthesized revised answer."
+        assert models["primary-model"].invoke_count == 2
+        assert models["critic-a"].invoke_count == 2  # initial + cross critique
+        assert models["critic-b"].invoke_count == 2
+        assert models["critic-c"].invoke_count == 2
