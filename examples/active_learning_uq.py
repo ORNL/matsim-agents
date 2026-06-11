@@ -1,5 +1,17 @@
 """Active-learning example: HydraGNN MLFF relaxation gated by a UQ proxy.
 
+.. note::
+   This standalone example demonstrates a **relaxation-based, UQ-gated**
+   handoff: it runs a HydraGNN-driven *geometry optimization* on each input
+   structure, checks the branch-weight UQ proxy, and escalates to reference
+   DFT only when the prediction looks unreliable. This is **distinct** from
+   the production active-learning loop (``matsim-agents al run``, see
+   ``examples/active_learning/README.md``), which instead runs cheap surrogate
+   **molecular dynamics** to generate candidate snapshots, scores them by
+   ensemble / MC-dropout force disagreement, and labels them with
+   *single-point* (frozen-ion) DFT. Both share the same UQ-gating idea but use
+   different surrogate simulations (relaxation here vs. MD in the loop).
+
 The HydraGNN multi-branch model returns per-branch weights for every
 prediction (see :mod:`matsim_agents.tools.relaxation`). When the model is
 confident, the top branch dominates and the per-branch weight distribution
