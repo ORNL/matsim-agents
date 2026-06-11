@@ -1,0 +1,121 @@
+# =============================================================================
+# Paper test case: NbTaVHfZrTi BCC refractory HEA (high-entropy alloy)
+#
+# Scientific motivation (from Zekun Chen, 2026-06-10):
+#   Refractory BCC HEAs with ≥6 principal elements present a combinatorial
+#   challenge: AFLOW prototypes only cover equimolar bcc/fcc/hcp end-members.
+#   Using mc_dropout uncertainty, the loop preferentially labels structures
+#   with highest epistemic variance in predicted energy, efficiently mapping
+#   the composition–structure–stability landscape.
+#   Connects to FORUMAI structural-materials goal.
+#
+# How to run (Perlmutter):
+#   matsim-agents al validate-config examples/paper_cases/al_hea_bcc.yaml
+#   sbatch ... -N 32 -t 24:00:00 run-active-learning-perlmutter.sh
+#
+# Seed source: 'compositions' with several equimolar sub-lattice variants.
+# n_random=6 gives random unit cells (BCC, FCC, HCP, and low-symmetry).
+# acquisition: mc_dropout — works even with a single checkpoint (no ensemble).
+# =============================================================================
+
+vars:
+  PROJ_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  RUNS_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/runs
+  HYDRAGNN_DIR: /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/HydraGNN
+  RUN_TAG:      hea-bcc-al-001
+
+  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  POTCAR_DIR: /global/cfs/projectdirs/m5216/mlupopa/POTCAR/PBE.54
+
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+mlp:
+  # Surrogate selector — switch backend with one env var, no file edits:
+  #   matsim-agents al run <cfg>                  # HydraGNN (default; retrains each iter)
+  #   MLP_BACKEND=uma matsim-agents al run <cfg>  # frozen UMA foundation model
+  backend: ${MLP_BACKEND:-hydragnn}
+  hydragnn:
+    logdir:         ${INITIAL_LOGDIR}
+    checkpoint:     best_model.pt
+    mlp_checkpoint: null
+    charge: 0.0
+    spin:   0.0
+    precision:  fp32
+    mlp_device: cuda
+    ensemble_paths: []       # optional; add sibling seed logdirs to switch to ensemble
+  uma:
+    model_name: uma-s-1p1     # fairchem pretrained model (or local checkpoint path)
+    task_name:  omat          # inorganic bulk materials head
+    device:     cuda
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear
+
+md:
+  seed_source:
+    kind: compositions
+    compositions:
+      # Equimolar sextet
+      - NbTaVHfZrTi
+      # 5-element sub-lattice variants (one element dropped)
+      - NbTaVHfZr
+      - NbTaVHfTi
+      - NbTaVZrTi
+      - NbTaHfZrTi
+      - NbVHfZrTi
+      - TaVHfZrTi
+    max_phases_per_composition: 2    # BCC + FCC prototypes per formula
+    n_random: 6                      # pyXtal random unit-cell seeds (BCC SG=229 preferred)
+    random_seed: 7
+  timestep_fs: 2.0
+  n_steps: 500
+  temperature_K: 1200.0             # refractory; sample disordered high-T regime
+  thermostat: langevin
+  friction_inv_ps: 0.05
+  sample_every: 20
+  max_force_threshold_eV_per_A: 80.0
+  max_displacement_A: 6.0
+
+acquisition:
+  strategy: mc_dropout              # single-checkpoint uncertainty, no ensemble needed
+  mc_dropout_passes: 16
+  mc_dropout_p: 0.1
+  n_select: 200
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: ${DFT_BACKEND:-vasp}
+
+  vasp:
+    vasp_bin:         ${VASP_BIN}
+    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/perlmutter/_vasp-step-perlmutter.sh
+    incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
+    kpoints_template: null            # use KSPACING from INCAR (auto Gamma mesh)
+    potcar_dir:       ${POTCAR_DIR}
+    nodes_per_job: 1
+    ranks_per_node: 4                 # 4 A100 GPUs per Perlmutter node
+    threads_per_rank: 16
+    timeout_sec: 10800
+    extra_incar:
+      ENCUT: "520"
+      ISMEAR: "1"          # Methfessel-Paxton (order 1) for metallic BCC HEA
+      SIGMA: "0.20"
+      KSPACING: "0.25"
+      NCORE: "4"
+
+trainer:
+  enabled: true
+  train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
+  train_launcher: ${PROJ_ROOT}/scripts/launchers/perlmutter/_hydragnn-train-step-perlmutter.sh
+  epochs_per_iter: 5
+  nodes_for_train: 4
+  ranks_per_node:  4
+
+loop:
+  n_iterations: 12
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: false

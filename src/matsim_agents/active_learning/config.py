@@ -40,6 +40,104 @@ class HydraGNNConfig(BaseModel):
     )
 
 
+class MCDropoutInjectionConfig(BaseModel):
+    """Test-time dropout injection for backends without native dropout (e.g. UMA).
+
+    UMA and most production foundation MLIPs are trained *without* dropout, so
+    ``acquisition.strategy: mc_dropout`` would otherwise return zero variance.
+    When ``enabled``, dropout modules are inserted via forward hooks on the
+    selected layer types after the model is loaded. They stay **dormant**
+    (identity) during normal energy/force prediction and relaxation, and only
+    become active while MC-Dropout scoring toggles them into ``train()`` mode,
+    so deterministic results (relaxation, MD) are unchanged.
+
+    Caveat: injecting dropout into a model not trained with it yields a
+    *heuristic* uncertainty (uncalibrated), not a Bayesian posterior. Prefer a
+    deep ensemble where a calibrated signal is required.
+    """
+
+    enabled: bool = True
+    p: float = Field(0.1, description="Dropout probability used at the injected layers.")
+    target_layers: Literal["linear", "all"] = Field(
+        "linear",
+        description="Which layer outputs to apply dropout to: 'linear' = nn.Linear only.",
+    )
+    max_layers: int | None = Field(
+        None, description="Cap the number of injected layers (None = every match)."
+    )
+
+
+class UMAConfig(BaseModel):
+    """Inputs to load a UMA (fairchem) universal MLIP as an ASE calculator.
+
+    UMA is a frozen foundation model: there is no per-iteration retraining, so
+    set ``trainer.enabled: false`` when using this backend.
+    """
+
+    model_name: str = Field(
+        "uma-s-1p1",
+        description="fairchem pretrained model name (e.g. 'uma-s-1p1') or local checkpoint path.",
+    )
+    task_name: Literal["omat", "omol", "oc20", "odac", "omc"] = Field(
+        "omat",
+        description="UMA task head (omat = inorganic bulk materials; omol = molecules/MOFs).",
+    )
+    device: Literal["cuda", "cpu"] = "cuda"
+    precision: Literal["fp32", "fp64", "bf16"] | None = None
+    charge: float = 0.0
+    spin: float = 0.0
+    ensemble_models: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Additional UMA model names/checkpoints forming a deep ensemble. If "
+            "non-empty, ensemble disagreement is available as an acquisition."
+        ),
+    )
+    dropout: MCDropoutInjectionConfig = Field(
+        default_factory=MCDropoutInjectionConfig,
+        description="Test-time dropout injection settings for MC-Dropout acquisition.",
+    )
+
+
+class MLPConfig(BaseModel):
+    """Selects which ML potential predicts energies and forces.
+
+    ``backend`` chooses the active surrogate. Both ``hydragnn`` and ``uma``
+    sub-blocks may be present simultaneously; only the block matching
+    ``backend`` must be populated (the other is ignored). This makes the
+    surrogate switchable with a single environment variable when ``backend``
+    is wired to one, e.g. ``backend: ${MLP_BACKEND:-hydragnn}``::
+
+        MLP_BACKEND=uma matsim-agents al run <cfg>   # frozen UMA foundation model
+        matsim-agents al run <cfg>                   # HydraGNN (default)
+
+    For backward compatibility, a legacy top-level ``hydragnn:`` block (no
+    ``mlp:`` block) is promoted to ``mlp: {backend: hydragnn, hydragnn: ...}``
+    by the :class:`ALConfig` root validator.
+    """
+
+    backend: Literal["hydragnn", "uma"] = "hydragnn"
+    hydragnn: HydraGNNConfig | None = None
+    uma: UMAConfig | None = None
+
+    @model_validator(mode="after")
+    def _check_backend_block(self) -> MLPConfig:
+        if self.backend == "hydragnn" and self.hydragnn is None:
+            raise ValueError("mlp.backend='hydragnn' requires an mlp.hydragnn block.")
+        if self.backend == "uma" and self.uma is None:
+            raise ValueError("mlp.backend='uma' requires an mlp.uma block.")
+        return self
+
+    @property
+    def ensemble_paths(self) -> list:
+        """Unified ensemble-member list used by the AL loop, regardless of backend."""
+        if self.backend == "hydragnn" and self.hydragnn is not None:
+            return list(self.hydragnn.ensemble_paths)
+        if self.backend == "uma" and self.uma is not None:
+            return list(self.uma.ensemble_models)
+        return []
+
+
 class MDConfig(BaseModel):
     """Parameters for the HydraGNN-driven MD sampler.
 
@@ -269,14 +367,19 @@ class DFTConfig(BaseModel):
 
 
 class TrainerConfig(BaseModel):
-    """How to retrain HydraGNN at the end of each AL iteration."""
+    """How to retrain HydraGNN at the end of each AL iteration.
+
+    Not used by frozen-foundation-model backends (e.g. UMA): set
+    ``enabled: false`` and leave ``train_script`` unset for those.
+    """
 
     enabled: bool = True
-    train_script: Path = Field(
-        ...,
+    train_script: Path | None = Field(
+        None,
         description=(
             "Path to a HydraGNN training script (e.g. examples/mptrj/train.py) that "
-            "accepts --config, --logdir, and --resume_from."
+            "accepts --config, --logdir, and --resume_from. Required only when "
+            "enabled=True."
         ),
     )
     train_launcher: Path | None = Field(
@@ -289,6 +392,12 @@ class TrainerConfig(BaseModel):
     epochs_per_iter: int = 5
     nodes_for_train: int = 8
     ranks_per_node: int = 8
+
+    @model_validator(mode="after")
+    def _check_train_script(self) -> TrainerConfig:
+        if self.enabled and self.train_script is None:
+            raise ValueError("trainer.enabled=True requires trainer.train_script.")
+        return self
 
 
 class LoopConfig(BaseModel):
@@ -309,7 +418,7 @@ class LoopConfig(BaseModel):
 class ALConfig(BaseModel):
     """Root config for the active-learning loop."""
 
-    hydragnn: HydraGNNConfig
+    mlp: MLPConfig
     md: MDConfig
     acquisition: AcquisitionConfig
     dft: DFTConfig
@@ -319,16 +428,18 @@ class ALConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _accept_legacy_vasp_block(cls, data: Any) -> Any:
-        """Accept the pre-multi-backend YAML schema (top-level ``vasp:``).
+        """Accept the pre-multi-backend YAML schema.
 
-        Older YAMLs had ``vasp:`` directly under the root. We promote that to
-        ``dft: {backend: vasp, vasp: ...}`` so existing configs keep working.
-        Likewise we promote ``md.seed_structures: [...]`` to
-        ``md.seed_source: {kind: paths, paths: [...]}``.
+        * Top-level ``hydragnn:`` (no ``mlp:``) → ``mlp: {backend: hydragnn,
+          hydragnn: ...}`` so existing single-surrogate configs keep working.
+        * Top-level ``vasp:`` (no ``dft:``) → ``dft: {backend: vasp, vasp: ...}``.
+        * ``md.seed_structures: [...]`` → ``md.seed_source: {kind: paths, ...}``.
         """
         if not isinstance(data, dict):
             return data
         data = dict(data)  # don't mutate the caller's dict
+        if "hydragnn" in data and "mlp" not in data:
+            data["mlp"] = {"backend": "hydragnn", "hydragnn": data.pop("hydragnn")}
         if "vasp" in data and "dft" not in data:
             data["dft"] = {"backend": "vasp", "vasp": data.pop("vasp")}
         md = data.get("md")
@@ -342,10 +453,10 @@ class ALConfig(BaseModel):
     def _check_ensemble_for_strategy(self) -> ALConfig:
         s = self.acquisition.strategy
         needs_ensemble = s in {"ensemble", "ensemble_then_dropout"}
-        if needs_ensemble and not self.hydragnn.ensemble_paths:
+        if needs_ensemble and not self.mlp.ensemble_paths:
             raise ValueError(
-                f"acquisition.strategy={s!r} requires hydragnn.ensemble_paths "
-                "(at least one additional model)."
+                f"acquisition.strategy={s!r} requires at least one additional model: "
+                "set mlp.hydragnn.ensemble_paths (HydraGNN) or mlp.uma.ensemble_models (UMA)."
             )
         return self
 
