@@ -78,6 +78,15 @@ can feed into it:
 In other words, AL is both a standalone workflow and the downstream execution
 engine for automated escalation from discovery.
 
+> **Not the same as `examples/active_learning_uq.py`.** That standalone example
+> demonstrates a *relaxation-based*, UQ-gated handoff — it runs a HydraGNN
+> **geometry optimization** on each structure and escalates to reference DFT
+> when the branch-weight UQ proxy looks unreliable. The `al run` loop documented
+> here is different: it uses cheap surrogate **molecular dynamics** (not
+> relaxation) to generate candidate snapshots, scores them by ensemble /
+> MC-dropout force disagreement, and labels them with single-point (frozen-ion)
+> DFT. Same UQ-gating idea, different surrogate simulation.
+
 ## Agentic workflow map
 
 ```mermaid
