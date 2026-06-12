@@ -82,6 +82,16 @@ export CONDA_PREFIX="${HYDRAGNN_VENV}"
 export CONDA_DEFAULT_ENV="matsim-agents"
 export VIRTUAL_ENV="${HYDRAGNN_VENV}"
 
+# Ensure NVIDIA runtime libs used by VASP are resolvable at runtime.
+NVIDIA_SDK_ROOT="/opt/nvidia/hpc_sdk/Linux_x86_64/25.5"
+for libdir in \
+    "${NVIDIA_SDK_ROOT}/compilers/lib" \
+    "${NVIDIA_SDK_ROOT}/compilers/extras/qd/lib"; do
+    if [[ -d "${libdir}" ]] && [[ ":${LD_LIBRARY_PATH:-}:" != *":${libdir}:"* ]]; then
+        export LD_LIBRARY_PATH="${libdir}:${LD_LIBRARY_PATH:-}"
+    fi
+done
+
 # Set PYTHONPATH to include matsim-agents
 MATSIM_AGENTS_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 export PYTHONPATH="${MATSIM_AGENTS_DIR}/src:${PYTHONPATH:-}"
