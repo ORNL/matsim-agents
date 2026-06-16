@@ -2,6 +2,15 @@
 
 This directory provides both full-install and quick-setup scripts for Frontier.
 
+## Model Download Safety Policy
+
+See the canonical cross-platform policy in `docs/model-download-safety.md`.
+
+Download entry points:
+
+- `scripts/download/frontier/download-models-frontier.sh` (full set, gated models optional via token)
+- `scripts/download/frontier/download-open-models-frontier.sh` (open-access set)
+
 ## Scripts
 
 ### install_matsim_frontier.sh
