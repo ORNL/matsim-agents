@@ -3,6 +3,15 @@
 This directory provides an Aurora-focused setup flow that mirrors the phased
 install style used by the Frontier and Perlmutter scripts.
 
+## Model Download Safety Policy
+
+See the canonical cross-platform policy in `docs/model-download-safety.md`.
+
+Download entry points:
+
+- `scripts/download/aurora/download-models-aurora.sh` (full set, gated models optional via token)
+- `scripts/download/aurora/download-open-models-aurora.sh` (open-access set)
+
 ## vLLM-XPU
 
 ### install-vllm-xpu-aurora.sh

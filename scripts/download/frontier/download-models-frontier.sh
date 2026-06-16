@@ -29,6 +29,12 @@
 
 set -euo pipefail
 
+# Safety policy:
+# - This downloader must run from the HydraGNN Frontier environment.
+# - This script never runs pip installs or mutates Python package versions.
+# - If tooling is missing, refresh the environment via setup scripts instead of
+#   installing ad-hoc packages here.
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
@@ -42,6 +48,31 @@ source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 source "$REPO/scripts/setup/frontier/frontier-module-stack.sh"
 load_frontier_rocm72_modules
 source activate "$VENV"
+
+# Guard against unsupported Hugging Face CLI stacks that can overwrite
+# sensitive HydraGNN dependencies (for example click/typer constraints).
+if "$VENV/bin/python" - <<'PY'
+import importlib.metadata as m
+try:
+    v = m.version("huggingface_hub")
+except m.PackageNotFoundError:
+    raise SystemExit(0)
+major = int(v.split(".", 1)[0])
+raise SystemExit(42 if major >= 1 else 0)
+PY
+then
+  :
+else
+  rc=$?
+  if [[ $rc -eq 42 ]]; then
+    echo "ERROR: Unsupported huggingface_hub>=1.0 detected in HydraGNN venv: $VENV" >&2
+    echo "Do not upgrade packages in-place in this environment." >&2
+    echo "Recreate/fix the Frontier environment with:" >&2
+    echo "  INSTALL_LLM_EXTRAS=1 bash scripts/setup/frontier/install_matsim_frontier.sh --rocm72" >&2
+    exit 1
+  fi
+  exit $rc
+fi
 
 # ---------------------------------------------------------------------------
 # Model catalogue
@@ -96,7 +127,9 @@ for m in "${MODELS[@]}"; do echo "  - $m"; done
 
 if ! command -v hf >/dev/null 2>&1; then
   echo "ERROR: hf CLI not found in active environment." >&2
-  echo "Try: pip install -U huggingface_hub" >&2
+  echo "Do not run ad-hoc pip upgrades in HydraGNN venv." >&2
+  echo "Refresh the environment with pinned extras instead:" >&2
+  echo "  INSTALL_LLM_EXTRAS=1 bash scripts/setup/frontier/install_matsim_frontier.sh --rocm72" >&2
   exit 1
 fi
 

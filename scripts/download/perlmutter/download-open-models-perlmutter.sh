@@ -24,17 +24,21 @@
 
 set -euo pipefail
 
+# Safety policy:
+# - This downloader must run from the HydraGNN Perlmutter environment.
+# - This script never runs pip installs or mutates Python package versions.
+# - If tooling is missing, refresh the environment via setup scripts instead of
+#   installing ad-hoc packages here.
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
 PROJ="$(dirname "${REPO}")"
 
-VENV_LOCAL_DEFAULT="$REPO/perlmutter_venv"
+# Use the shared HydraGNN Perlmutter environment by default.
+# Override only with MATSIM_PERLMUTTER_VENV when you explicitly know what you are doing.
 VENV_SHARED_DEFAULT="$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
-VENV="${VENV:-${MATSIM_PERLMUTTER_VENV:-$VENV_LOCAL_DEFAULT}}"
-if [[ ! -d "$VENV" && -d "$VENV_SHARED_DEFAULT" ]]; then
-  VENV="$VENV_SHARED_DEFAULT"
-fi
+VENV="${MATSIM_PERLMUTTER_VENV:-$VENV_SHARED_DEFAULT}"
 MODEL_ROOT="${MODEL_ROOT:-$PROJ/models}"
 RUN_DIR="$PROJ/runs/download-open-models-${SLURM_JOB_ID:-manual}"
 mkdir -p "$RUN_DIR" "$MODEL_ROOT"
@@ -51,6 +55,32 @@ fi
 export PATH="$VENV/bin:$PATH"
 export CONDA_PREFIX="$VENV"
 export CONDA_DEFAULT_ENV="hydragnn_venv"
+
+# Guard against unsupported Hugging Face CLI stacks that can overwrite sensitive
+# HydraGNN dependencies (for example click/typer constraints).
+if "$VENV/bin/python" - <<'PY'
+import importlib.metadata as m
+import sys
+try:
+    v = m.version("huggingface_hub")
+except m.PackageNotFoundError:
+    raise SystemExit(0)
+major = int(v.split(".", 1)[0])
+raise SystemExit(42 if major >= 1 else 0)
+PY
+then
+  :
+else
+  rc=$?
+  if [[ $rc -eq 42 ]]; then
+    echo "ERROR: Unsupported huggingface_hub>=1.0 detected in HydraGNN venv: $VENV" >&2
+    echo "Do not upgrade packages in-place in this environment." >&2
+    echo "Recreate/fix the Perlmutter environment with:" >&2
+    echo "  INSTALL_LLM_EXTRAS=1 bash scripts/setup/perlmutter/install_matsim_perlmutter.sh --gpu" >&2
+    exit 1
+  fi
+  exit $rc
+fi
 
 DEFAULT_MODELS=(
   "Qwen/Qwen2.5-72B-Instruct"
@@ -77,7 +107,9 @@ for m in "${MODELS[@]}"; do echo "  - $m"; done
 
 if ! command -v hf >/dev/null 2>&1; then
   echo "ERROR: hf CLI not found in active environment." >&2
-  echo "Try: pip install -U huggingface_hub" >&2
+  echo "Do not run ad-hoc pip upgrades in HydraGNN venv." >&2
+  echo "Refresh the environment with pinned extras instead:" >&2
+  echo "  INSTALL_LLM_EXTRAS=1 bash scripts/setup/perlmutter/install_matsim_perlmutter.sh --gpu" >&2
   exit 1
 fi
 

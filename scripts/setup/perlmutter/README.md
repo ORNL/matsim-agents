@@ -4,6 +4,15 @@ This directory contains setup scripts for running matsim-agents on NERSC's Perlm
 
 This implementation mirrors the methodology used for Frontier, providing both quick-setup and full-installation options.
 
+## Model Download Safety Policy
+
+See the canonical cross-platform policy in `docs/model-download-safety.md`.
+
+Perlmutter download entry points:
+
+- `scripts/download/perlmutter/download-models-perlmutter.sh` (full set, gated models optional via token)
+- `scripts/download/perlmutter/download-open-models-perlmutter.sh` (open-access set)
+
 ## Scripts
 
 ### Installation Approach
