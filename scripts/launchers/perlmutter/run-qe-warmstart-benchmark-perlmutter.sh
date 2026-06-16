@@ -87,6 +87,17 @@ export MATSIM_QE_TIMEOUT_SEC="${QE_TIMEOUT_SEC}"
 export MATSIM_QE_MLP_DEVICE="cuda"
 export MATSIM_WARMSTART_FIXTURES="${FIXTURES}"
 
+# inference_fused.py lives in the HydraGNN SC26 examples dir; add it so
+# HydraGNN's warm-start path can import it.
+HYDRAGNN_SC26_DIR="$PROJ/HydraGNN/examples/multidataset_hpo_sc26"
+export PYTHONPATH="${HYDRAGNN_SC26_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+
+# Disable GPU-aware MPI for the pw.x sub-launch: the GTL library is not
+# linked in this batch job context, which causes all MPI ranks to abort.
+# QE's GPU acceleration (CUDA kernels) still works; only GPU-direct
+# inter-rank communication is affected, which this benchmark does not test.
+export MPICH_GPU_SUPPORT_ENABLED=0
+
 echo "=========================================="
 echo "QE warm-start benchmark on Perlmutter"
 echo "Date:               $(date)"

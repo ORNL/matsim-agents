@@ -41,7 +41,9 @@ module load cray-fftw || echo "WARNING: cray-fftw not loaded"
 
 export CUDA_HOME="${CUDA_HOME:-/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/cuda/12.9}"
 export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/math_libs/12.9/targets/x86_64-linux/lib:${LD_LIBRARY_PATH:-}"
-export MPICH_GPU_SUPPORT_ENABLED=1
+# Allow callers to override GPU-aware MPI (e.g. set 0 when cray-mpich-gtl is
+# not linked in the launch environment to avoid the GTL init abort).
+export MPICH_GPU_SUPPORT_ENABLED="${MPICH_GPU_SUPPORT_ENABLED:-1}"
 
 echo "=========================================="
 echo "QE pw.x GPU run on Perlmutter"
