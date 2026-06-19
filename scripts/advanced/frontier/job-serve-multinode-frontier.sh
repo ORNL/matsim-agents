@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -A mat746
 #SBATCH -J vllm-multinode
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/vllm-multinode-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/vllm-multinode-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 02:00:00
 #SBATCH -N 4
 #SBATCH -p batch

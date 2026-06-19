@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH -A mat746
 #SBATCH -J discovery-chat-vllm
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/discovery-chat-vllm-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/discovery-chat-vllm-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 01:30:00
 #SBATCH -N 1
 #SBATCH -p batch
 #SBATCH -q debug
 # ---------------------------------------------------------------------------
-# matsim-agents: RHEA discovery run on Frontier (1 node, 8 GCDs)
+# matsim-agents: discovery run on Frontier (1 node, 8 GCDs)
 #
 # Layout:
 #   • vLLM server  : all 8 GCDs, tensor-parallel-size=8
@@ -31,8 +31,8 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
-LOGDIR=$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64
-MLP_CHECKPOINT=$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt
+LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
+HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
 MODEL_NAME=${MATSIM_MODEL_NAME:-Qwen/Qwen2.5-72B-Instruct}
 RUN_DIR=$PROJ/runs/discovery-chat-vllm-$SLURM_JOB_ID
@@ -84,7 +84,7 @@ rm -rf "$VLLM_CACHE_ROOT"
 mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 
 # ── vLLM server ──────────────────────────────────────────────────────────────
-VLLM_PORT=8000
+VLLM_PORT=${MATSIM_VLLM_PORT:-8000}
 VLLM_LOG=$RUN_DIR/vllm-server.log
 
 # For Qwen3 models: strip <think> tokens and route them to reasoning_content
@@ -132,18 +132,13 @@ fi
 
 export MATSIM_VLLM_BASE_URL="http://localhost:${VLLM_PORT}/v1"
 
-# ── RHEA query ───────────────────────────────────────────────────────────────
-QUERY="Propose 4 to 5 refractory high-entropy alloy compositions using elements \
-from Mo, Nb, Ta, W, V, Cr, Hf, Zr, Ti that are known for combined \
-high-temperature resistance and mechanical strength. For each composition \
-specify the relevant crystal phases (e.g. BCC, B2, HCP) and explain the \
-physical justification. Then relax each proposed structure using the MLFF \
-and report the final energies and which phases are most stable."
+# ── discovery query ──────────────────────────────────────────────────────────
+QUERY=${MATSIM_DISCOVERY_QUERY:-"Propose 3 to 5 candidate inorganic materials with concise physical justification, then relax each structure with the MLFF and report final energies and relative stability."}
 
-echo "[$(date)] Submitting RHEA query to matsim-agents ..."
+echo "[$(date)] Submitting discovery query to matsim-agents ..."
 echo "$QUERY" | matsim-agents chat \
     --logdir          "$LOGDIR" \
-    --mlp-checkpoint  "$MLP_CHECKPOINT" \
+    --mlp-checkpoint  "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
     --llm-provider    vllm \
     --llm-model       "$MODEL_NAME" \

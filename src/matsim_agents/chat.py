@@ -52,7 +52,7 @@ Guidelines:
 class DiscoveryChatConfig:
     mlip_backend: str = "hydragnn"
     logdir: str | None = None
-    mlp_checkpoint: str | None = None
+    hydragnn_branch_mlp_checkpoint: str | None = None
     output_dir: str = "./outputs"
     checkpoint: str | None = None
     mlp_device: str = "cuda"
@@ -109,9 +109,9 @@ class DiscoveryChatConfig:
                     "mlip_backend='hydragnn' requires 'logdir' "
                     "(HydraGNN logdir containing config.json + checkpoint)."
                 )
-            if not self.mlp_checkpoint:
+            if not self.hydragnn_branch_mlp_checkpoint:
                 raise ValueError(
-                    "mlip_backend='hydragnn' requires 'mlp_checkpoint' "
+                    "mlip_backend='hydragnn' requires 'hydragnn_branch_mlp_checkpoint' "
                     "(BranchWeightMLP .pt checkpoint)."
                 )
 
@@ -179,7 +179,7 @@ def _kickoff_exploration(
         composition,
         mlip_backend=cfg.mlip_backend,
         logdir=cfg.logdir,
-        mlp_checkpoint=cfg.mlp_checkpoint,
+        hydragnn_branch_mlp_checkpoint=cfg.hydragnn_branch_mlp_checkpoint,
         uma_model_name=cfg.uma_model_name,
         uma_task=cfg.uma_task,
         checkpoint=cfg.checkpoint,
@@ -271,7 +271,7 @@ def _run_single_structure_relaxation(structure_path: str, cfg: DiscoveryChatConf
             structure_path=structure_path,
             mlip_backend=cfg.mlip_backend,
             logdir=cfg.logdir,
-            mlp_checkpoint=cfg.mlp_checkpoint,
+            hydragnn_branch_mlp_checkpoint=cfg.hydragnn_branch_mlp_checkpoint,
             checkpoint=cfg.checkpoint,
             uma_model_name=cfg.uma_model_name,
             uma_task=cfg.uma_task,

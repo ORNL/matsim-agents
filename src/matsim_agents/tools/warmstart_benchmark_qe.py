@@ -77,7 +77,7 @@ def run_warmstart_benchmark(
     ``qe_settings_overrides`` is forwarded to :func:`recommend_settings`.
 
     ``hydragnn_kwargs`` is forwarded to ``relax_structure`` (the HydraGNN
-    tool). It must at least contain ``logdir`` and ``mlp_checkpoint``; the
+    tool). It must at least contain ``logdir`` and ``hydragnn_branch_mlp_checkpoint``; the
     output is written next to the input structure.
     """
     from ase.io import read, write
@@ -291,15 +291,15 @@ def main(argv: list[str] | None = None) -> int:
     hydragnn_kwargs: dict[str, Any] = {}
     if args.logdir:
         hydragnn_kwargs["logdir"] = args.logdir
-    if args.mlp_checkpoint:
-        hydragnn_kwargs["mlp_checkpoint"] = args.mlp_checkpoint
+    if args.hydragnn_branch_mlp_checkpoint:
+        hydragnn_kwargs["hydragnn_branch_mlp_checkpoint"] = args.hydragnn_branch_mlp_checkpoint
     if args.checkpoint:
         hydragnn_kwargs["checkpoint"] = args.checkpoint
     hydragnn_kwargs["mlp_device"] = args.mlp_device
     hydragnn_kwargs["fmax"] = args.hydragnn_fmax
     hydragnn_kwargs["maxiter"] = args.hydragnn_maxiter
 
-    skip_hg = not (args.logdir and args.mlp_checkpoint)
+    skip_hg = not (args.logdir and args.hydragnn_branch_mlp_checkpoint)
 
     qe_launcher: list[str] | str = (
         args.qe_launcher.split() if " " in args.qe_launcher else args.qe_launcher
