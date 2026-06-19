@@ -24,8 +24,11 @@ What happens:
     * If the relaxed phases show high uncertainty (low branch-weight
       confidence), discovery can hand off directly to the active-learning
       loop using a base AL YAML config (--al-config).
-    * You can also trigger an optional single-structure relaxation from
-      inside chat with: /relax <path_to_structure>
+    * You can also trigger optional control actions from inside chat with
+      slash commands: /relax <path_to_structure> (single-structure
+      relaxation), /al [composition] (active-learning handoff for the
+      given or most recently discussed composition), and /clear (reset
+      the conversation and discovery state).
 """
 
 from __future__ import annotations
