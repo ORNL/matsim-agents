@@ -116,7 +116,7 @@ flowchart TD
   tests, and the proposer revises for one or more rounds (`--llm-peer-review`,
   `--critic-llm-*`, `--peer-review-rounds`).
 - **Automatic composition detection** in user/LLM messages — when a new chemical formula is proposed, the system offers to run a substantial atomistic exploration.
-- **Optional single-structure relaxation inside discovery chat** via `/relax <structure_path>`.
+- **Slash commands inside discovery chat**: `/relax <structure_path>` (single-structure relaxation), `/al [composition]` (trigger an active-learning handoff for the given or most recently discussed composition), and `/clear` (reset the conversation and discovery state).
 - **Discovery-to-active-learning escalation policy**: when branch-weight UQ indicates low confidence, discovery can hand off to AL automatically from the same run.
 - **Structured handoff audit artifacts**: JSONL records of UQ metrics, thresholds, trigger rationale, and action (`not_triggered`, `triggered_dry_run`, `triggered_run`).
 - **Selectable surrogate backend for geometry relaxation**:
@@ -190,6 +190,8 @@ Use this table to choose the right entry point quickly.
 | One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective, `--logdir`, `--mlp-checkpoint`, optional AL handoff flags | planner/executor/UQ/analyst result; optional AL handoff + JSONL audit |
 | Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--logdir`, `--mlp-checkpoint`, LLM provider/model | chat transcript + discovery artifacts under `output_dir/discovery/` |
 | Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
+| Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) + JSONL audit record |
+| Reset conversation/discovery state during chat | `matsim-agents chat` + `/clear` | none | cleared session history and seen-composition state |
 | Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--logdir`, `--mlp-checkpoint`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
 | Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlp`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `MLP_BACKEND=uma` | iteration state dirs, dataset, optional retrained model logdirs |
 | Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
@@ -752,11 +754,17 @@ The `chat` REPL is more than a wrapper around the LLM — it is a
 5. The summary is fed back into the conversation as a discovery user-turn
   payload so the LLM can refine its hypothesis on the next turn.
 
-Discovery chat can also run two optional control actions:
+Discovery chat can also run optional control actions through slash commands:
 
 - **Single-structure relaxation command**:
   - `/relax path/to/structure.vasp`
-- **UQ-based AL handoff** (policy knobs on CLI):
+- **Active-learning handoff command**:
+  - `/al` (use the most recently discussed composition)
+  - `/al Li2MnO3` (specify the composition explicitly)
+  - Requires `--al-config`; respects the `--al-dry-run/--al-run` setting.
+- **Reset command**:
+  - `/clear` (clear the conversation history and discovery state for the session)
+- **UQ-based AL handoff** (automatic policy knobs on CLI):
   - `--trigger-al-handoff/--no-trigger-al-handoff`
   - `--al-config <base_al_yaml>`
   - `--al-dry-run/--al-run`
