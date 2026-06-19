@@ -30,7 +30,7 @@ class SupervisorConfig(BaseModel):
     """Inputs and policy knobs for the supervisor graph."""
 
     composition: str
-    mlp_backend: str = "hydragnn"
+    mlip_backend: str = "hydragnn"
     logdir: str | None = None
     mlp_checkpoint: str | None = None
     output_dir: str = "./outputs"
@@ -129,7 +129,7 @@ def _explore_node(state: SupervisorState) -> dict:
     out_dir = str(Path(cfg.output_dir) / "discovery")
     exploration = explore_composition(
         comp,
-        mlp_backend=cfg.mlp_backend,
+        mlip_backend=cfg.mlip_backend,
         logdir=cfg.logdir,
         mlp_checkpoint=cfg.mlp_checkpoint,
         uma_model_name=cfg.uma_model_name,

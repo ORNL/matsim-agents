@@ -121,7 +121,7 @@ flowchart TD
 - **Structured handoff audit artifacts**: JSONL records of UQ metrics, thresholds, trigger rationale, and action (`not_triggered`, `triggered_dry_run`, `triggered_run`).
 - **Selectable surrogate backend for geometry relaxation**:
   - **HydraGNN** fused MLFF + branch-weight MLP stack (default).
-  - **UMA** (Universal Models for Atoms) via fairchem (`--mlp-backend uma`).
+  - **UMA** (Universal Models for Atoms) via fairchem (`--mlip-backend uma`).
   - Note: branch-weight UQ is specific to HydraGNN; UMA relaxations do not emit branch-weight metrics.
 - **Unified crystal-phase seed generation** (`matsim_agents.discovery.seeds`)
   combining two complementary sources into one ranked candidate list:
@@ -175,11 +175,11 @@ flowchart TD
   - `matsim-agents run` for planner-executor-analyst task execution.
   - `matsim-agents supervisor-run` for discovery exploration + UQ-based decisioning + optional AL handoff.
 - **Surrogate backend switch for AL/supervisor flows**: choose HydraGNN or
-  UMA in the same YAML via `mlp.backend` (commonly
-  `backend: ${MLP_BACKEND:-hydragnn}`) and run with:
+  UMA in the same YAML via `mlip.backend` (commonly
+  `backend: ${MLIP_BACKEND:-hydragnn}`) and run with:
   - `matsim-agents al run <config.yaml>` (HydraGNN default)
-  - `MLP_BACKEND=uma matsim-agents al run <config.yaml>` (frozen UMA)
-  - `MLP_BACKEND=uma matsim-agents supervisor-run <composition> ...` (UMA in supervisor path)
+  - `MLIP_BACKEND=uma matsim-agents al run <config.yaml>` (frozen UMA)
+  - `MLIP_BACKEND=uma matsim-agents supervisor-run <composition> ...` (UMA in supervisor path)
 
 ## Workflow selection matrix
 
@@ -193,9 +193,9 @@ Use this table to choose the right entry point quickly.
 | Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) + JSONL audit record |
 | Reset conversation/discovery state during chat | `matsim-agents chat` + `/clear` | none | cleared session history and seen-composition state |
 | Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--logdir`, `--mlp-checkpoint`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
-| Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlp`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `MLP_BACKEND=uma` | iteration state dirs, dataset, optional retrained model logdirs |
+| Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlip`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `MLIP_BACKEND=uma` | iteration state dirs, dataset, optional retrained model logdirs |
 | Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
-| Paper-case feasibility check without iterative AL | `python examples/paper_cases/singlepass.py --case <name>` | case name, `MLP_LOGDIR`, optional `--dft` | per-case relaxed/ranked structures, optional DFT single-point validation |
+| Paper-case feasibility check without iterative AL | `python examples/paper_cases/singlepass.py --case <name>` | case name, `MLIP_LOGDIR`, optional `--dft` | per-case relaxed/ranked structures, optional DFT single-point validation |
 
 Notes:
 
@@ -216,7 +216,7 @@ matsim-agents run \
 # 1a) Core graph with UMA relaxation backend (no HydraGNN checkpoints needed)
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
-  --mlp-backend uma \
+  --mlip-backend uma \
   --uma-model-name uma-s-1p1 \
   --uma-task omat
 
@@ -255,7 +255,7 @@ matsim-agents chat \
 
 # 2a) Interactive discovery chat with UMA relaxations
 matsim-agents chat \
-  --mlp-backend uma \
+  --mlip-backend uma \
   --uma-model-name uma-s-1p1 \
   --uma-task omat
 
@@ -268,7 +268,7 @@ matsim-agents supervisor-run Li2MnO3 \
 
 # 3a) Supervisor orchestration with UMA relaxations
 matsim-agents supervisor-run Li2MnO3 \
-  --mlp-backend uma \
+  --mlip-backend uma \
   --uma-model-name uma-s-1p1 \
   --uma-task omat \
   --al-config examples/active_learning/al_config.example.yaml \
@@ -279,7 +279,7 @@ matsim-agents al validate-config examples/active_learning/al_config.example.yaml
 matsim-agents al run examples/active_learning/al_config.example.yaml
 
 # 4b) Same AL config, UMA surrogate instead of HydraGNN
-MLP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
+MLIP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
 
 # 5) Paper-case single pass
 python examples/paper_cases/singlepass.py --case lifepo4

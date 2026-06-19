@@ -1,17 +1,17 @@
-# Active-learning workflow: MLP surrogate (HydraGNN or UMA) ↔ DFT (VASP or Quantum ESPRESSO)
+# Active-learning workflow: MLIP surrogate (HydraGNN or UMA) ↔ DFT (VASP or Quantum ESPRESSO)
 
-End-to-end loop that uses an MLP surrogate force field (HydraGNN or UMA) and either
+End-to-end loop that uses an MLIP surrogate force field (HydraGNN or UMA) and either
 **VASP 6.6** or **Quantum ESPRESSO `pw.x`** as the ground-truth labeller for
 high-uncertainty structures discovered by surrogate-driven MD. The choice is
 a single YAML field (`dft.backend: vasp | qe`).
 
-Surrogate selection is controlled by the `mlp` block in the AL config:
+Surrogate selection is controlled by the `mlip` block in the AL config:
 
-- Default: `mlp.backend: hydragnn` (or `backend: ${MLP_BACKEND:-hydragnn}`)
+- Default: `mlip.backend: hydragnn` (or `backend: ${MLIP_BACKEND:-hydragnn}`)
 - Switch to UMA without editing YAML:
 
 ```bash
-MLP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
+MLIP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
 ```
 
 ## Methodology
@@ -19,12 +19,12 @@ MLP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.
 Each iteration of the loop performs four steps:
 
 1. **Cheap MD with the surrogate.** Short molecular-dynamics trajectories are
-   run from the seed structures using the MLP surrogate (HydraGNN or UMA) as
+   run from the seed structures using the MLIP surrogate (HydraGNN or UMA) as
    the ASE calculator — *not* DFT. The driver is ASE's `Langevin` (NVT) by
    default (`NVTBerendsen` / `VelocityVerlet` are alternatives), started from
    Maxwell–Boltzmann velocities at `md.temperature_K`. The heat-up deliberately
    drives the (intentionally un-relaxed) seeds off their idealised positions to
-   explore configuration space at MLP cost.
+   explore configuration space at MLIP cost.
 
 2. **Detect high-uncertainty snapshots.** Every MD snapshot is scored by a
    force-disagreement uncertainty (in eV/Å): `ensemble` (std across ≥2
@@ -198,7 +198,7 @@ matsim-agents al validate-config examples/active_learning/al_config.example.yaml
 matsim-agents al run examples/active_learning/al_config.example.yaml
 
 # 2b) Same AL config, UMA surrogate backend
-MLP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
+MLIP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
 
 # 3) Run via supervisor orchestration (dry-run handoff)
 matsim-agents supervisor-run Li2MnO3 \

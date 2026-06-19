@@ -3,7 +3,7 @@
 #
 # Same system as al_zn_formate.yaml, but driven by the UMA universal foundation
 # model (fairchem) instead of HydraGNN. This demonstrates the seamless surrogate
-# switch: only the `mlp:` block changes; the MD, acquisition, DFT, and loop
+# switch: only the `mlip:` block changes; the MD, acquisition, DFT, and loop
 # blocks are identical in spirit.
 #
 # Per the collaborator email (Zekun Chen, 2026-06-10), a universal potential
@@ -15,9 +15,9 @@
 #      so `trainer.enabled: false`. The labelled DFT dataset still accumulates
 #      for optional offline fine-tuning.
 #   2. UMA has no native dropout, so `acquisition.strategy: mc_dropout` relies on
-#      TEST-TIME dropout injection (mlp.uma.dropout). This is a heuristic
+#      TEST-TIME dropout injection (mlip.uma.dropout). This is a heuristic
 #      uncertainty; for a calibrated signal use `strategy: ensemble` with
-#      `mlp.uma.ensemble_models`.
+#      `mlip.uma.ensemble_models`.
 #
 # How to run:
 #   pip install fairchem-core          # one-time; accept UMA license on HF
@@ -33,7 +33,7 @@ vars:
   VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
   POTCAR_DIR: /global/cfs/projectdirs/m5216/mlupopa/POTCAR/PBE.54
 
-mlp:
+mlip:
   backend: uma
   uma:
     model_name: uma-s-1p1     # fairchem pretrained model (or local checkpoint path)
@@ -67,7 +67,7 @@ md:
   max_displacement_A: 3.0
 
 acquisition:
-  strategy: mc_dropout        # uses injected test-time dropout (see mlp.uma.dropout)
+  strategy: mc_dropout        # uses injected test-time dropout (see mlip.uma.dropout)
   mc_dropout_passes: 16
   mc_dropout_p: 0.1
   n_select: 64

@@ -20,29 +20,29 @@ console = Console()
 @app.command()
 def run(
     objective: str = typer.Argument(..., help="Free-form objective for the agent system."),
-    mlp_backend: str = typer.Option(
+    mlip_backend: str = typer.Option(
         "hydragnn",
-        "--mlp-backend",
+        "--mlip-backend",
         help="Relaxation backend: hydragnn | uma.",
         case_sensitive=False,
     ),
     logdir: Path | None = typer.Option(
         None,
-        help="HydraGNN logdir with config.json and checkpoint (required for --mlp-backend hydragnn).",
+        help="HydraGNN logdir with config.json and checkpoint (required for --mlip-backend hydragnn).",
     ),
     mlp_checkpoint: Path | None = typer.Option(
         None,
-        help="Path to BranchWeightMLP checkpoint (.pt), required for --mlp-backend hydragnn.",
+        help="Path to BranchWeightMLP checkpoint (.pt), required for --mlip-backend hydragnn.",
     ),
     uma_model_name: str = typer.Option(
         "uma-s-1p1",
         "--uma-model-name",
-        help="UMA model name/checkpoint (used when --mlp-backend uma).",
+        help="UMA model name/checkpoint (used when --mlip-backend uma).",
     ),
     uma_task: str = typer.Option(
         "omat",
         "--uma-task",
-        help="UMA task head: omat | omol (used when --mlp-backend uma).",
+        help="UMA task head: omat | omol (used when --mlip-backend uma).",
     ),
     checkpoint: str | None = typer.Option(
         None, help="HydraGNN checkpoint filename or absolute path."
@@ -116,7 +116,7 @@ def run(
     config = {
         "configurable": {
             "thread_id": str(uuid.uuid4()),
-            "mlp_backend": mlp_backend,
+            "mlip_backend": mlip_backend,
             "logdir": str(logdir) if logdir else None,
             "mlp_checkpoint": str(mlp_checkpoint) if mlp_checkpoint else None,
             "uma_model_name": uma_model_name,
@@ -158,29 +158,29 @@ def plan(objective: str):
 
 @app.command()
 def chat(
-    mlp_backend: str = typer.Option(
+    mlip_backend: str = typer.Option(
         "hydragnn",
-        "--mlp-backend",
+        "--mlip-backend",
         help="Relaxation backend: hydragnn | uma.",
         case_sensitive=False,
     ),
     logdir: Path | None = typer.Option(
         None,
-        help="HydraGNN logdir with config.json and checkpoint (required for --mlp-backend hydragnn).",
+        help="HydraGNN logdir with config.json and checkpoint (required for --mlip-backend hydragnn).",
     ),
     mlp_checkpoint: Path | None = typer.Option(
         None,
-        help="Path to BranchWeightMLP checkpoint (.pt), required for --mlp-backend hydragnn.",
+        help="Path to BranchWeightMLP checkpoint (.pt), required for --mlip-backend hydragnn.",
     ),
     uma_model_name: str = typer.Option(
         "uma-s-1p1",
         "--uma-model-name",
-        help="UMA model name/checkpoint (used when --mlp-backend uma).",
+        help="UMA model name/checkpoint (used when --mlip-backend uma).",
     ),
     uma_task: str = typer.Option(
         "omat",
         "--uma-task",
-        help="UMA task head: omat | omol (used when --mlp-backend uma).",
+        help="UMA task head: omat | omol (used when --mlip-backend uma).",
     ),
     output_dir: Path = typer.Option(
         Path("./outputs"), help="Root directory for discovery artifacts."
@@ -318,7 +318,7 @@ def chat(
     ]
 
     cfg = DiscoveryChatConfig(
-        mlp_backend=mlp_backend,
+        mlip_backend=mlip_backend,
         logdir=str(logdir) if logdir else None,
         mlp_checkpoint=str(mlp_checkpoint) if mlp_checkpoint else None,
         uma_model_name=uma_model_name,
@@ -364,29 +364,29 @@ def chat(
 @app.command("supervisor-run")
 def supervisor_run(
     composition: str = typer.Argument(..., help="Target composition, e.g. Li2MnO3."),
-    mlp_backend: str = typer.Option(
+    mlip_backend: str = typer.Option(
         "hydragnn",
-        "--mlp-backend",
+        "--mlip-backend",
         help="Relaxation backend: hydragnn | uma.",
         case_sensitive=False,
     ),
     logdir: Path | None = typer.Option(
         None,
-        help="HydraGNN logdir with config.json and checkpoint (required for --mlp-backend hydragnn).",
+        help="HydraGNN logdir with config.json and checkpoint (required for --mlip-backend hydragnn).",
     ),
     mlp_checkpoint: Path | None = typer.Option(
         None,
-        help="Path to BranchWeightMLP checkpoint (.pt), required for --mlp-backend hydragnn.",
+        help="Path to BranchWeightMLP checkpoint (.pt), required for --mlip-backend hydragnn.",
     ),
     uma_model_name: str = typer.Option(
         "uma-s-1p1",
         "--uma-model-name",
-        help="UMA model name/checkpoint (used when --mlp-backend uma).",
+        help="UMA model name/checkpoint (used when --mlip-backend uma).",
     ),
     uma_task: str = typer.Option(
         "omat",
         "--uma-task",
-        help="UMA task head: omat | omol (used when --mlp-backend uma).",
+        help="UMA task head: omat | omol (used when --mlip-backend uma).",
     ),
     output_dir: Path = typer.Option(Path("./outputs"), help="Root directory for artifacts."),
     checkpoint: str | None = typer.Option(None, help="HydraGNN checkpoint filename or path."),
@@ -451,7 +451,7 @@ def supervisor_run(
 
     cfg = SupervisorConfig(
         composition=composition,
-        mlp_backend=mlp_backend,
+        mlip_backend=mlip_backend,
         logdir=str(logdir) if logdir else None,
         mlp_checkpoint=str(mlp_checkpoint) if mlp_checkpoint else None,
         uma_model_name=uma_model_name,
