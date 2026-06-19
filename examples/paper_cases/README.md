@@ -6,7 +6,7 @@ categories proposed by Zekun Chen (2026-06-10).
 Every system has **two entry points**:
 
 * **Single pass** — `singlepass.py --case <name>`: runs the agent graph *once*
-  (MLP relax + polymorph ranking, optional one DFT validation single-point via
+  (MLIP relax + polymorph ranking, optional one DFT validation single-point via
   `--dft`). Fast sanity / feasibility read. No retraining loop.
 * **Active learning** — `al_<name>.yaml`: the full discovery → uncertainty
   acquisition → DFT labeling → retrain loop.
@@ -95,12 +95,12 @@ examples/paper_cases/
 source scripts/setup/perlmutter/setup_matsim_perlmutter.sh
 export PROJ_ROOT=$PWD
 export RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs
-export MLP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir
+export MLIP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir
 
 # 1) write every seed structure (no agent run) — useful before AL too:
 python examples/paper_cases/singlepass.py --all --seeds-only
 
-# 2) single pass on one system (MLP only):
+# 2) single pass on one system (MLIP only):
 python examples/paper_cases/singlepass.py --case lifepo4
 
 # 3) single pass with one DFT validation single-point (VASP):
@@ -111,11 +111,11 @@ matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run            examples/paper_cases/al_lifepo4.yaml
 
 # 4b) same AL config, UMA surrogate backend:
-MLP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
+MLIP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 
 # 5) supervisor-driven discovery -> optional AL handoff:
 matsim-agents supervisor-run LiFePO4 \
-  --logdir $MLP_LOGDIR \
+  --logdir $MLIP_LOGDIR \
   --mlp-checkpoint best_model.pt \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
@@ -143,7 +143,7 @@ matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 
 # 4) Supervisor path with optional AL handoff planning
 matsim-agents supervisor-run LiFePO4 \
-  --logdir "$MLP_LOGDIR" \
+  --logdir "$MLIP_LOGDIR" \
   --mlp-checkpoint best_model.pt \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
@@ -151,7 +151,7 @@ matsim-agents supervisor-run LiFePO4 \
 # 5) Core run path with UQ-triggered AL handoff planning
 matsim-agents run \
   "Relax structures/lifepo4_olivine.vasp and summarize results." \
-  --logdir "$MLP_LOGDIR" \
+  --logdir "$MLIP_LOGDIR" \
   --mlp-checkpoint best_model.pt \
   --trigger-al-handoff \
   --al-config examples/paper_cases/al_lifepo4.yaml \
@@ -162,16 +162,16 @@ The single-pass runner uses these environment variables:
 
 | Variable | Meaning | Default |
 |----------|---------|---------|
-| `MLP_LOGDIR` | HydraGNN logdir (config.json + checkpoint) | `$RUNS_ROOT/al-models/iter0_logdir` |
+| `MLIP_LOGDIR` | HydraGNN logdir (config.json + checkpoint) | `$RUNS_ROOT/al-models/iter0_logdir` |
 | `MLP_CKPT` | checkpoint filename | `best_model.pt` |
 | `OUT_DIR` | output root | `./out_singlepass` |
 
 For AL YAMLs in this folder, the surrogate backend can be switched with one
-env var when configs use `backend: ${MLP_BACKEND:-hydragnn}`:
+env var when configs use `backend: ${MLIP_BACKEND:-hydragnn}`:
 
 ```bash
 matsim-agents al run examples/paper_cases/al_lifepo4.yaml        # HydraGNN (default)
-MLP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
+MLIP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 ```
 
 ---
@@ -254,7 +254,7 @@ organic-inorganic MOFs better than the inorganic-trained HydraGNN model.
 source scripts/setup/perlmutter/setup_matsim_perlmutter.sh
 export PROJ_ROOT=$PWD
 export RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs
-export MLP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir
+export MLIP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir
 export VASP_BIN=$PROJ_ROOT/external/vasp6/src/vasp.6.6.0/bin/vasp_std
 export POTCAR_DIR=/global/cfs/projectdirs/m5216/mlupopa/POTCAR/PBE.54
 

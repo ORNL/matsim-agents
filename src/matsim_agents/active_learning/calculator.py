@@ -1,6 +1,6 @@
 """Lazy builders for the MLP surrogate ASE calculators.
 
-Two backends are supported behind a single factory, :func:`make_mlp_calculator`:
+Two backends are supported behind a single factory, :func:`make_mlip_calculator`:
 
 * **HydraGNN** — loaded from a logdir (``config.json`` + checkpoint), wrapping
   the pattern in ``HydraGNN/examples/.../structure_optimization_ASE.py``.
@@ -19,13 +19,13 @@ import os
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.active_learning.config import HydraGNNConfig, MLPConfig, UMAConfig
+from matsim_agents.active_learning.config import HydraGNNConfig, MLIPConfig, UMAConfig
 
 log = logging.getLogger(__name__)
 
 
-def make_mlp_calculator(
-    cfg: MLPConfig,
+def make_mlip_calculator(
+    cfg: MLIPConfig,
     *,
     enable_mc_dropout: bool = False,
     logdir_override: str | Path | None = None,
@@ -38,12 +38,12 @@ def make_mlp_calculator(
     ``logdir_override`` is used by the ensemble path (HydraGNN only).
     """
     if cfg.backend == "hydragnn":
-        assert cfg.hydragnn is not None  # guaranteed by MLPConfig validator
+        assert cfg.hydragnn is not None  # guaranteed by MLIPConfig validator
         return build_hydragnn_calculator(cfg.hydragnn, logdir_override=logdir_override)
     if cfg.backend == "uma":
         assert cfg.uma is not None
         return build_uma_calculator(cfg.uma, enable_mc_dropout=enable_mc_dropout)
-    raise ValueError(f"Unknown mlp.backend: {cfg.backend!r}")
+    raise ValueError(f"Unknown mlip.backend: {cfg.backend!r}")
 
 
 def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path | None = None):
@@ -125,7 +125,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     )
 
 
-def build_ensemble(cfg: MLPConfig, *, enable_mc_dropout: bool = False) -> list[Any]:
+def build_ensemble(cfg: MLIPConfig, *, enable_mc_dropout: bool = False) -> list[Any]:
     """Return a list of calculators: the primary model plus all ensemble members.
 
     * HydraGNN: primary logdir + each ``ensemble_paths`` logdir.
@@ -144,7 +144,7 @@ def build_ensemble(cfg: MLPConfig, *, enable_mc_dropout: bool = False) -> list[A
             member = cfg.uma.model_copy(update={"model_name": name})
             calcs.append(build_uma_calculator(member, enable_mc_dropout=enable_mc_dropout))
         return calcs
-    raise ValueError(f"Unknown mlp.backend: {cfg.backend!r}")
+    raise ValueError(f"Unknown mlip.backend: {cfg.backend!r}")
 
 
 # --------------------------------------------------------------------------- #
@@ -201,7 +201,7 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
         raise ImportError(
             "The UMA backend requires the 'fairchem-core' package. Install it with "
             "`pip install fairchem-core` (and accept the UMA model license on "
-            "Hugging Face), then set mlp.backend: uma."
+            "Hugging Face), then set mlip.backend: uma."
         ) from exc
 
     predictor = pretrained_mlip.get_predict_unit(cfg.model_name, device=cfg.device)
@@ -214,7 +214,7 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
         log.warning(
             "UMA calculator loaded but the underlying torch module could not be "
             "located; MC-Dropout acquisition will not work for this backend. "
-            "Use acquisition.strategy: ensemble (mlp.uma.ensemble_models) or random."
+            "Use acquisition.strategy: ensemble (mlip.uma.ensemble_models) or random."
         )
     else:
         try:

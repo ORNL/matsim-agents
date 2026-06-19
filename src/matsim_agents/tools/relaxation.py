@@ -26,17 +26,17 @@ class RelaxStructureInput(BaseModel):
     structure_path: str = Field(
         ..., description="Path to the input structure file (e.g. .vasp, .cif, .xyz)."
     )
-    mlp_backend: Literal["hydragnn", "uma"] = Field(
+    mlip_backend: Literal["hydragnn", "uma"] = Field(
         "hydragnn",
         description="Surrogate backend used by the relaxation tool.",
     )
     logdir: str | None = Field(
         None,
-        description="HydraGNN logdir containing config.json + checkpoint (required for mlp_backend='hydragnn').",
+        description="HydraGNN logdir containing config.json + checkpoint (required for mlip_backend='hydragnn').",
     )
     mlp_checkpoint: str | None = Field(
         None,
-        description="HydraGNN BranchWeightMLP checkpoint (.pt), required for mlp_backend='hydragnn'.",
+        description="HydraGNN BranchWeightMLP checkpoint (.pt), required for mlip_backend='hydragnn'.",
     )
     checkpoint: str | None = Field(
         None, description="Optional HydraGNN checkpoint filename or absolute path."
@@ -53,11 +53,11 @@ class RelaxStructureInput(BaseModel):
     mlp_device: Literal["cuda", "cpu"] = "cuda"
     uma_model_name: str = Field(
         "uma-s-1p1",
-        description="UMA pretrained model name/checkpoint when mlp_backend='uma'.",
+        description="UMA pretrained model name/checkpoint when mlip_backend='uma'.",
     )
     uma_task: Literal["omat", "omol"] = Field(
         "omat",
-        description="UMA task head when mlp_backend='uma'.",
+        description="UMA task head when mlip_backend='uma'.",
     )
     random_displacement: bool = False
     random_displacement_scale: float = 0.1
@@ -70,11 +70,11 @@ class RelaxStructureInput(BaseModel):
 
     @model_validator(mode="after")
     def _validate_backend_inputs(self):
-        if self.mlp_backend == "hydragnn":
+        if self.mlip_backend == "hydragnn":
             if not self.logdir:
-                raise ValueError("mlp_backend='hydragnn' requires logdir.")
+                raise ValueError("mlip_backend='hydragnn' requires logdir.")
             if not self.mlp_checkpoint:
-                raise ValueError("mlp_backend='hydragnn' requires mlp_checkpoint.")
+                raise ValueError("mlip_backend='hydragnn' requires mlp_checkpoint.")
         return self
 
 
@@ -198,7 +198,7 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
         f"{'_from_initial_randomly_perturbed_structure' if args.random_displacement else ''}{ext}",
     )
 
-    if args.mlp_backend == "hydragnn":
+    if args.mlip_backend == "hydragnn":
         from inference_fused import load_fused_stack
 
         (

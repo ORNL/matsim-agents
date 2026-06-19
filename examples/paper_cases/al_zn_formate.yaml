@@ -38,11 +38,11 @@ vars:
 
   INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
 
-mlp:
+mlip:
   # Surrogate selector — switch backend with one env var, no file edits:
   #   matsim-agents al run <cfg>                  # HydraGNN (default; retrains each iter)
-  #   MLP_BACKEND=uma matsim-agents al run <cfg>  # frozen UMA foundation model
-  backend: ${MLP_BACKEND:-hydragnn}
+  #   MLIP_BACKEND=uma matsim-agents al run <cfg>  # frozen UMA foundation model
+  backend: ${MLIP_BACKEND:-hydragnn}
   hydragnn:
     logdir:         ${INITIAL_LOGDIR}
     checkpoint:     best_model.pt
@@ -98,7 +98,7 @@ dft:
     threads_per_rank: 16
     timeout_sec: 14400
     # NOTE: AL DFT backend runs single-point SCF labeling only; framework
-    # relaxation is done by the MLP/MD stage. Zn formate is an insulator ->
+    # relaxation is done by the MLIP/MD stage. Zn formate is an insulator ->
     # Gaussian smearing (ISMEAR=0). LREAL=Auto speeds the large hybrid cell.
     extra_incar:
       ENCUT: "520"         # raised automatically if a POTCAR ENMAX demands it

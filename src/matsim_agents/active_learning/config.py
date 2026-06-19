@@ -99,20 +99,20 @@ class UMAConfig(BaseModel):
     )
 
 
-class MLPConfig(BaseModel):
+class MLIPConfig(BaseModel):
     """Selects which ML potential predicts energies and forces.
 
     ``backend`` chooses the active surrogate. Both ``hydragnn`` and ``uma``
     sub-blocks may be present simultaneously; only the block matching
     ``backend`` must be populated (the other is ignored). This makes the
     surrogate switchable with a single environment variable when ``backend``
-    is wired to one, e.g. ``backend: ${MLP_BACKEND:-hydragnn}``::
+    is wired to one, e.g. ``backend: ${MLIP_BACKEND:-hydragnn}``::
 
-        MLP_BACKEND=uma matsim-agents al run <cfg>   # frozen UMA foundation model
+        MLIP_BACKEND=uma matsim-agents al run <cfg>   # frozen UMA foundation model
         matsim-agents al run <cfg>                   # HydraGNN (default)
 
     For backward compatibility, a legacy top-level ``hydragnn:`` block (no
-    ``mlp:`` block) is promoted to ``mlp: {backend: hydragnn, hydragnn: ...}``
+    ``mlip:`` block) is promoted to ``mlip: {backend: hydragnn, hydragnn: ...}``
     by the :class:`ALConfig` root validator.
     """
 
@@ -121,11 +121,11 @@ class MLPConfig(BaseModel):
     uma: UMAConfig | None = None
 
     @model_validator(mode="after")
-    def _check_backend_block(self) -> MLPConfig:
+    def _check_backend_block(self) -> MLIPConfig:
         if self.backend == "hydragnn" and self.hydragnn is None:
-            raise ValueError("mlp.backend='hydragnn' requires an mlp.hydragnn block.")
+            raise ValueError("mlip.backend='hydragnn' requires an mlip.hydragnn block.")
         if self.backend == "uma" and self.uma is None:
-            raise ValueError("mlp.backend='uma' requires an mlp.uma block.")
+            raise ValueError("mlip.backend='uma' requires an mlip.uma block.")
         return self
 
     @property
@@ -418,7 +418,7 @@ class LoopConfig(BaseModel):
 class ALConfig(BaseModel):
     """Root config for the active-learning loop."""
 
-    mlp: MLPConfig
+    mlip: MLIPConfig
     md: MDConfig
     acquisition: AcquisitionConfig
     dft: DFTConfig
@@ -430,7 +430,7 @@ class ALConfig(BaseModel):
     def _accept_legacy_vasp_block(cls, data: Any) -> Any:
         """Accept the pre-multi-backend YAML schema.
 
-        * Top-level ``hydragnn:`` (no ``mlp:``) → ``mlp: {backend: hydragnn,
+        * Top-level ``hydragnn:`` (no ``mlip:``) → ``mlip: {backend: hydragnn,
           hydragnn: ...}`` so existing single-surrogate configs keep working.
         * Top-level ``vasp:`` (no ``dft:``) → ``dft: {backend: vasp, vasp: ...}``.
         * ``md.seed_structures: [...]`` → ``md.seed_source: {kind: paths, ...}``.
@@ -438,8 +438,8 @@ class ALConfig(BaseModel):
         if not isinstance(data, dict):
             return data
         data = dict(data)  # don't mutate the caller's dict
-        if "hydragnn" in data and "mlp" not in data:
-            data["mlp"] = {"backend": "hydragnn", "hydragnn": data.pop("hydragnn")}
+        if "hydragnn" in data and "mlip" not in data:
+            data["mlip"] = {"backend": "hydragnn", "hydragnn": data.pop("hydragnn")}
         if "vasp" in data and "dft" not in data:
             data["dft"] = {"backend": "vasp", "vasp": data.pop("vasp")}
         md = data.get("md")
@@ -453,10 +453,10 @@ class ALConfig(BaseModel):
     def _check_ensemble_for_strategy(self) -> ALConfig:
         s = self.acquisition.strategy
         needs_ensemble = s in {"ensemble", "ensemble_then_dropout"}
-        if needs_ensemble and not self.mlp.ensemble_paths:
+        if needs_ensemble and not self.mlip.ensemble_paths:
             raise ValueError(
                 f"acquisition.strategy={s!r} requires at least one additional model: "
-                "set mlp.hydragnn.ensemble_paths (HydraGNN) or mlp.uma.ensemble_models (UMA)."
+                "set mlip.hydragnn.ensemble_paths (HydraGNN) or mlip.uma.ensemble_models (UMA)."
             )
         return self
 

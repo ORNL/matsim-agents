@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.active_learning.config import ALConfig, MLPConfig
+from matsim_agents.active_learning.config import ALConfig, MLIPConfig
 
 
 def _base_blocks(tmp_path) -> dict:
@@ -38,10 +38,10 @@ def test_legacy_hydragnn_block_is_promoted_to_mlp(tmp_path) -> None:
     data = _base_blocks(tmp_path)
     data["hydragnn"] = {"logdir": str(tmp_path / "logdir"), "checkpoint": "best_model.pt"}
     cfg = ALConfig.model_validate(data)
-    assert cfg.mlp.backend == "hydragnn"
-    assert cfg.mlp.hydragnn is not None
-    assert cfg.mlp.uma is None
-    assert str(cfg.mlp.hydragnn.checkpoint) == "best_model.pt"
+    assert cfg.mlip.backend == "hydragnn"
+    assert cfg.mlip.hydragnn is not None
+    assert cfg.mlip.uma is None
+    assert str(cfg.mlip.hydragnn.checkpoint) == "best_model.pt"
 
 
 def test_uma_backend_parses(tmp_path) -> None:
@@ -55,23 +55,23 @@ def test_uma_backend_parses(tmp_path) -> None:
         },
     }
     cfg = ALConfig.model_validate(data)
-    assert cfg.mlp.backend == "uma"
-    assert cfg.mlp.uma is not None
-    assert cfg.mlp.uma.task_name == "omol"
-    assert cfg.mlp.uma.dropout.p == 0.15
+    assert cfg.mlip.backend == "uma"
+    assert cfg.mlip.uma is not None
+    assert cfg.mlip.uma.task_name == "omol"
+    assert cfg.mlip.uma.dropout.p == 0.15
     # No ensemble members -> unified ensemble_paths is empty.
-    assert cfg.mlp.ensemble_paths == []
+    assert cfg.mlip.ensemble_paths == []
 
 
-def test_mlp_backend_requires_matching_block() -> None:
+def test_mlip_backend_requires_matching_block() -> None:
     with pytest.raises(ValueError, match="requires an mlp.uma block"):
-        MLPConfig(backend="uma")
+        MLIPConfig(backend="uma")
     with pytest.raises(ValueError, match="requires an mlp.hydragnn block"):
-        MLPConfig(backend="hydragnn")
+        MLIPConfig(backend="hydragnn")
 
 
 def test_uma_ensemble_models_feed_ensemble_paths() -> None:
-    cfg = MLPConfig(
+    cfg = MLIPConfig(
         backend="uma",
         uma={"model_name": "uma-s-1p1", "ensemble_models": ["uma-s-1p1-seed2"]},
     )

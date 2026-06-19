@@ -36,7 +36,7 @@ def explore_composition(
     mlp_checkpoint: str | None = None,
     *,
     output_dir: str,
-    mlp_backend: str = "hydragnn",
+    mlip_backend: str = "hydragnn",
     uma_model_name: str = "uma-s-1p1",
     uma_task: str = "omat",
     checkpoint: str | None = None,
@@ -104,7 +104,7 @@ def explore_composition(
             result = relax(
                 RelaxStructureInput(
                     structure_path=cand.structure_path,
-                    mlp_backend=mlp_backend,
+                    mlip_backend=mlip_backend,
                     logdir=logdir,
                     mlp_checkpoint=mlp_checkpoint,
                     checkpoint=checkpoint,

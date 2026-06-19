@@ -37,11 +37,11 @@ vars:
 
 # ---------------------------------------------------------------------------
 
-mlp:
+mlip:
   # Surrogate selector — switch backend with one env var, no file edits:
   #   matsim-agents al run <cfg>                  # HydraGNN (default; retrains each iter)
-  #   MLP_BACKEND=uma matsim-agents al run <cfg>  # frozen UMA foundation model
-  backend: ${MLP_BACKEND:-hydragnn}
+  #   MLIP_BACKEND=uma matsim-agents al run <cfg>  # frozen UMA foundation model
+  backend: ${MLIP_BACKEND:-hydragnn}
   hydragnn:
     logdir:         ${INITIAL_LOGDIR}
     checkpoint:     best_model.pt
