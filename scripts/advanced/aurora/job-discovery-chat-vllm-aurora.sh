@@ -9,7 +9,7 @@
 #PBS -k doe
 #PBS -j oe
 # ---------------------------------------------------------------------------
-# matsim-agents: end-to-end RHEA discovery run on ALCF Aurora using vLLM-XPU.
+# matsim-agents: end-to-end discovery run on ALCF Aurora using vLLM-XPU.
 #
 # Aurora analog of scripts/advanced/frontier/job-discovery-chat-vllm-frontier.sh
 #
@@ -34,7 +34,7 @@
 #   qsub scripts/advanced/aurora/job-discovery-chat-vllm-aurora.sh
 #
 # Override model at submission:
-#   CHAT_MODEL_PATH=$PROJ/models/Qwen2.5-72B-Instruct \
+#   MATSIM_MODEL_DIR=$PROJ/models/Qwen2.5-72B-Instruct \
 #   qsub -l select=2 scripts/advanced/aurora/job-discovery-chat-vllm-aurora.sh
 #
 # See docs/vllm-aurora.md for full bring-up notes and known challenges.
@@ -50,15 +50,15 @@ PROJ="$(dirname "${REPO}")"
 
 VENV_PATH="${VENV_PATH:-${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
 HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
-LOGDIR="${CHAT_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}"
-MLP_CHECKPOINT="${CHAT_HYDRAGNN_MLP_CKPT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
+LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${CHAT_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}}"
+HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-${CHAT_HYDRAGNN_BRANCH_MLP_CHECKPOINT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}}"
 
-CHAT_MODEL_PATH="${CHAT_MODEL_PATH:-${PROJ}/models/Mistral-Small-24B-Instruct-2501}"
-CHAT_MODEL_NAME="${CHAT_MODEL_NAME:-$(basename "${CHAT_MODEL_PATH}")}"
-CHAT_PORT="${CHAT_PORT:-8000}"
-CHAT_TP_SIZE="${CHAT_TP_SIZE:-2}"
-CHAT_DTYPE="${CHAT_DTYPE:-bfloat16}"
-CHAT_MAX_MODEL_LEN="${CHAT_MAX_MODEL_LEN:-32768}"
+MODEL_DIR="${MATSIM_MODEL_DIR:-${CHAT_MODEL_PATH:-${PROJ}/models/Mistral-Small-24B-Instruct-2501}}"
+MODEL_NAME="${MATSIM_MODEL_NAME:-${CHAT_MODEL_NAME:-$(basename "${MODEL_DIR}")}}"
+VLLM_PORT="${MATSIM_VLLM_PORT:-${CHAT_PORT:-8000}}"
+TP_SIZE="${MATSIM_VLLM_TP_SIZE:-${CHAT_TP_SIZE:-2}}"
+VLLM_DTYPE="${MATSIM_VLLM_DTYPE:-${CHAT_DTYPE:-bfloat16}}"
+VLLM_MAX_MODEL_LEN="${MATSIM_VLLM_MAX_MODEL_LEN:-${CHAT_MAX_MODEL_LEN:-32768}}"
 
 JOBID="${PBS_JOBID:-local-$$}"
 RUN_DIR="${PROJ}/runs/discovery-chat-vllm-aurora-${JOBID}"
@@ -84,7 +84,7 @@ export TMPDIR=/tmp
 # executor_node reads these env vars as fallback when config injection is
 # unavailable (e.g. across LangGraph checkpoint boundaries).
 export MATSIM_HYDRAGNN_LOGDIR="${LOGDIR}"
-export MATSIM_HYDRAGNN_MLP_CKPT="${MLP_CHECKPOINT}"
+export HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 
 # Compute nodes have no outbound internet
 export HF_HUB_OFFLINE=1
@@ -118,10 +118,10 @@ echo "Host:          $(hostname)"
 echo "Run dir:       ${RUN_DIR}"
 echo "Repo:          ${REPO}"
 echo "Venv:          ${VENV_PATH}"
-echo "LLM model:     ${CHAT_MODEL_NAME}  (${CHAT_MODEL_PATH})"
-echo "TP size:       ${CHAT_TP_SIZE}"
+echo "LLM model:     ${MODEL_NAME}  (${MODEL_DIR})"
+echo "TP size:       ${TP_SIZE}"
 echo "HydraGNN log:  ${LOGDIR}"
-echo "MLP ckpt:      ${MLP_CHECKPOINT}"
+echo "MLP ckpt:      ${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 echo "=========================================="
 
 python - <<'PY'
@@ -139,7 +139,7 @@ PY
 
 # ── start vLLM server ────────────────────────────────────────────────────────
 VLLM_LOG="${RUN_DIR}/vllm-server.log"
-echo "[$(date)] Starting vLLM server (TP=${CHAT_TP_SIZE}, model=${CHAT_MODEL_NAME}) ..."
+echo "[$(date)] Starting vLLM server (TP=${TP_SIZE}, model=${MODEL_NAME}) ..."
 
 # aurora_vllm_entrypoint.py patches _run_in_subprocess to avoid SIGSEGV on
 # nodes where the registry subprocess (plain fork+exec) triggers Level Zero init
@@ -151,12 +151,12 @@ mpiexec -n 1 --ppn 1 \
         -u MPI_LOCALRANKID -u MPI_LOCALNRANKS \
         -u OMPI_COMM_WORLD_RANK -u OMPI_COMM_WORLD_SIZE \
     python "${REPO}/scripts/smoke-tests/aurora/aurora_vllm_entrypoint.py" \
-        --model "${CHAT_MODEL_PATH}" \
-        --served-model-name "${CHAT_MODEL_NAME}" \
-        --tensor-parallel-size "${CHAT_TP_SIZE}" \
-        --dtype "${CHAT_DTYPE}" \
-        --max-model-len "${CHAT_MAX_MODEL_LEN}" \
-        --port "${CHAT_PORT}" \
+        --model "${MODEL_DIR}" \
+        --served-model-name "${MODEL_NAME}" \
+        --tensor-parallel-size "${TP_SIZE}" \
+        --dtype "${VLLM_DTYPE}" \
+        --max-model-len "${VLLM_MAX_MODEL_LEN}" \
+        --port "${VLLM_PORT}" \
         --host 0.0.0.0 \
         --trust-remote-code \
         --no-enable-log-requests \
@@ -171,12 +171,12 @@ echo "[$(date)] vLLM PID: ${VLLM_PID}"
 trap "echo '[cleanup] Stopping vLLM (PID ${VLLM_PID}) ...'; kill ${VLLM_PID} 2>/dev/null; wait ${VLLM_PID} 2>/dev/null; echo '[cleanup] Done.'" EXIT
 
 # ── wait for vLLM to be ready ────────────────────────────────────────────────
-echo "[$(date)] Waiting for vLLM on http://localhost:${CHAT_PORT} (up to 10 min) ..."
+echo "[$(date)] Waiting for vLLM on http://localhost:${VLLM_PORT} (up to 10 min) ..."
 MAX_WAIT=600
 ELAPSED=0
 INTERVAL=10
 while true; do
-    if curl -fsS --max-time 3 "http://localhost:${CHAT_PORT}/health" > /dev/null 2>&1; then
+    if curl -fsS --max-time 3 "http://localhost:${VLLM_PORT}/health" > /dev/null 2>&1; then
         echo "[$(date)] vLLM server ready after ${ELAPSED}s."
         break
     fi
@@ -194,32 +194,20 @@ while true; do
     (( ELAPSED += INTERVAL ))
 done
 
-export MATSIM_VLLM_BASE_URL="http://localhost:${CHAT_PORT}/v1"
+export MATSIM_VLLM_BASE_URL="http://localhost:${VLLM_PORT}/v1"
 
 # ── multi-turn discovery dialogue ────────────────────────────────────────────
-# Three user turns + 'exit'. Each turn exercises a different chat feature:
-#
-#   Turn 1  →  multi-formula extraction from an *assistant* reply
-#              (one Li-Mn-O cathode  +  one refractory HEA)
-#              exercises:  AFLOW-prototype decoration  (oxide)
-#                          pyXtal random search        (HEA, no AFLOW match)
-#                          --auto-confirm path, novelty flagging
-#   Turn 2  →  asks the LLM to reason over the [discovery] SystemMessages
-#              that were injected after Turn 1's relaxations.
-#              exercises:  feedback loop, multi-round chat history
-#   Turn 3  →  the user *themself* writes a formula (BaTiO3) in the prompt.
-#              exercises:  composition extraction from *user* text
-#                          AFLOW prototype path (perovskite, many SGs hit)
-#
+# Three user turns + 'exit'. This keeps the script generic while still
+# exercising discovery, result-grounded comparison, and direct formula input.
 # Empty lines are silently skipped by the REPL; 'exit' closes it cleanly.
 echo "[$(date)] Submitting multi-turn discovery dialogue to matsim-agents (vLLM) ..."
 matsim-agents chat \
     --logdir          "${LOGDIR}" \
-    --mlp-checkpoint  "${MLP_CHECKPOINT}" \
+    --mlp-checkpoint  "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
     --output-dir      "${OUTPUT_DIR}" \
     --llm-provider    vllm \
-    --llm-model       "${CHAT_MODEL_NAME}" \
-    --llm-base-url    "http://localhost:${CHAT_PORT}/v1" \
+    --llm-model       "${MODEL_NAME}" \
+    --llm-base-url    "http://localhost:${VLLM_PORT}/v1" \
     --ase-structure-optimizer FIRE \
     --maxiter         500 \
     --fmax            0.02 \
@@ -227,9 +215,9 @@ matsim-agents chat \
     --random-seed     42 \
     --auto-confirm \
     <<'CHAT_INPUT' 2>&1 | tee "${RUN_DIR}/matsim-agents.log"
-Propose exactly TWO candidate materials in a single concise reply: (1) one Li-Mn-O layered cathode written as a clean formula such as Li2MnO3, and (2) one body-centered refractory high-entropy alloy drawn from {Mo, Nb, Ta, W, V, Cr}. For each, give the formula on its own line followed by a one-sentence physical justification (oxidation states, ionic radii, or Hume-Rothery rules). Keep the reply under 200 words.
+Propose exactly TWO candidate materials in a single concise reply: (1) one oxide composition and (2) one intermetallic composition. For each, give the formula on its own line followed by a one-sentence physical justification. Keep the reply under 200 words.
 The atomistic exploration results for the two compositions above were just appended to your context as [discovery] system messages. Using only those reported energies and |F|max values, answer: (a) which composition reached the lower minimum |F|max, suggesting better dynamical stability under the MLFF? (b) which composition has the lower total energy per atom? Be quantitative and quote the numbers.
-Good. Now I would like to also evaluate the canonical perovskite BaTiO3 as a reference oxide. Please briefly explain why BaTiO3 is a useful baseline, in two sentences.
+Good. Now also evaluate MgO as a simple reference oxide. Briefly explain in two sentences why MgO is a useful baseline.
 exit
 CHAT_INPUT
 

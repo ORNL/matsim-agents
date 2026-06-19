@@ -39,7 +39,7 @@ PROJ="$(dirname "${REPO}")"
 VENV_PATH="${VENV_PATH:-${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
 HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
 LOGDIR="${CHAT_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}"
-MLP_CHECKPOINT="${CHAT_HYDRAGNN_MLP_CKPT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
+HYDRAGNN_BRANCH_MLP_CHECKPOINT="${CHAT_HYDRAGNN_BRANCH_MLP_CHECKPOINT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
 
 CHAT_MODEL_PATH="${CHAT_MODEL_PATH:-${PROJ}/models/Mistral-Small-24B-Instruct-2501}"
 CHAT_MODEL_NAME="${CHAT_MODEL_NAME:-$(basename "${CHAT_MODEL_PATH}")}"
@@ -67,7 +67,7 @@ export PYTHONUNBUFFERED=1
 export TMPDIR=/tmp
 
 export MATSIM_HYDRAGNN_LOGDIR="${LOGDIR}"
-export MATSIM_HYDRAGNN_MLP_CKPT="${MLP_CHECKPOINT}"
+export HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -154,7 +154,7 @@ done
 echo "[$(date)] Submitting 5-perovskite dialogue to matsim-agents ..."
 matsim-agents chat \
     --logdir          "${LOGDIR}" \
-    --mlp-checkpoint  "${MLP_CHECKPOINT}" \
+    --mlp-checkpoint  "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
     --output-dir      "${OUTPUT_DIR}" \
     --llm-provider    vllm \
     --llm-model       "${CHAT_MODEL_NAME}" \

@@ -195,7 +195,7 @@ def process_structure(
     relax_input = RelaxStructureInput(
         structure_path=structure_path,
         logdir=args.logdir,
-        mlp_checkpoint=args.mlp_checkpoint,
+        hydragnn_branch_mlp_checkpoint=args.hydragnn_branch_mlp_checkpoint,
         checkpoint=args.checkpoint,
         optimizer=args.optimizer,
         maxiter=args.maxiter,

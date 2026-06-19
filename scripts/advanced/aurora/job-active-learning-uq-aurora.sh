@@ -26,8 +26,9 @@
 #   qsub scripts/advanced/aurora/job-active-learning-uq-aurora.sh
 #
 # Override:
-#   qsub -v MATSIM_AL_STRUCTURES="a.vasp b.vasp",MATSIM_TOP_W_THR=0.5 \
+#   qsub -v MATSIM_STRUCTURES="a.vasp b.vasp",MATSIM_TOP_W_THR=0.5 \
 #        scripts/advanced/aurora/job-active-learning-uq-aurora.sh
+# Backward-compatible alias: MATSIM_AL_STRUCTURES
 # ---------------------------------------------------------------------------
 
 set -eo pipefail  # NOTE: no -u; lmod's bash init breaks under nounset
@@ -42,18 +43,19 @@ PROJ="$(dirname "${REPO}")"
 VENV="${MATSIM_AURORA_VENV:-${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
 HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
 LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}"
-MLP_CHECKPOINT="${MATSIM_HYDRAGNN_MLP_CKPT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
+HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
 
-# Default candidate set: the small fixtures that ship with the repo. Override
-# with MATSIM_AL_STRUCTURES="path1 path2 ..." for a real sweep.
+# Default candidate set: neutral fixtures that ship with the repo. Override
+# with MATSIM_STRUCTURES="path1 path2 ..." for a real sweep.
 DEFAULT_STRUCTURES=(
   "${REPO}/tests/integration/data/Si.vasp"
   "${REPO}/tests/integration/data/MgO.vasp"
-  "${REPO}/tests/integration/data/MoNbTaW_HEA.vasp"
+  "${REPO}/tests/integration/data/NaCl.vasp"
 )
-if [[ -n "${MATSIM_AL_STRUCTURES:-}" ]]; then
+STRUCTURE_LIST="${MATSIM_STRUCTURES:-${MATSIM_AL_STRUCTURES:-}}"
+if [[ -n "${STRUCTURE_LIST}" ]]; then
   # shellcheck disable=SC2206
-  STRUCTURES=( ${MATSIM_AL_STRUCTURES} )
+  STRUCTURES=( ${STRUCTURE_LIST} )
 else
   STRUCTURES=( "${DEFAULT_STRUCTURES[@]}" )
 fi
@@ -95,7 +97,7 @@ echo "Job ID:      ${JOBID}"
 echo "Repo:        ${REPO}"
 echo "Venv:        ${VENV}"
 echo "Logdir:      ${LOGDIR}"
-echo "MLP ckpt:    ${MLP_CHECKPOINT}"
+echo "MLP ckpt:    ${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 echo "Structures:  ${#STRUCTURES[@]}"
 for s in "${STRUCTURES[@]}"; do echo "             - ${s}"; done
 echo "QE launch:   ${MATSIM_QE_LAUNCHER:-<unset>}"
@@ -108,7 +110,7 @@ echo "=========================================="
 python "${REPO}/examples/active_learning_uq.py" \
     "${STRUCTURES[@]}" \
     --logdir          "${LOGDIR}" \
-    --mlp-checkpoint  "${MLP_CHECKPOINT}" \
+    --mlp-checkpoint  "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
     --output-dir      "${OUTPUT_DIR}" \
     --mlp-device      cuda \
     --optimizer       FIRE \

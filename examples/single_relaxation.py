@@ -20,7 +20,7 @@ def main() -> None:
             "configurable": {
                 "thread_id": str(uuid.uuid4()),
                 "logdir": "multidataset_hpo-BEST6-fp64",
-                "mlp_checkpoint": "mlp_branch_weights.pt",
+                "hydragnn_branch_mlp_checkpoint": "mlp_branch_weights.pt",
                 "mlp_device": "cuda",
             }
         },

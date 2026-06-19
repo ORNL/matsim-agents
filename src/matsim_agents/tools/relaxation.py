@@ -34,7 +34,7 @@ class RelaxStructureInput(BaseModel):
         None,
         description="HydraGNN logdir containing config.json + checkpoint (required for mlip_backend='hydragnn').",
     )
-    mlp_checkpoint: str | None = Field(
+    hydragnn_branch_mlp_checkpoint: str | None = Field(
         None,
         description="HydraGNN BranchWeightMLP checkpoint (.pt), required for mlip_backend='hydragnn'.",
     )
@@ -73,8 +73,8 @@ class RelaxStructureInput(BaseModel):
         if self.mlip_backend == "hydragnn":
             if not self.logdir:
                 raise ValueError("mlip_backend='hydragnn' requires logdir.")
-            if not self.mlp_checkpoint:
-                raise ValueError("mlip_backend='hydragnn' requires mlp_checkpoint.")
+            if not self.hydragnn_branch_mlp_checkpoint:
+                raise ValueError("mlip_backend='hydragnn' requires hydragnn_branch_mlp_checkpoint.")
         return self
 
 
@@ -217,7 +217,7 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
         ) = load_fused_stack(
             args.logdir,
             args.checkpoint,
-            args.mlp_checkpoint,
+            args.hydragnn_branch_mlp_checkpoint,
             args.precision,
             args.mlp_precision,
             args.mlp_device,

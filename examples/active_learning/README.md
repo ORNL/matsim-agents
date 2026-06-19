@@ -183,7 +183,7 @@ graph and let it trigger this AL path when UQ policy thresholds are met:
 ```bash
 matsim-agents supervisor-run Li2MnO3 \
   --logdir /path/to/hydragnn_logdir \
-  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-run
 ```
@@ -203,7 +203,7 @@ MLIP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example
 # 3) Run via supervisor orchestration (dry-run handoff)
 matsim-agents supervisor-run Li2MnO3 \
   --logdir /path/to/hydragnn_logdir \
-  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 
@@ -211,7 +211,7 @@ matsim-agents supervisor-run Li2MnO3 \
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
   --logdir /path/to/hydragnn_logdir \
-  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
   --trigger-al-handoff \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run

@@ -55,9 +55,11 @@ flowchart LR
 | 4 | Cu-BHT conductive MOF | 2D | `singlepass.py --case cu_bht` † | `al_cu_bht_2d.yaml` † |
 | 5 | Zn(HCOO)₂ MOF | 3D | `singlepass.py --case zn_formate` | `al_zn_formate.yaml` |
 
-† Cu-BHT requires a supplied CIF at `seeds/cu_bht_monolayer.cif` (the inorganic
-prototype enumerator cannot build the organic BHT ligand). All other cases
-build their seeds automatically.
+† Cu-BHT requires a supplied CIF. The single-pass runner first checks the
+run-scoped path `out_singlepass/<run-id>/cu_bht/seeds/cu_bht_monolayer.cif`,
+then falls back to `examples/paper_cases/seeds/cu_bht_monolayer.cif`.
+The inorganic prototype enumerator cannot build the organic BHT ligand; all
+other cases build their seeds automatically.
 
 ---
 
@@ -116,7 +118,7 @@ MLIP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 # 5) supervisor-driven discovery -> optional AL handoff:
 matsim-agents supervisor-run LiFePO4 \
   --logdir $MLIP_LOGDIR \
-  --mlp-checkpoint best_model.pt \
+  --hydragnn-branch-mlp-checkpoint best_model.pt \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
 ```
@@ -144,7 +146,7 @@ matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 # 4) Supervisor path with optional AL handoff planning
 matsim-agents supervisor-run LiFePO4 \
   --logdir "$MLIP_LOGDIR" \
-  --mlp-checkpoint best_model.pt \
+  --hydragnn-branch-mlp-checkpoint best_model.pt \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
 
@@ -152,7 +154,7 @@ matsim-agents supervisor-run LiFePO4 \
 matsim-agents run \
   "Relax structures/lifepo4_olivine.vasp and summarize results." \
   --logdir "$MLIP_LOGDIR" \
-  --mlp-checkpoint best_model.pt \
+  --hydragnn-branch-mlp-checkpoint best_model.pt \
   --trigger-al-handoff \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
@@ -163,7 +165,7 @@ The single-pass runner uses these environment variables:
 | Variable | Meaning | Default |
 |----------|---------|---------|
 | `MLIP_LOGDIR` | HydraGNN logdir (config.json + checkpoint) | `$RUNS_ROOT/al-models/iter0_logdir` |
-| `MLP_CKPT` | checkpoint filename | `best_model.pt` |
+| `HYDRAGNN_BRANCH_MLP_CHECKPOINT` | checkpoint filename | `best_model.pt` |
 | `OUT_DIR` | output root | `./out_singlepass` |
 
 For AL YAMLs in this folder, the surrogate backend can be switched with one
@@ -223,8 +225,9 @@ structure cited in the email (materialssquare.com/work/43421) for the paper.
 
 ## Case 4 — Cu-BHT: conductive 2D MOF
 
-**Single pass:** loads `seeds/cu_bht_monolayer.cif` and relaxes it (skips with a
-clear message if the CIF is absent).
+**Single pass:** loads `cu_bht_monolayer.cif` from the run-scoped seeds directory
+when present, otherwise from `examples/paper_cases/seeds/`, and relaxes it
+(skips with a clear message if the CIF is absent in both locations).
 **AL (`al_cu_bht_2d.yaml`):** `seed_source.kind: paths`, `n_random: 3`,
 `ISMEAR=1` (metallic), `nodes_per_job: 2`.
 **Prerequisite:** place a validated Cu₃C₆S₆ CIF at

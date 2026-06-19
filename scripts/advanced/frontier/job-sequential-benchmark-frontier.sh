@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -A mat746
 #SBATCH -J seq-model-bench
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/seq-model-bench-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/seq-model-bench-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 02:00:00
 #SBATCH -N 1
 #SBATCH -p batch
@@ -36,7 +36,7 @@
 #   VLLM_PORT               – port for vLLM (default 8000)
 #
 # Example submission:
-#   BENCHMARK_PROMPT="Search for a Pb-free halide double perovskite and justify stability." \
+#   BENCHMARK_PROMPT="Propose a candidate inorganic material and justify expected stability." \
 #   sbatch scripts/advanced/frontier/job-sequential-benchmark-frontier.sh
 # ---------------------------------------------------------------------------
 
@@ -57,7 +57,7 @@ mkdir -p "$RUN_DIR"
 if [[ -z "${BENCHMARK_PROMPT:-}" ]]; then
   echo "ERROR: BENCHMARK_PROMPT is required." >&2
   echo "Example:" >&2
-  echo "  BENCHMARK_PROMPT='Search for a Pb-free halide double perovskite.' sbatch $0" >&2
+  echo "  BENCHMARK_PROMPT='Propose a candidate inorganic material.' sbatch $0" >&2
   exit 2
 fi
 

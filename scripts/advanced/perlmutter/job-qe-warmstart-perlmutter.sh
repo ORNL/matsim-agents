@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -A amsc001
 #SBATCH -J qe-warmstart
-#SBATCH -o /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/qe-warmstart-%j/job-%j.out
-#SBATCH -e /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/qe-warmstart-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 02:00:00
 #SBATCH -N 1
 #SBATCH -C gpu
@@ -29,20 +29,18 @@
 set -euo pipefail
 
 # ── paths ───────────────────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+REPO="${PROJECT_ROOT:-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents}"
 PROJ="$(dirname "${REPO}")"
+RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
-MLP_CHECKPOINT=${MATSIM_HYDRAGNN_MLP_CKPT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
+HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 
 QE_LAUNCHER=${MATSIM_QE_LAUNCHER:-$REPO/scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh}
 QE_PSEUDO_DIR=${MATSIM_QE_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}
 
-RUN_DIR=$PROJ/runs/qe-warmstart-$SLURM_JOB_ID
+RUN_DIR=$RUNS_ROOT/qe-warmstart-$SLURM_JOB_ID
 WARMSTART_DIR=$RUN_DIR/qe-warmstart
 mkdir -p "$RUN_DIR" "$WARMSTART_DIR"
 
@@ -62,7 +60,7 @@ export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 export MATSIM_QE_LAUNCHER="$QE_LAUNCHER"
 export MATSIM_QE_PSEUDO_DIR="$QE_PSEUDO_DIR"
 export MATSIM_HYDRAGNN_LOGDIR="$LOGDIR"
-export MATSIM_HYDRAGNN_MLP_CKPT="$MLP_CHECKPOINT"
+export HYDRAGNN_BRANCH_MLP_CHECKPOINT="$HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 export MATSIM_QE_MLP_DEVICE="${MATSIM_QE_MLP_DEVICE:-cuda}"
 export MATSIM_QE_TIMEOUT_SEC="${MATSIM_QE_TIMEOUT_SEC:-3600}"
 export MATSIM_WARMSTART_FIXTURES="${MATSIM_WARMSTART_FIXTURES:-Si_diamond}"
@@ -76,7 +74,7 @@ echo "Host:         $(hostname)"
 echo "Repo:         $REPO"
 echo "Venv:         $VENV"
 echo "HydraGNN log: $LOGDIR"
-echo "MLP ckpt:     $MLP_CHECKPOINT"
+echo "MLP ckpt:     $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "QE launcher:  $QE_LAUNCHER"
 echo "QE pseudos:   $QE_PSEUDO_DIR"
 echo "Fixtures:     $MATSIM_WARMSTART_FIXTURES"

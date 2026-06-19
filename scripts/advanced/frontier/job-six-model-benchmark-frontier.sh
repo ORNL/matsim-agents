@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -A mat746
 #SBATCH -J six-model-bench
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/six-model-bench-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/six-model-bench-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 01:00:00
 #SBATCH -N 1
 #SBATCH -p batch
@@ -30,7 +30,7 @@
 #   - BENCHMARK_ARGS (extra raw args forwarded to wrapper)
 #
 # Example:
-#   BENCHMARK_PROMPT="Search for a Pb-free halide double perovskite candidate and justify stability." \
+#   BENCHMARK_PROMPT="Propose a candidate inorganic material and justify expected stability." \
 #   BENCHMARK_SPEC_FILE="scripts/six_model_specs.example.json" \
 #   sbatch scripts/advanced/frontier/job-six-model-benchmark-frontier.sh
 # ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ mkdir -p "$RUN_DIR"
 if [[ -z "${BENCHMARK_PROMPT:-}" ]]; then
   echo "Error: BENCHMARK_PROMPT is required." >&2
   echo "Example:" >&2
-  echo "  BENCHMARK_PROMPT='Search for a Pb-free halide double perovskite candidate and justify stability.' sbatch scripts/advanced/frontier/job-six-model-benchmark-frontier.sh" >&2
+  echo "  BENCHMARK_PROMPT='Propose a candidate inorganic material and justify expected stability.' sbatch scripts/advanced/frontier/job-six-model-benchmark-frontier.sh" >&2
   exit 2
 fi
 

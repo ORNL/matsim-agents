@@ -187,12 +187,12 @@ Use this table to choose the right entry point quickly.
 
 | Goal | Recommended entry point | Required inputs | Typical outputs |
 |---|---|---|---|
-| One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective, `--logdir`, `--mlp-checkpoint`, optional AL handoff flags | planner/executor/UQ/analyst result; optional AL handoff + JSONL audit |
-| Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--logdir`, `--mlp-checkpoint`, LLM provider/model | chat transcript + discovery artifacts under `output_dir/discovery/` |
+| One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective, `--logdir`, `--hydragnn-branch-mlp-checkpoint`, optional AL handoff flags | planner/executor/UQ/analyst result; optional AL handoff + JSONL audit |
+| Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--logdir`, `--hydragnn-branch-mlp-checkpoint`, LLM provider/model | chat transcript + discovery artifacts under `output_dir/discovery/` |
 | Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
 | Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) + JSONL audit record |
 | Reset conversation/discovery state during chat | `matsim-agents chat` + `/clear` | none | cleared session history and seen-composition state |
-| Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--logdir`, `--mlp-checkpoint`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
+| Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--logdir`, `--hydragnn-branch-mlp-checkpoint`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
 | Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlip`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `MLIP_BACKEND=uma` | iteration state dirs, dataset, optional retrained model logdirs |
 | Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
 | Paper-case feasibility check without iterative AL | `python examples/paper_cases/singlepass.py --case <name>` | case name, `MLIP_LOGDIR`, optional `--dft` | per-case relaxed/ranked structures, optional DFT single-point validation |
@@ -211,7 +211,7 @@ Use these as starter templates; replace paths with your environment.
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
   --logdir /path/to/hydragnn_logdir \
-  --mlp-checkpoint /path/to/mlp_branch_weights.pt
+  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt
 
 # 1a) Core graph with UMA relaxation backend (no HydraGNN checkpoints needed)
 matsim-agents run \
@@ -224,7 +224,7 @@ matsim-agents run \
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and summarize results." \
   --logdir /path/to/hydragnn_logdir \
-  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
   --trigger-al-handoff \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
@@ -232,12 +232,12 @@ matsim-agents run \
 # 2) Interactive discovery chat
 matsim-agents chat \
   --logdir /path/to/hydragnn_logdir \
-  --mlp-checkpoint /path/to/mlp_branch_weights.pt
+  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt
 
 # 2b) Interactive chat with proposer/critic multi-LLM hypothesis debate
 matsim-agents chat \
   --logdir /path/to/hydragnn_logdir \
-  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
   --llm-peer-review \
   --critic-llm-provider ollama \
   --critic-llm-model qwen2.5:14b \
@@ -246,7 +246,7 @@ matsim-agents chat \
 # 2c) True multi-critic panel mode (multiple critics + cross-critique)
 matsim-agents chat \
   --logdir /path/to/hydragnn_logdir \
-  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
   --llm-peer-review \
   --critic-panel-models "qwen2.5:14b,llama3.1:8b,mistral:7b" \
   --critic-panel-providers "ollama,ollama,ollama" \
@@ -262,7 +262,7 @@ matsim-agents chat \
 # 3) Supervisor orchestration with AL handoff planning
 matsim-agents supervisor-run Li2MnO3 \
   --logdir /path/to/hydragnn_logdir \
-  --mlp-checkpoint /path/to/mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint /path/to/mlp_branch_weights.pt \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 
@@ -610,7 +610,7 @@ export MATSIM_HF_MODEL_PATH=/path/to/model  # huggingface provider: local model 
 matsim-agents run \
   "Relax structures/mos2-B_Defect-Free_PBE.vasp and report the final energy." \
   --logdir ./multidataset_hpo-BEST6-fp64 \
-  --mlp-checkpoint ./mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint ./mlp_branch_weights.pt \
   --llm-provider ollama --llm-model qwen2.5:14b
 ```
 
@@ -621,7 +621,7 @@ ollama pull qwen2.5:14b
 
 matsim-agents chat \
   --logdir ./multidataset_hpo-BEST6-fp64 \
-  --mlp-checkpoint ./mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint ./mlp_branch_weights.pt \
   --n-random 50 --random-seed 0
 ```
 
@@ -651,7 +651,7 @@ you> Now suggest a Sb-substituted variant.
 ```bash
 matsim-agents supervisor-run Li2MnO3 \
   --logdir ./multidataset_hpo-BEST6-fp64 \
-  --mlp-checkpoint ./mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint ./mlp_branch_weights.pt \
   --al-config examples/active_learning/al_config.example.yaml \
   --al-dry-run
 ```
@@ -667,7 +667,7 @@ pyXtal characterize the configuration space:
 ```bash
 matsim-agents chat \
   --logdir ./multidataset_hpo-BEST6-fp64 \
-  --mlp-checkpoint ./mlp_branch_weights.pt \
+  --hydragnn-branch-mlp-checkpoint ./mlp_branch_weights.pt \
   --n-random 200 --random-seed 42
 ```
 
@@ -842,7 +842,7 @@ from matsim_agents.tools.relaxation import RelaxStructureInput, _run
 result = _run(RelaxStructureInput(
     structure_path="structures/mos2.vasp",
     logdir="./multidataset_hpo-BEST6-fp64",
-    mlp_checkpoint="./mlp_branch_weights.pt",
+  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
     optimizer="FIRE",
     maxiter=200,
 ))
@@ -858,7 +858,7 @@ from matsim_agents.discovery import explore_composition
 result = explore_composition(
     "Cs2AgBiBr6",
     logdir="./multidataset_hpo-BEST6-fp64",
-    mlp_checkpoint="./mlp_branch_weights.pt",
+  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
     output_dir="./outputs",
 )
 print(result.stability.summary)
@@ -867,7 +867,7 @@ print(result.stability.summary)
 result = explore_composition(
     "MoS2",
     logdir="./multidataset_hpo-BEST6-fp64",
-    mlp_checkpoint="./mlp_branch_weights.pt",
+  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
     output_dir="./outputs",
     n_random=0,
 )
@@ -877,7 +877,7 @@ result = explore_composition(
 result = explore_composition(
     "FeCoNiCrMn",
     logdir="./multidataset_hpo-BEST6-fp64",
-    mlp_checkpoint="./mlp_branch_weights.pt",
+  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
     output_dir="./outputs",
     n_random=200,
     random_seed=42,
@@ -901,7 +901,7 @@ final = graph.invoke(
     config={"configurable": {
         "thread_id": str(uuid.uuid4()),
         "logdir": "./multidataset_hpo-BEST6-fp64",
-        "mlp_checkpoint": "./mlp_branch_weights.pt",
+      "hydragnn_branch_mlp_checkpoint": "./mlp_branch_weights.pt",
     }},
 )
 print(final["analysis"])
@@ -915,7 +915,7 @@ from matsim_agents.supervisor import SupervisorConfig, run_supervisor
 final = run_supervisor(SupervisorConfig(
   composition="Li2MnO3",
   logdir="./multidataset_hpo-BEST6-fp64",
-  mlp_checkpoint="./mlp_branch_weights.pt",
+  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
   output_dir="./outputs",
   trigger_active_learning_on_high_uq=True,
   active_learning_config="examples/active_learning/al_config.example.yaml",
@@ -931,7 +931,7 @@ from matsim_agents.chat import DiscoveryChatConfig, DiscoveryChatSession, chat_o
 
 session = DiscoveryChatSession(config=DiscoveryChatConfig(
     logdir="./multidataset_hpo-BEST6-fp64",
-    mlp_checkpoint="./mlp_branch_weights.pt",
+  hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
     output_dir="./outputs",
     llm_model="qwen2.5:14b",
     auto_confirm=True,
@@ -957,7 +957,7 @@ Common options (all commands that touch HydraGNN):
 | Flag | Description |
 |---|---|
 | `--logdir PATH` | HydraGNN logdir with `config.json` and checkpoint. |
-| `--mlp-checkpoint PATH` | BranchWeightMLP `.pt` file. |
+| `--hydragnn-branch-mlp-checkpoint PATH` | BranchWeightMLP `.pt` file. |
 | `--checkpoint NAME` | HydraGNN checkpoint filename or absolute path. |
 | `--mlp-device {cuda,cpu}` | Device for the auxiliary MLP. |
 | `--precision {fp32,fp64,bf16}` | HydraGNN precision override. |

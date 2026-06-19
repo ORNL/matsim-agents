@@ -22,7 +22,7 @@ class HydraGNNConfig(BaseModel):
 
     logdir: Path = Field(..., description="HydraGNN logdir with config.json + checkpoint.")
     checkpoint: str | None = Field(None, description="Specific checkpoint filename or path.")
-    mlp_checkpoint: Path | None = Field(
+    hydragnn_branch_mlp_checkpoint: Path | None = Field(
         None, description="Optional auxiliary BranchWeightMLP checkpoint."
     )
     radius: float | None = Field(None, description="Override cutoff radius (Å).")

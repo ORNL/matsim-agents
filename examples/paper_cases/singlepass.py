@@ -36,8 +36,9 @@ Usage:
 
 Environment variables (override defaults):
     MLIP_LOGDIR   HydraGNN logdir (config.json + checkpoint)   [required to run]
-    MLP_CKPT     checkpoint filename            (default: best_model.pt)
-    OUT_DIR      output root                    (default: ./out_singlepass)
+    HYDRAGNN_BRANCH_MLP_CHECKPOINT checkpoint filename (default: best_model.pt)
+    OUT_DIR      output root; each invocation creates OUT_DIR/run-*/
+    RUN_ID       optional explicit run directory name under OUT_DIR
 """
 
 from __future__ import annotations
@@ -46,6 +47,8 @@ import argparse
 import os
 import uuid
 from collections import Counter
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -66,16 +69,22 @@ from matsim_agents.state import MatSimState
 PROJ_ROOT  = Path(os.environ.get("PROJ_ROOT", Path(__file__).resolve().parents[2]))
 OUT_DIR    = Path(os.environ.get("OUT_DIR", PROJ_ROOT / "out_singlepass"))
 MLIP_LOGDIR = Path(os.environ.get("MLIP_LOGDIR", PROJ_ROOT / "runs/al-models/iter0_logdir"))
-MLP_CKPT   = os.environ.get("MLP_CKPT", "best_model.pt")
+PAPER_SEED_DIR = PROJ_ROOT / "examples" / "paper_cases" / "seeds"
+HYDRAGNN_BRANCH_MLP_CHECKPOINT = os.environ.get(
+    "HYDRAGNN_BRANCH_MLP_CHECKPOINT", "best_model.pt"
+)
 
-SEED_DIR = PROJ_ROOT / "examples/paper_cases/seeds"
-SEED_DIR.mkdir(parents=True, exist_ok=True)
+
+@dataclass(frozen=True)
+class BuildContext:
+    case: str
+    seed_dir: Path
 
 
 # ===========================================================================
 # Structure builders — one per case. Each returns a list of (label, Atoms).
 # ===========================================================================
-def build_lifepo4() -> list[tuple[str, Atoms]]:
+def build_lifepo4(_: BuildContext) -> list[tuple[str, Atoms]]:
     """LiFePO4 olivine, space group Pnma (#62), 28 atoms (4 f.u.)."""
     atoms = crystal(
         symbols=["Li", "Fe", "P", "O", "O", "O"],
@@ -108,7 +117,7 @@ def _random_alloy(prototype: Atoms, elements: list[str], seed: int) -> Atoms:
     return out
 
 
-def build_hea_bcc() -> list[tuple[str, Atoms]]:
+def build_hea_bcc(_: BuildContext) -> list[tuple[str, Atoms]]:
     """NbTaVHfZrTi equimolar BCC, 24-atom supercell (4 of each element)."""
     proto = make_supercell(bulk("W", "bcc", a=3.30, cubic=True),
                            np.diag([2, 2, 3]))  # 12 cells x 2 = 24 sites
@@ -116,7 +125,7 @@ def build_hea_bcc() -> list[tuple[str, Atoms]]:
     return [("bcc_random", _random_alloy(proto, elements, seed=7))]
 
 
-def build_hea_fcc() -> list[tuple[str, Atoms]]:
+def build_hea_fcc(_: BuildContext) -> list[tuple[str, Atoms]]:
     """CrMnFeCoNi Cantor alloy, FCC, 32-atom supercell (near-equimolar)."""
     proto = make_supercell(bulk("Ni", "fcc", a=3.59, cubic=True),
                            np.diag([2, 2, 2]))  # 8 cells x 4 = 32 sites
@@ -124,7 +133,7 @@ def build_hea_fcc() -> list[tuple[str, Atoms]]:
     return [("fcc_random", _random_alloy(proto, elements, seed=13))]
 
 
-def build_phosphorene(vacuum_A: float = 15.0) -> list[tuple[str, Atoms]]:
+def build_phosphorene(_: BuildContext, vacuum_A: float = 15.0) -> list[tuple[str, Atoms]]:
     """Phosphorene polymorphs to rank: black-P (Pmna, 4 atoms) and blue-P
     (P-3m1, 2 atoms).
 
@@ -163,23 +172,27 @@ def build_phosphorene(vacuum_A: float = 15.0) -> list[tuple[str, Atoms]]:
     return [("black_P", black), ("blue_P", blue)]
 
 
-def build_cu_bht() -> list[tuple[str, Atoms]]:
+def build_cu_bht(ctx: BuildContext) -> list[tuple[str, Atoms]]:
     """Cu-BHT (Cu3C6S6) 2D MOF — loaded from a supplied CIF.
 
     The seed enumerator is inorganic-only, so this MOF must be provided as a
     structure file. Place a validated Cu3C6S6 CIF (e.g. MP mp-630956) at
     examples/paper_cases/seeds/cu_bht_monolayer.cif.
     """
-    cif = SEED_DIR / "cu_bht_monolayer.cif"
+    run_scoped = ctx.seed_dir / "cu_bht_monolayer.cif"
+    shared_default = PAPER_SEED_DIR / "cu_bht_monolayer.cif"
+    cif = run_scoped if run_scoped.is_file() else shared_default
     if not cif.is_file():
         raise FileNotFoundError(
-            f"Cu-BHT seed not found: {cif}\n"
+            f"Cu-BHT seed not found in either:\n"
+            f"  - {run_scoped}\n"
+            f"  - {shared_default}\n"
             "Place a validated Cu3C6S6 CIF there (MP id mp-630956 recommended)."
         )
     return [("cu_bht", read(str(cif)))]
 
 
-def build_zn_formate() -> list[tuple[str, Atoms]]:
+def build_zn_formate(_: BuildContext) -> list[tuple[str, Atoms]]:
     """Zn(HCOO)2 MOF feasibility seeds — alpha (Pna2_1, #33) and beta
     (P2_1 2_1 2_1, #19) polymorphs to rank.
 
@@ -233,12 +246,14 @@ CASES = {
 }
 
 
-def write_seeds(case: str) -> list[Path]:
-    """Build the case structures and write them to the shared seeds/ dir."""
+def write_seeds(case: str, seed_dir: Path) -> list[Path]:
+    """Build the case structures and write them to a run-scoped seeds/ dir."""
     spec = CASES[case]
+    seed_dir.mkdir(parents=True, exist_ok=True)
+    ctx = BuildContext(case=case, seed_dir=seed_dir)
     paths: list[Path] = []
-    for label, atoms in spec["builder"]():
-        p = SEED_DIR / f"{case}_{label}.extxyz"
+    for label, atoms in spec["builder"](ctx):
+        p = seed_dir / f"{case}_{label}.extxyz"
         write(str(p), atoms)
         comp = dict(Counter(atoms.get_chemical_symbols()))
         print(f"  [{case}] wrote {p.name}  ({len(atoms)} atoms, {comp})")
@@ -267,9 +282,9 @@ def make_objective(case: str, seed_paths: list[Path], run_dft: bool) -> str:
     )
 
 
-def run_case(case: str, run_dft: bool) -> None:
+def run_case(case: str, run_dft: bool, case_dir: Path) -> None:
     print(f"\n=== single pass: {case} ===")
-    seed_paths = write_seeds(case)
+    seed_paths = write_seeds(case, case_dir / "seeds")
 
     graph = build_graph()
     objective = make_objective(case, seed_paths, run_dft)
@@ -278,12 +293,27 @@ def run_case(case: str, run_dft: bool) -> None:
         "configurable": {
             "thread_id": str(uuid.uuid4()),
             "logdir": str(MLIP_LOGDIR),
-            "mlp_checkpoint": MLP_CKPT,
+            "hydragnn_branch_mlp_checkpoint": HYDRAGNN_BRANCH_MLP_CHECKPOINT,
             "mlp_device": "cuda",
+            "output_dir": str(case_dir / "relaxations"),
         }
     }
     final = graph.invoke(state, config=config)
-    print(final.get("analysis"))
+    analysis = str(final.get("analysis") or "")
+    print(analysis)
+
+    (case_dir / "analysis.txt").write_text(analysis + "\n", encoding="utf-8")
+    (case_dir / "objective.txt").write_text(objective + "\n", encoding="utf-8")
+
+
+def make_run_dir() -> Path:
+    """Create a unique directory for this invocation and return it."""
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    job_id = os.environ.get("SLURM_JOB_ID", "local")
+    run_id = os.environ.get("RUN_ID", f"run-{ts}-{job_id}-{uuid.uuid4().hex[:8]}")
+    run_dir = OUT_DIR / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
 
 
 def main() -> None:
@@ -300,18 +330,21 @@ def main() -> None:
         parser.error("specify --case <name> or --all")
 
     cases = sorted(CASES) if args.all else [args.case]
+    run_dir = make_run_dir()
+    print(f"Run directory: {run_dir}")
+    print(f"MLIP logdir:    {MLIP_LOGDIR}")
 
     if args.seeds_only:
         for c in cases:
             try:
-                write_seeds(c)
+                write_seeds(c, run_dir / c / "seeds")
             except FileNotFoundError as exc:
                 print(f"  [skip] {exc}")
         return
 
     for c in cases:
         try:
-            run_case(c, run_dft=args.dft)
+            run_case(c, run_dft=args.dft, case_dir=run_dir / c)
         except FileNotFoundError as exc:
             print(f"  [skip] {c}: {exc}")
 
