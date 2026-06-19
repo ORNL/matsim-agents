@@ -50,7 +50,7 @@ Guidelines:
 
 @dataclass
 class DiscoveryChatConfig:
-    mlp_backend: str = "hydragnn"
+    mlip_backend: str = "hydragnn"
     logdir: str | None = None
     mlp_checkpoint: str | None = None
     output_dir: str = "./outputs"
@@ -92,26 +92,26 @@ class DiscoveryChatConfig:
     def __post_init__(self) -> None:
         """Enforce a single, consistent surrogate-backend choice.
 
-        The user selects exactly one ``mlp_backend`` and must supply the
+        The user selects exactly one ``mlip_backend`` and must supply the
         inputs that backend needs; the inputs for the other backend are
         ignored. This mirrors the validation in
         :class:`matsim_agents.tools.relaxation.RelaxStructureInput` so the
         error surfaces at configuration time rather than at the first
         relaxation.
         """
-        if self.mlp_backend not in {"hydragnn", "uma"}:
+        if self.mlip_backend not in {"hydragnn", "uma"}:
             raise ValueError(
-                f"mlp_backend must be 'hydragnn' or 'uma', got {self.mlp_backend!r}."
+                f"mlip_backend must be 'hydragnn' or 'uma', got {self.mlip_backend!r}."
             )
-        if self.mlp_backend == "hydragnn":
+        if self.mlip_backend == "hydragnn":
             if not self.logdir:
                 raise ValueError(
-                    "mlp_backend='hydragnn' requires 'logdir' "
+                    "mlip_backend='hydragnn' requires 'logdir' "
                     "(HydraGNN logdir containing config.json + checkpoint)."
                 )
             if not self.mlp_checkpoint:
                 raise ValueError(
-                    "mlp_backend='hydragnn' requires 'mlp_checkpoint' "
+                    "mlip_backend='hydragnn' requires 'mlp_checkpoint' "
                     "(BranchWeightMLP .pt checkpoint)."
                 )
 
@@ -177,7 +177,7 @@ def _kickoff_exploration(
 
     result = explore_composition(
         composition,
-        mlp_backend=cfg.mlp_backend,
+        mlip_backend=cfg.mlip_backend,
         logdir=cfg.logdir,
         mlp_checkpoint=cfg.mlp_checkpoint,
         uma_model_name=cfg.uma_model_name,
@@ -269,7 +269,7 @@ def _run_single_structure_relaxation(structure_path: str, cfg: DiscoveryChatConf
     result = _run_relaxation(
         RelaxStructureInput(
             structure_path=structure_path,
-            mlp_backend=cfg.mlp_backend,
+            mlip_backend=cfg.mlip_backend,
             logdir=cfg.logdir,
             mlp_checkpoint=cfg.mlp_checkpoint,
             checkpoint=cfg.checkpoint,

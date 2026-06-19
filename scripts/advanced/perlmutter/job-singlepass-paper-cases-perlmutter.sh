@@ -12,7 +12,7 @@
 # ---------------------------------------------------------------------------
 # Single-pass (non-AL) feasibility sweep over the manuscript paper cases.
 # Runs the planner -> executor -> uq_gate -> analyst graph ONCE per case with
-# the shared HydraGNN multidataset BEST6 surrogate (MLP only, no DFT).
+# the shared HydraGNN multidataset BEST6 surrogate (MLIP only, no DFT).
 #
 # Cases (5 ready; cu_bht skipped — needs a user-supplied CIF):
 #   lifepo4 hea_bcc hea_fcc phosphorene zn_formate
@@ -37,7 +37,7 @@ source scripts/setup/perlmutter/setup_matsim_perlmutter.sh --gpu
 export PROJ_ROOT="${PROJECT_ROOT}"
 export OUT_DIR="${RUN_DIR}/out_singlepass"
 # singlepass.py also passes mlp_checkpoint via config; keep it consistent.
-export MLP_LOGDIR="${MATSIM_HYDRAGNN_LOGDIR}"
+export MLIP_LOGDIR="${MATSIM_HYDRAGNN_LOGDIR}"
 export MLP_CKPT="${MATSIM_HYDRAGNN_MLP_CKPT}"
 
 echo "=========================================="

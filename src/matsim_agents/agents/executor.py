@@ -22,12 +22,12 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
     task = state.pending_tasks[0]
     remaining = state.pending_tasks[1:]
     cfg = (config or {}).get("configurable", {}) if config else {}
-    mlp_backend = str(cfg.get("mlp_backend") or os.environ.get("MATSIM_MLP_BACKEND") or "hydragnn")
+    mlip_backend = str(cfg.get("mlip_backend") or os.environ.get("MATSIM_MLIP_BACKEND") or "hydragnn")
     logdir = cfg.get("logdir") or os.environ.get("MATSIM_HYDRAGNN_LOGDIR")
     mlp_checkpoint = cfg.get("mlp_checkpoint") or os.environ.get("MATSIM_HYDRAGNN_MLP_CKPT")
     checkpoint = cfg.get("checkpoint") or os.environ.get("MATSIM_HYDRAGNN_CHECKPOINT")
 
-    if mlp_backend == "hydragnn":
+    if mlip_backend == "hydragnn":
         if not logdir:
             raise ValueError(
                 "Missing HydraGNN logdir. Provide via run config or set MATSIM_HYDRAGNN_LOGDIR."
@@ -46,7 +46,7 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
 
     args = RelaxStructureInput(
         structure_path=task.structure_path,
-        mlp_backend=mlp_backend,
+        mlip_backend=mlip_backend,
         logdir=logdir,
         mlp_checkpoint=mlp_checkpoint,
         checkpoint=checkpoint,

@@ -37,7 +37,7 @@ from typing import Any
 
 import numpy as np
 
-from matsim_agents.active_learning.calculator import build_ensemble, make_mlp_calculator
+from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.active_learning.candidates import sample_md_candidates
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
@@ -147,12 +147,12 @@ def run_active_learning(cfg: ALConfig) -> None:
         if start_iter > 0:
             log.info("Resuming AL loop at iteration %d (logdir=%s)", start_iter, resumed_logdir)
             if (
-                cfg.mlp.backend == "hydragnn"
-                and cfg.mlp.hydragnn is not None
+                cfg.mlip.backend == "hydragnn"
+                and cfg.mlip.hydragnn is not None
                 and resumed_logdir is not None
                 and resumed_logdir.exists()
             ):
-                cfg.mlp.hydragnn.logdir = resumed_logdir
+                cfg.mlip.hydragnn.logdir = resumed_logdir
 
     for i in range(start_iter, cfg.loop.n_iterations):
         it_dir = _iter_dir(root, i)
@@ -164,10 +164,10 @@ def run_active_learning(cfg: ALConfig) -> None:
             # --- 1. Build calculator(s) for this iteration --------------------
             t0 = time.time()
             enable_drop = cfg.acquisition.strategy in {"mc_dropout", "ensemble_then_dropout"}
-            primary_calc = make_mlp_calculator(cfg.mlp, enable_mc_dropout=enable_drop)
+            primary_calc = make_mlip_calculator(cfg.mlip, enable_mc_dropout=enable_drop)
             ensemble_calcs: list = []
-            if cfg.mlp.ensemble_paths:
-                ensemble_calcs = build_ensemble(cfg.mlp, enable_mc_dropout=enable_drop)
+            if cfg.mlip.ensemble_paths:
+                ensemble_calcs = build_ensemble(cfg.mlip, enable_mc_dropout=enable_drop)
             state.timings_sec["build_calculators"] = time.time() - t0
 
             # --- 2. Generate candidates via MD --------------------------------
@@ -251,10 +251,10 @@ def run_active_learning(cfg: ALConfig) -> None:
 
             # --- 6. (Optional) retrain the surrogate --------------------------
             t0 = time.time()
-            if cfg.mlp.backend == "hydragnn" and cfg.mlp.hydragnn is not None:
+            if cfg.mlip.backend == "hydragnn" and cfg.mlip.hydragnn is not None:
                 new_logdir = retrain_hydragnn(
                     cfg.trainer,
-                    cfg.mlp.hydragnn,
+                    cfg.mlip.hydragnn,
                     dataset_path=dataset_path,
                     iteration=i,
                     out_logdir=it_dir / "model",
@@ -262,14 +262,14 @@ def run_active_learning(cfg: ALConfig) -> None:
                 state.new_logdir = str(new_logdir)
                 # Update logdir for next iteration (in-memory only — we re-resolve
                 # from state.json on restart).
-                cfg.mlp.hydragnn.logdir = new_logdir
+                cfg.mlip.hydragnn.logdir = new_logdir
             else:
                 # Frozen foundation model (e.g. UMA): no per-iteration retraining.
                 # The labelled dataset still accumulates for offline fine-tuning.
                 log.info(
                     "Skipping retraining for backend=%s (frozen model); "
                     "%d labelled frames accumulated in %s.",
-                    cfg.mlp.backend,
+                    cfg.mlip.backend,
                     n_appended,
                     dataset_path,
                 )

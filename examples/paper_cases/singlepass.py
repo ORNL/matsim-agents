@@ -2,13 +2,13 @@
 Unified single-pass (non-AL) runner for all paper test cases.
 =============================================================
 A "single pass" runs the planner -> executor -> uq_gate -> analyst agent graph ONCE on a
-supplied/built seed structure: the MLP relaxes it, ranks polymorphs, and (with
+supplied/built seed structure: the MLIP relaxes it, ranks polymorphs, and (with
 ``--dft``) the agent may validate the lowest-energy structure with a single DFT
 single-point.  There is NO label -> retrain loop — that is what the ``al_*.yaml``
 active-learning configs are for.
 
 Use a single pass to:
-  * sanity-check that the MLP behaves on a system before committing to AL,
+  * sanity-check that the MLIP behaves on a system before committing to AL,
   * get a fast polymorph ranking / feasibility read (phosphorene, MOFs),
   * generate seed structure files that the AL ``seed_source.kind: paths``
     configs then consume.
@@ -25,7 +25,7 @@ Usage:
     cd /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
     source scripts/setup/perlmutter/setup_matsim_perlmutter.sh
 
-    # one case, MLP only:
+    # one case, MLIP only:
     python examples/paper_cases/singlepass.py --case lifepo4
 
     # with a single DFT validation single-point (VASP):
@@ -35,7 +35,7 @@ Usage:
     python examples/paper_cases/singlepass.py --all --seeds-only
 
 Environment variables (override defaults):
-    MLP_LOGDIR   HydraGNN logdir (config.json + checkpoint)   [required to run]
+    MLIP_LOGDIR   HydraGNN logdir (config.json + checkpoint)   [required to run]
     MLP_CKPT     checkpoint filename            (default: best_model.pt)
     OUT_DIR      output root                    (default: ./out_singlepass)
 """
@@ -65,7 +65,7 @@ from matsim_agents.state import MatSimState
 # ---------------------------------------------------------------------------
 PROJ_ROOT  = Path(os.environ.get("PROJ_ROOT", Path(__file__).resolve().parents[2]))
 OUT_DIR    = Path(os.environ.get("OUT_DIR", PROJ_ROOT / "out_singlepass"))
-MLP_LOGDIR = Path(os.environ.get("MLP_LOGDIR", PROJ_ROOT / "runs/al-models/iter0_logdir"))
+MLIP_LOGDIR = Path(os.environ.get("MLIP_LOGDIR", PROJ_ROOT / "runs/al-models/iter0_logdir"))
 MLP_CKPT   = os.environ.get("MLP_CKPT", "best_model.pt")
 
 SEED_DIR = PROJ_ROOT / "examples/paper_cases/seeds"
@@ -256,11 +256,11 @@ def make_objective(case: str, seed_paths: list[Path], run_dft: bool) -> str:
     )
     dft = (
         " Then run a single DFT single-point on the lowest-energy relaxed "
-        "structure to validate the MLP energy and forces." if run_dft else
-        " Report MLP-only results; do not run DFT."
+        "structure to validate the MLIP energy and forces." if run_dft else
+        " Report MLIP-only results; do not run DFT."
     )
     return (
-        f"Relax the following seed structure(s) for case '{case}' with the MLP "
+        f"Relax the following seed structure(s) for case '{case}' with the MLIP "
         f"surrogate and rank them by energy per atom:\n{files}\n"
         f"Report the most stable structure, its energy per atom, and the RMSD "
         f"per atom between the initial and relaxed geometry.{two_d}{dft}"
@@ -277,7 +277,7 @@ def run_case(case: str, run_dft: bool) -> None:
     config = {
         "configurable": {
             "thread_id": str(uuid.uuid4()),
-            "logdir": str(MLP_LOGDIR),
+            "logdir": str(MLIP_LOGDIR),
             "mlp_checkpoint": MLP_CKPT,
             "mlp_device": "cuda",
         }
