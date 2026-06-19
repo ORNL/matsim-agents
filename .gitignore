@@ -113,3 +113,8 @@ matsim-*.e[0-9]*
 # PBS / Slurm stdout/stderr from any job script
 *.o[0-9]*
 *.e[0-9]*
+
+# Local scratch/runtime artifacts
+.venv-model-download/
+CRASH
+input_tmp.in
