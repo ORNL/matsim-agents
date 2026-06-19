@@ -89,6 +89,33 @@ class DiscoveryChatConfig:
     uq_min_relaxations_for_handoff: int = 3
     al_handoff_audit_path: str | None = None
 
+    def __post_init__(self) -> None:
+        """Enforce a single, consistent surrogate-backend choice.
+
+        The user selects exactly one ``mlp_backend`` and must supply the
+        inputs that backend needs; the inputs for the other backend are
+        ignored. This mirrors the validation in
+        :class:`matsim_agents.tools.relaxation.RelaxStructureInput` so the
+        error surfaces at configuration time rather than at the first
+        relaxation.
+        """
+        if self.mlp_backend not in {"hydragnn", "uma"}:
+            raise ValueError(
+                f"mlp_backend must be 'hydragnn' or 'uma', got {self.mlp_backend!r}."
+            )
+        if self.mlp_backend == "hydragnn":
+            if not self.logdir:
+                raise ValueError(
+                    "mlp_backend='hydragnn' requires 'logdir' "
+                    "(HydraGNN logdir containing config.json + checkpoint)."
+                )
+            if not self.mlp_checkpoint:
+                raise ValueError(
+                    "mlp_backend='hydragnn' requires 'mlp_checkpoint' "
+                    "(BranchWeightMLP .pt checkpoint)."
+                )
+
+
 
 @dataclass
 class DiscoveryChatSession:
@@ -203,6 +230,36 @@ def _extract_relax_command(user_text: str) -> str | None:
         candidate = txt[len(prefix):].strip()
         return candidate or None
     return None
+
+
+def _is_clear_command(user_text: str) -> bool:
+    """Return True if the user typed the conversation-reset command.
+
+    Supported form:
+      - /clear
+    """
+    return user_text.strip().lower() == "/clear"
+
+
+def _extract_al_command(user_text: str) -> tuple[bool, str | None]:
+    """Parse a chat command that triggers an active-learning handoff.
+
+    Supported forms:
+      - /al                (use the most recently discussed composition)
+      - /al <composition>  (e.g. ``/al Li2MnO3``)
+
+    Returns ``(is_al_command, composition_or_None)``.
+    """
+    txt = user_text.strip()
+    low = txt.lower()
+    if low == "/al":
+        return True, None
+    prefix = "/al "
+    if low.startswith(prefix):
+        arg = txt[len(prefix):].strip()
+        return True, (arg or None)
+    return False, None
+
 
 
 def _run_single_structure_relaxation(structure_path: str, cfg: DiscoveryChatConfig) -> str:
@@ -335,6 +392,13 @@ def _handoff_to_active_learning(
     exploration: CompositionExplorationResult,
     cfg: DiscoveryChatConfig,
 ) -> str:
+    return _run_active_learning_for_formula(exploration.composition.formula, cfg)
+
+
+def _run_active_learning_for_formula(
+    formula: str,
+    cfg: DiscoveryChatConfig,
+) -> str:
     if not cfg.active_learning_config:
         return (
             "AL handoff requested but skipped: active_learning_config is not set. "
@@ -346,11 +410,11 @@ def _handoff_to_active_learning(
 
     al_cfg = ALConfig.from_yaml(cfg.active_learning_config)
     al_cfg.md.seed_source.kind = "compositions"
-    al_cfg.md.seed_source.compositions = [exploration.composition.formula]
+    al_cfg.md.seed_source.compositions = [formula]
     al_cfg.md.seed_source.paths = []
     al_cfg.md.seed_source.prompt = None
 
-    safe_formula = exploration.composition.formula.replace("/", "_")
+    safe_formula = formula.replace("/", "_")
     al_cfg.loop.out_dir = (
         Path(cfg.output_dir) / "discovery" / "al_handoff" / safe_formula
     )
@@ -358,15 +422,16 @@ def _handoff_to_active_learning(
     if cfg.active_learning_dry_run:
         return (
             "AL handoff DRY-RUN: would run active learning for "
-            f"{exploration.composition.formula} with seed_source.kind='compositions', "
-            f"compositions=[{exploration.composition.formula}], out_dir={al_cfg.loop.out_dir}."
+            f"{formula} with seed_source.kind='compositions', "
+            f"compositions=[{formula}], out_dir={al_cfg.loop.out_dir}."
         )
 
     run_active_learning(al_cfg)
     return (
         "AL handoff completed: active learning started from discovery for "
-        f"{exploration.composition.formula}. out_dir={al_cfg.loop.out_dir}."
+        f"{formula}. out_dir={al_cfg.loop.out_dir}."
     )
+
 
 
 def _debate_hypothesis_response(
@@ -530,6 +595,44 @@ def chat_once(
     if not session.messages:
         session.messages.append(SystemMessage(content=cfg.system_prompt))
 
+    # Direct command: /clear resets the conversation and discovery state.
+    if _is_clear_command(user_text):
+        session.messages = [SystemMessage(content=cfg.system_prompt)]
+        session.seen_compositions.clear()
+        session.explorations.clear()
+        assistant_text = "Conversation history and discovery state cleared."
+        if on_assistant is not None:
+            on_assistant(assistant_text)
+        return assistant_text
+
+    # Direct command: /al [composition] triggers an active-learning handoff.
+    is_al, al_formula = _extract_al_command(user_text)
+    if is_al:
+        session.messages.append(HumanMessage(content=user_text))
+        if al_formula is None:
+            if session.explorations:
+                al_formula = session.explorations[-1].composition.formula
+            elif session.seen_compositions:
+                al_formula = next(iter(session.seen_compositions))
+        if al_formula is None:
+            assistant_text = (
+                "Active learning command received but no composition was given and "
+                "none has been discussed yet. Use '/al <composition>' "
+                "(e.g. '/al Li2MnO3')."
+            )
+        else:
+            try:
+                assistant_text = _run_active_learning_for_formula(al_formula, cfg)
+            except Exception as exc:  # pragma: no cover - depends on runtime environment
+                assistant_text = (
+                    f"Active learning failed for {al_formula}: {exc!s}. "
+                    "Check active_learning_config and retry."
+                )
+        session.messages.append(AIMessage(content=assistant_text))
+        if on_assistant is not None:
+            on_assistant(assistant_text)
+        return assistant_text
+
     # Optional direct operation inside discovery: single-structure relaxation.
     relax_path = _extract_relax_command(user_text)
     if relax_path is not None:
@@ -634,6 +737,7 @@ def run_chat(config: DiscoveryChatConfig) -> DiscoveryChatSession:
         f"(provider={config.llm_provider}, model={config.llm_model}, "
         f"debate={'on' if config.enable_hypothesis_debate else 'off'})\n"
         "Type 'exit' to quit. Propose compositions like 'Li2MnO3' to trigger exploration.\n"
+        "Commands: /relax <structure_path>, /al [composition], /clear.\n"
     )
     while True:
         try:
