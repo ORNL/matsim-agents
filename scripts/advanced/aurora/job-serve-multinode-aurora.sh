@@ -84,7 +84,7 @@ PPN="${PPN:-12}"               # ranks per node = PVC tiles per node
 NTOTRANKS=$(( NNODES * PPN ))
 
 # 12-rank CPU binding used by HydraGNN on Aurora — one tile per rank.
-CPU_BIND="--cpu-bind=list:1-8:9-16:17-24:25-32:33-40:41-48:53-60:61-68:69-76:77-84:85-92:93-100"
+CPU_BIND="${CPU_BIND:---cpu-bind=list:1-8:9-16:17-24:25-32:33-40:41-48:53-60:61-68:69-76:77-84:85-92:93-100}"
 
 # ── runtime env (HF + torch-distributed/CCL on XPU) ─────────────────────────
 export PYTHONPATH="${REPO}:${PYTHONPATH:-}"

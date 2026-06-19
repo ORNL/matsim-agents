@@ -27,7 +27,7 @@
 #   PROJECT_ROOT          repo root (default: /lustre/orion/mat746/proj-shared/matsim-agents)
 #   PSEUDO_DIR            directory of .UPF pseudopotentials (REQUIRED)
 #   HYDRAGNN_LOGDIR       HydraGNN logdir with config.json + checkpoint
-#   HYDRAGNN_MLP_CKPT     BranchWeightMLP .pt checkpoint
+#   HYDRAGNN_BRANCH_MLP_CHECKPOINT     BranchWeightMLP .pt checkpoint
 #
 # Optional:
 #   FIXTURES              comma-separated fixture names (default: all)
@@ -35,7 +35,7 @@
 #
 # Usage:
 #   sbatch \
-#     --export=ALL,PSEUDO_DIR=/path/to/pseudos,HYDRAGNN_LOGDIR=/path/to/logdir,HYDRAGNN_MLP_CKPT=/path/to/mlp.pt \
+#     --export=ALL,PSEUDO_DIR=/path/to/pseudos,HYDRAGNN_LOGDIR=/path/to/logdir,HYDRAGNN_BRANCH_MLP_CHECKPOINT=/path/to/mlp.pt \
 #     scripts/launchers/frontier/run-qe-warmstart-benchmark.sh
 # =============================================================================
 
@@ -47,13 +47,13 @@ PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}
 
 PSEUDO_DIR="${PSEUDO_DIR:-}"
 HYDRAGNN_LOGDIR="${HYDRAGNN_LOGDIR:-}"
-HYDRAGNN_MLP_CKPT="${HYDRAGNN_MLP_CKPT:-}"
+HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-}"
 FIXTURES="${FIXTURES:-}"
 QE_TIMEOUT_SEC="${QE_TIMEOUT_SEC:-3600}"
 
-if [[ -z "${PSEUDO_DIR}" || -z "${HYDRAGNN_LOGDIR}" || -z "${HYDRAGNN_MLP_CKPT}" ]]; then
-  echo "ERROR: PSEUDO_DIR, HYDRAGNN_LOGDIR, and HYDRAGNN_MLP_CKPT must all be set." >&2
-  echo "Got: PSEUDO_DIR='${PSEUDO_DIR}' HYDRAGNN_LOGDIR='${HYDRAGNN_LOGDIR}' HYDRAGNN_MLP_CKPT='${HYDRAGNN_MLP_CKPT}'" >&2
+if [[ -z "${PSEUDO_DIR}" || -z "${HYDRAGNN_LOGDIR}" || -z "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" ]]; then
+  echo "ERROR: PSEUDO_DIR, HYDRAGNN_LOGDIR, and HYDRAGNN_BRANCH_MLP_CHECKPOINT must all be set." >&2
+  echo "Got: PSEUDO_DIR='${PSEUDO_DIR}' HYDRAGNN_LOGDIR='${HYDRAGNN_LOGDIR}' HYDRAGNN_BRANCH_MLP_CHECKPOINT='${HYDRAGNN_BRANCH_MLP_CHECKPOINT}'" >&2
   exit 2
 fi
 
@@ -83,7 +83,7 @@ cd "${PROJECT_ROOT}"
 export MATSIM_QE_LAUNCHER="${QE_LAUNCHER}"
 export MATSIM_QE_PSEUDO_DIR="${PSEUDO_DIR}"
 export MATSIM_HYDRAGNN_LOGDIR="${HYDRAGNN_LOGDIR}"
-export MATSIM_HYDRAGNN_MLP_CKPT="${HYDRAGNN_MLP_CKPT}"
+export HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 export MATSIM_QE_TIMEOUT_SEC="${QE_TIMEOUT_SEC}"
 export MATSIM_QE_MLP_DEVICE="cuda"
 [[ -n "${FIXTURES}" ]] && export MATSIM_WARMSTART_FIXTURES="${FIXTURES}"
@@ -96,7 +96,7 @@ echo "PROJECT_ROOT:       ${PROJECT_ROOT}"
 echo "QE launcher:        ${MATSIM_QE_LAUNCHER}"
 echo "PSEUDO_DIR:         ${MATSIM_QE_PSEUDO_DIR}"
 echo "HYDRAGNN_LOGDIR:    ${MATSIM_HYDRAGNN_LOGDIR}"
-echo "HYDRAGNN_MLP_CKPT:  ${MATSIM_HYDRAGNN_MLP_CKPT}"
+echo "HYDRAGNN_BRANCH_MLP_CHECKPOINT:  ${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 echo "FIXTURES:           ${FIXTURES:-<all>}"
 echo "QE_TIMEOUT_SEC:     ${MATSIM_QE_TIMEOUT_SEC}"
 echo "=========================================="

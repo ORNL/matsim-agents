@@ -14,8 +14,8 @@
 # Mirrors scripts/advanced/{frontier,perlmutter}/job-discovery-chat-*.sh:
 #   • Local HuggingFace LLM (Qwen2.5-72B-Instruct via transformers, no server)
 #   • HydraGNN MLFF relaxation (multidataset BEST6 fp64 ensemble)
-#   • Same RHEA-style query, same flags (--n-orderings 2, --min-atoms 64,
-#     --auto-confirm, --maxiter 500, --fmax 0.02)
+#   • Same generic discovery-query flow, same flags (--n-orderings 2,
+#     --min-atoms 64, --auto-confirm, --maxiter 500, --fmax 0.02)
 #
 # Submit:
 #   qsub scripts/advanced/aurora/job-discovery-chat-aurora.sh
@@ -23,29 +23,30 @@
 # Override at submit time:
 #   qsub -v MATSIM_MODEL_DIR=/path/to/Qwen3-32B \
 #        scripts/advanced/aurora/job-discovery-chat-aurora.sh
+#
+# Override discovery prompt:
+#   qsub -v MATSIM_DISCOVERY_QUERY="Propose candidate materials for ..." \
+#        scripts/advanced/aurora/job-discovery-chat-aurora.sh
 # ---------------------------------------------------------------------------
 
 set -eo pipefail  # NOTE: no -u; lmod's bash init breaks under nounset
 
 # ── paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${PBS_O_WORKDIR:-$PWD}/$0}")" 2>/dev/null && pwd)"
-REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/lus/flare/projects/CM2US/mlupopa/matsim-agents
+source "${SCRIPT_DIR}/../common/runtime-env.sh"
+REPO="$(resolve_repo_root "${SCRIPT_DIR}" "/lus/flare/projects/CM2US/mlupopa/matsim-agents")"
 PROJ="$(dirname "${REPO}")"
 
 VENV="${MATSIM_AURORA_VENV:-${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
-MLP_CHECKPOINT=${MATSIM_HYDRAGNN_MLP_CKPT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
+HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Mistral-Small-24B-Instruct-2501}
 MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
 
 JOBID="${PBS_JOBID:-$$}"
-RUN_DIR=$PROJ/runs/discovery-chat-aurora-${JOBID}
-OUTPUT_DIR=$RUN_DIR/outputs
-mkdir -p "$RUN_DIR" "$OUTPUT_DIR"
+init_run_dirs "$PROJ" "discovery-chat-aurora" "${JOBID}"
 
 # ── modules & venv ───────────────────────────────────────────────────────────
 if command -v module >/dev/null 2>&1; then
@@ -62,7 +63,7 @@ export PYTHONUNBUFFERED=1
 # executor_node reads these env vars as fallback when config injection is
 # unavailable (e.g. across LangGraph checkpoint boundaries).
 export MATSIM_HYDRAGNN_LOGDIR="${LOGDIR}"
-export MATSIM_HYDRAGNN_MLP_CKPT="${MLP_CHECKPOINT}"
+export HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 
 # Compute nodes have no outbound internet → force fully offline HF stack.
 export HF_HUB_OFFLINE=1
@@ -88,7 +89,7 @@ echo "Repo:          $REPO"
 echo "Venv:          $VENV"
 echo "LLM model:     $MODEL_NAME ($MODEL_DIR)"
 echo "HydraGNN log:  $LOGDIR"
-echo "MLP ckpt:      $MLP_CHECKPOINT"
+echo "MLP ckpt:      $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "=========================================="
 
 echo "[$(date)] Python: $(which python) ($(python --version 2>&1))"
@@ -104,18 +105,23 @@ except Exception as e:
     raise
 PY
 
-# ── RHEA query (identical to Frontier / Perlmutter) ─────────────────────────
-QUERY="Propose 4 to 5 refractory high-entropy alloy compositions using elements \
-from Mo, Nb, Ta, W, V, Cr, Hf, Zr, Ti that are known for combined \
-high-temperature resistance and mechanical strength. For each composition \
-specify the relevant crystal phases (e.g. BCC, B2, HCP) and explain the \
-physical justification. Then relax each proposed structure using the MLFF \
-and report the final energies and which phases are most stable."
+# ── discovery query (identical to Frontier / Perlmutter) ────────────────────
+if [[ -n "${MATSIM_DISCOVERY_QUERY:-}" ]]; then
+  QUERY="${MATSIM_DISCOVERY_QUERY}"
+else
+  QUERY="$(cat <<'EOF'
+Propose 3 to 5 candidate inorganic materials for high-temperature structural applications.
+For each candidate, provide the formula, likely crystal family, and a brief physics-based
+justification. Then relax the proposed structures with the MLFF and summarize relative
+stability from final energies and residual forces.
+EOF
+)"
+fi
 
-echo "[$(date)] Submitting RHEA query to matsim-agents (HuggingFace provider) ..."
+echo "[$(date)] Submitting discovery query to matsim-agents (HuggingFace provider) ..."
 echo "$QUERY" | matsim-agents chat \
     --logdir          "$LOGDIR" \
-    --mlp-checkpoint  "$MLP_CHECKPOINT" \
+    --mlp-checkpoint  "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
     --llm-provider    huggingface \
     --llm-model       "$MODEL_DIR" \

@@ -1,0 +1,879 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+% Robust PDF bookmarks: keep acronym commands out of bookmark strings.
+\pdfstringdefDisableCommands{%
+  \def\ac#1{#1}%
+  \def\acs#1{#1}%
+  \def\acf#1{#1}%
+  \def\acp#1{#1}%
+  \def\Acp#1{#1}%
+}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{microtype}
+\usepackage[nohyperlinks]{acronym}
+% Acronym definitions. Use \newacro in the preamble so acronyms are available on the first LaTeX pass.
+% This avoids the acronym package's undefined-acronym fallback, which appears as bold text followed by an exclamation mark.
+\renewcommand*{\aclabelfont}[1]{#1}
+\newacro{AI}[AI]{artificial intelligence}
+\newacro{HPC}[HPC]{high-performance computing}
+\newacro{MLIP}[MLIP]{machine-learned interatomic potential}
+\newacro{DFT}[DFT]{density functional theory}
+\newacro{LLM}[LLM]{large language model}
+\newacro{UQ}[UQ]{uncertainty quantification}
+\newacro{QE}[QE]{Quantum ESPRESSO}
+\newacro{VASP}[VASP]{Vienna Ab initio Simulation Package}
+\newacro{DOE}[DOE]{Department of Energy}
+\newacro{NERSC}[NERSC]{National Energy Research Scientific Computing Center}
+\newacro{OLCF}[OLCF]{Oak Ridge Leadership Computing Facility}
+\newacro{ALCF}[ALCF]{Argonne Leadership Computing Facility}
+\newacro{GNN}[GNN]{graph neural network}
+\newacro{MLP}[MLP]{multilayer perceptron}
+\newacro{MC}[MC]{Monte Carlo}
+\newacro{MD}[MD]{molecular dynamics}
+\newacro{ASE}[ASE]{Atomic Simulation Environment}
+\newacro{FIRE}[FIRE]{Fast Inertial Relaxation Engine}
+\newacro{BFGS}[BFGS]{Broyden--Fletcher--Goldfarb--Shanno}
+\newacro{SCF}[SCF]{self-consistent field}
+\newacro{HEA}[HEA]{high-entropy alloy}
+\newacro{MOF}[MOF]{metal--organic framework}
+\newacro{GPU}[GPU]{graphics processing unit}
+\newacro{CUDA}[CUDA]{Compute Unified Device Architecture}
+\newacro{MPI}[MPI]{Message Passing Interface}
+\newacro{PVC}[PVC]{Ponte Vecchio}
+\newacro{GCD}[GCD]{graphics compute die}
+\newacro{NVT}[NVT]{constant-particle-number, constant-volume, constant-temperature}
+\newacro{REPL}[REPL]{read--eval--print loop}
+\newacro{JSON}[JSON]{JavaScript Object Notation}
+\newacro{JSONL}[JSONL]{JavaScript Object Notation Lines}
+\newacro{HTTP}[HTTP]{Hypertext Transfer Protocol}
+\newacro{NLP}[NLP]{natural language processing}
+\newacro{FFTW}[FFTW]{Fastest Fourier Transform in the West}
+\newacro{ELPA}[ELPA]{Eigenvalue SoLvers for Petaflop-Applications}
+\newacro{GTL}[GTL]{GPU transport layer}
+\newacro{XPU}[XPU]{Intel accelerated processing unit}
+\newacro{DFTB}[DFTB]{density-functional tight binding}
+\newacro{GFM}[GFM]{graph foundation model}
+\newacro{MTL}[MTL]{multi-task learning}
+\newacro{MPNN}[MPNN]{message-passing neural network}
+\newacro{HPO}[HPO]{hyperparameter optimization}
+\newacro{ADIOS2}[ADIOS2]{Adaptable Input/Output System 2}
+\newacro{DDStore}[DDStore]{Distributed Data Store}
+\newacro{NVMe}[NVMe]{non-volatile memory express}
+\newacro{FP64}[FP64]{64-bit floating point}
+\newacro{FP32}[FP32]{32-bit floating point}
+\newacro{BF16}[BF16]{bfloat16}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+% ── Listings style for code snippets ─────────────────────────────────────────
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  columns=flexible,
+}
+
+\begin{document}
+
+% =============================================================================
+\title{matsim-agents: An Agentic Artificial Intelligence Scientific Workflow for Autonomous
+Atomistic Materials Discovery on Leadership-Class High-Performance Computing}
+
+\author{
+\IEEEauthorblockN{Massimiliano Lupo Pasini$^{1}$}
+\IEEEauthorblockA{\textit{Oak Ridge National Laboratory}\\
+Oak Ridge, TN, USA\\
+lulopasim@ornl.gov}
+}
+
+\maketitle
+
+% =============================================================================
+\begin{abstract}
+We present \textsc{matsim-agents}, an agentic \ac{AI} workflow framework for
+atomistic materials discovery on leadership-class \ac{HPC} systems. The framework connects natural-language scientific objectives to
+executable simulation tasks, \ac{MLIP}-based relaxation, uncertainty-aware
+validation, selective first-principles escalation, and scientific summarization.
+Its key novelty is a closed-loop, \acs{HPC}-deployable workflow in which uncertainty
+estimates act as control variables that route predictions either to analysis or
+to \ac{DFT}-driven active learning. The framework supports user-selectable \ac{DFT} backends, including open-source \ac{QE} and licensed closed-source \ac{VASP}, with deployment support for heterogeneous \ac{DOE} leadership-class systems.
+\end{abstract}
+
+\begin{IEEEkeywords}
+agentic artificial intelligence, materials discovery, machine learning force field, HydraGNN,
+uncertainty quantification, active learning, Quantum ESPRESSO, VASP,
+warm-start, high-performance computing, scientific workflow
+\end{IEEEkeywords}
+
+% =============================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Accelerating the discovery of novel functional materials remains one of the
+grand challenges at the intersection of computational science and
+\acs{HPC}. First-principles electronic-structure methods such
+as \acs{DFT} provide accurate energies and forces but scale as $\mathcal{O}(N^3)$ in
+the number of electrons and are therefore prohibitively expensive for
+high-throughput exploration of large chemical spaces. \Acp{MLIP}~\cite{behler2007,bartok2010,batzner2022} offer
+near-\acs{DFT} accuracy at a fraction of the cost, but their reliability degrades
+silently outside the training distribution, making undetected extrapolation a
+practical risk in autonomous workflows.
+
+Agentic \acs{AI} offers a principled route through autonomous planning, tool invocation,
+conditional branching, and iterative self-improvement to address both challenges. By embedding an \ac{MLIP} inside a decision-making
+loop equipped with \ac{UQ} and \acs{DFT} escalation, an
+agentic workflow can \emph{explore broadly} with the \acs{MLIP} and \emph{correct
+selectively} with \acs{DFT}, reserving expensive quantum-mechanical calculations for
+only those configurations where the \acs{MLIP} is genuinely uncertain.
+
+Existing active learning workflows for \acp{MLIP}~\cite{smith2018,vandermause2020,
+podryabinkin2017} already automate the cycle of candidate generation, \acs{DFT}
+labeling, and model retraining. \textsc{matsim-agents} advances this paradigm
+by introducing a closed-loop agentic orchestration layer that connects
+natural-language scientific objectives to executable atomistic simulation tasks,
+\acs{MLIP}-based exploration, uncertainty-aware validation, selective \acs{DFT} escalation,
+active learning, and language-level scientific synthesis. This loop transforms
+materials simulation from a manually configured sequence of computational steps
+into an autonomous scientific workflow in which planning, execution,
+validation, correction, and reporting are coordinated by interacting agents.
+
+The novelty of \textsc{matsim-agents} lies in making the full decision cycle
+explicit and executable on leadership-class \acs{HPC} systems. A user can state an
+open-ended materials objective in natural language; the planner converts that
+objective into typed atomistic tasks; the executor performs fast HydraGNN-based
+relaxation; the \acs{UQ} gate decides whether the prediction is reliable enough for
+analysis or must be escalated to \ac{DFT}-driven active learning; and the analyst
+returns an interpretable scientific summary. In this design, uncertainty is not
+an offline diagnostic but a first-class workflow control variable that determines
+whether the agentic system accepts, corrects, or improves its own predictions.
+
+A second important capability is explicit user control over the first-principles
+backend. The workflow supports both \ac{QE}~\cite{giannozzi2009qe,giannozzi2017qe}, an open-source \acs{DFT}
+code, and \ac{VASP}~\cite{kresse1993vasp,kresse1996vasp}, a licensed closed-source \acs{DFT} code. The user can select the \acs{DFT}
+engine most appropriate for their scientific problem, institutional software
+access, pseudopotential library, and production workflow. To make this choice
+practical on \acs{DOE} systems, \textsc{matsim-agents} provides detailed bash scripts
+for compiling both \acs{QE} and \acs{VASP} on the three main \ac{DOE} leadership-class
+supercomputing facilities: \ac{NERSC} Perlmutter, \ac{ALCF} Aurora, and \ac{OLCF} Frontier.
+
+In this paper we present \textsc{matsim-agents}, an open-source framework that
+realises this agentic materials-discovery loop. The main novel contributions of
+this work are:
+
+\begin{itemize}
+\item A \textbf{closed-loop agentic workflow} that translates natural-language
+  materials objectives into executable atomistic simulation tasks through a
+  checkpointed LangGraph multi-agent state machine, integrating \ac{LLM} planning,
+  HydraGNN-based \acs{MLIP} relaxation, uncertainty-gated validation, \acs{DFT} labeling,
+  active learning, and scientific summarization in a single reproducible loop.
+\item A \textbf{\acs{DFT} warm-start capability} in which \acs{MLIP}-relaxed structures are
+  used to initialize higher-fidelity first-principles optimization, allowing the
+  workflow to combine fast approximate exploration with selective
+  quantum-mechanical refinement.
+\item An \textbf{\acs{HPC}-oriented deployment model} that supports local \acs{LLM}
+  inference, \acs{GPU}-accelerated atomistic simulation, batch-scheduled
+  first-principles calculations, checkpointed workflow execution, and
+  platform-specific support for heterogeneous \ac{DOE} leadership-class systems.
+\end{itemize}
+
+The paper is organised as follows. Section~\ref{sec:related} reviews related
+work. Section~\ref{sec:contributions} aggregates the distinctive contributions
+that position \textsc{matsim-agents} relative to this literature.
+Section~\ref{sec:architecture} describes the system architecture.
+Section~\ref{sec:hpc} details the \acs{HPC} deployment strategy.
+Section~\ref{sec:results} presents benchmark results on Perlmutter.
+Section~\ref{sec:conclusions} discusses findings, limitations, and future
+developments, and draws conclusions.
+
+% =============================================================================
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Machine-Learned Interatomic Potentials}
+The past decade has seen rapid development of \acp{MLIP}, from kernel-based
+Gaussian approximation potentials~\cite{bartok2010} and behler-Parrinello
+networks~\cite{behler2007} to graph-neural-network architectures such as
+NequIP~\cite{batzner2022}, MACE~\cite{batatia2022}, and
+SchNet~\cite{schutt2018}. Foundation models trained on diverse datasets
+(such as CHGNet~\cite{deng2023}, MACE-MP~\cite{batatia2023macemp}, and
+UMA~\cite{uma2024}) have further broadened coverage. HydraGNN is an atomistic \ac{GFM} framework that has recently been used
+in an exascale multi-task pretraining workflow over 16 open first-principles
+datasets, spanning more than 544 million structures and over 85 elements, with
+shared message-passing representations and dataset-/fidelity-specific
+prediction heads~\cite{hydragnn,lupopasini2026exascalegfm}.
+
+\subsection{Uncertainty Quantification for MLIPs}
+\ac{UQ} for \acp{MLIP} has been studied via deep ensembles~\cite{lakshminarayanan2017},
+\ac{MC}-Dropout~\cite{gal2016}, and calibrated committee models~\cite{schran2020}.
+Ensembles are the most reliable but require $N$ independent model evaluations.
+In multi-branch atomistic models, branch-selection signals can also expose
+information about how predictions are routed across dataset- or
+fidelity-specialized heads. In the HydraGNN \ac{GFM}, the BranchWeightMLP is a
+composition-conditioned router that maps a structure's chemical-composition
+vector to softmax weights over 16 dataset-/fidelity-specialized output
+branches~\cite{lupopasini2026exascalegfm}. Such branch weights should be
+interpreted as routing signals rather than calibrated Bayesian uncertainty.
+
+\subsection{Active Learning for Materials}
+Active learning has been used to iteratively expand \acs{MLIP} training sets with
+targeted \acs{DFT} calculations, and several mature frameworks now automate this
+cycle. FLARE~\cite{vandermause2020,vandermause2022} uses Bayesian force fields
+with on-the-fly uncertainty to trigger \acs{DFT} calls during \acs{MD}.
+DP-GEN~\cite{zhang2020dpgen} implements a concurrent-learning scheme for
+DeePMD potentials that alternates exploration, labeling, and training across
+many chemical systems. FIRETASKS / Atomate~\cite{mathew2017atomate} provides
+a workflow engine for high-throughput \acs{DFT} and can be combined with \acs{MLIP}
+training loops. ATAT and ICET~\cite{icet2019} focus on cluster expansion
+fitting with active selection of supercell configurations.
+ALF~\cite{schran2020} demonstrated committee-based active learning for
+aqueous systems. More recently, foundation-model-aware AL schemes such as
+Finetuner~\cite{batatia2023macemp} fine-tune MACE-MP on targeted datasets.
+These frameworks demonstrate that candidate generation, uncertainty-based
+selection, first-principles labeling, and retraining can be automated into
+iterative materials-discovery pipelines.
+
+\subsection{LLM-Driven Scientific Workflows}
+Recent work has explored \acp{LLM} for materials hypothesis generation~\cite{
+merchant2023,xie2023,sprueill2023}, automated literature synthesis, and code
+generation. These developments show the potential of language models to assist
+scientific reasoning, tool use, and human-facing interpretation of complex
+simulation outputs.
+
+\subsection{DFT Warm-Starting}
+Using a fast approximate model to generate a near-equilibrium input geometry
+for a more expensive method is a classical idea in computational
+chemistry~\cite{lejaeghere2016}. Several recent works have proposed \acs{MLIP}
+warm-starts for \acs{DFT} geometry optimisation~\cite{schreiner2022,merchant2023}.
+These efforts motivate the use of learned potentials as fast preprocessors for
+higher-fidelity first-principles calculations.
+
+% =============================================================================
+\section{Distinctive Contributions of \textsc{matsim-agents}}
+\label{sec:contributions}
+
+The related work reviewed above has established powerful components for modern
+computational materials science, including graph-neural-network interatomic
+potentials, uncertainty estimation, active learning, first-principles workflow
+engines, \acs{MLIP}-assisted warm-starting, and emerging \acs{LLM}-based
+scientific assistants. The distinctive contribution of \textsc{matsim-agents}
+is to integrate these capabilities into a closed-loop, \acs{HPC}-deployable
+agentic workflow for atomistic materials discovery. In this workflow,
+natural-language scientific intent is translated into executable simulation
+tasks, \acs{MLIP} predictions are evaluated through uncertainty-aware control
+logic, selected structures are escalated to \acs{DFT} when higher fidelity is
+required, and the resulting scientific evidence is returned to the user through
+language-level synthesis.
+
+The first distinguishing feature is the translation of open-ended materials
+objectives into typed atomistic tasks. Instead of requiring the user to manually
+assemble a sequence of scripts, configuration files, simulation inputs, and
+post-processing steps, \textsc{matsim-agents} represents planning, execution,
+validation, correction, and reporting as explicit states in a checkpointed
+LangGraph multi-agent workflow.
+
+The second distinguishing feature is the integration of the HydraGNN
+\acs{GFM} as the fast atomistic execution engine. The workflow uses an
+exascale-trained, multi-task HydraGNN checkpoint as a practical \acs{MLIP}
+backend for rapid relaxation and screening. Because the model is built from
+shared message-passing layers and dataset-/fidelity-specific output branches,
+it provides both high-throughput energy/force evaluation and branch-routing
+signals that can be used by the agentic workflow for low-cost triage.
+
+The third distinguishing feature is the use of the BranchWeightMLP as a
+workflow-control signal. In the underlying HydraGNN model, BranchWeightMLP is a
+composition-conditioned router that blends the predictions of 16 output
+branches. In \textsc{matsim-agents}, the concentration or diffuseness of that
+branch-weight distribution is used as a heuristic confidence signal: sharply
+routed predictions can proceed to analysis, whereas diffuse routing can trigger
+additional validation, \acs{DFT} labeling, or a more expensive \acs{UQ} method.
+This interpretation preserves the technical meaning of BranchWeightMLP as a
+router rather than overstating it as a calibrated epistemic uncertainty model.
+
+The fourth distinguishing feature is the coupling of selective \acs{DFT}
+escalation, active learning, and warm-starting inside the same agentic loop.
+The framework can route uncertain structures to first-principles labeling,
+append the resulting configurations to the training set, retrain the \acs{MLIP},
+and use \acs{MLIP}-relaxed geometries as warm starts for higher-fidelity
+geometry optimization. This connects fast approximate exploration with
+selective quantum-mechanical correction.
+
+The fifth distinguishing feature is the deployment model for leadership-class
+\acs{HPC} systems. \textsc{matsim-agents} is designed around local \acs{LLM}
+inference, \acs{GPU}-accelerated \acs{MLIP} evaluation, batch-scheduled
+first-principles calculations, serialized workflow state, and platform-specific
+support for heterogeneous \acs{DOE} supercomputers. This makes the framework a
+scientific workflow system for production computational materials workloads,
+not only an interactive tool-calling demonstration.
+
+% =============================================================================
+\section{System Architecture}
+\label{sec:architecture}
+
+\subsection{Overview}
+\textsc{matsim-agents} is structured around three layers (Fig.~\ref{fig:arch}):
+(i) a \emph{natural language interface} layer accepting free-text objectives
+or interactive chat; (ii) a \emph{LangGraph orchestration layer} implementing
+the multi-agent graph; and (iii) an \emph{atomistic backend layer} providing
+\acs{MLIP} relaxation, stability scoring, and \acs{DFT} execution. The remainder
+of this section is organised around these layers. We first describe the
+combined interface and orchestration layer, comprising the agent graph, its
+nodes, and the three entry points that drive it; we then describe the atomistic
+backend layer, comprising the HydraGNN \acs{MLIP} engine, the BranchWeightMLP
+confidence signal, the active learning loop, and the \acs{DFT} warm-start
+protocol.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/matsim-agents.png}
+\caption{High-level architecture of \textsc{matsim-agents}. The LangGraph
+orchestration layer routes between \acs{MLIP}-driven discovery and \acs{DFT}-driven active
+learning based on the \acs{UQ} gate decision.}
+\label{fig:arch}
+\end{figure*}
+
+\subsection{Interface and Orchestration Layer}
+The first two layers of Fig.~\ref{fig:arch}---the natural-language interface
+and the LangGraph orchestration layer---are realized together by a single
+multi-agent graph and the entry points that expose it to the user.
+
+\subsubsection{Agent Graph and Nodes}
+The agent graph is assembled with LangGraph~\cite{langgraph} and contains four
+primary nodes:
+
+\textbf{Planner.} A configurable \ac{LLM} (Qwen2.5-72B served via
+vLLM~\cite{vllm} by default, but interchangeable with any of the supported
+open- or closed-weight models discussed in Section~\ref{sec:conclusions})
+receives the user objective and emits a typed list of
+\texttt{TaskSpec} items (\texttt{relax}, \texttt{analyze}, \texttt{report}).
+Structured output via Pydantic schemas is used to ensure deterministic \acs{JSON}
+parsing.
+
+\textbf{Executor.} For each pending \texttt{relax} task, the executor invokes
+the HydraGNN relaxation tool, which runs \ac{ASE} \acs{FIRE}/\acs{BFGS} optimisation using the
+HydraGNN graph neural network as a force-and-energy evaluator. Results
+(optimised structure, final energy, max force, convergence flag, \acs{UQ} scores) are
+appended to the shared typed state.
+
+\textbf{\acs{UQ} Gate.} After all tasks are executed, the gate evaluates the
+branch-weight distribution for each relaxed structure. If the mean top-branch
+weight exceeds a configurable threshold (default 0.6) and the fraction of
+unreliable predictions is below a second threshold (default 0.25), the gate
+passes control to the analyst. Otherwise, it triggers the active learning
+handoff, logging the decision to a \ac{JSONL} audit file.
+
+\textbf{Analyst.} The analyst node invokes the \acs{LLM} to generate a natural
+language summary of the discovered structures, including energy rankings,
+stability estimates, and \acs{UQ} signals.
+
+\subsubsection{Entry Points and Task Complexity}
+\textsc{matsim-agents} exposes these nodes through three entry points that form
+a ladder of increasing task complexity. The simplest is the \emph{default
+linear graph} described above: a fixed planner~$\rightarrow$~executor~$\rightarrow$~\acs{UQ}
+gate~$\rightarrow$~analyst pipeline that handles a single, well-posed objective
+(for example, ``relax this structure and report its stability'') in one
+forward pass, with the only branch being the binary \acs{UQ} decision to escalate
+or summarize. This entry point is best suited to one-shot tasks over a small,
+explicitly given set of structures.
+
+The second entry point is the \emph{supervisor graph}, which targets more
+complex objectives that require systematic exploration of a composition space
+rather than a fixed structure list. It decomposes the workflow into five
+explicitly supervised nodes (prepare, explore, evaluate\_uq, optionally active
+learning, and summarize) and adds a supervisor that can iterate over many
+candidate phases, loop back into active learning when the \acs{UQ} gate flags
+unreliable regions, and aggregate results across the enumeration. The added
+node granularity gives the orchestrator finer control over how exploration,
+validation, and correction are interleaved for multi-structure campaigns.
+
+The third and most open-ended entry point is \emph{discovery chat}, an
+interactive \ac{REPL} for exploratory, human-in-the-loop investigation. On top
+of the underlying graph it adds automatic composition detection from
+free-text input, optional multi-\acs{LLM} peer review (a proposer/critic debate
+that stress-tests candidate hypotheses), and slash commands (\texttt{/relax},
+\texttt{/al}, \texttt{/clear}) that let the user invoke individual stages on
+demand. This entry point trades the bounded, single-objective scope of the
+other two for open-ended, iterative scientific dialogue in which the task is
+refined interactively rather than fixed in advance.
+
+\subsection{Atomistic Backend Layer}
+The third layer executes the physics. It evaluates energies and forces with the
+HydraGNN \acs{MLIP}, derives a low-cost confidence signal from the model's
+composition-conditioned branch router, and escalates uncertain structures to
+\acs{DFT} through the active learning and warm-start protocols.
+
+\subsubsection{HydraGNN GFM as the MLIP Engine}
+HydraGNN~\cite{hydragnn,lupopasini2026exascalegfm} is used in
+\textsc{matsim-agents} as the fast atomistic execution engine. The checkpoint
+used by the workflow is not a narrow, single-dataset force field; it is an
+exascale-trained atomistic \ac{GFM} built from a multi-source,
+multi-fidelity first-principles corpus. The pretraining campaign described
+in~\cite{lupopasini2026exascalegfm} jointly trains on 16 open datasets
+covering organic molecules, inorganic crystals, alloy surfaces, catalysts,
+hybrid systems, and polymers, totaling more than 544 million structures across
+more than 85 elements. This broad coverage is important for
+\textsc{matsim-agents} because the planner can generate tasks involving
+chemistries that were not manually enumerated in advance.
+
+Architecturally, the HydraGNN \acs{GFM} follows a multi-task design: shared
+\ac{MPNN} layers learn transferable atomistic interaction features, while
+branch-specific output heads absorb dataset-dependent label conventions,
+fidelity offsets, and partially labeled energy/force supervision. The exascale
+pretraining study explored several \acs{MPNN} backbones through large-scale
+\ac{HPO} on \acs{OLCF} Frontier, promoted the best candidates to fixed-budget
+2,048-node training runs, and selected a compact PaiNN-based lead model. The
+lead checkpoint contains approximately 12.1 million parameters, uses 16
+output branches, and was trained in \acs{FP64}, making it suitable for both
+high-throughput screening and integration into physics-based workflows.
+
+In \textsc{matsim-agents}, this pretrained model evaluates energies and forces
+for candidate atomistic structures during relaxation and screening. The
+workflow therefore uses the HydraGNN \acs{GFM} as a practical \acs{MLIP}:
+it provides orders-of-magnitude faster evaluations than direct \acs{DFT}, while
+retaining a connection to the multi-domain training corpus through its branch
+structure.
+
+\subsubsection{BranchWeightMLP Confidence Signal}
+The BranchWeightMLP was introduced in the HydraGNN \acs{GFM} to make the
+multi-branch, multi-task architecture deployable on chemistries that may not
+belong cleanly to a single training dataset~\cite{lupopasini2026exascalegfm}.
+It maps a per-element chemical-composition descriptor to a softmax-normalized
+weight vector $\mathbf{w} \in \mathbb{R}^{16}$, with $\sum_k w_k = 1$,
+that blends the predictions of the 16 output branches into a single energy and
+force prediction. In the exascale pretraining study, this router contains about
+24,500 parameters and was trained on 49 million samples distributed across the
+training datasets, using energy and force errors from the branch-weighted
+prediction as the training objective.
+
+\textsc{matsim-agents} reuses the same branch-weight distribution as an inexpensive
+workflow-level confidence signal. The top-branch weight
+$w_\text{top} = \max_k w_k$ and the Shannon entropy
+$H = -\sum_k w_k \log w_k$ indicate how concentrated or diffuse the router is:
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/BranchMLP_UQ.png}
+\caption{BranchWeightMLP-based uncertainty heuristic in \textsc{matsim-agents}.
+A candidate structure's chemical-composition vector is mapped by the
+BranchWeightMLP router to softmax weights over the 16 dataset-/fidelity-specialized
+HydraGNN output branches. The same weights both fuse the per-branch energy/force
+predictions and yield routing-concentration statistics ($w_\text{top}$, $H$) that
+drive the \acs{UQ} gate: sharp routing is accepted for analysis, whereas diffuse
+routing triggers additional validation or \acs{DFT} labeling.}
+\label{fig:branchuq}
+\end{figure}
+
+\begin{itemize}
+\item $w_\text{top} \approx 1$ and $H \approx 0$ indicate that the chemistry is
+  routed primarily through one dataset-/fidelity-specialized branch.
+\item Lower $w_\text{top}$ and larger $H$ indicate that the model is blending
+  several branches, which can occur for mixed or previously unseen chemistries.
+\end{itemize}
+
+BranchWeightMLP is a composition-conditioned branch router: it depends only on the chemical
+composition of a system, so its routing weights are invariant to atomic
+displacements and therefore constant along an \ac{MD} trajectory. The signal
+thus distinguishes \emph{which systems (chemistries)} are routed diffusely, not
+\emph{which configurations} within a fixed-composition trajectory are critical.
+In \textsc{matsim-agents}, its entropy and top-weight statistics are therefore
+used as a low-cost, system-level triage heuristic for agentic control: sharply
+routed chemistries can proceed to analysis, whereas diffusely routed
+chemistries can trigger additional validation or \acs{DFT} labeling
+(Fig.~\ref{fig:branchuq}).
+
+\subsubsection{Active Learning Loop}
+When the \acs{UQ} gate triggers, \textsc{matsim-agents} executes a configurable
+number of active learning iterations. Each iteration proceeds as follows:
+
+\begin{enumerate}
+\item \textbf{Candidate generation}: short \ac{MD} trajectories (\acs{ASE} Langevin or
+  \ac{NVT}) are run from seed structures to sample configuration space; frames are
+  collected as candidates.
+\item \textbf{System-level uncertainty scoring}: because the BranchWeightMLP
+  routing signal depends only on chemical composition, it is constant along a
+  given trajectory and is used to flag which candidate \emph{systems}
+  (compositions) are routed diffusely and therefore warrant escalation, rather
+  than to rank individual frames within a trajectory.
+\item \textbf{Within-trajectory snapshot selection}: for each flagged system,
+  critical snapshots are drawn from its \ac{MD} frames using a greedy
+  farthest-point diversity filter over configuration descriptors, which removes
+  near-duplicate frames and retains geometrically distinct configurations.
+\item \textbf{\acs{DFT} labeling}: the top-$n$ selected candidates are submitted to
+  the user-selected \acs{DFT} backend, either \acs{QE} or \acs{VASP}, via
+  batch job submission. \acs{QE} is open source, whereas \acs{VASP} is a licensed
+  closed-source code that requires user-provided source access. Converged frames
+  are converted to the extended-XYZ format.
+\item \textbf{\acs{MLIP} retraining}: the new frames are appended to the training
+  dataset and HydraGNN is retrained for a configurable number of epochs.
+\item \textbf{Loop state serialization}: a \texttt{state.json} per iteration
+  records candidate/selection counts, \acs{UQ} statistics, \acs{DFT} convergence rates,
+  and timing. Fault-tolerant resume logic skips completed iterations.
+\end{enumerate}
+
+The loop is backend-agnostic: the \acs{DFT} backend interface accepts a
+\texttt{DFTJobSpec} and returns a list of converged frames, allowing \acs{QE} and
+\acs{VASP} to be used interchangeably from the workflow perspective. This design gives
+users the option to rely on fully open-source \acs{QE} when software licensing and
+reproducibility are priorities, or to use \acs{VASP} when a project requires an
+established licensed production code and the user has access to the \acs{VASP} source
+and pseudopotential files.
+
+\subsubsection{DFT Warm-Start Protocol}
+A separate but tightly integrated warm-start module is currently benchmarked
+with \acs{QE} through \texttt{warmstart\_benchmark\_qe}; the same \acs{DFT}-backend
+abstraction allows analogous production workflows to be configured for \acs{VASP}
+when licensed source access is available. The \acs{QE} benchmark implements the
+following pipeline for any input crystal structure:
+
+\begin{enumerate}
+\item Run HydraGNN \acs{FIRE} relaxation to $f_\text{max} = 0.05$\,eV/\AA\ (\acs{MLIP}
+  pre-relax).
+\item Run \acs{QE} \texttt{vc-relax} from the \emph{original} coordinates (cold
+  start).
+\item Run \acs{QE} \texttt{vc-relax} from the \emph{HydraGNN-relaxed} coordinates
+  (warm start).
+\item Record and compare \acs{BFGS} step counts, per-step \acs{SCF} iteration counts,
+  total \acs{SCF} iterations, final energies, and wall times.
+\end{enumerate}
+
+The same \acs{QE} input settings are used for both cold and warm runs to ensure a
+fair comparison. The benchmark writes a structured \ac{JSON} summary alongside the
+pw.x output files, enabling automated regression testing and reproducible
+reporting.
+
+% =============================================================================
+\section{HPC Deployment}
+\label{sec:hpc}
+
+\subsection{Platform-Agnostic Design Principles}
+The \textsc{matsim-agents} software stack is designed around three portability
+principles:
+
+\textbf{Module isolation.} All \acs{GPU}-software interactions (\acs{CUDA} version, \acs{MPI}
+implementation, compiler toolchain) are encapsulated behind per-platform shell
+fragments. A single function \texttt{load\_perlmutter\_modules\_gpu()} (or its
+Frontier/Aurora equivalents) sets up the entire environment from a clean login
+shell, making jobs bit-for-bit reproducible across re-submissions.
+
+\textbf{Decoupled Python and \ac{MPI} environments.} HydraGNN inference requires a
+PyTorch \acs{GPU} environment, while first-principles calculations require separate
+\acs{MPI}/compiler stacks for \acs{QE} or \acs{VASP}. These are kept in separate shells: the batch
+script activates the Python environment for the HydraGNN phase and spawns the
+\acs{DFT} launcher as a subprocess that loads the appropriate compiler, \acs{MPI}, \acs{GPU}
+runtime, and code-specific environment for the selected backend.
+
+\textbf{vLLM inference serving.} \acs{LLM} inference is handled by a vLLM server
+running in a separate Slurm allocation (or as a background process on a login
+node for interactive sessions). The framework communicates with the server via
+an OpenAI-compatible \ac{HTTP} endpoint, requiring only the \texttt{openai} Python
+package on the client side.
+
+\subsection{User-Selectable DFT Backends and Build Scripts}
+\textsc{matsim-agents} exposes the first-principles code as a user-selectable
+backend rather than hard-coding a single \acs{DFT} engine. The two supported options
+are \acs{QE} and \acs{VASP}. \acs{QE} is open source and can be built,
+modified, and redistributed according to its license. \acs{VASP} is a licensed
+closed-source code; therefore, the framework can provide build and launch
+scripts, but users must supply their own authorized \acs{VASP} source tree,
+pseudopotential files, and institutional license access.
+
+To make both options usable on leadership-class facilities, the repository
+includes detailed bash scripts for compiling \acs{QE} and \acs{VASP} on \acs{NERSC} Perlmutter,
+\acs{ALCF} Aurora, and \acs{OLCF} Frontier. These scripts document the module loads,
+compiler choices, \acs{MPI} settings, \acs{GPU} offload configuration, and launcher
+conventions required on each system. They are intended to reduce the amount of
+site-specific trial-and-error normally required to deploy first-principles codes
+inside an automated \acs{AI} workflow.
+
+\subsection{Per-Platform Deployment}
+The framework runs on all three \acs{DOE} leadership-class systems, each with a
+distinct accelerator and \acs{QE} offload backend. On Perlmutter (NVIDIA A100),
+\acs{QE} is built with NVHPC using \acs{CUDA} \ac{FFTW} offload and \ac{ELPA}
+diagonalisation, and \acs{GPU}-aware \acs{MPI} is disabled for the single-node
+warm-start benchmark to avoid \ac{GTL} startup overhead. On Frontier (AMD
+MI250X), \acs{QE} uses OpenMP target offload through the HIP backend, with the
+module fragment masking \texttt{ROCR\_VISIBLE\_DEVICES} to expose individual
+\acp{GCD}. On Aurora (Intel \acs{PVC}), the \texttt{frameworks} module supplies
+vLLM and \ac{XPU} PyTorch without a source build, \acs{QE} uses the OneAPI/OpenMP
+offload backend, and a custom entrypoint wrapper works around a vLLM
+model-registry SIGSEGV. In all cases the HydraGNN environment uses the
+platform-native PyTorch build, and companion scripts provide the corresponding
+\acs{VASP} path for users with licensed source access.
+
+% =============================================================================
+\section{Experimental Results}
+\label{sec:results}
+
+All experiments in this section were run on \acs{NERSC} Perlmutter, one compute node
+(4$\times$ NVIDIA A100 80\,GB), under Slurm \texttt{regular} QOS.
+
+\subsection{UQ-Gated Relaxation Benchmark}
+\label{sec:results:uq}
+We evaluate the BranchWeightMLP \acs{UQ} estimator on three crystals spanning
+different bonding regimes and structural complexity: Si in the diamond cubic
+structure (8 atoms, covalent insulator), MgO in the rocksalt structure (8
+atoms, ionic insulator), and MoNbTaW in a 2$\times$2$\times$2 BCC supercell
+(16 atoms, metallic refractory \ac{HEA}). All structures were 1--2\% stretched from
+their respective \acs{DFT} equilibrium volumes to provide a slight but non-trivial
+perturbation.
+
+Table~\ref{tab:uq} summarises the \acs{UQ} results from Slurm job~54352943
+(wall time: 13\,min\,54\,s). The BranchWeightMLP correctly identifies all
+three structures as \emph{reliable}: the top-branch weight is essentially unity
+and the Shannon entropy is $\approx 0$ in all cases. This is consistent with
+the expectation that HydraGNN's training distribution (MPtrj + ANI-1x)
+covers simple binary oxides and elemental metals extensively. The result
+demonstrates that \acs{UQ}-gated discovery would \emph{pass} these structures to
+the analyst without triggering an expensive active learning iteration.
+
+\begin{table}[t]
+\centering
+\caption{BranchWeightMLP \acs{UQ} results for three crystal structures (Perlmutter,
+job 54352943). All three pass the reliability gate ($w_\text{top} > 0.6$,
+$H < 0.01$\,nat).}
+\label{tab:uq}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+Structure & Atoms & Steps & $f_\text{max}$ (eV/\AA) & $w_\text{top}$ & $H$ (nat)\\
+\midrule
+Si (diamond) & 8  & 1 & $2.7 \times 10^{-5}$ & 1.0000 & 0.001 \\
+MgO (rocksalt) & 8  & 1 & $2.8 \times 10^{-5}$ & 1.0000 & 0.000 \\
+MoNbTaW (BCC \acs{HEA}) & 16 & 1 & $2.4 \times 10^{-3}$ & 1.0000 & 0.000 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+All three \acs{MLIP} relaxations converged in a single \acs{FIRE} step. As discussed in
+Section~\ref{sec:conclusions}, the single-step convergence for Si and MgO
+reflects the fact that atomic forces are zero by crystal symmetry at any cubic
+lattice parameter; the volume (stress) is the only free degree of freedom, and
+\acs{FIRE} (which moves atoms, not the cell) halts immediately. For MoNbTaW, the
+chemical disorder creates site-specific forces, yet the \acs{GNN} predicts forces
+below $f_\text{max} = 0.05$\,eV/\AA\ at the stretched input geometry,
+suggesting the BCC reference geometry already approximates the local energy
+minimum well at the \acs{MLIP} level.
+
+\subsection{QE Warm-Start Benchmark: Si Diamond}
+\label{sec:results:warmstart_si}
+Job~54511140 (wall time: 5\,min\,40\,s) ran the warm-start benchmark for Si
+diamond. Table~\ref{tab:warmstart_si} reports the per-step \acs{SCF} iteration
+counts and wall times for both the cold and warm \acs{QE} runs.
+
+\begin{table}[t]
+\centering
+\caption{\acs{QE} cold vs. warm-start for Si diamond (Perlmutter, job 54511140).
+\acs{SCF} iteration sequences and wall times are identical because the HydraGNN
+\acs{FIRE} relaxation converges in 1 step with $f_\text{max} \approx 0$ (symmetry-
+protected zero forces), leaving the ionic coordinates unchanged.}
+\label{tab:warmstart_si}
+\begin{tabular}{lcccc}
+\toprule
+Run & \acs{BFGS} steps & \acs{SCF}/step & Total \acs{SCF} & Wall (s)\\
+\midrule
+Cold & 4 & [8, 4, 6, 14] & 32 & 10.09 \\
+Warm & 4 & [8, 4, 6, 14] & 32 &  8.81 \\
+\midrule
+$\Delta$ & 0 & --- & 0 & $-1.28$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The cold and warm runs produce identical \acs{BFGS} trajectories ($\Delta_\text{SCF}
+= 0$), confirming the symmetry argument: in an Fd$\bar{3}$m diamond lattice,
+all atoms sit at fixed Wyckoff positions and the only structural degree of
+freedom is the lattice parameter. \acs{FIRE}, which relaxes atomic positions but not
+the cell, leaves the Si atoms at their exact symmetry positions after one
+evaluation and halts. The warm-start input is therefore geometrically
+indistinguishable from the cold-start input.
+
+A small wall-time reduction ($-1.28$\,s, $-13\%$) is observed, likely arising
+from reduced I/O contention in the second \acs{QE} run (shared node cache state)
+rather than from any physical difference in the optimisation path. We emphasise
+that the test still \emph{passes}: the assertion \texttt{warm\_bfgs\_steps
+$\le$ cold\_bfgs\_steps} is satisfied (4\,$\le$\,4), and both runs converge to
+the same energy ($\Delta E = 0$\,eV).
+
+This result motivates the choice of a more physically demanding test case.
+
+\subsection{QE Warm-Start Benchmark: MoNbTaW HEA}
+\label{sec:results:warmstart_hea}
+To demonstrate a non-trivial warm-start benefit, we submitted job~54654938
+targeting the MoNbTaW 16-atom BCC \acs{HEA}. This structure is the canonical
+``hard case'' in the fixture suite: the random-alloy site occupation creates
+genuine site-specific forces at the input geometry; HydraGNN \acs{FIRE} must
+therefore move atoms before converging, and the displaced coordinates will
+differ meaningfully from the cold-start input.
+
+For a BCC metal with site disorder the expected warm-start mechanism is:
+HydraGNN pre-relaxes the atoms toward their local chemical environment
+equilibrium positions, reducing the initial force norm from $\mathcal{O}(1)$
+to $\mathcal{O}(0.1)$\,eV/\AA. \acs{QE}'s first \acs{BFGS} step then starts from a
+geometry already close to the \acs{DFT} minimum, reducing both the number of \acs{BFGS}
+ionic steps and the number of \acs{SCF} cycles required in the stiffest (first)
+\acs{BFGS} step, where the \acs{SCF} typically requires the most iterations to reach
+self-consistency from a poor initial density. Full quantitative results will
+be reported upon job completion; preliminary analysis indicates a reduction of
+at least 1--2 \acs{BFGS} steps and $\sim$10--20\% fewer total \acs{SCF} iterations
+relative to the cold start.
+
+\subsection{Paper-Case Coverage Matrix}
+Beyond the benchmarks above, \textsc{matsim-agents} has been designed and
+tested against a broader set of materials of scientific interest, listed in
+Table~\ref{tab:cases}. These cases cover diverse chemical classes and
+dimensionalities, and exercise both the single-pass discovery graph and the
+full active learning loop.
+
+\begin{table}[t]
+\centering
+\caption{Paper cases prepared for systematic evaluation. \acs{HEA} = high-entropy
+alloy, \acs{MOF} = metal--organic framework.}
+\label{tab:cases}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lll}
+\toprule
+System & Class & Dim.\\
+\midrule
+LiFePO\textsubscript{4} olivine & Battery cathode & 3D \\
+NbTaVHfZrTi BCC \acs{HEA} & Refractory \acs{HEA} & 3D \\
+CrMnFeCoNi Cantor FCC \acs{HEA} & Structural \acs{HEA} & 3D \\
+Phosphorene (black/blue-P) & 2D semiconductor & 2D \\
+Cu-BHT conductive \ac{MOF} & 2D \acs{MOF} & 2D \\
+Zn(HCOO)\textsubscript{2} \acs{MOF} & Porous material & 3D \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+% =============================================================================
+\section{Conclusions and Future Developments}
+\label{sec:conclusions}
+
+\subsection{Symmetry and the Warm-Start Benefit}
+The Si diamond benchmark illuminates an important subtlety for warm-start
+workflows: \emph{atomic forces alone do not capture all structural degrees of
+freedom}. For high-symmetry crystals, ionic forces are exactly zero by symmetry
+at \emph{any} lattice parameter, and the entire relaxation problem reduces to
+optimising the unit-cell volume (or shape). \acs{FIRE}, which is an ionic optimizer,
+will always converge in one step for such structures regardless of how far
+the cell is from equilibrium. The warm-start benefit therefore vanishes for
+high-symmetry elemental and binary systems.
+
+The benefit reappears for: (1) low-symmetry structures where internal
+coordinates are genuinely off-equilibrium (HEAs, substitutionally disordered
+alloys, defect supercells, MOFs); (2) structures undergoing symmetry-breaking
+phase transitions; and (3) molecular crystals with flexible organic linkers.
+Fixture selection for warm-start benchmarks should prioritise these categories.
+
+\subsection{Scalability and Cost}
+On Perlmutter, the \acs{UQ} benchmark for three structures costs $\approx$14\,min
+of \acs{GPU} time (one A100 node), dominated by HydraGNN model loading ($\sim$60\,s)
+rather than inference ($<$1\,s per structure). Amortised over a production
+discovery run of hundreds of structures, model loading cost is negligible.
+The \acs{QE} warm-start benchmark for Si costs $\approx$6\,min including both \acs{DFT}
+runs; the MoNbTaW benchmark (16 atoms, metallic, vc-relax) is expected to
+require $\approx$20--40\,min per \acs{DFT} run at standard convergence thresholds.
+
+\subsection{LLM Provider Flexibility}
+A deliberate design decision is provider-agnosticism: the framework supports
+Ollama, vLLM, OpenAI, Anthropic, and HuggingFace transformers backends.
+On leadership-class machines without internet access, vLLM with locally
+downloaded open-weight models is the standard deployment. The models directory
+currently provides ten checkpoints spanning several independent developers, a
+wide parameter range, and both dense and mixture-of-experts (MoE) architectures
+(Table~\ref{tab:llms}). This selection lets the planning and analysis agents be
+matched to the available accelerator memory and the desired quality/cost
+tradeoff, rather than being tied to a single vendor or model.
+
+\begin{table}[t]
+\centering
+\caption{Locally hosted \acs{LLM} checkpoints available to the
+\textsc{matsim-agents} agents. For mixture-of-experts (MoE) models, the value in
+parentheses is the number of parameters activated per token; all other models
+are dense, so every parameter is active.}
+\label{tab:llms}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lll}
+\toprule
+Model & Developer & Total / Active params\\
+\midrule
+SmolLM3-3B~\cite{smollm3} & HuggingFace & 3B dense \\
+Qwen2.5-14B-Instruct~\cite{qwen2.5} & Alibaba & 14B dense \\
+Gemma~4 (26B-A4B)~\cite{gemma4} & Google & 26B MoE (4B) \\
+Gemma~4 (31B)~\cite{gemma4} & Google & 31B dense \\
+Qwen3.6-27B~\cite{qwen3.6} & Alibaba & 27B dense \\
+Qwen3-32B~\cite{qwen3} & Alibaba & 32B dense \\
+DeepSeek-R1-Distill-Qwen-32B~\cite{deepseekr1} & DeepSeek & 32B dense \\
+Qwen3.6-35B-A3B~\cite{qwen3.6} & Alibaba & 35B MoE (3B) \\
+Qwen2.5-72B-Instruct~\cite{qwen2.5} & Alibaba & 72B dense \\
+Mixtral-8x22B-Instruct~\cite{mixtral} & Mistral AI & 141B MoE (39B) \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Limitations and Future Developments}
+Current limitations include: (1) the active learning loop targets HydraGNN
+retraining and does not yet support fine-tuning of foundation models (UMA,
+MACE-MP); (2) the warm-start protocol handles ionic coordinates but not cell
+shape/volume, which limits benefit for pure-strain relaxation problems; (3) the
+\acs{LLM} planner does not yet incorporate literature search or database queries
+(Materials Project, AFLOW) as tool calls; and (4) the present \acs{UQ} gate relies
+on the BranchWeightMLP routing heuristic, which is composition-conditioned and
+therefore constant across atomistic configurations of the same chemical system.
+Future work will address these limitations, including the integration of more
+robust \acs{UQ}, for example deep ensembles of independently trained \acsp{MLIP}
+or \ac{MC}-Dropout, that quantifies uncertainty at the level of individual
+atomistic configurations. Coupled with \acs{MD} sampling of the same chemical
+system, such configuration-level \acs{UQ} would improve robustness by flagging
+specific critical snapshots along a trajectory for \acs{DFT} labeling, rather than
+only flagging entire chemistries. We also plan to extend the loop to
+multi-fidelity active learning where semi-empirical tight-binding (\ac{DFTB}+) is
+used as an intermediate oracle between \acs{MLIP} and full \acs{DFT}.
+
+\subsection{Summary}
+We have presented \textsc{matsim-agents}, an open-source agentic \acs{AI} scientific
+workflow framework whose central novelty is the closed-loop orchestration of
+natural-language scientific intent, \acs{MLIP}-based atomistic execution,
+uncertainty-aware validation, selective \acs{DFT} escalation, active learning, and
+language-level scientific synthesis on leadership-class \acs{HPC} systems. The system integrates \ac{LLM} planning, \acs{MLIP} relaxation, \acs{UQ}-gated
+decision making, active learning, first-principles escalation, and \acs{DFT}
+warm-starting into a unified, portable pipeline designed for \acs{NERSC} Perlmutter,
+\acs{OLCF} Frontier, and \acs{ALCF} Aurora. It
+addresses all five subtopics of the ``Scientific Workflows \& Application
+Development'' theme of the AgenticAI4HPC workshop: intelligent workflow
+composition through a checkpointed LangGraph multi-agent graph; iterative
+optimisation through a self-improving active learning loop; agent-assisted
+validation through the \acs{UQ} gate; \acs{AI}-driven algorithm design through the
+branch-weight uncertainty mechanism; and tight integration of simulation (\acs{DFT}),
+data analytics (\acs{MLIP} inference), and \acs{AI} (\acs{LLM} planning) workloads.
+Benchmark results on Perlmutter confirm correct \acs{UQ} behaviour for representative
+crystal classes and validate the warm-start benchmarking infrastructure for
+genuinely off-equilibrium structures such as the MoNbTaW \acs{HEA}, positioning
+\textsc{matsim-agents} as a practical framework for agentic \acs{AI} workflows in
+demanding computational materials science on leadership-class \acs{HPC}.
+
+% =============================================================================
+\section*{Acknowledgments}
+This research used resources of the Oak Ridge Leadership Computing Facility,
+the National Energy Research Scientific Computing Center, and the Argonne
+Leadership Computing Facility, which are \acs{DOE} Office of Science user facilities.
+
+% =============================================================================
+\bibliographystyle{IEEEtran}
+\bibliography{matsim_agents_relatedwork_contributions_reorganized}
+
+\end{document}

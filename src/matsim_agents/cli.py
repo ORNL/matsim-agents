@@ -17,42 +17,167 @@ app = typer.Typer(add_completion=False, help="Multi-agent AI for atomistic mater
 console = Console()
 
 
-@app.command()
-def run(
-    objective: str = typer.Argument(..., help="Free-form objective for the agent system."),
-    mlip_backend: str = typer.Option(
+def _path_or_none(value: Path | None) -> str | None:
+    return str(value) if value else None
+
+
+def _opt_mlip_backend():
+    return typer.Option(
         "hydragnn",
         "--mlip-backend",
         help="Relaxation backend: hydragnn | uma.",
         case_sensitive=False,
-    ),
-    logdir: Path | None = typer.Option(
+    )
+
+
+def _opt_logdir():
+    return typer.Option(
         None,
         help="HydraGNN logdir with config.json and checkpoint (required for --mlip-backend hydragnn).",
-    ),
-    mlp_checkpoint: Path | None = typer.Option(
+    )
+
+
+def _opt_hydragnn_branch_mlp_checkpoint():
+    return typer.Option(
         None,
         help="Path to BranchWeightMLP checkpoint (.pt), required for --mlip-backend hydragnn.",
-    ),
-    uma_model_name: str = typer.Option(
+    )
+
+
+def _opt_uma_model_name():
+    return typer.Option(
         "uma-s-1p1",
         "--uma-model-name",
         help="UMA model name/checkpoint (used when --mlip-backend uma).",
-    ),
-    uma_task: str = typer.Option(
+    )
+
+
+def _opt_uma_task():
+    return typer.Option(
         "omat",
         "--uma-task",
         help="UMA task head: omat | omol (used when --mlip-backend uma).",
-    ),
-    checkpoint: str | None = typer.Option(
-        None, help="HydraGNN checkpoint filename or absolute path."
-    ),
+    )
+
+
+def _opt_checkpoint(help_text: str):
+    return typer.Option(None, help=help_text)
+
+
+def _opt_mlp_device():
+    return typer.Option("cuda", help="Device for the auxiliary MLP (cuda|cpu).")
+
+
+def _opt_precision(help_text: str):
+    return typer.Option(None, help=help_text)
+
+
+def _opt_mlp_precision(help_text: str):
+    return typer.Option(None, help=help_text)
+
+
+def _opt_trigger_al_handoff(default: bool, help_text: str):
+    return typer.Option(
+        default,
+        "--trigger-al-handoff/--no-trigger-al-handoff",
+        help=help_text,
+    )
+
+
+def _opt_active_learning_config(help_text: str):
+    return typer.Option(None, "--al-config", help=help_text)
+
+
+def _opt_active_learning_dry_run(help_text: str):
+    return typer.Option(True, "--al-dry-run/--al-run", help=help_text)
+
+
+def _opt_uq_top_weight_threshold():
+    return typer.Option(
+        0.6,
+        "--uq-top-weight-threshold",
+        help="Trigger handoff when mean top branch weight is below this value.",
+    )
+
+
+def _opt_uq_min_unreliable_fraction():
+    return typer.Option(
+        0.25,
+        "--uq-min-unreliable-fraction",
+        help="Trigger handoff when this fraction of relaxations is low-confidence.",
+    )
+
+
+def _opt_uq_min_relaxations_for_handoff(default: int, help_text: str):
+    return typer.Option(
+        default,
+        "--uq-min-relaxations-for-handoff",
+        help=help_text,
+    )
+
+
+def _opt_al_handoff_audit_path(help_text: str):
+    return typer.Option(None, "--al-handoff-audit-path", help=help_text)
+
+
+def _build_run_config(
+    *,
+    thread_id: str,
+    mlip_backend: str,
+    logdir: Path | None,
+    hydragnn_branch_mlp_checkpoint: Path | None,
+    uma_model_name: str,
+    uma_task: str,
+    checkpoint: str | None,
+    output_dir: Path | None,
+    mlp_device: str,
+    precision: str | None,
+    mlp_precision: str | None,
+    trigger_al_handoff: bool,
+    active_learning_config: Path | None,
+    active_learning_dry_run: bool,
+    uq_top_weight_threshold: float,
+    uq_min_unreliable_fraction: float,
+    uq_min_relaxations_for_handoff: int,
+    al_handoff_audit_path: Path | None,
+) -> dict:
+    return {
+        "configurable": {
+            "thread_id": thread_id,
+            "mlip_backend": mlip_backend,
+            "logdir": _path_or_none(logdir),
+            "hydragnn_branch_mlp_checkpoint": _path_or_none(hydragnn_branch_mlp_checkpoint),
+            "uma_model_name": uma_model_name,
+            "uma_task": uma_task,
+            "checkpoint": checkpoint,
+            "output_dir": _path_or_none(output_dir),
+            "mlp_device": mlp_device,
+            "precision": precision,
+            "mlp_precision": mlp_precision,
+            "trigger_al_handoff": trigger_al_handoff,
+            "active_learning_config": _path_or_none(active_learning_config),
+            "active_learning_dry_run": active_learning_dry_run,
+            "uq_top_weight_threshold": uq_top_weight_threshold,
+            "uq_min_unreliable_fraction": uq_min_unreliable_fraction,
+            "uq_min_relaxations_for_handoff": uq_min_relaxations_for_handoff,
+            "al_handoff_audit_path": _path_or_none(al_handoff_audit_path),
+        }
+    }
+
+
+@app.command()
+def run(
+    objective: str = typer.Argument(..., help="Free-form objective for the agent system."),
+    mlip_backend: str = _opt_mlip_backend(),
+    logdir: Path | None = _opt_logdir(),
+    hydragnn_branch_mlp_checkpoint: Path | None = _opt_hydragnn_branch_mlp_checkpoint(),
+    uma_model_name: str = _opt_uma_model_name(),
+    uma_task: str = _opt_uma_task(),
+    checkpoint: str | None = _opt_checkpoint("HydraGNN checkpoint filename or absolute path."),
     output_dir: Path | None = typer.Option(None, help="Where to write artifacts."),
-    mlp_device: str = typer.Option("cuda", help="Device for the auxiliary MLP (cuda|cpu)."),
-    precision: str | None = typer.Option(
-        None, help="HydraGNN precision override (fp32|fp64|bf16)."
-    ),
-    mlp_precision: str | None = typer.Option(None, help="MLP precision override (fp32|fp64|bf16)."),
+    mlp_device: str = _opt_mlp_device(),
+    precision: str | None = _opt_precision("HydraGNN precision override (fp32|fp64|bf16)."),
+    mlp_precision: str | None = _opt_mlp_precision("MLP precision override (fp32|fp64|bf16)."),
     max_iterations: int = typer.Option(5, help="Maximum executor iterations."),
     llm_provider: str = typer.Option(
         "ollama",
@@ -68,40 +193,24 @@ def run(
         "--llm-base-url",
         help="Override server URL (Ollama or vLLM /v1 endpoint).",
     ),
-    trigger_active_learning_on_high_uq: bool = typer.Option(
+    trigger_active_learning_on_high_uq: bool = _opt_trigger_al_handoff(
         False,
-        "--trigger-al-handoff/--no-trigger-al-handoff",
-        help="After run relaxations, evaluate UQ and optionally hand off to active learning.",
+        "After run relaxations, evaluate UQ and optionally hand off to active learning.",
     ),
-    active_learning_config: Path | None = typer.Option(
-        None,
-        "--al-config",
-        help="Path to a base AL YAML config used when UQ-triggered handoff fires.",
+    active_learning_config: Path | None = _opt_active_learning_config(
+        "Path to a base AL YAML config used when UQ-triggered handoff fires."
     ),
-    active_learning_dry_run: bool = typer.Option(
-        True,
-        "--al-dry-run/--al-run",
-        help="Plan/report run->AL handoff only, or execute AL loop.",
+    active_learning_dry_run: bool = _opt_active_learning_dry_run(
+        "Plan/report run->AL handoff only, or execute AL loop."
     ),
-    uq_top_weight_threshold: float = typer.Option(
-        0.6,
-        "--uq-top-weight-threshold",
-        help="Trigger handoff when mean top branch weight is below this value.",
-    ),
-    uq_min_unreliable_fraction: float = typer.Option(
-        0.25,
-        "--uq-min-unreliable-fraction",
-        help="Trigger handoff when this fraction of relaxations is low-confidence.",
-    ),
-    uq_min_relaxations_for_handoff: int = typer.Option(
+    uq_top_weight_threshold: float = _opt_uq_top_weight_threshold(),
+    uq_min_unreliable_fraction: float = _opt_uq_min_unreliable_fraction(),
+    uq_min_relaxations_for_handoff: int = _opt_uq_min_relaxations_for_handoff(
         1,
-        "--uq-min-relaxations-for-handoff",
-        help="Minimum relaxations required before evaluating run-path handoff.",
+        "Minimum relaxations required before evaluating run-path handoff.",
     ),
-    al_handoff_audit_path: Path | None = typer.Option(
-        None,
-        "--al-handoff-audit-path",
-        help="Optional JSONL path for UQ decision and run->AL handoff audit records.",
+    al_handoff_audit_path: Path | None = _opt_al_handoff_audit_path(
+        "Optional JSONL path for UQ decision and run->AL handoff audit records."
     ),
 ):
     """Run the planner -> executor -> analyst graph for a given objective."""
@@ -113,28 +222,26 @@ def run(
         llm_model=llm_model,
         llm_base_url=llm_base_url,
     )
-    config = {
-        "configurable": {
-            "thread_id": str(uuid.uuid4()),
-            "mlip_backend": mlip_backend,
-            "logdir": str(logdir) if logdir else None,
-            "mlp_checkpoint": str(mlp_checkpoint) if mlp_checkpoint else None,
-            "uma_model_name": uma_model_name,
-            "uma_task": uma_task,
-            "checkpoint": checkpoint,
-            "output_dir": str(output_dir) if output_dir else None,
-            "mlp_device": mlp_device,
-            "precision": precision,
-            "mlp_precision": mlp_precision,
-            "trigger_al_handoff": trigger_active_learning_on_high_uq,
-            "active_learning_config": str(active_learning_config) if active_learning_config else None,
-            "active_learning_dry_run": active_learning_dry_run,
-            "uq_top_weight_threshold": uq_top_weight_threshold,
-            "uq_min_unreliable_fraction": uq_min_unreliable_fraction,
-            "uq_min_relaxations_for_handoff": uq_min_relaxations_for_handoff,
-            "al_handoff_audit_path": str(al_handoff_audit_path) if al_handoff_audit_path else None,
-        }
-    }
+    config = _build_run_config(
+        thread_id=str(uuid.uuid4()),
+        mlip_backend=mlip_backend,
+        logdir=logdir,
+        hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
+        uma_model_name=uma_model_name,
+        uma_task=uma_task,
+        checkpoint=checkpoint,
+        output_dir=output_dir,
+        mlp_device=mlp_device,
+        precision=precision,
+        mlp_precision=mlp_precision,
+        trigger_al_handoff=trigger_active_learning_on_high_uq,
+        active_learning_config=active_learning_config,
+        active_learning_dry_run=active_learning_dry_run,
+        uq_top_weight_threshold=uq_top_weight_threshold,
+        uq_min_unreliable_fraction=uq_min_unreliable_fraction,
+        uq_min_relaxations_for_handoff=uq_min_relaxations_for_handoff,
+        al_handoff_audit_path=al_handoff_audit_path,
+    )
 
     final = graph.invoke(state, config=config)
 
@@ -158,37 +265,18 @@ def plan(objective: str):
 
 @app.command()
 def chat(
-    mlip_backend: str = typer.Option(
-        "hydragnn",
-        "--mlip-backend",
-        help="Relaxation backend: hydragnn | uma.",
-        case_sensitive=False,
-    ),
-    logdir: Path | None = typer.Option(
-        None,
-        help="HydraGNN logdir with config.json and checkpoint (required for --mlip-backend hydragnn).",
-    ),
-    mlp_checkpoint: Path | None = typer.Option(
-        None,
-        help="Path to BranchWeightMLP checkpoint (.pt), required for --mlip-backend hydragnn.",
-    ),
-    uma_model_name: str = typer.Option(
-        "uma-s-1p1",
-        "--uma-model-name",
-        help="UMA model name/checkpoint (used when --mlip-backend uma).",
-    ),
-    uma_task: str = typer.Option(
-        "omat",
-        "--uma-task",
-        help="UMA task head: omat | omol (used when --mlip-backend uma).",
-    ),
+    mlip_backend: str = _opt_mlip_backend(),
+    logdir: Path | None = _opt_logdir(),
+    hydragnn_branch_mlp_checkpoint: Path | None = _opt_hydragnn_branch_mlp_checkpoint(),
+    uma_model_name: str = _opt_uma_model_name(),
+    uma_task: str = _opt_uma_task(),
     output_dir: Path = typer.Option(
         Path("./outputs"), help="Root directory for discovery artifacts."
     ),
-    checkpoint: str | None = typer.Option(None, help="HydraGNN checkpoint filename or path."),
-    mlp_device: str = typer.Option("cuda", help="Device for the auxiliary MLP (cuda|cpu)."),
-    precision: str | None = typer.Option(None, help="HydraGNN precision override."),
-    mlp_precision: str | None = typer.Option(None, help="MLP precision override."),
+    checkpoint: str | None = _opt_checkpoint("HydraGNN checkpoint filename or path."),
+    mlp_device: str = _opt_mlp_device(),
+    precision: str | None = _opt_precision("HydraGNN precision override."),
+    mlp_precision: str | None = _opt_mlp_precision("MLP precision override."),
     optimizer: str = typer.Option(
         "FIRE", "--ase-structure-optimizer", help="ASE structure optimizer for relaxations."
     ),
@@ -261,46 +349,26 @@ def chat(
         "--auto-confirm/--ask",
         help="If set, skip the y/N prompt and explore every detected composition.",
     ),
-    trigger_active_learning_on_high_uq: bool = typer.Option(
+    trigger_active_learning_on_high_uq: bool = _opt_trigger_al_handoff(
         True,
-        "--trigger-al-handoff/--no-trigger-al-handoff",
-        help="Automatically hand off discovery to active learning when UQ is high.",
+        "Automatically hand off discovery to active learning when UQ is high.",
     ),
-    active_learning_config: Path | None = typer.Option(
-        None,
-        "--al-config",
-        help=(
-            "Path to a base AL YAML config. On handoff, discovery overrides "
-            "seed_source to compositions=[detected_formula]."
-        ),
+    active_learning_config: Path | None = _opt_active_learning_config(
+        "Path to a base AL YAML config. On handoff, discovery overrides "
+        "seed_source to compositions=[detected_formula]."
     ),
-    active_learning_dry_run: bool = typer.Option(
-        True,
-        "--al-dry-run/--al-run",
-        help="Plan/report AL handoff only (dry-run) or execute AL loop.",
+    active_learning_dry_run: bool = _opt_active_learning_dry_run(
+        "Plan/report AL handoff only (dry-run) or execute AL loop."
     ),
-    uq_top_weight_threshold: float = typer.Option(
-        0.6,
-        "--uq-top-weight-threshold",
-        help="Trigger handoff when mean top branch weight is below this value.",
-    ),
-    uq_min_unreliable_fraction: float = typer.Option(
-        0.25,
-        "--uq-min-unreliable-fraction",
-        help="Trigger handoff when this fraction of relaxations is low-confidence.",
-    ),
-    uq_min_relaxations_for_handoff: int = typer.Option(
+    uq_top_weight_threshold: float = _opt_uq_top_weight_threshold(),
+    uq_min_unreliable_fraction: float = _opt_uq_min_unreliable_fraction(),
+    uq_min_relaxations_for_handoff: int = _opt_uq_min_relaxations_for_handoff(
         3,
-        "--uq-min-relaxations-for-handoff",
-        help="Minimum number of relaxations required before handoff UQ evaluation.",
+        "Minimum number of relaxations required before handoff UQ evaluation.",
     ),
-    al_handoff_audit_path: Path | None = typer.Option(
-        None,
-        "--al-handoff-audit-path",
-        help=(
-            "Optional JSONL artifact path for discovery->AL handoff audit records "
-            "(UQ metrics, trigger rationale, action)."
-        ),
+    al_handoff_audit_path: Path | None = _opt_al_handoff_audit_path(
+        "Optional JSONL artifact path for discovery->AL handoff audit records "
+        "(UQ metrics, trigger rationale, action)."
     ),
 ):
     """Interactive hypothesis-generation chat that triggers atomistic exploration.
@@ -319,8 +387,8 @@ def chat(
 
     cfg = DiscoveryChatConfig(
         mlip_backend=mlip_backend,
-        logdir=str(logdir) if logdir else None,
-        mlp_checkpoint=str(mlp_checkpoint) if mlp_checkpoint else None,
+        logdir=_path_or_none(logdir),
+        hydragnn_branch_mlp_checkpoint=_path_or_none(hydragnn_branch_mlp_checkpoint),
         uma_model_name=uma_model_name,
         uma_task=uma_task,
         output_dir=str(output_dir),
@@ -348,12 +416,12 @@ def chat(
         critic_cross_critique=critic_cross_critique,
         auto_confirm=auto_confirm,
         trigger_active_learning_on_high_uq=trigger_active_learning_on_high_uq,
-        active_learning_config=(str(active_learning_config) if active_learning_config else None),
+        active_learning_config=_path_or_none(active_learning_config),
         active_learning_dry_run=active_learning_dry_run,
         uq_top_weight_threshold=uq_top_weight_threshold,
         uq_min_unreliable_fraction=uq_min_unreliable_fraction,
         uq_min_relaxations_for_handoff=uq_min_relaxations_for_handoff,
-        al_handoff_audit_path=(str(al_handoff_audit_path) if al_handoff_audit_path else None),
+        al_handoff_audit_path=_path_or_none(al_handoff_audit_path),
     )
     session = run_chat(cfg)
     console.print(
@@ -364,35 +432,16 @@ def chat(
 @app.command("supervisor-run")
 def supervisor_run(
     composition: str = typer.Argument(..., help="Target composition, e.g. Li2MnO3."),
-    mlip_backend: str = typer.Option(
-        "hydragnn",
-        "--mlip-backend",
-        help="Relaxation backend: hydragnn | uma.",
-        case_sensitive=False,
-    ),
-    logdir: Path | None = typer.Option(
-        None,
-        help="HydraGNN logdir with config.json and checkpoint (required for --mlip-backend hydragnn).",
-    ),
-    mlp_checkpoint: Path | None = typer.Option(
-        None,
-        help="Path to BranchWeightMLP checkpoint (.pt), required for --mlip-backend hydragnn.",
-    ),
-    uma_model_name: str = typer.Option(
-        "uma-s-1p1",
-        "--uma-model-name",
-        help="UMA model name/checkpoint (used when --mlip-backend uma).",
-    ),
-    uma_task: str = typer.Option(
-        "omat",
-        "--uma-task",
-        help="UMA task head: omat | omol (used when --mlip-backend uma).",
-    ),
+    mlip_backend: str = _opt_mlip_backend(),
+    logdir: Path | None = _opt_logdir(),
+    hydragnn_branch_mlp_checkpoint: Path | None = _opt_hydragnn_branch_mlp_checkpoint(),
+    uma_model_name: str = _opt_uma_model_name(),
+    uma_task: str = _opt_uma_task(),
     output_dir: Path = typer.Option(Path("./outputs"), help="Root directory for artifacts."),
-    checkpoint: str | None = typer.Option(None, help="HydraGNN checkpoint filename or path."),
-    mlp_device: str = typer.Option("cuda", help="Device for the auxiliary MLP (cuda|cpu)."),
-    precision: str | None = typer.Option(None, help="HydraGNN precision override."),
-    mlp_precision: str | None = typer.Option(None, help="MLP precision override."),
+    checkpoint: str | None = _opt_checkpoint("HydraGNN checkpoint filename or path."),
+    mlp_device: str = _opt_mlp_device(),
+    precision: str | None = _opt_precision("HydraGNN precision override."),
+    mlp_precision: str | None = _opt_mlp_precision("MLP precision override."),
     optimizer: str = typer.Option(
         "FIRE", "--ase-structure-optimizer", help="ASE structure optimizer for relaxations."
     ),
@@ -410,40 +459,24 @@ def supervisor_run(
         help="Number of supplementary pyXtal random structures per composition.",
     ),
     random_seed: int = typer.Option(0, "--random-seed", help="Seed for pyXtal RNG."),
-    trigger_active_learning_on_high_uq: bool = typer.Option(
+    trigger_active_learning_on_high_uq: bool = _opt_trigger_al_handoff(
         True,
-        "--trigger-al-handoff/--no-trigger-al-handoff",
-        help="Automatically hand off to active learning when UQ is high.",
+        "Automatically hand off to active learning when UQ is high.",
     ),
-    active_learning_config: Path | None = typer.Option(
-        None,
-        "--al-config",
-        help="Path to a base active-learning YAML config.",
+    active_learning_config: Path | None = _opt_active_learning_config(
+        "Path to a base active-learning YAML config."
     ),
-    active_learning_dry_run: bool = typer.Option(
-        True,
-        "--al-dry-run/--al-run",
-        help="Plan/report AL handoff only (dry-run) or execute AL loop.",
+    active_learning_dry_run: bool = _opt_active_learning_dry_run(
+        "Plan/report AL handoff only (dry-run) or execute AL loop."
     ),
-    uq_top_weight_threshold: float = typer.Option(
-        0.6,
-        "--uq-top-weight-threshold",
-        help="Trigger handoff when mean top branch weight is below this value.",
-    ),
-    uq_min_unreliable_fraction: float = typer.Option(
-        0.25,
-        "--uq-min-unreliable-fraction",
-        help="Trigger handoff when this fraction of relaxations is low-confidence.",
-    ),
-    uq_min_relaxations_for_handoff: int = typer.Option(
+    uq_top_weight_threshold: float = _opt_uq_top_weight_threshold(),
+    uq_min_unreliable_fraction: float = _opt_uq_min_unreliable_fraction(),
+    uq_min_relaxations_for_handoff: int = _opt_uq_min_relaxations_for_handoff(
         3,
-        "--uq-min-relaxations-for-handoff",
-        help="Minimum number of relaxations before handoff UQ evaluation.",
+        "Minimum number of relaxations before handoff UQ evaluation.",
     ),
-    al_handoff_audit_path: Path | None = typer.Option(
-        None,
-        "--al-handoff-audit-path",
-        help="Optional JSONL path for UQ decision and handoff audit records.",
+    al_handoff_audit_path: Path | None = _opt_al_handoff_audit_path(
+        "Optional JSONL path for UQ decision and handoff audit records."
     ),
 ):
     """Run LangGraph supervisor: discovery exploration -> UQ gate -> optional AL handoff."""
@@ -452,8 +485,8 @@ def supervisor_run(
     cfg = SupervisorConfig(
         composition=composition,
         mlip_backend=mlip_backend,
-        logdir=str(logdir) if logdir else None,
-        mlp_checkpoint=str(mlp_checkpoint) if mlp_checkpoint else None,
+        logdir=_path_or_none(logdir),
+        hydragnn_branch_mlp_checkpoint=_path_or_none(hydragnn_branch_mlp_checkpoint),
         uma_model_name=uma_model_name,
         uma_task=uma_task,
         output_dir=str(output_dir),
@@ -469,12 +502,12 @@ def supervisor_run(
         n_random=n_random,
         random_seed=random_seed,
         trigger_active_learning_on_high_uq=trigger_active_learning_on_high_uq,
-        active_learning_config=(str(active_learning_config) if active_learning_config else None),
+        active_learning_config=_path_or_none(active_learning_config),
         active_learning_dry_run=active_learning_dry_run,
         uq_top_weight_threshold=uq_top_weight_threshold,
         uq_min_unreliable_fraction=uq_min_unreliable_fraction,
         uq_min_relaxations_for_handoff=uq_min_relaxations_for_handoff,
-        al_handoff_audit_path=(str(al_handoff_audit_path) if al_handoff_audit_path else None),
+        al_handoff_audit_path=_path_or_none(al_handoff_audit_path),
     )
 
     final = run_supervisor(cfg)

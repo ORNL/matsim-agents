@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -A mat746
 #SBATCH -J qe-warmstart
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/qe-warmstart-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/qe-warmstart-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 02:00:00
 #SBATCH -N 1
 #SBATCH -p batch
@@ -34,7 +34,7 @@ PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
-MLP_CHECKPOINT=${MATSIM_HYDRAGNN_MLP_CKPT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
+HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 
 QE_LAUNCHER=${MATSIM_QE_LAUNCHER:-$REPO/scripts/launchers/frontier/run-pw-gpu-frontier.sh}
 QE_PSEUDO_DIR=${MATSIM_QE_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}
@@ -64,7 +64,7 @@ export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
 export MATSIM_QE_LAUNCHER="$QE_LAUNCHER"
 export MATSIM_QE_PSEUDO_DIR="$QE_PSEUDO_DIR"
 export MATSIM_HYDRAGNN_LOGDIR="$LOGDIR"
-export MATSIM_HYDRAGNN_MLP_CKPT="$MLP_CHECKPOINT"
+export HYDRAGNN_BRANCH_MLP_CHECKPOINT="$HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 export MATSIM_QE_MLP_DEVICE="${MATSIM_QE_MLP_DEVICE:-cuda}"
 export MATSIM_QE_TIMEOUT_SEC="${MATSIM_QE_TIMEOUT_SEC:-3600}"
 export MATSIM_WARMSTART_FIXTURES="${MATSIM_WARMSTART_FIXTURES:-Si_diamond}"
@@ -78,7 +78,7 @@ echo "Host:         $(hostname)"
 echo "Repo:         $REPO"
 echo "Venv:         $VENV"
 echo "HydraGNN log: $LOGDIR"
-echo "MLP ckpt:     $MLP_CHECKPOINT"
+echo "MLP ckpt:     $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "QE launcher:  $QE_LAUNCHER"
 echo "QE pseudos:   $QE_PSEUDO_DIR"
 echo "Fixtures:     $MATSIM_WARMSTART_FIXTURES"

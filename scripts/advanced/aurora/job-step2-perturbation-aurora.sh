@@ -16,6 +16,11 @@
 #
 # Submit:
 #   qsub scripts/advanced/aurora/job-step2-perturbation-aurora.sh
+#
+# Submit with explicit structures from step-1 outputs:
+#   qsub -v MATSIM_BTO_STRUCT=/path/to/BaTiO3_optimized_structure.vasp,\
+#MATSIM_RHEA_STRUCT=/path/to/MoNbTaW_optimized_structure.vasp \
+#     scripts/advanced/aurora/job-step2-perturbation-aurora.sh
 # ---------------------------------------------------------------------------
 
 set -eo pipefail
@@ -29,13 +34,20 @@ PROJ="$(dirname "${REPO}")"
 VENV="${MATSIM_AURORA_VENV:-${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
 HYDRAGNN_EXAMPLE="${PROJ}/HydraGNN/examples/multidataset_hpo_sc26"
 LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${HYDRAGNN_EXAMPLE}/multidataset_hpo-BEST6-fp64}"
-MLP_CHECKPOINT="${MATSIM_HYDRAGNN_MLP_CKPT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
+HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-${HYDRAGNN_EXAMPLE}/mlp_branch_weights.pt}"
 
-# Inputs identified from the perovskite + RHEA discovery runs (Step 1 analysis).
-BTO_PROV="${PROJ}/runs/discovery-chat-perovskites-aurora-8510287.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov/outputs/discovery/BaO3Ti/relaxed"
-BTO_STRUCT="${MATSIM_BTO_STRUCT:-${BTO_PROV}/BaO3Ti__ABC3_hR10_167_a_b_e_o0_optimized_structure.vasp}"
-RHEA_PROV="${PROJ}/runs/discovery-chat-rhea-aurora-8510299.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov/outputs/discovery/MoNbTaW/relaxed"
-RHEA_STRUCT="${MATSIM_RHEA_STRUCT:-${RHEA_PROV}/MoNbTaW__ABCD_oP16_57_d_c_d_d_o10_optimized_structure.vasp}"
+# Inputs from step-1 outputs (required).
+BTO_STRUCT="${MATSIM_BTO_STRUCT:-}"
+RHEA_STRUCT="${MATSIM_RHEA_STRUCT:-}"
+
+if [[ -z "${BTO_STRUCT}" || -z "${RHEA_STRUCT}" ]]; then
+  echo "ERROR: set both MATSIM_BTO_STRUCT and MATSIM_RHEA_STRUCT." >&2
+  echo "Example:" >&2
+  echo "  qsub -v MATSIM_BTO_STRUCT=/path/to/BaTiO3_optimized_structure.vasp,MATSIM_RHEA_STRUCT=/path/to/MoNbTaW_optimized_structure.vasp $0" >&2
+  exit 2
+fi
+[[ -f "${BTO_STRUCT}" ]] || { echo "ERROR: BaTiO3 structure not found: ${BTO_STRUCT}" >&2; exit 2; }
+[[ -f "${RHEA_STRUCT}" ]] || { echo "ERROR: MoNbTaW structure not found: ${RHEA_STRUCT}" >&2; exit 2; }
 
 JOBID="${PBS_JOBID:-$$}"
 RUN_DIR="${PROJ}/runs/step2-perturbation-aurora-${JOBID}"
@@ -55,7 +67,7 @@ export PYTHONUNBUFFERED=1
 export ZE_AFFINITY_MASK="${ZE_AFFINITY_MASK:-0}"
 export ONEAPI_DEVICE_SELECTOR="${ONEAPI_DEVICE_SELECTOR:-level_zero:gpu}"
 export MATSIM_HYDRAGNN_LOGDIR="${LOGDIR}"
-export MATSIM_HYDRAGNN_MLP_CKPT="${MLP_CHECKPOINT}"
+export HYDRAGNN_BRANCH_MLP_CHECKPOINT="${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 
 echo "=========================================="
 echo "[Aurora] step 2 perturbation diagnostic"
@@ -70,7 +82,7 @@ echo "=========================================="
 
 python "${REPO}/scripts/diagnostics/step2_perturbation_diagnostic.py" \
     --logdir          "${LOGDIR}" \
-    --mlp-checkpoint  "${MLP_CHECKPOINT}" \
+    --mlp-checkpoint  "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
     --output-dir      "${OUTPUT_DIR}" \
     --device          cuda \
     --seed            42 \

@@ -102,7 +102,7 @@ def main() -> None:
 
     cfg = DiscoveryChatConfig(
         logdir=args.logdir,
-        mlp_checkpoint=args.mlp_checkpoint,
+        hydragnn_branch_mlp_checkpoint=args.hydragnn_branch_mlp_checkpoint,
         output_dir=args.output_dir,
         checkpoint=args.checkpoint,
         mlp_device=args.mlp_device,

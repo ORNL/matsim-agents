@@ -7,8 +7,8 @@
 #SBATCH -t 02:00:00
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
-#SBATCH -o /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/active-learning-uq-%j/job-%j.out
-#SBATCH -e /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/active-learning-uq-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 # ---------------------------------------------------------------------------
 # matsim-agents: active-learning loop on NERSC Perlmutter.
 #
@@ -26,37 +26,37 @@
 #   sbatch scripts/advanced/perlmutter/job-active-learning-uq-perlmutter.sh
 #
 # Override:
-#   MATSIM_AL_STRUCTURES="a.vasp b.vasp" MATSIM_TOP_W_THR=0.5 \
+#   MATSIM_STRUCTURES="a.vasp b.vasp" MATSIM_TOP_W_THR=0.5 \
 #     sbatch scripts/advanced/perlmutter/job-active-learning-uq-perlmutter.sh
+# Backward-compatible alias: MATSIM_AL_STRUCTURES
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
 
 # ── paths ───────────────────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+REPO="${PROJECT_ROOT:-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents}"
 PROJ="$(dirname "${REPO}")"
+RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
-MLP_CHECKPOINT=${MATSIM_HYDRAGNN_MLP_CKPT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
+HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 
 DEFAULT_STRUCTURES=(
   "$REPO/tests/integration/data/Si.vasp"
   "$REPO/tests/integration/data/MgO.vasp"
-  "$REPO/tests/integration/data/MoNbTaW_HEA.vasp"
+  "$REPO/tests/integration/data/NaCl.vasp"
 )
-if [[ -n "${MATSIM_AL_STRUCTURES:-}" ]]; then
+STRUCTURE_LIST="${MATSIM_STRUCTURES:-${MATSIM_AL_STRUCTURES:-}}"
+if [[ -n "${STRUCTURE_LIST}" ]]; then
   # shellcheck disable=SC2206
-  STRUCTURES=( ${MATSIM_AL_STRUCTURES} )
+  STRUCTURES=( ${STRUCTURE_LIST} )
 else
   STRUCTURES=( "${DEFAULT_STRUCTURES[@]}" )
 fi
 
-RUN_DIR=$PROJ/runs/active-learning-uq-${SLURM_JOB_ID:-$$}
+RUN_DIR=$RUNS_ROOT/active-learning-uq-${SLURM_JOB_ID:-$$}
 OUTPUT_DIR=$RUN_DIR/outputs
 mkdir -p "$RUN_DIR" "$OUTPUT_DIR"
 
@@ -90,7 +90,7 @@ echo "Host:        $(hostname)"
 echo "Repo:        $REPO"
 echo "Venv:        $VENV"
 echo "Logdir:      $LOGDIR"
-echo "MLP ckpt:    $MLP_CHECKPOINT"
+echo "MLP ckpt:    $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "Structures:  ${#STRUCTURES[@]}"
 for s in "${STRUCTURES[@]}"; do echo "             - $s"; done
 echo "QE launch:   ${MATSIM_QE_LAUNCHER:-<unset>}"
@@ -103,7 +103,7 @@ echo "=========================================="
 python "$REPO/examples/active_learning_uq.py" \
     "${STRUCTURES[@]}" \
     --logdir          "$LOGDIR" \
-    --mlp-checkpoint  "$MLP_CHECKPOINT" \
+    --mlp-checkpoint  "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
     --mlp-device      cuda \
     --optimizer       FIRE \

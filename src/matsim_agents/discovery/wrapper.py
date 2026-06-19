@@ -33,7 +33,7 @@ class CompositionExplorationResult(BaseModel):
 def explore_composition(
     composition: str | Composition,
     logdir: str | None = None,
-    mlp_checkpoint: str | None = None,
+    hydragnn_branch_mlp_checkpoint: str | None = None,
     *,
     output_dir: str,
     mlip_backend: str = "hydragnn",
@@ -60,7 +60,7 @@ def explore_composition(
     ----------
     composition:
         Either a formula string ("Li2MnO3") or a parsed :class:`Composition`.
-    logdir, mlp_checkpoint, checkpoint, ...:
+    logdir, hydragnn_branch_mlp_checkpoint, checkpoint, ...:
         Forwarded to :class:`RelaxStructureInput`.
     output_dir:
         Where seed structures, optimized structures, trajectories, and
@@ -106,7 +106,7 @@ def explore_composition(
                     structure_path=cand.structure_path,
                     mlip_backend=mlip_backend,
                     logdir=logdir,
-                    mlp_checkpoint=mlp_checkpoint,
+                    hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
                     checkpoint=checkpoint,
                     uma_model_name=uma_model_name,
                     uma_task=uma_task,

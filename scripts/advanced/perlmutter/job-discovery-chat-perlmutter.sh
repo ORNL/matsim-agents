@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -A amsc001
 #SBATCH -J discovery-chat
-#SBATCH -o /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/discovery-chat-%j/job-%j.out
-#SBATCH -e /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/discovery-chat-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 01:30:00
 #SBATCH -N 1
 #SBATCH -C gpu
@@ -10,7 +10,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
 # ---------------------------------------------------------------------------
-# matsim-agents: RHEA discovery run on NERSC Perlmutter using HuggingFace
+# matsim-agents: discovery run on NERSC Perlmutter using HuggingFace
 # Transformers as the LLM backend (no vLLM server required).
 #
 # Layout:
@@ -29,20 +29,16 @@ set -euo pipefail
 
 # ── paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+source "${SCRIPT_DIR}/../common/runtime-env.sh"
+REPO="$(resolve_repo_root "${SCRIPT_DIR}" "/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents")"
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
-LOGDIR=$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64
-MLP_CHECKPOINT=$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt
+LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
+HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
 MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
-RUN_DIR=$PROJ/runs/discovery-chat-$SLURM_JOB_ID
-OUTPUT_DIR=$RUN_DIR/outputs
-
-mkdir -p "$RUN_DIR" "$OUTPUT_DIR"
+init_run_dirs "$PROJ" "discovery-chat" "${SLURM_JOB_ID}"
 
 # ── modules & conda env ──────────────────────────────────────────────────────
 source "$REPO/scripts/setup/perlmutter/perlmutter-module-stack.sh"
@@ -80,18 +76,23 @@ for i in range(torch.cuda.device_count()):
     print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
 PY
 
-# ── RHEA query ───────────────────────────────────────────────────────────────
-QUERY="Propose 4 to 5 refractory high-entropy alloy compositions using elements \
-from Mo, Nb, Ta, W, V, Cr, Hf, Zr, Ti that are known for combined \
-high-temperature resistance and mechanical strength. For each composition \
-specify the relevant crystal phases (e.g. BCC, B2, HCP) and explain the \
-physical justification. Then relax each proposed structure using the MLFF \
-and report the final energies and which phases are most stable."
+# ── discovery query ──────────────────────────────────────────────────────────
+if [[ -n "${MATSIM_DISCOVERY_QUERY:-}" ]]; then
+  QUERY="${MATSIM_DISCOVERY_QUERY}"
+else
+  QUERY="$(cat <<'EOF'
+Propose 3 to 5 candidate inorganic materials for high-temperature structural applications.
+For each candidate, provide the formula, likely crystal family, and a brief physics-based
+justification. Then relax the proposed structures with the MLFF and summarize relative
+stability from final energies and residual forces.
+EOF
+)"
+fi
 
-echo "[$(date)] Submitting RHEA query to matsim-agents (HuggingFace provider) ..."
+echo "[$(date)] Submitting discovery query to matsim-agents (HuggingFace provider) ..."
 echo "$QUERY" | matsim-agents chat \
     --logdir          "$LOGDIR" \
-    --mlp-checkpoint  "$MLP_CHECKPOINT" \
+    --mlp-checkpoint  "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
     --llm-provider    huggingface \
     --llm-model       "$MODEL_DIR" \

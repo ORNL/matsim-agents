@@ -98,8 +98,8 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     model.to(device).eval()
 
     mlp = None
-    if cfg.mlp_checkpoint is not None:
-        mlp_state = torch.load(str(cfg.mlp_checkpoint), map_location=cfg.mlp_device)
+    if cfg.hydragnn_branch_mlp_checkpoint is not None:
+        mlp_state = torch.load(str(cfg.hydragnn_branch_mlp_checkpoint), map_location=cfg.mlp_device)
         # The MLP architecture lives with the upstream training script; we only
         # forward the state-dict — callers needing the MLP must rely on
         # tools/relaxation.py's loader once it's promoted to a public API.

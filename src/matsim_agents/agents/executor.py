@@ -15,6 +15,18 @@ from matsim_agents.state import MatSimState
 from matsim_agents.tools.relaxation import RelaxStructureInput, _run
 
 
+def _cfg_or_env(
+    cfg: dict,
+    cfg_key: str,
+    env_key: str,
+    default: str | None = None,
+) -> str | None:
+    value = cfg.get(cfg_key)
+    if value is not None:
+        return str(value)
+    return os.environ.get(env_key, default)
+
+
 def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> dict:
     if not state.pending_tasks:
         return {}
@@ -22,20 +34,24 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
     task = state.pending_tasks[0]
     remaining = state.pending_tasks[1:]
     cfg = (config or {}).get("configurable", {}) if config else {}
-    mlip_backend = str(cfg.get("mlip_backend") or os.environ.get("MATSIM_MLIP_BACKEND") or "hydragnn")
-    logdir = cfg.get("logdir") or os.environ.get("MATSIM_HYDRAGNN_LOGDIR")
-    mlp_checkpoint = cfg.get("mlp_checkpoint") or os.environ.get("MATSIM_HYDRAGNN_MLP_CKPT")
-    checkpoint = cfg.get("checkpoint") or os.environ.get("MATSIM_HYDRAGNN_CHECKPOINT")
+    mlip_backend = _cfg_or_env(cfg, "mlip_backend", "MATSIM_MLIP_BACKEND", "hydragnn")
+    logdir = _cfg_or_env(cfg, "logdir", "MATSIM_HYDRAGNN_LOGDIR")
+    hydragnn_branch_mlp_checkpoint = _cfg_or_env(
+        cfg,
+        "hydragnn_branch_mlp_checkpoint",
+        "HYDRAGNN_BRANCH_MLP_CHECKPOINT",
+    )
+    checkpoint = _cfg_or_env(cfg, "checkpoint", "MATSIM_HYDRAGNN_CHECKPOINT")
 
     if mlip_backend == "hydragnn":
         if not logdir:
             raise ValueError(
                 "Missing HydraGNN logdir. Provide via run config or set MATSIM_HYDRAGNN_LOGDIR."
             )
-        if not mlp_checkpoint:
+        if not hydragnn_branch_mlp_checkpoint:
             raise ValueError(
                 "Missing BranchWeightMLP checkpoint. Provide via run config or set "
-                "MATSIM_HYDRAGNN_MLP_CKPT."
+                "HYDRAGNN_BRANCH_MLP_CHECKPOINT."
             )
 
     if task.kind != "relax":
@@ -48,7 +64,7 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
         structure_path=task.structure_path,
         mlip_backend=mlip_backend,
         logdir=logdir,
-        mlp_checkpoint=mlp_checkpoint,
+        hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
         checkpoint=checkpoint,
         uma_model_name=str(
             cfg.get("uma_model_name") or os.environ.get("MATSIM_UMA_MODEL_NAME") or "uma-s-1p1"

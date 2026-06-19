@@ -55,7 +55,7 @@ def _initial_energy_force(structure_path: str, logdir: str, mlp_ckpt: str,
     args = RelaxStructureInput(
         structure_path=structure_path,
         logdir=logdir,
-        mlp_checkpoint=mlp_ckpt,
+        hydragnn_branch_mlp_checkpoint=mlp_ckpt,
         optimizer="FIRE",
         maxiter=0,                 # ASE FIRE with maxiter=0 → single eval
         fmax=1e9,                  # accept any |F|max
@@ -98,7 +98,7 @@ def run_case(name: str, structure_path: str, logdir: str, mlp_ckpt: str,
     args = RelaxStructureInput(
         structure_path=str(perturbed_path),
         logdir=logdir,
-        mlp_checkpoint=mlp_ckpt,
+        hydragnn_branch_mlp_checkpoint=mlp_ckpt,
         optimizer="FIRE",
         maxiter=500,
         fmax=1e-4,
@@ -198,7 +198,7 @@ def main():
             sys.exit(f"bad --cases spec '{spec}', expected NAME:PATH")
         summaries.append(run_case(
             name=name, structure_path=path,
-            logdir=args.logdir, mlp_ckpt=args.mlp_checkpoint,
+            logdir=args.logdir, mlp_ckpt=args.hydragnn_branch_mlp_checkpoint,
             output_root=out_root,
             displacement_scale=args.displacement_scale, seed=args.seed,
             device=args.device,
