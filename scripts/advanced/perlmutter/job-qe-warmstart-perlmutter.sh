@@ -29,7 +29,11 @@
 set -euo pipefail
 
 # ── paths ───────────────────────────────────────────────────────────────────
-REPO="${PROJECT_ROOT:-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+REPO_DEFAULT="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
+REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
+[[ ! -f "${REPO}/pyproject.toml" ]] && \
+  REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
@@ -65,6 +69,12 @@ export MATSIM_QE_MLP_DEVICE="${MATSIM_QE_MLP_DEVICE:-cuda}"
 export MATSIM_QE_TIMEOUT_SEC="${MATSIM_QE_TIMEOUT_SEC:-3600}"
 export MATSIM_WARMSTART_FIXTURES="${MATSIM_WARMSTART_FIXTURES:-Si_diamond}"
 
+# Optionally pin HydraGNN routing to a fixed expert branch (e.g. 7 = OMat24).
+# When unset, the BranchWeightMLP softmax routing is used as-is.
+if [[ -n "${HYDRAGNN_FORCE_BRANCH:-}" ]]; then
+  export HYDRAGNN_FORCE_BRANCH
+fi
+
 # ── diagnostics ─────────────────────────────────────────────────────────────
 echo "=========================================="
 echo "[Perlmutter QE warm-start benchmark]"
@@ -78,6 +88,7 @@ echo "MLP ckpt:     $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "QE launcher:  $QE_LAUNCHER"
 echo "QE pseudos:   $QE_PSEUDO_DIR"
 echo "Fixtures:     $MATSIM_WARMSTART_FIXTURES"
+echo "Force branch: ${HYDRAGNN_FORCE_BRANCH:-<unset> (softmax routing)}"
 echo "=========================================="
 
 echo "[$(date)] Python: $(which python) ($(python --version 2>&1))"
