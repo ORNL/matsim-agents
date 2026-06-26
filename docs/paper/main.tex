@@ -548,7 +548,7 @@ following pipeline for any input crystal structure:
 
 \begin{enumerate}
 \item Run HydraGNN \acs{FIRE} relaxation to $f_\text{max} = 0.05$\,eV/\AA\ (\acs{MLIP}
-  pre-relax).
+  pre-relax of \emph{atomic positions only}).
 \item Run \acs{QE} \texttt{vc-relax} from the \emph{original} coordinates (cold
   start).
 \item Run \acs{QE} \texttt{vc-relax} from the \emph{HydraGNN-relaxed} coordinates
@@ -556,6 +556,17 @@ following pipeline for any input crystal structure:
 \item Record and compare \acs{BFGS} step counts, per-step \acs{SCF} iteration counts,
   total \acs{SCF} iterations, final energies, and wall times.
 \end{enumerate}
+
+Critically, the \acs{MLIP} pre-relax optimises \emph{only} the ionic coordinates
+and does not modify the unit cell. HydraGNN predicts per-atom forces but not the
+stress tensor; the latter would have to be estimated by finite differences of the
+potential energy, which is too noisy for metallic and chemically disordered systems
+(the numerical stress error causes cell collapse for alloy supercells with $>$50
+optimisation steps). Cell optimisation is therefore delegated entirely to the \acs{DFT}
+engine, which computes the stress tensor analytically via the Hellmann--Feynman
+theorem. The warm-start benefit thus arises solely from supplying \acs{QE} with
+ionic coordinates already close to the \acs{DFT} minimum, reducing the number of
+\acs{BFGS} ionic steps and the \acs{SCF} iterations per step.
 
 The same \acs{QE} input settings are used for both cold and warm runs to ensure a
 fair comparison. The benchmark writes a structured \ac{JSON} summary alongside the
@@ -983,8 +994,11 @@ Mixtral-8x22B-Instruct~\cite{mixtral} & Mistral AI & 141B MoE (39B) \\
 \label{sec:future_work}
 Current limitations include: (1) the active learning loop targets HydraGNN
 retraining and does not yet support fine-tuning of foundation models (UMA,
-MACE-MP); (2) the warm-start protocol handles ionic coordinates but not cell
-shape/volume, which limits benefit for pure-strain relaxation problems; (3) the
+MACE-MP); (2) the warm-start protocol pre-relaxes ionic coordinates only;
+cell optimisation is intentionally delegated to the \acs{DFT} engine because
+finite-difference stress estimates are too noisy for metallic or disordered
+systems --- extending this to reliable \acs{MLIP} cell relaxation requires
+a model that predicts the stress tensor directly; (3) the
 \acs{LLM} planner does not yet incorporate literature search or database queries
 (Materials Project, AFLOW) as tool calls; and (4) the present \acs{UQ} gate relies
 on the BranchWeightMLP routing heuristic, which is composition-conditioned and
