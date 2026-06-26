@@ -186,3 +186,49 @@ fixtures:
     is_2d: false
     energy_tolerance_ev: 0.05
     expect_warm_le_cold: true
+
+  - name: NbMoW_BCC
+    file: NbMoW_BCC.vasp
+    description: >
+      16-atom NbMoW BCC refractory ternary alloy, SQS-like Mo5Nb5W6 arrangement,
+      a=6.40 A. Ternary subset of MoNbTaW_HEA; well-represented in OMAT24
+      training data. Chemical disorder on BCC sites drives genuine HydraGNN
+      pre-relaxation, expected to reduce QE BFGS steps similarly to HEA.
+    hydragnn:
+      optimizer: FIRE
+      fmax: 0.001
+      maxiter: 400
+      maxstep: 0.01
+      relative_increase_threshold: 0.2
+    qe:
+      calculation: vc-relax
+      nstep: 100
+    vasp:
+      calculation: vc-relax
+      nsw: 100
+    is_2d: false
+    energy_tolerance_ev: 0.05
+    expect_warm_le_cold: true
+
+  - name: NbTaW_BCC
+    file: NbTaW_BCC.vasp
+    description: >
+      16-atom NbTaW BCC refractory ternary alloy, SQS-like Nb5Ta5W6 arrangement,
+      a=6.50 A. Ternary subset of MoNbTaW_HEA; well-represented in OMAT24
+      training data. Chemical disorder on BCC sites drives genuine HydraGNN
+      pre-relaxation, expected to reduce QE BFGS steps similarly to HEA.
+    hydragnn:
+      optimizer: FIRE
+      fmax: 0.001
+      maxiter: 400
+      maxstep: 0.01
+      relative_increase_threshold: 0.2
+    qe:
+      calculation: vc-relax
+      nstep: 100
+    vasp:
+      calculation: vc-relax
+      nsw: 100
+    is_2d: false
+    energy_tolerance_ev: 0.05
+    expect_warm_le_cold: true
