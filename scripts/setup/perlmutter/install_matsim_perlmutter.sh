@@ -267,12 +267,14 @@ if [[ "${INSTALL_UMA}" == "1" ]]; then
     "${VENV_PATH}/bin/python" -m venv "${UMA_VENV_PATH}"
     "${UMA_VENV_PATH}/bin/pip" install -U pip setuptools wheel
     "${UMA_VENV_PATH}/bin/pip" install --upgrade-strategy only-if-needed \
-        torch torchvision --index-url "https://download.pytorch.org/whl/${TORCH_CUDA_TAG}"
-    "${UMA_VENV_PATH}/bin/pip" install --upgrade-strategy only-if-needed \
         fairchem-core \
         || warn "fairchem-core install failed; UMA backend will be unavailable."
+    # Install matsim-agents with its runtime deps (langchain-core, langgraph,
+    # pydantic, ase, etc.) but without the uma extra (fairchem-core is already
+    # installed above). --upgrade-strategy only-if-needed avoids overwriting
+    # fairchem-core's numpy/scipy with older versions.
     "${UMA_VENV_PATH}/bin/pip" install --upgrade-strategy only-if-needed \
-        -e "${MATSIM_DIR}[dev]" --no-deps
+        -e "${MATSIM_DIR}[dev]"
     log "fairchem_venv created. To use UMA: activate ${UMA_VENV_PATH}"
 else
     log "INSTALL_UMA=0 -> skipping fairchem_venv creation"
