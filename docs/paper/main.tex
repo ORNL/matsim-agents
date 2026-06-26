@@ -643,8 +643,8 @@ atoms, ionic insulator), and MoNbTaW in a 2$\times$2$\times$2 BCC supercell
 their respective \acs{DFT} equilibrium volumes to provide a slight but non-trivial
 perturbation.
 
-Table~\ref{tab:uq} summarises the \acs{UQ} results from Slurm job~54352943
-(wall time: 13\,min\,54\,s). The BranchWeightMLP correctly identifies all
+Table~\ref{tab:uq} summarises the \acs{UQ} results
+(wall time: 13\,min\,54\,s on one Perlmutter node). The BranchWeightMLP correctly identifies all
 three structures as \emph{reliable}: the top-branch weight is essentially unity
 and the Shannon entropy is $\approx 0$ in all cases. This is consistent with
 the expectation that HydraGNN's training distribution (MPtrj + ANI-1x)
@@ -654,8 +654,8 @@ the analyst without triggering an expensive active learning iteration.
 
 \begin{table}[t]
 \centering
-\caption{BranchWeightMLP \acs{UQ} results for three crystal structures (Perlmutter,
-job 54352943). All three pass the reliability gate ($w_\text{top} > 0.6$,
+\caption{BranchWeightMLP \acs{UQ} results for three crystal structures (Perlmutter).
+All three pass the reliability gate ($w_\text{top} > 0.6$,
 $H < 0.01$\,nat).}
 \label{tab:uq}
 \resizebox{\columnwidth}{!}{%
@@ -683,13 +683,13 @@ minimum well at the \acs{MLIP} level.
 
 \subsection{QE Warm-Start Benchmark: Si Diamond}
 \label{sec:results:warmstart_si}
-Job~54511140 (wall time: 5\,min\,40\,s) ran the warm-start benchmark for Si
-diamond. Table~\ref{tab:warmstart_si} reports the per-step \acs{SCF} iteration
+The warm-start benchmark for Si diamond
+(wall time: 5\,min\,40\,s) was run on one Perlmutter node. Table~\ref{tab:warmstart_si} reports the per-step \acs{SCF} iteration
 counts and wall times for both the cold and warm \acs{QE} runs.
 
 \begin{table}[t]
 \centering
-\caption{\acs{QE} cold vs. warm-start for Si diamond (Perlmutter, job 54511140).
+\caption{\acs{QE} cold vs.\ warm-start for Si diamond (Perlmutter).
 \acs{SCF} iteration sequences and wall times are identical because the HydraGNN
 \acs{FIRE} relaxation converges in 1 step with $f_\text{max} \approx 0$ (symmetry-
 protected zero forces), leaving the ionic coordinates unchanged.}
@@ -725,7 +725,7 @@ This result motivates the choice of a more physically demanding test case.
 
 \subsection{QE Warm-Start Benchmark: MoNbTaW HEA}
 \label{sec:results:warmstart_hea}
-To demonstrate a non-trivial warm-start benefit, we submitted job~54654938
+To demonstrate a non-trivial warm-start benefit, we ran the benchmark
 targeting the MoNbTaW 16-atom BCC \acs{HEA}. This structure is the canonical
 ``hard case'' in the fixture suite: the random-alloy site occupation creates
 genuine site-specific forces at the input geometry; HydraGNN \acs{FIRE} must
