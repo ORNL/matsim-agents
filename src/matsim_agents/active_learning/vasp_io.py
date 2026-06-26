@@ -119,13 +119,41 @@ def concat_potcar(
         if s not in seen:
             seen.append(s)
 
+    # Preferred PAW variant when the bare element directory is absent.
+    # Keys are element symbols; values are the subdirectory names to try next.
+    _PREFERRED_VARIANTS: dict[str, list[str]] = {
+        "Ba": ["Ba_sv"],
+        "Ca": ["Ca_sv", "Ca_pv"],
+        "Sr": ["Sr_sv"],
+        "K":  ["K_sv", "K_pv"],
+        "Rb": ["Rb_sv", "Rb_pv"],
+        "Cs": ["Cs_sv"],
+        "Na": ["Na_pv"],
+        "Li": ["Li_sv"],
+        "Pb": ["Pb_d"],
+        "Bi": ["Bi_d"],
+        "In": ["In_d"],
+        "Tl": ["Tl_d"],
+        "Hf": ["Hf_pv"],
+        "Zr": ["Zr_sv"],
+        "Y":  ["Y_sv"],
+        "Sc": ["Sc_sv"],
+        "La": ["La"],
+        "Ce": ["Ce"],
+    }
+
     pieces: list[bytes] = []
     for sym in seen:
-        candidates = [
-            potcar_dir / sym / "POTCAR",
-            potcar_dir / sym,
-            potcar_dir / f"POTCAR.{sym}",
-        ]
+        # Build candidate list: plain element first, then preferred variants,
+        # then legacy flat-file conventions.
+        variant_dirs = [sym] + _PREFERRED_VARIANTS.get(sym, [])
+        candidates = []
+        for vd in variant_dirs:
+            candidates += [
+                potcar_dir / vd / "POTCAR",
+                potcar_dir / vd,
+            ]
+        candidates += [potcar_dir / f"POTCAR.{sym}"]
         match = next((c for c in candidates if c.is_file()), None)
         if match is None:
             raise FileNotFoundError(
