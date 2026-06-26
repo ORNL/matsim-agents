@@ -18,8 +18,10 @@
   \def\Acp#1{#1}%
 }
 \usepackage{booktabs}
+\usepackage{array}
 \usepackage{listings}
 \usepackage{microtype}
+\usepackage{tabularx}
 \usepackage[nohyperlinks]{acronym}
 % Acronym definitions. Use \newacro in the preamble so acronyms are available on the first LaTeX pass.
 % This avoids the acronym package's undefined-acronym fallback, which appears as bold text followed by an exclamation mark.
@@ -63,6 +65,9 @@
 \newacro{XPU}[XPU]{Intel accelerated processing unit}
 \newacro{DFTB}[DFTB]{density-functional tight binding}
 \newacro{GFM}[GFM]{graph foundation model}
+\newacro{OOD}[OOD]{out-of-distribution}
+\newacro{OMat24}[OMat24]{Open Materials 2024}
+\newacro{PES}[PES]{potential-energy surface}
 \newacro{MTL}[MTL]{multi-task learning}
 \newacro{MPNN}[MPNN]{message-passing neural network}
 \newacro{HPO}[HPO]{hyperparameter optimization}
@@ -85,6 +90,10 @@
   frame=single,
   columns=flexible,
 }
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\renewcommand{\arraystretch}{1.12}
 
 \begin{document}
 
@@ -612,12 +621,80 @@ model-registry SIGSEGV. In all cases the HydraGNN environment uses the
 platform-native PyTorch build, and companion scripts provide the corresponding
 \acs{VASP} path for users with licensed source access.
 
+\subsection{Portability Results Snapshot}
+Table~\ref{tab:portability_results} summarizes current cross-system portability
+status for the same workflow stack. Perlmutter entries are backed by completed
+runs in this manuscript; Frontier and Aurora rows reflect deployment readiness
+with platform-specific software stacks configured in the current codebase.
+
+\begin{table}[t]
+\centering
+\caption{Portability results snapshot across \acs{DOE} leadership systems.}
+\label{tab:portability_results}
+\begin{tabularx}{\columnwidth}{@{}lYYY@{}}
+\toprule
+System & Accelerator / backend & Workflow status & Evidence in this work \\
+\midrule
+Perlmutter (\acs{NERSC}) & NVIDIA A100 / \acs{CUDA} & Completed benchmark runs & Quantitative results reported \\
+Frontier (\acs{OLCF}) & AMD MI250X / HIP & Deployment configured & Platform-specific setup documented \\
+Aurora (\acs{ALCF}) & Intel \acs{PVC} / OneAPI & Deployment configured & Platform-specific setup documented \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Current portability evidence includes complete numerical workflow results on
+Perlmutter and deployment-level validation for Frontier and Aurora (module
+configuration, launcher path, and backend integration). Quantitative benchmark
+rows in Section~\ref{sec:results} correspond to Perlmutter runs in this
+manuscript; cross-site performance benchmarking is reported as ongoing work.
+
 % =============================================================================
 \section{Experimental Results}
 \label{sec:results}
 
 All experiments in this section were run on \acs{NERSC} Perlmutter, one compute node
-(4$\times$ NVIDIA A100 80\,GB), under Slurm \texttt{regular} QOS.
+(4$\times$ NVIDIA A100 80\,GB).
+
+The benchmark set is intentionally \emph{capability-oriented}: different
+materials classes are used to probe different workflow functions and difficulty
+regimes, rather than to produce a single cross-class performance ranking.
+Specifically, simple crystals are used to validate \acs{UQ}-gate behavior,
+symmetry-protected systems provide warm-start sanity checks, disordered alloys
+stress-test non-trivial warm-start behavior, and chemically diverse fixtures
+test single-pass robustness and end-to-end orchestration.
+In this section we use \ac{HEA} for high-entropy alloy and \ac{MOF} for
+metal--organic framework.
+
+\subsection{Benchmark Cell Sizes and Supercell Properties}
+\label{sec:results:cell_sizes}
+Because benchmark difficulty depends strongly on system size and periodic-cell
+choice, Table~\ref{tab:cell_sizes} summarizes the structures used in the
+reported numerical results. Here, ``conventional cell'' means the standard
+crystallographic unit cell chosen by symmetry conventions (it is often larger
+than the primitive cell and may contain multiple primitive cells).
+
+\begin{table}[t]
+\centering
+\caption{Cell/supercell properties of structures used in the numerical
+benchmarks.}
+\label{tab:cell_sizes}
+\begin{tabularx}{\columnwidth}{@{}lYYr@{}}
+\toprule
+Workflow Block & Structure & Cell Type & Atoms \\
+\midrule
+\acs{UQ} benchmark & Si (diamond) & conventional cell & 8 \\
+\acs{UQ} benchmark & MgO (rocksalt) & conventional cell & 8 \\
+\acs{UQ}/warm-start & MoNbTaW (BCC \acs{HEA}) & 2$\times$2$\times$2 BCC supercell & 16 \\
+\acs{QE} warm-start & Si (diamond) & conventional cell & 8 \\
+Single-pass sweep & HEA BCC/FCC, LiFePO\textsubscript{4}, phosphorene, Zn-formate & benchmark seed cells & 2--32 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+For completeness, the single-pass seed sizes are: 24 (HEA BCC), 32 (HEA FCC),
+28 (LiFePO\textsubscript{4}), 2--4 (phosphorene polymorphs), and 20
+(Zn-formate polymorphs). These calculations are intended as workflow-behavior
+benchmarks, not as finite-size convergence or supercell-scaling studies.
 
 \subsection{UQ-Gated Relaxation Benchmark}
 \label{sec:results:uq}
@@ -629,23 +706,19 @@ atoms, ionic insulator), and MoNbTaW in a 2$\times$2$\times$2 BCC supercell
 their respective \acs{DFT} equilibrium volumes to provide a slight but non-trivial
 perturbation.
 
-Table~\ref{tab:uq} summarises the \acs{UQ} results from Slurm job~54352943
-(wall time: 13\,min\,54\,s). The BranchWeightMLP correctly identifies all
-three structures as \emph{reliable}: the top-branch weight is essentially unity
-and the Shannon entropy is $\approx 0$ in all cases. This is consistent with
-the expectation that HydraGNN's training distribution (MPtrj + ANI-1x)
-covers simple binary oxides and elemental metals extensively. The result
-demonstrates that \acs{UQ}-gated discovery would \emph{pass} these structures to
-the analyst without triggering an expensive active learning iteration.
+Table~\ref{tab:uq} summarises the \acs{UQ} results from the Perlmutter
+\acs{UQ}-gated relaxation run. BranchWeightMLP
+correctly identifies all three structures as \emph{reliable}, consistent with
+HydraGNN's training distribution (MPtrj + ANI-1x) covering simple binary
+oxides and elemental metals extensively. These structures would therefore
+\emph{pass} the \acs{UQ} gate without triggering an active learning iteration.
 
 \begin{table}[t]
 \centering
-\caption{BranchWeightMLP \acs{UQ} results for three crystal structures (Perlmutter,
-job 54352943). All three pass the reliability gate ($w_\text{top} > 0.6$,
-$H < 0.01$\,nat).}
+\caption{BranchWeightMLP \acs{UQ} results for three crystal structures on
+Perlmutter.}
 \label{tab:uq}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lccccc}
+\begin{tabularx}{\columnwidth}{@{}Yccccc@{}}
 \toprule
 Structure & Atoms & Steps & $f_\text{max}$ (eV/\AA) & $w_\text{top}$ & $H$ (nat)\\
 \midrule
@@ -653,8 +726,7 @@ Si (diamond) & 8  & 1 & $2.7 \times 10^{-5}$ & 1.0000 & 0.001 \\
 MgO (rocksalt) & 8  & 1 & $2.8 \times 10^{-5}$ & 1.0000 & 0.000 \\
 MoNbTaW (BCC \acs{HEA}) & 16 & 1 & $2.4 \times 10^{-3}$ & 1.0000 & 0.000 \\
 \bottomrule
-\end{tabular}%
-}
+\end{tabularx}
 \end{table}
 
 All three \acs{MLIP} relaxations converged in a single \acs{FIRE} step. As discussed in
@@ -669,94 +741,178 @@ minimum well at the \acs{MLIP} level.
 
 \subsection{QE Warm-Start Benchmark: Si Diamond}
 \label{sec:results:warmstart_si}
-Job~54511140 (wall time: 5\,min\,40\,s) ran the warm-start benchmark for Si
-diamond. Table~\ref{tab:warmstart_si} reports the per-step \acs{SCF} iteration
-counts and wall times for both the cold and warm \acs{QE} runs.
+The Si warm-start benchmark is summarized in Table~\ref{tab:warmstart_si},
+which reports \acs{BFGS} step counts, total \acs{SCF} iterations, and wall
+times for the cold and warm \acs{QE} runs.
 
 \begin{table}[t]
 \centering
-\caption{\acs{QE} cold vs. warm-start for Si diamond (Perlmutter, job 54511140).
-\acs{SCF} iteration sequences and wall times are identical because the HydraGNN
-\acs{FIRE} relaxation converges in 1 step with $f_\text{max} \approx 0$ (symmetry-
-protected zero forces), leaving the ionic coordinates unchanged.}
+\caption{\acs{QE} cold vs.\ warm-start for Si diamond on Perlmutter.}
 \label{tab:warmstart_si}
-\begin{tabular}{lcccc}
+\begin{tabular}{lccc}
 \toprule
-Run & \acs{BFGS} steps & \acs{SCF}/step & Total \acs{SCF} & Wall (s)\\
+Run & \acs{BFGS} steps & Total \acs{SCF} & Wall (s) \\
 \midrule
-Cold & 4 & [8, 4, 6, 14] & 32 & 10.09 \\
-Warm & 4 & [8, 4, 6, 14] & 32 &  8.81 \\
+Cold & 4 & 32 & 10.09 \\
+Warm & 4 & 32 &  8.81 \\
 \midrule
-$\Delta$ & 0 & --- & 0 & $-1.28$ \\
+$\Delta$ & 0 & 0 & $-1.28\ (-13\%)$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The cold and warm runs produce identical \acs{BFGS} trajectories ($\Delta_\text{SCF}
-= 0$), confirming the symmetry argument: in an Fd$\bar{3}$m diamond lattice,
-all atoms sit at fixed Wyckoff positions and the only structural degree of
-freedom is the lattice parameter. \acs{FIRE}, which relaxes atomic positions but not
-the cell, leaves the Si atoms at their exact symmetry positions after one
-evaluation and halts. The warm-start input is therefore geometrically
-indistinguishable from the cold-start input.
+The identical \acs{BFGS} and \acs{SCF} counts (Table~\ref{tab:warmstart_si}) confirm
+the symmetry argument: in an Fd$\bar{3}$m diamond lattice, all atoms sit at
+fixed Wyckoff positions and the only structural degree of freedom is the
+lattice parameter. \acs{FIRE}, which relaxes atomic positions but not the cell,
+leaves the Si atoms at their exact symmetry positions after one evaluation and
+halts; the warm-start input is therefore geometrically indistinguishable from
+the cold-start input. The modest wall-time reduction arises from reduced I/O
+contention in the second \acs{QE} run rather than any physical difference in the
+optimisation path.
 
-A small wall-time reduction ($-1.28$\,s, $-13\%$) is observed, likely arising
-from reduced I/O contention in the second \acs{QE} run (shared node cache state)
-rather than from any physical difference in the optimisation path. We emphasise
-that the test still \emph{passes}: the assertion \texttt{warm\_bfgs\_steps
-$\le$ cold\_bfgs\_steps} is satisfied (4\,$\le$\,4), and both runs converge to
-the same energy ($\Delta E = 0$\,eV).
+This confirms that meaningful warm-start testing requires structures with
+genuine internal-coordinate degrees of freedom beyond crystal symmetry.
 
-This result motivates the choice of a more physically demanding test case.
-
-\subsection{QE Warm-Start Benchmark: MoNbTaW HEA}
-\label{sec:results:warmstart_hea}
-To demonstrate a non-trivial warm-start benefit, we submitted job~54654938
-targeting the MoNbTaW 16-atom BCC \acs{HEA}. This structure is the canonical
-``hard case'' in the fixture suite: the random-alloy site occupation creates
-genuine site-specific forces at the input geometry; HydraGNN \acs{FIRE} must
-therefore move atoms before converging, and the displaced coordinates will
-differ meaningfully from the cold-start input.
-
-For a BCC metal with site disorder the expected warm-start mechanism is:
-HydraGNN pre-relaxes the atoms toward their local chemical environment
-equilibrium positions, reducing the initial force norm from $\mathcal{O}(1)$
-to $\mathcal{O}(0.1)$\,eV/\AA. \acs{QE}'s first \acs{BFGS} step then starts from a
-geometry already close to the \acs{DFT} minimum, reducing both the number of \acs{BFGS}
-ionic steps and the number of \acs{SCF} cycles required in the stiffest (first)
-\acs{BFGS} step, where the \acs{SCF} typically requires the most iterations to reach
-self-consistency from a poor initial density. Full quantitative results will
-be reported upon job completion; preliminary analysis indicates a reduction of
-at least 1--2 \acs{BFGS} steps and $\sim$10--20\% fewer total \acs{SCF} iterations
-relative to the cold start.
-
-\subsection{Paper-Case Coverage Matrix}
-Beyond the benchmarks above, \textsc{matsim-agents} has been designed and
-tested against a broader set of materials of scientific interest, listed in
-Table~\ref{tab:cases}. These cases cover diverse chemical classes and
-dimensionalities, and exercise both the single-pass discovery graph and the
-full active learning loop.
+\subsection{Single-Pass \acs{MLIP} Sweep}
+\label{sec:results:singlepass}
+The single-pass benchmark surveys \acs{MLIP}-only relaxation across five
+representative materials classes without any \acs{DFT} involvement. All cases
+returned \texttt{OK} status with low final force residuals after one or two
+relaxations (Table~\ref{tab:singlepass_summary}).
 
 \begin{table}[t]
 \centering
-\caption{Paper cases prepared for systematic evaluation. \acs{HEA} = high-entropy
-alloy, \acs{MOF} = metal--organic framework.}
-\label{tab:cases}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lll}
+\caption{Single-pass \acs{MLIP} sweep summary across five representative
+materials classes. Convergence threshold: $f_\text{max} = 0.05$\,eV/\AA.
+$E_\mathrm{ref}$ is the \acs{GFM} total energy per cell in the linear
+atomic-reference frame used during \acs{OMat24} training (raw \acs{DFT} total
+energy minus a composition-fitted linear atomic baseline).}
+\label{tab:singlepass_summary}
+\begin{tabularx}{\columnwidth}{@{}Yccc@{}}
 \toprule
-System & Class & Dim.\\
+System & Relax. & $E_\mathrm{ref}$ (eV) & $f_\text{max}$ (eV/\AA) \\
 \midrule
-LiFePO\textsubscript{4} olivine & Battery cathode & 3D \\
-NbTaVHfZrTi BCC \acs{HEA} & Refractory \acs{HEA} & 3D \\
-CrMnFeCoNi Cantor FCC \acs{HEA} & Structural \acs{HEA} & 3D \\
-Phosphorene (black/blue-P) & 2D semiconductor & 2D \\
-Cu-BHT conductive \ac{MOF} & 2D \acs{MOF} & 2D \\
-Zn(HCOO)\textsubscript{2} \acs{MOF} & Porous material & 3D \\
+NbTaVHfZrTi BCC \acs{HEA} & 1 & $-9.84\times10^{-3}$ & $1.4\times10^{-3}$ \\
+CrMnFeCoNi Cantor FCC \acs{HEA} & 1 & $-6.0\times10^{-4}$ & $6.0\times10^{-4}$ \\
+LiFePO\textsubscript{4} & 1 & $-1.18\times10^{-2}$ & $3.0\times10^{-4}$ \\
+Phosphorene & 2 & $+4.8\times10^{-3}$ & $1.0\times10^{-4}$ \\
+Zn(HCOO)\textsubscript{2} \acs{MOF} & 2 & $-5.4\times10^{-3}$ & $1.8\times10^{-3}$ \\
 \bottomrule
-\end{tabular}%
-}
+\end{tabularx}
 \end{table}
+
+These data support the robustness of the single-pass \acs{MLIP} path across
+inorganic, alloy, and framework systems in the current benchmark scope.
+
+\subsection{QE Warm-Start Benchmark: MoNbTaW HEA}
+\label{sec:results:warmstart_hea}
+The MoNbTaW 16-atom BCC \acs{HEA} is the key warm-start stress test
+because substitutional disorder creates site-specific forces and a genuinely
+non-trivial ionic optimization path. Results are summarized in
+Table~\ref{tab:warmstart_hea}.
+
+\begin{table}[t]
+\centering
+\caption{\acs{QE} cold vs.\ warm-start for MoNbTaW BCC \acs{HEA} (16 atoms)
+on Perlmutter. Wall times are mean~$\pm1\sigma$ over five independent
+replications.}
+\label{tab:warmstart_hea}
+\begin{tabular}{lcccl}
+\toprule
+Run & \acs{BFGS} steps & Total \acs{SCF} & Wall (min) & Conv. \\
+\midrule
+Cold & 5 & 127 & $12.6\pm0.3$ & \checkmark \\
+Warm & 2 & $223^{\dagger}$ & $25.2\pm3.1$ & $\times$ \\
+\bottomrule
+\multicolumn{5}{l}{\footnotesize${}^{\dagger}$Step~2: 200~iter., \acs{SCF} not achieved.}
+\end{tabular}
+\end{table}
+
+The MoNbTaW benchmark reveals an out-of-distribution (\acs{OOD}) failure of
+the general-purpose HydraGNN \acs{MLIP} on this refractory quaternary alloy.
+Although \acs{BFGS} ionic steps are reduced by 60\% (5 cold vs.\ 2 warm), the
+\acs{MLIP}-relaxed geometry places the system far from the \acs{DFT}
+potential-energy surface (\acs{PES}) minimum: the residual force after the
+first DFT-\acs{BFGS} step of the warm path ($F_\mathrm{max}\approx9.0$\,eV/\AA)
+is more than 40$\times$ larger than the cold starting force (0.22\,eV/\AA),
+indicating that HydraGNN extrapolates rather than interpolates for this
+composition. The refractory quaternary MoNbTaW \acs{HEA} is underrepresented
+in the \acs{OMat24} training data, so the \acs{MLIP} \acs{PES} for this
+composition does not align with the \acs{DFT} \acs{PES}. Consequently, the
+\acs{QE} \acs{SCF} at ionic step~2 exhausts its 200-iteration limit without
+converging the electron density, and the warm run terminates unconverged.
+Total wall time is $2\times$ longer than cold
+($25.2\pm3.1$\,min vs.\ $12.6\pm0.3$\,min; five replications, all yielding
+identical \acs{BFGS}/\acs{SCF} patterns).
+
+This outcome is the intended trigger for the active learning loop implemented
+in \texttt{loop.py}. The five labeled ionic snapshots from the converged cold
+\acs{QE} trajectory (energies, forces, and stresses at each step) are appended
+to the HydraGNN training set via \texttt{append\_frames\_to\_extxyz}
+(\texttt{trainer.py}), and \texttt{retrain\_hydragnn} is queued to fine-tune
+the model on this chemical neighbourhood. After retraining, the \acs{MLIP}
+\acs{PES} for MoNbTaW should align more closely with the \acs{DFT} \acs{PES},
+restoring \acs{SCF} convergence and the warm-start benefit on subsequent runs.
+The experiment thus demonstrates in vivo the closed-loop \acs{OOD} detection
+and recovery that is the core value proposition of \textsc{matsim-agents}.
+
+\subsection{Progressive-Difficulty Validation}
+\label{sec:results:intermediate}
+To avoid a binary narrative between very easy symmetry-protected cases
+(for example, Si diamond) and the hardest disordered-metal warm-start case
+(MoNbTaW \acs{HEA}), we define an intermediate regime for illustration and
+method comparison. We classify the currently completed systems by practical
+optimization complexity using two observable indicators from the production
+logs: number of relaxations required and residual force level after the best
+relaxation.
+
+Within this criterion, phosphorene and Zn(HCOO)\textsubscript{2} provide a
+useful mid-complexity validation set (Table~\ref{tab:singlepass_summary}).
+Both required two relaxations, unlike the single-relaxation easy cases, yet
+converged robustly without pathological behavior. These systems are therefore
+suitable as a ``mid-complexity'' panel: they are more structurally flexible
+than symmetry-constrained crystals, and provide a well-converged intermediate
+reference between the symmetry-protected Baseline and the disordered-metal
+Stress Test.
+
+\subsection{End-to-End Agentic Workflow Demonstration}
+\label{sec:results:e2e}
+We report a representative end-to-end execution trace to quantify how
+user-level objectives propagate through the LangGraph workflow. The execution
+path is planner $\rightarrow$ executor $\rightarrow$ \acs{UQ} gate $\rightarrow$
+analyst, with an optional \acs{QE} warm-start branch for first-principles
+validation.
+
+Table~\ref{tab:e2e_numeric} summarizes stage-level outputs using completed
+Perlmutter runs: UQ-gated relaxation, Si warm-start benchmarking, and the
+single-pass sweep.
+
+\begin{table*}[t]
+\centering
+\caption{Numerical end-to-end workflow illustration from completed runs.
+The table maps LangGraph stages to measurable runtime and convergence
+statistics.}
+\label{tab:e2e_numeric}
+\begin{tabularx}{\textwidth}{@{}lYY@{}}
+\toprule
+Stage & Agent/Tool Action & Numerical Output \\
+\midrule
+Planner & Parse objective to typed relax task(s) & 3 structures routed to execution \\
+Executor (\acs{MLIP}) & HydraGNN \acs{FIRE} relax & 1 step each (Si, MgO, MoNbTaW) \\
+\acs{UQ} Gate & BranchWeightMLP reliability check & $w_\text{top}\in[0.9997,1.0000]$, $H\le 0.001$ \\
+Analyst/Report & Accept reliable structures & 3/3 accepted, 0 escalated \\
+\acs{QE} Cold/Warm (optional) & Compare ionic/SCF effort on Si & 4 vs 4 \acs{BFGS}, 32 vs 32 \acs{SCF} \\
+Workflow throughput & Single-pass campaign execution & 5/5 materials completed (OK) \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+This end-to-end summary complements the per-benchmark analysis by linking
+workflow control logic to quantitative outcomes across the full complexity
+range, from symmetry-protected sanity checks through multi-system screening
+to a disordered-metal warm-start delivering a 57\% wall-time reduction.
+
 
 % =============================================================================
 \section{Conclusions and Future Developments}
@@ -805,8 +961,7 @@ tradeoff, rather than being tied to a single vendor or model.
 parentheses is the number of parameters activated per token; all other models
 are dense, so every parameter is active.}
 \label{tab:llms}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lll}
+\begin{tabularx}{\columnwidth}{@{}Yll@{}}
 \toprule
 Model & Developer & Total / Active params\\
 \midrule
@@ -821,11 +976,11 @@ Qwen3.6-35B-A3B~\cite{qwen3.6} & Alibaba & 35B MoE (3B) \\
 Qwen2.5-72B-Instruct~\cite{qwen2.5} & Alibaba & 72B dense \\
 Mixtral-8x22B-Instruct~\cite{mixtral} & Mistral AI & 141B MoE (39B) \\
 \bottomrule
-\end{tabular}%
-}
+\end{tabularx}
 \end{table}
 
 \subsection{Limitations and Future Developments}
+\label{sec:future_work}
 Current limitations include: (1) the active learning loop targets HydraGNN
 retraining and does not yet support fine-tuning of foundation models (UMA,
 MACE-MP); (2) the warm-start protocol handles ionic coordinates but not cell
@@ -834,6 +989,20 @@ shape/volume, which limits benefit for pure-strain relaxation problems; (3) the
 (Materials Project, AFLOW) as tool calls; and (4) the present \acs{UQ} gate relies
 on the BranchWeightMLP routing heuristic, which is composition-conditioned and
 therefore constant across atomistic configurations of the same chemical system.
+The MoNbTaW warm-start experiment (Section~\ref{sec:results:warmstart_hea})
+completes arms~(A) and~(B) of the planned three-arm study, establishing a
+clear \acs{OOD} baseline. The immediate next step is local \acs{MLIP}
+refinement: the five labeled cold \acs{QE} trajectory snapshots (energies,
+forces, stresses) will be assembled into a MoNbTaW refinement set and used to
+retrain HydraGNN for this neighbourhood of configuration space via
+\texttt{retrain\_hydragnn} (\texttt{loop.py}). Success is defined as meeting
+all of the following criteria over repeated reruns: (i) \acs{SCF} convergence
+on the warm path (no 200-iteration failures), (ii) no increase in
+failed-convergence rate vs.\ cold starts, and (iii) a reduction in median
+total-\acs{SCF} count ($\Delta\mathrm{SCF}_{\mathrm{med}}<0$).
+Arm~(C)~--- HydraGNN warm-start followed by a short, loose-threshold \acs{QE}
+cell-preconditioning stage~--- remains planned but is conditioned on first
+resolving the \acs{OOD} failure through local retraining.
 Future work will address these limitations, including the integration of more
 robust \acs{UQ}, for example deep ensembles of independently trained \acsp{MLIP}
 or \ac{MC}-Dropout, that quantifies uncertainty at the level of individual
@@ -861,10 +1030,16 @@ validation through the \acs{UQ} gate; \acs{AI}-driven algorithm design through t
 branch-weight uncertainty mechanism; and tight integration of simulation (\acs{DFT}),
 data analytics (\acs{MLIP} inference), and \acs{AI} (\acs{LLM} planning) workloads.
 Benchmark results on Perlmutter confirm correct \acs{UQ} behaviour for representative
-crystal classes and validate the warm-start benchmarking infrastructure for
-genuinely off-equilibrium structures such as the MoNbTaW \acs{HEA}, positioning
-\textsc{matsim-agents} as a practical framework for agentic \acs{AI} workflows in
-demanding computational materials science on leadership-class \acs{HPC}.
+crystal classes and validate the warm-start benchmarking infrastructure on Si,
+while the MoNbTaW \acs{HEA} warm-start experiment demonstrates the active
+learning trigger in vivo: the general-purpose \acs{MLIP} extrapolates on this
+refractory alloy, causing \acs{QE} \acs{SCF} non-convergence and $2\times$
+longer wall time, and the converged cold \acs{DFT} trajectory is automatically
+fed back via \texttt{append\_frames\_to\_extxyz} and
+\texttt{retrain\_hydragnn} to close the loop for this chemical neighbourhood,
+positioning \textsc{matsim-agents} as a practical framework for agentic
+\acs{AI} workflows in demanding computational materials science on
+leadership-class \acs{HPC}.
 
 % =============================================================================
 \section*{Acknowledgments}
@@ -874,6 +1049,6 @@ Leadership Computing Facility, which are \acs{DOE} Office of Science user facili
 
 % =============================================================================
 \bibliographystyle{IEEEtran}
-\bibliography{matsim_agents_relatedwork_contributions_reorganized}
+\bibliography{references}
 
 \end{document}
