@@ -69,6 +69,8 @@ def run_warmstart_benchmark(
     *,
     qe_settings_overrides: dict[str, Any] | None = None,
     hydragnn_kwargs: dict[str, Any] | None = None,
+    mlip_backend: str = "hydragnn",
+    mlip_kwargs: dict[str, Any] | None = None,
     skip_hydragnn: bool = False,
     timeout_sec: int | None = None,
 ) -> WarmstartComparison:
@@ -76,9 +78,17 @@ def run_warmstart_benchmark(
 
     ``qe_settings_overrides`` is forwarded to :func:`recommend_settings`.
 
-    ``hydragnn_kwargs`` is forwarded to ``relax_structure`` (the HydraGNN
-    tool). It must at least contain ``logdir`` and ``hydragnn_branch_mlp_checkpoint``; the
-    output is written next to the input structure.
+    ``mlip_backend`` selects the MLIP used for the warm pre-relaxation step.
+    Currently supported: ``"hydragnn"`` (default) and ``"uma"``.
+
+    ``mlip_kwargs`` is forwarded to the selected MLIP relax helper.  For
+    ``"hydragnn"`` this is the same as the legacy ``hydragnn_kwargs`` argument.
+    For ``"uma"`` it should contain ``uma_model_name``, ``uma_task``, and
+    optionally ``uma_device``, ``optimizer``, ``fmax``, ``maxiter``.
+
+    ``hydragnn_kwargs`` is kept for backward compatibility: when
+    ``mlip_backend="hydragnn"`` and ``mlip_kwargs`` is *not* provided,
+    ``hydragnn_kwargs`` is used as ``mlip_kwargs``.
     """
     from ase.io import read, write
 
@@ -112,9 +122,12 @@ def run_warmstart_benchmark(
     hydragnn_block: dict[str, Any] | None = None
 
     if not skip_hydragnn:
+        # Resolve effective kwargs: mlip_kwargs takes priority; fall back to
+        # legacy hydragnn_kwargs for backward compatibility.
+        effective_kwargs = mlip_kwargs if mlip_kwargs is not None else (hydragnn_kwargs or {})
         try:
-            warm_atoms_path, hydragnn_block = _hydragnn_relax(
-                structure_path, work_dir, hydragnn_kwargs or {}
+            warm_atoms_path, hydragnn_block = _mlip_relax(
+                structure_path, work_dir, effective_kwargs, mlip_backend=mlip_backend
             )
         except Exception as exc:  # pragma: no cover - exercised on-cluster only
             hydragnn_block = {"error": f"{type(exc).__name__}: {exc}"}
@@ -150,6 +163,44 @@ def run_warmstart_benchmark(
     summary = _summarise(structure_path, work_dir, cold_result, warm_block, hydragnn_block)
     summary.to_json(os.path.join(work_dir, "comparison.json"))
     return summary
+
+
+def _mlip_relax(
+    structure_path: str,
+    work_dir: str,
+    kwargs: dict[str, Any],
+    *,
+    mlip_backend: str = "hydragnn",
+) -> tuple[str | None, dict[str, Any]]:
+    """Invoke the MLIP relax tool. Returns ``(optimized_path, info)``.
+
+    Dispatches to the correct backend based on ``mlip_backend``.
+    """
+    from matsim_agents.tools.relaxation import RelaxStructureInput, _run
+
+    out_subdir = "hydragnn" if mlip_backend == "hydragnn" else mlip_backend
+    mlip_dir = os.path.join(work_dir, out_subdir)
+    Path(mlip_dir).mkdir(parents=True, exist_ok=True)
+
+    payload = dict(kwargs)
+    payload.setdefault("structure_path", structure_path)
+    payload.setdefault("output_dir", mlip_dir)
+    payload.setdefault("optimizer", "FIRE")
+    payload.setdefault("fmax", 0.05)
+    payload.setdefault("maxiter", 200)
+    payload["mlip_backend"] = mlip_backend
+
+    args = RelaxStructureInput(**payload)
+    res = _run(args)
+    return res.optimized_structure_path, {
+        "num_steps": res.num_steps,
+        "converged": res.converged,
+        "final_energy_eV": res.final_energy_eV,
+        "final_max_force_eV_per_A": res.final_max_force_eV_per_A,
+        "optimized_structure_path": res.optimized_structure_path,
+        "trajectory_path": res.trajectory_path,
+        "log_csv_path": res.log_csv_path,
+    }
 
 
 def _hydragnn_relax(
