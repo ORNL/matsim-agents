@@ -552,7 +552,7 @@ direct comparison of warm-start benefit across \acs{MLIP} families.
 The \acs{QE} benchmark implements the following pipeline for any input crystal structure:
 
 \begin{enumerate}
-\item Run \acs{MLIP} \acs{FIRE} pre-relaxation to $f_\text{max} = 0.05$\,eV/\AA\ using
+\item Run \acs{MLIP} \acs{FIRE} pre-relaxation to $f_\text{max} = 0.01$\,eV/\AA\ using
   either HydraGNN~\cite{hydragnn} or UMA~\cite{wood2025uma} (\acs{MLIP} warm start).
 \item Run \acs{QE} \texttt{vc-relax} from the \emph{original} coordinates (cold
   start).
@@ -675,7 +675,7 @@ reflects the fact that atomic forces are zero by crystal symmetry at any cubic
 lattice parameter; the volume (stress) is the only free degree of freedom, and
 \acs{FIRE} (which moves atoms, not the cell) halts immediately. For MoNbTaW, the
 chemical disorder creates site-specific forces, yet the \acs{GNN} predicts forces
-below $f_\text{max} = 0.05$\,eV/\AA\ at the stretched input geometry,
+below $f_\text{max} = 0.01$\,eV/\AA\ at the stretched input geometry,
 suggesting the BCC reference geometry already approximates the local energy
 minimum well at the \acs{MLIP} level.
 
