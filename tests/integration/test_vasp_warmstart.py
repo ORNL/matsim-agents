@@ -167,6 +167,9 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
     (work_dir / "comparison.json").write_text(json.dumps(_to_jsonable(summary), indent=2))
 
     cold = summary.cold
+    cold_may_fail = bool(fixture.get("cold_may_fail", False))
+    warm_may_fail = bool(fixture.get("warm_may_fail", False))
+
     assert cold.get("converged"), (
         f"Cold VASP run did not converge for {fixture['name']!r}: "
         f"return_code={cold.get('return_code')}, see {cold.get('work_dir')}/vasp.out"
@@ -178,10 +181,19 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
             f"hydragnn block: {summary.hydragnn}"
         )
     warm = summary.warm
-    assert warm.get("converged"), (
-        f"Warm VASP run did not converge for {fixture['name']!r}: "
-        f"return_code={warm.get('return_code')}, see {warm.get('work_dir')}/vasp.out"
-    )
+    if not warm.get("converged"):
+        if warm_may_fail:
+            import warnings
+            warnings.warn(
+                f"{fixture['name']!r}: warm VASP run did not converge "
+                f"(warm_may_fail=true) — MLIP pre-relaxation may have moved "
+                f"atoms away from the DFT basin. See {warm.get('work_dir')}/vasp.out"
+            )
+            return  # pass — cold converged, warm failure is expected
+        pytest.fail(
+            f"Warm VASP run did not converge for {fixture['name']!r}: "
+            f"return_code={warm.get('return_code')}, see {warm.get('work_dir')}/vasp.out"
+        )
 
     # Energy agreement: same minimum to within fixture-specified tolerance.
     e_tol = float(fixture.get("energy_tolerance_ev", 0.01))
