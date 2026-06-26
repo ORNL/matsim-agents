@@ -67,17 +67,10 @@ mkdir -p "${RUNS_ROOT}"
 HF_HOME_DIR="${PROJ}/models/hf_cache"
 mkdir -p "${HF_HOME_DIR}"
 
-# facebook/UMA is gated — ensure HF_TOKEN is available for the SLURM job.
-# Prefer an explicit env var; fall back to the cached login token.
-if [[ -z "${HF_TOKEN:-}" ]]; then
-  _TOKEN_FILE="${HOME}/.cache/huggingface/token"
-  if [[ -f "${_TOKEN_FILE}" ]]; then
-    HF_TOKEN="$(< "${_TOKEN_FILE}")"
-  else
-    echo "WARNING: HF_TOKEN is unset and no cached token found." >&2
-    echo "         UMA jobs will fail to download the model." >&2
-  fi
-fi
+# facebook/UMA is gated — the job script reads the token itself from
+# ~/.cache/huggingface/token at runtime (HOME is shared on Perlmutter).
+# Do NOT pass HF_TOKEN through sbatch --export to avoid leaking it into
+# process listings and SLURM accounting logs.
 
 echo "Submitting UMA warm-start matrix"
 echo "  repo:        ${REPO_ROOT}"
@@ -101,9 +94,6 @@ for ((i = 1; i <= REPEATS; i++)); do
   export_vars+=",MATSIM_UMA_TASK=${UMA_TASK}"
   export_vars+=",MATSIM_FAIRCHEM_VENV=${FAIRCHEM_VENV}"
   export_vars+=",HF_HOME=${HF_HOME_DIR}"
-  if [[ -n "${HF_TOKEN:-}" ]]; then
-    export_vars+=",HF_TOKEN=${HF_TOKEN}"
-  fi
 
   jid="$(sbatch --parsable \
     --account="${ACCOUNT}" \
