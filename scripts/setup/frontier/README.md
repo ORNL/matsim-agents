@@ -25,6 +25,19 @@ bash scripts/setup/frontier/install_matsim_frontier.sh
 bash scripts/setup/frontier/install_matsim_frontier.sh --rocm72
 ```
 
+### UMA MLIP Backend (fairchem-core)
+
+`fairchem-core >= 2.0` requires `numpy >= 2.0`, which conflicts with HydraGNN's
+`numpy == 1.26.4` pin. **Do not install `fairchem-core` into `hydragnn_venv`.**
+Use `INSTALL_UMA=1` to create a separate `fairchem_venv` alongside `hydragnn_venv`:
+
+```bash
+INSTALL_UMA=1 bash scripts/setup/frontier/install_matsim_frontier.sh
+```
+
+UMA jobs must activate `fairchem_venv` instead of `hydragnn_venv`. This is a
+known incompatibility until HydraGNN relaxes its numpy pin.
+
 ### setup_matsim_frontier.sh
 Quick setup script for daily use after installation.
 

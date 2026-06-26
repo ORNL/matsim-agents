@@ -38,6 +38,14 @@ hydragnn = [
     "torch>=2.2",
 ]
 mace = ["mace-torch>=0.3.6"]
+uma = [
+    # fairchem-core >= 2.0 requires numpy >= 2.0 and scipy >= 1.15, which
+    # conflicts with HydraGNN's numpy==1.26.4 / scipy==1.14.1 pins.
+    # Do NOT install this extra into the HydraGNN venv.
+    # Use INSTALL_UMA=1 with the machine install scripts, which create a
+    # separate fairchem_venv to avoid the conflict.
+    "fairchem-core",
+]
 pyxtal = [
     # Random crystal-structure generation for the unified seed pipeline
     # (matsim_agents.discovery.seeds.random_search). The pymatgen-bundled
