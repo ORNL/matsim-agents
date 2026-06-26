@@ -186,7 +186,7 @@ def _mlip_relax(
     payload.setdefault("structure_path", structure_path)
     payload.setdefault("output_dir", mlip_dir)
     payload.setdefault("optimizer", "FIRE")
-    payload.setdefault("fmax", 0.05)
+    payload.setdefault("fmax", 0.01)
     payload.setdefault("maxiter", 200)
     payload["mlip_backend"] = mlip_backend
 
@@ -218,7 +218,7 @@ def _hydragnn_relax(
     payload.setdefault("structure_path", structure_path)
     payload.setdefault("output_dir", hydragnn_dir)
     payload.setdefault("optimizer", "FIRE")
-    payload.setdefault("fmax", 0.05)
+    payload.setdefault("fmax", 0.01)
     payload.setdefault("maxiter", 200)
 
     args = RelaxStructureInput(**payload)
@@ -308,7 +308,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--mlp-checkpoint", help="HydraGNN BranchWeightMLP checkpoint .pt path.")
     p.add_argument("--checkpoint", default=None, help="Optional HydraGNN checkpoint filename.")
     p.add_argument("--mlp-device", default="cuda", choices=["cuda", "cpu"])
-    p.add_argument("--hydragnn-fmax", type=float, default=0.05)
+    p.add_argument("--hydragnn-fmax", type=float, default=0.01)
     p.add_argument("--hydragnn-maxiter", type=int, default=200)
     p.add_argument("--calculation", default="vc-relax", choices=["relax", "vc-relax"])
     p.add_argument(
