@@ -94,7 +94,7 @@ _ECUTWFC_RY: dict[str, int] = {
     "Au": 45,
     "Hg": 50,
     "Tl": 50,
-    "Pb": 40,
+    "Pb": 60,  # 5d-semicore PAW (Zval=14) needs >= 60 Ry
     "Bi": 45,
 }
 
@@ -544,7 +544,10 @@ _RE_BFGS_STEP = re.compile(r"number of scf cycles\s*=\s*(\d+)")
 _RE_BFGS_CONV = re.compile(r"bfgs converged in\s*(\d+)\s*scf cycles")
 _RE_FORCE_MAX = re.compile(r"Total force\s*=\s*(-?\d+\.\d+)\s*Total SCF correction")
 _RE_WALL = re.compile(r"PWSCF\s*:.*?CPU\s+(?:[\d:.h ms]+)\s+WALL")
-_RE_WALL_SEC = re.compile(r"PWSCF\s*:.*?(?P<w>[\d.]+s)\s+WALL", re.IGNORECASE)
+_RE_WALL_SEC = re.compile(
+    r"PWSCF\s*:.*?CPU\s+(?P<w>(?:\d+h\s*)?(?:\d+m\s*)?\d+(?:\.\d+)?s)\s+WALL",
+    re.IGNORECASE,
+)
 _RE_JOB_DONE = re.compile(r"JOB DONE\.")
 
 
@@ -584,13 +587,29 @@ def parse_pw_stdout(stdout_path: str, return_code: int = 0) -> PWResult:
         bfgs_steps = int(bfgs_done.group(1))
 
     job_done = bool(_RE_JOB_DONE.search(text))
-    converged = bool(bfgs_done) or job_done
+    # QE always prints "JOB DONE." even when BFGS did not converge (e.g. SCF
+    # hit the iteration limit).  Only treat the run as converged when the
+    # BFGS convergence line is explicitly present.
+    converged = bool(bfgs_done)
 
     wall = _RE_WALL_SEC.search(text)
     wall_sec: float | None
     if wall:
         try:
-            wall_sec = float(wall.group("w").rstrip("s"))
+            raw = wall.group("w")
+            # pw.x formats: "23.46s", "12m23.46s", "1h 2m 3.4s", "1h 2m3.4s"
+            hm = re.match(
+                r"(?:(\d+)h\s*)?(?:(\d+)m\s*)?(\d+(?:\.\d+)?)s?$",
+                raw.strip(),
+                re.IGNORECASE,
+            )
+            if hm:
+                h = float(hm.group(1) or 0)
+                m = float(hm.group(2) or 0)
+                s = float(hm.group(3) or 0)
+                wall_sec = h * 3600 + m * 60 + s
+            else:
+                wall_sec = float(raw.rstrip("s"))
         except ValueError:
             wall_sec = None
     else:

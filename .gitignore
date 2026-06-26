@@ -118,3 +118,11 @@ matsim-*.e[0-9]*
 .venv-model-download/
 CRASH
 input_tmp.in
+
+# QE warm-start job stdout/stderr
+qe-warmstart-*.out
+qe-warmstart-*.err
+qe-ws-*.out
+qe-ws-*.err
+slurm-*.out
+slurm-*.err

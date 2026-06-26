@@ -59,6 +59,14 @@ class RelaxStructureInput(BaseModel):
         "omat",
         description="UMA task head when mlip_backend='uma'.",
     )
+    relax_cell: bool = Field(
+        False,
+        description=(
+            "If True, relax the unit cell (volume + shape) in addition to atomic positions "
+            "using ASE ExpCellFilter. Requires the calculator to predict stress. "
+            "Use for vc-relax benchmarks."
+        ),
+    )
     random_displacement: bool = False
     random_displacement_scale: float = 0.1
     seed: int = 42
@@ -178,6 +186,124 @@ def _build_optimizer(name: str, atoms, maxstep: float):
     return BFGSLineSearch(atoms, maxstep=maxstep)
 
 
+class _NumericalStressCalculator:
+    """Wraps a forces-only ASE calculator to add stress via numerical finite differences.
+
+    Computes the 6-component Voigt stress tensor by applying central finite
+    differences to each of the 6 independent cell-strain components and measuring
+    the energy response.  The overhead is 12 extra energy evaluations per
+    optimizer step, which is negligible for a fast ML potential.
+
+    The wrapper transparently forwards all other attribute access to the inner
+    calculator, so ``last_branch_weights`` and other custom attributes remain
+    accessible to the benchmark logging code.
+
+    Args:
+        inner:  An ASE calculator that implements energy and forces.
+        dx:     Strain step size (dimensionless).  Default 1e-3.
+    """
+
+    implemented_properties = ["energy", "forces", "stress", "stresses"]
+
+    def __init__(self, inner, dx: float = 1e-3):
+        self._inner = inner
+        self.dx = dx
+        self.results: dict = {}
+        # Patch the inner calculator's implemented_properties so ASE doesn't
+        # short-circuit to raising NotImplementedError before our wrapper runs.
+        if hasattr(inner, "implemented_properties"):
+            orig = list(inner.implemented_properties)
+            if "stress" not in orig:
+                orig.append("stress")
+            if "stresses" not in orig:
+                orig.append("stresses")
+            inner.implemented_properties = orig
+
+    def __getattr__(self, name: str):
+        # Forward attribute reads (e.g. last_branch_weights) to the inner calc.
+        if name.startswith("_") or name in ("results", "implemented_properties"):
+            raise AttributeError(name)
+        # Block methods that would raise PropertyNotImplementedError on the inner
+        # calc — return a no-op lambda so ASE internals get None instead of crashing.
+        _unsupported = {"get_dipole_moment", "get_magnetic_moment",
+                        "get_magnetic_moments", "get_charges"}
+        if name in _unsupported:
+            return lambda *a, **kw: None
+        return getattr(self._inner, name)
+
+    def calculate(self, atoms=None, properties=("energy", "forces"), system_changes=None):
+        """Compute energy, forces, and (numerical) stress for *atoms*."""
+        # Energy + forces from the inner calculator on the original geometry.
+        self._inner.calculate(atoms, ["energy", "forces"], system_changes)
+        self.results["energy"] = self._inner.results["energy"]
+        self.results["forces"] = self._inner.results["forces"]
+        # Copy last_branch_weights *before* perturbations overwrite them.
+        if hasattr(self._inner, "last_branch_weights"):
+            self.last_branch_weights = self._inner.last_branch_weights
+
+        # Always compute numerical stress so ASE's property cache stays consistent.
+        self.results["stress"] = self._numerical_stress(atoms)
+
+    def get_potential_energy(self, atoms=None, force_consistent=False):
+        if "energy" not in self.results:
+            self.calculate(atoms)
+        return self.results["energy"]
+
+    def get_forces(self, atoms=None):
+        if "forces" not in self.results:
+            self.calculate(atoms)
+        return self.results["forces"]
+
+    def get_stress(self, atoms=None):
+        if "stress" not in self.results:
+            self.calculate(atoms)
+        return self.results["stress"]
+
+    def get_property(self, name, atoms=None, allow_calculation=True):
+        # 'stresses' (per-atom) is requested by some ASE filters; map to 'stress'.
+        key = "stress" if name == "stresses" else name
+        if key not in self.implemented_properties:
+            # Return None gracefully for unsupported properties (e.g. 'dipole')
+            # rather than raising, so ASE internals don't crash.
+            return None
+        if key not in self.results:
+            if not allow_calculation:
+                return None
+            self.calculate(atoms)
+        return self.results[key]
+
+    def _numerical_stress(self, atoms) -> "np.ndarray":
+        """Central FD stress in ASE Voigt 6-vector convention (eV/Å³)."""
+        import numpy as np
+
+        cell = atoms.cell.array.copy()
+        vol = atoms.get_volume()
+        stress = np.zeros(6)
+
+        # Voigt order: xx=0, yy=1, zz=2, yz=3, xz=4, xy=5
+        # Corresponding 3×3 indices:
+        voigt = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
+
+        for k, (i, j) in enumerate(voigt):
+            energies = {}
+            for sign in (+1, -1):
+                F = np.eye(3)
+                F[i, j] += sign * self.dx
+                a = atoms.copy()
+                a.set_cell(F @ cell, scale_atoms=True)
+                a.calc = self._inner
+                energies[sign] = a.get_potential_energy()
+
+            # σ_k = −(1/V) · dE/dε_k  (central difference)
+            stress[k] = -(energies[+1] - energies[-1]) / (2.0 * self.dx * vol)
+
+        # Restore inner calc's atom reference so its cache is consistent.
+        if hasattr(self._inner, "atoms"):
+            self._inner.atoms = atoms
+
+        return stress
+
+
 def _run(args: RelaxStructureInput) -> RelaxationResult:
     """Pure-python core of the tool (kept separate for unit testing)."""
     from ase.io import read, write
@@ -277,7 +403,23 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
     traj_writer = Trajectory(trajectory_path, mode="w", atoms=atoms)
     traj_writer.write()
 
-    optimizer = _build_optimizer(args.optimizer, atoms, args.maxstep)
+    cell_relax_active = False
+    if args.relax_cell:
+        from ase.constraints import ExpCellFilter
+
+        # Wrap with numerical stress unconditionally when relax_cell=True;
+        # _NumericalStressCalculator.calculate() will try the inner calc first
+        # and only use FD for stress (which the inner calc won't provide).
+        # This also patches implemented_properties on the inner calc so ASE's
+        # property cache doesn't raise before reaching our wrapper.
+        calculator = _NumericalStressCalculator(calculator)
+        atoms.calc = calculator
+        optimizable = ExpCellFilter(atoms)
+        cell_relax_active = True
+    else:
+        optimizable = atoms
+
+    optimizer = _build_optimizer(args.optimizer, optimizable, args.maxstep)
 
     csv_header = ["step", "energy_eV", "max_force_eV_per_A", "top_branch", "top_weight"] + [
         f"w_branch_{i}" for i in range(int(num_branches))
@@ -300,7 +442,10 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
 
                 energy = atoms.get_potential_energy()
                 forces = atoms.get_forces()
-                max_force = float(np.sqrt((forces**2).sum(axis=1).max()))
+                # For convergence we check the optimizable's forces (which
+                # includes stress pseudo-forces when relax_cell=True).
+                opt_forces = optimizable.get_forces()
+                max_force = float(np.sqrt((opt_forces**2).sum(axis=1).max()))
                 weights = getattr(calculator, "last_branch_weights", None)
                 top_branch = int(np.argmax(weights)) if weights is not None else -1
                 top_weight = float(weights[top_branch]) if weights is not None else float("nan")
@@ -329,7 +474,8 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 if prev_max_force is not None and prev_max_force > 0.0:
                     relative_increase = (max_force - prev_max_force) / prev_max_force
                     if relative_increase > args.relative_increase_threshold:
-                        atoms.set_positions(prev_positions)
+                        if not cell_relax_active:
+                            atoms.set_positions(prev_positions)
                         break
 
                 prev_max_force = max_force

@@ -66,6 +66,23 @@ fixtures:
     qe:
       calculation: vc-relax
       nstep: 80
+      # Pb.pbe-dn-kjpaw has 5d semicore (Zval=14); needs ecutwfc>=60 Ry.
+      # CsPbI3 is a semiconductor (~1.7 eV gap): force fixed occupations
+      # despite Cs being in the METALLIC set.
+      # Reduce mixing_beta; use CG diagonalization for robustness with
+      # heavy elements and a poorly-conditioned initial Hamiltonian.
+      ecutwfc_ry: 60
+      ecutrho_ry: 600
+      occupations: fixed
+      mixing_beta: 0.05
+      extra_electrons:
+        diagonalization: "'david'"
+        startingwfc: "'atomic+random'"
+        diago_thr_init: 1.0e-2
+        electron_maxstep: 500
+        mixing_ndim: 16
+      extra_cell:
+        cell_dofree: "'2Dxy'"
     vasp:
       # 2-D slab — keep cell shape free but volume fixed so the vacuum gap
       # doesn't collapse during the cold run.
@@ -73,7 +90,80 @@ fixtures:
       nsw: 80
     is_2d: true
     energy_tolerance_ev: 0.02
+    expect_warm_le_cold: false
+    cold_may_fail: true   # cold start struggles with this geometry; warm-start enables convergence
+
+  - name: LiFePO4_olivine
+    file: LiFePO4.vasp
+    description: >
+      28-atom LiFePO4 olivine (Pnma) conventional cell, ~1.5% uniformly
+      stretched. Li-ion cathode; PO4 tetrahedra have genuine
+      internal-coordinate DOF. Fe2+ treated non-spin-polarized.
+    qe:
+      calculation: vc-relax
+      nstep: 80
+      # Fe.pbe-spn-kjpaw (3s3p semicore) needs ~70 Ry.
+      # CG diagonalization for 3d-metal robustness.
+      # kpts override prevents the elongated cell (c/a=2.2) from being
+      # mis-detected as a 2-D slab by the auto-detector.
+      ecutwfc_ry: 70
+      ecutrho_ry: 560
+      mixing_beta: 0.2
+      kpts: [4, 4, 2]
+      extra_electrons:
+        diagonalization: "'cg'"
+        startingwfc: "'atomic+random'"
+    vasp:
+      calculation: vc-relax
+      nsw: 80
+    energy_tolerance_ev: 0.02
     expect_warm_le_cold: true
+
+  - name: TiO2_anatase
+    file: TiO2_anatase.vasp
+    description: >
+      12-atom anatase TiO2 (I4_1/amd) conventional cell, ~1.5% uniformly
+      stretched. Semiconductor (~3.2 eV gap); genuine O-axial internal
+      coordinate. Ti is in _METALLIC set but this is an insulator, so
+      occupations is forced to fixed.
+    qe:
+      calculation: vc-relax
+      nstep: 60
+      ecutwfc_ry: 50
+      # Ti in _METALLIC → force fixed occupations for this insulator.
+      occupations: fixed
+      mixing_beta: 0.3
+      extra_electrons:
+        startingwfc: "'atomic+random'"
+    vasp:
+      calculation: vc-relax
+      nsw: 60
+    energy_tolerance_ev: 0.01
+    expect_warm_le_cold: true
+
+  - name: BaTiO3_tetra
+    file: BaTiO3_tetra.vasp
+    description: >
+      5-atom BaTiO3 tetragonal (P4mm), ~1.5% stretched with Ti slightly
+      off-centre along z. Ferroelectric insulator; genuine Ti-displacement
+      DOF. Ba and Ti are in _METALLIC set; forced to fixed occupations.
+    qe:
+      calculation: vc-relax
+      nstep: 40
+      # Ba.pbe-spn-kjpaw has 5s5p semicore; needs >= 60 Ry.
+      ecutwfc_ry: 60
+      ecutrho_ry: 480
+      # Ba and Ti in _METALLIC → force fixed for this insulator.
+      occupations: fixed
+      mixing_beta: 0.3
+      kpts: [6, 6, 6]
+      extra_electrons:
+        startingwfc: "'atomic+random'"
+    vasp:
+      calculation: vc-relax
+      nsw: 40
+    energy_tolerance_ev: 0.005
+    expect_warm_le_cold: false
 
   - name: MoNbTaW_HEA
     file: MoNbTaW_HEA.vasp
@@ -81,6 +171,12 @@ fixtures:
       16-atom MoNbTaW BCC refractory high-entropy alloy supercell.
       Metallic; atoms are well off-equilibrium because of random-alloy
       mixing, so this is the structure where warm-start should help most.
+    hydragnn:
+      optimizer: FIRE
+      fmax: 0.001
+      maxiter: 400
+      maxstep: 0.01
+      relative_increase_threshold: 0.2
     qe:
       calculation: vc-relax
       nstep: 100

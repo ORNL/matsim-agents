@@ -41,9 +41,16 @@ module load cray-fftw || echo "WARNING: cray-fftw not loaded"
 
 export CUDA_HOME="${CUDA_HOME:-/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/cuda/12.9}"
 export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/math_libs/12.9/targets/x86_64-linux/lib:${LD_LIBRARY_PATH:-}"
-# Allow callers to override GPU-aware MPI (e.g. set 0 when cray-mpich-gtl is
-# not linked in the launch environment to avoid the GTL init abort).
-export MPICH_GPU_SUPPORT_ENABLED="${MPICH_GPU_SUPPORT_ENABLED:-1}"
+# Default to non-GTL mode on Perlmutter launcher paths used by these
+# benchmarks. We intentionally ignore inherited MPICH_GPU_SUPPORT_ENABLED from
+# outer environments because those often force 1 and trigger GTL init aborts.
+# Opt in explicitly via MATSIM_QE_ENABLE_GPU_AWARE_MPI=1 when GTL-linked MPICH
+# is guaranteed in the runtime environment.
+if [[ "${MATSIM_QE_ENABLE_GPU_AWARE_MPI:-0}" == "1" ]]; then
+  export MPICH_GPU_SUPPORT_ENABLED=1
+else
+  export MPICH_GPU_SUPPORT_ENABLED=0
+fi
 
 echo "=========================================="
 echo "QE pw.x GPU run on Perlmutter"
@@ -53,6 +60,7 @@ echo "pw.x:        ${PW_BIN}"
 echo "Input:       ${INPUT}"
 echo "MPI ranks:   ${NRANKS}    OMP threads/rank: ${OMP_NUM_THREADS}"
 echo "GPUs/node:   ${GPUS_PER_NODE}"
+echo "MPICH GPU-aware MPI: MPICH_GPU_SUPPORT_ENABLED=${MPICH_GPU_SUPPORT_ENABLED}"
 echo "=========================================="
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
