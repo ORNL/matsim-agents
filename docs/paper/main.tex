@@ -480,7 +480,7 @@ $H = -\sum_k w_k \log w_k$ indicate how concentrated or diffuse the router is:
 A candidate structure's chemical-composition vector is mapped by the
 BranchWeightMLP router to softmax weights over the 16 dataset-/fidelity-specialized
 HydraGNN output branches. The same weights both fuse the per-branch energy/force
-predictions and yield routing-concentration statistics ($w_\text{top}$, $H$) that
+predictions and yield routing-concentration statistics that
 drive the \acs{UQ} gate: sharp routing is accepted for analysis, whereas diffuse
 routing triggers additional validation or \acs{DFT} labeling.}
 \label{fig:branchuq}
@@ -654,9 +654,8 @@ the analyst without triggering an expensive active learning iteration.
 
 \begin{table}[t]
 \centering
-\caption{BranchWeightMLP \acs{UQ} results for three crystal structures (Perlmutter).
-All three pass the reliability gate ($w_\text{top} > 0.6$,
-$H < 0.01$\,nat).}
+\caption{BranchWeightMLP \acs{UQ} results for three crystal structures on Perlmutter.
+All three pass the reliability gate (high top-branch weight, near-zero routing entropy).}
 \label{tab:uq}
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{lccccc}
@@ -689,10 +688,10 @@ counts and wall times for both the cold and warm \acs{QE} runs.
 
 \begin{table}[t]
 \centering
-\caption{\acs{QE} cold vs.\ warm-start for Si diamond (Perlmutter).
+\caption{\acs{QE} cold vs.\ warm-start for Si diamond on Perlmutter.
 \acs{SCF} iteration sequences and wall times are identical because the HydraGNN
-\acs{FIRE} relaxation converges in 1 step with $f_\text{max} \approx 0$ (symmetry-
-protected zero forces), leaving the ionic coordinates unchanged.}
+\acs{FIRE} relaxation converges in one step due to symmetry-protected zero forces,
+leaving the ionic coordinates unchanged.}
 \label{tab:warmstart_si}
 \begin{tabular}{lcccc}
 \toprule
