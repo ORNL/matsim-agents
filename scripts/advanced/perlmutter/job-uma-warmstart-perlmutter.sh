@@ -75,6 +75,19 @@ export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 export HF_HOME="${HF_HOME:-${PROJ}/models/hf_cache}"
 mkdir -p "${HF_HOME}"
 
+# facebook/UMA is a gated Hugging Face repo — a token is required.
+# Prefer an explicit HF_TOKEN env var; fall back to the cached login token.
+if [[ -z "${HF_TOKEN:-}" ]]; then
+  _TOKEN_FILE="${HOME}/.cache/huggingface/token"
+  if [[ -f "${_TOKEN_FILE}" ]]; then
+    export HF_TOKEN="$(< "${_TOKEN_FILE}")"
+  else
+    echo "WARNING: HF_TOKEN is unset and no cached token found at ${_TOKEN_FILE}." >&2
+    echo "         The model download will fail for gated repos (e.g. facebook/UMA)." >&2
+    echo "         Set HF_TOKEN or run: huggingface-cli login" >&2
+  fi
+fi
+
 # ── UMA / warmstart env ──────────────────────────────────────────────────────
 export MATSIM_UMA_MODEL_NAME="${MATSIM_UMA_MODEL_NAME:-uma-s-1p1}"
 export MATSIM_UMA_TASK="${MATSIM_UMA_TASK:-omat}"
