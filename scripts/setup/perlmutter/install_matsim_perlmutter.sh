@@ -34,6 +34,7 @@
 #   INSTALL_LLM_EXTRAS Install huggingface/transformers extras (default: 0)
 #   INSTALL_PYXTAL     Install optional pyxtal stack    (default: 0)
 #   INSTALL_VLLM_SERVER  Install vLLM package          (default: 0)
+#   INSTALL_UMA        Install fairchem-core (UMA MLIP backend) (default: 0)
 # =============================================================================
 set -euo pipefail
 
@@ -67,6 +68,7 @@ LLM_BACKENDS="${LLM_BACKENDS:-dev}"
 INSTALL_LLM_EXTRAS="${INSTALL_LLM_EXTRAS:-0}"
 INSTALL_PYXTAL="${INSTALL_PYXTAL:-0}"
 INSTALL_VLLM_SERVER="${INSTALL_VLLM_SERVER:-0}"
+INSTALL_UMA="${INSTALL_UMA:-0}"
 
 # -- Helpers ------------------------------------------------------------------
 log()  { printf '\033[1;34m[install]\033[0m %s\n' "$*"; }
@@ -250,6 +252,32 @@ if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     pip_retry vllm
 fi
 
+# fairchem-core (optional, required for the UMA MLIP backend).
+# IMPORTANT: fairchem-core>=2.0 requires numpy>=2.0 + scipy>=1.15, which
+# conflicts with HydraGNN's strict numpy==1.26.4 / scipy==1.14.1 pins.
+# It MUST be installed in a separate venv to avoid breaking the HydraGNN env.
+# INSTALL_UMA=1 creates ${INSTALL_ROOT}/fairchem_venv alongside hydragnn_venv,
+# with matsim-agents installed in editable mode there too (so the UMA code path
+# can reach matsim_agents.active_learning.calculator.build_uma_calculator).
+UMA_VENV_PATH="${INSTALL_ROOT}/fairchem_venv"
+if [[ "${INSTALL_UMA}" == "1" ]]; then
+    log "INSTALL_UMA=1 -> creating separate fairchem_venv at ${UMA_VENV_PATH}..."
+    # Use the HydraGNN venv's Python (3.11) — not the system Python — so the
+    # new venv inherits a supported Python version for fairchem-core>=2.0.
+    "${VENV_PATH}/bin/python" -m venv "${UMA_VENV_PATH}"
+    "${UMA_VENV_PATH}/bin/pip" install -U pip setuptools wheel
+    "${UMA_VENV_PATH}/bin/pip" install --upgrade-strategy only-if-needed \
+        torch torchvision --index-url "https://download.pytorch.org/whl/${TORCH_CUDA_TAG}"
+    "${UMA_VENV_PATH}/bin/pip" install --upgrade-strategy only-if-needed \
+        fairchem-core \
+        || warn "fairchem-core install failed; UMA backend will be unavailable."
+    "${UMA_VENV_PATH}/bin/pip" install --upgrade-strategy only-if-needed \
+        -e "${MATSIM_DIR}[dev]" --no-deps
+    log "fairchem_venv created. To use UMA: activate ${UMA_VENV_PATH}"
+else
+    log "INSTALL_UMA=0 -> skipping fairchem_venv creation"
+fi
+
 # -- Re-assert HydraGNN-pinned versions ----------------------------------------
 # matsim-agents and its extras can drift HydraGNN pins via transitive deps.
 # Re-assert strict torch/PyG/base pin files so every scripted rebuild converges
@@ -291,6 +319,11 @@ if [[ "${INSTALL_LLM_EXTRAS}" == "1" ]]; then
     python -c "import huggingface_hub, transformers, accelerate; print('LLM tooling imports: OK')"
 else
     log "Skipping LLM tooling import verification (INSTALL_LLM_EXTRAS=0)"
+fi
+if [[ "${INSTALL_UMA}" == "1" ]]; then
+    "${UMA_VENV_PATH}/bin/python" -c "from fairchem.core import FAIRChemCalculator; print('fairchem-core import: OK (fairchem_venv)')"
+else
+    log "Skipping fairchem-core import verification (INSTALL_UMA=0)"
 fi
 
 # -- Summary -------------------------------------------------------------------

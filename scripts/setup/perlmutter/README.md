@@ -139,6 +139,8 @@ module names differ from the defaults.
 - `huggingface_hub` (includes `hf` CLI for resumable model downloads)
 - `transformers` + `accelerate`
 - Optional: `vllm` server package when `INSTALL_VLLM_SERVER=1`
+- Optional: `fairchem-core` (UMA MLIP backend) when `INSTALL_UMA=1` — **installed
+  in a separate `fairchem_venv`** due to a known numpy conflict (see below)
 
 **Install root + environment path (default):**
 ```
@@ -234,6 +236,63 @@ All these scripts source `perlmutter-module-stack.sh` (`load_perlmutter_modules_
 and activate the same `hydragnn_venv` produced by `install_matsim_perlmutter.sh`,
 so they inherit the unified HydraGNN-aligned toolchain (`cudatoolkit/12.9`,
 `gcc-native/13.2`, torch `2.11.0+cu129`).
+
+---
+
+## UMA MLIP Backend (fairchem-core)
+
+`matsim-agents` supports a second MLIP backend — Meta's Universal Model for Atoms
+(UMA) — via `matsim_agents.active_learning.calculator.build_uma_calculator` and
+the `mlip_backend="uma"` field on `RelaxStructureInput`. The backend requires
+`fairchem-core`.
+
+### Why a separate venv is required
+
+`fairchem-core >= 2.0` requires `numpy >= 2.0` and `scipy >= 1.15`, but
+HydraGNN pins `numpy == 1.26.4` and `scipy == 1.14.1`. These constraints are
+mutually exclusive and cannot be satisfied in the same environment. Installing
+`fairchem-core` into `hydragnn_venv` will silently downgrade / upgrade packages
+and break HydraGNN at runtime.
+
+### Installation
+
+```bash
+INSTALL_UMA=1 bash scripts/setup/perlmutter/install_matsim_perlmutter.sh --gpu
+```
+
+This creates a **separate** `fairchem_venv` alongside `hydragnn_venv`:
+```
+INSTALL_ROOT/
+├── hydragnn_venv/   ← HydraGNN + matsim-agents (numpy 1.26.4)
+└── fairchem_venv/   ← fairchem-core + matsim-agents (numpy 2.x)
+```
+
+Default path:
+```
+$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/fairchem_venv
+```
+
+### Running UMA jobs
+
+UMA benchmark jobs must activate `fairchem_venv` instead of `hydragnn_venv`:
+
+```bash
+# In a job script or interactive session:
+source $INSTALL_ROOT/fairchem_venv/bin/activate
+
+# Or set MATSIM_MLIP_BACKEND=uma and point to the fairchem venv:
+export MATSIM_MLIP_BACKEND=uma
+export MATSIM_FAIRCHEM_VENV=$INSTALL_ROOT/fairchem_venv
+```
+
+The warm-start test infrastructure (`test_qe_warmstart.py`, `test_vasp_warmstart.py`)
+supports `mlip_backend: uma` in fixtures.yaml when run inside `fairchem_venv`.
+
+### Known limitation
+
+HydraGNN and UMA cannot share a runtime environment on Perlmutter until
+HydraGNN relaxes its `numpy==1.26.4` pin. Until then, maintain both venvs and
+select the appropriate one per job.
 
 ---
 
@@ -502,6 +561,20 @@ If the installation fails with OOM:
 ```bash
 # Reduce parallel jobs
 MAX_JOBS=4 bash install_matsim_perlmutter.sh --gpu
+```
+
+### `fairchem-core` conflicts with HydraGNN (numpy incompatibility)
+`fairchem-core >= 2.0` requires `numpy >= 2.0` but HydraGNN pins `numpy == 1.26.4`.
+Do **not** install `fairchem-core` into `hydragnn_venv`. Use `INSTALL_UMA=1`
+which creates a separate `fairchem_venv` automatically:
+```bash
+INSTALL_UMA=1 bash install_matsim_perlmutter.sh --gpu
+```
+If you accidentally installed `fairchem-core` into `hydragnn_venv`, restore the
+HydraGNN pins:
+```bash
+$VENV/bin/pip install numpy==1.26.4 scipy==1.14.1 click==8.0.0
+$VENV/bin/pip uninstall -y fairchem-core
 ```
 
 ---

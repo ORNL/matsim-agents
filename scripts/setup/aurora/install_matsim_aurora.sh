@@ -22,6 +22,7 @@
 #   RECREATE_ENV      Passed to HydraGNN installer (default: 0)
 #   LLM_BACKENDS      matsim-agents extras (default: dev)
 #   INSTALL_VLLM_SERVER  Install vllm package (default: 0)
+#   INSTALL_UMA       Install fairchem-core (UMA MLIP backend) (default: 0)
 # =============================================================================
 set -euo pipefail
 
@@ -35,6 +36,7 @@ VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
 RECREATE_ENV="${RECREATE_ENV:-0}"
 LLM_BACKENDS="${LLM_BACKENDS:-dev}"
 INSTALL_VLLM_SERVER="${INSTALL_VLLM_SERVER:-0}"
+INSTALL_UMA="${INSTALL_UMA:-0}"
 
 log()  { printf '\033[1;34m[install]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[install]\033[0m %s\n' "$*" >&2; }
@@ -119,6 +121,31 @@ pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0" "accelerate>=
 # warns and skips random search cleanly when pyxtal is missing.
 log "Installing pyxtal (optional, for random-symmetry seed generation)"
 pip_retry "pyxtal>=0.6" || warn "pyxtal install failed; random-symmetry seed generation will be unavailable."
+
+# fairchem-core (optional, required for the UMA MLIP backend).
+# IMPORTANT: fairchem-core>=2.0 requires numpy>=2.0 + scipy>=1.15, which
+# conflicts with HydraGNN's strict numpy / scipy pins AND Aurora's
+# frameworks-provided numpy. It MUST be installed in a separate venv.
+# INSTALL_UMA=1 creates ${INSTALL_ROOT}/fairchem_venv alongside hydragnn_venv,
+# with matsim-agents installed there too (no-deps). The CUDA-torch overlay
+# cleanup below does NOT apply to fairchem_venv (it uses CPU/XPU torch from
+# PyPI — no GPU overlay issue on Aurora).
+UMA_VENV_PATH="${INSTALL_ROOT}/fairchem_venv"
+if [[ "${INSTALL_UMA}" == "1" ]]; then
+    log "INSTALL_UMA=1 -> creating separate fairchem_venv at ${UMA_VENV_PATH}..."
+    # Use the HydraGNN venv's Python — not the system Python — so the new venv
+    # inherits a supported Python version (>=3.10) for fairchem-core>=2.0.
+    "${VENV_PATH}/bin/python" -m venv "${UMA_VENV_PATH}"
+    "${UMA_VENV_PATH}/bin/pip" install -U pip setuptools wheel
+    "${UMA_VENV_PATH}/bin/pip" install --upgrade-strategy only-if-needed \
+        fairchem-core \
+        || warn "fairchem-core install failed; UMA backend will be unavailable."
+    "${UMA_VENV_PATH}/bin/pip" install --upgrade-strategy only-if-needed \
+        -e "${MATSIM_DIR}[dev]" --no-deps
+    log "fairchem_venv created. To use UMA: activate ${UMA_VENV_PATH}"
+else
+    log "INSTALL_UMA=0 -> skipping fairchem_venv creation"
+fi
 
 if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     log "INSTALL_VLLM_SERVER=1 -> installing vllm"

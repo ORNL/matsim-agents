@@ -59,6 +59,7 @@
 #   VENV_PATH        Conda env path                (default: INSTALL_ROOT/hydragnn_venv[_rocm72])
 #   ROCM_VERSION     ROCm version to use: "7.1" (default) or "7.2"
 #                    Equivalent to passing --rocm72 flag.
+#   INSTALL_UMA      Install fairchem-core (UMA MLIP backend) (default: 0)
 # =============================================================================
 set -euo pipefail
 
@@ -71,6 +72,7 @@ HYDRAGNN_REPO="${HYDRAGNN_REPO:-https://github.com/allaffa/HydraGNN.git}"
 HYDRAGNN_BRANCH="${HYDRAGNN_BRANCH:-fix/structure-optimization-ase-fused}"
 MATSIM_REPO="${MATSIM_REPO:-https://github.com/ORNL/matsim-agents.git}"
 LLM_BACKENDS="${LLM_BACKENDS:-vllm,dev}"
+INSTALL_UMA="${INSTALL_UMA:-0}"
 
 # ROCm version selection (default: 7.1; pass --rocm72 or set ROCM_VERSION=7.2)
 ROCM_VERSION="${ROCM_VERSION:-7.1}"
@@ -255,6 +257,29 @@ pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0"
 # skips random search cleanly when pyxtal is missing.
 log "Installing pyxtal (optional, for random-symmetry seed generation)..."
 pip_retry "pyxtal>=0.6" || warn "pyxtal install failed; random-symmetry seed generation will be unavailable."
+
+# fairchem-core (optional, required for the UMA MLIP backend).
+# IMPORTANT: fairchem-core>=2.0 requires numpy>=2.0 + scipy>=1.15, which
+# conflicts with HydraGNN's strict numpy / scipy pins. It MUST be installed in
+# a separate venv. INSTALL_UMA=1 creates ${INSTALL_ROOT}/fairchem_venv alongside
+# hydragnn_venv, with matsim-agents installed there too (no-deps) so the UMA
+# code path (matsim_agents.active_learning.calculator) can be imported.
+UMA_VENV_PATH="${INSTALL_ROOT}/fairchem_venv"
+if [[ "${INSTALL_UMA}" == "1" ]]; then
+    log "INSTALL_UMA=1 -> creating separate fairchem_venv at ${UMA_VENV_PATH}..."
+    # Use the HydraGNN venv's Python (3.11) — not the system Python — so the
+    # new venv inherits a supported Python version for fairchem-core>=2.0.
+    "${VENV_PATH}/bin/python" -m venv "${UMA_VENV_PATH}"
+    "${UMA_VENV_PATH}/bin/pip" install -U pip setuptools wheel
+    "${UMA_VENV_PATH}/bin/pip" install --upgrade-strategy only-if-needed \
+        fairchem-core \
+        || warn "fairchem-core install failed; UMA backend will be unavailable."
+    "${UMA_VENV_PATH}/bin/pip" install --upgrade-strategy only-if-needed \
+        -e "${MATSIM_DIR}[dev]" --no-deps
+    log "fairchem_venv created. To use UMA: activate ${UMA_VENV_PATH}"
+else
+    log "INSTALL_UMA=0 -> skipping fairchem_venv creation"
+fi
 
 # ── Phase 2.5: Patch flashinfer for ROCm (no libcudart, only libamdhip64) ─────
 #

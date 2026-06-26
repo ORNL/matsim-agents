@@ -69,7 +69,19 @@ LLM_BACKENDS="huggingface,dev" bash scripts/setup/aurora/install_matsim_aurora.s
 
 # Also install vLLM
 INSTALL_VLLM_SERVER=1 bash scripts/setup/aurora/install_matsim_aurora.sh
+
+# Install UMA backend (creates a separate fairchem_venv — see note below)
+INSTALL_UMA=1 bash scripts/setup/aurora/install_matsim_aurora.sh
 ```
+
+> **UMA / fairchem-core note:** `fairchem-core >= 2.0` requires `numpy >= 2.0`,
+> which conflicts with HydraGNN's `numpy == 1.26.4` pin. `INSTALL_UMA=1`
+> therefore creates a **separate** `fairchem_venv` alongside `hydragnn_venv`
+> rather than installing into the shared environment. UMA jobs must activate
+> `fairchem_venv` instead of `hydragnn_venv`. This is a known incompatibility
+> until HydraGNN relaxes its numpy pin. Note also that Aurora's `frameworks`
+> module ships numpy 2.x, so the fairchem_venv should not have the overlay
+> cleanup issue that affects CUDA-torch; the install script handles this.
 
 Default environment path created by this flow:
 
