@@ -129,10 +129,16 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
     hydragnn_cfg: dict[str, Any] = dict(fixture.get("hydragnn", {}))
 
     is_vc_relax = qe_overrides.get("calculation", "vc-relax") == "vc-relax"
-    # For vc-relax, ExpCellFilter combines atomic forces with stress pseudo-forces.
-    # Use a tighter fmax (0.01 eV/Å) so the ML optimizer actually relaxes the cell,
-    # not just the atoms.  Can be overridden per-fixture via hydragnn.fmax.
     default_fmax = 0.01 if is_vc_relax else 0.05
+
+    # relax_cell controls whether the HydraGNN pre-relax uses ExpCellFilter to
+    # also optimise the unit cell.  Default is False: HydraGNN only relaxes
+    # atomic positions and QE handles the cell via its DFT stress tensor.
+    # Cell relaxation via NumericalStressCalculator (finite-difference forces)
+    # is too noisy for metallic / disordered systems and can collapse the cell.
+    # Enable per-fixture via  hydragnn: relax_cell: true  only when the MLP
+    # stress is reliable (e.g. well-converged insulators with small cells).
+    relax_cell = bool(hydragnn_cfg.get("relax_cell", False))
 
     hydragnn_kwargs: dict[str, Any] = {
         "logdir": _env("MATSIM_HYDRAGNN_LOGDIR"),
@@ -145,7 +151,7 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
         "relative_increase_threshold": float(
             hydragnn_cfg.get("relative_increase_threshold", 0.05)
         ),
-        "relax_cell": is_vc_relax,
+        "relax_cell": relax_cell,
     }
 
     timeout = int(_env("MATSIM_QE_TIMEOUT_SEC") or "3600")
