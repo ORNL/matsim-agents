@@ -59,9 +59,13 @@ export CUDA_HOME="${CUDA_HOME:-/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/cuda/12.9}"
 # resolve at startup. Without it, vasp exits with
 # "error while loading shared libraries: libqdmod.so.0".
 export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/math_libs/12.9/targets/x86_64-linux/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/compilers/extras/qd/lib:${LD_LIBRARY_PATH:-}"
-# Disable GPU-aware MPI to avoid GTL/NCCL startup failures in the single-node
-# warm-start benchmark (matches the QE warm-start benchmark configuration).
-export MPICH_GPU_SUPPORT_ENABLED=0
+# VASP 6.6.0 was built with CUDA-aware MPI and refuses to run without it.
+# Keep GPU-aware MPI enabled (=1) but disable NCCL P2P transport, which
+# causes "invalid device ordinal" / CUDA_ERROR_ILLEGAL_ADDRESS on single-node
+# jobs where intra-node GPU-GPU transfers via NCCL P2P conflict with the
+# cray-mpich GTL shim. Disabling P2P falls back to NCCL SHM/socket transport.
+export MPICH_GPU_SUPPORT_ENABLED=1
+export NCCL_P2P_DISABLE=1
 
 echo "=========================================="
 echo "VASP GPU run on Perlmutter"
