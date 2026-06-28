@@ -60,12 +60,14 @@ export CUDA_HOME="${CUDA_HOME:-/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/cuda/12.9}"
 # "error while loading shared libraries: libqdmod.so.0".
 export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/math_libs/12.9/targets/x86_64-linux/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/compilers/extras/qd/lib:${LD_LIBRARY_PATH:-}"
 # VASP 6.6.0 was built with CUDA-aware MPI and refuses to run without it.
-# Keep GPU-aware MPI enabled (=1) but disable NCCL P2P transport, which
-# causes "invalid device ordinal" / CUDA_ERROR_ILLEGAL_ADDRESS on single-node
-# jobs where intra-node GPU-GPU transfers via NCCL P2P conflict with the
-# cray-mpich GTL shim. Disabling P2P falls back to NCCL SHM/socket transport.
+# Keep GPU-aware MPI enabled (=1). Disable both NCCL P2P and SHM transports,
+# which both fail with "Cuda failure 101 / invalid device ordinal" on single-
+# node Perlmutter jobs due to GPU cgroup isolation conflicting with NCCL's
+# intra-node device enumeration. Disabling both forces NCCL onto socket
+# (loopback TCP) transport, which works correctly on a single node.
 export MPICH_GPU_SUPPORT_ENABLED=1
 export NCCL_P2P_DISABLE=1
+export NCCL_SHM_DISABLE=1
 
 echo "=========================================="
 echo "VASP GPU run on Perlmutter"
