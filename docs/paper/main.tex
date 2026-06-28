@@ -18,6 +18,7 @@
   \def\Acp#1{#1}%
 }
 \usepackage{booktabs}
+\usepackage{multirow}
 \usepackage{listings}
 \usepackage{microtype}
 \usepackage[nohyperlinks]{acronym}
@@ -185,9 +186,16 @@ this work are:
   HydraGNN-based \acs{MLIP} relaxation, uncertainty-gated validation, \acs{DFT} labeling,
   active learning, and scientific summarization in a single reproducible loop.
 \item A \textbf{\acs{DFT} warm-start capability} in which \acs{MLIP}-relaxed structures are
-  used to initialize higher-fidelity first-principles optimization, allowing the
-  workflow to combine fast approximate exploration with selective
-  quantum-mechanical refinement.
+  used to initialize higher-fidelity first-principles optimization, benchmarked
+  across a 2$\times$2 matrix of \acs{MLIP} backends (HydraGNN~\cite{hydragnn} and
+  UMA~\cite{wood2025uma}) and \acs{DFT} solvers (\acs{QE} and \acs{VASP}). Beyond
+  accelerating \acs{DFT} convergence, the cold-start vs.\ warm-start comparison serves
+  two additional roles in the agentic workflow: it acts as a computational
+  validation safety net for the \acs{MLIP} predictions by testing whether the
+  \acs{MLIP}-relaxed geometry is genuinely closer to the \acs{DFT} minimum, and it
+  exposes regions of \acs{MLIP} weakness in materials space---cases where warm-start
+  benefit is absent or where \acs{DFT} convergence degrades---that can be used to
+  target active learning data collection and improve model robustness.
 \item An \textbf{\acs{HPC}-oriented deployment model} that supports local \acs{LLM}
   inference, \acs{GPU}-accelerated atomistic simulation, batch-scheduled
   first-principles calculations, checkpointed workflow execution, and
@@ -542,14 +550,31 @@ established licensed production code and the user has access to the \acs{VASP} s
 and pseudopotential files.
 
 \subsubsection{DFT Warm-Start Protocol}
-A separate but tightly integrated warm-start module is benchmarked with \acs{QE}
-through \texttt{warmstart\_benchmark\_qe}; the same \acs{DFT}-backend abstraction
-allows analogous production workflows to be configured for \acs{VASP} when
-licensed source access is available. Both \acs{MLIP} backends are evaluated:
-HydraGNN~\cite{hydragnn} provides the graph-neural-network pre-relaxation, while
-UMA~\cite{wood2025uma} provides a universal-model alternative, enabling a
-direct comparison of warm-start benefit across \acs{MLIP} families.
-The \acs{QE} benchmark implements the following pipeline for any input crystal structure:
+A separate but tightly integrated warm-start module is benchmarked across a
+2$\times$2 combination of \acs{MLIP} backends and \acs{DFT} solvers:
+\texttt{warmstart\_benchmark\_qe} targets \acs{QE} while
+\texttt{warmstart\_benchmark\_vasp} targets \acs{VASP}, and each module accepts
+either HydraGNN~\cite{hydragnn} (graph-neural-network \acs{GFM}) or
+UMA~\cite{wood2025uma} (universal foundation-model potential) as the
+pre-relaxation backend. This yields four benchmark configurations---HydraGNN+\acs{QE},
+HydraGNN+\acs{VASP}, UMA+\acs{QE}, and UMA+\acs{VASP}---enabling direct comparison of
+warm-start benefit across both \acs{MLIP} families and both \acs{DFT} solvers.
+
+Beyond its primary role as a convergence accelerator, the cold-start
+vs.\ warm-start comparison fulfills two broader functions within the agentic
+workflow. First, it provides a computational validation safety net: if the
+\acs{MLIP}-relaxed structure genuinely brings atoms closer to the \acs{DFT} energy
+minimum, the warm run should require fewer \acs{BFGS} steps and fewer \acs{SCF}
+iterations than the cold run; failure of this condition signals that the \acs{MLIP}
+prediction may not be trustworthy for that chemistry. Second, systematic
+collection of such failure cases across the benchmark fixture suite identifies
+\emph{regions of \acs{MLIP} weakness} in materials space---compositions or
+structural motifs where the model's pre-relaxation is unreliable---and this
+information can be fed directly into the active learning loop to collect
+targeted \acs{DFT} data and improve model robustness.
+
+The benchmark pipeline, shared across all four configurations, proceeds as follows
+for any input crystal structure:
 
 \begin{enumerate}
 \item Run \acs{MLIP} \acs{FIRE} pre-relaxation to $f_\text{max} = 0.01$\,eV/\AA\ using
@@ -679,11 +704,59 @@ below $f_\text{max} = 0.01$\,eV/\AA\ at the stretched input geometry,
 suggesting the BCC reference geometry already approximates the local energy
 minimum well at the \acs{MLIP} level.
 
-\subsection{QE Warm-Start Benchmark: Si Diamond}
+\subsection{Warm-Start Benchmark Setup}
+\label{sec:results:warmstart_setup}
+The warm-start benchmarks are organized as a controlled comparison between two
+ways of initializing each first-principles geometry optimization:
+
+\begin{itemize}
+\item \textbf{Cold start.} The \acs{DFT} optimizer is launched directly from the
+  \emph{original} input coordinates of the fixture, with no \acs{MLIP}
+  pre-processing. This is the conventional baseline.
+\item \textbf{Warm start.} The same fixture is first relaxed by an \acs{MLIP}
+  to $f_\text{max} = 0.01$\,eV/\AA, and the \acs{DFT} optimizer is then launched
+  from the \emph{\acs{MLIP}-relaxed} coordinates. The \acs{DFT} settings are held
+  identical to the cold run so that any difference in convergence is
+  attributable solely to the change of initial geometry.
+\end{itemize}
+
+The cold/warm pair is replicated across a 2$\times$2 matrix of backends:
+HydraGNN~\cite{hydragnn} and UMA~\cite{wood2025uma} as the \acs{MLIP}
+pre-relaxation engines, crossed with \acs{QE} and \acs{VASP} as the \acs{DFT}
+solvers. This yields four configurations---HydraGNN+\acs{QE}, HydraGNN+\acs{VASP},
+UMA+\acs{QE}, and UMA+\acs{VASP}---each of which is run in both cold and warm
+modes. Crossing the two \acs{MLIP} families with the two \acs{DFT} solvers
+separates the contribution of the pre-relaxation potential from that of the
+first-principles optimizer, so that a warm-start benefit (or its absence) can be
+attributed to the \acs{MLIP}, to the \acs{DFT} code, or to their interaction.
+
+Three alloy fixtures provide the off-equilibrium ``hard cases'' that make the
+cold/warm distinction meaningful: MoNbTaW \acs{HEA} (16-atom BCC supercell),
+NbTaW BCC, and NbMoW BCC. A Si diamond fixture is included as a high-symmetry
+reference case that establishes baseline correctness of the pipeline before the
+alloy benchmarks (Section~\ref{sec:results:warmstart_si}). For every
+fixture$\times$backend combination, both the cold and warm runs are repeated
+three times on Perlmutter to assess run-to-run reproducibility, and the
+following quantities are recorded and compared between the cold and warm runs:
+the number of \acs{BFGS} ionic steps, the per-step and total \acs{SCF} iteration
+counts, the final total energy, and the wall time.
+
+As described in Section~\ref{sec:architecture}, this cold-start vs.\ warm-start
+comparison serves two roles beyond raw convergence acceleration: it is a
+computational validation safety net for the \acs{MLIP} (a genuine geometry
+improvement must reduce \acs{BFGS} steps and \acs{SCF} iterations), and it is a
+probe for regions of \acs{MLIP} weakness (fixtures where warm-start benefit is
+absent or where \acs{DFT} convergence degrades) whose failure cases can be routed
+back into the active learning loop.
+
+\subsection{Reference Case: Si Diamond}
 \label{sec:results:warmstart_si}
-The warm-start benchmark for Si diamond
-(wall time: 5\,min\,40\,s) was run on one Perlmutter node. Table~\ref{tab:warmstart_si} reports the per-step \acs{SCF} iteration
-counts and wall times for both the cold and warm \acs{QE} runs.
+The Si diamond fixture is the high-symmetry reference point of the matrix: it
+validates that the cold and warm pipelines are wired correctly and produce
+consistent energies before we interpret the harder alloy cases. The benchmark
+(wall time: 5\,min\,40\,s) was run on one Perlmutter node with the \acs{QE}
+solver. Table~\ref{tab:warmstart_si} reports the per-step \acs{SCF} iteration
+counts and wall times for both the cold and warm runs.
 
 \begin{table}[t]
 \centering
@@ -718,26 +791,75 @@ the same energy ($\Delta E = 0$\,eV).
 
 This result motivates the choice of a more physically demanding test case.
 
-\subsection{QE Warm-Start Benchmark: MoNbTaW HEA}
+\subsection{Warm-Start across the 2$\times$2 Matrix: Alloy Fixtures}
 \label{sec:results:warmstart_hea}
-To demonstrate a non-trivial warm-start benefit, we ran the benchmark
-targeting the MoNbTaW 16-atom BCC \acs{HEA}. This structure is the canonical
-``hard case'' in the fixture suite: the random-alloy site occupation creates
-genuine site-specific forces at the input geometry; HydraGNN \acs{FIRE} must
-therefore move atoms before converging, and the displaced coordinates will
-differ meaningfully from the cold-start input.
+The three alloy fixtures---MoNbTaW \acs{HEA} (16-atom BCC), NbTaW BCC, and
+NbMoW BCC---are the cases where the cold/warm distinction is expected to matter.
+The random-alloy site occupation in these structures creates genuine
+site-specific forces at the input geometry, so the \acs{MLIP} pre-relaxation must
+move atoms before converging and the warm-start coordinates differ meaningfully
+from the cold-start input. Each fixture is evaluated under all four backend
+combinations (HydraGNN+\acs{QE}, HydraGNN+\acs{VASP}, UMA+\acs{QE}, UMA+\acs{VASP}),
+giving the twelve fixture$\times$backend rows of Table~\ref{tab:warmstart_matrix}.
 
 For a BCC metal with site disorder the expected warm-start mechanism is:
-HydraGNN pre-relaxes the atoms toward their local chemical environment
+the \acs{MLIP} pre-relaxes atoms toward their local chemical environment
 equilibrium positions, reducing the initial force norm from $\mathcal{O}(1)$
-to $\mathcal{O}(0.1)$\,eV/\AA. \acs{QE}'s first \acs{BFGS} step then starts from a
-geometry already close to the \acs{DFT} minimum, reducing both the number of \acs{BFGS}
-ionic steps and the number of \acs{SCF} cycles required in the stiffest (first)
-\acs{BFGS} step, where the \acs{SCF} typically requires the most iterations to reach
-self-consistency from a poor initial density. Full quantitative results will
-be reported upon job completion; preliminary analysis indicates a reduction of
-at least 1--2 \acs{BFGS} steps and $\sim$10--20\% fewer total \acs{SCF} iterations
-relative to the cold start.
+to $\mathcal{O}(0.1)$\,eV/\AA. The \acs{DFT} code's first \acs{BFGS} step then starts
+from a geometry already close to the \acs{DFT} minimum, reducing both the number
+of \acs{BFGS} ionic steps and the number of \acs{SCF} cycles required in the stiffest
+(first) \acs{BFGS} step, where the \acs{SCF} typically requires the most iterations to
+reach self-consistency from a poor initial density. The 2$\times$2 backend
+crossing then lets us separate \emph{which} component drives any observed
+benefit: comparing the two \acs{MLIP} rows for a fixed \acs{DFT} solver isolates
+the quality of the HydraGNN vs.\ UMA pre-relaxation, whereas comparing the two
+\acs{DFT} columns for a fixed \acs{MLIP} isolates how \acs{QE} and \acs{VASP}
+respond to the same warm-start geometry.
+
+Table~\ref{tab:warmstart_matrix} consolidates the cold vs.\ warm comparison
+across all twelve fixture$\times$backend combinations. Each row reports the
+\acs{BFGS} ionic-step count and total \acs{SCF} iteration count for the cold and
+warm runs (averaged over the three repeats), together with the relative change
+in total \acs{SCF} work, $\Delta_\text{SCF} = (\text{warm}-\text{cold})/\text{cold}$,
+for which negative values indicate a warm-start speed-up. Cells marked TBD
+correspond to benchmark jobs that were still queued on Perlmutter at submission
+time and will be populated once the runs complete.
+
+\begin{table*}[t]
+\centering
+\caption{Cold vs.\ warm-start convergence across the 2$\times$2 \acs{MLIP}$\times$\acs{DFT}
+matrix for the three alloy fixtures. \acs{BFGS} = ionic steps; \acs{SCF} = total
+self-consistent-field iterations; values are averaged over three repeats.
+$\Delta_\text{SCF}<0$ indicates fewer total \acs{SCF} iterations for the warm
+start. TBD entries are pending Perlmutter jobs.}
+\label{tab:warmstart_matrix}
+\begin{tabular}{lllcccccc}
+\toprule
+\multirow{2}{*}{Fixture} & \multirow{2}{*}{\acs{MLIP}} & \multirow{2}{*}{\acs{DFT}}
+ & \multicolumn{2}{c}{\acs{BFGS} steps} & \multicolumn{2}{c}{Total \acs{SCF}} & \multirow{2}{*}{$\Delta_\text{SCF}$} & \multirow{2}{*}{Repeats}\\
+\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & & & Cold & Warm & Cold & Warm & & \\
+\midrule
+\multirow{4}{*}{MoNbTaW \acs{HEA}}
+ & HydraGNN & \acs{QE}   & TBD & TBD & TBD & TBD & TBD & 3 \\
+ & HydraGNN & \acs{VASP} & TBD & TBD & TBD & TBD & TBD & 3 \\
+ & UMA      & \acs{QE}   & TBD & TBD & TBD & TBD & TBD & 3 \\
+ & UMA      & \acs{VASP} & TBD & TBD & TBD & TBD & TBD & 3 \\
+\cmidrule(lr){1-9}
+\multirow{4}{*}{NbTaW BCC}
+ & HydraGNN & \acs{QE}   & TBD & TBD & TBD & TBD & TBD & 3 \\
+ & HydraGNN & \acs{VASP} & TBD & TBD & TBD & TBD & TBD & 3 \\
+ & UMA      & \acs{QE}   & TBD & TBD & TBD & TBD & TBD & 3 \\
+ & UMA      & \acs{VASP} & TBD & TBD & TBD & TBD & TBD & 3 \\
+\cmidrule(lr){1-9}
+\multirow{4}{*}{NbMoW BCC}
+ & HydraGNN & \acs{QE}   & TBD & TBD & TBD & TBD & TBD & 3 \\
+ & HydraGNN & \acs{VASP} & TBD & TBD & TBD & TBD & TBD & 3 \\
+ & UMA      & \acs{QE}   & TBD & TBD & TBD & TBD & TBD & 3 \\
+ & UMA      & \acs{VASP} & TBD & TBD & TBD & TBD & TBD & 3 \\
+\bottomrule
+\end{tabular}
+\end{table*}
 
 \subsection{Paper-Case Coverage Matrix}
 Beyond the benchmarks above, \textsc{matsim-agents} has been designed and
