@@ -66,17 +66,25 @@ def _classify_run_dir(name):
 
 
 def _extract_run_and_fixture(path):
-    """Return ((mlip, dft), fixture) for a comparison.json path, or None.
+    """Return ((mlip, dft), fixture, job_id) for a comparison.json path, or None.
 
     The run directory is the first ancestor whose name matches a known prefix;
-    the fixture is the name of the directory directly containing the file.
+    the fixture is the name of the directory directly containing the file; the
+    job id is the trailing integer of the run-directory name (used by --latest).
     """
     fixture = path.parent.name
     for ancestor in path.parents:
         backend = _classify_run_dir(ancestor.name)
         if backend is not None:
-            return backend, fixture
+            job_id = _job_id(ancestor.name)
+            return backend, fixture, job_id
     return None
+
+
+def _job_id(run_dir_name):
+    """Trailing integer of a run-directory name (e.g. ...-warmstart-55096521)."""
+    tail = run_dir_name.rsplit("-", 1)[-1]
+    return int(tail) if tail.isdigit() else -1
 
 
 def _ionic_steps(side):
@@ -142,18 +150,25 @@ def _fmt_delta_scf(cold_scf, warm_scf):
     if c == 0:
         return "TBD"
     pct = 100.0 * (w - c) / c
+    if abs(pct) < 0.5:
+        return r"0\%"
     sign = "+" if pct >= 0 else "$-$"
     return "{}{:.0f}\\%".format(sign, abs(pct))
 
 
-def collect(runs_root, require_converged=False):
-    """Return {(fixture, mlip, dft): {metric: [values...]}}."""
-    buckets = defaultdict(lambda: defaultdict(list))
+def collect(runs_root, require_converged=False, latest=0):
+    """Return {(fixture, mlip, dft): {metric: [values...]}}.
+
+    When ``latest`` > 0, only the ``latest`` newest runs (by job id) are kept
+    per fixture x backend cell.
+    """
+    # First gather per-cell records tagged with their job id.
+    raw = defaultdict(list)
     for path in runs_root.glob("**/comparison.json"):
         info = _extract_run_and_fixture(path)
         if info is None:
             continue
-        backend, fixture = info
+        backend, fixture, job_id = info
         if fixture not in FIXTURE_LABELS:
             continue
         rec = _load_record(path)
@@ -164,11 +179,20 @@ def collect(runs_root, require_converged=False):
         ):
             continue
         key = (fixture, backend[0], backend[1])
-        bucket = buckets[key]
-        bucket["cold_ionic"].append(rec["cold_ionic"])
-        bucket["warm_ionic"].append(rec["warm_ionic"])
-        bucket["cold_scf"].append(rec["cold_scf"])
-        bucket["warm_scf"].append(rec["warm_scf"])
+        raw[key].append((job_id, rec))
+
+    buckets = defaultdict(lambda: defaultdict(list))
+    for key, items in raw.items():
+        # Newest job ids first; keep only ``latest`` when requested.
+        items.sort(key=lambda pair: pair[0], reverse=True)
+        if latest > 0:
+            items = items[:latest]
+        for _job_id_value, rec in items:
+            bucket = buckets[key]
+            bucket["cold_ionic"].append(rec["cold_ionic"])
+            bucket["warm_ionic"].append(rec["warm_ionic"])
+            bucket["cold_scf"].append(rec["cold_scf"])
+            bucket["warm_scf"].append(rec["warm_scf"])
     return buckets
 
 
@@ -246,6 +270,13 @@ def main():
         help="Only aggregate runs where both cold and warm converged",
     )
     parser.add_argument(
+        "--latest",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Keep only the N newest runs (by job id) per fixture x backend cell",
+    )
+    parser.add_argument(
         "--out",
         default="",
         help="Optional path to write the LaTeX output (default: stdout)",
@@ -256,7 +287,11 @@ def main():
     if not runs_root.is_dir():
         raise SystemExit("runs root does not exist: {}".format(runs_root))
 
-    buckets = collect(runs_root, require_converged=args.require_converged)
+    buckets = collect(
+        runs_root,
+        require_converged=args.require_converged,
+        latest=args.latest,
+    )
     rows = render_rows(buckets)
     output = TABLE_TEMPLATE.format(rows=rows) if args.full_table else rows + "\n"
 
