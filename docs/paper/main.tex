@@ -114,7 +114,12 @@ to \ac{DFT}-driven active learning. The framework supports user-selectable \ac{M
 exascale-pretrained graph-neural-network potentials and UMA~\cite{wood2025uma}
 for universal foundation-model potentials---and user-selectable \ac{DFT} backends,
 including open-source \ac{QE} and licensed closed-source \ac{VASP}, with deployment
-support for heterogeneous \ac{DOE} leadership-class systems.
+support for heterogeneous \ac{DOE} leadership-class systems. Rather than promoting
+any single potential, the framework treats the \ac{MLIP} as an interchangeable,
+benchmarkable component: the same cold-start vs.\ warm-start instrument that
+accelerates \ac{DFT} also measures which backend is trustworthy for a given
+material, enabling per-system model selection without changing the orchestration
+or deployment layers.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -159,8 +164,9 @@ validation, correction, and reporting are coordinated by interacting agents.
 The novelty of \textsc{matsim-agents} lies in making the full decision cycle
 explicit and executable on leadership-class \acs{HPC} systems. A user can state an
 open-ended materials objective in natural language; the planner converts that
-objective into typed atomistic tasks; the executor performs fast HydraGNN-based
-relaxation; the \acs{UQ} gate decides whether the prediction is reliable enough for
+objective into typed atomistic tasks; the executor performs fast \acs{MLIP}-based
+relaxation through a user-selected backend (HydraGNN or UMA); the \acs{UQ} gate
+decides whether the prediction is reliable enough for
 analysis or must be escalated to \ac{DFT}-driven active learning; and the analyst
 returns an interpretable scientific summary. In this design, uncertainty is not
 an offline diagnostic but a first-class workflow control variable that determines
@@ -183,7 +189,7 @@ this work are:
 \item A \textbf{closed-loop agentic workflow} that translates natural-language
   materials objectives into executable atomistic simulation tasks through a
   checkpointed LangGraph multi-agent state machine, integrating \ac{LLM} planning,
-  HydraGNN-based \acs{MLIP} relaxation, uncertainty-gated validation, \acs{DFT} labeling,
+  backend-agnostic \acs{MLIP} relaxation, uncertainty-gated validation, \acs{DFT} labeling,
   active learning, and scientific summarization in a single reproducible loop.
 \item A \textbf{\acs{DFT} warm-start capability} in which \acs{MLIP}-relaxed structures are
   used to initialize higher-fidelity first-principles optimization, benchmarked
@@ -830,6 +836,28 @@ time and will be populated once the runs complete.
 %     --runs-root <RUNS_ROOT> --latest 3 --full-table \
 %     --out docs/paper/tables/warmstart_matrix.tex
 \input{tables/warmstart_matrix}
+
+The \acs{QE} columns already reveal a backend-dependent split that is central to
+the design philosophy of \textsc{matsim-agents}. On the disordered \acs{BCC}
+alloys, UMA-relaxed geometries reduce the total \acs{DFT} \acs{SCF} work
+(e.g.\ $\Delta_\text{SCF}=-19\%$ on NbTaW and $-11\%$ on NbMoW), whereas the
+HydraGNN pre-relaxation yields no benefit and in one case \emph{increases}
+\acs{DFT} cost ($\Delta_\text{SCF}=+68\%$ on NbTaW, where the warm \acs{DFT} run
+exhausts its \acs{SCF} budget without converging). We report this contrast
+deliberately. The objective of \textsc{matsim-agents} is \emph{not} to advocate
+for any single \acs{MLIP}: it is to host multiple potentials behind a uniform,
+\acs{HPC}-portable interface so that the workflow can \emph{measure} which model
+is trustworthy for a given material and \emph{select} accordingly. The same
+cold/warm instrument that accelerates \acs{DFT} when the \acs{MLIP} is good thus
+doubles as a model-selection and weakness-detection probe when it is not: the
+$+68\%$ HydraGNN result is not a defect of the framework but exactly the signal
+the framework is built to surface, flagging the fixture as out-of-distribution
+for that potential and routing it back into the active learning loop while UMA is
+preferred for production warm-starts on these alloys. Because the backend is a
+user-selectable configuration rather than a hard-coded dependency, swapping or
+adding potentials---or choosing the best one per fixture---requires no change to
+the agentic orchestration, the \acs{DFT} escalation logic, or the deployment
+scripts.
 
 \subsection{Paper-Case Coverage Matrix}
 Beyond the benchmarks above, \textsc{matsim-agents} has been designed and
