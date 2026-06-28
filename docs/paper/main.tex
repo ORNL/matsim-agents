@@ -192,9 +192,10 @@ this work are:
   backend-agnostic \acs{MLIP} relaxation, uncertainty-gated validation, \acs{DFT} labeling,
   active learning, and scientific summarization in a single reproducible loop.
 \item A \textbf{\acs{DFT} warm-start capability} in which \acs{MLIP}-relaxed structures are
-  used to initialize higher-fidelity first-principles optimization, benchmarked
-  across a 2$\times$2 matrix of \acs{MLIP} backends (HydraGNN~\cite{hydragnn} and
-  UMA~\cite{wood2025uma}) and \acs{DFT} solvers (\acs{QE} and \acs{VASP}). Beyond
+  used to initialize higher-fidelity first-principles optimization, evaluated
+  with a \emph{factorial backend ablation} that pairs each \acs{MLIP} backend
+  (HydraGNN~\cite{hydragnn} and UMA~\cite{wood2025uma}) with each \acs{DFT}
+  solver (\acs{QE} and \acs{VASP}). Beyond
   accelerating \acs{DFT} convergence, the cold-start vs.\ warm-start comparison serves
   two additional roles in the agentic workflow: it acts as a computational
   validation safety net for the \acs{MLIP} predictions by testing whether the
@@ -556,15 +557,16 @@ established licensed production code and the user has access to the \acs{VASP} s
 and pseudopotential files.
 
 \subsubsection{DFT Warm-Start Protocol}
-A separate but tightly integrated warm-start module is benchmarked across a
-2$\times$2 combination of \acs{MLIP} backends and \acs{DFT} solvers:
+A separate but tightly integrated warm-start module is evaluated as a factorial
+backend ablation that pairs each \acs{MLIP} backend with each \acs{DFT} solver:
 \texttt{warmstart\_benchmark\_qe} targets \acs{QE} while
 \texttt{warmstart\_benchmark\_vasp} targets \acs{VASP}, and each module accepts
 either HydraGNN~\cite{hydragnn} (graph-neural-network \acs{GFM}) or
 UMA~\cite{wood2025uma} (universal foundation-model potential) as the
-pre-relaxation backend. This yields four benchmark configurations---HydraGNN+\acs{QE},
-HydraGNN+\acs{VASP}, UMA+\acs{QE}, and UMA+\acs{VASP}---enabling direct comparison of
-warm-start benefit across both \acs{MLIP} families and both \acs{DFT} solvers.
+pre-relaxation backend. Enumerating both choices yields four benchmark
+configurations---HydraGNN+\acs{QE}, HydraGNN+\acs{VASP}, UMA+\acs{QE}, and
+UMA+\acs{VASP}---enabling direct comparison of warm-start benefit across both
+\acs{MLIP} families and both \acs{DFT} solvers.
 
 Beyond its primary role as a convergence accelerator, the cold-start
 vs.\ warm-start comparison fulfills two broader functions within the agentic
@@ -726,15 +728,16 @@ ways of initializing each first-principles geometry optimization:
   attributable solely to the change of initial geometry.
 \end{itemize}
 
-The cold/warm pair is replicated across a 2$\times$2 matrix of backends:
-HydraGNN~\cite{hydragnn} and UMA~\cite{wood2025uma} as the \acs{MLIP}
-pre-relaxation engines, crossed with \acs{QE} and \acs{VASP} as the \acs{DFT}
-solvers. This yields four configurations---HydraGNN+\acs{QE}, HydraGNN+\acs{VASP},
-UMA+\acs{QE}, and UMA+\acs{VASP}---each of which is run in both cold and warm
-modes. Crossing the two \acs{MLIP} families with the two \acs{DFT} solvers
-separates the contribution of the pre-relaxation potential from that of the
-first-principles optimizer, so that a warm-start benefit (or its absence) can be
-attributed to the \acs{MLIP}, to the \acs{DFT} code, or to their interaction.
+The cold/warm pair is run as a \emph{factorial backend ablation}: the same
+cold/warm comparison is repeated for every combination of two independent
+backend choices. The first choice is the \acs{MLIP} pre-relaxation engine
+(HydraGNN~\cite{hydragnn} or UMA~\cite{wood2025uma}); the second is the \acs{DFT}
+solver (\acs{QE} or \acs{VASP}). Enumerating both choices yields four backend
+pairings---HydraGNN+\acs{QE}, HydraGNN+\acs{VASP}, UMA+\acs{QE}, and
+UMA+\acs{VASP}---each run in both cold and warm modes. Because only one backend
+factor is varied at a time while the other is held fixed, a warm-start benefit
+(or its absence) can be attributed to the \acs{MLIP}, to the \acs{DFT} code, or to
+their interaction---the defining property of an ablation study.
 
 Three alloy fixtures provide the off-equilibrium ``hard cases'' that make the
 cold/warm distinction meaningful: MoNbTaW \acs{HEA} (16-atom BCC supercell),
@@ -757,7 +760,7 @@ back into the active learning loop.
 
 \subsection{Reference Case: Si Diamond}
 \label{sec:results:warmstart_si}
-The Si diamond fixture is the high-symmetry reference point of the matrix: it
+The Si diamond fixture is the high-symmetry reference point of the ablation: it
 validates that the cold and warm pipelines are wired correctly and produce
 consistent energies before we interpret the harder alloy cases. The benchmark
 (wall time: 5\,min\,40\,s) was run on one Perlmutter node with the \acs{QE}
@@ -797,7 +800,7 @@ the same energy ($\Delta E = 0$\,eV).
 
 This result motivates the choice of a more physically demanding test case.
 
-\subsection{Warm-Start across the 2$\times$2 Matrix: Alloy Fixtures}
+\subsection{Warm-Start across All Backend Pairings: Alloy Fixtures}
 \label{sec:results:warmstart_hea}
 The three alloy fixtures---MoNbTaW \acs{HEA} (16-atom BCC), NbTaW BCC, and
 NbMoW BCC---are the cases where the cold/warm distinction is expected to matter.
@@ -815,8 +818,8 @@ to $\mathcal{O}(0.1)$\,eV/\AA. The \acs{DFT} code's first \acs{BFGS} step then s
 from a geometry already close to the \acs{DFT} minimum, reducing both the number
 of \acs{BFGS} ionic steps and the number of \acs{SCF} cycles required in the stiffest
 (first) \acs{BFGS} step, where the \acs{SCF} typically requires the most iterations to
-reach self-consistency from a poor initial density. The 2$\times$2 backend
-crossing then lets us separate \emph{which} component drives any observed
+reach self-consistency from a poor initial density. Varying one backend factor
+at a time then lets us separate \emph{which} component drives any observed
 benefit: comparing the two \acs{MLIP} rows for a fixed \acs{DFT} solver isolates
 the quality of the HydraGNN vs.\ UMA pre-relaxation, whereas comparing the two
 \acs{DFT} columns for a fixed \acs{MLIP} isolates how \acs{QE} and \acs{VASP}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Populate the 2x2 warm-start matrix table (tab:warmstart_matrix) from runs.
+"""Populate the warm-start backend-ablation table (tab:warmstart_matrix) from runs.
 
 Scans a runs root for warm-start ``comparison.json`` files produced by the four
 benchmark configurations and emits LaTeX body rows (and optionally a full
@@ -232,8 +232,9 @@ def render_rows(buckets):
 
 TABLE_TEMPLATE = r"""\begin{{table*}}[t]
 \centering
-\caption{{Cold vs.\ warm-start convergence across the 2$\times$2 \acs{{MLIP}}$\times$\acs{{DFT}}
-matrix for the three alloy fixtures. \acs{{BFGS}} = ionic steps; \acs{{SCF}} = total
+\caption{{Cold vs.\ warm-start convergence for the factorial backend ablation
+that pairs each \acs{{MLIP}} backend with each \acs{{DFT}} solver, across the three
+alloy fixtures. \acs{{BFGS}} = ionic steps; \acs{{SCF}} = total
 self-consistent-field iterations; values are averaged over the available repeats.
 $\Delta_\text{{SCF}}<0$ indicates fewer total \acs{{SCF}} iterations for the warm
 start. TBD entries are pending Perlmutter jobs.}}
