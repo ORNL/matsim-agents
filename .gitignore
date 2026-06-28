@@ -126,3 +126,11 @@ qe-ws-*.out
 qe-ws-*.err
 slurm-*.out
 slurm-*.err
+
+# UMA / VASP warm-start job stdout/stderr
+uma-ws-*.out
+uma-ws-*.err
+uma-vasp-ws-*.out
+uma-vasp-ws-*.err
+vasp-ws-*.out
+vasp-ws-*.err
