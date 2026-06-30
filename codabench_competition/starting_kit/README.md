@@ -48,6 +48,14 @@ solids / molecules, same PBE settings) are published in
 `reference_data/elemental_energies.json`.  Use these same references when
 converting your ML total energies to formation energies.
 
+> **Units & normalisation (read carefully).** All energies are reported **per
+> atom** (eV/atom), i.e. the total cell energy divided by $N$, the number of
+> atoms in that structure. This makes the metric intensive and comparable
+> across structures of very different size — submit per-atom values, not total
+> eV. The elemental-reference convention above is **fixed**; the scorer uses
+> exactly these references, so you must use them too or your formation energies
+> will be offset. Forces (Task 2) are likewise per-component in eV/Å.
+
 File: `task1.csv`
 ```
 structure_id,formation_energy_eV_per_atom
