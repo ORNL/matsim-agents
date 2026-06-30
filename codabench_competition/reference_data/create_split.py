@@ -17,6 +17,14 @@ Outputs (written to this script's directory = reference_data/):
     public_ids.txt   — one structure_id per line
     private_ids.txt  — one structure_id per line
 
+Stratification reads the *private* anonymisation table (which still carries the
+`formula` column alongside the opaque `anon_id`).  The public
+structures_metadata.csv only exposes `structure_id,file_path`, so the formula
+grouping is intentionally not derivable from the public competition bundle.
+Provide the private table server-side via the MATSIM_PRIVATE_METADATA environment
+variable, or place it at
+reference_data/private_reference/anon_to_descriptive.csv (gitignored).
+
 Run once, after DFT calculations are complete but BEFORE uploading reference_data
 to Codabench:
     python reference_data/create_split.py
@@ -26,6 +34,7 @@ Re-running with the same SEED always produces the same split.
 from __future__ import annotations
 
 import csv
+import os
 import random
 from collections import defaultdict
 from pathlib import Path
@@ -36,19 +45,36 @@ PUBLIC_FRACTION  = 0.30        # ~30 % of each formula group goes to public set
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 HERE          = Path(__file__).parent
-METADATA_PATH = HERE.parent / "public_data" / "structures_metadata.csv"
+# Private anonymisation table (maps anon_id → descriptive, and carries `formula`).
+# NEVER committed to the public repo; supplied server-side only.
+METADATA_PATH = Path(
+    os.environ.get(
+        "MATSIM_PRIVATE_METADATA",
+        str(HERE / "private_reference" / "anon_to_descriptive.csv"),
+    )
+)
 PUBLIC_FILE   = HERE / "public_ids.txt"
 PRIVATE_FILE  = HERE / "private_ids.txt"
 
 
 def main() -> None:
+    if not METADATA_PATH.exists():
+        raise SystemExit(
+            f"Private anonymisation table not found at {METADATA_PATH}.\n"
+            "Set MATSIM_PRIVATE_METADATA to the server-side anon_to_descriptive.csv "
+            "(the public structures_metadata.csv no longer carries `formula`)."
+        )
     rows = list(csv.DictReader(open(METADATA_PATH)))
     print(f"Total structures: {len(rows)}")
+
+    # The public-facing structure id is the opaque MATS key (`anon_id`); fall
+    # back to `structure_id` if running against a table that lacks it.
+    id_col = "anon_id" if rows and "anon_id" in rows[0] else "structure_id"
 
     # Group structure_ids by formula (= phase-stability group)
     groups: dict[str, list[str]] = defaultdict(list)
     for row in rows:
-        groups[row["formula"]].append(row["structure_id"])
+        groups[row["formula"]].append(row[id_col])
 
     rng = random.Random(SEED)
 
@@ -56,7 +82,9 @@ def main() -> None:
     private_ids: list[str] = []
 
     for formula, sids in sorted(groups.items()):
-        shuffled = sids[:]
+        # Sort first so the split is reproducible regardless of the input row
+        # order of the private table.
+        shuffled = sorted(sids)
         rng.shuffle(shuffled)
 
         # At least 1 public, at least 1 private in every group
