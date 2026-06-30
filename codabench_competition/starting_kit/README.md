@@ -27,9 +27,11 @@ and/or alloyed variants.
 > `MATS-XXXX` keys (e.g. `MATS-0023`, `MATS-0038`).  The mapping from these
 > keys to compound names is intentionally kept private to prevent participants
 > from looking up or reproducing the DFT reference values from external
-> databases.  The material class and formula are available in
-> `public_data/structures_metadata.csv`; the specific variant (ideal /
-> vacancy / antisite / interstitial) is not disclosed.
+> databases.  `public_data/structures_metadata.csv` lists only
+> `structure_id,file_path` — the material class, chemical formula, and the
+> specific variant (ideal / vacancy / antisite / interstitial) are **not**
+> disclosed.  Determine composition, if needed, directly from the provided
+> structure files.
 
 ---
 

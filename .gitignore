@@ -87,6 +87,9 @@ codabench_competition/reference_data/formation_energies.csv
 codabench_competition/reference_data/forces/
 codabench_competition/reference_data/relaxed/
 codabench_competition/reference_data/task4_relaxed/
+# Private descriptive metadata (carries the `formula` column used by
+# create_split.py for stratification). Server-side only, never publish.
+codabench_competition/reference_data/private_reference/
 # Parsed elemental energies (derived from VASP OUTCARs — also sensitive)
 codabench_competition/dft_reference/vasp/elemental_refs/elemental_energies.json
 # VASP compound and elemental calculation output trees (contain OUTCARs)
