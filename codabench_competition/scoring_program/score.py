@@ -27,8 +27,18 @@ Outputs <output_dir>/scores.json with:
         "Task4_relaxation_RMSD_A":       ...,  (if task4_relaxed/ present)
         "Task4_energy_MAE_eV_per_atom":  ...,  (if task4_energies.csv present)
         "Task5_phase_spearman_rho":      ...,
-        "overall_score":                 ...
+        "overall_score":                 ...,
+        "dft_cheating_suspect":          0/1,  (heuristic anti-cheat flag)
+        "dft_cheating_reason":           "...", (present only when flagged)
     }
+(metrics are additionally emitted with public_ / private_ prefixes per the
+public/private leaderboard split).
+
+Anti-cheating: detect_dft_cheating() flags submissions whose per-structure
+errors fall below physically-implausible "DFT noise floors" — a strong tell
+that the participant ran DFT on the released geometries rather than predicting
+with an ML potential.  The flag is advisory (for organiser review); it does not
+change the computed scores.
 """
 from __future__ import annotations
 
@@ -105,6 +115,104 @@ def spearman_rho(x: np.ndarray, y: np.ndarray) -> float:
     return float(rho)
 
 
+def _load_force_errors(pred_dir: Path, ref_dir: Path,
+                       structure_ids: list[str]) -> tuple[np.ndarray, int]:
+    """Return (concatenated pred-minus-ref force errors, n_structures_matched)."""
+    errs: list[np.ndarray] = []
+    n_ok = 0
+    for sid in structure_ids:
+        p = pred_dir / f"{sid}.npy"
+        r = ref_dir  / f"{sid}.npy"
+        if not p.is_file() or not r.is_file():
+            continue
+        try:
+            fp = np.load(str(p)).reshape(-1)
+            fr = np.load(str(r)).reshape(-1)
+            if fp.shape != fr.shape:
+                continue
+            errs.append(fp - fr)
+            n_ok += 1
+        except Exception:
+            pass
+    arr = np.concatenate(errs) if errs else np.array([])
+    return arr, n_ok
+
+
+# ---------------------------------------------------------------------------
+# DFT-cheating detection
+# ---------------------------------------------------------------------------
+# A genuine ML interatomic potential cannot match the reference DFT below these
+# per-structure "noise floors" on a diverse, out-of-distribution test set.
+# Errors far below them across (almost) all structures indicate the participant
+# likely ran DFT on the released geometries and submitted those values instead
+# of true ML predictions.  Because the exact reference DFT protocol (INCAR,
+# pseudopotentials, k-mesh, elemental references) is withheld, even careful
+# independent DFT should leave a residual offset above these floors — so falling
+# below them is a strong tell.
+#
+# These are HEURISTICS: they raise a flag for manual organiser review.  They do
+# NOT by themselves change the score or disqualify a team.
+ENERGY_DFT_FLOOR_eV_per_atom = 0.003   # 3 meV/atom
+FORCES_DFT_FLOOR_eV_per_A    = 0.010   # 10 meV/Å
+RELAX_DFT_FLOOR_A            = 0.050   # 50 mÅ mean RMSD vs DFT-relaxed geometry
+CHEAT_FRACTION_THRESHOLD     = 0.90    # ≥90 % of structures below the floor → flag
+CHEAT_MAE_MULTIPLE           = 1.0     # aggregate MAE below 1× the floor → flag
+
+
+def _below_floor_fraction(errors: np.ndarray, floor: float) -> float:
+    if errors.size == 0:
+        return float("nan")
+    return float(np.mean(np.abs(errors) < floor))
+
+
+def detect_dft_cheating(energy_errors: np.ndarray,
+                        force_errors: np.ndarray,
+                        relax_rmsd: float) -> dict:
+    """Heuristic screen for submissions that look like raw DFT rather than ML.
+
+    Returns diagnostic fields plus an integer ``dft_cheating_suspect`` flag
+    (0/1) and a human-readable ``dft_cheating_reason``.  Merged into the
+    per-partition score dict so organisers can review flagged submissions.
+    """
+    out: dict = {}
+    reasons: list[str] = []
+    signals = 0
+
+    if energy_errors.size:
+        emae  = float(np.mean(np.abs(energy_errors)))
+        efrac = _below_floor_fraction(energy_errors, ENERGY_DFT_FLOOR_eV_per_atom)
+        out["energy_frac_below_DFT_floor"] = round(efrac, 4)
+        if efrac >= CHEAT_FRACTION_THRESHOLD or emae < ENERGY_DFT_FLOOR_eV_per_atom * CHEAT_MAE_MULTIPLE:
+            signals += 1
+            reasons.append(
+                f"energy MAE {emae*1e3:.2f} meV/atom, {efrac*100:.0f}% of "
+                f"structures < {ENERGY_DFT_FLOOR_eV_per_atom*1e3:.0f} meV/atom"
+            )
+
+    if force_errors.size:
+        fmae  = float(np.mean(np.abs(force_errors)))
+        ffrac = _below_floor_fraction(force_errors, FORCES_DFT_FLOOR_eV_per_A)
+        out["forces_frac_below_DFT_floor"] = round(ffrac, 4)
+        if ffrac >= CHEAT_FRACTION_THRESHOLD or fmae < FORCES_DFT_FLOOR_eV_per_A * CHEAT_MAE_MULTIPLE:
+            signals += 1
+            reasons.append(
+                f"forces MAE {fmae*1e3:.2f} meV/Å, {ffrac*100:.0f}% of "
+                f"components < {FORCES_DFT_FLOOR_eV_per_A*1e3:.0f} meV/Å"
+            )
+
+    # Relaxation RMSD ≈ 0 means the submitted geometry is essentially the
+    # DFT-relaxed one (i.e. the participant ran DFT relaxation themselves).
+    if relax_rmsd == relax_rmsd and relax_rmsd < RELAX_DFT_FLOOR_A:  # not nan
+        signals += 1
+        reasons.append(f"relaxation RMSD {relax_rmsd*1e3:.1f} mÅ ≈ DFT-relaxed")
+
+    out["dft_cheating_signals"] = signals
+    out["dft_cheating_suspect"] = int(signals >= 1)
+    if reasons:
+        out["dft_cheating_reason"] = "; ".join(reasons)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Task scorers
 # ---------------------------------------------------------------------------
@@ -124,27 +232,11 @@ def score_energy(pred: dict, ref: dict) -> dict[str, float]:
 
 def score_forces(pred_dir: Path, ref_dir: Path, structure_ids: list[str]) -> dict[str, float]:
     """Task 2: MAE of atomic forces per component (eV/Å)."""
-    all_pred, all_ref = [], []
-    n_ok = 0
-    for sid in structure_ids:
-        p = pred_dir / f"{sid}.npy"
-        r = ref_dir  / f"{sid}.npy"
-        if not p.is_file() or not r.is_file():
-            continue
-        try:
-            fp = np.load(str(p)).reshape(-1)
-            fr = np.load(str(r)).reshape(-1)
-            if fp.shape != fr.shape:
-                continue
-            all_pred.append(fp)
-            all_ref.append(fr)
-            n_ok += 1
-        except Exception:
-            pass
-    if not all_pred:
+    err, n_ok = _load_force_errors(pred_dir, ref_dir, structure_ids)
+    if err.size == 0:
         return {"Task2_forces_MAE_eV_per_A": float("nan"), "Task2_n_structures": 0}
     return {
-        "Task2_forces_MAE_eV_per_A": mae(np.concatenate(all_pred), np.concatenate(all_ref)),
+        "Task2_forces_MAE_eV_per_A": float(np.mean(np.abs(err))),
         "Task2_n_structures": n_ok,
     }
 
@@ -284,8 +376,16 @@ def score_partition(
     # Task 1
     out.update(score_energy(p_e, r_e))
 
-    # Task 2
-    out.update(score_forces(pred_dir / "forces", ref_dir / "forces", part_sids))
+    # Task 2 — compute force errors once and reuse for cheat detection
+    force_err, n_force = _load_force_errors(
+        pred_dir / "forces", ref_dir / "forces", part_sids
+    )
+    if force_err.size:
+        out["Task2_forces_MAE_eV_per_A"] = float(np.mean(np.abs(force_err)))
+        out["Task2_n_structures"] = n_force
+    else:
+        out["Task2_forces_MAE_eV_per_A"] = float("nan")
+        out["Task2_n_structures"] = 0
 
     # Task 3
     pred_relaxed = pred_dir / "relaxed"
@@ -298,6 +398,17 @@ def score_partition(
 
     # Task 5
     out.update(score_phase_stability(p_e, r_e, meta_path))
+
+    # DFT-cheating screen (flags submissions whose accuracy is physically
+    # implausible for an ML potential — see detect_dft_cheating).
+    e_common = sorted(set(p_e) & set(r_e))
+    energy_err = np.array([
+        p_e[s]["formation_energy_eV_per_atom"] - r_e[s]["formation_energy_eV_per_atom"]
+        for s in e_common
+    ]) if e_common else np.array([])
+    out.update(detect_dft_cheating(
+        energy_err, force_err, out.get("Task3_relaxation_RMSD_A", float("nan")),
+    ))
 
     # Overall for this partition
     out["overall_score"] = overall_score(out)
@@ -366,6 +477,21 @@ def main() -> None:
     scores_file = output_dir / "scores.json"
     with open(scores_file, "w") as f:
         json.dump(scores, f, indent=2)
+
+    # ── DFT-cheating summary ──────────────────────────────────────────────
+    # Surface any flag prominently in the scoring log so organisers reviewing
+    # the leaderboard backend can audit suspicious submissions.  The flag is
+    # advisory only — it does not alter the computed scores above.
+    flagged = [k for k, v in scores.items()
+               if k.endswith("dft_cheating_suspect") and v]
+    if flagged:
+        print("\n" + "=" * 70)
+        print("⚠  POSSIBLE DFT CHEATING — submission flagged for manual review")
+        for k in flagged:
+            prefix = k[: -len("dft_cheating_suspect")]
+            reason = scores.get(prefix + "dft_cheating_reason", "(no detail)")
+            print(f"   [{prefix or 'all'}] {reason}")
+        print("=" * 70)
 
     print(json.dumps(scores, indent=2))
     print(f"\nScores written to {scores_file}")

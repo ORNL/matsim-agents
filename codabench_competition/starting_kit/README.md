@@ -178,6 +178,16 @@ exhaustive probing.
 > **Tip**: optimise your model on the public score, but do not overfit to
 > it — the public partition is only 30 % of the final evaluation.
 
+> **Anti-cheating — predictions must come from your model, not DFT.** This is
+> an ML-potential benchmark. Submitting values obtained by running DFT (or any
+> first-principles calculation) on the released geometries is not allowed. The
+> scorer automatically screens every submission for accuracy that is physically
+> implausible for an ML potential (per-structure errors below DFT noise floors).
+> Note that the exact reference DFT protocol (pseudopotentials, k-mesh, INCAR,
+> elemental references) is **not** published, so independently-run DFT will not
+> match the reference anyway. Flagged submissions are reviewed and may be
+> disqualified.
+
 ---
 
 ## Provided Baselines
