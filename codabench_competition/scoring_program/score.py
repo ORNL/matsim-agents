@@ -6,12 +6,25 @@ Called by Codabench as:
     python score.py <input_dir> <output_dir>
 
 Expected layout of input_dir/:
-    res/
-        formation_energies.csv — structure_id (MATS-XXXX), formation_energy_eV_per_atom, n_atoms
-        forces/               — MATS-XXXX.npy  (float64, shape (N,3), eV/Å)
-        relaxed/              — MATS-XXXX.xyz   (Task 3: ML-relaxed structures)
-        task4_relaxed/        — MATS-XXXX.xyz   (Task 4: AI-DFT-relaxed structures)
-        task4_energies.csv    — structure_id (MATS-XXXX), formation_energy_eV_per_atom, n_atoms (optional)
+    res/   — the participant submission.  Two layouts are accepted:
+
+      (a) Documented per-task layout (what the starting kit / README describe):
+            task1.csv             — structure_id, formation_energy_eV_per_atom  (Task 1)
+            task2.zip             — MATS-XXXX.npy  force arrays                  (Task 2)
+            task3.zip             — MATS-XXXX.xyz  ML-relaxed structures         (Task 3)
+            task4.zip             — task4_relaxed/MATS-XXXX.xyz + optional
+                                    task4_energies.csv                          (Task 4)
+            task5.csv             — structure_id, formation_energy_eV_per_atom  (Task 5)
+
+      (b) Flat layout (used internally after normalisation, also accepted directly):
+            formation_energies.csv — structure_id (MATS-XXXX), formation_energy_eV_per_atom, n_atoms
+            forces/               — MATS-XXXX.npy  (float64, shape (N,3), eV/Å)
+            relaxed/              — MATS-XXXX.xyz   (Task 3: ML-relaxed structures)
+            task4_relaxed/        — MATS-XXXX.xyz   (Task 4: AI-DFT-relaxed structures)
+            task4_energies.csv    — structure_id (MATS-XXXX), formation_energy_eV_per_atom, n_atoms (optional)
+            task5_energies.csv    — structure_id (MATS-XXXX), formation_energy_eV_per_atom (optional)
+
+    normalise_submission() converts layout (a) into layout (b) before scoring.
     ref/
         formation_energies.csv — same columns, DFT reference (MATS-XXXX keys)
         forces/               — same layout, DFT reference
@@ -45,7 +58,10 @@ from __future__ import annotations
 import csv
 import json
 import os
+import shutil
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -89,7 +105,6 @@ def prefix_keys(d: dict, prefix: str) -> dict:
 
 def rmsd_structures(pred_path: Path, ref_path: Path, structure_ids: list[str]) -> float:
     """Mean RMSD (Å) between predicted and reference relaxed structures."""
-    from ase.io import read
     rmsds = []
     for sid in structure_ids:
         p = pred_path / f"{sid}.xyz"
@@ -97,9 +112,9 @@ def rmsd_structures(pred_path: Path, ref_path: Path, structure_ids: list[str]) -
         if not p.is_file() or not r.is_file():
             continue
         try:
-            pred_pos = read(str(p), format="extxyz").get_positions()
-            ref_pos  = read(str(r), format="extxyz").get_positions()
-            if pred_pos.shape != ref_pos.shape:
+            pred_pos = _read_xyz_positions(p)
+            ref_pos  = _read_xyz_positions(r)
+            if pred_pos is None or ref_pos is None or pred_pos.shape != ref_pos.shape:
                 continue
             diff = pred_pos - ref_pos
             rmsds.append(float(np.sqrt(np.mean(np.sum(diff ** 2, axis=1)))))
@@ -108,11 +123,81 @@ def rmsd_structures(pred_path: Path, ref_path: Path, structure_ids: list[str]) -
     return float(np.mean(rmsds)) if rmsds else float("nan")
 
 
+def _read_xyz_positions(path: Path) -> "np.ndarray | None":
+    """Return the (N, 3) atomic positions from an extended-XYZ file.
+
+    Uses ASE when available (most robust for arbitrary participant files) and
+    otherwise falls back to a dependency-free parser so the scorer also runs on
+    a bare numpy image.  Returns None on parse failure.
+    """
+    try:
+        from ase.io import read  # optional — present in richer images
+        return read(str(path), format="extxyz").get_positions()
+    except ImportError:
+        pass
+    except Exception:
+        return None
+    # ── numpy-only fallback ──────────────────────────────────────────────
+    try:
+        lines = path.read_text().splitlines()
+        n = int(lines[0].split()[0])
+        comment = lines[1] if len(lines) > 1 else ""
+        # Locate the 'pos' columns from a Properties=... descriptor if present;
+        # default to "<symbol> x y z" (offset 1).
+        pos_off = 1
+        import re as _re
+        m = _re.search(r"Properties=(\S+)", comment)
+        if m:
+            fields = m.group(1).split(":")
+            col, found = 0, None
+            for k in range(0, len(fields) - 2, 3):
+                name, cnt = fields[k], int(fields[k + 2])
+                if name == "pos":
+                    found = col
+                    break
+                col += cnt
+            pos_off = found if found is not None else 1
+        coords = []
+        for ln in lines[2:2 + n]:
+            tok = ln.split()
+            if len(tok) < pos_off + 3:
+                return None
+            coords.append([float(tok[pos_off]), float(tok[pos_off + 1]), float(tok[pos_off + 2])])
+        return np.asarray(coords, dtype=float)
+    except Exception:
+        return None
+
+
+def _rankdata(a: np.ndarray) -> np.ndarray:
+    """Assign average ranks to the data (ties share the mean rank).
+
+    Equivalent to scipy.stats.rankdata(method='average') but numpy-only.
+    """
+    a = np.asarray(a, dtype=float)
+    order = a.argsort(kind="mergesort")
+    ranks = np.empty(len(a), dtype=float)
+    ranks[order] = np.arange(1, len(a) + 1, dtype=float)
+    sorted_a = a[order]
+    i, n = 0, len(a)
+    while i < n:
+        j = i
+        while j + 1 < n and sorted_a[j + 1] == sorted_a[i]:
+            j += 1
+        if j > i:
+            ranks[order[i:j + 1]] = (i + j) / 2.0 + 1.0
+        i = j + 1
+    return ranks
+
+
 def spearman_rho(x: np.ndarray, y: np.ndarray) -> float:
-    """Spearman rank correlation coefficient."""
-    from scipy.stats import spearmanr
-    rho, _ = spearmanr(x, y)
-    return float(rho)
+    """Spearman rank correlation coefficient (numpy-only, no scipy dependency)."""
+    rx, ry = _rankdata(x), _rankdata(y)
+    rx = rx - rx.mean()
+    ry = ry - ry.mean()
+    denom = np.sqrt(float((rx * rx).sum()) * float((ry * ry).sum()))
+    if denom == 0.0:
+        return float("nan")
+    return float((rx * ry).sum() / denom)
 
 
 def _load_force_errors(pred_dir: Path, ref_dir: Path,
@@ -136,6 +221,92 @@ def _load_force_errors(pred_dir: Path, ref_dir: Path,
             pass
     arr = np.concatenate(errs) if errs else np.array([])
     return arr, n_ok
+
+
+# ---------------------------------------------------------------------------
+# Submission normalisation
+# ---------------------------------------------------------------------------
+# Participants submit the per-task layout documented in the starting kit
+# (task1.csv, task2.zip, task3.zip, task4.zip, task5.csv).  Codabench unpacks
+# the submission into res/ but does NOT recurse into the nested per-task zips,
+# so we expand them here into the flat layout the scorers consume.
+
+def _safe_extract_zip(zip_path: Path, dest: Path) -> None:
+    """Extract *zip_path* into *dest*, guarding against Zip-Slip path traversal."""
+    dest = dest.resolve()
+    with zipfile.ZipFile(zip_path) as zf:
+        for member in zf.namelist():
+            target = (dest / member).resolve()
+            if dest != target and dest not in target.parents:
+                raise ValueError(f"Unsafe path in {zip_path.name}: {member!r}")
+        zf.extractall(dest)
+
+
+def _collect_by_suffix(src: Path, suffix: str, dest: Path) -> int:
+    """Flatten every *suffix* file found under *src* (recursively) into *dest*.
+
+    Files are keyed by their basename (MATS-XXXX.npy / MATS-XXXX.xyz), so a
+    nested top-level folder inside the participant zip is tolerated.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for f in src.rglob(f"*{suffix}"):
+        if f.is_file():
+            shutil.copy2(f, dest / f.name)
+            n += 1
+    return n
+
+
+def normalise_submission(res_dir: Path) -> Path:
+    """Return a directory holding the flat scoring layout.
+
+    If *res_dir* already uses the flat layout (formation_energies.csv etc.) it
+    is returned unchanged.  Otherwise the documented per-task layout
+    (task1.csv / task2.zip / task3.zip / task4.zip / task5.csv) is expanded into
+    a fresh temporary directory which is returned instead.
+    """
+    has_flat = (res_dir / "formation_energies.csv").is_file() or \
+               (res_dir / "forces").is_dir() or (res_dir / "relaxed").is_dir()
+    has_tasks = any((res_dir / n).exists() for n in (
+        "task1.csv", "task2.zip", "task3.zip", "task4.zip", "task5.csv"))
+    if has_flat or not has_tasks:
+        return res_dir
+
+    work = Path(tempfile.mkdtemp(prefix="matsim_sub_"))
+
+    # Task 1 — formation energies
+    if (res_dir / "task1.csv").is_file():
+        shutil.copy2(res_dir / "task1.csv", work / "formation_energies.csv")
+
+    # Task 5 — phase-stability energies (kept separate; falls back to Task 1)
+    if (res_dir / "task5.csv").is_file():
+        shutil.copy2(res_dir / "task5.csv", work / "task5_energies.csv")
+
+    # Task 2 — forces zip → forces/
+    if (res_dir / "task2.zip").is_file():
+        tmp = work / "_t2"; tmp.mkdir()
+        _safe_extract_zip(res_dir / "task2.zip", tmp)
+        _collect_by_suffix(tmp, ".npy", work / "forces")
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    # Task 3 — relaxed structures zip → relaxed/
+    if (res_dir / "task3.zip").is_file():
+        tmp = work / "_t3"; tmp.mkdir()
+        _safe_extract_zip(res_dir / "task3.zip", tmp)
+        _collect_by_suffix(tmp, ".xyz", work / "relaxed")
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    # Task 4 — AI-DFT relaxed structures (+ optional energies) zip
+    if (res_dir / "task4.zip").is_file():
+        tmp = work / "_t4"; tmp.mkdir()
+        _safe_extract_zip(res_dir / "task4.zip", tmp)
+        _collect_by_suffix(tmp, ".xyz", work / "task4_relaxed")
+        for csv_hit in tmp.rglob("task4_energies.csv"):
+            shutil.copy2(csv_hit, work / "task4_energies.csv")
+            break
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    return work
 
 
 # ---------------------------------------------------------------------------
@@ -360,11 +531,15 @@ def score_partition(
     ref_energies: dict,
     sids: list,
     meta_path: Path,
+    pred_energies_t5: dict | None = None,
 ) -> dict:
     """Compute all task scores for *sids* (a subset of all structure IDs).
 
     Returns a flat dict with keys like Task1_energy_MAE_eV_per_atom,
     overall_score, etc.  The caller is responsible for prefixing keys.
+
+    *pred_energies_t5* holds the Task-5 (phase-stability) predictions; when not
+    provided it falls back to *pred_energies* (the Task-1 predictions).
     """
     # Filter energy dicts to this partition's structures
     p_e = {s: pred_energies[s] for s in sids if s in pred_energies}
@@ -396,8 +571,10 @@ def score_partition(
     # Task 4
     out.update(score_task4(pred_dir, ref_dir, r_e, part_sids))
 
-    # Task 5
-    out.update(score_phase_stability(p_e, r_e, meta_path))
+    # Task 5 — uses dedicated phase-stability predictions when supplied
+    t5_pred = pred_energies_t5 if pred_energies_t5 is not None else pred_energies
+    p_e5 = {s: t5_pred[s] for s in sids if s in t5_pred}
+    out.update(score_phase_stability(p_e5, r_e, meta_path))
 
     # DFT-cheating screen (flags submissions whose accuracy is physically
     # implausible for an ML potential — see detect_dft_cheating).
@@ -432,17 +609,28 @@ def main() -> None:
     pred_dir = input_dir / "res"
     ref_dir  = input_dir / "ref"
 
+    # Expand the documented per-task submission (task1.csv / task2.zip / ...)
+    # into the flat layout the scorers consume.  No-op if already flat.
+    pred_dir = normalise_submission(pred_dir)
+
     # Load energies
     pred_e_file = pred_dir / "formation_energies.csv"
     ref_e_file  = ref_dir  / "formation_energies.csv"
-    if not pred_e_file.is_file():
-        sys.exit(f"Submission formation_energies.csv not found: {pred_e_file}")
     if not ref_e_file.is_file():
         sys.exit(f"Reference formation_energies.csv not found: {ref_e_file}")
 
-    pred_energies = load_energies(pred_e_file)
+    pred_energies = load_energies(pred_e_file) if pred_e_file.is_file() else {}
     ref_energies  = load_energies(ref_e_file)
-    all_sids      = sorted(set(pred_energies) & set(ref_energies))
+    if not pred_energies:
+        print("No submission formation energies (task1.csv / formation_energies.csv) "
+              "— Task 1 / Task 5 will be skipped.")
+
+    # Task 5 may carry its own predictions; otherwise reuse the Task 1 ones.
+    t5_file = pred_dir / "task5_energies.csv"
+    pred_energies_t5 = load_energies(t5_file) if t5_file.is_file() else pred_energies
+
+    # Score across the union of structures any task could touch.
+    all_sids      = sorted(set(pred_energies) | set(pred_energies_t5))
     meta_path     = ref_dir / "structures_metadata.csv"
 
     scores = {}
@@ -470,6 +658,7 @@ def main() -> None:
             continue
         part_scores = score_partition(
             pred_dir, ref_dir, pred_energies, ref_energies, sids, meta_path,
+            pred_energies_t5=pred_energies_t5,
         )
         scores.update(prefix_keys(part_scores, prefix))
 

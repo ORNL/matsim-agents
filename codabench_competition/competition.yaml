@@ -15,8 +15,9 @@ image: logo.png
 # Require organiser approval for registrations (set true to auto-approve).
 registration_auto_approve: false
 
-# Execution image for the scoring program. MUST provide python3 + numpy + scipy.
-# Replace with your preferred image if you maintain one.
+# Execution image for the scoring program. score.py needs only numpy, which
+# the default codalab-legacy image provides; ASE is used for XYZ parsing when
+# available, with a numpy-only fallback, so no custom image is required.
 docker_image: codalab/codalab-legacy:py39
 
 # Registration terms (participants must accept before submitting).

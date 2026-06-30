@@ -8,4 +8,5 @@ description: >-
   Scores the Matsim-Agents multi-task materials-ML submission (formation
   energy, forces, relaxation RMSD, AI-accelerated DFT, phase-stability
   ranking) and emits public_/private_ metrics plus an advisory DFT-cheating
-  flag. Requires numpy and scipy in the execution image.
+  flag. Requires only numpy (the default codalab-legacy image is sufficient);
+  ASE is used for XYZ parsing when present, with a numpy-only fallback.
