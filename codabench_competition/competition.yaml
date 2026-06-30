@@ -1,85 +1,111 @@
+version: 2
 title: "Matsim-Agents Materials Discovery Challenge"
-description: |
-  Multi-task competition for atomistic ML: formation energy, force prediction, structure relaxation,
-  AI-accelerated DFT, and phase stability ranking. Test set covers five diverse material classes,
-  each with ideal crystal structures and defect variants:
-    1. 2D monolayers
-    2. Intermetallic phases
-    3. BCC high-entropy alloy (equiatomic, 128-atom supercells)
-    4. Critical minerals
-    5. Catalysis slabs
-  Defects represented: point vacancies, antisites, and interstitials.
-  Compound identities and exact variants are intentionally withheld; structures are
-  identified by opaque MATS-XXXX keys.
-image: "public_data/logo.png"
-has_registration: true
-phases:
-  - name: "Formation Energy Prediction"
-    description: "Predict formation energies for a set of test structures."
-    scoring_program: "scoring_program/score.py"
-    reference_data: "reference_data/"
-    starting_kit: "starting_kit/"
-  - name: "Force Prediction"
-    description: "Predict atomic forces for each structure."
-    scoring_program: "scoring_program/score.py"
-    reference_data: "reference_data/"
-    starting_kit: "starting_kit/"
-  - name: "Structure Relaxation"
-    description: "Submit relaxed structures. Scored by RMSD to DFT-relaxed."
-    scoring_program: "scoring_program/score.py"
-    reference_data: "reference_data/"
-    starting_kit: "starting_kit/"
-  - name: "AI-Accelerated DFT Relaxation"
-    description: "Submit AI-relaxed structures. Scored by reduction in DFT SCF steps."
-    scoring_program: "scoring_program/score.py"
-    reference_data: "reference_data/"
-    starting_kit: "starting_kit/"
-  - name: "Phase Stability Ranking"
-    description: "Rank phase stability or predict formation energies for a set of polymorphs."
-    scoring_program: "scoring_program/score.py"
-    reference_data: "reference_data/"
-    starting_kit: "starting_kit/"
-input_data: "public_data/"
-output_data: "output/"
+description: >-
+  Multi-task benchmark for atomistic ML: formation energy, force prediction,
+  structure relaxation, AI-accelerated DFT, and phase-stability ranking. The
+  test set spans five material classes (2D monolayers, intermetallics, a BCC
+  high-entropy alloy, critical minerals, catalysis slabs) with ideal crystals
+  and defect variants (vacancies, antisites, interstitials). Compound
+  identities and exact variants are withheld; structures are identified by
+  opaque MATS-XXXX keys.
 
-# ── Leaderboard configuration ────────────────────────────────────────────────
-# During the competition, only public_* metrics are shown (scored on ~30 % of
-# structures).  After the competition closes, reconfigure to show private_*
-# metrics for the final ranking (scored on the remaining ~70 %).
+# Logo shown on the competition card (bundle-relative path).
+image: logo.png
+
+# Require organiser approval for registrations (set true to auto-approve).
+registration_auto_approve: false
+
+# Execution image for the scoring program. MUST provide python3 + numpy + scipy.
+# Replace with your preferred image if you maintain one.
+docker_image: codalab/codalab-legacy:py39
+
+# Registration terms (participants must accept before submitting).
+terms: pages/terms.md
+
+# Content tabs rendered on the competition page.
+pages:
+  - title: Overview
+    file: pages/overview.md
+  - title: Evaluation
+    file: pages/evaluation.md
+  - title: Data
+    file: pages/data.md
+  - title: Terms
+    file: pages/terms.md
+
+# ── Tasks ────────────────────────────────────────────────────────────────────
+# A single task scores all five sub-tasks at once from one submission bundle.
+# input_data      → public test geometries handed to participants
+# reference_data  → server-side ground-truth labels + public/private split
+# scoring_program → scoring_program/ (contains score.py + metadata manifest)
+tasks:
+  - index: 0
+    name: "Multi-task materials-ML scoring"
+    description: >-
+      Scores formation energy (Task 1), forces (Task 2), relaxation RMSD
+      (Task 3), AI-accelerated DFT relaxation (Task 4), and phase-stability
+      ranking (Task 5), emitting public_/private_ metrics and an advisory
+      DFT-cheating flag.
+    is_public: false
+    input_data: public_data
+    reference_data: reference_data
+    scoring_program: scoring_program
+
+# No baseline solutions are bundled.
+solutions: []
+
+# ── Phases ───────────────────────────────────────────────────────────────────
+# Single open phase. The public/private split is handled inside score.py:
+# the live leaderboard shows public_* metrics (~30 % of structures); to produce
+# the final ranking on the held-out ~70 %, reconfigure the leaderboard columns
+# from public_* to private_* when the competition closes.
 #
 # The split is deterministic and reproducible: see reference_data/create_split.py
-# (SEED=42, PUBLIC_FRACTION=0.30, stratified by formula group).
+# (SEED=42, PUBLIC_FRACTION=0.30, stratified by formula group). Participants
+# cannot recover private labels because (1) private_ids.txt lives server-side in
+# reference_data/, (2) the submission rate is limited, and (3) the private
+# partition is never scored until the competition ends.
 #
-# Participants can query the public leaderboard as often as allowed, but cannot
-# recover private labels because:
-#   1. private_ids.txt is inside reference_data/ (server-side only).
-#   2. Submission rate is limited (max_submissions_per_day below).
-#   3. The private partition is never scored until the competition ends.
-#
-# To switch to final ranking at competition end: change "public_" → "private_"
-# in the key fields below (or add both sets and reconfigure via the UI).
-leaderboard:
-  columns:
-    - title: "Overall Score"
-      key: public_overall_score
-      index: 0
-      default: true
-      sorting: desc
-    - title: "Energy MAE eV/atom"
-      key: public_Task1_energy_MAE_eV_per_atom
-      index: 1
-      sorting: asc
-    - title: "Forces MAE eV/Å"
-      key: public_Task2_forces_MAE_eV_per_A
-      index: 2
-      sorting: asc
-    - title: "Relaxation RMSD Å"
-      key: public_Task3_relaxation_RMSD_A
-      index: 3
-      sorting: asc
-    - title: "Phase Stability ρ"
-      key: public_Task5_phase_spearman_rho
-      index: 4
-      sorting: desc
+# NOTE: edit `start`/`end` to your actual schedule before launch.
+phases:
+  - index: 0
+    name: "Open"
+    description: "Submit predictions; the public leaderboard reflects ~30% of structures."
+    start: 2026-07-01
+    end: 2026-12-31
+    max_submissions_per_day: 3
+    max_submissions: 9999
+    public_data: public_data
+    starting_kit: starting_kit
+    tasks:
+      - 0
 
-max_submissions_per_day: 3
+# ── Leaderboard ──────────────────────────────────────────────────────────────
+# Keys must match the fields written to scores.json by score.py.
+# During the competition these show public_* metrics; switch to private_* for
+# the final ranking at competition end.
+leaderboards:
+  - index: 0
+    title: "Results"
+    key: results
+    columns:
+      - title: "Overall Score"
+        key: public_overall_score
+        index: 0
+        sorting: desc
+      - title: "Energy MAE eV/atom"
+        key: public_Task1_energy_MAE_eV_per_atom
+        index: 1
+        sorting: asc
+      - title: "Forces MAE eV/Å"
+        key: public_Task2_forces_MAE_eV_per_A
+        index: 2
+        sorting: asc
+      - title: "Relaxation RMSD Å"
+        key: public_Task3_relaxation_RMSD_A
+        index: 3
+        sorting: asc
+      - title: "Phase Stability ρ"
+        key: public_Task5_phase_spearman_rho
+        index: 4
+        sorting: desc
