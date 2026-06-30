@@ -42,7 +42,15 @@ from pathlib import Path
 # ── Configuration ────────────────────────────────────────────────────────────
 SEED             = 42          # fixed seed → reproducible, auditable split
 PUBLIC_FRACTION  = 0.30        # ~30 % of each formula group goes to public set
-
+# Structures excluded from the competition.  The High-Entropy Ceramic (HEC)
+# structures encode their disordered cation sublattice with placeholder "X"
+# atoms (a dummy species, not a real element).  These cannot be labelled by DFT
+# (no pseudopotential / elemental reference for X) nor evaluated by an ML
+# interatomic potential, so they are dropped from the test set.
+EXCLUDE_IDS = {
+    "MATS-0084", "MATS-0085", "MATS-0086", "MATS-0090", "MATS-0091",
+    "MATS-0092", "MATS-0093", "MATS-0094", "MATS-0095", "MATS-0096",
+}
 # ── Paths ────────────────────────────────────────────────────────────────────
 HERE          = Path(__file__).parent
 # Private anonymisation table (maps anon_id → descriptive, and carries `formula`).
@@ -70,6 +78,12 @@ def main() -> None:
     # The public-facing structure id is the opaque MATS key (`anon_id`); fall
     # back to `structure_id` if running against a table that lacks it.
     id_col = "anon_id" if rows and "anon_id" in rows[0] else "structure_id"
+
+    # Drop excluded (HEC placeholder-X) structures before stratifying.
+    n_before = len(rows)
+    rows = [r for r in rows if r[id_col] not in EXCLUDE_IDS]
+    if n_before != len(rows):
+        print(f"Excluded {n_before - len(rows)} structure(s): {sorted(EXCLUDE_IDS)}")
 
     # Group structure_ids by formula (= phase-stability group)
     groups: dict[str, list[str]] = defaultdict(list)
