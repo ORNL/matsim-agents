@@ -8,17 +8,17 @@ AI-accelerated DFT workflows on **159 atomistic test structures** spanning
 
 | Class | Examples |
 |---|---|
-| 2D Monolayer | graphene, h-BN, MoS₂, WS₂, black phosphorus |
-| BCC HEA | NbTaVHfZrTi equiatomic (128 atoms) |
-| FCC HEA | CrMnFeCoNi Cantor (108 atoms) |
-| Catalysis | Au/Co/Cu/Fe/Ni/Pd/Pt/Ru (111) slabs |
-| Critical Minerals | Al₂O₃, TiO₂, SiC, LiCoO₂, LiFePO₄, WC, … |
-| High-Entropy Ceramics | HECarbide, HENitride, HEBoride, HEOxide |
-| Intermetallics | Cu₃Au L1₂, Ni₃Al L1₂, FePt L1₀, NiAl B2, NiTi B19′ |
-| MAX Phases | Ti₂AlC, Ti₃AlC₂ |
-| Nuclear | UO₂, ZrO₂, YSZ, MOX |
-| Perovskites | BaTiO₃, SrTiO₃, LaFeO₃, CsPbBr₃ |
-| Thermoelectrics | PbTe, Bi₂Te₃, Pb₀.₇₅Sn₀.₂₅Te |
+| 2D Monolayer | hexagonal monolayers |
+| BCC HEA | equiatomic (128 atoms) |
+| FCC HEA | equiatomic (108 atoms) |
+| Catalysis | close-packed metal slabs |
+| Critical Minerals | oxides, carbides, phosphates |
+| High-Entropy Ceramics | carbide / nitride / boride / oxide |
+| Intermetallics | ordered binary prototypes |
+| MAX Phases | Mₙ₊₁AXₙ phases |
+| Nuclear | actinide / zirconia oxides |
+| Perovskites | oxide / halide perovskites |
+| Thermoelectrics | telluride thermoelectrics |
 
 Each structure comes in ideal, supercell, vacancy, antisite, interstitial,
 and/or alloyed variants.
