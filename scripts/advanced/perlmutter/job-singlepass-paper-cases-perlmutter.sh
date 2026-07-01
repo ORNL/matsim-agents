@@ -32,12 +32,12 @@ set -euo pipefail
 #     --export=ALL,PROJECT_ROOT=/global/cfs/projectdirs/m5216/mlupopa/matsim-agents,RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs \
 #     scripts/advanced/perlmutter/job-singlepass-paper-cases-perlmutter.sh
 # ---------------------------------------------------------------------------
-PROJECT_ROOT="${PROJECT_ROOT:-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents}"
+PROJECT_ROOT="${PROJECT_ROOT:-/global/cfs/projectdirs/m5216/mlupopa/matsim-agents}"
 PROJ="$(dirname "${PROJECT_ROOT}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 # Surrogate checkpoints are shared and physically live under amsc001; keep the
 # default decoupled from PROJECT_ROOT so an m5216 run still finds the model.
-HYDRAGNN_EXAMPLE="${HYDRAGNN_EXAMPLE:-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/HydraGNN/examples/multidataset_hpo_sc26}"
+HYDRAGNN_EXAMPLE="${HYDRAGNN_EXAMPLE:-/global/cfs/projectdirs/m5216/mlupopa/HydraGNN/examples/multidataset_hpo_sc26}"
 
 if [[ -z "${SLURM_JOB_ID:-}" ]]; then
   echo "ERROR: submit this file with sbatch, not bash." >&2

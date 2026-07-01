@@ -30,7 +30,7 @@ set -euo pipefail
 # ── paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 source "${SCRIPT_DIR}/../common/runtime-env.sh"
-REPO="$(resolve_repo_root "${SCRIPT_DIR}" "/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents")"
+REPO="$(resolve_repo_root "${SCRIPT_DIR}" "/global/cfs/projectdirs/m5216/mlupopa/matsim-agents")"
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
@@ -92,15 +92,13 @@ fi
 echo "[$(date)] Submitting discovery query to matsim-agents (HuggingFace provider) ..."
 echo "$QUERY" | matsim-agents chat \
     --logdir          "$LOGDIR" \
-    --mlp-checkpoint  "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
+    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
     --llm-provider    huggingface \
     --llm-model       "$MODEL_DIR" \
     --ase-structure-optimizer FIRE \
     --maxiter         500 \
     --fmax            0.02 \
-    --min-atoms       64 \
-    --n-orderings     2 \
     --auto-confirm \
     2>&1 | tee "$RUN_DIR/matsim-agents.log"
 
