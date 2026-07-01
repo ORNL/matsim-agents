@@ -33,7 +33,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO_DEFAULT="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+  REPO=/global/cfs/projectdirs/m5216/mlupopa/matsim-agents
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv

@@ -34,7 +34,7 @@
 set -euo pipefail
 
 # ── paths ───────────────────────────────────────────────────────────────────
-REPO="${PROJECT_ROOT:-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents}"
+REPO="${PROJECT_ROOT:-/global/cfs/projectdirs/m5216/mlupopa/matsim-agents}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
