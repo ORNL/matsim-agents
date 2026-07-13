@@ -153,9 +153,8 @@ for i in range(torch.cuda.device_count()):
 PY
 
 # ── 4) discovery query ───────────────────────────────────────────────────────
-if [[ -n "${MATSIM_DISCOVERY_QUERY:-}" ]]; then
-  QUERY="${MATSIM_DISCOVERY_QUERY}"
-else
+QUERY="${MATSIM_DISCOVERY_QUERY:-}"
+if [[ -z "$QUERY" ]]; then
   QUERY="$(cat <<'EOF'
 Propose 3 to 5 candidate inorganic materials for high-temperature structural applications.
 For each candidate, provide the formula, likely crystal family, and a brief physics-based
@@ -177,10 +176,7 @@ if [[ "$AL_MODE" == "run" ]]; then
   if [[ -n "${MATSIM_AL_CONFIG:-}" ]]; then
     AL_CFG="${MATSIM_AL_CONFIG}"
     [[ "$AL_CFG" = /* ]] || AL_CFG="$REPO/$AL_CFG"
-    if [[ ! -f "$AL_CFG" ]]; then
-      echo "[ERROR] MATSIM_AL_CONFIG not found: $AL_CFG" >&2
-      exit 1
-    fi
+    [[ -f "$AL_CFG" ]] || { echo "[ERROR] MATSIM_AL_CONFIG not found: $AL_CFG" >&2; exit 1; }
     AL_ARGS+=( --al-config "$AL_CFG" )
   fi
 else

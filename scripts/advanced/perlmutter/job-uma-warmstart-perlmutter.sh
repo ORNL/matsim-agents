@@ -88,15 +88,13 @@ export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 
 # facebook/UMA is a gated Hugging Face repo — a token is required.
 # Prefer an explicit HF_TOKEN env var; fall back to the cached login token.
-if [[ -z "${HF_TOKEN:-}" ]]; then
-  _TOKEN_FILE="${HOME}/.cache/huggingface/token"
-  if [[ -f "${_TOKEN_FILE}" ]]; then
-    export HF_TOKEN="$(< "${_TOKEN_FILE}")"
-  else
-    echo "WARNING: HF_TOKEN is unset and no cached token found at ${_TOKEN_FILE}." >&2
-    echo "         The model download will fail for gated repos (e.g. facebook/UMA)." >&2
-    echo "         Set HF_TOKEN or run: huggingface-cli login" >&2
-  fi
+_TOKEN_FILE="${HOME}/.cache/huggingface/token"
+if [[ -z "${HF_TOKEN:-}" && -f "${_TOKEN_FILE}" ]]; then
+  export HF_TOKEN="$(< "${_TOKEN_FILE}")"
+elif [[ -z "${HF_TOKEN:-}" ]]; then
+  echo "WARNING: HF_TOKEN is unset and no cached token found at ${_TOKEN_FILE}." >&2
+  echo "         The model download will fail for gated repos (e.g. facebook/UMA)." >&2
+  echo "         Set HF_TOKEN or run: huggingface-cli login" >&2
 fi
 
 # ── UMA / warmstart env ──────────────────────────────────────────────────────

@@ -125,12 +125,11 @@ def explore_composition(
             if on_phase_done is not None:
                 on_phase_done(cand, result)
         except Exception as exc:  # pragma: no cover - depends on HydraGNN env
+            tag = "seed"
             if cand.prototype_id:
                 tag = cand.prototype_id
             elif cand.source == "random" and cand.space_group is not None:
                 tag = f"pyxtal_sg{int(cand.space_group):03d}"
-            else:
-                tag = "seed"
             failures.append(f"{tag}: {exc!s}")
 
     report: StabilityReport | None = None
