@@ -62,10 +62,11 @@ def _score_row(
         }
 
     keyword_hits = row.get("keyword_hits") or {}
-    if isinstance(keyword_hits, dict) and keyword_hits:
-        cov = sum(1 for v in keyword_hits.values() if bool(v)) / len(keyword_hits)
-    else:
-        cov = 0.0
+    cov = (
+        sum(1 for v in keyword_hits.values() if bool(v)) / len(keyword_hits)
+        if isinstance(keyword_hits, dict) and keyword_hits
+        else 0.0
+    )
 
     comp_count = len(row.get("compositions") or [])
     comp_score = _clamp01(comp_count / max(1, comp_target))
