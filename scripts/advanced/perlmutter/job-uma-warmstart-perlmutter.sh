@@ -75,6 +75,13 @@ export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 export HF_HOME="${HF_HOME:-${PROJ}/models/hf_cache}"
 mkdir -p "${HF_HOME}"
 
+# Read the pre-fetched UMA cache in OFFLINE mode: compute nodes mount CFS via
+# DVS, which does not support fcntl.flock (OSError [Errno 524]); offline reads
+# skip the lock. Requires a prior run of
+# scripts/download/perlmutter/download-uma-perlmutter.sh.
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
+export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
+
 # facebook/UMA is a gated Hugging Face repo — a token is required.
 # Prefer an explicit HF_TOKEN env var; fall back to the cached login token.
 if [[ -z "${HF_TOKEN:-}" ]]; then
