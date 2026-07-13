@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J build-qe-gpu
-#SBATCH -A amsc001
+#SBATCH -A m5216
 #SBATCH -p gpu
 #SBATCH -q regular
 #SBATCH -N 1

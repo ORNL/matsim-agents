@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -A amsc001
+#SBATCH -A m5216
 #SBATCH -J single-relaxation
 #SBATCH -C gpu
 #SBATCH -q regular
