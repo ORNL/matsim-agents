@@ -265,6 +265,7 @@ def select_candidates(
         raise ValueError(f"Unknown acquisition strategy: {cfg.strategy!r}")
 
     # Threshold on raw uncertainty (ignored for random)
+    keep_mask = np.ones_like(scores, dtype=bool)
     if cfg.strategy != "random" and cfg.min_uncertainty_eV_per_A > 0:
         keep_mask = scores >= cfg.min_uncertainty_eV_per_A
         if not np.any(keep_mask):
@@ -275,8 +276,6 @@ def select_candidates(
                 cfg.min_uncertainty_eV_per_A,
             )
             keep_mask = np.ones_like(scores, dtype=bool)
-    else:
-        keep_mask = np.ones_like(scores, dtype=bool)
 
     eligible_idx = np.where(keep_mask)[0]
     eligible_scores = scores[eligible_idx]

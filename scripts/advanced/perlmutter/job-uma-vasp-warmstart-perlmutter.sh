@@ -87,15 +87,13 @@ export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 
 # facebook/UMA is gated — read token from cached login at runtime.
-if [[ -z "${HF_TOKEN:-}" ]]; then
-  _TOKEN_FILE="${HOME}/.cache/huggingface/token"
-  if [[ -f "${_TOKEN_FILE}" ]]; then
-    export HF_TOKEN="$(< "${_TOKEN_FILE}")"
-  else
-    echo "WARNING: HF_TOKEN is unset and no cached token found at ${_TOKEN_FILE}." >&2
-    echo "         The model download will fail for gated repos (e.g. facebook/UMA)." >&2
-    echo "         Set HF_TOKEN or run: huggingface-cli login" >&2
-  fi
+_TOKEN_FILE="${HOME}/.cache/huggingface/token"
+if [[ -z "${HF_TOKEN:-}" && -f "${_TOKEN_FILE}" ]]; then
+  export HF_TOKEN="$(< "${_TOKEN_FILE}")"
+elif [[ -z "${HF_TOKEN:-}" ]]; then
+  echo "WARNING: HF_TOKEN is unset and no cached token found at ${_TOKEN_FILE}." >&2
+  echo "         The model download will fail for gated repos (e.g. facebook/UMA)." >&2
+  echo "         Set HF_TOKEN or run: huggingface-cli login" >&2
 fi
 
 # ── UMA+VASP / warmstart env ─────────────────────────────────────────────────
