@@ -68,8 +68,21 @@ source "${VENV}/bin/activate"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
-# UMA model cache (shared project dir); matches the AL / warm-start jobs.
-export HF_HOME="${HF_HOME:-${PROJ}/models/hf_cache}"
+# Persistent (shared) destination cache on CFS.
+DEST_HF="${HF_HOME:-${PROJ}/models/hf_cache}"
+mkdir -p "${DEST_HF}"
+
+# CFS/GPFS does NOT support fcntl.flock (OSError [Errno 524]), which
+# huggingface_hub requires while downloading. Stage the download on a
+# flock-capable filesystem ($SCRATCH Lustre, else node-local /tmp), then copy
+# the result into the persistent CFS cache.
+STAGE_BASE="${SCRATCH:-/tmp}"
+STAGE_HF="${STAGE_BASE}/hf-stage.${USER}.${SLURM_JOB_ID:-manual}"
+mkdir -p "${STAGE_HF}"
+trap 'rm -rf "${STAGE_HF}" 2>/dev/null || true' EXIT
+# Seed the stage with whatever is already cached so downloads stay incremental.
+rsync -a "${DEST_HF}/" "${STAGE_HF}/" 2>/dev/null || true
+export HF_HOME="${STAGE_HF}"
 mkdir -p "${HF_HOME}"
 if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
   export HF_TOKEN="$(< "${HOME}/.cache/huggingface/token")"
@@ -79,6 +92,9 @@ if [[ -z "${HF_TOKEN:-}" ]]; then
   echo "         The download will fail for the gated facebook/UMA repo." >&2
   echo "         Run 'hf auth login' once, or export HF_TOKEN=hf_..." >&2
 fi
+
+echo "[$(date)] Staging cache (flock-capable): $HF_HOME"
+echo "[$(date)] Persistent destination (CFS):  $DEST_HF"
 
 # ── model list ───────────────────────────────────────────────────────────────
 UMA_MODELS="${UMA_MODELS:-uma-s-1p1}"
@@ -110,6 +126,10 @@ PY
     rc=1
   fi
 done
+
+echo
+echo "[$(date)] Persisting staged cache to CFS: $DEST_HF"
+rsync -a "${STAGE_HF}/" "${DEST_HF}/"
 
 echo
 echo "[$(date)] Completed UMA download job. Logs in $RUN_DIR"

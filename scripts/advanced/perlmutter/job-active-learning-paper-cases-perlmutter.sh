@@ -95,6 +95,12 @@ mkdir -p "${HF_HOME}"
 if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
   export HF_TOKEN="$(< "${HOME}/.cache/huggingface/token")"
 fi
+# Read the pre-fetched UMA cache in OFFLINE mode: compute nodes have no outbound
+# internet, and offline reads skip huggingface_hub's fcntl.flock, which CFS/GPFS
+# does not support (OSError [Errno 524]). Requires a prior successful run of
+# scripts/download/perlmutter/download-uma-perlmutter.sh.
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
+export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 
 # ── AL backend selection (consumed by the YAML via ${...} env interpolation) ─
 export MLIP_BACKEND
