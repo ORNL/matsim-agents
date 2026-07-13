@@ -32,6 +32,13 @@
 #
 # Override backends:
 #   MLIP_BACKEND=hydragnn DFT_BACKEND=qe CASE=hea_bcc sbatch ...
+#
+# PREREQUISITE (UMA backend) — prefetch the UMA weights first. This job reads
+# the shared HF cache in OFFLINE mode (HF_HUB_OFFLINE=1): compute nodes have no
+# internet and CFS does not support fcntl.flock over DVS (OSError [Errno 524]),
+# so UMA is NOT downloaded on first use. Run once before submitting:
+#   sbatch scripts/download/perlmutter/download-uma-perlmutter.sh
+# See docs/model-download.md ("UMA MLIP weights on Perlmutter").
 # ---------------------------------------------------------------------------
 
 set -euo pipefail

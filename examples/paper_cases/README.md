@@ -123,9 +123,15 @@ matsim-agents supervisor-run LiFePO4 \
   --al-dry-run
 ```
 
-> **Note:** there is no `run-active-learning-perlmutter.sh` launcher yet (only a
-> Frontier one). On Perlmutter, wrap `matsim-agents al run <config>` in your own
-> `sbatch` script, or run it on an interactive `salloc` GPU node.
+> **Note:** on Perlmutter, submit the full AL loop with
+> `scripts/advanced/perlmutter/job-active-learning-paper-cases-perlmutter.sh`
+> (select the system with `CASE=<name>`), or wrap `matsim-agents al run
+> <config>` in your own `sbatch` script / interactive `salloc` GPU node.
+>
+> **UMA prerequisite:** with `MLIP_BACKEND=uma`, the UMA weights must be
+> **prefetched** first — compute nodes have no internet and read the HF cache
+> offline. Run `sbatch scripts/download/perlmutter/download-uma-perlmutter.sh`
+> once. See `docs/model-download.md` ("UMA MLIP weights on Perlmutter").
 
 > **Integration note:** `--al-dry-run` in `supervisor-run` only reports the
 > planned handoff. Use `--al-run` to actually execute the AL loop.
