@@ -15,7 +15,7 @@
 #
 # The launchers under scripts/launchers/perlmutter/ override --nodes via sbatch.
 # ---------------------------------------------------------------------------
-#SBATCH -A amsc001
+#SBATCH -A m5216
 #SBATCH -J smoke-tf-mn-pm
 #SBATCH -C gpu
 #SBATCH -q regular

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J qe-warmstart-bench
-#SBATCH -A amsc001
+#SBATCH -A m5216
 #SBATCH -C gpu
 #SBATCH -q regular
 #SBATCH -N 1

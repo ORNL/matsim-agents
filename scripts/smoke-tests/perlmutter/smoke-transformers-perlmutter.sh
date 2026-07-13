@@ -13,7 +13,7 @@
 #   sbatch --export=ALL,MATSIM_MODEL_DIR=/path/to/model \
 #          scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh
 # ---------------------------------------------------------------------------
-#SBATCH -A amsc001
+#SBATCH -A m5216
 #SBATCH -J smoke-transformers-pm
 #SBATCH -C gpu
 #SBATCH -q regular

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J singlepass-paper
-#SBATCH -A amsc001_g
+#SBATCH -A m5216_g
 #SBATCH -C gpu
 #SBATCH -q regular
 #SBATCH -N 1

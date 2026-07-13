@@ -42,7 +42,7 @@ FIXTURE="${FIXTURE:-MoNbTaW_HEA}"
 REPEATS="${REPEATS:-3}"
 TIME_LIMIT="${TIME_LIMIT:-02:00:00}"
 QOS="${QOS:-regular}"
-ACCOUNT="${ACCOUNT:-amsc001}"
+ACCOUNT="${ACCOUNT:-m5216}"
 
 PSEUDO_DIR="${MATSIM_QE_PSEUDO_DIR:-${REPO_ROOT}/external/quantum-espresso/src/pseudo}"
 QE_LAUNCHER="${MATSIM_QE_LAUNCHER:-${REPO_ROOT}/scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh}"

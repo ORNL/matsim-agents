@@ -106,7 +106,7 @@ turns on GPU-aware MPI, and `srun`s `pw.x` with the correct A100 layout
 #SBATCH -C gpu
 #SBATCH -q regular
 #SBATCH -t 01:00:00
-#SBATCH -A amsc001
+#SBATCH -A m5216
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
 #SBATCH --job-name=qe-gpu-job
@@ -142,7 +142,7 @@ For CPU-only `pw.x`:
 #SBATCH -N 1
 #SBATCH -q regular
 #SBATCH -t 01:00:00
-#SBATCH -A amsc001
+#SBATCH -A m5216
 
 source scripts/setup/perlmutter/perlmutter-module-stack.sh
 load_perlmutter_modules
@@ -283,7 +283,7 @@ EOF
 # 5. Create and submit a test job
 cat > job-qe-test.sh << 'EOF'
 #!/bin/bash
-#SBATCH -N 1 -C gpu -q regular -t 00:10:00 -A amsc001
+#SBATCH -N 1 -C gpu -q regular -t 00:10:00 -A m5216
 
 source scripts/setup/perlmutter/perlmutter-module-stack.sh
 load_perlmutter_modules_gpu

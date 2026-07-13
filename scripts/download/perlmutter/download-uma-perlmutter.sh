@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -A amsc001
+#SBATCH -A m5216
 #SBATCH -J dl-uma
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
