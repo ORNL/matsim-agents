@@ -172,3 +172,73 @@ export MATSIM_VLLM_BASE_URL=http://<compute-node-hostname>:8000/v1
 export MATSIM_LLM_MODEL=Qwen/Qwen2.5-72B-Instruct
 matsim-agents chat ...
 ```
+
+---
+
+## UMA MLIP weights on Perlmutter (prefetch **required**)
+
+The active-learning and warm-start jobs use the UMA foundation MLIP
+(`facebook/UMA`, e.g. `uma-s-1p1`) via `fairchem-core`. On Perlmutter these
+weights **must be pre-fetched before running any compute job** — a compute
+job will *not* download them itself. There are two independent reasons:
+
+1. **No outbound internet on compute nodes.** Perlmutter compute nodes cannot
+   reach `huggingface.co`, so a lazy first-use download is impossible there.
+2. **CFS does not support file locking on compute nodes.** The project
+   filesystem (CFS, `/global/cfs/...`) is mounted over DVS on compute nodes,
+   which does not implement `fcntl.flock`. `huggingface_hub` takes a per-file
+   lock while writing to its cache, so a download that targets CFS from a
+   compute node fails immediately with `OSError: [Errno 524] Unknown error 524`.
+
+Because of this, the compute-side jobs read the cache in **offline mode**
+(`HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`), which resolves the cached path
+directly and never takes a lock.
+
+> ⚠️ **Caveat — the cache must be prefetched first.** Because reads are
+> offline, if a model is **not** already in the cache the job fails fast with a
+> "not found locally" / offline error instead of downloading it. This is the
+> intended trade-off on compute nodes (which have no internet anyway). Run the
+> prefetch step below once per model before submitting AL / warm-start jobs.
+
+### Step 0 — one-time Hugging Face auth (gated repo)
+
+`facebook/UMA` is gated. Accept the license at
+<https://huggingface.co/facebook/UMA>, then log in once on a login node:
+```bash
+source $PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/fairchem_venv/bin/activate
+hf auth login          # paste your hf_... token; writes ~/.cache/huggingface/token
+hf auth whoami         # should print your username
+```
+
+### Step 1 — prefetch the weights (CPU job)
+
+```bash
+sbatch scripts/download/perlmutter/download-uma-perlmutter.sh
+# multiple / alternate models:
+UMA_MODELS="uma-s-1p1 uma-m-1p1" sbatch scripts/download/perlmutter/download-uma-perlmutter.sh
+```
+
+The download job **stages** the cache on a flock-capable filesystem
+(`$SCRATCH` Lustre, else node-local `/tmp`), then copies the finished cache
+into the persistent shared location on CFS
+(`$PROJ/models/hf_cache`, override with `HF_HOME=...`). This is what side-steps
+the errno-524 lock failure while still leaving the weights on CFS for reuse.
+
+### Step 2 — verify the cache
+
+```bash
+ls $PROJ/models/hf_cache/hub/models--facebook--UMA
+# should list blobs/, refs/, snapshots/ once the prefetch succeeded
+```
+
+### Step 3 — run compute jobs (offline reads)
+
+The following jobs already set `HF_HOME=$PROJ/models/hf_cache` and
+`HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1`, so they read the prefetched
+cache without any download or lock:
+
+- `scripts/advanced/perlmutter/job-active-learning-paper-cases-perlmutter.sh`
+- `scripts/advanced/perlmutter/job-uma-warmstart-perlmutter.sh`
+- `scripts/advanced/perlmutter/job-uma-vasp-warmstart-perlmutter.sh`
+
+If you point them at a different `HF_HOME`, prefetch into that directory first.

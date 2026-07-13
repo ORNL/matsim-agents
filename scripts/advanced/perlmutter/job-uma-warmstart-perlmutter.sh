@@ -29,10 +29,14 @@
 #   MATSIM_WARMSTART_FIXTURES=MoNbTaW_HEA \
 #     sbatch scripts/advanced/perlmutter/job-uma-warmstart-perlmutter.sh
 #
-# The UMA model (uma-s-1p1) is downloaded automatically from Hugging Face on
-# first use.  Set HF_HOME to a shared writable directory so the download is
-# cached across jobs:
+# PREREQUISITE — prefetch the UMA weights first. This job reads the shared HF
+# cache in OFFLINE mode (HF_HUB_OFFLINE=1): compute nodes have no internet and
+# CFS does not support fcntl.flock over DVS (OSError [Errno 524]). It will NOT
+# download UMA on first use; if the cache is missing it fails fast. Run once:
+#   sbatch scripts/download/perlmutter/download-uma-perlmutter.sh
+# The cache lives at HF_HOME (default $PROJ/models/hf_cache); override with:
 #   export HF_HOME=/global/cfs/projectdirs/m5216/mlupopa/models/hf_cache
+# See docs/model-download.md ("UMA MLIP weights on Perlmutter").
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
