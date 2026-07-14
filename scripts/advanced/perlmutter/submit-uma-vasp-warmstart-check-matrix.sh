@@ -92,6 +92,7 @@ for ((i = 1; i <= REPEATS; i++)); do
   export_vars+=",MATSIM_UMA_TASK=${UMA_TASK}"
   export_vars+=",MATSIM_FAIRCHEM_VENV=${FAIRCHEM_VENV}"
   export_vars+=",HF_HOME=${HF_HOME_DIR}"
+  export_vars+=",FAIRCHEM_CACHE_DIR=${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
 
   jid="$(sbatch --parsable \
     --account="${ACCOUNT}" \

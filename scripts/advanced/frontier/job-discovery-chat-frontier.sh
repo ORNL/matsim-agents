@@ -31,7 +31,12 @@ set -euo pipefail
 
 # ── paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-source "${SCRIPT_DIR}/../common/runtime-env.sh"
+# Slurm copies the submitted script into a spool dir before executing it, so
+# BASH_SOURCE[0] does NOT point at this file's real location under sbatch --
+# fall back to the known repo-absolute path when the relative lookup misses.
+RUNTIME_ENV="${SCRIPT_DIR}/../common/runtime-env.sh"
+[[ -f "${RUNTIME_ENV}" ]] || RUNTIME_ENV=/lustre/orion/mat746/proj-shared/matsim-agents/scripts/advanced/common/runtime-env.sh
+source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}" "/lustre/orion/mat746/proj-shared/matsim-agents")"
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72

@@ -79,10 +79,14 @@ export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 export HF_HOME="${HF_HOME:-${PROJ}/models/hf_cache}"
 mkdir -p "${HF_HOME}"
 
-# Read the pre-fetched UMA cache in OFFLINE mode: compute nodes mount CFS via
-# DVS, which does not support fcntl.flock (OSError [Errno 524]); offline reads
-# skip the lock. Requires a prior run of
+# fairchem's pretrained_mlip.get_predict_unit() ignores HF_HOME entirely -- it
+# always calls hf_hub_download(..., cache_dir=FAIRCHEM_CACHE_DIR), which
+# defaults to ~/.cache/fairchem on $HOME (CFS/DVS, no fcntl.flock support ->
+# OSError [Errno 524], regardless of offline mode). Point it at $SCRATCH
+# (flock-capable, persistent across jobs). Requires a prior run of
 # scripts/download/perlmutter/download-uma-perlmutter.sh.
+export FAIRCHEM_CACHE_DIR="${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
+mkdir -p "${FAIRCHEM_CACHE_DIR}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 

@@ -96,6 +96,16 @@ fi
 echo "[$(date)] Staging cache (flock-capable): $HF_HOME"
 echo "[$(date)] Persistent destination (CFS):  $DEST_HF"
 
+# fairchem's pretrained_mlip.get_predict_unit()/pretrained_checkpoint_path_from_name()
+# call hf_hub_download(..., cache_dir=CACHE_DIR) with a HARDCODED cache_dir that
+# ignores HF_HOME entirely. CACHE_DIR comes from FAIRCHEM_CACHE_DIR (env var),
+# defaulting to ~/.cache/fairchem on $HOME (CFS -> no flock support, same
+# OSError [Errno 524]). Point it at the flock-capable $SCRATCH directly; unlike
+# a job-scoped stage, $SCRATCH persists across jobs, so no CFS copy-back needed.
+export FAIRCHEM_CACHE_DIR="${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
+mkdir -p "${FAIRCHEM_CACHE_DIR}"
+echo "[$(date)] FAIRCHEM_CACHE_DIR (flock-capable, persistent): $FAIRCHEM_CACHE_DIR"
+
 # ── model list ───────────────────────────────────────────────────────────────
 UMA_MODELS="${UMA_MODELS:-uma-s-1p1}"
 
