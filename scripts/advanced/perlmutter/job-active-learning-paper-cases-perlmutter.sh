@@ -102,10 +102,14 @@ mkdir -p "${HF_HOME}"
 if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
   export HF_TOKEN="$(< "${HOME}/.cache/huggingface/token")"
 fi
-# Read the pre-fetched UMA cache in OFFLINE mode: compute nodes have no outbound
-# internet, and offline reads skip huggingface_hub's fcntl.flock, which CFS/GPFS
-# does not support (OSError [Errno 524]). Requires a prior successful run of
+# fairchem's pretrained_mlip.get_predict_unit() ignores HF_HOME entirely -- it
+# always calls hf_hub_download(..., cache_dir=FAIRCHEM_CACHE_DIR), which
+# defaults to ~/.cache/fairchem on $HOME (CFS/GPFS, no fcntl.flock support ->
+# OSError [Errno 524], regardless of offline mode). Point it at $SCRATCH
+# (flock-capable, persistent across jobs). Requires a prior successful run of
 # scripts/download/perlmutter/download-uma-perlmutter.sh.
+export FAIRCHEM_CACHE_DIR="${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
+mkdir -p "${FAIRCHEM_CACHE_DIR}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 

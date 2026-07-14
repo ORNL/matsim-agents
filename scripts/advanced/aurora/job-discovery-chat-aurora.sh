@@ -33,7 +33,11 @@ set -eo pipefail  # NOTE: no -u; lmod's bash init breaks under nounset
 
 # ── paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${PBS_O_WORKDIR:-$PWD}/$0}")" 2>/dev/null && pwd)"
-source "${SCRIPT_DIR}/../common/runtime-env.sh"
+# PBS may not preserve the submitted script's original path either -- fall
+# back to the known repo-absolute path when the relative lookup misses.
+RUNTIME_ENV="${SCRIPT_DIR}/../common/runtime-env.sh"
+[[ -f "${RUNTIME_ENV}" ]] || RUNTIME_ENV=/lus/flare/projects/CM2US/mlupopa/matsim-agents/scripts/advanced/common/runtime-env.sh
+source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}" "/lus/flare/projects/CM2US/mlupopa/matsim-agents")"
 PROJ="$(dirname "${REPO}")"
 
