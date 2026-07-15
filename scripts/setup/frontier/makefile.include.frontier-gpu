@@ -1,0 +1,154 @@
+# =============================================================================
+# makefile.include.frontier-gpu
+#
+# VASP 6.6.0 build for Frontier (OLCF) - AMD MI250X (gfx90a) OpenMP GPU offload.
+#
+# Base: VASP-shipped arch/makefile.include.cray_omp_off (Cray + HIP, -DCRAYHIP).
+# Consumed by scripts/setup/frontier/build-vasp-gpu-frontier.sh, which copies
+# this to external/vasp6/src/vasp.6.6.0/makefile.include and runs make.
+#
+# The build script exports (read below via ?=):
+#   ROCM_PATH       -> ROCm root (rocBLAS/rocFFT/rocSOLVER/hip/rccl)
+#   FFTW_ROOT       -> CRAY_FFTW_PREFIX (FFTW3 headers + libs)
+#   VASP_HDF5_ROOT  -> optional; when set, enables -DVASP_HDF5
+# =============================================================================
+
+# Precompiler options
+CPP_OPTIONS = -DHOST=\"Frontier-MI250X\" \
+              -DMPI -DMPI_BLOCK=8000 -Duse_collective \
+              -DscaLAPACK \
+              -DCACHE_SIZE=4000 \
+              -Davoidalloc \
+              -DMPI_INPLACE \
+              -Dvasp6 \
+              -Dtbdyn \
+              -Dfock_dblbuf
+
+# activate OpenMP and gpu offloading
+CPP_OPTIONS += -D_OPENMP \
+               -DOMP_OFFLOAD \
+               -DCRAYHIP
+
+CPP        = cpp --traditional -E -P -Wno-endif-labels $*$(FUFFIX) >$*$(SUFFIX) $(CPP_OPTIONS)
+
+FC         = ftn -hnoacc -homp
+FCL        = $(FC)
+
+FREE       = -ffree -N 1023
+
+FFLAGS     = -dC -rmo -emEb
+# lower the ipa level for inlining to 0 to avoid compiler problems
+FFLAGS     += -hipa0
+# suppress warnings
+FFLAGS     += -m 4 
+
+# O2 recommended for optimal GPU performance, O1 significantly slower in certain GPU kernels
+OFLAG      = -O2
+OFLAG_IN   = $(OFLAG)
+DEBUG      = -O0
+
+# fine grain control over lapack, by default ftn will link libsci with the appropriate configuration
+# LAPACK     = -L${CRAY_LIBSCI_PREFIX_DIR}/lib -lsci_cray_mpi
+# LLIBS      = $(LAPACK)
+
+# FFTW3 from cray-fftw; FFTW_ROOT is exported by the build script (CRAY_FFTW_PREFIX).
+FFTW_ROOT  ?= $(CRAY_FFTW_PREFIX)
+LLIBS      += -L$(FFTW_ROOT)/lib -lfftw3 -lfftw3_omp
+INCS       = -I$(FFTW_ROOT)/include
+
+# HIP
+CLANG      = cc
+
+# ROCM_PATH is exported by the build script (module rocm).
+ROCM_PATH  ?= /opt/rocm
+HIPCC      ?= ${ROCM_PATH}/bin/hipcc
+
+# ROCm 7.x: the HIP headers declare a __device__ memcpy which shadows the host
+# ::memcpy in the HIP interface (runtime_interface.cpp). Force-include <cstring>
+# so the host memcpy is visible and overload resolution picks it from __host__ code.
+# The HIP .cpp files also use assert()/printf() without including <cassert>/<cstdio>
+# (transitive includes that ROCm 7 headers no longer pull in), so force those too.
+HIPFLAGS   += -include cstring -include cassert -include cstdio
+
+ROCM_INCS  = -I${ROCM_PATH}/include -I${ROCM_PATH}/include/hip -I${ROCM_PATH}/include/rocblas -I${ROCM_PATH}/include/rocsolver -I${ROCM_PATH}/include/rocfft
+
+# -L both lib dirs: ROCm >=6.4 keeps libamdhip64 in hip/lib, ROCm <=6.3 in lib/.
+ROCM_LIBS  = -L${ROCM_PATH}/lib -L${ROCM_PATH}/hip/lib -lamdhip64 \
+             -L${ROCM_PATH}/lib -lrocblas -lrocfft -lrocsolver -lcraymp
+
+# using RCCL aka NCCL for direct multi-GPU communication, recommended for best performance
+CPP_OPTIONS += -DUSENCCL
+ROCM_LIBS   += -lrccl
+
+# cce 18.x emits redundant OpenMP clone symbols (foo__cce$omp_redun_clone_) with
+# global linkage; when the same routine (e.g. split_cmplx_atomic_add_from_cmplx,
+# ni_global$wave) is inlined into several objects the host link fails with
+# "multiple definition". The clones are identical, so let ld keep the first.
+LLIBS      += -Wl,--allow-multiple-definition
+
+LLIBS      += $(ROCM_LIBS)
+
+LIBS       += HIP
+LLIBS      += -LHIP -lHipInterface
+
+#
+# For what used to be vasp.5.lib
+CPP_LIB    = $(CPP)
+FC_LIB     = $(FC)
+CC_LIB     = cc
+CFLAGS_LIB = -O
+FFLAGS_LIB = -O1
+FREE_LIB   = $(FREE)
+
+OBJECTS_LIB= linpack_double.o getshmem.o
+
+# For the parser library
+CXX_PARS   = CC
+LLIBS      += -lstdc++
+
+# Normally no need to change this
+SRCDIR     = ../../src
+BINDIR     = ../../bin
+
+# HDF5-support (optional). Enabled automatically when the build script is invoked
+# with VASP_HDF5_ROOT set (e.g. VASP_HDF5_ROOT=$CRAY_HDF5_PREFIX ... build-...sh).
+ifdef VASP_HDF5_ROOT
+CPP_OPTIONS+= -DVASP_HDF5
+LLIBS      += -L$(VASP_HDF5_ROOT)/lib -lhdf5_fortran -lhdf5
+INCS       += -I$(VASP_HDF5_ROOT)/include
+endif
+
+# For the VASP-2-Wannier90 interface (optional)
+#CPP_OPTIONS    += -DVASP2WANNIER90
+#WANNIER90_ROOT ?= /path/to/your/wannier90/installation
+#LLIBS          += -L$(WANNIER90_ROOT)/lib -lwannier
+
+# Get major version of crayftn
+CRAYFTNVER=$(shell crayftn --version 2>/dev/null | grep "Version" | sed -n 's/.*Version \([0-9]\+\)\..*/\1/p')
+CPP_OPTIONS += -D__DCRAYFTN_VERSION=$(CRAYFTNVER)
+
+### special cray workarounds cce v19.0.0, remove for cce20
+ # error Unsupported OpenMP construct Calls -- _cray_dv_broadcast : W_G%CPTWFP=0
+ OBJECTS_O2 += rot.o
+ # fexcg has to be higher optimization level for kernel not too spill
+ OBJECTS_O2 += fexcg.o mbj.o ldalib.o ggalib.o mggalib.o
+ # error: unexpected type in TYPE_DEREF l818 (copyin_wavefun1_array)
+ OBJECTS_O1 += openmp.o
+ # error: unexpected type in TYPE_DEREF l724 (twoelectron4o_acc)
+ OBJECTS_O1 += twoelectron4o.o
+ # error: unexpected type in TYPE_DEREF l377 (calculate_local_field_fock)
+ OBJECTS_O1 += local_field.o
+ # for the next problem we use OBJECTS_O3 to remove omp
+ FFLAGS_3 += -hnoomp
+ # error: Found inner_ref/inner_def object without Fortran internal procedure  l5515
+ OBJECTS_O3 += bse.o
+ # error: Found inner_ref/inner_def object without Fortran internal procedure l1644
+ OBJECTS_O3 += GG_base.o
+ # cce 18.x: ERROR Unsupported OpenMP construct Calls -- split_cmplx_atomic_add_from_cmplx
+ # (only reached when building with MODS=0 so this per-file -hnoomp rule applies)
+ OBJECTS_O3 += vdw_nl.o
+ # MLFF problems with ISTART=2
+ OBJECTS_O1 += ml_ff_math.o ml_ff_ff2.o
+ # cce 18.x: optcg (code generator) aborts with SIGABRT at -O2; drop to -O1
+ OBJECTS_O1 += finite_diff.o
+#################

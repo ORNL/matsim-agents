@@ -38,8 +38,12 @@ TOTAL_RANKS=$(( NNODES * RANKS_PER_NODE ))
 
 # ── Module reset to the VASP build's toolchain ──────────────────────────────
 # IMPORTANT: do NOT inherit modules from the parent shell — VASP needs
-# PrgEnv-cray + cce + craype-accel-amd-gfx90a + rocm/7.1.1 + cray-fftw,
+# PrgEnv-cray + cce + craype-accel-amd-gfx90a + rocm/6.2.0 + cray-fftw,
 # while the parent driver runs under PrgEnv-gnu + rocm/7.2.0.
+# rocm/6.2.0 (LLVM 18) MUST match what VASP was built with: the cce 18.x GPU
+# device link (llvm-link + lld) can only read ROCm bitcode from LLVM <= 18 AND
+# needs the non-overloaded readfirstlane intrinsic (ROCm 6.2.4+ broke this), so
+# build and runtime are pinned to the same ROCm as build-vasp-gpu-frontier.sh.
 # `module reset` is mandatory; otherwise Lmod will refuse to swap PrgEnv.
 if command -v module >/dev/null 2>&1; then
   :
@@ -53,8 +57,8 @@ module load cpe/24.07
 module load PrgEnv-cray
 module load cce
 module load craype-accel-amd-gfx90a
-module load rocm/7.1.1
-module load amd-mixed/7.1.1
+module load rocm/6.2.0
+module load amd-mixed/6.2.0
 module load cray-fftw
 module unload darshan-runtime 2>/dev/null || true
 

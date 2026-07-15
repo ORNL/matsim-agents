@@ -14,7 +14,7 @@
 # Build VASP 6.6 with OpenMP GPU offloading to AMD MI250X (gfx90a) on Frontier.
 #
 # Toolchain mirrors the matsim-agents Python venv module stack:
-#   cpe/24.07  rocm/7.1.1  amd-mixed/7.1.1
+#   cpe/24.07  rocm/6.2.0  amd-mixed/6.2.0
 # with these additions required for VASP GPU compilation:
 #   PrgEnv-cray + cce ............... Cray Fortran compiler + OpenMP offload
 #   craype-accel-amd-gfx90a ......... routes ftn/cc to gfx90a device code
@@ -44,15 +44,23 @@
 #   NCORES            Parallel make jobs         (default: nproc or 16 on login)
 #   CLEAN_BUILD       1=wipe build dirs first    (default: 0)
 #   VASP_TARGET       all|std|gam|ncl            (default: all)
-#   ROCM_MODULE       ROCm module to load        (default: rocm/7.1.1)
-#   AMD_MIXED_MODULE  amd-mixed module to load   (default: amd-mixed/7.1.1)
+#   ROCM_MODULE       ROCm module to load        (default: rocm/6.2.0)
+#   AMD_MIXED_MODULE  amd-mixed module to load   (default: amd-mixed/6.2.0)
 #   VASP_HDF5_ROOT    Path to HDF5 install       (optional; enables -DVASP_HDF5)
 #
-# NOTE on ROCm version: rocm/7.1.1 matches the matsim-agents Python venv.
-# If the linker reports cray-mpich GTL ABI errors (libamdhip64.so.6 vs .7),
-# rebuild with:
-#   ROCM_MODULE=rocm/6.2.4 AMD_MIXED_MODULE=amd-mixed/6.2.4 \
-#     bash scripts/setup/frontier/build-vasp-gpu-frontier.sh
+# NOTE on ROCm version: the GPU device link runs cce's llvm-link + lld (LLVM 18
+# for cce 18.x) over ROCm's device bitcode (amdgcn/bitcode/*.bc).  Two
+# constraints pin the ROCm version:
+#   1. The bitcode must be produced by LLVM <= 18, else llvm-link fails with
+#      "Invalid attribute group entry (Producer 'LLVM20' Reader 'LLVM 18')".
+#      -> rules out ROCm 6.4+ (LLVM 19) and 7.x (LLVM 20).
+#   2. The device libs must use the NON-overloaded llvm.amdgcn.readfirstlane
+#      intrinsic; ROCm 6.2.4+ backported the typed .i32 form (an LLVM-19
+#      feature) into their 18.0.0git fork, which cce 18's lld cannot lower
+#      ("undefined symbol: llvm.amdgcn.readfirstlane.i32").
+#      -> rules out ROCm 6.2.4 and 6.3.1.
+# rocm/6.2.0 is the newest ROCm satisfying BOTH (LLVM 18 bitcode + old
+# intrinsic).  rocm/6.1.3 (LLVM 17) is a fallback.
 # =============================================================================
 
 set -euo pipefail
@@ -72,9 +80,17 @@ VASP_ROOT="${VASP_ROOT:-${REPO}/external/vasp6/src/vasp.6.6.0}"
 PREFIX="${PREFIX:-build}"
 CLEAN_BUILD="${CLEAN_BUILD:-0}"
 VASP_TARGET="${VASP_TARGET:-all}"
-ROCM_MODULE="${ROCM_MODULE:-rocm/7.1.1}"
-AMD_MIXED_MODULE="${AMD_MIXED_MODULE:-amd-mixed/7.1.1}"
-MAKEFILE_INCLUDE="${REPO}/external/vasp6/makefile.include.frontier-gpu"
+# MODS=1 runs VASP's bulk `mods` pass: a single `ftn -homp -c <all sources>` whose
+# objects the link step then reuses.  Under cce 18.x that bulk compile aborts with
+# ftn-7032 on vdw_nl.f90 ("Unsupported OpenMP construct Calls") and bypasses the
+# per-file OBJECTS_O*/-hnoomp workarounds.  MODS=0 skips it so each source is
+# compiled individually via the O-group rules (in .depend order), which lets the
+# workarounds -- including vdw_nl -> -hnoomp -- take effect.
+VASP_MODS="${VASP_MODS:-0}"
+ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.0}"
+AMD_MIXED_MODULE="${AMD_MIXED_MODULE:-amd-mixed/6.2.0}"
+# Tracked next to this script (external/ is gitignored, so the recipe lives here).
+MAKEFILE_INCLUDE="${MAKEFILE_INCLUDE:-${SCRIPT_DIR}/makefile.include.frontier-gpu}"
 
 # Parallel jobs: use SLURM allocation if available, else be a polite login-node
 # neighbour (16 cores).  Override with NCORES=N.
@@ -153,7 +169,9 @@ log "  → ${VASP_ROOT}/makefile.include"
 # venv (cpe/24.07, rocm/7.1.1, amd-mixed/7.1.1).  The only differences from
 # the Python venv stack are:
 #   • PrgEnv-cray replaces PrgEnv-gnu  (needed for ftn + OpenMP offload)
-#   • cce is loaded explicitly         (pins Cray Fortran 18.0.1)
+#   • cce is loaded explicitly         (Cray Fortran 18.x; the only cce with
+#                                       working gfx90a offload on this system --
+#                                       cce >=19 lacks libopenacc.pc for craype)
 #   • craype-accel-amd-gfx90a added    (routes compilation to gfx90a device)
 #   • cray-fftw added                  (FFTW3 headers/libs for VASP)
 #   • miniforge3 not needed for compile
@@ -162,7 +180,7 @@ init_modules
 module reset
 module load cpe/24.07
 module load PrgEnv-cray                 # Cray Fortran (ftn) + OpenMP target offload
-module load cce                         # default 18.0.1 on Frontier
+module load cce                         # cce 18.x (only version with working gfx90a offload)
 module load craype-accel-amd-gfx90a    # enables gfx90a OpenMP offload device code
 module load "${ROCM_MODULE}"            # rocBLAS, rocFFT, rocSOLVER, RCCL, hipcc
 module load "${AMD_MIXED_MODULE}"       # AMD mixed stack (matches Python venv)
@@ -212,8 +230,12 @@ fi
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 for target in "${BUILD_TARGETS[@]}"; do
-    log "Building target '${target}' with -j${NCORES} ..."
-    make PREFIX="${PREFIX}" DEPS=1 MODS=1 -j"${NCORES}" "${target}"
+    # VASP's makefile uses `ifdef MODS` (tests defined-ness, not value), so MODS
+    # must be OMITTED -- not set to 0 -- to skip the bulk `mods` pass.
+    mods_arg=()
+    [[ "${VASP_MODS}" == "1" ]] && mods_arg=(MODS=1)
+    log "Building target '${target}' with -j${NCORES} (MODS=${VASP_MODS}) ..."
+    make PREFIX="${PREFIX}" DEPS=1 "${mods_arg[@]}" -j"${NCORES}" "${target}"
     log "Finished target '${target}'"
 done
 
