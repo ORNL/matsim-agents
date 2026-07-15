@@ -1,0 +1,101 @@
+# =============================================================================
+# Portability case: phosphorene AL loop with the Quantum ESPRESSO backend.
+#
+# Identical loop to al_phosphorene.yaml (UMA MLIP + Langevin MD sampling +
+# mc_dropout acquisition), but the DFT-labelling stage uses QE pw.x instead of
+# VASP. Its purpose in the manuscript is to show the loop is DFT-engine-agnostic
+# on the SAME platform: only the `dft:` block changes.
+#
+# Phosphorene (single element P, semiconductor, small monolayer cell) is the
+# cheapest, most robust QE test case in the paper set.
+#
+# Run (UMA MLIP + QE DFT):
+#   MLIP_BACKEND=uma DFT_BACKEND=qe \
+#     matsim-agents al run examples/paper_cases/al_phosphorene_qe.yaml
+# =============================================================================
+
+vars:
+  PROJ_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  RUNS_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/runs
+  HYDRAGNN_DIR: /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/HydraGNN
+  RUN_TAG:      phosphorene-2d-qe-al-001
+
+  SEED_XYZ:   ${PROJ_ROOT}/examples/paper_cases/seeds/phosphorene_black_P.extxyz
+  PW_BIN:     ${PROJ_ROOT}/external/quantum-espresso/install-gpu/bin/pw.x
+  PSEUDO_DIR: ${PROJ_ROOT}/external/quantum-espresso/src/pseudo
+
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+mlip:
+  backend: ${MLIP_BACKEND:-uma}
+  hydragnn:
+    logdir:         ${INITIAL_LOGDIR}
+    checkpoint:     best_model.pt
+    mlp_checkpoint: null
+    precision:  fp32
+    mlp_device: cuda
+    ensemble_paths: []
+  uma:
+    model_name: uma-s-1p1
+    task_name:  omat
+    device:     cuda
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear
+
+md:
+  seed_source:
+    kind: paths
+    paths:
+      - ${SEED_XYZ}
+    n_random: 3
+    random_seed: 17
+  timestep_fs: 0.5
+  n_steps: 200
+  temperature_K: 300.0
+  thermostat: langevin
+  friction_inv_ps: 0.2
+  sample_every: 10
+  max_force_threshold_eV_per_A: 40.0
+  max_displacement_A: 3.0
+
+acquisition:
+  strategy: mc_dropout
+  mc_dropout_passes: 16
+  mc_dropout_p: 0.1
+  n_select: 32
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: ${DFT_BACKEND:-qe}
+
+  qe:
+    pw_bin:      ${PW_BIN}
+    pw_wrapper:  ${PROJ_ROOT}/scripts/launchers/perlmutter/_qe-step-perlmutter.sh
+    pseudo_dir:  ${PSEUDO_DIR}
+    # Explicit pseudo pin (avoids auto-detect ambiguity for P).
+    pseudopotentials:
+      P: P.pbe-n-kjpaw_psl.1.0.0.UPF
+    # 2D monolayer: dense in-plane mesh, single k-point along the vacuum axis.
+    kpts:     [4, 4, 1]
+    koffset:  [0, 0, 0]
+    occupations: smearing
+    smearing:    gaussian    # phosphorene is a semiconductor
+    degauss_ry:  0.007       # ~0.1 eV
+    # ecutwfc/ecutrho left to recommend_settings() from the PAW pseudo.
+    nodes_per_job:    1      # small monolayer cell (few atoms + vacuum)
+    ranks_per_node:   4      # 4 A100 GPUs per Perlmutter node
+    threads_per_rank: 16
+    timeout_sec:      7200
+
+trainer:
+  enabled: false            # portability demo: frozen UMA, isolate the DFT swap
+
+loop:
+  n_iterations: 3
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: false
