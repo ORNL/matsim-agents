@@ -91,10 +91,18 @@ export NCCL_SHM_DISABLE=1
 cd "${WORK_DIR}"
 
 echo "[vasp-step] $(date) host=$(hostname) work_dir=${WORK_DIR}"
-echo "[vasp-step] srun -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK} \\"
+echo "[vasp-step] srun --exclusive -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK} \\"
 echo "             --gpus-per-node=${RANKS_PER_NODE} --gpu-bind=closest ${VASP_BIN}"
 
+# --exclusive is REQUIRED for concurrent multi-node dispatch: the AL driver
+# launches up to (SLURM_JOB_NUM_NODES / nodes_per_job) of these steps at once
+# from a ThreadPool. Without --exclusive, each srun step defaults to requesting
+# the allocation's full resource set, so the 2nd+ concurrent step blocks with
+# "srun: Job step creation temporarily disabled, retrying". With --exclusive
+# each -N1 step claims one whole, distinct node and they run in parallel.
+# For a single-node (-N1) allocation this is a harmless no-op.
 exec srun \
+  --exclusive \
   -N "${NNODES}" \
   -n "${TOTAL_RANKS}" \
   -c "${THREADS_PER_RANK}" \
