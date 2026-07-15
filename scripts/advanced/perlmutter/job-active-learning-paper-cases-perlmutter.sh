@@ -33,6 +33,16 @@
 # Override backends:
 #   MLIP_BACKEND=hydragnn DFT_BACKEND=qe CASE=hea_bcc sbatch ...
 #
+# MULTI-NODE DFT CONCURRENCY — the AL driver dispatches the selected VASP
+# single-points concurrently, up to (SLURM_JOB_NUM_NODES / nodes_per_job) at a
+# time. This script defaults to -N 1 (serial DFT). To run K DFT jobs in
+# parallel, submit with more nodes, e.g. `sbatch -N 4 ...` gives 4-way
+# concurrency for the nodes_per_job=1 cases (lifepo4, hea_bcc, hea_fcc,
+# phosphorene). NOTE: al_zn_formate*.yaml uses nodes_per_job: 2 (dense
+# framework cell), so zn_formate REQUIRES -N >= 2 (use -N 4 for 2-way
+# concurrency); with -N 1 every step fails with
+# "srun: error: Only allocated 1 nodes asked for 2".
+#
 # PREREQUISITE (UMA backend) — prefetch the UMA weights first. This job reads
 # the shared HF cache in OFFLINE mode (HF_HUB_OFFLINE=1): compute nodes have no
 # internet and CFS does not support fcntl.flock over DVS (OSError [Errno 524]),

@@ -128,6 +128,15 @@ matsim-agents supervisor-run LiFePO4 \
 > (select the system with `CASE=<name>`), or wrap `matsim-agents al run
 > <config>` in your own `sbatch` script / interactive `salloc` GPU node.
 >
+> **Multi-node DFT:** the AL driver runs VASP single-points concurrently, up to
+> `SLURM_JOB_NUM_NODES / nodes_per_job` at once. The job script defaults to
+> `-N 1` (serial DFT); pass more nodes for parallelism, e.g. `sbatch -N 4 ...`
+> gives 4-way concurrency for the `nodes_per_job: 1` cases (lifepo4, hea_bcc,
+> hea_fcc, phosphorene). **`zn_formate` uses `nodes_per_job: 2`** (dense
+> framework cell), so it **must** be submitted with `-N >= 2` (use `-N 4` for
+> 2-way concurrency) — with `-N 1` every DFT step fails with
+> `srun: error: Only allocated 1 nodes asked for 2`.
+>
 > **UMA prerequisite:** with `MLIP_BACKEND=uma`, the UMA weights must be
 > **prefetched** first — compute nodes have no internet and read the HF cache
 > offline. Run `sbatch scripts/download/perlmutter/download-uma-perlmutter.sh`
