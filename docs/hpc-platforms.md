@@ -55,6 +55,18 @@ Highlights:
 
 ### Perlmutter (NERSC, NVIDIA A100)
 
+- Guide: [docs/vasp-perlmutter.md](vasp-perlmutter.md)
+- Build script: [scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh](../scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh)
+- Launchers: [scripts/launchers/perlmutter/run-vasp-gpu-perlmutter.sh](../scripts/launchers/perlmutter/run-vasp-gpu-perlmutter.sh) (standalone / warm-start), [scripts/launchers/perlmutter/_vasp-step-perlmutter.sh](../scripts/launchers/perlmutter/_vasp-step-perlmutter.sh) (AL loop DFT step)
+
+Highlights:
+
+- OpenACC GPU port built with NVHPC 25.5 / CUDA 12.9, `cray-mpich/8.1.30`, netlib scaLAPACK
+- catalogues every runtime fix: NCCL P2P/SHM disable, CUDA-aware MPI, NVHPC `qd` libs, `--exclusive` multi-node dispatch, per-case `nodes_per_job`, and `resume`-state hygiene
+- explains how to verify a single-point SCF actually converged (`TOTEN` / `E0=` / `</modeling>`, not `reached required accuracy`)
+
+## Quantum Espresso on Perlmutter
+
 - Guide: [docs/quantum-espresso-perlmutter.md](quantum-espresso-perlmutter.md)
 - Build scripts overview: [scripts/setup/perlmutter/QE-BUILD-GUIDE.md](../scripts/setup/perlmutter/QE-BUILD-GUIDE.md)
 - Setup docs: [scripts/setup/perlmutter/README.md](../scripts/setup/perlmutter/README.md)
