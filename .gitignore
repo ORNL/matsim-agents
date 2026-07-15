@@ -43,6 +43,10 @@ outputs/
 logs/
 test_matsim_perlmutter.out
 
+# Slurm job logs written to the repo root (never commit these).
+/*.out
+/*.err
+
 # External code built/installed via scripts/setup/* (e.g. quantum-espresso).
 # Repo "owns" the path layout via the build scripts, but artifacts (source
 # clones, build trees, install prefixes) are too large for git.
