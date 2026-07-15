@@ -77,7 +77,16 @@ export OMP_NUM_THREADS="${THREADS_PER_RANK}"
 export OMP_PLACES="cores"
 export OMP_PROC_BIND="close"
 export OMP_STACKSIZE="${OMP_STACKSIZE:-512M}"
+# VASP 6.6.0 was built with CUDA-aware MPI and refuses to run without it.
+# Keep GPU-aware MPI enabled (=1). Disable both NCCL P2P and SHM transports,
+# which otherwise fail with "Cuda failure 101 / invalid device ordinal" on
+# single-node Perlmutter jobs (GPU cgroup isolation conflicts with NCCL's
+# intra-node device enumeration). Disabling both forces NCCL onto socket
+# (loopback TCP) transport, which works correctly on a single node. This
+# mirrors run-vasp-gpu-perlmutter.sh, the known-good warm-start launcher.
 export MPICH_GPU_SUPPORT_ENABLED=1
+export NCCL_P2P_DISABLE=1
+export NCCL_SHM_DISABLE=1
 
 cd "${WORK_DIR}"
 
