@@ -29,6 +29,13 @@ dependencies = [
     "typer>=0.12",
     "rich>=13.7",
     "pyyaml>=6.0",
+    # Random crystal-structure generation for the unified seed pipeline
+    # (matsim_agents.discovery.seeds.random_search). Modern pyxtal (>=1.0)
+    # ships as a pure-Python wheel with no Fortran/pyshtools build step, so it
+    # is safe to require by default. The pymatgen-bundled AFLOW prototype
+    # encyclopedia is always available; pyxtal adds supplementary random /
+    # novel-topology seeds.
+    "pyxtal>=0.6",
 ]
 
 [project.optional-dependencies]
@@ -45,13 +52,6 @@ uma = [
     # Use INSTALL_UMA=1 with the machine install scripts, which create a
     # separate fairchem_venv to avoid the conflict.
     "fairchem-core",
-]
-pyxtal = [
-    # Random crystal-structure generation for the unified seed pipeline
-    # (matsim_agents.discovery.seeds.random_search). The pymatgen-bundled
-    # AFLOW prototype encyclopedia is always available; pyxtal is only
-    # needed for supplementary random / novel-topology seeds.
-    "pyxtal>=0.6",
 ]
 openai = ["langchain-openai>=0.2.0"]
 ollama = ["langchain-ollama>=0.2.0"]

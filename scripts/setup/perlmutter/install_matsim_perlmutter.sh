@@ -32,7 +32,6 @@
 #   MAX_JOBS          Build parallelism                (default: 16)
 #   LLM_BACKENDS      matsim extras                    (default: dev)
 #   INSTALL_LLM_EXTRAS Install huggingface/transformers extras (default: 0)
-#   INSTALL_PYXTAL     Install optional pyxtal stack    (default: 0)
 #   INSTALL_VLLM_SERVER  Install vLLM package          (default: 0)
 #   INSTALL_UMA        Install fairchem-core (UMA MLIP backend) (default: 0)
 # =============================================================================
@@ -66,7 +65,6 @@ TORCH_CUDA_ARCH="${TORCH_CUDA_ARCH:-8.0}"
 MAX_JOBS="${MAX_JOBS:-16}"
 LLM_BACKENDS="${LLM_BACKENDS:-dev}"
 INSTALL_LLM_EXTRAS="${INSTALL_LLM_EXTRAS:-0}"
-INSTALL_PYXTAL="${INSTALL_PYXTAL:-0}"
 INSTALL_VLLM_SERVER="${INSTALL_VLLM_SERVER:-0}"
 INSTALL_UMA="${INSTALL_UMA:-0}"
 
@@ -233,19 +231,11 @@ else
     log "INSTALL_LLM_EXTRAS=0 -> skipping optional LLM tooling extras"
 fi
 
-# pyXtal (optional, used by matsim_agents.discovery.seeds for random-symmetry
-# crystal generation when no AFLOW prototype matches the target composition).
-# Installed with --upgrade-strategy only-if-needed (via pip_retry) so it cannot
-# upgrade the conda-env's pinned numpy/scipy/pymatgen/spglib/ase. Made
-# non-fatal: pyxtal's transitive deps (notably pyshtools) sometimes fail to
-# build on HPC systems without a working Fortran toolchain; the discovery
-# code already warns and skips random search cleanly when pyxtal is missing.
-if [[ "${INSTALL_PYXTAL}" == "1" ]]; then
-    log "INSTALL_PYXTAL=1 -> installing pyxtal (optional random-symmetry seed generation)..."
-    pip_retry "pyxtal>=0.6" || warn "pyxtal install failed; random-symmetry seed generation will be unavailable."
-else
-    log "INSTALL_PYXTAL=0 -> skipping optional pyxtal install"
-fi
+# pyXtal (random-symmetry seed generation for matsim_agents.discovery.seeds)
+# is now a CORE matsim-agents dependency (see pyproject.toml) and is therefore
+# installed with the editable matsim-agents package above. Modern pyxtal
+# (>=1.0) is a pure-Python wheel with no Fortran/pyshtools build step, so no
+# separate/gated install step is needed here.
 
 if [[ "${INSTALL_VLLM_SERVER}" == "1" ]]; then
     log "INSTALL_VLLM_SERVER=1 -> installing vLLM server package"

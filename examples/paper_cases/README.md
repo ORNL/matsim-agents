@@ -286,7 +286,7 @@ are staged under `$POTCAR_DIR` as bare-symbol subdirectories.
 
 | Feature | Extra install needed |
 |---------|---------------------|
-| `n_random > 0` (pyXtal seeds) | `INSTALL_PYXTAL=1 bash scripts/setup/perlmutter/install_matsim_perlmutter.sh` |
+| `n_random > 0` (pyXtal seeds) | Nothing extra (pyxtal is a core dependency, installed by default) |
 | `acquisition.strategy: mc_dropout` | Nothing extra (works with a single checkpoint) |
 | `acquisition.strategy: ensemble` / `ensemble_then_dropout` | ≥2 entries in `hydragnn.ensemble_paths` |
 | VASP DFT backend | Perlmutter VASP GPU build at `external/vasp6/` + licensed POTCARs at `$POTCAR_DIR` |
