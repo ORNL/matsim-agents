@@ -248,15 +248,11 @@ log "Installing LLM tooling extras (huggingface_hub CLI + transformers)..."
 # up the breaking 1.x line (e.g. 1.15.0) that ships with newer fairchem-core.
 pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0"
 
-# pyXtal (optional, used by matsim_agents.discovery.seeds for random-symmetry
-# crystal generation when no AFLOW prototype matches the target composition).
-# Installed with --upgrade-strategy only-if-needed (via pip_retry) so it cannot
-# upgrade the venv's pinned torch/ROCm/numpy. Made non-fatal: pyxtal's
-# transitive deps (notably pyshtools) sometimes fail to build on HPC systems
-# without a working Fortran toolchain; the discovery code already warns and
-# skips random search cleanly when pyxtal is missing.
-log "Installing pyxtal (optional, for random-symmetry seed generation)..."
-pip_retry "pyxtal>=0.6" || warn "pyxtal install failed; random-symmetry seed generation will be unavailable."
+# pyXtal (random-symmetry seed generation for matsim_agents.discovery.seeds)
+# is now a CORE matsim-agents dependency (see pyproject.toml) and is therefore
+# installed by the `pip install -e "${MATSIM_DIR}[...]"` step above. Modern
+# pyxtal (>=1.0) is a pure-Python wheel with no Fortran/pyshtools build step,
+# so no separate/non-fatal install step is needed here.
 
 # fairchem-core (optional, required for the UMA MLIP backend).
 # IMPORTANT: fairchem-core>=2.0 requires numpy>=2.0 + scipy>=1.15, which
