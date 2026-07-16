@@ -140,8 +140,9 @@ flowchart TD
     Wyckoff multiplicities and minimum-distance constraints. Seeds
     from this path are tagged `needs_dft_verification=True` and called
     out as `(novel)` in the stability report so they get DFT-validated
-    before any publication claim. Optional dependency; the pipeline
-    silently degrades to prototypes-only if pyXtal is absent.
+    before any publication claim. pyXtal is a core dependency (installed
+    by default); the pipeline still degrades gracefully to
+    prototypes-only should it ever be absent.
 - **Stability scoring**: relative chemical stability (ΔE/atom rankings) and a dynamical-stability proxy (residual force tolerance).
 - **Local & HPC ready, portable across diverse DOE accelerators**: same
   Python entry points run on **Frontier (OLCF, AMD MI250X)**, **Aurora
