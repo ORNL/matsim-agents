@@ -1,0 +1,112 @@
+# =============================================================================
+# DFT-concurrency strong-scaling harness on OLCF Frontier (AMD MI250X).
+#
+# Frontier analogue of al_hea_fcc_scaling.yaml. The AL loop dispatches up to
+# (SLURM_JOB_NUM_NODES / nodes_per_job) VASP single-points concurrently, so
+# submitting this SAME config at N = 1, 2, 4, 8 nodes yields a strong-scaling
+# curve for a FIXED workload. Only the vars/paths, the DFT launcher, and the
+# per-node rank layout differ from the Perlmutter config.
+#
+# Fixed workload: n_select = 16 with >=16 MD candidates guaranteed (5 seeds x
+# 7 samples = 35 candidates), so exactly 16 identical VASP single-points run per
+# submission regardless of node count. One iteration only.
+#
+# Frontier node layout: 8 GCDs per node, 56 usable cores (7 per GCD)
+#   -> ranks_per_node=8, threads_per_rank=7.
+#
+# Submit with the companion job script, which sets a per-N RUN_TAG:
+#   scripts/advanced/frontier/job-al-dft-scaling-frontier.sh
+#   scripts/advanced/frontier/submit-al-dft-scaling-sweep.sh
+# =============================================================================
+
+vars:
+  PROJ_ROOT:    ${PROJ_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents}
+  RUNS_ROOT:    ${RUNS_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/runs}
+  HYDRAGNN_DIR: ${HYDRAGNN_DIR:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN}
+  # RUN_TAG is injected per-submission (encodes the node count) so each point in
+  # the scaling sweep writes to its own directory and never resumes another.
+  RUN_TAG:      ${SCALE_TAG:-hea-fcc-scaling-frontier-N1}
+
+  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  POTCAR_DIR: ${PROJ_ROOT}/external/vasp6/potcar/potpaw_PBE.64
+
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+mlip:
+  # Frontier's venv is HydraGNN/ROCm; UMA (fairchem) is not installed there.
+  backend: ${MLIP_BACKEND:-hydragnn}
+  hydragnn:
+    logdir:         ${INITIAL_LOGDIR}
+    checkpoint:     best_model.pt
+    mlp_checkpoint: null
+    precision:  fp32
+    mlp_device: cuda           # torch HIP maps the "cuda" device string on MI250X
+    ensemble_paths: []
+  uma:
+    model_name: uma-s-1p1
+    task_name:  omat
+    device:     cuda
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear
+
+md:
+  seed_source:
+    kind: compositions
+    compositions:
+      - CrMnFeCoNi
+      - Cr2MnFe2CoNi
+      - CrMnFe2CoNi2
+      - CrMnFeCoNi2
+      - CrMn2FeCoNi
+    max_phases_per_composition: 1    # FCC only -> 5 seeds (keeps MD cost low)
+    n_random: 0
+    random_seed: 13
+  timestep_fs: 2.0
+  n_steps: 105                       # 105 / sample_every(15) = 7 frames per seed
+  temperature_K: 1000.0
+  thermostat: langevin
+  friction_inv_ps: 0.08
+  sample_every: 15
+  max_force_threshold_eV_per_A: 60.0
+  max_displacement_A: 5.0
+
+acquisition:
+  strategy: mc_dropout
+  mc_dropout_passes: 8
+  mc_dropout_p: 0.1
+  n_select: 16                       # FIXED workload: exactly 16 VASP jobs/iter
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: ${DFT_BACKEND:-vasp}
+
+  vasp:
+    vasp_bin:         ${VASP_BIN}
+    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/frontier/_vasp-step-frontier.sh
+    incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
+    kpoints_template: null
+    potcar_dir:       ${POTCAR_DIR}
+    nodes_per_job: 1
+    ranks_per_node: 8                 # 8 GCDs per Frontier node
+    threads_per_rank: 7               # 56 usable cores / 8 GCDs
+    timeout_sec: 10800
+    extra_incar:
+      ENCUT: "520"
+      ISMEAR: "1"
+      SIGMA: "0.20"
+      ISPIN: "2"
+      KSPACING: "0.22"
+      NCORE: "4"
+
+trainer:
+  enabled: false                     # scaling test: isolate the DFT stage
+
+loop:
+  n_iterations: 1                    # single batch of 16 single-points
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
+  dataset_format: extxyz
+  resume: false                      # every scaling point starts fresh
+  fail_fast: false
