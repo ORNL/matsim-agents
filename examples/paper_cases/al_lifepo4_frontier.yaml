@@ -1,0 +1,119 @@
+# =============================================================================
+# Portability case: LiFePO4 (olivine battery cathode) AL loop on OLCF Frontier.
+#
+# Cross-platform analogue of al_lifepo4.yaml: the SAME active-learning loop
+# (HydraGNN MD sampling + mc_dropout acquisition + VASP vasp_std labelling),
+# retargeted from Perlmutter (NVIDIA A100) to Frontier (AMD MI250X). Only the
+# vars/paths, the DFT + train launchers, and the per-node rank layout differ;
+# the md, acquisition, and loop physics are identical to the Perlmutter config.
+#
+# Frontier node layout: 8 GCDs (logical GPUs) per node, 56 usable cores
+# (7 per GCD) -> ranks_per_node=8, threads_per_rank=7.
+#
+# How to run (from the Frontier repo checkout):
+#   matsim-agents al validate-config examples/paper_cases/al_lifepo4_frontier.yaml
+#   CASE=lifepo4 sbatch scripts/advanced/frontier/job-active-learning-paper-cases-frontier.sh
+#   # or, directly through the AL launcher:
+#   sbatch --export=ALL,AL_CONFIG=$PWD/examples/paper_cases/al_lifepo4_frontier.yaml \
+#       scripts/launchers/frontier/run-active-learning-frontier.sh
+#
+# All vars default to the lrn070 project checkout but are env-overridable:
+#   PROJ_ROOT=$PWD RUNS_ROOT=/path/to/runs matsim-agents al run <cfg>
+# =============================================================================
+
+vars:
+  PROJ_ROOT:    ${PROJ_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents}
+  RUNS_ROOT:    ${RUNS_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/runs}
+  HYDRAGNN_DIR: ${HYDRAGNN_DIR:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN}
+  RUN_TAG:      lifepo4-frontier-al-001
+
+  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  POTCAR_DIR: ${PROJ_ROOT}/external/vasp6/potcar/potpaw_PBE.64
+
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+# ---------------------------------------------------------------------------
+
+mlip:
+  # Frontier's venv is HydraGNN/ROCm (fairchem/UMA needs numpy>=2 and is not
+  # installed there), so the platform-native MLIP is HydraGNN. Override with
+  # MLIP_BACKEND=uma only on a node where fairchem-core is available.
+  backend: ${MLIP_BACKEND:-hydragnn}
+  hydragnn:
+    logdir:         ${INITIAL_LOGDIR}
+    checkpoint:     best_model.pt
+    mlp_checkpoint: null
+    charge: 0.0
+    spin:   0.0
+    precision:  fp32
+    mlp_device: cuda           # torch HIP maps the "cuda" device string on MI250X
+    ensemble_paths: []
+  uma:
+    model_name: uma-s-1p1     # fairchem pretrained model (or local checkpoint path)
+    task_name:  omat          # inorganic bulk materials head
+    device:     cuda
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear
+
+md:
+  seed_source:
+    kind: compositions
+    compositions:
+      - LiFePO4          # olivine prototype (AFLOW AB4C_oP12 / AB4CD_oP28)
+    max_phases_per_composition: 4    # olivine + maricite + 2 others
+    n_random: 4                      # pyXtal random-symmetry search (requires pyxtal)
+    random_seed: 42
+  timestep_fs: 1.0
+  n_steps: 300
+  temperature_K: 800.0              # above Debye temp; samples broader config space
+  thermostat: langevin
+  friction_inv_ps: 0.1
+  sample_every: 10
+  max_force_threshold_eV_per_A: 50.0
+  max_displacement_A: 5.0
+
+acquisition:
+  strategy: mc_dropout
+  mc_dropout_passes: 16
+  mc_dropout_p: 0.1
+  n_select: 128
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: ${DFT_BACKEND:-vasp}
+
+  vasp:
+    vasp_bin:         ${VASP_BIN}
+    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/frontier/_vasp-step-frontier.sh
+    incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
+    kpoints_template: null            # use KSPACING from INCAR (auto Gamma mesh)
+    potcar_dir:       ${POTCAR_DIR}
+    nodes_per_job: 1
+    ranks_per_node: 8                 # 8 GCDs per Frontier node
+    threads_per_rank: 7               # 56 usable cores / 8 GCDs
+    timeout_sec: 7200
+    extra_incar:
+      ENCUT: "520"
+      ISMEAR: "0"          # Gaussian smearing: LiFePO4 is a wide-gap insulator
+      SIGMA: "0.05"
+      ISPIN: "2"           # Fe carries a local moment
+      KSPACING: "0.30"     # olivine cell is elongated; KSPACING adapts per axis
+      NCORE: "4"
+
+trainer:
+  enabled: true
+  train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
+  train_launcher: ${PROJ_ROOT}/scripts/launchers/frontier/_hydragnn-train-step-frontier.sh
+  epochs_per_iter: 5
+  nodes_for_train: 4
+  ranks_per_node:  8
+
+loop:
+  n_iterations: 10
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: false
