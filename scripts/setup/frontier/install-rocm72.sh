@@ -11,13 +11,13 @@
 # Phase 3: Submit build-vllm-rocm72.sh as a compute batch job.
 #
 # Usage (on a login node):
-#   bash /lustre/orion/mat746/proj-shared/matsim-agents/scripts/setup/frontier/install-rocm72.sh
+#   bash /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents/scripts/setup/frontier/install-rocm72.sh
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 VLLM_SRC=$PROJ/cache/vllm-src/vllm

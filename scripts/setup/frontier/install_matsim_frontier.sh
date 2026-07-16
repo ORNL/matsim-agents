@@ -74,6 +74,16 @@ MATSIM_REPO="${MATSIM_REPO:-https://github.com/ORNL/matsim-agents.git}"
 LLM_BACKENDS="${LLM_BACKENDS:-vllm,dev}"
 INSTALL_UMA="${INSTALL_UMA:-0}"
 
+# vLLM (the inference-engine package) has NO pre-built ROCm wheels and must be
+# COMPILED from source with hipcc against the real ROCm toolchain. Frontier
+# LOGIN nodes only carry a stub /opt/rocm-*/ (no hipcc/headers/libs) — that
+# toolchain exists only on COMPUTE nodes. So this login-node installer must
+# NOT attempt the vLLM source build (doing so aborts the whole install under
+# `set -e`). We default SKIP_VLLM=1 here; build vLLM afterwards on a compute
+# node via scripts/setup/frontier/build-vllm-rocm72.sh (see install-rocm72.sh,
+# which orchestrates the login-side dep pre-download + the compute build job).
+SKIP_VLLM="${SKIP_VLLM:-1}"
+
 # ROCm version selection (default: 7.1; pass --rocm72 or set ROCM_VERSION=7.2)
 ROCM_VERSION="${ROCM_VERSION:-7.1}"
 
@@ -169,7 +179,7 @@ if [[ "$ROCM_VERSION" == "7.2" ]]; then
     log "INSTALL_ROOT=${INSTALL_ROOT}"
     log "VENV_PATH=${VENV_PATH}"
     ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
-        && INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" \
+        && INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" SKIP_VLLM="${SKIP_VLLM}" \
            bash "hydragnn_installation_bash_script_frontier-rocm72.sh" )
 else
     SC_INSTALLER="${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_frontier-rocm71.sh"
@@ -179,7 +189,7 @@ else
     log "INSTALL_ROOT=${INSTALL_ROOT}"
     log "VENV_PATH=${VENV_PATH}"
     ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
-        && INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" \
+        && INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" SKIP_VLLM="${SKIP_VLLM}" \
            bash "hydragnn_installation_bash_script_frontier-rocm71.sh" )
 fi
 log "HydraGNN environment build complete."
