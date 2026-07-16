@@ -47,10 +47,10 @@
 # Submit:
 #   sbatch scripts/prebuild-tvm-ffi-frontier.sh
 # ---------------------------------------------------------------------------
-#SBATCH -A mat746
+#SBATCH -A lrn070
 #SBATCH -J prebuild-tvm-ffi
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/prebuild-tvm-ffi-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/prebuild-tvm-ffi-%j.out
+#SBATCH -o /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/runs/prebuild-tvm-ffi-%j.out
+#SBATCH -e /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/runs/prebuild-tvm-ffi-%j.out
 #SBATCH -t 00:15:00
 #SBATCH -N 1
 #SBATCH -p batch
@@ -60,7 +60,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv
 CACHE_DIR=$PROJ/cache/tvm-ffi
