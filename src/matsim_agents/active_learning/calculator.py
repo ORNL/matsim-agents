@@ -56,7 +56,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     import json
 
     import torch
-    from hydragnn.utils.model.load_existing_model import load_existing_model_config
+    from hydragnn.models.create import create_model_config
 
     from matsim_agents.tools.relaxation import (
         _build_calculator,  # type: ignore[attr-defined]
@@ -85,16 +85,24 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = load_existing_model_config(
-        config=hcfg,
-        model_name=hcfg["NeuralNetwork"].get("model_name", "EquivariantPNAStack"),
+    model = create_model_config(
+        config=hcfg["NeuralNetwork"],
+        verbosity=hcfg.get("Verbosity", {}).get("level", 0),
     )
     if cfg.checkpoint:
         ckpt_path = (
             cfg.checkpoint if os.path.isabs(cfg.checkpoint) else str(logdir / cfg.checkpoint)
         )
         state = torch.load(ckpt_path, map_location=device)
-        model.load_state_dict(state.get("model_state_dict", state), strict=False)
+        state_dict = state.get("model_state_dict", state)
+        # HydraGNN saves checkpoints from a DDP-wrapped model, so every key
+        # carries a "module." prefix. We build a bare (non-DDP) model here, so
+        # strip that prefix to make the keys line up.
+        state_dict = {
+            (k[len("module.") :] if k.startswith("module.") else k): v
+            for k, v in state_dict.items()
+        }
+        model.load_state_dict(state_dict, strict=False)
     model.to(device).eval()
 
     mlp = None
