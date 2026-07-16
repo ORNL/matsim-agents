@@ -75,13 +75,19 @@ LLM_BACKENDS="${LLM_BACKENDS:-vllm,dev}"
 INSTALL_UMA="${INSTALL_UMA:-0}"
 
 # vLLM (the inference-engine package) has NO pre-built ROCm wheels and must be
-# COMPILED from source with hipcc against the real ROCm toolchain. Frontier
-# LOGIN nodes only carry a stub /opt/rocm-*/ (no hipcc/headers/libs) — that
-# toolchain exists only on COMPUTE nodes. So this login-node installer must
-# NOT attempt the vLLM source build (doing so aborts the whole install under
-# `set -e`). We default SKIP_VLLM=1 here; build vLLM afterwards on a compute
-# node via scripts/setup/frontier/build-vllm-rocm72.sh (see install-rocm72.sh,
-# which orchestrates the login-side dep pre-download + the compute build job).
+# COMPILED from source. We default SKIP_VLLM=1 in this login-node installer and
+# build vLLM afterwards on a compute node via
+# scripts/setup/frontier/build-vllm-rocm72.sh (see install-rocm72.sh, which
+# orchestrates the login-side dep pre-download + the compute build job).
+#
+# NOTE ON THE PRIOR ABORT: the earlier failure here was NOT a missing toolchain
+# (Frontier login nodes DO carry a real /opt/rocm-7.2.0/bin/hipcc, and it built
+# the whole HydraGNN/PyG HIP stack on the login node). It was a PATH MISMATCH:
+# this script pre-clones vLLM to ${PROJECT_DIR}/cache/vllm-src/vllm, but the
+# HydraGNN sub-installer's vLLM section defaulted to ${HYDRAGNN_DIR}/cache/...
+# and, not finding the tree, `exit 1`-ed under `set -e` and killed the whole
+# install. We now (a) default SKIP_VLLM=1, and (b) export VLLM_SRC_DIR into the
+# sub-installer so that even SKIP_VLLM=0 finds the pre-cloned source.
 SKIP_VLLM="${SKIP_VLLM:-1}"
 
 # ROCm version selection (default: 7.1; pass --rocm72 or set ROCM_VERSION=7.2)
@@ -179,7 +185,7 @@ if [[ "$ROCM_VERSION" == "7.2" ]]; then
     log "INSTALL_ROOT=${INSTALL_ROOT}"
     log "VENV_PATH=${VENV_PATH}"
     ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
-        && INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" SKIP_VLLM="${SKIP_VLLM}" \
+        && INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" SKIP_VLLM="${SKIP_VLLM}" VLLM_SRC_DIR="${VLLM_SRC_DIR}" \
            bash "hydragnn_installation_bash_script_frontier-rocm72.sh" )
 else
     SC_INSTALLER="${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_frontier-rocm71.sh"
@@ -189,7 +195,7 @@ else
     log "INSTALL_ROOT=${INSTALL_ROOT}"
     log "VENV_PATH=${VENV_PATH}"
     ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
-        && INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" SKIP_VLLM="${SKIP_VLLM}" \
+        && INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" SKIP_VLLM="${SKIP_VLLM}" VLLM_SRC_DIR="${VLLM_SRC_DIR}" \
            bash "hydragnn_installation_bash_script_frontier-rocm71.sh" )
 fi
 log "HydraGNN environment build complete."
