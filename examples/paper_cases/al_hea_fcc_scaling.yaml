@@ -54,8 +54,11 @@ md:
       - CrMnFe2CoNi2
       - CrMnFeCoNi2
       - CrMn2FeCoNi
-    max_phases_per_composition: 1    # FCC only -> 5 seeds (keeps MD cost low)
-    n_random: 0
+    max_phases_per_composition: 1    # 1 seed/composition -> 5 seeds (keeps MD cost low)
+    # Equimolar HEAs have no matching AFLOW prototype (signature (1,1,1,1,1) is
+    # absent from the 288-entry encyclopedia), so seeds come from one pyXtal
+    # random structure per composition. Deterministic under random_seed.
+    n_random: 1
     random_seed: 13
   timestep_fs: 2.0
   n_steps: 105                       # 105 / sample_every(15) = 7 frames per seed
