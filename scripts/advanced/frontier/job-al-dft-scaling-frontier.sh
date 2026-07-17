@@ -60,6 +60,11 @@ source scripts/setup/frontier/setup_matsim_frontier.sh --rocm72
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
+# Make HydraGNN example utilities importable (inference_fused, etc.), which the
+# HydraGNN ASE calculator in tools/relaxation.py imports at build time.
+HYDRAGNN_EXAMPLE="${HYDRAGNN_DIR:-$PROJ/HydraGNN}/examples/multidataset_hpo_sc26"
+export PYTHONPATH="$HYDRAGNN_EXAMPLE:${HYDRAGNN_DIR:-$PROJ/HydraGNN}:${PYTHONPATH:-}"
+
 echo "=========================================="
 echo "[Frontier AL DFT-scaling point]"
 echo "Date:      $(date)"
