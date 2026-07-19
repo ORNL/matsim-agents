@@ -1,13 +1,13 @@
-"""Append labelled VASP results to the AL dataset and (optionally) retrain HydraGNN.
+"""Append labelled DFT results to the AL dataset and optionally retrain the MLIP.
 
 The dataset is stored as an extended-XYZ file (one frame per labelled
 structure) so it is human-inspectable, ASE-readable, and easy to slurp into
 HydraGNN's training pipeline.
 
-Retraining is delegated to a user-supplied training script (typically one of
-``HydraGNN/examples/.../train.py``) so we don't hard-code any particular
-HydraGNN training config here. The trainer just shells out to the
-training-launcher bash script (which itself handles ``srun`` + module setup).
+Retraining is delegated to a user-supplied training script so we don't hard-code
+any particular backend training config here. The trainer just shells out to a
+training-launcher bash script (which itself handles ``srun`` + module setup), or
+falls back to invoking the script directly with Python for single-process use.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from pathlib import Path
 from ase import Atoms
 from ase.io import write as ase_write
 
-from matsim_agents.active_learning.config import HydraGNNConfig, TrainerConfig
+from matsim_agents.active_learning.config import HydraGNNConfig, TrainerConfig, UMAConfig
 from matsim_agents.active_learning.dft_backend import DFTResult
 
 log = logging.getLogger(__name__)
@@ -158,3 +158,71 @@ def retrain_hydragnn(
         raise RuntimeError(f"HydraGNN retrain failed with exit {proc.returncode}; see {log_path}")
 
     return out_logdir
+
+
+def retrain_uma(
+    trainer_cfg: TrainerConfig,
+    uma_cfg: UMAConfig,
+    dataset_path: str | Path,
+    iteration: int,
+    out_model_dir: str | Path,
+) -> Path:
+    """Spawn a user-supplied UMA fine-tuning script as a child process.
+
+    Returns the path to the fine-tuned model directory/checkpoint, which becomes
+    ``UMAConfig.model_name`` for the next AL iteration. The launcher convention is
+    analogous to the HydraGNN hook, but passes UMA-specific inputs:
+
+    ``<train_script> <dataset_path> <out_model_dir> <base_model> <task_name> <epochs> <nodes> <ranks>``.
+
+    The launcher is responsible for translating the extxyz dataset into the
+    exact FairChem/UMA fine-tuning command used at the deployment site.
+    """
+    out_model_dir = Path(out_model_dir)
+    if not trainer_cfg.enabled:
+        log.info("trainer.enabled=False; skipping UMA fine-tune at iteration %d", iteration)
+        return Path(str(uma_cfg.model_name))
+
+    out_model_dir.mkdir(parents=True, exist_ok=True)
+
+    if trainer_cfg.train_launcher is not None:
+        argv = [
+            "bash",
+            str(trainer_cfg.train_launcher),
+            str(trainer_cfg.train_script),
+            str(dataset_path),
+            str(out_model_dir),
+            str(uma_cfg.model_name),
+            str(uma_cfg.task_name),
+            str(trainer_cfg.epochs_per_iter),
+            str(trainer_cfg.nodes_for_train),
+            str(trainer_cfg.ranks_per_node),
+        ]
+    else:
+        log.warning(
+            "trainer.train_launcher not set; running UMA fine-tune in-process "
+            "(no srun, no module swap). For multi-node training set train_launcher."
+        )
+        argv = [
+            "python",
+            str(trainer_cfg.train_script),
+            "--dataset",
+            str(dataset_path),
+            "--output-dir",
+            str(out_model_dir),
+            "--base-model",
+            str(uma_cfg.model_name),
+            "--task-name",
+            str(uma_cfg.task_name),
+            "--epochs",
+            str(trainer_cfg.epochs_per_iter),
+        ]
+
+    log.info("Launching UMA fine-tune: %s", " ".join(argv))
+    log_path = out_model_dir / "train.log"
+    with open(log_path, "w") as f:
+        proc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"UMA fine-tune failed with exit {proc.returncode}; see {log_path}")
+
+    return out_model_dir
