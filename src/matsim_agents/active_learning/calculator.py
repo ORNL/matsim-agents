@@ -74,7 +74,10 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     with open(config_path) as f:
         hcfg = json.load(f)
 
-    radius = (
+    # vesin's neighbor-list builder (via RadiusGraphPBC) requires a strict
+    # Python float cutoff; HydraGNN configs commonly store radius as an int
+    # (e.g. 5), so coerce here. Mirrors tools/relaxation.py's fused-stack loader.
+    radius = float(
         cfg.radius if cfg.radius is not None else hcfg["NeuralNetwork"]["Architecture"]["radius"]
     )
     max_neighbours = (
