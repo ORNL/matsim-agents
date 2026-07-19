@@ -70,8 +70,9 @@ class MCDropoutInjectionConfig(BaseModel):
 class UMAConfig(BaseModel):
     """Inputs to load a UMA (fairchem) universal MLIP as an ASE calculator.
 
-    UMA is a frozen foundation model: there is no per-iteration retraining, so
-    set ``trainer.enabled: false`` when using this backend.
+    By default UMA is used as a frozen foundation model, but the AL trainer can
+    optionally call a user-supplied FairChem/UMA fine-tuning launcher after each
+    DFT-labelled batch and use the resulting model path on the next iteration.
     """
 
     model_name: str = Field(
@@ -367,19 +368,23 @@ class DFTConfig(BaseModel):
 
 
 class TrainerConfig(BaseModel):
-    """How to retrain HydraGNN at the end of each AL iteration.
+    """How to retrain the MLIP at the end of each AL iteration.
 
-    Not used by frozen-foundation-model backends (e.g. UMA): set
-    ``enabled: false`` and leave ``train_script`` unset for those.
+    HydraGNN and UMA both use a user-supplied training script/launcher. For UMA,
+    leave ``enabled: false`` to keep using the frozen foundation model and simply
+    accumulate labels for offline fine-tuning.
     """
 
     enabled: bool = True
     train_script: Path | None = Field(
         None,
         description=(
-            "Path to a HydraGNN training script (e.g. examples/mptrj/train.py) that "
-            "accepts --config, --logdir, and --resume_from. Required only when "
-            "enabled=True."
+            "Path to a backend training script. Required when enabled=True. "
+            "HydraGNN scripts receive --dataset/--logdir/--resume_from in the "
+            "direct Python path; UMA scripts receive --dataset/--output-dir/"
+            "--base-model/--task-name. Launcher scripts may define their own "
+            "site-specific command using the positional arguments passed by "
+            "matsim-agents."
         ),
     )
     train_launcher: Path | None = Field(

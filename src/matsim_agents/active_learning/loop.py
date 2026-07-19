@@ -47,6 +47,7 @@ from matsim_agents.active_learning.trainer import (
     append_frames_to_extxyz,
     dft_results_to_frames,
     retrain_hydragnn,
+    retrain_uma,
 )
 from matsim_agents.active_learning.uncertainty import select_candidates
 
@@ -263,11 +264,20 @@ def run_active_learning(cfg: ALConfig) -> None:
                 # Update logdir for next iteration (in-memory only — we re-resolve
                 # from state.json on restart).
                 cfg.mlip.hydragnn.logdir = new_logdir
+            elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None and cfg.trainer.enabled:
+                new_model = retrain_uma(
+                    cfg.trainer,
+                    cfg.mlip.uma,
+                    dataset_path=dataset_path,
+                    iteration=i,
+                    out_model_dir=it_dir / "model",
+                )
+                state.new_logdir = str(new_model)
+                cfg.mlip.uma.model_name = str(new_model)
             else:
-                # Frozen foundation model (e.g. UMA): no per-iteration retraining.
-                # The labelled dataset still accumulates for offline fine-tuning.
+                # Frozen foundation model / disabled trainer: keep accumulating labels.
                 log.info(
-                    "Skipping retraining for backend=%s (frozen model); "
+                    "Skipping retraining for backend=%s; "
                     "%d labelled frames accumulated in %s.",
                     cfg.mlip.backend,
                     n_appended,
