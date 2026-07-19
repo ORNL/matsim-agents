@@ -102,13 +102,27 @@ def sample_md_candidates(
             "The AL loop computes this from md_cfg.seed_source."
         )
 
+    # Optionally seed the MD RNG so the trajectory and candidate pool are
+    # reproducible across runs (used e.g. by the strong-scaling harness so the
+    # identical structure set is labelled at every node count). A dedicated
+    # RandomState is threaded through both the velocity initialisation and the
+    # Langevin thermostat; ``None`` (the default) leaves sampling stochastic.
+    md_rng = None
+    if md_cfg.random_seed is not None:
+        md_rng = np.random.RandomState(md_cfg.random_seed)
+
     for seed_path in seed_paths:
         seed_path = str(seed_path)
         atoms = _read_structure(seed_path)
         atoms.calc = calculator
 
         # Initialise velocities from a Maxwell-Boltzmann distribution.
-        MaxwellBoltzmannDistribution(atoms, temperature_K=md_cfg.temperature_K)
+        if md_rng is not None:
+            MaxwellBoltzmannDistribution(
+                atoms, temperature_K=md_cfg.temperature_K, rng=md_rng
+            )
+        else:
+            MaxwellBoltzmannDistribution(atoms, temperature_K=md_cfg.temperature_K)
 
         timestep = md_cfg.timestep_fs * units.fs
         if md_cfg.thermostat == "langevin":
@@ -117,6 +131,7 @@ def sample_md_candidates(
                 timestep=timestep,
                 temperature_K=md_cfg.temperature_K,
                 friction=md_cfg.friction_inv_ps / units.fs * 1e-3,  # ps^-1 -> ASE units
+                rng=md_rng,
             )
         elif md_cfg.thermostat == "nvt-berendsen":
             dyn = NVTBerendsen(

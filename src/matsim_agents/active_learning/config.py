@@ -165,6 +165,15 @@ class MDConfig(BaseModel):
     sample_every: int = 10  # snapshot every N steps for the candidate pool
     max_force_threshold_eV_per_A: float = 50.0  # discard exploding frames
     max_displacement_A: float = 5.0  # discard frames moving > X Å from start
+    random_seed: int | None = Field(
+        default=None,
+        description=(
+            "If set, seed the MD RNG (Maxwell-Boltzmann velocities and the "
+            "Langevin thermostat noise) so the sampled trajectory and the "
+            "resulting candidate pool are reproducible across runs. Leave "
+            "unset for stochastic sampling (the default)."
+        ),
+    )
 
 
 class LLMSeedConfig(BaseModel):
