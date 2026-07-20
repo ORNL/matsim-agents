@@ -542,7 +542,12 @@ number of active learning iterations. Each iteration proceeds as follows:
   closed-source code that requires user-provided source access. Converged frames
   are converted to the extended-XYZ format.
 \item \textbf{\acs{MLIP} retraining}: the new frames are appended to the training
-  dataset and HydraGNN is retrained for a configurable number of epochs.
+  dataset and the selected \acs{MLIP} backend is retrained for a configurable
+  number of epochs---HydraGNN is retrained from its checkpoint, while UMA is
+  optionally fine-tuned from its foundation-model checkpoint---through a
+  user-supplied training script or multi-node launcher. When retraining is
+  disabled, UMA is used as a frozen foundation model and the labeled frames are
+  simply accumulated for offline fine-tuning.
 \item \textbf{Loop state serialization}: a \texttt{state.json} per iteration
   records candidate/selection counts, \acs{UQ} statistics, \acs{DFT} convergence rates,
   and timing. Fault-tolerant resume logic skips completed iterations.
