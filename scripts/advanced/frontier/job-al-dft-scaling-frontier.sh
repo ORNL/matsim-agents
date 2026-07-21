@@ -9,8 +9,8 @@
 # ---------------------------------------------------------------------------
 # matsim-agents: DFT-concurrency STRONG-SCALING harness on OLCF Frontier.
 #
-# Runs ONE active-learning iteration with a FIXED 16-job DFT workload
-# (examples/paper_cases/al_hea_fcc_scaling_frontier.yaml, n_select=16,
+# Runs ONE active-learning iteration with a FIXED 32-job DFT workload
+# (examples/paper_cases/al_hea_fcc_scaling_frontier.yaml, n_select=32,
 # HydraGNN + VASP). The AL driver dispatches up to
 # (SLURM_JOB_NUM_NODES / nodes_per_job=1) VASP single-points concurrently, so
 # submitting this script at several node counts produces a strong-scaling curve
@@ -21,8 +21,9 @@
 # or a single point directly:
 #   sbatch -N 4 scripts/advanced/frontier/job-al-dft-scaling-frontier.sh
 #
-# Each submission writes to a per-N RUN_TAG (hea-fcc-scaling-frontier-N<nodes>)
-# so points never collide.
+# Each submission writes to a per-(N,repeat) RUN_TAG
+# (hea-fcc-scaling-frontier-N<nodes>-r<rep>) so points never collide. REP/AL_SEED
+# randomize the workload per repeat (fixed across node counts within a repeat).
 #
 # Paths default to the lrn070 project checkout but are env-overridable:
 #   PROJECT_ROOT, RUNS_ROOT, VENV_ROOT.
@@ -42,10 +43,15 @@ RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 AL_CONFIG="$REPO/examples/paper_cases/al_hea_fcc_scaling_frontier.yaml"
 [[ ! -f "$AL_CONFIG" ]] && { echo "ERROR: missing $AL_CONFIG" >&2; exit 2; }
 
-# ── per-N run tag (consumed by the YAML via ${SCALE_TAG}) ─────────────────────
+# ── per-(N,repeat) run tag (consumed by the YAML via ${SCALE_TAG}) ────────────
+# REP indexes the repeat; AL_SEED randomizes the workload per repeat (held fixed
+# across node counts within a repeat) so averaging over repeats dampens per-draw
+# variability. Each (N,REP) writes to its own out_dir -> no resume/collision.
 NNODES="${SLURM_JOB_NUM_NODES:-1}"
-export SCALE_TAG="hea-fcc-scaling-frontier-N${NNODES}"
-RUN_DIR="$RUNS_ROOT/al-scaling-N${NNODES}-${SLURM_JOB_ID:-$$}"
+REP="${REP:-1}"
+export AL_SEED="${AL_SEED:-$((12 + REP))}"
+export SCALE_TAG="hea-fcc-scaling-frontier-N${NNODES}-r${REP}"
+RUN_DIR="$RUNS_ROOT/al-scaling-N${NNODES}-r${REP}-${SLURM_JOB_ID:-$$}"
 mkdir -p "$RUN_DIR"
 
 # ── backends ──────────────────────────────────────────────────────────────────
@@ -70,6 +76,7 @@ echo "[Frontier AL DFT-scaling point]"
 echo "Date:      $(date)"
 echo "Job ID:    ${SLURM_JOB_ID:-N/A}"
 echo "Nodes:     ${NNODES}  (=> ${NNODES}-way DFT concurrency, nodes_per_job=1)"
+echo "Repeat:    ${REP}  (AL_SEED=${AL_SEED})"
 echo "SCALE_TAG: ${SCALE_TAG}"
 echo "AL config: ${AL_CONFIG}"
 echo "Run dir:   ${RUN_DIR}"
