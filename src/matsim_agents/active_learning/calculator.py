@@ -46,6 +46,55 @@ def make_mlip_calculator(
     raise ValueError(f"Unknown mlip.backend: {cfg.backend!r}")
 
 
+def _build_single_head_calculator(
+    model,
+    *,
+    radius,
+    max_neighbours,
+    param_dtype,
+    device,
+    charge,
+    spin,
+):
+    """ASE calculator for a single-branch (``num_branches==1``) HydraGNN model.
+
+    Bypasses the BranchWeightMLP entirely: the decoder uses ``branch-0``
+    directly, so energy = ``model(data)[0]`` and forces = ``-dE/dx`` via autograd.
+    Used for the 'drop-all-heads + new head' fine-tune models.
+    """
+    import torch
+    from ase.calculators.calculator import Calculator, all_changes
+
+    from matsim_agents.tools.relaxation import _atoms_to_graph  # type: ignore[attr-defined]
+
+    class SingleHeadHydraGNNCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def __init__(self):
+            super().__init__()
+            self.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            data = _atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours).to(device)
+            # Keep float tensors on the model precision regardless of the ambient
+            # default dtype at call time.
+            data.pos = data.pos.to(param_dtype)
+            if hasattr(data, "cell") and data.cell is not None:
+                data.cell = data.cell.to(param_dtype)
+            data.x = data.x.to(param_dtype)
+            data.pos.requires_grad_(True)
+            with torch.enable_grad():
+                pred = model(data)
+                energy = pred[0] if isinstance(pred, (list, tuple)) else pred
+                energy = energy.squeeze(-1).sum()
+                forces = -torch.autograd.grad(energy, data.pos)[0]
+            self.results["energy"] = float(energy.detach())
+            self.results["forces"] = forces.detach().cpu().numpy()
+
+    return SingleHeadHydraGNNCalculator()
+
+
 def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path | None = None):
     """Build a ready-to-use ASE calculator from a HydraGNN logdir.
 
@@ -54,9 +103,11 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     """
     # Heavy imports kept inside the function so this module stays cheap to import.
     import json
+    import sys
 
     import torch
     from hydragnn.models.create import create_model_config
+    from hydragnn.train.train_validate_test import resolve_precision
 
     from matsim_agents.tools.relaxation import (
         _build_calculator,  # type: ignore[attr-defined]
@@ -70,6 +121,19 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     config_path = logdir / "config.json"
     if not config_path.is_file():
         raise FileNotFoundError(f"HydraGNN config.json not found in {logdir}")
+
+    # ``inference_fused`` lives in the HydraGNN example dir alongside the GFM
+    # logdir (``.../multidataset_hpo_sc26/<gfm_logdir>``). Make the eval path
+    # self-sufficient by putting that dir on sys.path here, so it does not rely
+    # on the caller (or the fine-tune module) having imported it first. Also
+    # honour HYDRAGNN_ROOT if set, matching finetune_hydragnn's resolution.
+    _example_dirs = [logdir.parent]
+    _root_env = os.environ.get("HYDRAGNN_ROOT")
+    if _root_env:
+        _example_dirs.append(Path(_root_env) / "examples" / "multidataset_hpo_sc26")
+    for _d in _example_dirs:
+        if (_d / "inference_fused.py").is_file() and str(_d) not in sys.path:
+            sys.path.insert(0, str(_d))
 
     with open(config_path) as f:
         hcfg = json.load(f)
@@ -88,10 +152,66 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # The model precision is dictated by the training config (the fp64 GFM must
+    # be run in fp64, otherwise data tensors built downstream mismatch the model
+    # weights). Resolve it here and keep every tensor (model + branch-MLP +
+    # inference inputs) on the same dtype.
+    precision_str = (
+        cfg.precision
+        if cfg.precision is not None
+        else hcfg["NeuralNetwork"]["Training"].get("precision", "fp32")
+    )
+    _, param_dtype, _ = resolve_precision(precision_str)
+    torch.set_default_dtype(param_dtype)
+
     model = create_model_config(
         config=hcfg["NeuralNetwork"],
         verbosity=hcfg.get("Verbosity", {}).get("level", 0),
     )
+    # create_model_config may overwrite the default dtype; restore + cast model.
+    torch.set_default_dtype(param_dtype)
+    model = model.to(dtype=param_dtype, device=device)
+
+    # --- new-head (single-branch) fine-tune models -----------------------------
+    # When ``newhead_ft_config`` is set, the checkpoint was produced by
+    # finetune_hydragnn_newhead: the 16-branch decoder was replaced by a single
+    # fresh ``branch-0`` head. Reproduce that surgery here (build the 16-branch
+    # backbone, apply ORNL ``update_architecture``) so the checkpoint loads into a
+    # byte-identical model, then use direct single-head inference (no branch-MLP).
+    if cfg.newhead_ft_config is not None:
+        from matsim_agents.active_learning.finetune_hydragnn_newhead import (
+            apply_newhead_surgery,
+        )
+
+        with open(cfg.newhead_ft_config) as f:
+            newhead = json.load(f)
+        model = apply_newhead_surgery(
+            model, newhead["ft_config"], ft_repo=cfg.ft_repo, freeze=False
+        )
+        torch.set_default_dtype(param_dtype)
+        model = model.to(dtype=param_dtype, device=device)
+        if cfg.checkpoint:
+            ckpt_path = (
+                cfg.checkpoint if os.path.isabs(cfg.checkpoint) else str(logdir / cfg.checkpoint)
+            )
+            state = torch.load(ckpt_path, map_location=device)
+            state_dict = state.get("model_state_dict", state)
+            state_dict = {
+                (k[len("module.") :] if k.startswith("module.") else k): v
+                for k, v in state_dict.items()
+            }
+            model.load_state_dict(state_dict, strict=False)
+        model.to(device).eval()
+        return _build_single_head_calculator(
+            model=model,
+            radius=radius,
+            max_neighbours=max_neighbours,
+            param_dtype=param_dtype,
+            device=device,
+            charge=cfg.charge,
+            spin=cfg.spin,
+        )
+
     if cfg.checkpoint:
         ckpt_path = (
             cfg.checkpoint if os.path.isabs(cfg.checkpoint) else str(logdir / cfg.checkpoint)
@@ -110,11 +230,24 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
 
     mlp = None
     if cfg.hydragnn_branch_mlp_checkpoint is not None:
-        mlp_state = torch.load(str(cfg.hydragnn_branch_mlp_checkpoint), map_location=cfg.mlp_device)
-        # The MLP architecture lives with the upstream training script; we only
-        # forward the state-dict — callers needing the MLP must rely on
-        # tools/relaxation.py's loader once it's promoted to a public API.
-        mlp = mlp_state
+        # ``run_fused_inference`` expects a live ``BranchWeightMLP`` module
+        # (it calls ``mlp.parameters()``), so reconstruct it from the saved
+        # state-dict using the example's own loader to guarantee the exact
+        # architecture. The raw checkpoint stores the state-dict under
+        # ``mlp_state_dict``.
+        from inference_fused import (  # provided alongside the HydraGNN example
+            _reconstruct_mlp_from_state_dict,
+        )
+
+        mlp_ckpt = torch.load(
+            str(cfg.hydragnn_branch_mlp_checkpoint), map_location=cfg.mlp_device
+        )
+        mlp_state = mlp_ckpt.get("mlp_state_dict", mlp_ckpt)
+        mlp = _reconstruct_mlp_from_state_dict(mlp_state)
+        mlp = mlp.to(dtype=param_dtype, device=cfg.mlp_device)
+        mlp.eval()
+        for p in mlp.parameters():
+            p.requires_grad_(False)
 
     autocast_ctx = torch.autocast(device_type=device.type, enabled=False)
     mlp_autocast_ctx = torch.autocast(device_type=cfg.mlp_device, enabled=False)
@@ -124,10 +257,10 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         mlp=mlp,
         radius=radius,
         max_neighbours=max_neighbours,
-        param_dtype=torch.float32,
+        param_dtype=param_dtype,
         autocast_ctx=autocast_ctx,
         device=device,
-        num_branches=hcfg["NeuralNetwork"]["Architecture"].get("num_branches", 1),
+        num_branches=getattr(model, "num_branches", 1),
         mlp_device=cfg.mlp_device,
         mlp_autocast_ctx=mlp_autocast_ctx,
         unified_mlp_gnn_stack=False,
@@ -199,8 +332,33 @@ def _find_torch_module(*roots: Any):
     return None
 
 
+def _resolve_finetuned_uma_checkpoint(model_name: str) -> Path | None:
+    """If ``model_name`` points at a fine-tuned UMA checkpoint on disk, return
+    the resolved ``.pt`` path; otherwise return ``None`` (a registered name).
+
+    The AL trainer's UMA fine-tune writes its final checkpoint under the fairchem
+    convention ``<output-dir>/<timestamp_id>/checkpoints/final/inference_ckpt.pt``,
+    so a directory is accepted and the canonical location is searched first.
+    """
+    p = Path(str(model_name))
+    if not p.exists():
+        return None
+    if p.is_file():
+        return p
+    canonical = p / "checkpoints" / "final" / "inference_ckpt.pt"
+    if canonical.is_file():
+        return canonical
+    matches = sorted(p.glob("**/inference_ckpt.pt"))
+    return matches[-1] if matches else None
+
+
 def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
     """Build an ASE calculator backed by a UMA (fairchem) universal MLIP.
+
+    ``cfg.model_name`` may be either a registered pretrained model name (e.g.
+    ``uma-s-1p1``) or a path to a locally fine-tuned checkpoint produced by the
+    AL trainer; the latter is loaded via ``load_predict_unit`` so the in-loop
+    fine-tuned model is picked up on the next iteration.
 
     When ``enable_mc_dropout`` and ``cfg.dropout.enabled`` are both True, dropout
     is injected into the underlying torch model so MC-Dropout acquisition yields
@@ -208,6 +366,7 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
     """
     try:
         from fairchem.core import FAIRChemCalculator, pretrained_mlip
+        from fairchem.core.units.mlip_unit import load_predict_unit
     except ImportError as exc:  # pragma: no cover - depends on optional dep
         raise ImportError(
             "The UMA backend requires the 'fairchem-core' package. Install it with "
@@ -215,7 +374,12 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
             "Hugging Face), then set mlip.backend: uma."
         ) from exc
 
-    predictor = pretrained_mlip.get_predict_unit(cfg.model_name, device=cfg.device)
+    ckpt = _resolve_finetuned_uma_checkpoint(cfg.model_name)
+    if ckpt is not None:
+        log.info("Loading fine-tuned UMA checkpoint from %s", ckpt)
+        predictor = load_predict_unit(str(ckpt), device=cfg.device)
+    else:
+        predictor = pretrained_mlip.get_predict_unit(cfg.model_name, device=cfg.device)
     calc = FAIRChemCalculator(predictor, task_name=cfg.task_name)
 
     # Expose the underlying torch module as `.model` so uncertainty.score_mc_dropout
