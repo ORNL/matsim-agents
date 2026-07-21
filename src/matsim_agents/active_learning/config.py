@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # --------------------------------------------------------------------------- #
 # Sub-configs                                                                 #
@@ -20,10 +20,15 @@ from pydantic import BaseModel, Field, model_validator
 class HydraGNNConfig(BaseModel):
     """Inputs needed to load and (optionally) retrain a HydraGNN MLFF model."""
 
+    # Accept both the field name and the YAML-facing alias 'mlp_checkpoint'.
+    model_config = ConfigDict(populate_by_name=True)
+
     logdir: Path = Field(..., description="HydraGNN logdir with config.json + checkpoint.")
     checkpoint: str | None = Field(None, description="Specific checkpoint filename or path.")
     hydragnn_branch_mlp_checkpoint: Path | None = Field(
-        None, description="Optional auxiliary BranchWeightMLP checkpoint."
+        None,
+        alias="mlp_checkpoint",
+        description="Optional auxiliary BranchWeightMLP checkpoint (YAML key: mlp_checkpoint).",
     )
     newhead_ft_config: Path | None = Field(
         None,

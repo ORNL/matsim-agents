@@ -38,7 +38,9 @@ mlip:
   hydragnn:
     logdir:         ${INITIAL_LOGDIR}
     checkpoint:     best_model.pt
-    mlp_checkpoint: null
+    # The BEST6 multi-branch model REQUIRES its BranchWeightMLP; iter0_logdir has
+    # no mlp_weights/ dir, so point at the trained MLP shipped with the example.
+    mlp_checkpoint: ${HYDRAGNN_DIR}/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
     precision:  fp32
     mlp_device: cuda           # torch HIP maps the "cuda" device string on MI250X
     ensemble_paths: []

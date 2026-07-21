@@ -106,16 +106,10 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     import sys
 
     import torch
-    from hydragnn.models.create import create_model_config
-    from hydragnn.train.train_validate_test import resolve_precision
 
     from matsim_agents.tools.relaxation import (
         _build_calculator,  # type: ignore[attr-defined]
     )
-
-    # We replicate the loading sequence from tools/relaxation.py inline to
-    # avoid coupling to the LangGraph @tool wrapper there. If/when that module
-    # exposes a public loader, this should switch to it.
 
     logdir = Path(logdir_override) if logdir_override is not None else cfg.logdir
     config_path = logdir / "config.json"
@@ -135,53 +129,54 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         if (_d / "inference_fused.py").is_file() and str(_d) not in sys.path:
             sys.path.insert(0, str(_d))
 
-    with open(config_path) as f:
-        hcfg = json.load(f)
-
-    # vesin's neighbor-list builder (via RadiusGraphPBC) requires a strict
-    # Python float cutoff; HydraGNN configs commonly store radius as an int
-    # (e.g. 5), so coerce here. Mirrors tools/relaxation.py's fused-stack loader.
-    radius = float(
-        cfg.radius if cfg.radius is not None else hcfg["NeuralNetwork"]["Architecture"]["radius"]
-    )
-    max_neighbours = (
-        cfg.max_neighbours
-        if cfg.max_neighbours is not None
-        else hcfg["NeuralNetwork"]["Architecture"]["max_neighbours"]
-    )
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # The model precision is dictated by the training config (the fp64 GFM must
-    # be run in fp64, otherwise data tensors built downstream mismatch the model
-    # weights). Resolve it here and keep every tensor (model + branch-MLP +
-    # inference inputs) on the same dtype.
-    precision_str = (
-        cfg.precision
-        if cfg.precision is not None
-        else hcfg["NeuralNetwork"]["Training"].get("precision", "fp32")
-    )
-    _, param_dtype, _ = resolve_precision(precision_str)
-    torch.set_default_dtype(param_dtype)
-
-    model = create_model_config(
-        config=hcfg["NeuralNetwork"],
-        verbosity=hcfg.get("Verbosity", {}).get("level", 0),
-    )
-    # create_model_config may overwrite the default dtype; restore + cast model.
-    torch.set_default_dtype(param_dtype)
-    model = model.to(dtype=param_dtype, device=device)
-
     # --- new-head (single-branch) fine-tune models -----------------------------
     # When ``newhead_ft_config`` is set, the checkpoint was produced by
     # finetune_hydragnn_newhead: the 16-branch decoder was replaced by a single
     # fresh ``branch-0`` head. Reproduce that surgery here (build the 16-branch
     # backbone, apply ORNL ``update_architecture``) so the checkpoint loads into a
     # byte-identical model, then use direct single-head inference (no branch-MLP).
+    # This bespoke path cannot go through ``load_fused_stack``, so it is handled
+    # first with an inline model build.
     if cfg.newhead_ft_config is not None:
+        from hydragnn.models.create import create_model_config
+        from hydragnn.train.train_validate_test import resolve_precision
+
         from matsim_agents.active_learning.finetune_hydragnn_newhead import (
             apply_newhead_surgery,
         )
+
+        with open(config_path) as f:
+            hcfg = json.load(f)
+
+        # vesin's neighbor-list builder (via RadiusGraphPBC) requires a strict
+        # Python float cutoff; HydraGNN configs commonly store radius as an int.
+        radius = float(
+            cfg.radius if cfg.radius is not None else hcfg["NeuralNetwork"]["Architecture"]["radius"]
+        )
+        max_neighbours = (
+            cfg.max_neighbours
+            if cfg.max_neighbours is not None
+            else hcfg["NeuralNetwork"]["Architecture"]["max_neighbours"]
+        )
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # The model precision is dictated by the training config (the fp64 GFM
+        # must be run in fp64) so keep every tensor on the same dtype.
+        precision_str = (
+            cfg.precision
+            if cfg.precision is not None
+            else hcfg["NeuralNetwork"]["Training"].get("precision", "fp32")
+        )
+        _, param_dtype, _ = resolve_precision(precision_str)
+        torch.set_default_dtype(param_dtype)
+
+        model = create_model_config(
+            config=hcfg["NeuralNetwork"],
+            verbosity=hcfg.get("Verbosity", {}).get("level", 0),
+        )
+        # create_model_config may overwrite the default dtype; restore + cast.
+        torch.set_default_dtype(param_dtype)
+        model = model.to(dtype=param_dtype, device=device)
 
         with open(cfg.newhead_ft_config) as f:
             newhead = json.load(f)
@@ -212,45 +207,50 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
             spin=cfg.spin,
         )
 
-    if cfg.checkpoint:
-        ckpt_path = (
-            cfg.checkpoint if os.path.isabs(cfg.checkpoint) else str(logdir / cfg.checkpoint)
-        )
-        state = torch.load(ckpt_path, map_location=device)
-        state_dict = state.get("model_state_dict", state)
-        # HydraGNN saves checkpoints from a DDP-wrapped model, so every key
-        # carries a "module." prefix. We build a bare (non-DDP) model here, so
-        # strip that prefix to make the keys line up.
-        state_dict = {
-            (k[len("module.") :] if k.startswith("module.") else k): v
-            for k, v in state_dict.items()
-        }
-        model.load_state_dict(state_dict, strict=False)
-    model.to(device).eval()
+    # --- normal (multi-branch fused-stack) path --------------------------------
+    # Delegate to the authoritative fused-stack loader shipped alongside the
+    # HydraGNN example (also used by tools/relaxation.py). It builds the model,
+    # reconstructs the BranchWeightMLP from its checkpoint, and returns matching
+    # dtypes/device/autocast contexts. Reimplementing this here previously drifted
+    # from the proven path (wrong model-build API, unstripped DDP "module." keys,
+    # int radius that vesin rejects, and a raw state-dict passed as the MLP).
+    from inference_fused import load_fused_stack  # provided alongside the HydraGNN example
 
-    mlp = None
-    if cfg.hydragnn_branch_mlp_checkpoint is not None:
-        # ``run_fused_inference`` expects a live ``BranchWeightMLP`` module
-        # (it calls ``mlp.parameters()``), so reconstruct it from the saved
-        # state-dict using the example's own loader to guarantee the exact
-        # architecture. The raw checkpoint stores the state-dict under
-        # ``mlp_state_dict``.
-        from inference_fused import (  # provided alongside the HydraGNN example
-            _reconstruct_mlp_from_state_dict,
-        )
+    mlp_checkpoint = (
+        str(cfg.hydragnn_branch_mlp_checkpoint)
+        if cfg.hydragnn_branch_mlp_checkpoint is not None
+        else None
+    )
 
-        mlp_ckpt = torch.load(
-            str(cfg.hydragnn_branch_mlp_checkpoint), map_location=cfg.mlp_device
-        )
-        mlp_state = mlp_ckpt.get("mlp_state_dict", mlp_ckpt)
-        mlp = _reconstruct_mlp_from_state_dict(mlp_state)
-        mlp = mlp.to(dtype=param_dtype, device=cfg.mlp_device)
-        mlp.eval()
-        for p in mlp.parameters():
-            p.requires_grad_(False)
+    (
+        model,
+        mlp,
+        config,
+        device,
+        autocast_ctx,
+        param_dtype,
+        num_branches,
+        mlp_device,
+        mlp_autocast_ctx,
+        unified_mlp_gnn_stack,
+        _gnn_prec,
+        _mlp_prec,
+    ) = load_fused_stack(
+        str(logdir),
+        cfg.checkpoint,
+        mlp_checkpoint,
+        cfg.precision,
+        cfg.precision,
+        cfg.mlp_device,
+    )
 
-    autocast_ctx = torch.autocast(device_type=device.type, enabled=False)
-    mlp_autocast_ctx = torch.autocast(device_type=cfg.mlp_device, enabled=False)
+    arch = config["NeuralNetwork"]["Architecture"]
+    radius = float(cfg.radius) if cfg.radius is not None else float(arch.get("radius", 5.0))
+    max_neighbours = (
+        int(cfg.max_neighbours)
+        if cfg.max_neighbours is not None
+        else int(arch.get("max_neighbours", 20))
+    )
 
     return _build_calculator(
         model=model,
@@ -260,10 +260,10 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         param_dtype=param_dtype,
         autocast_ctx=autocast_ctx,
         device=device,
-        num_branches=getattr(model, "num_branches", 1),
-        mlp_device=cfg.mlp_device,
+        num_branches=num_branches,
+        mlp_device=mlp_device,
         mlp_autocast_ctx=mlp_autocast_ctx,
-        unified_mlp_gnn_stack=False,
+        unified_mlp_gnn_stack=unified_mlp_gnn_stack,
         charge=cfg.charge,
         spin=cfg.spin,
     )
