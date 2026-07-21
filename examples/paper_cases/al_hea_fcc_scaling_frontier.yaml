@@ -7,9 +7,11 @@
 # curve for a FIXED workload. Only the vars/paths, the DFT launcher, and the
 # per-node rank layout differ from the Perlmutter config.
 #
-# Fixed workload: n_select = 16 with >=16 MD candidates guaranteed (5 seeds x
-# 7 samples = 35 candidates), so exactly 16 identical VASP single-points run per
-# submission regardless of node count. One iteration only.
+# Fixed workload: n_select = 32 with >=32 MD candidates guaranteed (5 random
+# seeds x 10 samples = 50 candidates), so exactly 32 identical VASP single-points
+# run per submission regardless of node count. One iteration only. Mirrors the
+# Perlmutter twin (al_hea_fcc_scaling.yaml) so the two portability legs are
+# directly comparable.
 #
 # Frontier node layout: 8 GCDs per node, 56 usable cores (7 per GCD)
 #   -> ranks_per_node=8, threads_per_rank=7.
@@ -65,23 +67,31 @@ md:
     max_phases_per_composition: 1    # 1 seed/composition -> 5 seeds (keeps MD cost low)
     # Equimolar HEAs have no matching AFLOW prototype (signature (1,1,1,1,1) is
     # absent from the 288-entry encyclopedia), so seeds come from one pyXtal
-    # random structure per composition. Deterministic under random_seed.
+    # random structure per composition. AL_SEED is held fixed across node counts
+    # within one repeat and varied per repeat by the sweep wrapper, so averaging
+    # over repeats dampens per-draw variability in the reported throughput.
     n_random: 1
-    random_seed: 13
+    random_seed: ${AL_SEED:-13}
   timestep_fs: 2.0
-  n_steps: 105                       # 105 / sample_every(15) = 7 frames per seed
+  n_steps: 150                       # 150 / sample_every(15) = 10 frames per seed
   temperature_K: 1000.0
   thermostat: langevin
   friction_inv_ps: 0.08
   sample_every: 15
   max_force_threshold_eV_per_A: 60.0
   max_displacement_A: 5.0
+  # Seed the MD RNG (Maxwell-Boltzmann velocities + Langevin thermostat noise)
+  # with the same AL_SEED as the seed structures above, so within one repeat the
+  # candidate pool is drawn identically at every node count (N=1/2/4/8). Varying
+  # AL_SEED across repeats yields independent random workloads whose per-N wall
+  # times are averaged to give a robust strong-scaling estimate.
+  random_seed: ${AL_SEED:-13}
 
 acquisition:
   strategy: mc_dropout
   mc_dropout_passes: 8
   mc_dropout_p: 0.1
-  n_select: 16                       # FIXED workload: exactly 16 VASP jobs/iter
+  n_select: 32                       # FIXED workload: exactly 32 VASP jobs/iter
   diversity_filter: true
   min_uncertainty_eV_per_A: 0.0
 
@@ -110,7 +120,7 @@ trainer:
   enabled: false                     # scaling test: isolate the DFT stage
 
 loop:
-  n_iterations: 1                    # single batch of 16 single-points
+  n_iterations: 1                    # single batch of 32 single-points
   out_dir: ${RUNS_ROOT}/${RUN_TAG}
   dataset_format: extxyz
   resume: false                      # every scaling point starts fresh
