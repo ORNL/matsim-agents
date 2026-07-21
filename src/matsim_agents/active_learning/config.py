@@ -25,6 +25,20 @@ class HydraGNNConfig(BaseModel):
     hydragnn_branch_mlp_checkpoint: Path | None = Field(
         None, description="Optional auxiliary BranchWeightMLP checkpoint."
     )
+    newhead_ft_config: Path | None = Field(
+        None,
+        description=(
+            "For the 'drop-all-heads + new head' fine-tune: path to the "
+            "``newhead.json`` produced by finetune_hydragnn_newhead. When set, "
+            "the calculator rebuilds the backbone from ``config.json``, re-applies "
+            "the single-branch head surgery, loads ``checkpoint`` and uses direct "
+            "single-head inference (no BranchWeightMLP)."
+        ),
+    )
+    ft_repo: Path | None = Field(
+        None,
+        description="Path to ORNL/HydraGNN_GFM_FineTuning4Materials (for update_model).",
+    )
     radius: float | None = Field(None, description="Override cutoff radius (Å).")
     max_neighbours: int | None = Field(None, description="Override max neighbours.")
     charge: float = 0.0
