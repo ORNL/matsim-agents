@@ -139,6 +139,7 @@ def _build_calculator(
 
         def __init__(self):
             super().__init__()
+            self.model = model  # expose for score_mc_dropout (uncertainty.py)
             self.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
             self.last_branch_weights = None
 
