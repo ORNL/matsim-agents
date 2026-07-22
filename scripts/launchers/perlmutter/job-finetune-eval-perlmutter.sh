@@ -133,10 +133,9 @@ if [[ "${BACKEND}" == "hydragnn" ]]; then
     EXTRA_ARGS+=(--ft-repo "${FT_REPO}")
   fi
 else
-  # UMA needs the fairchem SOURCE checkout for the finetune config templates,
-  # plus a HuggingFace / fairchem model cache for the base UMA weights.
-  export FAIRCHEM_SRC="${FAIRCHEM_SRC:-${PROJ}/fairchem-src}"
-  [[ ! -d "${FAIRCHEM_SRC}" ]] && { echo "ERROR: FAIRCHEM_SRC not found: ${FAIRCHEM_SRC}" >&2; exit 2; }
+  # UMA fine-tuning uses a self-contained custom PyTorch loop (no fairchem
+  # config templates needed), plus a HuggingFace / fairchem model cache for the
+  # base UMA weights.
   export HF_HOME="${HF_HOME:-${PROJ}/models/hf_cache}"
   mkdir -p "${HF_HOME}"
   if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
@@ -145,11 +144,13 @@ else
   export FAIRCHEM_CACHE_DIR="${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
   mkdir -p "${FAIRCHEM_CACHE_DIR}"
   EXTRA_ARGS+=(--uma-task-name "${UMA_TASK}")
-  # Gentle foundation-model recipe knobs (avoid catastrophic forgetting on the
-  # small AL datasets). Defaults live in the Python CLI; override via env.
-  [[ -n "${UMA_EPOCHS:-}" ]]       && EXTRA_ARGS+=(--uma-epochs "${UMA_EPOCHS}")
-  [[ -n "${UMA_LR:-}" ]]           && EXTRA_ARGS+=(--uma-lr "${UMA_LR}")
-  [[ -n "${UMA_WEIGHT_DECAY:-}" ]] && EXTRA_ARGS+=(--uma-weight-decay "${UMA_WEIGHT_DECAY}")
+  # Fine-tune recipe knobs (Adam lr=1e-4, force-weighted MSE loss; see
+  # finetune_uma). Defaults live in the Python CLI; override via env.
+  [[ -n "${UMA_EPOCHS:-}" ]]         && EXTRA_ARGS+=(--uma-epochs "${UMA_EPOCHS}")
+  [[ -n "${UMA_LR:-}" ]]             && EXTRA_ARGS+=(--uma-lr "${UMA_LR}")
+  [[ -n "${UMA_FORCE_WEIGHT:-}" ]]   && EXTRA_ARGS+=(--uma-force-weight "${UMA_FORCE_WEIGHT}")
+  [[ -n "${UMA_WEIGHT_DECAY:-}" ]]   && EXTRA_ARGS+=(--uma-weight-decay "${UMA_WEIGHT_DECAY}")
+  [[ "${UMA_FREEZE_BACKBONE:-0}" == "1" ]] && EXTRA_ARGS+=(--uma-freeze-backbone)
 fi
 
 # Optional explicit device override; default leaves detection to torch, which

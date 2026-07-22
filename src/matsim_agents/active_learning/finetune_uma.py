@@ -1,63 +1,68 @@
 """Fine-tune a UMA (fairchem) foundation model on an AL-collected DFT dataset.
 
-This wraps fairchem-core 2.21.0's fine-tuning workflow so the active-learning
-pipeline can turn an extended-XYZ dataset (as written by
+This turns an extended-XYZ dataset (as written by
 :func:`matsim_agents.active_learning.trainer.append_frames_to_extxyz`) into a
 fine-tuned ``inference_ckpt.pt`` that
-:func:`matsim_agents.active_learning.calculator.build_uma_calculator` can load.
+:func:`matsim_agents.active_learning.calculator.build_uma_calculator` can load
+via ``load_predict_unit``.
 
-The heavy lifting is delegated to fairchem's own scripts:
+Approach (matches allaffa/HydraGNN_GFM_FineTuning4Materials @ ``uma-sota-comparison``)
+------------------------------------------------------------------------------------
+UMA exposes a *conservative* energy-and-force head: forces are obtained as the
+autograd gradient of the predicted energy w.r.t. atomic positions *inside* the
+forward pass. We therefore fine-tune with a small custom PyTorch loop that runs
+the model directly, rather than fairchem's ``create_yaml`` / normalizer /
+element-reference config pipeline (which trains the *direct*-force head and
+re-fits an output normalizer -- rescaling the heads and inflating forces on the
+small AL datasets).
 
-* ``fairchem.core.scripts.create_finetune_dataset`` converts ASE atoms into the
-  ``aselmdb`` format and computes the normaliser / linear element references,
-* ``fairchem.core.scripts.create_uma_finetune_dataset`` fills the Hydra config
-  templates shipped in the fairchem *source* tree (the PyPI wheel does not ship
-  ``configs/``), and
-* the ``fairchem`` CLI (``fairchem -c <config>``) runs the actual training.
+Concretely:
 
-Because ``create_uma_finetune_dataset`` reads its templates from a *relative*
-``configs/uma/finetune`` path, a checkout of the matching fairchem source tree
-must be provided via ``--fairchem-src`` (or the ``FAIRCHEM_SRC`` env var). The
-generated Hydra config is self-contained (the ``fairchem`` CLI initialises its
-config dir from the config file's own directory), so training itself does not
-need the source tree on ``sys.path``/CWD.
+* ``pu = load_predict_unit(ckpt, device, inference_settings="default")`` -- the
+  ``"default"`` settings avoid ``torch.compile`` so the autograd graph is clean
+  for the double-backprop the conservative head needs.
+* ``model = pu.model.module`` is the trainable ``HydraModel``.
+* ``model.train()`` is *required* so the force head sets ``create_graph=True``;
+  otherwise the energy graph is freed by the internal force autograd and the
+  outer ``loss.backward()`` fails.
+* Loss per sample is ``E_MSE + force_weight * F_MSE`` (``force_weight=10`` by
+  default), optimised with Adam (``lr=1e-4``). No normalizer / element-reference
+  re-fitting is performed -- the model's native heads are used as-is.
+
+The fine-tuned weights are written back into a
+:class:`~fairchem.core.units.mlip_unit.api.inference.MLIPInferenceCheckpoint`
+(reusing the base checkpoint's ``model_config`` / ``tasks_config``), so the
+resulting ``.pt`` reloads through the ordinary ``load_predict_unit`` path.
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
-import os
-import shutil
-import subprocess
-import sys
-import tempfile
 from pathlib import Path
 
 import numpy as np
-import yaml
 from ase import Atoms
-from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read as ase_read
-from ase.io import write as ase_write
 
 from matsim_agents.active_learning.cost import CostReport, GpuMemorySampler, track_cost
 
 log = logging.getLogger(__name__)
 
-# UMA fine-tuning tasks understood by create_uma_finetune_dataset.
+# UMA task heads: omat (inorganic bulk), omol (molecules/MOFs), oc20, odac, omc.
 _UMA_TASKS = {"omat", "omol", "oc20", "odac", "omc"}
-_REGRESSION_TASKS = {"e", "ef", "efs"}
 
 
 # --------------------------------------------------------------------------- #
-# Dataset preparation                                                         #
+# Dataset helpers                                                             #
 # --------------------------------------------------------------------------- #
 
 
 def _reference_energy(atoms: Atoms) -> float | None:
-    if "energy" in atoms.info:
-        return float(atoms.info["energy"])
+    """Ground-truth (DFT) total energy from ``info`` or an attached calculator."""
+    for key in ("REF_energy", "energy"):
+        if key in atoms.info:
+            return float(atoms.info[key])
     try:
         return float(atoms.get_potential_energy())
     except Exception:  # noqa: BLE001
@@ -65,212 +70,208 @@ def _reference_energy(atoms: Atoms) -> float | None:
 
 
 def _reference_forces(atoms: Atoms) -> np.ndarray | None:
-    if "forces" in atoms.arrays:
-        return np.asarray(atoms.arrays["forces"], dtype=float)
+    """Ground-truth (DFT) forces from ``arrays`` or an attached calculator."""
+    for key in ("REF_forces", "forces"):
+        if key in atoms.arrays:
+            return np.asarray(atoms.arrays[key], dtype=float)
     try:
         return np.asarray(atoms.get_forces(), dtype=float)
     except Exception:  # noqa: BLE001
         return None
 
 
-def _reference_stress(atoms: Atoms) -> np.ndarray | None:
-    if "stress" in atoms.info:
-        return np.asarray(atoms.info["stress"], dtype=float)
-    try:
-        return np.asarray(atoms.get_stress(), dtype=float)
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _with_singlepoint(atoms: Atoms, *, need_stress: bool) -> Atoms | None:
-    """Attach a SinglePointCalculator so fairchem's converter finds results.
-
-    fairchem's ``write_ase_db`` asserts that ``atoms.calc.results`` contains
-    ``energy`` and ``forces`` (and ``stress`` for the ``efs`` task). Our extxyz
-    frames store these under ``info``/``arrays``, so re-attach them explicitly.
-    """
-    e = _reference_energy(atoms)
-    f = _reference_forces(atoms)
-    if e is None or f is None:
-        return None
-    out = atoms.copy()
-    results: dict[str, object] = {"energy": e, "forces": f}
-    if need_stress:
-        s = _reference_stress(atoms)
-        if s is None:
-            return None
-        results["stress"] = s
-    out.calc = SinglePointCalculator(out, **results)
-    return out
-
-
-def _auto_regression_tasks(frames: list[Atoms]) -> str:
-    """Pick the richest regression task supported by *all* frames."""
-    have_stress = all(_reference_stress(a) is not None for a in frames)
-    have_forces = all(_reference_forces(a) is not None for a in frames)
-    if have_stress:
-        return "efs"
-    if have_forces:
-        return "ef"
-    return "e"
-
-
-def _split_train_val(
-    frames: list[Atoms], val_fraction: float, seed: int
-) -> tuple[list[Atoms], list[Atoms]]:
-    n = len(frames)
-    if n < 2:
-        raise ValueError(f"Need >=2 frames to fine-tune, got {n}.")
-    rng = np.random.default_rng(seed)
-    perm = rng.permutation(n)
-    n_val = max(1, int(round(val_fraction * n)))
-    n_val = min(n_val, n - 1)  # keep at least one train frame
-    val_idx = set(perm[:n_val].tolist())
-    train = [frames[i] for i in range(n) if i not in val_idx]
-    val = [frames[i] for i in range(n) if i in val_idx]
-    return train, val
-
-
-# --------------------------------------------------------------------------- #
-# Config generation                                                           #
-# --------------------------------------------------------------------------- #
-
-
-def _resolve_fairchem_src(fairchem_src: str | Path | None) -> Path:
-    candidate = fairchem_src or os.environ.get("FAIRCHEM_SRC")
-    if not candidate:
+def _load_labeled_frames(dataset_path: str | Path) -> list[Atoms]:
+    """Read frames that carry both an energy and a forces label."""
+    raw = ase_read(str(dataset_path), index=":")
+    frames = [raw] if isinstance(raw, Atoms) else list(raw)
+    usable: list[Atoms] = []
+    for a in frames:
+        if _reference_energy(a) is not None and _reference_forces(a) is not None:
+            usable.append(a)
+    if len(usable) < 2:
         raise ValueError(
-            "A fairchem source checkout is required (its configs/uma/finetune "
-            "templates are not shipped in the PyPI wheel). Pass --fairchem-src "
-            "or set FAIRCHEM_SRC to the repo root."
+            f"Only {len(usable)}/{len(frames)} frames in {dataset_path} carry both "
+            "energy and forces labels; need >=2 to fine-tune."
         )
-    root = Path(candidate).expanduser().resolve()
-    template_dir = root / "configs" / "uma" / "finetune"
-    if not template_dir.is_dir():
-        raise FileNotFoundError(
-            f"fairchem templates not found under {template_dir}. Point "
-            "--fairchem-src at a fairchem source checkout matching the installed "
-            "fairchem-core version."
-        )
-    return root
+    return usable
 
 
-def _prepare_dataset_and_config(
-    *,
-    train_dir: Path,
-    val_dir: Path,
-    artifacts_dir: Path,
-    task_name: str,
-    regression_tasks: str,
-    base_model: str,
-    fairchem_root: Path,
-    num_workers: int,
-) -> Path:
-    """Convert ASE dirs to aselmdb and emit the fine-tune Hydra config.
+# --------------------------------------------------------------------------- #
+# UMA model loading + differentiable forward pass                             #
+# --------------------------------------------------------------------------- #
 
-    Returns the path to the generated ``uma_sm_finetune_template.yaml``.
+
+def _resolve_base_checkpoint(base_model: str) -> str:
+    """Resolve a UMA model *name* (or local path) to a checkpoint file path."""
+    import os
+
+    if os.path.isfile(base_model):
+        return base_model
+    from fairchem.core.calculate.pretrained_mlip import (
+        pretrained_checkpoint_path_from_name,
+    )
+
+    return str(pretrained_checkpoint_path_from_name(base_model))
+
+
+def load_trainable_uma(base_model: str, task_name: str, device: str):
+    """Load a UMA checkpoint exposing a trainable ``HydraModel``.
+
+    Returns ``(predict_unit, calculator, model)`` where ``model`` is
+    ``predict_unit.model.module`` -- the module whose parameters are updated
+    in-place by the training loop and read back at inference time.
     """
-    from fairchem.core.scripts import create_uma_finetune_dataset as cufd
-    from fairchem.core.scripts.create_finetune_dataset import (
-        compute_normalizer_and_linear_reference,
-        launch_processing,
+    from fairchem.core import FAIRChemCalculator, pretrained_mlip
+
+    ckpt = _resolve_base_checkpoint(base_model)
+    # 'default' inference settings avoid torch.compile so autograd graphs are
+    # clean for the double-backprop of the conservative force head.
+    pu = pretrained_mlip.load_predict_unit(
+        ckpt, device=device, inference_settings="default"
     )
-
-    # create_uma_finetune_dataset reads templates from a CWD-relative path; point
-    # it at the absolute template dir in the provided source checkout instead.
-    cufd.TEMPLATE_DIR = fairchem_root / "configs" / "uma" / "finetune"
-
-    if artifacts_dir.exists():
-        raise FileExistsError(f"artifacts dir must not already exist: {artifacts_dir}")
-
-    train_out = artifacts_dir / "train"
-    val_out = artifacts_dir / "val"
-    launch_processing(str(train_dir), train_out, num_workers)
-    force_rms, linref_coeff = compute_normalizer_and_linear_reference(train_out, num_workers)
-    if regression_tasks == "e":
-        force_rms = 1.0
-    launch_processing(str(val_dir), val_out, num_workers)
-
-    cufd.create_yaml(
-        train_path=str(train_out),
-        val_path=str(val_out),
-        force_rms=float(force_rms),
-        linref_coeff=linref_coeff,
-        output_dir=artifacts_dir,
-        dataset_name=task_name,
-        regression_tasks=regression_tasks,
-        base_model_name=base_model,
-    )
-    return artifacts_dir / cufd.UMA_SM_FINETUNE_YAML
+    calc = FAIRChemCalculator(pu, task_name=task_name)
+    model = pu.model.module  # trainable HydraModel
+    return pu, calc, model
 
 
-def _patch_finetune_config(
-    config_path: Path,
+def uma_energy_forces(model, calc, atoms: Atoms, task_name: str):
+    """Differentiable forward pass returning ``(energy[1], forces[N, 3])`` tensors.
+
+    ``atoms`` must have ``info["charge"]`` / ``info["spin"]`` for the ``omol``
+    head (defaults to 0 / 1 if missing).
+    """
+    import torch
+
+    atoms.info.setdefault("charge", 0)
+    atoms.info.setdefault("spin", 1)
+
+    param = next(model.parameters())
+    data = calc.a2g(atoms).to(param.device)
+    # Match the model's working dtype on all floating tensors.
+    for key, val in data:
+        if torch.is_tensor(val) and val.is_floating_point():
+            data[key] = val.to(param.dtype)
+
+    out = model(data)
+    energy = out[f"{task_name}_energy"]["energy"]
+    forces = out[f"{task_name}_forces"]["forces"]
+    return energy, forces
+
+
+# --------------------------------------------------------------------------- #
+# Training loop                                                               #
+# --------------------------------------------------------------------------- #
+
+
+def _train_uma(
+    model,
+    calc,
+    train_atoms: list[Atoms],
     *,
-    run_dir: Path,
-    run_name: str,
+    task_name: str,
     epochs: int,
-    batch_size: int,
     lr: float,
-    max_neighbors: int,
-    ranks_per_node: int,
-    device_type: str,
-    weight_decay: float | None = None,
-    warmup_epochs: float | None = None,
-    lr_min_factor: float | None = None,
-) -> None:
-    """Override the generated Hydra config for a controlled single-node run."""
-    with open(config_path) as fh:
-        cfg = yaml.safe_load(fh)
+    batch_size: int,
+    force_weight: float,
+    freeze_backbone: bool,
+    weight_decay: float,
+    seed: int,
+) -> list[float]:
+    """Custom PyTorch fine-tune loop on UMA's conservative energy/force head.
 
-    job = cfg.setdefault("job", {})
-    job["run_dir"] = str(run_dir)
-    job["run_name"] = run_name
-    job["device_type"] = device_type
-    job["debug"] = True
-    # Disable the WandB logger (offline HPC nodes have no network / no wandb).
-    job["logger"] = None
-    scheduler = job.setdefault("scheduler", {})
-    scheduler["mode"] = "LOCAL"
-    scheduler["num_nodes"] = 1
-    scheduler["ranks_per_node"] = int(ranks_per_node)
+    Loss per sample is ``E_MSE + force_weight * F_MSE``. Gradients are
+    accumulated over ``batch_size`` samples before each optimiser step.
+    Returns the mean per-sample loss for each epoch.
+    """
+    import torch
 
-    cfg["epochs"] = int(epochs)
-    cfg["steps"] = None
-    cfg["batch_size"] = int(batch_size)
-    cfg["lr"] = float(lr)
-    cfg["max_neighbors"] = int(max_neighbors)
-    if weight_decay is not None:
-        cfg["weight_decay"] = float(weight_decay)
+    param = next(model.parameters())
+    device, dtype = param.device, param.dtype
 
-    # The cosine LR schedule's warmup fraction and floor are hard-coded in the
-    # template's runner block (not top-level interpolation), so patch them in
-    # place when a gentler foundation-model recipe asks for it.
-    if warmup_epochs is not None or lr_min_factor is not None:
-        try:
-            sched = cfg["runner"]["train_eval_unit"]["cosine_lr_scheduler_fn"]
-            if warmup_epochs is not None:
-                sched["warmup_epochs"] = float(warmup_epochs)
-            if lr_min_factor is not None:
-                sched["lr_min_factor"] = float(lr_min_factor)
-        except (KeyError, TypeError):
-            log.warning("cosine_lr_scheduler_fn not found in config; skipping warmup patch")
+    if freeze_backbone and hasattr(model, "backbone"):
+        for p in model.backbone.parameters():
+            p.requires_grad_(False)
+    params = [p for p in model.parameters() if p.requires_grad]
+    if not params:
+        raise ValueError("No trainable parameters after freezing; check freeze_backbone.")
 
-    with open(config_path, "w") as fh:
-        yaml.safe_dump(cfg, fh, default_flow_style=False, sort_keys=False)
+    opt = torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
+    # model.train() -> conservative force head uses create_graph=True (double backprop).
+    model.train()
 
-
-def _find_inference_checkpoint(run_dir: Path) -> Path:
-    """Locate the final fine-tuned checkpoint under a fairchem run dir."""
-    matches = sorted(
-        run_dir.glob("**/checkpoints/final/inference_ckpt.pt"),
-        key=lambda p: p.stat().st_mtime,
-    )
-    if not matches:
-        raise FileNotFoundError(
-            f"No inference_ckpt.pt produced under {run_dir}. Check the training log."
+    # Precompute targets once.
+    targets: list[tuple[torch.Tensor, torch.Tensor]] = []
+    for atoms in train_atoms:
+        e = _reference_energy(atoms)
+        f = _reference_forces(atoms)
+        targets.append(
+            (
+                torch.as_tensor(e, dtype=dtype, device=device),
+                torch.as_tensor(f, dtype=dtype, device=device),
+            )
         )
-    return matches[-1]
+
+    rng = np.random.default_rng(seed)
+    n = len(train_atoms)
+    history: list[float] = []
+
+    for epoch in range(epochs):
+        order = rng.permutation(n)
+        opt.zero_grad()
+        epoch_loss = 0.0
+        pending = 0
+        for idx in order:
+            atoms = train_atoms[int(idx)]
+            e_true, f_true = targets[int(idx)]
+            e_pred, f_pred = uma_energy_forces(model, calc, atoms, task_name)
+            e_loss = (e_pred.squeeze() - e_true) ** 2
+            f_loss = (f_pred - f_true).pow(2).mean()
+            loss = e_loss + force_weight * f_loss
+            (loss / batch_size).backward()
+            epoch_loss += float(loss.detach())
+            pending += 1
+            if pending == batch_size:
+                opt.step()
+                opt.zero_grad()
+                pending = 0
+        if pending > 0:  # flush the final partial batch
+            opt.step()
+            opt.zero_grad()
+        mean_loss = epoch_loss / n
+        history.append(mean_loss)
+        log.info("UMA fine-tune epoch %d/%d: mean loss=%.6f", epoch + 1, epochs, mean_loss)
+
+    model.eval()
+    return history
+
+
+# --------------------------------------------------------------------------- #
+# Checkpoint persistence                                                      #
+# --------------------------------------------------------------------------- #
+
+
+def _save_finetuned_checkpoint(pu, base_model: str, out_ckpt: Path) -> None:
+    """Write the fine-tuned weights into a reloadable ``MLIPInferenceCheckpoint``.
+
+    ``load_predict_unit`` reconstructs the model as an ``AveragedModel`` and
+    loads ``ema_state_dict`` for inference, so we persist the trained
+    ``AveragedModel`` state dict (``module.*`` + ``n_averaged``) as the EMA
+    weights (and the bare module state dict as the non-EMA weights), reusing the
+    base checkpoint's ``model_config`` / ``tasks_config``.
+    """
+    import torch
+
+    base_ckpt_path = _resolve_base_checkpoint(base_model)
+    ckpt = torch.load(base_ckpt_path, map_location="cpu", weights_only=False)
+
+    ema_sd = {k: v.detach().cpu().clone() for k, v in pu.model.state_dict().items()}
+    model_sd = {k: v.detach().cpu().clone() for k, v in pu.model.module.state_dict().items()}
+    ckpt.ema_state_dict = ema_sd
+    ckpt.model_state_dict = model_sd
+
+    out_ckpt.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(ckpt, out_ckpt)
+    log.info("Saved fine-tuned UMA checkpoint -> %s", out_ckpt)
 
 
 # --------------------------------------------------------------------------- #
@@ -284,249 +285,153 @@ def finetune_uma(
     *,
     base_model: str = "uma-s-1p1",
     task_name: str = "omat",
-    epochs: int = 1,
-    regression_tasks: str | None = None,
-    val_fraction: float = 0.1,
-    batch_size: int = 2,
-    lr: float = 2e-5,
-    weight_decay: float = 1e-2,
-    warmup_epochs: float | None = 0.1,
-    lr_min_factor: float | None = 0.01,
-    max_neighbors: int = 300,
-    ranks_per_node: int = 1,
-    num_workers: int = 8,
+    epochs: int = 20,
+    batch_size: int = 4,
+    lr: float = 1e-4,
+    force_weight: float = 10.0,
+    freeze_backbone: bool = False,
+    weight_decay: float = 0.0,
     seed: int = 0,
-    fairchem_src: str | Path | None = None,
-    work_dir: str | Path | None = None,
     device: str | None = None,
     run: bool = True,
+    # Accepted for backward compatibility with the previous fairchem-config
+    # based implementation; ignored by the custom training loop.
+    ranks_per_node: int = 1,
+    **_legacy,
 ) -> Path:
     """Fine-tune ``base_model`` on ``dataset_path`` and return the checkpoint path.
 
-    When ``run`` is False the dataset and Hydra config are prepared but training
-    is skipped (returns the config path) -- useful for dry-run validation.
+    The returned ``inference_ckpt.pt`` reloads through
+    :func:`fairchem.core.units.mlip_unit.load_predict_unit` (and hence
+    :func:`matsim_agents.active_learning.calculator.build_uma_calculator`).
+
+    When ``run`` is False the model and dataset are loaded/validated but no
+    training or checkpoint write occurs (dry-run); the intended checkpoint path
+    is still returned.
     """
+    import torch
+
     if task_name not in _UMA_TASKS:
         raise ValueError(f"task_name must be one of {sorted(_UMA_TASKS)}, got {task_name!r}")
 
     output_dir = Path(output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    fairchem_root = _resolve_fairchem_src(fairchem_src)
+    dest_ckpt = output_dir / "inference_ckpt.pt"
 
-    raw = ase_read(str(dataset_path), index=":")
-    frames = [raw] if isinstance(raw, Atoms) else list(raw)
-    if not frames:
-        raise ValueError(f"No frames read from {dataset_path}")
+    # Normalise device string ("CUDA"/"CPU" from callers -> torch form).
+    dev = (device or ("cuda" if torch.cuda.is_available() else "cpu")).lower()
+    if dev.startswith("cuda") and not torch.cuda.is_available():
+        log.warning("CUDA requested but unavailable; falling back to CPU.")
+        dev = "cpu"
 
-    reg = regression_tasks or _auto_regression_tasks(frames)
-    if reg not in _REGRESSION_TASKS:
-        raise ValueError(f"regression_tasks must be one of {sorted(_REGRESSION_TASKS)}, got {reg!r}")
-    need_stress = reg == "efs"
-
-    prepared = [_with_singlepoint(a, need_stress=need_stress) for a in frames]
-    usable = [a for a in prepared if a is not None]
-    if len(usable) < 2:
-        raise ValueError(
-            f"Only {len(usable)}/{len(frames)} frames carry the labels required for "
-            f"regression_tasks={reg!r}; need >=2."
-        )
-
-    train_frames, val_frames = _split_train_val(usable, val_fraction, seed)
-
-    ase_in = output_dir / "ase_input"
-    train_dir = ase_in / "train"
-    val_dir = ase_in / "val"
-    train_dir.mkdir(parents=True, exist_ok=True)
-    val_dir.mkdir(parents=True, exist_ok=True)
-    ase_write(str(train_dir / "train.extxyz"), train_frames, format="extxyz")
-    ase_write(str(val_dir / "val.extxyz"), val_frames, format="extxyz")
+    train_atoms = _load_labeled_frames(dataset_path)
     log.info(
-        "UMA fine-tune: %d train / %d val frames (regression=%s, task=%s)",
-        len(train_frames),
-        len(val_frames),
-        reg,
+        "UMA fine-tune: %d train frames (task=%s, base=%s, device=%s)",
+        len(train_atoms),
         task_name,
+        base_model,
+        dev,
     )
 
-    # fairchem's dataset builder writes LMDB (``aselmdb``) files, whose mmap +
-    # file-locking are NOT supported on the CFS/GPFS parallel filesystem
-    # ("lmdb.Error: ... Function not implemented"). Run all fairchem dataset +
-    # training IO in a node-local scratch dir (``$TMPDIR``/``/tmp`` by default,
-    # overridable via ``MATSIM_UMA_WORKDIR``), then copy the small inference
-    # checkpoint back to the CFS output dir so it persists past the job.
-    scratch_base = Path(work_dir or os.environ.get("MATSIM_UMA_WORKDIR") or tempfile.gettempdir())
-    scratch_base.mkdir(parents=True, exist_ok=True)
-    work_root = Path(tempfile.mkdtemp(prefix="matsim_uma_ft_", dir=str(scratch_base)))
-    artifacts_dir = work_root / "ft"
-    run_dir = work_root / "train_runs"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        config_path = _prepare_dataset_and_config(
-            train_dir=train_dir,
-            val_dir=val_dir,
-            artifacts_dir=artifacts_dir,
-            task_name=task_name,
-            regression_tasks=reg,
-            base_model=base_model,
-            fairchem_root=fairchem_root,
-            num_workers=num_workers,
-        )
+    pu, calc, model = load_trainable_uma(base_model, task_name, dev)
 
-        device_type = device or ("CUDA" if _cuda_available() else "CPU")
-        _patch_finetune_config(
-            config_path,
-            run_dir=run_dir,
-            run_name="uma_finetune",
-            epochs=epochs,
-            batch_size=batch_size,
-            lr=lr,
-            max_neighbors=max_neighbors,
-            ranks_per_node=ranks_per_node,
-            device_type=device_type,
-            weight_decay=weight_decay,
-            warmup_epochs=warmup_epochs,
-            lr_min_factor=lr_min_factor,
-        )
-
-        if not run:
-            log.info("run=False; prepared config at %s (training skipped)", config_path)
-            return config_path
-
-        num_gpus = int(ranks_per_node) if device_type == "CUDA" else 0
-        report = CostReport(
-            model_backend="uma",
-            dataset_label=Path(dataset_path).parent.name or Path(dataset_path).stem,
-            base_model=base_model,
-            dataset_path=str(Path(dataset_path).resolve()),
-            n_train_frames=len(train_frames),
-            n_val_frames=len(val_frames),
-            epochs=int(epochs),
-            num_gpus=num_gpus,
-            device=device_type,
-            extra={"task_name": task_name, "regression_tasks": reg, "protocol": "gentle-finetune",
-                   "lr": float(lr), "weight_decay": float(weight_decay)},
-        )
-        # UMA trains in a subprocess -> sample GPU memory via nvidia-smi, but only
-        # on a real GPU run (nvidia-smi reports node-total usage, which is bogus on
-        # a shared CPU login node).
-        sampler = GpuMemorySampler(enabled=device_type == "CUDA")
-        with sampler, track_cost(report):
-            _run_fairchem(config_path)
-        if sampler.peak_gb:
-            report.peak_gpu_mem_gb = round(sampler.peak_gb, 3)
-        report.write(output_dir / "cost.json")
-
-        local_ckpt = _find_inference_checkpoint(run_dir)
-        # Persist the (self-contained) inference checkpoint on CFS; the training
-        # DCP shards stay in node-local scratch and are discarded with it.
-        dest_ckpt = output_dir / "inference_ckpt.pt"
-        shutil.copy2(local_ckpt, dest_ckpt)
-        log.info(
-            "UMA fine-tune complete -> %s (%.1fs, %.4f GPU-h)",
-            dest_ckpt,
-            report.wall_time_s,
-            report.gpu_hours,
-        )
+    if not run:
+        log.info("run=False; loaded model + %d frames (training skipped)", len(train_atoms))
         return dest_ckpt
-    finally:
-        # Node-local scratch is ephemeral, but clean up eagerly so co-scheduled
-        # ``shared``-QOS jobs on the same node don't accumulate stale LMDB dirs.
-        if run:
-            shutil.rmtree(work_root, ignore_errors=True)
 
+    report = CostReport(
+        model_backend="uma",
+        dataset_label=Path(dataset_path).parent.name or Path(dataset_path).stem,
+        base_model=base_model,
+        dataset_path=str(Path(dataset_path).resolve()),
+        n_train_frames=len(train_atoms),
+        n_val_frames=0,
+        epochs=int(epochs),
+        num_gpus=1 if dev.startswith("cuda") else 0,
+        device=dev.upper(),
+        extra={
+            "task_name": task_name,
+            "protocol": "conservative-head-finetune",
+            "lr": float(lr),
+            "force_weight": float(force_weight),
+            "batch_size": int(batch_size),
+            "freeze_backbone": bool(freeze_backbone),
+            "weight_decay": float(weight_decay),
+        },
+    )
+    sampler = GpuMemorySampler(enabled=dev.startswith("cuda"))
+    with sampler, track_cost(report):
+        history = _train_uma(
+            model,
+            calc,
+            train_atoms,
+            task_name=task_name,
+            epochs=int(epochs),
+            lr=float(lr),
+            batch_size=int(batch_size),
+            force_weight=float(force_weight),
+            freeze_backbone=bool(freeze_backbone),
+            weight_decay=float(weight_decay),
+            seed=int(seed),
+        )
+    if sampler.peak_gb:
+        report.peak_gpu_mem_gb = round(sampler.peak_gb, 3)
+    if history:
+        report.extra["final_train_loss"] = round(history[-1], 6)
+    report.write(output_dir / "cost.json")
 
-def _cuda_available() -> bool:
-    try:
-        import torch
-
-        return bool(torch.cuda.is_available())
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def _run_fairchem(config_path: Path) -> None:
-    """Invoke the fairchem training CLI on the generated config.
-
-    The training entry point is the ``fairchem`` *console script*, which calls
-    ``fairchem.core._cli:main``. The ``_cli`` module has NO ``if __name__ ==
-    "__main__"`` guard, so ``python -m fairchem.core._cli`` merely imports it and
-    exits 0 without training. We therefore prefer the console script that ships
-    next to the active interpreter (the venv ``bin/`` dir, which is not
-    necessarily on ``PATH`` when the interpreter is invoked by absolute path),
-    then fall back to ``PATH``, and finally to importing and calling ``main()``
-    explicitly in a fresh interpreter.
-    """
-    candidate = Path(sys.executable).with_name("fairchem")
-    fairchem_bin = str(candidate) if candidate.is_file() else shutil.which("fairchem")
-    if fairchem_bin:
-        argv = [fairchem_bin, "-c", str(config_path)]
-    else:  # module has no __main__ guard -> call main() explicitly
-        argv = [
-            sys.executable,
-            "-c",
-            "import sys; from fairchem.core._cli import main; sys.exit(main())",
-            "-c",
-            str(config_path),
-        ]
-    log.info("Launching fairchem: %s", " ".join(argv))
-    proc = subprocess.run(argv, check=False)
-    if proc.returncode != 0:
-        raise RuntimeError(f"fairchem fine-tune failed with exit {proc.returncode}")
+    _save_finetuned_checkpoint(pu, base_model, dest_ckpt)
+    log.info(
+        "UMA fine-tune complete -> %s (%.1fs, %.4f GPU-h)",
+        dest_ckpt,
+        report.wall_time_s,
+        report.gpu_hours,
+    )
+    return dest_ckpt
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--dataset", required=True, help="AL-collected extxyz dataset.")
     parser.add_argument("--output-dir", required=True, help="Work/output directory.")
-    parser.add_argument("--base-model", default="uma-s-1p1", help="Base UMA model name.")
+    parser.add_argument("--base-model", default="uma-s-1p1", help="Base UMA model name or path.")
     parser.add_argument(
         "--task-name",
         default="omat",
         choices=sorted(_UMA_TASKS),
         help="UMA task (omat: inorganic bulk, omol: molecules/MOFs, ...).",
     )
-    parser.add_argument("--epochs", type=int, default=1, help="Number of fine-tune epochs.")
-    parser.add_argument(
-        "--regression-tasks",
-        default=None,
-        choices=sorted(_REGRESSION_TASKS),
-        help="Targets: e / ef / efs. Default: auto-detect from dataset labels.",
-    )
-    parser.add_argument("--val-fraction", type=float, default=0.1)
-    parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument("--epochs", type=int, default=20, help="Number of fine-tune epochs.")
+    parser.add_argument("--batch-size", type=int, default=4, help="Gradient-accumulation batch size.")
     parser.add_argument(
         "--lr",
         type=float,
-        default=2e-5,
-        help="Fine-tune learning rate. Default 2e-5 is a gentle foundation-model "
-        "recipe that avoids catastrophic forgetting on small AL datasets.",
+        default=1e-4,
+        help="Adam learning rate (reference UMA fine-tune recipe: 1e-4).",
+    )
+    parser.add_argument(
+        "--force-weight",
+        type=float,
+        default=10.0,
+        help="Weight on the force MSE term relative to the energy MSE term.",
+    )
+    parser.add_argument(
+        "--freeze-backbone",
+        action="store_true",
+        help="Freeze the backbone and train only the output head.",
     )
     parser.add_argument(
         "--weight-decay",
         type=float,
-        default=1e-2,
-        help="AdamW weight decay (regularises toward the base model).",
+        default=0.0,
+        help="Adam weight decay (default 0, matching the reference recipe).",
     )
-    parser.add_argument(
-        "--warmup-epochs",
-        type=float,
-        default=0.1,
-        help="Cosine-LR warmup length in epochs.",
-    )
-    parser.add_argument("--max-neighbors", type=int, default=300)
-    parser.add_argument("--ranks-per-node", type=int, default=1, help="GPUs to train on.")
-    parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument(
-        "--fairchem-src",
-        default=None,
-        help="fairchem source checkout root (or set FAIRCHEM_SRC).",
-    )
-    parser.add_argument("--device", default=None, choices=["CUDA", "CPU"])
+    parser.add_argument("--device", default=None, choices=["CUDA", "CPU", "cuda", "cpu"])
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Prepare dataset + config but do not launch training.",
+        help="Load model + dataset but do not train / write a checkpoint.",
     )
     args = parser.parse_args(argv)
 
@@ -538,17 +443,12 @@ def main(argv: list[str] | None = None) -> int:
         base_model=args.base_model,
         task_name=args.task_name,
         epochs=args.epochs,
-        regression_tasks=args.regression_tasks,
-        val_fraction=args.val_fraction,
         batch_size=args.batch_size,
         lr=args.lr,
+        force_weight=args.force_weight,
+        freeze_backbone=args.freeze_backbone,
         weight_decay=args.weight_decay,
-        warmup_epochs=args.warmup_epochs,
-        max_neighbors=args.max_neighbors,
-        ranks_per_node=args.ranks_per_node,
-        num_workers=args.num_workers,
         seed=args.seed,
-        fairchem_src=args.fairchem_src,
         device=args.device,
         run=not args.dry_run,
     )

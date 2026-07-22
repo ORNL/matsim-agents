@@ -217,12 +217,14 @@ def run_campaign(
     # UMA
     uma_base_model: str = "uma-s-1p1",
     uma_task_name: str = "omat",
-    # UMA gentle fine-tune recipe (decoupled from the shared HydraGNN knobs so a
-    # strong foundation model is not overfit / catastrophically forgotten on the
-    # small AL datasets).
-    uma_epochs: int = 8,
-    uma_lr: float = 2e-5,
-    uma_weight_decay: float = 1e-2,
+    # UMA fine-tune recipe (custom conservative-head loop; see finetune_uma).
+    # Matches allaffa/HydraGNN_GFM_FineTuning4Materials @ uma-sota-comparison:
+    # Adam lr=1e-4, force-weighted MSE loss, no weight decay.
+    uma_epochs: int = 20,
+    uma_lr: float = 1e-4,
+    uma_force_weight: float = 10.0,
+    uma_weight_decay: float = 0.0,
+    uma_freeze_backbone: bool = False,
     # HydraGNN
     gfm_logdir: str | Path | None = None,
     branch_mlp_path: str | Path | None = None,
@@ -293,8 +295,9 @@ def run_campaign(
             epochs=uma_epochs,
             batch_size=batch_size,
             lr=lr if lr is not None else uma_lr,
+            force_weight=uma_force_weight,
+            freeze_backbone=uma_freeze_backbone,
             weight_decay=uma_weight_decay,
-            ranks_per_node=1 if dev.startswith("cuda") else 1,
             device="CUDA" if dev.startswith("cuda") else "CPU",
             seed=seed,
         )
@@ -419,13 +422,18 @@ def main(argv: list[str] | None = None) -> int:
         "--uma-task-name", default="omat", choices=["omat", "omol", "oc20", "odac", "omc"]
     )
     parser.add_argument(
-        "--uma-epochs", type=int, default=8, help="UMA fine-tune epochs (gentle recipe)."
+        "--uma-epochs", type=int, default=20, help="UMA fine-tune epochs."
     )
     parser.add_argument(
-        "--uma-lr", type=float, default=2e-5,
-        help="UMA fine-tune LR (gentle default avoids catastrophic forgetting).",
+        "--uma-lr", type=float, default=1e-4,
+        help="UMA fine-tune Adam LR (reference recipe: 1e-4).",
     )
-    parser.add_argument("--uma-weight-decay", type=float, default=1e-2)
+    parser.add_argument(
+        "--uma-force-weight", type=float, default=10.0,
+        help="Weight on the force-MSE term relative to energy-MSE.",
+    )
+    parser.add_argument("--uma-freeze-backbone", action="store_true")
+    parser.add_argument("--uma-weight-decay", type=float, default=0.0)
     # HydraGNN
     parser.add_argument("--gfm-logdir", default=None, help="HydraGNN GFM logdir (config.json + .pk).")
     parser.add_argument("--branch-mlp", default=None, help="mlp_branch_weights.pt path.")
@@ -462,6 +470,8 @@ def main(argv: list[str] | None = None) -> int:
         uma_task_name=args.uma_task_name,
         uma_epochs=args.uma_epochs,
         uma_lr=args.uma_lr,
+        uma_force_weight=args.uma_force_weight,
+        uma_freeze_backbone=args.uma_freeze_backbone,
         uma_weight_decay=args.uma_weight_decay,
         gfm_logdir=args.gfm_logdir,
         branch_mlp_path=args.branch_mlp,

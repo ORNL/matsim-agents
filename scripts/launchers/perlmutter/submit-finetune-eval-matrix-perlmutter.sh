@@ -106,7 +106,9 @@ for backend in "${BACKEND_LIST[@]}"; do
       [[ -n "${BATCH_SIZE:-}" ]] && exports+=",BATCH_SIZE=${BATCH_SIZE}"
       [[ -n "${UMA_EPOCHS:-}" ]]       && exports+=",UMA_EPOCHS=${UMA_EPOCHS}"
       [[ -n "${UMA_LR:-}" ]]           && exports+=",UMA_LR=${UMA_LR}"
+      [[ -n "${UMA_FORCE_WEIGHT:-}" ]] && exports+=",UMA_FORCE_WEIGHT=${UMA_FORCE_WEIGHT}"
       [[ -n "${UMA_WEIGHT_DECAY:-}" ]] && exports+=",UMA_WEIGHT_DECAY=${UMA_WEIGHT_DECAY}"
+      [[ -n "${UMA_FREEZE_BACKBONE:-}" ]] && exports+=",UMA_FREEZE_BACKBONE=${UMA_FREEZE_BACKBONE}"
       [[ -n "${DEVICE:-}" ]]     && exports+=",DEVICE=${DEVICE}"
 
       if [[ -n "${DRY_RUN:-}" ]]; then
