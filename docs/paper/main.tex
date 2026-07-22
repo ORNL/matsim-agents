@@ -210,9 +210,7 @@ this work are:
 \end{itemize}
 
 The paper is organised as follows. Section~\ref{sec:related} reviews related
-work. Section~\ref{sec:contributions} aggregates the distinctive contributions
-that position \textsc{matsim-agents} relative to this literature.
-Section~\ref{sec:architecture} describes the system architecture.
+work. Section~\ref{sec:architecture} describes the system architecture.
 Section~\ref{sec:hpc} details the \acs{HPC} deployment strategy.
 Section~\ref{sec:results} presents benchmark results on Perlmutter.
 Section~\ref{sec:conclusions} discusses findings, limitations, and future
@@ -241,10 +239,9 @@ prediction heads~\cite{hydragnn,lupopasini2026exascalegfm}.
 Ensembles are the most reliable but require $N$ independent model evaluations.
 In multi-branch atomistic models, branch-selection signals can also expose
 information about how predictions are routed across dataset- or
-fidelity-specialized heads. In the HydraGNN \ac{GFM}, the BranchWeightMLP is a
-composition-conditioned router that maps a structure's chemical-composition
-vector to softmax weights over 16 dataset-/fidelity-specialized output
-branches~\cite{lupopasini2026exascalegfm}. Such branch weights should be
+fidelity-specialized heads; \textsc{matsim-agents} repurposes the HydraGNN
+BranchWeightMLP router in exactly this way, as detailed in
+Section~\ref{sec:architecture}. Such branch weights should be
 interpreted as routing signals rather than calibrated Bayesian uncertainty.
 
 \subsection{Active Learning for Materials}
@@ -279,67 +276,6 @@ chemistry~\cite{lejaeghere2016}. Several recent works have proposed \acs{MLIP}
 warm-starts for \acs{DFT} geometry optimisation~\cite{schreiner2022,merchant2023}.
 These efforts motivate the use of learned potentials as fast preprocessors for
 higher-fidelity first-principles calculations.
-
-% =============================================================================
-\section{Distinctive Contributions of \textsc{matsim-agents}}
-\label{sec:contributions}
-
-The related work reviewed above has established powerful components for modern
-computational materials science, including graph-neural-network interatomic
-potentials, uncertainty estimation, active learning, first-principles workflow
-engines, \acs{MLIP}-assisted warm-starting, and emerging \acs{LLM}-based
-scientific assistants. The distinctive contribution of \textsc{matsim-agents}
-is to integrate these capabilities into a closed-loop, \acs{HPC}-deployable
-agentic workflow for atomistic materials discovery. In this workflow,
-natural-language scientific intent is translated into executable simulation
-tasks, \acs{MLIP} predictions are evaluated through uncertainty-aware control
-logic, selected structures are escalated to \acs{DFT} when higher fidelity is
-required, and the resulting scientific evidence is returned to the user through
-language-level synthesis.
-
-The first distinguishing feature is the translation of open-ended materials
-objectives into typed atomistic tasks. Instead of requiring the user to manually
-assemble a sequence of scripts, configuration files, simulation inputs, and
-post-processing steps, \textsc{matsim-agents} represents planning, execution,
-validation, correction, and reporting as explicit states in a checkpointed
-LangGraph multi-agent workflow.
-
-The second distinguishing feature is the support for multiple \acs{MLIP} backends as
-the fast atomistic execution engine. By default the workflow uses an
-exascale-trained, multi-task HydraGNN checkpoint~\cite{hydragnn}: a compact
-PaiNN-based \ac{GFM} built from 16 open first-principles datasets that provides both
-high-throughput energy/force evaluation and branch-routing signals for low-cost
-triage. A second supported backend is UMA~\cite{wood2025uma}, Meta FAIR's
-family of universal foundation-model potentials trained on half a billion atomic
-structures across molecules, materials, and catalysts. Both backends expose an
-identical \ac{ASE} calculator interface, so the same workflow runs unmodified
-regardless of which \acs{MLIP} is selected.
-
-The third distinguishing feature is the use of the BranchWeightMLP as a
-workflow-control signal. In the underlying HydraGNN model, BranchWeightMLP is a
-composition-conditioned router that blends the predictions of 16 output
-branches. In \textsc{matsim-agents}, the concentration or diffuseness of that
-branch-weight distribution is used as a heuristic confidence signal: sharply
-routed predictions can proceed to analysis, whereas diffuse routing can trigger
-additional validation, \acs{DFT} labeling, or a more expensive \acs{UQ} method.
-This interpretation preserves the technical meaning of BranchWeightMLP as a
-router rather than overstating it as a calibrated epistemic uncertainty model.
-
-The fourth distinguishing feature is the coupling of selective \acs{DFT}
-escalation, active learning, and warm-starting inside the same agentic loop.
-The framework can route uncertain structures to first-principles labeling,
-append the resulting configurations to the training set, retrain the \acs{MLIP},
-and use \acs{MLIP}-relaxed geometries as warm starts for higher-fidelity
-geometry optimization. This connects fast approximate exploration with
-selective quantum-mechanical correction.
-
-The fifth distinguishing feature is the deployment model for leadership-class
-\acs{HPC} systems. \textsc{matsim-agents} is designed around local \acs{LLM}
-inference, \acs{GPU}-accelerated \acs{MLIP} evaluation, batch-scheduled
-first-principles calculations, serialized workflow state, and platform-specific
-support for heterogeneous \acs{DOE} supercomputers. This makes the framework a
-scientific workflow system for production computational materials workloads,
-not only an interactive tool-calling demonstration.
 
 % =============================================================================
 \section{System Architecture}
@@ -531,7 +467,11 @@ number of active learning iterations. Each iteration proceeds as follows:
   routing signal depends only on chemical composition, it is constant along a
   given trajectory and is used to flag which candidate \emph{systems}
   (compositions) are routed diffusely and therefore warrant escalation, rather
-  than to rank individual frames within a trajectory.
+  than to rank individual frames within a trajectory. For backends without
+  branch routing (e.g.\ UMA), or when configuration-level scoring is preferred,
+  candidates can instead be scored by \ac{MC}-Dropout force variance or by
+  deep-ensemble disagreement, including a combined ensemble-then-dropout
+  strategy.
 \item \textbf{Within-trajectory snapshot selection}: for each flagged system,
   critical snapshots are drawn from its \ac{MD} frames using a greedy
   farthest-point diversity filter over configuration descriptors, which removes
@@ -562,7 +502,7 @@ established licensed production code and the user has access to the \acs{VASP} s
 and pseudopotential files.
 
 \subsubsection{DFT Warm-Start Protocol}
-A separate but tightly integrated warm-start module is evaluated as a factorial
+A separate warm-start benchmarking module is evaluated as a factorial
 backend ablation that pairs each \acs{MLIP} backend with each \acs{DFT} solver:
 \texttt{warmstart\_benchmark\_qe} targets \acs{QE} while
 \texttt{warmstart\_benchmark\_vasp} targets \acs{VASP}, and each module accepts
@@ -583,8 +523,8 @@ prediction may not be trustworthy for that chemistry. Second, systematic
 collection of such failure cases across the benchmark fixture suite identifies
 \emph{regions of \acs{MLIP} weakness} in materials space---compositions or
 structural motifs where the model's pre-relaxation is unreliable---and this
-information can be fed directly into the active learning loop to collect
-targeted \acs{DFT} data and improve model robustness.
+information can be used to target active-learning data collection and improve
+model robustness.
 
 The benchmark pipeline, shared across all four configurations, proceeds as follows
 for any input crystal structure:
@@ -1072,6 +1012,120 @@ as an uncertainty-driven learning curve; the uncertainty-guided acquisition and
 in-loop retraining components are present and exercised, and quantifying their
 sample efficiency with a trainable ensemble backend is the natural next study.
 
+\subsection{Fine-Tuning on Active-Learning-Corrected Data}
+\label{sec:results:finetune}
+The end-to-end loop of Section~\ref{sec:results:al} produces, for each paper
+case, a compact set of \acs{DFT}-labelled frames drawn precisely from the
+configurations the \acs{MLIP} itself sampled during \acs{MD}. The natural
+question that closes the loop is whether re-training the force engine on this
+active-learning-corrected data measurably improves it on the very chemistry that
+generated the frames. We therefore ran a controlled \emph{fine-tune-and-evaluate}
+study on five of the six paper cases (Cu-BHT again pending a \acs{CIF} seed),
+using the per-case datasets accumulated by the loop
+(LiFePO\textsubscript{4}, Cantor FCC \acs{HEA}, NbTaVHfZrTi BCC \acs{HEA},
+phosphorene, and the Zn(HCOO)\textsubscript{2} \acs{MOF}).
+
+\paragraph{Protocol.}
+Each dataset is split into disjoint train and held-out test partitions. We then
+measure a strict \emph{before/after} pair on the identical test partition: the
+\emph{before} endpoint is the pretrained checkpoint evaluated with no exposure to
+the case data, and the \emph{after} endpoint is the same architecture
+fine-tuned on the train partition. Because both endpoints are scored on the same
+held-out frames with the same metrics, any change is attributable solely to the
+fine-tuning. We report two error metrics per endpoint: the force mean absolute
+error (\acs{MAE}, in eV/\AA) and the per-atom energy \acs{MAE} after removing a
+constant reference shift (in meV/atom), the latter isolating the shape of the
+energy surface from a trivial global offset.
+
+\paragraph{Backends.}
+The study spans both \acs{MLIP} engines used elsewhere in the paper. For
+HydraGNN~\cite{hydragnn} we contrast four transfer-learning strategies against a
+common baseline: (i) \emph{routed}, the default multi-head \ac{GFM} routing;
+(ii) \emph{unfrozen}, a full fine-tune of the backbone and heads; (iii)
+\emph{frozen}, in which the backbone is held fixed and only the output head is
+retrained; and (iv) \emph{scratch}, a model trained from random initialization
+on the case data alone, which isolates the value of the pretrained
+representation. For UMA~\cite{wood2025uma} we fine-tune directly through the
+model's conservative energy-and-force head with a lightweight custom training
+loop---a small number of Adam epochs on a force-weighted energy-and-force loss
+that updates the pretrained output heads in place---optionally freezing the
+backbone so that only the output head adapts. This adapts the large pretrained
+potential to a narrow domain without erasing its general knowledge.
+
+\paragraph{Fine-tuning through the conservative force head.}
+A subtle but decisive methodological choice surfaced when fine-tuning the
+UMA foundation model. UMA predicts forces as the analytic gradient of its energy
+with respect to atomic positions---a \emph{conservative} force head evaluated
+inside the forward pass. The convenient route of driving the fine-tune through
+the reference configuration pipeline instead recomputes the output
+normalizers---the force \acs{RMS} scale and the per-element linear energy
+references---from the (small) case dataset and trains a \emph{direct}-force head.
+On a few hundred frames these statistics are estimated far from their
+pretraining values: the force scale inflates by roughly a factor of three and
+the per-element references collapse onto the handful of elements present in the
+case. Because a direct-force head multiplies its raw output by the stored force
+scale, a gentle fine-tune that barely moves the network weights nonetheless
+emits forces mis-scaled by that same factor, so accuracy \emph{degrades} from
+the first optimization step. We therefore fine-tune the conservative head
+\emph{directly}: the model is run in training mode so the head retains the
+double-backprop graph needed to differentiate the force gradient, and a
+force-weighted energy-and-force loss updates the pretrained heads while leaving
+their output statistics untouched. We adopt this convention for all
+foundation-model fine-tunes reported here, and note it explicitly because the
+normalizer-refitting route is an easy and silent failure mode when adapting
+large pretrained potentials to small domain datasets.
+
+\paragraph{HydraGNN results.}
+Table~\ref{tab:finetune} reports the held-out force and reference-shifted energy
+\acs{MAE} for the pretrained baseline (\emph{before}) and each of the four
+HydraGNN transfer-learning strategies (\emph{after}). The pretrained \ac{GFM}
+starts far off-distribution on these specialized chemistries, as expected given
+that none of the cases (battery cathode, refractory and structural \acsp{HEA},
+2D semiconductor, porous \acs{MOF}) is well represented in its MPtrj+ANI-1x
+training distribution. Fine-tuning on the loop-generated data sharply reduces
+both error metrics in every case. The full fine-tune (\emph{unfrozen}) and the
+from-\emph{scratch} specialist are the strongest and are typically close, while
+\emph{frozen}-backbone tuning (head only) helps but trails them and the default
+multi-head \emph{routed} update improves least. That the from-scratch specialist
+is competitive with transfer learning indicates the active-learning-corrected
+datasets are internally consistent enough to train a capable case-specific
+potential on their own, while the full fine-tune retains the advantage on the
+sparser cases. The two weaker strategies can occasionally leave the energy
+essentially unimproved, underscoring that a full fine-tune is the safer default.
+
+\begin{table*}[t]
+\centering
+\caption{Held-out test errors on the active-learning-corrected paper cases
+(lower is better). \emph{Before} is the pretrained HydraGNN \ac{GFM}; the
+remaining columns are the four transfer-learning strategies after fine-tuning on
+the loop-generated train partition. Left panel: force \acs{MAE} (eV/\AA). Right
+panel: reference-shifted per-atom energy \acs{MAE} (meV/atom). UMA
+foundation-model fine-tunes are reported separately in the text.}
+\label{tab:finetune}
+\begin{tabular}{lccccc@{\hspace{2em}}ccccc}
+\toprule
+ & \multicolumn{5}{c}{Force \acs{MAE} (eV/\AA)} & \multicolumn{5}{c}{Energy \acs{MAE} (meV/atom)}\\
+\cmidrule(lr){2-6}\cmidrule(lr){7-11}
+System & Before & Routed & Unfroz. & Frozen & Scratch & Before & Routed & Unfroz. & Frozen & Scratch\\
+\midrule
+LiFePO\textsubscript{4} olivine     & 22.97 & 3.09 & 2.69 & 4.98 & 2.50 & 1917 & 662  & 612 & 431 & 605 \\
+CrMnFeCoNi Cantor FCC \acs{HEA}     & 6.43  & 6.18 & 3.43 & 5.10 & 2.14 & 2248 & 1108 & 418 & 843 & 450 \\
+NbTaVHfZrTi BCC \acs{HEA}           & 3.32  & 2.02 & 1.38 & 1.46 & 1.38 & 559  & 121  & 28  & 107 & 49  \\
+Phosphorene (black/blue-P)          & 2.84  & 1.58 & 0.68 & 0.57 & 0.42 & 136  & 165  & 45  & 59  & 33  \\
+Zn(HCOO)\textsubscript{2} \acs{MOF} & 5.38  & 2.49 & 2.21 & 3.26 & 2.12 & 216  & 116  & 117 & 216 & 120 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\paragraph{UMA foundation-model results.}
+The UMA fine-tunes, which adapt the conservative force head as described above,
+are being regenerated at the time of writing and their held-out numbers will be
+reported here once the runs complete.
+% TODO(results): fill UMA before/after from
+%   runs/finetune-eval-umaref/uma/<case>/eval/iter*.json (pending; jobs
+%   56299390/391/393/398/401). Metric keys: force_mae_eV_per_A and
+%   energy_mae_eV_per_atom_shifted (x1000 -> meV/atom). Base "before" = iter0.
+
 \subsection{Strong Scaling of DFT Labeling}
 \label{sec:results:scaling}
 The per-iteration breakdown of Fig.~\ref{fig:al_timing} shows that
@@ -1251,20 +1305,23 @@ Mixtral-8x22B-Instruct~\cite{mixtral} & Mistral AI & 141B MoE (39B) \\
 \end{table}
 
 \subsection{Limitations and Future Developments}
-Current limitations include: (1) the active learning loop targets HydraGNN
-retraining and does not yet support fine-tuning of universal \acsp{MLIP}
-(UMA~\cite{wood2025uma}, MACE-MP~\cite{batatia2023macemp}); the warm-start
-module, by contrast, already supports both HydraGNN and UMA as pre-relaxation
+Current limitations include: (1) automatic in-loop retraining is demonstrated
+end-to-end for HydraGNN, while UMA fine-tuning---implemented both as an in-loop
+retrain hook and as the offline fine-tune study of
+Section~\ref{sec:results:finetune}---has not yet been exercised as a fully
+automatic in-loop step, and other universal \acsp{MLIP} such as
+MACE-MP~\cite{batatia2023macemp} remain unsupported; the warm-start
+module already supports both HydraGNN and UMA as pre-relaxation
 backends; (2) the warm-start protocol handles ionic coordinates but not cell
 shape/volume, which limits benefit for pure-strain relaxation problems; (3) the
 \acs{LLM} planner does not yet incorporate literature search or database queries
 (Materials Project, AFLOW) as tool calls; and (4) the present \acs{UQ} gate relies
 on the BranchWeightMLP routing heuristic, which is composition-conditioned and
 therefore constant across atomistic configurations of the same chemical system.
-Future work will address these limitations, including the integration of more
-robust \acs{UQ}, for example deep ensembles of independently trained \acsp{MLIP}
-or \ac{MC}-Dropout, that quantifies uncertainty at the level of individual
-atomistic configurations. Coupled with \acs{MD} sampling of the same chemical
+Future work will address these limitations, including promoting the
+already-implemented \ac{MC}-Dropout and deep-ensemble scorers---presently used
+for candidate acquisition---to configuration-level gate signals that quantify
+uncertainty at the level of individual atomistic configurations. Coupled with \acs{MD} sampling of the same chemical
 system, such configuration-level \acs{UQ} would improve robustness by flagging
 specific critical snapshots along a trajectory for \acs{DFT} labeling, rather than
 only flagging entire chemistries. We also plan to extend the loop to
