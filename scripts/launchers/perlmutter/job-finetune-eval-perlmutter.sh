@@ -92,6 +92,7 @@ elif [[ "${BACKEND}" == "mace" ]]; then
   __mace_variant="${MACE_MODEL_ID:-${MACE_MODEL}}"
   [[ "${__mace_variant}" != "medium" ]] && VARIANT_PARTS+=("$(basename "${__mace_variant}")")
   [[ "${MACE_LORA:-0}" == "1" ]] && VARIANT_PARTS+=("lora")
+  [[ "${MACE_FREEZE_BACKBONE:-0}" == "1" ]] && VARIANT_PARTS+=("frozen")
 elif [[ "${BACKEND}" == "uma" ]]; then
   [[ "${UMA_LORA:-0}" == "1" ]] && VARIANT_PARTS+=("lora")
   [[ "${UMA_FREEZE_BACKBONE:-0}" == "1" ]] && VARIANT_PARTS+=("frozen")
