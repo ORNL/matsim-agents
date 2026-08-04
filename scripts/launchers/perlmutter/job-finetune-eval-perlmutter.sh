@@ -29,12 +29,21 @@
 #     sbatch scripts/launchers/perlmutter/job-finetune-eval-perlmutter.sh
 #   BACKEND=uma CASE=zn-formate-mof-uma-al-001 UMA_TASK=omol \
 #     sbatch scripts/launchers/perlmutter/job-finetune-eval-perlmutter.sh
+#   BACKEND=mace CASE=lifepo4-al-001 MACE_FAMILY=mace_mp MACE_MODEL=medium \
+#     sbatch scripts/launchers/perlmutter/job-finetune-eval-perlmutter.sh
 #
 # Required env:
-#   BACKEND   hydragnn | uma
+#   BACKEND   hydragnn | uma | mace
 #   CASE      dataset case dir under $RUNS_ROOT (contains dataset.extxyz)
 # Optional env (with defaults):
 #   UMA_TASK      omat | omol | oc20 | odac | omc   (uma only; default omat)
+#   UMA_LORA      1 = LoRA fine-tune of UMA backbone scalar linears (default 0)
+#   MACE_FAMILY   mace_mp | mace_off | checkpoint   (mace only; default mace_mp)
+#   MACE_MODEL    small | medium | large | tag/URL | .model path
+#                                                   (mace only; default medium)
+#   MACE_MODEL_ID curated MACE_MODELS id (overrides MACE_FAMILY/MACE_MODEL)
+#   MACE_LORA     1 = native mace_run_train LoRA fine-tune (default 0)
+#   MACE_PRECISION  fp32 | fp64                      (mace only; default fp64)
 #   EPOCHS        fine-tune epochs                  (default 20)
 #   BATCH_SIZE    training batch size               (default 4)
 #   DEVICE        override torch device             (default: auto = cuda)
@@ -60,21 +69,36 @@ HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-${PROJ}/HydraGNN}"
 VENV_ROOT="${HYDRAGNN_ROOT}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
 
 # ── required inputs ─────────────────────────────────────────────────────────
-BACKEND="${BACKEND:?set BACKEND=hydragnn|uma}"
+BACKEND="${BACKEND:?set BACKEND=hydragnn|uma|mace}"
 CASE="${CASE:?set CASE=<dataset case dir under RUNS_ROOT>}"
 DATASET="${DATASET:-${RUNS_ROOT}/${CASE}/dataset.extxyz}"
 [[ ! -f "${DATASET}" ]] && { echo "ERROR: dataset not found: ${DATASET}" >&2; exit 2; }
 
 # ── knobs ────────────────────────────────────────────────────────────────────
 UMA_TASK="${UMA_TASK:-omat}"
+MACE_FAMILY="${MACE_FAMILY:-mace_mp}"
+MACE_MODEL="${MACE_MODEL:-medium}"
+MACE_PRECISION="${MACE_PRECISION:-fp64}"
 EPOCHS="${EPOCHS:-20}"
 BATCH_SIZE="${BATCH_SIZE:-4}"
 HYDRAGNN_STRATEGY="${HYDRAGNN_STRATEGY:-routed}"
 FTEVAL_ROOT="${FTEVAL_ROOT:-${RUNS_ROOT}/finetune-eval}"
-# Non-routed hydragnn strategies write to their own subdir so the new-head
-# fine-tunes never collide with the branch-MLP (routed) campaign.
-if [[ "${BACKEND}" == "hydragnn" && "${HYDRAGNN_STRATEGY}" != "routed" ]]; then
-  OUT_DIR="${FTEVAL_ROOT}/${BACKEND}-${HYDRAGNN_STRATEGY}/${CASE}"
+# Distinct runs (head strategy, MACE size/variant, LoRA/frozen) write to their
+# own subdir via a composed variant tag so they never collide.
+VARIANT_PARTS=()
+if [[ "${BACKEND}" == "hydragnn" ]]; then
+  [[ "${HYDRAGNN_STRATEGY}" != "routed" ]] && VARIANT_PARTS+=("${HYDRAGNN_STRATEGY}")
+elif [[ "${BACKEND}" == "mace" ]]; then
+  __mace_variant="${MACE_MODEL_ID:-${MACE_MODEL}}"
+  [[ "${__mace_variant}" != "medium" ]] && VARIANT_PARTS+=("$(basename "${__mace_variant}")")
+  [[ "${MACE_LORA:-0}" == "1" ]] && VARIANT_PARTS+=("lora")
+elif [[ "${BACKEND}" == "uma" ]]; then
+  [[ "${UMA_LORA:-0}" == "1" ]] && VARIANT_PARTS+=("lora")
+  [[ "${UMA_FREEZE_BACKBONE:-0}" == "1" ]] && VARIANT_PARTS+=("frozen")
+fi
+if [[ ${#VARIANT_PARTS[@]} -gt 0 ]]; then
+  VARIANT_TAG="$(IFS=-; echo "${VARIANT_PARTS[*]}")"
+  OUT_DIR="${FTEVAL_ROOT}/${BACKEND}-${VARIANT_TAG}/${CASE}"
 else
   OUT_DIR="${FTEVAL_ROOT}/${BACKEND}/${CASE}"
 fi
@@ -95,8 +119,10 @@ if [[ "${BACKEND}" == "uma" ]]; then
   VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
 elif [[ "${BACKEND}" == "hydragnn" ]]; then
   VENV="${MATSIM_HYDRAGNN_VENV:-${VENV_ROOT}/hydragnn_venv}"
+elif [[ "${BACKEND}" == "mace" ]]; then
+  VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}"
 else
-  echo "ERROR: BACKEND must be 'hydragnn' or 'uma' (got '${BACKEND}')" >&2
+  echo "ERROR: BACKEND must be 'hydragnn', 'uma', or 'mace' (got '${BACKEND}')" >&2
   exit 2
 fi
 [[ ! -d "${VENV}" ]] && { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
@@ -132,7 +158,7 @@ if [[ "${BACKEND}" == "hydragnn" ]]; then
     [[ ! -d "${FT_REPO}" ]] && { echo "ERROR: FT_REPO (ORNL fine-tune utils) not found: ${FT_REPO}" >&2; exit 2; }
     EXTRA_ARGS+=(--ft-repo "${FT_REPO}")
   fi
-else
+elif [[ "${BACKEND}" == "uma" ]]; then
   # UMA fine-tuning uses a self-contained custom PyTorch loop (no fairchem
   # config templates needed), plus a HuggingFace / fairchem model cache for the
   # base UMA weights.
@@ -151,6 +177,32 @@ else
   [[ -n "${UMA_FORCE_WEIGHT:-}" ]]   && EXTRA_ARGS+=(--uma-force-weight "${UMA_FORCE_WEIGHT}")
   [[ -n "${UMA_WEIGHT_DECAY:-}" ]]   && EXTRA_ARGS+=(--uma-weight-decay "${UMA_WEIGHT_DECAY}")
   [[ "${UMA_FREEZE_BACKBONE:-0}" == "1" ]] && EXTRA_ARGS+=(--uma-freeze-backbone)
+  [[ "${UMA_LORA:-0}" == "1" ]]     && EXTRA_ARGS+=(--uma-lora)
+  [[ -n "${UMA_LORA_R:-}" ]]        && EXTRA_ARGS+=(--uma-lora-r "${UMA_LORA_R}")
+  [[ -n "${UMA_LORA_ALPHA:-}" ]]    && EXTRA_ARGS+=(--uma-lora-alpha "${UMA_LORA_ALPHA}")
+else
+  # MACE fine-tuning is delegated to mace_run_train (reference recipe); base
+  # foundation weights are fetched to an in-project MACE cache. All MACE
+  # versions are selectable via MACE_MODEL_ID or MACE_FAMILY / MACE_MODEL, with
+  # optional native LoRA (MACE_LORA=1).
+  export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${PROJ}/models/mace_cache}"
+  export MACE_CACHE="${MACE_CACHE:-${XDG_CACHE_HOME}/mace}"
+  mkdir -p "${MACE_CACHE}"
+  if [[ -n "${MACE_MODEL_ID:-}" ]]; then
+    EXTRA_ARGS+=(--mace-model-id "${MACE_MODEL_ID}")
+  else
+    EXTRA_ARGS+=(--mace-family "${MACE_FAMILY}" --mace-model "${MACE_MODEL}")
+  fi
+  EXTRA_ARGS+=(--mace-precision "${MACE_PRECISION}")
+  [[ -n "${MACE_EPOCHS:-}" ]]               && EXTRA_ARGS+=(--mace-epochs "${MACE_EPOCHS}")
+  [[ "${MACE_DISPERSION:-0}" == "1" ]]      && EXTRA_ARGS+=(--mace-dispersion)
+  [[ -n "${MACE_LR:-}" ]]                   && EXTRA_ARGS+=(--mace-lr "${MACE_LR}")
+  [[ -n "${MACE_FORCE_WEIGHT:-}" ]]         && EXTRA_ARGS+=(--mace-force-weight "${MACE_FORCE_WEIGHT}")
+  [[ -n "${MACE_WEIGHT_DECAY:-}" ]]         && EXTRA_ARGS+=(--mace-weight-decay "${MACE_WEIGHT_DECAY}")
+  [[ "${MACE_FREEZE_BACKBONE:-0}" == "1" ]] && EXTRA_ARGS+=(--mace-freeze-backbone)
+  [[ "${MACE_LORA:-0}" == "1" ]]            && EXTRA_ARGS+=(--mace-lora)
+  [[ -n "${MACE_LORA_RANK:-}" ]]            && EXTRA_ARGS+=(--mace-lora-rank "${MACE_LORA_RANK}")
+  [[ -n "${MACE_LORA_ALPHA:-}" ]]           && EXTRA_ARGS+=(--mace-lora-alpha "${MACE_LORA_ALPHA}")
 fi
 
 # Optional explicit device override; default leaves detection to torch, which
@@ -165,7 +217,8 @@ echo "Backend:    ${BACKEND}"
 echo "Case:       ${CASE}"
 echo "Dataset:    ${DATASET}"
 echo "Strategy:   ${HYDRAGNN_STRATEGY}   (hydragnn only)"
-echo "Task (UMA): ${UMA_TASK}"
+echo "Task (UMA): ${UMA_TASK}   (uma LoRA: ${UMA_LORA:-0})"
+echo "MACE:       ${MACE_MODEL_ID:-${MACE_FAMILY}:${MACE_MODEL}} (${MACE_PRECISION})  (LoRA: ${MACE_LORA:-0})   (mace only)"
 echo "Epochs:     ${EPOCHS}   Batch: ${BATCH_SIZE}"
 echo "Out dir:    ${OUT_DIR}"
 echo "Venv:       ${VENV}"

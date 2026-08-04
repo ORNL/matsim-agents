@@ -35,6 +35,7 @@ from ase.io import write as ase_write
 
 from matsim_agents.active_learning.config import (
     HydraGNNConfig,
+    MACEConfig,
     MCDropoutInjectionConfig,
     MLIPConfig,
     UMAConfig,
@@ -165,6 +166,19 @@ def _uma_cfg(model_name: str, task_name: str, device: str) -> MLIPConfig:
     )
 
 
+def _mace_cfg(family: str, model: str, device: str, *, precision: str = "fp64") -> MLIPConfig:
+    return MLIPConfig(
+        backend="mace",
+        mace=MACEConfig(
+            family=family,  # type: ignore[arg-type]
+            model=model,
+            device="cuda" if device.startswith("cuda") else "cpu",
+            precision=precision,  # type: ignore[arg-type]
+            dropout=MCDropoutInjectionConfig(enabled=False),  # deterministic eval
+        ),
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Eval helper                                                                 #
 # --------------------------------------------------------------------------- #
@@ -225,6 +239,25 @@ def run_campaign(
     uma_force_weight: float = 10.0,
     uma_weight_decay: float = 0.0,
     uma_freeze_backbone: bool = False,
+    uma_lora: bool = False,
+    uma_lora_r: int = 8,
+    uma_lora_alpha: float = 16.0,
+    # MACE (all versions: family in {mace_mp, mace_off, checkpoint}; model in
+    # {small, medium, large}/tag/URL/path, or a MACE_MODELS id). Fine-tuning is
+    # delegated to mace_run_train (reference recipe), with optional native LoRA.
+    mace_family: str = "mace_mp",
+    mace_model: str = "medium",
+    mace_model_id: str | None = None,
+    mace_precision: str = "fp64",
+    mace_dispersion: bool = False,
+    mace_epochs: int | None = None,
+    mace_lr: float | None = None,
+    mace_force_weight: float = 10.0,
+    mace_weight_decay: float = 0.0,
+    mace_freeze_backbone: bool = False,
+    mace_lora: bool = False,
+    mace_lora_rank: int | None = None,
+    mace_lora_alpha: float | None = None,
     # HydraGNN
     gfm_logdir: str | Path | None = None,
     branch_mlp_path: str | Path | None = None,
@@ -300,8 +333,59 @@ def run_campaign(
             weight_decay=uma_weight_decay,
             device="CUDA" if dev.startswith("cuda") else "CPU",
             seed=seed,
+            lora=uma_lora,
+            lora_r=uma_lora_r,
+            lora_alpha=uma_lora_alpha,
         )
         after_cfg = _uma_cfg(str(ckpt), uma_task_name, dev)
+        after_model_path = str(ckpt)
+
+    elif backend == "mace":
+        # A MACE_MODELS id (if given) selects the family/variant for the
+        # baseline eval too, so "before" and "after" use the same foundation.
+        if mace_model_id is not None:
+            from matsim_agents.active_learning.finetune_mace import MACE_MODELS
+
+            if mace_model_id not in MACE_MODELS:
+                raise ValueError(
+                    f"mace_model_id must be one of {sorted(MACE_MODELS)}, got {mace_model_id!r}"
+                )
+            mace_family = MACE_MODELS[mace_model_id]["family"]
+            mace_model = MACE_MODELS[mace_model_id]["model"]
+        base_cfg = _mace_cfg(mace_family, mace_model, dev, precision=mace_precision)
+        _run_eval(
+            base_cfg,
+            test_frames,
+            iteration=0,
+            model_path=f"{mace_family}:{mace_model}",
+            test_label=str(test_path),
+            eval_dir=eval_dir,
+            max_parity_points=max_parity_points,
+        )
+        from matsim_agents.active_learning.finetune_mace import finetune_mace
+
+        ckpt = finetune_mace(
+            train_path,
+            ft_dir,
+            family=mace_family,
+            base_model=mace_model,
+            model_id=mace_model_id,
+            precision=mace_precision,
+            dispersion=mace_dispersion,
+            epochs=mace_epochs,
+            batch_size=batch_size,
+            lr=lr if lr is not None else mace_lr,
+            lora=mace_lora,
+            lora_rank=mace_lora_rank,
+            lora_alpha=mace_lora_alpha,
+            force_weight=mace_force_weight,
+            freeze_backbone=mace_freeze_backbone,
+            weight_decay=mace_weight_decay,
+            device="CUDA" if dev.startswith("cuda") else "CPU",
+            seed=seed,
+        )
+        # Fine-tuned checkpoint reloads via family="checkpoint".
+        after_cfg = _mace_cfg("checkpoint", str(ckpt), dev, precision=mace_precision)
         after_model_path = str(ckpt)
 
     elif backend == "hydragnn":
@@ -363,7 +447,7 @@ def run_campaign(
         after_model_path = str(ft_logdir)
 
     else:
-        raise ValueError(f"Unknown backend {backend!r} (expected 'hydragnn' or 'uma').")
+        raise ValueError(f"Unknown backend {backend!r} (expected 'hydragnn', 'uma', or 'mace').")
 
     _run_eval(
         after_cfg,
@@ -413,7 +497,7 @@ def _newest_pk(logdir: Path) -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--backend", required=True, choices=["hydragnn", "uma"])
+    parser.add_argument("--backend", required=True, choices=["hydragnn", "uma", "mace"])
     parser.add_argument("--dataset", required=True, help="AL-collected extxyz dataset.")
     parser.add_argument("--output-dir", required=True, help="Campaign output directory.")
     # UMA
@@ -434,6 +518,47 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--uma-freeze-backbone", action="store_true")
     parser.add_argument("--uma-weight-decay", type=float, default=0.0)
+    parser.add_argument(
+        "--uma-lora", action="store_true",
+        help="LoRA fine-tune of UMA backbone scalar linears (preserves equivariance).",
+    )
+    parser.add_argument("--uma-lora-r", type=int, default=8, help="UMA LoRA rank (default: 8).")
+    parser.add_argument("--uma-lora-alpha", type=float, default=16.0, help="UMA LoRA alpha (default: 16.0).")
+    # MACE (all versions)
+    parser.add_argument(
+        "--mace-model-id", default=None,
+        help="Curated MACE variant id (see finetune_mace.MACE_MODELS); overrides --mace-family/--mace-model.",
+    )
+    parser.add_argument(
+        "--mace-family", default="mace_mp", choices=["mace_mp", "mace_off", "checkpoint"],
+        help="MACE family: mace_mp (inorganic), mace_off (organic), or checkpoint (local .model).",
+    )
+    parser.add_argument(
+        "--mace-model", default="medium",
+        help="MACE size/variant (small|medium|large, or tag/URL), or a .model path for family=checkpoint.",
+    )
+    parser.add_argument("--mace-precision", default="fp64", choices=["fp32", "fp64"])
+    parser.add_argument("--mace-dispersion", action="store_true")
+    parser.add_argument(
+        "--mace-epochs", type=int, default=None,
+        help="MACE fine-tune epochs (default: 10 for LoRA, 50 for naive).",
+    )
+    parser.add_argument(
+        "--mace-lr", type=float, default=None,
+        help="MACE fine-tune LR (default: 5e-3 for LoRA, 1e-3 for naive).",
+    )
+    parser.add_argument(
+        "--mace-force-weight", type=float, default=10.0,
+        help="Recorded for parity; mace_run_train uses its own energy/force weighting.",
+    )
+    parser.add_argument("--mace-freeze-backbone", action="store_true")
+    parser.add_argument("--mace-weight-decay", type=float, default=0.0)
+    parser.add_argument(
+        "--mace-lora", action="store_true",
+        help="Parameter-efficient LoRA fine-tune (native mace_run_train --lora).",
+    )
+    parser.add_argument("--mace-lora-rank", type=int, default=None, help="MACE LoRA rank (default: 4).")
+    parser.add_argument("--mace-lora-alpha", type=float, default=None, help="MACE LoRA alpha (default: 1.0).")
     # HydraGNN
     parser.add_argument("--gfm-logdir", default=None, help="HydraGNN GFM logdir (config.json + .pk).")
     parser.add_argument("--branch-mlp", default=None, help="mlp_branch_weights.pt path.")
@@ -473,6 +598,22 @@ def main(argv: list[str] | None = None) -> int:
         uma_force_weight=args.uma_force_weight,
         uma_freeze_backbone=args.uma_freeze_backbone,
         uma_weight_decay=args.uma_weight_decay,
+        uma_lora=args.uma_lora,
+        uma_lora_r=args.uma_lora_r,
+        uma_lora_alpha=args.uma_lora_alpha,
+        mace_family=args.mace_family,
+        mace_model=args.mace_model,
+        mace_model_id=args.mace_model_id,
+        mace_precision=args.mace_precision,
+        mace_dispersion=args.mace_dispersion,
+        mace_epochs=args.mace_epochs,
+        mace_lr=args.mace_lr,
+        mace_force_weight=args.mace_force_weight,
+        mace_freeze_backbone=args.mace_freeze_backbone,
+        mace_weight_decay=args.mace_weight_decay,
+        mace_lora=args.mace_lora,
+        mace_lora_rank=args.mace_lora_rank,
+        mace_lora_alpha=args.mace_lora_alpha,
         gfm_logdir=args.gfm_logdir,
         branch_mlp_path=args.branch_mlp,
         gfm_checkpoint=args.gfm_checkpoint,

@@ -159,6 +159,100 @@ def uma_energy_forces(model, calc, atoms: Atoms, task_name: str):
 
 
 # --------------------------------------------------------------------------- #
+# LoRA support for UMA backbone scalar linear layers                          #
+# --------------------------------------------------------------------------- #
+#
+# Mirrors utils/uma_finetune.py in
+# allaffa/HydraGNN_GFM_FineTuning4Materials @ uma-sota-comparison: low-rank
+# adapters are injected into the *invariant* scalar linear layers only
+# (``scalar_mlp`` / ``rad_func.net``); the equivariant SO2/SO3 linears are left
+# untouched so rotational equivariance is preserved.
+
+# Module paths whose ``nn.Linear`` layers receive a LoRA adapter.
+_LORA_TARGET_SUBSTRINGS = ("scalar_mlp", "rad_func.net")
+
+
+def apply_lora_to_backbone(
+    backbone,
+    r: int = 8,
+    alpha: float = 16.0,
+    target_substrings: tuple = _LORA_TARGET_SUBSTRINGS,
+) -> int:
+    """Replace targeted backbone ``nn.Linear`` layers with LoRA adapters.
+
+    The adapter computes ``base(x) + scaling * lora_B @ lora_A @ x`` with
+    ``scaling = alpha / r``. ``lora_B`` is initialised to zero so the adapter is
+    transparent at start (the base model is preserved). Returns the number of
+    layers replaced.
+    """
+    import math
+
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+
+    class LoRALinear(nn.Module):
+        def __init__(self, linear: nn.Linear, rank: int, scale_alpha: float):
+            super().__init__()
+            self.r = rank
+            self.scaling = scale_alpha / rank
+            self.base = linear
+            for p in self.base.parameters():
+                p.requires_grad_(False)
+            in_f, out_f = linear.in_features, linear.out_features
+            w = linear.weight
+            self.lora_A = nn.Parameter(torch.zeros(rank, in_f, dtype=w.dtype, device=w.device))
+            self.lora_B = nn.Parameter(torch.zeros(out_f, rank, dtype=w.dtype, device=w.device))
+            nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+
+        def forward(self, x):
+            return self.base(x) + F.linear(F.linear(x, self.lora_A), self.lora_B) * self.scaling
+
+    replaced = 0
+    for full_name, module in list(backbone.named_modules()):
+        if not isinstance(module, nn.Linear):
+            continue
+        if not any(sub in full_name for sub in target_substrings):
+            continue
+        parent = backbone
+        child = full_name
+        if "." in full_name:
+            head, child = full_name.rsplit(".", 1)
+            for part in head.split("."):
+                parent = getattr(parent, part)
+        setattr(parent, child, LoRALinear(module, r, alpha))
+        replaced += 1
+    return replaced
+
+
+def merge_lora_into_backbone(backbone) -> int:
+    """Fold LoRA adapters back into their base ``nn.Linear`` weights.
+
+    After merging, the backbone's ``state_dict`` matches the original
+    (adapter-free) architecture, so the fine-tuned weights reload through the
+    ordinary ``load_predict_unit`` path. Returns the number of adapters merged.
+    """
+    import torch
+
+    merged = 0
+    for full_name, module in list(backbone.named_modules()):
+        if not (hasattr(module, "lora_A") and hasattr(module, "lora_B") and hasattr(module, "base")):
+            continue
+        with torch.no_grad():
+            delta = (module.lora_B @ module.lora_A) * module.scaling
+            module.base.weight.add_(delta.to(module.base.weight.dtype))
+        parent = backbone
+        child = full_name
+        if "." in full_name:
+            head, child = full_name.rsplit(".", 1)
+            for part in head.split("."):
+                parent = getattr(parent, part)
+        setattr(parent, child, module.base)
+        merged += 1
+    return merged
+
+
+# --------------------------------------------------------------------------- #
 # Training loop                                                               #
 # --------------------------------------------------------------------------- #
 
@@ -176,19 +270,34 @@ def _train_uma(
     freeze_backbone: bool,
     weight_decay: float,
     seed: int,
+    lora: bool = False,
+    lora_r: int = 8,
+    lora_alpha: float = 16.0,
 ) -> list[float]:
     """Custom PyTorch fine-tune loop on UMA's conservative energy/force head.
 
     Loss per sample is ``E_MSE + force_weight * F_MSE``. Gradients are
     accumulated over ``batch_size`` samples before each optimiser step.
     Returns the mean per-sample loss for each epoch.
+
+    With ``lora=True`` low-rank adapters are injected into the backbone scalar
+    linears and only those adapters (plus the output heads) are trained; with
+    ``freeze_backbone=True`` the whole backbone is frozen and only the heads
+    train. The two options are mutually exclusive (``lora`` takes precedence).
     """
     import torch
 
     param = next(model.parameters())
     device, dtype = param.device, param.dtype
 
-    if freeze_backbone and hasattr(model, "backbone"):
+    if lora and hasattr(model, "backbone"):
+        n_lora = apply_lora_to_backbone(model.backbone, r=lora_r, alpha=lora_alpha)
+        log.info("UMA LoRA: injected %d adapters (r=%d, alpha=%.1f)", n_lora, lora_r, lora_alpha)
+        # Freeze all backbone params except the LoRA adapters; leave heads trainable.
+        for name, p in model.backbone.named_parameters():
+            if "lora_A" not in name and "lora_B" not in name:
+                p.requires_grad_(False)
+    elif freeze_backbone and hasattr(model, "backbone"):
         for p in model.backbone.parameters():
             p.requires_grad_(False)
     params = [p for p in model.parameters() if p.requires_grad]
@@ -294,6 +403,9 @@ def finetune_uma(
     seed: int = 0,
     device: str | None = None,
     run: bool = True,
+    lora: bool = False,
+    lora_r: int = 8,
+    lora_alpha: float = 16.0,
     # Accepted for backward compatibility with the previous fairchem-config
     # based implementation; ignored by the custom training loop.
     ranks_per_node: int = 1,
@@ -357,6 +469,9 @@ def finetune_uma(
             "batch_size": int(batch_size),
             "freeze_backbone": bool(freeze_backbone),
             "weight_decay": float(weight_decay),
+            "lora": bool(lora),
+            "lora_r": int(lora_r) if lora else None,
+            "lora_alpha": float(lora_alpha) if lora else None,
         },
     )
     sampler = GpuMemorySampler(enabled=dev.startswith("cuda"))
@@ -373,12 +488,21 @@ def finetune_uma(
             freeze_backbone=bool(freeze_backbone),
             weight_decay=float(weight_decay),
             seed=int(seed),
+            lora=bool(lora),
+            lora_r=int(lora_r),
+            lora_alpha=float(lora_alpha),
         )
     if sampler.peak_gb:
         report.peak_gpu_mem_gb = round(sampler.peak_gb, 3)
     if history:
         report.extra["final_train_loss"] = round(history[-1], 6)
     report.write(output_dir / "cost.json")
+
+    # Fold LoRA adapters back into the base linears so the saved checkpoint
+    # matches the original (adapter-free) architecture for reloading.
+    if lora and hasattr(model, "backbone"):
+        n_merged = merge_lora_into_backbone(model.backbone)
+        log.info("UMA LoRA: merged %d adapters into base weights before save", n_merged)
 
     _save_finetuned_checkpoint(pu, base_model, dest_ckpt)
     log.info(
@@ -421,6 +545,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Freeze the backbone and train only the output head.",
     )
     parser.add_argument(
+        "--lora",
+        action="store_true",
+        help="LoRA fine-tuning of backbone scalar linear layers (preserves equivariance).",
+    )
+    parser.add_argument("--lora-r", type=int, default=8, help="LoRA rank (default: 8).")
+    parser.add_argument(
+        "--lora-alpha", type=float, default=16.0, help="LoRA alpha scaling (default: 16.0)."
+    )
+    parser.add_argument(
         "--weight-decay",
         type=float,
         default=0.0,
@@ -451,6 +584,9 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         device=args.device,
         run=not args.dry_run,
+        lora=args.lora,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
     )
     print(ckpt)
     return 0

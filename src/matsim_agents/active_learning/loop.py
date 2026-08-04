@@ -47,6 +47,7 @@ from matsim_agents.active_learning.trainer import (
     append_frames_to_extxyz,
     dft_results_to_frames,
     retrain_hydragnn,
+    retrain_mace,
     retrain_uma,
 )
 from matsim_agents.active_learning.uncertainty import select_candidates
@@ -274,6 +275,18 @@ def run_active_learning(cfg: ALConfig) -> None:
                 )
                 state.new_logdir = str(new_model)
                 cfg.mlip.uma.model_name = str(new_model)
+            elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None and cfg.trainer.enabled:
+                new_model = retrain_mace(
+                    cfg.trainer,
+                    cfg.mlip.mace,
+                    dataset_path=dataset_path,
+                    iteration=i,
+                    out_model_dir=it_dir / "model",
+                )
+                state.new_logdir = str(new_model)
+                # Next iteration continues from the fine-tuned checkpoint.
+                cfg.mlip.mace.family = "checkpoint"
+                cfg.mlip.mace.model = str(new_model)
             else:
                 # Frozen foundation model / disabled trainer: keep accumulating labels.
                 log.info(

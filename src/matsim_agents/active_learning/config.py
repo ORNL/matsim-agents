@@ -119,6 +119,59 @@ class UMAConfig(BaseModel):
     )
 
 
+class MACEConfig(BaseModel):
+    """Inputs to load a MACE MLIP as an ASE calculator.
+
+    Supports the foundation models shipped with ``mace-torch`` -- ``mace_mp``
+    (Materials Project, inorganic) and ``mace_off`` (organic molecules) -- as
+    well as a local fine-tuned ``.model`` checkpoint. ``model`` selects the
+    size/variant (``small`` | ``medium`` | ``large``, or a release tag/URL) so
+    multiple MACE versions are benchmarkable behind the same backend, matching
+    the Frontier HydraGNN-vs-MACE-vs-UMA comparison pipeline.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    family: Literal["mace_mp", "mace_off", "checkpoint"] = Field(
+        "mace_mp",
+        description=(
+            "Which MACE model family to load: 'mace_mp' (Materials Project, "
+            "inorganic), 'mace_off' (organic molecules), or 'checkpoint' (a local "
+            ".model file given by `model`)."
+        ),
+    )
+    model: str = Field(
+        "medium",
+        description=(
+            "Variant for the foundation families ('small' | 'medium' | 'large', "
+            "or a specific release tag/URL), or a path to a local .model checkpoint "
+            "when family='checkpoint'."
+        ),
+    )
+    device: Literal["cuda", "cpu"] = "cuda"
+    precision: Literal["fp32", "fp64"] | None = Field(
+        None,
+        description="Calculator dtype -> MACE default_dtype (fp64 recommended for relaxation).",
+    )
+    dispersion: bool = Field(
+        False, description="Add DFT-D3 dispersion correction (mace_mp / mace_off only)."
+    )
+    ensemble_models: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Additional MACE variants/checkpoints forming a deep ensemble. If "
+            "non-empty, ensemble disagreement is available as an acquisition."
+        ),
+    )
+    dropout: MCDropoutInjectionConfig = Field(
+        default_factory=MCDropoutInjectionConfig,
+        description=(
+            "Test-time dropout injection for MC-Dropout acquisition (MACE has no "
+            "native dropout)."
+        ),
+    )
+
+
 class MLIPConfig(BaseModel):
     """Selects which ML potential predicts energies and forces.
 
@@ -136,9 +189,10 @@ class MLIPConfig(BaseModel):
     by the :class:`ALConfig` root validator.
     """
 
-    backend: Literal["hydragnn", "uma"] = "hydragnn"
+    backend: Literal["hydragnn", "uma", "mace"] = "hydragnn"
     hydragnn: HydraGNNConfig | None = None
     uma: UMAConfig | None = None
+    mace: MACEConfig | None = None
 
     @model_validator(mode="after")
     def _check_backend_block(self) -> MLIPConfig:
@@ -146,6 +200,8 @@ class MLIPConfig(BaseModel):
             raise ValueError("mlip.backend='hydragnn' requires an mlip.hydragnn block.")
         if self.backend == "uma" and self.uma is None:
             raise ValueError("mlip.backend='uma' requires an mlip.uma block.")
+        if self.backend == "mace" and self.mace is None:
+            raise ValueError("mlip.backend='mace' requires an mlip.mace block.")
         return self
 
     @property
@@ -155,6 +211,8 @@ class MLIPConfig(BaseModel):
             return list(self.hydragnn.ensemble_paths)
         if self.backend == "uma" and self.uma is not None:
             return list(self.uma.ensemble_models)
+        if self.backend == "mace" and self.mace is not None:
+            return list(self.mace.ensemble_models)
         return []
 
 

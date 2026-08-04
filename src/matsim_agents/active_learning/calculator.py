@@ -19,7 +19,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.active_learning.config import HydraGNNConfig, MLIPConfig, UMAConfig
+from matsim_agents.active_learning.config import (
+    HydraGNNConfig,
+    MACEConfig,
+    MLIPConfig,
+    UMAConfig,
+)
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +48,9 @@ def make_mlip_calculator(
     if cfg.backend == "uma":
         assert cfg.uma is not None
         return build_uma_calculator(cfg.uma, enable_mc_dropout=enable_mc_dropout)
+    if cfg.backend == "mace":
+        assert cfg.mace is not None
+        return build_mace_calculator(cfg.mace, enable_mc_dropout=enable_mc_dropout)
     raise ValueError(f"Unknown mlip.backend: {cfg.backend!r}")
 
 
@@ -407,6 +415,89 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
             )
             log.info(
                 "Injected test-time dropout into %d UMA layer(s) (p=%g, target=%s) "
+                "for MC-Dropout acquisition.",
+                n,
+                cfg.dropout.p,
+                cfg.dropout.target_layers,
+            )
+        torch_model.eval()  # keep injected dropout dormant until scoring
+
+    return calc
+
+
+def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
+    """Build an ASE calculator backed by a MACE MLIP.
+
+    Loads a foundation model by variant (``mace_mp`` / ``mace_off`` with
+    ``cfg.model`` in ``{small, medium, large}`` or a release tag/URL), or a local
+    fine-tuned ``.model`` checkpoint when ``cfg.family == 'checkpoint'``. This
+    lets multiple MACE versions be benchmarked behind ``mlip.backend: mace``,
+    mirroring the Frontier HydraGNN-vs-MACE-vs-UMA comparison pipeline.
+
+    When ``enable_mc_dropout`` and ``cfg.dropout.enabled`` are both True, dropout
+    is injected into the underlying torch model so MC-Dropout acquisition yields
+    non-zero variance. The dropout is dormant for ordinary energy/force calls.
+    """
+    try:
+        from mace.calculators import MACECalculator, mace_mp, mace_off
+    except ImportError as exc:  # pragma: no cover - depends on optional dep
+        raise ImportError(
+            "The MACE backend requires the 'mace-torch' package. Install it with the "
+            "per-platform build script (scripts/setup/<machine>/build-mace-venv-*.sh) "
+            "or `pip install mace-torch`, then set mlip.backend: mace."
+        ) from exc
+
+    # MACE keeps energies/forces at the calculator dtype; fp64 is preferred for
+    # relaxation, so an unset precision defaults to float64.
+    dtype = {"fp32": "float32", "fp64": "float64", None: "float64"}[cfg.precision]
+
+    if cfg.family == "checkpoint":
+        ckpt = Path(cfg.model)
+        if not ckpt.is_file():
+            raise FileNotFoundError(f"MACE checkpoint not found: {ckpt}")
+        log.info("Loading MACE checkpoint from %s", ckpt)
+        calc = MACECalculator(model_paths=[str(ckpt)], device=cfg.device, default_dtype=dtype)
+    elif cfg.family == "mace_off":
+        calc = mace_off(model=cfg.model, device=cfg.device, default_dtype=dtype)
+    else:  # mace_mp
+        calc = mace_mp(
+            model=cfg.model,
+            device=cfg.device,
+            default_dtype=dtype,
+            dispersion=cfg.dispersion,
+        )
+
+    # Expose the underlying torch module as `.model` so uncertainty.score_mc_dropout
+    # can toggle dropout, and (optionally) inject dropout for MC-Dropout UQ. MACE
+    # calculators hold their nets in a `.models` list.
+    torch_model = None
+    models = getattr(calc, "models", None)
+    if models:
+        torch_model = models[0]
+    elif getattr(calc, "model", None) is not None:
+        torch_model = calc.model
+    if torch_model is None:
+        log.warning(
+            "MACE calculator loaded but the underlying torch module could not be "
+            "located; MC-Dropout acquisition will not work for this backend. "
+            "Use acquisition.strategy: ensemble (mlip.mace.ensemble_models) or random."
+        )
+    else:
+        try:
+            calc.model = torch_model  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - some calculators forbid new attrs
+            log.debug("Could not attach `.model` to the MACE calculator instance.")
+        if enable_mc_dropout and cfg.dropout.enabled:
+            from matsim_agents.active_learning.uncertainty import inject_inference_dropout
+
+            n = inject_inference_dropout(
+                torch_model,
+                p=cfg.dropout.p,
+                target_layers=cfg.dropout.target_layers,
+                max_layers=cfg.dropout.max_layers,
+            )
+            log.info(
+                "Injected test-time dropout into %d MACE layer(s) (p=%g, target=%s) "
                 "for MC-Dropout acquisition.",
                 n,
                 cfg.dropout.p,

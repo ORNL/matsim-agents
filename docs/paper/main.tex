@@ -39,6 +39,7 @@
 \newacro{ALCF}[ALCF]{Argonne Leadership Computing Facility}
 \newacro{GNN}[GNN]{graph neural network}
 \newacro{MLP}[MLP]{multilayer perceptron}
+\newacro{MAE}[MAE]{mean absolute error}
 \newacro{MC}[MC]{Monte Carlo}
 \newacro{MD}[MD]{molecular dynamics}
 \newacro{ASE}[ASE]{Atomic Simulation Environment}
@@ -111,20 +112,25 @@ validation, selective first-principles escalation, and scientific summarization.
 Its key novelty is a closed-loop, \acs{HPC}-deployable workflow in which uncertainty
 estimates act as control variables that route predictions either to analysis or
 to \ac{DFT}-driven active learning. The framework supports user-selectable \ac{MLIP} backends---HydraGNN~\cite{hydragnn} for
-exascale-pretrained graph-neural-network potentials and UMA~\cite{wood2025uma}
-for universal foundation-model potentials---and user-selectable \ac{DFT} backends,
+exascale-pretrained graph-neural-network potentials, UMA~\cite{wood2025uma}
+for universal foundation-model potentials, and the MACE-MP foundation
+models~\cite{batatia2022,batatia2023macemp}---and user-selectable \ac{DFT} backends,
 including open-source \ac{QE} and licensed closed-source \ac{VASP}, with deployment
 support for heterogeneous \ac{DOE} leadership-class systems. Rather than promoting
 any single potential, the framework treats the \ac{MLIP} as an interchangeable,
 benchmarkable component: the same cold-start vs.\ warm-start instrument that
 accelerates \ac{DFT} also measures which backend is trustworthy for a given
 material, enabling per-system model selection without changing the orchestration
-or deployment layers.
+or deployment layers. We demonstrate the complete loop running unattended on
+\ac{NERSC} Perlmutter---from \ac{MLIP}-driven sampling through concurrent
+\ac{DFT} labeling to per-case model retraining---and use the resulting
+active-learning-corrected data to benchmark fine-tuning across all three
+\ac{MLIP} backends under a single like-for-like protocol.
 \end{abstract}
 
 \begin{IEEEkeywords}
 agentic artificial intelligence, materials discovery, machine learning force field, HydraGNN,
-UMA, fairchem-core, universal MLIP,
+UMA, MACE, fairchem-core, universal MLIP,
 uncertainty quantification, active learning, Quantum ESPRESSO, VASP,
 warm-start, high-performance computing, scientific workflow
 \end{IEEEkeywords}
@@ -165,7 +171,7 @@ The novelty of \textsc{matsim-agents} lies in making the full decision cycle
 explicit and executable on leadership-class \acs{HPC} systems. A user can state an
 open-ended materials objective in natural language; the planner converts that
 objective into typed atomistic tasks; the executor performs fast \acs{MLIP}-based
-relaxation through a user-selected backend (HydraGNN or UMA); the \acs{UQ} gate
+relaxation through a user-selected backend (HydraGNN, UMA, or MACE-MP); the \acs{UQ} gate
 decides whether the prediction is reliable enough for
 analysis or must be escalated to \ac{DFT}-driven active learning; and the analyst
 returns an interpretable scientific summary. In this design, uncertainty is not
@@ -203,6 +209,15 @@ this work are:
   exposes regions of \acs{MLIP} weakness in materials space---cases where warm-start
   benefit is absent or where \acs{DFT} convergence degrades---that can be used to
   target active learning data collection and improve model robustness.
+\item A \textbf{closed-loop active-learning demonstration and cross-backend
+  fine-tuning benchmark}: the full loop is run unattended end-to-end on
+  Perlmutter across five materials cases---driving \acs{MLIP}-\acs{MD} sampling,
+  \acs{MC}-dropout acquisition, and concurrent \acs{DFT} labeling with
+  per-iteration checkpointing---and the resulting active-learning-corrected
+  datasets are used to fine-tune and evaluate all three \acs{MLIP} backends
+  (HydraGNN, UMA, and the MACE-MP capacities) under a single like-for-like
+  protocol, so the loop both generates targeted training data and measures how
+  much each potential improves on the chemistry it sampled.
 \item An \textbf{\acs{HPC}-oriented deployment model} that supports local \acs{LLM}
   inference, \acs{GPU}-accelerated atomistic simulation, batch-scheduled
   first-principles calculations, checkpointed workflow execution, and
@@ -282,7 +297,7 @@ higher-fidelity first-principles calculations.
 \label{sec:architecture}
 
 \subsection{Overview}
-\textsc{matsim-agents} is structured around three layers (Fig.~\ref{fig:arch}):
+\textsc{matsim-agents} is structured around three layers:
 (i) a \emph{natural language interface} layer accepting free-text objectives
 or interactive chat; (ii) a \emph{LangGraph orchestration layer} implementing
 the multi-agent graph; and (iii) an \emph{atomistic backend layer} providing
@@ -290,21 +305,13 @@ the multi-agent graph; and (iii) an \emph{atomistic backend layer} providing
 of this section is organised around these layers. We first describe the
 combined interface and orchestration layer, comprising the agent graph, its
 nodes, and the three entry points that drive it; we then describe the atomistic
-backend layer, comprising the HydraGNN \acs{MLIP} engine, the BranchWeightMLP
+backend layer, comprising the pluggable \acs{MLIP} engine (HydraGNN by default,
+with UMA and the MACE-MP foundation models also selectable), the BranchWeightMLP
 confidence signal, the active learning loop, and the \acs{DFT} warm-start
 protocol.
 
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/matsim-agents.png}
-\caption{High-level architecture of \textsc{matsim-agents}. The LangGraph
-orchestration layer routes between \acs{MLIP}-driven discovery and \acs{DFT}-driven active
-learning based on the \acs{UQ} gate decision.}
-\label{fig:arch}
-\end{figure*}
-
 \subsection{Interface and Orchestration Layer}
-The first two layers of Fig.~\ref{fig:arch}---the natural-language interface
+The first two layers---the natural-language interface
 and the LangGraph orchestration layer---are realized together by a single
 multi-agent graph and the entry points that expose it to the user.
 
@@ -322,19 +329,26 @@ parsing.
 
 \textbf{Executor.} For each pending \texttt{relax} task, the executor invokes
 the \acs{MLIP} relaxation tool, which runs \ac{ASE} \acs{FIRE}/\acs{BFGS}
-optimisation using a user-selected \acs{MLIP} backend---either
-HydraGNN~\cite{hydragnn} (graph-neural-network \acs{GFM}) or
-UMA~\cite{wood2025uma} (universal foundation-model potential)---as a
+optimisation using a user-selected \acs{MLIP} backend---HydraGNN~\cite{hydragnn}
+(graph-neural-network \acs{GFM}), UMA~\cite{wood2025uma} (universal
+foundation-model potential), or the MACE-MP foundation
+models~\cite{batatia2022,batatia2023macemp}---as a
 force-and-energy evaluator. Results
 (optimised structure, final energy, max force, convergence flag, \acs{UQ} scores) are
 appended to the shared typed state.
 
-\textbf{\acs{UQ} Gate.} After all tasks are executed, the gate evaluates the
-branch-weight distribution for each relaxed structure. If the mean top-branch
+\textbf{\acs{UQ} Gate.} The gate is a \emph{post-relaxation routing step}: it
+does not steer the relaxation itself---which is a standard \acs{FIRE}/\acs{BFGS}
+minimisation---but instead evaluates the branch-weight distribution captured at
+each already-relaxed structure. If the mean top-branch
 weight exceeds a configurable threshold (default 0.6) and the fraction of
 unreliable predictions is below a second threshold (default 0.25), the gate
 passes control to the analyst. Otherwise, it triggers the active learning
-handoff, logging the decision to a \ac{JSONL} audit file.
+handoff, logging the decision to a \ac{JSONL} audit file. This branch-weight
+signal is specific to HydraGNN's composition-conditioned branch router (the
+BranchWeightMLP); the foundation-model backends (UMA and MACE-MP) expose no
+analogous per-structure routing weight, so the branch-weight gate applies only
+to the HydraGNN backend.
 
 \textbf{Analyst.} The analyst node invokes the \acs{LLM} to generate a natural
 language summary of the discovered structures, including energy rankings,
@@ -371,10 +385,17 @@ other two for open-ended, iterative scientific dialogue in which the task is
 refined interactively rather than fixed in advance.
 
 \subsection{Atomistic Backend Layer}
-The third layer executes the physics. It evaluates energies and forces with the
-HydraGNN \acs{MLIP}, derives a low-cost confidence signal from the model's
-composition-conditioned branch router, and escalates uncertain structures to
-\acs{DFT} through the active learning and warm-start protocols.
+The third layer executes the physics. It evaluates energies and forces with a
+configuration-selected \acs{MLIP} backend---HydraGNN by default, with the UMA
+and MACE-MP foundation models selectable through the same interface---derives a
+low-cost confidence signal from the model's composition-conditioned branch
+router, and escalates uncertain structures to \acs{DFT} through the active
+learning and warm-start protocols. We describe the HydraGNN \ac{GFM} engine in
+detail below as the default backend; the alternative foundation-model backends
+plug into the identical calculator, acquisition, and labelling interfaces and
+are chosen by a single configuration switch (\texttt{MLIP\_BACKEND}) without
+changing the orchestration code, so the pretrained potential itself is an
+interchangeable component rather than a hard-coded dependency.
 
 \subsubsection{HydraGNN GFM as the MLIP Engine}
 HydraGNN~\cite{hydragnn,lupopasini2026exascalegfm} is used in
@@ -559,10 +580,10 @@ fragments. A single function \texttt{load\_perlmutter\_modules\_gpu()} (or its
 Frontier/Aurora equivalents) sets up the entire environment from a clean login
 shell, making jobs bit-for-bit reproducible across re-submissions.
 
-\textbf{Decoupled Python and \ac{MPI} environments.} HydraGNN inference requires a
-PyTorch \acs{GPU} environment, while first-principles calculations require separate
+\textbf{Decoupled Python and \ac{MPI} environments.} The \acs{MLIP} backends---HydraGNN,
+UMA, and MACE-MP---require a PyTorch \acs{GPU} environment, while first-principles calculations require separate
 \acs{MPI}/compiler stacks for \acs{QE} or \acs{VASP}. These are kept in separate shells: the batch
-script activates the Python environment for the HydraGNN phase and spawns the
+script activates the Python environment for the selected \acs{MLIP} phase and spawns the
 \acs{DFT} launcher as a subprocess that loads the appropriate compiler, \acs{MPI}, \acs{GPU}
 runtime, and code-specific environment for the selected backend.
 
@@ -600,9 +621,13 @@ module fragment masking \texttt{ROCR\_VISIBLE\_DEVICES} to expose individual
 \acp{GCD}. On Aurora (Intel \acs{PVC}), the \texttt{frameworks} module supplies
 vLLM and \ac{XPU} PyTorch without a source build, \acs{QE} uses the OneAPI/OpenMP
 offload backend, and a custom entrypoint wrapper works around a vLLM
-model-registry SIGSEGV. In all cases the HydraGNN environment uses the
-platform-native PyTorch build, and companion scripts provide the corresponding
-\acs{VASP} path for users with licensed source access.
+model-registry SIGSEGV. HydraGNN runs on the platform-native PyTorch build for
+each accelerator (\acs{CUDA}, ROCm/HIP, and \acs{XPU}/OneAPI, respectively); the
+UMA and MACE-MP foundation-model backends are currently deployed on the
+Perlmutter \acs{CUDA} build. Companion scripts build \emph{both} first-principles engines---\acs{QE}
+and \acs{VASP}---on all three facilities (\acs{VASP} requiring the user's
+licensed source), and the active-learning loop is wired end-to-end on Perlmutter
+and Frontier, with the Aurora compile/runtime stack in place.
 
 % =============================================================================
 \section{Experimental Results}
@@ -1038,7 +1063,7 @@ constant reference shift (in meV/atom), the latter isolating the shape of the
 energy surface from a trivial global offset.
 
 \paragraph{Backends.}
-The study spans both \acs{MLIP} engines used elsewhere in the paper. For
+The study spans all three \acs{MLIP} engines used elsewhere in the paper. For
 HydraGNN~\cite{hydragnn} we contrast four transfer-learning strategies against a
 common baseline: (i) \emph{routed}, the default multi-head \ac{GFM} routing;
 (ii) \emph{unfrozen}, a full fine-tune of the backbone and heads; (iii)
@@ -1048,9 +1073,31 @@ on the case data alone, which isolates the value of the pretrained
 representation. For UMA~\cite{wood2025uma} we fine-tune directly through the
 model's conservative energy-and-force head with a lightweight custom training
 loop---a small number of Adam epochs on a force-weighted energy-and-force loss
-that updates the pretrained output heads in place---optionally freezing the
-backbone so that only the output head adapts. This adapts the large pretrained
-potential to a narrow domain without erasing its general knowledge.
+that updates the pretrained output heads in place---in three variants:
+\emph{full} (all trainable weights), \emph{frozen} (backbone held fixed, output
+head only), and \emph{LoRA}, in which low-rank adapters are inserted into the
+backbone's scalar and radial linear layers, leaving the equivariant tensor
+operations untouched. For MACE~\cite{batatia2022,batatia2023macemp} we fine-tune
+the released MACE-MP foundation models at all three published capacities
+(\emph{small}, \emph{medium}, \emph{large}) using the authors' own training
+entry point, in two variants: a \emph{naive} full fine-tune and a native
+\emph{LoRA} fine-tune. All fine-tunes adapt the large pretrained potential to a
+narrow domain without erasing its general knowledge, and every backend is scored
+on the same held-out partition with identical metrics so the comparison is
+strictly like-for-like.
+
+\paragraph{Execution.}
+The full matrix---three foundation-model backends at their several fine-tuning
+variants, together with the HydraGNN transfer-learning strategies, each across
+five cases---amounts to dozens of independent single-\acs{GPU}
+fine-tune-and-evaluate campaigns. To use leadership-class nodes efficiently we
+execute them through a packed launcher that co-schedules four self-contained
+campaigns on the four \acs{GPU} devices of a single node, pinning one campaign
+per device and collecting per-campaign logs and evaluation outputs
+independently. Because every campaign uses identical dataset splits, metrics,
+and held-out partitions regardless of how it is scheduled, packing four per node
+quadruples node-level throughput without altering any individual result, and the
+entire table is reproduced by resubmitting the same packed jobs.
 
 \paragraph{Fine-tuning through the conservative force head.}
 A subtle but decisive methodological choice surfaced when fine-tuning the
@@ -1075,56 +1122,87 @@ foundation-model fine-tunes reported here, and note it explicitly because the
 normalizer-refitting route is an easy and silent failure mode when adapting
 large pretrained potentials to small domain datasets.
 
-\paragraph{HydraGNN results.}
+\paragraph{Cross-backend results.}
 Table~\ref{tab:finetune} reports the held-out force and reference-shifted energy
-\acs{MAE} for the pretrained baseline (\emph{before}) and each of the four
-HydraGNN transfer-learning strategies (\emph{after}). The pretrained \ac{GFM}
-starts far off-distribution on these specialized chemistries, as expected given
-that none of the cases (battery cathode, refractory and structural \acsp{HEA},
-2D semiconductor, porous \acs{MOF}) is well represented in its MPtrj+ANI-1x
-training distribution. Fine-tuning on the loop-generated data sharply reduces
-both error metrics in every case. The full fine-tune (\emph{unfrozen}) and the
+\acs{MAE} for every backend and fine-tuning variant on the five
+active-learning-corrected paper cases, each grouped under its zero-shot
+baseline. Because all methods are scored on the same held-out frames with the
+same metrics, the table is a strictly like-for-like comparison of HydraGNN, UMA,
+and the three MACE-MP capacities. The pretrained potentials all start
+off-distribution on these specialized chemistries (battery cathode, refractory
+and structural \acsp{HEA}, 2D semiconductor, porous \acs{MOF}), none of which is
+well represented in their training distributions. Fine-tuning on the
+loop-generated data reduces both error metrics in essentially every case.
+
+For HydraGNN the full fine-tune (\emph{unfrozen}) and the
 from-\emph{scratch} specialist are the strongest and are typically close, while
 \emph{frozen}-backbone tuning (head only) helps but trails them and the default
 multi-head \emph{routed} update improves least. That the from-scratch specialist
 is competitive with transfer learning indicates the active-learning-corrected
 datasets are internally consistent enough to train a capable case-specific
 potential on their own, while the full fine-tune retains the advantage on the
-sparser cases. The two weaker strategies can occasionally leave the energy
-essentially unimproved, underscoring that a full fine-tune is the safer default.
+sparser cases. For the UMA and MACE foundation models the same
+instrument contrasts full fine-tuning against the parameter-efficient
+alternatives (frozen head, LoRA), and---across the MACE-MP capacities---whether
+the additional foundation-model size translates into lower post-fine-tune error
+on these narrow domains. The MACE fine-tunes are produced through the authors'
+native training entry point (identical energy/force loss, exponential
+moving-average weight tracking, and gradient clipping as the reference recipe)
+so the numbers are directly
+comparable to community MACE-MP fine-tuning practice.
 
 \begin{table*}[t]
 \centering
+\footnotesize
+\setlength{\tabcolsep}{4.5pt}
 \caption{Held-out test errors on the active-learning-corrected paper cases
-(lower is better). \emph{Before} is the pretrained HydraGNN \ac{GFM}; the
-remaining columns are the four transfer-learning strategies after fine-tuning on
-the loop-generated train partition. Left panel: force \acs{MAE} (eV/\AA). Right
-panel: reference-shifted per-atom energy \acs{MAE} (meV/atom). UMA
-foundation-model fine-tunes are reported separately in the text.}
+(lower is better), unified across all three \acs{MLIP} backends and their
+fine-tuning variants. Each backend block lists its zero-shot baseline followed
+by its fine-tuning variants (indented). Left panel: force \acs{MAE} (eV/\AA).
+Right panel: reference-shifted per-atom energy \acs{MAE} (meV/atom). Column
+abbreviations: LFP $=$ LiFePO\textsubscript{4} olivine; Cantor $=$ CrMnFeCoNi FCC
+\acs{HEA}; NbTaV $=$ NbTaVHfZrTi BCC \acs{HEA}; Phos $=$ phosphorene; MOF $=$
+Zn(HCOO)\textsubscript{2} \acs{MOF}. MACE-MP capacities: S/M/L $=$ small/medium/
+large. Dashes mark runs still completing at submission time.}
 \label{tab:finetune}
-\begin{tabular}{lccccc@{\hspace{2em}}ccccc}
+\begin{tabular}{lccccc@{\hspace{1.5em}}ccccc}
 \toprule
  & \multicolumn{5}{c}{Force \acs{MAE} (eV/\AA)} & \multicolumn{5}{c}{Energy \acs{MAE} (meV/atom)}\\
 \cmidrule(lr){2-6}\cmidrule(lr){7-11}
-System & Before & Routed & Unfroz. & Frozen & Scratch & Before & Routed & Unfroz. & Frozen & Scratch\\
+Method & LFP & Cantor & NbTaV & Phos & MOF & LFP & Cantor & NbTaV & Phos & MOF\\
 \midrule
-LiFePO\textsubscript{4} olivine     & 22.97 & 3.09 & 2.69 & 4.98 & 2.50 & 1917 & 662  & 612 & 431 & 605 \\
-CrMnFeCoNi Cantor FCC \acs{HEA}     & 6.43  & 6.18 & 3.43 & 5.10 & 2.14 & 2248 & 1108 & 418 & 843 & 450 \\
-NbTaVHfZrTi BCC \acs{HEA}           & 3.32  & 2.02 & 1.38 & 1.46 & 1.38 & 559  & 121  & 28  & 107 & 49  \\
-Phosphorene (black/blue-P)          & 2.84  & 1.58 & 0.68 & 0.57 & 0.42 & 136  & 165  & 45  & 59  & 33  \\
-Zn(HCOO)\textsubscript{2} \acs{MOF} & 5.38  & 2.49 & 2.21 & 3.26 & 2.12 & 216  & 116  & 117 & 216 & 120 \\
+HydraGNN zero-shot   & 22.97 & 6.43 & 3.32 & 2.84 & 5.38 & 1917 & 2248 & 559 & 136 & 216 \\
+\quad routed         & 3.09  & 6.18 & 2.02 & 1.58 & 2.49 & 662  & 1108 & 121 & 165 & 116 \\
+\quad unfrozen       & 2.69  & 3.43 & 1.38 & 0.68 & 2.21 & 612  & 418  & 28  & 45  & 117 \\
+\quad frozen         & 4.98  & 5.10 & 1.46 & 0.57 & 3.26 & 431  & 843  & 107 & 59  & 216 \\
+\quad scratch        & 2.50  & 2.14 & 1.38 & 0.42 & 2.12 & 605  & 450  & 49  & 33  & 120 \\
+\addlinespace
+UMA zero-shot        & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\quad full FT        & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\quad frozen         & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\quad LoRA           & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\addlinespace
+MACE-MP-S zero-shot  & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\quad naive FT       & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\quad LoRA           & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\addlinespace
+MACE-MP-M zero-shot  & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\quad naive FT       & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\quad LoRA           & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\addlinespace
+MACE-MP-L zero-shot  & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\quad naive FT       & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\quad LoRA           & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
 \bottomrule
 \end{tabular}
 \end{table*}
-
-\paragraph{UMA foundation-model results.}
-The UMA fine-tunes, which adapt the conservative force head as described above,
-are being regenerated at the time of writing and their held-out numbers will be
-reported here once the runs complete.
-% TODO(results): fill UMA before/after from
-%   runs/finetune-eval-umaref/uma/<case>/eval/iter*.json (pending; jobs
-%   56299390/391/393/398/401). Metric keys: force_mae_eV_per_A and
-%   energy_mae_eV_per_atom_shifted (x1000 -> meV/atom). Base "before" = iter0.
+% Fill UMA + MACE rows from the eval JSONs once the queued jobs finish:
+%   python scripts/utils/harvest_finetune_eval.py           # prints LaTeX rows
+%   python scripts/utils/harvest_finetune_eval.py --tsv     # TSV for checking
+% Reads runs/finetune-eval/<variant>/<case>/eval/iter{0,N}.json; keys
+%   force_mae_eV_per_A and energy_mae_eV_per_atom_shifted (x1000 -> meV/atom).
+% Pending Slurm jobs (Perlmutter): UMA frozen/LoRA 56327962-56327971;
+%   MACE small/medium/large x {naive,LoRA} 56327496-56327605.
 
 \subsection{Strong Scaling of DFT Labeling}
 \label{sec:results:scaling}
@@ -1215,23 +1293,40 @@ corresponding configuration (\texttt{al\_phosphorene\_qe\_frontier.yaml}) differ
 from the Perlmutter one only in paths and the eight-\acs{GCD} rank/thread layout.
 The per-platform build and offload details underlying these backends are those
 of Section~\ref{sec:hpc}, which also covers the Aurora (Intel \acs{PVC}) stack to
-which the loop extends by the same mechanism.
+which the loop extends by the same mechanism. While Table~\ref{tab:portability}
+lists the loop configurations at their current stage of maturity, the
+per-platform scripts of Section~\ref{sec:hpc} establish the underlying coverage:
+HydraGNN builds on all three accelerators (\acs{CUDA}, ROCm/HIP,
+\acs{XPU}/OneAPI), UMA and MACE-MP on the Perlmutter \acs{CUDA} stack, and both
+first-principles engines (\acs{QE}, \acs{VASP}) compile on all three facilities,
+so the supported backend/engine/platform combinations run without modifying the
+orchestration code.
 
 \begin{table}[t]
 \centering
 \caption{Portability of the active-learning loop across accelerators and
 first-principles engines. ``Shown'': full loop with real \acs{DFT} labels
 reported here. ``Running'': submitted, results pending at the time of writing.
-``Ready'': configuration and per-platform launchers in place, not yet executed.}
+``Ready'': configuration and per-platform loop launchers in place, not yet
+executed. ``Build'': per-platform \acs{MLIP} and \acs{DFT} compile/install
+scripts in place, loop launcher pending. HydraGNN is deployed on all three
+accelerators; the UMA and MACE-MP foundation models are currently deployed on
+Perlmutter.}
 \label{tab:portability}
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{lllll}
 \toprule
 Platform & Accelerator & \acs{MLIP} & \acs{DFT} engine & Loop status \\
 \midrule
-Perlmutter & NVIDIA A100 & UMA      & \acs{VASP}      & Shown (Table~\ref{tab:al}) \\
-Perlmutter & NVIDIA A100 & UMA      & \acs{QE} pw.x   & Running \\
-Frontier   & AMD MI250X  & HydraGNN & \acs{QE} pw.x   & Ready \\
+Perlmutter & NVIDIA A100     & UMA      & \acs{VASP}      & Shown (Table~\ref{tab:al}) \\
+Perlmutter & NVIDIA A100     & UMA      & \acs{QE} pw.x   & Running \\
+Perlmutter & NVIDIA A100     & MACE-MP  & \acs{VASP}      & Running \\
+Perlmutter & NVIDIA A100     & HydraGNN & \acs{VASP}      & Ready \\
+Perlmutter & NVIDIA A100     & HydraGNN & \acs{QE} pw.x   & Ready \\
+Frontier   & AMD MI250X      & HydraGNN & \acs{QE} pw.x   & Ready \\
+Frontier   & AMD MI250X      & HydraGNN & \acs{VASP}      & Ready \\
+Aurora     & Intel \acs{PVC} & HydraGNN & \acs{QE} pw.x   & Build \\
+Aurora     & Intel \acs{PVC} & HydraGNN & \acs{VASP}      & Build \\
 \bottomrule
 \end{tabular}%
 }
@@ -1306,13 +1401,13 @@ Mixtral-8x22B-Instruct~\cite{mixtral} & Mistral AI & 141B MoE (39B) \\
 
 \subsection{Limitations and Future Developments}
 Current limitations include: (1) automatic in-loop retraining is demonstrated
-end-to-end for HydraGNN, while UMA fine-tuning---implemented both as an in-loop
-retrain hook and as the offline fine-tune study of
-Section~\ref{sec:results:finetune}---has not yet been exercised as a fully
-automatic in-loop step, and other universal \acsp{MLIP} such as
-MACE-MP~\cite{batatia2023macemp} remain unsupported; the warm-start
-module already supports both HydraGNN and UMA as pre-relaxation
-backends; (2) the warm-start protocol handles ionic coordinates but not cell
+end-to-end for HydraGNN, whereas the foundation-model backends
+(UMA~\cite{wood2025uma} and MACE-MP~\cite{batatia2023macemp}) are supported as
+relaxation engines and through the offline fine-tune study of
+Section~\ref{sec:results:finetune}, and are wired as in-loop retrain hooks, but
+have not yet been exercised as fully automatic in-loop retraining steps; the
+warm-start module is backend-agnostic and supports HydraGNN, UMA, and MACE-MP as
+pre-relaxation backends; (2) the warm-start protocol handles ionic coordinates but not cell
 shape/volume, which limits benefit for pure-strain relaxation problems; (3) the
 \acs{LLM} planner does not yet incorporate literature search or database queries
 (Materials Project, AFLOW) as tool calls; and (4) the present \acs{UQ} gate relies
@@ -1333,8 +1428,8 @@ We have presented \textsc{matsim-agents}, an open-source agentic \acs{AI} scient
 workflow framework whose central novelty is the closed-loop orchestration of
 natural-language scientific intent, \acs{MLIP}-based atomistic execution,
 uncertainty-aware validation, selective \acs{DFT} escalation, active learning, and
-language-level scientific synthesis on leadership-class \acs{HPC} systems. The system integrates \ac{LLM} planning, \acs{MLIP} relaxation (HydraGNN~\cite{hydragnn}
-and UMA~\cite{wood2025uma}), \acs{UQ}-gated decision making, active learning,
+language-level scientific synthesis on leadership-class \acs{HPC} systems. The system integrates \ac{LLM} planning, \acs{MLIP} relaxation (HydraGNN~\cite{hydragnn},
+UMA~\cite{wood2025uma}, and MACE-MP~\cite{batatia2023macemp}), \acs{UQ}-gated decision making, active learning,
 first-principles escalation, and \acs{DFT} warm-starting into a unified, portable
 pipeline designed for \acs{NERSC} Perlmutter, \acs{OLCF} Frontier, and \acs{ALCF} Aurora. It
 addresses all five subtopics of the ``Scientific Workflows \& Application

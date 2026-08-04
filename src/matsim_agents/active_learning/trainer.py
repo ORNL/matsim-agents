@@ -21,7 +21,12 @@ from pathlib import Path
 from ase import Atoms
 from ase.io import write as ase_write
 
-from matsim_agents.active_learning.config import HydraGNNConfig, TrainerConfig, UMAConfig
+from matsim_agents.active_learning.config import (
+    HydraGNNConfig,
+    MACEConfig,
+    TrainerConfig,
+    UMAConfig,
+)
 from matsim_agents.active_learning.dft_backend import DFTResult
 
 log = logging.getLogger(__name__)
@@ -226,3 +231,79 @@ def retrain_uma(
         raise RuntimeError(f"UMA fine-tune failed with exit {proc.returncode}; see {log_path}")
 
     return out_model_dir
+
+
+def retrain_mace(
+    trainer_cfg: TrainerConfig,
+    mace_cfg: MACEConfig,
+    dataset_path: str | Path,
+    iteration: int,
+    out_model_dir: str | Path,
+) -> Path:
+    """Spawn a MACE fine-tuning job as a child process.
+
+    Returns the path to the fine-tuned ``mace_finetuned.model`` checkpoint, which
+    becomes the next iteration's base model (``MACEConfig.family='checkpoint'``,
+    ``MACEConfig.model=<path>``). All MACE versions are supported -- the base
+    variant is taken from ``mace_cfg.family`` / ``mace_cfg.model``.
+
+    The launcher convention mirrors the HydraGNN/UMA hooks:
+
+    ``<train_script> <dataset_path> <out_model_dir> <family> <base_model> <epochs> <nodes> <ranks>``.
+
+    With no launcher, the built-in ``finetune_mace`` CLI is invoked in-process.
+    """
+    out_model_dir = Path(out_model_dir)
+    if not trainer_cfg.enabled:
+        log.info("trainer.enabled=False; skipping MACE fine-tune at iteration %d", iteration)
+        # Point downstream at the existing base model (checkpoint path or variant).
+        return Path(str(mace_cfg.model))
+
+    out_model_dir.mkdir(parents=True, exist_ok=True)
+
+    if trainer_cfg.train_launcher is not None:
+        argv = [
+            "bash",
+            str(trainer_cfg.train_launcher),
+            str(trainer_cfg.train_script),
+            str(dataset_path),
+            str(out_model_dir),
+            str(mace_cfg.family),
+            str(mace_cfg.model),
+            str(trainer_cfg.epochs_per_iter),
+            str(trainer_cfg.nodes_for_train),
+            str(trainer_cfg.ranks_per_node),
+        ]
+    else:
+        log.warning(
+            "trainer.train_launcher not set; running MACE fine-tune in-process "
+            "(no srun, no module swap). For multi-node training set train_launcher."
+        )
+        import sys
+
+        argv = [
+            sys.executable,
+            "-m",
+            "matsim_agents.active_learning.finetune_mace",
+            "--dataset",
+            str(dataset_path),
+            "--output-dir",
+            str(out_model_dir),
+            "--family",
+            str(mace_cfg.family),
+            "--base-model",
+            str(mace_cfg.model),
+            "--epochs",
+            str(trainer_cfg.epochs_per_iter),
+        ]
+
+    log.info("Launching MACE fine-tune: %s", " ".join(argv))
+    log_path = out_model_dir / "train.log"
+    with open(log_path, "w") as f:
+        proc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"MACE fine-tune failed with exit {proc.returncode}; see {log_path}")
+
+    # The in-process CLI writes mace_finetuned.model; a launcher should do the same.
+    finetuned = out_model_dir / "mace_finetuned.model"
+    return finetuned if finetuned.is_file() else out_model_dir
