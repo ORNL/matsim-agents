@@ -67,7 +67,6 @@
 \newacro{GFM}[GFM]{graph foundation model}
 \newacro{MTL}[MTL]{multi-task learning}
 \newacro{MPNN}[MPNN]{message-passing neural network}
-\newacro{HPO}[HPO]{hyperparameter optimization}
 \newacro{ADIOS2}[ADIOS2]{Adaptable Input/Output System 2}
 \newacro{DDStore}[DDStore]{Distributed Data Store}
 \newacro{NVMe}[NVMe]{non-volatile memory express}
@@ -242,11 +241,9 @@ networks~\cite{behler2007} to graph-neural-network architectures such as
 NequIP~\cite{batzner2022}, MACE~\cite{batatia2022}, and
 SchNet~\cite{schutt2018}. Foundation models trained on diverse datasets
 (such as CHGNet~\cite{deng2023}, MACE-MP~\cite{batatia2023macemp}, and
-UMA~\cite{wood2025uma}) have further broadened coverage. HydraGNN is an atomistic \ac{GFM} framework that has recently been used
-in an exascale multi-task pretraining workflow over 16 open first-principles
-datasets, spanning more than 544 million structures and over 85 elements, with
-shared message-passing representations and dataset-/fidelity-specific
-prediction heads~\cite{hydragnn,lupopasini2026exascalegfm}.
+UMA~\cite{wood2025uma}) have further broadened coverage. HydraGNN is an atomistic \ac{GFM} trained in a recent exascale multi-task
+workflow, using shared message-passing representations with
+dataset-/fidelity-specific prediction heads~\cite{hydragnn,lupopasini2026exascalegfm}.
 
 \subsection{Uncertainty Quantification for MLIPs}
 \ac{UQ} for \acp{MLIP} has been studied via deep ensembles~\cite{lakshminarayanan2017},
@@ -398,35 +395,17 @@ changing the orchestration code, so the pretrained potential itself is an
 interchangeable component rather than a hard-coded dependency.
 
 \subsubsection{HydraGNN GFM as the MLIP Engine}
-HydraGNN~\cite{hydragnn,lupopasini2026exascalegfm} is used in
-\textsc{matsim-agents} as the fast atomistic execution engine. The checkpoint
-used by the workflow is not a narrow, single-dataset force field; it is an
-exascale-trained atomistic \ac{GFM} built from a multi-source,
-multi-fidelity first-principles corpus. The pretraining campaign described
-in~\cite{lupopasini2026exascalegfm} jointly trains on 16 open datasets
-covering organic molecules, inorganic crystals, alloy surfaces, catalysts,
-hybrid systems, and polymers, totaling more than 544 million structures across
-more than 85 elements. This broad coverage is important for
-\textsc{matsim-agents} because the planner can generate tasks involving
-chemistries that were not manually enumerated in advance.
-
-Architecturally, the HydraGNN \acs{GFM} follows a multi-task design: shared
-\ac{MPNN} layers learn transferable atomistic interaction features, while
-branch-specific output heads absorb dataset-dependent label conventions,
-fidelity offsets, and partially labeled energy/force supervision. The exascale
-pretraining study explored several \acs{MPNN} backbones through large-scale
-\ac{HPO} on \acs{OLCF} Frontier, promoted the best candidates to fixed-budget
-2,048-node training runs, and selected a compact PaiNN-based lead model. The
-lead checkpoint contains approximately 12.1 million parameters, uses 16
-output branches, and was trained in \acs{FP64}, making it suitable for both
-high-throughput screening and integration into physics-based workflows.
-
-In \textsc{matsim-agents}, this pretrained model evaluates energies and forces
-for candidate atomistic structures during relaxation and screening. The
-workflow therefore uses the HydraGNN \acs{GFM} as a practical \acs{MLIP}:
-it provides orders-of-magnitude faster evaluations than direct \acs{DFT}, while
-retaining a connection to the multi-domain training corpus through its branch
-structure.
+The default backend is the HydraGNN \ac{GFM}~\cite{hydragnn,lupopasini2026exascalegfm},
+an exascale-pretrained, multi-fidelity atomistic model rather than a narrow
+single-dataset force field. Its multi-task design---shared \ac{MPNN} layers over
+16 dataset-/fidelity-specific output branches, trained on a multi-source
+first-principles corpus of more than 544 million structures spanning over 85
+elements---gives it broad chemical coverage, which matters here because the
+planner can generate tasks over chemistries not enumerated in advance. The
+compact PaiNN-based lead checkpoint ($\sim$12M parameters, \acs{FP64}) evaluates
+energies and forces orders of magnitude faster than direct \acs{DFT} during
+relaxation and screening, while its branch structure supplies the routing signal
+used by the confidence gate below.
 
 \subsubsection{BranchWeightMLP Confidence Signal}
 The BranchWeightMLP was introduced in the HydraGNN \acs{GFM} to make the
@@ -435,10 +414,7 @@ belong cleanly to a single training dataset~\cite{lupopasini2026exascalegfm}.
 It maps a per-element chemical-composition descriptor to a softmax-normalized
 weight vector $\mathbf{w} \in \mathbb{R}^{16}$, with $\sum_k w_k = 1$,
 that blends the predictions of the 16 output branches into a single energy and
-force prediction. In the exascale pretraining study, this router contains about
-24,500 parameters and was trained on 49 million samples distributed across the
-training datasets, using energy and force errors from the branch-weighted
-prediction as the training objective.
+force prediction.
 
 \textsc{matsim-agents} reuses the same branch-weight distribution as an inexpensive
 workflow-level confidence signal. The top-branch weight
