@@ -118,9 +118,10 @@ including open-source \ac{QE} and licensed closed-source \ac{VASP}, with deploym
 support for heterogeneous \ac{DOE} leadership-class systems. Rather than promoting
 any single potential, the framework treats the \ac{MLIP} as an interchangeable,
 benchmarkable component: the same cold-start vs.\ warm-start instrument that
-accelerates \ac{DFT} also measures which backend is trustworthy for a given
-material, enabling per-system model selection without changing the orchestration
-or deployment layers. We demonstrate the complete loop running unattended on
+accelerates \ac{DFT} also measures how each backend behaves for a given
+material, enabling users to switch and benchmark backends against one another,
+combine them as a mixture of experts, or seed active-learning data collection
+from any of them---without changing the orchestration or deployment layers. We demonstrate the complete loop running unattended on
 \ac{NERSC} Perlmutter---from \ac{MLIP}-driven sampling through concurrent
 \ac{DFT} labeling to per-case model retraining---and use the resulting
 active-learning-corrected data to benchmark fine-tuning across all three
@@ -825,19 +826,24 @@ warm \acs{DFT} run exhausts its \acs{SCF} budget without converging). We report
 this contrast deliberately. The objective of \textsc{matsim-agents} is
 \emph{not} to advocate for any single \acs{MLIP}: it is to host multiple
 potentials behind a uniform, \acs{HPC}-portable interface so that the workflow
-can \emph{measure} which model is trustworthy for a given material and
-\emph{select} accordingly. That UMA wins on both \acs{DFT} columns---most
-strongly with the $37\%$ \acs{SCF} reduction on UMA+\acs{VASP}/NbMoW---identifies
-it as the production warm-start backend for these alloys, while the same
-cold/warm instrument that accelerates \acs{DFT} when the \acs{MLIP} is good thus
+can \emph{measure}, per material, how each model behaves and act on that
+measurement. On these alloy fixtures UMA pre-relaxation reduces
+$\Delta_\text{SCF}$ on both \acs{DFT} columns (up to the $37\%$ reduction on
+UMA+\acs{VASP}/NbMoW), whereas HydraGNN pre-relaxation is neutral on \acs{VASP}
+($0\%$ on all three fixtures) and, on NbTaW+\acs{QE}, increases cost ($+68\%$).
+Neither figure is a verdict on a potential in the abstract; each is a per-fixture
+measurement, and the ranking can invert on a different material. The same
+cold/warm instrument that accelerates \acs{DFT} when a potential is well matched
 doubles as a model-selection and weakness-detection probe when it is not: the
-$+68\%$ HydraGNN result is not a defect of the framework but exactly the signal
-the framework is built to surface, flagging the fixture as out-of-distribution
-for that potential and routing it back into the active learning loop. Because the
-backend is a user-selectable configuration rather than a hard-coded dependency,
-swapping or adding potentials---or choosing the best one per fixture---requires no
-change to the agentic orchestration, the \acs{DFT} escalation logic, or the
-deployment scripts.
+$+68\%$ result is not a defect of the framework but exactly the signal it is
+built to surface, flagging that fixture as out-of-distribution for that potential
+and routing it back into the active learning loop as a target for new data.
+Because the backend is a user-selectable configuration rather than a hard-coded
+dependency, the same run can switch potentials, benchmark several against one
+another on identical fixtures, combine them as a mixture of experts, or use any
+of them as the pretrained starting point for active-learning data
+collection---none of which requires a change to the agentic orchestration, the
+\acs{DFT} escalation logic, or the deployment scripts.
 
 \subsection{Paper-Case Coverage Matrix}
 Beyond the benchmarks above, \textsc{matsim-agents} has been designed and
@@ -1111,13 +1117,13 @@ well represented in their training distributions. Fine-tuning on the
 loop-generated data reduces both error metrics in essentially every case.
 
 For HydraGNN the full fine-tune (\emph{unfrozen}) and the
-from-\emph{scratch} specialist are the strongest and are typically close, while
-\emph{frozen}-backbone tuning (head only) helps but trails them and the default
-multi-head \emph{routed} update improves least. That the from-scratch specialist
-is competitive with transfer learning indicates the active-learning-corrected
-datasets are internally consistent enough to train a capable case-specific
-potential on their own, while the full fine-tune retains the advantage on the
-sparser cases. For UMA the same instrument contrasts full fine-tuning against
+from-\emph{scratch} specialist give the largest error reductions and are
+typically close to each other; the \emph{frozen}-backbone (head-only) update
+yields a smaller reduction, and the default multi-head \emph{routed} update
+changes the metrics least. That the from-scratch specialist is competitive with
+transfer learning indicates the active-learning-corrected datasets are internally
+consistent enough to train a capable case-specific potential on their own. For
+UMA the same instrument contrasts full fine-tuning against
 its parameter-efficient alternatives (frozen backbone with head-only training,
 and LoRA); for the MACE-MP capacities---whose native training entry point does
 not expose head-only backbone freezing---it contrasts naive full fine-tuning
@@ -1128,6 +1134,18 @@ native training entry point (identical energy/force loss, exponential
 moving-average weight tracking, and gradient clipping as the reference recipe)
 so the numbers are directly
 comparable to community MACE-MP fine-tuning practice.
+
+We report these numbers as measurements, not as a ranking that anoints a single
+best potential. Which backend and which adaptation give the lowest error depend
+on the material and the metric, and the absolute values shift as more
+active-learning data is collected, so a result on one fixture does not transfer
+to a general recommendation. \textsc{matsim-agents} therefore treats
+Table~\ref{tab:finetune} as a benchmarking instrument rather than an
+endorsement: the same uniform interface lets a user switch potentials, benchmark
+several against one another on identical held-out frames, combine them as a
+mixture of experts, or take any of them as the pretrained starting point for
+further active-learning data collection. The comparison is thus kept factual and
+the choice of potential remains the user's, per material and per task.
 
 \begin{table*}[t]
 \centering
