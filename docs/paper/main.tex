@@ -1117,11 +1117,13 @@ multi-head \emph{routed} update improves least. That the from-scratch specialist
 is competitive with transfer learning indicates the active-learning-corrected
 datasets are internally consistent enough to train a capable case-specific
 potential on their own, while the full fine-tune retains the advantage on the
-sparser cases. For the UMA and MACE foundation models the same
-instrument contrasts full fine-tuning against the parameter-efficient
-alternatives (frozen head, LoRA), and---across the MACE-MP capacities---whether
-the additional foundation-model size translates into lower post-fine-tune error
-on these narrow domains. The MACE fine-tunes are produced through the authors'
+sparser cases. For UMA the same instrument contrasts full fine-tuning against
+its parameter-efficient alternatives (frozen backbone with head-only training,
+and LoRA); for the MACE-MP capacities---whose native training entry point does
+not expose head-only backbone freezing---it contrasts naive full fine-tuning
+against LoRA, and, across the three capacities, whether the additional
+foundation-model size translates into lower post-fine-tune error on these narrow
+domains. The MACE fine-tunes are produced through the authors'
 native training entry point (identical energy/force loss, exponential
 moving-average weight tracking, and gradient clipping as the reference recipe)
 so the numbers are directly
@@ -1139,7 +1141,7 @@ Right panel: reference-shifted per-atom energy \acs{MAE} (meV/atom). Column
 abbreviations: LFP $=$ LiFePO\textsubscript{4} olivine; Cantor $=$ CrMnFeCoNi FCC
 \acs{HEA}; NbTaV $=$ NbTaVHfZrTi BCC \acs{HEA}; Phos $=$ phosphorene; MOF $=$
 Zn(HCOO)\textsubscript{2} \acs{MOF}. MACE-MP capacities: S/M/L $=$ small/medium/
-large. Dashes mark runs still completing at submission time.}
+large.}
 \label{tab:finetune}
 \begin{tabular}{lccccc@{\hspace{1.5em}}ccccc}
 \toprule
@@ -1155,15 +1157,15 @@ HydraGNN zero-shot   & 22.97 & 6.43 & 3.32 & 2.84 & 5.38 & 1917 & 2248 & 559 & 1
 \addlinespace
 UMA zero-shot        & 0.73 & 0.66 & 0.18 & 0.17 & 1.03 & 130 & 150 & 5  & 15 & 78  \\
 \quad full FT        & 1.82 & 0.65 & 0.00 & 0.36 & 1.92 & 445 & 123 & 0  & 29 & 115 \\
-\quad frozen         & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
-\quad LoRA           & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+\quad frozen         & 0.73 & 0.66 & 0.18 & 0.17 & 1.03 & 130 & 150 & 5  & 15 & 78  \\
+\quad LoRA           & 0.73 & 0.66 & 0.18 & 0.22 & 1.50 & 130 & 150 & 5  & 13 & 178 \\
 \addlinespace
 MACE-MP-S zero-shot  & 1.30 & 1.36 & 0.48 & 0.21 & 0.61 & 177 & 154 & 112 & 31 & 32 \\
 \quad naive FT       & 0.07 & 0.02 & 0.00 & 0.05 & 0.07 & 18  & 8   & 0   & 2  & 11 \\
 \quad LoRA           & 0.42 & 0.19 & 0.01 & 0.11 & 0.34 & 89  & 190 & 6   & 8  & 14 \\
 \addlinespace
-MACE-MP-M zero-shot  & 1.04 & 1.07 & 0.49 & 0.31 & -- & 117 & 158 & 19 & 45 & -- \\
-\quad naive FT       & 0.04 & 0.02 & 0.00 & 0.04 & -- & 11  & 9   & 0  & 3  & -- \\
+MACE-MP-M zero-shot  & 1.04 & 1.07 & 0.49 & 0.31 & 0.55 & 117 & 158 & 19 & 45 & 27 \\
+\quad naive FT       & 0.04 & 0.02 & 0.00 & 0.04 & 0.05 & 11  & 9   & 0  & 3  & 6  \\
 \quad LoRA           & 0.33 & 0.20 & 0.01 & 0.09 & 0.36 & 68 & 197 & 5 & 7 & 20 \\
 \addlinespace
 MACE-MP-L zero-shot  & 1.25 & 1.06 & 0.66 & 0.27 & 0.43 & 97 & 177 & 45 & 46 & 48 \\
@@ -1177,8 +1179,9 @@ MACE-MP-L zero-shot  & 1.25 & 1.06 & 0.66 & 0.27 & 0.43 & 97 & 177 & 45 & 46 & 4
 %   python scripts/utils/harvest_finetune_eval.py --tsv     # TSV for checking
 % Reads runs/finetune-eval/<variant>/<case>/eval/iter{0,N}.json; keys
 %   force_mae_eV_per_A and energy_mae_eV_per_atom_shifted (x1000 -> meV/atom).
-% Remaining dashes (UMA frozen/LoRA; MACE-MP-M MOF column) fill in from the
-%   5 packed jobs still queued (squeue: fte-pack4); rerun the harvester to update.
+% All cells are now populated from completed runs. MACE has no head-only "frozen"
+%   row: mace_run_train ignores backbone freezing, so LoRA is its parameter-
+%   efficient variant (UMA's frozen row is the head-only comparison point).
 
 \subsection{Strong Scaling of DFT Labeling}
 \label{sec:results:scaling}
