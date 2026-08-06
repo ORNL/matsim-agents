@@ -129,7 +129,16 @@ active-learning-corrected data to benchmark fine-tuning across all three
 capabilities, the active-learning loop is exercised specifically to estimate the
 chemical and dynamical stability of an ensemble of candidate atomistic
 structures; the framework therefore automates materials \emph{characterization},
-an essential prerequisite for informed materials discovery and design.
+an essential prerequisite for informed materials discovery and design. To couple
+these measured accuracies to scientific decisions, an optional multi-\acs{LLM}
+hypothesis-debate stage---an \acs{LLM} proposer with a panel of independent
+critics reasoning only over the reported surrogate errors---returns materially
+different crystal-structure stability verdicts before versus after fine-tuning
+across two high-entropy alloys and a LiFePO$_4$ cathode: it escalates to
+\acs{DFT} when the potential cannot resolve the tens-of-meV/atom spacing between
+competing polymorphs, asserts the stable structure under an uncertainty gate once
+fine-tuning closes that gap, and withholds claims---while flagging cases where
+fine-tuning degrades a backend---when the residual error remains too large.
 \end{abstract}
 
 \begin{IEEEkeywords}
