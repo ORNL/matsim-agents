@@ -121,9 +121,9 @@ benchmarkable component: the same cold-start vs.\ warm-start instrument that
 accelerates \ac{DFT} also measures how each backend behaves for a given
 material, enabling users to switch and benchmark backends against one another,
 combine them as a mixture of experts, or seed active-learning data collection
-from any of them---without changing the orchestration or deployment layers. We demonstrate the complete loop running unattended on
-\ac{NERSC} Perlmutter---from \ac{MLIP}-driven sampling through concurrent
-\ac{DFT} labeling to per-case model retraining---and use the resulting
+from any of them, without changing the orchestration or deployment layers. We demonstrate the complete loop running unattended on
+\ac{NERSC} Perlmutter, from \ac{MLIP}-driven sampling through concurrent
+\ac{DFT} labeling to per-case model retraining, and use the resulting
 active-learning-corrected data to benchmark fine-tuning across all three
 \ac{MLIP} backends under a single like-for-like protocol. In its current
 capabilities, the active-learning loop is exercised specifically to estimate the
@@ -131,14 +131,14 @@ chemical and dynamical stability of an ensemble of candidate atomistic
 structures; the framework therefore automates materials \emph{characterization},
 an essential prerequisite for informed materials discovery and design. To couple
 these measured accuracies to scientific decisions, an optional multi-\acs{LLM}
-hypothesis-debate stage---an \acs{LLM} proposer with a panel of independent
-critics reasoning only over the reported surrogate errors---returns materially
+hypothesis-debate stage, an \acs{LLM} proposer with a panel of independent
+critics reasoning only over the reported surrogate errors, returns materially
 different crystal-structure stability verdicts before versus after fine-tuning
 across two high-entropy alloys and a LiFePO$_4$ cathode: it escalates to
 \acs{DFT} when the potential cannot resolve the tens-of-meV/atom spacing between
 competing polymorphs, asserts the stable structure under an uncertainty gate once
-fine-tuning closes that gap, and withholds claims---while flagging cases where
-fine-tuning degrades a backend---when the residual error remains too large.
+fine-tuning closes that gap, and withholds claims, while flagging cases where
+fine-tuning degrades a backend, when the residual error remains too large.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -193,7 +193,7 @@ whether the agentic system accepts, corrects, or improves its own predictions.
 
 In its current capabilities, the active-learning workflow is exercised
 specifically to estimate the chemical and dynamical stability of an ensemble of
-candidate atomistic structures---determining which crystallographic structures
+candidate atomistic structures, determining which crystallographic structures
 are chemically and dynamically stable for a given set of elements and for varying
 stoichiometric formulas. In this scope the framework automates materials
 \emph{characterization}, which is a crucial prerequisite for informed materials
@@ -227,8 +227,8 @@ this work are:
   two additional roles in the agentic workflow: it acts as a computational
   validation safety net for the \acs{MLIP} predictions by testing whether the
   \acs{MLIP}-relaxed geometry is genuinely closer to the \acs{DFT} minimum, and it
-  exposes regions of \acs{MLIP} weakness in materials space---cases where warm-start
-  benefit is absent or where \acs{DFT} convergence degrades---that can be used to
+  exposes regions of \acs{MLIP} weakness in materials space, cases where warm-start
+  benefit is absent or where \acs{DFT} convergence degrades, that can be used to
   target active learning data collection and improve model robustness.
 \item A \textbf{closed-loop active-learning demonstration and cross-backend
   fine-tuning benchmark}: the full loop is run unattended end-to-end on
@@ -330,8 +330,8 @@ confidence signal, the active learning loop, and the \acs{DFT} warm-start
 protocol.
 
 \subsection{Interface and Orchestration Layer}
-The first two layers---the natural-language interface
-and the LangGraph orchestration layer---are realized together by a single
+The first two layers, the natural-language interface
+and the LangGraph orchestration layer, are realized together by a single
 multi-agent graph and the entry points that expose it to the user.
 
 \subsubsection{Agent Graph and Nodes}
@@ -357,8 +357,8 @@ force-and-energy evaluator. Results
 appended to the shared typed state.
 
 \textbf{\acs{UQ} Gate.} The gate is a \emph{post-relaxation routing step}: it
-does not steer the relaxation itself---which is a standard \acs{FIRE}/\acs{BFGS}
-minimisation---but instead evaluates the branch-weight distribution captured at
+does not steer the relaxation itself, which is a standard \acs{FIRE}/\acs{BFGS}
+minimisation, but instead evaluates the branch-weight distribution captured at
 each already-relaxed structure. If the mean top-branch
 weight exceeds a configurable threshold (default 0.6) and the fraction of
 unreliable predictions is below a second threshold (default 0.25), the gate
@@ -540,8 +540,8 @@ minimum, the warm run should require fewer \acs{BFGS} steps and fewer \acs{SCF}
 iterations than the cold run; failure of this condition signals that the \acs{MLIP}
 prediction may not be trustworthy for that chemistry. Second, systematic
 collection of such failure cases across the benchmark fixture suite identifies
-\emph{regions of \acs{MLIP} weakness} in materials space---compositions or
-structural motifs where the model's pre-relaxation is unreliable---and this
+\emph{regions of \acs{MLIP} weakness} in materials space, compositions or
+structural motifs where the model's pre-relaxation is unreliable, and this
 information can be used to target active-learning data collection and improve
 model robustness.
 
@@ -622,8 +622,8 @@ offload backend, and a custom entrypoint wrapper works around a vLLM
 model-registry SIGSEGV. HydraGNN runs on the platform-native PyTorch build for
 each accelerator (\acs{CUDA}, ROCm/HIP, and \acs{XPU}/OneAPI, respectively); the
 UMA and MACE-MP foundation-model backends are currently deployed on the
-Perlmutter \acs{CUDA} build. Companion scripts build \emph{both} first-principles engines---\acs{QE}
-and \acs{VASP}---on all three facilities (\acs{VASP} requiring the user's
+Perlmutter \acs{CUDA} build. Companion scripts build \emph{both} first-principles engines, \acs{QE}
+and \acs{VASP}, on all three facilities (\acs{VASP} requiring the user's
 licensed source), and the active-learning loop is wired end-to-end on Perlmutter
 and Frontier, with the Aurora compile/runtime stack in place.
 
@@ -705,7 +705,7 @@ pairings---HydraGNN+\acs{QE}, HydraGNN+\acs{VASP}, UMA+\acs{QE}, and
 UMA+\acs{VASP}---each run in both cold and warm modes. Because only one backend
 factor is varied at a time while the other is held fixed, a warm-start benefit
 (or its absence) can be attributed to the \acs{MLIP}, to the \acs{DFT} code, or to
-their interaction---the defining property of an ablation study.
+their interaction, the defining property of an ablation study.
 
 Three alloy fixtures provide the off-equilibrium ``hard cases'' that make the
 cold/warm distinction meaningful: MoNbTaW \acs{HEA} (16-atom BCC supercell),
@@ -863,7 +863,7 @@ Because the backend is a user-selectable configuration rather than a hard-coded
 dependency, the same run can switch potentials, benchmark several against one
 another on identical fixtures, combine them as a mixture of experts, or use any
 of them as the pretrained starting point for active-learning data
-collection---none of which requires a change to the agentic orchestration, the
+collection, none of which requires a change to the agentic orchestration, the
 \acs{DFT} escalation logic, or the deployment scripts.
 
 \subsection{Paper-Case Coverage Matrix}
@@ -1034,8 +1034,8 @@ frame was labelled. The BCC \acs{HEA} is the exception: it generated more
 candidates (1650) than its budget (1000 selected), so the diversity filter
 actively down-selected. Second, the two $\dagger$ rows are partial snapshots of
 runs still executing at the time of writing. Consequently these results should
-be read as a demonstration of \emph{integration and throughput}---that every
-stage is wired together and runs autonomously at \acs{HPC} scale---rather than
+be read as a demonstration of \emph{integration and throughput}, that every
+stage is wired together and runs autonomously at \acs{HPC} scale, rather than
 as an uncertainty-driven learning curve; the uncertainty-guided acquisition and
 in-loop retraining components are present and exercised, and quantifying their
 sample efficiency with a trainable ensemble backend is the natural next study.
@@ -1075,8 +1075,8 @@ retrained; and (iv) \emph{scratch}, a model trained from random initialization
 on the case data alone, which isolates the value of the pretrained
 representation. For UMA~\cite{wood2025uma} we fine-tune directly through the
 model's conservative energy-and-force head with a lightweight custom training
-loop---a small number of Adam epochs on a force-weighted energy-and-force loss
-that updates the pretrained output heads in place---in three variants:
+loop, a small number of Adam epochs on a force-weighted energy-and-force loss
+that updates the pretrained output heads in place, in three variants:
 \emph{full} (all trainable weights), \emph{frozen} (backbone held fixed, output
 head only), and \emph{LoRA}, in which low-rank adapters are inserted into the
 backbone's scalar and radial linear layers, leaving the equivariant tensor
@@ -1105,11 +1105,11 @@ entire table is reproduced by resubmitting the same packed jobs.
 \paragraph{Fine-tuning through the conservative force head.}
 A subtle but decisive methodological choice surfaced when fine-tuning the
 UMA foundation model. UMA predicts forces as the analytic gradient of its energy
-with respect to atomic positions---a \emph{conservative} force head evaluated
+with respect to atomic positions, a \emph{conservative} force head evaluated
 inside the forward pass. The convenient route of driving the fine-tune through
 the reference configuration pipeline instead recomputes the output
-normalizers---the force \acs{RMS} scale and the per-element linear energy
-references---from the (small) case dataset and trains a \emph{direct}-force head.
+normalizers, the force \acs{RMS} scale and the per-element linear energy
+references, from the (small) case dataset and trains a \emph{direct}-force head.
 On a few hundred frames these statistics are estimated far from their
 pretraining values: the force scale inflates by roughly a factor of three and
 the per-element references collapse onto the handful of elements present in the
@@ -1146,8 +1146,8 @@ transfer learning indicates the active-learning-corrected datasets are internall
 consistent enough to train a capable case-specific potential on their own. For
 UMA the same instrument contrasts full fine-tuning against
 its parameter-efficient alternatives (frozen backbone with head-only training,
-and LoRA); for the MACE-MP capacities---whose native training entry point does
-not expose head-only backbone freezing---it contrasts naive full fine-tuning
+and LoRA); for the MACE-MP capacities, whose native training entry point does
+not expose head-only backbone freezing, it contrasts naive full fine-tuning
 against LoRA, and, across the three capacities, whether the additional
 foundation-model size translates into lower post-fine-tune error on these narrow
 domains. The MACE fine-tunes are produced through the authors'
@@ -1243,10 +1243,10 @@ evidence the panel is given about the surrogate is its measured held-out
 accuracy from Table~\ref{tab:finetune}; the panel is not told which potential to
 prefer, so any change in its verdict is a function of the reported numbers alone.
 
-We run three fixtures---the two \acs{HEA}s and the LiFePO$_4$ olivine/maricite
-cathode---under two evidence conditions: the zero-shot
+We run three fixtures, the two \acs{HEA}s and the LiFePO$_4$ olivine/maricite
+cathode, under two evidence conditions: the zero-shot
 accuracy (\emph{before} active-learning fine-tuning) and the fine-tuned accuracy
-(\emph{after})---and compare the resulting hypotheses (Table~\ref{tab:hypothesis}).
+(\emph{after}), and compare the resulting hypotheses (Table~\ref{tab:hypothesis}).
 The panel consistently anchors its decision to the physical fact that competing
 polymorphs are separated by only tens of meV/atom, so a surrogate whose energy
 error exceeds that spacing cannot resolve the convex hull. For the Cantor
@@ -1264,7 +1264,7 @@ NbTaVHfZrTi \acs{HEA} the shift is more nuanced: because UMA is already accurate
 before fine-tuning ($5$~meV/atom), the panel separates the two notions of
 stability, treating chemical stability as resolvable from the surrogate energies
 while insisting that dynamical (phonon) stability be confirmed in \acs{DFT}
-until the force error is small enough to trust vibrational signs---which the
+until the force error is small enough to trust vibrational signs, which the
 fine-tuned potentials ($\le\!0.005$~eV/\AA) subsequently provide. The
 LiFePO$_4$ cathode (olivine \emph{Pnma} versus maricite) exposes a third pattern
 together with a benchmarking caveat. Before fine-tuning no backend is usable (best
@@ -1272,7 +1272,7 @@ energy \acs{MAE} 97~meV/atom), and the panel additionally recognises the known
 phase-separating character of Li$_x$FePO$_4$, posing a miscibility-gap
 counter-hypothesis before escalating to \acs{DFT} and active learning. After
 fine-tuning only MACE-MP-L improves (energy 9~meV/atom, force $0.021$~eV/\AA),
-whereas UMA and HydraGNN in fact \emph{regress} on this chemistry---a divergence
+whereas UMA and HydraGNN in fact \emph{regress} on this chemistry, a divergence
 the before/after benchmark surfaces automatically; even then the panel asserts
 only chemical resolvability while still escalating the phonon (dynamical-stability)
 check to \acs{DFT}, because $0.021$~eV/\AA\ remains above the
@@ -1334,8 +1334,8 @@ single-point \acs{DFT} labelling accounts for 88--97\% of the loop's wall time,
 which raises a natural systems question: how does that dominant stage respond
 to additional node allocation? To answer it we ran a controlled strong-scaling
 study in which a \emph{fixed} 32-frame workload of FCC \acs{HEA}
-configurations---drawn from CrMnFeCoNi and four near-equimolar FCC
-compositions---is labelled by single-point \acs{VASP} at four node counts,
+configurations, drawn from CrMnFeCoNi and four near-equimolar FCC
+compositions, is labelled by single-point \acs{VASP} at four node counts,
 $N\in\{1,2,4,8\}$. Concurrency is expressed as $N$ simultaneous one-node
 \acs{VASP} jobs (four A100 ranks each), so $N$ nodes process the same 32 frames
 with $N$-way parallelism. Because the workload is held fixed while the resource
@@ -1562,8 +1562,8 @@ therefore constant across atomistic configurations of the same chemical system.
 
 These limitations map directly onto our planned developments. To address the
 configuration-insensitivity of the gate, we will promote the already-implemented
-\ac{MC}-Dropout and deep-ensemble scorers---presently used for candidate
-acquisition---to configuration-level gate signals that quantify uncertainty at
+\ac{MC}-Dropout and deep-ensemble scorers, presently used for candidate
+acquisition, to configuration-level gate signals that quantify uncertainty at
 the level of individual atomistic configurations. Coupled with \acs{MD} sampling
 of the same chemical system, such configuration-level \acs{UQ} would improve
 robustness by flagging specific critical snapshots along a trajectory for
