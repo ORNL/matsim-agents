@@ -125,7 +125,11 @@ from any of them---without changing the orchestration or deployment layers. We d
 \ac{NERSC} Perlmutter---from \ac{MLIP}-driven sampling through concurrent
 \ac{DFT} labeling to per-case model retraining---and use the resulting
 active-learning-corrected data to benchmark fine-tuning across all three
-\ac{MLIP} backends under a single like-for-like protocol.
+\ac{MLIP} backends under a single like-for-like protocol. In its current
+capabilities, the active-learning loop is exercised specifically to estimate the
+chemical and dynamical stability of an ensemble of candidate atomistic
+structures; the framework therefore automates materials \emph{characterization},
+an essential prerequisite for informed materials discovery and design.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -177,6 +181,14 @@ analysis or must be escalated to \ac{DFT}-driven active learning; and the analys
 returns an interpretable scientific summary. In this design, uncertainty is not
 an offline diagnostic but a first-class workflow control variable that determines
 whether the agentic system accepts, corrects, or improves its own predictions.
+
+In its current capabilities, the active-learning workflow is exercised
+specifically to estimate the chemical and dynamical stability of an ensemble of
+candidate atomistic structures---determining which crystallographic structures
+are chemically and dynamically stable for a given set of elements and for varying
+stoichiometric formulas. In this scope the framework automates materials
+\emph{characterization}, which is a crucial prerequisite for informed materials
+discovery and design rather than a substitute for it.
 
 A second important capability is explicit user control over the first-principles
 backend. The workflow supports both \ac{QE}~\cite{giannozzi2009qe,giannozzi2017qe}, an open-source \acs{DFT}
@@ -1504,6 +1516,18 @@ specific critical snapshots along a trajectory for \acs{DFT} labeling, rather th
 only flagging entire chemistries. We also plan to extend the loop to
 multi-fidelity active learning where semi-empirical tight-binding (\ac{DFTB}+) is
 used as an intermediate oracle between \acs{MLIP} and full \acs{DFT}.
+
+A further direction extends the framework from materials \emph{characterization}
+toward materials \emph{discovery and design}. Because the present workflow is
+exercised to establish the chemical and dynamical stability of candidate
+structures, the natural next step is to support the actual discovery and design
+of functional materials by driving atomistic simulations dedicated to the
+collection of functional properties. This entails expanding the set of supported
+computational tools beyond first-principles methods to include classical Monte
+Carlo for thermodynamic properties and molecular dynamics for the retrieval of
+mechanical behavior, so that the same agentic orchestration layer can progress
+from certifying structural stability to predicting the functional and mechanical
+response that ultimately governs materials selection.
 
 \subsection{Summary}
 We have presented \textsc{matsim-agents}, an open-source agentic \acs{AI} scientific
