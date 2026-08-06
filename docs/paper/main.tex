@@ -1234,7 +1234,8 @@ evidence the panel is given about the surrogate is its measured held-out
 accuracy from Table~\ref{tab:finetune}; the panel is not told which potential to
 prefer, so any change in its verdict is a function of the reported numbers alone.
 
-We run the two \acs{HEA} fixtures under two evidence conditions---the zero-shot
+We run three fixtures---the two \acs{HEA}s and the LiFePO$_4$ olivine/maricite
+cathode---under two evidence conditions: the zero-shot
 accuracy (\emph{before} active-learning fine-tuning) and the fine-tuned accuracy
 (\emph{after})---and compare the resulting hypotheses (Table~\ref{tab:hypothesis}).
 The panel consistently anchors its decision to the physical fact that competing
@@ -1255,14 +1256,29 @@ before fine-tuning ($5$~meV/atom), the panel separates the two notions of
 stability, treating chemical stability as resolvable from the surrogate energies
 while insisting that dynamical (phonon) stability be confirmed in \acs{DFT}
 until the force error is small enough to trust vibrational signs---which the
-fine-tuned potentials ($\le\!0.005$~eV/\AA) subsequently provide.
+fine-tuned potentials ($\le\!0.005$~eV/\AA) subsequently provide. The
+LiFePO$_4$ cathode (olivine \emph{Pnma} versus maricite) exposes a third pattern
+together with a benchmarking caveat. Before fine-tuning no backend is usable (best
+energy \acs{MAE} 97~meV/atom), and the panel additionally recognises the known
+phase-separating character of Li$_x$FePO$_4$, posing a miscibility-gap
+counter-hypothesis before escalating to \acs{DFT} and active learning. After
+fine-tuning only MACE-MP-L improves (energy 9~meV/atom, force $0.021$~eV/\AA),
+whereas UMA and HydraGNN in fact \emph{regress} on this chemistry---a divergence
+the before/after benchmark surfaces automatically; even then the panel asserts
+only chemical resolvability while still escalating the phonon (dynamical-stability)
+check to \acs{DFT}, because $0.021$~eV/\AA\ remains above the
+$\sim\!0.005$~eV/\AA\ it requires to trust vibrational signs.
 
 Two points matter for the framework rather than for the specific chemistries.
 First, the conclusion the system reports is not fixed: the same prompt and the
 same panel move from ``escalate to \acs{DFT}/active learning'' to ``assert the
 stable structure, with an uncertainty gate'' purely because the underlying
 \acs{MLIP} became more accurate through the active-learning loop, which is the
-intended coupling between the physics layer and the reasoning layer. Second, the
+intended coupling between the physics layer and the reasoning layer. The same
+coupling also acts defensively: on LiFePO$_4$ the panel withholds the
+dynamical-stability claim while the fine-tuned force error is still too coarse for
+phonons, and the before/after evidence itself exposes cases where fine-tuning
+\emph{degrades} a universal potential rather than improving it. Second, the
 multi-model panel reproduces, in natural language, the same uncertainty-aware
 escalation logic that the \acs{UQ} gate applies numerically
 (Section~\ref{sec:results:uq}): it declines to over-claim when the evidence is
@@ -1294,6 +1310,10 @@ Fixture & Stage & \shortstack{Min.\ energy\\\acs{MAE}\\(meV/atom)} & Panel stabi
 \multirow{2}{*}{\shortstack[l]{NbTaV\\BCC}}
  & before & 5   & Chemical stability resolvable; phonons require \acs{DFT}\\
  & after  & 0   & Assert BCC; \acs{UQ}-gated screening\\
+\addlinespace
+\multirow{2}{*}{\shortstack[l]{LiFePO$_4$\\olivine}}
+ & before & 97  & Cannot resolve hull; escalate to \acs{DFT} + active learning\\
+ & after  & 9   & Chemistry resolvable; phonons still require \acs{DFT}\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1494,42 +1514,6 @@ Mixtral-8x22B-Instruct~\cite{mixtral} & Mistral AI & 141B MoE (39B) \\
 \end{table}
 
 \subsection{Limitations and Future Developments}
-Current limitations include: (1) automatic in-loop retraining is demonstrated
-end-to-end for HydraGNN, whereas the foundation-model backends
-(UMA~\cite{wood2025uma} and MACE-MP~\cite{batatia2023macemp}) are supported as
-relaxation engines and through the offline fine-tune study of
-Section~\ref{sec:results:finetune}, and are wired as in-loop retrain hooks, but
-have not yet been exercised as fully automatic in-loop retraining steps; the
-warm-start module is backend-agnostic and supports HydraGNN, UMA, and MACE-MP as
-pre-relaxation backends; (2) the warm-start protocol handles ionic coordinates but not cell
-shape/volume, which limits benefit for pure-strain relaxation problems; (3) the
-\acs{LLM} planner does not yet incorporate literature search or database queries
-(Materials Project, AFLOW) as tool calls; and (4) the present \acs{UQ} gate relies
-on the BranchWeightMLP routing heuristic, which is composition-conditioned and
-therefore constant across atomistic configurations of the same chemical system.
-Future work will address these limitations, including promoting the
-already-implemented \ac{MC}-Dropout and deep-ensemble scorers---presently used
-for candidate acquisition---to configuration-level gate signals that quantify
-uncertainty at the level of individual atomistic configurations. Coupled with \acs{MD} sampling of the same chemical
-system, such configuration-level \acs{UQ} would improve robustness by flagging
-specific critical snapshots along a trajectory for \acs{DFT} labeling, rather than
-only flagging entire chemistries. We also plan to extend the loop to
-multi-fidelity active learning where semi-empirical tight-binding (\ac{DFTB}+) is
-used as an intermediate oracle between \acs{MLIP} and full \acs{DFT}.
-
-A further direction extends the framework from materials \emph{characterization}
-toward materials \emph{discovery and design}. Because the present workflow is
-exercised to establish the chemical and dynamical stability of candidate
-structures, the natural next step is to support the actual discovery and design
-of functional materials by driving atomistic simulations dedicated to the
-collection of functional properties. This entails expanding the set of supported
-computational tools beyond first-principles methods to include classical Monte
-Carlo for thermodynamic properties and molecular dynamics for the retrieval of
-mechanical behavior, so that the same agentic orchestration layer can progress
-from certifying structural stability to predicting the functional and mechanical
-response that ultimately governs materials selection.
-
-\subsection{Summary}
 We have presented \textsc{matsim-agents}, an open-source agentic \acs{AI} scientific
 workflow framework whose central novelty is the closed-loop orchestration of
 natural-language scientific intent, \acs{MLIP}-based atomistic execution,
@@ -1550,6 +1534,46 @@ crystal classes and validate the warm-start benchmarking infrastructure for
 genuinely off-equilibrium structures such as the MoNbTaW \acs{HEA}, positioning
 \textsc{matsim-agents} as a practical framework for agentic \acs{AI} workflows in
 demanding computational materials science on leadership-class \acs{HPC}.
+
+These demonstrated capabilities also delineate the current boundaries of the
+framework, and each boundary is an opportunity for the next stage of development.
+The present limitations are: (1) automatic in-loop retraining is demonstrated
+end-to-end for HydraGNN, whereas the foundation-model backends
+(UMA~\cite{wood2025uma} and MACE-MP~\cite{batatia2023macemp}) are supported as
+relaxation engines and through the offline fine-tune study of
+Section~\ref{sec:results:finetune}, and are wired as in-loop retrain hooks, but
+have not yet been exercised as fully automatic in-loop retraining steps; the
+warm-start module is backend-agnostic and supports HydraGNN, UMA, and MACE-MP as
+pre-relaxation backends; (2) the warm-start protocol handles ionic coordinates but not cell
+shape/volume, which limits benefit for pure-strain relaxation problems; (3) the
+\acs{LLM} planner does not yet incorporate literature search or database queries
+(Materials Project, AFLOW) as tool calls; and (4) the present \acs{UQ} gate relies
+on the BranchWeightMLP routing heuristic, which is composition-conditioned and
+therefore constant across atomistic configurations of the same chemical system.
+
+These limitations map directly onto our planned developments. To address the
+configuration-insensitivity of the gate, we will promote the already-implemented
+\ac{MC}-Dropout and deep-ensemble scorers---presently used for candidate
+acquisition---to configuration-level gate signals that quantify uncertainty at
+the level of individual atomistic configurations. Coupled with \acs{MD} sampling
+of the same chemical system, such configuration-level \acs{UQ} would improve
+robustness by flagging specific critical snapshots along a trajectory for
+\acs{DFT} labeling, rather than only flagging entire chemistries. We also plan to
+extend the loop to multi-fidelity active learning where semi-empirical
+tight-binding (\ac{DFTB}+) is used as an intermediate oracle between \acs{MLIP}
+and full \acs{DFT}.
+
+A further direction extends the framework from materials \emph{characterization}
+toward materials \emph{discovery and design}. Because the present workflow is
+exercised to establish the chemical and dynamical stability of candidate
+structures, the natural next step is to support the actual discovery and design
+of functional materials by driving atomistic simulations dedicated to the
+collection of functional properties. This entails expanding the set of supported
+computational tools beyond first-principles methods to include classical Monte
+Carlo for thermodynamic properties and molecular dynamics for the retrieval of
+mechanical behavior, so that the same agentic orchestration layer can progress
+from certifying structural stability to predicting the functional and mechanical
+response that ultimately governs materials selection.
 
 % =============================================================================
 \section*{Acknowledgments}
