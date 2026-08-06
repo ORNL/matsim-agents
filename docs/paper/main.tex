@@ -1201,6 +1201,91 @@ MACE-MP-L zero-shot  & 1.25 & 1.06 & 0.66 & 0.27 & 0.43 & 97 & 177 & 45 & 46 & 4
 %   row: mace_run_train ignores backbone freezing, so LoRA is its parameter-
 %   efficient variant (UMA's frozen row is the head-only comparison point).
 
+\subsection{Hypothesis Formulation and Multi-LLM Debate}
+\label{sec:results:hypothesis}
+The fine-tuning results above quantify \emph{how accurate} each surrogate is on
+the corrected data; this subsection closes the loop by showing how that accuracy
+propagates into the \emph{scientific conclusion} that the interface layer draws.
+We exercise the optional multi-\acs{LLM} peer review of the discovery-chat entry
+point (Section~\ref{sec:architecture}) on a materials-characterization task:
+given an element set and a family of stoichiometries, decide which
+crystallographic structure is simultaneously \emph{chemically} stable
+(formation energy on or below the convex hull) and \emph{dynamically} stable
+(no imaginary phonon modes), and state the numerical criterion that would
+falsify the claim. A proposer model (Qwen2.5-14B-Instruct) drafts a falsifiable
+hypothesis, and a panel of two critics from independent developers
+(DeepSeek-R1-Distill-Qwen-32B and Gemma~4~31B; Table~\ref{tab:llms}) revises it
+over two rounds of critique and cross-critique. All three models are served
+locally through vLLM on a single node (three A100-80GB \acsp{GPU}, one model
+each); the driver and \acs{HPC} launcher are released with the code. The only
+evidence the panel is given about the surrogate is its measured held-out
+accuracy from Table~\ref{tab:finetune}; the panel is not told which potential to
+prefer, so any change in its verdict is a function of the reported numbers alone.
+
+We run the two \acs{HEA} fixtures under two evidence conditions---the zero-shot
+accuracy (\emph{before} active-learning fine-tuning) and the fine-tuned accuracy
+(\emph{after})---and compare the resulting hypotheses (Table~\ref{tab:hypothesis}).
+The panel consistently anchors its decision to the physical fact that competing
+polymorphs are separated by only tens of meV/atom, so a surrogate whose energy
+error exceeds that spacing cannot resolve the convex hull. For the Cantor
+\acs{HEA}, the before-fine-tuning evidence gives every backend an energy
+\acs{MAE} of 150--2248~meV/atom; the panel judges all three surrogates
+insufficient to rank the FCC/HCP/BCC alternatives and recommends escalating to
+\acs{DFT} and routing the structures back into active learning. Under the
+after-fine-tuning evidence the most accurate fine-tuned potential on that
+fixture (MACE-MP-L, 3~meV/atom) falls below the polymorph spacing; the panel now
+asserts the single-phase FCC solid solution, tightens the falsification
+tolerance to $\pm 10$~meV/atom and a residual-force bound of $0.07$~eV/\AA, and
+adds an ensemble-uncertainty gate that still escalates individual structures
+whose cross-model energy spread exceeds $5$~meV/atom. For the refractory
+NbTaVHfZrTi \acs{HEA} the shift is more nuanced: because UMA is already accurate
+before fine-tuning ($5$~meV/atom), the panel separates the two notions of
+stability, treating chemical stability as resolvable from the surrogate energies
+while insisting that dynamical (phonon) stability be confirmed in \acs{DFT}
+until the force error is small enough to trust vibrational signs---which the
+fine-tuned potentials ($\le\!0.005$~eV/\AA) subsequently provide.
+
+Two points matter for the framework rather than for the specific chemistries.
+First, the conclusion the system reports is not fixed: the same prompt and the
+same panel move from ``escalate to \acs{DFT}/active learning'' to ``assert the
+stable structure, with an uncertainty gate'' purely because the underlying
+\acs{MLIP} became more accurate through the active-learning loop, which is the
+intended coupling between the physics layer and the reasoning layer. Second, the
+multi-model panel reproduces, in natural language, the same uncertainty-aware
+escalation logic that the \acs{UQ} gate applies numerically
+(Section~\ref{sec:results:uq}): it declines to over-claim when the evidence is
+weak and narrows its criteria only when the measured error supports it. The
+panel is a cross-examination step that surfaces this reasoning explicitly, not
+an oracle that replaces the physical calculations.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\caption{Effect of \acs{MLIP} accuracy on the multi-\acs{LLM} panel's
+crystal-structure stability verdict, before and after active-learning
+fine-tuning. ``Min.\ energy \acs{MAE}'' is the smallest held-out per-atom energy
+error available to the panel among the three backends on that fixture
+(Table~\ref{tab:finetune}); the panel reasons against the tens-of-meV/atom
+spacing between competing polymorphs. The proposer (Qwen2.5-14B-Instruct) and
+critics (DeepSeek-R1-Distill-Qwen-32B, Gemma~4~31B) are unchanged across
+conditions.}
+\label{tab:hypothesis}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llcp{3.4cm}}
+\toprule
+Fixture & Stage & \shortstack{Min.\ energy\\\acs{MAE}\\(meV/atom)} & Panel stability verdict\\
+\midrule
+\multirow{2}{*}{\shortstack[l]{Cantor\\FCC}}
+ & before & 150 & Cannot resolve hull; escalate to \acs{DFT} + active learning\\
+ & after  & 3   & Assert FCC; \acs{UQ}-gated screening\\
+\addlinespace
+\multirow{2}{*}{\shortstack[l]{NbTaV\\BCC}}
+ & before & 5   & Chemical stability resolvable; phonons require \acs{DFT}\\
+ & after  & 0   & Assert BCC; \acs{UQ}-gated screening\\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \subsection{Strong Scaling of DFT Labeling}
 \label{sec:results:scaling}
 The per-iteration breakdown of Fig.~\ref{fig:al_timing} shows that
