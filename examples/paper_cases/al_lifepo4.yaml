@@ -61,6 +61,18 @@ mlip:
       enabled: true
       p: 0.1
       target_layers: linear
+  mace:
+    # MACE-MP foundation model (mace-torch). Select with MLIP_BACKEND=mace;
+    # size via MACE_MODEL (small|medium|large). Frozen by default (like UMA);
+    # set MACE_RETRAIN=1 in the launcher to fine-tune each iteration.
+    family:    ${MACE_FAMILY:-mace_mp}
+    model:     ${MACE_MODEL:-medium}
+    precision: fp64
+    device:    cuda
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear
 
 md:
   seed_source:
@@ -109,9 +121,9 @@ dft:
       NCORE: "4"
 
 trainer:
-  enabled: true
+  enabled: ${TRAINER_ENABLED:-true}
   train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
-  train_launcher: ${PROJ_ROOT}/scripts/launchers/perlmutter/_hydragnn-train-step-perlmutter.sh
+  train_launcher: ${TRAIN_LAUNCHER:-/global/cfs/projectdirs/m5216/mlupopa/matsim-agents/scripts/launchers/perlmutter/_hydragnn-train-step-perlmutter.sh}
   epochs_per_iter: 5
   nodes_for_train: 4
   ranks_per_node:  4

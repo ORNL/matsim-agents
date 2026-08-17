@@ -92,9 +92,12 @@ class EvalMetrics:
     # Energy (per atom) — the standard size-intensive metric.
     energy_mae_eV_per_atom: float
     energy_rmse_eV_per_atom: float
-    # Energy (per atom) after removing the constant mean (pred-ref) offset.
-    # MLIP backends (esp. UMA) use their own energy reference, so a constant
-    # shift is expected and uninformative; this isolates the *relative* error.
+    # Energy (per atom) after removing a per-element *linear* reference from the
+    # (pred-ref) energy difference (E_lin = sum_Z n_Z c_Z, fit by least squares).
+    # MLIP backends (esp. UMA) use their own per-element energy zero, so this
+    # composition-dependent shift -- the same linear-reference trick the
+    # fine-tune training applies -- isolates the *relative* error and reduces to
+    # the old constant offset when every frame shares one composition.
     energy_mae_eV_per_atom_shifted: float
     energy_rmse_eV_per_atom_shifted: float
     energy_mean_offset_eV_per_atom: float
@@ -133,6 +136,8 @@ def evaluate_frames(
     e_pred_pa: list[float] = []
     e_ref_tot: list[float] = []
     e_pred_tot: list[float] = []
+    e_natoms: list[int] = []
+    e_numbers: list[np.ndarray] = []
     f_ref_all: list[np.ndarray] = []
     f_pred_all: list[np.ndarray] = []
     n_atoms_total = 0
@@ -160,6 +165,8 @@ def evaluate_frames(
             e_pred_tot.append(e_pred)
             e_ref_pa.append(e_ref / n)
             e_pred_pa.append(e_pred / n)
+            e_natoms.append(n)
+            e_numbers.append(np.asarray(atoms.get_atomic_numbers(), dtype=int))
         if f_ref is not None and f_ref.shape == f_pred.shape:
             f_ref_all.append(f_ref.reshape(-1))
             f_pred_all.append(f_pred.reshape(-1))
@@ -179,7 +186,25 @@ def evaluate_frames(
     de_tot = e_pred_tot_a - e_ref_tot_a
     de_pa = e_pred_pa_a - e_ref_pa_a
     offset_pa = float(np.mean(de_pa)) if de_pa.size else 0.0
-    de_pa_shifted = de_pa - offset_pa
+    # Remove a per-element linear reference (E_lin = sum_Z n_Z c_Z) from the
+    # pred-ref total-energy difference, mirroring the reference-energy
+    # subtraction the fine-tune training applies. This generalises the single
+    # constant shift to a composition-dependent offset, so varying-stoichiometry
+    # frames are scored on the shape of the energy surface rather than a
+    # per-element reference mismatch; for a fixed composition it reduces to the
+    # old constant shift. Applied identically to zero-shot and fine-tuned evals.
+    if de_tot.size:
+        zs = sorted({int(z) for nums in e_numbers for z in nums.tolist()})
+        col = {z: j for j, z in enumerate(zs)}
+        comp = np.zeros((len(e_numbers), len(zs)), dtype=float)
+        for i_row, nums in enumerate(e_numbers):
+            for z in nums.tolist():
+                comp[i_row, col[int(z)]] += 1.0
+        coef, *_ = np.linalg.lstsq(comp, de_tot, rcond=None)
+        n_arr = np.asarray(e_natoms, dtype=float)
+        de_pa_shifted = (de_tot - comp @ coef) / n_arr
+    else:
+        de_pa_shifted = de_pa
 
     if f_ref_all:
         f_ref_a = np.concatenate(f_ref_all)
