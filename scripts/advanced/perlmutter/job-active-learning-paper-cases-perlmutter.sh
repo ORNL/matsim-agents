@@ -32,6 +32,11 @@
 #
 # Override backends:
 #   MLIP_BACKEND=hydragnn DFT_BACKEND=qe CASE=hea_bcc sbatch ...
+#   MLIP_BACKEND=mace     CASE=hea_bcc sbatch ...            (frozen MACE-MP loop)
+#   MLIP_BACKEND=mace MACE_MODEL=large MACE_RETRAIN=1 CASE=hea_bcc sbatch ...
+# MACE runs FROZEN by default (comparable to the frozen-UMA loop); MACE_RETRAIN=1
+# fine-tunes each iteration and requires the mace_venv + a prefetched foundation
+# model cache under $PROJ/models/mace_cache.
 #
 # MULTI-NODE DFT CONCURRENCY — the AL driver dispatches the selected VASP
 # single-points concurrently, up to (SLURM_JOB_NUM_NODES / nodes_per_job) at a
@@ -63,7 +68,6 @@ PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
 VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
 
 # ── case -> AL YAML mapping ──────────────────────────────────────────────────
 CASE="${CASE:-hea_bcc}"
@@ -95,11 +99,28 @@ fi
 RUN_DIR=$RUNS_ROOT/al-paper-${CASE}-${SLURM_JOB_ID:-$$}
 mkdir -p "$RUN_DIR"
 
-# ── modules & venv (fairchem_venv for UMA) ───────────────────────────────────
+# ── modules & venv (backend-specific) ────────────────────────────────────────
 source "$REPO/scripts/setup/perlmutter/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
-# shellcheck disable=SC1091
-source "${VENV}/bin/activate"
+
+case "$MLIP_BACKEND" in
+  uma)      VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}" ;;
+  mace)     VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}" ;;
+  hydragnn) VENV="${MATSIM_HYDRAGNN_VENV:-${VENV_ROOT}/hydragnn_venv}" ;;
+  *)        VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}" ;;
+esac
+[[ ! -d "${VENV}" ]] && { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
+# fairchem_venv/mace_venv are plain venvs (bin/activate); hydragnn_venv is conda.
+if [[ -f "${VENV}/bin/activate" ]]; then
+  # shellcheck disable=SC1091
+  source "${VENV}/bin/activate"
+else
+  __conda_base="$(conda info --base 2>/dev/null)"
+  [[ -z "${__conda_base}" ]] && { echo "ERROR: 'conda' not available to activate ${VENV}" >&2; exit 2; }
+  # shellcheck disable=SC1091
+  source "${__conda_base}/etc/profile.d/conda.sh"
+  conda activate "${VENV}" || { echo "ERROR: conda activate failed for ${VENV}" >&2; exit 2; }
+fi
 
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
@@ -126,6 +147,23 @@ export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 # ── AL backend selection (consumed by the YAML via ${...} env interpolation) ─
 export MLIP_BACKEND
 export DFT_BACKEND="${DFT_BACKEND:-vasp}"
+
+# MACE backend: cache foundation weights in the shared project dir and run the
+# loop FROZEN by default (directly comparable to the frozen-UMA loop). Set
+# MACE_RETRAIN=1 to fine-tune each iteration via the MACE train-step launcher.
+if [[ "$MLIP_BACKEND" == "mace" ]]; then
+  export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${PROJ}/models/mace_cache}"
+  export MACE_CACHE="${MACE_CACHE:-${XDG_CACHE_HOME}/mace}"
+  mkdir -p "${MACE_CACHE}"
+  export MACE_FAMILY="${MACE_FAMILY:-mace_mp}"
+  export MACE_MODEL="${MACE_MODEL:-medium}"
+  if [[ "${MACE_RETRAIN:-0}" == "1" ]]; then
+    export TRAINER_ENABLED="true"
+    export TRAIN_LAUNCHER="${TRAIN_LAUNCHER:-${REPO}/scripts/launchers/perlmutter/_mace-train-step-perlmutter.sh}"
+  else
+    export TRAINER_ENABLED="${TRAINER_ENABLED:-false}"
+  fi
+fi
 
 echo "=========================================="
 echo "[Perlmutter active-learning — paper case]"
