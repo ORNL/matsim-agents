@@ -23,7 +23,7 @@ Cases (mirror the al_*.yaml configs):
 
 Usage:
     cd /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
-    source scripts/setup/perlmutter/setup_matsim_perlmutter.sh
+    source deployments/perlmutter/setup/setup_matsim_perlmutter.sh
 
     # one case, MLIP only:
     python examples/paper_cases/singlepass.py --case lifepo4

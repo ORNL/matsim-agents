@@ -12,7 +12,7 @@ DFT run needed, plus the agreement between the two final energies. The full
 comparison is written to a JSON file analogous to the QE flavour, so any
 downstream analysis can consume both with the same schema.
 
-The HydraGNN step is delegated to :mod:`matsim_agents.tools.relaxation`
+The HydraGNN step is delegated to :mod:`matsim_agents.backends.mlip.relaxation`
 (if it cannot be imported the warm-start phase is skipped and only the
 cold DFT run is performed; the ``warm`` block is left ``None``).
 
@@ -28,7 +28,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.tools.vasp_relax import (
+from matsim_agents.backends.dft.vasp_relax import (
     VASPRelaxResult,
     VASPSettings,
     parse_relax_outputs,
@@ -79,7 +79,7 @@ def run_warmstart_benchmark(
     """Run the cold + warm VASP relaxations and return the comparison summary.
 
     ``vasp_settings_overrides`` is forwarded verbatim to
-    :func:`matsim_agents.tools.vasp_relax.recommend_settings`.
+    :func:`matsim_agents.backends.dft.vasp_relax.recommend_settings`.
 
     ``mlip_backend`` selects the MLIP pre-relaxation engine: ``"hydragnn"``
     (default) or ``"uma"``.  ``mlip_kwargs`` is forwarded to the selected
@@ -154,7 +154,7 @@ def _mlip_relax(
     Supports ``mlip_backend='hydragnn'`` (default) and ``'uma'``.
     Returns ``(optimized_path, info)``.
     """
-    from matsim_agents.tools.relaxation import RelaxStructureInput, _run
+    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 
     out_subdir = "hydragnn" if mlip_backend == "hydragnn" else mlip_backend
     mlip_dir = os.path.join(work_dir, out_subdir)

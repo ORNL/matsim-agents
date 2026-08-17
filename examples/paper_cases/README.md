@@ -94,7 +94,7 @@ examples/paper_cases/
 ## Quick start
 
 ```bash
-source scripts/setup/perlmutter/setup_matsim_perlmutter.sh
+source deployments/perlmutter/setup/setup_matsim_perlmutter.sh
 export PROJ_ROOT=$PWD
 export RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs
 export MLIP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir
@@ -124,7 +124,7 @@ matsim-agents supervisor-run LiFePO4 \
 ```
 
 > **Note:** on Perlmutter, submit the full AL loop with
-> `scripts/advanced/perlmutter/job-active-learning-paper-cases-perlmutter.sh`
+> `deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh`
 > (select the system with `CASE=<name>`), or wrap `matsim-agents al run
 > <config>` in your own `sbatch` script / interactive `salloc` GPU node.
 >
@@ -139,7 +139,7 @@ matsim-agents supervisor-run LiFePO4 \
 >
 > **UMA prerequisite:** with `MLIP_BACKEND=uma`, the UMA weights must be
 > **prefetched** first — compute nodes have no internet and read the HF cache
-> offline. Run `sbatch scripts/download/perlmutter/download-uma-perlmutter.sh`
+> offline. Run `sbatch deployments/perlmutter/download/download-uma-perlmutter.sh`
 > once. See `docs/model-download.md` ("UMA MLIP weights on Perlmutter").
 
 > **Integration note:** `--al-dry-run` in `supervisor-run` only reports the
@@ -269,7 +269,7 @@ organic-inorganic MOFs better than the inorganic-trained HydraGNN model.
 ## Environment setup (all cases)
 
 ```bash
-source scripts/setup/perlmutter/setup_matsim_perlmutter.sh
+source deployments/perlmutter/setup/setup_matsim_perlmutter.sh
 export PROJ_ROOT=$PWD
 export RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs
 export MLIP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir

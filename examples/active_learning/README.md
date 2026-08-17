@@ -150,7 +150,7 @@ in the parsed `ALConfig`.
 
 1. Build VASP (one-time):
    ```bash
-   nohup bash scripts/setup/frontier/build-vasp-gpu-frontier.sh \
+   nohup bash deployments/frontier/setup/build-vasp-gpu-frontier.sh \
        > runs/build-vasp-gpu-login/build.log 2>&1 &
    ```
 
@@ -172,7 +172,7 @@ in the parsed `ALConfig`.
    ```bash
    sbatch --export=ALL,AL_CONFIG=$PWD/examples/active_learning/al_config.example.yaml \
        -N 64 -t 12:00:00 \
-       scripts/launchers/frontier/run-active-learning-frontier.sh
+       deployments/frontier/launchers/run-active-learning-frontier.sh
    ```
 
 ### Trigger this same AL flow from supervisor-run

@@ -12,10 +12,10 @@
 #
 # How to run (from the Frontier repo checkout):
 #   matsim-agents al validate-config examples/paper_cases/al_lifepo4_frontier.yaml
-#   CASE=lifepo4 sbatch scripts/advanced/frontier/job-active-learning-paper-cases-frontier.sh
+#   CASE=lifepo4 sbatch deployments/frontier/jobs/job-active-learning-paper-cases-frontier.sh
 #   # or, directly through the AL launcher:
 #   sbatch --export=ALL,AL_CONFIG=$PWD/examples/paper_cases/al_lifepo4_frontier.yaml \
-#       scripts/launchers/frontier/run-active-learning-frontier.sh
+#       deployments/frontier/launchers/run-active-learning-frontier.sh
 #
 # All vars default to the lrn070 project checkout but are env-overridable:
 #   PROJ_ROOT=$PWD RUNS_ROOT=/path/to/runs matsim-agents al run <cfg>
@@ -87,7 +87,7 @@ dft:
 
   vasp:
     vasp_bin:         ${VASP_BIN}
-    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/frontier/_vasp-step-frontier.sh
+    vasp_wrapper:     ${PROJ_ROOT}/deployments/frontier/launchers/_vasp-step-frontier.sh
     incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null            # use KSPACING from INCAR (auto Gamma mesh)
     potcar_dir:       ${POTCAR_DIR}
@@ -106,7 +106,7 @@ dft:
 trainer:
   enabled: true
   train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
-  train_launcher: ${PROJ_ROOT}/scripts/launchers/frontier/_hydragnn-train-step-frontier.sh
+  train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5
   nodes_for_train: 4
   ranks_per_node:  8

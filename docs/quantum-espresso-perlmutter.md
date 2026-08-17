@@ -35,7 +35,7 @@ Two build scripts are provided:
 Ensure your matsim-agents environment is set up:
 ```bash
 cd /global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
-source scripts/setup/perlmutter/perlmutter-module-stack.sh
+source deployments/perlmutter/setup/perlmutter-module-stack.sh
 ```
 
 ### Option A: GPU Build (Recommended)
@@ -43,24 +43,24 @@ source scripts/setup/perlmutter/perlmutter-module-stack.sh
 **Method 1: On a login node (survives disconnect)**
 ```bash
 mkdir -p runs/build-qe-gpu-login
-nohup bash scripts/setup/perlmutter/build-qe-gpu-perlmutter.sh \
+nohup bash deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh \
       > runs/build-qe-gpu-login/build-$(date +%Y%m%d-%H%M%S).log 2>&1 &
 ```
 
 **Method 2: As a batch job**
 ```bash
-sbatch scripts/setup/perlmutter/build-qe-gpu-perlmutter.sh
+sbatch deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh
 ```
 
 **Method 3: Custom build prefix**
 ```bash
-QE_PREFIX=/scratch/user/qe bash scripts/setup/perlmutter/build-qe-gpu-perlmutter.sh
+QE_PREFIX=/scratch/user/qe bash deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh
 ```
 
 ### Option B: CPU Build
 
 ```bash
-sbatch scripts/setup/perlmutter/build-qe-cpu-perlmutter.sh
+sbatch deployments/perlmutter/setup/build-qe-cpu-perlmutter.sh
 ```
 
 ## Build Output
@@ -84,7 +84,7 @@ external/quantum-espresso/
 
 Load the same modules and environment as used in the build:
 ```bash
-source scripts/setup/perlmutter/perlmutter-module-stack.sh
+source deployments/perlmutter/setup/perlmutter-module-stack.sh
 load_perlmutter_modules_gpu      # for GPU jobs
 # or
 # load_perlmutter_modules        # for CPU-only jobs
@@ -94,8 +94,8 @@ conda activate scripts/perlmutter_venv
 ### GPU Execution
 
 The canonical way to invoke `pw.x` on Perlmutter GPU nodes is via the bundled
-launcher [`scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh`](../scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh).
-It sources [`perlmutter-module-stack.sh`](../scripts/setup/perlmutter/perlmutter-module-stack.sh)
+launcher [`deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh`](../deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh).
+It sources [`perlmutter-module-stack.sh`](../deployments/perlmutter/setup/perlmutter-module-stack.sh)
 (`load_perlmutter_modules_nvidia`), exports a CUDA-12.9 `LD_LIBRARY_PATH`,
 turns on GPU-aware MPI, and `srun`s `pw.x` with the correct A100 layout
 (4 ranks × 4 GPUs × 16 OMP threads, `--gpu-bind=closest`):
@@ -112,7 +112,7 @@ turns on GPU-aware MPI, and `srun`s `pw.x` with the correct A100 layout
 #SBATCH --job-name=qe-gpu-job
 
 # The launcher loads its own module stack; no need to load anything here.
-./scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh test.in
+./deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh test.in
 ```
 
 The launcher also accepts environment overrides (`PW_BIN=`, `QE_PREFIX=`,
@@ -124,14 +124,14 @@ The launcher also accepts environment overrides (`PW_BIN=`, `QE_PREFIX=`,
 The HydraGNN-MLFF warm-start vs `pw.x` cold-start integration test
 ([`tests/integration/test_qe_warmstart.py`](../tests/integration/test_qe_warmstart.py))
 has a ready-made Perlmutter SBATCH wrapper at
-[`scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh`](../scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh).
+[`deployments/perlmutter/launchers/run-qe-warmstart-benchmark-perlmutter.sh`](../deployments/perlmutter/launchers/run-qe-warmstart-benchmark-perlmutter.sh).
 It loads the HydraGNN-aligned module stack + `hydragnn_venv`, exports the
 `MATSIM_QE_*` and `MATSIM_HYDRAGNN_*` env vars, and runs `pytest`:
 
 ```bash
 sbatch \
   --export=ALL,PSEUDO_DIR=/path/to/pseudos,FIXTURES=Si_diamond \
-  scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh
+  deployments/perlmutter/launchers/run-qe-warmstart-benchmark-perlmutter.sh
 ```
 
 ### CPU Execution
@@ -144,9 +144,9 @@ For CPU-only `pw.x`:
 #SBATCH -t 01:00:00
 #SBATCH -A m5216
 
-source scripts/setup/perlmutter/perlmutter-module-stack.sh
+source deployments/perlmutter/setup/perlmutter-module-stack.sh
 load_perlmutter_modules
-source scripts/setup/perlmutter/setup_matsim_perlmutter.sh
+source deployments/perlmutter/setup/setup_matsim_perlmutter.sh
 
 # Run with full 128 cores per node
 srun -N1 -n64 \
@@ -244,13 +244,13 @@ When running QE with GPU offload:
 ```bash
 # 1. Set up environment
 cd /global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
-source scripts/setup/perlmutter/perlmutter-module-stack.sh
+source deployments/perlmutter/setup/perlmutter-module-stack.sh
 load_perlmutter_modules_gpu
 conda activate scripts/perlmutter_venv
 
 # 2. Build QE GPU version (on login node, background)
 mkdir -p runs/build-qe-gpu-login
-nohup bash scripts/setup/perlmutter/build-qe-gpu-perlmutter.sh \
+nohup bash deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh \
       > runs/build-qe-gpu-login/build.log 2>&1 &
 tail -f runs/build-qe-gpu-login/build.log
 
@@ -285,7 +285,7 @@ cat > job-qe-test.sh << 'EOF'
 #!/bin/bash
 #SBATCH -N 1 -C gpu -q regular -t 00:10:00 -A m5216
 
-source scripts/setup/perlmutter/perlmutter-module-stack.sh
+source deployments/perlmutter/setup/perlmutter-module-stack.sh
 load_perlmutter_modules_gpu
 conda activate scripts/perlmutter_venv
 

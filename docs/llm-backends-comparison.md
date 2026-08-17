@@ -114,20 +114,20 @@ internals.
 
 | Scenario | Recommended backend |
 |---|---|
-| Validate GPU stack and model weights quickly | **Transformers + Accelerate** (`scripts/smoke-tests/frontier/smoke-transformers-frontier.sh`) |
-| Run matsim-agents with many concurrent agent steps | **vLLM** (`scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh`) |
+| Validate GPU stack and model weights quickly | **Transformers + Accelerate** (`deployments/frontier/smoke-tests/smoke-transformers-frontier.sh`) |
+| Run matsim-agents with many concurrent agent steps | **vLLM** (`deployments/frontier/smoke-tests/smoke-vllm-singlenode-frontier.sh`) |
 | Fine-tune or debug model internals | **Transformers + Accelerate** |
-| Production multi-node serving | **vLLM** (`scripts/smoke-tests/frontier/smoke-vllm-multinode-frontier.sh`) |
+| Production multi-node serving | **vLLM** (`deployments/frontier/smoke-tests/smoke-vllm-multinode-frontier.sh`) |
 
 The smoke-test scripts cover both cases:
 
 ```bash
 # HuggingFace Transformers (works today, no build needed)
-sbatch scripts/smoke-tests/frontier/smoke-transformers-frontier.sh
+sbatch deployments/frontier/smoke-tests/smoke-transformers-frontier.sh
 
 # vLLM (requires source build first)
-sbatch scripts/setup/frontier/build-vllm-rocm72.sh                 # one-time build
-sbatch scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh   # then serve
+sbatch deployments/frontier/setup/build-vllm-rocm72.sh                 # one-time build
+sbatch deployments/frontier/smoke-tests/smoke-vllm-singlenode-frontier.sh   # then serve
 ```
 
 ---
@@ -143,20 +143,20 @@ no `torchrun` agent).
 
 | Scenario | Recommended backend |
 |---|---|
-| Validate the GPU stack on a single node | **Transformers + Accelerate** ([scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh](../scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh)) |
-| Sweep all locally-cached models | [scripts/launchers/perlmutter/launch-test-all-models-perlmutter.sh](../scripts/launchers/perlmutter/launch-test-all-models-perlmutter.sh) |
-| Multi-node TP (Qwen2.5-72B, Mixtral-8x22B) | **Transformers `tp_plan="auto"`** ([scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh](../scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh)) |
-| LLM + HydraGNN + QE end-to-end | [scripts/advanced/perlmutter/job-discovery-chat-perlmutter.sh](../scripts/advanced/perlmutter/job-discovery-chat-perlmutter.sh) |
+| Validate the GPU stack on a single node | **Transformers + Accelerate** ([deployments/perlmutter/smoke-tests/smoke-transformers-perlmutter.sh](../deployments/perlmutter/smoke-tests/smoke-transformers-perlmutter.sh)) |
+| Sweep all locally-cached models | [deployments/perlmutter/launchers/launch-test-all-models-perlmutter.sh](../deployments/perlmutter/launchers/launch-test-all-models-perlmutter.sh) |
+| Multi-node TP (Qwen2.5-72B, Mixtral-8x22B) | **Transformers `tp_plan="auto"`** ([deployments/perlmutter/smoke-tests/smoke-transformers-multinode-perlmutter.sh](../deployments/perlmutter/smoke-tests/smoke-transformers-multinode-perlmutter.sh)) |
+| LLM + HydraGNN + QE end-to-end | [deployments/perlmutter/jobs/job-discovery-chat-perlmutter.sh](../deployments/perlmutter/jobs/job-discovery-chat-perlmutter.sh) |
 
 ```bash
 # Single-node smoke (defaults to Qwen2.5-72B; override via MATSIM_MODEL_DIR)
-sbatch scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh
+sbatch deployments/perlmutter/smoke-tests/smoke-transformers-perlmutter.sh
 
 # Multi-node TP smoke (2 nodes × 4 A100s = 8 ranks, NCCL + tp_plan="auto")
-sbatch scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh
+sbatch deployments/perlmutter/smoke-tests/smoke-transformers-multinode-perlmutter.sh
 
 # End-to-end discovery validation
-sbatch scripts/advanced/perlmutter/job-discovery-chat-perlmutter.sh
+sbatch deployments/perlmutter/jobs/job-discovery-chat-perlmutter.sh
 ```
 
 ---
@@ -164,8 +164,8 @@ sbatch scripts/advanced/perlmutter/job-discovery-chat-perlmutter.sh
 ## Related docs
 
 - [docs/model-download.md](model-download.md) — downloading Qwen2.5-72B-Instruct
-- [scripts/smoke-tests/frontier/smoke-transformers-frontier.sh](../scripts/smoke-tests/frontier/smoke-transformers-frontier.sh)
-- [scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh](../scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh)
-- [scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh](../scripts/smoke-tests/perlmutter/smoke-transformers-perlmutter.sh)
-- [scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh](../scripts/smoke-tests/perlmutter/smoke-transformers-multinode-perlmutter.sh)
-- [scripts/setup/perlmutter/README.md](../scripts/setup/perlmutter/README.md)
+- [deployments/frontier/smoke-tests/smoke-transformers-frontier.sh](../deployments/frontier/smoke-tests/smoke-transformers-frontier.sh)
+- [deployments/frontier/smoke-tests/smoke-vllm-singlenode-frontier.sh](../deployments/frontier/smoke-tests/smoke-vllm-singlenode-frontier.sh)
+- [deployments/perlmutter/smoke-tests/smoke-transformers-perlmutter.sh](../deployments/perlmutter/smoke-tests/smoke-transformers-perlmutter.sh)
+- [deployments/perlmutter/smoke-tests/smoke-transformers-multinode-perlmutter.sh](../deployments/perlmutter/smoke-tests/smoke-transformers-multinode-perlmutter.sh)
+- [deployments/perlmutter/setup/README.md](../deployments/perlmutter/setup/README.md)

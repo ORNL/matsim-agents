@@ -27,9 +27,8 @@ from matsim_agents.discovery import (
     explore_composition,
     extract_compositions,
 )
-from matsim_agents.llm import get_chat_model
-from matsim_agents.tools.relaxation import RelaxStructureInput
-from matsim_agents.tools.relaxation import _run as _run_relaxation
+from matsim_agents.backends.llm.provider import get_chat_model
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run as _run_relaxation
 
 DEFAULT_SYSTEM_PROMPT = """You are a materials-discovery research partner.
 Your role is to help the user generate, critique, and refine hypotheses for
@@ -96,7 +95,7 @@ class DiscoveryChatConfig:
         The user selects exactly one ``mlip_backend`` and must supply the
         inputs that backend needs; the inputs for the other backend are
         ignored. This mirrors the validation in
-        :class:`matsim_agents.tools.relaxation.RelaxStructureInput` so the
+        :class:`matsim_agents.backends.mlip.relaxation.RelaxStructureInput` so the
         error surfaces at configuration time rather than at the first
         relaxation.
         """

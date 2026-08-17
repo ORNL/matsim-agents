@@ -15,7 +15,7 @@ Example:
   python scripts/diagnostics/collect_paper_results.py \
     --runs-root /global/cfs/projectdirs/m5216/mlupopa/runs \
     --runs-root /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs \
-    --output-csv docs/paper/results/paper_results_master.csv
+    --output-csv research/paper/manuscript/results/paper_results_master.csv
 """
 
 from __future__ import annotations
@@ -277,12 +277,12 @@ def main() -> int:
     )
     parser.add_argument(
         "--output-csv",
-        default="docs/paper/results/paper_results_master.csv",
+        default="research/paper/manuscript/results/paper_results_master.csv",
         help="Path to consolidated CSV.",
     )
     parser.add_argument(
         "--output-json",
-        default="docs/paper/results/paper_results_master.json",
+        default="research/paper/manuscript/results/paper_results_master.json",
         help="Path to consolidated JSON.",
     )
     args = parser.parse_args()

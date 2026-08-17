@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 
-from matsim_agents.active_learning.backends.vasp import VASPBackend
+from matsim_agents.backends.dft.vasp import VASPBackend
 from matsim_agents.active_learning.config import VASPConfig
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
 from matsim_agents.active_learning.dft_runner import run_dft_batch

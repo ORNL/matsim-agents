@@ -73,7 +73,7 @@ def _build_single_head_calculator(
     import torch
     from ase.calculators.calculator import Calculator, all_changes
 
-    from matsim_agents.tools.relaxation import _atoms_to_graph  # type: ignore[attr-defined]
+    from matsim_agents.backends.mlip.relaxation import _atoms_to_graph  # type: ignore[attr-defined]
 
     class SingleHeadHydraGNNCalculator(Calculator):
         implemented_properties = ["energy", "forces"]
@@ -115,7 +115,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
 
     import torch
 
-    from matsim_agents.tools.relaxation import (
+    from matsim_agents.backends.mlip.relaxation import (
         _build_calculator,  # type: ignore[attr-defined]
     )
 

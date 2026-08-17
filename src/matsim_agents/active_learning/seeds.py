@@ -81,7 +81,7 @@ def _ask_llm_for_compositions(
     """Send ``prompt`` to the LLM and parse a JSON list of formulas back."""
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    from matsim_agents.llm import get_chat_model
+    from matsim_agents.backends.llm.provider import get_chat_model
 
     user_msg = f"Target: {prompt.strip()}\nReturn up to {n_target} distinct compositions."
     llm = get_chat_model(

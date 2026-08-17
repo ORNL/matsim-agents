@@ -8,9 +8,9 @@ Use the first-command patterns below from the repository root.
 
 | Platform | First build command | First run command |
 |---|---|---|
-| Frontier (OLCF, MI250X) | `nohup bash scripts/setup/frontier/build-qe-gpu-frontier.sh > runs/build-qe-gpu-login/build-$(date +%Y%m%d-%H%M%S).log 2>&1 &` | `sbatch scripts/launchers/frontier/run-pw-gpu-frontier.sh path/to/your.in` |
-| Aurora (ALCF, PVC) | `bash scripts/setup/aurora/build-qe-gpu-aurora.sh` | `bash scripts/launchers/aurora/run-pw-gpu-aurora.sh path/to/pw.in` |
-| Perlmutter (NERSC, A100) | `nohup bash scripts/setup/perlmutter/build-qe-gpu-perlmutter.sh > runs/build-qe-gpu-login/build-$(date +%Y%m%d-%H%M%S).log 2>&1 &` | `./scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh path/to/pw.in` |
+| Frontier (OLCF, MI250X) | `nohup bash deployments/frontier/setup/build-qe-gpu-frontier.sh > runs/build-qe-gpu-login/build-$(date +%Y%m%d-%H%M%S).log 2>&1 &` | `sbatch deployments/frontier/launchers/run-pw-gpu-frontier.sh path/to/your.in` |
+| Aurora (ALCF, PVC) | `bash deployments/aurora/setup/build-qe-gpu-aurora.sh` | `bash deployments/aurora/launchers/run-pw-gpu-aurora.sh path/to/pw.in` |
+| Perlmutter (NERSC, A100) | `nohup bash deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh > runs/build-qe-gpu-login/build-$(date +%Y%m%d-%H%M%S).log 2>&1 &` | `./deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh path/to/pw.in` |
 
 If you need full context (toolchain pins, overrides, troubleshooting), continue
 to the detailed per-platform sections below.
@@ -20,8 +20,8 @@ to the detailed per-platform sections below.
 ### Frontier (OLCF, AMD MI250X)
 
 - Guide: [docs/quantum-espresso-frontier.md](quantum-espresso-frontier.md)
-- Build script: [scripts/setup/frontier/build-qe-gpu-frontier.sh](../scripts/setup/frontier/build-qe-gpu-frontier.sh)
-- Launcher: [scripts/launchers/frontier/run-pw-gpu-frontier.sh](../scripts/launchers/frontier/run-pw-gpu-frontier.sh)
+- Build script: [deployments/frontier/setup/build-qe-gpu-frontier.sh](../deployments/frontier/setup/build-qe-gpu-frontier.sh)
+- Launcher: [deployments/frontier/launchers/run-pw-gpu-frontier.sh](../deployments/frontier/launchers/run-pw-gpu-frontier.sh)
 
 Highlights:
 
@@ -31,8 +31,8 @@ Highlights:
 ### Aurora (ALCF, Intel PVC)
 
 - Guide: [docs/quantum-espresso-aurora.md](quantum-espresso-aurora.md)
-- Build script: [scripts/setup/aurora/build-qe-gpu-aurora.sh](../scripts/setup/aurora/build-qe-gpu-aurora.sh)
-- Launcher: [scripts/launchers/aurora/run-pw-gpu-aurora.sh](../scripts/launchers/aurora/run-pw-gpu-aurora.sh)
+- Build script: [deployments/aurora/setup/build-qe-gpu-aurora.sh](../deployments/aurora/setup/build-qe-gpu-aurora.sh)
+- Launcher: [deployments/aurora/launchers/run-pw-gpu-aurora.sh](../deployments/aurora/launchers/run-pw-gpu-aurora.sh)
 
 Highlights:
 
@@ -44,7 +44,7 @@ Highlights:
 ### Aurora (ALCF, Intel PVC)
 
 - Guide: [docs/vasp-aurora.md](vasp-aurora.md)
-- Build script: [scripts/setup/aurora/build-vasp-gpu-aurora.sh](../scripts/setup/aurora/build-vasp-gpu-aurora.sh)
+- Build script: [deployments/aurora/setup/build-vasp-gpu-aurora.sh](../deployments/aurora/setup/build-vasp-gpu-aurora.sh)
 
 Highlights:
 
@@ -56,8 +56,8 @@ Highlights:
 ### Perlmutter (NERSC, NVIDIA A100)
 
 - Guide: [docs/vasp-perlmutter.md](vasp-perlmutter.md)
-- Build script: [scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh](../scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh)
-- Launchers: [scripts/launchers/perlmutter/run-vasp-gpu-perlmutter.sh](../scripts/launchers/perlmutter/run-vasp-gpu-perlmutter.sh) (standalone / warm-start), [scripts/launchers/perlmutter/_vasp-step-perlmutter.sh](../scripts/launchers/perlmutter/_vasp-step-perlmutter.sh) (AL loop DFT step)
+- Build script: [deployments/perlmutter/setup/build-vasp-gpu-perlmutter.sh](../deployments/perlmutter/setup/build-vasp-gpu-perlmutter.sh)
+- Launchers: [deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh](../deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh) (standalone / warm-start), [deployments/perlmutter/launchers/_vasp-step-perlmutter.sh](../deployments/perlmutter/launchers/_vasp-step-perlmutter.sh) (AL loop DFT step)
 
 Highlights:
 
@@ -68,9 +68,9 @@ Highlights:
 ## Quantum Espresso on Perlmutter
 
 - Guide: [docs/quantum-espresso-perlmutter.md](quantum-espresso-perlmutter.md)
-- Build scripts overview: [scripts/setup/perlmutter/QE-BUILD-GUIDE.md](../scripts/setup/perlmutter/QE-BUILD-GUIDE.md)
-- Setup docs: [scripts/setup/perlmutter/README.md](../scripts/setup/perlmutter/README.md)
-- Launcher: [scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh](../scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh)
+- Build scripts overview: [deployments/perlmutter/setup/QE-BUILD-GUIDE.md](../deployments/perlmutter/setup/QE-BUILD-GUIDE.md)
+- Setup docs: [deployments/perlmutter/setup/README.md](../deployments/perlmutter/setup/README.md)
+- Launcher: [deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh](../deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh)
 
 Highlights:
 
@@ -82,9 +82,9 @@ Highlights:
 ### Aurora (ALCF, Intel PVC)
 
 - Full guide (install, challenges, fixes): [docs/vllm-aurora.md](vllm-aurora.md)
-- Stack verification script: [scripts/setup/aurora/install-vllm-xpu-aurora.sh](../scripts/setup/aurora/install-vllm-xpu-aurora.sh)
-- Single-node smoke test: [scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh](../scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh)
-- Multi-node serve job: [scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh](../scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh)
+- Stack verification script: [deployments/aurora/setup/install-vllm-xpu-aurora.sh](../deployments/aurora/setup/install-vllm-xpu-aurora.sh)
+- Single-node smoke test: [deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh](../deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh)
+- Multi-node serve job: [deployments/aurora/jobs/job-serve-multinode-vllm-aurora.sh](../deployments/aurora/jobs/job-serve-multinode-vllm-aurora.sh)
 
 Highlights:
 
@@ -97,7 +97,7 @@ Highlights:
 
 ### Frontier (OLCF, AMD MI250X)
 
-See the Frontier vLLM smoke test: [scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh](../scripts/smoke-tests/frontier/smoke-vllm-singlenode-frontier.sh)
+See the Frontier vLLM smoke test: [deployments/frontier/smoke-tests/smoke-vllm-singlenode-frontier.sh](../deployments/frontier/smoke-tests/smoke-vllm-singlenode-frontier.sh)
 
 ## LLM and model-serving docs on HPC
 

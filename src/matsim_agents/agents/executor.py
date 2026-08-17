@@ -11,8 +11,8 @@ import os
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 
-from matsim_agents.state import MatSimState
-from matsim_agents.tools.relaxation import RelaxStructureInput, _run
+from matsim_agents.orchestration.state import MatSimState
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 
 
 def _cfg_or_env(
