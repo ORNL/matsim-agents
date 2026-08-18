@@ -1123,7 +1123,7 @@ launcher details, and per-backend ROCm/MPI gotchas — lives in
 
 ## Codabench Competition
 
-The `research/codabench/competition/` directory contains a fully self-contained
+The `benchmarks/codabench/` directory contains a fully self-contained
 [Codabench](https://www.codabench.org/) challenge called the
 **Matsim-Agents Materials Discovery Challenge**.
 
@@ -1173,7 +1173,7 @@ the competition. To switch to final ranking, change the key prefix from
 
 ### Baselines
 
-Four baselines are provided in `research/codabench/competition/baselines/`:
+Four baselines are provided in `benchmarks/codabench/baselines/`:
 
 | Baseline | Architecture | Source |
 |----------|-------------|--------|
@@ -1185,7 +1185,7 @@ Four baselines are provided in `research/codabench/competition/baselines/`:
 Run any or all baselines:
 
 ```bash
-cd codabench_competition
+cd benchmarks/codabench
 python run_baselines.py --model mace        # MACE-MP-0
 python run_baselines.py --model hydragnn    # HydraGNN
 python run_baselines.py --model uma         # UMA (requires fairchem-core ≥2.20)
@@ -1201,7 +1201,7 @@ accepted before use at <https://huggingface.co/facebook/UMA> and
 ### Directory layout
 
 ```
-research/codabench/competition/
+benchmarks/codabench/
 ├── competition.yaml             # Codabench bundle manifest & leaderboard config
 ├── run_baselines.py             # entry point: --model mace/hydragnn/uma/allscaip/all
 ├── evaluate.py                  # local evaluation helper (mirrors the Codabench scorer)
@@ -1231,7 +1231,7 @@ research/codabench/competition/
     └── MODEL_INTERFACE.md       # how to write a custom MLIP adapter
 ```
 
-See [`research/codabench/competition/starting_kit/README.md`](research/codabench/competition/starting_kit/README.md)
+See [`benchmarks/codabench/starting_kit/README.md`](benchmarks/codabench/starting_kit/README.md)
 for the full participant guide including submission formats.
 
 ---
