@@ -3,7 +3,6 @@
 
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
-\usepackage{algorithmic}
 \usepackage{graphicx}
 \usepackage{textcomp}
 \usepackage{xcolor}
@@ -19,7 +18,6 @@
 }
 \usepackage{booktabs}
 \usepackage{multirow}
-\usepackage{listings}
 \usepackage{microtype}
 \usepackage[nohyperlinks]{acronym}
 % Acronym definitions. Use \newacro in the preamble so acronyms are available on the first LaTeX pass.
@@ -49,6 +47,7 @@
 \newacro{RMS}[RMS]{root mean square}
 \newacro{BCC}[BCC]{body-centered cubic}
 \newacro{HEA}[HEA]{high-entropy alloy}
+\newacro{GGA}[GGA]{generalized-gradient approximation}
 \newacro{MOF}[MOF]{metal--organic framework}
 \newacro{GPU}[GPU]{graphics processing unit}
 \newacro{CUDA}[CUDA]{Compute Unified Device Architecture}
@@ -81,14 +80,6 @@
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 
-% ── Listings style for code snippets ─────────────────────────────────────────
-\lstset{
-  basicstyle=\ttfamily\footnotesize,
-  breaklines=true,
-  frame=single,
-  columns=flexible,
-}
-
 \begin{document}
 
 % =============================================================================
@@ -96,35 +87,34 @@
 Atomistic Materials Characterization}
 
 \author{
-\IEEEauthorblockN{Massimiliano Lupo Pasini$^{1}$}
-\IEEEauthorblockA{\textit{Oak Ridge National Laboratory}\\
-Oak Ridge, TN, USA\\
-lulopasim@ornl.gov}
+\IEEEauthorblockN{Massimiliano Lupo Pasini\textsuperscript{1} (corresponding author), Zekun Chen\textsuperscript{2}, Anubhav Jain\textsuperscript{2}}
+\IEEEauthorblockA{\textsuperscript{1}Computational Sciences and Engineering Division, Oak Ridge National Laboratory}
+\IEEEauthorblockA{\textsuperscript{2}Energy Storage \& Distributed Resources Lawrence Berkeley National Laboratory}\IEEEauthorblockA{lupopasinim@ornl.gov, zchen11@lbl.gov ajain@lbl.gov}
 }
 
 \maketitle
 
 % =============================================================================
 \begin{abstract}
-We present \textsc{matsim-agents}, an agentic \ac{AI} workflow that couples
-\acp{LLM} to atomistic simulation for materials discovery on leadership-class
-\ac{HPC}. The framework is portable by construction to all three \ac{DOE}
-leadership supercomputers---\ac{NERSC} Perlmutter, \ac{OLCF} Frontier, and
-\ac{ALCF} Aurora---treating the \ac{MLIP} and the first-principles engine as
+We present \textsc{matsim-agents}, a fault-tolerant, backend-portable agentic
+\ac{AI} workflow that translates natural-language scientific objectives into
+typed, auditable atomistic-simulation plans on leadership-class \ac{HPC}. A
+checkpointed \acs{LLM}-driven orchestration layer couples fast \ac{MLIP}
+exploration, selective first-principles (\acs{DFT}) labeling, and model
+adaptation, treating both the \ac{MLIP} and the \acs{DFT} engine as
 configuration-selected backends (HydraGNN, UMA, and MACE-MP potentials; \ac{QE}
-and \ac{VASP}) behind a single orchestration layer. Within this framework,
-\acsp{LLM} formulate scientific hypotheses; an \ac{MLIP} augments the knowledge
-available to them by characterizing candidate structures at the atomistic scale;
-and an \ac{AL} loop escalates selectively to first-principles
-calculations to improve \acs{MLIP} accuracy where it is weakest. Crucially, these
-two capabilities close the loop back onto hypothesis formulation: the sharpened,
-quantitatively benchmarked surrogate accuracies automatically augment the knowledge
-the \acsp{LLM} reason over, improving the scientific soundness of the hypotheses
-they produce. We show the complete loop running unattended on Perlmutter,
-where a multi-\acs{LLM} hypothesis-debate stage---an \acs{LLM} proposer with a
-panel of independent critics---returns materially different crystal-structure
-stability verdicts before versus after \acs{AL} fine-tuning across two
-high-entropy alloys and a LiFePO$_4$ cathode.
+and \ac{VASP}). The \acs{LLM} plans and interprets evidence, while explicit
+scientific-computation stages produce every physical quantity and rule-based gates
+decide when to escalate to \acs{DFT}. Across five unattended end-to-end campaigns
+on \ac{NERSC} Perlmutter the loop runs without manual intervention and resumes across batch
+allocations; single-point \acs{DFT} labeling accounts for $88$--$97\%$ of
+iteration wall time while all non-\acs{DFT} stages combined account for
+$3$--$12\%$, and the dominant \acs{DFT} stage scales from one to eight nodes at
+$74$--$79\%$ parallel efficiency. We further show that measured surrogate accuracy
+can drive an auditable decision to continue \acs{MLIP} screening or escalate
+to first-principles calculations, and we characterize backend- and
+material-dependent fine-tuning and warm-start behavior across positive, neutral,
+and negative outcomes.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -133,6 +123,8 @@ UMA, MACE, fairchem-core, universal MLIP,
 active learning, Quantum ESPRESSO, VASP,
 warm-start, high-performance computing, scientific workflow
 \end{IEEEkeywords}
+
+{\footnotesize{This manuscript has been authored in part by UT-Battelle, LLC, under contract DE-AC05-00OR22725 with the US Department of Energy (DOE). The US government retains and the publisher, by accepting the article for publication, acknowledges that the US government retains a nonexclusive, paid-up, irrevocable, worldwide license to publish or reproduce the published form of this manuscript, or allow others to do so, for US government purposes. DOE will provide public access to these results of federally sponsored research in accordance with the DOE Public Access Plan (\url{http://energy.gov/downloads/doe-public-access-plan}).}}
 
 % =============================================================================
 \section{Introduction}
@@ -148,143 +140,103 @@ near-\acs{DFT} accuracy at a fraction of the cost, but their reliability degrade
 silently outside the training distribution, making undetected extrapolation a
 practical risk in autonomous workflows.
 
-Agentic \acs{AI} offers a principled route through autonomous planning, tool invocation,
-conditional branching, and iterative self-improvement to address both challenges. By embedding an \ac{MLIP} inside a decision-making
-loop with \acs{DFT} escalation, an
-agentic workflow can \emph{explore broadly} with the \acs{MLIP} and \emph{correct
-selectively} with \acs{DFT}, reserving expensive quantum-mechanical calculations for
-only those configurations where first-principles accuracy is genuinely needed.
+Agentic \acs{AI} provides a mechanism for coordinating these tasks through
+planning, tool invocation, conditional branching, and repeated evaluation. By
+embedding an \ac{MLIP} within a workflow that can escalate selected
+configurations to \acs{DFT}, the system can use the surrogate for broad
+exploration while reserving first-principles calculations for configurations
+that require higher-fidelity evaluation.
 
 Existing \acs{AL} workflows for \acp{MLIP}~\cite{smith2018,vandermause2020,
-podryabinkin2017} already automate the cycle of candidate generation, \acs{DFT}
-labeling, and model retraining. \textsc{matsim-agents} advances this paradigm
-by introducing a closed-loop agentic orchestration layer that connects
-natural-language scientific objectives to executable atomistic simulation tasks,
-\acs{MLIP}-based exploration, validation-gated \acs{DFT} escalation,
-\acs{AL}, and language-level scientific synthesis. This loop transforms
-materials simulation from a manually configured sequence of computational steps
-into an autonomous scientific workflow in which planning, execution,
-validation, correction, and reporting are coordinated by interacting agents.
+podryabinkin2017} already automate candidate generation, \acs{DFT} labeling, and
+retraining, and recent agentic tools add \acs{LLM}-driven planning on top.
+Several practical challenges remain for deployment on leadership-class
+\acs{HPC}. Many workflows are tied to a particular surrogate or
+first-principles engine, making changes in model, \acs{DFT} code, or computing
+platform more involved than a configuration change. Long-running campaigns must
+also tolerate job failures and allocation boundaries while preserving a
+consistent workflow state. In addition, the computational cost of the
+coordination layer is rarely reported relative to the dominant scientific
+calculations, and escalation policies are often specified a priori rather than
+linked to measured surrogate accuracy. Backend sensitivity, neutral transfer,
+and negative transfer also merit explicit characterization because they affect
+when a workflow should adapt a model or invoke a higher-fidelity calculation.
 
-The novelty of \textsc{matsim-agents} lies in making the full decision cycle
-explicit and executable on leadership-class \acs{HPC} systems. A user can state an
-open-ended materials objective in natural language; the planner converts that
-objective into typed atomistic tasks; the executor performs fast \acs{MLIP}-based
-relaxation through a user-selected backend (HydraGNN, UMA, or MACE-MP); a validation gate
-decides whether the prediction can proceed to
-analysis or must be escalated to \ac{DFT}-driven \acs{AL}; and the analyst
-returns an interpretable scientific summary. In this design, this escalation
-decision acts as a lightweight, workflow-level triage that determines
-whether the agentic system accepts a prediction or escalates it for first-principles correction.
+We introduce \textsc{matsim-agents} \cite{osti-code-181158} \footnote{\url{https://github.com/ORNL/matsim-agents}}, an open-source, fault-tolerant agentic
+\acs{AI} framework that addresses these limitations directly. A checkpointed
+LangGraph orchestration layer connects a natural-language objective to executable
+atomistic tasks: a planner converts the objective into typed tasks; an executor
+performs fast \acs{MLIP} relaxation through a user-selected backend (HydraGNN~\cite{hydragnn,lupopasini2026exascalegfm},
+UMA~\cite{wood2025uma}, or MACE-MP~\cite{batatia2022,batatia2023macemp}); a validation gate decides whether each prediction can proceed to
+analysis or must be escalated to \ac{DFT}-driven \acs{AL}; and an analyst returns
+an interpretable summary. Both the \acs{MLIP} and the first-principles engine are
+configuration-selected backends---the workflow supports
+\ac{QE}~\cite{giannozzi2009qe,giannozzi2017qe} (open source) and
+\ac{VASP}~\cite{kresse1993vasp,kresse1996vasp} (licensed) and ships build scripts
+for both on \ac{NERSC} Perlmutter, \ac{ALCF} Aurora, and \ac{OLCF}
+Frontier---so retargeting the loop is a configuration change, not a rewrite. The
+state machine checkpoints its typed state at every transition and resumes across
+job failures and allocation boundaries. Escalation is based on measured
+surrogate accuracy, and the evaluation includes positive, neutral, and negative
+adaptation and warm-start outcomes. In its current scope the loop is exercised to estimate the chemical and
+dynamical stability of candidate structures for a given element set and varying
+stoichiometries to support materials \emph{characterization}, which is a prerequisite for materials discovery and design.
 
-In its current capabilities, the \acs{AL} workflow is exercised
-specifically to estimate the chemical and dynamical stability of an ensemble of
-candidate atomistic structures, determining which crystallographic structures
-are chemically and dynamically stable for a given set of elements and for varying
-stoichiometric formulas. In this scope the framework automates materials
-\emph{characterization}, which is a crucial prerequisite for informed materials
-discovery and design rather than a substitute for it.
-
-A second important capability is explicit user control over the first-principles
-backend. The workflow supports both \ac{QE}~\cite{giannozzi2009qe,giannozzi2017qe}, an open-source \acs{DFT}
-code, and \ac{VASP}~\cite{kresse1993vasp,kresse1996vasp}, a licensed closed-source \acs{DFT} code. The user can select the \acs{DFT}
-engine most appropriate for their scientific problem, institutional software
-access, pseudopotential library, and production workflow. To make this choice
-practical on \acs{DOE} systems, \textsc{matsim-agents} provides detailed bash scripts
-for compiling both \acs{QE} and \acs{VASP} on the three main \ac{DOE} leadership-class
-supercomputing facilities: \ac{NERSC} Perlmutter, \ac{ALCF} Aurora, and \ac{OLCF} Frontier.
-
-In this paper we present \textsc{matsim-agents}, an open-source framework that
-realises this agentic materials-discovery loop. The main novel contributions of
-this work are:
+The main novel contributions of this work are:
 
 \begin{itemize}
-\item A \textbf{closed-loop agentic workflow} that translates natural-language
-  materials objectives into executable atomistic simulation tasks through a
-  checkpointed LangGraph multi-agent state machine, integrating \ac{LLM} planning,
-  backend-agnostic \acs{MLIP} relaxation, validation-gated \acs{DFT} labeling,
-  \acs{AL}, and scientific summarization in a single reproducible loop.
-\item A \textbf{\acs{DFT} warm-start capability} in which \acs{MLIP}-relaxed structures are
-  used to initialize higher-fidelity first-principles optimization, evaluated
-  with a \emph{factorial backend ablation} that pairs each \acs{MLIP} backend
-  (HydraGNN~\cite{hydragnn} and UMA~\cite{wood2025uma}) with each \acs{DFT}
-  solver (\acs{QE} and \acs{VASP}). Beyond
-  accelerating \acs{DFT} convergence, the cold-start vs.\ warm-start comparison serves
-  two additional roles in the agentic workflow: it acts as a computational
-  validation safety net for the \acs{MLIP} predictions by testing whether the
-  \acs{MLIP}-relaxed geometry is genuinely closer to the \acs{DFT} minimum, and it
-  exposes regions of \acs{MLIP} weakness in materials space, cases where warm-start
-  benefit is absent or where \acs{DFT} convergence degrades, that can be used to
-  target \acs{AL} data collection and improve model robustness.
-\item A \textbf{closed-loop \acs{AL} showcase and cross-backend
-  fine-tuning benchmark}: the full loop is run unattended end-to-end on
-  Perlmutter across five materials cases---driving \acs{MLIP}-\acs{MD} sampling,
-  candidate screening, and concurrent \acs{DFT} labeling with
-  per-iteration checkpointing---and the resulting \acs{AL}-corrected
-  datasets are used to fine-tune and evaluate all three \acs{MLIP} backends
-  (HydraGNN, UMA, and the MACE-MP capacities) under a single like-for-like
-  protocol, so the loop both generates targeted training data and measures how
-  much each potential improves on the chemistry it sampled.
-\item An \textbf{\acs{HPC}-oriented deployment model} that supports local \acs{LLM}
-  inference, \acs{GPU}-accelerated atomistic simulation, batch-scheduled
-  first-principles calculations, checkpointed workflow execution, and
-  platform-specific support for heterogeneous \ac{DOE} leadership-class systems.
+\item A \textbf{fault-tolerant, backend-portable agentic workflow} that turns a
+  natural-language objective into a typed, executable plan and drives \acs{MLIP}
+  exploration, selective \acs{DFT} labeling, and model adaptation through a
+  checkpointed LangGraph state machine that resumes across job failures and
+  \acs{HPC} allocation boundaries.
+\item A \textbf{quantitative characterization of workflow cost and scaling}:
+  across five unattended multi-iteration campaigns all non-\acs{DFT} stages
+  combined (\acs{MLIP} calculator setup, \acs{MLIP}-\acs{MD} sampling, candidate
+  selection, dataset updates, and the orchestration/retrain hooks) account for
+  only $3$--$12\%$ of iteration wall time while single-point \acs{DFT} labeling
+  accounts for $88$--$97\%$, and the dominant \acs{DFT} stage scales from one to
+  eight nodes at $74$--$79\%$ parallel efficiency.
+\item An \textbf{evidence-based model-adaptation loop} that fine-tunes and
+  evaluates all three \acs{MLIP} backends (HydraGNN, UMA, and the MACE-MP
+  capacities) on loop-generated data behind a common backend abstraction,
+  exposing material- and backend-dependent behavior across positive, neutral,
+  and negative warm-start and fine-tuning outcomes.
 \end{itemize}
 
 The paper is organised as follows. Section~\ref{sec:related} reviews related
 work. Section~\ref{sec:architecture} describes the system architecture.
 Section~\ref{sec:hpc} details the \acs{HPC} deployment strategy.
 Section~\ref{sec:results} presents benchmark results on Perlmutter.
-Section~\ref{sec:conclusions} discusses findings, limitations, and future
-developments, and draws conclusions.
+Section~\ref{sec:conclusions} summarizes the main findings and outlines future
+work.
 
 % =============================================================================
 \section{Related Work}
 \label{sec:related}
 
-\subsection{Machine-Learned Interatomic Potentials}
-The past decade has seen rapid development of \acp{MLIP}, from kernel-based
-Gaussian approximation potentials~\cite{bartok2010} and behler-Parrinello
-networks~\cite{behler2007} to graph-neural-network architectures such as
-NequIP~\cite{batzner2022}, MACE~\cite{batatia2022}, and
-SchNet~\cite{schutt2018}. Foundation models trained on diverse datasets
-(such as CHGNet~\cite{deng2023}, MACE-MP~\cite{batatia2023macemp}, and
-UMA~\cite{wood2025uma}) have further broadened coverage. HydraGNN is an atomistic \ac{GFM} trained in a recent exascale multi-task
-workflow, using shared message-passing representations with
-dataset-/fidelity-specific prediction heads~\cite{hydragnn,lupopasini2026exascalegfm}.
+\acp{MLIP} have advanced from kernel-based Gaussian approximation
+potentials~\cite{bartok2010} and Behler--Parrinello networks~\cite{behler2007} to
+graph architectures such as NequIP~\cite{batzner2022}, MACE~\cite{batatia2022},
+and SchNet~\cite{schutt2018}, and to foundation models trained on diverse
+corpora (CHGNet~\cite{deng2023}, MACE-MP~\cite{batatia2023macemp}, and
+UMA~\cite{wood2025uma}); HydraGNN is an exascale-pretrained multi-task graph
+foundation model~\cite{hydragnn,lupopasini2026exascalegfm}. Because \acs{MLIP}
+accuracy degrades silently outside the training distribution~\cite{bartok2010,
+batzner2022}, selective first-principles correction remains essential.
 
-\subsection{Active Learning for Materials}
-\acs{AL} has been used to iteratively expand \acs{MLIP} training sets with
-targeted \acs{DFT} calculations, and several mature frameworks now automate this
-cycle. FLARE~\cite{vandermause2020,vandermause2022} uses Bayesian force fields
-with on-the-fly uncertainty to trigger \acs{DFT} calls during \acs{MD}.
-DP-GEN~\cite{zhang2020dpgen} implements a concurrent-learning scheme for
-DeePMD potentials that alternates exploration, labeling, and training across
-many chemical systems. FIRETASKS / Atomate~\cite{mathew2017atomate} provides
-a workflow engine for high-throughput \acs{DFT} and can be combined with \acs{MLIP}
-training loops. ATAT and ICET~\cite{icet2019} focus on cluster expansion
-fitting with active selection of supercell configurations.
-ALF~\cite{schran2020} showed committee-based \acs{AL} for
-aqueous systems. More recently, foundation-model-aware AL schemes such as
-Finetuner~\cite{batatia2023macemp} fine-tune MACE-MP on targeted datasets.
-These frameworks show that candidate generation, targeted
-selection, first-principles labeling, and retraining can be automated into
-iterative materials-discovery pipelines.
-
-\subsection{LLM-Driven Scientific Workflows}
-Recent work has explored \acp{LLM} for materials hypothesis generation~\cite{
-merchant2023,xie2023,sprueill2023}, automated literature synthesis, and code
-generation. These developments show the potential of language models to assist
-scientific reasoning, tool use, and human-facing interpretation of complex
-simulation outputs.
-
-\subsection{DFT Warm-Starting}
-Using a fast approximate model to generate a near-equilibrium input geometry
-for a more expensive method is a classical idea in computational
-chemistry~\cite{lejaeghere2016}. Several recent works have proposed \acs{MLIP}
-warm-starts for \acs{DFT} geometry optimisation~\cite{schreiner2022,merchant2023}.
-These efforts motivate the use of learned potentials as fast preprocessors for
-higher-fidelity first-principles calculations.
+Active-learning frameworks automate candidate generation, \acs{DFT} labeling, and
+retraining---FLARE~\cite{vandermause2020,vandermause2022},
+DP-GEN~\cite{zhang2020dpgen}, Atomate~\cite{mathew2017atomate},
+ICET~\cite{icet2019}, ALF~\cite{schran2020}, and foundation-model
+finetuning~\cite{batatia2023macemp,smith2018,podryabinkin2017}. Separately,
+\acp{LLM} have been applied to materials hypothesis generation and literature
+synthesis~\cite{merchant2023,xie2023,sprueill2023}, and \acs{MLIP} warm-starts
+have been proposed as fast preprocessors for \acs{DFT} geometry
+optimization~\cite{lejaeghere2016,schreiner2022}. \textsc{matsim-agents} differs
+by placing these pieces under a single fault-tolerant agentic orchestration layer
+that runs end-to-end on leadership-class \acs{HPC} and treats both the \acs{MLIP}
+and the \acs{DFT} engine as interchangeable backends.
 
 % =============================================================================
 \section{System Architecture}
@@ -302,6 +254,59 @@ nodes, and the three entry points that drive it; we then describe the atomistic
 backend layer, comprising the pluggable \acs{MLIP} engine (HydraGNN by default,
 with UMA and the MACE-MP foundation models also selectable), the \acs{AL}
 loop, and the \acs{DFT} warm-start protocol.
+Figure~\ref{fig:architecture} summarizes the end-to-end flow and marks which
+steps are \acs{LLM}-controlled, which are explicit scientific-computation stages,
+and which are rule-based gates.
+
+A deliberate boundary separates what the \acs{LLM} decides from what the
+explicit scientific-computation stages compute. The \acp{LLM} translate a
+free-text objective into a typed plan, select which tool to run next, branch on
+measured evidence, and produce human-readable summaries; they never compute a
+force, an energy, or a phase-stability result. All physical quantities are
+produced by explicit scientific codes and numerical models---\ac{ASE} relaxation
+and \acs{MD}, \acs{MLIP} and \acs{DFT} evaluations, the backend training scripts,
+and Slurm-scheduled jobs---rather than generated by the \acs{LLM}. The
+\acs{LLM} does not replace physical models or numerical solvers. It is used for
+plan translation, tool selection, conditional branching, state tracking, failure
+recovery, and natural-language explanation of workflow decisions.
+
+\begin{figure*}[tb]
+\centering
+\begin{tikzpicture}[
+  node distance=5.5mm,
+  font=\scriptsize,
+  every node/.style={align=center},
+  llm/.style={rectangle, rounded corners, draw=blue!60!black, fill=blue!12,
+    text width=17mm, inner sep=2pt, minimum height=9mm},
+  det/.style={rectangle, draw=black!55, fill=black!7,
+    text width=17mm, inner sep=2pt, minimum height=9mm},
+  gate/.style={rectangle, rounded corners, draw=orange!75!black, fill=orange!18,
+    text width=17mm, inner sep=2pt, minimum height=9mm},
+  arr/.style={-{Latex[length=2mm]}, thick, black!60}
+]
+\node[llm] (obj) {Objective $\rightarrow$ \acs{LLM} planner (typed plan)};
+\node[det, right=of obj] (mlip) {\acs{MLIP} explore relax / \acs{MD}\\{\tiny HydraGNN$\mid$UMA$\mid$MACE-MP}};
+\node[det, right=of mlip] (acq) {Candidate gen.\ \& diversity acq.};
+\node[det, right=of acq] (dft) {\acs{DFT} label (Slurm) {\tiny QE$\mid$VASP}};
+\node[det, right=of dft] (ft) {Dataset update \& \acs{MLIP} fine-tune};
+\node[gate, right=of ft] (gate) {Evidence gate: continue / stop / escalate};
+\node[llm, right=of gate] (an) {\acs{LLM} analyst summary};
+\draw[arr] (obj) -- (mlip);
+\draw[arr] (mlip) -- (acq);
+\draw[arr] (acq) -- (dft);
+\draw[arr] (dft) -- (ft);
+\draw[arr] (ft) -- (gate);
+\draw[arr] (gate) -- (an);
+\draw[arr] (gate.north) -- ++(0,4mm) -| node[pos=0.25, above] {\tiny escalate} (mlip.north);
+\end{tikzpicture}
+\caption{End-to-end \textsc{matsim-agents} workflow. Blue nodes are
+\acs{LLM}-controlled, gray nodes denote explicit scientific-computation stages,
+and the orange node is a rule-based gate. LangGraph checkpoints the typed state at
+every transition so the loop resumes across batch allocations. All physical
+quantities are produced by explicit scientific codes and numerical models rather
+than generated by the \acs{LLM}.}
+\label{fig:architecture}
+\end{figure*}
 
 \subsection{Interface and Orchestration Layer}
 The first two layers, the natural-language interface
@@ -312,96 +317,64 @@ multi-agent graph and the entry points that expose it to the user.
 The agent graph is assembled with LangGraph~\cite{langgraph} and contains four
 primary nodes:
 
-\textbf{Planner.} A configurable \ac{LLM} (Qwen2.5-72B served via
-vLLM~\cite{vllm} by default, but interchangeable with any of the supported
-open- or closed-weight models discussed in Section~\ref{sec:conclusions})
-receives the user objective and emits a typed list of
-\texttt{TaskSpec} items (\texttt{relax}, \texttt{analyze}, \texttt{report}).
-Structured output via Pydantic schemas is used to ensure deterministic \acs{JSON}
-parsing.
+\textbf{Planner.} A configurable \ac{LLM} (Qwen2.5-72B via vLLM~\cite{vllm} by
+default) turns the user objective into a typed list of \texttt{TaskSpec} items
+(\texttt{relax}, \texttt{analyze}, \texttt{report}), using Pydantic schemas for
+deterministic \acs{JSON} parsing.
 
-\textbf{Executor.} For each pending \texttt{relax} task, the executor invokes
-the \acs{MLIP} relaxation tool, which runs \ac{ASE} \acs{FIRE}/\acs{BFGS}
-optimisation using a user-selected \acs{MLIP} backend---HydraGNN~\cite{hydragnn}
-(graph-neural-network \acs{GFM}), UMA~\cite{wood2025uma} (universal
-foundation-model potential), or the MACE-MP foundation
-models~\cite{batatia2022,batatia2023macemp}---as a
-force-and-energy evaluator. Results
-(optimised structure, final energy, max force, and convergence flag) are
-appended to the shared typed state.
+\textbf{Executor.} For each \texttt{relax} task the executor runs \ac{ASE}
+\acs{FIRE}/\acs{BFGS} optimisation with the selected \acs{MLIP} backend
+(HydraGNN~\cite{hydragnn}, UMA~\cite{wood2025uma}, or
+MACE-MP~\cite{batatia2022,batatia2023macemp}) as the force-and-energy evaluator,
+appending the optimised structure, final energy, max force, and convergence flag
+to the shared typed state.
 
 \textbf{Validation Gate.} After relaxation, a configurable
 \emph{post-relaxation gate} decides whether each optimized structure can proceed
-to analysis or must be escalated to \acs{DFT}-driven \acs{AL}. The
-decision is based on the relaxation outcome---convergence and residual
-forces---together with the workflow's exploration policy, and does not steer the
-relaxation itself, which is a standard \acs{FIRE}/\acs{BFGS} minimisation. When
-the gate accepts, it passes control to the analyst; otherwise it triggers the
-\acs{AL} handoff, logging the decision to a \ac{JSONL} audit file.
+to analysis or must be escalated to \acs{DFT}-driven \acs{AL}, based on the
+relaxation outcome (convergence and residual forces) and the workflow's
+exploration policy. It does not steer the relaxation itself. On acceptance it
+passes control to the analyst; otherwise it triggers the \acs{AL} handoff, logging
+the decision to a \ac{JSONL} audit file.
 
 \textbf{Analyst.} The analyst node invokes the \acs{LLM} to generate a natural
-language summary of the discovered structures, including energy rankings
-and stability estimates.
+language summary of the discovered structures, including energy rankings and
+stability estimates.
 
 \subsubsection{Entry Points and Task Complexity}
-\textsc{matsim-agents} exposes these nodes through three entry points that form
-a ladder of increasing task complexity. The simplest is the \emph{default
-linear graph} described above: a fixed planner~$\rightarrow$~executor~$\rightarrow$~validation
-gate~$\rightarrow$~analyst pipeline that handles a single, well-posed objective
-(for example, ``relax this structure and report its stability'') in one
-forward pass, with the only branch being the binary decision to escalate
-or summarize. This entry point is best suited to one-shot tasks over a small,
-explicitly given set of structures.
-
-The second entry point is the \emph{supervisor graph}, which targets more
-complex objectives that require systematic exploration of a composition space
-rather than a fixed structure list. It decomposes the workflow into five
-explicitly supervised nodes (prepare, explore, validate, optionally active
-learning, and summarize) and adds a supervisor that can iterate over many
-candidate phases, loop back into \acs{AL} when the validation gate flags
-structures for escalation, and aggregate results across the enumeration. The added
-node granularity gives the orchestrator finer control over how exploration,
-validation, and correction are interleaved for multi-structure campaigns.
-
-The third and most open-ended entry point is \emph{discovery chat}, an
-interactive \ac{REPL} for exploratory, human-in-the-loop investigation. On top
-of the underlying graph it adds automatic composition detection from
-free-text input, optional multi-\acs{LLM} peer review (a proposer/critic debate
-that stress-tests candidate hypotheses), and slash commands (\texttt{/relax},
-\texttt{/al}, \texttt{/clear}) that let the user invoke individual stages on
-demand. This entry point trades the bounded, single-objective scope of the
-other two for open-ended, iterative scientific dialogue in which the task is
-refined interactively rather than fixed in advance.
+The nodes are exposed through three entry points of increasing scope. The
+\emph{default linear graph} handles a single well-posed objective (e.g., ``relax
+this structure and report its stability'') in one
+planner$\rightarrow$executor$\rightarrow$gate$\rightarrow$analyst pass, the only
+branch being escalate-or-summarize. The \emph{supervisor graph} adds a supervisor
+over five nodes (prepare, explore, validate, optional \acs{AL}, summarize) that
+iterates across a composition space and loops back into \acs{AL} when the gate
+flags structures for escalation. The \emph{discovery chat} is an interactive
+\ac{REPL} that adds automatic composition detection from free text, optional
+multi-\acs{LLM} peer review, and slash commands (\texttt{/relax}, \texttt{/al},
+\texttt{/clear}) for human-in-the-loop investigation.
 
 \subsection{Atomistic Backend Layer}
-The third layer executes the physics. It evaluates energies and forces with a
-configuration-selected \acs{MLIP} backend and escalates structures selected for
-validation to \acs{DFT} through the active learning and warm-start protocols.
-Three pretrained potentials are supported on an equal footing behind a single
-calculator interface---HydraGNN~\cite{hydragnn,lupopasini2026exascalegfm},
-UMA~\cite{wood2025uma}, and the MACE-MP foundation
-models~\cite{batatia2022,batatia2023macemp}---and are chosen by a single
-configuration switch (\texttt{MLIP\_BACKEND}) without changing the orchestration
-code, so the potential is an interchangeable component rather than a hard-coded
-dependency. HydraGNN is used as the default only because it is the backend wired
-end-to-end on all three target platforms; nothing in the loop, the acquisition
-step, or the \acs{DFT} labelling interface depends on that choice.
+The third layer executes the physics: it evaluates energies and forces with a
+configuration-selected \acs{MLIP} backend and escalates flagged structures to
+\acs{DFT} through the active-learning and warm-start protocols. Three pretrained
+potentials---HydraGNN~\cite{hydragnn,lupopasini2026exascalegfm},
+UMA~\cite{wood2025uma}, and MACE-MP~\cite{batatia2022,batatia2023macemp}---sit
+behind one calculator interface and are chosen by a single switch
+(\texttt{MLIP\_BACKEND}) without touching the orchestration code. HydraGNN is the
+default only because it is wired end-to-end on all three platforms; nothing in the
+loop, the acquisition step, or the \acs{DFT} interface depends on that choice.
 
 \subsubsection{Pretrained MLIP Backends}
 Each backend plugs into the identical calculator, acquisition, and labelling
-interfaces, and the workflow depends only on the shared contract they all
-satisfy: energy and force evaluation orders of magnitude faster than direct
-\acs{DFT}, so that relaxation, screening, and warm-starting are independent of
-which potential is loaded. The default HydraGNN \ac{GFM} is an
-exascale-pretrained, multi-fidelity graph model whose multi-task design and
-broad training corpus give it wide chemical coverage; its architecture, training
-data, and pretraining protocol are described in full in the accompanying
-preprint~\cite{lupopasini2026exascalegfm} and are not reproduced here.
-UMA~\cite{wood2025uma} and the MACE-MP foundation
-models~\cite{batatia2022,batatia2023macemp} are universal potentials used
-through their released checkpoints. Any of the three can equally serve as the
-relaxation engine, the warm-start pre-relaxer, or the starting point for
-\acs{AL} fine-tuning.
+interfaces; the workflow depends only on their shared contract---energy and force
+evaluation orders of magnitude faster than direct \acs{DFT}. The default HydraGNN
+\ac{GFM} is an exascale-pretrained multi-task graph model with wide chemical
+coverage (architecture and pretraining detailed
+in~\cite{lupopasini2026exascalegfm}); UMA~\cite{wood2025uma} and the MACE-MP
+models~\cite{batatia2022,batatia2023macemp} are universal potentials used through
+their released checkpoints. Any of the three can serve as relaxation engine,
+warm-start pre-relaxer, or \acs{AL} starting point.
 
 \subsubsection{Active Learning Loop}
 When the validation gate escalates a structure, \textsc{matsim-agents} executes a configurable
@@ -416,144 +389,82 @@ number of \acs{AL} iterations. Each iteration proceeds as follows:
   the per-iteration budget using a greedy farthest-point composition-diversity
   filter over configuration descriptors, which removes near-duplicate frames and
   retains geometrically distinct configurations.
-\item \textbf{\acs{DFT} labeling}: the top-$n$ selected candidates are submitted to
-  the user-selected \acs{DFT} backend, either \acs{QE} or \acs{VASP}, via
-  batch job submission. \acs{QE} is open source, whereas \acs{VASP} is a licensed
-  closed-source code that requires user-provided source access. Converged frames
-  are converted to the extended-XYZ format.
+\item \textbf{\acs{DFT} labeling}: the top-$n$ selected candidates are submitted
+  to the user-selected \acs{DFT} backend (\acs{QE} or \acs{VASP}) as batch jobs,
+  and converged frames are written in extended-XYZ format.
 \item \textbf{\acs{MLIP} retraining}: the new frames are appended to the training
-  dataset and the selected \acs{MLIP} backend is retrained for a configurable
-  number of epochs---HydraGNN is retrained from its checkpoint, while UMA is
-  optionally fine-tuned from its foundation-model checkpoint---through a
-  user-supplied training script or multi-node launcher. When retraining is
-  disabled, UMA is used as a frozen foundation model and the labeled frames are
-  simply accumulated for offline fine-tuning.
+  set and the selected backend is retrained for a configurable number of epochs
+  (HydraGNN from its checkpoint, UMA optionally fine-tuned from its
+  foundation-model checkpoint) via a user-supplied training script; when disabled,
+  frames are accumulated for offline fine-tuning.
 \item \textbf{Loop state serialization}: a \texttt{state.json} per iteration
   records candidate/selection counts, selection statistics, \acs{DFT} convergence rates,
   and timing. Fault-tolerant resume logic skips completed iterations.
 \end{enumerate}
 
-The loop is backend-agnostic: the \acs{DFT} backend interface accepts a
-\texttt{DFTJobSpec} and returns a list of converged frames, allowing \acs{QE} and
-\acs{VASP} to be used interchangeably from the workflow perspective. This design gives
-users the option to rely on fully open-source \acs{QE} when software licensing and
-reproducibility are priorities, or to use \acs{VASP} when a project requires an
-established licensed production code and the user has access to the \acs{VASP} source
-and pseudopotential files.
+The loop is backend-agnostic: the \acs{DFT} interface accepts a
+\texttt{DFTJobSpec} and returns converged frames, so \acs{QE} (open source) and
+\acs{VASP} (licensed, user-supplied source) are interchangeable from the workflow
+perspective.
 
 \subsubsection{DFT Warm-Start Protocol}
-A separate warm-start benchmarking module is evaluated as a factorial
-backend ablation that pairs each \acs{MLIP} backend with each \acs{DFT} solver:
-\texttt{warmstart\_benchmark\_qe} targets \acs{QE} while
-\texttt{warmstart\_benchmark\_vasp} targets \acs{VASP}, and each module accepts
-either HydraGNN~\cite{hydragnn} (graph-neural-network \acs{GFM}) or
-UMA~\cite{wood2025uma} (universal foundation-model potential) as the
-pre-relaxation backend. Enumerating both choices yields four benchmark
-configurations---HydraGNN+\acs{QE}, HydraGNN+\acs{VASP}, UMA+\acs{QE}, and
-UMA+\acs{VASP}---enabling direct comparison of warm-start benefit across both
-\acs{MLIP} families and both \acs{DFT} solvers.
-
-Beyond its primary role as a convergence accelerator, the cold-start
-vs.\ warm-start comparison fulfills two broader functions within the agentic
-workflow. First, it provides a computational validation safety net: if the
-\acs{MLIP}-relaxed structure genuinely brings atoms closer to the \acs{DFT} energy
-minimum, the warm run should require fewer \acs{BFGS} steps and fewer \acs{SCF}
-iterations than the cold run; failure of this condition signals that the \acs{MLIP}
-prediction may not be trustworthy for that chemistry. Second, systematic
-collection of such failure cases across the benchmark fixture suite identifies
-\emph{regions of \acs{MLIP} weakness} in materials space, compositions or
-structural motifs where the model's pre-relaxation is unreliable, and this
-information can be used to target \acs{AL} data collection and improve
-model robustness.
+A separate warm-start benchmarking module pairs each \acs{MLIP} pre-relaxer
+(HydraGNN~\cite{hydragnn} or UMA~\cite{wood2025uma}) with each \acs{DFT} solver
+(\acs{QE} via \texttt{warmstart\_benchmark\_qe}, \acs{VASP} via
+\texttt{warmstart\_benchmark\_vasp}) as a factorial ablation, so that any
+warm-start benefit can be attributed to the potential, the solver, or their
+interaction.
 
 The benchmark pipeline, shared across all four configurations, proceeds as follows
-for any input crystal structure:
-
-\begin{enumerate}
-\item Run \acs{MLIP} \acs{FIRE} pre-relaxation to $f_\text{max} = 0.01$\,eV/\AA\ using
-  either HydraGNN~\cite{hydragnn} or UMA~\cite{wood2025uma} (\acs{MLIP} warm start).
-\item Run \acs{QE} \texttt{vc-relax} from the \emph{original} coordinates (cold
-  start).
-\item Run \acs{QE} \texttt{vc-relax} from the \emph{\acs{MLIP}-relaxed} coordinates
-  (warm start).
-\item Record and compare \acs{BFGS} step counts, per-step \acs{SCF} iteration counts,
-  total \acs{SCF} iterations, final energies, and wall times.
-\end{enumerate}
-
-The same \acs{QE} input settings are used for both cold and warm runs to ensure a
-fair comparison. The benchmark writes a structured \ac{JSON} summary alongside the
-pw.x output files, enabling automated regression testing and reproducible
-reporting.
+for any input crystal structure: (i) an \acs{MLIP} \acs{FIRE} pre-relaxation to
+$f_\text{max} = 0.01$\,eV/\AA\ (HydraGNN~\cite{hydragnn} or UMA~\cite{wood2025uma});
+(ii) the selected \acs{DFT} solver from the \emph{original} coordinates (cold
+start: \acs{QE} \texttt{vc-relax} or the equivalent \acs{VASP} ionic relaxation);
+(iii) the same solver from the \emph{\acs{MLIP}-relaxed} coordinates (warm start);
+and (iv) comparison of \acs{BFGS} step counts, per-step and total \acs{SCF}
+iterations, final energies, and wall times. Identical \acs{DFT} input settings are
+used for cold and warm runs to ensure a fair comparison.
 
 % =============================================================================
 \section{HPC Deployment}
 \label{sec:hpc}
 
 \subsection{Platform-Agnostic Design Principles}
-The \textsc{matsim-agents} software stack is designed around three portability
-principles:
-
-\textbf{Module isolation.} All \acs{GPU}-software interactions (\acs{CUDA} version, \acs{MPI}
-implementation, compiler toolchain) are encapsulated behind per-platform shell
-fragments. A single function \texttt{load\_perlmutter\_modules\_gpu()} (or its
-Frontier/Aurora equivalents) sets up the entire environment from a clean login
-shell, making jobs bit-for-bit reproducible across re-submissions.
-
-\textbf{Decoupled Python and \ac{MPI} environments.} The \acs{MLIP} backends---HydraGNN,
-UMA, and MACE-MP---require a PyTorch \acs{GPU} environment, while first-principles calculations require separate
-\acs{MPI}/compiler stacks for \acs{QE} or \acs{VASP}. These are kept in separate shells: the batch
-script activates the Python environment for the selected \acs{MLIP} phase and spawns the
-\acs{DFT} launcher as a subprocess that loads the appropriate compiler, \acs{MPI}, \acs{GPU}
-runtime, and code-specific environment for the selected backend.
-
-\textbf{vLLM inference serving.} \acs{LLM} inference is handled by a vLLM server
-running in a separate Slurm allocation (or as a background process on a login
-node for interactive sessions). The framework communicates with the server via
-an OpenAI-compatible \ac{HTTP} endpoint, requiring only the \texttt{openai} Python
-package on the client side.
-
-\subsection{User-Selectable DFT Backends and Build Scripts}
-\textsc{matsim-agents} exposes the first-principles code as a user-selectable
-backend rather than hard-coding a single \acs{DFT} engine. The two supported options
-are \acs{QE} and \acs{VASP}. \acs{QE} is open source and can be built,
-modified, and redistributed according to its license. \acs{VASP} is a licensed
-closed-source code; therefore, the framework can provide build and launch
-scripts, but users must supply their own authorized \acs{VASP} source tree,
-pseudopotential files, and institutional license access.
-
-To make both options usable on leadership-class facilities, the repository
-includes detailed bash scripts for compiling \acs{QE} and \acs{VASP} on \acs{NERSC} Perlmutter,
-\acs{ALCF} Aurora, and \acs{OLCF} Frontier. These scripts document the module loads,
-compiler choices, \acs{MPI} settings, \acs{GPU} offload configuration, and launcher
-conventions required on each system. They are intended to reduce the amount of
-site-specific trial-and-error normally required to deploy first-principles codes
-inside an automated \acs{AI} workflow.
+The stack rests on three portability principles. \textbf{Module isolation:} all
+\acs{GPU}-software interactions (\acs{CUDA}/\acs{MPI}/compiler toolchain) are
+encapsulated behind per-platform shell fragments, so a single function
+(\texttt{load\_perlmutter\_modules\_gpu()} or its Frontier/Aurora equivalents)
+sets up the whole environment reproducibly from a clean login shell.
+\textbf{Decoupled Python and \ac{MPI} environments:} the \acs{MLIP} backends run
+in a PyTorch \acs{GPU} environment while \acs{QE}/\acs{VASP} need separate
+\acs{MPI}/compiler stacks, so the batch script activates the Python environment
+for the \acs{MLIP} phase and spawns the \acs{DFT} launcher as a subprocess with
+its own compiler/\acs{MPI}/runtime. \textbf{vLLM inference serving:} \acs{LLM}
+inference runs in a separate Slurm allocation (or a login-node background process)
+behind an OpenAI-compatible \ac{HTTP} endpoint, requiring only the \texttt{openai}
+package on the client side. The first-principles code is exposed as a
+user-selectable backend (\acs{QE} or \acs{VASP}); the repository ships build and
+launch scripts for both on Perlmutter, Frontier, and Aurora, documenting the
+module loads, compiler choices, \acs{MPI}/offload settings, and launcher
+conventions each system requires, while \acs{VASP} users must supply their own
+licensed source and pseudopotentials.
 
 \subsection{Per-Platform Deployment}
-The framework runs on all three \acs{DOE} leadership-class systems, each with a
-distinct accelerator and \acs{QE} offload backend. On Perlmutter (NVIDIA A100),
-\acs{QE} is built with NVHPC using \acs{CUDA} \ac{FFTW} offload and \ac{ELPA}
-diagonalisation, and \acs{GPU}-aware \acs{MPI} is disabled for the single-node
-warm-start benchmark to avoid \ac{GTL} startup overhead. On Frontier (AMD
-MI250X), \acs{QE} uses OpenMP target offload through the HIP backend, with the
-module fragment masking \texttt{ROCR\_VISIBLE\_DEVICES} to expose individual
-\acp{GCD}. On Aurora (Intel \acs{PVC}), the \texttt{frameworks} module supplies
-vLLM and \ac{XPU} PyTorch without a source build, \acs{QE} uses the OneAPI/OpenMP
-offload backend, and a custom entrypoint wrapper works around a vLLM
-model-registry SIGSEGV. HydraGNN runs on the platform-native PyTorch build for
-each accelerator (\acs{CUDA}, ROCm/HIP, and \acs{XPU}/OneAPI, respectively); the
-UMA and MACE-MP foundation-model backends are currently deployed on the
-Perlmutter \acs{CUDA} build. Companion scripts build \emph{both} first-principles engines, \acs{QE}
-and \acs{VASP}, on all three facilities (\acs{VASP} requiring the user's
-licensed source), and the \acs{AL} loop is wired end-to-end on Perlmutter
-and Frontier, with the Aurora compile/runtime stack in place.
+The framework is built and deployed on all three \acs{DOE} leadership-class
+systems, each with a distinct accelerator and \acs{DFT} offload backend
+(Perlmutter/NVIDIA A100 via NVHPC \acs{CUDA}, Frontier/AMD MI250X via HIP OpenMP
+target offload, Aurora/Intel \acs{PVC} via OneAPI); the per-platform module
+loads, compiler choices, and offload settings live in the released build scripts.
+
 
 % =============================================================================
 \section{Experimental Results}
 \label{sec:results}
 
-All experiments in this section were run on \acs{NERSC} Perlmutter, one compute node
-(4$\times$ NVIDIA A100 80\,GB).
+All experiments in this section were run on \acs{NERSC} Perlmutter. The warm-start
+and fine-tuning studies use a single compute node (4$\times$ NVIDIA A100 80\,GB);
+the end-to-end campaigns and the strong-scaling study use one to eight such nodes,
+as noted in each table.
 
 \subsection{Warm-Start Benchmark Setup}
 \label{sec:results:warmstart_setup}
@@ -571,68 +482,30 @@ ways of initializing each first-principles geometry optimization:
   attributable solely to the change of initial geometry.
 \end{itemize}
 
-The cold/warm pair is run as a \emph{factorial backend ablation}: the same
-cold/warm comparison is repeated for every combination of two independent
-backend choices. The first choice is the \acs{MLIP} pre-relaxation engine
-(HydraGNN~\cite{hydragnn} or UMA~\cite{wood2025uma}); the second is the \acs{DFT}
-solver (\acs{QE} or \acs{VASP}). Enumerating both choices yields four backend
-pairings---HydraGNN+\acs{QE}, HydraGNN+\acs{VASP}, UMA+\acs{QE}, and
-UMA+\acs{VASP}---each run in both cold and warm modes. Because only one backend
-factor is varied at a time while the other is held fixed, a warm-start benefit
-(or its absence) can be attributed to the \acs{MLIP}, to the \acs{DFT} code, or to
-their interaction, the defining property of an ablation study.
-
-Three alloy fixtures provide the off-equilibrium ``hard cases'' that make the
-cold/warm distinction meaningful: MoNbTaW \acs{HEA} (16-atom BCC supercell),
-NbTaW BCC, and NbMoW BCC. For every
-fixture$\times$backend combination, both the cold and warm runs are repeated
-three times on Perlmutter to assess run-to-run reproducibility, and the
-following quantities are recorded and compared between the cold and warm runs:
-the number of \acs{BFGS} ionic steps, the per-step and total \acs{SCF} iteration
-counts, the final total energy, and the wall time.
-
-As described in Section~\ref{sec:architecture}, this cold-start vs.\ warm-start
-comparison serves two roles beyond raw convergence acceleration: it is a
-computational validation safety net for the \acs{MLIP} (a genuine geometry
-improvement must reduce \acs{BFGS} steps and \acs{SCF} iterations), and it is a
-probe for regions of \acs{MLIP} weakness (fixtures where warm-start benefit is
-absent or where \acs{DFT} convergence degrades) whose failure cases can be routed
-back into the \acs{AL} loop.
+The cold/warm pair is repeated for all four combinations of \acs{MLIP}
+pre-relaxer (HydraGNN~\cite{hydragnn} or UMA~\cite{wood2025uma}) and \acs{DFT}
+solver (\acs{QE} or \acs{VASP}), a factorial ablation in which varying one factor
+at a time attributes any warm-start benefit to the potential, the solver, or
+their interaction. Three off-equilibrium alloy fixtures are used---MoNbTaW
+\acs{HEA} (16-atom BCC), NbTaW BCC, and NbMoW BCC---each run three times per
+backend pairing on Perlmutter; the recorded quantities are the \acs{BFGS}
+ionic-step count, per-step and total \acs{SCF} iterations, final energy, and wall
+time.
 
 \subsection{Warm-Start across All Backend Pairings: Alloy Fixtures}
 \label{sec:results:warmstart_hea}
-The three alloy fixtures---MoNbTaW \acs{HEA} (16-atom BCC), NbTaW BCC, and
-NbMoW BCC---are the cases where the cold/warm distinction is expected to matter.
-The random-alloy site occupation in these structures creates genuine
-site-specific forces at the input geometry, so the \acs{MLIP} pre-relaxation must
-move atoms before converging and the warm-start coordinates differ meaningfully
-from the cold-start input. Each fixture is evaluated under all four backend
-combinations (HydraGNN+\acs{QE}, HydraGNN+\acs{VASP}, UMA+\acs{QE}, UMA+\acs{VASP}),
-giving the twelve fixture$\times$backend rows of Table~\ref{tab:warmstart_matrix}.
+The three alloy fixtures---MoNbTaW \acs{HEA} (16-atom BCC), NbTaW BCC, and NbMoW
+BCC---have random site occupation, so the input geometry carries genuine
+site-specific forces and the \acs{MLIP} pre-relaxation moves atoms before
+converging. Each fixture is run under all four backend pairings, giving the
+twelve rows of Table~\ref{tab:warmstart_matrix}. Each row reports the \acs{BFGS}
+ionic-step count and total \acs{SCF} iteration count for the cold and warm runs
+(averaged over three repeats) and the relative change in total \acs{SCF} work,
+$\Delta_\text{SCF} = (\text{warm}-\text{cold})/\text{cold}$, where negative values
+indicate a warm-start speed-up. Varying one backend factor at a time isolates
+whether any benefit comes from the \acs{MLIP} pre-relaxer or the \acs{DFT} solver.
 
-For a BCC metal with site disorder the expected warm-start mechanism is:
-the \acs{MLIP} pre-relaxes atoms toward their local chemical environment
-equilibrium positions, reducing the initial force norm from $\mathcal{O}(1)$
-to $\mathcal{O}(0.1)$\,eV/\AA. The \acs{DFT} code's first \acs{BFGS} step then starts
-from a geometry already close to the \acs{DFT} minimum, reducing both the number
-of \acs{BFGS} ionic steps and the number of \acs{SCF} cycles required in the stiffest
-(first) \acs{BFGS} step, where the \acs{SCF} typically requires the most iterations to
-reach self-consistency from a poor initial density. Varying one backend factor
-at a time then lets us separate \emph{which} component drives any observed
-benefit: comparing the two \acs{MLIP} rows for a fixed \acs{DFT} solver isolates
-the quality of the HydraGNN vs.\ UMA pre-relaxation, whereas comparing the two
-\acs{DFT} columns for a fixed \acs{MLIP} isolates how \acs{QE} and \acs{VASP}
-respond to the same warm-start geometry.
-
-Table~\ref{tab:warmstart_matrix} consolidates the cold vs.\ warm comparison
-across all twelve fixture$\times$backend combinations. Each row reports the
-\acs{BFGS} ionic-step count and total \acs{SCF} iteration count for the cold and
-warm runs (averaged over the three repeats), together with the relative change
-in total \acs{SCF} work, $\Delta_\text{SCF} = (\text{warm}-\text{cold})/\text{cold}$,
-for which negative values indicate a warm-start speed-up. Every cell is averaged
-over three repeats.
-
-\begin{table*}[t]
+\begin{table*}[tp]
 \centering
 \caption{Cold vs.\ warm-start convergence for the factorial backend ablation
 across the three alloy fixtures.}
@@ -662,100 +535,22 @@ across the three alloy fixtures.}
 \end{tabular}
 \end{table*}
 
-The completed matrix reveals a backend-dependent split that is central to
-the design philosophy of \textsc{matsim-agents}. On the disordered \acs{BCC}
-alloys, UMA-relaxed geometries consistently reduce the total \acs{DFT} \acs{SCF}
-work across \emph{both} solvers---UMA+\acs{QE} cuts $\Delta_\text{SCF}$ by
-$19\%$ (NbTaW) and $11\%$ (NbMoW), while UMA+\acs{VASP} cuts it by
-$8\%$ (NbTaW) and $37\%$ (NbMoW)---whereas HydraGNN pre-relaxation is
-neutral on \acs{VASP} ($0\%$ on all three fixtures) and in one case
-\emph{increases} \acs{QE} cost ($\Delta_\text{SCF}=+68\%$ on NbTaW, where the
-warm \acs{DFT} run exhausts its \acs{SCF} budget without converging). We report
-this contrast deliberately. The objective of \textsc{matsim-agents} is
-\emph{not} to advocate for any single \acs{MLIP}: it is to host multiple
-potentials behind a uniform, \acs{HPC}-portable interface so that the workflow
-can \emph{measure}, per material, how each model behaves and act on that
-measurement. On these alloy fixtures UMA pre-relaxation reduces
-$\Delta_\text{SCF}$ on both \acs{DFT} columns (up to the $37\%$ reduction on
-UMA+\acs{VASP}/NbMoW), whereas HydraGNN pre-relaxation is neutral on \acs{VASP}
-($0\%$ on all three fixtures) and, on NbTaW+\acs{QE}, increases cost ($+68\%$).
-Neither figure is a verdict on a potential in the abstract; each is a per-fixture
-measurement, and the ranking can invert on a different material. The same
-cold/warm instrument that accelerates \acs{DFT} when a potential is well matched
-doubles as a model-selection and weakness-detection probe when it is not: the
-$+68\%$ result is not a defect of the framework but exactly the signal it is
-built to surface, flagging that fixture as out-of-distribution for that potential
-and routing it back into the \acs{AL} loop as a target for new data.
-Because the backend is a user-selectable configuration rather than a hard-coded
-dependency, the same run can switch potentials, benchmark several against one
-another on identical fixtures, combine them as a mixture of experts, or use any
-of them as the pretrained starting point for \acs{AL} data
-collection, none of which requires a change to the agentic orchestration, the
-\acs{DFT} escalation logic, or the deployment scripts.
-
-\subsection{Paper-Case Coverage Matrix}
-Beyond the benchmarks above, \textsc{matsim-agents} has been designed and
-tested against a broader set of materials of scientific interest, listed in
-Table~\ref{tab:cases}. These cases cover diverse chemical classes and
-dimensionalities, and exercise both the single-pass discovery graph
-(Section~\ref{sec:results:singlepass}) and the full \acs{AL} loop.
-
-\begin{table}[t]
-\centering
-\caption{Paper cases prepared for systematic evaluation.}
-\label{tab:cases}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lll}
-\toprule
-System & Class & Dim.\\
-\midrule
-LiFePO\textsubscript{4} olivine & Battery cathode & 3D \\
-NbTaVHfZrTi BCC \acs{HEA} & Refractory \acs{HEA} & 3D \\
-CrMnFeCoNi Cantor FCC \acs{HEA} & Structural \acs{HEA} & 3D \\
-Phosphorene (black/blue-P) & 2D semiconductor & 2D \\
-Cu-BHT conductive \ac{MOF} & 2D \acs{MOF} & 2D \\
-Zn(HCOO)\textsubscript{2} \acs{MOF} & Porous material & 3D \\
-\bottomrule
-\end{tabular}%
-}
-\end{table}
-
-\subsection{Single-Pass Discovery on the Paper Cases}
-\label{sec:results:singlepass}
-We run the single-pass discovery graph on five of the six paper cases from
-Table~\ref{tab:cases} (Cu-BHT is omitted, pending a \acs{CIF} seed). Each
-case's seed polymorph(s) are relaxed with the HydraGNN \acs{MLIP} under
-\acs{FIRE} to $f_\text{max} = 0.01$\,eV/\AA. Table~\ref{tab:singlepass} reports
-the lowest final energy and force among the evaluated polymorphs per case; the
-full sweep completes in 18\,min on one Perlmutter node.
-
-\begin{table}[t]
-\centering
-\caption{Single-pass HydraGNN relaxation results for the paper cases.}
-\label{tab:singlepass}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lccc}
-\toprule
-System & Seeds (atoms) & $E$ (eV) & $f_\text{max}$ (eV/\AA)\\
-\midrule
-LiFePO\textsubscript{4} olivine & 1 (28) & $-0.0118$ & 0.0003 \\
-NbTaVHfZrTi BCC \acs{HEA} & 1 (24) & $-0.0098$ & 0.0014 \\
-CrMnFeCoNi Cantor FCC \acs{HEA} & 1 (32) & $-0.0006$ & 0.0006 \\
-Phosphorene (black/blue-P) & 2 (4, 2) & 0.0048 & 0.0001 \\
-Zn(HCOO)\textsubscript{2} \acs{MOF} & 2 (20, 20) & $-0.0054$ & 0.0018 \\
-\bottomrule
-\end{tabular}%
-}
-\end{table}
-
-All five cases converge in a single \acs{FIRE} step
-($f_\text{max} \le 0.0018$\,eV/\AA), consistent with seed polymorphs already
-close to a local minimum.
-The sweep spans a battery cathode, two \acsp{HEA}, a 2D semiconductor, and a
-porous 3D \acs{MOF}, using the same discovery graph and checkpoint with no case-specific
-configuration. The full \acs{AL} (\acs{MLIP}+\acs{DFT} loopback) runs
-for these cases are reported next in
-Section~\ref{sec:results:al}.
+The completed matrix shows a backend-dependent split. On the disordered \acs{BCC}
+alloys, UMA-relaxed geometries reduce total \acs{DFT} \acs{SCF} work across
+\emph{both} solvers---UMA+\acs{QE} by $19\%$ (NbTaW) and $11\%$ (NbMoW), and
+UMA+\acs{VASP} by $8\%$ (NbTaW) and $37\%$ (NbMoW)---whereas HydraGNN
+pre-relaxation is neutral on \acs{VASP} ($0\%$ on all three fixtures) and, on
+NbTaW+\acs{QE}, \emph{increases} cost ($\Delta_\text{SCF}=+68\%$, with the warm
+run exhausting its \acs{SCF} budget without converging). These results show that warm-start behavior depends on both the material and the
+backend. A change in \acs{SCF} work reflects not only the quality of the
+pre-relaxed geometry but also solver conditioning and pseudopotential choice, so
+the results should not be interpreted as a universal ranking of potentials.
+Instead, \acs{MLIP} pre-relaxation can reduce \acs{DFT} optimization effort for
+some material--backend combinations and increase it for others; its benefit
+should therefore be evaluated for the target workflow. Because the backend is a user-selectable
+configuration rather than a hard-coded dependency, the same run can switch or
+benchmark potentials on identical fixtures without changing the agentic
+orchestration, the \acs{DFT} escalation logic, or the deployment scripts.
 
 \subsection{End-to-End Integration and Throughput}
 \label{sec:results:al}
@@ -764,8 +559,8 @@ seed generation, \acs{MLIP}-driven \acs{MD} sampling, candidate
 acquisition, \acs{DFT} labelling, dataset assembly, and model
 retraining---compose into a single automated loop that runs unattended on
 leadership \acs{HPC}. To validate this we executed the \acs{AL} loop
-end to end on five of the six paper cases (Cu-BHT again pending a \acs{CIF}
-seed), on \acs{NERSC} Perlmutter using the OpenACC \acs{GPU} build of
+end to end on all five cases for five distinct classes of compounds, on \acs{NERSC} Perlmutter using the OpenACC
+\acs{GPU} build of
 \acs{VASP}~6.6.0 on NVIDIA A100 nodes. Each iteration proceeds without human
 intervention: seeds are propagated by short Langevin \acs{MD} (400 steps,
 2\,fs, 1000\,K) under the \acs{MLIP} force engine; snapshots are sub-sampled
@@ -776,11 +571,56 @@ concurrent single-point \acs{VASP} jobs; and the converged frames are appended
 to the growing training set. State is checkpointed per iteration so runs resume
 after walltime limits.
 
+The performance is tested on five classes of compounds that span diverse chemical classes and dimensionalities:
+LiFePO\textsubscript{4} olivine (3D battery cathode), NbTaVHfZrTi \acs{BCC} and
+CrMnFeCoNi Cantor FCC \acsp{HEA} (3D refractory and structural alloys),
+phosphorene (2D semiconductor), and the Zn(HCOO)\textsubscript{2} \acs{MOF} (3D
+porous framework).
+
+The single-point \acs{DFT} settings used to label every frame are summarized in
+Table~\ref{tab:dft}. All systems share a single, internally consistent
+Perdew--Burke--Ernzerhof (PBE) generalized-gradient exchange--correlation
+functional with projector augmented-wave (PAW) potentials, so that the surrogate
+learns from one uniform reference across chemistries; per-case choices vary only
+in spin treatment, smearing, and k-point density. The magnetic $3d$ systems
+(LiFePO\textsubscript{4} and the CrMnFeCoNi Cantor alloy) are computed
+spin-polarized (\texttt{ISPIN}$=2$); no Hubbard $+U$ correction is applied to any
+system, so the LiFePO\textsubscript{4} reference is spin-polarized plain
+\acs{GGA}. We deliberately keep a single uniform functional across all five
+chemistries because the object of study is the orchestration workflow and the
+surrogate's ability to reproduce its own \acs{DFT} target, not the absolute
+electrochemical accuracy of any one material; a $+U$ or hybrid reference for the
+Fe-$3d$ states would improve LiFePO\textsubscript{4} redox energetics but is
+orthogonal to the workflow claims and is left to future work.
+
+\begin{table}[tb]
+\centering
+\caption{Per-case single-point \acs{VASP}/PAW settings. Shared across all cases:
+PBE (\acs{GGA}) functional, \texttt{ENCUT}$=520$\,eV, \texttt{EDIFF}$=10^{-6}$\,eV,
+$\Gamma$-centred k-meshes, \texttt{NSW}$=0$, and no Hubbard $+U$.}
+\label{tab:dft}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\toprule
+System & Spin (\texttt{ISPIN}) & Smearing ($\sigma$/eV) & \texttt{KSPACING} (\AA$^{-1}$)\\
+\midrule
+LiFePO\textsubscript{4} olivine     & polarized (2)   & Gaussian (0.05) & 0.30 \\
+CrMnFeCoNi Cantor FCC \acs{HEA}     & polarized (2)   & MP-1 (0.20)     & 0.22 \\
+NbTaVHfZrTi BCC \acs{HEA}           & unpolarized (1) & MP-1 (0.20)     & 0.25 \\
+Phosphorene (black-P)               & unpolarized (1) & Gaussian (0.05) & 0.25 \\
+Zn(HCOO)\textsubscript{2} \acs{MOF} & unpolarized (1) & Gaussian (0.05) & 0.30 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
 Table~\ref{tab:al} reports per-case throughput---completed iterations, total
 \acs{MD} candidates, candidates selected for labelling, converged and failed
 single-point \acs{VASP} jobs, and cumulative \acs{DFT} labelling wall time.
-Across all cases the loop drove
-the full pipeline hands-free, dispatching \acs{DFT} jobs concurrently within a
+Across all cases the loop executed
+the full pipeline without manual intervention, dispatching \acs{DFT} jobs concurrently within a
 four-node allocation (four one-node \acs{VASP} jobs at a time, or two two-node
 jobs for the denser Zn(HCOO)\textsubscript{2} framework), and recovering
 automatically across the checkpoint boundary. \acs{DFT} convergence rates were
@@ -788,7 +628,7 @@ high (\(>94\%\) in every case, and \(100\%\) for phosphorene and
 LiFePO\textsubscript{4}), confirming that the \acs{MD} screening stage supplies
 physically reasonable structures to \acs{VASP}.
 
-\begin{table}[t]
+\begin{table}[tb]
 \centering
 \caption{End-to-end \acs{AL} throughput on Perlmutter, four A100 nodes per case.}
 \label{tab:al}
@@ -807,12 +647,12 @@ Zn(HCOO)\textsubscript{2} \acs{MOF} & 4 & 4 & 32 & 32 & 32 & 0 & 0.61 \\
 }
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[tb]
 \centering
 \includegraphics[width=\columnwidth]{figures/al_timing_breakdown.pdf}
 \caption{Per-iteration wall-time breakdown of the \acs{AL} loop across
-the five paper cases. (a) Mean wall time per iteration, stacked by stage.
-(b) Combined non-\acs{DFT} overhead (calculator construction, \acs{MLIP}-\acs{MD}
+the five cases covering five distinct classes of compounds. (a) Mean wall time per iteration, stacked by stage.
+(b) Combined non-\acs{DFT} time (calculator construction, \acs{MLIP}-\acs{MD}
 sampling, candidate acquisition, dataset append, and the retrain hook) as a
 percentage of iteration wall time.}
 \label{fig:al_timing}
@@ -820,15 +660,18 @@ percentage of iteration wall time.}
 
 Figure~\ref{fig:al_timing} decomposes the per-iteration wall time by stage.
 Single-point \acs{DFT} labelling accounts for 88--97\% of the wall clock in
-every case, while the entire agentic orchestration layer---building the
+every case, while all non-\acs{DFT} stages combined---building the
 \acs{MLIP} calculator, running the Langevin \acs{MD} sampler, selecting
 candidates by the composition-diversity filter, appending the labelled frames, and invoking the
-retrain hook---contributes only 3--12\%. The acquisition and dataset-management
+retrain hook---contribute only 3--12\%. These figures bound the aggregate
+non-\acs{DFT} cost; they do not separately quantify \acs{LLM} inference, LangGraph
+transitions, state serialization, or scheduler interaction, which we do not
+measure individually. The acquisition and dataset-management
 stages are sub-second to a few seconds per iteration (e.g.\ 2.6\,s acquisition
 and 0.15\,s append for the Cantor \acs{HEA}); the only non-trivial non-DFT cost
 is \acs{MLIP}-\acs{MD} sampling, which scales with system size and step count.
-Wrapping the first-principles engine in the automated loop is therefore close to
-free: the framework spends its time where the physics is, not in coordination.
+The aggregate non-\acs{DFT} cost remains small relative to first-principles
+labelling, so \acs{DFT} remains the dominant computational cost of the workflow.
 
 The loop is also resilient to the wall-clock limits that dominate shared
 \acs{HPC} scheduling. State is checkpointed after every iteration (a
@@ -842,48 +685,54 @@ checkpoint-and-resume behaviour lets long campaigns span many short,
 backfill-friendly allocations rather than requiring a single monolithic
 reservation.
 
-One scope note accompanies these numbers: selection ran close to
-pass-through for most cases---for four of the five cases the number of screened
+We highlight that, for four of the five cases, the number of screened
 \acs{MD} candidates fell at or below the per-iteration budget, so essentially
 every valid frame was labelled; the BCC \acs{HEA} is the exception, generating
 more candidates (1650) than its budget (1000 selected), so the
-composition-diversity filter actively down-selected. These results should
-therefore be read as an illustration of
-\emph{integration and throughput}, that every stage is wired together and runs
-autonomously at \acs{HPC} scale, rather than as a learning curve; in-loop
-retraining is present and exercised, and quantifying its sample efficiency with
-a trainable ensemble backend is the natural next study.
+composition-diversity filter actively down-selected. Accordingly, these experiments establish end-to-end integration and throughput
+rather than sample-efficiency gains from the acquisition strategy. In-loop
+retraining is exercised, while systematic comparison of acquisition strategies
+is left to future work.
 
 \subsection{Fine-Tuning on Active-Learning-Corrected Data}
 \label{sec:results:finetune}
 The end-to-end loop of Section~\ref{sec:results:al} produces, for each paper
 case, a compact set of \acs{DFT}-labelled frames drawn precisely from the
-configurations the \acs{MLIP} itself sampled during \acs{MD}. The natural
-question that closes the loop is whether re-training the force engine on this
-\acs{AL}-corrected data measurably improves it on the very chemistry that
-generated the frames. We therefore ran a controlled \emph{fine-tune-and-evaluate}
-study on five of the six paper cases (Cu-BHT again pending a \acs{CIF} seed),
+configurations the \acs{MLIP} itself sampled during \acs{MD}. We next evaluate whether retraining the force engine on the resulting
+\acs{DFT}-labelled data improves accuracy for the corresponding chemistry. We
+therefore ran a controlled \emph{fine-tune-and-evaluate} study on all five cases,
 using the per-case datasets accumulated by the loop
 (LiFePO\textsubscript{4}, Cantor FCC \acs{HEA}, NbTaVHfZrTi BCC \acs{HEA},
 phosphorene, and the Zn(HCOO)\textsubscript{2} \acs{MOF}).
 
-\paragraph{Protocol.}
-Each dataset is split into disjoint train and held-out test partitions. We then
-measure a strict \emph{before/after} pair on the identical test partition: the
-\emph{before} endpoint is the pretrained checkpoint evaluated with no exposure to
-the case data, and the \emph{after} endpoint is the same architecture
-fine-tuned on the train partition. Because both endpoints are scored on the same
-held-out frames with the same metrics, any change is attributable solely to the
-fine-tuning. We report two error metrics per endpoint: the force mean absolute
-error (\acs{MAE}, in eV/\AA) and the per-atom energy \acs{MAE} after removing a
-per-element linear reference (in meV/atom), fit by least squares over the
-composition of the held-out frames. This is the same linear energy-reference
-term subtracted during fine-tune training, applied identically to the zero-shot
-and fine-tuned endpoints; it isolates the shape of the energy surface from the
-per-element reference offset each backend uses and reduces to a constant global
-shift when every frame shares one composition.
+\paragraph{Protocol}
+Each per-case dataset is divided into disjoint train and held-out test partitions
+by a single random frame-level $80/20$ split (fixed seed $0$, one draw per case;
+no separate validation partition). The total/train/test frame counts and number of \acs{AL} iterations are
+$29/23/6$ ($10$) for LiFePO\textsubscript{4}, $86/69/17$ ($12$) for Cantor FCC,
+$434/347/87$ ($5$) for NbTaVHfZrTi BCC, $32/26/6$ ($8$) for phosphorene, and
+$13/10/3$ ($4$) for the Zn(HCOO)\textsubscript{2} \acs{MOF}. Given its
+three-frame held-out partition, the \acs{MOF} result is treated as illustrative
+rather than as a basis for cross-backend comparison. The study is intended to
+measure model adaptation on loop-generated data rather than to establish
+large-data benchmark rankings. We measure a strict
+\emph{before/after} pair on the identical test partition: the \emph{before}
+endpoint is the pretrained checkpoint with no exposure to the case data, and the
+\emph{after} endpoint is the same architecture fine-tuned on the train partition.
+We report two error metrics per endpoint: the force mean absolute error
+(\acs{MAE}, eV/\AA) and the per-atom energy \acs{MAE} after subtracting a
+per-element linear reference (meV/atom). The frame-level split is used consistently across all backends. Because
+neighboring \acs{MD} frames can be temporally correlated, the resulting metrics
+characterize within-trajectory held-out performance; future evaluations will also
+use trajectory- or iteration-level partitions. In the current implementation the
+per-element linear reference for the shifted energy metric is fit on the held-out
+frames. We therefore mark the reference-shifted energy \acs{MAE} and use force \acs{MAE}, 
+which is unaffected by that reference fit, as the
+principal fine-tuning metric. A training-partition reference will be used in the
+next evaluation. Each campaign is run once with a fixed seed, so the table reports
+point estimates.
 
-\paragraph{Backends.}
+\paragraph{Backends}
 The study spans all three \acs{MLIP} engines used elsewhere in the paper. For
 HydraGNN~\cite{hydragnn} we contrast four transfer-learning strategies against a
 common baseline: (i) \emph{routed}, the default multi-head \ac{GFM} routing;
@@ -892,7 +741,7 @@ common baseline: (i) \emph{routed}, the default multi-head \ac{GFM} routing;
 retrained; and (iv) \emph{scratch}, a model trained from random initialization
 on the case data alone, which isolates the value of the pretrained
 representation. For UMA~\cite{wood2025uma} we fine-tune directly through the
-model's conservative energy-and-force head with a lightweight custom training
+model's conservative energy-and-force head with a custom training
 loop, a small number of Adam epochs on a force-weighted energy-and-force loss
 that updates the pretrained output heads in place, in three variants:
 \emph{full} (all trainable weights), \emph{frozen} (backbone held fixed, output
@@ -902,256 +751,132 @@ operations untouched. For MACE~\cite{batatia2022,batatia2023macemp} we fine-tune
 the released MACE-MP foundation models at all three published capacities
 (\emph{small}, \emph{medium}, \emph{large}) using the authors' own training
 entry point, in two variants: a \emph{naive} full fine-tune and a native
-\emph{LoRA} fine-tune. All fine-tunes adapt the large pretrained potential to a
-narrow domain without erasing its general knowledge, and every backend is scored
-on the same held-out partition with identical metrics so the comparison is
-strictly like-for-like.
+\emph{LoRA} fine-tune. All fine-tunes adapt the pretrained potential to a narrow
+domain, and every backend is scored on the same held-out partition with the same
+metrics, so the comparison is on common data partitions and evaluation metrics
+rather than identical training conditions (optimizers, trainable-parameter counts,
+budgets, and implementations differ across backends).
 
-\paragraph{Execution.}
-The full matrix---three foundation-model backends at their several fine-tuning
-variants, together with the HydraGNN transfer-learning strategies, each across
-five cases---amounts to dozens of independent single-\acs{GPU}
-fine-tune-and-evaluate campaigns. To use leadership-class nodes efficiently we
-execute them through a packed launcher that co-schedules four self-contained
-campaigns on the four \acs{GPU} devices of a single node, pinning one campaign
-per device and collecting per-campaign logs and evaluation outputs
-independently. Because every campaign uses identical dataset splits, metrics,
-and held-out partitions regardless of how it is scheduled, packing four per node
-quadruples node-level throughput without altering any individual result, and the
-entire table is reproduced by resubmitting the same packed jobs.
+\paragraph{Fine-tuning through the conservative force head}
+UMA is a \emph{conservative} potential: it predicts one energy and takes the
+forces as the exact gradient of that energy, keeping energies and forces
+consistent. For these datasets, directly applying the default fine-tuning procedure produced
+two undesirable effects. Recomputing the energy/force normalization scales from
+the case data increased the force scale by about $3\times$, and replacing the
+conservative head with a \emph{direct}-force head removed the energy-gradient
+constraint. We therefore fine-tune the original conservative head while retaining
+the pretrained normalization scales. In our tests, refitting the normalizer on
+the case-specific data degraded accuracy without producing an explicit runtime
+error.
 
-\paragraph{Fine-tuning through the conservative force head.}
-A subtle but decisive methodological choice surfaced when fine-tuning the
-UMA foundation model. UMA predicts forces as the analytic gradient of its energy
-with respect to atomic positions, a \emph{conservative} force head evaluated
-inside the forward pass. The convenient route of driving the fine-tune through
-the reference configuration pipeline instead recomputes the output
-normalizers, the force \acs{RMS} scale and the per-element linear energy
-references, from the (small) case dataset and trains a \emph{direct}-force head.
-On a few hundred frames these statistics are estimated far from their
-pretraining values: the force scale inflates by roughly a factor of three and
-the per-element references collapse onto the handful of elements present in the
-case. Because a direct-force head multiplies its raw output by the stored force
-scale, a gentle fine-tune that barely moves the network weights nonetheless
-emits forces mis-scaled by that same factor, so accuracy \emph{degrades} from
-the first optimization step. We therefore fine-tune the conservative head
-\emph{directly}: the model is run in training mode so the head retains the
-double-backprop graph needed to differentiate the force gradient, and a
-force-weighted energy-and-force loss updates the pretrained heads while leaving
-their output statistics untouched. We adopt this convention for all
-foundation-model fine-tunes reported here, and note it explicitly because the
-normalizer-refitting route is an easy and silent failure mode when adapting
-large pretrained potentials to small domain datasets.
+\paragraph{Cross-backend results}
+Figure~\ref{fig:finetune} reports the held-out force \acs{MAE} (principal metric)
+and the reference-shifted energy \acs{MAE} for every backend
+and fine-tuning variant on the five \acs{AL}-corrected cases for five distinct classes of compounds, each grouped
+under its zero-shot baseline. Because all methods are scored on the same held-out
+frames with the
+same metrics, the figure compares HydraGNN, UMA, and the three MACE-MP capacities
+on common data partitions and evaluation metrics (training conditions differ
+across backends). The zero-shot errors indicate limited transfer to several of
+these specialized chemistries (battery cathode, refractory and structural
+\acsp{HEA}, 2D semiconductor, porous \acs{MOF}), regardless of whether related
+configurations appeared in the original pretraining corpora. Fine-tuning on the
+loop-generated data reduces one or both error metrics for many backend--material
+combinations, but neutral and negative transfer also occurs and is a meaningful
+outcome rather than an exception.
 
-\paragraph{Cross-backend results.}
-Figure~\ref{fig:finetune} reports the held-out force and reference-shifted energy
-\acs{MAE} for every backend and fine-tuning variant on the five
-\acs{AL}-corrected paper cases, each grouped under its zero-shot
-baseline. Because all methods are scored on the same held-out frames with the
-same metrics, the figure is a strictly like-for-like comparison of HydraGNN, UMA,
-and the three MACE-MP capacities. The pretrained potentials all start
-off-distribution on these specialized chemistries (battery cathode, refractory
-and structural \acsp{HEA}, 2D semiconductor, porous \acs{MOF}), none of which is
-well represented in their training distributions. Fine-tuning on the
-loop-generated data reduces both error metrics in essentially every case.
+For HydraGNN the full (\emph{unfrozen}) fine-tune and the from-\emph{scratch}
+specialist give the largest, similar reductions, while the head-only
+(\emph{frozen}) and default \emph{routed} updates change the metrics least; the
+competitiveness of the from-scratch model suggests the \acs{AL}-corrected
+datasets are internally consistent. For UMA the figure contrasts full fine-tuning
+with parameter-efficient variants (head-only and LoRA), and for the MACE-MP
+capacities naive full fine-tuning with LoRA, using the authors' native training
+entry point. These results compare backend behavior under a common evaluation protocol rather
+than define a universal ranking: the lowest-error backend and adaptation strategy
+depend on the material and metric. The uniform interface lets a user switch
+or benchmark potentials on identical held-out frames, so the choice of potential
+remains the user's, per material and per task.
 
-For HydraGNN the full fine-tune (\emph{unfrozen}) and the
-from-\emph{scratch} specialist give the largest error reductions and are
-typically close to each other; the \emph{frozen}-backbone (head-only) update
-yields a smaller reduction, and the default multi-head \emph{routed} update
-changes the metrics least. That the from-scratch specialist is competitive with
-transfer learning indicates the \acs{AL}-corrected datasets are internally
-consistent enough to train a capable case-specific potential on their own. For
-UMA the same instrument contrasts full fine-tuning against
-its parameter-efficient alternatives (frozen backbone with head-only training,
-and LoRA); for the MACE-MP capacities, whose native training entry point does
-not expose head-only backbone freezing, it contrasts naive full fine-tuning
-against LoRA, and, across the three capacities, whether the additional
-foundation-model size translates into lower post-fine-tune error on these narrow
-domains. The MACE fine-tunes are produced through the authors'
-native training entry point (identical energy/force loss, exponential
-moving-average weight tracking, and gradient clipping as the reference recipe)
-so the numbers are directly
-comparable to community MACE-MP fine-tuning practice.
-
-We report these numbers as measurements, not as a ranking that anoints a single
-best potential. Which backend and which adaptation give the lowest error depend
-on the material and the metric, and the absolute values shift as more
-\acs{AL} data is collected, so a result on one fixture does not transfer
-to a general recommendation. \textsc{matsim-agents} therefore treats
-Fig.~\ref{fig:finetune} as a benchmarking instrument rather than an
-endorsement: the same uniform interface lets a user switch potentials, benchmark
-several against one another on identical held-out frames, combine them as a
-mixture of experts, or take any of them as the pretrained starting point for
-further \acs{AL} data collection. The comparison is thus kept factual and
-the choice of potential remains the user's, per material and per task.
-
-\begin{figure*}[t]
+\begin{figure*}[tp]
 \centering
-\includegraphics[width=\textwidth]{figures/finetune_matrix.pdf}
-\caption{Held-out test errors on the \acs{AL}-corrected paper cases, unified
+\includegraphics[width=0.66\textwidth]{figures/finetune_matrix.pdf}
+\caption{Held-out test errors on the \acs{AL}-corrected cases, unified
 across all three \acs{MLIP} backends and their fine-tuning variants.
-(a)~force \acs{MAE} (eV/\AA); (b)~reference-shifted per-atom energy \acs{MAE}
-(meV/atom). Rows are grouped by backend, each backend's zero-shot baseline
-(bold) followed by its fine-tuning variants; case columns LFP, Cantor, NbTaV,
-Phos, and MOF follow Table~\ref{tab:cases}; MACE-MP S/M/L $=$ small/medium/large.
+(a)~force \acs{MAE} (eV/\AA); (b) reference-shifted per-atom
+energy \acs{MAE} (meV/atom; elemental reference fit on the test frames, see
+Section~\ref{sec:conclusions}). Rows are grouped by backend, each backend's
+zero-shot baseline
+(bold) followed by its fine-tuning variants; case columns are LFP
+(LiFePO\textsubscript{4}), Cantor, NbTaV (NbTaVHfZrTi), Phos (phosphorene), and
+MOF (Zn(HCOO)\textsubscript{2}); MACE-MP S/M/L $=$ small/medium/large.
 Colour is log-scaled (green $=$ low error, red $=$ high error), so the
 order-of-magnitude drop from zero-shot to fine-tuned is visible at a glance
 while every cell is annotated with its exact value.}
 \label{fig:finetune}
 \end{figure*}
 
-% --- Table V replaced by Fig.~\ref{fig:finetune}; retained (disabled) below in
-% --- case the tabular form is needed again. Re-enable by removing \iffalse/\fi.
-\iffalse
-\begin{table*}[t]
-\centering
-\footnotesize
-\setlength{\tabcolsep}{4.5pt}
-\caption{Held-out test errors on the \acs{AL}-corrected paper cases,
-unified across all three \acs{MLIP} backends and their fine-tuning variants.
-Left panel: force \acs{MAE} (eV/\AA); right panel: reference-shifted per-atom
-energy \acs{MAE} (meV/atom). Case columns LFP, Cantor, NbTaV, Phos, and MOF
-follow Table~\ref{tab:cases}; MACE-MP S/M/L $=$ small/medium/large.}
-\label{tab:finetune}
-\begin{tabular}{lccccc@{\hspace{1.5em}}ccccc}
-\toprule
- & \multicolumn{5}{c}{Force \acs{MAE} (eV/\AA)} & \multicolumn{5}{c}{Energy \acs{MAE} (meV/atom)}\\
-\cmidrule(lr){2-6}\cmidrule(lr){7-11}
-Method & LFP & Cantor & NbTaV & Phos & MOF & LFP & Cantor & NbTaV & Phos & MOF\\
-\midrule
-HydraGNN zero-shot   & 22.97 & 6.43 & 3.32 & 2.84 & 5.38 & 1917 & 2248 & 559 & 136 & 216 \\
-\quad routed         & 3.09  & 6.18 & 2.02 & 1.58 & 2.49 & 662  & 1108 & 121 & 165 & 116 \\
-\quad unfrozen       & 2.69  & 3.43 & 1.37 & 0.68 & 2.21 & 612  & 418  & 28  & 45  & 117 \\
-\quad frozen         & 4.98  & 5.10 & 1.46 & 0.57 & 3.26 & 430  & 843  & 107 & 59  & 216 \\
-\quad scratch        & 2.50  & 2.14 & 1.37 & 0.42 & 2.12 & 604  & 450  & 49  & 33  & 120 \\
-\addlinespace
-UMA zero-shot        & 0.73 & 0.66 & 0.18 & 0.17 & 1.03 & 130 & 150 & 5  & 15 & 78  \\
-\quad full FT        & 1.82 & 0.65 & 0.00 & 0.36 & 1.92 & 445 & 123 & 0  & 29 & 115 \\
-\quad frozen         & 0.73 & 0.66 & 0.18 & 0.17 & 1.03 & 130 & 150 & 5  & 15 & 78  \\
-\quad LoRA           & 0.73 & 0.66 & 0.18 & 0.22 & 1.50 & 130 & 150 & 5  & 13 & 178 \\
-\addlinespace
-MACE-MP-S zero-shot  & 1.30 & 1.36 & 0.48 & 0.21 & 0.61 & 177 & 154 & 112 & 31 & 32 \\
-\quad naive FT       & 0.07 & 0.02 & 0.00 & 0.05 & 0.07 & 18  & 8   & 0   & 2  & 11 \\
-\quad LoRA           & 0.42 & 0.19 & 0.01 & 0.11 & 0.34 & 89  & 190 & 6   & 8  & 14 \\
-\addlinespace
-MACE-MP-M zero-shot  & 1.04 & 1.07 & 0.49 & 0.31 & 0.55 & 117 & 158 & 19 & 45 & 27 \\
-\quad naive FT       & 0.04 & 0.02 & 0.00 & 0.04 & 0.05 & 11  & 9   & 0  & 3  & 6  \\
-\quad LoRA           & 0.33 & 0.20 & 0.01 & 0.09 & 0.36 & 68 & 197 & 5 & 7 & 20 \\
-\addlinespace
-MACE-MP-L zero-shot  & 1.25 & 1.06 & 0.66 & 0.27 & 0.43 & 97 & 177 & 45 & 46 & 48 \\
-\quad naive FT       & 0.02 & 0.01 & 0.00 & 0.04 & 0.03 & 9  & 3   & 0  & 2  & 11 \\
-\quad LoRA           & 0.35 & 0.15 & 0.01 & 0.10 & 0.29 & 96 & 171 & 4  & 6  & 13 \\
-\bottomrule
-\end{tabular}
-\end{table*}
-% Regenerate rows from the eval JSONs:
-%   python scripts/utils/harvest_finetune_eval.py           # prints LaTeX rows
-%   python scripts/utils/harvest_finetune_eval.py --tsv     # TSV for checking
-% Reads runs/finetune-eval/<variant>/<case>/eval/iter{0,N}.json; keys
-%   force_mae_eV_per_A and energy_mae_eV_per_atom_shifted (x1000 -> meV/atom).
-% All cells are now populated from completed runs. MACE has no head-only "frozen"
-%   row: mace_run_train ignores backbone freezing, so LoRA is its parameter-
-%   efficient variant (UMA's frozen row is the head-only comparison point).
-\fi
 
-\subsection{Hypothesis Formulation and Multi-LLM Debate}
+\subsection{Evidence-Gated Escalation}
 \label{sec:results:hypothesis}
-The fine-tuning results above quantify \emph{how accurate} each surrogate is on
-the corrected data; this subsection closes the loop by showing how that accuracy
-propagates into the \emph{scientific conclusion} that the interface layer draws.
-We exercise the optional multi-\acs{LLM} peer review of the discovery-chat entry
-point (Section~\ref{sec:architecture}) on a materials-characterization task:
-given an element set and a family of stoichiometries, decide which
-crystallographic structure is simultaneously \emph{chemically} stable
-(formation energy on or below the convex hull) and \emph{dynamically} stable
-(no imaginary phonon modes), and state the numerical criterion that would
-falsify the claim. A proposer model (Qwen2.5-14B-Instruct) drafts a falsifiable
-hypothesis, and a panel of two critics from independent developers
-(DeepSeek-R1-Distill-Qwen-32B and Gemma~4~31B; Table~\ref{tab:llms}) revises it
-over two rounds of critique and cross-critique. All three models are served
-locally through vLLM on a single node (three A100-80GB \acsp{GPU}, one model
-each); the driver and \acs{HPC} launcher are released with the code. The only
-evidence the panel is given about the surrogate is its measured held-out
-accuracy from Fig.~\ref{fig:finetune}; the panel is not told which potential to
-prefer, so any change in its verdict is a function of the reported numbers alone.
+The fine-tuning results quantify \emph{how accurate} each surrogate is; this
+subsection shows how that accuracy sets the workflow's \emph{recommended
+action}---continue surrogate screening or escalate to \acs{DFT}. Through the
+discovery-chat entry point (Section~\ref{sec:architecture}) a user types a single
+free-text objective---for the Cantor alloy, for instance, to decide which of
+FCC/BCC/HCP is simultaneously chemically and dynamically stable and to give the
+numerical criterion that would falsify the claim. The workflow auto-detects the
+composition, enumerates the candidate polymorphs, and hands them to an optional
+multi-\acs{LLM} panel: a proposer (Qwen2.5-14B-Instruct) and two critics from
+independent developers (DeepSeek-R1-Distill-Qwen-32B and Gemma~4~31B), served
+locally through vLLM. The panel's only surrogate evidence is the measured
+held-out accuracy of Fig.~\ref{fig:finetune}, so any change in its recommended
+action is a function of the reported numbers alone.
 
-We run three fixtures, the two \acs{HEA}s and the LiFePO$_4$ olivine/maricite
-cathode, under two evidence conditions: the zero-shot
-accuracy (\emph{before} \acs{AL} fine-tuning) and the fine-tuned accuracy
-(\emph{after}), and compare the resulting hypotheses (Table~\ref{tab:hypothesis}).
-The panel consistently anchors its decision to the physical fact that competing
-polymorphs are separated by only tens of meV/atom, so a surrogate whose energy
-error exceeds that spacing cannot resolve the convex hull. For the Cantor
-\acs{HEA}, the before-fine-tuning evidence gives every backend an energy
-\acs{MAE} of 150--2248~meV/atom; the panel judges all three surrogates
-insufficient to rank the FCC/HCP/BCC alternatives and recommends escalating to
-\acs{DFT} and routing the structures back into \acs{AL}. Under the
-after-fine-tuning evidence the most accurate fine-tuned potential on that
-fixture (MACE-MP-L, 3~meV/atom) falls below the polymorph spacing; the panel now
-asserts the single-phase FCC solid solution, tightens the falsification
-tolerance to $\pm 10$~meV/atom and a residual-force bound of $0.07$~eV/\AA, and
-adds a cross-model agreement check that still escalates individual structures
-whose energy spread across backends exceeds $5$~meV/atom. For the refractory
-NbTaVHfZrTi \acs{HEA} the shift is more nuanced: because UMA is already accurate
-before fine-tuning ($5$~meV/atom), the panel separates the two notions of
-stability, treating chemical stability as resolvable from the surrogate energies
-while insisting that dynamical (phonon) stability be confirmed in \acs{DFT}
-until the force error is small enough to trust vibrational signs, which the
-fine-tuned potentials ($\le\!0.005$~eV/\AA) subsequently provide. The
-LiFePO$_4$ cathode (olivine \emph{Pnma} versus maricite) exposes a third pattern
-together with a benchmarking caveat. Before fine-tuning no backend is usable (best
-energy \acs{MAE} 97~meV/atom), and the panel additionally recognises the known
-phase-separating character of Li$_x$FePO$_4$, posing a miscibility-gap
-counter-hypothesis before escalating to \acs{DFT} and \acs{AL}. After
-fine-tuning only MACE-MP-L improves (energy 9~meV/atom, force $0.021$~eV/\AA),
-whereas UMA and HydraGNN in fact \emph{regress} on this chemistry, a divergence
-the before/after benchmark surfaces automatically; even then the panel asserts
-only chemical resolvability while still escalating the phonon (dynamical-stability)
-check to \acs{DFT}, because $0.021$~eV/\AA\ remains above the
-$\sim\!0.005$~eV/\AA\ it requires to trust vibrational signs.
+We run three fixtures---the two \acs{HEA}s and the LiFePO$_4$
+cathode---under two evidence conditions: zero-shot (\emph{before}) and fine-tuned
+(\emph{after}). A rule-based gate encodes the rule the panel is asked to
+respect: if the best available force \acs{MAE} exceeds the
+$\sim\!0.005$\,eV/\AA\ needed to trust phonon signs (and the coarser resolution
+needed to separate competing polymorphs), escalate to \acs{DFT} and route the
+structures back into \acs{AL}; otherwise permit surrogate screening subject to
+\acs{DFT} validation. We drive the gate on the force \acs{MAE}, our principal and
+leakage-free metric, and deliberately exclude the reference-shifted energy
+\acs{MAE}, whose elemental reference is fit on the test frames
+(Section~\ref{sec:conclusions}). Table~\ref{tab:hypothesis} shows the recommended
+action tracking the gate: before fine-tuning the best force \acs{MAE} is
+$0.18$--$0.73$\,eV/\AA\ and the panel escalates, whereas after fine-tuning it
+falls to $\le\!0.01$\,eV/\AA\ on the \acsp{HEA} (screening permitted subject to
+\acs{DFT} validation) while LiFePO$_4$ remains at $0.02$\,eV/\AA---still too
+coarse for phonon signs---so \acs{DFT} is required. The before/after evidence also
+surfaces cases where fine-tuning \emph{degrades} a universal potential (UMA and
+HydraGNN regress on LiFePO$_4$).
 
-Two points matter for the framework rather than for the specific chemistries.
-First, the conclusion the system reports is not fixed: the same prompt and the
-same panel move from ``escalate to \acs{DFT}/\acs{AL}'' to ``assert the
-stable structure, under an error-tolerance gate'' purely because the underlying
-\acs{MLIP} became more accurate through the \acs{AL} loop, which is the
-intended coupling between the physics layer and the reasoning layer. The same
-coupling also acts defensively: on LiFePO$_4$ the panel withholds the
-dynamical-stability claim while the fine-tuned force error is still too coarse for
-phonons, and the before/after evidence itself exposes cases where fine-tuning
-\emph{degrades} a universal potential rather than improving it. Second, the
-multi-model panel reproduces, in natural language, the same conservative,
-evidence-gated escalation logic that the workflow applies numerically: it
-declines to over-claim when the evidence is
-weak and narrows its criteria only when the measured error supports it. The
-panel is a cross-examination step that surfaces this reasoning explicitly, not
-an oracle that replaces the physical calculations.
+An aggregate held-out \acs{MAE} does not certify the phase
+stability of any specific candidate, nor is it a candidate-specific uncertainty;
+it only bounds how finely the surrogate can discriminate, which is what the gate
+needs. The \acs{LLM} panel interprets the reported evidence in natural language,
+but the rule-based gate makes the escalate/permit decision and every stability
+conclusion still requires \acs{DFT}. Thus, measured surrogate quality determines whether the workflow continues with
+surrogate screening or invokes first-principles evaluation.
 
-\begin{table}[t]
+\begin{table}[tb]
 \centering
 \footnotesize
-\caption{Effect of \acs{MLIP} accuracy on the multi-\acs{LLM} panel's
-crystal-structure stability verdict, before and after \acs{AL}
-fine-tuning. ``Min.\ energy \acs{MAE}'' is the smallest per-atom energy error
-available to the panel among the three backends (Fig.~\ref{fig:finetune}).}
+\caption{Evidence-gated recommended actions before vs.\ after \acs{AL}
+fine-tuning. All three fixtures share one user objective (decide the stable
+structure and give a falsification criterion); only the element set differs.
+``Min.\ force \acs{MAE}'' is the smallest held-out force error over the three
+backends (Fig.~\ref{fig:finetune}).}
 \label{tab:hypothesis}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{llcp{3.4cm}}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lccl}
 \toprule
-Fixture & Stage & \shortstack{Min.\ energy\\\acs{MAE}\\(meV/atom)} & Panel stability verdict\\
+Fixture & \shortstack{Before\\(eV/\AA)} & \shortstack{After\\(eV/\AA)} & Recommended action\\
 \midrule
-\multirow{2}{*}{\shortstack[l]{Cantor\\FCC}}
- & before & 150 & Cannot resolve hull; escalate to \acs{DFT} + \acs{AL}\\
- & after  & 3   & Assert FCC; error-gated screening\\
-\addlinespace
-\multirow{2}{*}{\shortstack[l]{NbTaV\\BCC}}
- & before & 5   & Chemical stability resolvable; phonons require \acs{DFT}\\
- & after  & 0   & Assert BCC; error-gated screening\\
-\addlinespace
-\multirow{2}{*}{\shortstack[l]{LiFePO$_4$\\olivine}}
- & before & 97  & Cannot resolve hull; escalate to \acs{DFT} + \acs{AL}\\
- & after  & 9   & Chemistry resolvable; phonons still require \acs{DFT}\\
+Cantor FCC & 0.66 & 0.01 & Escalate $\rightarrow$ screen, then \acs{DFT} validate\\
+NbTaV BCC  & 0.18 & $<$0.01 & Escalate $\rightarrow$ screen, then \acs{DFT} validate\\
+LiFePO$_4$ & 0.73 & 0.02 & Escalate $\rightarrow$ \acs{DFT} required (phonons)\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1170,20 +895,16 @@ $N\in\{1,2,4,8\}$. Concurrency is expressed as $N$ simultaneous one-node
 with $N$-way parallelism. Because the workload is held fixed while the resource
 grows, this is a strong-scaling (fixed-problem) measurement.
 
-To make the result defensible against per-draw variability and the stochastic
-\acs{SCF} cost of individual random-alloy frames, we repeat the entire sweep
-$R=5$ times. Each repeat draws an independent random 32-frame workload (seeded
-deterministically and held fixed across node counts within the repeat), and the
-scaling metric is measured \emph{inside} each job from its per-iteration
-\texttt{state.json}: the work-normalized \acs{DFT} throughput is the number of
-converged frames divided by the cumulative \acs{DFT} wall time,
-$\text{throughput} = n_\text{conv}/t_\text{DFT}\times 3600$ frames/h. Because
-throughput is computed from in-job timers rather than queue-to-queue latency, it
-is independent of how the jobs are scheduled. Parallel
-efficiency is $100\times(\text{throughput}_N/N)/(\text{throughput}_1/1)$ relative
-to the single-node baseline.
+To make the result defensible against per-draw variability we repeat the sweep
+$R=5$ times, each drawing an independent random 32-frame workload held fixed
+across node counts within the repeat. Throughput is measured from in-job timers
+as converged frames per \acs{DFT}-hour
+($\text{throughput} = n_\text{conv}/t_\text{DFT}\times 3600$), independent of
+scheduling latency, and parallel efficiency is
+$100\times(\text{throughput}_N/N)/\text{throughput}_1$ relative to the single-node
+baseline.
 
-\begin{figure}[t]
+\begin{figure}[tb]
 \centering
 \includegraphics[width=\columnwidth]{figures/al_dft_scaling.pdf}
 \caption{Strong scaling of the \acs{DFT}-labelling stage on Perlmutter: a fixed
@@ -1203,181 +924,84 @@ $113.5\pm40.5$ (eight nodes), corresponding to speedups of $1.55\times$,
 $2.96\times$, and $6.28\times$. Parallel efficiency remains between 74\% and
 79\% across the scaled runs.
 
-The remaining sublinear scaling is a property of the \emph{fixed} workload
-rather than a coordination bottleneck in the orchestration layer. The random
-alloy configurations differ widely in \acs{SCF} difficulty---some converge in a
-handful of iterations, others exhaust their \acs{SCF} budget or fail---so at high
-concurrency the stage makespan is still influenced by whichever frame is slowest
-within a repeat. Increasing the fixed workload from the pilot 16-frame problem to
-32 frames reduces this straggler sensitivity: at eight nodes the mean throughput
-rises from 66.9 to 113.5 frames/h and the relative standard deviation drops from
-62\% to 36\%, yielding substantially steadier high-concurrency behavior. Because
-\acs{DFT} labelling is embarrassingly parallel---each frame is an independent
-single-point job---the 74--79\% efficiencies from two through eight nodes show
-that \textsc{matsim-agents} introduces little scheduling overhead; the residual
-gap to ideal scaling reflects finite batch granularity and stochastic \acs{SCF}
-cost rather than contention in the orchestration layer. In production this
-argues for matching the node allocation to the labelling batch: larger
-acquisition budgets can exploit higher concurrency effectively, whereas very
-small batches become straggler-bound once the number of workers approaches the
-number of difficult frames.
+The residual sublinear scaling is a property of the \emph{fixed} workload rather
+than the resource: random alloy frames differ widely in \acs{SCF}
+difficulty, so at high concurrency the makespan is set by the slowest frame in a
+repeat (enlarging the workload from $16$ to $32$ frames raises eight-node
+throughput from $66.9$ to $113.5$ frames/h). The embarrassingly parallel
+\acs{DFT}-labelling workload thus retains approximately $74$--$79\%$ parallel
+efficiency up to eight concurrent nodes; production runs should match the node
+allocation to the acquisition-batch size. This experiment measures labelling
+throughput and does not separately quantify scheduler latency.
 
 \subsection{Backend and Platform Portability of the Loop}
 \label{sec:results:portability}
 The loop treats both the \acs{MLIP} and the first-principles engine as
-configuration-selected backends rather than hard-coded dependencies, so the
-same orchestration runs across accelerators and \acs{DFT} codes without code
-changes. By construction, the entire workflow is therefore portable to all
-three \acs{DOE} leadership-class supercomputers: \acs{NERSC} Perlmutter
-(NVIDIA A100, \acs{CUDA}), \acs{OLCF} Frontier (AMD MI250X, ROCm/HIP), and
-\acs{ALCF} Aurora (Intel \acs{PVC}, \acs{XPU}/OneAPI). On Perlmutter the
-identical phosphorene loop labels structures with either \acs{VASP} or \acs{QE}:
-only the \texttt{dft:} block of the configuration differs
-(\texttt{al\_phosphorene.yaml} vs.\ \texttt{al\_phosphorene\_qe.yaml}), and each
-first-principles code is reached through a thin per-platform step launcher
-(\texttt{\_vasp-step-perlmutter.sh}, \texttt{\_qe-step-perlmutter.sh}) that
-performs its own module swap, so the driver's Python/\acs{MLIP} environment
-never collides with the compiler/\acs{MPI} stack of the \acs{DFT} code. The same
-abstraction carries the loop unchanged, apart from paths and the per-platform
-rank/thread layout, to Frontier and Aurora. The per-platform build, module, and
-offload details of Section~\ref{sec:hpc} establish the underlying coverage:
-HydraGNN builds on all three accelerators (\acs{CUDA}, ROCm/HIP,
-\acs{XPU}/OneAPI), the UMA and MACE-MP foundation models on the Perlmutter
-\acs{CUDA} stack, and both first-principles engines (\acs{QE}, \acs{VASP})
-compile on all three facilities. Because the orchestration code is identical
-across platforms and only the configuration-selected backends and thin
-per-platform launchers change, the workflow runs on any of the three machines
-without modification.
+configuration-selected backends rather than hard-coded dependencies, so the same
+orchestration targets different accelerators and \acs{DFT} codes without code
+changes. On Perlmutter the identical phosphorene loop labels structures with
+either \acs{VASP} or \acs{QE} by changing only the \texttt{dft:} block of the
+configuration; each code is reached through a thin per-platform launcher that
+performs its own module swap, so the driver's Python/\acs{MLIP} environment never
+collides with the \acs{DFT} code's compiler/\acs{MPI} stack. HydraGNN builds on
+all three target accelerators and both \acs{QE} and \acs{VASP} compile on all
+three facilities (Section~\ref{sec:hpc}), but end-to-end campaigns with reported
+measurements are illustrated only on Perlmutter; the
+framework is thus portable by design, with performance illustrated on one
+platform.
 
 % =============================================================================
-\section{Conclusions and Future Developments}
+\section{Conclusions and Future Work}
 \label{sec:conclusions}
 
-\subsection{Symmetry and the Warm-Start Benefit}
-High-symmetry reference structures such as Si diamond and MgO, which converge
-in a single \acs{FIRE} step, illuminate an important
-subtlety for warm-start workflows: \emph{atomic forces alone do not capture all
-structural degrees of
-freedom}. For high-symmetry crystals, ionic forces are exactly zero by symmetry
-at \emph{any} lattice parameter, and the entire relaxation problem reduces to
-optimising the unit-cell volume (or shape). \acs{FIRE}, which is an ionic optimizer,
-will always converge in one step for such structures regardless of how far
-the cell is from equilibrium. The warm-start benefit therefore vanishes for
-high-symmetry elemental and binary systems.
+We presented \textsc{matsim-agents}, an open-source agentic workflow that connects
+natural-language scientific objectives to \acs{MLIP}-based exploration,
+first-principles labeling, model adaptation, and evidence-based escalation on
+leadership-class \acs{HPC}. The system separates orchestration from the scientific
+backends, checkpoints workflow state across batch allocations, and allows the
+\acs{MLIP} and \acs{DFT} engines to be selected through configuration rather than
+hard-coded into the workflow. On Perlmutter, five end-to-end campaigns ran without
+manual intervention and resumed across allocation boundaries. Across these
+campaigns, single-point \acs{DFT} labeling accounted for $88$--$97\%$ of iteration
+wall time, while all non-\acs{DFT} stages combined accounted for $3$--$12\%$.
+The dominant labeling stage retained approximately $74$--$79\%$ parallel
+efficiency from one to eight concurrent nodes.
 
-The benefit reappears for: (1) low-symmetry structures where internal
-coordinates are genuinely off-equilibrium (HEAs, substitutionally disordered
-alloys, defect supercells, MOFs); (2) structures undergoing symmetry-breaking
-phase transitions; and (3) molecular crystals with flexible organic linkers.
-Fixture selection for warm-start benchmarks should prioritise these categories.
+The experiments also show that the usefulness of surrogate models depends on the
+material, backend, and task. \acs{MLIP} pre-relaxation reduced \acs{DFT} effort for
+several material--backend combinations but was neutral or detrimental for others.
+Likewise, fine-tuning improved many backend--material combinations but did not
+produce a uniform benefit. These results motivate the backend abstraction used in
+\textsc{matsim-agents}: model selection and adaptation are treated as workflow
+choices informed by measured performance rather than as fixed assumptions. The
+escalation experiment follows the same principle by using measured
+force error to determine when surrogate screening is appropriate and when the
+workflow should invoke \acs{DFT}.
 
-\subsection{Scalability and Cost}
-On Perlmutter, \acs{MLIP} relaxation is dominated by HydraGNN model loading
-($\sim$60\,s) rather than inference ($<$1\,s per structure); amortised over a
-production discovery run of hundreds of structures, model loading cost is
-negligible.
-The \acs{QE} warm-start benchmark for a 16-atom metallic alloy such as MoNbTaW
-(vc-relax) requires $\approx$20--40\,min per \acs{DFT} run at standard
-convergence thresholds.
+The present study focuses on demonstrating integrated execution, portability of
+the software design, and model adaptation on loop-generated data. The
+fine-tuning analysis uses frame-level held-out splits, so future evaluations will
+add trajectory- and iteration-level partitions to quantify transfer across less
+correlated configurations.
+Systematic comparisons of the acquisition strategy against random, uniform, and
+uncertainty-based selection will also be used to quantify sample efficiency.
 
-\subsection{LLM Provider Flexibility}
-A deliberate design decision is provider-agnosticism: the framework supports
-Ollama, vLLM, OpenAI, Anthropic, and HuggingFace transformers backends.
-On leadership-class machines without internet access, vLLM with locally
-downloaded open-weight models is the standard deployment. The models directory
-currently provides ten checkpoints spanning several independent developers, a
-wide parameter range, and both dense and mixture-of-experts (MoE) architectures
-(Table~\ref{tab:llms}). This selection lets the planning and analysis agents be
-matched to the available accelerator memory and the desired quality/cost
-tradeoff, rather than being tied to a single vendor or model.
-
-\begin{table}[t]
-\centering
-\caption{Locally hosted \acs{LLM} checkpoints available to the
-\textsc{matsim-agents} agents; for MoE models, the parenthetical value is the
-number of parameters activated per token.}
-\label{tab:llms}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lll}
-\toprule
-Model & Developer & Total / Active params\\
-\midrule
-SmolLM3-3B~\cite{smollm3} & HuggingFace & 3B dense \\
-Qwen2.5-14B-Instruct~\cite{qwen2.5} & Alibaba & 14B dense \\
-Gemma~4 (26B-A4B)~\cite{gemma4} & Google & 26B MoE (4B) \\
-Gemma~4 (31B)~\cite{gemma4} & Google & 31B dense \\
-Qwen3.6-27B~\cite{qwen3.6} & Alibaba & 27B dense \\
-Qwen3-32B~\cite{qwen3} & Alibaba & 32B dense \\
-DeepSeek-R1-Distill-Qwen-32B~\cite{deepseekr1} & DeepSeek & 32B dense \\
-Qwen3.6-35B-A3B~\cite{qwen3.6} & Alibaba & 35B MoE (3B) \\
-Qwen2.5-72B-Instruct~\cite{qwen2.5} & Alibaba & 72B dense \\
-Mixtral-8x22B-Instruct~\cite{mixtral} & Mistral AI & 141B MoE (39B) \\
-\bottomrule
-\end{tabular}%
-}
-\end{table}
-
-\subsection{Limitations and Future Developments}
-We have presented \textsc{matsim-agents}, an open-source agentic \acs{AI} scientific
-workflow framework whose central novelty is the closed-loop orchestration of
-natural-language scientific intent, \acs{MLIP}-based atomistic execution,
-validation-gated \acs{DFT} escalation, \acs{AL}, and
-language-level scientific synthesis on leadership-class \acs{HPC} systems. The system integrates \ac{LLM} planning, \acs{MLIP} relaxation (HydraGNN~\cite{hydragnn},
-UMA~\cite{wood2025uma}, and MACE-MP~\cite{batatia2023macemp}), validation-gated decision making, \acs{AL},
-first-principles escalation, and \acs{DFT} warm-starting into a unified, portable
-pipeline designed for \acs{NERSC} Perlmutter, \acs{OLCF} Frontier, and \acs{ALCF} Aurora. It
-addresses all five subtopics of the ``Scientific Workflows \& Application
-Development'' theme of the AgenticAI4HPC workshop: intelligent workflow
-composition through a checkpointed LangGraph multi-agent graph; iterative
-optimisation through a self-improving \acs{AL} loop; agent-assisted
-validation through the validation gate; \acs{AI}-driven algorithm design through the
-multi-\acs{LLM} hypothesis-debate that adapts screening criteria to measured
-surrogate accuracy; and tight integration of simulation (\acs{DFT}),
-data analytics (\acs{MLIP} inference), and \acs{AI} (\acs{LLM} planning) workloads.
-Benchmark results on Perlmutter validate the warm-start benchmarking infrastructure for
-genuinely off-equilibrium structures such as the MoNbTaW \acs{HEA}, positioning
-\textsc{matsim-agents} as a practical framework for agentic \acs{AI} workflows in
-demanding computational materials science on leadership-class \acs{HPC}.
-
-The capabilities shown above also delineate the current boundaries of the
-framework, and each boundary is an opportunity for the next stage of development.
-The present limitations are: (1) automatic in-loop retraining is shown
-end-to-end for HydraGNN, whereas the foundation-model backends
-(UMA~\cite{wood2025uma} and MACE-MP~\cite{batatia2023macemp}) are supported as
-relaxation engines and through the offline fine-tune study of
-Section~\ref{sec:results:finetune}, and are wired as in-loop retrain hooks, but
-have not yet been exercised as fully automatic in-loop retraining steps; the
-warm-start module is backend-agnostic and supports HydraGNN, UMA, and MACE-MP as
-pre-relaxation backends; (2) the warm-start protocol handles ionic coordinates but not cell
-shape/volume, which limits benefit for pure-strain relaxation problems; (3) the
-\acs{LLM} planner does not yet incorporate literature search or database queries
-(Materials Project, AFLOW) as tool calls.
-
-These limitations map directly onto our planned developments. We plan to
-extend the loop to multi-fidelity \acs{AL} where semi-empirical
-tight-binding (\ac{DFTB}+) is used as an intermediate oracle between \acs{MLIP}
-and full \acs{DFT}.
-
-A further direction extends the framework from materials \emph{characterization}
-toward materials \emph{discovery and design}. Because the present workflow is
-exercised to establish the chemical and dynamical stability of candidate
-structures, the natural next step is to support the actual discovery and design
-of functional materials by driving atomistic simulations dedicated to the
-collection of functional properties. This entails expanding the set of supported
-computational tools beyond first-principles methods to include classical Monte
-Carlo for thermodynamic properties and molecular dynamics for the retrieval of
-mechanical behavior, so that the same agentic orchestration layer can progress
-from certifying structural stability to predicting the functional and mechanical
-response that ultimately governs materials selection.
+Future work will extend the perform end-to-end campaigns beyond Perlmutter
+to Frontier and Aurora, expand in-loop adaptation across additional \acs{MLIP}
+backends, and introduce intermediate-fidelity models such as \ac{DFTB}+ where they
+can reduce the number of full \acs{DFT} evaluations. Additional literature and
+materials-database tools will broaden the information available to the planning
+layer. These developments will move the framework from the present focus on
+stability characterization toward broader materials-discovery workflows while
+retaining the same separation between language-model orchestration and explicit
+scientific computation.
 
 % =============================================================================
 \section*{Acknowledgments}
-This research used resources of the Oak Ridge Leadership Computing Facility,
-the National Energy Research Scientific Computing Center, and the Argonne
-Leadership Computing Facility, which are \acs{DOE} Office of Science user facilities.
+This work was primarily supported by the Office of Advanced Scientific Computing Research (ASCR) and Office of Basic Energy Sciences through the SciDAC project ``FORUM-AI: Foundation Models Orchestrating Reasoning Agents to Uncover Materials Advances and Insight",  and also by the Seed project ``Critical Minerals and Materials to Unlock Supply (CM2US)" under The Transformational AI Models Consortium (ModCon) initiative of the Genesis Mission. Computing resources were provided by (i) the Oak Ridge Leadership Computing Facility, supported by the DOE Office of Science under the same contract, through ASCR Leadership Computing Challenge (ALCC) award LRN070; (ii) the Argonne Leadership Computing Facility, a DOE Office of Science user facility at Argonne National Laboratory, supported by ASCR under contract DE-AC02-06CH11357, through Director’s Discretionary award HydraGNN; and (iii) the National Energy Research Scientific Computing Center (NERSC), a DOE Office of Science user facility, through award “ScienceAtScale@NERSC” ASCR-ERCAP0034735 and ASCR-ERCAP0036319.
 
 % =============================================================================
 \bibliographystyle{IEEEtran}
-\bibliography{matsim_agents_relatedwork_contributions_reorganized}
+\bibliography{references}
 
 \end{document}
