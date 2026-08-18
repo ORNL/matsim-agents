@@ -114,9 +114,7 @@ def score_stability(
                 source=cand.source if cand is not None else "prototype",
                 prototype_id=cand.prototype_id if cand is not None else None,
                 space_group=cand.space_group if cand is not None else None,
-                needs_dft_verification=(
-                    cand.needs_dft_verification if cand is not None else False
-                ),
+                needs_dft_verification=(cand.needs_dft_verification if cand is not None else False),
             )
         )
 

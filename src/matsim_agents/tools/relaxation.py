@@ -242,8 +242,12 @@ class _NumericalStressCalculator:
             raise AttributeError(name)
         # Block methods that would raise PropertyNotImplementedError on the inner
         # calc — return a no-op lambda so ASE internals get None instead of crashing.
-        _unsupported = {"get_dipole_moment", "get_magnetic_moment",
-                        "get_magnetic_moments", "get_charges"}
+        _unsupported = {
+            "get_dipole_moment",
+            "get_magnetic_moment",
+            "get_magnetic_moments",
+            "get_charges",
+        }
         if name in _unsupported:
             return lambda *a, **kw: None
         return getattr(self._inner, name)
@@ -289,7 +293,7 @@ class _NumericalStressCalculator:
             self.calculate(atoms)
         return self.results[key]
 
-    def _numerical_stress(self, atoms) -> "np.ndarray":
+    def _numerical_stress(self, atoms) -> np.ndarray:
         """Central FD stress in ASE Voigt 6-vector convention (eV/Å³)."""
         import numpy as np
 
@@ -473,7 +477,6 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 steps_taken = step + 1
 
                 energy = atoms.get_potential_energy()
-                forces = atoms.get_forces()
                 # For convergence we check the optimizable's forces (which
                 # includes stress pseudo-forces when relax_cell=True).
                 opt_forces = optimizable.get_forces()

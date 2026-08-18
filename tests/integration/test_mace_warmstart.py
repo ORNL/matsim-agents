@@ -142,9 +142,7 @@ def test_mace_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> Non
         "fmax": float(mace_cfg.get("fmax", default_fmax)),
         "maxiter": int(mace_cfg.get("maxiter", 200)),
         "maxstep": float(mace_cfg.get("maxstep", 1e-2)),
-        "relative_increase_threshold": float(
-            mace_cfg.get("relative_increase_threshold", 0.05)
-        ),
+        "relative_increase_threshold": float(mace_cfg.get("relative_increase_threshold", 0.05)),
     }
 
     timeout = int(_env("MATSIM_QE_TIMEOUT_SEC") or "3600")
@@ -185,9 +183,11 @@ def test_mace_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> Non
         )
         if cold.get("converged"):
             import warnings
+
             warnings.warn(
                 f"{fixture['name']!r}: cold run converged unexpectedly — "
-                "consider removing cold_may_fail: true from the fixture."
+                "consider removing cold_may_fail: true from the fixture.",
+                stacklevel=2,
             )
         return  # pass — warm converged, cold did not (or both did, which is fine)
 

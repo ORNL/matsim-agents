@@ -118,9 +118,7 @@ def sample_md_candidates(
 
         # Initialise velocities from a Maxwell-Boltzmann distribution.
         if md_rng is not None:
-            MaxwellBoltzmannDistribution(
-                atoms, temperature_K=md_cfg.temperature_K, rng=md_rng
-            )
+            MaxwellBoltzmannDistribution(atoms, temperature_K=md_cfg.temperature_K, rng=md_rng)
         else:
             MaxwellBoltzmannDistribution(atoms, temperature_K=md_cfg.temperature_K)
 

@@ -76,9 +76,7 @@ def _split_dataset(
 # --------------------------------------------------------------------------- #
 
 
-def _hydragnn_cfg(
-    logdir: Path, checkpoint: str, branch_mlp: Path, device: str
-) -> MLIPConfig:
+def _hydragnn_cfg(logdir: Path, checkpoint: str, branch_mlp: Path, device: str) -> MLIPConfig:
     return MLIPConfig(
         backend="hydragnn",
         hydragnn=HydraGNNConfig(
@@ -568,64 +566,94 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--uma-task-name", default="omat", choices=["omat", "omol", "oc20", "odac", "omc"]
     )
+    parser.add_argument("--uma-epochs", type=int, default=20, help="UMA fine-tune epochs.")
     parser.add_argument(
-        "--uma-epochs", type=int, default=20, help="UMA fine-tune epochs."
-    )
-    parser.add_argument(
-        "--uma-lr", type=float, default=1e-4,
+        "--uma-lr",
+        type=float,
+        default=1e-4,
         help="UMA fine-tune Adam LR (reference recipe: 1e-4).",
     )
     parser.add_argument(
-        "--uma-force-weight", type=float, default=10.0,
+        "--uma-force-weight",
+        type=float,
+        default=10.0,
         help="Weight on the force-MSE term relative to energy-MSE.",
     )
     parser.add_argument("--uma-freeze-backbone", action="store_true")
     parser.add_argument("--uma-weight-decay", type=float, default=0.0)
     parser.add_argument(
-        "--uma-lora", action="store_true",
+        "--uma-lora",
+        action="store_true",
         help="LoRA fine-tune of UMA backbone scalar linears (preserves equivariance).",
     )
     parser.add_argument("--uma-lora-r", type=int, default=8, help="UMA LoRA rank (default: 8).")
-    parser.add_argument("--uma-lora-alpha", type=float, default=16.0, help="UMA LoRA alpha (default: 16.0).")
+    parser.add_argument(
+        "--uma-lora-alpha", type=float, default=16.0, help="UMA LoRA alpha (default: 16.0)."
+    )
     # MACE (all versions)
     parser.add_argument(
-        "--mace-model-id", default=None,
-        help="Curated MACE variant id (see finetune_mace.MACE_MODELS); overrides --mace-family/--mace-model.",
+        "--mace-model-id",
+        default=None,
+        help=(
+            "Curated MACE variant id (see finetune_mace.MACE_MODELS); "
+            "overrides --mace-family/--mace-model."
+        ),
     )
     parser.add_argument(
-        "--mace-family", default="mace_mp", choices=["mace_mp", "mace_off", "checkpoint"],
+        "--mace-family",
+        default="mace_mp",
+        choices=["mace_mp", "mace_off", "checkpoint"],
         help="MACE family: mace_mp (inorganic), mace_off (organic), or checkpoint (local .model).",
     )
     parser.add_argument(
-        "--mace-model", default="medium",
-        help="MACE size/variant (small|medium|large, or tag/URL), or a .model path for family=checkpoint.",
+        "--mace-model",
+        default="medium",
+        help=(
+            "MACE size/variant (small|medium|large, or tag/URL), "
+            "or a .model path for family=checkpoint."
+        ),
     )
     parser.add_argument("--mace-precision", default="fp64", choices=["fp32", "fp64"])
     parser.add_argument("--mace-dispersion", action="store_true")
     parser.add_argument(
-        "--mace-epochs", type=int, default=None,
+        "--mace-epochs",
+        type=int,
+        default=None,
         help="MACE fine-tune epochs (default: 10 for LoRA, 50 for naive).",
     )
     parser.add_argument(
-        "--mace-lr", type=float, default=None,
+        "--mace-lr",
+        type=float,
+        default=None,
         help="MACE fine-tune LR (default: 5e-3 for LoRA, 1e-3 for naive).",
     )
     parser.add_argument(
-        "--mace-force-weight", type=float, default=10.0,
+        "--mace-force-weight",
+        type=float,
+        default=10.0,
         help="Recorded for parity; mace_run_train uses its own energy/force weighting.",
     )
     parser.add_argument("--mace-freeze-backbone", action="store_true")
     parser.add_argument("--mace-weight-decay", type=float, default=0.0)
     parser.add_argument(
-        "--mace-lora", action="store_true",
+        "--mace-lora",
+        action="store_true",
         help="Parameter-efficient LoRA fine-tune (native mace_run_train --lora).",
     )
-    parser.add_argument("--mace-lora-rank", type=int, default=None, help="MACE LoRA rank (default: 4).")
-    parser.add_argument("--mace-lora-alpha", type=float, default=None, help="MACE LoRA alpha (default: 1.0).")
+    parser.add_argument(
+        "--mace-lora-rank", type=int, default=None, help="MACE LoRA rank (default: 4)."
+    )
+    parser.add_argument(
+        "--mace-lora-alpha", type=float, default=None, help="MACE LoRA alpha (default: 1.0)."
+    )
     # HydraGNN
-    parser.add_argument("--gfm-logdir", default=None, help="HydraGNN GFM logdir (config.json + .pk).")
+    parser.add_argument(
+        "--gfm-logdir", default=None, help="HydraGNN GFM logdir (config.json + .pk)."
+    )
     parser.add_argument("--branch-mlp", default=None, help="mlp_branch_weights.pt path.")
-    parser.add_argument("--gfm-checkpoint", default=None, help="GFM .pk filename (default: newest).")
+    parser.add_argument(
+        "--gfm-checkpoint", default=None, help="GFM .pk filename (default: newest)."
+    )
     parser.add_argument("--weight-threshold", type=float, default=0.1)
     parser.add_argument("--unfreeze-backbone", action="store_true")
     parser.add_argument(
@@ -636,12 +664,15 @@ def main(argv: list[str] | None = None) -> int:
         "drop-all-heads + new-head strategy (unfrozen/frozen/scratch).",
     )
     parser.add_argument(
-        "--hydragnn-head", default=None,
+        "--hydragnn-head",
+        default=None,
         help="Fine-tune a PRETRAINED HydraGNN head instead of a fresh random one: "
         "a branch index 0..15 or dataset name (e.g. MPTrj). Requires "
         "--hydragnn-strategy unfrozen|frozen.",
     )
-    parser.add_argument("--ft-repo", default=None, help="ORNL HydraGNN_GFM_FineTuning4Materials path.")
+    parser.add_argument(
+        "--ft-repo", default=None, help="ORNL HydraGNN_GFM_FineTuning4Materials path."
+    )
     parser.add_argument("--hydragnn-root", default=None)
     # shared
     parser.add_argument("--epochs", type=int, default=20)

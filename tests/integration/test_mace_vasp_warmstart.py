@@ -135,9 +135,7 @@ def test_mace_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> N
         "fmax": float(mace_cfg.get("fmax", 0.01)),
         "maxiter": int(mace_cfg.get("maxiter", 200)),
         "maxstep": float(mace_cfg.get("maxstep", 1e-2)),
-        "relative_increase_threshold": float(
-            mace_cfg.get("relative_increase_threshold", 0.05)
-        ),
+        "relative_increase_threshold": float(mace_cfg.get("relative_increase_threshold", 0.05)),
     }
 
     timeout = int(_env("MATSIM_VASP_TIMEOUT_SEC") or "3600")
@@ -161,7 +159,6 @@ def test_mace_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> N
     (work_dir / "comparison.json").write_text(json.dumps(_to_jsonable(summary), indent=2))
 
     cold = summary.cold
-    cold_may_fail = bool(fixture.get("cold_may_fail", False))
     warm_may_fail = bool(fixture.get("warm_may_fail", False))
 
     assert cold.get("converged"), (
@@ -178,10 +175,12 @@ def test_mace_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> N
     if not warm.get("converged"):
         if warm_may_fail:
             import warnings
+
             warnings.warn(
                 f"{fixture['name']!r}: warm VASP run did not converge "
                 f"(warm_may_fail=true) — MACE pre-relaxation may have moved "
-                f"atoms away from the DFT basin. See {warm.get('work_dir')}/vasp.out"
+                f"atoms away from the DFT basin. See {warm.get('work_dir')}/vasp.out",
+                stacklevel=2,
             )
             return  # pass — cold converged, warm failure is expected
         pytest.fail(

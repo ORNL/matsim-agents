@@ -148,9 +148,7 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
         "fmax": float(hydragnn_cfg.get("fmax", default_fmax)),
         "maxiter": int(hydragnn_cfg.get("maxiter", 200)),
         "maxstep": float(hydragnn_cfg.get("maxstep", 1e-2)),
-        "relative_increase_threshold": float(
-            hydragnn_cfg.get("relative_increase_threshold", 0.05)
-        ),
+        "relative_increase_threshold": float(hydragnn_cfg.get("relative_increase_threshold", 0.05)),
         "relax_cell": relax_cell,
     }
 
@@ -194,6 +192,7 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
         # so the fixture flag can be re-evaluated.
         if cold.get("converged"):
             import warnings
+
             warnings.warn(
                 f"{fixture['name']!r}: cold run converged unexpectedly — "
                 "consider removing cold_may_fail: true from the fixture."
@@ -214,6 +213,7 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
     if not warm.get("converged"):
         if warm_may_fail:
             import warnings
+
             warnings.warn(
                 f"{fixture['name']!r}: warm pw.x run did not converge "
                 f"(warm_may_fail=true) — MLIP pre-relaxation may have moved "

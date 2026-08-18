@@ -126,9 +126,7 @@ def load_trainable_uma(base_model: str, task_name: str, device: str):
     ckpt = _resolve_base_checkpoint(base_model)
     # 'default' inference settings avoid torch.compile so autograd graphs are
     # clean for the double-backprop of the conservative force head.
-    pu = pretrained_mlip.load_predict_unit(
-        ckpt, device=device, inference_settings="default"
-    )
+    pu = pretrained_mlip.load_predict_unit(ckpt, device=device, inference_settings="default")
     calc = FAIRChemCalculator(pu, task_name=task_name)
     model = pu.model.module  # trainable HydraModel
     return pu, calc, model
@@ -236,7 +234,9 @@ def merge_lora_into_backbone(backbone) -> int:
 
     merged = 0
     for full_name, module in list(backbone.named_modules()):
-        if not (hasattr(module, "lora_A") and hasattr(module, "lora_B") and hasattr(module, "base")):
+        if not (
+            hasattr(module, "lora_A") and hasattr(module, "lora_B") and hasattr(module, "base")
+        ):
             continue
         with torch.no_grad():
             delta = (module.lora_B @ module.lora_A) * module.scaling
@@ -526,7 +526,9 @@ def main(argv: list[str] | None = None) -> int:
         help="UMA task (omat: inorganic bulk, omol: molecules/MOFs, ...).",
     )
     parser.add_argument("--epochs", type=int, default=20, help="Number of fine-tune epochs.")
-    parser.add_argument("--batch-size", type=int, default=4, help="Gradient-accumulation batch size.")
+    parser.add_argument(
+        "--batch-size", type=int, default=4, help="Gradient-accumulation batch size."
+    )
     parser.add_argument(
         "--lr",
         type=float,
