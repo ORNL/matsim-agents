@@ -50,6 +50,9 @@
 #   HYDRAGNN_STRATEGY  routed | unfrozen | frozen | scratch (hydragnn only;
 #                      default routed = branch-MLP head reuse. The other three
 #                      drop all 16 heads and grow one fresh head.)
+#   HYDRAGNN_HEAD  fine-tune a PRETRAINED head instead of a random one: a branch
+#                  index 0..15 or dataset name (e.g. MPTrj, Alexandria, OMat24).
+#                  Requires HYDRAGNN_STRATEGY=unfrozen|frozen. (default: random)
 #   FT_REPO       ORNL HydraGNN_GFM_FineTuning4Materials checkout (new-head only)
 #   FTEVAL_ROOT   output root                       (default $RUNS_ROOT/finetune-eval)
 #   PROJECT_ROOT / RUNS_ROOT / HYDRAGNN_ROOT / GFM_LOGDIR / BRANCH_MLP / FAIRCHEM_SRC
@@ -82,12 +85,14 @@ MACE_PRECISION="${MACE_PRECISION:-fp64}"
 EPOCHS="${EPOCHS:-20}"
 BATCH_SIZE="${BATCH_SIZE:-4}"
 HYDRAGNN_STRATEGY="${HYDRAGNN_STRATEGY:-routed}"
+HYDRAGNN_HEAD="${HYDRAGNN_HEAD:-}"
 FTEVAL_ROOT="${FTEVAL_ROOT:-${RUNS_ROOT}/finetune-eval}"
 # Distinct runs (head strategy, MACE size/variant, LoRA/frozen) write to their
 # own subdir via a composed variant tag so they never collide.
 VARIANT_PARTS=()
 if [[ "${BACKEND}" == "hydragnn" ]]; then
   [[ "${HYDRAGNN_STRATEGY}" != "routed" ]] && VARIANT_PARTS+=("${HYDRAGNN_STRATEGY}")
+  [[ -n "${HYDRAGNN_HEAD}" ]] && VARIANT_PARTS+=("$(echo "${HYDRAGNN_HEAD}" | tr '/ ' '__')")
 elif [[ "${BACKEND}" == "mace" ]]; then
   __mace_variant="${MACE_MODEL_ID:-${MACE_MODEL}}"
   [[ "${__mace_variant}" != "medium" ]] && VARIANT_PARTS+=("$(basename "${__mace_variant}")")
@@ -155,6 +160,8 @@ if [[ "${BACKEND}" == "hydragnn" ]]; then
   [[ ! -f "${BRANCH_MLP}" ]] && { echo "ERROR: branch MLP not found: ${BRANCH_MLP}" >&2; exit 2; }
   EXTRA_ARGS+=(--gfm-logdir "${GFM_LOGDIR}" --branch-mlp "${BRANCH_MLP}" --hydragnn-root "${HYDRAGNN_ROOT}")
   EXTRA_ARGS+=(--hydragnn-strategy "${HYDRAGNN_STRATEGY}")
+  [[ -n "${HYDRAGNN_HEAD}" ]] && EXTRA_ARGS+=(--hydragnn-head "${HYDRAGNN_HEAD}")
+  [[ -n "${HYDRAGNN_LR:-}" ]] && EXTRA_ARGS+=(--lr "${HYDRAGNN_LR}")
   if [[ "${HYDRAGNN_STRATEGY}" != "routed" ]]; then
     [[ ! -d "${FT_REPO}" ]] && { echo "ERROR: FT_REPO (ORNL fine-tune utils) not found: ${FT_REPO}" >&2; exit 2; }
     EXTRA_ARGS+=(--ft-repo "${FT_REPO}")
@@ -210,6 +217,11 @@ fi
 # picks the Slurm-bound GPU.
 [[ -n "${DEVICE:-}" ]] && EXTRA_ARGS+=(--device "${DEVICE}")
 
+# Leakage-free RE-SCORE mode: skip training, reuse the existing split +
+# fine-tuned checkpoint, and re-score both endpoints with the per-element energy
+# reference fit on the TRAIN partition (writes eval/iter*_trainref.json).
+[[ "${RESCORE:-0}" == "1" ]] && EXTRA_ARGS+=(--eval-only)
+
 echo "=========================================="
 echo "[Perlmutter FT+eval campaign]"
 echo "Date:       $(date)"
@@ -218,6 +230,7 @@ echo "Backend:    ${BACKEND}"
 echo "Case:       ${CASE}"
 echo "Dataset:    ${DATASET}"
 echo "Strategy:   ${HYDRAGNN_STRATEGY}   (hydragnn only)"
+echo "Head:       ${HYDRAGNN_HEAD:-<random>}   (hydragnn new-head only)"
 echo "Task (UMA): ${UMA_TASK}   (uma LoRA: ${UMA_LORA:-0})"
 echo "MACE:       ${MACE_MODEL_ID:-${MACE_FAMILY}:${MACE_MODEL}} (${MACE_PRECISION})  (LoRA: ${MACE_LORA:-0})   (mace only)"
 echo "Epochs:     ${EPOCHS}   Batch: ${BATCH_SIZE}"

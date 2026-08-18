@@ -114,6 +114,46 @@ class EvalMetrics:
 # --------------------------------------------------------------------------- #
 
 
+def _predict_energy_diffs(
+    calc, frames: list[Atoms]
+) -> tuple[np.ndarray, list[np.ndarray]]:
+    """Predict total energies and return ``(de_tot, numbers)`` for scored frames.
+
+    ``de_tot[i] = E_pred(frame_i) - E_ref(frame_i)`` and ``numbers[i]`` holds the
+    atomic numbers of frame ``i``. Frames without a reference energy (or whose
+    single-point fails) are skipped. Used to fit a per-element linear reference
+    on an *independent* set of frames (e.g. the training partition) so the shift
+    applied to the held-out test set is not fit on the test set itself.
+    """
+    de: list[float] = []
+    numbers: list[np.ndarray] = []
+    for atoms in frames:
+        e_ref = _reference_energy(atoms)
+        if e_ref is None:
+            continue
+        try:
+            probe = atoms.copy()
+            probe.calc = calc
+            e_pred = float(probe.get_potential_energy())
+        except Exception:  # noqa: BLE001 — skip frames that fail to evaluate
+            continue
+        de.append(e_pred - e_ref)
+        numbers.append(np.asarray(atoms.get_atomic_numbers(), dtype=int))
+    return np.asarray(de, dtype=float), numbers
+
+
+def _composition_matrix(numbers: list[np.ndarray], zs: list[int]) -> np.ndarray:
+    """Rows = frames, cols = element counts over the fixed ``zs`` ordering."""
+    col = {z: j for j, z in enumerate(zs)}
+    comp = np.zeros((len(numbers), len(zs)), dtype=float)
+    for i_row, nums in enumerate(numbers):
+        for z in nums.tolist():
+            j = col.get(int(z))
+            if j is not None:
+                comp[i_row, j] += 1.0
+    return comp
+
+
 def evaluate_frames(
     mlip_cfg: MLIPConfig,
     frames: list[Atoms],
@@ -121,12 +161,20 @@ def evaluate_frames(
     iteration: int | None = None,
     model_path: str | None = None,
     test_set_label: str = "",
+    ref_frames: list[Atoms] | None = None,
 ) -> tuple[EvalMetrics, dict[str, np.ndarray]]:
     """Run single-points with ``mlip_cfg`` and score them against references.
 
     Returns ``(metrics, parity)`` where ``parity`` holds the raw arrays for
     scatter plots: per-atom reference/predicted energies and flattened
     reference/predicted force components.
+
+    ``ref_frames`` (optional): an *independent* set of frames (typically the
+    training partition) on which the per-element linear energy reference is fit.
+    The fitted per-element coefficients are then applied to ``frames`` (the
+    held-out test set). This removes the reference-fit leakage that occurs when
+    the shift is fit on the same test frames it is evaluated on. When ``None``,
+    the reference is fit on ``frames`` itself (legacy behaviour).
     """
     from matsim_agents.active_learning.calculator import make_mlip_calculator
 
@@ -194,13 +242,25 @@ def evaluate_frames(
     # per-element reference mismatch; for a fixed composition it reduces to the
     # old constant shift. Applied identically to zero-shot and fine-tuned evals.
     if de_tot.size:
-        zs = sorted({int(z) for nums in e_numbers for z in nums.tolist()})
-        col = {z: j for j, z in enumerate(zs)}
-        comp = np.zeros((len(e_numbers), len(zs)), dtype=float)
-        for i_row, nums in enumerate(e_numbers):
-            for z in nums.tolist():
-                comp[i_row, col[int(z)]] += 1.0
-        coef, *_ = np.linalg.lstsq(comp, de_tot, rcond=None)
+        # Fit the per-element linear reference on an independent set of frames
+        # (``ref_frames``, e.g. the training partition) when provided, so the
+        # shift applied to the held-out test set is NOT fit on the test set
+        # itself. Fall back to the legacy in-sample fit when ``ref_frames`` is
+        # None. The Z-column ordering spans the union of test and ref elements.
+        if ref_frames is not None:
+            de_tot_ref, numbers_ref = _predict_energy_diffs(calc, ref_frames)
+        else:
+            de_tot_ref, numbers_ref = de_tot, e_numbers
+        zs = sorted(
+            {int(z) for nums in e_numbers for z in nums.tolist()}
+            | {int(z) for nums in numbers_ref for z in nums.tolist()}
+        )
+        comp = _composition_matrix(e_numbers, zs)
+        comp_ref = _composition_matrix(numbers_ref, zs)
+        if de_tot_ref.size and comp_ref.shape[0] >= 1:
+            coef, *_ = np.linalg.lstsq(comp_ref, de_tot_ref, rcond=None)
+        else:  # degenerate ref set -> fall back to in-sample fit
+            coef, *_ = np.linalg.lstsq(comp, de_tot, rcond=None)
         n_arr = np.asarray(e_natoms, dtype=float)
         de_pa_shifted = (de_tot - comp @ coef) / n_arr
     else:
@@ -281,6 +341,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--al-config", required=True, help="AL config YAML (selects backend).")
     parser.add_argument("--test-set", required=True, help="Held-out DFT extxyz test set.")
+    parser.add_argument(
+        "--train-set",
+        default=None,
+        help=(
+            "Optional training-partition extxyz. When given, the per-element "
+            "energy reference is fit on THESE frames and applied to the test "
+            "set, removing the in-sample reference-fit leakage."
+        ),
+    )
     parser.add_argument("--out-json", required=True, help="Output metrics JSON path.")
     parser.add_argument(
         "--model-path",
@@ -307,12 +376,24 @@ def main(argv: list[str] | None = None) -> int:
         frames = [frames]
     log.info("Loaded %d test frames from %s", len(frames), args.test_set)
 
+    ref_frames = None
+    if args.train_set:
+        ref_frames = ase_read(args.train_set, index=":")
+        if isinstance(ref_frames, Atoms):
+            ref_frames = [ref_frames]
+        log.info(
+            "Loaded %d train frames from %s (per-element reference fit on train)",
+            len(ref_frames),
+            args.train_set,
+        )
+
     metrics, parity = evaluate_frames(
         cfg.mlip,
         frames,
         iteration=args.iteration,
         model_path=args.model_path,
         test_set_label=str(args.test_set),
+        ref_frames=ref_frames,
     )
 
     out_json = Path(args.out_json)
