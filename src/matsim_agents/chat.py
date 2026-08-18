@@ -21,14 +21,15 @@ from typing import Callable
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
+from matsim_agents.backends.llm.provider import get_chat_model
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
+from matsim_agents.backends.mlip.relaxation import _run as _run_relaxation
 from matsim_agents.discovery import (
     Composition,
     CompositionExplorationResult,
     explore_composition,
     extract_compositions,
 )
-from matsim_agents.backends.llm.provider import get_chat_model
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run as _run_relaxation
 
 DEFAULT_SYSTEM_PROMPT = """You are a materials-discovery research partner.
 Your role is to help the user generate, critique, and refine hypotheses for
