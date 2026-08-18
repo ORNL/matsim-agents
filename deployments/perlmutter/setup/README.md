@@ -201,7 +201,7 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 ### `deployments/perlmutter/smoke-tests/`
 | Script | Purpose |
 |---|---|
-| `smoke-transformers-perlmutter.sh` | Single-node HuggingFace smoke (uses `matsim_agents.llm.get_chat_model`, provider `huggingface`, `device_map="auto"` over the 4 A100s). |
+| `smoke-transformers-perlmutter.sh` | Single-node HuggingFace smoke (uses `matsim_agents.backends.llm.get_chat_model`, provider `huggingface`, `device_map="auto"` over the 4 A100s). |
 | `smoke-transformers-multinode-perlmutter.sh` | Multi-node HuggingFace smoke. Pure `srun + torch.distributed` (no `torchrun` nesting, no DeepSpeed). Uses `transformers`' `tp_plan="auto"` tensor-parallel sharding over NCCL on Slingshot. |
 | `_torchrun_smoke_loader.py` | Companion loader: reads `RANK`/`LOCAL_RANK`/`WORLD_SIZE`, calls `dist.init_process_group("nccl")`, loads the model with `tp_plan="auto"` (≥ 2 ranks) or `device_map="auto"` (1 rank), runs a one-shot generate and prints from rank 0. |
 
@@ -243,7 +243,8 @@ so they inherit the unified HydraGNN-aligned toolchain (`cudatoolkit/12.9`,
 
 `matsim-agents` supports a second MLIP backend — Meta's Universal Model for Atoms
 (UMA) — via `matsim_agents.active_learning.calculator.build_uma_calculator` and
-the `mlip_backend="uma"` field on `RelaxStructureInput`. The backend requires
+the `mlip_backend="uma"` field on `RelaxStructureInput` (canonical:
+`matsim_agents.backends.mlip.relaxation.RelaxStructureInput`). The backend requires
 `fairchem-core`.
 
 ### Why a separate venv is required
@@ -300,7 +301,7 @@ select the appropriate one per job.
 
 Three scripts together produce a multi-node-capable VASP 6.6.0 GPU binary on
 Perlmutter A100 nodes (sm_80) and a runtime launcher consumed by
-`matsim_agents.tools.vasp_relax` via the `MATSIM_VASP_LAUNCHER` env var.
+`matsim_agents.backends.dft.vasp_relax` via the `MATSIM_VASP_LAUNCHER` env var.
 
 ### Toolchain
 - `PrgEnv-gnu/8.5.0` + `cpe/24.07` + `cray-mpich/8.1.30` (NVIDIA variant) +
@@ -403,7 +404,7 @@ and `srun`s the requested variant.
 export MATSIM_VASP_LAUNCHER=$PWD/deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh
 export VASP_VARIANT=std       # or gam / ncl
 export NRANKS=4 OMP_NUM_THREADS=16 GPUS_PER_NODE=4
-# ...then anything that calls matsim_agents.tools.vasp_relax.run_vasp(...)
+# ...then anything that calls matsim_agents.backends.dft.vasp_relax.run_vasp(...)
 ```
 
 For multi-node runs increase `NRANKS` to `4 * <num_nodes>` and keep
