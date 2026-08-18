@@ -520,8 +520,8 @@ def _debate_hypothesis_response(
         if cfg.critic_cross_critique and len(critiques) > 1:
             refined: list[tuple[str, str]] = []
             for label, critic in critics:
-                own = next((txt for l, txt in critiques if l == label), "")
-                others = "\n\n".join([f"[{l}] {txt}" for l, txt in critiques if l != label])
+                own = next((txt for lbl, txt in critiques if lbl == label), "")
+                others = "\n\n".join([f"[{lbl}] {txt}" for lbl, txt in critiques if lbl != label])
                 cross_rsp = critic.invoke(
                     [
                         SystemMessage(

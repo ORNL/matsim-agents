@@ -195,7 +195,8 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
 
             warnings.warn(
                 f"{fixture['name']!r}: cold run converged unexpectedly — "
-                "consider removing cold_may_fail: true from the fixture."
+                "consider removing cold_may_fail: true from the fixture.",
+                stacklevel=2,
             )
         return  # pass — warm converged, cold did not (or both did, which is fine)
 
@@ -217,7 +218,8 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
             warnings.warn(
                 f"{fixture['name']!r}: warm pw.x run did not converge "
                 f"(warm_may_fail=true) — MLIP pre-relaxation may have moved "
-                f"atoms away from the DFT basin. See {warm.get('stdout_path')}"
+                f"atoms away from the DFT basin. See {warm.get('stdout_path')}",
+                stacklevel=2,
             )
             return  # pass — cold converged, warm failure is expected
         pytest.fail(
