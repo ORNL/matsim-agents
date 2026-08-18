@@ -63,11 +63,15 @@ _HEAD_PARAM_RE = re.compile(r"heads_NN\.\d+\.branch-(\d+)\.")
 
 def _resolve_hydragnn_paths(hydragnn_root: str | Path | None) -> tuple[Path, Path]:
     """Return ``(hydragnn_root, example_dir)`` and put both on ``sys.path``."""
-    root = Path(
-        hydragnn_root
-        or os.environ.get("HYDRAGNN_ROOT")
-        or "/global/cfs/projectdirs/m5216/mlupopa/HydraGNN"
-    ).expanduser().resolve()
+    root = (
+        Path(
+            hydragnn_root
+            or os.environ.get("HYDRAGNN_ROOT")
+            or "/global/cfs/projectdirs/m5216/mlupopa/HydraGNN"
+        )
+        .expanduser()
+        .resolve()
+    )
     if not (root / "hydragnn").is_dir():
         raise FileNotFoundError(f"hydragnn package not found under {root}")
     example_dir = root / "examples" / "multidataset_hpo_sc26"
@@ -262,11 +266,10 @@ def finetune_hydragnn(
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
 
     import torch
-    from torch_geometric.loader import DataLoader
-
     from hydragnn.models.create import create_model_config
     from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
     from hydragnn.train.train_validate_test import resolve_precision
+    from torch_geometric.loader import DataLoader
 
     # --- config + precision ---
     config_path = gfm_logdir / "config.json"
@@ -313,8 +316,7 @@ def finetune_hydragnn(
     state = torch.load(ckpt_path, map_location=dev)
     state_dict = state.get("model_state_dict", state)
     state_dict = {
-        (k[len("module.") :] if k.startswith("module.") else k): v
-        for k, v in state_dict.items()
+        (k[len("module.") :] if k.startswith("module.") else k): v for k, v in state_dict.items()
     }
     model.load_state_dict(state_dict, strict=False)
     model.eval()  # no BN/dropout in the heads; keeps frozen backbone stats fixed
@@ -348,9 +350,7 @@ def finetune_hydragnn(
     branch_mlp = load_branch_mlp(branch_mlp_path).to(device=dev, dtype=param_dtype)
     routed_t = torch.tensor(routed, dtype=torch.long, device=dev)
 
-    optimizer = torch.optim.AdamW(
-        [p for p in model.parameters() if p.requires_grad], lr=lr
-    )
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr)
 
     num_gpus = 1 if dev.type == "cuda" else 0
     report = CostReport(
@@ -411,9 +411,7 @@ def finetune_hydragnn(
                 vrun = 0.0
                 for batch in val_loader:
                     batch = batch.to(dev)
-                    vloss = _batch_loss(
-                        model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype
-                    )
+                    vloss = _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype)
                     vrun += float(vloss.detach()) * batch.num_graphs
                 selection_mse = vrun / max(len(val_graphs), 1)
                 val_msg = f" val={selection_mse:.6f}"
@@ -473,7 +471,9 @@ def _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype):
     weighted_energy = batch.pos.new_zeros(num_graphs)
     original = getattr(batch, "dataset_name", None)
     for j, b in enumerate(routed_t.tolist()):
-        batch.dataset_name = torch.full((num_graphs, 1), b, dtype=torch.long, device=batch.pos.device)
+        batch.dataset_name = torch.full(
+            (num_graphs, 1), b, dtype=torch.long, device=batch.pos.device
+        )
         pred = model(batch)
         energy = pred[0].squeeze(-1) if isinstance(pred, (list, tuple)) else pred.squeeze(-1)
         weighted_energy = weighted_energy + w_routed[:, j] * energy

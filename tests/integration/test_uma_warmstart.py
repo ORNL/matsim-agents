@@ -140,9 +140,7 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
         "fmax": float(uma_cfg.get("fmax", default_fmax)),
         "maxiter": int(uma_cfg.get("maxiter", 200)),
         "maxstep": float(uma_cfg.get("maxstep", 1e-2)),
-        "relative_increase_threshold": float(
-            uma_cfg.get("relative_increase_threshold", 0.05)
-        ),
+        "relative_increase_threshold": float(uma_cfg.get("relative_increase_threshold", 0.05)),
     }
 
     timeout = int(_env("MATSIM_QE_TIMEOUT_SEC") or "3600")
@@ -183,6 +181,7 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
         )
         if cold.get("converged"):
             import warnings
+
             warnings.warn(
                 f"{fixture['name']!r}: cold run converged unexpectedly — "
                 "consider removing cold_may_fail: true from the fixture."

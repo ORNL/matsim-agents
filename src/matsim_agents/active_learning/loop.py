@@ -290,8 +290,7 @@ def run_active_learning(cfg: ALConfig) -> None:
             else:
                 # Frozen foundation model / disabled trainer: keep accumulating labels.
                 log.info(
-                    "Skipping retraining for backend=%s; "
-                    "%d labelled frames accumulated in %s.",
+                    "Skipping retraining for backend=%s; %d labelled frames accumulated in %s.",
                     cfg.mlip.backend,
                     n_appended,
                     dataset_path,

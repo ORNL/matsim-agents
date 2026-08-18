@@ -133,9 +133,7 @@ def test_uma_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> No
         "fmax": float(uma_cfg.get("fmax", 0.01)),
         "maxiter": int(uma_cfg.get("maxiter", 200)),
         "maxstep": float(uma_cfg.get("maxstep", 1e-2)),
-        "relative_increase_threshold": float(
-            uma_cfg.get("relative_increase_threshold", 0.05)
-        ),
+        "relative_increase_threshold": float(uma_cfg.get("relative_increase_threshold", 0.05)),
     }
 
     timeout = int(_env("MATSIM_VASP_TIMEOUT_SEC") or "3600")
@@ -176,6 +174,7 @@ def test_uma_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> No
     if not warm.get("converged"):
         if warm_may_fail:
             import warnings
+
             warnings.warn(
                 f"{fixture['name']!r}: warm VASP run did not converge "
                 f"(warm_may_fail=true) — UMA pre-relaxation may have moved "

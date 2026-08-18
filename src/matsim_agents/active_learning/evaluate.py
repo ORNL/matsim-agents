@@ -114,9 +114,7 @@ class EvalMetrics:
 # --------------------------------------------------------------------------- #
 
 
-def _predict_energy_diffs(
-    calc, frames: list[Atoms]
-) -> tuple[np.ndarray, list[np.ndarray]]:
+def _predict_energy_diffs(calc, frames: list[Atoms]) -> tuple[np.ndarray, list[np.ndarray]]:
     """Predict total energies and return ``(de_tot, numbers)`` for scored frames.
 
     ``de_tot[i] = E_pred(frame_i) - E_ref(frame_i)`` and ``numbers[i]`` holds the

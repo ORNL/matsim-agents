@@ -288,4 +288,3 @@ def test_inject_inference_dropout_is_idempotent() -> None:
     n2 = inject_inference_dropout(model, p=0.1)
     assert n1 == 2  # two Linear layers
     assert n2 == 0  # already instrumented -> nothing new injected
-

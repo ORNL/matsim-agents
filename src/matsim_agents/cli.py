@@ -378,12 +378,8 @@ def chat(
     from matsim_agents.chat import DiscoveryChatConfig, run_chat
 
     panel_models = [s.strip() for s in (critic_panel_models or "").split(",") if s.strip()]
-    panel_providers = [
-        s.strip() for s in (critic_panel_providers or "").split(",") if s.strip()
-    ]
-    panel_base_urls = [
-        s.strip() for s in (critic_panel_base_urls or "").split(",") if s.strip()
-    ]
+    panel_providers = [s.strip() for s in (critic_panel_providers or "").split(",") if s.strip()]
+    panel_base_urls = [s.strip() for s in (critic_panel_base_urls or "").split(",") if s.strip()]
 
     cfg = DiscoveryChatConfig(
         mlip_backend=mlip_backend,

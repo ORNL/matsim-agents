@@ -45,7 +45,6 @@ import json
 import logging
 import os
 import shutil
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -77,22 +76,22 @@ _STRATEGY_SPEC = {
 # random head) lets us fine-tune a readout that already knows the right physics
 # -- e.g. ``MPTrj``/``Alexandria``/``OMat24`` for bulk (transition-metal) solids.
 GFM_HEAD_DATASETS = (
-    "Alexandria",          # 0
-    "ANI1x",               # 1
-    "MPTrj",               # 2
-    "OC2020",              # 3
-    "OC2022",              # 4
-    "OC25",                # 5
-    "ODAC23",              # 6
-    "OMat24",              # 7
-    "OMol25",              # 8
-    "OMol25-neutral",      # 9
+    "Alexandria",  # 0
+    "ANI1x",  # 1
+    "MPTrj",  # 2
+    "OC2020",  # 3
+    "OC2022",  # 4
+    "OC25",  # 5
+    "ODAC23",  # 6
+    "OMat24",  # 7
+    "OMol25",  # 8
+    "OMol25-neutral",  # 9
     "OMol25-non-neutral",  # 10
-    "OPoly2026",           # 11
-    "Nabla2DFT",           # 12
-    "QCML",                # 13
-    "QM7X",                # 14
-    "transition1x",        # 15
+    "OPoly2026",  # 11
+    "Nabla2DFT",  # 12
+    "QCML",  # 13
+    "QM7X",  # 14
+    "transition1x",  # 15
 )
 
 
@@ -111,9 +110,7 @@ def _resolve_head_index(head) -> int | None:
     if isinstance(head, int) or (isinstance(head, str) and head.strip().lstrip("-").isdigit()):
         idx = int(head)
         if not 0 <= idx < len(GFM_HEAD_DATASETS):
-            raise ValueError(
-                f"head index {idx} out of range 0..{len(GFM_HEAD_DATASETS) - 1}"
-            )
+            raise ValueError(f"head index {idx} out of range 0..{len(GFM_HEAD_DATASETS) - 1}")
         return idx
     key = str(head).strip().lower()
     for i, name in enumerate(GFM_HEAD_DATASETS):
@@ -136,9 +133,11 @@ def load_update_model(ft_repo: str | Path | None = None):
     The module name ``utils`` collides with HydraGNN's own ``utils`` on
     ``sys.path``, so we load it directly from the repo file to avoid shadowing.
     """
-    repo = Path(
-        ft_repo or os.environ.get("HYDRAGNN_FT_REPO") or _DEFAULT_FT_REPO
-    ).expanduser().resolve()
+    repo = (
+        Path(ft_repo or os.environ.get("HYDRAGNN_FT_REPO") or _DEFAULT_FT_REPO)
+        .expanduser()
+        .resolve()
+    )
     path = repo / "utils" / "update_model.py"
     if not path.is_file():
         raise FileNotFoundError(
@@ -426,11 +425,10 @@ def finetune_hydragnn_newhead(
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
 
     import torch
-    from torch_geometric.loader import DataLoader
-
     from hydragnn.models.create import create_model_config
     from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
     from hydragnn.train.train_validate_test import resolve_precision
+    from torch_geometric.loader import DataLoader
 
     # --- config + precision ---
     config_path = gfm_logdir / "config.json"
@@ -450,7 +448,11 @@ def finetune_hydragnn_newhead(
     # energy are balanced at unit weight; the raw config force_weight (~95) is
     # only appropriate for the un-normalised eV^2 objective.
     _w_default = 1.0 if normalize else arch.get("force_weight", 1.0)
-    e_w = float(energy_weight if energy_weight is not None else (1.0 if normalize else arch.get("energy_weight", 1.0)))
+    e_w = float(
+        energy_weight
+        if energy_weight is not None
+        else (1.0 if normalize else arch.get("energy_weight", 1.0))
+    )
     f_w = float(force_weight if force_weight is not None else _w_default)
 
     # --- read dataset ---
@@ -491,7 +493,8 @@ def finetune_hydragnn_newhead(
         )
         log.info(
             "Kept pretrained head branch-%d (%s) as branch-0",
-            head_index, GFM_HEAD_DATASETS[head_index],
+            head_index,
+            GFM_HEAD_DATASETS[head_index],
         )
     else:
         model = apply_newhead_surgery(
@@ -546,12 +549,14 @@ def finetune_hydragnn_newhead(
     log.info(
         "Loss normalisation: normalize=%s f_scale=%.4f eV/A e_scale=%.4f eV/atom "
         "(e_w=%.3f f_w=%.3f)",
-        normalize, f_scale, e_scale, e_w, f_w,
+        normalize,
+        f_scale,
+        e_scale,
+        e_w,
+        f_w,
     )
 
-    optimizer = torch.optim.AdamW(
-        [p for p in model.parameters() if p.requires_grad], lr=lr
-    )
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr)
     num_gpus = 1 if dev.type == "cuda" else 0
     report = CostReport(
         model_backend="hydragnn",
@@ -620,7 +625,9 @@ def finetune_hydragnn_newhead(
             for batch in train_loader:
                 batch = batch.to(dev)
                 optimizer.zero_grad(set_to_none=True)
-                loss = _batch_loss_single_head(model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale)
+                loss = _batch_loss_single_head(
+                    model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale
+                )
                 loss.backward()
                 if grad_clip and grad_clip > 0:
                     torch.nn.utils.clip_grad_norm_(
@@ -637,7 +644,9 @@ def finetune_hydragnn_newhead(
                 vrun = 0.0
                 for batch in val_loader:
                     batch = batch.to(dev)
-                    vloss = _batch_loss_single_head(model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale)
+                    vloss = _batch_loss_single_head(
+                        model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale
+                    )
                     vrun += float(vloss.detach()) * batch.num_graphs
                 selection_mse = vrun / max(len(val_graphs), 1)
                 val_msg = f" val={selection_mse:.6f}"
@@ -693,7 +702,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gfm-logdir", required=True, help="GFM dir (config.json + .pk).")
     parser.add_argument("--strategy", default="unfrozen", choices=list(STRATEGIES))
     parser.add_argument(
-        "--head", default=None,
+        "--head",
+        default=None,
         help="Fine-tune a PRETRAINED head instead of a fresh random one: a branch "
         "index 0..15 or a dataset name (e.g. MPTrj, Alexandria, OMat24). "
         "Requires --strategy unfrozen|frozen. Default: grow a random head.",
@@ -707,7 +717,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--energy-weight", type=float, default=None)
     parser.add_argument("--force-weight", type=float, default=None)
     parser.add_argument(
-        "--no-normalize", dest="normalize", action="store_false",
+        "--no-normalize",
+        dest="normalize",
+        action="store_false",
         help="Disable force/energy loss normalisation (use raw eV objective).",
     )
     parser.set_defaults(normalize=True)
@@ -716,7 +728,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--charge", type=float, default=0.0)
     parser.add_argument("--spin", type=float, default=0.0)
     parser.add_argument("--hydragnn-root", default=None)
-    parser.add_argument("--ft-repo", default=None, help="ORNL HydraGNN_GFM_FineTuning4Materials path.")
+    parser.add_argument(
+        "--ft-repo", default=None, help="ORNL HydraGNN_GFM_FineTuning4Materials path."
+    )
     parser.add_argument("--device", default=None)
     parser.add_argument("--checkpoint-name", default="ft_model.pk")
     parser.add_argument("--dry-run", action="store_true", help="Single forward/loss only.")

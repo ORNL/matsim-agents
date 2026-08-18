@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from dataclasses import dataclass, field
 from typing import Callable
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -28,7 +28,8 @@ from matsim_agents.discovery import (
     extract_compositions,
 )
 from matsim_agents.llm import get_chat_model
-from matsim_agents.tools.relaxation import RelaxStructureInput, _run as _run_relaxation
+from matsim_agents.tools.relaxation import RelaxStructureInput
+from matsim_agents.tools.relaxation import _run as _run_relaxation
 
 DEFAULT_SYSTEM_PROMPT = """You are a materials-discovery research partner.
 Your role is to help the user generate, critique, and refine hypotheses for
@@ -114,7 +115,6 @@ class DiscoveryChatConfig:
                     "mlip_backend='hydragnn' requires 'hydragnn_branch_mlp_checkpoint' "
                     "(BranchWeightMLP .pt checkpoint)."
                 )
-
 
 
 @dataclass
@@ -227,7 +227,7 @@ def _extract_relax_command(user_text: str) -> str | None:
     txt = user_text.strip()
     prefix = "/relax "
     if txt.lower().startswith(prefix):
-        candidate = txt[len(prefix):].strip()
+        candidate = txt[len(prefix) :].strip()
         return candidate or None
     return None
 
@@ -256,10 +256,9 @@ def _extract_al_command(user_text: str) -> tuple[bool, str | None]:
         return True, None
     prefix = "/al "
     if low.startswith(prefix):
-        arg = txt[len(prefix):].strip()
+        arg = txt[len(prefix) :].strip()
         return True, (arg or None)
     return False, None
-
 
 
 def _run_single_structure_relaxation(structure_path: str, cfg: DiscoveryChatConfig) -> str:
@@ -292,7 +291,9 @@ def _run_single_structure_relaxation(structure_path: str, cfg: DiscoveryChatConf
     )
 
 
-def _uq_handoff_metrics(exploration: CompositionExplorationResult, cfg: DiscoveryChatConfig) -> tuple[float, float, int]:
+def _uq_handoff_metrics(
+    exploration: CompositionExplorationResult, cfg: DiscoveryChatConfig
+) -> tuple[float, float, int]:
     """Return (mean_top_weight, unreliable_fraction, n_with_weights)."""
     weights = [
         float(r.top_branch_weight)
@@ -324,8 +325,7 @@ def _should_handoff_to_active_learning(
         return False, "handoff skipped: no branch-weight UQ available from relaxations"
 
     should = (
-        mean_top < cfg.uq_top_weight_threshold
-        or frac_unreliable >= cfg.uq_min_unreliable_fraction
+        mean_top < cfg.uq_top_weight_threshold or frac_unreliable >= cfg.uq_min_unreliable_fraction
     )
     reason = (
         f"mean_top_weight={mean_top:.3f}, unreliable_fraction={frac_unreliable:.3f}, "
@@ -415,9 +415,7 @@ def _run_active_learning_for_formula(
     al_cfg.md.seed_source.prompt = None
 
     safe_formula = formula.replace("/", "_")
-    al_cfg.loop.out_dir = (
-        Path(cfg.output_dir) / "discovery" / "al_handoff" / safe_formula
-    )
+    al_cfg.loop.out_dir = Path(cfg.output_dir) / "discovery" / "al_handoff" / safe_formula
 
     if cfg.active_learning_dry_run:
         return (
@@ -431,7 +429,6 @@ def _run_active_learning_for_formula(
         "AL handoff completed: active learning started from discovery for "
         f"{formula}. out_dir={al_cfg.loop.out_dir}."
     )
-
 
 
 def _debate_hypothesis_response(
@@ -524,9 +521,7 @@ def _debate_hypothesis_response(
             refined: list[tuple[str, str]] = []
             for label, critic in critics:
                 own = next((txt for l, txt in critiques if l == label), "")
-                others = "\n\n".join(
-                    [f"[{l}] {txt}" for l, txt in critiques if l != label]
-                )
+                others = "\n\n".join([f"[{l}] {txt}" for l, txt in critiques if l != label])
                 cross_rsp = critic.invoke(
                     [
                         SystemMessage(

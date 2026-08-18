@@ -184,6 +184,7 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
     if not warm.get("converged"):
         if warm_may_fail:
             import warnings
+
             warnings.warn(
                 f"{fixture['name']!r}: warm VASP run did not converge "
                 f"(warm_may_fail=true) — MLIP pre-relaxation may have moved "
