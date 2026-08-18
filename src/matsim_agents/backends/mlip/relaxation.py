@@ -226,8 +226,12 @@ class _NumericalStressCalculator:
             raise AttributeError(name)
         # Block methods that would raise PropertyNotImplementedError on the inner
         # calc — return a no-op lambda so ASE internals get None instead of crashing.
-        _unsupported = {"get_dipole_moment", "get_magnetic_moment",
-                        "get_magnetic_moments", "get_charges"}
+        _unsupported = {
+            "get_dipole_moment",
+            "get_magnetic_moment",
+            "get_magnetic_moments",
+            "get_charges",
+        }
         if name in _unsupported:
             return lambda *a, **kw: None
         return getattr(self._inner, name)
