@@ -102,7 +102,7 @@ def main() -> None:
     # Propagate the throughput std into the efficiency (linear scaling by nodes).
     eff_std = 100.0 * (tput_std / nodes) / (base / base_nodes)
 
-    fig, (ax_t, ax_e) = plt.subplots(1, 2, figsize=(8.6, 3.3))
+    fig, (ax_t, ax_e) = plt.subplots(2, 1, figsize=(5.0, 6.4))
 
     ax_t.plot(nodes, ideal, "k--", lw=1.2, label="ideal (linear)")
     ax_t.errorbar(
@@ -115,18 +115,30 @@ def main() -> None:
     ax_t.set_xticks(nodes)
     ax_t.legend(fontsize=8)
 
-    ax_e.axhline(100.0, color="k", ls="--", lw=1.2)
+    ax_e.axhline(100.0, color="k", ls="--", lw=1.2, label="ideal (linear)")
     ax_e.errorbar(
         nodes, efficiency, yerr=eff_std, fmt="s-", color="#e08214",
-        lw=1.6, ms=6, capsize=3,
+        lw=1.6, ms=6, capsize=3, label="measured (mean +/- std)",
     )
     ax_e.set_xlabel("Nodes (= concurrent VASP jobs)")
     ax_e.set_ylabel("Parallel efficiency (%)")
     ax_e.set_title("(b) Strong-scaling efficiency", fontsize=9)
     ax_e.set_xticks(nodes)
-    ax_e.set_ylim(0, 115)
-    for xi, e in zip(nodes, efficiency):
-        ax_e.text(xi, e, f"{e:.0f}%", ha="center", va="bottom", fontsize=7)
+    ax_e.set_ylim(0, 140)
+    # Offset the value labels so they clear the markers, the connecting line,
+    # and the vertical error bars; the rightmost label points left to stay
+    # inside the axes.
+    x_last = nodes[-1]
+    for xi, e, es in zip(nodes, efficiency, eff_std):
+        if xi == x_last:
+            dx, ha = -7, "right"
+        else:
+            dx, ha = 7, "left"
+        ax_e.annotate(
+            f"{e:.0f}%", xy=(xi, e), xytext=(dx, 8), textcoords="offset points",
+            ha=ha, va="bottom", fontsize=7,
+        )
+    ax_e.legend(loc="lower right", fontsize=8)
 
     fig.tight_layout()
     fig.savefig(args.out, bbox_inches="tight")

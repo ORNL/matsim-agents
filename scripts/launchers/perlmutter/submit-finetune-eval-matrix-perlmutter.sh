@@ -193,6 +193,7 @@ for backend in "${BACKEND_LIST[@]}"; do
         [[ -n "${UMA_FORCE_WEIGHT:-}" ]] && exports+=",UMA_FORCE_WEIGHT=${UMA_FORCE_WEIGHT}"
         [[ -n "${UMA_WEIGHT_DECAY:-}" ]] && exports+=",UMA_WEIGHT_DECAY=${UMA_WEIGHT_DECAY}"
         [[ -n "${DEVICE:-}" ]]     && exports+=",DEVICE=${DEVICE}"
+        [[ "${RESCORE:-0}" == "1" ]] && exports+=",RESCORE=1"
 
         if [[ -n "${DRY_RUN:-}" ]]; then
           echo "sbatch -J ${jobname} ${SBATCH_OPTS[*]:-} --export=${exports} ${JOB}"

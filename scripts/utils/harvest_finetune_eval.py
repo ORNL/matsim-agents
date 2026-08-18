@@ -55,16 +55,39 @@ ROWS = [
 DEFAULT_RUNS = "/global/cfs/projectdirs/m5216/mlupopa/runs"
 
 
-def _read_endpoint(eval_dir: Path, endpoint: str) -> dict | None:
+def _read_endpoint(eval_dir: Path, endpoint: str, *, trainref: bool = False) -> dict | None:
     if not eval_dir.is_dir():
         return None
-    iters = sorted(
-        (p for p in eval_dir.glob("iter*.json")),
-        key=lambda p: int(p.stem[4:]) if p.stem[4:].isdigit() else -1,
-    )
+    if trainref:
+        # Leakage-free re-score files: iter<N>_trainref.json (per-element energy
+        # reference fit on the TRAIN partition, applied to the held-out TEST).
+        cand = list(eval_dir.glob("iter*_trainref.json"))
+
+        def _num(p: Path) -> int:
+            s = p.stem[4:].split("_", 1)[0]
+            return int(s) if s.isdigit() else -1
+
+    else:
+        # Only plain iter<N>.json (exclude *_trainref.json).
+        cand = [p for p in eval_dir.glob("iter*.json") if not p.stem.endswith("_trainref")]
+
+        def _num(p: Path) -> int:
+            return int(p.stem[4:]) if p.stem[4:].isdigit() else -1
+
+    iters = sorted(cand, key=_num)
     if not iters:
         return None
-    src = iters[0] if endpoint == "before" else iters[-1]
+    if endpoint == "before":
+        src = iters[0]
+    else:
+        # The "after" endpoint is the fine-tuned model at iter<N>, N>0. If only
+        # the zero-shot iter0 file exists (e.g. an incomplete run whose
+        # fine-tuned checkpoint is missing), there is no valid "after" -> None,
+        # so we never mistake the baseline for a fine-tuned result.
+        after = [p for p in iters if _num(p) > 0]
+        if not after:
+            return None
+        src = after[-1]
     try:
         return json.loads(src.read_text())
     except (OSError, json.JSONDecodeError):
@@ -77,13 +100,13 @@ def _fmt(val: float | None, scale: float, digits: int) -> str:
     return f"{val * scale:.{digits}f}"
 
 
-def harvest(runs_root: Path) -> list[tuple[str, list[str], list[str]]]:
+def harvest(runs_root: Path, *, trainref: bool = False) -> list[tuple[str, list[str], list[str]]]:
     fte = runs_root / "finetune-eval"
     out = []
     for label, variant, endpoint in ROWS:
         force_cells, energy_cells = [], []
         for case in CASES:
-            m = _read_endpoint(fte / variant / case / "eval", endpoint)
+            m = _read_endpoint(fte / variant / case / "eval", endpoint, trainref=trainref)
             f = m.get("force_mae_eV_per_A") if m else None
             e = m.get("energy_mae_eV_per_atom_shifted") if m else None
             force_cells.append(_fmt(f, 1.0, 2))
@@ -96,9 +119,15 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs", default=DEFAULT_RUNS, help="runs root (holds finetune-eval/)")
     ap.add_argument("--tsv", action="store_true", help="emit TSV instead of LaTeX rows")
+    ap.add_argument(
+        "--trainref",
+        action="store_true",
+        help="Harvest the leakage-free re-score (iter*_trainref.json) for the "
+        "energy column: per-element reference fit on TRAIN, applied to TEST.",
+    )
     args = ap.parse_args()
 
-    rows = harvest(Path(args.runs))
+    rows = harvest(Path(args.runs), trainref=args.trainref)
     if args.tsv:
         header = ["method"] + [f"F:{c}" for c in CASES] + [f"E:{c}" for c in CASES]
         print("\t".join(header))

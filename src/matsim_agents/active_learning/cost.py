@@ -112,8 +112,7 @@ def track_cost(report: CostReport, *, reset_cuda_peak: bool = True):
         if torch_cuda is not None:
             try:
                 peak_bytes = max(
-                    torch_cuda.max_memory_allocated(i)
-                    for i in range(torch_cuda.device_count())
+                    torch_cuda.max_memory_allocated(i) for i in range(torch_cuda.device_count())
                 )
                 peak_gb = peak_bytes / (1024**3)
                 report.peak_gpu_mem_gb = max(report.peak_gpu_mem_gb, round(peak_gb, 3))
@@ -160,7 +159,7 @@ class GpuMemorySampler:
             self.peak_gb = max(self.peak_gb, self._sample_once())
             self._stop.wait(self.interval_s)
 
-    def __enter__(self) -> "GpuMemorySampler":
+    def __enter__(self) -> GpuMemorySampler:
         if self._available:
             self._thread = threading.Thread(target=self._run, daemon=True)
             self._thread.start()

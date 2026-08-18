@@ -12,9 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict
 
-from pydantic import BaseModel
-
 from langgraph.graph import END, StateGraph
+from pydantic import BaseModel
 
 from matsim_agents.active_learning import ALConfig
 from matsim_agents.active_learning.loop import run_active_learning
@@ -185,8 +184,7 @@ def _evaluate_uq_node(state: SupervisorState) -> dict:
     frac_unreliable = n_unreliable / len(weights)
 
     should = cfg.trigger_active_learning_on_high_uq and (
-        mean_top < cfg.uq_top_weight_threshold
-        or frac_unreliable >= cfg.uq_min_unreliable_fraction
+        mean_top < cfg.uq_top_weight_threshold or frac_unreliable >= cfg.uq_min_unreliable_fraction
     )
     reason = (
         f"mean_top_weight={mean_top:.3f}, unreliable_fraction={frac_unreliable:.3f}, "

@@ -76,9 +76,7 @@ def _split_dataset(
 # --------------------------------------------------------------------------- #
 
 
-def _hydragnn_cfg(
-    logdir: Path, checkpoint: str, branch_mlp: Path, device: str
-) -> MLIPConfig:
+def _hydragnn_cfg(logdir: Path, checkpoint: str, branch_mlp: Path, device: str) -> MLIPConfig:
     return MLIPConfig(
         backend="hydragnn",
         hydragnn=HydraGNNConfig(
@@ -193,6 +191,8 @@ def _run_eval(
     test_label: str,
     eval_dir: Path,
     max_parity_points: int,
+    ref_frames: list[Atoms] | None = None,
+    out_suffix: str = "",
 ) -> dict:
     metrics, parity = evaluate_frames(
         mlip_cfg,
@@ -200,12 +200,14 @@ def _run_eval(
         iteration=iteration,
         model_path=model_path,
         test_set_label=test_label,
+        ref_frames=ref_frames,
     )
     eval_dir.mkdir(parents=True, exist_ok=True)
-    out_json = eval_dir / f"iter{iteration}.json"
+    out_json = eval_dir / f"iter{iteration}{out_suffix}.json"
     out_json.write_text(json.dumps(asdict(metrics), indent=2))
     np.savez_compressed(
-        eval_dir / f"iter{iteration}_parity.npz", **_subsample(parity, max_parity_points)
+        eval_dir / f"iter{iteration}{out_suffix}_parity.npz",
+        **_subsample(parity, max_parity_points),
     )
     log.info(
         "iter%d %s: E_MAE=%.4f (shift %.4f) eV/atom  F_MAE=%.4f eV/A",
@@ -265,6 +267,7 @@ def run_campaign(
     weight_threshold: float = 0.1,
     unfreeze_backbone: bool = False,
     hydragnn_strategy: str = "routed",
+    hydragnn_head: str | int | None = None,
     ft_repo: str | Path | None = None,
     hydragnn_root: str | Path | None = None,
     # shared FT knobs
@@ -275,8 +278,17 @@ def run_campaign(
     seed: int = 0,
     device: str | None = None,
     max_parity_points: int = 20000,
+    eval_only: bool = False,
 ) -> Path:
-    """Run before/after fine-tune + eval for one backend on one dataset."""
+    """Run before/after fine-tune + eval for one backend on one dataset.
+
+    When ``eval_only`` is True, the training step is skipped: the existing
+    deterministic train/test split and the already-fine-tuned checkpoint under
+    ``ft/`` are reused, and both endpoints are *re-scored* with the per-element
+    energy reference fit on the TRAIN partition (leakage-free), writing
+    ``eval/iter*_trainref.json``. The original ``iter*.json`` files are left
+    untouched.
+    """
     # Apply the GPU-visibility policy *before* any torch/HydraGNN import happens
     # downstream, so an explicit CPU request is actually honoured.
     _enforce_device_visibility(device)
@@ -297,8 +309,13 @@ def run_campaign(
     n_iters = _num_al_iterations(frames)
     train_path = output_dir / "split" / "train.extxyz"
     test_path = output_dir / "split" / "test_set.extxyz"
-    ase_write(str(train_path), train_frames, format="extxyz")
-    ase_write(str(test_path), test_frames, format="extxyz")
+    if eval_only and train_path.exists() and test_path.exists():
+        # Reuse the exact frames scored originally (avoid clobbering the split).
+        train_frames = list(ase_read(str(train_path), index=":"))
+        test_frames = list(ase_read(str(test_path), index=":"))
+    else:
+        ase_write(str(train_path), train_frames, format="extxyz")
+        ase_write(str(test_path), test_frames, format="extxyz")
     log.info(
         "%s campaign: %d train / %d test frames; N_al_iterations=%d",
         backend,
@@ -306,6 +323,11 @@ def run_campaign(
         len(test_frames),
         n_iters,
     )
+
+    # Leakage-free re-score mode: fit the per-element reference on TRAIN and
+    # write to a distinct ``_trainref`` suffix so originals are preserved.
+    _ref = train_frames if eval_only else None
+    _suf = "_trainref" if eval_only else ""
 
     if backend == "uma":
         base_cfg = _uma_cfg(uma_base_model, uma_task_name, dev)
@@ -317,26 +339,33 @@ def run_campaign(
             test_label=str(test_path),
             eval_dir=eval_dir,
             max_parity_points=max_parity_points,
+            ref_frames=_ref,
+            out_suffix=_suf,
         )
-        from matsim_agents.active_learning.finetune_uma import finetune_uma
+        if eval_only:
+            ckpt = ft_dir / "inference_ckpt.pt"
+            if not ckpt.exists():
+                raise FileNotFoundError(f"eval-only: missing UMA checkpoint {ckpt}")
+        else:
+            from matsim_agents.active_learning.finetune_uma import finetune_uma
 
-        ckpt = finetune_uma(
-            train_path,
-            ft_dir,
-            base_model=uma_base_model,
-            task_name=uma_task_name,
-            epochs=uma_epochs,
-            batch_size=batch_size,
-            lr=lr if lr is not None else uma_lr,
-            force_weight=uma_force_weight,
-            freeze_backbone=uma_freeze_backbone,
-            weight_decay=uma_weight_decay,
-            device="CUDA" if dev.startswith("cuda") else "CPU",
-            seed=seed,
-            lora=uma_lora,
-            lora_r=uma_lora_r,
-            lora_alpha=uma_lora_alpha,
-        )
+            ckpt = finetune_uma(
+                train_path,
+                ft_dir,
+                base_model=uma_base_model,
+                task_name=uma_task_name,
+                epochs=uma_epochs,
+                batch_size=batch_size,
+                lr=lr if lr is not None else uma_lr,
+                force_weight=uma_force_weight,
+                freeze_backbone=uma_freeze_backbone,
+                weight_decay=uma_weight_decay,
+                device="CUDA" if dev.startswith("cuda") else "CPU",
+                seed=seed,
+                lora=uma_lora,
+                lora_r=uma_lora_r,
+                lora_alpha=uma_lora_alpha,
+            )
         after_cfg = _uma_cfg(str(ckpt), uma_task_name, dev)
         after_model_path = str(ckpt)
 
@@ -361,29 +390,36 @@ def run_campaign(
             test_label=str(test_path),
             eval_dir=eval_dir,
             max_parity_points=max_parity_points,
+            ref_frames=_ref,
+            out_suffix=_suf,
         )
-        from matsim_agents.active_learning.finetune_mace import finetune_mace
+        if eval_only:
+            ckpt = ft_dir / "mace_finetuned.model"
+            if not ckpt.exists():
+                raise FileNotFoundError(f"eval-only: missing MACE checkpoint {ckpt}")
+        else:
+            from matsim_agents.active_learning.finetune_mace import finetune_mace
 
-        ckpt = finetune_mace(
-            train_path,
-            ft_dir,
-            family=mace_family,
-            base_model=mace_model,
-            model_id=mace_model_id,
-            precision=mace_precision,
-            dispersion=mace_dispersion,
-            epochs=mace_epochs,
-            batch_size=batch_size,
-            lr=lr if lr is not None else mace_lr,
-            lora=mace_lora,
-            lora_rank=mace_lora_rank,
-            lora_alpha=mace_lora_alpha,
-            force_weight=mace_force_weight,
-            freeze_backbone=mace_freeze_backbone,
-            weight_decay=mace_weight_decay,
-            device="CUDA" if dev.startswith("cuda") else "CPU",
-            seed=seed,
-        )
+            ckpt = finetune_mace(
+                train_path,
+                ft_dir,
+                family=mace_family,
+                base_model=mace_model,
+                model_id=mace_model_id,
+                precision=mace_precision,
+                dispersion=mace_dispersion,
+                epochs=mace_epochs,
+                batch_size=batch_size,
+                lr=lr if lr is not None else mace_lr,
+                lora=mace_lora,
+                lora_rank=mace_lora_rank,
+                lora_alpha=mace_lora_alpha,
+                force_weight=mace_force_weight,
+                freeze_backbone=mace_freeze_backbone,
+                weight_decay=mace_weight_decay,
+                device="CUDA" if dev.startswith("cuda") else "CPU",
+                seed=seed,
+            )
         # Fine-tuned checkpoint reloads via family="checkpoint".
         after_cfg = _mace_cfg("checkpoint", str(ckpt), dev, precision=mace_precision)
         after_model_path = str(ckpt)
@@ -403,25 +439,36 @@ def run_campaign(
             test_label=str(test_path),
             eval_dir=eval_dir,
             max_parity_points=max_parity_points,
+            ref_frames=_ref,
+            out_suffix=_suf,
         )
         from matsim_agents.active_learning.finetune_hydragnn import finetune_hydragnn
 
         if hydragnn_strategy == "routed":
-            ft_logdir = finetune_hydragnn(
-                train_path,
-                ft_dir,
-                gfm_logdir=gfm_logdir,
-                branch_mlp_path=branch_mlp_path,
-                gfm_checkpoint=base_ckpt,
-                weight_threshold=weight_threshold,
-                epochs=epochs,
-                lr=lr if lr is not None else 1e-3,
-                batch_size=batch_size,
-                seed=seed,
-                unfreeze_backbone=unfreeze_backbone,
-                hydragnn_root=hydragnn_root,
-                device=dev,
-            )
+            if eval_only:
+                ft_logdir = ft_dir
+                if not (ft_logdir / "ft_model.pk").exists():
+                    raise FileNotFoundError(
+                        f"eval-only: missing HydraGNN checkpoint {ft_logdir / 'ft_model.pk'}"
+                    )
+            else:
+                ft_logdir = finetune_hydragnn(
+                    train_path,
+                    ft_dir,
+                    gfm_logdir=gfm_logdir,
+                    branch_mlp_path=branch_mlp_path,
+                    gfm_checkpoint=base_ckpt,
+                    weight_threshold=weight_threshold,
+                    epochs=epochs,
+                    # 1e-4 (not 1e-3): a full-backbone step at 1e-3 collapses the
+                    # net into a constant predictor; force_weight stays ~94 (config).
+                    lr=lr if lr is not None else 1e-4,
+                    batch_size=batch_size,
+                    seed=seed,
+                    unfreeze_backbone=unfreeze_backbone,
+                    hydragnn_root=hydragnn_root,
+                    device=dev,
+                )
             after_cfg = _hydragnn_cfg(ft_logdir, "ft_model.pk", branch_mlp_path, dev)
         else:
             from matsim_agents.active_learning.finetune_hydragnn_newhead import (
@@ -429,20 +476,32 @@ def run_campaign(
             )
 
             ft_repo_p = Path(ft_repo).expanduser().resolve() if ft_repo else None
-            ft_logdir = finetune_hydragnn_newhead(
-                train_path,
-                ft_dir,
-                gfm_logdir=gfm_logdir,
-                strategy=hydragnn_strategy,
-                gfm_checkpoint=base_ckpt,
-                epochs=epochs,
-                lr=lr if lr is not None else 1e-3,
-                batch_size=batch_size,
-                seed=seed,
-                hydragnn_root=hydragnn_root,
-                ft_repo=ft_repo_p,
-                device=dev,
-            )
+            if eval_only:
+                ft_logdir = ft_dir
+                if not (ft_logdir / "ft_model.pk").exists():
+                    raise FileNotFoundError(
+                        f"eval-only: missing HydraGNN checkpoint {ft_logdir / 'ft_model.pk'}"
+                    )
+            else:
+                ft_logdir = finetune_hydragnn_newhead(
+                    train_path,
+                    ft_dir,
+                    gfm_logdir=gfm_logdir,
+                    strategy=hydragnn_strategy,
+                    head=hydragnn_head,
+                    gfm_checkpoint=base_ckpt,
+                    epochs=epochs,
+                    # The new-head loss is normalised (forces/energy scaled to O(1))
+                    # with LR warmup+cosine and gradient clipping, so a 1e-3 step no
+                    # longer collapses the head into a constant predictor; this is
+                    # what actually moves the metrics off the zero-shot baseline.
+                    lr=lr if lr is not None else 1e-3,
+                    batch_size=batch_size,
+                    seed=seed,
+                    hydragnn_root=hydragnn_root,
+                    ft_repo=ft_repo_p,
+                    device=dev,
+                )
             after_cfg = _hydragnn_newhead_cfg(ft_logdir, "ft_model.pk", dev, ft_repo=ft_repo_p)
         after_model_path = str(ft_logdir)
 
@@ -457,6 +516,8 @@ def run_campaign(
         test_label=str(test_path),
         eval_dir=eval_dir,
         max_parity_points=max_parity_points,
+        ref_frames=_ref,
+        out_suffix=_suf,
     )
     log.info("Campaign complete -> %s (eval: iter0 vs iter%d)", output_dir, n_iters)
     return output_dir
@@ -505,64 +566,94 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--uma-task-name", default="omat", choices=["omat", "omol", "oc20", "odac", "omc"]
     )
+    parser.add_argument("--uma-epochs", type=int, default=20, help="UMA fine-tune epochs.")
     parser.add_argument(
-        "--uma-epochs", type=int, default=20, help="UMA fine-tune epochs."
-    )
-    parser.add_argument(
-        "--uma-lr", type=float, default=1e-4,
+        "--uma-lr",
+        type=float,
+        default=1e-4,
         help="UMA fine-tune Adam LR (reference recipe: 1e-4).",
     )
     parser.add_argument(
-        "--uma-force-weight", type=float, default=10.0,
+        "--uma-force-weight",
+        type=float,
+        default=10.0,
         help="Weight on the force-MSE term relative to energy-MSE.",
     )
     parser.add_argument("--uma-freeze-backbone", action="store_true")
     parser.add_argument("--uma-weight-decay", type=float, default=0.0)
     parser.add_argument(
-        "--uma-lora", action="store_true",
+        "--uma-lora",
+        action="store_true",
         help="LoRA fine-tune of UMA backbone scalar linears (preserves equivariance).",
     )
     parser.add_argument("--uma-lora-r", type=int, default=8, help="UMA LoRA rank (default: 8).")
-    parser.add_argument("--uma-lora-alpha", type=float, default=16.0, help="UMA LoRA alpha (default: 16.0).")
+    parser.add_argument(
+        "--uma-lora-alpha", type=float, default=16.0, help="UMA LoRA alpha (default: 16.0)."
+    )
     # MACE (all versions)
     parser.add_argument(
-        "--mace-model-id", default=None,
-        help="Curated MACE variant id (see finetune_mace.MACE_MODELS); overrides --mace-family/--mace-model.",
+        "--mace-model-id",
+        default=None,
+        help=(
+            "Curated MACE variant id (see finetune_mace.MACE_MODELS); "
+            "overrides --mace-family/--mace-model."
+        ),
     )
     parser.add_argument(
-        "--mace-family", default="mace_mp", choices=["mace_mp", "mace_off", "checkpoint"],
+        "--mace-family",
+        default="mace_mp",
+        choices=["mace_mp", "mace_off", "checkpoint"],
         help="MACE family: mace_mp (inorganic), mace_off (organic), or checkpoint (local .model).",
     )
     parser.add_argument(
-        "--mace-model", default="medium",
-        help="MACE size/variant (small|medium|large, or tag/URL), or a .model path for family=checkpoint.",
+        "--mace-model",
+        default="medium",
+        help=(
+            "MACE size/variant (small|medium|large, or tag/URL), "
+            "or a .model path for family=checkpoint."
+        ),
     )
     parser.add_argument("--mace-precision", default="fp64", choices=["fp32", "fp64"])
     parser.add_argument("--mace-dispersion", action="store_true")
     parser.add_argument(
-        "--mace-epochs", type=int, default=None,
+        "--mace-epochs",
+        type=int,
+        default=None,
         help="MACE fine-tune epochs (default: 10 for LoRA, 50 for naive).",
     )
     parser.add_argument(
-        "--mace-lr", type=float, default=None,
+        "--mace-lr",
+        type=float,
+        default=None,
         help="MACE fine-tune LR (default: 5e-3 for LoRA, 1e-3 for naive).",
     )
     parser.add_argument(
-        "--mace-force-weight", type=float, default=10.0,
+        "--mace-force-weight",
+        type=float,
+        default=10.0,
         help="Recorded for parity; mace_run_train uses its own energy/force weighting.",
     )
     parser.add_argument("--mace-freeze-backbone", action="store_true")
     parser.add_argument("--mace-weight-decay", type=float, default=0.0)
     parser.add_argument(
-        "--mace-lora", action="store_true",
+        "--mace-lora",
+        action="store_true",
         help="Parameter-efficient LoRA fine-tune (native mace_run_train --lora).",
     )
-    parser.add_argument("--mace-lora-rank", type=int, default=None, help="MACE LoRA rank (default: 4).")
-    parser.add_argument("--mace-lora-alpha", type=float, default=None, help="MACE LoRA alpha (default: 1.0).")
+    parser.add_argument(
+        "--mace-lora-rank", type=int, default=None, help="MACE LoRA rank (default: 4)."
+    )
+    parser.add_argument(
+        "--mace-lora-alpha", type=float, default=None, help="MACE LoRA alpha (default: 1.0)."
+    )
     # HydraGNN
-    parser.add_argument("--gfm-logdir", default=None, help="HydraGNN GFM logdir (config.json + .pk).")
+    parser.add_argument(
+        "--gfm-logdir", default=None, help="HydraGNN GFM logdir (config.json + .pk)."
+    )
     parser.add_argument("--branch-mlp", default=None, help="mlp_branch_weights.pt path.")
-    parser.add_argument("--gfm-checkpoint", default=None, help="GFM .pk filename (default: newest).")
+    parser.add_argument(
+        "--gfm-checkpoint", default=None, help="GFM .pk filename (default: newest)."
+    )
     parser.add_argument("--weight-threshold", type=float, default=0.1)
     parser.add_argument("--unfreeze-backbone", action="store_true")
     parser.add_argument(
@@ -572,7 +663,16 @@ def main(argv: list[str] | None = None) -> int:
         help="HydraGNN fine-tune method: 'routed' (adapt routed heads) or a "
         "drop-all-heads + new-head strategy (unfrozen/frozen/scratch).",
     )
-    parser.add_argument("--ft-repo", default=None, help="ORNL HydraGNN_GFM_FineTuning4Materials path.")
+    parser.add_argument(
+        "--hydragnn-head",
+        default=None,
+        help="Fine-tune a PRETRAINED HydraGNN head instead of a fresh random one: "
+        "a branch index 0..15 or dataset name (e.g. MPTrj). Requires "
+        "--hydragnn-strategy unfrozen|frozen.",
+    )
+    parser.add_argument(
+        "--ft-repo", default=None, help="ORNL HydraGNN_GFM_FineTuning4Materials path."
+    )
     parser.add_argument("--hydragnn-root", default=None)
     # shared
     parser.add_argument("--epochs", type=int, default=20)
@@ -582,6 +682,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default=None)
     parser.add_argument("--max-parity-points", type=int, default=20000)
+    parser.add_argument(
+        "--eval-only",
+        action="store_true",
+        help="Skip training: reuse the existing split + fine-tuned checkpoint and "
+        "re-score both endpoints with the per-element reference fit on the TRAIN "
+        "partition (leakage-free), writing eval/iter*_trainref.json.",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     # Set GPU visibility from the requested device before torch is imported.
@@ -620,6 +727,7 @@ def main(argv: list[str] | None = None) -> int:
         weight_threshold=args.weight_threshold,
         unfreeze_backbone=args.unfreeze_backbone,
         hydragnn_strategy=args.hydragnn_strategy,
+        hydragnn_head=args.hydragnn_head,
         ft_repo=args.ft_repo,
         hydragnn_root=args.hydragnn_root,
         epochs=args.epochs,
@@ -629,6 +737,7 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         device=args.device,
         max_parity_points=args.max_parity_points,
+        eval_only=args.eval_only,
     )
     return 0
 

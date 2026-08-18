@@ -63,11 +63,15 @@ _HEAD_PARAM_RE = re.compile(r"heads_NN\.\d+\.branch-(\d+)\.")
 
 def _resolve_hydragnn_paths(hydragnn_root: str | Path | None) -> tuple[Path, Path]:
     """Return ``(hydragnn_root, example_dir)`` and put both on ``sys.path``."""
-    root = Path(
-        hydragnn_root
-        or os.environ.get("HYDRAGNN_ROOT")
-        or "/global/cfs/projectdirs/m5216/mlupopa/HydraGNN"
-    ).expanduser().resolve()
+    root = (
+        Path(
+            hydragnn_root
+            or os.environ.get("HYDRAGNN_ROOT")
+            or "/global/cfs/projectdirs/m5216/mlupopa/HydraGNN"
+        )
+        .expanduser()
+        .resolve()
+    )
     if not (root / "hydragnn").is_dir():
         raise FileNotFoundError(f"hydragnn package not found under {root}")
     example_dir = root / "examples" / "multidataset_hpo_sc26"
@@ -129,6 +133,42 @@ def _atoms_to_data(atoms: Atoms, add_edges_pbc, dtype, charge: float, spin: floa
         forces=torch.tensor(forces, dtype=dtype),
     )
     return add_edges_pbc(data)
+
+
+# --------------------------------------------------------------------------- #
+# Per-element linear reference energies                                        #
+# --------------------------------------------------------------------------- #
+
+
+def _fit_reference_energies(graphs) -> dict[int, float]:
+    """Least-squares per-element linear reference energies ``e_ref[Z]``.
+
+    Solves ``E_total_i approx sum_Z n_{i,Z} * e_ref[Z]`` over ``graphs`` (each
+    carrying a TOTAL DFT energy in eV). Subtracting the per-structure reference
+    sum from the DFT total leaves a small formation-scale target that matches
+    the formation energy HydraGNN's head predicts, which keeps the fine-tune
+    from regressing the large raw-energy offset. Fit on the train split only to
+    avoid leakage.
+    """
+    zs = sorted({int(z) for g in graphs for z in g.atomic_numbers.tolist()})
+    col = {z: j for j, z in enumerate(zs)}
+    a = np.zeros((len(graphs), len(zs)), dtype=np.float64)
+    b = np.zeros(len(graphs), dtype=np.float64)
+    for i, g in enumerate(graphs):
+        for z in g.atomic_numbers.tolist():
+            a[i, col[int(z)]] += 1.0
+        b[i] = float(g.energy.item())
+    coef, *_ = np.linalg.lstsq(a, b, rcond=None)
+    return {z: float(coef[col[z]]) for z in zs}
+
+
+def _attach_reference_energies(graphs, e_ref_map: dict[int, float], dtype) -> None:
+    """Attach the per-structure reference sum (TOTAL eV) as ``g.e_ref`` in place."""
+    import torch
+
+    for g in graphs:
+        ref = sum(e_ref_map.get(int(z), 0.0) for z in g.atomic_numbers.tolist())
+        g.e_ref = torch.tensor([ref], dtype=dtype)
 
 
 def _reshape_composition(data, num_graphs: int):
@@ -226,11 +266,10 @@ def finetune_hydragnn(
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
 
     import torch
-    from torch_geometric.loader import DataLoader
-
     from hydragnn.models.create import create_model_config
     from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
     from hydragnn.train.train_validate_test import resolve_precision
+    from torch_geometric.loader import DataLoader
 
     # --- config + precision ---
     config_path = gfm_logdir / "config.json"
@@ -277,8 +316,7 @@ def finetune_hydragnn(
     state = torch.load(ckpt_path, map_location=dev)
     state_dict = state.get("model_state_dict", state)
     state_dict = {
-        (k[len("module.") :] if k.startswith("module.") else k): v
-        for k, v in state_dict.items()
+        (k[len("module.") :] if k.startswith("module.") else k): v for k, v in state_dict.items()
     }
     model.load_state_dict(state_dict, strict=False)
     model.eval()  # no BN/dropout in the heads; keeps frozen backbone stats fixed
@@ -300,12 +338,19 @@ def finetune_hydragnn(
     train_graphs, val_graphs = _split(graphs, val_fraction, seed)
     log.info("Graphs: %d train / %d val", len(train_graphs), len(val_graphs))
 
+    e_ref_map = _fit_reference_energies(train_graphs)
+    _attach_reference_energies(train_graphs, e_ref_map, param_dtype)
+    _attach_reference_energies(val_graphs, e_ref_map, param_dtype)
+    log.info(
+        "Fitted per-element reference energies (%d elements): %s",
+        len(e_ref_map),
+        {int(k): round(v, 3) for k, v in e_ref_map.items()},
+    )
+
     branch_mlp = load_branch_mlp(branch_mlp_path).to(device=dev, dtype=param_dtype)
     routed_t = torch.tensor(routed, dtype=torch.long, device=dev)
 
-    optimizer = torch.optim.AdamW(
-        [p for p in model.parameters() if p.requires_grad], lr=lr
-    )
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr)
 
     num_gpus = 1 if dev.type == "cuda" else 0
     report = CostReport(
@@ -343,6 +388,11 @@ def finetune_hydragnn(
     train_loader = DataLoader(train_graphs, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_graphs, batch_size=batch_size) if val_graphs else None
 
+    # Keep the checkpoint with the lowest validation loss, not the final epoch:
+    # on these small AL datasets the loss overfits well before the last epoch.
+    best_val = float("inf")
+    best_state = None
+    best_epoch = 0
     with track_cost(report):
         for epoch in range(epochs):
             model.eval()
@@ -356,16 +406,25 @@ def finetune_hydragnn(
                 running += float(loss.detach()) * batch.num_graphs
             train_mse = running / max(len(train_graphs), 1)
             val_msg = ""
+            selection_mse = train_mse
             if val_loader is not None:
                 vrun = 0.0
                 for batch in val_loader:
                     batch = batch.to(dev)
-                    vloss = _batch_loss(
-                        model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype
-                    )
+                    vloss = _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype)
                     vrun += float(vloss.detach()) * batch.num_graphs
-                val_msg = f" val={vrun / max(len(val_graphs), 1):.6f}"
+                selection_mse = vrun / max(len(val_graphs), 1)
+                val_msg = f" val={selection_mse:.6f}"
             log.info("Epoch %d/%d: train=%.6f%s", epoch + 1, epochs, train_mse, val_msg)
+            if selection_mse < best_val:
+                best_val = selection_mse
+                best_epoch = epoch + 1
+                best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+
+    # Restore the best-validation weights before saving.
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        log.info("Best epoch %d/%d: val=%.6f (restored for save)", best_epoch, epochs, best_val)
 
     # --- save logdir ---
     ckpt_out = output_dir / checkpoint_name
@@ -379,6 +438,7 @@ def finetune_hydragnn(
                 "routed_datasets": [BRANCH_DATASETS[b] for b in routed],
                 "mean_branch_weights": mean_w.tolist(),
                 "checkpoint": checkpoint_name,
+                "reference_energies": {str(k): v for k, v in e_ref_map.items()},
             },
             indent=2,
         )
@@ -411,7 +471,9 @@ def _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype):
     weighted_energy = batch.pos.new_zeros(num_graphs)
     original = getattr(batch, "dataset_name", None)
     for j, b in enumerate(routed_t.tolist()):
-        batch.dataset_name = torch.full((num_graphs, 1), b, dtype=torch.long, device=batch.pos.device)
+        batch.dataset_name = torch.full(
+            (num_graphs, 1), b, dtype=torch.long, device=batch.pos.device
+        )
         pred = model(batch)
         energy = pred[0].squeeze(-1) if isinstance(pred, (list, tuple)) else pred.squeeze(-1)
         weighted_energy = weighted_energy + w_routed[:, j] * energy
@@ -428,8 +490,18 @@ def _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype):
         create_graph=True,
     )[0]
 
+    # HydraGNN predicts a TOTAL formation energy (eV) while the DFT labels are
+    # TOTAL energies (eV) on the raw reference. Subtract the per-structure linear
+    # reference sum so the target is formation-scale and matches the head's
+    # output, then normalise the loss to eV/atom (divide by node_counts).
     e_target = batch.energy.view(num_graphs)
-    e_loss = F.mse_loss(weighted_energy / node_counts, e_target / node_counts)
+    e_ref = (
+        batch.e_ref.view(num_graphs)
+        if hasattr(batch, "e_ref") and batch.e_ref is not None
+        else torch.zeros_like(e_target)
+    )
+    e_form_target = e_target - e_ref
+    e_loss = F.mse_loss(weighted_energy / node_counts, e_form_target / node_counts)
     f_loss = F.mse_loss(forces_pred, batch.forces)
     return e_w * e_loss + f_w * f_loss
 

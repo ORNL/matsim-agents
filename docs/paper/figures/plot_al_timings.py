@@ -87,7 +87,7 @@ def main() -> None:
 
     x = np.arange(len(labels))
     fig, (ax_abs, ax_ovh) = plt.subplots(
-        1, 2, figsize=(9.2, 3.4), gridspec_kw={"width_ratios": [1.4, 1.0]}
+        2, 1, figsize=(5.0, 6.6), gridspec_kw={"height_ratios": [1.4, 1.0]}
     )
 
     # --- Panel (a): absolute mean per-iteration wall, stacked ---------------
@@ -101,6 +101,8 @@ def main() -> None:
     ax_abs.set_xticklabels(labels, rotation=20, ha="right", fontsize=8)
     ax_abs.set_title("(a) Per-iteration stage cost", fontsize=9)
     ax_abs.legend(fontsize=6.5, loc="upper left", framealpha=0.9)
+    # Extra headroom so the total-value labels stay inside the axes box.
+    ax_abs.set_ylim(0, max(bottom) * 1.15 if len(bottom) and max(bottom) > 0 else 1)
     for xi, tot in zip(x, bottom):
         ax_abs.text(xi, tot, f"{tot:,.0f}s", ha="center", va="bottom", fontsize=6.5)
 

@@ -16,9 +16,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
-from langchain_core.runnables import RunnableConfig
 
 from matsim_agents.agents import analyst_node, executor_node, planner_node
 from matsim_agents.discovery.composition import parse_composition
@@ -50,13 +50,17 @@ def _default_handoff_audit_path(output_dir: str) -> Path:
     return Path(output_dir) / "discovery" / "al_handoff_events.jsonl"
 
 
-def _append_handoff_audit_record(*, cfg: dict, state: MatSimState, action: str, message: str) -> None:
+def _append_handoff_audit_record(
+    *, cfg: dict, state: MatSimState, action: str, message: str
+) -> None:
     output_dir = cfg.get("output_dir") or "./outputs"
     custom_path = cfg.get("al_handoff_audit_path")
     audit_path = Path(custom_path) if custom_path else _default_handoff_audit_path(output_dir)
     audit_path.parent.mkdir(parents=True, exist_ok=True)
 
-    top_weights = [float(r.top_branch_weight) for r in state.results if r.top_branch_weight is not None]
+    top_weights = [
+        float(r.top_branch_weight) for r in state.results if r.top_branch_weight is not None
+    ]
     mean_top = (sum(top_weights) / len(top_weights)) if top_weights else None
     threshold = float(cfg.get("uq_top_weight_threshold", 0.6))
     frac_unrel = None
@@ -95,7 +99,9 @@ def uq_gate_node(state: MatSimState, config: RunnableConfig = None) -> dict:
     if not state.results:
         return {}
 
-    top_weights = [float(r.top_branch_weight) for r in state.results if r.top_branch_weight is not None]
+    top_weights = [
+        float(r.top_branch_weight) for r in state.results if r.top_branch_weight is not None
+    ]
     min_relax = int(cfg.get("uq_min_relaxations_for_handoff", 1))
     if len(state.results) < min_relax:
         msg = (
