@@ -14,6 +14,8 @@ compatibility:
     vasp-warmstart-*      -> HydraGNN + VASP
     uma-warmstart-*       -> UMA + QE
     uma-vasp-warmstart-*  -> UMA + VASP
+    mace-warmstart-*      -> MACE + QE
+    mace-vasp-warmstart-* -> MACE + VASP
 
 The QE and VASP comparison schemas differ:
     QE   cold/warm: ``bfgs_steps``, ``scf_iterations_total``
@@ -39,19 +41,25 @@ BACKENDS = [
     ("HydraGNN", "VASP"),
     ("UMA", "QE"),
     ("UMA", "VASP"),
+    ("MACE", "QE"),
+    ("MACE", "VASP"),
 ]
 BACKEND_LABELS = {
     ("HydraGNN", "QE"): (r"HydraGNN", r"\acs{QE}"),
     ("HydraGNN", "VASP"): (r"HydraGNN", r"\acs{VASP}"),
     ("UMA", "QE"): (r"UMA", r"\acs{QE}"),
     ("UMA", "VASP"): (r"UMA", r"\acs{VASP}"),
+    ("MACE", "QE"): (r"MACE", r"\acs{QE}"),
+    ("MACE", "VASP"): (r"MACE", r"\acs{VASP}"),
 }
 
-# Run-dir prefix -> (mlip, dft). Order matters: the UMA+VASP prefix must be
-# tested before the bare ``vasp-warmstart-`` prefix.
+# Run-dir prefix -> (mlip, dft). Order matters: the UMA+VASP and MACE+VASP
+# prefixes must be tested before the bare ``vasp-warmstart-`` prefix.
 PREFIX_BACKENDS = [
     ("uma-vasp-warmstart-", ("UMA", "VASP")),
     ("uma-warmstart-", ("UMA", "QE")),
+    ("mace-vasp-warmstart-", ("MACE", "VASP")),
+    ("mace-warmstart-", ("MACE", "QE")),
     ("vasp-warmstart-", ("HydraGNN", "VASP")),
     ("qe-warmstart-", ("HydraGNN", "QE")),
 ]
@@ -209,7 +217,9 @@ def render_rows(buckets):
             warm_scf = bucket.get("warm_scf", [])
             n = len(cold_ionic)
             first = (
-                "\\multirow{{4}}{{*}}{{{}}}".format(label) if bi == 0 else ""
+                "\\multirow{{{}}}{{*}}{{{}}}".format(len(BACKENDS), label)
+                if bi == 0
+                else ""
             )
             row = " & ".join(
                 [
