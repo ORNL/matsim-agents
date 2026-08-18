@@ -838,7 +838,7 @@ downstream scorers can filter or weight them.
 ### Single relaxation
 
 ```python
-from matsim_agents.tools.relaxation import RelaxStructureInput, _run
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 
 result = _run(RelaxStructureInput(
     structure_path="structures/mos2.vasp",
@@ -889,8 +889,8 @@ result = explore_composition(
 
 ```python
 import uuid
-from matsim_agents.graph import build_graph
-from matsim_agents.state import MatSimState
+from matsim_agents.orchestration.objective_graph import build_graph
+from matsim_agents.orchestration.state import MatSimState
 
 graph = build_graph()
 final = graph.invoke(
@@ -1333,38 +1333,66 @@ matsim-agents/
 │           ├── README-frontier.md
 │           └── README-six-model-benchmark.md
 ├── src/matsim_agents/
-│   ├── state.py                  # typed shared LangGraph state
-│   ├── graph.py                  # planner -> executor -> uq_gate -> analyst
-│   ├── llm.py                    # Ollama | vLLM | OpenAI | Anthropic | HuggingFace
 │   ├── cli.py                    # `matsim-agents run|plan|chat|supervisor-run|al`
-│   ├── supervisor.py             # LangGraph supervisor (discovery -> UQ -> optional AL handoff)
 │   ├── chat.py                   # interactive discovery REPL
+│   ├── supervisor.py             # compat alias → orchestration/composition_graph
+│   ├── graph.py                  # compat alias → orchestration/objective_graph
+│   ├── state.py                  # compat alias → orchestration/state
+│   ├── llm.py                    # compat alias → backends/llm/provider
+│   │
+│   ├── orchestration/            # typed workflow state, graphs, and policies
+│   │   ├── state.py              # MatSimState, RelaxationResult, TaskSpec
+│   │   ├── objective_graph.py    # planner -> executor -> uq_gate -> analyst
+│   │   ├── composition_graph.py  # supervisor (discovery -> UQ -> optional AL)
+│   │   └── policies/             # UQ handoff policy helpers
+│   │
+│   ├── backends/                 # five stable backend interfaces (Protocols)
+│   │   ├── llm/
+│   │   │   ├── __init__.py       # LLMBackend type alias (BaseChatModel)
+│   │   │   └── provider.py       # get_chat_model() — Ollama | vLLM | OpenAI | Anthropic | HF
+│   │   ├── mlip/
+│   │   │   ├── __init__.py       # MLIPBackend Protocol (as_calculator, relax)
+│   │   │   └── relaxation.py     # HydraGNN + UMA + ASE relaxation tool
+│   │   └── dft/
+│   │       ├── __init__.py       # DFTBackend Protocol, DFTJobSpec, DFTResult
+│   │       ├── vasp.py           # VASP 6.6 DFTBackend implementation
+│   │       ├── vasp_relax.py     # VASP relaxer (scf|relax|vc-relax|vc-relax-shape)
+│   │       ├── qe.py             # QE DFTBackend implementation
+│   │       └── qe_relax.py       # QE pw.x relaxer (scf|relax|vc-relax)
+│   │
+│   ├── execution/                # HPC-neutral resource, launch, and provenance
+│   │   ├── __init__.py           # ExecutionPlatform Protocol, ResourceRequest, RunStore
+│   │   ├── resources.py          # ResourceRequest frozen dataclass
+│   │   ├── launchers.py          # Launcher Protocol stub
+│   │   └── provenance.py         # RunStore Protocol + JsonlRunStore implementation
+│   │
 │   ├── agents/
 │   │   ├── planner.py
 │   │   ├── executor.py
 │   │   └── analyst.py
 │   ├── tools/
-│   │   ├── relaxation.py         # HydraGNN + ASE relaxation tool
-│   │   ├── qe_relax.py           # Quantum ESPRESSO pw.x relaxer (scf|relax|vc-relax)
-│   │   ├── vasp_relax.py         # VASP relaxer (scf|relax|vc-relax|vc-relax-shape)
+│   │   ├── relaxation.py         # compat alias → backends/mlip/relaxation
+│   │   ├── qe_relax.py           # compat alias → backends/dft/qe_relax
+│   │   ├── vasp_relax.py         # compat alias → backends/dft/vasp_relax
 │   │   ├── warmstart_benchmark_qe.py   # HydraGNN warm-start vs cold-start QE benchmark
 │   │   └── warmstart_benchmark_vasp.py # HydraGNN warm-start vs cold-start VASP benchmark
-│   └── discovery/
-│       ├── composition.py        # formula parsing
-│       ├── seeds.py              # crystal-phase seed generation (AFLOW + pyXtal)
-│       ├── stability.py          # ΔE/atom ranking & |F|max proxy
-│       └── wrapper.py            # explore_composition()
+│   ├── discovery/
+│   │   ├── composition.py        # formula parsing
+│   │   ├── seeds.py              # crystal-phase seed generation (AFLOW + pyXtal)
+│   │   ├── stability.py          # ΔE/atom ranking & |F|max proxy
+│   │   └── wrapper.py            # explore_composition()
 │   └── active_learning/          # HydraGNN <-> DFT active-learning loop
 │       ├── config.py             # pydantic schema + ${VAR} substitution
 │       ├── loop.py               # top-level driver (matsim-agents al run)
 │       ├── candidates.py         # MD sampling + per-step candidate capture
 │       ├── uncertainty.py        # ensemble / MC-dropout scoring + diversity
 │       ├── seeds.py              # paths or LLM-prompted seed materialisation
-│       ├── trainer.py            # HydraGNN retraining wrapper
-│       ├── dft_backend.py        # backend-agnostic Protocol
+│       ├── trainer.py            # HydraGNN / MACE retraining wrappers
+│       ├── dft_backend.py        # DFTBackend Protocol source (re-exported via backends/dft)
 │       ├── dft_runner.py         # in-allocation parallel job dispatcher
 │       ├── vasp_io.py            # POSCAR/INCAR/KPOINTS/POTCAR writers + parser
-│       └── backends/
+│       ├── vasp_runner.py        # VASP step runner
+│       └── backends/             # AL-specific DFT adapters (single-point only)
 │           ├── vasp.py           # VASP 6.6 single-point labeller
 │           └── qe.py             # Quantum ESPRESSO pw.x single-point labeller
 ├── examples/
@@ -1426,7 +1454,7 @@ TaskSpec(
 
 ### `RelaxStructureInput` / `RelaxationResult`
 
-See [`src/matsim_agents/tools/relaxation.py`](src/matsim_agents/tools/relaxation.py) — fields mirror the
+See [`src/matsim_agents/backends/mlip/relaxation.py`](src/matsim_agents/backends/mlip/relaxation.py) — fields mirror the
 options of the upstream HydraGNN ASE script
 (`structure_optimization_ASE.py`).
 
@@ -1434,19 +1462,19 @@ options of the upstream HydraGNN ASE script
 
 For cases where the user wants a *real* DFT relaxation rather than the
 cheap HydraGNN one (e.g. validating a discovered structure, refining a
-final candidate), two sibling drivers ship under `src/matsim_agents/tools/`
-with matching APIs:
+final candidate), two drivers ship under `src/matsim_agents/backends/dft/`
+with matching APIs (also importable via the `matsim_agents.tools` compat aliases):
 
 | Module | Backend | Calculation modes | Composition-aware defaults |
 |---|---|---|---|
-| [`qe_relax.py`](src/matsim_agents/tools/qe_relax.py) | Quantum ESPRESSO `pw.x` | `scf`, `relax`, `vc-relax` | `ecutwfc` (SSSP-PBE-eff-1.3 table), smearing, k-mesh |
-| [`vasp_relax.py`](src/matsim_agents/tools/vasp_relax.py) | VASP `vasp_std` | `scf`, `relax`, `vc-relax`, `vc-relax-shape` | `ENCUT` = 1.3 × max(ENMAX) from POTCARs (else 520 eV); `ISMEAR/SIGMA/KSPACING` flip metallic vs insulator |
+| [`backends/dft/qe_relax.py`](src/matsim_agents/backends/dft/qe_relax.py) | Quantum ESPRESSO `pw.x` | `scf`, `relax`, `vc-relax` | `ecutwfc` (SSSP-PBE-eff-1.3 table), smearing, k-mesh |
+| [`backends/dft/vasp_relax.py`](src/matsim_agents/backends/dft/vasp_relax.py) | VASP `vasp_std` | `scf`, `relax`, `vc-relax`, `vc-relax-shape` | `ENCUT` = 1.3 × max(ENMAX) from POTCARs (else 520 eV); `ISMEAR/SIGMA/KSPACING` flip metallic vs insulator |
 
 Both follow the same workflow:
 
 ```python
 from ase.build import bulk
-from matsim_agents.tools.vasp_relax import (
+from matsim_agents.backends.dft.vasp_relax import (
     recommend_settings, prepare_relax_workdir, run_vasp,
 )
 

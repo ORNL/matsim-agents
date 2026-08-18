@@ -16,6 +16,23 @@ individual experiments or machines.
 Machine-specific setup and job scripts live in `deployments/`; research-only
 paper and Codabench artifacts live in `research/`.
 
+## Five stable interfaces
+
+Each backend boundary is defined by a `@runtime_checkable` Protocol so that
+new implementations only need to satisfy the structural contract — no
+inheritance required.
+
+| Interface | Import path | Key methods / attributes |
+| --- | --- | --- |
+| `DFTBackend` | `matsim_agents.backends.dft` | `name`, `run_one(spec) → DFTResult` |
+| `MLIPBackend` | `matsim_agents.backends.mlip` | `name`, `as_calculator() → Calculator`, `relax(atoms, *, fmax, max_steps) → RelaxationResult` |
+| `LLMBackend` | `matsim_agents.backends.llm` | type alias for `langchain_core.language_models.BaseChatModel` |
+| `ExecutionPlatform` | `matsim_agents.execution` | `name`, `submit(cmd, *, resources, workdir) → str`, `available_resources() → ResourceRequest` |
+| `RunStore` | `matsim_agents.execution` | `append(record) → None`, `iter_records() → Iterable` |
+
+`JsonlRunStore` in `matsim_agents.execution.provenance` is the concrete
+`RunStore` implementation backed by a newline-delimited JSON file.
+
 ## Compatibility policy
 
 The first migration release retains aliases at the former import paths (for
