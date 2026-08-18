@@ -143,7 +143,10 @@ def uq_gate_node(state: MatSimState, config: RunnableConfig = None) -> dict:
 
     composition = _infer_formula_from_latest_result(state)
     if not composition:
-        msg = "AL handoff requested but skipped: could not infer composition from optimized structure."
+        msg = (
+            "AL handoff requested but skipped: could not infer composition "
+            "from optimized structure."
+        )
         _append_handoff_audit_record(
             cfg=cfg, state=state, action="triggered_but_missing_composition", message=msg
         )

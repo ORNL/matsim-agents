@@ -97,10 +97,10 @@ def track_cost(report: CostReport, *, reset_cuda_peak: bool = True):
         torch_cuda = None
 
     if torch_cuda is not None and reset_cuda_peak:
-        try:
+        import contextlib
+
+        with contextlib.suppress(Exception):
             torch_cuda.reset_peak_memory_stats()
-        except Exception:  # noqa: BLE001
-            pass
 
     start = time.perf_counter()
     try:
