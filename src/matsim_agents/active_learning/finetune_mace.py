@@ -207,35 +207,58 @@ def _run_mace_train(
     """Invoke ``mace_run_train`` with the reference fine-tuning recipe."""
     cmd = [
         *_mace_run_train_cmd(),
-        "--name", run_name,
-        "--foundation_model", foundation,
-        "--train_file", str(train_xyz),
-        "--valid_file", str(val_xyz),
-        "--energy_key", "REF_energy",
-        "--forces_key", "REF_forces",
-        "--loss", "ef",
-        "--E0s", "average",
-        "--lr", str(lr),
-        "--max_num_epochs", str(epochs),
-        "--batch_size", str(batch_size),
-        "--valid_batch_size", str(batch_size),
-        "--device", device,
-        "--default_dtype", dtype,
-        "--work_dir", str(work_dir),
-        "--model_dir", str(model_dir),
-        "--checkpoints_dir", str(work_dir / "checkpoints"),
-        "--results_dir", str(work_dir / "results"),
-        "--compute_stress", "False",
-        "--log_level", "WARNING",
+        "--name",
+        run_name,
+        "--foundation_model",
+        foundation,
+        "--train_file",
+        str(train_xyz),
+        "--valid_file",
+        str(val_xyz),
+        "--energy_key",
+        "REF_energy",
+        "--forces_key",
+        "REF_forces",
+        "--loss",
+        "ef",
+        "--E0s",
+        "average",
+        "--lr",
+        str(lr),
+        "--max_num_epochs",
+        str(epochs),
+        "--batch_size",
+        str(batch_size),
+        "--valid_batch_size",
+        str(batch_size),
+        "--device",
+        device,
+        "--default_dtype",
+        dtype,
+        "--work_dir",
+        str(work_dir),
+        "--model_dir",
+        str(model_dir),
+        "--checkpoints_dir",
+        str(work_dir / "checkpoints"),
+        "--results_dir",
+        str(work_dir / "results"),
+        "--compute_stress",
+        "False",
+        "--log_level",
+        "WARNING",
     ]
     if lora:
         cmd += ["--lora", "True", "--lora_rank", str(lora_rank), "--lora_alpha", str(lora_alpha)]
     cmd += [
         "--ema",
-        "--ema_decay", "0.995",
+        "--ema_decay",
+        "0.995",
         "--amsgrad",
-        "--clip_grad", "10.0",
-        "--weight_decay", str(weight_decay),
+        "--clip_grad",
+        "10.0",
+        "--weight_decay",
+        str(weight_decay),
     ]
     log.info("Running mace_run_train: %s", " ".join(cmd))
     subprocess.run(cmd, check=True)
@@ -451,16 +474,21 @@ def main(argv: list[str] | None = None) -> int:
         "--dispersion", action="store_true", help="Seed with DFT-D3 dispersion (mace_mp/mace_off)."
     )
     parser.add_argument(
-        "--epochs", type=int, default=None,
+        "--epochs",
+        type=int,
+        default=None,
         help="Fine-tune epochs (default: 10 for LoRA, 50 for naive).",
     )
     parser.add_argument("--batch-size", type=int, default=4, help="mace_run_train batch size.")
     parser.add_argument(
-        "--lr", type=float, default=None,
+        "--lr",
+        type=float,
+        default=None,
         help="Learning rate (default: 5e-3 for LoRA, 1e-3 for naive).",
     )
     parser.add_argument(
-        "--lora", action="store_true",
+        "--lora",
+        action="store_true",
         help="Parameter-efficient LoRA fine-tune (native mace_run_train --lora).",
     )
     parser.add_argument("--lora-rank", type=int, default=None, help="LoRA rank (default: 4).")
@@ -469,7 +497,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default=None, choices=["CUDA", "CPU", "cuda", "cpu"])
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Load the dataset but do not train / write a checkpoint.",
     )
     args = parser.parse_args(argv)

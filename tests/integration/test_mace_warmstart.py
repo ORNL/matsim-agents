@@ -1,29 +1,30 @@
-"""Integration test: UMA warm-start vs cold-start QE relaxation.
+"""Integration test: MACE warm-start vs cold-start QE relaxation.
 
 For each fixture in ``data/fixtures.yaml`` we:
 
-  1. Run a UMA (fairchem-core) structure optimisation on the input crystal.
+  1. Run a MACE-MP (mace-torch) structure optimisation on the input crystal.
   2. Run ``pw.x`` ``vc-relax`` from the *original* coordinates (cold start).
-  3. Run ``pw.x`` ``vc-relax`` from the UMA-relaxed coordinates (warm start).
+  3. Run ``pw.x`` ``vc-relax`` from the MACE-relaxed coordinates (warm start).
   4. Compare BFGS step counts, total SCF iterations, and final energies.
 
 The whole test is **skipped unless** every external dependency is available
 through environment variables; this lets the rest of the test suite run
-without Quantum ESPRESSO or a UMA checkpoint::
+without Quantum ESPRESSO or a MACE foundation model::
 
     MATSIM_QE_LAUNCHER         # absolute path or wrapper that invokes pw.x
     MATSIM_QE_PSEUDO_DIR       # directory with .UPF pseudopotentials
-    MATSIM_UMA_MODEL_NAME      # UMA model checkpoint (e.g. uma-s-1p1)
+    MATSIM_MACE_MODEL          # MACE variant (small|medium|large) or .model path
 
 Optional::
 
-    MATSIM_UMA_TASK            # omat|omol|oc20|odac|omc  (default: omat)
+    MATSIM_MACE_FAMILY         # mace_mp|mace_off|checkpoint  (default: mace_mp)
+    MATSIM_MACE_PRECISION      # fp32|fp64  (default: fp64)
     MATSIM_QE_TIMEOUT_SEC      # per-pw.x-run timeout (default: 3600)
     MATSIM_QE_MLP_DEVICE       # cuda|cpu  (default: cuda)
     MATSIM_WARMSTART_FIXTURES  # comma-sep names to restrict (default: all)
 
 A SLURM launcher that wires all of the above is provided at
-``scripts/advanced/perlmutter/job-uma-warmstart-perlmutter.sh``.
+``scripts/advanced/perlmutter/job-mace-warmstart-perlmutter.sh``.
 """
 
 from __future__ import annotations
@@ -60,15 +61,15 @@ def _missing_requirements() -> list[str]:
         missing.append("MATSIM_QE_PSEUDO_DIR")
     elif not Path(_env("MATSIM_QE_PSEUDO_DIR")).is_dir():
         missing.append("MATSIM_QE_PSEUDO_DIR (not a directory)")
-    if _env("MATSIM_UMA_MODEL_NAME") is None:
-        missing.append("MATSIM_UMA_MODEL_NAME")
+    if _env("MATSIM_MACE_MODEL") is None:
+        missing.append("MATSIM_MACE_MODEL")
     return missing
 
 
 pytestmark = pytest.mark.skipif(
     bool(_missing_requirements()),
     reason=(
-        "UMA warm-start benchmark requires environment variables: "
+        "MACE warm-start benchmark requires environment variables: "
         + ", ".join(_missing_requirements() or ["<all set>"])
     ),
 )
@@ -107,7 +108,7 @@ _FIXTURES = _load_fixtures() if FIXTURES_YAML.exists() else []
 
 
 @pytest.mark.parametrize("fixture", _FIXTURES, ids=_ids(_FIXTURES))
-def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None:
+def test_mace_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None:
     """Warm-started pw.x relaxation should not need more BFGS steps than cold."""
     from matsim_agents.tools.warmstart_benchmark_qe import run_warmstart_benchmark
 
@@ -124,23 +125,24 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
     qe_overrides: dict[str, Any] = {"is_2d": bool(fixture.get("is_2d", False))}
     qe_overrides.update(fixture.get("qe", {}))
 
-    # Read UMA-specific settings from env / fixture.
-    # The fixture may optionally have a ``uma:`` block with keys that override
+    # Read MACE-specific settings from env / fixture.
+    # The fixture may optionally have a ``mace:`` block with keys that override
     # defaults (e.g. fmax, maxiter, optimizer).
-    uma_cfg: dict[str, Any] = dict(fixture.get("uma", {}))
+    mace_cfg: dict[str, Any] = dict(fixture.get("mace", {}))
 
     is_vc_relax = qe_overrides.get("calculation", "vc-relax") == "vc-relax"
     default_fmax = 0.01 if is_vc_relax else 0.05
 
-    uma_kwargs: dict[str, Any] = {
-        "uma_model_name": _env("MATSIM_UMA_MODEL_NAME") or "uma-s-1p1",
-        "uma_task": _env("MATSIM_UMA_TASK") or uma_cfg.get("task", "omat"),
+    mace_kwargs: dict[str, Any] = {
+        "mace_family": _env("MATSIM_MACE_FAMILY") or mace_cfg.get("family", "mace_mp"),
+        "mace_model": _env("MATSIM_MACE_MODEL") or mace_cfg.get("model", "medium"),
+        "mace_precision": _env("MATSIM_MACE_PRECISION") or mace_cfg.get("precision", "fp64"),
         "mlp_device": _env("MATSIM_QE_MLP_DEVICE") or "cuda",
-        "optimizer": uma_cfg.get("optimizer", "FIRE"),
-        "fmax": float(uma_cfg.get("fmax", default_fmax)),
-        "maxiter": int(uma_cfg.get("maxiter", 200)),
-        "maxstep": float(uma_cfg.get("maxstep", 1e-2)),
-        "relative_increase_threshold": float(uma_cfg.get("relative_increase_threshold", 0.05)),
+        "optimizer": mace_cfg.get("optimizer", "FIRE"),
+        "fmax": float(mace_cfg.get("fmax", default_fmax)),
+        "maxiter": int(mace_cfg.get("maxiter", 200)),
+        "maxstep": float(mace_cfg.get("maxstep", 1e-2)),
+        "relative_increase_threshold": float(mace_cfg.get("relative_increase_threshold", 0.05)),
     }
 
     timeout = int(_env("MATSIM_QE_TIMEOUT_SEC") or "3600")
@@ -155,8 +157,8 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
         pseudo_dir=_env("MATSIM_QE_PSEUDO_DIR"),
         qe_launcher=qe_launcher,
         qe_settings_overrides=qe_overrides,
-        mlip_backend="uma",
-        mlip_kwargs=uma_kwargs,
+        mlip_backend="mace",
+        mlip_kwargs=mace_kwargs,
         timeout_sec=timeout,
     )
 
@@ -172,7 +174,7 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
         if summary.warm is None or "bfgs_steps" not in summary.warm:
             pytest.fail(
                 f"Warm-start phase produced no result for {fixture['name']!r}; "
-                f"uma block: {summary.hydragnn}"
+                f"mace block: {summary.hydragnn}"
             )
         warm = summary.warm
         assert warm.get("converged"), (
@@ -184,7 +186,8 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
 
             warnings.warn(
                 f"{fixture['name']!r}: cold run converged unexpectedly — "
-                "consider removing cold_may_fail: true from the fixture."
+                "consider removing cold_may_fail: true from the fixture.",
+                stacklevel=2,
             )
         return  # pass — warm converged, cold did not (or both did, which is fine)
 
@@ -196,7 +199,7 @@ def test_uma_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) -> None
     if summary.warm is None or "bfgs_steps" not in summary.warm:
         pytest.fail(
             f"Warm-start phase produced no result for {fixture['name']!r}; "
-            f"uma block: {summary.hydragnn}"
+            f"mace block: {summary.hydragnn}"
         )
     warm = summary.warm
     assert warm.get("converged"), (

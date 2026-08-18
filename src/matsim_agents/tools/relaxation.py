@@ -26,7 +26,7 @@ class RelaxStructureInput(BaseModel):
     structure_path: str = Field(
         ..., description="Path to the input structure file (e.g. .vasp, .cif, .xyz)."
     )
-    mlip_backend: Literal["hydragnn", "uma"] = Field(
+    mlip_backend: Literal["hydragnn", "uma", "mace"] = Field(
         "hydragnn",
         description="Surrogate backend used by the relaxation tool.",
     )
@@ -58,6 +58,22 @@ class RelaxStructureInput(BaseModel):
     uma_task: Literal["omat", "omol"] = Field(
         "omat",
         description="UMA task head when mlip_backend='uma'.",
+    )
+    mace_family: Literal["mace_mp", "mace_off", "checkpoint"] = Field(
+        "mace_mp",
+        description="MACE model family when mlip_backend='mace'.",
+    )
+    mace_model: str = Field(
+        "medium",
+        description=(
+            "MACE variant ('small'|'medium'|'large' or release tag) for the "
+            "foundation families, or a path to a local .model checkpoint when "
+            "mace_family='checkpoint'."
+        ),
+    )
+    mace_precision: Literal["fp32", "fp64"] = Field(
+        "fp64",
+        description="MACE calculator dtype when mlip_backend='mace' (fp64 recommended for relaxation).",
     )
     relax_cell: bool = Field(
         False,
@@ -226,8 +242,12 @@ class _NumericalStressCalculator:
             raise AttributeError(name)
         # Block methods that would raise PropertyNotImplementedError on the inner
         # calc — return a no-op lambda so ASE internals get None instead of crashing.
-        _unsupported = {"get_dipole_moment", "get_magnetic_moment",
-                        "get_magnetic_moments", "get_charges"}
+        _unsupported = {
+            "get_dipole_moment",
+            "get_magnetic_moment",
+            "get_magnetic_moments",
+            "get_charges",
+        }
         if name in _unsupported:
             return lambda *a, **kw: None
         return getattr(self._inner, name)
@@ -273,7 +293,7 @@ class _NumericalStressCalculator:
             self.calculate(atoms)
         return self.results[key]
 
-    def _numerical_stress(self, atoms) -> "np.ndarray":
+    def _numerical_stress(self, atoms) -> np.ndarray:
         """Central FD stress in ASE Voigt 6-vector convention (eV/Å³)."""
         import numpy as np
 
@@ -370,7 +390,7 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
             args.spin,
         )
         uq_note = None
-    else:
+    elif args.mlip_backend == "uma":
         from matsim_agents.active_learning.calculator import build_uma_calculator
         from matsim_agents.active_learning.config import UMAConfig
 
@@ -384,6 +404,21 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
         )
         num_branches = 0
         uq_note = "branch-weight UQ unavailable for UMA backend"
+    else:  # mace
+        from matsim_agents.active_learning.calculator import build_mace_calculator
+        from matsim_agents.active_learning.config import MACEConfig
+
+        calculator = build_mace_calculator(
+            MACEConfig(
+                family=args.mace_family,
+                model=args.mace_model,
+                device=args.mlp_device,
+                precision=args.mace_precision,
+            ),
+            enable_mc_dropout=False,
+        )
+        num_branches = 0
+        uq_note = "branch-weight UQ unavailable for MACE backend"
 
     atoms = read(structure_path)
     atoms.calc = calculator
@@ -442,7 +477,6 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 steps_taken = step + 1
 
                 energy = atoms.get_potential_energy()
-                forces = atoms.get_forces()
                 # For convergence we check the optimizable's forces (which
                 # includes stress pseudo-forces when relax_cell=True).
                 opt_forces = optimizable.get_forces()

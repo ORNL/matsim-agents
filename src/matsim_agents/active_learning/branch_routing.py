@@ -27,22 +27,22 @@ log = logging.getLogger(__name__)
 # Branch index -> training dataset alias (order of --multi_model_list /
 # datadir0..15 in the SC26 GFM job scripts).
 BRANCH_DATASETS: tuple[str, ...] = (
-    "Alexandria",       # 0  inorganic bulk (DFT-PBE)
-    "ANI1x",            # 1  organic molecules
-    "MPTrj",            # 2  inorganic bulk (Materials Project trajectories)
-    "OC2020",           # 3  catalysis surfaces/adsorbates
-    "OC2022",           # 4  catalysis surfaces/adsorbates
-    "OC25",             # 5  catalysis
-    "ODAC23",           # 6  MOFs / direct-air-capture
-    "OMat24",           # 7  inorganic bulk materials
-    "OMol25",           # 8  molecules
-    "OMol25-neutral",   # 9  molecules (neutral)
+    "Alexandria",  # 0  inorganic bulk (DFT-PBE)
+    "ANI1x",  # 1  organic molecules
+    "MPTrj",  # 2  inorganic bulk (Materials Project trajectories)
+    "OC2020",  # 3  catalysis surfaces/adsorbates
+    "OC2022",  # 4  catalysis surfaces/adsorbates
+    "OC25",  # 5  catalysis
+    "ODAC23",  # 6  MOFs / direct-air-capture
+    "OMat24",  # 7  inorganic bulk materials
+    "OMol25",  # 8  molecules
+    "OMol25-neutral",  # 9  molecules (neutral)
     "OMol25-non-neutral",  # 10 molecules (charged)
-    "OPoly2026",        # 11 polymers
-    "Nabla2DFT",        # 12 molecules
-    "QCML",             # 13 molecules (quantum-chemistry ML)
-    "QM7X",             # 14 small organic molecules
-    "transition1x",     # 15 organic reaction transition states
+    "OPoly2026",  # 11 polymers
+    "Nabla2DFT",  # 12 molecules
+    "QCML",  # 13 molecules (quantum-chemistry ML)
+    "QM7X",  # 14 small organic molecules
+    "transition1x",  # 15 organic reaction transition states
 )
 NUM_BRANCHES = len(BRANCH_DATASETS)
 _HIDDEN_DIMS: tuple[int, ...] = (128, 64)
@@ -85,7 +85,7 @@ def load_branch_mlp(
     state = ckpt.get("mlp_state_dict", ckpt) if isinstance(ckpt, dict) else ckpt
     # Original module stored the Sequential under ``self.net`` -> strip prefix
     # so keys line up with our bare nn.Sequential.
-    state = {k[len("net."):] if k.startswith("net.") else k: v for k, v in state.items()}
+    state = {k[len("net.") :] if k.startswith("net.") else k: v for k, v in state.items()}
     mlp.load_state_dict(state, strict=True)
     mlp.eval()
     return mlp

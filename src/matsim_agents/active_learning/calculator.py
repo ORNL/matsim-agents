@@ -159,7 +159,9 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         # vesin's neighbor-list builder (via RadiusGraphPBC) requires a strict
         # Python float cutoff; HydraGNN configs commonly store radius as an int.
         radius = float(
-            cfg.radius if cfg.radius is not None else hcfg["NeuralNetwork"]["Architecture"]["radius"]
+            cfg.radius
+            if cfg.radius is not None
+            else hcfg["NeuralNetwork"]["Architecture"]["radius"]
         )
         max_neighbours = (
             cfg.max_neighbours

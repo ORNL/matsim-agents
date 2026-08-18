@@ -166,8 +166,7 @@ class MACEConfig(BaseModel):
     dropout: MCDropoutInjectionConfig = Field(
         default_factory=MCDropoutInjectionConfig,
         description=(
-            "Test-time dropout injection for MC-Dropout acquisition (MACE has no "
-            "native dropout)."
+            "Test-time dropout injection for MC-Dropout acquisition (MACE has no native dropout)."
         ),
     )
 
@@ -314,9 +313,7 @@ class SeedSourceConfig(BaseModel):
             "Default 0: AL relies on prototype-derived seeds only."
         ),
     )
-    random_seed: int = Field(
-        0, description="Seed for pyXtal random search (per composition)."
-    )
+    random_seed: int = Field(0, description="Seed for pyXtal random search (per composition).")
 
     @model_validator(mode="after")
     def _check_required_fields(self) -> SeedSourceConfig:
@@ -614,10 +611,7 @@ class ALConfig(BaseModel):
 
                 return pattern.sub(_sub, value)
 
-            defaults = {
-                str(k): _break_self_ref(str(k), str(v))
-                for k, v in preview["vars"].items()
-            }
+            defaults = {str(k): _break_self_ref(str(k), str(v)) for k, v in preview["vars"].items()}
 
         def _resolve(match: re.Match[str]) -> str:
 

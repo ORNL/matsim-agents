@@ -1,29 +1,30 @@
-"""Integration test: UMA warm-start vs cold-start VASP relaxation.
+"""Integration test: MACE warm-start vs cold-start VASP relaxation.
 
 For each fixture in ``data/fixtures.yaml`` we:
 
-  1. Run a UMA (fairchem-core) structure optimisation on the input crystal.
+  1. Run a MACE-MP (mace-torch) structure optimisation on the input crystal.
   2. Run ``vasp_std`` relaxation from the *original* coordinates (cold start).
-  3. Run ``vasp_std`` relaxation from the UMA-relaxed coordinates (warm start).
+  3. Run ``vasp_std`` relaxation from the MACE-relaxed coordinates (warm start).
   4. Compare ionic step counts, total SCF iterations, and final energies.
 
 The test is **skipped unless** every external dependency is available through
 environment variables; this lets the rest of the test suite run without VASP
-or a UMA checkpoint::
+or a MACE foundation model::
 
     MATSIM_VASP_LAUNCHER       # absolute path or wrapper that invokes vasp_std
     MATSIM_VASP_POTCAR_DIR     # directory with POTCAR files (potpaw_PBE.64)
-    MATSIM_UMA_MODEL_NAME      # UMA model checkpoint (e.g. uma-s-1p1)
+    MATSIM_MACE_MODEL          # MACE variant (small|medium|large) or .model path
 
 Optional::
 
-    MATSIM_UMA_TASK            # omat|omol|oc20|odac|omc  (default: omat)
+    MATSIM_MACE_FAMILY         # mace_mp|mace_off|checkpoint  (default: mace_mp)
+    MATSIM_MACE_PRECISION      # fp32|fp64  (default: fp64)
     MATSIM_VASP_TIMEOUT_SEC    # per-vasp_std-run timeout (default: 3600)
     MATSIM_VASP_MLP_DEVICE     # cuda|cpu  (default: cuda)
     MATSIM_WARMSTART_FIXTURES  # comma-sep names to restrict (default: all)
 
 A SLURM launcher that wires all of the above is provided at
-``scripts/advanced/perlmutter/job-uma-vasp-warmstart-perlmutter.sh``.
+``scripts/advanced/perlmutter/job-mace-vasp-warmstart-perlmutter.sh``.
 """
 
 from __future__ import annotations
@@ -60,15 +61,15 @@ def _missing_requirements() -> list[str]:
         missing.append("MATSIM_VASP_POTCAR_DIR")
     elif not Path(_env("MATSIM_VASP_POTCAR_DIR")).is_dir():
         missing.append("MATSIM_VASP_POTCAR_DIR (not a directory)")
-    if _env("MATSIM_UMA_MODEL_NAME") is None:
-        missing.append("MATSIM_UMA_MODEL_NAME")
+    if _env("MATSIM_MACE_MODEL") is None:
+        missing.append("MATSIM_MACE_MODEL")
     return missing
 
 
 pytestmark = pytest.mark.skipif(
     bool(_missing_requirements()),
     reason=(
-        "UMA+VASP warm-start benchmark requires environment variables: "
+        "MACE+VASP warm-start benchmark requires environment variables: "
         + ", ".join(_missing_requirements() or ["<all set>"])
     ),
 )
@@ -107,7 +108,7 @@ _FIXTURES = _load_fixtures() if FIXTURES_YAML.exists() else []
 
 
 @pytest.mark.parametrize("fixture", _FIXTURES, ids=_ids(_FIXTURES))
-def test_uma_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> None:
+def test_mace_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> None:
     """Warm-started VASP relaxation should not need more ionic steps than cold."""
     from matsim_agents.tools.warmstart_benchmark_vasp import run_warmstart_benchmark
 
@@ -123,17 +124,18 @@ def test_uma_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> No
     vasp_overrides: dict[str, Any] = {}
     vasp_overrides.update(fixture.get("vasp", {}))
 
-    uma_cfg: dict[str, Any] = dict(fixture.get("uma", {}))
+    mace_cfg: dict[str, Any] = dict(fixture.get("mace", {}))
 
-    uma_kwargs: dict[str, Any] = {
-        "uma_model_name": _env("MATSIM_UMA_MODEL_NAME") or "uma-s-1p1",
-        "uma_task": _env("MATSIM_UMA_TASK") or uma_cfg.get("task", "omat"),
+    mace_kwargs: dict[str, Any] = {
+        "mace_family": _env("MATSIM_MACE_FAMILY") or mace_cfg.get("family", "mace_mp"),
+        "mace_model": _env("MATSIM_MACE_MODEL") or mace_cfg.get("model", "medium"),
+        "mace_precision": _env("MATSIM_MACE_PRECISION") or mace_cfg.get("precision", "fp64"),
         "mlp_device": _env("MATSIM_VASP_MLP_DEVICE") or "cuda",
-        "optimizer": uma_cfg.get("optimizer", "FIRE"),
-        "fmax": float(uma_cfg.get("fmax", 0.01)),
-        "maxiter": int(uma_cfg.get("maxiter", 200)),
-        "maxstep": float(uma_cfg.get("maxstep", 1e-2)),
-        "relative_increase_threshold": float(uma_cfg.get("relative_increase_threshold", 0.05)),
+        "optimizer": mace_cfg.get("optimizer", "FIRE"),
+        "fmax": float(mace_cfg.get("fmax", 0.01)),
+        "maxiter": int(mace_cfg.get("maxiter", 200)),
+        "maxstep": float(mace_cfg.get("maxstep", 1e-2)),
+        "relative_increase_threshold": float(mace_cfg.get("relative_increase_threshold", 0.05)),
     }
 
     timeout = int(_env("MATSIM_VASP_TIMEOUT_SEC") or "3600")
@@ -148,8 +150,8 @@ def test_uma_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> No
         potcar_dir=_env("MATSIM_VASP_POTCAR_DIR"),
         vasp_launcher=vasp_launcher,
         vasp_settings_overrides=vasp_overrides,
-        mlip_backend="uma",
-        mlip_kwargs=uma_kwargs,
+        mlip_backend="mace",
+        mlip_kwargs=mace_kwargs,
         timeout_sec=timeout,
     )
 
@@ -157,7 +159,6 @@ def test_uma_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> No
     (work_dir / "comparison.json").write_text(json.dumps(_to_jsonable(summary), indent=2))
 
     cold = summary.cold
-    cold_may_fail = bool(fixture.get("cold_may_fail", False))
     warm_may_fail = bool(fixture.get("warm_may_fail", False))
 
     assert cold.get("converged"), (
@@ -168,7 +169,7 @@ def test_uma_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> No
     if summary.warm is None or "n_ionic_steps" not in summary.warm:
         pytest.fail(
             f"Warm-start phase produced no result for {fixture['name']!r}; "
-            f"uma block: {summary.hydragnn}"
+            f"mace block: {summary.hydragnn}"
         )
     warm = summary.warm
     if not warm.get("converged"):
@@ -177,8 +178,9 @@ def test_uma_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> No
 
             warnings.warn(
                 f"{fixture['name']!r}: warm VASP run did not converge "
-                f"(warm_may_fail=true) — UMA pre-relaxation may have moved "
-                f"atoms away from the DFT basin. See {warm.get('work_dir')}/vasp.out"
+                f"(warm_may_fail=true) — MACE pre-relaxation may have moved "
+                f"atoms away from the DFT basin. See {warm.get('work_dir')}/vasp.out",
+                stacklevel=2,
             )
             return  # pass — cold converged, warm failure is expected
         pytest.fail(
@@ -205,7 +207,7 @@ def test_uma_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> No
         assert int(warm["n_ionic_steps"]) <= int(cold["n_ionic_steps"]), (
             f"Warm-started VASP took more ionic steps ({warm['n_ionic_steps']}) "
             f"than cold ({cold['n_ionic_steps']}) for {fixture['name']!r} — "
-            f"UMA warm-start did not help."
+            f"MACE warm-start did not help."
         )
 
 
