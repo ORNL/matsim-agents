@@ -141,3 +141,23 @@ uma-vasp-ws-*.out
 uma-vasp-ws-*.err
 vasp-ws-*.out
 vasp-ws-*.err
+
+# Fine-tune-eval SLURM logs (written to scripts/launchers/perlmutter/ by submit scripts)
+fte-*.out
+fte-*.err
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+docs/paper/main.log
+docs/paper/main.out
+docs/paper/main.pdf
+
+# Paper tarballs and editor backup files
+docs/paper.tar.gz
+docs/paper/main.tex.backup-*
+docs/paper/main.tex.orig-backup-*
