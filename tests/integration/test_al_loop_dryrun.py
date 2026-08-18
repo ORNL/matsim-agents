@@ -154,8 +154,8 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(
         loop_mod,
-        "build_hydragnn_calculator",
-        lambda hcfg: _ConstantForceCalc(forces=np.zeros((2, 3))),
+        "make_mlip_calculator",
+        lambda mlip_cfg, **kw: _ConstantForceCalc(forces=np.zeros((2, 3))),
     )
     monkeypatch.setattr(
         loop_mod,

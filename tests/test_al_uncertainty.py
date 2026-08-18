@@ -278,7 +278,7 @@ def test_inject_inference_dropout_makes_mc_dropout_nonzero() -> None:
 
 
 def test_inject_inference_dropout_is_idempotent() -> None:
-    torch = pytest.importorskip("torch")
+    pytest.importorskip("torch")
     import torch.nn as nn
 
     from matsim_agents.active_learning.uncertainty import inject_inference_dropout

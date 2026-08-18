@@ -178,7 +178,8 @@ def retrain_uma(
     ``UMAConfig.model_name`` for the next AL iteration. The launcher convention is
     analogous to the HydraGNN hook, but passes UMA-specific inputs:
 
-    ``<train_script> <dataset_path> <out_model_dir> <base_model> <task_name> <epochs> <nodes> <ranks>``.
+    ``<train_script> <dataset_path> <out_model_dir> <base_model> <task_name>``
+    ``<epochs> <nodes> <ranks>``.
 
     The launcher is responsible for translating the extxyz dataset into the
     exact FairChem/UMA fine-tuning command used at the deployment site.
@@ -249,7 +250,8 @@ def retrain_mace(
 
     The launcher convention mirrors the HydraGNN/UMA hooks:
 
-    ``<train_script> <dataset_path> <out_model_dir> <family> <base_model> <epochs> <nodes> <ranks>``.
+    ``<train_script> <dataset_path> <out_model_dir> <family> <base_model>``
+    ``<epochs> <nodes> <ranks>``.
 
     With no launcher, the built-in ``finetune_mace`` CLI is invoked in-process.
     """

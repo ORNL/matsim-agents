@@ -167,7 +167,6 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
     (work_dir / "comparison.json").write_text(json.dumps(_to_jsonable(summary), indent=2))
 
     cold = summary.cold
-    cold_may_fail = bool(fixture.get("cold_may_fail", False))
     warm_may_fail = bool(fixture.get("warm_may_fail", False))
 
     assert cold.get("converged"), (
@@ -188,7 +187,8 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
             warnings.warn(
                 f"{fixture['name']!r}: warm VASP run did not converge "
                 f"(warm_may_fail=true) — MLIP pre-relaxation may have moved "
-                f"atoms away from the DFT basin. See {warm.get('work_dir')}/vasp.out"
+                f"atoms away from the DFT basin. See {warm.get('work_dir')}/vasp.out",
+                stacklevel=2,
             )
             return  # pass — cold converged, warm failure is expected
         pytest.fail(

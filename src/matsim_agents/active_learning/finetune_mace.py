@@ -465,7 +465,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--base-model",
         default="medium",
-        help="Size/variant (small|medium|large, or a release tag/URL), or a .model path for family=checkpoint.",
+        help=(
+            "Size/variant (small|medium|large, or a release tag/URL), "
+            "or a .model path for family=checkpoint."
+        ),
     )
     parser.add_argument(
         "--precision", default="fp64", choices=["fp32", "fp64"], help="Training dtype."
