@@ -117,7 +117,7 @@ turns on GPU-aware MPI, and `srun`s `pw.x` with the correct A100 layout
 
 The launcher also accepts environment overrides (`PW_BIN=`, `QE_PREFIX=`,
 `NRANKS=`, `OMP_NUM_THREADS=`, `GPUS_PER_NODE=`) and is what
-`matsim_agents.tools.qe_relax` invokes when `MATSIM_QE_LAUNCHER` is set.
+`matsim_agents.backends.dft.qe_relax` invokes when `MATSIM_QE_LAUNCHER` is set.
 
 ### HydraGNN warm-start vs QE cold-start benchmark
 

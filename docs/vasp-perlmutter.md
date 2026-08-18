@@ -50,7 +50,7 @@ environment (module stack, `LD_LIBRARY_PATH`, and the CUDA-aware-MPI / NCCL env)
 
 | Launcher | Used by | Invocation |
 |----------|---------|------------|
-| [`deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh`](../deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh) | `matsim_agents.tools.vasp_relax` and the VASP warm-start benchmark, via `MATSIM_VASP_LAUNCHER` | run *inside* a work dir already holding `INCAR/POSCAR/KPOINTS/POTCAR`; **no argv** |
+| [`deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh`](../deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh) | `matsim_agents.backends.dft.vasp_relax` and the VASP warm-start benchmark, via `MATSIM_VASP_LAUNCHER` | run *inside* a work dir already holding `INCAR/POSCAR/KPOINTS/POTCAR`; **no argv** |
 | [`deployments/perlmutter/launchers/_vasp-step-perlmutter.sh`](../deployments/perlmutter/launchers/_vasp-step-perlmutter.sh) | the AL loop's DFT step (`dft.vasp.vasp_wrapper` in the AL YAML), called from `active_learning/backends/vasp.py` | `bash _vasp-step-perlmutter.sh <work_dir> <vasp_bin> <nodes> <ranks_per_node> <threads_per_rank>` |
 
 Both do a full `module reset` to the VASP build toolchain, unset venv-injected
