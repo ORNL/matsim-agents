@@ -149,6 +149,23 @@ def execute_smoke(config: dict[str, Any], backend: str) -> dict[str, Any]:
     }
 
 
+def validate_llm_check(path: Path) -> dict[str, Any]:
+    """Require a successful, fully qualified LLM-check directory."""
+
+    result_path = path / "result.json"
+    identity_path = path / "model_identity.json"
+    if not result_path.is_file() or not identity_path.is_file():
+        raise ValueError("LLM-check run must contain result.json and model_identity.json")
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    identity = json.loads(identity_path.read_text(encoding="utf-8"))
+    if result.get("status") != "complete":
+        raise ValueError("referenced LLM-check run did not complete successfully")
+    required = {"readiness", "load", "generation", "structured", "discussion", "distributed"}
+    if not all(result.get("stages", {}).get(stage) for stage in required):
+        raise ValueError("referenced LLM-check run did not pass every required stage")
+    return {"run_id": result.get("run_id"), "run_directory": str(path), "model": identity}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--facility", required=True, choices=sorted(FACILITIES))
@@ -176,7 +193,29 @@ def main() -> int:
         action="store_true",
         help="Use the configured LLM for proposal and critique instead of deterministic responses.",
     )
+    parser.add_argument(
+        "--llm-check-run",
+        type=Path,
+        help="Successful matsim-agents llm-check directory required by --live-llm.",
+    )
     args = parser.parse_args()
+
+    llm_qualification = None
+    if args.live_llm:
+        if args.llm_check_run is None:
+            parser.error("--live-llm requires --llm-check-run")
+        llm_qualification = validate_llm_check(args.llm_check_run)
+        identity = llm_qualification["model"]
+        qualified_provider = str(identity["provider"])
+        qualified_model = str(identity["model"])
+        if os.environ.get("MATSIM_LLM_PROVIDER", qualified_provider) != qualified_provider:
+            parser.error("MATSIM_LLM_PROVIDER differs from the qualified LLM-check provider")
+        if os.environ.get("MATSIM_LLM_MODEL", qualified_model) != qualified_model:
+            parser.error("MATSIM_LLM_MODEL differs from the qualified LLM-check model")
+        os.environ.setdefault("MATSIM_LLM_PROVIDER", qualified_provider)
+        os.environ.setdefault("MATSIM_LLM_MODEL", qualified_model)
+        if identity.get("base_url"):
+            os.environ.setdefault("MATSIM_VLLM_BASE_URL", str(identity["base_url"]))
 
     config = resolved_configuration(args.facility)
     errors = validate_inputs(config)
@@ -201,6 +240,7 @@ def main() -> int:
         "backend": args.backend,
         "status": "planned",
         "plan": [step for suite in suites for step in build_plan(config, suite, args.backend)],
+        "llm_qualification": llm_qualification,
     }
     if args.execute:
         from benchmarks.portability.suites import execute_contract_suite

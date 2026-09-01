@@ -112,12 +112,16 @@ export MATSIM_VLLM_BASE_URL=http://localhost:8000/v1
 
 python benchmarks/portability/run.py \
   --facility frontier --suite all --backend qe --execute --live-llm \
+  --llm-check-run runs/llm-check/<successful-run> \
   --output runs/portability-live
 ```
 
 Use the same model identifier, prompt settings, source commit, and server
 configuration on every facility before comparing responses. Live LLM output is
 recorded for functional comparison, not required to be textually identical.
+`--live-llm` requires `--llm-check-run`; the portability result records that
+qualification run ID and exact model identity. See
+[`docs/llm-readiness.md`](../../docs/llm-readiness.md).
 
 Paper cases, scaling sweeps, model catalog benchmarks, and warm-start studies
 remain specialized benchmarks. They are intentionally not deleted or silently

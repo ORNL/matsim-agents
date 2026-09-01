@@ -706,6 +706,17 @@ server loaded its weights. `MATSIM_VLLM_API_KEY` defaults to `EMPTY`, which is
 appropriate for an unsecured local server. Set it when the endpoint requires
 authentication. `MATSIM_VLLM_BASE_URL` is ignored by non-vLLM providers.
 
+Before using a real model in a scientific workflow, qualify its configuration,
+endpoint or local artifacts, loading, structured output, multi-turn behavior,
+resource visibility, and latency independently:
+
+```bash
+matsim-agents llm-check examples/llm_check/llm_check.example.yaml
+```
+
+See [docs/llm-readiness.md](docs/llm-readiness.md) for the stage contract,
+artifacts, distributed checks, and portability integration.
+
 The provider factory can address arbitrary compatible model identifiers.
 “First-class supported” is narrower: it means a model is present in
 `deployments/common/open-model-catalog.json` and therefore has catalog,
