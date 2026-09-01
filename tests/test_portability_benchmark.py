@@ -6,7 +6,12 @@ from pathlib import Path
 import pytest
 
 from benchmarks.portability.compare import compare_runs
-from benchmarks.portability.run import build_plan, resolved_configuration, validate_inputs
+from benchmarks.portability.run import (
+    build_plan,
+    resolved_configuration,
+    validate_inputs,
+    validate_llm_check,
+)
 from benchmarks.portability.suites import (
     active_learning_contract,
     investigation_contract,
@@ -82,3 +87,21 @@ def test_validation_and_comparison_reject_changed_scientific_inputs(tmp_path):
     _write_run(aurora, facility="aurora", commit="abc", digest="two")
     assert validate_run(frontier) == []
     assert compare_runs([frontier, aurora]) == ["runs used different structure bytes"]
+
+
+def test_live_portability_requires_complete_llm_qualification(tmp_path):
+    run = tmp_path / "llm-check"
+    run.mkdir()
+    stages = {
+        name: True
+        for name in ("readiness", "load", "generation", "structured", "discussion", "distributed")
+    }
+    (run / "result.json").write_text(
+        json.dumps({"run_id": "qualified", "status": "complete", "stages": stages})
+    )
+    (run / "model_identity.json").write_text(
+        json.dumps({"provider": "vllm", "model": "model", "base_url": "http://node:8000/v1"})
+    )
+    qualification = validate_llm_check(run)
+    assert qualification["run_id"] == "qualified"
+    assert qualification["model"]["model"] == "model"
