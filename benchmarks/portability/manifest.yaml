@@ -7,7 +7,12 @@
     "smoke": ["environment", "launcher"],
     "relaxation": ["mlip", "qe", "vasp", "mlip-qe", "mlip-vasp"],
     "active-learning": {"candidate_count": 4, "selected_count": 2, "retrain": false},
-    "phase-exploration": {"compositions": ["Si"], "random_candidates": 4}
+    "phase-exploration": {"compositions": ["Si"], "random_candidates": 4},
+    "llm-discussion": {
+      "turns": ["proposal", "critique", "revision"],
+      "phase_dispatch": true,
+      "deterministic_by_default": true
+    }
   },
   "acceptance": {
     "required_artifacts": ["result.json", "environment.json"],

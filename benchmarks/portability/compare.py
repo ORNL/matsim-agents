@@ -12,8 +12,7 @@ HERE = Path(__file__).resolve().parent
 
 def compare_runs(paths: list[Path]) -> list[str]:
     records = [
-        json.loads((path / "environment.json").read_text(encoding="utf-8"))
-        for path in paths
+        json.loads((path / "environment.json").read_text(encoding="utf-8")) for path in paths
     ]
     errors: list[str] = []
     hashes = {record["structure_sha256"] for record in records}

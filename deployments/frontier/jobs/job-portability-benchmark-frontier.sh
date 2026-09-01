@@ -17,6 +17,5 @@ RUN_DIR="${RUNS_ROOT}/portability/frontier-${SLURM_JOB_ID:-$$}"
 # science configuration are identical in spirit on every machine; only this
 # scheduler envelope and the facility overlay differ.
 python "${REPO}/benchmarks/portability/run.py" \
-  --facility frontier --suite smoke --backend qe --execute --output "${RUN_DIR}"
+  --facility frontier --suite all --backend qe --execute --output "${RUN_DIR}"
 python "${REPO}/benchmarks/portability/validate.py" "${RUN_DIR}"
-

@@ -19,7 +19,7 @@ relaxation
 | Active learning | `matsim-agents al run CONFIG.yaml` | End-to-end candidate generation, acquisition, DFT labeling, dataset growth, and optional retraining |
 | Phase exploration | `matsim_agents.workflows.run_phase_exploration` | Programmatic workflow; relaxation and optional AL are composed through callbacks |
 | Agentic investigation | `matsim_agents.workflows.run_investigation` | Programmatic orchestration and persisted hypothesis revision; numerical work is delegated to phase exploration |
-| Cross-facility benchmark | `benchmarks/portability/run.py` | Smoke stage executes directly; facility-dependent scientific stages require installed models, DFT binaries, and pseudopotentials |
+| Cross-facility benchmark | `benchmarks/portability/run.py` | Executes deterministic relaxation, AL, phase-dispatch, and LLM-discussion contracts; production numerical qualification still requires installed models and DFT assets |
 
 “Supported” means that the workflow contract exists. It does not imply that a
 licensed VASP binary, POTCAR library, QE pseudopotentials, or a particular MLIP
@@ -130,4 +130,3 @@ Related documentation:
 - [Distributed DFT dispatch](distributed-dft-dispatch.md)
 - [Run artifacts and restarts](run-artifacts-and-restarts.md)
 - [Cross-facility portability benchmark](../benchmarks/portability/README.md)
-

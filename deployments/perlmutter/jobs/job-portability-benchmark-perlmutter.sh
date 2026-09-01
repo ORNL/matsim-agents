@@ -25,6 +25,5 @@ conda activate "${VENV}"
 PYTHON="${VENV}/bin/python3"
 
 "${PYTHON}" "${REPO}/benchmarks/portability/run.py" \
-  --facility perlmutter --suite smoke --backend qe --execute --output "${RUN_DIR}"
+  --facility perlmutter --suite all --backend qe --execute --output "${RUN_DIR}"
 "${PYTHON}" "${REPO}/benchmarks/portability/validate.py" "${RUN_DIR}"
-

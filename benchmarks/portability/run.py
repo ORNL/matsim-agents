@@ -22,6 +22,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 FACILITIES = {"frontier", "aurora", "perlmutter"}
 FACILITY_KEYS = {
     "facility",
@@ -103,14 +105,26 @@ def environment_record(config: dict[str, Any]) -> dict[str, Any]:
 
 def build_plan(config: dict[str, Any], suite: str, backend: str) -> list[dict[str, Any]]:
     science = config["science"]
-    deployment = config["deployment"]
     if suite == "smoke":
         return [{"stage": "environment"}, {"stage": "launcher", "backend": backend}]
     if suite == "relaxation":
-        mode = "mlip" if backend == "mlip" else "dft"
-        return [{"stage": "relaxation", "mode": mode, "backend": backend}]
+        return [
+            {
+                "stage": "relaxation",
+                "adapter": "deterministic",
+                "production_target": backend,
+            }
+        ]
     if suite == "active-learning":
         return [{"stage": "active-learning", **science["active_learning"], "backend": backend}]
+    if suite == "llm-discussion":
+        return [
+            {
+                "stage": "llm-discussion",
+                "turns": ["proposal", "critique", "revision"],
+                "phase_dispatch": True,
+            }
+        ]
     return [{"stage": "phase-exploration", **science["phase_exploration"], "backend": backend}]
 
 
@@ -141,7 +155,14 @@ def main() -> int:
     parser.add_argument(
         "--suite",
         default="smoke",
-        choices=["smoke", "relaxation", "active-learning", "phase-exploration"],
+        choices=[
+            "smoke",
+            "relaxation",
+            "active-learning",
+            "phase-exploration",
+            "llm-discussion",
+            "all",
+        ],
     )
     parser.add_argument("--backend", default="qe", choices=["mlip", "qe", "vasp"])
     parser.add_argument("--output", type=Path, required=True)
@@ -149,6 +170,11 @@ def main() -> int:
         "--execute",
         action="store_true",
         help="Execute supported stages; otherwise emit a deterministic plan.",
+    )
+    parser.add_argument(
+        "--live-llm",
+        action="store_true",
+        help="Use the configured LLM for proposal and critique instead of deterministic responses.",
     )
     args = parser.parse_args()
 
@@ -163,22 +189,40 @@ def main() -> int:
     (args.output / "resolved_config.json").write_text(
         json.dumps(config, indent=2) + "\n", encoding="utf-8"
     )
+    suites = (
+        ["smoke", "relaxation", "active-learning", "phase-exploration", "llm-discussion"]
+        if args.suite == "all"
+        else [args.suite]
+    )
     result: dict[str, Any] = {
         "schema_version": 1,
         "facility": args.facility,
         "suite": args.suite,
         "backend": args.backend,
         "status": "planned",
-        "plan": build_plan(config, args.suite, args.backend),
+        "plan": [step for suite in suites for step in build_plan(config, suite, args.backend)],
     }
     if args.execute:
-        if args.suite != "smoke":
-            raise SystemExit(
-                "Only the dependency-free smoke stage executes directly; use the documented "
-                "scientific commands for licensed/model-dependent stages."
-            )
-        result["execution"] = execute_smoke(config, args.backend)
-        result["status"] = "passed" if result["execution"]["return_code"] == 0 else "failed"
+        from benchmarks.portability.suites import execute_contract_suite
+
+        execution: dict[str, Any] = {}
+        for suite in suites:
+            if suite == "smoke":
+                execution[suite] = execute_smoke(config, args.backend)
+            else:
+                execution[suite] = execute_contract_suite(
+                    suite,
+                    structure=HERE / config["science"]["structure"],
+                    output=args.output / suite,
+                    live_llm=args.live_llm,
+                )
+        result["execution"] = execution
+        failed = any(
+            payload.get("return_code", 0) != 0
+            or str(payload.get("status", "complete")) in {"failed", "rejected"}
+            for payload in execution.values()
+        )
+        result["status"] = "failed" if failed else "passed"
     (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2))
     return 0 if result["status"] != "failed" else 1
