@@ -156,17 +156,10 @@ place the env elsewhere (build deps still stay under `INSTALL_ROOT`).
 Quick setup (`setup_matsim_perlmutter.sh`) prefers this shared in-HydraGNN path,
 falling back to the legacy local `matsim-agents/perlmutter_venv` only if the
 shared env is absent.
-### `job_perlmutter.sh`
-Example SLURM job submission script with proper environment setup.
-
-**Usage:**
-```bash
-# Edit to set your project allocation
-vim job_perlmutter.sh
-
-# Submit
-sbatch job_perlmutter.sh
-```
+The obsolete generic `job_perlmutter.sh` template was removed because it
+invoked the nonexistent `matsim_agents.main` module and could not describe a
+specific scientific contract. Submit one of the explicit jobs under
+`deployments/perlmutter/jobs/` instead.
 
 ### `test_matsim_perlmutter.sh`
 Comprehensive test suite validating the complete environment:
@@ -209,8 +202,8 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | Script | Purpose |
 |---|---|
 | `job-discovery-chat-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + HydraGNN MLFF (FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
-| `job-single-relaxation-perlmutter.sh` | Runs `examples/single_relaxation.py` (HydraGNN FIRE relaxation) under a single A100 node; exports `MATSIM_HYDRAGNN_*` and `MATSIM_LLM_*` for the vLLM/HF backend. |
-| `job-active-learning-uq-perlmutter.sh` | Full active-learning loop (`matsim-agents al run`) on Perlmutter: MD sampling → ensemble uncertainty → DFT labelling (VASP or QE) → HydraGNN retraining. Multi-phase SBATCH with node-level srun steps. |
+| `job-single-relaxation-perlmutter.sh` | Runs the typed `matsim-agents relax` contract through the shared deployment runner. |
+| `job-active-learning-uq-perlmutter.sh` | Production `matsim-agents al run` workflow: MD sampling → acquisition → one selected DFT labeller → labelled dataset; retraining is opt-in. |
 | `job-llm-check-perlmutter.sh` | Dedicated live-vLLM deployment qualification: owns server startup/readiness/cleanup, runs all six `matsim-agents llm-check` stages, and optionally launches the live scientific portability suite. |
 | `job-qe-warmstart-perlmutter.sh` | QE warm-start benchmark job: exercises the HydraGNN-preconditioned `pw.x` cold-vs-warm convergence test via `tests/integration/test_qe_warmstart.py`. |
 

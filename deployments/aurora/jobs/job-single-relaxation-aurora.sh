@@ -8,11 +8,7 @@
 #PBS -k doe
 #PBS -j oe
 # ---------------------------------------------------------------------------
-# matsim-agents: smoke-test of `examples/single_relaxation.py` on ALCF Aurora.
-#
-# Runs the planner -> executor -> analyst LangGraph on a single structure
-# using the HydraGNN MLFF backend. Mirrors the example but lets the
-# structure path, logdir and MLP checkpoint be overridden via env vars.
+# matsim-agents: typed, provenance-tracked MLIP relaxation on Aurora.
 #
 # Submit:
 #   qsub deployments/aurora/jobs/job-single-relaxation-aurora.sh
@@ -75,16 +71,7 @@ echo "MLP ckpt:    ${HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 echo "Run dir:     ${RUN_DIR}"
 echo "=========================================="
 
-# ── run the agent graph on a single structure ───────────────────────────────
-# We call the CLI rather than the example file directly so the structure path
-# can be overridden at submit time.
-matsim-agents run \
-    "Relax the structure at ${STRUCTURE} using HydraGNN and report the final energy." \
-    --logdir          "${LOGDIR}" \
-    --hydragnn-branch-mlp-checkpoint "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
-    --output-dir      "${OUTPUT_DIR}" \
-    --mlp-device      cuda \
-    --max-iterations  3 \
-    2>&1 | tee "${RUN_DIR}/single-relaxation.log"
+# ── run the typed relaxation contract ───────────────────────────────────────
+source "${REPO}/deployments/common/run-mlip-relaxation.sh"
 
 echo "[$(date)] Single-relaxation smoke test complete. Artifacts in ${OUTPUT_DIR}"

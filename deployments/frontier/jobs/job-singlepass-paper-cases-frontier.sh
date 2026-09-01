@@ -7,6 +7,7 @@
 #SBATCH -e %x-%j.err
 
 # ---------------------------------------------------------------------------
+# LEGACY MANUSCRIPT REPRODUCTION (not a current production workflow).
 # Single-pass (non-AL) feasibility sweep over the manuscript paper cases on
 # OLCF Frontier (AMD MI250X). Runs the planner -> executor -> uq_gate ->
 # analyst graph ONCE per case with the shared HydraGNN multidataset BEST6
@@ -24,6 +25,8 @@
 #   HYDRAGNN_EXAMPLE  surrogate model tree (default: <PROJ>/HydraGNN example tree)
 # ---------------------------------------------------------------------------
 set -euo pipefail
+MATSIM_LEGACY_MANUSCRIPT_REPRODUCTION=1
+export MATSIM_LEGACY_MANUSCRIPT_REPRODUCTION
 
 PROJECT_ROOT="${PROJECT_ROOT:?export PROJECT_ROOT}"
 PROJ="$(dirname "${PROJECT_ROOT}")"

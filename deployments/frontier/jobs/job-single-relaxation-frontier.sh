@@ -7,8 +7,7 @@
 #SBATCH -p batch
 #SBATCH -q debug
 # ---------------------------------------------------------------------------
-# matsim-agents: smoke-test of the planner -> executor -> analyst LangGraph
-# on a single structure using the HydraGNN MLFF backend (Frontier).
+# matsim-agents: typed, provenance-tracked MLIP relaxation on Frontier.
 #
 # Mirrors scripts/advanced/{aurora,perlmutter}/job-single-relaxation-*.sh.
 #
@@ -68,14 +67,7 @@ echo "MLP ckpt:    $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "Run dir:     $RUN_DIR"
 echo "=========================================="
 
-# ── run the agent graph on a single structure ───────────────────────────────
-matsim-agents run \
-    "Relax the structure at ${STRUCTURE} using HydraGNN and report the final energy." \
-    --logdir          "$LOGDIR" \
-    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
-    --output-dir      "$OUTPUT_DIR" \
-    --mlp-device      cuda \
-    --max-iterations  3 \
-    2>&1 | tee "$RUN_DIR/single-relaxation.log"
+# ── run the typed relaxation contract ───────────────────────────────────────
+source "$REPO/deployments/common/run-mlip-relaxation.sh"
 
 echo "[$(date)] Single-relaxation finished. Artifacts in $OUTPUT_DIR"

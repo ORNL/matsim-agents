@@ -39,3 +39,21 @@ Use `benchmarks/portability/` and each facility's
 `job-portability-benchmark-<facility>.sh` as the shared release gate. Those
 scripts record comparable machine metadata and use an identical scientific
 configuration; specialized scaling and paper scripts are not portability gates.
+
+## Shared workflow runners
+
+Facility job files own only scheduler directives, module/venv activation, and
+hardware-specific launcher geometry. They delegate scientific configuration to:
+
+- `common/run-mlip-relaxation.sh` for the typed `matsim-agents relax` contract;
+- `common/run-active-learning.sh` for validated `matsim-agents al run` jobs.
+
+The active-learning runner defaults to collecting DFT labels without
+retraining. `MATSIM_RETRAIN=1` additionally requires `MATSIM_TRAIN_SCRIPT`;
+model promotion remains disabled and must happen through an explicit reviewed
+workflow. Set `MATSIM_DFT_BACKEND=qe|vasp` and provide the corresponding binary,
+pseudopotential/POTCAR, wrapper, and rank variables.
+
+Files marked `LEGACY MANUSCRIPT REPRODUCTION` reproduce an earlier published
+pipeline and are not templates for new campaigns. Current deployments should
+use the typed relaxation, active-learning, portability, or supervisor contracts.
