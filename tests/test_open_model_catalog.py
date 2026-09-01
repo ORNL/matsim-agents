@@ -7,11 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "deployments" / "common" / "open-model-catalog.json"
 MANIFESTS = (
     ROOT / "deployments" / "frontier" / "config" / "all_model_specs.json",
-    ROOT
-    / "deployments"
-    / "frontier"
-    / "config"
-    / "six_model_specs.vllm-only.json",
+    ROOT / "deployments" / "frontier" / "config" / "six_model_specs.vllm-only.json",
 )
 DOWNLOADERS = tuple(
     ROOT / "deployments" / facility / "download" / script
@@ -21,13 +17,7 @@ DOWNLOADERS = tuple(
         "download-open-models-" + facility + ".sh",
     )
 )
-BENCHMARK = (
-    ROOT
-    / "deployments"
-    / "frontier"
-    / "jobs"
-    / "job-sequential-benchmark-frontier.sh"
-)
+BENCHMARK = ROOT / "deployments" / "frontier" / "jobs" / "job-sequential-benchmark-frontier.sh"
 
 
 def _read_json(path: Path):
@@ -50,9 +40,7 @@ def test_first_class_open_models_are_present_in_every_deployment_path() -> None:
 
     for manifest in MANIFESTS:
         configured = {
-            entry["model"]
-            for entry in _read_json(manifest)
-            if entry["provider"] == "vllm"
+            entry["model"] for entry in _read_json(manifest) if entry["provider"] == "vllm"
         }
         assert models <= configured, f"{manifest} misses {sorted(models - configured)}"
 
