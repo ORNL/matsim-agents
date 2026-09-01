@@ -9,13 +9,19 @@
 
 set -euo pipefail
 
-REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
-RUNS_ROOT="${RUNS_ROOT:-${REPO}/runs}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
+PROJ="$(dirname "${REPO}")"
+VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 RUN_DIR="${RUNS_ROOT}/portability/frontier-${SLURM_JOB_ID:-$$}"
 
-# The portability job is deliberately thin: the activated environment and
-# science configuration are identical in spirit on every machine; only this
-# scheduler envelope and the facility overlay differ.
-python "${REPO}/benchmarks/portability/run.py" \
+source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
+source activate "${VENV}"
+
+PYTHON="${VENV}/bin/python3"
+
+"${PYTHON}" "${REPO}/benchmarks/portability/run.py" \
   --facility frontier --suite all --backend qe --execute --output "${RUN_DIR}"
-python "${REPO}/benchmarks/portability/validate.py" "${RUN_DIR}"
+"${PYTHON}" "${REPO}/benchmarks/portability/validate.py" "${RUN_DIR}"
