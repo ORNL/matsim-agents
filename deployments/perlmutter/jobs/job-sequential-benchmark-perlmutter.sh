@@ -4,10 +4,9 @@
 #SBATCH -e %x-%j.err
 #SBATCH -t 08:00:00
 #SBATCH -N 1
-#SBATCH -p gpu_ss11
-#SBATCH -q gpu_regular
-#SBATCH -A <allocation>
-#SBATCH -C "gpu&a100"
+#SBATCH -C gpu
+#SBATCH -q premium
+#SBATCH -A m5216_g
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
 # ---------------------------------------------------------------------------
