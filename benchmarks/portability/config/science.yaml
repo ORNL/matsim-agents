@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "structure": "structures/Si.vasp",
+  "relaxation": {
+    "max_steps": 40,
+    "force_tolerance_eV_per_A": 0.05,
+    "relax_atoms": true,
+    "relax_cell": false,
+    "mlip": {"backend": "mace", "model": "small"},
+    "dft": {"backend": "qe", "nodes_per_job": 1}
+  },
+  "active_learning": {
+    "fixed_candidate_pool": true,
+    "candidate_count": 4,
+    "selected_count": 2,
+    "retrain": false,
+    "promote_model": false
+  },
+  "phase_exploration": {
+    "compositions": ["Si"],
+    "relax_structures": true,
+    "active_learning": false,
+    "retrain_mlip": false,
+    "random_candidates": 4
+  }
+}

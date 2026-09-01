@@ -12,6 +12,14 @@ individual experiments or machines.
 | `backends.mlip` | MLIP calculators, relaxation, and exploration interfaces |
 | `backends.dft` | Quantum ESPRESSO and VASP interfaces |
 | `execution` | Scheduler-neutral resources, launch contracts, and provenance |
+| `workflows` | Composable relaxation, phase-exploration, and investigation policies/results |
+
+The workflow layer uses `execution.contracts` for evidence, validation,
+approval, compute-budget, provenance, status, and result envelopes. Scientific
+run directories are owned by `execution.run_directory`; scheduler allocation
+discovery and disjoint DFT node grouping are owned by `execution.allocation`.
+See [Scientific workflow contracts](scientific-workflows.md) for behavior and
+[Run artifacts and restarts](run-artifacts-and-restarts.md) for persistence.
 
 Machine-specific setup and job scripts live in `deployments/`; research-only
 paper and Codabench artifacts live in `research/`.
@@ -29,6 +37,10 @@ inheritance required.
 | `LLMBackend` | `matsim_agents.backends.llm` | type alias for `langchain_core.language_models.BaseChatModel` |
 | `ExecutionPlatform` | `matsim_agents.execution` | `name`, `submit(cmd, *, resources, workdir) → str`, `available_resources() → ResourceRequest` |
 | `RunStore` | `matsim_agents.execution` | `append(record) → None`, `iter_records() → Iterable` |
+
+These backend Protocols are extension boundaries. The newer scientific
+workflow models are policy and result contracts layered above them, not
+replacement backend interfaces.
 
 `JsonlRunStore` in `matsim_agents.execution.provenance` is the concrete
 `RunStore` implementation backed by a newline-delimited JSON file.

@@ -19,26 +19,27 @@ plugged in via the same interfaces.
 ## Table of contents
 
 1. [Architecture](#architecture)
-2. [Portability across DOE supercomputers](#portability-across-doe-supercomputers)
-3. [Running on Frontier (OLCF)](#running-on-frontier-olcf)
-4. [Running on Aurora (ALCF)](#running-on-aurora-alcf)
-5. [Running on Perlmutter (NERSC)](#running-on-perlmutter-nersc)
-6. [HPC Documentation Index](#hpc-documentation-index)
-7. [Installation](#installation)
-8. [LLM backends](#llm-backends)
-9. [Downloading models for vLLM](#downloading-models-for-vllm)
-10. [Quick start](#quick-start)
-11. [Graph orchestration modes](#graph-orchestration-modes)
-12. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
-13. [Programmatic API](#programmatic-api)
-14. [CLI reference](#cli-reference)
-15. [Active-learning loop (HydraGNN ↔ DFT)](#active-learning-loop-hydragnn--dft)
-16. [Codabench Competition](#codabench-competition)
-17. [Project layout](#project-layout)
-18. [Configuration reference](#configuration-reference)
-19. [Current capabilities and planned work](#current-capabilities-and-planned-work)
-20. [Contributing](#contributing)
-21. [License & citation](#license--citation)
+2. [Scientific workflow contracts](#scientific-workflow-contracts)
+3. [Portability across DOE supercomputers](#portability-across-doe-supercomputers)
+4. [Running on Frontier (OLCF)](#running-on-frontier-olcf)
+5. [Running on Aurora (ALCF)](#running-on-aurora-alcf)
+6. [Running on Perlmutter (NERSC)](#running-on-perlmutter-nersc)
+7. [HPC Documentation Index](#hpc-documentation-index)
+8. [Installation](#installation)
+9. [LLM backends](#llm-backends)
+10. [Downloading models for vLLM](#downloading-models-for-vllm)
+11. [Quick start](#quick-start)
+12. [Graph orchestration modes](#graph-orchestration-modes)
+13. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
+14. [Programmatic API](#programmatic-api)
+15. [CLI reference](#cli-reference)
+16. [Active-learning loop (HydraGNN ↔ DFT)](#active-learning-loop-hydragnn--dft)
+17. [Codabench Competition](#codabench-competition)
+18. [Project layout](#project-layout)
+19. [Configuration reference](#configuration-reference)
+20. [Current capabilities and planned work](#current-capabilities-and-planned-work)
+21. [Contributing](#contributing)
+22. [License & citation](#license--citation)
 
 ---
 
@@ -157,11 +158,13 @@ flowchart TD
   CUDA). Build scripts and SLURM/PBS launchers are checked in for each
   site — see [Portability across DOE supercomputers](#portability-across-doe-supercomputers).
 - **Pluggable LLMs**: Ollama, vLLM, OpenAI, Anthropic via a single factory.
-- **Active-learning loop** (`matsim-agents al run`): HydraGNN-driven MD
+- **Active-learning loop** (`matsim-agents al run`): MLIP-driven MD
   generates candidates → ensemble / MC-dropout uncertainty selects the
   most informative → a DFT backend (**VASP 6.6** *or* **Quantum
   ESPRESSO `pw.x`**) labels them in parallel inside one SLURM
-  allocation → dataset is grown and HydraGNN is retrained → repeat. The
+  allocation → validated labels grow the dataset. Optional training creates a
+  candidate model; only separately approved promotion lets it drive the next
+  iteration. The
   DFT backend is a single YAML toggle (`dft.backend: vasp | qe`); both
   share an INCAR-style template path (`INCAR.template` / `pw.template`).
 - **LLM-generated MD seeds** (`md.seed_source.kind: prompt`): the LLM
@@ -203,6 +206,16 @@ Every workflow writes a collision-resistant directory such as
 provenance, event stream, structures, calculations, datasets, models, and
 results. Failed and unconverged calculations are retained with an explicit
 reason; they are not silently dropped or included in phase rankings.
+
+### Scientific workflow contracts
+
+The authoritative guide to relaxation, active learning, phase exploration,
+agentic investigation, approval gates, evidence levels, and current execution
+status is [docs/scientific-workflows.md](docs/scientific-workflows.md).
+Run-directory layout and restart rules are documented in
+[docs/run-artifacts-and-restarts.md](docs/run-artifacts-and-restarts.md), while
+scheduler-neutral ensemble DFT execution is documented in
+[docs/distributed-dft-dispatch.md](docs/distributed-dft-dispatch.md).
 
 #### Unified structure relaxation
 
@@ -1140,8 +1153,9 @@ YAML field.
         │                       ▼                                            │
         │             dataset.extxyz / dataset.db  (tagged with backend)      │
         │                       │                                            │
+        │                       ├── default: retain validated labels          │
         │                       ▼                                            │
-        └─ retrain HydraGNN ── next iteration ─────────────────────────────┘
+        └─ optional train + approved promotion ── next iteration ────────────┘
 ```
 
 ### Quick start
@@ -1337,6 +1351,13 @@ for the full participant guide including submission formats.
 ---
 
 ## Project layout
+
+The concise, responsibility-oriented package map is maintained in
+[docs/architecture.md](docs/architecture.md). Machine assets live under
+`deployments/<facility>/{setup,launchers,jobs,smoke-tests}`; the older detailed
+tree below is retained as a file-level index but `deployments/` is authoritative
+for current facility paths. The cross-facility release gate lives under
+`benchmarks/portability/`.
 
 ```
 matsim-agents/

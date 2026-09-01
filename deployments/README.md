@@ -34,3 +34,8 @@ flags, embedded allocation IDs, and unsafe absolute scheduler output paths.
 Successful execution on Frontier, Aurora, and Perlmutter remains a release gate:
 record the module list, accelerator visibility, rank mapping, torch build, and a
 short MLIP plus DFT smoke result before marking a toolchain combination validated.
+
+Use `benchmarks/portability/` and each facility's
+`job-portability-benchmark-<facility>.sh` as the shared release gate. Those
+scripts record comparable machine metadata and use an identical scientific
+configuration; specialized scaling and paper scripts are not portability gates.

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "silicon-portability-v1",
+  "description": "Fixed Si workflow for Frontier, Aurora, and Perlmutter.",
+  "structures": ["structures/Si.vasp"],
+  "suites": {
+    "smoke": ["environment", "launcher"],
+    "relaxation": ["mlip", "qe", "vasp", "mlip-qe", "mlip-vasp"],
+    "active-learning": {"candidate_count": 4, "selected_count": 2, "retrain": false},
+    "phase-exploration": {"compositions": ["Si"], "random_candidates": 4}
+  },
+  "acceptance": {
+    "required_artifacts": ["result.json", "environment.json"],
+    "convergence": {"require_finite_energy": true, "max_force_eV_per_A": 0.20},
+    "cross_facility": {
+      "energy_eV_per_atom_atol": 0.05,
+      "max_force_eV_per_A_atol": 0.05,
+      "position_A_rmsd_atol": 0.05
+    },
+    "invariants": [
+      "same_structure_count",
+      "same_selected_candidate_ids",
+      "no_model_retraining",
+      "disjoint_dft_node_groups"
+    ]
+  }
+}
