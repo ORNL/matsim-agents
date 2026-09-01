@@ -6,7 +6,7 @@
 #SBATCH -N 1
 #SBATCH -p gpu_ss11
 #SBATCH -q gpu_regular
-#SBATCH -A m5216_g
+#SBATCH -A <allocation>
 #SBATCH -C "gpu&a100"
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
