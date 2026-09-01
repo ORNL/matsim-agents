@@ -179,7 +179,7 @@ fi
 # ---------------------------------------------------------------------------
 wait_for_vllm() {
   local port=$1
-  local max_wait=300
+  local max_wait=1200  # CFS weight load (~14 min worst-case) + CUDA graph capture
   local interval=5
   local elapsed=0
   echo "[vllm] Waiting for server on port $port ..."
@@ -262,6 +262,12 @@ for entry in "${MODEL_LIST[@]}"; do
     export TRITON_CACHE_DIR="$_JIT_TMP/triton"
     export TORCHINDUCTOR_CACHE_DIR="$_JIT_TMP/inductor"
     export VLLM_CACHE_ROOT="$_JIT_TMP/vllm"
+    # CFS does not support fcntl.flock on compute nodes; redirect all caches to tmpfs.
+    export XDG_CACHE_HOME="$_JIT_TMP/xdg-cache"
+    export HF_HOME="$_JIT_TMP/hf-home"
+    export TORCH_HOME="$_JIT_TMP/torch-home"
+    export TMPDIR="$_JIT_TMP/tmp"
+    mkdir -p "$TMPDIR"
     _PY_HDR="$INSTALL_ROOT/hydragnn_venv/include/python3.11"
     export CPATH="${_PY_HDR}:${CPATH:-}"
     export C_INCLUDE_PATH="${_PY_HDR}:${C_INCLUDE_PATH:-}"
