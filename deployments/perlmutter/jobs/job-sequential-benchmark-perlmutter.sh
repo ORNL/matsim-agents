@@ -23,6 +23,12 @@
 #   7. Runs rank_model_eval.py  → leaderboard CSV
 #   8. Runs plot_model_eval.py  → comparison PNG
 #
+# Storage layout:
+#   $PROJ/models/<local_dir>/     – model weights on CFS (read-only by this job)
+#   $PROJ/runs/seq-model-bench-$JOBID/  – eval JSON + vLLM logs (CFS, persisted)
+#   /tmp/vllm-jit.<user>.$JOBID/  – JIT caches (node-local tmpfs, discarded at job end)
+#     CFS does not support fcntl.flock; Triton/HF/Torch JIT writes go to tmpfs.
+#
 # Required at submission:
 #   BENCHMARK_PROMPT   – the shared prompt text
 #
