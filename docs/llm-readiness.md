@@ -94,3 +94,27 @@ python benchmarks/portability/run.py \
 The portability result embeds the qualification run ID and model identity.
 Deterministic discussion remains available without a model server and is the
 workflow-contract release gate.
+
+## Perlmutter compute-job qualification
+
+A login node cannot reach a vLLM endpoint bound inside a compute allocation.
+Use the dedicated job, which owns both the server and qualification lifecycle:
+
+```bash
+PROJECT_ROOT=$PWD sbatch -A <allocation> \
+  deployments/perlmutter/jobs/job-llm-check-perlmutter.sh
+```
+
+Override `MATSIM_MODEL_DIR`, `MATSIM_MODEL_NAME`, and `MATSIM_VLLM_TP` for the
+checkpoint and topology being qualified. The job starts vLLM in its isolated
+environment, polls `/v1/models` until the exact served identifier appears,
+runs all six `llm-check` stages from the client environment, validates the
+terminal `result.json`, and always stops the server through an exit trap. It
+preserves the vLLM launch log, endpoint response, generated check configuration,
+console log, and full qualification directory under one Slurm run directory.
+
+Set `MATSIM_RUN_PORTABILITY=1` to run the live scientific portability suite
+after qualification; that run receives the successful check directory through
+`--llm-check-run`. The dedicated job is the authoritative deployment check.
+The sequential model-quality benchmark may reuse the same pattern, but a model
+evaluation failure should not be conflated with endpoint or deployment failure.

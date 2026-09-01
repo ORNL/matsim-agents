@@ -211,6 +211,7 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | `job-discovery-chat-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + HydraGNN MLFF (FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
 | `job-single-relaxation-perlmutter.sh` | Runs `examples/single_relaxation.py` (HydraGNN FIRE relaxation) under a single A100 node; exports `MATSIM_HYDRAGNN_*` and `MATSIM_LLM_*` for the vLLM/HF backend. |
 | `job-active-learning-uq-perlmutter.sh` | Full active-learning loop (`matsim-agents al run`) on Perlmutter: MD sampling → ensemble uncertainty → DFT labelling (VASP or QE) → HydraGNN retraining. Multi-phase SBATCH with node-level srun steps. |
+| `job-llm-check-perlmutter.sh` | Dedicated live-vLLM deployment qualification: owns server startup/readiness/cleanup, runs all six `matsim-agents llm-check` stages, and optionally launches the live scientific portability suite. |
 | `job-qe-warmstart-perlmutter.sh` | QE warm-start benchmark job: exercises the HydraGNN-preconditioned `pw.x` cold-vs-warm convergence test via `tests/integration/test_qe_warmstart.py`. |
 
 ### Submission examples
@@ -230,6 +231,10 @@ sbatch deployments/perlmutter/launchers/run-qe-warmstart-benchmark-perlmutter.sh
 
 # Full discovery validation (LLM + HydraGNN + QE)
 sbatch deployments/perlmutter/jobs/job-discovery-chat-perlmutter.sh
+
+# Qualify one live vLLM deployment inside its compute allocation
+PROJECT_ROOT=$PWD sbatch -A <allocation> \
+  deployments/perlmutter/jobs/job-llm-check-perlmutter.sh
 ```
 
 All these scripts source `perlmutter-module-stack.sh` (`load_perlmutter_modules_gpu`)
