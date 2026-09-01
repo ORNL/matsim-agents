@@ -264,6 +264,13 @@ for entry in "${MODEL_LIST[@]}"; do
     export TRITON_CACHE_DIR="$_JIT_TMP/triton"
     export TORCHINDUCTOR_CACHE_DIR="$_JIT_TMP/inductor"
     export VLLM_CACHE_ROOT="$_JIT_TMP/vllm"
+    # Redirect ALL user-cache/home dirs to tmpfs so the model-registry subprocess
+    # never touches CFS/GPFS (which blocks on fcntl.flock → Errno 524).
+    export XDG_CACHE_HOME="$_JIT_TMP/xdg-cache"
+    export HF_HOME="$_JIT_TMP/hf-home"
+    export TORCH_HOME="$_JIT_TMP/torch-home"
+    export TMPDIR="$_JIT_TMP/tmp"
+    mkdir -p "$TMPDIR"
     _PY_HDR="$INSTALL_ROOT/hydragnn_venv/include/python3.11"
     export CPATH="${_PY_HDR}:${CPATH:-}"
     export C_INCLUDE_PATH="${_PY_HDR}:${C_INCLUDE_PATH:-}"
