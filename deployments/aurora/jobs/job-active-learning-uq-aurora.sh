@@ -79,10 +79,11 @@ export ZE_AFFINITY_MASK="${ZE_AFFINITY_MASK:-0}"
 export ONEAPI_DEVICE_SELECTOR="${ONEAPI_DEVICE_SELECTOR:-level_zero:gpu}"
 
 # ── DFT launchers (the example will skip cleanly if these are unset) ────────
-# QE: ships with the repo.
-export MATSIM_QE_LAUNCHER="${MATSIM_QE_LAUNCHER:-${REPO}/deployments/aurora/launchers/run-pw-gpu-aurora.sh}"
-# VASP: no in-tree launcher yet; user must point this at their Aurora wrapper.
-export MATSIM_VASP_LAUNCHER="${MATSIM_VASP_LAUNCHER:-}"
+# Scheduler-step wrappers use the same backend contract as Frontier and
+# Perlmutter and consume dispatcher-assigned, disjoint PBS node groups.
+export MATSIM_QE_LAUNCHER="${MATSIM_QE_LAUNCHER:-${REPO}/deployments/aurora/launchers/_qe-step-aurora.sh}"
+export MATSIM_VASP_LAUNCHER="${MATSIM_VASP_LAUNCHER:-${REPO}/deployments/aurora/launchers/_vasp-step-aurora.sh}"
+export MATSIM_GPUS_PER_NODE="${MATSIM_GPUS_PER_NODE:-12}"
 
 TOP_W_THR="${MATSIM_TOP_W_THR:-0.6}"
 ENT_THR="${MATSIM_ENT_THR:-0.5}"

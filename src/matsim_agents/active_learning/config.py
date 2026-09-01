@@ -440,6 +440,14 @@ class DFTConfig(BaseModel):
     backend: Literal["vasp", "qe"] = "vasp"
     vasp: VASPConfig | None = None
     qe: QEBackendConfig | None = None
+    max_concurrent_jobs: int | None = Field(
+        None,
+        ge=1,
+        description=(
+            "Optional concurrency cap. The scheduler-neutral allocation planner "
+            "otherwise uses every complete nodes_per_job partition."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_backend_block(self) -> DFTConfig:

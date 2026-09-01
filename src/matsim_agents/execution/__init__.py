@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
+from matsim_agents.execution.allocation import Allocation, discover_allocation
 from matsim_agents.execution.contracts import (
     ApprovalPolicy,
     ComputeBudget,
@@ -49,6 +50,7 @@ class ExecutionPlatform(Protocol):
 
 __all__ = [
     "ApprovalPolicy",
+    "Allocation",
     "ComputeBudget",
     "EvidenceLevel",
     "ExecutionPlatform",
@@ -60,5 +62,6 @@ __all__ = [
     "WorkflowResult",
     "WorkflowStatus",
     "append_jsonl_record",
+    "discover_allocation",
     "make_run_id",
 ]

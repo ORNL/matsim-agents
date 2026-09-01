@@ -231,7 +231,11 @@ def run_active_learning(cfg: ALConfig) -> None:
                 )
                 for cand in selected
             ]
-            results = run_dft_batch(specs, backend)
+            results = run_dft_batch(
+                specs,
+                backend,
+                max_workers=cfg.dft.max_concurrent_jobs,
+            )
             n_ok = sum(1 for r in results if r.converged)
             state.n_dft_converged = n_ok
             state.n_dft_failed = len(results) - n_ok

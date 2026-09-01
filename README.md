@@ -230,6 +230,19 @@ frames are checked for finite energies/forces, correct force shapes, and exact
 duplicate geometries; a SHA-256 dataset manifest records the DFT energy
 reference and validation summary.
 
+#### Consistent multi-node DFT labeling
+
+The DFT batch planner discovers Slurm allocations on Frontier/Perlmutter and
+PBS nodefiles on Aurora, partitions the nodes into stable disjoint groups, and
+processes one serial queue per group. This prevents a node from being reused
+while its preceding VASP/QE step is still running. Facility launchers consume
+the assigned host list and use every configured GPU rank per node. Set
+`MATSIM_GPUS_PER_NODE` on PBS (12 for Aurora tile-as-device runs); Slurm GPU
+counts are discovered from its environment. A mismatch between allocated GPUs
+and `ranks_per_node` fails before launching expensive calculations.
+Set `dft.max_concurrent_jobs` to impose a lower concurrency cap; when omitted,
+all complete `nodes_per_job` partitions are used.
+
 #### Thermodynamic claims
 
 `relative_phase_ranking` compares only converged candidates generated in one
