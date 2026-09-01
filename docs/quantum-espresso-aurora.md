@@ -5,8 +5,8 @@ Intel GPU offload on ALCF Aurora.
 
 The recipe scripts are committed in:
 
-- `scripts/setup/aurora/build-qe-gpu-aurora.sh`
-- `scripts/launchers/aurora/run-pw-gpu-aurora.sh`
+- `deployments/aurora/setup/build-qe-gpu-aurora.sh`
+- `deployments/aurora/launchers/run-pw-gpu-aurora.sh`
 
 Source code, build artifacts, and installation are placed under
 `external/quantum-espresso/` (gitignored).
@@ -46,17 +46,17 @@ This keeps the setup aligned with Aurora-provided MPI/compiler integration.
 Run from the repository root:
 
 ```bash
-bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+bash deployments/aurora/setup/build-qe-gpu-aurora.sh
 ```
 
 Useful overrides:
 
 ```bash
-QE_VERSION=7.4 bash scripts/setup/aurora/build-qe-gpu-aurora.sh
-NCORES=32 bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+QE_VERSION=7.4 bash deployments/aurora/setup/build-qe-gpu-aurora.sh
+NCORES=32 bash deployments/aurora/setup/build-qe-gpu-aurora.sh
 QE_GPU_ARCHS=intel_gpu_pvc QE_GPU="openmp;oneapi" \
-  bash scripts/setup/aurora/build-qe-gpu-aurora.sh
-EXTRA_CMAKE_ARGS="-DVAR=VALUE" bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+  bash deployments/aurora/setup/build-qe-gpu-aurora.sh
+EXTRA_CMAKE_ARGS="-DVAR=VALUE" bash deployments/aurora/setup/build-qe-gpu-aurora.sh
 ```
 
 Default layout:
@@ -74,7 +74,7 @@ external/quantum-espresso/
 Use the launcher:
 
 ```bash
-bash scripts/launchers/aurora/run-pw-gpu-aurora.sh path/to/pw.in
+bash deployments/aurora/launchers/run-pw-gpu-aurora.sh path/to/pw.in
 ```
 
 Launcher behavior:
@@ -89,7 +89,7 @@ Common runtime overrides:
 
 ```bash
 NRANKS=6 OMP_NUM_THREADS=4 GPU_BIND=closest \
-  bash scripts/launchers/aurora/run-pw-gpu-aurora.sh path/to/pw.in
+  bash deployments/aurora/launchers/run-pw-gpu-aurora.sh path/to/pw.in
 ```
 
 ## Verify installation quickly
@@ -123,7 +123,7 @@ shell differs, source your site module init first, then re-run:
 
 ```bash
 source /etc/profile.d/modules.sh
-bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+bash deployments/aurora/setup/build-qe-gpu-aurora.sh
 ```
 
 ### MPI wrapper compilers missing (`mpicc`, `mpicxx`, `mpifort`)
@@ -140,7 +140,7 @@ If your site prefers different wrappers, override script variables:
 
 ```bash
 C_COMPILER=<your-mpicc> CXX_COMPILER=<your-mpicxx> FORTRAN_COMPILER=<your-mpifort> \
-  bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+  bash deployments/aurora/setup/build-qe-gpu-aurora.sh
 ```
 
 ### CMake configure fails on GPU flags
@@ -150,14 +150,14 @@ override GPU settings explicitly:
 
 ```bash
 QE_GPU="openmp;oneapi" QE_GPU_ARCHS=intel_gpu_pvc \
-  bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+  bash deployments/aurora/setup/build-qe-gpu-aurora.sh
 ```
 
 Pass additional CMake debug flags when needed:
 
 ```bash
 EXTRA_CMAKE_ARGS="-DCMAKE_VERBOSE_MAKEFILE=ON" \
-  bash scripts/setup/aurora/build-qe-gpu-aurora.sh
+  bash deployments/aurora/setup/build-qe-gpu-aurora.sh
 ```
 
 ### `pw.x` launcher cannot find executable

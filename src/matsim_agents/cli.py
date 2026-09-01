@@ -10,8 +10,8 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from matsim_agents.graph import build_graph
-from matsim_agents.state import MatSimState
+from matsim_agents.orchestration.objective_graph import build_graph
+from matsim_agents.orchestration.state import MatSimState
 
 app = typer.Typer(add_completion=False, help="Multi-agent AI for atomistic materials simulation.")
 console = Console()
@@ -476,7 +476,7 @@ def supervisor_run(
     ),
 ):
     """Run LangGraph supervisor: discovery exploration -> UQ gate -> optional AL handoff."""
-    from matsim_agents.supervisor import SupervisorConfig, run_supervisor
+    from matsim_agents.orchestration.composition_graph import SupervisorConfig, run_supervisor
 
     cfg = SupervisorConfig(
         composition=composition,

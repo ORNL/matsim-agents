@@ -3,8 +3,8 @@
 This page documents how matsim-agents builds and runs Quantum ESPRESSO with
 AMD GPU offload on OLCF Frontier. Source code, build tree, and install
 prefix live under `external/quantum-espresso/` (gitignored). The recipe
-itself is committed under `scripts/setup/frontier/` and
-`scripts/launchers/frontier/`.
+itself is committed under `deployments/frontier/setup/` and
+`deployments/frontier/launchers/`.
 
 ## What gets built
 
@@ -31,7 +31,7 @@ itself is committed under `scripts/setup/frontier/` and
 
 ```bash
 # From the matsim-agents repo root, on a Frontier login node:
-nohup bash scripts/setup/frontier/build-qe-gpu-frontier.sh \
+nohup bash deployments/frontier/setup/build-qe-gpu-frontier.sh \
       > runs/build-qe-gpu-login/build-$(date +%Y%m%d-%H%M%S).log 2>&1 &
 ```
 
@@ -78,10 +78,10 @@ relocate everything as a unit, or override `SRC_DIR`/`BUILD_DIR`/
 
 ```bash
 # Submit a 30-min batch job on 1 node, 8 GCDs:
-sbatch scripts/launchers/frontier/run-pw-gpu-frontier.sh path/to/your.in
+sbatch deployments/frontier/launchers/run-pw-gpu-frontier.sh path/to/your.in
 
 # Or, inside a salloc'd compute node:
-bash scripts/launchers/frontier/run-pw-gpu-frontier.sh path/to/your.in
+bash deployments/frontier/launchers/run-pw-gpu-frontier.sh path/to/your.in
 ```
 
 The launcher loads the same module stack as the build, sets

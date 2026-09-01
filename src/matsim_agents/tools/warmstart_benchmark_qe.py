@@ -11,7 +11,7 @@ agreement between the two final energies. The whole comparison is written to
 a JSON file that the integration tests consume.
 
 The HydraGNN step is delegated to the existing tool
-``matsim_agents.tools.relaxation`` (which itself is optional — if HydraGNN is
+``matsim_agents.backends.mlip.relaxation`` (which itself is optional — if HydraGNN is
 not importable the warm-start phase is skipped and only the cold run is
 performed, with a ``warm`` block left as ``None``).
 
@@ -27,7 +27,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.tools.qe_relax import (
+from matsim_agents.backends.dft.qe_relax import (
     PWResult,
     QESettings,
     recommend_settings,
@@ -176,7 +176,7 @@ def _mlip_relax(
 
     Dispatches to the correct backend based on ``mlip_backend``.
     """
-    from matsim_agents.tools.relaxation import RelaxStructureInput, _run
+    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 
     out_subdir = "hydragnn" if mlip_backend == "hydragnn" else mlip_backend
     mlip_dir = os.path.join(work_dir, out_subdir)
@@ -209,7 +209,7 @@ def _hydragnn_relax(
     kwargs: dict[str, Any],
 ) -> tuple[str | None, dict[str, Any]]:
     """Invoke the HydraGNN relax tool. Returns ``(optimized_path, info)``."""
-    from matsim_agents.tools.relaxation import RelaxStructureInput, _run
+    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 
     hydragnn_dir = os.path.join(work_dir, "hydragnn")
     Path(hydragnn_dir).mkdir(parents=True, exist_ok=True)

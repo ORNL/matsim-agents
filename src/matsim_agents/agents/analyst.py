@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from langchain_core.messages import AIMessage, SystemMessage
 
-from matsim_agents.state import MatSimState
+from matsim_agents.orchestration.state import MatSimState
 
 _SYSTEM_PROMPT = """You are the analyst agent of a materials-discovery system.
 Given a JSON list of structure relaxation results, write a concise scientific
@@ -35,7 +35,7 @@ def analyst_node(state: MatSimState) -> dict:
     summary = _deterministic_summary(state)
 
     try:
-        from matsim_agents.llm import get_chat_model
+        from matsim_agents.backends.llm.provider import get_chat_model
 
         llm = get_chat_model(
             provider=state.llm_provider,

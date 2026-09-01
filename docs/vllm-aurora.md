@@ -10,14 +10,14 @@ fix applied, so future builds are reproducible.
 
 ```bash
 # 1. Verify the stack (login node — XPU will report unavailable, that is expected)
-bash scripts/setup/aurora/install-vllm-xpu-aurora.sh
+bash deployments/aurora/setup/install-vllm-xpu-aurora.sh
 
 # 2. Smoke-test on one compute node (TP=2, ~8 min walltime)
-qsub scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh
+qsub deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh
 
 # 3. Multi-node serve (2 nodes, TP=24, adjust -l select=N as needed)
 SERVE_MODEL_PATH=$PROJ/models/Mixtral-8x22B-Instruct-v0.1 \
-qsub scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh
+qsub deployments/aurora/jobs/job-serve-multinode-vllm-aurora.sh
 ```
 
 ---
@@ -86,7 +86,7 @@ hold on those nodes, causing Level Zero to fault.
 
 **Fix — `aurora_vllm_entrypoint.py`**
 
-`scripts/smoke-tests/aurora/aurora_vllm_entrypoint.py` is a thin wrapper that:
+`deployments/aurora/smoke-tests/aurora_vllm_entrypoint.py` is a thin wrapper that:
 
 1. Patches `_run_in_subprocess` before `api_server` is imported.
 2. Sets `ONEAPI_DEVICE_SELECTOR=opencl:cpu` in the subprocess's environment
@@ -107,7 +107,7 @@ mpiexec -n 1 --ppn 1 \
       -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR \
       -u MPI_LOCALRANKID -u MPI_LOCALNRANKS \
       -u OMPI_COMM_WORLD_RANK -u OMPI_COMM_WORLD_SIZE \
-  python scripts/smoke-tests/aurora/aurora_vllm_entrypoint.py \
+  python deployments/aurora/smoke-tests/aurora_vllm_entrypoint.py \
     --model "$MODEL_PATH" ...
 ```
 
@@ -252,7 +252,7 @@ Wrap the optional display block so it never propagates a non-zero exit:
 
 ## Smoke test
 
-`scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh` runs a series of
+`deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh` runs a series of
 pre-flight checks and then starts vLLM on one node with TP=2 using
 Mistral-Small-24B.
 
@@ -278,7 +278,7 @@ Chat-completion response to `"2+2="` → `"4"`.
 
 ## Multi-node serve
 
-`scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh` bootstraps a Ray
+`deployments/aurora/jobs/job-serve-multinode-vllm-aurora.sh` bootstraps a Ray
 cluster across all allocated nodes and starts vLLM with tensor parallelism
 spanning every PVC tile:
 
@@ -309,7 +309,7 @@ Set these in the matsim-agents client job before running workflows.
 
 | File | Purpose |
 |---|---|
-| `scripts/setup/aurora/install-vllm-xpu-aurora.sh` | Stack verification (login node) |
-| `scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh` | Single-node PBS smoke test |
-| `scripts/smoke-tests/aurora/aurora_vllm_entrypoint.py` | Registry subprocess patch + API server launcher |
-| `scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh` | Multi-node Ray + vLLM serve job |
+| `deployments/aurora/setup/install-vllm-xpu-aurora.sh` | Stack verification (login node) |
+| `deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh` | Single-node PBS smoke test |
+| `deployments/aurora/smoke-tests/aurora_vllm_entrypoint.py` | Registry subprocess patch + API server launcher |
+| `deployments/aurora/jobs/job-serve-multinode-vllm-aurora.sh` | Multi-node Ray + vLLM serve job |

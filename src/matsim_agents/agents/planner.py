@@ -12,7 +12,7 @@ import os
 from langchain_core.messages import AIMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from matsim_agents.state import MatSimState, TaskSpec
+from matsim_agents.orchestration.state import MatSimState, TaskSpec
 
 
 class _Plan(BaseModel):
@@ -41,7 +41,7 @@ def planner_node(state: MatSimState) -> dict:
     ]
 
     try:
-        from matsim_agents.llm import get_chat_model
+        from matsim_agents.backends.llm.provider import get_chat_model
 
         llm = get_chat_model(
             provider=state.llm_provider,

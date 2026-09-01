@@ -2,9 +2,9 @@
 """Render paper LaTeX table fragments from collected benchmark data.
 
 Inputs:
-- docs/paper/results/paper_results_master.csv
+- research/paper/manuscript/results/paper_results_master.csv
 
-Outputs (default under docs/paper/results/tex):
+Outputs (default under research/paper/manuscript/results/tex):
 - uq_table_rows.tex
 - warmstart_qe_table_rows.tex
 - singlepass_table_rows.tex
@@ -238,12 +238,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Render LaTeX table rows for the paper.")
     parser.add_argument(
         "--input-csv",
-        default="docs/paper/results/paper_results_master.csv",
+        default="research/paper/manuscript/results/paper_results_master.csv",
         help="Path to consolidated CSV produced by collect_paper_results.py",
     )
     parser.add_argument(
         "--output-dir",
-        default="docs/paper/results/tex",
+        default="research/paper/manuscript/results/tex",
         help="Directory where .tex row fragments are written.",
     )
     args = parser.parse_args()

@@ -9,7 +9,7 @@ Top-level package. Submodules:
     - cli: command-line interface
 """
 
-from matsim_agents.state import MatSimState
+from matsim_agents.orchestration.state import MatSimState
 
 __all__ = ["MatSimState", "__version__"]
 __version__ = "0.1.0"

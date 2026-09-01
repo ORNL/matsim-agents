@@ -18,23 +18,23 @@ HydraGNN runtime environments carry pinned dependency constraints that are neede
 
 ### Perlmutter
 
-- scripts/download/perlmutter/download-models-perlmutter.sh
-- scripts/download/perlmutter/download-open-models-perlmutter.sh
+- deployments/perlmutter/download/download-models-perlmutter.sh
+- deployments/perlmutter/download/download-open-models-perlmutter.sh
 
 ### Frontier
 
-- scripts/download/frontier/download-models-frontier.sh
-- scripts/download/frontier/download-open-models-frontier.sh
+- deployments/frontier/download/download-models-frontier.sh
+- deployments/frontier/download/download-open-models-frontier.sh
 
 ### Aurora
 
-- scripts/download/aurora/download-models-aurora.sh
-- scripts/download/aurora/download-open-models-aurora.sh
+- deployments/aurora/download/download-models-aurora.sh
+- deployments/aurora/download/download-open-models-aurora.sh
 
 ## Recovery Guidance
 
 If a platform download script reports missing or incompatible tooling, rebuild with the platform installer flow:
 
-- Perlmutter: scripts/setup/perlmutter/install_matsim_perlmutter.sh
-- Frontier: scripts/setup/frontier/install_matsim_frontier.sh
-- Aurora: scripts/setup/aurora/install_matsim_aurora.sh
+- Perlmutter: deployments/perlmutter/setup/install_matsim_perlmutter.sh
+- Frontier: deployments/frontier/setup/install_matsim_frontier.sh
+- Aurora: deployments/aurora/setup/install_matsim_aurora.sh

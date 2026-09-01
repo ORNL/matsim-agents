@@ -73,7 +73,7 @@ dft:
 
   qe:
     pw_bin:      ${PW_BIN}
-    pw_wrapper:  ${PROJ_ROOT}/scripts/launchers/perlmutter/_qe-step-perlmutter.sh
+    pw_wrapper:  ${PROJ_ROOT}/deployments/perlmutter/launchers/_qe-step-perlmutter.sh
     pseudo_dir:  ${PSEUDO_DIR}
     # Explicit pseudo pin (avoids auto-detect ambiguity for P).
     pseudopotentials:

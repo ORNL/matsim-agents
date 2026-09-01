@@ -23,7 +23,7 @@ Optional::
     MATSIM_WARMSTART_FIXTURES  # comma-sep names to restrict (default: all)
 
 A SLURM launcher that wires all of the above is provided at
-``scripts/launchers/frontier/run-qe-warmstart-benchmark.sh``.
+``deployments/frontier/launchers/run-qe-warmstart-benchmark.sh``.
 """
 
 from __future__ import annotations

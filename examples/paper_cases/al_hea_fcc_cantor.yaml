@@ -97,7 +97,7 @@ dft:
 
   vasp:
     vasp_bin:         ${VASP_BIN}
-    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/perlmutter/_vasp-step-perlmutter.sh
+    vasp_wrapper:     ${PROJ_ROOT}/deployments/perlmutter/launchers/_vasp-step-perlmutter.sh
     incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null            # use KSPACING from INCAR (auto Gamma mesh)
     potcar_dir:       ${POTCAR_DIR}
@@ -118,7 +118,7 @@ dft:
 trainer:
   enabled: ${TRAINER_ENABLED:-true}
   train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
-  train_launcher: ${TRAIN_LAUNCHER:-/global/cfs/projectdirs/m5216/mlupopa/matsim-agents/scripts/launchers/perlmutter/_hydragnn-train-step-perlmutter.sh}
+  train_launcher: ${TRAIN_LAUNCHER:-/global/cfs/projectdirs/m5216/mlupopa/matsim-agents/deployments/perlmutter/launchers/_hydragnn-train-step-perlmutter.sh}
   epochs_per_iter: 5
   nodes_for_train: 4
   ranks_per_node:  4

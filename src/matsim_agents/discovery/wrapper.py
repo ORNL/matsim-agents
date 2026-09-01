@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field
 from matsim_agents.discovery.composition import Composition, parse_composition
 from matsim_agents.discovery.seeds import PhaseCandidate, generate_seeds
 from matsim_agents.discovery.stability import StabilityReport, score_stability
-from matsim_agents.state import RelaxationResult
-from matsim_agents.tools.relaxation import RelaxStructureInput, _run as _run_relaxation
+from matsim_agents.orchestration.state import RelaxationResult
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run as _run_relaxation
 
 
 class CompositionExplorationResult(BaseModel):

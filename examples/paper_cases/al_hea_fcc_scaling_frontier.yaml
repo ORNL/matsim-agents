@@ -17,8 +17,8 @@
 #   -> ranks_per_node=8, threads_per_rank=7.
 #
 # Submit with the companion job script, which sets a per-N RUN_TAG:
-#   scripts/advanced/frontier/job-al-dft-scaling-frontier.sh
-#   scripts/advanced/frontier/submit-al-dft-scaling-sweep.sh
+#   deployments/frontier/jobs/job-al-dft-scaling-frontier.sh
+#   deployments/frontier/jobs/submit-al-dft-scaling-sweep.sh
 # =============================================================================
 
 vars:
@@ -100,7 +100,7 @@ dft:
 
   vasp:
     vasp_bin:         ${VASP_BIN}
-    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/frontier/_vasp-step-frontier.sh
+    vasp_wrapper:     ${PROJ_ROOT}/deployments/frontier/launchers/_vasp-step-frontier.sh
     incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null
     potcar_dir:       ${POTCAR_DIR}

@@ -13,7 +13,7 @@
 #
 # Run (from the Frontier repo checkout):
 #   sbatch --export=ALL,AL_CONFIG=$PWD/examples/paper_cases/al_phosphorene_qe_frontier.yaml \
-#       scripts/launchers/frontier/run-active-learning-frontier.sh
+#       deployments/frontier/launchers/run-active-learning-frontier.sh
 # =============================================================================
 
 vars:
@@ -78,7 +78,7 @@ dft:
 
   qe:
     pw_bin:      ${PW_BIN}
-    pw_wrapper:  ${PROJ_ROOT}/scripts/launchers/frontier/_qe-step-frontier.sh
+    pw_wrapper:  ${PROJ_ROOT}/deployments/frontier/launchers/_qe-step-frontier.sh
     pseudo_dir:  ${PSEUDO_DIR}
     pseudopotentials:
       P: P.pbe-n-kjpaw_psl.1.0.0.UPF

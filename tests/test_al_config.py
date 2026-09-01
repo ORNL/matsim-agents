@@ -129,7 +129,7 @@ def test_from_yaml_minimal_round_trip(
     assert cfg.dft.backend == "vasp"
     assert cfg.dft.vasp is not None
     assert str(cfg.dft.vasp.vasp_bin) == required_paths["VASP_BIN"]
-    assert str(cfg.hydragnn.logdir) == required_paths["LOGDIR"]
+    assert str(cfg.mlip.hydragnn.logdir) == required_paths["LOGDIR"]
     assert cfg.acquisition.strategy == "random"
     assert cfg.md.seed_source.kind == "paths"
     assert len(cfg.md.seed_source.paths) == 1

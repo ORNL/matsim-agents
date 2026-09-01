@@ -92,7 +92,7 @@ dft:
 
   vasp:
     vasp_bin:        ${VASP_BIN}
-    vasp_wrapper:    ${PROJ_ROOT}/scripts/launchers/frontier/_vasp-step-frontier.sh
+    vasp_wrapper:    ${PROJ_ROOT}/deployments/frontier/launchers/_vasp-step-frontier.sh
     incar_template:  ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null               # use KSPACING in INCAR
     potcar_dir:      ${POTCAR_DIR}
@@ -105,7 +105,7 @@ dft:
 
   qe:
     pw_bin:      ${PW_BIN}
-    pw_wrapper:  ${PROJ_ROOT}/scripts/launchers/frontier/_qe-step-frontier.sh
+    pw_wrapper:  ${PROJ_ROOT}/deployments/frontier/launchers/_qe-step-frontier.sh
     pseudo_dir:  ${PSEUDO_DIR}
     # Optional pw.in namelist template (analogue of dft.vasp.incar_template).
     # When set, the namelist-level pins below (ecutwfc_ry, occupations,
@@ -133,7 +133,7 @@ dft:
 trainer:
   enabled: true
   train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
-  train_launcher: ${PROJ_ROOT}/scripts/launchers/frontier/_hydragnn-train-step-frontier.sh
+  train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5
   nodes_for_train: 8
   ranks_per_node: 8
