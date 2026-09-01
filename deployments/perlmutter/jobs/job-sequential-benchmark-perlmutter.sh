@@ -187,7 +187,7 @@ fi
 # ---------------------------------------------------------------------------
 wait_for_vllm() {
   local port=$1
-  local max_wait=300
+  local max_wait=900  # CFS weight load (27B→~3 min, 72B→~8 min) + CUDA graph capture
   local interval=5
   local elapsed=0
   echo "[vllm] Waiting for server on port $port ..."
