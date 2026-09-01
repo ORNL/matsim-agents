@@ -85,14 +85,23 @@ DEFAULT_MODELS=(
   # --- Qwen3 (MoE / dense) ---
   "Qwen/Qwen3.6-27B"
   "Qwen/Qwen3.6-35B-A3B"
+  "Qwen/Qwen3-235B-A22B-Instruct-2507"
+  "Qwen/Qwen3-235B-A22B-Thinking-2507"
+  # --- Kimi / GLM ---
+  "moonshotai/Kimi-K2.5"
+  "zai-org/GLM-4.7"
+  "zai-org/GLM-4.7-Flash"
   # --- Meta Llama (gated: requires hf auth login) ---
   "meta-llama/Llama-3.3-70B-Instruct"
   "meta-llama/Llama-3.1-70B-Instruct"
   "meta-llama/Llama-3.1-8B-Instruct"
   # --- Mistral ---
   "mistralai/Mixtral-8x22B-Instruct-v0.1"
+  "mistralai/Mistral-Large-3-675B-Instruct-2512"
+  "mistralai/Devstral-2-123B-Instruct-2512"
   # --- DeepSeek ---
   "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+  "deepseek-ai/DeepSeek-V3.2"
   # --- Google Gemma ---
   "google/gemma-4-31B-it"
   "google/gemma-4-26B-A4B-it"

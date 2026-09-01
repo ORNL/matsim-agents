@@ -110,5 +110,69 @@
     "base_url_env": "MATSIM_VLLM_DEEPSEEK_V4_BASE_URL",
     "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
     "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "kimi-k2.5",
+    "provider": "vllm",
+    "model": "moonshotai/Kimi-K2.5",
+    "base_url_env": "MATSIM_VLLM_KIMI_K25_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "glm-4.7",
+    "provider": "vllm",
+    "model": "zai-org/GLM-4.7",
+    "base_url_env": "MATSIM_VLLM_GLM47_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "glm-4.7-flash",
+    "provider": "vllm",
+    "model": "zai-org/GLM-4.7-Flash",
+    "base_url_env": "MATSIM_VLLM_GLM47_FLASH_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "deepseek-v3.2",
+    "provider": "vllm",
+    "model": "deepseek-ai/DeepSeek-V3.2",
+    "base_url_env": "MATSIM_VLLM_DEEPSEEK_V32_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "mistral-large-3",
+    "provider": "vllm",
+    "model": "mistralai/Mistral-Large-3-675B-Instruct-2512",
+    "base_url_env": "MATSIM_VLLM_MISTRAL_LARGE3_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "qwen3-235b-a22b-instruct-2507",
+    "provider": "vllm",
+    "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "base_url_env": "MATSIM_VLLM_QWEN3_235B_INSTRUCT_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "qwen3-235b-a22b-thinking-2507",
+    "provider": "vllm",
+    "model": "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "base_url_env": "MATSIM_VLLM_QWEN3_235B_THINKING_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
+  },
+  {
+    "name": "devstral-2",
+    "provider": "vllm",
+    "model": "mistralai/Devstral-2-123B-Instruct-2512",
+    "base_url_env": "MATSIM_VLLM_DEVSTRAL2_BASE_URL",
+    "fallback_base_url_env": "MATSIM_VLLM_BASE_URL",
+    "api_key_env": "MATSIM_VLLM_API_KEY"
   }
 ]

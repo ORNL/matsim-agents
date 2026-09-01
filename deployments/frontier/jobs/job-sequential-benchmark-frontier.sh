@@ -134,6 +134,14 @@ DEFAULT_MODELS=(
   "gemma-4-31b-it:google/gemma-4-31B-it:gemma-4-31B-it"
   "gemma-4-26b-a4b-it:google/gemma-4-26B-A4B-it:gemma-4-26B-A4B-it"
   "smollm3-3b:HuggingFaceTB/SmolLM3-3B:SmolLM3-3B"
+  "kimi-k2.5:moonshotai/Kimi-K2.5:Kimi-K2.5"
+  "glm-4.7:zai-org/GLM-4.7:GLM-4.7"
+  "glm-4.7-flash:zai-org/GLM-4.7-Flash:GLM-4.7-Flash"
+  "deepseek-v3.2:deepseek-ai/DeepSeek-V3.2:DeepSeek-V3.2"
+  "mistral-large-3:mistralai/Mistral-Large-3-675B-Instruct-2512:Mistral-Large-3-675B-Instruct-2512"
+  "qwen3-235b-a22b-instruct-2507:Qwen/Qwen3-235B-A22B-Instruct-2507:Qwen3-235B-A22B-Instruct-2507"
+  "qwen3-235b-a22b-thinking-2507:Qwen/Qwen3-235B-A22B-Thinking-2507:Qwen3-235B-A22B-Thinking-2507"
+  "devstral-2:mistralai/Devstral-2-123B-Instruct-2512:Devstral-2-123B-Instruct-2512"
 )
 
 # BENCHMARK_PART=heavy  → large dense/MoE models (70B+, 32B dense)  ~75-90 min
@@ -146,6 +154,13 @@ HEAVY_MODELS=(
   "llama-3.1-70b-instruct:meta-llama/Llama-3.1-70B-Instruct:Llama-3.1-70B-Instruct"
   "qwen3-32b:Qwen/Qwen3-32B:Qwen3-32B"
   "deepseek-r1-distill-qwen-32b:deepseek-ai/DeepSeek-R1-Distill-Qwen-32B:DeepSeek-R1-Distill-Qwen-32B"
+  "kimi-k2.5:moonshotai/Kimi-K2.5:Kimi-K2.5"
+  "glm-4.7:zai-org/GLM-4.7:GLM-4.7"
+  "deepseek-v3.2:deepseek-ai/DeepSeek-V3.2:DeepSeek-V3.2"
+  "mistral-large-3:mistralai/Mistral-Large-3-675B-Instruct-2512:Mistral-Large-3-675B-Instruct-2512"
+  "qwen3-235b-a22b-instruct-2507:Qwen/Qwen3-235B-A22B-Instruct-2507:Qwen3-235B-A22B-Instruct-2507"
+  "qwen3-235b-a22b-thinking-2507:Qwen/Qwen3-235B-A22B-Thinking-2507:Qwen3-235B-A22B-Thinking-2507"
+  "devstral-2:mistralai/Devstral-2-123B-Instruct-2512:Devstral-2-123B-Instruct-2512"
 )
 
 LIGHT_MODELS=(
@@ -156,6 +171,7 @@ LIGHT_MODELS=(
   "qwen2.5-14b-instruct:Qwen/Qwen2.5-14B-Instruct:Qwen2.5-14B-Instruct"
   "llama-3.1-8b-instruct:meta-llama/Llama-3.1-8B-Instruct:Llama-3.1-8B-Instruct"
   "smollm3-3b:HuggingFaceTB/SmolLM3-3B:SmolLM3-3B"
+  "glm-4.7-flash:zai-org/GLM-4.7-Flash:GLM-4.7-Flash"
 )
 
 if [[ -n "${BENCHMARK_MODELS:-}" ]]; then

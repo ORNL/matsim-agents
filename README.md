@@ -601,6 +601,39 @@ export MATSIM_VLLM_API_KEY=EMPTY            # only if vLLM is auth-protected
 export MATSIM_HF_MODEL_PATH=/path/to/model  # huggingface provider: local model dir
 ```
 
+### First-class open-model support
+
+The generic `vllm` and `huggingface` providers can address arbitrary model
+identifiers, but a checkpoint is called **first-class supported** only when it
+is present in
+[`deployments/common/open-model-catalog.json`](deployments/common/open-model-catalog.json).
+Every catalog entry has all of the following:
+
+- a canonical Hugging Face checkpoint identifier;
+- a named endpoint environment variable plus the shared
+  `MATSIM_VLLM_BASE_URL` fallback;
+- entries in both Frontier benchmark manifests;
+- download support on Frontier, Aurora, and Perlmutter; and
+- inclusion in the sequential model benchmark.
+
+CI enforces this contract in `tests/test_open_model_catalog.py`. Adding a model
+to the catalog without adding any required deployment path fails the test, so
+the backend-compatible and first-class sets cannot silently drift apart.
+
+The frontier open-model catalog currently covers Kimi K2.5, GLM-4.7 and
+GLM-4.7-Flash, DeepSeek-V3.2, Mistral Large 3, Qwen3-235B-A22B Instruct and
+Thinking, Gemma 4, and Devstral 2. These checkpoints vary enormously in size.
+Catalog membership means the repository knows how to select, download, and
+benchmark the model; it does not mean that every model fits on one node. Use
+the multi-node serving launcher and choose tensor parallelism appropriate to
+the checkpoint and facility.
+
+Model-specific vLLM behavior continues to be controlled by the serving
+environment. In particular, use a vLLM release that supports the checkpoint's
+architecture and chat template, and pass any required reasoning/tool parser
+arguments through the serving command. A successfully downloaded checkpoint
+is not treated as a successful deployment until the smoke request completes.
+
 ---
 
 ## Quick start
