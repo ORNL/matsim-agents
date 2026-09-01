@@ -458,7 +458,23 @@ class TrainerConfig(BaseModel):
     accumulate labels for offline fine-tuning.
     """
 
-    enabled: bool = True
+    enabled: bool = Field(
+        False,
+        description="Opt in to retraining; collecting DFT labels without it is the safe default.",
+    )
+    promote_model: bool = Field(
+        False,
+        description=(
+            "Use the newly trained candidate in the next AL iteration. This is deliberately "
+            "separate from enabled so retraining never silently replaces the deployed model."
+        ),
+    )
+    promotion_approved: bool = Field(
+        False,
+        description=(
+            "Explicit human/policy approval after reviewing candidate validation metrics."
+        ),
+    )
     train_script: Path | None = Field(
         None,
         description=(
@@ -485,6 +501,13 @@ class TrainerConfig(BaseModel):
     def _check_train_script(self) -> TrainerConfig:
         if self.enabled and self.train_script is None:
             raise ValueError("trainer.enabled=True requires trainer.train_script.")
+        if self.promote_model and not self.enabled:
+            raise ValueError("trainer.promote_model=True requires trainer.enabled=True.")
+        if self.promote_model and not self.promotion_approved:
+            raise ValueError(
+                "trainer.promote_model=True requires trainer.promotion_approved=True "
+                "after candidate validation."
+            )
         return self
 
 

@@ -94,6 +94,8 @@ dft:
 
 trainer:
   enabled: true
+  promote_model: true          # explicitly use the validated candidate in the next iteration
+  promotion_approved: true     # explicit acceptance after reviewing validation metrics
   train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5

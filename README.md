@@ -184,6 +184,60 @@ flowchart TD
 
 ## Workflow selection matrix
 
+### Composable scientific workflow hierarchy
+
+The public workflows form a strict dependency ladder. Higher-level workflows
+reuse lower-level services and their typed results instead of duplicating
+relaxation, labeling, ranking, or provenance logic:
+
+```text
+scientific run directory + provenance + validation
+    -> structure relaxation (MLIP | DFT | MLIP-to-DFT)
+    -> uncertainty acquisition + DFT labeling (+ optional retraining)
+    -> composition/phase exploration (+ optional embedded AL)
+    -> property-driven agentic investigation and hypothesis revision
+```
+
+Every workflow writes a collision-resistant directory such as
+`runs/2026-09-01T14-32-18Z_a8f31c/` containing the resolved request,
+provenance, event stream, structures, calculations, datasets, models, and
+results. Failed and unconverged calculations are retained with an explicit
+reason; they are not silently dropped or included in phase rankings.
+
+#### Unified structure relaxation
+
+Use `matsim-agents relax CONFIG.yaml` with `mode: mlip`, `mode: dft`, or
+`mode: mlip-dft`. The last mode performs an MLIP warm start and passes its
+optimized geometry to VASP or Quantum ESPRESSO. See
+`examples/relaxation/scientific_relaxation.example.yaml`. DFT execution
+requires explicit approval by default.
+
+#### Active-learning safety defaults
+
+Active learning defaults to DFT label collection without retraining:
+
+```yaml
+trainer:
+  enabled: false
+  promote_model: false
+  promotion_approved: false
+```
+
+`enabled: true` creates a candidate model. `promote_model: true` is a separate,
+explicit decision that permits the next iteration to use it and additionally
+requires `promotion_approved: true` after validation metrics have been reviewed. Newly labeled
+frames are checked for finite energies/forces, correct force shapes, and exact
+duplicate geometries; a SHA-256 dataset manifest records the DFT energy
+reference and validation summary.
+
+#### Thermodynamic claims
+
+`relative_phase_ranking` compares only converged candidates generated in one
+exploration. `convex_hull_ranking` additionally requires a compatible,
+method-identified elemental and competing-phase reference set and reports
+formation energy, energy above hull, and decomposition. Residual forces are a
+convergence filter, not a thermodynamic ranking term.
+
 Use this table to choose the right entry point quickly.
 
 | Goal | Recommended entry point | Required inputs | Typical outputs |

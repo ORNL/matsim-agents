@@ -40,6 +40,10 @@ import numpy as np
 from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.active_learning.candidates import sample_md_candidates
 from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.active_learning.dataset_governance import (
+    validate_labelled_frames,
+    write_dataset_manifest,
+)
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
 from matsim_agents.active_learning.dft_runner import run_dft_batch
 from matsim_agents.active_learning.seeds import resolve_seed_structures
@@ -73,6 +77,8 @@ class IterationState:
     score_max: float | None = None
     score_mean: float | None = None
     dataset_path: str | None = None
+    candidate_model_path: str | None = None
+    model_promoted: bool = False
     new_logdir: str | None = None
     timings_sec: dict[str, float] = field(default_factory=dict)
     notes: str | None = None
@@ -246,14 +252,26 @@ def run_active_learning(cfg: ALConfig) -> None:
             # --- 5. Append to dataset -----------------------------------------
             t0 = time.time()
             frames = dft_results_to_frames(results, iteration=i)
+            frames, validation = validate_labelled_frames(frames)
             n_appended = append_frames_to_extxyz(frames, dataset_path)
             state.dataset_path = str(dataset_path)
+            if dataset_path.exists():
+                write_dataset_manifest(
+                    dataset_path,
+                    dft_backend=backend.name,
+                    energy_reference=f"{backend.name}:native_total_energy",
+                    validation=validation,
+                )
             state.timings_sec["append_dataset"] = time.time() - t0
             log.info("Iter %d: appended %d labelled frames to %s", i, n_appended, dataset_path)
 
             # --- 6. (Optional) retrain the surrogate --------------------------
             t0 = time.time()
-            if cfg.mlip.backend == "hydragnn" and cfg.mlip.hydragnn is not None:
+            if (
+                cfg.trainer.enabled
+                and cfg.mlip.backend == "hydragnn"
+                and cfg.mlip.hydragnn is not None
+            ):
                 new_logdir = retrain_hydragnn(
                     cfg.trainer,
                     cfg.mlip.hydragnn,
@@ -261,10 +279,13 @@ def run_active_learning(cfg: ALConfig) -> None:
                     iteration=i,
                     out_logdir=it_dir / "model",
                 )
-                state.new_logdir = str(new_logdir)
-                # Update logdir for next iteration (in-memory only — we re-resolve
-                # from state.json on restart).
-                cfg.mlip.hydragnn.logdir = new_logdir
+                state.candidate_model_path = str(new_logdir)
+                if cfg.trainer.promote_model:
+                    state.new_logdir = str(new_logdir)
+                    state.model_promoted = True
+                    # Promotion is explicit: only an accepted candidate becomes
+                    # the surrogate used by the next iteration.
+                    cfg.mlip.hydragnn.logdir = new_logdir
             elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None and cfg.trainer.enabled:
                 new_model = retrain_uma(
                     cfg.trainer,
@@ -273,8 +294,11 @@ def run_active_learning(cfg: ALConfig) -> None:
                     iteration=i,
                     out_model_dir=it_dir / "model",
                 )
-                state.new_logdir = str(new_model)
-                cfg.mlip.uma.model_name = str(new_model)
+                state.candidate_model_path = str(new_model)
+                if cfg.trainer.promote_model:
+                    state.new_logdir = str(new_model)
+                    state.model_promoted = True
+                    cfg.mlip.uma.model_name = str(new_model)
             elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None and cfg.trainer.enabled:
                 new_model = retrain_mace(
                     cfg.trainer,
@@ -283,10 +307,12 @@ def run_active_learning(cfg: ALConfig) -> None:
                     iteration=i,
                     out_model_dir=it_dir / "model",
                 )
-                state.new_logdir = str(new_model)
-                # Next iteration continues from the fine-tuned checkpoint.
-                cfg.mlip.mace.family = "checkpoint"
-                cfg.mlip.mace.model = str(new_model)
+                state.candidate_model_path = str(new_model)
+                if cfg.trainer.promote_model:
+                    state.new_logdir = str(new_model)
+                    state.model_promoted = True
+                    cfg.mlip.mace.family = "checkpoint"
+                    cfg.mlip.mace.model = str(new_model)
             else:
                 # Frozen foundation model / disabled trainer: keep accumulating labels.
                 log.info(

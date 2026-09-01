@@ -17,6 +17,29 @@ app = typer.Typer(add_completion=False, help="Multi-agent AI for atomistic mater
 console = Console()
 
 
+@app.command("relax")
+def relax_workflow(
+    config: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        help="JSON or YAML ScientificRelaxationConfig file.",
+    ),
+) -> None:
+    """Run a provenance-tracked MLIP, DFT, or MLIP-to-DFT relaxation."""
+
+    import yaml
+
+    from matsim_agents.workflows.relaxation import ScientificRelaxationConfig, run_relaxation
+
+    raw = yaml.safe_load(config.read_text(encoding="utf-8"))
+    cfg = ScientificRelaxationConfig.model_validate(raw)
+    result = run_relaxation(cfg)
+    console.print_json(result.model_dump_json())
+    if result.status == "failed":
+        raise typer.Exit(code=1)
+
+
 def _path_or_none(value: Path | None) -> str | None:
     return str(value) if value else None
 
