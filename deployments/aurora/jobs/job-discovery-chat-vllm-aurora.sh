@@ -1,5 +1,4 @@
 #!/bin/bash
-#PBS -A CM2US
 #PBS -N discovery-chat-vllm
 #PBS -l select=1
 #PBS -l place=scatter
@@ -45,7 +44,7 @@ set -eo pipefail  # NOTE: no -u; lmod's bash init breaks under nounset
 # ── paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${PBS_O_WORKDIR:-$PWD}/$0}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lus/flare/projects/CM2US/mlupopa/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
 VENV_PATH="${VENV_PATH:-${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
@@ -203,7 +202,7 @@ export MATSIM_VLLM_BASE_URL="http://localhost:${VLLM_PORT}/v1"
 echo "[$(date)] Submitting multi-turn discovery dialogue to matsim-agents (vLLM) ..."
 matsim-agents chat \
     --logdir          "${LOGDIR}" \
-    --mlp-checkpoint  "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
+    --hydragnn-branch-mlp-checkpoint "${HYDRAGNN_BRANCH_MLP_CHECKPOINT}" \
     --output-dir      "${OUTPUT_DIR}" \
     --llm-provider    vllm \
     --llm-model       "${MODEL_NAME}" \

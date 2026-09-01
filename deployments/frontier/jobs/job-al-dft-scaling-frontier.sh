@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH -A lrn070
 #SBATCH -J al-dft-scaling
 #SBATCH -o %x-N%N-%j.out
 #SBATCH -e %x-N%N-%j.err
@@ -36,7 +35,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO_DEFAULT="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents
+  REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 

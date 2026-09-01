@@ -163,7 +163,7 @@ NCORES=128 bash deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh
 
 Ensure you're in the correct directory and have loaded the modules:
 ```bash
-cd /global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+cd ${PROJECT_ROOT:?export PROJECT_ROOT}
 source deployments/perlmutter/setup/perlmutter-module-stack.sh
 ```
 
@@ -176,7 +176,7 @@ tail -100 external/quantum-espresso/build-gpu/build.log
 
 If out of disk space:
 ```bash
-df -h /global/cfs/projectdirs/amsc001/
+df -h "${PROJECT_ROOT}"
 ```
 
 ### GPU libraries not linked
@@ -199,23 +199,23 @@ To maintain multiple QE versions:
 
 ```bash
 # GPU version 7.4
-QE_PREFIX=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/qe-7.4 \
+QE_PREFIX=/path/to/project/qe-7.4 \
 QE_VERSION=7.4 \
 bash deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh
 
 # GPU develop version
-QE_PREFIX=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/qe-develop \
+QE_PREFIX=/path/to/project/qe-develop \
 QE_VERSION=develop \
 bash deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh
 
 # CPU version
-QE_PREFIX=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/qe-cpu \
+QE_PREFIX=/path/to/project/qe-cpu \
 bash deployments/perlmutter/setup/build-qe-cpu-perlmutter.sh
 ```
 
 Then set `PATH` to use the desired version:
 ```bash
-export PATH=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/qe-7.4/install-gpu/bin:$PATH
+export PATH=/path/to/project/qe-7.4/install-gpu/bin:$PATH
 ```
 
 ## Further Reading

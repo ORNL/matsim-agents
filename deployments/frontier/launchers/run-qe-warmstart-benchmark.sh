@@ -1,11 +1,10 @@
 #!/bin/bash
 #SBATCH -J qe-warmstart-bench
-#SBATCH -A mat746
 #SBATCH -p batch
 #SBATCH -N 1
 #SBATCH -t 04:00:00
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/qe-warmstart-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/qe-warmstart-%j/job-%j.err
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 
 # =============================================================================
 # Run the HydraGNN warm-start vs Quantum ESPRESSO cold-start benchmark
@@ -24,7 +23,7 @@
 # parent loaded.
 #
 # Required overrides (set via environment or edit below):
-#   PROJECT_ROOT          repo root (default: /lustre/orion/mat746/proj-shared/matsim-agents)
+#   PROJECT_ROOT          repo root (default: ${PROJECT_ROOT:?export PROJECT_ROOT})
 #   PSEUDO_DIR            directory of .UPF pseudopotentials (REQUIRED)
 #   HYDRAGNN_LOGDIR       HydraGNN logdir with config.json + checkpoint
 #   HYDRAGNN_BRANCH_MLP_CHECKPOINT     BranchWeightMLP .pt checkpoint
@@ -43,7 +42,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}"
-[[ ! -f "${PROJECT_ROOT}/pyproject.toml" ]] && PROJECT_ROOT=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${PROJECT_ROOT}/pyproject.toml" ]] && PROJECT_ROOT=${PROJECT_ROOT:?export PROJECT_ROOT}
 
 PSEUDO_DIR="${PSEUDO_DIR:-}"
 HYDRAGNN_LOGDIR="${HYDRAGNN_LOGDIR:-}"
@@ -70,7 +69,7 @@ module load rocm/7.2.0
 module load amd-mixed/7.2.0
 module load miniforge3/23.11.0-0
 
-VENV_ROOT="/lustre/orion/mat746/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72"
+VENV_ROOT="${VENV_ROOT:-$(dirname "${PROJECT_ROOT}")/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72}"
 if [[ ! -d "${VENV_ROOT}" ]]; then
   echo "ERROR: HydraGNN rocm/7.2.0 venv not found: ${VENV_ROOT}" >&2
   exit 2

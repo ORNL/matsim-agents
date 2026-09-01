@@ -45,7 +45,7 @@ TOTAL_RANKS=$(( NNODES * RANKS_PER_NODE ))
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 
 # shellcheck disable=SC1091
 source "${REPO}/deployments/perlmutter/setup/perlmutter-module-stack.sh"

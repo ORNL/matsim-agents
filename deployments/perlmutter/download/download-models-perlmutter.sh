@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH -A m5216
 #SBATCH -J dl-models
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
@@ -18,7 +17,7 @@
 #   sbatch deployments/perlmutter/download/download-models-perlmutter.sh
 #
 # Alternate destination:
-#   MODEL_ROOT=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/models \
+#   MODEL_ROOT=/path/to/project/models \
 #   sbatch deployments/perlmutter/download/download-models-perlmutter.sh
 #
 # Notes:
@@ -37,7 +36,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
 # Use the shared HydraGNN Perlmutter environment by default.

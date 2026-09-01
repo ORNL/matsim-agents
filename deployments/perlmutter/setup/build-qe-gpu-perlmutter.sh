@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH -J build-qe-gpu
-#SBATCH -A m5216
 #SBATCH -p gpu
 #SBATCH -q regular
 #SBATCH -N 1
@@ -50,7 +49,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
 # ---- Configuration ----------------------------------------------------------

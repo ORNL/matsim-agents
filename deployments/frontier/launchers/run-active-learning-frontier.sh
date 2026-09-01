@@ -1,11 +1,10 @@
 #!/bin/bash
 #SBATCH -J matsim-al
-#SBATCH -A mat746
 #SBATCH -p batch
 #SBATCH -N 64
 #SBATCH -t 12:00:00
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/al-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/al-%j/job-%j.err
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 
 # =============================================================================
 # run-active-learning-frontier.sh
@@ -21,7 +20,7 @@
 #   AL_CONFIG     Path to the AL YAML config
 #
 # Optional:
-#   PROJECT_ROOT  Repo root (default: /lustre/orion/mat746/proj-shared/matsim-agents)
+#   PROJECT_ROOT  Repo root (default: ${PROJECT_ROOT:?export PROJECT_ROOT})
 #   VENV_ROOT     HydraGNN venv (default: rocm72 venv)
 #   LOG_LEVEL     Python logging level (default: INFO)
 #
@@ -34,11 +33,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}"
-[[ ! -f "${PROJECT_ROOT}/pyproject.toml" ]] && PROJECT_ROOT=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${PROJECT_ROOT}/pyproject.toml" ]] && PROJECT_ROOT=${PROJECT_ROOT:?export PROJECT_ROOT}
 
 AL_CONFIG="${AL_CONFIG:-}"
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
-VENV_ROOT="${VENV_ROOT:-/lustre/orion/mat746/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72}"
+VENV_ROOT="${VENV_ROOT:-$(dirname "${PROJECT_ROOT}")/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72}"
 
 if [[ -z "${AL_CONFIG}" ]]; then
   echo "ERROR: AL_CONFIG must be set (path to AL YAML config)." >&2

@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH -A mat746
 #SBATCH -J vllm-multinode
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
@@ -31,11 +30,11 @@
 #   RAY_PORT           – Ray head port (default 6379)
 #
 # Example submission (4 nodes, DeepSeek-V4-Pro):
-#   SERVE_MODEL_PATH=/lustre/orion/mat746/proj-shared/models/DeepSeek-V4-Pro \
+#   SERVE_MODEL_PATH=/path/to/project/models/DeepSeek-V4-Pro \
 #   sbatch --nodes=4 deployments/frontier/jobs/job-serve-multinode-frontier.sh
 #
 # Example submission (2 nodes, Mixtral 8x22B sanity check):
-#   SERVE_MODEL_PATH=/lustre/orion/mat746/proj-shared/models/Mixtral-8x22B-Instruct-v0.1 \
+#   SERVE_MODEL_PATH=/path/to/project/models/Mixtral-8x22B-Instruct-v0.1 \
 #   sbatch --nodes=2 deployments/frontier/jobs/job-serve-multinode-frontier.sh
 #
 # The server stays alive until the job time limit. Connect clients to:
@@ -46,7 +45,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 RUN_DIR=$PROJ/runs/vllm-multinode-$SLURM_JOB_ID

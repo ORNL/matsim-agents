@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH -A m5216
 #SBATCH -J mace-warmstart
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
@@ -20,14 +19,14 @@
 #
 # This script activates the separate mace_venv (not hydragnn_venv/fairchem_venv)
 # because mace-torch pins e3nn==0.4.4 (the version the foundation checkpoints
-# were serialised with).  See scripts/setup/perlmutter/build-mace-venv-perlmutter.sh.
+# were serialised with). See deployments/perlmutter/setup/build-mace-venv-perlmutter.sh.
 #
 # Submit:
-#   sbatch scripts/advanced/perlmutter/job-mace-warmstart-perlmutter.sh
+#   sbatch deployments/perlmutter/jobs/job-mace-warmstart-perlmutter.sh
 #
 # Override fixture (comma-separated, see fixtures.yaml for available names):
 #   MATSIM_WARMSTART_FIXTURES=MoNbTaW_HEA \
-#     sbatch scripts/advanced/perlmutter/job-mace-warmstart-perlmutter.sh
+#     sbatch deployments/perlmutter/jobs/job-mace-warmstart-perlmutter.sh
 #
 # PREREQUISITE — the MACE foundation weights must already be present in the
 # shared MACE cache ($PROJ/models/mace_cache/mace). Compute nodes have no
@@ -43,7 +42,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO_DEFAULT="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
@@ -51,7 +50,7 @@ RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
 VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}"
 
-QE_LAUNCHER=${MATSIM_QE_LAUNCHER:-$REPO/scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh}
+QE_LAUNCHER=${MATSIM_QE_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh}
 QE_PSEUDO_DIR=${MATSIM_QE_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}
 
 RUN_DIR=$RUNS_ROOT/mace-warmstart-$SLURM_JOB_ID
@@ -59,7 +58,7 @@ WARMSTART_DIR=$RUN_DIR/mace-warmstart
 mkdir -p "$RUN_DIR" "$WARMSTART_DIR"
 
 # ── modules ──────────────────────────────────────────────────────────────────
-source "$REPO/scripts/setup/perlmutter/perlmutter-module-stack.sh"
+source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
 # Activate the plain Python venv (mace_venv), NOT conda.

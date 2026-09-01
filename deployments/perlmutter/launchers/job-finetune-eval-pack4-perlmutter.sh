@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH -A m5216
 #SBATCH -J fte-pack4
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.out
@@ -48,7 +47,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO_DEFAULT="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 SINGLE="${REPO}/deployments/perlmutter/launchers/job-finetune-eval-perlmutter.sh"
 [[ ! -f "${SINGLE}" ]] && { echo "ERROR: single-campaign launcher not found: ${SINGLE}" >&2; exit 2; }
 

@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH -J singlepass-paper
-#SBATCH -A lrn070
 #SBATCH -p batch
 #SBATCH -N 1
 #SBATCH -t 02:00:00
@@ -26,7 +25,7 @@
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-PROJECT_ROOT="${PROJECT_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents}"
+PROJECT_ROOT="${PROJECT_ROOT:?export PROJECT_ROOT}"
 PROJ="$(dirname "${PROJECT_ROOT}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 HYDRAGNN_EXAMPLE="${HYDRAGNN_EXAMPLE:-${PROJ}/HydraGNN/examples/multidataset_hpo_sc26}"

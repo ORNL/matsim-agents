@@ -1,5 +1,4 @@
 #!/bin/bash
-#PBS -A CM2US
 #PBS -N dl-open-models
 #PBS -l select=1
 #PBS -l place=scatter
@@ -19,7 +18,7 @@
 #        deployments/aurora/download/download-open-models-aurora.sh
 #
 # Alternate destination:
-#   qsub -v MODEL_ROOT=/lus/flare/projects/CM2US/mlupopa/models \
+#   qsub -v MODEL_ROOT=/path/to/project/models \
 #        deployments/aurora/download/download-open-models-aurora.sh
 # ---------------------------------------------------------------------------
 
@@ -33,7 +32,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lus/flare/projects/CM2US/mlupopa/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
 VENV_DEFAULT="${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv"

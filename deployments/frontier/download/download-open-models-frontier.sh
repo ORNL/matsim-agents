@@ -1,8 +1,7 @@
 #!/bin/bash
-#SBATCH -A mat746
 #SBATCH -J dl-open-models
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/download-open-models-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/download-open-models-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 12:00:00
 #SBATCH -N 1
 #SBATCH -p batch
@@ -18,7 +17,7 @@
 #   sbatch deployments/frontier/download/download-open-models-frontier.sh
 #
 # Alternate destination:
-#   MODEL_ROOT=/lustre/orion/mat746/proj-shared/models \
+#   MODEL_ROOT=/path/to/project/models \
 #   sbatch deployments/frontier/download/download-open-models-frontier.sh
 #
 # ---------------------------------------------------------------------------
@@ -33,7 +32,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 MODEL_ROOT=${MODEL_ROOT:-$PROJ/models}

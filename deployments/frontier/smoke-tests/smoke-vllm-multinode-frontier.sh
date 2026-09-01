@@ -19,10 +19,9 @@
 #   SMOKE_MODEL_PATH=... SMOKE_MODEL_NAME=... \
 #   sbatch --nodes=4 deployments/frontier/smoke-tests/smoke-vllm-multinode-frontier.sh
 # ---------------------------------------------------------------------------
-#SBATCH -A mat746
 #SBATCH -J smoke-multinode
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/smoke-multinode-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/smoke-multinode-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 01:00:00
 #SBATCH -N 4
 #SBATCH -p batch
@@ -32,7 +31,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 # Under sbatch, BASH_SOURCE resolves to /var/spool/slurmd/jobXXX/slurm_script,
 # so SCRIPT_DIR is non-empty but wrong. Check that _rocr_to_hip.sh actually exists.

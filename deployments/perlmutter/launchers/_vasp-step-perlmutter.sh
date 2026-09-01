@@ -44,7 +44,7 @@ TOTAL_RANKS=$(( NNODES * RANKS_PER_NODE ))
 # the linked NVHPC libs. `module reset` is mandatory to drop inherited modules.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ -f "${REPO}/pyproject.toml" ]] || REPO=/global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+[[ -f "${REPO}/pyproject.toml" ]] || REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 
 if ! command -v module >/dev/null 2>&1 && [[ -f /usr/share/lmod/lmod/init/bash ]]; then
   # shellcheck disable=SC1091

@@ -5,8 +5,8 @@ for the vLLM-based agent backend.
 
 > **Note on paths**: throughout this document, `$PROJ` refers to your
 > project's proj-shared directory on Lustre (e.g.
-> `/lustre/orion/<your-project>/proj-shared`). Set it once with
-> `export PROJ=/lustre/orion/<your-project>/proj-shared` and all examples
+> your project's shared filesystem). Set it once with
+> `export PROJ=/path/to/project-shared` and all examples
 > below will work as written.
 
 ## Frontier scripts directory layout

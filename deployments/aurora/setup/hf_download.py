@@ -1,4 +1,4 @@
-"""Download a HuggingFace repo snapshot to /lus/flare/.../models/<basename>.
+"""Download a HuggingFace repository snapshot to a local model directory.
 
 Usage:
     python deployments/aurora/setup/hf_download.py <repo_id> [--name LOCAL_NAME]
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from huggingface_hub import snapshot_download
 
-DEFAULT_DEST = Path("/lus/flare/projects/CM2US/mlupopa/models")
+DEFAULT_DEST = Path(os.environ.get("MODEL_ROOT", Path.cwd() / "models"))
 
 
 def main() -> int:

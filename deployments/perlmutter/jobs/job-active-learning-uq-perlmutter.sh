@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH -A m5216
 #SBATCH -J active-learning-uq
 #SBATCH -C gpu
 #SBATCH -q regular
@@ -34,7 +33,7 @@
 set -euo pipefail
 
 # ── paths ───────────────────────────────────────────────────────────────────
-REPO="${PROJECT_ROOT:-/global/cfs/projectdirs/m5216/mlupopa/matsim-agents}"
+REPO="${PROJECT_ROOT:?export PROJECT_ROOT}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 

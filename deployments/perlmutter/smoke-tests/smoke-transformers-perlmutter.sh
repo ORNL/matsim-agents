@@ -13,7 +13,6 @@
 #   sbatch --export=ALL,MATSIM_MODEL_DIR=/path/to/model \
 #          deployments/perlmutter/smoke-tests/smoke-transformers-perlmutter.sh
 # ---------------------------------------------------------------------------
-#SBATCH -A m5216
 #SBATCH -J smoke-transformers-pm
 #SBATCH -C gpu
 #SBATCH -q regular
@@ -21,15 +20,15 @@
 #SBATCH -t 00:30:00
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
-#SBATCH -o /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/smoke-transformers-pm-%j/job-%j.out
-#SBATCH -e /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/smoke-transformers-pm-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+  REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}

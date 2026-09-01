@@ -1,5 +1,4 @@
 #!/bin/bash
-#PBS -A CM2US
 #PBS -N matsim-smoke-vllm-singlenode
 #PBS -l select=1
 #PBS -l place=scatter
@@ -31,14 +30,14 @@ set -eo pipefail  # NOTE: no -u; lmod's bash init breaks under nounset
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${PBS_O_WORKDIR:-$PWD}/$0}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lus/flare/projects/CM2US/mlupopa/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
 # vLLM is provided by the `frameworks` module (vLLM 0.15 + PyTorch 2.10/XPU as
 # of frameworks/2025.3.1).  We then activate hydragnn_venv (built with
 # --system-site-packages on top of that same Python 3.12) so HydraGNN +
 # matsim-agents are importable alongside vLLM.
-VENV_PATH="${VENV_PATH:-/lus/flare/projects/CM2US/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
+VENV_PATH="${VENV_PATH:-$(dirname "${REPO}")/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
 
 SMOKE_MODEL_PATH="${SMOKE_MODEL_PATH:-${PROJ}/models/Mistral-Small-24B-Instruct-2501}"
 SMOKE_MODEL_NAME="${SMOKE_MODEL_NAME:-$(basename "$SMOKE_MODEL_PATH")}"

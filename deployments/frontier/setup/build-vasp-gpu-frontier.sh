@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 #SBATCH -J build-vasp-gpu
-#SBATCH -A mat746
 #SBATCH -p batch
 #SBATCH -q debug
 #SBATCH -N 1
 #SBATCH -t 02:00:00
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/build-vasp-gpu-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/build-vasp-gpu-%j/job-%j.err
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 
 # =============================================================================
 # build-vasp-gpu-frontier.sh
@@ -29,9 +28,9 @@
 # Usage
 # -----
 #   # Login-node build (recommended):
-#   mkdir -p /lustre/orion/mat746/proj-shared/runs/build-vasp-gpu-login
+#   mkdir -p /path/to/project/runs/build-vasp-gpu-login
 #   nohup bash deployments/frontier/setup/build-vasp-gpu-frontier.sh \
-#         > /lustre/orion/mat746/proj-shared/runs/build-vasp-gpu-login/build.log 2>&1 &
+#         > /path/to/project/runs/build-vasp-gpu-login/build.log 2>&1 &
 #
 #   # Or as a SLURM batch job:
 #   sbatch deployments/frontier/setup/build-vasp-gpu-frontier.sh

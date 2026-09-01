@@ -256,7 +256,7 @@ def parse_args() -> argparse.Namespace:
         "--runs-root",
         default=os.environ.get(
             "MATSIM_RUNS_ROOT",
-            "/global/cfs/projectdirs/m5216/mlupopa/runs/finetune-eval",
+            str(Path.cwd() / "runs" / "finetune-eval"),
         ),
     )
     p.add_argument("--output-dir", required=True)

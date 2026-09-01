@@ -1,11 +1,10 @@
 #!/bin/bash
-#SBATCH -A m5216
 #SBATCH -J single-relaxation
 #SBATCH -C gpu
-#SBATCH -q regular
+#SBATCH -q shared
 #SBATCH -N 1
 #SBATCH -t 00:30:00
-#SBATCH --gpus-per-node=4
+#SBATCH --gpus=1
 #SBATCH -c 32
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
@@ -26,7 +25,12 @@
 set -euo pipefail
 
 # ── paths ───────────────────────────────────────────────────────────────────
-REPO="${PROJECT_ROOT:-/global/cfs/projectdirs/m5216/mlupopa/matsim-agents}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}"
+[[ -f "${REPO}/pyproject.toml" ]] || {
+  echo "ERROR: set PROJECT_ROOT to the matsim-agents checkout" >&2
+  exit 2
+}
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
@@ -71,7 +75,7 @@ echo "=========================================="
 matsim-agents run \
     "Relax the structure at ${STRUCTURE} using HydraGNN and report the final energy." \
     --logdir          "$LOGDIR" \
-    --mlp-checkpoint  "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
+    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
     --mlp-device      cuda \
     --max-iterations  3 \

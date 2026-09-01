@@ -12,10 +12,9 @@
 # Or run interactively after `salloc`:
 #   bash scripts/smoke-transformers-frontier.sh
 # ---------------------------------------------------------------------------
-#SBATCH -A mat746
 #SBATCH -J smoke-transformers
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/smoke-transformers-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/smoke-transformers-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 00:30:00
 #SBATCH -N 1
 #SBATCH -p batch
@@ -25,7 +24,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}

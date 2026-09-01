@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH -A mat746
 #SBATCH -J discovery-chat
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
@@ -31,13 +30,10 @@ set -euo pipefail
 
 # ── paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-# Slurm copies the submitted script into a spool dir before executing it, so
-# BASH_SOURCE[0] does NOT point at this file's real location under sbatch --
-# fall back to the known repo-absolute path when the relative lookup misses.
-RUNTIME_ENV="${SCRIPT_DIR}/../common/runtime-env.sh"
-[[ -f "${RUNTIME_ENV}" ]] || RUNTIME_ENV=/lustre/orion/mat746/proj-shared/matsim-agents/scripts/advanced/common/runtime-env.sh
+RUNTIME_ENV="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}/deployments/common/runtime-env.sh"
+[[ -f "${RUNTIME_ENV}" ]] || { echo "ERROR: export PROJECT_ROOT before submission" >&2; exit 2; }
 source "${RUNTIME_ENV}"
-REPO="$(resolve_repo_root "${SCRIPT_DIR}" "/lustre/orion/mat746/proj-shared/matsim-agents")"
+REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
@@ -104,7 +100,7 @@ fi
 echo "[$(date)] Submitting discovery query to matsim-agents (HuggingFace provider) ..."
 echo "$QUERY" | matsim-agents chat \
     --logdir          "$LOGDIR" \
-    --mlp-checkpoint  "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
+    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
     --llm-provider    huggingface \
     --llm-model       "$MODEL_DIR" \

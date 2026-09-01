@@ -1,14 +1,13 @@
 #!/bin/bash
 #SBATCH -J qe-warmstart-bench
-#SBATCH -A m5216
 #SBATCH -C gpu
 #SBATCH -q regular
 #SBATCH -N 1
 #SBATCH -t 04:00:00
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
-#SBATCH -o /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/qe-warmstart-%j/job-%j.out
-#SBATCH -e /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/qe-warmstart-%j/job-%j.err
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 
 # =============================================================================
 # Run the HydraGNN warm-start vs Quantum ESPRESSO cold-start benchmark
@@ -22,7 +21,7 @@
 #   so the parent environment stays HydraGNN-aligned throughout.
 #
 # Required overrides (set via environment or edit below):
-#   PROJECT_ROOT        repo root (default: /global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents)
+#   PROJECT_ROOT        repo root (default: ${PROJECT_ROOT:?export PROJECT_ROOT})
 #   PSEUDO_DIR          directory of .UPF pseudopotentials (REQUIRED)
 #   HYDRAGNN_LOGDIR     HydraGNN logdir with config.json + checkpoint
 #   HYDRAGNN_BRANCH_MLP_CHECKPOINT   BranchWeightMLP .pt checkpoint
@@ -42,7 +41,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}"
 [[ ! -f "${PROJECT_ROOT}/pyproject.toml" ]] && \
-  PROJECT_ROOT=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+  PROJECT_ROOT=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${PROJECT_ROOT}")"
 
 PSEUDO_DIR="${PSEUDO_DIR:-${PROJECT_ROOT}/external/quantum-espresso/src/pseudo}"

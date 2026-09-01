@@ -1,12 +1,11 @@
 #!/bin/bash
 #SBATCH -J build-qe-gpu
-#SBATCH -A mat746
 #SBATCH -p batch
 #SBATCH -q debug
 #SBATCH -N 1
 #SBATCH -t 02:00:00
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/build-qe-gpu-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/build-qe-gpu-%j/job-%j.err
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 
 # =============================================================================
 # Build Quantum ESPRESSO with AMD MI250X (gfx90a) OpenMP target offload
@@ -47,7 +46,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
 # ---- Configuration ----------------------------------------------------------

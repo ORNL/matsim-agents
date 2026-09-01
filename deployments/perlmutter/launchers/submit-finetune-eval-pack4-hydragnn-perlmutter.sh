@@ -16,7 +16,7 @@
 # sbatch's comma-delimited --export parser intact.
 #
 # Usage:
-#   bash scripts/launchers/perlmutter/submit-finetune-eval-pack4-hydragnn-perlmutter.sh
+#   bash deployments/perlmutter/launchers/submit-finetune-eval-pack4-hydragnn-perlmutter.sh
 #   QOS=regular  bash .../submit-finetune-eval-pack4-hydragnn-perlmutter.sh
 #   CASES=lifepo4-al-001,hea-bcc-al-001  bash .../submit-...   # subset
 #   DRY_RUN=1    bash .../submit-...                            # print only
@@ -26,7 +26,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 JOB="${SCRIPT_DIR}/job-finetune-eval-pack4-perlmutter.sh"

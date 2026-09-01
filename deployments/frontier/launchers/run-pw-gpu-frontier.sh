@@ -1,11 +1,10 @@
 #!/bin/bash
 #SBATCH -J qe-pw-gpu
-#SBATCH -A mat746
 #SBATCH -p batch
 #SBATCH -N 1
 #SBATCH -t 00:30:00
-#SBATCH -o /lustre/orion/mat746/proj-shared/runs/qe-pw-gpu-%j/job-%j.out
-#SBATCH -e /lustre/orion/mat746/proj-shared/runs/qe-pw-gpu-%j/job-%j.err
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 
 # =============================================================================
 # Run pw.x on Frontier with AMD MI250X (gfx90a) OpenMP target offload.
@@ -32,7 +31,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/mat746/proj-shared/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 
 QE_PREFIX="${QE_PREFIX:-${REPO}/external/quantum-espresso}"
 PW_BIN="${PW_BIN:-${QE_PREFIX}/install-gpu/bin/pw.x}"
@@ -71,13 +70,13 @@ echo "=========================================="
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
   # Inside an allocation: srun directly.
-  srun -n "${NRANKS}" -c "${OMP_NUM_THREADS}" \
+  srun -n "${NRANKS}" -c "${OMP_NUM_THREADS}" --threads-per-core=1 --cpu-bind=cores \
        --gpus-per-node=8 --gpu-bind=closest \
        "${PW_BIN}" -in "${INPUT}" "$@"
 else
   # Stand-alone invocation outside an allocation: assume the caller already
   # acquired one (e.g. `salloc -N1 -p batch -A mat746 ...`).
-  srun -N1 -n "${NRANKS}" -c "${OMP_NUM_THREADS}" \
+  srun -N1 -n "${NRANKS}" -c "${OMP_NUM_THREADS}" --threads-per-core=1 --cpu-bind=cores \
        --gpus-per-node=8 --gpu-bind=closest \
        "${PW_BIN}" -in "${INPUT}" "$@"
 fi

@@ -15,7 +15,6 @@
 #
 # The launchers under deployments/perlmutter/launchers/ override --nodes via sbatch.
 # ---------------------------------------------------------------------------
-#SBATCH -A m5216
 #SBATCH -J smoke-tf-mn-pm
 #SBATCH -C gpu
 #SBATCH -q regular
@@ -25,15 +24,15 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=16
-#SBATCH -o /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/smoke-tf-mn-pm-%j/job-%j.out
-#SBATCH -e /global/cfs/projectdirs/amsc001/cm2us/mlupopa/runs/smoke-tf-mn-pm-%j/job-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+  REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 

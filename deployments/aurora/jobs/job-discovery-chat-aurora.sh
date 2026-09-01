@@ -1,5 +1,4 @@
 #!/bin/bash
-#PBS -A CM2US
 #PBS -N discovery-chat
 #PBS -l select=1
 #PBS -l place=scatter
@@ -33,12 +32,10 @@ set -eo pipefail  # NOTE: no -u; lmod's bash init breaks under nounset
 
 # ── paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${PBS_O_WORKDIR:-$PWD}/$0}")" 2>/dev/null && pwd)"
-# PBS may not preserve the submitted script's original path either -- fall
-# back to the known repo-absolute path when the relative lookup misses.
-RUNTIME_ENV="${SCRIPT_DIR}/../common/runtime-env.sh"
-[[ -f "${RUNTIME_ENV}" ]] || RUNTIME_ENV=/lus/flare/projects/CM2US/mlupopa/matsim-agents/scripts/advanced/common/runtime-env.sh
+RUNTIME_ENV="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}/deployments/common/runtime-env.sh"
+[[ -f "${RUNTIME_ENV}" ]] || { echo "ERROR: export PROJECT_ROOT before submission" >&2; exit 2; }
 source "${RUNTIME_ENV}"
-REPO="$(resolve_repo_root "${SCRIPT_DIR}" "/lus/flare/projects/CM2US/mlupopa/matsim-agents")"
+REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
 
 VENV="${MATSIM_AURORA_VENV:-${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
@@ -125,7 +122,7 @@ fi
 echo "[$(date)] Submitting discovery query to matsim-agents (HuggingFace provider) ..."
 echo "$QUERY" | matsim-agents chat \
     --logdir          "$LOGDIR" \
-    --mlp-checkpoint  "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
+    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
     --llm-provider    huggingface \
     --llm-model       "$MODEL_DIR" \

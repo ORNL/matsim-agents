@@ -10,7 +10,7 @@
 #   PW_BIN           = ${QE_PREFIX}/install-gpu/bin/pw.x
 #   NRANKS           = 6
 #   OMP_NUM_THREADS  = 4
-#   GPU_BIND         = closest
+#   GPU_BIND         = list:0:1:2:3:4:5
 #
 # Notes:
 # - Uses Aurora frameworks module stack.
@@ -31,7 +31,7 @@ QE_PREFIX="${QE_PREFIX:-${REPO}/external/quantum-espresso}"
 PW_BIN="${PW_BIN:-${QE_PREFIX}/install-gpu/bin/pw.x}"
 NRANKS="${NRANKS:-6}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-4}"
-GPU_BIND="${GPU_BIND:-closest}"
+GPU_BIND="${GPU_BIND:-list:0:1:2:3:4:5}"
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <pw-input-file> [extra pw.x args...]" >&2
@@ -69,13 +69,12 @@ echo "Input:       ${INPUT}"
 echo "MPI ranks:   ${NRANKS}    OMP threads/rank: ${OMP_NUM_THREADS}"
 echo "=========================================="
 
-if command -v srun >/dev/null 2>&1; then
-  # Keep launch semantics aligned with Frontier/Perlmutter launchers.
-  srun -n "${NRANKS}" -c "${OMP_NUM_THREADS}" --gpu-bind="${GPU_BIND}" \
-       "${PW_BIN}" -in "${INPUT}" "$@"
-elif command -v mpiexec >/dev/null 2>&1; then
-  mpiexec -n "${NRANKS}" "${PW_BIN}" -in "${INPUT}" "$@"
+if command -v mpiexec >/dev/null 2>&1; then
+  # Aurora is PBS/MPICH, not Slurm. Bind one rank to each physical PVC by
+  # default; callers using tile-as-device mode must override GPU_BIND.
+  mpiexec -n "${NRANKS}" -ppn "${NRANKS}" --gpu-bind="${GPU_BIND}" \
+    "${PW_BIN}" -in "${INPUT}" "$@"
 else
-  echo "ERROR: neither srun nor mpiexec found for launching MPI job" >&2
+  echo "ERROR: mpiexec is required on Aurora" >&2
   exit 2
 fi

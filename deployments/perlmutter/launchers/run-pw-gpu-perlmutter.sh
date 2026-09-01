@@ -16,7 +16,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+  REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 
 QE_PREFIX="${QE_PREFIX:-${REPO}/external/quantum-espresso}"
 PW_BIN="${PW_BIN:-${QE_PREFIX}/install-gpu/bin/pw.x}"
@@ -64,11 +64,11 @@ echo "MPICH GPU-aware MPI: MPICH_GPU_SUPPORT_ENABLED=${MPICH_GPU_SUPPORT_ENABLED
 echo "=========================================="
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-  srun -n "${NRANKS}" -c "${OMP_NUM_THREADS}" \
-       --gpus-per-node="${GPUS_PER_NODE}" --gpu-bind=closest \
+  srun -n "${NRANKS}" --ntasks-per-node="${NRANKS}" -c "${OMP_NUM_THREADS}" \
+       --gpus-per-task=1 --gpu-bind=closest --cpu-bind=cores \
        "${PW_BIN}" -in "${INPUT}" "$@"
 else
-  srun -N1 -n "${NRANKS}" -c "${OMP_NUM_THREADS}" \
-       --gpus-per-node="${GPUS_PER_NODE}" --gpu-bind=closest \
+  srun -N1 -n "${NRANKS}" --ntasks-per-node="${NRANKS}" -c "${OMP_NUM_THREADS}" \
+       --gpus-per-task=1 --gpu-bind=closest --cpu-bind=cores \
        "${PW_BIN}" -in "${INPUT}" "$@"
 fi

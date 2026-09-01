@@ -2,6 +2,9 @@
 
 This page centralizes HPC-oriented documentation for matsim-agents.
 
+See [`hpc-validation.md`](hpc-validation.md) for the validation standard and
+current status of each machine/toolchain combination.
+
 ## Quick Start by Platform
 
 Use the first-command patterns below from the repository root.

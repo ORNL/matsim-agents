@@ -3,7 +3,6 @@
 #SBATCH -C gpu
 #SBATCH -q regular
 #SBATCH -t 01:00:00
-#SBATCH -A m5216
 #SBATCH --job-name=matsim-agents
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err

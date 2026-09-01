@@ -1,8 +1,7 @@
 #!/bin/bash
-#SBATCH -A lrn070
 #SBATCH -J build-vllm-rocm72
-#SBATCH -o /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/runs/build-vllm-rocm72-%j.out
-#SBATCH -e /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/runs/build-vllm-rocm72-%j.out
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH -t 02:00:00
 #SBATCH -N 1
 #SBATCH -p batch
@@ -19,7 +18,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents
+[[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 VLLM_SRC=$PROJ/cache/vllm-src/vllm

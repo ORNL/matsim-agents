@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH -J singlepass-paper
-#SBATCH -A m5216_g
 #SBATCH -C gpu
 #SBATCH -q regular
 #SBATCH -N 1
@@ -29,15 +28,15 @@ set -euo pipefail
 #
 # Submit on m5216 with explicit paths:
 #   sbatch -A m5216_g \
-#     --export=ALL,PROJECT_ROOT=/global/cfs/projectdirs/m5216/mlupopa/matsim-agents,RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs \
+#     --export=ALL,PROJECT_ROOT=/path/to/matsim-agents,RUNS_ROOT=/path/to/scratch/runs \
 #     deployments/perlmutter/jobs/job-singlepass-paper-cases-perlmutter.sh
 # ---------------------------------------------------------------------------
-PROJECT_ROOT="${PROJECT_ROOT:-/global/cfs/projectdirs/m5216/mlupopa/matsim-agents}"
+PROJECT_ROOT="${PROJECT_ROOT:?export PROJECT_ROOT}"
 PROJ="$(dirname "${PROJECT_ROOT}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 # Surrogate checkpoints are shared and physically live under amsc001; keep the
 # default decoupled from PROJECT_ROOT so an m5216 run still finds the model.
-HYDRAGNN_EXAMPLE="${HYDRAGNN_EXAMPLE:-/global/cfs/projectdirs/m5216/mlupopa/HydraGNN/examples/multidataset_hpo_sc26}"
+HYDRAGNN_EXAMPLE="${HYDRAGNN_EXAMPLE:-${PROJ}/HydraGNN/examples/multidataset_hpo_sc26}"
 
 if [[ -z "${SLURM_JOB_ID:-}" ]]; then
   echo "ERROR: submit this file with sbatch, not bash." >&2

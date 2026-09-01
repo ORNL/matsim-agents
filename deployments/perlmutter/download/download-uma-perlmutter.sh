@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH -A m5216
 #SBATCH -J dl-uma
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
@@ -25,7 +24,7 @@
 #   sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
 #
 # Alternate cache location:
-#   HF_HOME=/global/cfs/projectdirs/m5216/mlupopa/models/hf_cache \
+#   HF_HOME=/path/to/project/models/hf_cache \
 #   sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
 #
 # Notes:
@@ -43,7 +42,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO_DEFAULT="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
-  REPO=/global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
 # fairchem_venv lives alongside hydragnn_venv under the HydraGNN install root.

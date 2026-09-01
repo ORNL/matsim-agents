@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH -A m5216
 #SBATCH -J discovery-vllm
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
@@ -38,10 +37,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 # Slurm copies the submitted script into a spool dir before executing it, so
 # BASH_SOURCE[0] does NOT point at this file's real location under sbatch --
 # fall back to the known repo-absolute path when the relative lookup misses.
-RUNTIME_ENV="${SCRIPT_DIR}/../common/runtime-env.sh"
-[[ -f "${RUNTIME_ENV}" ]] || RUNTIME_ENV=/global/cfs/projectdirs/m5216/mlupopa/matsim-agents/scripts/advanced/common/runtime-env.sh
+RUNTIME_ENV="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}/deployments/common/runtime-env.sh"
+[[ -f "${RUNTIME_ENV}" ]] || { echo "ERROR: export PROJECT_ROOT before submission" >&2; exit 2; }
 source "${RUNTIME_ENV}"
-REPO="$(resolve_repo_root "${SCRIPT_DIR}" "/global/cfs/projectdirs/m5216/mlupopa/matsim-agents")"
+REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
 INSTALL_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
 VENV=$INSTALL_ROOT/hydragnn_venv          # discovery client + HydraGNN MLFF
