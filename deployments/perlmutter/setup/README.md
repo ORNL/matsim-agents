@@ -212,6 +212,7 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | `job-single-relaxation-perlmutter.sh` | Runs `examples/single_relaxation.py` (HydraGNN FIRE relaxation) under a single A100 node; exports `MATSIM_HYDRAGNN_*` and `MATSIM_LLM_*` for the vLLM/HF backend. |
 | `job-active-learning-uq-perlmutter.sh` | Full active-learning loop (`matsim-agents al run`) on Perlmutter: MD sampling → ensemble uncertainty → DFT labelling (VASP or QE) → HydraGNN retraining. Multi-phase SBATCH with node-level srun steps. |
 | `job-qe-warmstart-perlmutter.sh` | QE warm-start benchmark job: exercises the HydraGNN-preconditioned `pw.x` cold-vs-warm convergence test via `tests/integration/test_qe_warmstart.py`. |
+| `job-sequential-benchmark-perlmutter.sh` | Sequential single-node LLM benchmark: starts a vLLM server (from `vllm_venv`) for each open-catalog model in turn, runs `eval_six_models_search_prompt.py` (via `hydragnn_venv`), then merges results into a leaderboard CSV and comparison PNG. All JIT caches are redirected to node-local `/tmp` to avoid CFS `fcntl.flock` hangs (Errno 524). Required env var: `BENCHMARK_PROMPT`. Optional: `BENCHMARK_PART=light\|heavy\|all`. See the storage layout comment at the top of the script. |
 
 ### Submission examples
 ```bash
