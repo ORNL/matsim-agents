@@ -649,7 +649,7 @@ for Frontier (ROCm) — see [docs/llm-backends-comparison.md](docs/llm-backends-
 
 | Provider | Install | Typical model | Notes |
 |---|---|---|---|
-| **`ollama`** *(default)* | `brew install ollama && ollama pull qwen2.5:14b` | `qwen2.5:14b`, `llama3.1:8b`, `deepseek-r1:14b` | Fully local, CPU/GPU/Metal. |
+| **`ollama`** *(library default)* | `brew install ollama && ollama pull llama3.1:8b` | `llama3.1:8b` *(default)*; `qwen2.5:14b`, `deepseek-r1:14b` are examples | Fully local, CPU/GPU/Metal. |
 | **`vllm`** | Run a vLLM server (`vllm serve <model> --port 8000`) | `meta-llama/Llama-3.1-8B-Instruct` | OpenAI-compatible; great for HPC. |
 | **`openai`** | `pip install matsim-agents[openai]` | `gpt-4o-mini` | Hosted. Set `OPENAI_API_KEY`. |
 | **`anthropic`** | `pip install matsim-agents[anthropic]` | `claude-3-5-sonnet-latest` | Hosted. Set `ANTHROPIC_API_KEY`. |
@@ -675,11 +675,41 @@ Configuration knobs:
 
 ```bash
 export MATSIM_LLM_PROVIDER=ollama          # or vllm | openai | anthropic | huggingface
+export MATSIM_LLM_MODEL=llama3.1:8b         # provider-specific model ID or local path
 export MATSIM_OLLAMA_BASE_URL=http://...    # optional
 export MATSIM_VLLM_BASE_URL=http://node:8000/v1
 export MATSIM_VLLM_API_KEY=EMPTY            # only if vLLM is auth-protected
 export MATSIM_HF_MODEL_PATH=/path/to/model  # huggingface provider: local model dir
 ```
+
+The exact environment-variable contract is:
+
+| Variable | Allowed values / format | Default and scope |
+|---|---|---|
+| `MATSIM_LLM_PROVIDER` | `ollama`, `vllm`, `openai`, `anthropic`, or `huggingface` | General library default: `ollama`. The portability `--live-llm` path defaults to `vllm` so it can address an HPC model server. |
+| `MATSIM_LLM_MODEL` | Provider-specific model identifier, Ollama tag, or local model path | Used by entry points that expose environment-selected models, including the live portability benchmark. If omitted there, the provider default below is used. |
+| `MATSIM_VLLM_BASE_URL` | Full OpenAI-compatible vLLM API root, normally `http[s]://host:port/v1` | vLLM only; defaults to `http://localhost:8000/v1`. Include `/v1`. |
+
+Provider model defaults implemented by `get_chat_model` are:
+
+| Provider | Default model | Identifier convention |
+|---|---|---|
+| `ollama` | `llama3.1:8b` | Tag installed in the Ollama daemon |
+| `vllm` | `meta-llama/Llama-3.1-8B-Instruct` | The model name exposed by the OpenAI-compatible server |
+| `openai` | `gpt-4o-mini` | OpenAI model identifier; requires `OPENAI_API_KEY` |
+| `anthropic` | `claude-3-5-sonnet-latest` | Anthropic model identifier; requires `ANTHROPIC_API_KEY` |
+| `huggingface` | `Qwen/Qwen2.5-72B-Instruct` | Hugging Face ID or local path selected with `MATSIM_HF_MODEL_PATH` |
+
+For vLLM, `MATSIM_LLM_MODEL` must match a model identifier accepted by the
+running server; it is not necessarily the filesystem directory from which the
+server loaded its weights. `MATSIM_VLLM_API_KEY` defaults to `EMPTY`, which is
+appropriate for an unsecured local server. Set it when the endpoint requires
+authentication. `MATSIM_VLLM_BASE_URL` is ignored by non-vLLM providers.
+
+The provider factory can address arbitrary compatible model identifiers.
+“First-class supported” is narrower: it means a model is present in
+`deployments/common/open-model-catalog.json` and therefore has catalog,
+download, launch, and benchmark coverage on the supported facilities.
 
 ### First-class open-model support
 

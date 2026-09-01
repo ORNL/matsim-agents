@@ -82,6 +82,43 @@ model on each machine and add `--live-llm`. Supported environment variables are
 deterministic discussion remains the release gate because hosted/server
 availability should not hide an orchestration regression.
 
+### Live LLM configuration
+
+The live portability path supports the same five providers as the library:
+`ollama`, `vllm`, `openai`, `anthropic`, and `huggingface`. Unlike the general
+library default (`ollama`), this benchmark defaults to `vllm`, matching the
+model-serving pattern on Frontier, Aurora, and Perlmutter.
+
+| Variable | Meaning | Live-benchmark default |
+|---|---|---|
+| `MATSIM_LLM_PROVIDER` | One of the five provider names above | `vllm` |
+| `MATSIM_LLM_MODEL` | Model name understood by that provider/server | Provider-specific default |
+| `MATSIM_VLLM_BASE_URL` | Full OpenAI-compatible API root; vLLM only | `http://localhost:8000/v1` |
+
+Provider defaults are `llama3.1:8b` for Ollama,
+`meta-llama/Llama-3.1-8B-Instruct` for vLLM, `gpt-4o-mini` for OpenAI,
+`claude-3-5-sonnet-latest` for Anthropic, and
+`Qwen/Qwen2.5-72B-Instruct` for Hugging Face. For vLLM, include `/v1` in the
+base URL and ensure `MATSIM_LLM_MODEL` matches the name exposed by the running
+server. Set `MATSIM_VLLM_API_KEY` when the endpoint is protected; otherwise it
+defaults to `EMPTY`.
+
+Example:
+
+```bash
+export MATSIM_LLM_PROVIDER=vllm
+export MATSIM_LLM_MODEL=Qwen/Qwen2.5-72B-Instruct
+export MATSIM_VLLM_BASE_URL=http://localhost:8000/v1
+
+python benchmarks/portability/run.py \
+  --facility frontier --suite all --backend qe --execute --live-llm \
+  --output runs/portability-live
+```
+
+Use the same model identifier, prompt settings, source commit, and server
+configuration on every facility before comparing responses. Live LLM output is
+recorded for functional comparison, not required to be textually identical.
+
 Paper cases, scaling sweeps, model catalog benchmarks, and warm-start studies
 remain specialized benchmarks. They are intentionally not deleted or silently
 redirected to this small portability gate.
