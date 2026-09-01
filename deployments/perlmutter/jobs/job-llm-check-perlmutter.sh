@@ -88,6 +88,12 @@ echo "[$(date)] Starting ${MODEL_NAME} from ${MODEL_DIR} on GPU(s) ${VLLM_GPUS} 
   export TRITON_CACHE_DIR="${JIT_TMP}/triton"
   export TORCHINDUCTOR_CACHE_DIR="${JIT_TMP}/inductor"
   export VLLM_CACHE_ROOT="${JIT_TMP}/vllm"
+  # CFS does not support fcntl.flock on compute nodes; redirect all caches to tmpfs.
+  export XDG_CACHE_HOME="${JIT_TMP}/xdg-cache"
+  export HF_HOME="${JIT_TMP}/hf-home"
+  export TORCH_HOME="${JIT_TMP}/torch-home"
+  export TMPDIR="${JIT_TMP}/tmp"
+  mkdir -p "${TMPDIR}"
   PYTHON_HEADERS="${CLIENT_VENV}/include/python3.11"
   export CPATH="${PYTHON_HEADERS}:${CPATH:-}"
   export C_INCLUDE_PATH="${PYTHON_HEADERS}:${C_INCLUDE_PATH:-}"
