@@ -175,6 +175,37 @@ matsim-agents chat ...
 
 ---
 
+## Perlmutter (NERSC) — open LLM benchmark models
+
+The sequential benchmark job reads weights directly from CFS. Download them
+once from a login node using the catalog-driven batch script:
+
+```bash
+# All open-catalog models (~718 GB total)
+sbatch deployments/perlmutter/download/download-open-models-perlmutter.sh
+
+# Subset only
+MODEL_IDS="Qwen/Qwen2.5-14B-Instruct Qwen/Qwen2.5-72B-Instruct" \
+  sbatch deployments/perlmutter/download/download-open-models-perlmutter.sh
+```
+
+Weights land at `$PROJ/models/<local_dir>/` and stay there permanently.
+The benchmark job (`job-sequential-benchmark-perlmutter.sh`) reads them
+directly from CFS — nothing is staged to scratch or tmpfs.
+
+> **CFS flock note**: downloads run on login or shared-CPU nodes where CFS
+> locking works fine. It is only compute-node vLLM startup that must not
+> touch CFS for locking; the benchmark job handles this automatically by
+> redirecting all JIT caches to node-local `/tmp`.
+
+Monitor progress:
+```bash
+squeue -u $USER
+tail -f $PROJ/runs/download-open-<jobid>.log 2>/dev/null
+```
+
+---
+
 ## UMA MLIP weights on Perlmutter (prefetch **required**)
 
 The active-learning and warm-start jobs use the UMA foundation MLIP
