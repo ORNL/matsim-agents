@@ -33,11 +33,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-# Under sbatch, BASH_SOURCE resolves to /var/spool/slurmd/jobXXX/slurm_script,
-# so SCRIPT_DIR is non-empty but wrong. Check that _rocr_to_hip.sh actually exists.
-UTILS_DIR="$SCRIPT_DIR/../../utils/frontier"
-[[ ! -f "$UTILS_DIR/_rocr_to_hip.sh" ]] && \
-  UTILS_DIR="$REPO/deployments/frontier/utils"
+# Under sbatch BASH_SOURCE is wrong; anchor to the repo instead.
+UTILS_DIR="$REPO/deployments/frontier/utils"
 VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 # Default: small model that loads quickly
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/Llama-3.1-8B-Instruct}
