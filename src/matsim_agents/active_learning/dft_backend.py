@@ -89,13 +89,13 @@ def make_backend(dft_cfg) -> DFTBackend:
     """
     backend_name = dft_cfg.backend
     if backend_name == "vasp":
-        from matsim_agents.active_learning.backends.vasp import VASPBackend
+        from matsim_agents.backends.dft.vasp import VASPBackend
 
         if dft_cfg.vasp is None:
             raise ValueError("dft.backend='vasp' requires a dft.vasp block.")
         return VASPBackend(dft_cfg.vasp)
     if backend_name == "qe":
-        from matsim_agents.active_learning.backends.qe import QEBackend
+        from matsim_agents.backends.dft.qe import QEBackend
 
         if dft_cfg.qe is None:
             raise ValueError("dft.backend='qe' requires a dft.qe block.")

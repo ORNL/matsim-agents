@@ -13,7 +13,7 @@ Environment:
 
 Validation Command:
 srun -A amsc001 -q interactive -C gpu -N 1 -G 1 -t 00:10:00 \
-  bash scripts/setup/perlmutter/smoke_qe_vasp_perlmutter.sh
+  bash deployments/perlmutter/setup/smoke_qe_vasp_perlmutter.sh
 
 Observed Outcome:
 - torch CUDA visibility: True (device count: 1)

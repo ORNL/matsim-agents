@@ -26,9 +26,9 @@ notes, launchers, and non-proprietary configuration summaries are committed.
   multi-node parallel diagonalization).
 - GPU arch: A100 = `cc80`.
 - Build script:
-  [`scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh`](../scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh)
+  [`deployments/perlmutter/setup/build-vasp-gpu-perlmutter.sh`](../deployments/perlmutter/setup/build-vasp-gpu-perlmutter.sh)
 - Module helper (single source of truth for the toolchain):
-  [`scripts/setup/perlmutter/perlmutter-module-stack.sh`](../scripts/setup/perlmutter/perlmutter-module-stack.sh)
+  [`deployments/perlmutter/setup/perlmutter-module-stack.sh`](../deployments/perlmutter/setup/perlmutter-module-stack.sh)
   → `load_perlmutter_modules_nvidia`.
 - Resulting binary: `external/vasp6/src/vasp.6.6.0/bin/vasp_std`.
 
@@ -38,7 +38,7 @@ notes, launchers, and non-proprietary configuration summaries are committed.
 > `cray-mpich/8.1.30`.
 
 ```bash
-bash scripts/setup/perlmutter/build-vasp-gpu-perlmutter.sh
+bash deployments/perlmutter/setup/build-vasp-gpu-perlmutter.sh
 # useful overrides: CLEAN_BUILD=1  VASP_TARGET=std  GPU_ARCH=cc80  CUDA_VER=12.9
 ```
 
@@ -50,8 +50,8 @@ environment (module stack, `LD_LIBRARY_PATH`, and the CUDA-aware-MPI / NCCL env)
 
 | Launcher | Used by | Invocation |
 |----------|---------|------------|
-| [`scripts/launchers/perlmutter/run-vasp-gpu-perlmutter.sh`](../scripts/launchers/perlmutter/run-vasp-gpu-perlmutter.sh) | `matsim_agents.tools.vasp_relax` and the VASP warm-start benchmark, via `MATSIM_VASP_LAUNCHER` | run *inside* a work dir already holding `INCAR/POSCAR/KPOINTS/POTCAR`; **no argv** |
-| [`scripts/launchers/perlmutter/_vasp-step-perlmutter.sh`](../scripts/launchers/perlmutter/_vasp-step-perlmutter.sh) | the AL loop's DFT step (`dft.vasp.vasp_wrapper` in the AL YAML), called from `active_learning/backends/vasp.py` | `bash _vasp-step-perlmutter.sh <work_dir> <vasp_bin> <nodes> <ranks_per_node> <threads_per_rank>` |
+| [`deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh`](../deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh) | `matsim_agents.backends.dft.vasp_relax` and the VASP warm-start benchmark, via `MATSIM_VASP_LAUNCHER` | run *inside* a work dir already holding `INCAR/POSCAR/KPOINTS/POTCAR`; **no argv** |
+| [`deployments/perlmutter/launchers/_vasp-step-perlmutter.sh`](../deployments/perlmutter/launchers/_vasp-step-perlmutter.sh) | the AL loop's DFT step (`dft.vasp.vasp_wrapper` in the AL YAML), called from `active_learning/backends/vasp.py` | `bash _vasp-step-perlmutter.sh <work_dir> <vasp_bin> <nodes> <ranks_per_node> <threads_per_rank>` |
 
 Both do a full `module reset` to the VASP build toolchain, unset venv-injected
 variables that perturb the launch (`LD_PRELOAD`, `VLLM_CUDART_SO_PATH`,
@@ -175,7 +175,7 @@ internet. `fairchem-core` ignores `HF_HOME` and uses `FAIRCHEM_CACHE_DIR`
 `OSError [Errno 524]`). Prefetch once and point the cache at `$SCRATCH`:
 
 ```bash
-sbatch scripts/download/perlmutter/download-uma-perlmutter.sh
+sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
 # the job scripts export FAIRCHEM_CACHE_DIR=$SCRATCH/matsim-agents/fairchem_cache
 ```
 
@@ -185,7 +185,7 @@ Perlmutter").
 ## Running the AL loop
 
 Submit a paper case with
-[`scripts/advanced/perlmutter/job-active-learning-paper-cases-perlmutter.sh`](../scripts/advanced/perlmutter/job-active-learning-paper-cases-perlmutter.sh)
+[`deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh`](../deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh)
 (`CASE=<name>`). The script defaults to `-N 1` (serial DFT).
 
 **DFT concurrency = `SLURM_JOB_NUM_NODES / nodes_per_job`.** Request more nodes
@@ -195,11 +195,11 @@ to parallelize the VASP single-points:
 # nodes_per_job=1 cases (lifepo4, hea_bcc, hea_fcc, phosphorene):
 #   -N 4  -> 4 VASP jobs in parallel
 CASE=hea_bcc sbatch -q premium -N 4 -t 12:00:00 \
-  scripts/advanced/perlmutter/job-active-learning-paper-cases-perlmutter.sh
+  deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh
 
 # zn_formate has nodes_per_job=2 -> MUST use -N >= 2 (use -N 4 for 2-way):
 CASE=zn_formate sbatch -q premium -N 4 -t 12:00:00 \
-  scripts/advanced/perlmutter/job-active-learning-paper-cases-perlmutter.sh
+  deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh
 ```
 
 The premium QOS (`sbatch -q premium`) allows `MaxWall 2-00:00:00` but
@@ -234,7 +234,7 @@ grep -rlE "NCCL WARN|invalid device ordinal|ILLEGAL_ADDRESS" \
 ## Related repository docs
 
 - Aurora VASP build/run: [`docs/vasp-aurora.md`](vasp-aurora.md)
-- Perlmutter setup overview: [`scripts/setup/perlmutter/README.md`](../scripts/setup/perlmutter/README.md)
+- Perlmutter setup overview: [`deployments/perlmutter/setup/README.md`](../deployments/perlmutter/setup/README.md)
 - Paper AL cases (submission guide): [`examples/paper_cases/README.md`](../examples/paper_cases/README.md)
 - UMA weight prefetch: [`docs/model-download.md`](model-download.md)
 - HPC index: [`docs/hpc-platforms.md`](hpc-platforms.md)

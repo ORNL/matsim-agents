@@ -46,7 +46,7 @@ def test_legacy_hydragnn_block_is_promoted_to_mlp(tmp_path) -> None:
 
 def test_uma_backend_parses(tmp_path) -> None:
     data = _base_blocks(tmp_path)
-    data["mlp"] = {
+    data["mlip"] = {
         "backend": "uma",
         "uma": {
             "model_name": "uma-s-1p1",
@@ -64,9 +64,9 @@ def test_uma_backend_parses(tmp_path) -> None:
 
 
 def test_mlip_backend_requires_matching_block() -> None:
-    with pytest.raises(ValueError, match="requires an mlp.uma block"):
+    with pytest.raises(ValueError, match="requires an mlip.uma block"):
         MLIPConfig(backend="uma")
-    with pytest.raises(ValueError, match="requires an mlp.hydragnn block"):
+    with pytest.raises(ValueError, match="requires an mlip.hydragnn block"):
         MLIPConfig(backend="hydragnn")
 
 
@@ -81,14 +81,14 @@ def test_uma_ensemble_models_feed_ensemble_paths() -> None:
 def test_ensemble_strategy_requires_members(tmp_path) -> None:
     data = _base_blocks(tmp_path)
     data["acquisition"]["strategy"] = "ensemble"
-    data["mlp"] = {"backend": "uma", "uma": {"model_name": "uma-s-1p1"}}
+    data["mlip"] = {"backend": "uma", "uma": {"model_name": "uma-s-1p1"}}
     with pytest.raises(ValueError, match="requires at least one additional model"):
         ALConfig.model_validate(data)
 
 
 def test_trainer_enabled_requires_train_script(tmp_path) -> None:
     data = _base_blocks(tmp_path)
-    data["mlp"] = {"backend": "uma", "uma": {"model_name": "uma-s-1p1"}}
+    data["mlip"] = {"backend": "uma", "uma": {"model_name": "uma-s-1p1"}}
     data["trainer"] = {"enabled": True}  # no train_script
     with pytest.raises(ValueError, match="requires trainer.train_script"):
         ALConfig.model_validate(data)

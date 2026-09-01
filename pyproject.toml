@@ -108,6 +108,8 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 "src/matsim_agents/discovery/stability.py" = ["UP035"]
 "src/matsim_agents/discovery/wrapper.py" = ["I001", "UP035"]
 "src/matsim_agents/tools/relaxation.py" = ["E501", "I001"]
+"src/matsim_agents/backends/mlip/relaxation.py" = ["E501", "F841", "I001", "UP037"]
+"src/matsim_agents/orchestration/objective_graph.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

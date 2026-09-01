@@ -29,7 +29,7 @@ from typing import Iterable, Sequence
 from pydantic import BaseModel, Field
 
 from matsim_agents.discovery.seeds import PhaseCandidate
-from matsim_agents.state import RelaxationResult
+from matsim_agents.orchestration.state import RelaxationResult
 
 
 class PhaseStability(BaseModel):

@@ -24,7 +24,7 @@ Optional::
     MATSIM_WARMSTART_FIXTURES  # comma-sep names to restrict (default: all)
 
 A SLURM launcher that wires all of the above is provided at
-``scripts/advanced/perlmutter/job-mace-vasp-warmstart-perlmutter.sh``.
+``deployments/perlmutter/jobs/job-mace-vasp-warmstart-perlmutter.sh``.
 """
 
 from __future__ import annotations

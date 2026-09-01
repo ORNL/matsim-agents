@@ -17,7 +17,7 @@ this repository without committing the proprietary VASP source tree.
 - Local working file used for the Aurora build:
   `external/vasp6/src/vasp.6.6.0/makefile.include`
 - Aurora build script:
-  `scripts/setup/aurora/build-vasp-gpu-aurora.sh`
+  `deployments/aurora/setup/build-vasp-gpu-aurora.sh`
 
 The Aurora build started from the VASP-provided Intel oneAPI OpenMP offload
 template and was then adjusted locally for Aurora's module stack and Intel PVC
@@ -46,16 +46,16 @@ copy of the proprietary makefile.
 Run from the repository root:
 
 ```bash
-bash scripts/setup/aurora/build-vasp-gpu-aurora.sh
+bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
 ```
 
 Useful overrides:
 
 ```bash
-NCORES=32 bash scripts/setup/aurora/build-vasp-gpu-aurora.sh
-CLEAN_BUILD=1 bash scripts/setup/aurora/build-vasp-gpu-aurora.sh
-VASP_TARGET=gam bash scripts/setup/aurora/build-vasp-gpu-aurora.sh
-PREFIX=build-aurora bash scripts/setup/aurora/build-vasp-gpu-aurora.sh
+NCORES=32 bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
+CLEAN_BUILD=1 bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
+VASP_TARGET=gam bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
+PREFIX=build-aurora bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
 ```
 
 ## Validated build state
@@ -85,7 +85,7 @@ When reproducing the Aurora build, confirm these points before compiling:
 
 ## Related repository docs
 
-- Aurora setup overview: `scripts/setup/aurora/README.md`
+- Aurora setup overview: `deployments/aurora/setup/README.md`
 - HPC index: `docs/hpc-platforms.md`
 - Top-level project guide: `README.md`
 

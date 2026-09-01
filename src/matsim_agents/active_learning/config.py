@@ -255,7 +255,7 @@ class MDConfig(BaseModel):
 class LLMSeedConfig(BaseModel):
     """LLM provider used by ``seed_source.kind='prompt'``.
 
-    Defaults match :func:`matsim_agents.llm.get_chat_model`. On Frontier the
+    Defaults match :func:`matsim_agents.backends.llm.provider.get_chat_model`. On Frontier the
     typical configuration is a vLLM server running e.g. Qwen2.5-72B-Instruct.
     """
 
@@ -354,7 +354,7 @@ class VASPConfig(BaseModel):
         description=(
             "Bash wrapper that does `module reset && module load PrgEnv-cray ...` "
             "and execs `srun vasp_std`. Provided at "
-            "scripts/launchers/frontier/_vasp-step-frontier.sh."
+            "deployments/frontier/launchers/_vasp-step-frontier.sh."
         ),
     )
     incar_template: Path = Field(..., description="INCAR template with Python str.format() slots.")
@@ -373,7 +373,7 @@ class QEBackendConfig(BaseModel):
     """How to run Quantum ESPRESSO ``pw.x`` single-point SCF calculations.
 
     The Python side fills in element-aware defaults (plane-wave cutoffs,
-    smearing, k-mesh) via :func:`matsim_agents.tools.qe_relax.recommend_settings`
+    smearing, k-mesh) via :func:`matsim_agents.backends.dft.qe_relax.recommend_settings`
     so most fields are optional. Pin them explicitly for production runs.
     """
 
@@ -383,7 +383,7 @@ class QEBackendConfig(BaseModel):
         description=(
             "Bash wrapper that does `module reset && module load PrgEnv-cray ...` "
             "and execs `srun pw.x -in <input>`. Provided at "
-            "scripts/launchers/frontier/_qe-step-frontier.sh."
+            "deployments/frontier/launchers/_qe-step-frontier.sh."
         ),
     )
     pseudo_dir: Path = Field(

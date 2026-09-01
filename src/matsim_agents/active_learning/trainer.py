@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ase import Atoms
+from ase.io import read as ase_read
 from ase.io import write as ase_write
 
 from matsim_agents.active_learning.config import (
@@ -75,9 +76,30 @@ vasp_results_to_frames = dft_results_to_frames
 
 
 def append_frames_to_extxyz(frames: list[LabelledFrame], path: str | Path) -> int:
-    """Append labelled frames to an extxyz dataset. Returns the count appended."""
+    """Append frames while enforcing one DFT energy reference per dataset."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    incoming_backends = {frame.backend for frame in frames}
+    if len(incoming_backends) > 1:
+        raise ValueError(
+            "Refusing to mix DFT energy references in one dataset: "
+            f"incoming frames use {sorted(incoming_backends)}"
+        )
+    if path.exists() and path.stat().st_size and incoming_backends:
+        first = ase_read(str(path), index=0, format="extxyz")
+        existing_backend = first.info.get("dft_backend")
+        incoming_backend = next(iter(incoming_backends))
+        if not existing_backend:
+            raise ValueError(
+                f"Existing dataset {path} has no dft_backend provenance; refusing an unsafe append"
+            )
+        if existing_backend != incoming_backend:
+            raise ValueError(
+                f"Refusing to append {incoming_backend!r} energies to {path}; "
+                f"the existing dataset uses {existing_backend!r}. Apply an "
+                "explicit energy-reference transformation into a new dataset."
+            )
 
     n = 0
     for fr in frames:

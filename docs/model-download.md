@@ -213,9 +213,9 @@ hf auth whoami         # should print your username
 ### Step 1 — prefetch the weights (CPU job)
 
 ```bash
-sbatch scripts/download/perlmutter/download-uma-perlmutter.sh
+sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
 # multiple / alternate models:
-UMA_MODELS="uma-s-1p1 uma-m-1p1" sbatch scripts/download/perlmutter/download-uma-perlmutter.sh
+UMA_MODELS="uma-s-1p1 uma-m-1p1" sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
 ```
 
 The download job **stages** the cache on a flock-capable filesystem
@@ -237,8 +237,8 @@ The following jobs already set `HF_HOME=$PROJ/models/hf_cache` and
 `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1`, so they read the prefetched
 cache without any download or lock:
 
-- `scripts/advanced/perlmutter/job-active-learning-paper-cases-perlmutter.sh`
-- `scripts/advanced/perlmutter/job-uma-warmstart-perlmutter.sh`
-- `scripts/advanced/perlmutter/job-uma-vasp-warmstart-perlmutter.sh`
+- `deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh`
+- `deployments/perlmutter/jobs/job-uma-warmstart-perlmutter.sh`
+- `deployments/perlmutter/jobs/job-uma-vasp-warmstart-perlmutter.sh`
 
 If you point them at a different `HF_HOME`, prefetch into that directory first.

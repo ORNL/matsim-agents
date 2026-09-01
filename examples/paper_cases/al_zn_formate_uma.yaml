@@ -79,7 +79,7 @@ dft:
 
   vasp:
     vasp_bin:         ${VASP_BIN}
-    vasp_wrapper:     ${PROJ_ROOT}/scripts/launchers/perlmutter/_vasp-step-perlmutter.sh
+    vasp_wrapper:     ${PROJ_ROOT}/deployments/perlmutter/launchers/_vasp-step-perlmutter.sh
     incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null
     potcar_dir:       ${POTCAR_DIR}

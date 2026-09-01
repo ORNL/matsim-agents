@@ -39,7 +39,7 @@ Both DFT engines are launched through user-provided launcher commands
 (strings that accept the run directory as the first argument). On Aurora
 the matching wrappers are:
 
-    MATSIM_QE_LAUNCHER=scripts/launchers/aurora/run-pw-gpu-aurora.sh
+    MATSIM_QE_LAUNCHER=deployments/aurora/launchers/run-pw-gpu-aurora.sh
     MATSIM_VASP_LAUNCHER=<path-to-your-aurora-vasp-launcher>
 
 Each launcher is expected to:

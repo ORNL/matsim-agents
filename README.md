@@ -304,8 +304,8 @@ GTL pins, ROCm/Cray cross-builds, CUDA-aware MPI) baked in.
 | **vLLM model server**               | ROCm 7.2.0, source build          | oneAPI                                  | CUDA                            |
 | **VASP 6.6**                        | `build-vasp-gpu-frontier.sh`      | `build-vasp-gpu-aurora.sh` (`vasp_std`/`vasp_gam`/`vasp_ncl`) | (use site module if available)  |
 | **Quantum ESPRESSO `pw.x` (GPU)**   | OpenMP target offload to gfx90a   | `QE_GPU="openmp;oneapi"`, PVC arch      | CUDA build                      |
-| **Setup entry point**               | `scripts/setup/frontier/install-rocm72.sh` | `scripts/setup/aurora/install_matsim_aurora.sh` | `scripts/setup/perlmutter/install_matsim_perlmutter.sh` |
-| **Active-learning launcher**        | `scripts/launchers/frontier/run-active-learning-frontier.sh` | (file-coupled via SLURM)                | (file-coupled via SLURM)        |
+| **Setup entry point**               | `deployments/frontier/setup/install-rocm72.sh` | `deployments/aurora/setup/install_matsim_aurora.sh` | `deployments/perlmutter/setup/install_matsim_perlmutter.sh` |
+| **Active-learning launcher**        | `deployments/frontier/launchers/run-active-learning-frontier.sh` | (file-coupled via SLURM)                | (file-coupled via SLURM)        |
 | **Per-platform docs**               | [docs/quantum-espresso-frontier.md](docs/quantum-espresso-frontier.md) | [docs/quantum-espresso-aurora.md](docs/quantum-espresso-aurora.md), [docs/vasp-aurora.md](docs/vasp-aurora.md) | [docs/quantum-espresso-perlmutter.md](docs/quantum-espresso-perlmutter.md) |
 
 Single entry-point index covering all three systems:
@@ -333,22 +333,22 @@ Design principles that keep the code portable:
 ## Running on Frontier (OLCF)
 
 > **⚠️ Frontier users — read this first:**
-> See [`scripts/docs/frontier/README-frontier.md`](scripts/docs/frontier/README-frontier.md)
+> See [`deployments/frontier/docs/README-frontier.md`](deployments/frontier/docs/README-frontier.md)
 > for required setup and known issues. **Critically: a prebuilt `tvm_ffi`
 > shared library must exist at
 > `$PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so`
 > (where `$PROJ` is your project's proj-shared directory) or every vLLM job
 > will silently hang forever** (the script preflight check will fail-fast in
 > 2 seconds with a clear error message). If missing, rebuild with
-> `sbatch scripts/setup/frontier/prebuild-tvm-ffi-frontier.sh`.
+> `sbatch deployments/frontier/setup/prebuild-tvm-ffi-frontier.sh`.
 
 ### Quantum ESPRESSO (DFT) backend on Frontier
 
 The repo also ships a fully reproducible recipe for building Quantum
 ESPRESSO `develop` with **AMD MI250X (gfx90a) OpenMP target offload**:
 
-- Build script: [`scripts/setup/frontier/build-qe-gpu-frontier.sh`](scripts/setup/frontier/build-qe-gpu-frontier.sh)
-- Run launcher: [`scripts/launchers/frontier/run-pw-gpu-frontier.sh`](scripts/launchers/frontier/run-pw-gpu-frontier.sh)
+- Build script: [`deployments/frontier/setup/build-qe-gpu-frontier.sh`](deployments/frontier/setup/build-qe-gpu-frontier.sh)
+- Run launcher: [`deployments/frontier/launchers/run-pw-gpu-frontier.sh`](deployments/frontier/launchers/run-pw-gpu-frontier.sh)
 - Full docs: [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md)
 - Platform index: [`docs/hpc-platforms.md`](docs/hpc-platforms.md)
 
@@ -368,9 +368,9 @@ are deliberately kept isolated and coupled only through Slurm + files.
 VASP 6.6 is also wired up on Frontier MI250X for the active-learning
 labeller path:
 
-- Build script: [`scripts/setup/frontier/build-vasp-gpu-frontier.sh`](scripts/setup/frontier/build-vasp-gpu-frontier.sh)
+- Build script: [`deployments/frontier/setup/build-vasp-gpu-frontier.sh`](deployments/frontier/setup/build-vasp-gpu-frontier.sh)
 - In-allocation step launcher (called by the AL loop):
-  [`scripts/launchers/frontier/_vasp-step-frontier.sh`](scripts/launchers/frontier/_vasp-step-frontier.sh)
+  [`deployments/frontier/launchers/_vasp-step-frontier.sh`](deployments/frontier/launchers/_vasp-step-frontier.sh)
 
 As with QE, the proprietary VASP source itself is **not** committed;
 only the build recipe is. The repository assumes you have a licensed
@@ -383,8 +383,8 @@ VASP source tree under `external/vasp6/`.
 The repository also includes a validated build/run path for Quantum
 ESPRESSO with Intel GPU offload on Aurora.
 
-- Build script: [`scripts/setup/aurora/build-qe-gpu-aurora.sh`](scripts/setup/aurora/build-qe-gpu-aurora.sh)
-- Run launcher: [`scripts/launchers/aurora/run-pw-gpu-aurora.sh`](scripts/launchers/aurora/run-pw-gpu-aurora.sh)
+- Build script: [`deployments/aurora/setup/build-qe-gpu-aurora.sh`](deployments/aurora/setup/build-qe-gpu-aurora.sh)
+- Run launcher: [`deployments/aurora/launchers/run-pw-gpu-aurora.sh`](deployments/aurora/launchers/run-pw-gpu-aurora.sh)
 - Full docs: [`docs/quantum-espresso-aurora.md`](docs/quantum-espresso-aurora.md)
 - Platform index: [`docs/hpc-platforms.md`](docs/hpc-platforms.md)
 
@@ -397,7 +397,7 @@ Validated outcome in this repo:
 Quick run pattern:
 
 ```bash
-bash scripts/launchers/aurora/run-pw-gpu-aurora.sh path/to/pw.in
+bash deployments/aurora/launchers/run-pw-gpu-aurora.sh path/to/pw.in
 ```
 
 Aurora QE and the Python/ML environment are intentionally isolated and
@@ -408,15 +408,15 @@ source itself. The recorded makefile lineage is documented in
 [`docs/vasp-aurora.md`](docs/vasp-aurora.md), including the upstream template
 used (`arch/makefile.include.oneapi_omp_off`) and the local working makefile
 path under `external/vasp6/`. The Aurora build entry point is
-[`scripts/setup/aurora/build-vasp-gpu-aurora.sh`](scripts/setup/aurora/build-vasp-gpu-aurora.sh),
+[`deployments/aurora/setup/build-vasp-gpu-aurora.sh`](deployments/aurora/setup/build-vasp-gpu-aurora.sh),
 which defaults to building `vasp_std`, `vasp_gam`, and `vasp_ncl` in one run.
 
 ### vLLM on Aurora (Intel PVC)
 
 Aurora supports vLLM-XPU serving and inference via the official ALCF `frameworks` module stack (Python 3.12, torch-xpu, ipex, vllm, ray, triton). The repo provides:
 
-- **Single-node smoke test:** [`scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh`](scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh)
-- **Advanced launchers:** [`scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh`](scripts/advanced/aurora/job-serve-multinode-vllm-aurora.sh) (multi-node Ray serve), plus single-relax, active-learning, and QE warmstart launchers
+- **Single-node smoke test:** [`deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh`](deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh)
+- **Advanced launchers:** [`deployments/aurora/jobs/job-serve-multinode-vllm-aurora.sh`](deployments/aurora/jobs/job-serve-multinode-vllm-aurora.sh) (multi-node Ray serve), plus single-relax, active-learning, and QE warmstart launchers
 
 **Key requirements and gotchas:**
 
@@ -431,39 +431,39 @@ Aurora supports vLLM-XPU serving and inference via the official ALCF `frameworks
 
 1. Build the vLLM XPU venv (if not already):
   ```bash
-  bash scripts/setup/aurora/install-vllm-xpu-aurora.sh
+  bash deployments/aurora/setup/install-vllm-xpu-aurora.sh
   ```
 2. Download a supported model (e.g., Mistral-Small-24B):
   ```bash
   source /path/to/hydragnn_venv/bin/activate
-  python scripts/setup/aurora/hf_download.py mistralai/Mistral-Small-24B-Instruct-2501
+  python deployments/aurora/setup/hf_download.py mistralai/Mistral-Small-24B-Instruct-2501
   ```
 3. Submit the smoke test:
   ```bash
-  qsub scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh
+  qsub deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh
   # or override model:
-  qsub -v SMOKE_MODEL_PATH=$PROJ/models/Qwen2.5-32B-Instruct scripts/smoke-tests/aurora/smoke-vllm-singlenode-aurora.sh
+  qsub -v SMOKE_MODEL_PATH=$PROJ/models/Qwen2.5-32B-Instruct deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh
   ```
 4. Inspect results in `runs/smoke-vllm-singlenode-<jobid>/`.
 
 If the job fails, check `vllm.log` for device mask, TMPDIR, or oneCCL errors. Each error layer is documented in the script comments.
 
-For multi-node serving, see the advanced launchers in `scripts/advanced/aurora/`.
+For multi-node serving, see the advanced launchers in `deployments/aurora/jobs/`.
 
 ## Running on Perlmutter (NERSC)
 
 Perlmutter (NERSC, NVIDIA A100) is supported as a first-class target
 for both the Python/ML stack and Quantum ESPRESSO GPU.
 
-- Setup overview: [`scripts/setup/perlmutter/README.md`](scripts/setup/perlmutter/README.md)
-- Matsim env install: [`scripts/setup/perlmutter/install_matsim_perlmutter.sh`](scripts/setup/perlmutter/install_matsim_perlmutter.sh)
-- QE GPU build: [`scripts/setup/perlmutter/build-qe-gpu-perlmutter.sh`](scripts/setup/perlmutter/build-qe-gpu-perlmutter.sh)
-  (CPU-only variant: [`build-qe-cpu-perlmutter.sh`](scripts/setup/perlmutter/build-qe-cpu-perlmutter.sh))
-- QE detailed build guide: [`scripts/setup/perlmutter/QE-BUILD-GUIDE.md`](scripts/setup/perlmutter/QE-BUILD-GUIDE.md)
+- Setup overview: [`deployments/perlmutter/setup/README.md`](deployments/perlmutter/setup/README.md)
+- Matsim env install: [`deployments/perlmutter/setup/install_matsim_perlmutter.sh`](deployments/perlmutter/setup/install_matsim_perlmutter.sh)
+- QE GPU build: [`deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh`](deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh)
+  (CPU-only variant: [`build-qe-cpu-perlmutter.sh`](deployments/perlmutter/setup/build-qe-cpu-perlmutter.sh))
+- QE detailed build guide: [`deployments/perlmutter/setup/QE-BUILD-GUIDE.md`](deployments/perlmutter/setup/QE-BUILD-GUIDE.md)
 - Full QE docs: [`docs/quantum-espresso-perlmutter.md`](docs/quantum-espresso-perlmutter.md)
 - Launchers:
-  - QE `pw.x` GPU: [`scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh`](scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh)
-  - QE warm-start benchmark: [`scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh`](scripts/launchers/perlmutter/run-qe-warmstart-benchmark-perlmutter.sh)
+  - QE `pw.x` GPU: [`deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh`](deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh)
+  - QE warm-start benchmark: [`deployments/perlmutter/launchers/run-qe-warmstart-benchmark-perlmutter.sh`](deployments/perlmutter/launchers/run-qe-warmstart-benchmark-perlmutter.sh)
   - Single-node / multi-node / all-models LLM smoke tests:
     `launch-test-singlenode-resume-perlmutter.sh`,
     `launch-test-multinode-perlmutter.sh`,
@@ -472,7 +472,7 @@ for both the Python/ML stack and Quantum ESPRESSO GPU.
 Quick run pattern:
 
 ```bash
-./scripts/launchers/perlmutter/run-pw-gpu-perlmutter.sh path/to/pw.in
+./deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh path/to/pw.in
 ```
 
 As on Frontier and Aurora, the DFT module stack and the Python/ML
@@ -503,7 +503,7 @@ cd matsim-agents
 ./scripts/setup_env.sh
 
 # Frontier (OLCF, ROCm 7.2 — current standard)
-bash scripts/setup/frontier/install-rocm72.sh
+bash deployments/frontier/setup/install-rocm72.sh
 
 # Perlmutter (NERSC)
 PLATFORM=perlmutter ./scripts/setup_env.sh
@@ -512,7 +512,7 @@ PLATFORM=perlmutter ./scripts/setup_env.sh
 Available `PLATFORM` values for the generic `setup_env.sh`:
 `workstation` (default), `perlmutter`, `aurora`, `andes`,
 `frontier-rocm71`, `frontier-rocm64` (legacy — the supported Frontier
-path is `scripts/setup/frontier/install-rocm72.sh`).
+path is `deployments/frontier/setup/install-rocm72.sh`).
 
 ### ROCm version matrix on Frontier
 
@@ -523,7 +523,7 @@ in the scripts and what you should expect at runtime:
 | Backend | Module | Why this version |
 |---|---|---|
 | **HydraGNN venv** (used by every Frontier launcher: vLLM, HF, downloaders, smoke tests, six-model bench) | `rocm/7.2.0` | Current Frontier-supported PyTorch + ROCm path; built once into `HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72/` |
-| **vLLM model server** | `rocm/7.2.0` | Shares the HydraGNN ROCm 7.2 venv; built from source via [`scripts/setup/frontier/build-vllm-rocm72.sh`](scripts/setup/frontier/build-vllm-rocm72.sh) |
+| **vLLM model server** | `rocm/7.2.0` | Shares the HydraGNN ROCm 7.2 venv; built from source via [`deployments/frontier/setup/build-vllm-rocm72.sh`](deployments/frontier/setup/build-vllm-rocm72.sh) |
 | **Quantum ESPRESSO GPU** | `rocm/6.2.4` *(forced)* | Frontier's `cray-mpich/8.1.31` GTL `libmpi_gtl_hsa.so` is hard-linked against `libamdhip64.so.6` (rocm 6.x SONAME). rocm/7.x ships `.so.7` and breaks the MPI Fortran link probe at CMake configure. Pin documented in [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md). |
 
 QE and the Python/ML stacks are deliberately never co-loaded in the same
@@ -600,6 +600,39 @@ export MATSIM_VLLM_BASE_URL=http://node:8000/v1
 export MATSIM_VLLM_API_KEY=EMPTY            # only if vLLM is auth-protected
 export MATSIM_HF_MODEL_PATH=/path/to/model  # huggingface provider: local model dir
 ```
+
+### First-class open-model support
+
+The generic `vllm` and `huggingface` providers can address arbitrary model
+identifiers, but a checkpoint is called **first-class supported** only when it
+is present in
+[`deployments/common/open-model-catalog.json`](deployments/common/open-model-catalog.json).
+Every catalog entry has all of the following:
+
+- a canonical Hugging Face checkpoint identifier;
+- a named endpoint environment variable plus the shared
+  `MATSIM_VLLM_BASE_URL` fallback;
+- entries in both Frontier benchmark manifests;
+- download support on Frontier, Aurora, and Perlmutter; and
+- inclusion in the sequential model benchmark.
+
+CI enforces this contract in `tests/test_open_model_catalog.py`. Adding a model
+to the catalog without adding any required deployment path fails the test, so
+the backend-compatible and first-class sets cannot silently drift apart.
+
+The frontier open-model catalog currently covers Kimi K2.5, GLM-4.7 and
+GLM-4.7-Flash, DeepSeek-V3.2, Mistral Large 3, Qwen3-235B-A22B Instruct and
+Thinking, Gemma 4, and Devstral 2. These checkpoints vary enormously in size.
+Catalog membership means the repository knows how to select, download, and
+benchmark the model; it does not mean that every model fits on one node. Use
+the multi-node serving launcher and choose tensor parallelism appropriate to
+the checkpoint and facility.
+
+Model-specific vLLM behavior continues to be controlled by the serving
+environment. In particular, use a vLLM release that supports the checkpoint's
+architecture and chat template, and pass any required reasoning/tool parser
+arguments through the serving command. A successfully downloaded checkpoint
+is not treated as a successful deployment until the smoke request completes.
 
 ---
 
@@ -838,7 +871,7 @@ downstream scorers can filter or weight them.
 ### Single relaxation
 
 ```python
-from matsim_agents.tools.relaxation import RelaxStructureInput, _run
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 
 result = _run(RelaxStructureInput(
     structure_path="structures/mos2.vasp",
@@ -889,8 +922,8 @@ result = explore_composition(
 
 ```python
 import uuid
-from matsim_agents.graph import build_graph
-from matsim_agents.state import MatSimState
+from matsim_agents.orchestration.objective_graph import build_graph
+from matsim_agents.orchestration.state import MatSimState
 
 graph = build_graph()
 final = graph.invoke(
@@ -1059,7 +1092,7 @@ matsim-agents al validate-config examples/active_learning/al_config.example.yaml
 # 3. Submit on Frontier
 sbatch --export=ALL,AL_CONFIG=$PWD/examples/active_learning/al_config.example.yaml \
     -N 64 -t 12:00:00 \
-    scripts/launchers/frontier/run-active-learning-frontier.sh
+    deployments/frontier/launchers/run-active-learning-frontier.sh
 ```
 
 ### Backend toggle
@@ -1123,7 +1156,7 @@ launcher details, and per-backend ROCm/MPI gotchas — lives in
 
 ## Codabench Competition
 
-The `codabench_competition/` directory contains a fully self-contained
+The `benchmarks/codabench/` directory contains a fully self-contained
 [Codabench](https://www.codabench.org/) challenge called the
 **Matsim-Agents Materials Discovery Challenge**.
 
@@ -1173,7 +1206,7 @@ the competition. To switch to final ranking, change the key prefix from
 
 ### Baselines
 
-Four baselines are provided in `codabench_competition/baselines/`:
+Four baselines are provided in `benchmarks/codabench/baselines/`:
 
 | Baseline | Architecture | Source |
 |----------|-------------|--------|
@@ -1185,7 +1218,7 @@ Four baselines are provided in `codabench_competition/baselines/`:
 Run any or all baselines:
 
 ```bash
-cd codabench_competition
+cd benchmarks/codabench
 python run_baselines.py --model mace        # MACE-MP-0
 python run_baselines.py --model hydragnn    # HydraGNN
 python run_baselines.py --model uma         # UMA (requires fairchem-core ≥2.20)
@@ -1201,7 +1234,7 @@ accepted before use at <https://huggingface.co/facebook/UMA> and
 ### Directory layout
 
 ```
-codabench_competition/
+benchmarks/codabench/
 ├── competition.yaml             # Codabench bundle manifest & leaderboard config
 ├── run_baselines.py             # entry point: --model mace/hydragnn/uma/allscaip/all
 ├── evaluate.py                  # local evaluation helper (mirrors the Codabench scorer)
@@ -1231,7 +1264,7 @@ codabench_competition/
     └── MODEL_INTERFACE.md       # how to write a custom MLIP adapter
 ```
 
-See [`codabench_competition/starting_kit/README.md`](codabench_competition/starting_kit/README.md)
+See [`benchmarks/codabench/starting_kit/README.md`](benchmarks/codabench/starting_kit/README.md)
 for the full participant guide including submission formats.
 
 ---
@@ -1333,38 +1366,66 @@ matsim-agents/
 │           ├── README-frontier.md
 │           └── README-six-model-benchmark.md
 ├── src/matsim_agents/
-│   ├── state.py                  # typed shared LangGraph state
-│   ├── graph.py                  # planner -> executor -> uq_gate -> analyst
-│   ├── llm.py                    # Ollama | vLLM | OpenAI | Anthropic | HuggingFace
 │   ├── cli.py                    # `matsim-agents run|plan|chat|supervisor-run|al`
-│   ├── supervisor.py             # LangGraph supervisor (discovery -> UQ -> optional AL handoff)
 │   ├── chat.py                   # interactive discovery REPL
+│   ├── supervisor.py             # compat alias → orchestration/composition_graph
+│   ├── graph.py                  # compat alias → orchestration/objective_graph
+│   ├── state.py                  # compat alias → orchestration/state
+│   ├── llm.py                    # compat alias → backends/llm/provider
+│   │
+│   ├── orchestration/            # typed workflow state, graphs, and policies
+│   │   ├── state.py              # MatSimState, RelaxationResult, TaskSpec
+│   │   ├── objective_graph.py    # planner -> executor -> uq_gate -> analyst
+│   │   ├── composition_graph.py  # supervisor (discovery -> UQ -> optional AL)
+│   │   └── policies/             # UQ handoff policy helpers
+│   │
+│   ├── backends/                 # five stable backend interfaces (Protocols)
+│   │   ├── llm/
+│   │   │   ├── __init__.py       # LLMBackend type alias (BaseChatModel)
+│   │   │   └── provider.py       # get_chat_model() — Ollama | vLLM | OpenAI | Anthropic | HF
+│   │   ├── mlip/
+│   │   │   ├── __init__.py       # MLIPBackend Protocol (as_calculator, relax)
+│   │   │   └── relaxation.py     # HydraGNN + UMA + ASE relaxation tool
+│   │   └── dft/
+│   │       ├── __init__.py       # DFTBackend Protocol, DFTJobSpec, DFTResult
+│   │       ├── vasp.py           # VASP 6.6 DFTBackend implementation
+│   │       ├── vasp_relax.py     # VASP relaxer (scf|relax|vc-relax|vc-relax-shape)
+│   │       ├── qe.py             # QE DFTBackend implementation
+│   │       └── qe_relax.py       # QE pw.x relaxer (scf|relax|vc-relax)
+│   │
+│   ├── execution/                # HPC-neutral resource, launch, and provenance
+│   │   ├── __init__.py           # ExecutionPlatform Protocol, ResourceRequest, RunStore
+│   │   ├── resources.py          # ResourceRequest frozen dataclass
+│   │   ├── launchers.py          # Launcher Protocol stub
+│   │   └── provenance.py         # RunStore Protocol + JsonlRunStore implementation
+│   │
 │   ├── agents/
 │   │   ├── planner.py
 │   │   ├── executor.py
 │   │   └── analyst.py
 │   ├── tools/
-│   │   ├── relaxation.py         # HydraGNN + ASE relaxation tool
-│   │   ├── qe_relax.py           # Quantum ESPRESSO pw.x relaxer (scf|relax|vc-relax)
-│   │   ├── vasp_relax.py         # VASP relaxer (scf|relax|vc-relax|vc-relax-shape)
+│   │   ├── relaxation.py         # compat alias → backends/mlip/relaxation
+│   │   ├── qe_relax.py           # compat alias → backends/dft/qe_relax
+│   │   ├── vasp_relax.py         # compat alias → backends/dft/vasp_relax
 │   │   ├── warmstart_benchmark_qe.py   # HydraGNN warm-start vs cold-start QE benchmark
 │   │   └── warmstart_benchmark_vasp.py # HydraGNN warm-start vs cold-start VASP benchmark
-│   └── discovery/
-│       ├── composition.py        # formula parsing
-│       ├── seeds.py              # crystal-phase seed generation (AFLOW + pyXtal)
-│       ├── stability.py          # ΔE/atom ranking & |F|max proxy
-│       └── wrapper.py            # explore_composition()
+│   ├── discovery/
+│   │   ├── composition.py        # formula parsing
+│   │   ├── seeds.py              # crystal-phase seed generation (AFLOW + pyXtal)
+│   │   ├── stability.py          # ΔE/atom ranking & |F|max proxy
+│   │   └── wrapper.py            # explore_composition()
 │   └── active_learning/          # HydraGNN <-> DFT active-learning loop
 │       ├── config.py             # pydantic schema + ${VAR} substitution
 │       ├── loop.py               # top-level driver (matsim-agents al run)
 │       ├── candidates.py         # MD sampling + per-step candidate capture
 │       ├── uncertainty.py        # ensemble / MC-dropout scoring + diversity
 │       ├── seeds.py              # paths or LLM-prompted seed materialisation
-│       ├── trainer.py            # HydraGNN retraining wrapper
-│       ├── dft_backend.py        # backend-agnostic Protocol
+│       ├── trainer.py            # HydraGNN / MACE retraining wrappers
+│       ├── dft_backend.py        # DFTBackend Protocol source (re-exported via backends/dft)
 │       ├── dft_runner.py         # in-allocation parallel job dispatcher
 │       ├── vasp_io.py            # POSCAR/INCAR/KPOINTS/POTCAR writers + parser
-│       └── backends/
+│       ├── vasp_runner.py        # VASP step runner
+│       └── backends/             # AL-specific DFT adapters (single-point only)
 │           ├── vasp.py           # VASP 6.6 single-point labeller
 │           └── qe.py             # Quantum ESPRESSO pw.x single-point labeller
 ├── examples/
@@ -1426,7 +1487,7 @@ TaskSpec(
 
 ### `RelaxStructureInput` / `RelaxationResult`
 
-See [`src/matsim_agents/tools/relaxation.py`](src/matsim_agents/tools/relaxation.py) — fields mirror the
+See [`src/matsim_agents/backends/mlip/relaxation.py`](src/matsim_agents/backends/mlip/relaxation.py) — fields mirror the
 options of the upstream HydraGNN ASE script
 (`structure_optimization_ASE.py`).
 
@@ -1434,19 +1495,19 @@ options of the upstream HydraGNN ASE script
 
 For cases where the user wants a *real* DFT relaxation rather than the
 cheap HydraGNN one (e.g. validating a discovered structure, refining a
-final candidate), two sibling drivers ship under `src/matsim_agents/tools/`
-with matching APIs:
+final candidate), two drivers ship under `src/matsim_agents/backends/dft/`
+with matching APIs (also importable via the `matsim_agents.tools` compat aliases):
 
 | Module | Backend | Calculation modes | Composition-aware defaults |
 |---|---|---|---|
-| [`qe_relax.py`](src/matsim_agents/tools/qe_relax.py) | Quantum ESPRESSO `pw.x` | `scf`, `relax`, `vc-relax` | `ecutwfc` (SSSP-PBE-eff-1.3 table), smearing, k-mesh |
-| [`vasp_relax.py`](src/matsim_agents/tools/vasp_relax.py) | VASP `vasp_std` | `scf`, `relax`, `vc-relax`, `vc-relax-shape` | `ENCUT` = 1.3 × max(ENMAX) from POTCARs (else 520 eV); `ISMEAR/SIGMA/KSPACING` flip metallic vs insulator |
+| [`backends/dft/qe_relax.py`](src/matsim_agents/backends/dft/qe_relax.py) | Quantum ESPRESSO `pw.x` | `scf`, `relax`, `vc-relax` | `ecutwfc` (SSSP-PBE-eff-1.3 table), smearing, k-mesh |
+| [`backends/dft/vasp_relax.py`](src/matsim_agents/backends/dft/vasp_relax.py) | VASP `vasp_std` | `scf`, `relax`, `vc-relax`, `vc-relax-shape` | `ENCUT` = 1.3 × max(ENMAX) from POTCARs (else 520 eV); `ISMEAR/SIGMA/KSPACING` flip metallic vs insulator |
 
 Both follow the same workflow:
 
 ```python
 from ase.build import bulk
-from matsim_agents.tools.vasp_relax import (
+from matsim_agents.backends.dft.vasp_relax import (
     recommend_settings, prepare_relax_workdir, run_vasp,
 )
 
