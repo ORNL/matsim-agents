@@ -4,10 +4,12 @@
 #SBATCH -e %x-%j.err
 #SBATCH -t 08:00:00
 #SBATCH -N 1
-#SBATCH -C gpu
-#SBATCH -q regular
+#SBATCH -p gpu_ss11
+#SBATCH -q gpu_regular
+#SBATCH -A m5216_g
+#SBATCH -C "gpu&a100"
 #SBATCH --gpus-per-node=4
-#SBATCH -c 64
+#SBATCH -c 32
 # ---------------------------------------------------------------------------
 # matsim-agents: sequential single-node model benchmark on NERSC Perlmutter.
 #
