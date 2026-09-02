@@ -601,7 +601,7 @@ in the scripts and what you should expect at runtime:
 
 | Backend | Module | Why this version |
 |---|---|---|
-| **HydraGNN venv** (used by every Frontier launcher: vLLM, HF, downloaders, smoke tests, six-model bench) | `rocm/7.2.0` | Current Frontier-supported PyTorch + ROCm path; built once into `HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72/` |
+| **HydraGNN venv** (used by every Frontier launcher: vLLM, HF, downloaders, smoke tests, six-model bench) | `rocm/7.2.0` | Current Frontier-supported PyTorch + ROCm path; built once into `matsim-agents/.venv/` |
 | **vLLM model server** | `rocm/7.2.0` | Shares the HydraGNN ROCm 7.2 venv; built from source via [`deployments/frontier/setup/build-vllm-rocm72.sh`](deployments/frontier/setup/build-vllm-rocm72.sh) |
 | **Quantum ESPRESSO GPU** | `rocm/6.2.4` *(forced)* | Frontier's `cray-mpich/8.1.31` GTL `libmpi_gtl_hsa.so` is hard-linked against `libamdhip64.so.6` (rocm 6.x SONAME). rocm/7.x ships `.so.7` and breaks the MPI Fortran link probe at CMake configure. Pin documented in [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md). |
 
@@ -616,8 +616,8 @@ Environment overrides accepted by the installer:
 | `HYDRAGNN_REPO` | HydraGNN git URL | `https://github.com/ORNL/HydraGNN.git` |
 | `HYDRAGNN_REF` | Branch/tag/commit | `main` |
 | `HYDRAGNN_DIR` | Reuse an existing HydraGNN checkout | sibling `HydraGNN` checkout |
-| `INSTALL_ROOT` | Environment and compiled dependency root | facility-specific HydraGNN installation root |
-| `VENV_PATH` | Override the single target Python environment | `${INSTALL_ROOT}/hydragnn_venv*` |
+| `INSTALL_ROOT` | Compiled HydraGNN dependency build root | `.hpc-build/<facility>` |
+| `VENV_PATH` | Override the matsim-owned Python environment | `.venv` |
 | `MATSIM_EXTRAS` | matsim-agents extras installed in the target environment | `hydragnn,dev,openai,ollama,anthropic,huggingface` |
 | `INSTALL_UMA` | Install and import-check FairChem for UMA workflows | `0` |
 | `BOOTSTRAP_OLLAMA` | Set to `1` to install the Ollama daemon, start it, and pull `OLLAMA_MODELS` (workstation only) | `0` |

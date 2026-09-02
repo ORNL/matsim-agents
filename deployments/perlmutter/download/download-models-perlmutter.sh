@@ -41,7 +41,7 @@ PROJ="$(dirname "${REPO}")"
 
 # Use the shared HydraGNN Perlmutter environment by default.
 # Override only with MATSIM_PERLMUTTER_VENV when you explicitly know what you are doing.
-VENV_SHARED_DEFAULT="$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
+VENV_SHARED_DEFAULT="$REPO/.venv"
 VENV="${MATSIM_PERLMUTTER_VENV:-$VENV_SHARED_DEFAULT}"
 MODEL_ROOT="${MODEL_ROOT:-$PROJ/models}"
 RUN_DIR="$PROJ/runs/download-models-${SLURM_JOB_ID:-manual}"

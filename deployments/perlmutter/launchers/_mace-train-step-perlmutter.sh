@@ -35,7 +35,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV_ROOT="${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
+VENV_ROOT="${REPO}/.hpc-build/perlmutter"
 VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}"
 [[ ! -d "${VENV}" ]] && { echo "ERROR: MACE venv not found: ${VENV}" >&2; exit 2; }
 

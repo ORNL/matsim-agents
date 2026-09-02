@@ -53,8 +53,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-INSTALL_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV=$INSTALL_ROOT/hydragnn_venv          # eval Python + matsim_agents
+INSTALL_ROOT=$REPO/.hpc-build/perlmutter
+VENV=$REPO/.venv          # eval Python + matsim_agents
 VLLM_VENV=$INSTALL_ROOT/vllm_venv         # isolated vLLM server (torch 2.11 / cu13)
 MODEL_ROOT=$PROJ/models
 RUN_DIR=$PROJ/runs/seq-model-bench-${SLURM_JOB_ID:-$$}
@@ -268,7 +268,7 @@ for entry in "${MODEL_LIST[@]}"; do
     export TORCH_HOME="$_JIT_TMP/torch-home"
     export TMPDIR="$_JIT_TMP/tmp"
     mkdir -p "$TMPDIR"
-    _PY_HDR="$INSTALL_ROOT/hydragnn_venv/include/python3.11"
+    _PY_HDR="$REPO/.venv/include/python3.11"
     export CPATH="${_PY_HDR}:${CPATH:-}"
     export C_INCLUDE_PATH="${_PY_HDR}:${C_INCLUDE_PATH:-}"
     exec "$VLLM_VENV/bin/vllm" serve "$LOCAL_PATH" \

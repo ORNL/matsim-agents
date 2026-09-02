@@ -66,7 +66,7 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
+VENV_ROOT=$REPO/.hpc-build/perlmutter
 
 # ── case -> AL YAML mapping ──────────────────────────────────────────────────
 CASE="${CASE:-hea_bcc}"
@@ -103,10 +103,10 @@ source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
 case "$MLIP_BACKEND" in
-  uma)      VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}" ;;
+  uma)      VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}" ;;
   mace)     VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}" ;;
-  hydragnn) VENV="${MATSIM_HYDRAGNN_VENV:-${VENV_ROOT}/hydragnn_venv}" ;;
-  *)        VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}" ;;
+  hydragnn) VENV="${MATSIM_HYDRAGNN_VENV:-${REPO}/.venv}" ;;
+  *)        VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}" ;;
 esac
 [[ ! -d "${VENV}" ]] && { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
 # mace_venv is a plain venv; hydragnn_venv is a conda environment.

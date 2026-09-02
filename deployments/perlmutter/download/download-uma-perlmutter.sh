@@ -46,8 +46,8 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 
 # Unified HydraGNN/FairChem environment.
-VENV_ROOT="$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
-VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}"
+VENV_ROOT="$REPO/.hpc-build/perlmutter"
+VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}"
 RUN_DIR="$PROJ/runs/download-uma-${SLURM_JOB_ID:-manual}"
 mkdir -p "$RUN_DIR"
 

@@ -6,6 +6,7 @@ __pycache__/
 build/
 dist/
 .venv/
+.hpc-build/
 venv/
 perlmutter_venv/
 scripts/perlmutter_venv/

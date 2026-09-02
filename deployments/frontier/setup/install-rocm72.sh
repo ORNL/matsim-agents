@@ -19,15 +19,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=$REPO/.venv
 VLLM_SRC=$PROJ/cache/vllm-src/vllm
 PROTECTED_REQS=$REPO/deployments/frontier/setup/vllm-rocm72-protected-requirements.txt
 
 # ── Phase 1: HydraGNN environment (login node, internet required) ─────────────
 echo "=== Phase 1: HydraGNN ROCm 7.2 environment ==="
 export SKIP_VLLM=1
-cd $PROJ/HydraGNN/installation_DOE_supercomputers
-bash hydragnn_installation_bash_script_frontier-rocm72.sh
+bash "${REPO}/deployments/frontier/setup/install.sh"
 
 # Pin to versions satisfying both HydraGNN Phase 1 AND vLLM Phase 2 constraints.
 # Done here so Phase 2 never needs to reassert them.

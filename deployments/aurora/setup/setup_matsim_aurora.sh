@@ -12,8 +12,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MATSIM_AGENTS_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-$(cd "${MATSIM_AGENTS_ROOT}/.." && pwd)/HydraGNN}"
-DEFAULT_VENV="${HYDRAGNN_ROOT}/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv"
+DEFAULT_VENV="${MATSIM_AGENTS_ROOT}/.venv"
 LEGACY_VENV="${MATSIM_AGENTS_ROOT}/aurora_venv"
 PREFERRED_VENV="${MATSIM_AURORA_VENV:-${DEFAULT_VENV}}"
 
@@ -28,7 +27,7 @@ fi
 if [[ ! -d "${AURORA_VENV}" ]]; then
     echo "Error: Aurora virtual environment not found at ${AURORA_VENV}" >&2
     echo "Create it with:" >&2
-    echo "  bash ${SCRIPT_DIR}/install_matsim_aurora.sh" >&2
+    echo "  bash ${SCRIPT_DIR}/install.sh" >&2
     return 1 2>/dev/null || exit 1
 fi
 

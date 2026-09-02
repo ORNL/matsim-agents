@@ -55,8 +55,8 @@ MLP_DEVICE="${MATSIM_VASP_MLP_DEVICE:-cuda}"
 UMA_MODEL="${MATSIM_UMA_MODEL_NAME:-uma-s-1p1}"
 UMA_TASK="${MATSIM_UMA_TASK:-omat}"
 
-VENV_ROOT="${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
-FAIRCHEM_VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}"
+VENV_ROOT="${REPO_ROOT}/.hpc-build/perlmutter"
+FAIRCHEM_VENV="${MATSIM_FAIRCHEM_VENV:-${REPO_ROOT}/.venv}"
 
 for req in "${POTCAR_DIR}" "${VASP_LAUNCHER}" "${FAIRCHEM_VENV}"; do
   if [[ ! -e "${req}" ]]; then

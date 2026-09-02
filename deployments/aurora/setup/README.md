@@ -89,7 +89,7 @@ RECREATE_ENV=1 bash deployments/aurora/setup/install.sh
 Default environment path created by this flow:
 
 ```bash
-$HYDRAGNN_ROOT/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv
+$MATSIM_DIR/.venv
 ```
 
 ### setup_matsim_aurora.sh

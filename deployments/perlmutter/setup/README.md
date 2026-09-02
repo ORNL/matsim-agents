@@ -83,7 +83,7 @@ source setup_matsim_perlmutter.sh --gpu
 
 **Environment used:** 
 ```
-$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+$MATSIM_DIR/.venv
 ```
 
 ### `install.sh` (Fresh Installation)
@@ -151,18 +151,17 @@ module names differ from the defaults.
 
 **Install root + environment path (default):**
 ```
-INSTALL_ROOT = $HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV_PATH    = $INSTALL_ROOT/hydragnn_venv
+INSTALL_ROOT = $MATSIM_DIR/.hpc-build/perlmutter
+VENV_PATH    = $MATSIM_DIR/.venv
 ```
-`INSTALL_ROOT` is the single source of truth: the conda env AND all HydraGNN
-dependency build trees (ADIOS2, MPI4PY, DDStore, GPTL, DeepHyper, PyG) live
-inside it. Override `INSTALL_ROOT=/custom/path` to relocate everything together.
-`VENV_PATH` defaults to `$INSTALL_ROOT/hydragnn_venv`; override it alone only to
-place the env elsewhere (build deps still stay under `INSTALL_ROOT`).
+`INSTALL_ROOT` owns HydraGNN dependency build trees (ADIOS2, MPI4PY, DDStore,
+GPTL, DeepHyper, and PyG). `VENV_PATH` independently names the Python
+environment owned by matsim-agents. Both defaults remain inside this checkout.
+`VENV_PATH` defaults to `$MATSIM_DIR/.venv`; override it alone only to place the
+environment elsewhere (build dependencies remain under `INSTALL_ROOT`).
 
-Quick setup (`setup_matsim_perlmutter.sh`) prefers this shared in-HydraGNN path,
-falling back to the legacy local `matsim-agents/perlmutter_venv` only if the
-shared env is absent.
+Quick setup (`setup_matsim_perlmutter.sh`) prefers `matsim-agents/.venv`,
+falling back to the legacy local `matsim-agents/perlmutter_venv` only if needed.
 The obsolete generic `job_perlmutter.sh` template was removed because it
 invoked the nonexistent `matsim_agents.main` module and could not describe a
 specific scientific contract. Submit one of the explicit jobs under
@@ -426,7 +425,7 @@ cd <work_dir_with_INCAR_POSCAR_KPOINTS_POTCAR>
 - Running on a Perlmutter login or compute node
 - Existing HydraGNN environment at:
   ```
-  $HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+  $MATSIM_DIR/.venv
   ```
 
 ### Full Installation (`install_matsim_perlmutter.sh`)
@@ -506,7 +505,7 @@ You must be running on a Perlmutter login node. The module system is not availab
 ### "HydraGNN virtual environment not found" (Quick Setup)
 Ensure the shared HydraGNN environment exists at:
 ```
-$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+$MATSIM_DIR/.venv
 ```
 
 Contact the project maintainers if it needs to be re-created.
@@ -518,7 +517,7 @@ bash install_matsim_perlmutter.sh --gpu
 ```
 Default expected path:
 ```
-$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+$MATSIM_DIR/.venv
 ```
 
 ### CUDA not available

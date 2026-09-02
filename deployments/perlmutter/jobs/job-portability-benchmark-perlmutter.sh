@@ -13,8 +13,8 @@ set -euo pipefail
 
 REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
 PROJ="$(dirname "${REPO}")"
-INSTALL_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV=$INSTALL_ROOT/hydragnn_venv
+INSTALL_ROOT=$REPO/.hpc-build/perlmutter
+VENV=$REPO/.venv
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 RUN_DIR="${RUNS_ROOT}/portability/perlmutter-${SLURM_JOB_ID:-$$}"
 QUALIFICATION="${MATSIM_PORTABILITY_QUALIFICATION:-contract}"

@@ -47,7 +47,7 @@ PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
 # mace_venv lives alongside hydragnn_venv under the HydraGNN install root.
-VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
+VENV_ROOT=$REPO/.hpc-build/perlmutter
 VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}"
 
 QE_LAUNCHER=${MATSIM_QE_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh}

@@ -7,8 +7,8 @@ MATSIM_DIR="${MATSIM_DIR:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 HYDRAGNN_DIR="${HYDRAGNN_DIR:-$(dirname "${MATSIM_DIR}")/HydraGNN}"
 HYDRAGNN_REPO="${HYDRAGNN_REPO:-https://github.com/ORNL/HydraGNN.git}"
 HYDRAGNN_REF="${HYDRAGNN_REF:-main}"
-INSTALL_ROOT="${INSTALL_ROOT:-${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72}"
-VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv_rocm72}"
+INSTALL_ROOT="${INSTALL_ROOT:-${MATSIM_DIR}/.hpc-build/frontier}"
+VENV_PATH="${VENV_PATH:-${MATSIM_DIR}/.venv}"
 MATSIM_EXTRAS="${MATSIM_EXTRAS:-hydragnn,dev,openai,ollama,anthropic,huggingface}"
 INSTALL_UMA="${INSTALL_UMA:-0}"
 RECREATE_ENV="${RECREATE_ENV:-0}"
@@ -34,12 +34,12 @@ fi
 HYDRAGNN_INSTALLER="${HYDRAGNN_DIR}/scripts/hpc/olcf/frontier/installation/install-rocm72.sh"
 [[ -f "${HYDRAGNN_INSTALLER}" ]] || die "HydraGNN Frontier installer not found: ${HYDRAGNN_INSTALLER}"
 
-# HydraGNN's Frontier script derives INSTALL_ROOT from PWD. Run it from this
-# compatibility parent so existing jobs continue to find the same environment.
-mkdir -p "$(dirname "${INSTALL_ROOT}")"
+# HydraGNN's Frontier script derives its build root from PWD, while VENV_PATH
+# remains authoritative. Keep both the build tree and environment under matsim.
+mkdir -p "${INSTALL_ROOT}"
 log "Installing HydraGNN and its ROCm/PyG/MPI dependencies first"
 (
-    cd "$(dirname "${INSTALL_ROOT}")"
+    cd "${INSTALL_ROOT}"
     VENV_PATH="${VENV_PATH}" RECREATE_ENV="${RECREATE_ENV}" SKIP_VLLM="${SKIP_VLLM}" \
         bash "${HYDRAGNN_INSTALLER}"
 )

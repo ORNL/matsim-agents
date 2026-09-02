@@ -43,9 +43,9 @@ HYDRAGNN_DIR="${HYDRAGNN_DIR:-$(cd "${MATSIM_DIR}/.." && pwd)/HydraGNN}"
 MACE_TORCH_VERSION="${MACE_TORCH_VERSION:-0.3.16}"
 E3NN_VERSION="${E3NN_VERSION:-0.4.4}"
 
-INSTALL_ROOT_DEFAULT="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
+INSTALL_ROOT_DEFAULT="${MATSIM_DIR}/.hpc-build/perlmutter"
 INSTALL_ROOT="${INSTALL_ROOT:-${INSTALL_ROOT_DEFAULT}}"
-BASE_VENV="${BASE_VENV:-${INSTALL_ROOT}/hydragnn_venv}"
+BASE_VENV="${BASE_VENV:-${MATSIM_DIR}/.venv}"
 MACE_VENV="${MACE_VENV:-${INSTALL_ROOT}/mace_venv}"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ log()  { printf '\033[1;34m[mace]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[mace]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[mace]\033[0m %s\n' "$*" >&2; exit 1; }
 
-[[ -x "${BASE_VENV}/bin/python" ]] || die "Base HydraGNN venv not found at ${BASE_VENV}. Run install_matsim_perlmutter.sh --gpu first."
+[[ -x "${BASE_VENV}/bin/python" ]] || die "Base matsim venv not found at ${BASE_VENV}. Run install.sh first."
 
 # ── Load Perlmutter modules so torch (CUDA) imports for verification ──────────
 if ! command -v module >/dev/null 2>&1; then

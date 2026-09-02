@@ -49,7 +49,7 @@ RUNTIME_ENV="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}/
 source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
-VENV="${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72"
+VENV="${REPO}/.venv"
 MODEL_DIR="${MATSIM_MODEL_DIR:-${PROJ}/models/Qwen2.5-72B-Instruct}"
 MODEL_NAME="${MATSIM_MODEL_NAME:-$(basename "${MODEL_DIR}")}"
 init_run_dirs "${PROJ}" "llm-check-frontier" "${SLURM_JOB_ID:-$$}"

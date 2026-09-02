@@ -41,8 +41,8 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}"
+VENV_ROOT=$REPO/.hpc-build/perlmutter
+VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}"
 
 AL_CONFIG="$REPO/examples/paper_cases/al_hea_fcc_scaling.yaml"
 [[ ! -f "$AL_CONFIG" ]] && { echo "ERROR: missing $AL_CONFIG" >&2; exit 2; }

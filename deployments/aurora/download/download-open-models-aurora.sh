@@ -35,7 +35,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
-VENV_DEFAULT="${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv"
+VENV_DEFAULT="${REPO}/.venv"
 VENV="${MATSIM_AURORA_VENV:-$VENV_DEFAULT}"
 MODEL_ROOT="${MODEL_ROOT:-$PROJ/models}"
 JOB_TAG="${PBS_JOBID:-manual}"

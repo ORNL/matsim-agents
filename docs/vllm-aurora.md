@@ -57,7 +57,7 @@ HydraGNN and matsim-agents on top.
 Default venv path:
 
 ```
-$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv
+$REPO/.venv
 ```
 
 ---

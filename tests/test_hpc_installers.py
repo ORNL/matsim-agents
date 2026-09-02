@@ -19,6 +19,9 @@ def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
         assert installer.stat().st_mode & 0o111
         assert hydragnn_path in text
         assert "https://github.com/ORNL/HydraGNN.git" in text
+        assert 'VENV_PATH="${VENV_PATH:-${MATSIM_DIR}/.venv}"' in text
+        assert "${MATSIM_DIR}/.hpc-build/" in text
+        assert "${HYDRAGNN_DIR}/installation_DOE_supercomputers" not in text
         assert "hf_transfer" in text
         assert 'INSTALL_UMA="${INSTALL_UMA:-0}"' in text
         assert 'MATSIM_EXTRAS="${MATSIM_EXTRAS},uma"' in text
@@ -26,3 +29,9 @@ def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
         assert "pip check" in text
         assert "installation_DOE_supercomputers/hydragnn_installation" not in text
         subprocess.run(["bash", "-n", str(installer)], check=True)
+
+
+def test_deployment_scripts_do_not_reference_hydragnn_owned_environment() -> None:
+    old_fragment = "HydraGNN/installation_DOE_supercomputers"
+    for script in (ROOT / "deployments").rglob("*.sh"):
+        assert old_fragment not in script.read_text(encoding="utf-8"), script

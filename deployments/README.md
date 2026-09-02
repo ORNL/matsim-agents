@@ -26,7 +26,8 @@ bash deployments/perlmutter/setup/install.sh
 
 Every entry point clones or updates `ORNL/HydraGNN`, runs HydraGNN's current
 facility recipe under `scripts/hpc/` first, and installs non-editable HydraGNN
-and matsim-agents packages into the environment that recipe creates. The script
+and matsim-agents packages into `matsim-agents/.venv`. Compiled dependency
+build trees are kept under `matsim-agents/.hpc-build/`. The script
 finishes with `pip check` and import checks; a successful exit therefore means
 there is one Python environment for the HydraGNN-based matsim workflow.
 
@@ -38,7 +39,9 @@ API in the same environment. Frontier also accepts HydraGNN's
 clean rebuild; HydraGNN's current Perlmutter recipe always recreates its target
 environment.
 
-“Self-contained” applies to Python packages. Facility modules and native GPU,
+The environment and its build artifacts are owned by the matsim-agents
+checkout; the HydraGNN checkout is source input only. “Self-contained” applies
+to Python packages. Facility modules and native GPU,
 MPI, Quantum ESPRESSO, and VASP runtimes remain external system dependencies.
 MACE remains excluded because its e3nn constraint conflicts with HydraGNN main.
 FairChem/UMA is compatible with the updated Python dependency contract, but

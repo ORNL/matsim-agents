@@ -68,7 +68,7 @@ fi
 source "${PROJECT_ROOT}/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
-VENV_ROOT="$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
+VENV_ROOT="${PROJECT_ROOT}/.venv"
 if [[ ! -d "${VENV_ROOT}" ]]; then
   echo "ERROR: HydraGNN venv not found: ${VENV_ROOT}" >&2
   exit 2

@@ -74,7 +74,7 @@ to activate it (activation in subshells can fail on Frontier because
 `module` commands are not available there):
 
 ```bash
-VENV=/lustre/orion/<project>/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=/lustre/orion/<project>/proj-shared/matsim-agents/.venv
 MODEL_DIR=/lustre/orion/<project>/proj-shared/models/Qwen2.5-72B-Instruct
 LOG=/lustre/orion/<project>/proj-shared/models/qwen_download.log
 
@@ -154,7 +154,7 @@ interactive allocation. Example for Frontier (single node, 8 GPUs):
 module reset
 ml rocm/7.2.0 amd-mixed/7.2.0 PrgEnv-gnu miniforge3/23.11.0-0
 module unload darshan-runtime
-conda activate /lustre/orion/<project>/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+conda activate /lustre/orion/<project>/proj-shared/matsim-agents/.venv
 
 pip install vllm  # if not already installed
 
@@ -236,7 +236,7 @@ directly and never takes a lock.
 `facebook/UMA` is gated. Accept the license at
 <https://huggingface.co/facebook/UMA>, then log in once on a login node:
 ```bash
-source $PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/fairchem_venv/bin/activate
+source $REPO/.venv/bin/activate
 hf auth login          # paste your hf_... token; writes ~/.cache/huggingface/token
 hf auth whoami         # should print your username
 ```

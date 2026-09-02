@@ -54,19 +54,19 @@ warn() { printf '\033[1;33m[mace]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[mace]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ── Resolve base venv / install root for the selected ROCm version ────────────
-INSTALL_ROOT_DEFAULT_71="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Frontier"
-INSTALL_ROOT_DEFAULT_72="${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72"
+INSTALL_ROOT_DEFAULT_71="${MATSIM_DIR}/.hpc-build/frontier"
+INSTALL_ROOT_DEFAULT_72="${MATSIM_DIR}/.hpc-build/frontier"
 if [[ "$ROCM_VERSION" == "7.2" ]]; then
     INSTALL_ROOT="${INSTALL_ROOT:-$INSTALL_ROOT_DEFAULT_72}"
-    BASE_VENV="${BASE_VENV:-${INSTALL_ROOT}/hydragnn_venv_rocm72}"
+    BASE_VENV="${BASE_VENV:-${MATSIM_DIR}/.venv}"
     MACE_VENV="${MACE_VENV:-${INSTALL_ROOT}/mace_venv_rocm72}"
 else
     INSTALL_ROOT="${INSTALL_ROOT:-$INSTALL_ROOT_DEFAULT_71}"
-    BASE_VENV="${BASE_VENV:-${INSTALL_ROOT}/hydragnn_venv}"
+    BASE_VENV="${BASE_VENV:-${MATSIM_DIR}/.venv}"
     MACE_VENV="${MACE_VENV:-${INSTALL_ROOT}/mace_venv}"
 fi
 
-[[ -x "${BASE_VENV}/bin/python" ]] || die "Base HydraGNN venv not found at ${BASE_VENV}. Run install_matsim_frontier.sh (${ROCM_VERSION}) first."
+[[ -x "${BASE_VENV}/bin/python" ]] || die "Base matsim venv not found at ${BASE_VENV}. Run install.sh first."
 
 # ── Load Frontier ROCm modules so torch (HIP) imports for verification ────────
 if [[ -f "${SCRIPT_DIR}/frontier-module-stack.sh" ]]; then

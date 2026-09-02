@@ -45,7 +45,7 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
+VENV_ROOT=$REPO/.hpc-build/perlmutter
 VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}"
 
 VASP_LAUNCHER=${MATSIM_VASP_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh}

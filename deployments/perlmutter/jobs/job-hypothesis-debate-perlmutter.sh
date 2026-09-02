@@ -40,8 +40,8 @@ RUNTIME_ENV="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}/
 source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
-INSTALL_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV=$INSTALL_ROOT/hydragnn_venv          # debate client (matsim-agents + openai)
+INSTALL_ROOT=$REPO/.hpc-build/perlmutter
+VENV=$REPO/.venv          # debate client (matsim-agents + openai)
 VLLM_VENV=$INSTALL_ROOT/vllm_venv         # isolated vLLM servers (torch 2.11)
 MODELS_DIR=$PROJ/models
 init_run_dirs "$PROJ" "hyp-debate" "${SLURM_JOB_ID:-$$}"
@@ -89,7 +89,7 @@ launch_server() {
     export TORCHINDUCTOR_CACHE_DIR="$jit/inductor" VLLM_CACHE_ROOT="$jit/vllm"
     # vLLM JIT-compiles a CUDA helper at startup and needs Python.h; the base
     # python3.11 has no dev headers, so point at the hydragnn_venv headers.
-    local pyhdr="$INSTALL_ROOT/hydragnn_venv/include/python3.11"
+    local pyhdr="$REPO/.venv/include/python3.11"
     export CPATH="${pyhdr}:${CPATH:-}" C_INCLUDE_PATH="${pyhdr}:${C_INCLUDE_PATH:-}"
     exec "$VLLM_VENV/bin/vllm" serve "$model_dir" \
         --served-model-name "$name" \

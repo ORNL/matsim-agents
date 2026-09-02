@@ -57,7 +57,7 @@ PROJ="$(dirname "${REPO}")"
 # of frameworks/2025.3.1).  We then activate hydragnn_venv (built with
 # --system-site-packages on top of that same Python 3.12) so HydraGNN +
 # matsim-agents are importable alongside vLLM.
-VENV_PATH="${VENV_PATH:-$(dirname "${REPO}")/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
+VENV_PATH="${VENV_PATH:-${REPO}/.venv}"
 JOBID="${PBS_JOBID:-local-$$}"
 RUN_DIR="${PROJ}/runs/vllm-multinode-aurora-${JOBID}"
 mkdir -p "$RUN_DIR"
