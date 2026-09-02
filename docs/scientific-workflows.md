@@ -68,6 +68,10 @@ an intentionally asymmetric panel instead, select `debate_mode: role_based`,
 assign participant roles, and optionally use
 `synthesis_method: designated_model` with `synthesis_participant`.
 
+For all four supported combinations, complete configuration examples, output
+semantics, and artifact definitions, see
+[Scientific hypothesis debate](scientific-debate.md).
+
 For deployment qualification across the entire first-class model catalog, use
 `benchmarks/portability/llm_enclave.py`. Unlike a user-selected debate, this
 benchmark fails closed unless every catalog model completes at least two rounds

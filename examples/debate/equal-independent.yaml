@@ -1,0 +1,17 @@
+hypothesis: >
+  What candidate material provides an optimal thermoelectric functional property,
+  specifically high ZT near 800 K, while remaining chemically stable and using
+  reasonably abundant elements?
+rounds: 2
+output_root: ./runs
+debate_mode: equal
+synthesis_method: independent_verdicts
+participants:
+  - name: model_a
+    provider: vllm
+    model: org/model-a
+    base_url: http://node-a:8000/v1
+  - name: model_b
+    provider: vllm
+    model: org/model-b
+    base_url: http://node-b:8000/v1

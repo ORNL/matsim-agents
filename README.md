@@ -718,6 +718,10 @@ provenance are retained in a uniquely named run directory. See
 [`docs/scientific-workflows.md`](docs/scientific-workflows.md) for the complete
 configuration and evidence limitations.
 
+The dedicated [scientific debate guide](docs/scientific-debate.md) documents
+all four equal/role-based and independent/designated modalities with runnable
+YAML examples and their different outcome semantics.
+
 The default is a debate between equals: roles do not alter prompts, all models
 receive identical neutral instructions, and every model writes an independent
 final verdict. Role-based debate and designated-model synthesis remain explicit

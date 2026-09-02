@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from matsim_agents.workflows.debate import (
     DebateParticipant,
@@ -110,3 +112,27 @@ def test_debate_rejects_duplicate_names_and_unknown_synthesizer():
             ],
             synthesis_participant="missing",
         )
+
+
+@pytest.mark.parametrize(
+    "name,mode,method,verdict_count",
+    [
+        ("equal-independent.yaml", "equal", "independent_verdicts", 2),
+        ("equal-designated.yaml", "equal", "designated_model", 1),
+        ("role-based-independent.yaml", "role_based", "independent_verdicts", 2),
+        ("role-based-designated.yaml", "role_based", "designated_model", 1),
+    ],
+)
+def test_documented_debate_modalities_match_the_config_contract(
+    name, mode, method, verdict_count, tmp_path
+):
+    raw = yaml.safe_load((Path("examples/debate") / name).read_text())
+    raw["output_root"] = str(tmp_path)
+    config = ScientificDebateConfig.model_validate(raw)
+    result = run_scientific_debate(
+        config,
+        model_factory=lambda *, provider, model, base_url: _Model(model),
+    )
+    assert config.debate_mode == mode
+    assert config.synthesis_method == method
+    assert len(result.verdicts) == verdict_count
