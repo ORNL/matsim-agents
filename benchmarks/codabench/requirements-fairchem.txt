@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# UMA and AllScAIP. Model repositories are gated on Hugging Face.
+fairchem-core>=2.20
+huggingface_hub>=0.24.0,<1.0

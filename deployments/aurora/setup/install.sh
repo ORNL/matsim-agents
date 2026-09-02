@@ -11,6 +11,8 @@ INSTALL_ROOT="${INSTALL_ROOT:-${MATSIM_DIR}/.hpc-build/aurora}"
 VENV_PATH="${VENV_PATH:-${MATSIM_DIR}/.venv}"
 MATSIM_EXTRAS="${MATSIM_EXTRAS:-hydragnn,dev,openai,ollama,anthropic,huggingface}"
 INSTALL_UMA="${INSTALL_UMA:-0}"
+INSTALL_MACE="${INSTALL_MACE:-0}"
+MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"
 RECREATE_ENV="${RECREATE_ENV:-0}"
 
 log() { printf '\033[1;34m[aurora-install]\033[0m %s\n' "$*"; }
@@ -48,6 +50,12 @@ log "Installing non-editable HydraGNN and matsim-agents packages in that environ
 "${PYTHON}" -c "import hydragnn, matsim_agents, torch; print('verified', torch.__version__)"
 if [[ "${INSTALL_UMA}" == "1" ]]; then
     "${PYTHON}" -c "from fairchem.core import FAIRChemCalculator, pretrained_mlip; print('FairChem/UMA import: OK')"
+fi
+if [[ "${INSTALL_MACE}" == "1" ]]; then
+    log "Installing MACE in its e3nn-compatible matsim-owned environment"
+    MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" MACE_VENV_PATH="${MACE_VENV_PATH}" \
+        FACILITY=aurora RECREATE_MACE_ENV="${RECREATE_ENV}" \
+        bash "${MATSIM_DIR}/deployments/common/setup/install-mace-compat.sh"
 fi
 
 log "Complete. Activate with: module load frameworks && source ${VENV_PATH}/bin/activate"

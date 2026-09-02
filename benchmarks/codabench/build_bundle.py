@@ -43,7 +43,14 @@ def build_bundle(output: Path, public_data: Path, reference_data: Path) -> Path:
 
         # Participant-facing utilities are deliberately copied into the
         # starting kit because Codabench does not include sibling directories.
-        for rel in ("baselines", "run_baselines.py", "package_submission.py", "requirements.txt"):
+        for rel in (
+            "baselines",
+            "run_baselines.py",
+            "package_submission.py",
+            "requirements.txt",
+            "requirements-mace.txt",
+            "requirements-fairchem.txt",
+        ):
             _copy(HERE / rel, stage / "starting_kit" / rel)
 
         errors = validate_bundle(stage, release=True)

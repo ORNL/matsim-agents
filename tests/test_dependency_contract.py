@@ -22,3 +22,16 @@ def test_hydragnn_main_dependency_contract() -> None:
         "torch-geometric==2.8.0",
     } <= set(project["optional-dependencies"]["hydragnn"])
     assert "fairchem-core" in project["optional-dependencies"]["uma"]
+    assert project["optional-dependencies"]["mace"] == ["mace-torch==0.3.16"]
+
+
+def test_mace_and_hydragnn_e3nn_contracts_are_explicitly_isolated() -> None:
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    extras = config["project"]["optional-dependencies"]
+
+    assert "e3nn==0.5.1" in extras["hydragnn"]
+    installer = (ROOT / "deployments/common/setup/install-mace-compat.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'E3NN_VERSION="${E3NN_VERSION:-0.4.4}"' in installer
+    assert 'MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"' in installer

@@ -40,6 +40,32 @@ def test_baselines_load_as_distinct_modules() -> None:
     assert mace is not hydragnn
 
 
+def test_aggregate_baselines_dispatch_incompatible_backends(tmp_path, monkeypatch) -> None:
+    runner = _load("codabench_run_dispatch", CODEBENCH / "run_baselines.py")
+    base_python = tmp_path / "base-python"
+    mace_python = tmp_path / "mace-python"
+    base_python.touch()
+    mace_python.touch()
+    monkeypatch.setenv("MATSIM_BASE_PYTHON", str(base_python))
+    monkeypatch.setenv("MATSIM_MACE_PYTHON", str(mace_python))
+    monkeypatch.setattr(runner.sys, "argv", ["run_baselines.py", "--model=all", "--device", "cpu"])
+    calls = []
+    monkeypatch.setattr(runner.subprocess, "run", lambda command, check: calls.append(command))
+
+    runner._dispatch_aggregate("all")
+
+    assert len(calls) == 4
+    assert calls[0][0] == str(mace_python)
+    assert "--model=mace" in calls[0]
+    assert all(call[0] == str(base_python) for call in calls[1:])
+    assert [next(arg for arg in call if arg.startswith("--model=")) for call in calls] == [
+        "--model=mace",
+        "--model=hydragnn",
+        "--model=uma",
+        "--model=allscaip",
+    ]
+
+
 def test_submission_packager_rejects_raw_total_energies(tmp_path) -> None:
     package = _load("codabench_package", CODEBENCH / "package_submission.py")
     predictions = tmp_path / "predictions"
@@ -93,6 +119,8 @@ def test_builds_self_contained_release_bundle(tmp_path, monkeypatch) -> None:
     assert "competition.yaml" in names
     assert "starting_kit/baselines/hydragnn/model.py" in names
     assert "starting_kit/package_submission.py" in names
+    assert "starting_kit/requirements-mace.txt" in names
+    assert "starting_kit/requirements-fairchem.txt" in names
     assert "public_data/structures/MATS-0001.xyz" in names
     assert "reference_data/forces/MATS-0001.npy" in names
     assert "reference_data/relaxed/MATS-0001.xyz" in names

@@ -216,8 +216,14 @@ python run_baselines.py --model mace        # MACE-MP-0
 python run_baselines.py --model hydragnn    # HydraGNN
 python run_baselines.py --model uma         # UMA
 python run_baselines.py --model allscaip    # AllScAIP
-python run_baselines.py --model all --relax # all baselines including relaxation (Tasks 3 & 4)
+python run_baselines.py --model all --relax # dispatches MACE to its compatibility env
 ```
+
+Install backend dependencies separately: `requirements-mace.txt` in the MACE
+environment and `requirements-fairchem.txt` in the HydraGNN/FairChem
+environment. Aggregate runs use `.venv-mace/bin/python` and `.venv/bin/python`
+by default; set `MATSIM_MACE_PYTHON` and `MATSIM_BASE_PYTHON` when the
+environments live elsewhere.
 
 `run_baselines.py` writes raw model totals and numerical artifacts beneath
 `predictions/<model>/`. Raw total energies are not formation energies. After

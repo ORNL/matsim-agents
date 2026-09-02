@@ -34,7 +34,7 @@
 #   MLIP_BACKEND=mace     CASE=hea_bcc sbatch ...            (frozen MACE-MP loop)
 #   MLIP_BACKEND=mace MACE_MODEL=large MACE_RETRAIN=1 CASE=hea_bcc sbatch ...
 # MACE runs FROZEN by default (comparable to the frozen-UMA loop); MACE_RETRAIN=1
-# fine-tunes each iteration and requires the mace_venv + a prefetched foundation
+# fine-tunes each iteration and requires `.venv-mace` plus a prefetched foundation
 # model cache under $PROJ/models/mace_cache.
 #
 # MULTI-NODE DFT CONCURRENCY — the AL driver dispatches the selected VASP
@@ -65,8 +65,6 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
-
-VENV_ROOT=$REPO/.hpc-build/perlmutter
 
 # ── case -> AL YAML mapping ──────────────────────────────────────────────────
 CASE="${CASE:-hea_bcc}"
@@ -104,12 +102,12 @@ load_perlmutter_modules_gpu
 
 case "$MLIP_BACKEND" in
   uma)      VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}" ;;
-  mace)     VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}" ;;
+  mace)     VENV="${MATSIM_MACE_VENV:-${REPO}/.venv-mace}" ;;
   hydragnn) VENV="${MATSIM_HYDRAGNN_VENV:-${REPO}/.venv}" ;;
   *)        VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}" ;;
 esac
 [[ ! -d "${VENV}" ]] && { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
-# mace_venv is a plain venv; hydragnn_venv is a conda environment.
+# Both default environments are matsim-owned Python virtual environments.
 if [[ -f "${VENV}/bin/activate" ]]; then
   # shellcheck disable=SC1091
   source "${VENV}/bin/activate"

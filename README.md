@@ -515,7 +515,7 @@ Aurora supports vLLM-XPU serving and inference via the official ALCF `frameworks
   ```
 2. Download a supported model (e.g., Mistral-Small-24B):
   ```bash
-  source /path/to/hydragnn_venv/bin/activate
+  source /path/to/matsim-agents/.venv/bin/activate
   python deployments/aurora/setup/hf_download.py mistralai/Mistral-Small-24B-Instruct-2501
   ```
 3. Submit the smoke test:
@@ -620,6 +620,8 @@ Environment overrides accepted by the installer:
 | `VENV_PATH` | Override the matsim-owned Python environment | `.venv` |
 | `MATSIM_EXTRAS` | matsim-agents extras installed in the target environment | `hydragnn,dev,openai,ollama,anthropic,huggingface` |
 | `INSTALL_UMA` | Install and import-check FairChem for UMA workflows | `0` |
+| `INSTALL_MACE` | Create and verify the matsim-owned MACE compatibility environment | `0` |
+| `MACE_VENV_PATH` | Override the MACE compatibility environment | `.venv-mace` |
 | `BOOTSTRAP_OLLAMA` | Set to `1` to install the Ollama daemon, start it, and pull `OLLAMA_MODELS` (workstation only) | `0` |
 | `OLLAMA_MODELS` | Space-separated list of models to pull when `BOOTSTRAP_OLLAMA=1` | `qwen2.5:14b` |
 
@@ -629,6 +631,13 @@ After the script finishes:
 source .venv/bin/activate    # workstation case
 matsim-agents --help
 ```
+
+HydraGNN and optional FairChem/UMA share `.venv`. Current upstream
+`mace-torch==0.3.16` has a hard `e3nn==0.4.4` requirement, which conflicts with
+HydraGNN's `e3nn==0.5.1`. Requesting `INSTALL_MACE=1` therefore creates
+`.venv-mace` inside the matsim-agents checkout. It inherits the machine's
+PyTorch stack from `.venv` without modifying `.venv`; MACE jobs run in a
+separate Python process.
 
 To bootstrap the local Ollama daemon and pull a model in one go:
 
@@ -1372,7 +1381,7 @@ python run_baselines.py --model mace        # MACE-MP-0
 python run_baselines.py --model hydragnn    # HydraGNN
 python run_baselines.py --model uma         # UMA (requires fairchem-core ≥2.20)
 python run_baselines.py --model allscaip    # AllScAIP (requires fairchem-core ≥2.20)
-python run_baselines.py --model all --relax # all baselines incl. relaxation (Tasks 3/4)
+python run_baselines.py --model all --relax # dispatches through .venv and .venv-mace
 ```
 
 UMA and AllScAIP require the `fairchem-core` package and the model checkpoints
@@ -1387,7 +1396,9 @@ benchmarks/codabench/
 ├── competition.yaml             # Codabench bundle manifest & leaderboard config
 ├── run_baselines.py             # entry point: --model mace/hydragnn/uma/allscaip/all
 ├── evaluate.py                  # local evaluation helper (mirrors the Codabench scorer)
-├── requirements.txt             # Python deps for the competition bundle
+├── requirements.txt             # backend-neutral competition dependencies
+├── requirements-mace.txt        # MACE process dependencies (e3nn 0.4.4)
+├── requirements-fairchem.txt    # UMA/AllScAIP process dependencies
 ├── install_mace_aurora.sh       # MACE-MP-0 install helper for Aurora (XPU)
 ├── fix_h5py_system_conflict_aurora.sh  # h5py/HDF5 conflict workaround (Aurora)
 ├── baselines/

@@ -11,6 +11,9 @@ INSTALL_ROOT="${INSTALL_ROOT:-${MATSIM_DIR}/.hpc-build/perlmutter}"
 VENV_PATH="${VENV_PATH:-${MATSIM_DIR}/.venv}"
 MATSIM_EXTRAS="${MATSIM_EXTRAS:-hydragnn,dev,openai,ollama,anthropic,huggingface}"
 INSTALL_UMA="${INSTALL_UMA:-0}"
+INSTALL_MACE="${INSTALL_MACE:-0}"
+MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"
+RECREATE_MACE_ENV="${RECREATE_MACE_ENV:-0}"
 EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
 
 log() { printf '\033[1;34m[perlmutter-install]\033[0m %s\n' "$*"; }
@@ -48,6 +51,12 @@ log "Installing HydraGNN and matsim-agents wheels into the same environment"
 "${PYTHON}" -c "import hydragnn, matsim_agents, torch; print('verified', torch.__version__)"
 if [[ "${INSTALL_UMA}" == "1" ]]; then
     "${PYTHON}" -c "from fairchem.core import FAIRChemCalculator, pretrained_mlip; print('FairChem/UMA import: OK')"
+fi
+if [[ "${INSTALL_MACE}" == "1" ]]; then
+    log "Installing MACE in its e3nn-compatible matsim-owned environment"
+    MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" MACE_VENV_PATH="${MACE_VENV_PATH}" \
+        FACILITY=perlmutter RECREATE_MACE_ENV="${RECREATE_MACE_ENV}" \
+        bash "${MATSIM_DIR}/deployments/common/setup/install-mace-compat.sh"
 fi
 
 log "Complete. Activate with: source ${VENV_PATH}/bin/activate"

@@ -17,9 +17,8 @@
 #   2. Runs vasp_std cold-start and vasp_std warm-start (coords from MACE).
 #   3. Reports ionic steps / SCF iterations / wall-time speed-up.
 #
-# This script activates the separate mace_venv, not the unified hydragnn_venv,
-# because mace-torch pins e3nn==0.4.4 (the version the foundation checkpoints
-# were serialised with). See deployments/perlmutter/setup/build-mace-venv-perlmutter.sh.
+# This script activates .venv-mace because upstream MACE 0.3.16 declares
+# e3nn==0.4.4 while the primary HydraGNN environment declares e3nn==0.5.1.
 #
 # Submit:
 #   sbatch deployments/perlmutter/jobs/job-mace-vasp-warmstart-perlmutter.sh
@@ -45,8 +44,7 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-VENV_ROOT=$REPO/.hpc-build/perlmutter
-VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}"
+VENV="${MATSIM_MACE_VENV:-${REPO}/.venv-mace}"
 
 VASP_LAUNCHER=${MATSIM_VASP_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh}
 VASP_POTCAR_DIR=${MATSIM_VASP_POTCAR_DIR:-$REPO/external/vasp6/potcar/potpaw_PBE.64}
@@ -59,8 +57,8 @@ mkdir -p "$RUN_DIR" "$WARMSTART_DIR"
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
-# Activate mace_venv (plain venv, not conda).
-[[ ! -d "${VENV}" ]] && { echo "ERROR: mace_venv not found: ${VENV}" >&2; exit 2; }
+# Activate the matsim-owned MACE compatibility environment.
+[[ ! -d "${VENV}" ]] && { echo "ERROR: MACE environment not found: ${VENV}" >&2; exit 2; }
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 

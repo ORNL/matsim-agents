@@ -34,7 +34,8 @@ there is one Python environment for the HydraGNN-based matsim workflow.
 Common overrides are `HYDRAGNN_DIR`, `HYDRAGNN_REF`, `INSTALL_ROOT`,
 `VENV_PATH`, and `MATSIM_EXTRAS`. Set `INSTALL_UMA=1` to install
 `fairchem-core` through the matsim-agents `uma` extra and verify its calculator
-API in the same environment. Frontier also accepts HydraGNN's
+API in the same environment. Set `INSTALL_MACE=1` to have the same canonical
+installer create `matsim-agents/.venv-mace`. Frontier also accepts HydraGNN's
 `SKIP_VLLM` setting. Set `RECREATE_ENV=1` on Frontier or Aurora to request a
 clean rebuild; HydraGNN's current Perlmutter recipe always recreates its target
 environment.
@@ -43,7 +44,14 @@ The environment and its build artifacts are owned by the matsim-agents
 checkout; the HydraGNN checkout is source input only. “Self-contained” applies
 to Python packages. Facility modules and native GPU,
 MPI, Quantum ESPRESSO, and VASP runtimes remain external system dependencies.
-MACE remains excluded because its e3nn constraint conflicts with HydraGNN main.
+MACE cannot be installed in `.venv`: upstream `mace-torch==0.3.16` declares
+`e3nn==0.4.4`, while HydraGNN declares `e3nn==0.5.1`. The optional
+`.venv-mace` is also owned by matsim-agents and inherits the expensive
+facility-specific PyTorch stack from `.venv`, but shadows e3nn in its own
+site-packages. Run MACE as a separate process; do not import HydraGNN and MACE
+in the same Python interpreter.
+See [`docs/mace-dependencies.md`](../docs/mace-dependencies.md) for the checked
+upstream constraints and the qualification boundary.
 FairChem/UMA is compatible with the updated Python dependency contract, but
 UMA weights are gated and accelerator execution must still be qualified on
 each facility.

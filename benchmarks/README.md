@@ -27,3 +27,21 @@ python benchmarks/codabench/build_bundle.py \
 
 The builder validates required assets and copies the baseline and submission
 packaging utilities into the participant starting kit.
+
+For facility baseline runs, install optional model stacks through the machine's
+canonical installer. For example, on Aurora:
+
+```bash
+INSTALL_UMA=1 INSTALL_MACE=1 bash deployments/aurora/setup/install.sh
+```
+
+UMA remains in `.venv`. MACE runs from `.venv-mace` because the current
+upstream package pins `e3nn==0.4.4`, conflicting with HydraGNN's exact
+`e3nn==0.5.1` pin. The older Codabench MACE helper remains only as a forwarding
+compatibility entry point and no longer modifies the active HydraGNN environment.
+
+Codabench dependencies follow the same boundary: `requirements.txt` is
+backend-neutral, `requirements-mace.txt` belongs in `.venv-mace`, and
+`requirements-fairchem.txt` belongs in `.venv`. `run_baselines.py --model all`
+dispatches each backend through the appropriate interpreter. Override the
+defaults with `MATSIM_BASE_PYTHON` and `MATSIM_MACE_PYTHON`.

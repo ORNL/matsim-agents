@@ -22,7 +22,7 @@ Usage
     python run_baselines.py --model both --mace-size medium \\
                             --hydragnn-logdir /path/to/logdir
 
-# All four models:
+# All four models (MACE is dispatched to .venv-mace; the others to .venv):
     python run_baselines.py --model all --mace-size medium \\
                             --hydragnn-logdir /path/to/logdir --device cuda
 
@@ -39,6 +39,9 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib.util
+import os
+import subprocess
+import sys
 import time
 import traceback
 from pathlib import Path
@@ -195,6 +198,37 @@ def run_predictions(
     print(f"  → {out}/")
 
 
+def _dispatch_aggregate(model: str) -> None:
+    """Run incompatible backend families in their owning interpreters."""
+    repo = HERE.parents[1]
+    base_python = Path(os.environ.get("MATSIM_BASE_PYTHON", repo / ".venv/bin/python"))
+    mace_python = Path(os.environ.get("MATSIM_MACE_PYTHON", repo / ".venv-mace/bin/python"))
+    selections = ["mace", "hydragnn"]
+    if model == "all":
+        selections.extend(("uma", "allscaip"))
+
+    original = sys.argv[1:]
+    for selection in selections:
+        python = mace_python if selection == "mace" else base_python
+        if not python.is_file():
+            raise SystemExit(
+                f"{selection} interpreter not found: {python}. Run the facility installer "
+                f"with INSTALL_MACE=1 and/or INSTALL_UMA=1 first."
+            )
+        child_args = original.copy()
+        for index, argument in enumerate(child_args):
+            if argument == "--model":
+                child_args[index + 1] = selection
+                break
+            if argument.startswith("--model="):
+                child_args[index] = f"--model={selection}"
+                break
+        else:
+            child_args.extend(("--model", selection))
+        print(f"\n=== dispatch {selection} via {python} ===", flush=True)
+        subprocess.run([str(python), str(Path(__file__).resolve()), *child_args], check=True)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -203,10 +237,14 @@ def run_predictions(
 def main() -> None:
     args = parse_args()
 
-    run_mace = args.model in ("mace", "both", "all")
-    run_hydragnn = args.model in ("hydragnn", "both", "all")
-    run_uma = args.model in ("uma", "all")
-    run_allscaip = args.model in ("allscaip", "all")
+    if args.model in ("both", "all"):
+        _dispatch_aggregate(args.model)
+        return
+
+    run_mace = args.model == "mace"
+    run_hydragnn = args.model == "hydragnn"
+    run_uma = args.model == "uma"
+    run_allscaip = args.model == "allscaip"
 
     if run_mace:
         print(f"\n=== MACE-MP-0 ({args.mace_size}) ===")

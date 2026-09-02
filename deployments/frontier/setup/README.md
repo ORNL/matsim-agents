@@ -44,6 +44,20 @@ INSTALL_UMA=1 bash deployments/frontier/setup/install.sh
 The installer verifies FairChem imports. UMA on ROCm remains unqualified until
 the resulting environment passes a model inference smoke test on Frontier.
 
+### MACE compatibility environment
+
+Current `mace-torch==0.3.16` requires `e3nn==0.4.4`, which conflicts with
+HydraGNN's `e3nn==0.5.1`. Install and verify the matsim-owned compatibility
+environment from the same entry point:
+
+```bash
+INSTALL_MACE=1 bash deployments/frontier/setup/install.sh
+source .venv-mace/bin/activate
+```
+
+`.venv-mace` inherits the ROCm PyTorch stack from `.venv` but has its own e3nn
+and MACE packages. HydraGNN and MACE must run as separate Python processes.
+
 ### setup_matsim_frontier.sh
 Quick setup script for daily use after installation.
 

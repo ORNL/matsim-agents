@@ -86,6 +86,13 @@ RECREATE_ENV=1 bash deployments/aurora/setup/install.sh
 > calculator API. FairChem does not currently document Intel XPU support, so a
 > successful import is not evidence of accelerated UMA inference on Aurora.
 
+> **MACE:** use `INSTALL_MACE=1 bash deployments/aurora/setup/install.sh`.
+> Upstream MACE requires `e3nn==0.4.4`, so the installer creates
+> `$MATSIM_DIR/.venv-mace` rather than changing HydraGNN's `e3nn==0.5.1` in
+> `.venv`. The compatibility environment inherits the Aurora PyTorch/XPU stack
+> and applies the site-specific h5py repair. XPU execution still requires an
+> on-node inference qualification.
+
 Default environment path created by this flow:
 
 ```bash

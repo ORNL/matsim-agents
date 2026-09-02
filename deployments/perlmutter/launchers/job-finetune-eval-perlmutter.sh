@@ -68,7 +68,6 @@ PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
 HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-${PROJ}/HydraGNN}"
-VENV_ROOT="${REPO}/.hpc-build/perlmutter"
 
 # ── required inputs ─────────────────────────────────────────────────────────
 BACKEND="${BACKEND:?set BACKEND=hydragnn|uma|mace}"
@@ -125,14 +124,14 @@ if [[ "${BACKEND}" == "uma" ]]; then
 elif [[ "${BACKEND}" == "hydragnn" ]]; then
   VENV="${MATSIM_HYDRAGNN_VENV:-${REPO}/.venv}"
 elif [[ "${BACKEND}" == "mace" ]]; then
-  VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}"
+  VENV="${MATSIM_MACE_VENV:-${REPO}/.venv-mace}"
 else
   echo "ERROR: BACKEND must be 'hydragnn', 'uma', or 'mace' (got '${BACKEND}')" >&2
   exit 2
 fi
 [[ ! -d "${VENV}" ]] && { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
-# mace_venv is a plain Python venv; the unified hydragnn_venv is conda and may
-# need activation through the conda hook when bin/activate is unavailable.
+# Both default environments are matsim-owned Python virtual environments;
+# retain conda activation support for explicit custom environment overrides.
 if [[ -f "${VENV}/bin/activate" ]]; then
   # shellcheck disable=SC1091
   source "${VENV}/bin/activate"

@@ -24,6 +24,9 @@ def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
         assert "${HYDRAGNN_DIR}/installation_DOE_supercomputers" not in text
         assert "hf_transfer" in text
         assert 'INSTALL_UMA="${INSTALL_UMA:-0}"' in text
+        assert 'INSTALL_MACE="${INSTALL_MACE:-0}"' in text
+        assert 'MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"' in text
+        assert "deployments/common/setup/install-mace-compat.sh" in text
         assert 'MATSIM_EXTRAS="${MATSIM_EXTRAS},uma"' in text
         assert "from fairchem.core import FAIRChemCalculator, pretrained_mlip" in text
         assert "pip check" in text
@@ -35,3 +38,14 @@ def test_deployment_scripts_do_not_reference_hydragnn_owned_environment() -> Non
     old_fragment = "HydraGNN/installation_DOE_supercomputers"
     for script in (ROOT / "deployments").rglob("*.sh"):
         assert old_fragment not in script.read_text(encoding="utf-8"), script
+
+
+def test_mace_runtime_paths_use_matsim_owned_compatibility_environment() -> None:
+    for script in (ROOT / "deployments").rglob("*.sh"):
+        text = script.read_text(encoding="utf-8")
+        assert ".hpc-build/perlmutter/mace_venv" not in text, script
+        assert "e3nn 0.6.x" not in text, script
+
+    common = ROOT / "deployments/common/setup/install-mace-compat.sh"
+    assert common.stat().st_mode & 0o111
+    subprocess.run(["bash", "-n", str(common)], check=True)

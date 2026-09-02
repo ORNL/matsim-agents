@@ -148,6 +148,8 @@ module names differ from the defaults.
 - Optional: `vllm` server package when `INSTALL_VLLM_SERVER=1`
 - Optional: `fairchem-core` (UMA MLIP backend) in the unified environment when
   `INSTALL_UMA=1`
+- Optional: `mace-torch==0.3.16` in `$MATSIM_DIR/.venv-mace` when
+  `INSTALL_MACE=1`
 
 **Install root + environment path (default):**
 ```
@@ -237,7 +239,7 @@ PROJECT_ROOT=$PWD sbatch -A <allocation> \
 ```
 
 All these scripts source `perlmutter-module-stack.sh` (`load_perlmutter_modules_gpu`)
-and activate the same `hydragnn_venv` produced by `install_matsim_perlmutter.sh`,
+and activate the same matsim-owned `.venv` produced by `install.sh`,
 so they inherit the unified HydraGNN-aligned toolchain (`cudatoolkit/12.9`,
 `gcc-native/13.2`, torch `2.11.0+cu129`).
 
@@ -263,7 +265,7 @@ SciPy 1.17.1, PyTorch 2.13, and e3nn 0.5.1. These versions satisfy current
 INSTALL_UMA=1 bash deployments/perlmutter/setup/install.sh
 ```
 
-This installs and import-checks FairChem in the same `hydragnn_venv`.
+This installs and import-checks FairChem in `$MATSIM_DIR/.venv`.
 
 ### Running UMA jobs
 
@@ -271,15 +273,30 @@ UMA benchmark jobs activate the unified environment:
 
 ```bash
 # In a job script or interactive session:
-source $INSTALL_ROOT/hydragnn_venv/bin/activate
+source $MATSIM_DIR/.venv/bin/activate
 
 # Or set MATSIM_MLIP_BACKEND=uma and point to the fairchem venv:
 export MATSIM_MLIP_BACKEND=uma
-export MATSIM_FAIRCHEM_VENV=$INSTALL_ROOT/hydragnn_venv
+export MATSIM_FAIRCHEM_VENV=$MATSIM_DIR/.venv
 ```
 
 The warm-start test infrastructure (`test_qe_warmstart.py`, `test_vasp_warmstart.py`)
 supports `mlip_backend: uma` in fixtures.yaml when run in this environment.
+
+### MACE compatibility environment
+
+Upstream `mace-torch==0.3.16` declares `e3nn==0.4.4`; HydraGNN declares
+`e3nn==0.5.1`. Because pip cannot satisfy both exact pins in one environment,
+request MACE through the same facility installer:
+
+```bash
+INSTALL_MACE=1 bash deployments/perlmutter/setup/install.sh
+source $MATSIM_DIR/.venv-mace/bin/activate
+```
+
+The MACE environment inherits Perlmutter's CUDA PyTorch stack from `.venv` but
+shadows e3nn locally. MACE jobs use a separate Python process and default to
+`.venv-mace`; override that location with `MATSIM_MACE_VENV` at runtime.
 
 ---
 
