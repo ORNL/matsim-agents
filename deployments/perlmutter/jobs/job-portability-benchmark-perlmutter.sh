@@ -2,6 +2,7 @@
 #SBATCH -J matsim-portability
 #SBATCH -C gpu
 #SBATCH -q debug
+#SBATCH -A m5216_g
 #SBATCH -N 1
 #SBATCH -t 00:20:00
 #SBATCH --gpus-per-node=4
