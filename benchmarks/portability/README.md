@@ -75,6 +75,30 @@ pseudopotentials at all sites. The facility jobs accept
 `MATSIM_PORTABILITY_RELAXATION_CONFIGS` list. Contract mode remains the default
 CI/release gate because it does not require external model or DFT assets.
 
+`config/relaxation/qe-si.yaml` and `config/relaxation/uma-si.yaml` are worked
+Perlmutter examples (NERSC paths, `mlp_device: cuda` on the A100s).
+`config/relaxation/qe-si-frontier.yaml` and
+`config/relaxation/hydragnn-si-frontier.yaml` are the Frontier equivalents:
+the QE case points `dft.launcher` at
+[`deployments/frontier/launchers/run-pw-gpu-frontier.sh`](../../deployments/frontier/launchers/run-pw-gpu-frontier.sh)
+(which performs its own module reset to the PrgEnv-cray/rocm-6.2.4 QE
+toolchain) instead of a bare `pw.x` path, and the MLIP case uses the
+HydraGNN backend because UMA/fairchem is not installed on Frontier. Submit
+compute-mode qualification on Frontier with:
+
+```bash
+MATSIM_PORTABILITY_QUALIFICATION=compute \
+MATSIM_PORTABILITY_RELAXATION_CONFIGS="$PWD/benchmarks/portability/config/relaxation/hydragnn-si-frontier.yaml:$PWD/benchmarks/portability/config/relaxation/qe-si-frontier.yaml" \
+sbatch -A <allocation> --export=ALL,PROJECT_ROOT="$PWD",MATSIM_PORTABILITY_QUALIFICATION,MATSIM_PORTABILITY_RELAXATION_CONFIGS \
+  deployments/frontier/jobs/job-portability-benchmark-frontier.sh
+```
+
+The job script loads the ROCm 7.2.0 module stack and HydraGNN venv for the
+driver process (real MLIP inference); the QE step launcher it invokes for the
+`dft`-mode case switches to the isolated QE toolchain itself, so the two
+never share a shell (see
+[Module-stack isolation](../../docs/quantum-espresso-frontier.md#module-stack-isolation-from-matsim-agents-python)).
+
 ### All-model scientific debate qualification
 
 `all_model_scientific_debate.py` is the live portability test for the complete first-class

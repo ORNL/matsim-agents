@@ -28,7 +28,21 @@ if [[ "${QUALIFICATION}" == "compute" ]]; then
 fi
 
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
+source "${REPO}/deployments/frontier/setup/frontier-module-stack.sh"
+load_frontier_rocm72_modules
 source activate "${VENV}"
+
+# Real MLIP (--qualification compute) runs torch on-GPU; the QE step launcher
+# (deployments/frontier/launchers/run-pw-gpu-frontier.sh) does its own module
+# reset to the PrgEnv-cray/rocm-6.2.4 QE toolchain, so it is unaffected by
+# these rocm-7.2.0 vars (see docs/quantum-espresso-frontier.md).
+export PYTHONNOUSERSITE=1
+export MIOPEN_DISABLE_CACHE=1
+export MIOPEN_USER_DB_PATH="/tmp/miopen-${SLURM_JOB_ID:-$$}"
+mkdir -p "${MIOPEN_USER_DB_PATH}"
+export PYTORCH_ROCM_ARCH=gfx90a
+export ROCM_ARCH=gfx90a
+export LD_LIBRARY_PATH="${VENV}/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}"
 
 PYTHON="${VENV}/bin/python3"
 
