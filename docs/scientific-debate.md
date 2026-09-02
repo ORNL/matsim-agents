@@ -159,9 +159,9 @@ experiments.
 
 ## All-model portability modality
 
-Run `benchmarks/portability/llm_enclave.py` to require every first-class model
+Run `benchmarks/portability/all_model_scientific_debate.py` to require every first-class model
 in `deployments/common/open-model-catalog.json`. It always uses equal debate,
 independent verdicts, and at least two rounds. It fails for missing endpoints,
 missing or empty turns/verdicts, incomplete model coverage, or duplicate
 contribution IDs. See the
-[portability benchmark guide](../benchmarks/portability/README.md#all-model-llm-enclave-qualification).
+[portability benchmark guide](../benchmarks/portability/README.md#all-model-scientific-debate-qualification).

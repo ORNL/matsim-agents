@@ -73,7 +73,7 @@ semantics, and artifact definitions, see
 [Scientific hypothesis debate](scientific-debate.md).
 
 For deployment qualification across the entire first-class model catalog, use
-`benchmarks/portability/llm_enclave.py`. Unlike a user-selected debate, this
+`benchmarks/portability/all_model_scientific_debate.py`. Unlike a user-selected debate, this
 benchmark fails closed unless every catalog model completes at least two rounds
 and the saved dialogue assigns a unique contribution ID to every model turn.
 

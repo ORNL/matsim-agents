@@ -101,7 +101,7 @@ def validate_enclave_result(
     return errors
 
 
-def execute_llm_enclave(
+def execute_all_model_scientific_debate(
     *,
     output: Path,
     rounds: int,
@@ -150,7 +150,7 @@ def execute_llm_enclave(
             "required_participants": [participant.name for participant in participants],
             "errors": [f"{type(error).__name__}: {error}"],
         }
-    (output / "llm_enclave_result.json").write_text(
+    (output / "all_model_scientific_debate_result.json").write_text(
         json.dumps(payload, indent=2) + "\n", encoding="utf-8"
     )
     return payload
@@ -164,7 +164,7 @@ def main() -> int:
     args = parser.parse_args()
     if args.rounds < 2:
         parser.error("--rounds must be at least 2")
-    result = execute_llm_enclave(
+    result = execute_all_model_scientific_debate(
         output=args.output,
         rounds=args.rounds,
         catalog=args.catalog,

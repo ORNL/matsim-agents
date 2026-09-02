@@ -33,7 +33,7 @@ PYTHON="${VENV_PATH}/bin/python3"
 
 "${PYTHON}" "${REPO}/benchmarks/portability/run.py" "${ARGS[@]}"
 "${PYTHON}" "${REPO}/benchmarks/portability/validate.py" "${RUN_DIR}"
-if [[ "${MATSIM_RUN_LLM_ENCLAVE:-0}" == "1" ]]; then
-  "${PYTHON}" "${REPO}/benchmarks/portability/llm_enclave.py" \
-    --rounds "${MATSIM_DEBATE_ROUNDS:-2}" --output "${RUN_DIR}/llm-enclave"
+if [[ "${MATSIM_RUN_ALL_MODEL_SCIENTIFIC_DEBATE:-0}" == "1" ]]; then
+  "${PYTHON}" "${REPO}/benchmarks/portability/all_model_scientific_debate.py" \
+    --rounds "${MATSIM_DEBATE_ROUNDS:-2}" --output "${RUN_DIR}/all-model-scientific-debate"
 fi

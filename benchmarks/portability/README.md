@@ -75,9 +75,9 @@ pseudopotentials at all sites. The facility jobs accept
 `MATSIM_PORTABILITY_RELAXATION_CONFIGS` list. Contract mode remains the default
 CI/release gate because it does not require external model or DFT assets.
 
-### All-model LLM enclave qualification
+### All-model scientific debate qualification
 
-`llm_enclave.py` is the live portability test for the complete first-class
+`all_model_scientific_debate.py` is the live portability test for the complete first-class
 model catalog. It dynamically reads
 `deployments/common/open-model-catalog.json`; therefore a newly cataloged model
 automatically becomes required. Every model must contribute exactly once in
@@ -101,8 +101,8 @@ endpoint variable (or one `MATSIM_VLLM_BASE_URL` endpoint capable of routing
 all catalog model IDs), then run:
 
 ```bash
-python benchmarks/portability/llm_enclave.py \
-  --rounds 2 --output runs/portability/llm-enclave
+python benchmarks/portability/all_model_scientific_debate.py \
+  --rounds 2 --output runs/portability/all-model-scientific-debate
 ```
 
 The required `dialogue.json` artifact contains the original user question,
@@ -113,7 +113,7 @@ machine-readable result fails for a missing catalog endpoint, missing model
 turn, empty contribution, duplicate contribution ID, or empty synthesis.
 
 Facility portability jobs run this additional test when
-`MATSIM_RUN_LLM_ENCLAVE=1`; use `MATSIM_DEBATE_ROUNDS` to request more than the
+`MATSIM_RUN_ALL_MODEL_SCIENTIFIC_DEBATE=1`; use `MATSIM_DEBATE_ROUNDS` to request more than the
 mandatory two rounds. The endpoints must already be live within the compute
 allocation. Large catalog checkpoints will generally require separate or
 multi-node servers; catalog membership does not imply simultaneous one-node

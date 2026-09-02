@@ -6,10 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from benchmarks.portability.llm_enclave import (
+from benchmarks.portability.all_model_scientific_debate import (
     CATALOG,
     THERMOELECTRIC_HYPOTHESIS,
-    execute_llm_enclave,
+    execute_all_model_scientific_debate,
     load_catalog,
 )
 
@@ -52,7 +52,7 @@ def test_every_catalog_model_completes_two_scientific_interaction_rounds(tmp_pat
         models[model] = _FakeModel(model)
         return models[model]
 
-    result = execute_llm_enclave(
+    result = execute_all_model_scientific_debate(
         output=tmp_path / "output",
         rounds=2,
         catalog=catalog,
@@ -79,7 +79,7 @@ def test_actual_first_class_catalog_defines_the_required_enclave(tmp_path):
     def factory(*, provider, model, base_url):
         return _FakeModel(model)
 
-    result = execute_llm_enclave(
+    result = execute_all_model_scientific_debate(
         output=tmp_path / "catalog-enclave",
         rounds=2,
         catalog=CATALOG,
@@ -93,7 +93,7 @@ def test_actual_first_class_catalog_defines_the_required_enclave(tmp_path):
 
 def test_enclave_fails_closed_for_missing_model_endpoint(tmp_path):
     with pytest.raises(ValueError, match="MODEL_1_URL"):
-        execute_llm_enclave(
+        execute_all_model_scientific_debate(
             output=tmp_path / "output",
             rounds=2,
             catalog=_catalog(tmp_path, count=2),
@@ -103,7 +103,7 @@ def test_enclave_fails_closed_for_missing_model_endpoint(tmp_path):
 
 def test_enclave_rejects_fewer_than_two_rounds(tmp_path):
     with pytest.raises(ValueError, match="at least two"):
-        execute_llm_enclave(
+        execute_all_model_scientific_debate(
             output=tmp_path / "output",
             rounds=1,
             catalog=_catalog(tmp_path, count=2),
