@@ -4,6 +4,16 @@ This directory contains setup scripts for running matsim-agents on NERSC's Perlm
 
 This implementation mirrors the methodology used for Frontier, providing both quick-setup and full-installation options.
 
+The single full-install entry point is:
+
+```bash
+bash deployments/perlmutter/setup/install.sh
+```
+
+It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current Perlmutter installer,
+then installs and verifies matsim-agents in that environment.
+`install_matsim_perlmutter.sh` is only a compatibility alias.
+
 ## Model Download Safety Policy
 
 See the canonical cross-platform policy in `docs/model-download-safety.md`.
@@ -34,7 +44,7 @@ Use the **full installation** script to recreate the HydraGNN-aligned conda envi
 **Best for:** Reproducible installs aligned with HydraGNN runtime expectations
 
 ```bash
-bash install_matsim_perlmutter.sh [--gpu]
+bash install.sh
 ```
 
 ---
@@ -76,7 +86,7 @@ source setup_matsim_perlmutter.sh --gpu
 $HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
 ```
 
-### `install_matsim_perlmutter.sh` (Fresh Installation)
+### `install.sh` (Fresh Installation)
 Frontier-style phased installation that always recreates the Perlmutter HydraGNN environment used at runtime:
 
 **Phase 1:** Run HydraGNN Perlmutter installer (delegated build of CUDA/PyTorch/PyG stack)
@@ -86,16 +96,13 @@ Frontier-style phased installation that always recreates the Perlmutter HydraGNN
 
 First-time full installation (creates new environment):
 ```bash
-bash install_matsim_perlmutter.sh [--gpu]
+bash install.sh
 ```
-
-**Flags:**
-- `--gpu` - Compatibility flag (installer already targets A100/CUDA)
 
 **Customization via environment variables:**
 ```bash
 # Custom environment location
-VENV_PATH=/custom/path bash install_matsim_perlmutter.sh --gpu
+VENV_PATH=/custom/path bash install.sh
 
 # Runtime setup override (quick setup script)
 MATSIM_PERLMUTTER_VENV=/custom/path source setup_matsim_perlmutter.sh --gpu

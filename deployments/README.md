@@ -8,6 +8,40 @@ must not import from this tree; platform selection belongs at deployment time.
 - `aurora/`: ALCF Aurora (PBS Pro)
 - `perlmutter/`: NERSC Perlmutter (Slurm)
 
+## One-command Python installation
+
+Each machine has one canonical installer. Run it from a login node with network
+access:
+
+```bash
+# OLCF Frontier
+bash deployments/frontier/setup/install.sh
+
+# ALCF Aurora
+bash deployments/aurora/setup/install.sh
+
+# NERSC Perlmutter
+bash deployments/perlmutter/setup/install.sh
+```
+
+Every entry point clones or updates `ORNL/HydraGNN`, runs HydraGNN's current
+facility recipe under `scripts/hpc/` first, and installs non-editable HydraGNN
+and matsim-agents packages into the environment that recipe creates. The script
+finishes with `pip check` and import checks; a successful exit therefore means
+there is one Python environment for the HydraGNN-based matsim workflow.
+
+Common overrides are `HYDRAGNN_DIR`, `HYDRAGNN_REF`, `INSTALL_ROOT`,
+`VENV_PATH`, and `MATSIM_EXTRAS`. Frontier also accepts HydraGNN's
+`SKIP_VLLM` setting. Set `RECREATE_ENV=1` on Frontier or Aurora to request a
+clean rebuild; HydraGNN's current Perlmutter recipe always recreates its target
+environment.
+
+“Self-contained” applies to Python packages. Facility modules and native GPU,
+MPI, Quantum ESPRESSO, and VASP runtimes remain external system dependencies.
+MACE and UMA are intentionally not installed into this environment: their
+published dependency constraints conflict with the HydraGNN stack. Workflows
+using those alternative MLIPs must continue to use dedicated environments.
+
 ## Submission contract
 
 The checked-in scripts intentionally do not contain allocation IDs, usernames,

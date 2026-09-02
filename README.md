@@ -384,7 +384,7 @@ GTL pins, ROCm/Cray cross-builds, CUDA-aware MPI) baked in.
 | **vLLM model server**               | ROCm 7.2.0, source build          | oneAPI                                  | CUDA                            |
 | **VASP 6.6**                        | `build-vasp-gpu-frontier.sh`      | `build-vasp-gpu-aurora.sh` (`vasp_std`/`vasp_gam`/`vasp_ncl`) | (use site module if available)  |
 | **Quantum ESPRESSO `pw.x` (GPU)**   | OpenMP target offload to gfx90a   | `QE_GPU="openmp;oneapi"`, PVC arch      | CUDA build                      |
-| **Setup entry point**               | `deployments/frontier/setup/install-rocm72.sh` | `deployments/aurora/setup/install_matsim_aurora.sh` | `deployments/perlmutter/setup/install_matsim_perlmutter.sh` |
+| **Setup entry point**               | `deployments/frontier/setup/install.sh` | `deployments/aurora/setup/install.sh` | `deployments/perlmutter/setup/install.sh` |
 | **Active-learning launcher**        | `deployments/frontier/launchers/run-active-learning-frontier.sh` | (file-coupled via SLURM)                | (file-coupled via SLURM)        |
 | **Per-platform docs**               | [docs/quantum-espresso-frontier.md](docs/quantum-espresso-frontier.md) | [docs/quantum-espresso-aurora.md](docs/quantum-espresso-aurora.md), [docs/vasp-aurora.md](docs/vasp-aurora.md) | [docs/quantum-espresso-perlmutter.md](docs/quantum-espresso-perlmutter.md) |
 
@@ -582,17 +582,16 @@ cd matsim-agents
 # Local workstation (CPU or single GPU)
 ./scripts/setup_env.sh
 
-# Frontier (OLCF, ROCm 7.2 — current standard)
-bash deployments/frontier/setup/install-rocm72.sh
-
-# Perlmutter (NERSC)
-PLATFORM=perlmutter ./scripts/setup_env.sh
+# Frontier (OLCF), Aurora (ALCF), or Perlmutter (NERSC)
+bash deployments/frontier/setup/install.sh
+bash deployments/aurora/setup/install.sh
+bash deployments/perlmutter/setup/install.sh
 ```
 
-Available `PLATFORM` values for the generic `setup_env.sh`:
-`workstation` (default), `perlmutter`, `aurora`, `andes`,
-`frontier-rocm71`, `frontier-rocm64` (legacy — the supported Frontier
-path is `deployments/frontier/setup/install-rocm72.sh`).
+The generic `scripts/setup_env.sh` remains available for workstations and
+legacy deployments. On the three supported leadership systems, use the
+facility `install.sh` above. It runs HydraGNN's current official HPC installer
+first and leaves HydraGNN and matsim-agents in one verified environment.
 
 ### ROCm version matrix on Frontier
 
@@ -616,9 +615,10 @@ Environment overrides accepted by the installer:
 | `PYTHON` | Python interpreter | `python3` |
 | `HYDRAGNN_REPO` | HydraGNN git URL | `https://github.com/ORNL/HydraGNN.git` |
 | `HYDRAGNN_REF` | Branch/tag/commit | `main` |
-| `HYDRAGNN_DIR` | Reuse an existing HydraGNN checkout | `third_party/HydraGNN` |
-| `HYDRAGNN_EXTRAS` | Args forwarded to `install_dependencies.sh` | `all dev` |
-| `LLM_BACKENDS` | Subset of `ollama vllm openai anthropic huggingface` | `ollama vllm` |
+| `HYDRAGNN_DIR` | Reuse an existing HydraGNN checkout | sibling `HydraGNN` checkout |
+| `INSTALL_ROOT` | Environment and compiled dependency root | facility-specific HydraGNN installation root |
+| `VENV_PATH` | Override the single target Python environment | `${INSTALL_ROOT}/hydragnn_venv*` |
+| `MATSIM_EXTRAS` | matsim-agents extras installed in the target environment | `dev,openai,ollama,anthropic,huggingface` |
 | `BOOTSTRAP_OLLAMA` | Set to `1` to install the Ollama daemon, start it, and pull `OLLAMA_MODELS` (workstation only) | `0` |
 | `OLLAMA_MODELS` | Space-separated list of models to pull when `BOOTSTRAP_OLLAMA=1` | `qwen2.5:14b` |
 

@@ -1,6 +1,14 @@
 # Frontier Setup Scripts for matsim-agents
 
-This directory provides both full-install and quick-setup scripts for Frontier.
+The single full-install entry point for Frontier is:
+
+```bash
+bash deployments/frontier/setup/install.sh
+```
+
+It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current ROCm 7.2 installer,
+then installs and verifies matsim-agents in the resulting environment.
+`install_matsim_frontier.sh` is only a compatibility alias.
 
 ## Model Download Safety Policy
 
@@ -13,30 +21,22 @@ Download entry points:
 
 ## Scripts
 
-### install_matsim_frontier.sh
+### install.sh
 Frontier phased install that builds the HydraGNN runtime environment first, then
 installs matsim-agents and supporting dependencies.
 
 Usage:
 
 ```bash
-bash deployments/frontier/setup/install_matsim_frontier.sh
-# ROCm 7.2 variant
-bash deployments/frontier/setup/install_matsim_frontier.sh --rocm72
+bash deployments/frontier/setup/install.sh
 ```
 
 ### UMA MLIP Backend (fairchem-core)
 
 `fairchem-core >= 2.0` requires `numpy >= 2.0`, which conflicts with HydraGNN's
 `numpy == 1.26.4` pin. **Do not install `fairchem-core` into `hydragnn_venv`.**
-Use `INSTALL_UMA=1` to create a separate `fairchem_venv` alongside `hydragnn_venv`:
-
-```bash
-INSTALL_UMA=1 bash deployments/frontier/setup/install_matsim_frontier.sh
-```
-
-UMA jobs must activate `fairchem_venv` instead of `hydragnn_venv`. This is a
-known incompatibility until HydraGNN relaxes its numpy pin.
+UMA jobs must use a separate environment. The canonical HydraGNN installer does
+not silently create a second environment.
 
 ### setup_matsim_frontier.sh
 Quick setup script for daily use after installation.

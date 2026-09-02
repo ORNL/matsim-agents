@@ -3,6 +3,16 @@
 This directory provides an Aurora-focused setup flow that mirrors the phased
 install style used by the Frontier and Perlmutter scripts.
 
+The single full-install entry point is:
+
+```bash
+bash deployments/aurora/setup/install.sh
+```
+
+It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current Aurora installer,
+then installs and verifies matsim-agents in that environment.
+`install_matsim_aurora.sh` is only a compatibility alias.
+
 ## Model Download Safety Policy
 
 See the canonical cross-platform policy in `docs/model-download-safety.md`.
@@ -45,33 +55,30 @@ qsub deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh
 
 Runs a two-stage install:
 
-1. Run HydraGNN's Aurora installer from installation_DOE_supercomputers to
+1. Run HydraGNN's Aurora installer from `scripts/hpc/alcf/aurora` to
 	create/configure the environment and install HydraGNN dependencies.
 2. Install matsim-agents and additional runtime dependencies.
 
 Usage:
 
 ```bash
-bash deployments/aurora/setup/install_matsim_aurora.sh
+bash deployments/aurora/setup/install.sh
 ```
 
 Common overrides:
 
 ```bash
 # Choose env location
-VENV_PATH=/path/to/aurora_venv bash deployments/aurora/setup/install_matsim_aurora.sh
+VENV_PATH=/path/to/aurora_venv bash deployments/aurora/setup/install.sh
 
 # Choose Python interpreter
-PYTHON_BIN=python3.11 bash deployments/aurora/setup/install_matsim_aurora.sh
+PYTHON_BIN=python3.11 bash deployments/aurora/setup/install.sh
 
 # Install matsim-agents with extra backends
-LLM_BACKENDS="huggingface,dev" bash deployments/aurora/setup/install_matsim_aurora.sh
+MATSIM_EXTRAS="huggingface,dev" bash deployments/aurora/setup/install.sh
 
-# Also install vLLM
-INSTALL_VLLM_SERVER=1 bash deployments/aurora/setup/install_matsim_aurora.sh
-
-# Install UMA backend (creates a separate fairchem_venv — see note below)
-INSTALL_UMA=1 bash deployments/aurora/setup/install_matsim_aurora.sh
+# Request a clean rebuild
+RECREATE_ENV=1 bash deployments/aurora/setup/install.sh
 ```
 
 > **UMA / fairchem-core note:** `fairchem-core >= 2.0` requires `numpy >= 2.0`,

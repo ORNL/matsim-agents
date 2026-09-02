@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# One-shot, self-contained matsim-agents + HydraGNN environment for OLCF Frontier.
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MATSIM_DIR="${MATSIM_DIR:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+HYDRAGNN_DIR="${HYDRAGNN_DIR:-$(dirname "${MATSIM_DIR}")/HydraGNN}"
+HYDRAGNN_REPO="${HYDRAGNN_REPO:-https://github.com/ORNL/HydraGNN.git}"
+HYDRAGNN_REF="${HYDRAGNN_REF:-main}"
+INSTALL_ROOT="${INSTALL_ROOT:-${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72}"
+VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv_rocm72}"
+MATSIM_EXTRAS="${MATSIM_EXTRAS:-dev,openai,ollama,anthropic,huggingface}"
+RECREATE_ENV="${RECREATE_ENV:-0}"
+SKIP_VLLM="${SKIP_VLLM:-1}"
+
+log() { printf '\033[1;34m[frontier-install]\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31m[frontier-install]\033[0m %s\n' "$*" >&2; exit 1; }
+
+[[ -f "${MATSIM_DIR}/pyproject.toml" ]] || die "matsim-agents checkout not found: ${MATSIM_DIR}"
+command -v git >/dev/null || die "git is required"
+
+if [[ ! -d "${HYDRAGNN_DIR}/.git" ]]; then
+    log "Cloning HydraGNN ${HYDRAGNN_REF} into ${HYDRAGNN_DIR}"
+    git clone --branch "${HYDRAGNN_REF}" "${HYDRAGNN_REPO}" "${HYDRAGNN_DIR}"
+else
+    git -C "${HYDRAGNN_DIR}" diff --quiet && git -C "${HYDRAGNN_DIR}" diff --cached --quiet \
+        || die "HydraGNN checkout has local changes: ${HYDRAGNN_DIR}"
+    log "Updating HydraGNN checkout to ${HYDRAGNN_REF}"
+    git -C "${HYDRAGNN_DIR}" fetch origin "${HYDRAGNN_REF}"
+    git -C "${HYDRAGNN_DIR}" checkout --detach FETCH_HEAD
+fi
+
+HYDRAGNN_INSTALLER="${HYDRAGNN_DIR}/scripts/hpc/olcf/frontier/installation/install-rocm72.sh"
+[[ -f "${HYDRAGNN_INSTALLER}" ]] || die "HydraGNN Frontier installer not found: ${HYDRAGNN_INSTALLER}"
+
+# HydraGNN's Frontier script derives INSTALL_ROOT from PWD. Run it from this
+# compatibility parent so existing jobs continue to find the same environment.
+mkdir -p "$(dirname "${INSTALL_ROOT}")"
+log "Installing HydraGNN and its ROCm/PyG/MPI dependencies first"
+(
+    cd "$(dirname "${INSTALL_ROOT}")"
+    VENV_PATH="${VENV_PATH}" RECREATE_ENV="${RECREATE_ENV}" SKIP_VLLM="${SKIP_VLLM}" \
+        bash "${HYDRAGNN_INSTALLER}"
+)
+
+PYTHON="${VENV_PATH}/bin/python"
+[[ -x "${PYTHON}" ]] || die "HydraGNN did not create ${VENV_PATH}"
+log "Installing HydraGNN and matsim-agents wheels into the same environment"
+"${PYTHON}" -m pip install --upgrade-strategy only-if-needed --no-deps "${HYDRAGNN_DIR}"
+"${PYTHON}" -m pip install --upgrade-strategy only-if-needed "${MATSIM_DIR}[${MATSIM_EXTRAS}]"
+"${PYTHON}" -m pip install --upgrade-strategy only-if-needed hf_transfer
+"${PYTHON}" -m pip check
+"${PYTHON}" -c "import hydragnn, matsim_agents, torch; print('verified', torch.__version__)"
+
+log "Complete. Activate with: source ${VENV_PATH}/bin/activate"
