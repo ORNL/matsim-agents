@@ -40,6 +40,13 @@ def test_deployment_scripts_do_not_reference_hydragnn_owned_environment() -> Non
     for script in (ROOT / "deployments").rglob("*.sh"):
         assert old_fragment not in script.read_text(encoding="utf-8"), script
 
+    generic = (ROOT / "scripts/setup_env.sh").read_text(encoding="utf-8")
+    assert "installation_DOE_supercomputers" not in generic
+    assert "hydragnn_installation_bash_script" not in generic
+    assert 'deployments/${FACILITY}/setup/install.sh' in generic
+    assert "frontier|frontier-rocm71|frontier-rocm64)" in generic
+    assert "perlmutter|aurora)" in generic
+
 
 def test_mace_runtime_paths_use_matsim_owned_compatibility_environment() -> None:
     for script in (ROOT / "deployments").rglob("*.sh"):
@@ -60,7 +67,13 @@ def test_installation_guidance_has_no_obsolete_environment_contracts() -> None:
         "INSTALL_LLM_EXTRAS=1 bash",
         "numpy==1.26.4",
     )
-    roots = (ROOT / "README.md", ROOT / "docs", ROOT / "deployments", ROOT / "benchmarks")
+    roots = (
+        ROOT / "README.md",
+        ROOT / "docs",
+        ROOT / "deployments",
+        ROOT / "benchmarks",
+        ROOT / "scripts",
+    )
     files = [roots[0]]
     for directory in roots[1:]:
         files.extend(directory.rglob("*.md"))

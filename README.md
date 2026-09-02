@@ -588,10 +588,12 @@ bash deployments/aurora/setup/install.sh
 bash deployments/perlmutter/setup/install.sh
 ```
 
-The generic `scripts/setup_env.sh` remains available for workstations and
-legacy deployments. On the three supported leadership systems, use the
-facility `install.sh` above. It runs HydraGNN's current official HPC installer
-first and leaves HydraGNN and matsim-agents in one verified environment.
+The generic `scripts/setup_env.sh` remains the workstation implementation. If
+called with `PLATFORM=frontier`, `PLATFORM=aurora`, or
+`PLATFORM=perlmutter`, it delegates immediately to the corresponding canonical
+facility `install.sh` above. Each facility installer runs HydraGNN's current
+official HPC installer first and leaves HydraGNN and matsim-agents in one
+verified environment.
 
 ### ROCm version matrix on Frontier
 
@@ -1450,7 +1452,7 @@ matsim-agents/
 │   ├── quantum-espresso-perlmutter.md       # QE GPU build/run on Perlmutter (A100)
 │   └── vasp-aurora.md                       # VASP 6.6 makefile lineage on Aurora
 ├── scripts/
-│   └── setup_env.sh                         # workstation-only environment install
+│   └── setup_env.sh                         # workstation install / facility dispatcher
 ├── deployments/
 │   ├── frontier/setup/                      # Frontier (OLCF, MI250X) installers
 │   │   ├── install.sh                       # canonical matsim/HydraGNN installer
