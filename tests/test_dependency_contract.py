@@ -11,6 +11,12 @@ def test_hydragnn_main_dependency_contract() -> None:
     project = config["project"]
 
     assert project["requires-python"] == ">=3.11,<3.15"
+    assert {
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
+    } <= set(project["classifiers"])
     assert {"ase==3.26.0", "numpy==2.2.6", "scipy==1.17.1"} <= set(project["dependencies"])
     assert {
         "torch==2.13.0",
@@ -23,6 +29,12 @@ def test_hydragnn_main_dependency_contract() -> None:
     } <= set(project["optional-dependencies"]["hydragnn"])
     assert "fairchem-core" in project["optional-dependencies"]["uma"]
     assert project["optional-dependencies"]["mace"] == ["mace-torch==0.3.16"]
+
+
+def test_ci_python_matrix_matches_supported_range() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert 'python-version: ["3.11", "3.12", "3.13", "3.14"]' in workflow
+    assert '"3.10"' not in workflow
 
 
 def test_mace_and_hydragnn_e3nn_contracts_are_explicitly_isolated() -> None:
