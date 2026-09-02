@@ -110,7 +110,8 @@ pip_retry "langchain-core>=0.3.0" "pytest>=8.0" "pytest-cov>=5.0"
 # transformers 4.57.x which requires huggingface-hub<1.0; allowing the 1.x line
 # (e.g. 1.15.0) breaks `import transformers`. Keep transformers<5 for the same
 # compatibility window across Perlmutter/Frontier installers.
-pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0" "accelerate>=1.13"
+# hf_transfer accelerates large Hub downloads when available.
+pip_retry "huggingface_hub>=0.34.0,<1.0" "hf_transfer" "transformers>=4.45,<5.0" "accelerate>=1.13"
 
 # pyXtal (random-symmetry seed generation for matsim_agents.discovery.seeds)
 # is now a CORE matsim-agents dependency (see pyproject.toml) and is therefore

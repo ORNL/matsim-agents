@@ -222,11 +222,12 @@ log "Ensuring runtime dependencies used by fused HydraGNN path..."
 pip_retry "scikit-learn==1.5.1" "vesin==0.4.2"
 
 if [[ "${INSTALL_LLM_EXTRAS}" == "1" ]]; then
-    log "INSTALL_LLM_EXTRAS=1 -> installing LLM tooling extras (huggingface_hub + transformers + accelerate)..."
+    log "INSTALL_LLM_EXTRAS=1 -> installing LLM tooling extras (huggingface_hub + hf_transfer + transformers + accelerate)..."
     # Cap huggingface_hub<1.0: transformers<4.58 (and thus our 4.45..4.57 floor)
     # requires huggingface-hub<1.0. Pinned here to keep the resolver from picking
     # up the breaking 1.x line (e.g. 1.15.0) that ships with newer fairchem-core.
-    pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0" "accelerate>=1.13"
+    # hf_transfer accelerates large model downloads when the package is available.
+    pip_retry "huggingface_hub>=0.34.0,<1.0" "hf_transfer" "transformers>=4.45,<5.0" "accelerate>=1.13"
 else
     log "INSTALL_LLM_EXTRAS=0 -> skipping optional LLM tooling extras"
 fi

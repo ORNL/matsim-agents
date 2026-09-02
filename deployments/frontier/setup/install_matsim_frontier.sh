@@ -258,11 +258,12 @@ log "Installing accelerate (required for Transformers device_map=auto)..."
 pip_retry accelerate
 
 # Keep model download/inference tooling aligned with Perlmutter installs.
-log "Installing LLM tooling extras (huggingface_hub CLI + transformers)..."
+log "Installing LLM tooling extras (huggingface_hub CLI + hf_transfer + transformers)..."
 # Cap huggingface_hub<1.0: transformers<4.58 (and thus our 4.45..4.57 floor)
 # requires huggingface-hub<1.0. Pinned here to keep the resolver from picking
 # up the breaking 1.x line (e.g. 1.15.0) that ships with newer fairchem-core.
-pip_retry "huggingface_hub>=0.34.0,<1.0" "transformers>=4.45,<5.0"
+# hf_transfer accelerates large model downloads when the package is available.
+pip_retry "huggingface_hub>=0.34.0,<1.0" "hf_transfer" "transformers>=4.45,<5.0"
 
 # pyXtal (random-symmetry seed generation for matsim_agents.discovery.seeds)
 # is now a CORE matsim-agents dependency (see pyproject.toml) and is therefore
