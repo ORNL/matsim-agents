@@ -29,15 +29,16 @@ It assigns the same hypothesis to at least two LLM participants. Within each
 round, every participant sees the prior transcript and must identify which peer
 claims it supports or disputes, expose assumptions, and propose falsification
 tests. Speaking order rotates between rounds, so one model does not permanently
-receive either the first-turn or last-turn advantage. After the requested
-rounds, a designated participant (the first by default) produces a synthesis
-that retains unresolved disagreements instead of forcing consensus.
+receive either the first-turn or last-turn advantage. In equal mode, every
+participant produces an independent final verdict; no designated model is
+allowed to reinterpret the panel or manufacture consensus.
 
 ```yaml
 hypothesis: "Pressure stabilizes a metastable silicon phase at room temperature."
 rounds: 3
 output_root: ./runs
-synthesis_participant: theorist
+debate_mode: equal
+synthesis_method: independent_verdicts
 participants:
   - name: theorist
     role: first-principles condensed-matter theorist
@@ -59,6 +60,13 @@ participant identities, complete ordered transcript, synthesis, and provenance.
 LLM statements remain hypothesis-level evidence until calculations or
 experiments verify them. `max_transcript_chars` bounds the context sent to each
 model (default 60,000) without truncating the transcript saved on disk.
+
+`debate_mode: equal` is the default. Participant roles are ignored, all models
+receive the same neutral system instructions, and
+`synthesis_method: independent_verdicts` saves one conclusion per model. To run
+an intentionally asymmetric panel instead, select `debate_mode: role_based`,
+assign participant roles, and optionally use
+`synthesis_method: designated_model` with `synthesis_participant`.
 
 For deployment qualification across the entire first-class model catalog, use
 `benchmarks/portability/llm_enclave.py`. Unlike a user-selected debate, this

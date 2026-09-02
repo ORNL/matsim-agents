@@ -16,8 +16,10 @@ class _Model:
     def __init__(self, name: str):
         self.name = name
         self.prompts = []
+        self.system_prompts = []
 
     def invoke(self, messages):
+        self.system_prompts.append(messages[0].content)
         self.prompts.append(messages[-1].content)
         return SimpleNamespace(content=f"argument from {self.name} call {len(self.prompts)}")
 
@@ -42,6 +44,7 @@ def test_models_debate_each_other_for_user_selected_rounds(tmp_path):
     result = run_scientific_debate(cfg, model_factory=factory)
     assert result.rounds_completed == 3
     assert len(result.turns) == 9
+    assert len(result.verdicts) == 3
     assert [turn.participant for turn in result.turns[:6]] == [
         "theorist",
         "skeptic",
@@ -57,9 +60,41 @@ def test_models_debate_each_other_for_user_selected_rounds(tmp_path):
     dialogue = json.loads((tmp_path / result.run_id / "dialogue.json").read_text())
     model_contributions = [entry for entry in dialogue if entry["kind"].startswith("model_")]
     identifiers = [entry["contribution_id"] for entry in model_contributions]
-    assert len(model_contributions) == 10
+    assert len(model_contributions) == 12
     assert len(identifiers) == len(set(identifiers))
     assert all(identifier for identifier in identifiers)
+    assert len({models[name].system_prompts[0] for name in models}) == 1
+
+
+def test_designated_synthesis_remains_available_for_role_based_debate(tmp_path):
+    models = {}
+
+    def factory(*, provider, model, base_url):
+        models[model] = _Model(model)
+        return models[model]
+
+    result = run_scientific_debate(
+        ScientificDebateConfig(
+            hypothesis="Candidate X has high ZT.",
+            output_root=str(tmp_path),
+            debate_mode="role_based",
+            synthesis_method="designated_model",
+            synthesis_participant="theorist",
+            participants=[
+                DebateParticipant(name="theorist", provider="vllm", model="a", role="theorist"),
+                DebateParticipant(
+                    name="experimentalist",
+                    provider="vllm",
+                    model="b",
+                    role="experimentalist",
+                ),
+            ],
+        ),
+        model_factory=factory,
+    )
+    assert len(result.verdicts) == 1
+    assert result.verdicts[0].participant == "theorist"
+    assert result.synthesis_turn_id == result.verdicts[0].contribution_id
 
 
 def test_debate_rejects_duplicate_names_and_unknown_synthesizer():

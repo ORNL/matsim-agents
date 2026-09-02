@@ -62,7 +62,7 @@ def test_every_catalog_model_completes_two_scientific_interaction_rounds(tmp_pat
     assert result["status"] == "passed"
     assert result["required_models"] == [f"org/model-{index}" for index in range(3)]
     assert result["turn_count"] == 6
-    assert all(model.calls >= 2 for model in models.values())
+    assert all(model.calls == 3 for model in models.values())
     dialogue = json.loads(Path(result["dialogue_path"]).read_text())
     contributions = [entry for entry in dialogue if entry["kind"] == "model_argument"]
     assert len(contributions) == 6

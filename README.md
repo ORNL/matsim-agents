@@ -718,6 +718,11 @@ provenance are retained in a uniquely named run directory. See
 [`docs/scientific-workflows.md`](docs/scientific-workflows.md) for the complete
 configuration and evidence limitations.
 
+The default is a debate between equals: roles do not alter prompts, all models
+receive identical neutral instructions, and every model writes an independent
+final verdict. Role-based debate and designated-model synthesis remain explicit
+options for workflows that intentionally need an asymmetric review panel.
+
 Before using a real model in a scientific workflow, qualify its configuration,
 endpoint or local artifacts, loading, structured output, multi-turn behavior,
 resource visibility, and latency independently:

@@ -74,7 +74,9 @@ def validate_enclave_result(
 ) -> list[str]:
     errors = []
     expected = {participant.name for participant in participants}
-    contribution_ids = [turn.turn_id for turn in result.turns] + [result.synthesis_turn_id]
+    contribution_ids = [turn.turn_id for turn in result.turns] + [
+        verdict.contribution_id for verdict in result.verdicts
+    ]
     if len(contribution_ids) != len(set(contribution_ids)):
         errors.append("model contribution IDs are not unique")
     if any(not contribution_id.strip() for contribution_id in contribution_ids):
@@ -90,8 +92,12 @@ def validate_enclave_result(
         empty = [turn.participant for turn in turns if not turn.response.strip()]
         if empty:
             errors.append(f"round {round_index} has empty responses from {sorted(empty)}")
-    if not result.synthesis.strip():
-        errors.append("final synthesis is empty")
+    verdict_models = {verdict.model for verdict in result.verdicts}
+    expected_models = {participant.model for participant in participants}
+    if verdict_models != expected_models:
+        errors.append("independent final verdicts do not cover every model")
+    if any(not verdict.response.strip() for verdict in result.verdicts):
+        errors.append("one or more independent final verdicts are empty")
     return errors
 
 
@@ -113,6 +119,8 @@ def execute_llm_enclave(
         participants=participants,
         rounds=rounds,
         output_root=str(output / "runs"),
+        debate_mode="equal",
+        synthesis_method="independent_verdicts",
     )
     try:
         debate = run_scientific_debate(config, model_factory=model_factory)

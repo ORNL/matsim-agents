@@ -82,7 +82,9 @@ model catalog. It dynamically reads
 `deployments/common/open-model-catalog.json`; therefore a newly cataloged model
 automatically becomes required. Every model must contribute exactly once in
 each of at least two rounds, directly respond to the accumulated peer dialogue,
-and return non-empty text. The assigned materials-design question is:
+and return non-empty text. Every participant receives identical neutral system
+instructions and produces its own final verdict; the benchmark has no
+privileged synthesizer. The assigned materials-design question is:
 
 > What candidate material provides an optimal thermoelectric functional
 > property—specifically a high dimensionless figure of merit ZT near 800 K—

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
@@ -28,6 +28,8 @@ class ScientificDebateConfig(BaseModel):
     participants: list[DebateParticipant] = Field(min_length=2)
     rounds: int = Field(2, ge=1, le=100)
     output_root: str = "./runs"
+    debate_mode: Literal["equal", "role_based"] = "equal"
+    synthesis_method: Literal["independent_verdicts", "designated_model"] = "independent_verdicts"
     synthesis_participant: str | None = None
     max_transcript_chars: int = Field(60_000, ge=1_000)
 
@@ -38,12 +40,24 @@ class ScientificDebateConfig(BaseModel):
             raise ValueError("debate participant names must be unique")
         if self.synthesis_participant is not None and self.synthesis_participant not in names:
             raise ValueError("synthesis_participant must name a configured participant")
+        if self.synthesis_method == "independent_verdicts" and self.synthesis_participant:
+            raise ValueError(
+                "synthesis_participant is only valid with synthesis_method=designated_model"
+            )
         return self
 
 
 class DebateTurn(BaseModel):
     turn_id: str
     round: int
+    participant: str
+    provider: str
+    model: str
+    response: str
+
+
+class DebateVerdict(BaseModel):
+    contribution_id: str
     participant: str
     provider: str
     model: str
@@ -57,8 +71,9 @@ class ScientificDebateResult(BaseModel):
     hypothesis: str
     rounds_completed: int
     turns: list[DebateTurn]
+    verdicts: list[DebateVerdict]
     synthesis: str
-    synthesis_turn_id: str
+    synthesis_turn_id: str | None = None
     transcript_path: str
     dialogue_path: str
 
@@ -114,22 +129,32 @@ def run_scientific_debate(
         for participant in cfg.participants
     }
     turns: list[DebateTurn] = []
+    equal_instruction = (
+        "You are one equal member of a scientific debate panel. No participant has greater "
+        "authority or a privileged role. Independently evaluate the hypothesis, explicitly "
+        "identify peer claims you support or dispute, expose assumptions, propose falsification "
+        "tests, and update your position when warranted. Do not seek superficial consensus. "
+        "Distinguish evidence from speculation."
+    )
     for round_index in range(cfg.rounds):
         offset = round_index % len(cfg.participants)
         order = cfg.participants[offset:] + cfg.participants[:offset]
         for participant in order:
             history = _transcript(turns, cfg.max_transcript_chars) or "No peer has spoken yet."
+            instruction = (
+                equal_instruction
+                if cfg.debate_mode == "equal"
+                else (
+                    f"You are {participant.name}, acting as {participant.role}. Debate the "
+                    "scientific hypothesis independently. Explicitly identify which peer claims "
+                    "you support or dispute, expose assumptions, propose falsification tests, "
+                    "and update your position when warranted. Do not seek superficial consensus. "
+                    "Distinguish evidence from speculation."
+                )
+            )
             response = models[participant.name].invoke(
                 [
-                    SystemMessage(
-                        content=(
-                            f"You are {participant.name}, acting as {participant.role}. "
-                            "Debate the scientific hypothesis independently. Explicitly identify "
-                            "which peer claims you support or dispute, expose assumptions, propose "
-                            "falsification tests, and update your position when warranted. Do not "
-                            "seek superficial consensus. Distinguish evidence from speculation."
-                        )
-                    ),
+                    SystemMessage(content=instruction),
                     HumanMessage(
                         content=(
                             f"Hypothesis:\n{cfg.hypothesis}\n\n"
@@ -151,27 +176,54 @@ def run_scientific_debate(
                 )
             )
 
-    synthesizer_name = cfg.synthesis_participant or cfg.participants[0].name
-    synthesis = _content(
-        models[synthesizer_name].invoke(
-            [
-                SystemMessage(
-                    content=(
-                        "Synthesize a scientific debate without erasing disagreement. Report: "
-                        "consensus, unresolved disputes, strongest evidence, assumptions, decisive "
-                        "experiments or calculations, and a calibrated verdict on the hypothesis."
-                    )
-                ),
-                HumanMessage(
-                    content=(
-                        f"Hypothesis:\n{cfg.hypothesis}\n\nTranscript:\n"
-                        f"{_transcript(turns, cfg.max_transcript_chars)}"
-                    ),
-                ),
-            ]
-        )
+    verdict_participants = (
+        cfg.participants
+        if cfg.synthesis_method == "independent_verdicts"
+        else [
+            next(
+                participant
+                for participant in cfg.participants
+                if participant.name == (cfg.synthesis_participant or cfg.participants[0].name)
+            )
+        ]
     )
-    synthesis_turn_id = f"synthesis-turn-{len(turns) + 1:04d}"
+    verdicts = []
+    for index, participant in enumerate(verdict_participants, start=1):
+        response = _content(
+            models[participant.name].invoke(
+                [
+                    SystemMessage(
+                        content=(
+                            "Give your independent final assessment of this scientific debate. "
+                            "Report supported points, unresolved disputes, strongest evidence, "
+                            "assumptions, decisive tests, and a calibrated verdict. Do not claim "
+                            "to speak for the other panel members or manufacture consensus."
+                        )
+                    ),
+                    HumanMessage(
+                        content=(
+                            f"Hypothesis:\n{cfg.hypothesis}\n\nTranscript:\n"
+                            f"{_transcript(turns, cfg.max_transcript_chars)}"
+                        ),
+                    ),
+                ]
+            )
+        )
+        verdicts.append(
+            DebateVerdict(
+                contribution_id=f"verdict-{index:03d}-turn-{len(turns) + index:04d}",
+                participant=participant.name,
+                provider=participant.provider,
+                model=participant.model,
+                response=response,
+            )
+        )
+    synthesis = "\n\n".join(
+        f"[{verdict.participant} independent verdict]\n{verdict.response}" for verdict in verdicts
+    )
+    synthesis_turn_id = (
+        verdicts[0].contribution_id if cfg.synthesis_method == "designated_model" else None
+    )
     dialogue = [
         {
             "contribution_id": "hypothesis-0000",
@@ -191,22 +243,21 @@ def run_scientific_debate(
             }
             for turn in turns
         ],
-        {
-            "contribution_id": synthesis_turn_id,
-            "kind": "model_synthesis",
-            "speaker": synthesizer_name,
-            "provider": next(
-                participant.provider
-                for participant in cfg.participants
-                if participant.name == synthesizer_name
-            ),
-            "model": next(
-                participant.model
-                for participant in cfg.participants
-                if participant.name == synthesizer_name
-            ),
-            "text": synthesis,
-        },
+        *[
+            {
+                "contribution_id": verdict.contribution_id,
+                "kind": (
+                    "model_verdict"
+                    if cfg.synthesis_method == "independent_verdicts"
+                    else "model_synthesis"
+                ),
+                "speaker": verdict.participant,
+                "provider": verdict.provider,
+                "model": verdict.model,
+                "text": verdict.response,
+            }
+            for verdict in verdicts
+        ],
     ]
     dialogue_path = run.write_json("dialogue.json", dialogue)
     transcript_path = run.write_json(
@@ -214,6 +265,7 @@ def run_scientific_debate(
         {
             "hypothesis": cfg.hypothesis,
             "turns": [turn.model_dump(mode="json") for turn in turns],
+            "verdicts": [verdict.model_dump(mode="json") for verdict in verdicts],
             "synthesis": synthesis,
         },
     )
@@ -224,6 +276,7 @@ def run_scientific_debate(
         hypothesis=cfg.hypothesis,
         rounds_completed=cfg.rounds,
         turns=turns,
+        verdicts=verdicts,
         synthesis=synthesis,
         synthesis_turn_id=synthesis_turn_id,
         transcript_path=str(transcript_path),
@@ -236,6 +289,7 @@ def run_scientific_debate(
 __all__ = [
     "DebateParticipant",
     "DebateTurn",
+    "DebateVerdict",
     "ScientificDebateConfig",
     "ScientificDebateResult",
     "run_scientific_debate",
