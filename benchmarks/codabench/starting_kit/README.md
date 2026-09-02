@@ -219,6 +219,23 @@ python run_baselines.py --model allscaip    # AllScAIP
 python run_baselines.py --model all --relax # all baselines including relaxation (Tasks 3 & 4)
 ```
 
+`run_baselines.py` writes raw model totals and numerical artifacts beneath
+`predictions/<model>/`. Raw total energies are not formation energies. After
+applying the published elemental-reference convention into a file containing
+`structure_id,formation_energy_eV_per_atom`, create a submission with:
+
+```bash
+python package_submission.py predictions/<model> submission/ \
+  --formation-energies path/to/formation_energies.csv
+```
+
+The packager refuses to label a raw `energy_eV` file as Task 1 or Task 5.
+Forces and available relaxed structures can be packaged independently.
+
+The HydraGNN reference baseline also requires an installed `matsim-agents`
+checkout and its separately installed HydraGNN runtime. The MACE, UMA, and
+AllScAIP baselines do not import `matsim-agents`.
+
 To use UMA or AllScAIP, accept the model-card licenses on HuggingFace first:
 
 - UMA: <https://huggingface.co/facebook/UMA>

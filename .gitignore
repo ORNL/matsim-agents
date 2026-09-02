@@ -88,26 +88,26 @@ id_mapping.json
 **/id_mapping.json
 
 # Codabench reference data labels — server-side only, never publish
-codabench_competition/reference_data/formation_energies.csv
-codabench_competition/reference_data/forces/
-codabench_competition/reference_data/relaxed/
-codabench_competition/reference_data/task4_relaxed/
+benchmarks/codabench/reference_data/formation_energies.csv
+benchmarks/codabench/reference_data/forces/
+benchmarks/codabench/reference_data/relaxed/
+benchmarks/codabench/reference_data/task4_relaxed/
 # Private descriptive metadata (carries the `formula` column used by
 # create_split.py for stratification). Server-side only, never publish.
-codabench_competition/reference_data/private_reference/
+benchmarks/codabench/reference_data/private_reference/
 # Parsed elemental energies (derived from VASP OUTCARs — also sensitive)
-codabench_competition/dft_reference/vasp/elemental_refs/elemental_energies.json
+benchmarks/codabench/dft_reference/vasp/elemental_refs/elemental_energies.json
 # VASP compound and elemental calculation output trees (contain OUTCARs)
-codabench_competition/dft_reference/vasp/compounds/
+benchmarks/codabench/dft_reference/vasp/compounds/
 # VASP elemental reference calculation inputs — reproducible from setup_elements.py
 # but committing them would trivially expose the exact DFT settings needed to
 # reproduce the reference energies (POSCAR + INCAR + KPOINTS → run → same result).
-codabench_competition/dft_reference/vasp/elemental_refs/calculations/
+benchmarks/codabench/dft_reference/vasp/elemental_refs/calculations/
 # DFT input/collection scripts — moved to private repo (matsim-agents-dft-reference).
 # Full recipe (INCAR params, k-spacing, POTCAR map) must not be in the public repo.
-codabench_competition/dft_reference/
+benchmarks/codabench/dft_reference/
 # Logs from PBS jobs
-codabench_competition/dft_reference/vasp/elemental_refs/logs/
+benchmarks/codabench/dft_reference/vasp/elemental_refs/logs/
 
 # Vendored third-party clones (bootstrapped by scripts/setup_env.sh)
 third_party/

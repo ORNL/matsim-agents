@@ -138,6 +138,9 @@ jobs:
       - name: Ruff format check
         run: ruff format --check src/ tests/
 
+      - name: Validate Codabench source bundle
+        run: python benchmarks/codabench/validate_bundle.py
+
       - name: mypy type check (src only)
         run: mypy src/matsim_agents --ignore-missing-imports
         continue-on-error: true  # type errors are informational for now
