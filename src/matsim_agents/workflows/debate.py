@@ -42,6 +42,7 @@ class ScientificDebateConfig(BaseModel):
 
 
 class DebateTurn(BaseModel):
+    turn_id: str
     round: int
     participant: str
     provider: str
@@ -57,7 +58,9 @@ class ScientificDebateResult(BaseModel):
     rounds_completed: int
     turns: list[DebateTurn]
     synthesis: str
+    synthesis_turn_id: str
     transcript_path: str
+    dialogue_path: str
 
 
 def _content(response: Any) -> str:
@@ -139,6 +142,7 @@ def run_scientific_debate(
             )
             turns.append(
                 DebateTurn(
+                    turn_id=f"round-{round_index + 1:03d}-turn-{len(turns) + 1:04d}",
                     round=round_index + 1,
                     participant=participant.name,
                     provider=participant.provider,
@@ -167,6 +171,44 @@ def run_scientific_debate(
             ]
         )
     )
+    synthesis_turn_id = f"synthesis-turn-{len(turns) + 1:04d}"
+    dialogue = [
+        {
+            "contribution_id": "hypothesis-0000",
+            "kind": "assigned_hypothesis",
+            "speaker": "user",
+            "text": cfg.hypothesis,
+        },
+        *[
+            {
+                "contribution_id": turn.turn_id,
+                "kind": "model_argument",
+                "round": turn.round,
+                "speaker": turn.participant,
+                "provider": turn.provider,
+                "model": turn.model,
+                "text": turn.response,
+            }
+            for turn in turns
+        ],
+        {
+            "contribution_id": synthesis_turn_id,
+            "kind": "model_synthesis",
+            "speaker": synthesizer_name,
+            "provider": next(
+                participant.provider
+                for participant in cfg.participants
+                if participant.name == synthesizer_name
+            ),
+            "model": next(
+                participant.model
+                for participant in cfg.participants
+                if participant.name == synthesizer_name
+            ),
+            "text": synthesis,
+        },
+    ]
+    dialogue_path = run.write_json("dialogue.json", dialogue)
     transcript_path = run.write_json(
         "debate_transcript.json",
         {
@@ -183,7 +225,9 @@ def run_scientific_debate(
         rounds_completed=cfg.rounds,
         turns=turns,
         synthesis=synthesis,
+        synthesis_turn_id=synthesis_turn_id,
         transcript_path=str(transcript_path),
+        dialogue_path=str(dialogue_path),
     )
     run.write_json("results.json", result)
     return result

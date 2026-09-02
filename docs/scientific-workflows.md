@@ -60,6 +60,11 @@ LLM statements remain hypothesis-level evidence until calculations or
 experiments verify them. `max_transcript_chars` bounds the context sent to each
 model (default 60,000) without truncating the transcript saved on disk.
 
+For deployment qualification across the entire first-class model catalog, use
+`benchmarks/portability/llm_enclave.py`. Unlike a user-selected debate, this
+benchmark fails closed unless every catalog model completes at least two rounds
+and the saved dialogue assigns a unique contribution ID to every model turn.
+
 “Supported” means that the workflow contract exists. It does not imply that a
 licensed VASP binary, POTCAR library, QE pseudopotentials, or a particular MLIP
 checkpoint is installed at a site.

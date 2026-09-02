@@ -11,6 +11,12 @@
     "compute": {
       "purpose": "Production numerical qualification using installed models and QE assets.",
       "required": ["real-mlip-relaxation", "real-qe-relaxation", "scientific-summary"]
+    },
+    "llm_enclave": {
+      "purpose": "Every first-class catalog LLM debates one materials-design hypothesis with every peer.",
+      "minimum_rounds": 2,
+      "model_set": "deployments/common/open-model-catalog.json",
+      "required_artifacts": ["llm_enclave_result.json", "dialogue.json"]
     }
   },
   "suites": {

@@ -34,3 +34,7 @@ PYTHON="${VENV}/bin/python3"
 
 "${PYTHON}" "${REPO}/benchmarks/portability/run.py" "${ARGS[@]}"
 "${PYTHON}" "${REPO}/benchmarks/portability/validate.py" "${RUN_DIR}"
+if [[ "${MATSIM_RUN_LLM_ENCLAVE:-0}" == "1" ]]; then
+  "${PYTHON}" "${REPO}/benchmarks/portability/llm_enclave.py" \
+    --rounds "${MATSIM_DEBATE_ROUNDS:-2}" --output "${RUN_DIR}/llm-enclave"
+fi

@@ -54,6 +54,12 @@ def test_models_debate_each_other_for_user_selected_rounds(tmp_path):
     transcript = json.loads((tmp_path / result.run_id / "debate_transcript.json").read_text())
     assert len(transcript["turns"]) == 9
     assert transcript["synthesis"] == result.synthesis
+    dialogue = json.loads((tmp_path / result.run_id / "dialogue.json").read_text())
+    model_contributions = [entry for entry in dialogue if entry["kind"].startswith("model_")]
+    identifiers = [entry["contribution_id"] for entry in model_contributions]
+    assert len(model_contributions) == 10
+    assert len(identifiers) == len(set(identifiers))
+    assert all(identifier for identifier in identifiers)
 
 
 def test_debate_rejects_duplicate_names_and_unknown_synthesizer():

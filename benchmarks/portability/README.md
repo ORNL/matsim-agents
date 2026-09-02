@@ -75,6 +75,48 @@ pseudopotentials at all sites. The facility jobs accept
 `MATSIM_PORTABILITY_RELAXATION_CONFIGS` list. Contract mode remains the default
 CI/release gate because it does not require external model or DFT assets.
 
+### All-model LLM enclave qualification
+
+`llm_enclave.py` is the live portability test for the complete first-class
+model catalog. It dynamically reads
+`deployments/common/open-model-catalog.json`; therefore a newly cataloged model
+automatically becomes required. Every model must contribute exactly once in
+each of at least two rounds, directly respond to the accumulated peer dialogue,
+and return non-empty text. The assigned materials-design question is:
+
+> What candidate material provides an optimal thermoelectric functional
+> property—specifically a high dimensionless figure of merit ZT near 800 K—
+> while remaining chemically stable and composed of reasonably abundant
+> elements?
+
+Thermoelectric `ZT` is a standard community metric that couples the Seebeck
+coefficient, electrical conductivity, thermal conductivity, and temperature.
+The benchmark tests scientific interaction and deployment portability; it does
+not treat the proposed candidate or the debate consensus as validated evidence.
+
+Each catalog entry declares a `base_url_env`. Export every corresponding
+endpoint variable (or one `MATSIM_VLLM_BASE_URL` endpoint capable of routing
+all catalog model IDs), then run:
+
+```bash
+python benchmarks/portability/llm_enclave.py \
+  --rounds 2 --output runs/portability/llm-enclave
+```
+
+The required `dialogue.json` artifact contains the original user question,
+every model argument in chronological dialogue order, and the final synthesis.
+Every model argument and synthesis has a unique `contribution_id`, together
+with its round, participant, provider, model identifier, and full text. The
+machine-readable result fails for a missing catalog endpoint, missing model
+turn, empty contribution, duplicate contribution ID, or empty synthesis.
+
+Facility portability jobs run this additional test when
+`MATSIM_RUN_LLM_ENCLAVE=1`; use `MATSIM_DEBATE_ROUNDS` to request more than the
+mandatory two rounds. The endpoints must already be live within the compute
+allocation. Large catalog checkpoints will generally require separate or
+multi-node servers; catalog membership does not imply simultaneous one-node
+residency.
+
 ## Running
 
 Plan locally without a scheduler:

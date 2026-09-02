@@ -6,7 +6,6 @@
 #SBATCH -N 1
 #SBATCH -C gpu
 #SBATCH -q regular
-#SBATCH -A m5216_g
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
 # ---------------------------------------------------------------------------
