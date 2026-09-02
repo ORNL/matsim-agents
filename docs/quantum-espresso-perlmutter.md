@@ -34,7 +34,7 @@ Two build scripts are provided:
 
 Ensure your matsim-agents environment is set up:
 ```bash
-cd /global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+cd /path/to/matsim-agents
 source deployments/perlmutter/setup/perlmutter-module-stack.sh
 ```
 
@@ -88,7 +88,7 @@ source deployments/perlmutter/setup/perlmutter-module-stack.sh
 load_perlmutter_modules_gpu      # for GPU jobs
 # or
 # load_perlmutter_modules        # for CPU-only jobs
-conda activate scripts/perlmutter_venv
+source .venv/bin/activate
 ```
 
 ### GPU Execution
@@ -106,7 +106,7 @@ turns on GPU-aware MPI, and `srun`s `pw.x` with the correct A100 layout
 #SBATCH -C gpu
 #SBATCH -q regular
 #SBATCH -t 01:00:00
-#SBATCH -A m5216
+#SBATCH -A <allocation>
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
 #SBATCH --job-name=qe-gpu-job
@@ -125,7 +125,7 @@ The HydraGNN-MLFF warm-start vs `pw.x` cold-start integration test
 ([`tests/integration/test_qe_warmstart.py`](../tests/integration/test_qe_warmstart.py))
 has a ready-made Perlmutter SBATCH wrapper at
 [`deployments/perlmutter/launchers/run-qe-warmstart-benchmark-perlmutter.sh`](../deployments/perlmutter/launchers/run-qe-warmstart-benchmark-perlmutter.sh).
-It loads the HydraGNN-aligned module stack + `hydragnn_venv`, exports the
+It loads the HydraGNN-aligned module stack plus the matsim-owned `.venv`, exports the
 `MATSIM_QE_*` and `MATSIM_HYDRAGNN_*` env vars, and runs `pytest`:
 
 ```bash
@@ -142,7 +142,7 @@ For CPU-only `pw.x`:
 #SBATCH -N 1
 #SBATCH -q regular
 #SBATCH -t 01:00:00
-#SBATCH -A m5216
+#SBATCH -A <allocation>
 
 source deployments/perlmutter/setup/perlmutter-module-stack.sh
 load_perlmutter_modules
@@ -243,10 +243,10 @@ When running QE with GPU offload:
 
 ```bash
 # 1. Set up environment
-cd /global/cfs/projectdirs/amsc001/cm2us/mlupopa/matsim-agents
+cd /path/to/matsim-agents
 source deployments/perlmutter/setup/perlmutter-module-stack.sh
 load_perlmutter_modules_gpu
-conda activate scripts/perlmutter_venv
+source .venv/bin/activate
 
 # 2. Build QE GPU version (on login node, background)
 mkdir -p runs/build-qe-gpu-login
@@ -283,11 +283,11 @@ EOF
 # 5. Create and submit a test job
 cat > job-qe-test.sh << 'EOF'
 #!/bin/bash
-#SBATCH -N 1 -C gpu -q regular -t 00:10:00 -A m5216
+#SBATCH -N 1 -C gpu -q regular -t 00:10:00 -A <allocation>
 
 source deployments/perlmutter/setup/perlmutter-module-stack.sh
 load_perlmutter_modules_gpu
-conda activate scripts/perlmutter_venv
+source .venv/bin/activate
 
 srun -N1 -n1 -c14 --gpus-per-node=1 --gpu-bind=closest \
      external/quantum-espresso/install-gpu/bin/pw.x -in test-qe.in

@@ -14,7 +14,7 @@
 # (tests/integration/test_qe_warmstart.py) on a single Perlmutter GPU node.
 #
 # Architecture (Perlmutter is simpler than Frontier here):
-#   * HydraGNN ASE relax phase  : cudatoolkit/12.9 + hydragnn_venv (torch cu129)
+#   * HydraGNN ASE relax phase  : cudatoolkit/12.9 + matsim .venv (torch 2.13)
 #   * pw.x phase                : NVHPC 25.5 (also CUDA 12.9) — same major.minor
 #                                 as the PyTorch wheel, so no module conflict.
 #   The pw.x launcher handles the PrgEnv-nvidia swap inside its own subshell

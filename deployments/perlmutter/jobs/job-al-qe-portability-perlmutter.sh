@@ -47,7 +47,7 @@ mkdir -p "$RUN_DIR"
 export MLIP_BACKEND="${MLIP_BACKEND:-uma}"
 export DFT_BACKEND="${DFT_BACKEND:-qe}"
 
-# ── modules & venv (hydragnn_venv for UMA MD/scoring) ─────────────────────────
+# ── modules and matsim-owned .venv for UMA MD/scoring ────────────────────────
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 # shellcheck disable=SC1091

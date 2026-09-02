@@ -19,7 +19,7 @@
 #
 # Runs `matsim-agents al run examples/paper_cases/al_<case>.yaml` with
 #   MLIP_BACKEND=uma DFT_BACKEND=vasp
-# from the unified hydragnn_venv created with INSTALL_UMA=1.
+# from the matsim-owned .venv created with INSTALL_UMA=1.
 #
 # Select the case with the CASE env var (default: hea_bcc):
 #   CASE=lifepo4    sbatch deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh

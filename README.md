@@ -536,7 +536,7 @@ Perlmutter (NERSC, NVIDIA A100) is supported as a first-class target
 for both the Python/ML stack and Quantum ESPRESSO GPU.
 
 - Setup overview: [`deployments/perlmutter/setup/README.md`](deployments/perlmutter/setup/README.md)
-- Matsim env install: [`deployments/perlmutter/setup/install_matsim_perlmutter.sh`](deployments/perlmutter/setup/install_matsim_perlmutter.sh)
+- Matsim environment installer: [`deployments/perlmutter/setup/install.sh`](deployments/perlmutter/setup/install.sh)
 - QE GPU build: [`deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh`](deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh)
   (CPU-only variant: [`build-qe-cpu-perlmutter.sh`](deployments/perlmutter/setup/build-qe-cpu-perlmutter.sh))
 - QE detailed build guide: [`deployments/perlmutter/setup/QE-BUILD-GUIDE.md`](deployments/perlmutter/setup/QE-BUILD-GUIDE.md)
@@ -1433,9 +1433,9 @@ for the full participant guide including submission formats.
 
 The concise, responsibility-oriented package map is maintained in
 [docs/architecture.md](docs/architecture.md). Machine assets live under
-`deployments/<facility>/{setup,launchers,jobs,smoke-tests}`; the older detailed
-tree below is retained as a file-level index but `deployments/` is authoritative
-for current facility paths. The cross-facility release gate lives under
+`deployments/<facility>/{setup,launchers,jobs,smoke-tests}`. The compact tree
+below shows the current ownership model; use the per-facility READMEs for full
+file inventories. The cross-facility release gate lives under
 `benchmarks/portability/`.
 
 ```
@@ -1450,32 +1450,25 @@ matsim-agents/
 │   ├── quantum-espresso-perlmutter.md       # QE GPU build/run on Perlmutter (A100)
 │   └── vasp-aurora.md                       # VASP 6.6 makefile lineage on Aurora
 ├── scripts/
-│   ├── setup_env.sh                         # workstation / legacy HPC env install
-│   ├── setup/
-│   │   ├── frontier/                        # Frontier (OLCF, MI250X) installers
-│   │   │   ├── install-rocm72.sh            # vLLM ROCm 7.2 master install
-│   │   │   ├── install_matsim_frontier.sh   # matsim-agents env on Frontier
-│   │   │   ├── prebuild-tvm-ffi-frontier.sh
-│   │   │   ├── build-vllm-rocm72.sh         # vLLM source build
-│   │   │   ├── build-qe-cpu-frontier.sh     # Quantum ESPRESSO CPU build
-│   │   │   ├── build-qe-gpu-frontier.sh     # Quantum ESPRESSO MI250X build
-│   │   │   ├── build-vasp-gpu-frontier.sh   # VASP 6.6 MI250X build
-│   │   │   └── frontier-module-stack.sh     # shared module-load helpers
-│   │   ├── aurora/                          # Aurora (ALCF, Intel PVC) installers
-│   │   │   ├── install_matsim_aurora.sh
-│   │   │   ├── setup_matsim_aurora.sh
-│   │   │   ├── build-qe-cpu-aurora.sh
-│   │   │   ├── build-qe-gpu-aurora.sh       # QE PVC build (oneapi+openmp)
-│   │   │   └── build-vasp-gpu-aurora.sh     # VASP 6.6 PVC build (vasp_std/_gam/_ncl)
-│   │   └── perlmutter/                      # Perlmutter (NERSC, A100) installers
-│   │       ├── install_matsim_perlmutter.sh
-│   │       ├── setup_matsim_perlmutter.sh
-│   │       ├── build-qe-cpu-perlmutter.sh
-│   │       ├── build-qe-gpu-perlmutter.sh   # QE A100 CUDA build
-│   │       ├── perlmutter-module-stack.sh
-│   │       └── QE-BUILD-GUIDE.md
-│   ├── launchers/
-│   │   ├── frontier/                        # Frontier sbatch launchers
+│   └── setup_env.sh                         # workstation-only environment install
+├── deployments/
+│   ├── frontier/setup/                      # Frontier (OLCF, MI250X) installers
+│   │   ├── install.sh                       # canonical matsim/HydraGNN installer
+│   │   ├── build-vllm-rocm72.sh             # optional vLLM source build
+│   │   ├── build-qe-{cpu,gpu}-frontier.sh
+│   │   └── build-vasp-gpu-frontier.sh
+│   ├── aurora/setup/                        # Aurora (ALCF, Intel PVC) installers
+│   │   ├── install.sh
+│   │   ├── build-qe-{cpu,gpu}-aurora.sh
+│   │   └── build-vasp-gpu-aurora.sh
+│   └── perlmutter/setup/                    # Perlmutter (NERSC, A100) installers
+│       ├── install.sh
+│       ├── build-qe-{cpu,gpu}-perlmutter.sh
+│       └── build-vasp-gpu-perlmutter.sh
+│
+│   # Each facility also owns launchers/, jobs/, smoke-tests/, and downloads.
+│   # For example:
+│   ├── frontier/launchers/                  # Frontier sbatch launchers
 │   │   │   ├── run-active-learning-frontier.sh  # `matsim-agents al run` driver
 │   │   │   ├── _vasp-step-frontier.sh       # in-allocation VASP step
 │   │   │   ├── _qe-step-frontier.sh         # in-allocation QE step
@@ -1485,28 +1478,26 @@ matsim-agents/
 │   │   │   ├── launch-test-singlenode-resume-frontier.sh
 │   │   │   ├── launch-test-multinode-frontier.sh
 │   │   │   └── launch-test-all-models-frontier.sh
-│   │   ├── aurora/
+│   ├── aurora/launchers/
 │   │   │   └── run-pw-gpu-aurora.sh         # QE pw.x GPU launcher
-│   │   └── perlmutter/
+│   ├── perlmutter/launchers/
 │   │       ├── run-pw-gpu-perlmutter.sh
 │   │       ├── run-vasp-gpu-perlmutter.sh
 │   │       ├── run-qe-warmstart-benchmark-perlmutter.sh
 │   │       ├── launch-test-singlenode-resume-perlmutter.sh
 │   │       ├── launch-test-multinode-perlmutter.sh
 │   │       └── launch-test-all-models-perlmutter.sh
-│   ├── smoke-tests/
-│   │   ├── frontier/
+│   ├── frontier/smoke-tests/
 │   │   │   ├── smoke-vllm-singlenode-frontier.sh
 │   │   │   ├── smoke-vllm-multinode-frontier.sh
 │   │   │   └── smoke-transformers-frontier.sh
-│   │   ├── aurora/
+│   ├── aurora/smoke-tests/
 │   │   │   └── smoke-vllm-singlenode-aurora.sh   # vLLM-XPU single-node smoke (qsub)
-│   │   └── perlmutter/
+│   ├── perlmutter/smoke-tests/
 │   │       ├── smoke-transformers-perlmutter.sh
 │   │       ├── smoke-transformers-multinode-perlmutter.sh
 │   │       └── _torchrun_smoke_loader.py
-│   ├── advanced/
-│   │   ├── frontier/                        # Frontier multi-step sbatch job scripts
+│   ├── frontier/jobs/                       # Frontier multi-step sbatch jobs
 │   │   │   ├── job-serve-multinode-frontier.sh
 │   │   │   ├── job-discovery-chat-frontier.sh
 │   │   │   ├── job-discovery-chat-vllm-frontier.sh
@@ -1515,7 +1506,7 @@ matsim-agents/
 │   │   │   ├── job-qe-warmstart-frontier.sh
 │   │   │   ├── job-sequential-benchmark-frontier.sh
 │   │   │   └── job-six-model-benchmark-frontier.sh
-│   │   ├── aurora/                          # Aurora multi-step qsub job scripts
+│   ├── aurora/jobs/                         # Aurora multi-step PBS jobs
 │   │   │   ├── job-serve-multinode-aurora.sh
 │   │   │   ├── job-serve-multinode-vllm-aurora.sh
 │   │   │   ├── job-discovery-chat-aurora.sh
@@ -1523,15 +1514,11 @@ matsim-agents/
 │   │   │   ├── job-active-learning-uq-aurora.sh
 │   │   │   ├── job-qe-warmstart-aurora.sh
 │   │   │   └── _mpi_xpu_loader.py
-│   │   └── perlmutter/                      # Perlmutter multi-step sbatch job scripts
+│   └── perlmutter/jobs/                     # Perlmutter multi-step sbatch jobs
 │   │       ├── job-discovery-chat-perlmutter.sh
 │   │       ├── job-single-relaxation-perlmutter.sh
 │   │       ├── job-active-learning-uq-perlmutter.sh
 │   │       └── job-qe-warmstart-perlmutter.sh
-│   └── docs/
-│       └── frontier/                        # Frontier-specific docs
-│           ├── README-frontier.md
-│           └── README-six-model-benchmark.md
 ├── src/matsim_agents/
 │   ├── cli.py                    # `matsim-agents run|plan|chat|supervisor-run|al`
 │   ├── chat.py                   # interactive discovery REPL
@@ -1618,7 +1605,9 @@ matsim-agents/
 │       └── test_vasp_warmstart.py    # end-to-end VASP warm-start (env-gated)
 ├── external/                     # gitignored: large external builds
 │   └── quantum-espresso/         # src/, build-gpu/, install-gpu/
-└── third_party/HydraGNN/         # cloned by setup_env.sh
+├── .venv/                        # matsim-owned HydraGNN/UMA environment
+├── .venv-mace/                   # optional MACE compatibility environment
+└── ../HydraGNN/                  # sibling source checkout used by HPC installers
 ```
 
 ---

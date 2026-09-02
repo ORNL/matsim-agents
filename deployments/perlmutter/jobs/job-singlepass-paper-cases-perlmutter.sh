@@ -23,22 +23,21 @@ export MATSIM_LEGACY_MANUSCRIPT_REPRODUCTION
 
 # ---------------------------------------------------------------------------
 # Allocation-portable configuration (override via env vars to switch projects):
-#   PROJECT_ROOT  matsim-agents working copy (default: amsc001 checkout)
+#   PROJECT_ROOT  matsim-agents working copy (required)
 #   RUNS_ROOT     parent dir for job logs + run outputs (default: <PROJ>/runs)
-#   HYDRAGNN_EXAMPLE  surrogate model tree   (default: shared amsc001 location)
+#   HYDRAGNN_EXAMPLE  surrogate model tree   (default: sibling HydraGNN checkout)
 # Submit (default account from #SBATCH):
 #   sbatch deployments/perlmutter/jobs/job-singlepass-paper-cases-perlmutter.sh
 #
-# Submit on m5216 with explicit paths:
-#   sbatch -A m5216_g \
+# Submit with explicit paths:
+#   sbatch -A <allocation> \
 #     --export=ALL,PROJECT_ROOT=/path/to/matsim-agents,RUNS_ROOT=/path/to/scratch/runs \
 #     deployments/perlmutter/jobs/job-singlepass-paper-cases-perlmutter.sh
 # ---------------------------------------------------------------------------
 PROJECT_ROOT="${PROJECT_ROOT:?export PROJECT_ROOT}"
 PROJ="$(dirname "${PROJECT_ROOT}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
-# Surrogate checkpoints are shared and physically live under amsc001; keep the
-# default decoupled from PROJECT_ROOT so an m5216 run still finds the model.
+# Keep the model checkout separate from the matsim-owned Python environment.
 HYDRAGNN_EXAMPLE="${HYDRAGNN_EXAMPLE:-${PROJ}/HydraGNN/examples/multidataset_hpo_sc26}"
 
 if [[ -z "${SLURM_JOB_ID:-}" ]]; then

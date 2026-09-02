@@ -15,7 +15,7 @@
 # For each model this job:
 #   1. Starts a vLLM server (vllm_venv) on localhost:8000
 #   2. Waits for the health endpoint
-#   3. Runs eval_six_models_search_prompt.py (hydragnn_venv)
+#   3. Runs eval_six_models_search_prompt.py (matsim-owned .venv)
 #   4. Kills the vLLM server
 #   5. Repeats for the next model
 # After all models:

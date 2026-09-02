@@ -18,7 +18,7 @@
 #   2. Runs vasp_std cold-start and vasp_std warm-start.
 #   3. Reports ionic steps / wall-time speed-up.
 #
-# Uses the unified hydragnn_venv created with INSTALL_UMA=1.
+# Uses the matsim-owned .venv created with INSTALL_UMA=1.
 #
 # Artifacts:
 #   $RUNS_ROOT/uma-vasp-warmstart-$SLURM_JOB_ID/

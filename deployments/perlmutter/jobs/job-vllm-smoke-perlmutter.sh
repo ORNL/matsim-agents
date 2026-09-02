@@ -61,7 +61,7 @@ export TRITON_CACHE_DIR="$_JIT_TMP/triton"
 export TORCHINDUCTOR_CACHE_DIR="$_JIT_TMP/inductor"
 export VLLM_CACHE_ROOT="$_JIT_TMP/vllm"
 # Triton/inductor may JIT-compile a CUDA stub needing Python.h, which is absent
-# in the system-python vllm_venv; borrow the conda py3.11 headers from hydragnn_venv.
+# in the system-python vllm_venv; borrow Python headers from the matsim .venv.
 _PY_HDR="$REPO/.venv/include/python3.11"
 export CPATH="${_PY_HDR}:${CPATH:-}"
 export C_INCLUDE_PATH="${_PY_HDR}:${C_INCLUDE_PATH:-}"

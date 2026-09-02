@@ -46,7 +46,7 @@ FIXTURE="${FIXTURE:-MoNbTaW_HEA}"
 REPEATS="${REPEATS:-3}"
 TIME_LIMIT="${TIME_LIMIT:-02:00:00}"
 QOS="${QOS:-regular}"
-ACCOUNT="${ACCOUNT:-m5216}"
+ACCOUNT="${ACCOUNT:?set ACCOUNT to your NERSC allocation}"
 
 POTCAR_DIR="${MATSIM_VASP_POTCAR_DIR:-${REPO_ROOT}/external/vasp6/potcar/potpaw_PBE.64}"
 VASP_LAUNCHER="${MATSIM_VASP_LAUNCHER:-${REPO_ROOT}/deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh}"

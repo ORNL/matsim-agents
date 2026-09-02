@@ -39,7 +39,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
-# Use the shared HydraGNN Perlmutter environment by default.
+# Use the matsim-owned Perlmutter environment by default.
 # Override only with MATSIM_PERLMUTTER_VENV when you explicitly know what you are doing.
 VENV_SHARED_DEFAULT="$REPO/.venv"
 VENV="${MATSIM_PERLMUTTER_VENV:-$VENV_SHARED_DEFAULT}"
@@ -51,15 +51,15 @@ source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules
 
 if [[ ! -d "$VENV" ]]; then
-  echo "ERROR: Perlmutter HydraGNN env not found: $VENV" >&2
-  echo "Build it first with: bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu" >&2
+  echo "ERROR: Perlmutter matsim environment not found: $VENV" >&2
+  echo "Build it first with: bash deployments/perlmutter/setup/install.sh" >&2
   exit 1
 fi
 
 # Conda env activation by PATH is sufficient for this workload.
 export PATH="$VENV/bin:$PATH"
 export CONDA_PREFIX="$VENV"
-export CONDA_DEFAULT_ENV="hydragnn_venv"
+export CONDA_DEFAULT_ENV="matsim-agents"
 
 # Guard against unsupported Hugging Face CLI stacks that can overwrite sensitive
 # HydraGNN dependencies (for example click/typer constraints).
@@ -81,7 +81,7 @@ else
     echo "ERROR: Unsupported huggingface_hub>=1.0 detected in HydraGNN venv: $VENV" >&2
     echo "Do not upgrade packages in-place in this environment." >&2
     echo "Recreate/fix the Perlmutter environment with:" >&2
-    echo "  INSTALL_LLM_EXTRAS=1 bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu" >&2
+    echo "  bash deployments/perlmutter/setup/install.sh" >&2
     exit 1
   fi
   exit $rc
@@ -147,7 +147,7 @@ if ! command -v hf >/dev/null 2>&1; then
   echo "ERROR: hf CLI not found in active environment." >&2
   echo "Do not run ad-hoc pip upgrades in HydraGNN venv." >&2
   echo "Refresh the environment with pinned extras instead:" >&2
-  echo "  INSTALL_LLM_EXTRAS=1 bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu" >&2
+  echo "  bash deployments/perlmutter/setup/install.sh" >&2
   exit 1
 fi
 

@@ -109,7 +109,7 @@ else
 fi
 
 # Force NVHPC 25.5 (which bundles CUDA 12.9) so the QE GPU build links against
-# the same CUDA runtime that HydraGNN's PyTorch (torch 2.11.0+cu129) uses.
+# the same CUDA runtime used by the current HydraGNN-aligned PyTorch 2.13 stack.
 # Mismatched CUDA majors between PyTorch and QE cause libcuda*.so symbol
 # conflicts when both are loaded in the same job.
 export CUDA_HOME="/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/cuda/12.9"

@@ -13,16 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MATSIM_AGENTS_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 DEFAULT_VENV="${MATSIM_AGENTS_ROOT}/.venv"
-LEGACY_VENV="${MATSIM_AGENTS_ROOT}/aurora_venv"
-PREFERRED_VENV="${MATSIM_AURORA_VENV:-${DEFAULT_VENV}}"
-
-if [[ -d "${PREFERRED_VENV}" ]]; then
-    AURORA_VENV="${PREFERRED_VENV}"
-elif [[ -d "${LEGACY_VENV}" ]]; then
-    AURORA_VENV="${LEGACY_VENV}"
-else
-    AURORA_VENV="${PREFERRED_VENV}"
-fi
+AURORA_VENV="${MATSIM_AURORA_VENV:-${DEFAULT_VENV}}"
 
 if [[ ! -d "${AURORA_VENV}" ]]; then
     echo "Error: Aurora virtual environment not found at ${AURORA_VENV}" >&2

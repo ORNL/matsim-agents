@@ -49,7 +49,7 @@ multi-node inference is bundled in the module.
 
 ### Python virtual environment
 
-matsim-agents uses `hydragnn_venv`, built with `--system-site-packages` on top
+matsim-agents uses its `.venv`, built with `--system-site-packages` on top
 of the frameworks module's Python 3.12.  This lets the venv inherit the XPU
 PyTorch, IPEX, vLLM, Ray, and Triton-XPU from the module while adding
 HydraGNN and matsim-agents on top.
@@ -179,8 +179,8 @@ numpy.core._multiarray_umath failed to import ... numpy C-extension compiled
 against numpy 1.x
 ```
 
-or the reverse — installing `numpy==1.26.4` (the pin used on Frontier/
-Perlmutter) causes `torch.xpu` or `ipex` to fail at import because they were
+or the reverse — installing a NumPy 1.x build causes `torch.xpu` or `ipex` to
+fail at import because they were
 compiled against the numpy 2.x ABI.
 
 **Root cause**
@@ -189,11 +189,10 @@ compiled against the numpy 2.x ABI.
 extension in the stack (pyarrow 23.0, scipy 1.17, scikit-learn 1.8, torch
 2.10/XPU, IPEX 2.10) is compiled against the **numpy 2.x** ABI.
 
-The Frontier and Perlmutter install scripts pin `numpy==1.26.4` because
-PyTorch on those systems was built against the numpy 1.x ABI.  **Aurora is the
-opposite**: pinning `numpy==1.26.4` would break the entire XPU stack.
+The current cross-facility HydraGNN contract pins `numpy==2.2.6`. On Aurora,
+downgrading that environment to NumPy 1.x would break the XPU stack.
 
-**Fix (in `install_matsim_aurora.sh`)**
+**Fix (in `deployments/aurora/setup/install.sh`)**
 
 After installing matsim-agents and its dependencies, immediately uninstall any
 venv-local numpy/pandas overlay that transitive dependencies may have pulled in:

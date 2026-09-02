@@ -63,7 +63,7 @@ else
     echo "ERROR: Unsupported huggingface_hub>=1.0 detected in HydraGNN venv: $VENV" >&2
     echo "Do not upgrade packages in-place in this environment." >&2
     echo "Recreate/fix the Frontier environment with:" >&2
-    echo "  INSTALL_LLM_EXTRAS=1 bash deployments/frontier/setup/install_matsim_frontier.sh --rocm72" >&2
+    echo "  bash deployments/frontier/setup/install.sh" >&2
     exit 1
   fi
   exit $rc
@@ -115,7 +115,7 @@ if ! command -v hf >/dev/null 2>&1; then
   echo "ERROR: hf CLI not found in active environment." >&2
   echo "Do not run ad-hoc pip upgrades in HydraGNN venv." >&2
   echo "Refresh the environment with pinned extras instead:" >&2
-  echo "  INSTALL_LLM_EXTRAS=1 bash deployments/frontier/setup/install_matsim_frontier.sh --rocm72" >&2
+  echo "  bash deployments/frontier/setup/install.sh" >&2
   exit 1
 fi
 

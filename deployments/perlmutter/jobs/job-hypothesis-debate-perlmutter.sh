@@ -15,7 +15,7 @@
 #
 # A panel of *different* models from the local model zoo is served, each on its
 # own OpenAI-compatible vLLM endpoint (isolated vllm_venv, torch 2.11). A thin
-# client (hydragnn_venv) drives the real matsim-agents debate machinery
+# client (`matsim-agents/.venv`) drives the real matsim-agents debate machinery
 # (_debate_hypothesis_response) twice -- once with the pretrained-MLIP evidence,
 # once with the fine-tuned-MLIP evidence -- and records the two transcripts.
 #
@@ -88,7 +88,7 @@ launch_server() {
     export FLASHINFER_WORKSPACE_BASE="$jit" TRITON_CACHE_DIR="$jit/triton"
     export TORCHINDUCTOR_CACHE_DIR="$jit/inductor" VLLM_CACHE_ROOT="$jit/vllm"
     # vLLM JIT-compiles a CUDA helper at startup and needs Python.h; the base
-    # python3.11 has no dev headers, so point at the hydragnn_venv headers.
+    # python3.11 has no dev headers, so point at the matsim .venv headers.
     local pyhdr="$REPO/.venv/include/python3.11"
     export CPATH="${pyhdr}:${CPATH:-}" C_INCLUDE_PATH="${pyhdr}:${C_INCLUDE_PATH:-}"
     exec "$VLLM_VENV/bin/vllm" serve "$model_dir" \

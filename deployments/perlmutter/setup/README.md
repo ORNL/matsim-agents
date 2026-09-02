@@ -30,9 +30,9 @@ Perlmutter download entry points:
 You have two options:
 
 #### Option 1: Quick Setup (Activate Installer-Created Environment)
-Use the **quick setup** scripts to activate the HydraGNN environment created by the installer.
+Use the **quick setup** script to activate the matsim-owned environment created by the installer.
 
-**Best for:** Development, testing, quick runs when HydraGNN environment is stable
+**Best for:** Development, testing, and repeated runs after installation
 
 ```bash
 source setup_matsim_perlmutter.sh [--gpu]
@@ -67,9 +67,9 @@ Loads the necessary Perlmutter module stack for CPU and GPU computing.
 - CMake, Conda, and build tools
 
 ### `setup_matsim_perlmutter.sh` (Quick Setup)
-Quickly activates a pre-configured HydraGNN environment:
+Quickly activates the pre-configured matsim environment:
 1. Loads Perlmutter modules
-2. Activates the shared HydraGNN conda environment
+2. Activates `$MATSIM_DIR/.venv` (or `MATSIM_PERLMUTTER_VENV`)
 3. Sets up PYTHONPATH for matsim-agents
 
 **Usage:**
@@ -87,7 +87,7 @@ $MATSIM_DIR/.venv
 ```
 
 ### `install.sh` (Fresh Installation)
-Frontier-style phased installation that always recreates the Perlmutter HydraGNN environment used at runtime:
+Canonical installation that creates the Perlmutter environment used at runtime:
 
 **Phase 1:** Run HydraGNN Perlmutter installer (delegated build of CUDA/PyTorch/PyG stack)
 **Phase 2:** Activate resulting env and install matsim-agents + runtime extras
@@ -107,14 +107,8 @@ VENV_PATH=/custom/path bash install.sh
 # Runtime setup override (quick setup script)
 MATSIM_PERLMUTTER_VENV=/custom/path source setup_matsim_perlmutter.sh --gpu
 
-# Python version
-PYTHON_VERSION=3.12 bash install_matsim_perlmutter.sh --gpu
-
-# Parallel build jobs
-MAX_JOBS=32 bash install_matsim_perlmutter.sh --gpu
-
-# Also install vLLM server package
-INSTALL_VLLM_SERVER=1 bash install_matsim_perlmutter.sh --gpu
+# Add FairChem/UMA and the isolated MACE compatibility environment
+INSTALL_UMA=1 INSTALL_MACE=1 bash install.sh
 ```
 
 **Advanced module/path overrides (forwarded to the delegated HydraGNN installer):**
@@ -123,7 +117,7 @@ INSTALL_VLLM_SERVER=1 bash install_matsim_perlmutter.sh --gpu
 MODULES_SH_PATH=/etc/profile.d/modules.sh \
 LMOD_INIT_BASH_PATH=/usr/share/lmod/lmod/init/bash \
 MODULES_INIT_BASH_PATH=/usr/share/Modules/init/bash \
-bash install_matsim_perlmutter.sh --gpu
+bash install.sh
 
 # Override Perlmutter module names/versions used by HydraGNN installer
 PERLMUTTER_CPE_MODULE=cpe/24.07 \
@@ -132,7 +126,7 @@ PERLMUTTER_MPICH_MODULE=cray-mpich/8.1.30 \
 PERLMUTTER_ACCEL_MODULE=craype-accel-nvidia80 \
 PERLMUTTER_GCC_MODULE=gcc-native/13.2 \
 PERLMUTTER_CONDA_PRIMARY_MODULE=conda/Miniforge3-24.11.3-0 \
-bash install_matsim_perlmutter.sh --gpu
+bash install.sh
 ```
 
 These overrides are optional and mainly useful when site module paths or
@@ -145,7 +139,6 @@ module names differ from the defaults.
 - HydraGNN runtime dependencies (`scikit-learn==1.5.1`, `vesin==0.4.2`)
 - `huggingface_hub` (includes `hf` CLI for resumable model downloads)
 - `transformers` + `accelerate`
-- Optional: `vllm` server package when `INSTALL_VLLM_SERVER=1`
 - Optional: `fairchem-core` (UMA MLIP backend) in the unified environment when
   `INSTALL_UMA=1`
 - Optional: `mace-torch==0.3.16` in `$MATSIM_DIR/.venv-mace` when
@@ -162,8 +155,8 @@ environment owned by matsim-agents. Both defaults remain inside this checkout.
 `VENV_PATH` defaults to `$MATSIM_DIR/.venv`; override it alone only to place the
 environment elsewhere (build dependencies remain under `INSTALL_ROOT`).
 
-Quick setup (`setup_matsim_perlmutter.sh`) prefers `matsim-agents/.venv`,
-falling back to the legacy local `matsim-agents/perlmutter_venv` only if needed.
+Quick setup (`setup_matsim_perlmutter.sh`) activates `matsim-agents/.venv`, or
+the explicit `MATSIM_PERLMUTTER_VENV` override. It does not search legacy paths.
 The obsolete generic `job_perlmutter.sh` template was removed because it
 invoked the nonexistent `matsim_agents.main` module and could not describe a
 specific scientific contract. Submit one of the explicit jobs under
@@ -440,12 +433,12 @@ cd <work_dir_with_INCAR_POSCAR_KPOINTS_POTCAR>
 
 ### Quick Setup (`setup_matsim_perlmutter.sh`)
 - Running on a Perlmutter login or compute node
-- Existing HydraGNN environment at:
+- Existing matsim-owned environment at:
   ```
   $MATSIM_DIR/.venv
   ```
 
-### Full Installation (`install_matsim_perlmutter.sh`)
+### Full installation (`install.sh`)
 - Running on a Perlmutter login node (compute nodes work but slower)
 - Sufficient disk space for conda environment (~10-20 GB)
 - Internet access (for PyPI package downloads)
@@ -458,11 +451,11 @@ cd <work_dir_with_INCAR_POSCAR_KPOINTS_POTCAR>
 | Aspect | Quick Setup | Fresh Installation |
 |--------|------------|-------------------|
 | **Speed** | Minutes (1-2 min) | 30-45 minutes |
-| **Disk Usage** | None (shared env) | ~10-20 GB (at configured env path) |
-| **Isolation** | Shared unless overridden | Shared by default, isolated if `VENV_PATH` is custom |
+| **Disk Usage** | None beyond the installed environment | ~10-20 GB inside the checkout by default |
+| **Isolation** | Reuses `.venv` | Matsim-owned; `VENV_PATH` is configurable |
 | **Reproducibility** | Fast reuse | Rebuildable from script |
 | **Best for** | Development, testing | Aligned install/runtime and rebuilds |
-| **Env location** | Global (shared default) | Shared default (`VENV_PATH` configurable) |
+| **Env location** | `$MATSIM_DIR/.venv` | `$MATSIM_DIR/.venv` by default |
 
 ---
 
@@ -482,14 +475,14 @@ python -m matsim_agents ...
 ### Production Workflow (Fresh Installation)
 ```bash
 # Initial setup (30-45 min, run once)
-bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu
+bash deployments/perlmutter/setup/install.sh
 
 # Every session
 source deployments/perlmutter/setup/setup_matsim_perlmutter.sh --gpu
 python -m matsim_agents ...
 
 # Rebuild and reinstall in a fresh environment
-bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu
+RECREATE_MACE_ENV=1 bash deployments/perlmutter/setup/install.sh
 ```
 
 ### SLURM Job Submission (Both Approaches)
@@ -503,11 +496,11 @@ bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu
 
 # Load environment (choose one)
 
-# Option 1: Quick setup (if HydraGNN env exists)
+# Option 1: Quick setup (if the matsim environment exists)
 source deployments/perlmutter/setup/setup_matsim_perlmutter.sh --gpu
 
 # Option 2: Activate a custom env path used during install
-# conda activate /path/used/as/VENV_PATH
+# source /path/used/as/VENV_PATH/bin/activate
 
 python -m matsim_agents.run --config config.yaml
 ```
@@ -519,18 +512,18 @@ python -m matsim_agents.run --config config.yaml
 ### "module command not found"
 You must be running on a Perlmutter login node. The module system is not available on external machines.
 
-### "HydraGNN virtual environment not found" (Quick Setup)
-Ensure the shared HydraGNN environment exists at:
+### "Python virtual environment not found" (Quick Setup)
+Ensure the matsim-owned environment exists at:
 ```
 $MATSIM_DIR/.venv
 ```
 
 Contact the project maintainers if it needs to be re-created.
 
-### "conda env not found" (Fresh Installation)
+### "virtual environment not found" (Fresh Installation)
 The environment was not created. Re-run the installation:
 ```bash
-bash install_matsim_perlmutter.sh --gpu
+bash install.sh
 ```
 Default expected path:
 ```
@@ -539,11 +532,9 @@ $MATSIM_DIR/.venv
 
 ### CUDA not available
 - Ensure you're using GPU nodes (`-C gpu`)
-- Use the `--gpu` flag when loading modules:
+- Load the GPU module stack through the quick-setup helper:
   ```bash
   source setup_matsim_perlmutter.sh --gpu
-  # OR
-  bash install_matsim_perlmutter.sh --gpu
   ```
 
 ### PyTorch import fails
@@ -554,17 +545,17 @@ python -c "import torch; print(torch.__version__)"
 ```
 
 ### "hf command not found"
-`install_matsim_perlmutter.sh` now installs `huggingface_hub`, which provides `hf`.
+`install.sh` installs `huggingface_hub`, which provides `hf`.
 If your environment predates that update, re-run:
 ```bash
-bash install_matsim_perlmutter.sh --gpu
+bash install.sh
 ```
 
 ### Out of memory during build
 If the installation fails with OOM:
 ```bash
 # Reduce parallel jobs
-MAX_JOBS=4 bash install_matsim_perlmutter.sh --gpu
+MAX_JOBS=4 bash install.sh
 ```
 
 ### Install FairChem for UMA

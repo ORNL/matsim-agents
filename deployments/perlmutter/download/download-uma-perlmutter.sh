@@ -32,7 +32,7 @@
 #   and provide a token. This script reads ~/.cache/huggingface/token if HF_TOKEN
 #   is not already set (run `hf auth login` once beforehand).
 # - Downloads are resumable; rerunning skips files already in the cache.
-# - Runs from the unified hydragnn_venv built with INSTALL_UMA=1.
+# - Runs from the matsim-owned .venv built with INSTALL_UMA=1.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -52,13 +52,13 @@ RUN_DIR="$PROJ/runs/download-uma-${SLURM_JOB_ID:-manual}"
 mkdir -p "$RUN_DIR"
 
 if [[ ! -d "$VENV" ]]; then
-  echo "ERROR: hydragnn_venv not found: $VENV" >&2
+  echo "ERROR: matsim .venv not found: $VENV" >&2
   echo "Build it first with:" >&2
   echo "  INSTALL_UMA=1 bash deployments/perlmutter/setup/install.sh" >&2
   exit 1
 fi
 
-# ── modules & venv (hydragnn_venv for UMA) ───────────────────────────────────
+# ── modules and matsim-owned environment ─────────────────────────────────────
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules
 # shellcheck disable=SC1091

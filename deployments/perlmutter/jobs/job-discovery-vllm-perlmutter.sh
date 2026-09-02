@@ -14,12 +14,12 @@
 #
 # Layout (single node, 4xA100 80GB):
 #   • vLLM server (Qwen2.5-14B)  : GPU 0           [vllm_venv, torch 2.11]
-#   • matsim-agents discovery    : GPUs 1,2,3      [hydragnn_venv, torch 2.8]
+#   • matsim-agents discovery    : GPUs 1,2,3      [.venv, torch 2.13]
 #       - HydraGNN MLFF relaxations run inline on the 3 reserved GPUs
 #       - LLM proposer + critic both talk to localhost:8000/v1
 #
 # The two stacks live in separate venvs because vLLM hard-pins torch 2.11
-# while HydraGNN/UMA require torch 2.8. The matsim vLLM client only needs the
+# while HydraGNN/UMA require torch 2.13. The matsim vLLM client only needs the
 # `openai` package plus the HTTP endpoint, so no torch conflict at the client.
 #
 # Usage:

@@ -17,10 +17,10 @@ Environment overrides:
   PROJECT_ROOT, RUNS_ROOT, FIXTURE, REPEATS, TIME_LIMIT, QOS, ACCOUNT
   MATSIM_QE_PSEUDO_DIR, MATSIM_QE_LAUNCHER, MATSIM_QE_TIMEOUT_SEC
   MATSIM_QE_MLP_DEVICE, MATSIM_UMA_MODEL_NAME, MATSIM_UMA_TASK
-  MATSIM_FAIRCHEM_VENV   # override hydragnn_venv path
+  MATSIM_FAIRCHEM_VENV   # override the matsim .venv path
 
 Example:
-  REPEATS=3 FIXTURE=MoNbTaW_HEA QOS=premium ACCOUNT=m5216_g \
+  REPEATS=3 FIXTURE=MoNbTaW_HEA QOS=premium ACCOUNT=<allocation> \
   deployments/perlmutter/jobs/submit-uma-warmstart-check-matrix.sh
 EOF
   exit 0
@@ -42,7 +42,7 @@ FIXTURE="${FIXTURE:-MoNbTaW_HEA}"
 REPEATS="${REPEATS:-3}"
 TIME_LIMIT="${TIME_LIMIT:-02:00:00}"
 QOS="${QOS:-regular}"
-ACCOUNT="${ACCOUNT:-m5216}"
+ACCOUNT="${ACCOUNT:?set ACCOUNT to your NERSC allocation}"
 
 PSEUDO_DIR="${MATSIM_QE_PSEUDO_DIR:-${REPO_ROOT}/external/quantum-espresso/src/pseudo}"
 QE_LAUNCHER="${MATSIM_QE_LAUNCHER:-${REPO_ROOT}/deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh}"

@@ -17,7 +17,7 @@
 #   2. Runs pw.x cold-start and pw.x warm-start (initial coords from UMA).
 #   3. Reports SCF iterations / wall-time speed-up.
 #
-# This script activates the unified hydragnn_venv created with INSTALL_UMA=1.
+# This script activates the matsim-owned .venv created with INSTALL_UMA=1.
 #
 # Submit:
 #   sbatch deployments/perlmutter/jobs/job-uma-warmstart-perlmutter.sh

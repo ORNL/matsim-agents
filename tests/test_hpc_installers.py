@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -49,3 +50,24 @@ def test_mace_runtime_paths_use_matsim_owned_compatibility_environment() -> None
     common = ROOT / "deployments/common/setup/install-mace-compat.sh"
     assert common.stat().st_mode & 0o111
     subprocess.run(["bash", "-n", str(common)], check=True)
+
+
+def test_installation_guidance_has_no_obsolete_environment_contracts() -> None:
+    obsolete = (
+        "hydragnn_venv",
+        "scripts/perlmutter_venv",
+        "third_party/HydraGNN",
+        "INSTALL_LLM_EXTRAS=1 bash",
+        "numpy==1.26.4",
+    )
+    roots = (ROOT / "README.md", ROOT / "docs", ROOT / "deployments", ROOT / "benchmarks")
+    files = [roots[0]]
+    for directory in roots[1:]:
+        files.extend(directory.rglob("*.md"))
+        files.extend(directory.rglob("*.sh"))
+
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        for fragment in obsolete:
+            assert fragment not in text, f"{path.relative_to(ROOT)} contains {fragment!r}"
+        assert re.search(r"bash[^\n`]*install_matsim_", text) is None, path
