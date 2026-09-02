@@ -12,7 +12,9 @@ import json
 import os
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 
 def relaxation_contract(structure: Path, output: Path) -> dict[str, Any]:
@@ -103,6 +105,194 @@ def active_learning_contract(output: Path) -> dict[str, Any]:
         "retrain": False,
         "promote_model": False,
         "dataset_manifest": str(manifest),
+    }
+
+
+def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, Any]:
+    """Execute one production AL iteration with deterministic numerical adapters."""
+
+    import numpy as np
+    from ase.io import read
+
+    from matsim_agents.active_learning.candidates import Candidate
+    from matsim_agents.active_learning.config import ALConfig
+    from matsim_agents.active_learning.dft_backend import DFTResult
+    from matsim_agents.active_learning.loop import run_active_learning
+
+    atoms = read(structure)
+    candidates = [
+        Candidate(f"candidate-{index}", atoms.copy(), str(structure), index) for index in range(4)
+    ]
+    labelled = [
+        DFTResult(
+            backend="qe",
+            work_dir=str(output / "dft" / candidate.candidate_id),
+            return_code=0,
+            converged=True,
+            energy_eV=-10.0 + index * 0.1,
+            forces_eV_per_A=np.zeros((len(atoms), 3)),
+            stress_eV_per_A3=None,
+            n_atoms=len(atoms),
+            wall_time_sec=0.01,
+            final_atoms=atoms.copy(),
+        )
+        for index, candidate in enumerate(candidates[:2])
+    ]
+    cfg = ALConfig.model_validate(
+        {
+            "mlip": {
+                "backend": "hydragnn",
+                "hydragnn": {
+                    "logdir": str(output / "model"),
+                    "mlp_checkpoint": str(output / "branch.pt"),
+                    "mlp_device": "cpu",
+                },
+            },
+            "md": {"seed_source": {"kind": "paths", "paths": [str(structure)]}},
+            "acquisition": {"strategy": "random", "n_select": 2},
+            "dft": {
+                "backend": "qe",
+                "qe": {
+                    "pw_bin": "/portability/pw.x",
+                    "pw_wrapper": "/portability/qe-wrapper.sh",
+                    "pseudo_dir": "/portability/pseudo",
+                    "ranks_per_node": 1,
+                },
+            },
+            "trainer": {"enabled": False},
+            "loop": {
+                "n_iterations": 1,
+                "out_dir": str(output / "production-loop"),
+                "resume": True,
+            },
+        }
+    )
+    with (
+        patch(
+            "matsim_agents.active_learning.loop.resolve_seed_structures",
+            return_value=[structure],
+        ),
+        patch("matsim_agents.active_learning.loop.make_mlip_calculator", return_value=object()),
+        patch("matsim_agents.active_learning.loop.sample_md_candidates", return_value=candidates),
+        patch(
+            "matsim_agents.active_learning.loop.select_candidates",
+            return_value=(candidates[:2], np.asarray([0.9, 0.8, 0.2, 0.1])),
+        ),
+        patch(
+            "matsim_agents.active_learning.loop.make_backend",
+            return_value=SimpleNamespace(name="qe"),
+        ),
+        patch("matsim_agents.active_learning.loop.run_dft_batch", return_value=labelled),
+    ):
+        run_active_learning(cfg)
+        # Running a second time must resume rather than duplicate iteration 0.
+        run_active_learning(cfg)
+    state_path = output / "production-loop" / "iteration_0000" / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    dataset = output / "production-loop" / "dataset.extxyz"
+    return {
+        "status": state["status"],
+        "candidate_count": state["n_candidates"],
+        "selected_count": state["n_selected"],
+        "labelled_count": state["n_dft_converged"],
+        "dataset": str(dataset),
+        "dataset_manifest": str(dataset.with_suffix(dataset.suffix + ".manifest.json")),
+        "resume_avoided_duplicate_iteration": not (
+            output / "production-loop" / "iteration_0001"
+        ).exists(),
+        "retrain": False,
+        "promote_model": False,
+    }
+
+
+def dft_allocation_contract(output: Path) -> dict[str, Any]:
+    """Exercise the real concurrent dispatcher and prove node groups are disjoint."""
+
+    import numpy as np
+    from ase import Atoms
+
+    from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
+    from matsim_agents.active_learning.dft_runner import run_dft_batch
+
+    assignments: list[tuple[str, ...]] = []
+
+    class Backend:
+        name = "qe"
+        nodes_per_job = 1
+        ranks_per_node = 1
+        threads_per_rank = 1
+        timeout_sec = 30
+
+        def run_one(self, spec):
+            assignments.append(spec.assigned_nodes)
+            return DFTResult(
+                backend="qe",
+                work_dir=spec.work_dir,
+                return_code=0,
+                converged=True,
+                energy_eV=-1.0,
+                forces_eV_per_A=np.zeros((1, 3)),
+                stress_eV_per_A3=None,
+                n_atoms=1,
+                wall_time_sec=0.01,
+                final_atoms=spec.atoms,
+            )
+
+    specs = [
+        DFTJobSpec(str(index), Atoms("Si"), str(output / "allocation" / str(index)))
+        for index in range(4)
+    ]
+    environment = {
+        "SLURM_JOB_ID": "portability",
+        "SLURM_JOB_NUM_NODES": "4",
+        "SLURM_JOB_NODELIST": "node0,node1,node2,node3",
+        "MATSIM_GPUS_PER_NODE": "1",
+    }
+    with patch.dict(os.environ, environment, clear=False):
+        results = run_dft_batch(specs, Backend())
+    unique = {group for group in assignments}
+    return {
+        "status": "complete",
+        "job_count": len(results),
+        "assigned_node_groups": [list(group) for group in sorted(unique)],
+        "disjoint_node_groups": len(unique) == 4 and all(len(group) == 1 for group in unique),
+    }
+
+
+def phase_exploration_contract(output: Path) -> dict[str, Any]:
+    """Execute the independent phase workflow rather than the LLM investigation."""
+
+    from matsim_agents.discovery.seeds import PhaseCandidate
+    from matsim_agents.workflows.phase_exploration import (
+        PhaseExplorationPolicy,
+        run_phase_exploration,
+    )
+
+    candidate_path = output / "phases" / "Si" / "seeds" / "Si-diamond.vasp"
+    candidate_path.parent.mkdir(parents=True, exist_ok=True)
+    candidate_path.write_text("deterministic Si phase candidate\n", encoding="utf-8")
+    candidates = [
+        PhaseCandidate(
+            formula="Si",
+            structure_path=str(candidate_path),
+            prototype_id="portability-diamond",
+            num_atoms=8,
+        )
+    ]
+
+    with patch("matsim_agents.discovery.seeds.generate_seeds", return_value=candidates):
+        result = run_phase_exploration(
+            "Si",
+            policy=PhaseExplorationPolicy(relax_structures=False),
+            output_dir=str(output / "phases"),
+            exploration_kwargs={"n_random": 0, "random_seed": 0},
+        )
+    return {
+        "status": "complete",
+        "composition": result.composition,
+        "candidate_count": len(result.initial.phase_candidates),
+        "relaxation_count": len(result.initial.relaxations),
+        "used_llm_investigation": False,
     }
 
 
@@ -217,15 +407,29 @@ def execute_contract_suite(
     if suite == "relaxation":
         return relaxation_contract(structure, output)
     if suite == "active-learning":
-        return active_learning_contract(output)
-    if suite in {"phase-exploration", "llm-discussion"}:
+        governance = active_learning_contract(output / "governance")
+        production = active_learning_loop_contract(structure, output)
+        allocation = dft_allocation_contract(output)
+        return {
+            "status": "complete",
+            "governance": governance,
+            "production": production,
+            "allocation": allocation,
+            **production,
+        }
+    if suite == "phase-exploration":
+        return phase_exploration_contract(output)
+    if suite == "llm-discussion":
         return investigation_contract(output, live_llm=live_llm)
     raise ValueError(f"unsupported contract suite: {suite}")
 
 
 __all__ = [
     "active_learning_contract",
+    "active_learning_loop_contract",
+    "dft_allocation_contract",
     "execute_contract_suite",
     "investigation_contract",
+    "phase_exploration_contract",
     "relaxation_contract",
 ]

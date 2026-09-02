@@ -11,12 +11,15 @@ machine-specific launch choice with a change to the science.
 2. **Relaxation contract:** runs the production relaxation workflow with a
    deterministic numerical adapter and verifies convergence, persistence, and
    artifact handoff without requiring model weights.
-3. **Active learning contract:** a fixed four-candidate pool selects candidates
-   1 and 3, validates their labels, writes the dataset and immutable manifest,
-   and proves that retraining and promotion remain disabled.
-4. **Phase exploration contract:** dispatches the fixed Si candidate through
-   the same typed result used by the production phase workflow.
-5. **LLM discussion contract:** records proposal, critique, and revision turns,
+3. **Active learning contract:** runs a complete miniature production AL loop
+   over four deterministic candidates, labels two through the DFT dispatch
+   interface, writes the dataset and immutable manifest, and verifies that a
+   restart neither repeats an iteration nor retrains/promotes the model.
+4. **DFT allocation contract:** simulates a four-node scheduler allocation and
+   verifies concurrent calculations receive four disjoint node groups.
+5. **Phase exploration contract:** invokes phase exploration directly for the
+   fixed Si candidate; it does not reuse or depend on the LLM discussion stub.
+6. **LLM discussion contract:** records proposal, critique, and revision turns,
    dispatches the proposed Si composition, and persists the investigation. The
    default responses are deterministic; `--live-llm` tests the configured model
    endpoint instead.
@@ -25,8 +28,11 @@ The contract suite executes on every facility and tests workflow composition,
 data governance, persistence, and deterministic selections. It deliberately
 does not claim MLIP or DFT numerical equivalence: production model weights,
 licensed VASP assets, QE pseudopotentials, and model servers remain separate
-facility qualifications. Place their results in `scientific_summary.json` for
-the cross-site tolerance comparison.
+facility qualifications. The separate `--qualification compute` mode executes
+the real production relaxation workflow and requires at least one MLIP-only
+configuration and one QE-only configuration. Both modes always write
+`scientific_summary.json`; contract metrics are explicitly marked as adapter
+results and must never be presented as numerical backend evidence.
 
 ## Inputs and acceptance
 
@@ -40,10 +46,34 @@ the cross-site tolerance comparison.
 - Validation compares invariants and tolerances, never bitwise-identical
   floating-point results.
 
-Every run records the Git commit, exact structure digest, resolved
+Every executed run records the Git commit, exact structure digest, resolved
 configuration, scheduler allocation metadata, executable discovery, plan, and
-status. A comparison fails when runs use different source commits or structure
-bytes. Optional numerical summaries use the tolerances in `manifest.yaml`.
+status, and mandatory scientific summary. A comparison fails when runs use
+different source commits, structure bytes, or qualification modes.
+
+### Real compute qualification
+
+Supply production `ScientificRelaxationConfig` YAML files. The benchmark owns
+the Si input and output roots, so `structure_path` and `output_root` in those
+files are overridden. All other model, pseudopotential, convergence, launcher,
+and geometry choices remain explicit in the files. Repeat the option for each
+MLIP model that should be qualified; at minimum one `mode: mlip` case and one
+`mode: dft` case with `dft.backend: qe` are mandatory.
+
+```bash
+python benchmarks/portability/run.py \
+  --facility frontier --qualification compute --execute \
+  --relaxation-config /shared/configs/uma-si.yaml \
+  --relaxation-config /shared/configs/qe-si.yaml \
+  --output runs/portability/frontier-compute
+python benchmarks/portability/validate.py runs/portability/frontier-compute
+```
+
+Use identical configuration bytes, model checkpoints, QE version, and
+pseudopotentials at all sites. The facility jobs accept
+`MATSIM_PORTABILITY_QUALIFICATION=compute` and a colon-separated
+`MATSIM_PORTABILITY_RELAXATION_CONFIGS` list. Contract mode remains the default
+CI/release gate because it does not require external model or DFT assets.
 
 ## Running
 

@@ -26,8 +26,13 @@ def compare_runs(paths: list[Path]) -> list[str]:
     summaries = []
     for path in paths:
         summary = path / "scientific_summary.json"
-        if summary.is_file():
-            summaries.append(json.loads(summary.read_text(encoding="utf-8")))
+        if not summary.is_file():
+            errors.append(f"{path} is missing scientific_summary.json")
+            continue
+        summaries.append(json.loads(summary.read_text(encoding="utf-8")))
+    qualifications = {summary.get("qualification") for summary in summaries}
+    if len(qualifications) > 1:
+        errors.append("cannot compare contract and compute qualification results")
     if summaries:
         metrics = (
             ("energy_eV_per_atom", "energy_eV_per_atom_atol"),

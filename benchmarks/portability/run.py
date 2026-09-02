@@ -184,6 +184,19 @@ def main() -> int:
     parser.add_argument("--backend", default="qe", choices=["mlip", "qe", "vasp"])
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
+        "--qualification",
+        choices=["contract", "compute"],
+        default="contract",
+        help="Run the dependency-light contract gate or real numerical qualification.",
+    )
+    parser.add_argument(
+        "--relaxation-config",
+        action="append",
+        default=[],
+        type=Path,
+        help="Real MLIP/QE relaxation config; repeat for compute qualification cases.",
+    )
+    parser.add_argument(
         "--execute",
         action="store_true",
         help="Execute supported stages; otherwise emit a deterministic plan.",
@@ -239,10 +252,31 @@ def main() -> int:
         "suite": args.suite,
         "backend": args.backend,
         "status": "planned",
+        "qualification": args.qualification,
         "plan": [step for suite in suites for step in build_plan(config, suite, args.backend)],
         "llm_qualification": llm_qualification,
     }
     if args.execute:
+        if args.qualification == "compute":
+            from benchmarks.portability.qualification import (
+                execute_compute_qualification,
+                write_scientific_summary,
+            )
+
+            summary = execute_compute_qualification(
+                structure=HERE / config["science"]["structure"],
+                output=args.output / "compute",
+                relaxation_configs=args.relaxation_config,
+            )
+            write_scientific_summary(args.output / "scientific_summary.json", summary)
+            result["execution"] = {"compute": summary}
+            result["status"] = summary["status"]
+            (args.output / "result.json").write_text(
+                json.dumps(result, indent=2) + "\n", encoding="utf-8"
+            )
+            print(json.dumps(result, indent=2))
+            return 0 if result["status"] == "passed" else 1
+
         from benchmarks.portability.suites import execute_contract_suite
 
         execution: dict[str, Any] = {}
@@ -263,6 +297,21 @@ def main() -> int:
             for payload in execution.values()
         )
         result["status"] = "failed" if failed else "passed"
+        from benchmarks.portability.qualification import write_scientific_summary
+
+        relaxation = execution.get("relaxation", {})
+        write_scientific_summary(
+            args.output / "scientific_summary.json",
+            {
+                "schema_version": 1,
+                "qualification": "contract",
+                "status": result["status"],
+                "structure_count": 1,
+                "energy_eV_per_atom": relaxation.get("energy_eV_per_atom"),
+                "max_force_eV_per_A": relaxation.get("max_force_eV_per_A"),
+                "note": "Deterministic adapter metrics are contract checks, not MLIP/DFT evidence.",
+            },
+        )
     (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2))
     return 0 if result["status"] != "failed" else 1

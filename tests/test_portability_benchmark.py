@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from benchmarks.portability.compare import compare_runs
+from benchmarks.portability.qualification import execute_compute_qualification
 from benchmarks.portability.run import (
     build_plan,
     resolved_configuration,
@@ -14,7 +16,10 @@ from benchmarks.portability.run import (
 )
 from benchmarks.portability.suites import (
     active_learning_contract,
+    active_learning_loop_contract,
+    dft_allocation_contract,
     investigation_contract,
+    phase_exploration_contract,
     relaxation_contract,
 )
 from benchmarks.portability.validate import validate_run
@@ -68,6 +73,52 @@ def test_executable_scientific_contracts(tmp_path):
     assert investigation["composition_count"] == 1
 
 
+def test_production_contracts_cover_resume_allocation_and_independent_phase(tmp_path):
+    structure = Path("benchmarks/portability/structures/Si.vasp")
+    active_learning = active_learning_loop_contract(structure, tmp_path / "active-learning")
+    allocation = dft_allocation_contract(tmp_path / "allocation")
+    phase = phase_exploration_contract(tmp_path / "phase")
+    assert active_learning["labelled_count"] == 2
+    assert active_learning["resume_avoided_duplicate_iteration"] is True
+    assert allocation["disjoint_node_groups"] is True
+    assert phase["used_llm_investigation"] is False
+
+
+def test_compute_qualification_requires_and_executes_real_workflow_modes(tmp_path):
+    mlip = tmp_path / "mlip.yaml"
+    qe = tmp_path / "qe.yaml"
+    mlip.write_text("mode: mlip\nstructure_path: replaced\n")
+    qe.write_text(
+        "mode: dft\nstructure_path: replaced\ndft:\n  backend: qe\n  pseudo_dir: /shared/pseudo\n"
+    )
+
+    def fake_runner(config):
+        backend = "qe" if config.mode.value == "dft" else "uma"
+        stage_payload = {"backend": backend, "converged": True}
+        stage = SimpleNamespace(
+            energy_eV=-10.0,
+            max_force_eV_per_A=0.01,
+            converged=True,
+            model_dump=lambda **_: stage_payload,
+        )
+        return SimpleNamespace(
+            status=SimpleNamespace(value="complete"),
+            run_id=f"{backend}-run",
+            run_directory=str(tmp_path / backend),
+            final_structure_path=str(tmp_path / f"{backend}.vasp"),
+            stages=[stage],
+        )
+
+    summary = execute_compute_qualification(
+        structure=Path("benchmarks/portability/structures/Si.vasp"),
+        output=tmp_path / "compute",
+        relaxation_configs=[mlip, qe],
+        runner=fake_runner,
+    )
+    assert summary["status"] == "passed"
+    assert [case["mode"] for case in summary["cases"]] == ["mlip", "dft"]
+
+
 def _write_run(path: Path, *, facility: str, commit: str, digest: str) -> None:
     path.mkdir()
     config = resolved_configuration(facility)
@@ -77,6 +128,9 @@ def _write_run(path: Path, *, facility: str, commit: str, digest: str) -> None:
     (path / "resolved_config.json").write_text(json.dumps(config), encoding="utf-8")
     (path / "result.json").write_text(
         json.dumps({"facility": facility, "status": "passed"}), encoding="utf-8"
+    )
+    (path / "scientific_summary.json").write_text(
+        json.dumps({"qualification": "contract"}), encoding="utf-8"
     )
 
 

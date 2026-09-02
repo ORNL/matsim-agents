@@ -1,8 +1,18 @@
 {
   "schema_version": 1,
   "benchmark_id": "silicon-portability-v1",
-  "description": "Fixed Si workflow for Frontier, Aurora, and Perlmutter.",
+  "description": "Fixed Si contract and real-compute qualification for Frontier, Aurora, and Perlmutter.",
   "structures": ["structures/Si.vasp"],
+  "coverage": {
+    "contract": {
+      "purpose": "Deterministic orchestration, persistence, governance, resume, and allocation checks; not numerical backend evidence.",
+      "suites": ["smoke", "relaxation-adapter", "active-learning-mini-loop", "dft-allocation", "phase-exploration", "llm-discussion"]
+    },
+    "compute": {
+      "purpose": "Production numerical qualification using installed models and QE assets.",
+      "required": ["real-mlip-relaxation", "real-qe-relaxation", "scientific-summary"]
+    }
+  },
   "suites": {
     "smoke": ["environment", "launcher"],
     "relaxation": ["mlip", "qe", "vasp", "mlip-qe", "mlip-vasp"],
@@ -15,7 +25,7 @@
     }
   },
   "acceptance": {
-    "required_artifacts": ["result.json", "environment.json"],
+    "required_artifacts": ["result.json", "environment.json", "scientific_summary.json"],
     "convergence": {"require_finite_energy": true, "max_force_eV_per_A": 0.20},
     "cross_facility": {
       "energy_eV_per_atom_atol": 0.05,

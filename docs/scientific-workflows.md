@@ -19,7 +19,7 @@ relaxation
 | Active learning | `matsim-agents al run CONFIG.yaml` | End-to-end candidate generation, acquisition, DFT labeling, dataset growth, and optional retraining |
 | Phase exploration | `matsim_agents.workflows.run_phase_exploration` | Programmatic workflow; relaxation and optional AL are composed through callbacks |
 | Agentic investigation | `matsim_agents.workflows.run_investigation` | Programmatic orchestration and persisted hypothesis revision; numerical work is delegated to phase exploration |
-| Cross-facility benchmark | `benchmarks/portability/run.py` | Executes deterministic relaxation, AL, phase-dispatch, and LLM-discussion contracts; production numerical qualification still requires installed models and DFT assets |
+| Cross-facility benchmark | `benchmarks/portability/run.py` | Separates deterministic workflow contracts from `--qualification compute`, which executes real MLIP and QE relaxation configs and emits a mandatory scientific summary |
 
 “Supported” means that the workflow contract exists. It does not imply that a
 licensed VASP binary, POTCAR library, QE pseudopotentials, or a particular MLIP

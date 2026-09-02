@@ -25,6 +25,22 @@ def validate_run(path: Path) -> list[str]:
     if result.get("facility") != config["deployment"].get("facility"):
         errors.append("result facility differs from resolved deployment")
     execution = result.get("execution", {})
+    if execution and not (path / "scientific_summary.json").is_file():
+        errors.append("executed benchmark is missing scientific_summary.json")
+    if result.get("qualification") == "compute":
+        compute = execution.get("compute", {})
+        modes = {case.get("mode") for case in compute.get("cases", [])}
+        if "mlip" not in modes:
+            errors.append("compute qualification has no real MLIP relaxation")
+        if not any(
+            case.get("mode") == "dft"
+            and case.get("stages")
+            and case["stages"][-1].get("backend") == "qe"
+            for case in compute.get("cases", [])
+        ):
+            errors.append("compute qualification has no real QE relaxation")
+        if any(not case.get("converged") for case in compute.get("cases", [])):
+            errors.append("one or more compute qualification cases did not converge")
     if result.get("suite") == "all":
         required = {
             "smoke",
@@ -37,10 +53,24 @@ def validate_run(path: Path) -> list[str]:
         if missing:
             errors.append(f"all-suite result missing executions: {sorted(missing)}")
         active_learning = execution.get("active-learning", {})
-        if active_learning.get("selected_candidate_ids") != [1, 3]:
+        governance = active_learning.get("governance", {})
+        production = active_learning.get("production", {})
+        allocation = active_learning.get("allocation", {})
+        if governance.get("selected_candidate_ids") != [1, 3]:
             errors.append("fixed active-learning selection changed")
         if active_learning.get("retrain") or active_learning.get("promote_model"):
             errors.append("portability active learning mutated the model")
+        if production.get("labelled_count") != 2:
+            errors.append("production active-learning loop did not label two candidates")
+        if not production.get("resume_avoided_duplicate_iteration"):
+            errors.append("active-learning resume duplicated a completed iteration")
+        if not allocation.get("disjoint_node_groups"):
+            errors.append("DFT dispatcher did not assign disjoint node groups")
+        phase = execution.get("phase-exploration", {})
+        if phase.get("used_llm_investigation") is not False:
+            errors.append("phase exploration incorrectly reused LLM investigation")
+        if phase.get("candidate_count", 0) < 1:
+            errors.append("phase exploration produced no candidates")
         discussion = execution.get("llm-discussion", {})
         if discussion.get("discussion_turns") != 3:
             errors.append("LLM discussion did not complete proposal, critique, and revision")
