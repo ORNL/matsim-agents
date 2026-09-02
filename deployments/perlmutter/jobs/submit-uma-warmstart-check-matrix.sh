@@ -17,7 +17,7 @@ Environment overrides:
   PROJECT_ROOT, RUNS_ROOT, FIXTURE, REPEATS, TIME_LIMIT, QOS, ACCOUNT
   MATSIM_QE_PSEUDO_DIR, MATSIM_QE_LAUNCHER, MATSIM_QE_TIMEOUT_SEC
   MATSIM_QE_MLP_DEVICE, MATSIM_UMA_MODEL_NAME, MATSIM_UMA_TASK
-  MATSIM_FAIRCHEM_VENV   # override fairchem_venv path
+  MATSIM_FAIRCHEM_VENV   # override hydragnn_venv path
 
 Example:
   REPEATS=3 FIXTURE=MoNbTaW_HEA QOS=premium ACCOUNT=m5216_g \
@@ -52,7 +52,7 @@ UMA_MODEL="${MATSIM_UMA_MODEL_NAME:-uma-s-1p1}"
 UMA_TASK="${MATSIM_UMA_TASK:-omat}"
 
 VENV_ROOT="${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
-FAIRCHEM_VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+FAIRCHEM_VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}"
 
 for req in "${PSEUDO_DIR}" "${QE_LAUNCHER}" "${FAIRCHEM_VENV}"; do
   if [[ ! -e "${req}" ]]; then

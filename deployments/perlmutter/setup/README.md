@@ -140,14 +140,14 @@ module names differ from the defaults.
 
 **Packages installed by the script (high level):**
 - Core HydraGNN + PyTorch/PyG stack (via delegated HydraGNN installer)
-- matsim-agents (editable)
+- matsim-agents (non-editable wheel install)
 - Core runtime/test dependencies (`langchain-core`, `pytest`, `pytest-cov`)
 - HydraGNN runtime dependencies (`scikit-learn==1.5.1`, `vesin==0.4.2`)
 - `huggingface_hub` (includes `hf` CLI for resumable model downloads)
 - `transformers` + `accelerate`
 - Optional: `vllm` server package when `INSTALL_VLLM_SERVER=1`
-- Optional: `fairchem-core` (UMA MLIP backend) when `INSTALL_UMA=1` — **installed
-  in a separate `fairchem_venv`** due to a known numpy conflict (see below)
+- Optional: `fairchem-core` (UMA MLIP backend) in the unified environment when
+  `INSTALL_UMA=1`
 
 **Install root + environment path (default):**
 ```
@@ -252,53 +252,35 @@ the `mlip_backend="uma"` field on `RelaxStructureInput` (canonical:
 `matsim_agents.backends.mlip.relaxation.RelaxStructureInput`). The backend requires
 `fairchem-core`.
 
-### Why a separate venv is required
+### Shared dependency contract
 
-`fairchem-core >= 2.0` requires `numpy >= 2.0` and `scipy >= 1.15`, but
-HydraGNN pins `numpy == 1.26.4` and `scipy == 1.14.1`. These constraints are
-mutually exclusive and cannot be satisfied in the same environment. Installing
-`fairchem-core` into `hydragnn_venv` will silently downgrade / upgrade packages
-and break HydraGNN at runtime.
+HydraGNN main and matsim-agents now use Python 3.11–3.14, NumPy 2.2.6,
+SciPy 1.17.1, PyTorch 2.13, and e3nn 0.5.1. These versions satisfy current
+`fairchem-core`, so UMA no longer requires a second Python environment.
 
 ### Installation
 
 ```bash
-INSTALL_UMA=1 bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu
+INSTALL_UMA=1 bash deployments/perlmutter/setup/install.sh
 ```
 
-This creates a **separate** `fairchem_venv` alongside `hydragnn_venv`:
-```
-INSTALL_ROOT/
-├── hydragnn_venv/   ← HydraGNN + matsim-agents (numpy 1.26.4)
-└── fairchem_venv/   ← fairchem-core + matsim-agents (numpy 2.x)
-```
-
-Default path:
-```
-$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/fairchem_venv
-```
+This installs and import-checks FairChem in the same `hydragnn_venv`.
 
 ### Running UMA jobs
 
-UMA benchmark jobs must activate `fairchem_venv` instead of `hydragnn_venv`:
+UMA benchmark jobs activate the unified environment:
 
 ```bash
 # In a job script or interactive session:
-source $INSTALL_ROOT/fairchem_venv/bin/activate
+source $INSTALL_ROOT/hydragnn_venv/bin/activate
 
 # Or set MATSIM_MLIP_BACKEND=uma and point to the fairchem venv:
 export MATSIM_MLIP_BACKEND=uma
-export MATSIM_FAIRCHEM_VENV=$INSTALL_ROOT/fairchem_venv
+export MATSIM_FAIRCHEM_VENV=$INSTALL_ROOT/hydragnn_venv
 ```
 
 The warm-start test infrastructure (`test_qe_warmstart.py`, `test_vasp_warmstart.py`)
-supports `mlip_backend: uma` in fixtures.yaml when run inside `fairchem_venv`.
-
-### Known limitation
-
-HydraGNN and UMA cannot share a runtime environment on Perlmutter until
-HydraGNN relaxes its `numpy==1.26.4` pin. Until then, maintain both venvs and
-select the appropriate one per job.
+supports `mlip_backend: uma` in fixtures.yaml when run in this environment.
 
 ---
 
@@ -569,18 +551,11 @@ If the installation fails with OOM:
 MAX_JOBS=4 bash install_matsim_perlmutter.sh --gpu
 ```
 
-### `fairchem-core` conflicts with HydraGNN (numpy incompatibility)
-`fairchem-core >= 2.0` requires `numpy >= 2.0` but HydraGNN pins `numpy == 1.26.4`.
-Do **not** install `fairchem-core` into `hydragnn_venv`. Use `INSTALL_UMA=1`
-which creates a separate `fairchem_venv` automatically:
+### Install FairChem for UMA
+Use the canonical opt-in so FairChem is installed and verified against the
+shared dependency contract:
 ```bash
-INSTALL_UMA=1 bash install_matsim_perlmutter.sh --gpu
-```
-If you accidentally installed `fairchem-core` into `hydragnn_venv`, restore the
-HydraGNN pins:
-```bash
-$VENV/bin/pip install numpy==1.26.4 scipy==1.14.1 click==8.0.0
-$VENV/bin/pip uninstall -y fairchem-core
+INSTALL_UMA=1 bash install.sh
 ```
 
 ---

@@ -31,16 +31,19 @@ finishes with `pip check` and import checks; a successful exit therefore means
 there is one Python environment for the HydraGNN-based matsim workflow.
 
 Common overrides are `HYDRAGNN_DIR`, `HYDRAGNN_REF`, `INSTALL_ROOT`,
-`VENV_PATH`, and `MATSIM_EXTRAS`. Frontier also accepts HydraGNN's
+`VENV_PATH`, and `MATSIM_EXTRAS`. Set `INSTALL_UMA=1` to install
+`fairchem-core` through the matsim-agents `uma` extra and verify its calculator
+API in the same environment. Frontier also accepts HydraGNN's
 `SKIP_VLLM` setting. Set `RECREATE_ENV=1` on Frontier or Aurora to request a
 clean rebuild; HydraGNN's current Perlmutter recipe always recreates its target
 environment.
 
 “Self-contained” applies to Python packages. Facility modules and native GPU,
 MPI, Quantum ESPRESSO, and VASP runtimes remain external system dependencies.
-MACE and UMA are intentionally not installed into this environment: their
-published dependency constraints conflict with the HydraGNN stack. Workflows
-using those alternative MLIPs must continue to use dedicated environments.
+MACE remains excluded because its e3nn constraint conflicts with HydraGNN main.
+FairChem/UMA is compatible with the updated Python dependency contract, but
+UMA weights are gated and accelerator execution must still be qualified on
+each facility.
 
 ## Submission contract
 

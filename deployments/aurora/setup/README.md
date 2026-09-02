@@ -81,14 +81,10 @@ MATSIM_EXTRAS="huggingface,dev" bash deployments/aurora/setup/install.sh
 RECREATE_ENV=1 bash deployments/aurora/setup/install.sh
 ```
 
-> **UMA / fairchem-core note:** `fairchem-core >= 2.0` requires `numpy >= 2.0`,
-> which conflicts with HydraGNN's `numpy == 1.26.4` pin. `INSTALL_UMA=1`
-> therefore creates a **separate** `fairchem_venv` alongside `hydragnn_venv`
-> rather than installing into the shared environment. UMA jobs must activate
-> `fairchem_venv` instead of `hydragnn_venv`. This is a known incompatibility
-> until HydraGNN relaxes its numpy pin. Note also that Aurora's `frameworks`
-> module ships numpy 2.x, so the fairchem_venv should not have the overlay
-> cleanup issue that affects CUDA-torch; the install script handles this.
+> **UMA / FairChem:** use `INSTALL_UMA=1 bash deployments/aurora/setup/install.sh`.
+> This installs `fairchem-core` in the unified environment and verifies its
+> calculator API. FairChem does not currently document Intel XPU support, so a
+> successful import is not evidence of accelerated UMA inference on Aurora.
 
 Default environment path created by this flow:
 

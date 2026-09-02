@@ -618,7 +618,8 @@ Environment overrides accepted by the installer:
 | `HYDRAGNN_DIR` | Reuse an existing HydraGNN checkout | sibling `HydraGNN` checkout |
 | `INSTALL_ROOT` | Environment and compiled dependency root | facility-specific HydraGNN installation root |
 | `VENV_PATH` | Override the single target Python environment | `${INSTALL_ROOT}/hydragnn_venv*` |
-| `MATSIM_EXTRAS` | matsim-agents extras installed in the target environment | `dev,openai,ollama,anthropic,huggingface` |
+| `MATSIM_EXTRAS` | matsim-agents extras installed in the target environment | `hydragnn,dev,openai,ollama,anthropic,huggingface` |
+| `INSTALL_UMA` | Install and import-check FairChem for UMA workflows | `0` |
 | `BOOTSTRAP_OLLAMA` | Set to `1` to install the Ollama daemon, start it, and pull `OLLAMA_MODELS` (workstation only) | `0` |
 | `OLLAMA_MODELS` | Space-separated list of models to pull when `BOOTSTRAP_OLLAMA=1` | `qwen2.5:14b` |
 

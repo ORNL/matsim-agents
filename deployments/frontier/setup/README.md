@@ -33,10 +33,16 @@ bash deployments/frontier/setup/install.sh
 
 ### UMA MLIP Backend (fairchem-core)
 
-`fairchem-core >= 2.0` requires `numpy >= 2.0`, which conflicts with HydraGNN's
-`numpy == 1.26.4` pin. **Do not install `fairchem-core` into `hydragnn_venv`.**
-UMA jobs must use a separate environment. The canonical HydraGNN installer does
-not silently create a second environment.
+HydraGNN main and matsim-agents now share the NumPy 2.2.6, SciPy 1.17.1,
+PyTorch 2.13, and e3nn 0.5.1 contract required by current FairChem. Request UMA
+support in the same environment with:
+
+```bash
+INSTALL_UMA=1 bash deployments/frontier/setup/install.sh
+```
+
+The installer verifies FairChem imports. UMA on ROCm remains unqualified until
+the resulting environment passes a model inference smoke test on Frontier.
 
 ### setup_matsim_frontier.sh
 Quick setup script for daily use after installation.

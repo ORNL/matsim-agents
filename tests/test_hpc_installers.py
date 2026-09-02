@@ -20,6 +20,9 @@ def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
         assert hydragnn_path in text
         assert "https://github.com/ORNL/HydraGNN.git" in text
         assert "hf_transfer" in text
+        assert 'INSTALL_UMA="${INSTALL_UMA:-0}"' in text
+        assert 'MATSIM_EXTRAS="${MATSIM_EXTRAS},uma"' in text
+        assert "from fairchem.core import FAIRChemCalculator, pretrained_mlip" in text
         assert "pip check" in text
         assert "installation_DOE_supercomputers/hydragnn_installation" not in text
         subprocess.run(["bash", "-n", str(installer)], check=True)

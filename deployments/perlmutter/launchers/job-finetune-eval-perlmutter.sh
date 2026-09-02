@@ -121,7 +121,7 @@ source "${REPO}/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
 if [[ "${BACKEND}" == "uma" ]]; then
-  VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+  VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}"
 elif [[ "${BACKEND}" == "hydragnn" ]]; then
   VENV="${MATSIM_HYDRAGNN_VENV:-${VENV_ROOT}/hydragnn_venv}"
 elif [[ "${BACKEND}" == "mace" ]]; then
@@ -131,8 +131,8 @@ else
   exit 2
 fi
 [[ ! -d "${VENV}" ]] && { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
-# fairchem_venv is a plain Python venv (has bin/activate); hydragnn_venv is a
-# conda environment (no bin/activate) and must be activated via `conda activate`.
+# mace_venv is a plain Python venv; the unified hydragnn_venv is conda and may
+# need activation through the conda hook when bin/activate is unavailable.
 if [[ -f "${VENV}/bin/activate" ]]; then
   # shellcheck disable=SC1091
   source "${VENV}/bin/activate"

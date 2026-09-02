@@ -19,7 +19,7 @@
 #
 # Runs `matsim-agents al run examples/paper_cases/al_<case>.yaml` with
 #   MLIP_BACKEND=uma DFT_BACKEND=vasp
-# from the fairchem_venv (UMA requires numpy>=2; not the hydragnn_venv).
+# from the unified hydragnn_venv created with INSTALL_UMA=1.
 #
 # Select the case with the CASE env var (default: hea_bcc):
 #   CASE=lifepo4    sbatch deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh
@@ -103,13 +103,13 @@ source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
 case "$MLIP_BACKEND" in
-  uma)      VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}" ;;
+  uma)      VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}" ;;
   mace)     VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}" ;;
   hydragnn) VENV="${MATSIM_HYDRAGNN_VENV:-${VENV_ROOT}/hydragnn_venv}" ;;
-  *)        VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}" ;;
+  *)        VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}" ;;
 esac
 [[ ! -d "${VENV}" ]] && { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
-# fairchem_venv/mace_venv are plain venvs (bin/activate); hydragnn_venv is conda.
+# mace_venv is a plain venv; hydragnn_venv is a conda environment.
 if [[ -f "${VENV}/bin/activate" ]]; then
   # shellcheck disable=SC1091
   source "${VENV}/bin/activate"

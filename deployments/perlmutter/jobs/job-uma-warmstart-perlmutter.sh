@@ -17,9 +17,7 @@
 #   2. Runs pw.x cold-start and pw.x warm-start (initial coords from UMA).
 #   3. Reports SCF iterations / wall-time speed-up.
 #
-# This script activates the separate fairchem_venv (not hydragnn_venv) because
-# fairchem-core requires numpy>=2.0 which conflicts with HydraGNN's pin.
-# See deployments/perlmutter/setup/README.md for details.
+# This script activates the unified hydragnn_venv created with INSTALL_UMA=1.
 #
 # Submit:
 #   sbatch deployments/perlmutter/jobs/job-uma-warmstart-perlmutter.sh
@@ -49,9 +47,9 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-# fairchem_venv lives alongside hydragnn_venv under the HydraGNN install root.
+# Unified HydraGNN/FairChem environment.
 VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}"
 
 QE_LAUNCHER=${MATSIM_QE_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh}
 QE_PSEUDO_DIR=${MATSIM_QE_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}
@@ -64,7 +62,7 @@ mkdir -p "$RUN_DIR" "$WARMSTART_DIR"
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
-# Activate the plain Python venv (fairchem_venv), NOT conda.
+# Activate the unified environment.
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 

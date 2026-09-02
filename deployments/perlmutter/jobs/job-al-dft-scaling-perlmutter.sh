@@ -42,7 +42,7 @@ PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
 VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/hydragnn_venv}"
 
 AL_CONFIG="$REPO/examples/paper_cases/al_hea_fcc_scaling.yaml"
 [[ ! -f "$AL_CONFIG" ]] && { echo "ERROR: missing $AL_CONFIG" >&2; exit 2; }
@@ -62,7 +62,7 @@ mkdir -p "$RUN_DIR"
 export MLIP_BACKEND="${MLIP_BACKEND:-uma}"
 export DFT_BACKEND="${DFT_BACKEND:-vasp}"
 
-# ── modules & venv (fairchem_venv for UMA) ────────────────────────────────────
+# ── modules & venv (hydragnn_venv for UMA) ────────────────────────────────────
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 # shellcheck disable=SC1091

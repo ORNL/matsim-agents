@@ -9,7 +9,8 @@ HYDRAGNN_REPO="${HYDRAGNN_REPO:-https://github.com/ORNL/HydraGNN.git}"
 HYDRAGNN_REF="${HYDRAGNN_REF:-main}"
 INSTALL_ROOT="${INSTALL_ROOT:-${HYDRAGNN_DIR}/installation_DOE_supercomputers/HydraGNN-Installation-Aurora}"
 VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
-MATSIM_EXTRAS="${MATSIM_EXTRAS:-dev,openai,ollama,anthropic,huggingface}"
+MATSIM_EXTRAS="${MATSIM_EXTRAS:-hydragnn,dev,openai,ollama,anthropic,huggingface}"
+INSTALL_UMA="${INSTALL_UMA:-0}"
 RECREATE_ENV="${RECREATE_ENV:-0}"
 
 log() { printf '\033[1;34m[aurora-install]\033[0m %s\n' "$*"; }
@@ -38,11 +39,15 @@ HYDRAGNN_SRC="${HYDRAGNN_DIR}" bash "${HYDRAGNN_INSTALLER}"
 
 PYTHON="${VENV_PATH}/bin/python"
 [[ -x "${PYTHON}" ]] || die "HydraGNN did not create ${VENV_PATH}"
+[[ "${INSTALL_UMA}" == "1" ]] && MATSIM_EXTRAS="${MATSIM_EXTRAS},uma"
 log "Installing non-editable HydraGNN and matsim-agents packages in that environment"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed --no-deps --force-reinstall "${HYDRAGNN_DIR}"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed "${MATSIM_DIR}[${MATSIM_EXTRAS}]"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed hf_transfer
 "${PYTHON}" -m pip check
 "${PYTHON}" -c "import hydragnn, matsim_agents, torch; print('verified', torch.__version__)"
+if [[ "${INSTALL_UMA}" == "1" ]]; then
+    "${PYTHON}" -c "from fairchem.core import FAIRChemCalculator, pretrained_mlip; print('FairChem/UMA import: OK')"
+fi
 
 log "Complete. Activate with: module load frameworks && source ${VENV_PATH}/bin/activate"

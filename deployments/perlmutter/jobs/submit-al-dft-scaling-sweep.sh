@@ -10,7 +10,7 @@
 #   NODES="1 2 4" REPS=5 QOS=regular scripts/.../submit-al-dft-scaling-sweep.sh
 #
 # After all jobs finish, build the figure (mean +/- std over repeats) with:
-#   fairchem_venv/bin/python research/paper/manuscript/figures/plot_dft_scaling.py \
+#   hydragnn_venv/bin/python research/paper/manuscript/figures/plot_dft_scaling.py \
 #       --runs-root $PROJ/runs --out research/paper/manuscript/figures/al_dft_scaling.pdf
 # ---------------------------------------------------------------------------
 set -euo pipefail

@@ -17,7 +17,7 @@
 #   2. Runs vasp_std cold-start and vasp_std warm-start (coords from MACE).
 #   3. Reports ionic steps / SCF iterations / wall-time speed-up.
 #
-# This script activates the separate mace_venv (not hydragnn_venv/fairchem_venv)
+# This script activates the separate mace_venv, not the unified hydragnn_venv,
 # because mace-torch pins e3nn==0.4.4 (the version the foundation checkpoints
 # were serialised with). See deployments/perlmutter/setup/build-mace-venv-perlmutter.sh.
 #
