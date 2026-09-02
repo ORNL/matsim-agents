@@ -727,6 +727,11 @@ receive identical neutral instructions, and every model writes an independent
 final verdict. Role-based debate and designated-model synthesis remain explicit
 options for workflows that intentionally need an asymmetric review panel.
 
+The same debate is available as the `multi_llm_debate` hypothesis-discussion
+mode of `InvestigationConfig`. It replaces the single-LLM discussion before
+phase exploration; it is not embedded in active learning. See
+[the integration guide](docs/scientific-debate.md#using-debate-inside-the-agentic-materials-workflow).
+
 Before using a real model in a scientific workflow, qualify its configuration,
 endpoint or local artifacts, loading, structured output, multi-turn behavior,
 resource visibility, and latency independently:

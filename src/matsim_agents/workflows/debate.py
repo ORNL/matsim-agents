@@ -32,6 +32,7 @@ class ScientificDebateConfig(BaseModel):
     synthesis_method: Literal["independent_verdicts", "designated_model"] = "independent_verdicts"
     synthesis_participant: str | None = None
     max_transcript_chars: int = Field(60_000, ge=1_000)
+    final_response_instruction: str | None = None
 
     @model_validator(mode="after")
     def _validate_participants(self) -> ScientificDebateConfig:
@@ -189,6 +190,11 @@ def run_scientific_debate(
     )
     verdicts = []
     for index, participant in enumerate(verdict_participants, start=1):
+        final_instruction = (
+            f"\n\nRequired response format:\n{cfg.final_response_instruction}"
+            if cfg.final_response_instruction
+            else ""
+        )
         response = _content(
             models[participant.name].invoke(
                 [
@@ -198,6 +204,7 @@ def run_scientific_debate(
                             "Report supported points, unresolved disputes, strongest evidence, "
                             "assumptions, decisive tests, and a calibrated verdict. Do not claim "
                             "to speak for the other panel members or manufacture consensus."
+                            f"{final_instruction}"
                         )
                     ),
                     HumanMessage(

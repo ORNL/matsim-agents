@@ -157,6 +157,43 @@ is not physical validation. Candidate materials, mechanisms, and property
 claims must still be checked against databases, MLIP/DFT calculations, and
 experiments.
 
+## Using debate inside the agentic materials workflow
+
+Debate can replace the single-LLM hypothesis-discussion stage without becoming
+part of active learning. Configure `InvestigationConfig.hypothesis_discussion`:
+
+```yaml
+hypothesis_discussion:
+  mode: multi_llm_debate       # or single_llm
+  multi_llm_debate:
+    rounds: 2
+    debate_mode: equal
+    synthesis_method: independent_verdicts
+    participants:
+      - name: model_a
+        provider: vllm
+        model: org/model-a
+        base_url: http://node-a:8000/v1
+      - name: model_b
+        provider: vllm
+        model: org/model-b
+        base_url: http://node-b:8000/v1
+```
+
+The workflow requires each final verdict to return a structured, testable
+hypothesis, proposed chemical compositions, rationale, and assumptions. With
+independent verdicts, compositions are merged in participant order and
+duplicates are removed; hypotheses, rationales, assumptions, contributor IDs,
+and disagreements retain their model attribution. The resulting
+`ScientificHypothesis` is then consumed by phase exploration exactly like a
+single-LLM hypothesis.
+
+Phase exploration may subsequently invoke active learning when its existing
+policy and uncertainty criteria require it. Debate is not run inside the AL
+loop, after AL iterations, or as an AL decision maker. Complete investigation
+configurations are provided in
+[`examples/investigation`](../examples/investigation/).
+
 ## All-model portability modality
 
 Run `benchmarks/portability/all_model_scientific_debate.py` to require every first-class model
