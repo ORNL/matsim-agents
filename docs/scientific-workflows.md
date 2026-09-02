@@ -20,6 +20,45 @@ relaxation
 | Phase exploration | `matsim_agents.workflows.run_phase_exploration` | Programmatic workflow; relaxation and optional AL are composed through callbacks |
 | Agentic investigation | `matsim_agents.workflows.run_investigation` | Programmatic orchestration and persisted hypothesis revision; numerical work is delegated to phase exploration |
 | Cross-facility benchmark | `benchmarks/portability/run.py` | Separates deterministic workflow contracts from `--qualification compute`, which executes real MLIP and QE relaxation configs and emits a mandatory scientific summary |
+| Scientific debate | `matsim-agents debate debate.yaml` | Runs independently configured LLMs that challenge a shared hypothesis for a user-selected number of rounds, then persists the transcript and synthesis |
+
+## Multi-model scientific hypothesis debate
+
+The debate workflow is separate from phase exploration and numerical evidence.
+It assigns the same hypothesis to at least two LLM participants. Within each
+round, every participant sees the prior transcript and must identify which peer
+claims it supports or disputes, expose assumptions, and propose falsification
+tests. Speaking order rotates between rounds, so one model does not permanently
+receive either the first-turn or last-turn advantage. After the requested
+rounds, a designated participant (the first by default) produces a synthesis
+that retains unresolved disagreements instead of forcing consensus.
+
+```yaml
+hypothesis: "Pressure stabilizes a metastable silicon phase at room temperature."
+rounds: 3
+output_root: ./runs
+synthesis_participant: theorist
+participants:
+  - name: theorist
+    role: first-principles condensed-matter theorist
+    provider: vllm
+    model: Qwen/Qwen2.5-72B-Instruct
+    base_url: http://localhost:8000/v1
+  - name: experimentalist
+    role: skeptical high-pressure experimentalist
+    provider: ollama
+    model: qwen2.5:14b
+  - name: reviewer
+    role: independent materials-science reviewer
+    provider: openai
+    model: gpt-4o-mini
+```
+
+Run `matsim-agents debate debate.yaml`. The run directory records resolved
+participant identities, complete ordered transcript, synthesis, and provenance.
+LLM statements remain hypothesis-level evidence until calculations or
+experiments verify them. `max_transcript_chars` bounds the context sent to each
+model (default 60,000) without truncating the transcript saved on disk.
 
 “Supported” means that the workflow contract exists. It does not imply that a
 licensed VASP binary, POTCAR library, QE pseudopotentials, or a particular MLIP

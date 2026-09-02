@@ -706,6 +706,18 @@ server loaded its weights. `MATSIM_VLLM_API_KEY` defaults to `EMPTY`, which is
 appropriate for an unsecured local server. Set it when the endpoint requires
 authentication. `MATSIM_VLLM_BASE_URL` is ignored by non-vLLM providers.
 
+### Multi-model scientific debate
+
+Use `matsim-agents debate debate.yaml` to assign one scientific hypothesis to
+an enclave of two or more independently configured LLMs. The YAML specifies
+each participant's name, scientific role, provider, model and optional endpoint,
+plus the user-selected `rounds`. Models see and directly challenge prior peer
+arguments; speaking order rotates each round. A final synthesis preserves both
+consensus and unresolved disputes, while the complete transcript and model
+provenance are retained in a uniquely named run directory. See
+[`docs/scientific-workflows.md`](docs/scientific-workflows.md) for the complete
+configuration and evidence limitations.
+
 Before using a real model in a scientific workflow, qualify its configuration,
 endpoint or local artifacts, loading, structured output, multi-turn behavior,
 resource visibility, and latency independently:

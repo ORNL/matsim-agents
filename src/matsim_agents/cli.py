@@ -17,6 +17,26 @@ app = typer.Typer(add_completion=False, help="Multi-agent AI for atomistic mater
 console = Console()
 
 
+@app.command("debate")
+def debate_workflow(
+    config: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        help="JSON or YAML ScientificDebateConfig file.",
+    ),
+) -> None:
+    """Run a persisted multi-model debate over one scientific hypothesis."""
+
+    import yaml
+
+    from matsim_agents.workflows.debate import ScientificDebateConfig, run_scientific_debate
+
+    raw = yaml.safe_load(config.read_text(encoding="utf-8"))
+    cfg = ScientificDebateConfig.model_validate(raw)
+    console.print_json(run_scientific_debate(cfg).model_dump_json())
+
+
 @app.command("llm-check")
 def llm_check_workflow(
     config: Path = typer.Argument(
