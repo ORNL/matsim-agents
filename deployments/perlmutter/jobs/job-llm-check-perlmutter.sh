@@ -5,7 +5,8 @@
 #SBATCH -t 01:30:00
 #SBATCH -N 1
 #SBATCH -C gpu
-#SBATCH -q regular
+#SBATCH -q premium
+#SBATCH -A m5216_g
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
 # ---------------------------------------------------------------------------
