@@ -7,8 +7,8 @@ bash deployments/frontier/setup/install.sh
 ```
 
 It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current ROCm 7.2 installer,
-then installs and verifies matsim-agents in the resulting environment.
-`install_matsim_frontier.sh` is only a compatibility alias.
+then installs and verifies matsim-agents in the resulting environment. There is
+no second general-purpose installer or legacy alias.
 
 ## Model Download Safety Policy
 
@@ -29,6 +29,18 @@ Usage:
 
 ```bash
 bash deployments/frontier/setup/install.sh
+```
+
+### install-vllm-rocm72.sh
+
+Optional vLLM deployment workflow. Run `install.sh` first; this script then
+validates the existing `.venv`, prepares pinned vLLM/Ray/Triton dependencies
+on the login node, and submits `build-vllm-rocm72.sh` for the GPU build. It
+does not recreate or reinstall the base HydraGNN/matsim environment.
+
+```bash
+bash deployments/frontier/setup/install.sh
+bash deployments/frontier/setup/install-vllm-rocm72.sh
 ```
 
 ### UMA MLIP Backend (fairchem-core)

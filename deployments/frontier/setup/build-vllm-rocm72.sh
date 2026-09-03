@@ -9,7 +9,7 @@
 #
 # Compute-node job: build vLLM from source against ROCm 7.2.
 #
-# Prerequisites (must be done on the login node first via install-rocm72.sh):
+# Prerequisites (must be done on the login node first via install-vllm-rocm72.sh):
 #   - HydraGNN ROCm 7.2 venv already exists at $VENV
 #   - vLLM source already cloned at $VLLM_SRC
 #   - vLLM ROCm build deps already pip-installed into the venv
