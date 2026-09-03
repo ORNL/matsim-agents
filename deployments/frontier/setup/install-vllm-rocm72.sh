@@ -139,5 +139,8 @@ pip install --no-deps \
 
 # ── Phase 3: Submit vLLM compute build job ────────────────────────────────────
 echo "=== Phase 3: Submitting vLLM build job ==="
+# sbatch runs the script from a spooled copy, so BASH_SOURCE-based REPO
+# detection fails on the compute node; pass REPO through explicitly.
+export PROJECT_ROOT="$REPO"
 sbatch "$REPO/deployments/frontier/setup/build-vllm-rocm72.sh"
 echo "Done. Monitor with: tail -f $PROJ/runs/build-vllm-rocm72-<jobid>.out"
