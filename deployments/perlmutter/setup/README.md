@@ -136,10 +136,10 @@ module names differ from the defaults.
 - Core HydraGNN + PyTorch/PyG stack (via delegated HydraGNN installer)
 - matsim-agents (non-editable wheel install)
 - Core runtime/test dependencies (`langchain-core`, `pytest`, `pytest-cov`)
-- HydraGNN runtime dependencies (`scikit-learn==1.5.1`, `vesin==0.4.2`)
+- HydraGNN runtime dependencies (`scikit-learn==1.7.2`, `vesin==0.4.2`)
 - `huggingface_hub` (includes `hf` CLI for resumable model downloads)
 - `transformers` + `accelerate`
-- Optional: `fairchem-core` (UMA MLIP backend) in the unified environment when
+- Optional: `fairchem-core` (UMA MLIP backend) in `$MATSIM_DIR/.venv-uma` when
   `INSTALL_UMA=1`
 - Optional: `mace-torch==0.3.16` in `$MATSIM_DIR/.venv-mace` when
   `INSTALL_MACE=1`
@@ -246,11 +246,12 @@ the `mlip_backend="uma"` field on `RelaxStructureInput` (canonical:
 `matsim_agents.backends.mlip.relaxation.RelaxStructureInput`). The backend requires
 `fairchem-core`.
 
-### Shared dependency contract
+### Compatibility environment
 
-HydraGNN main and matsim-agents now use Python 3.11–3.14, NumPy 2.2.6,
-SciPy 1.17.1, PyTorch 2.13, and e3nn 0.5.1. These versions satisfy current
-`fairchem-core`, so UMA no longer requires a second Python environment.
+HydraGNN requires PyTorch 2.14, while `fairchem-core==2.22.0` requires
+PyTorch 2.13. The installer therefore keeps HydraGNN in `$MATSIM_DIR/.venv`
+and creates the independently resolved UMA environment at
+`$MATSIM_DIR/.venv-uma`. Both environments remain owned by matsim-agents.
 
 ### Installation
 
@@ -258,19 +259,19 @@ SciPy 1.17.1, PyTorch 2.13, and e3nn 0.5.1. These versions satisfy current
 INSTALL_UMA=1 bash deployments/perlmutter/setup/install.sh
 ```
 
-This installs and import-checks FairChem in `$MATSIM_DIR/.venv`.
+This installs and import-checks FairChem in `$MATSIM_DIR/.venv-uma`.
 
 ### Running UMA jobs
 
-UMA benchmark jobs activate the unified environment:
+UMA benchmark jobs activate the compatibility environment:
 
 ```bash
 # In a job script or interactive session:
-source $MATSIM_DIR/.venv/bin/activate
+source $MATSIM_DIR/.venv-uma/bin/activate
 
 # Or set MATSIM_MLIP_BACKEND=uma and point to the fairchem venv:
 export MATSIM_MLIP_BACKEND=uma
-export MATSIM_FAIRCHEM_VENV=$MATSIM_DIR/.venv
+export MATSIM_FAIRCHEM_VENV=$MATSIM_DIR/.venv-uma
 ```
 
 The warm-start test infrastructure (`test_qe_warmstart.py`, `test_vasp_warmstart.py`)

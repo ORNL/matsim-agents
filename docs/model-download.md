@@ -236,7 +236,7 @@ directly and never takes a lock.
 `facebook/UMA` is gated. Accept the license at
 <https://huggingface.co/facebook/UMA>, then log in once on a login node:
 ```bash
-source $REPO/.venv/bin/activate
+source $REPO/.venv-uma/bin/activate
 hf auth login          # paste your hf_... token; writes ~/.cache/huggingface/token
 hf auth whoami         # should print your username
 ```

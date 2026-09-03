@@ -80,7 +80,7 @@ special memory management — each call processes one prompt at a time.
 - **Zero build required** — both packages are pure Python wheels; `pip install
   accelerate` is all you need.
 - **Works without a separate inference-server build** — Transformers uses the
-  PyTorch 2.13 environment installed by the current HydraGNN recipe. Frontier
+  PyTorch 2.14 environment installed by the current HydraGNN recipe. Frontier
   accelerator execution must be qualified against the selected ROCm module.
 - **Full model flexibility** — you can inspect activations, attach hooks,
   modify the forward pass, or inject custom layers with a few lines of Python.

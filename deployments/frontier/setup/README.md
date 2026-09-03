@@ -33,9 +33,10 @@ bash deployments/frontier/setup/install.sh
 
 ### UMA MLIP Backend (fairchem-core)
 
-HydraGNN main and matsim-agents now share the NumPy 2.2.6, SciPy 1.17.1,
-PyTorch 2.13, and e3nn 0.5.1 contract required by current FairChem. Request UMA
-support in the same environment with:
+HydraGNN main and matsim-agents now use NumPy 2.4.6, SciPy 1.17.1,
+PyTorch 2.14, torchvision 0.29, and e3nn 0.5.1. FairChem cannot yet share
+that environment: FairChem 2.22 requires Torch 2.13. Request the matsim-owned
+`.venv-uma` environment with:
 
 ```bash
 INSTALL_UMA=1 bash deployments/frontier/setup/install.sh

@@ -17,7 +17,7 @@
 #   2. Runs pw.x cold-start and pw.x warm-start (initial coords from UMA).
 #   3. Reports SCF iterations / wall-time speed-up.
 #
-# This script activates the matsim-owned .venv created with INSTALL_UMA=1.
+# This script activates the matsim-owned .venv-uma created with INSTALL_UMA=1.
 #
 # Submit:
 #   sbatch deployments/perlmutter/jobs/job-uma-warmstart-perlmutter.sh
@@ -47,9 +47,9 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-# Unified HydraGNN/FairChem environment.
+# Isolated FairChem/UMA compatibility environment.
 VENV_ROOT=$REPO/.hpc-build/perlmutter
-VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}"
+VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}"
 
 QE_LAUNCHER=${MATSIM_QE_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh}
 QE_PSEUDO_DIR=${MATSIM_QE_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}
@@ -62,7 +62,7 @@ mkdir -p "$RUN_DIR" "$WARMSTART_DIR"
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
-# Activate the unified environment.
+# Activate the UMA compatibility environment.
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 

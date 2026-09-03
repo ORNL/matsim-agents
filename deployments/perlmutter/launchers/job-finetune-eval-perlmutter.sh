@@ -120,7 +120,7 @@ source "${REPO}/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
 if [[ "${BACKEND}" == "uma" ]]; then
-  VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}"
+  VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}"
 elif [[ "${BACKEND}" == "hydragnn" ]]; then
   VENV="${MATSIM_HYDRAGNN_VENV:-${REPO}/.venv}"
 elif [[ "${BACKEND}" == "mace" ]]; then

@@ -189,21 +189,14 @@ compiled against the numpy 2.x ABI.
 extension in the stack (pyarrow 23.0, scipy 1.17, scikit-learn 1.8, torch
 2.10/XPU, IPEX 2.10) is compiled against the **numpy 2.x** ABI.
 
-The current cross-facility HydraGNN contract pins `numpy==2.2.6`. On Aurora,
+The current cross-facility HydraGNN contract pins `numpy==2.4.6`. On Aurora,
 downgrading that environment to NumPy 1.x would break the XPU stack.
 
-**Fix (in `deployments/aurora/setup/install.sh`)**
+**Fix (in the current HydraGNN Aurora installer)**
 
-After installing matsim-agents and its dependencies, immediately uninstall any
-venv-local numpy/pandas overlay that transitive dependencies may have pulled in:
-
-```bash
-pip uninstall -y numpy pandas 2>/dev/null || true
-```
-
-The `--system-site-packages` venv then falls back to the frameworks-provided
-numpy 2.2.6 and pandas 3.0.0, which is exactly what every other C extension
-in the stack expects.
+Keep the upstream `numpy==2.4.6` venv overlay. It remains on the NumPy 2.x ABI
+and is now HydraGNN's qualified cross-facility version. Do not uninstall it to
+fall back to the older frameworks copy.
 
 Similarly, remove any venv-local CUDA PyTorch wheels (e.g. pulled in by
 `transformers` or `accelerate`):

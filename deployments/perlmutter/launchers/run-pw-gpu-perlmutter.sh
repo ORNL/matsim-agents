@@ -34,7 +34,7 @@ INPUT="$1"; shift
 
 # Same module stack as the build (see build-qe-gpu-perlmutter.sh for the
 # rationale on the NVHPC 25.5 / CUDA 12.9 pin: it must match the CUDA runtime
-# used by the current HydraGNN-aligned PyTorch 2.13 environment).
+# used by the current HydraGNN-aligned PyTorch 2.14 environment).
 source "${REPO}/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_nvidia
 module load cray-fftw || echo "WARNING: cray-fftw not loaded"

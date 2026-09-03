@@ -19,7 +19,7 @@
 #
 # Runs `matsim-agents al run examples/paper_cases/al_<case>.yaml` with
 #   MLIP_BACKEND=uma DFT_BACKEND=vasp
-# from the matsim-owned .venv created with INSTALL_UMA=1.
+# from the matsim-owned .venv-uma created with INSTALL_UMA=1.
 #
 # Select the case with the CASE env var (default: hea_bcc):
 #   CASE=lifepo4    sbatch deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh
@@ -101,10 +101,10 @@ source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
 case "$MLIP_BACKEND" in
-  uma)      VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}" ;;
+  uma)      VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}" ;;
   mace)     VENV="${MATSIM_MACE_VENV:-${REPO}/.venv-mace}" ;;
   hydragnn) VENV="${MATSIM_HYDRAGNN_VENV:-${REPO}/.venv}" ;;
-  *)        VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}" ;;
+  *)        VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}" ;;
 esac
 [[ ! -d "${VENV}" ]] && { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
 # Both default environments are matsim-owned Python virtual environments.

@@ -82,8 +82,8 @@ RECREATE_ENV=1 bash deployments/aurora/setup/install.sh
 ```
 
 > **UMA / FairChem:** use `INSTALL_UMA=1 bash deployments/aurora/setup/install.sh`.
-> This installs `fairchem-core` in the unified environment and verifies its
-> calculator API. FairChem does not currently document Intel XPU support, so a
+> This installs `fairchem-core` in the matsim-owned `.venv-uma` environment and
+> verifies its calculator API. FairChem does not currently document Intel XPU support, so a
 > successful import is not evidence of accelerated UMA inference on Aurora.
 
 > **MACE:** use `INSTALL_MACE=1 bash deployments/aurora/setup/install.sh`.

@@ -95,7 +95,9 @@ Highlights:
 - SIGSEGV in vLLM's model-registry subprocess fixed via `aurora_vllm_entrypoint.py`
   (sets `ONEAPI_DEVICE_SELECTOR=opencl:cpu` for the registry child process)
 - Server must be launched via `mpiexec -n 1 --ppn 1` for PALS device-fabric permissions
-- Do **not** pin numpy to 1.x on Aurora — the XPU stack requires numpy 2.2.6 (2.x ABI)
+- Do **not** pin NumPy to 1.x on Aurora. HydraGNN now pins NumPy 2.4.6;
+  its installer shadows the frameworks module's NumPy 2.2.6 while preserving
+  the required 2.x ABI.
 - Smoke test confirmed passing: job 8506887, May 25 2026
 
 ### Frontier (OLCF, AMD MI250X)

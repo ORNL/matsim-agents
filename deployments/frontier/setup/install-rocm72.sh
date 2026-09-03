@@ -103,7 +103,7 @@ fi
 # Reassert the HydraGNN NumPy contract and the ROCm Triton build.
 echo "Reasserting numpy and triton-rocm..."
 pip uninstall -y triton || true
-pip install --no-deps --force-reinstall numpy==2.2.6 \
+pip install --no-deps --force-reinstall numpy==2.4.6 \
     --extra-index-url https://download.pytorch.org/whl/rocm7.2 triton-rocm==3.6.0
 python - <<'PY'
 import importlib.metadata as md
@@ -115,7 +115,7 @@ print("triton", installed.get("triton", "missing"))
 print("triton-rocm", installed.get("triton-rocm", "missing"))
 print("setuptools", installed.get("setuptools", "missing"))
 print("grpcio", installed.get("grpcio", "missing"))
-assert numpy.__version__ == "2.2.6",          f"numpy={numpy.__version__}"
+assert numpy.__version__ == "2.4.6",          f"numpy={numpy.__version__}"
 assert installed.get("triton") in (None, "missing"), f"triton={installed.get('triton')}"
 assert installed.get("triton-rocm") == "3.6.0",    f"triton-rocm={installed.get('triton-rocm')}"
 print("All package version assertions passed.")

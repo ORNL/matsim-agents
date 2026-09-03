@@ -17,17 +17,19 @@ def test_hydragnn_main_dependency_contract() -> None:
         "Programming Language :: Python :: 3.13",
         "Programming Language :: Python :: 3.14",
     } <= set(project["classifiers"])
-    assert {"ase==3.26.0", "numpy==2.2.6", "scipy==1.17.1"} <= set(project["dependencies"])
+    assert {"ase==3.26.0", "numpy==2.4.6", "scipy==1.17.1"} <= set(project["dependencies"])
     assert {
-        "torch==2.13.0",
-        "torchvision==0.28.0",
-        "torchaudio==2.11.0",
+        "torch==2.14.0",
+        "torchvision==0.29.0",
         "e3nn==0.5.1",
         "torch-ema==0.3",
         "torchmetrics==1.4.0",
         "torch-geometric==2.8.0",
     } <= set(project["optional-dependencies"]["hydragnn"])
-    assert "fairchem-core" in project["optional-dependencies"]["uma"]
+    assert not any(
+        dep.startswith("torchaudio") for dep in project["optional-dependencies"]["hydragnn"]
+    )
+    assert "fairchem-core>=2.20" in project["optional-dependencies"]["uma"]
     assert project["optional-dependencies"]["mace"] == ["mace-torch==0.3.16"]
 
 

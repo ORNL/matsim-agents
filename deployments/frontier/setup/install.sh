@@ -11,6 +11,7 @@ INSTALL_ROOT="${INSTALL_ROOT:-${MATSIM_DIR}/.hpc-build/frontier}"
 VENV_PATH="${VENV_PATH:-${MATSIM_DIR}/.venv}"
 MATSIM_EXTRAS="${MATSIM_EXTRAS:-hydragnn,dev,openai,ollama,anthropic,huggingface}"
 INSTALL_UMA="${INSTALL_UMA:-0}"
+UMA_VENV_PATH="${UMA_VENV_PATH:-${MATSIM_DIR}/.venv-uma}"
 INSTALL_MACE="${INSTALL_MACE:-0}"
 MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"
 RECREATE_ENV="${RECREATE_ENV:-0}"
@@ -48,7 +49,6 @@ log "Installing HydraGNN and its ROCm/PyG/MPI dependencies first"
 
 PYTHON="${VENV_PATH}/bin/python"
 [[ -x "${PYTHON}" ]] || die "HydraGNN did not create ${VENV_PATH}"
-[[ "${INSTALL_UMA}" == "1" ]] && MATSIM_EXTRAS="${MATSIM_EXTRAS},uma"
 log "Installing HydraGNN and matsim-agents wheels into the same environment"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed --no-deps "${HYDRAGNN_DIR}"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed "${MATSIM_DIR}[${MATSIM_EXTRAS}]"
@@ -56,7 +56,10 @@ log "Installing HydraGNN and matsim-agents wheels into the same environment"
 "${PYTHON}" -m pip check
 "${PYTHON}" -c "import hydragnn, matsim_agents, torch; print('verified', torch.__version__)"
 if [[ "${INSTALL_UMA}" == "1" ]]; then
-    "${PYTHON}" -c "from fairchem.core import FAIRChemCalculator, pretrained_mlip; print('FairChem/UMA import: OK')"
+    log "Installing UMA in its Torch-compatible matsim-owned environment"
+    MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" UMA_VENV_PATH="${UMA_VENV_PATH}" \
+        RECREATE_UMA_ENV="${RECREATE_ENV}" \
+        bash "${MATSIM_DIR}/deployments/common/setup/install-uma-compat.sh"
 fi
 if [[ "${INSTALL_MACE}" == "1" ]]; then
     log "Installing MACE in its e3nn-compatible matsim-owned environment"

@@ -42,7 +42,7 @@ PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
 VENV_ROOT=$REPO/.hpc-build/perlmutter
-VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv}"
+VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}"
 
 AL_CONFIG="$REPO/examples/paper_cases/al_hea_fcc_scaling.yaml"
 [[ ! -f "$AL_CONFIG" ]] && { echo "ERROR: missing $AL_CONFIG" >&2; exit 2; }

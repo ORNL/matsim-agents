@@ -52,7 +52,7 @@ UMA_MODEL="${MATSIM_UMA_MODEL_NAME:-uma-s-1p1}"
 UMA_TASK="${MATSIM_UMA_TASK:-omat}"
 
 VENV_ROOT="${REPO_ROOT}/.hpc-build/perlmutter"
-FAIRCHEM_VENV="${MATSIM_FAIRCHEM_VENV:-${REPO_ROOT}/.venv}"
+FAIRCHEM_VENV="${MATSIM_FAIRCHEM_VENV:-${REPO_ROOT}/.venv-uma}"
 
 for req in "${PSEUDO_DIR}" "${QE_LAUNCHER}" "${FAIRCHEM_VENV}"; do
   if [[ ! -e "${req}" ]]; then

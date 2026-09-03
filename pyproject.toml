@@ -31,7 +31,7 @@ dependencies = [
     # Keep the scientific ABI aligned with HydraGNN main. Its compiled PyG
     # extensions and FairChem/UMA integration are qualified against this pair.
     "ase==3.26.0",
-    "numpy==2.2.6",
+    "numpy==2.4.6",
     "scipy==1.17.1",
     "typer>=0.12",
     "rich>=13.7",
@@ -49,9 +49,8 @@ dependencies = [
 hydragnn = [
     # HydraGNN itself and compiled PyG extensions remain facility-installed;
     # these pins declare the Python-level compatibility contract from main.
-    "torch==2.13.0",
-    "torchvision==0.28.0",
-    "torchaudio==2.11.0",
+    "torch==2.14.0",
+    "torchvision==0.29.0",
     "e3nn==0.5.1",
     "torch-ema==0.3",
     "torchmetrics==1.4.0",
@@ -64,9 +63,11 @@ mace = [
     "mace-torch==0.3.16",
 ]
 uma = [
-    # UMA is provided by FairChem. Its current torch/numpy/scipy/e3nn ranges
-    # intersect HydraGNN main's exact pins above.
-    "fairchem-core",
+    # UMA is provided by FairChem. FairChem 2.22 requires torch<2.14 and e3nn
+    # 0.6, so HPC installers isolate it from HydraGNN in .venv-uma.
+    # UMA/OMat support is part of FairChem 2.x; leaving this unbounded allows
+    # pip to backtrack to fairchem-core 1.0, which does not provide the UMS API.
+    "fairchem-core>=2.20",
 ]
 openai = ["langchain-openai>=0.2.0"]
 ollama = ["langchain-ollama>=0.2.0"]

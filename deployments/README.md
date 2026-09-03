@@ -34,7 +34,8 @@ there is one Python environment for the HydraGNN-based matsim workflow.
 Common overrides are `HYDRAGNN_DIR`, `HYDRAGNN_REF`, `INSTALL_ROOT`,
 `VENV_PATH`, and `MATSIM_EXTRAS`. Set `INSTALL_UMA=1` to install
 `fairchem-core` through the matsim-agents `uma` extra and verify its calculator
-API in the same environment. Set `INSTALL_MACE=1` to have the same canonical
+API in the matsim-owned `.venv-uma` compatibility environment. Set
+`INSTALL_MACE=1` to have the same canonical
 installer create `matsim-agents/.venv-mace`. Frontier also accepts HydraGNN's
 `SKIP_VLLM` setting. Set `RECREATE_ENV=1` on Frontier or Aurora to request a
 clean rebuild; HydraGNN's current Perlmutter recipe always recreates its target
@@ -52,9 +53,10 @@ site-packages. Run MACE as a separate process; do not import HydraGNN and MACE
 in the same Python interpreter.
 See [`docs/mace-dependencies.md`](../docs/mace-dependencies.md) for the checked
 upstream constraints and the qualification boundary.
-FairChem/UMA is compatible with the updated Python dependency contract, but
-UMA weights are gated and accelerator execution must still be qualified on
-each facility.
+FairChem/UMA shares the NumPy/SciPy contract but not the Torch contract:
+FairChem 2.22 requires Torch 2.13, while HydraGNN requires Torch 2.14.
+`INSTALL_UMA=1` therefore creates the matsim-owned `.venv-uma`. UMA weights
+are gated, and accelerator execution must still be qualified on each facility.
 
 ## Submission contract
 
