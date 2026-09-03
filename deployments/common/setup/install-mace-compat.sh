@@ -53,7 +53,10 @@ if [[ "${FACILITY}" == "aurora" ]]; then
 fi
 "${PYTHON}" -m pip install -c "${CONSTRAINTS}" "e3nn==${E3NN_VERSION}"
 "${PYTHON}" -m pip install -c "${CONSTRAINTS}" "mace-torch==${MACE_TORCH_VERSION}"
-"${PYTHON}" -m pip install --no-deps --force-reinstall "${MATSIM_DIR}"
+"${PYTHON}" -m pip install --upgrade-strategy only-if-needed "hatchling>=1.21"
+# --no-build-isolation: avoids pip's PEP 517 isolated build env, which needs
+# network/TLS to fetch hatchling; it is pre-installed above instead.
+"${PYTHON}" -m pip install --no-build-isolation --no-deps --force-reinstall "${MATSIM_DIR}"
 
 # PyTorch >=2.6 otherwise changes torch.load's default for e3nn's constants.
 ACTIVATE="${MACE_VENV_PATH}/bin/activate"
