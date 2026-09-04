@@ -37,8 +37,8 @@
 #
 # Configurable environment overrides
 # ------------------------------------
-#   VASP_SRC_TGZ      Path to vasp.6.6.0.tgz    (default: external/vasp6/src/vasp.6.6.0.tgz)
-#   VASP_ROOT         Extracted VASP source dir  (default: external/vasp6/src/vasp.6.6.0)
+#   VASP_SRC_TGZ      Path to vasp.6.6.1.tgz    (default: external/vasp6/src/vasp.6.6.1.tgz)
+#   VASP_ROOT         Extracted VASP source dir  (default: external/vasp6/src/vasp.6.6.1)
 #   PREFIX            Build sub-directory name   (default: build)
 #   NCORES            Parallel make jobs         (default: nproc or 16 on login)
 #   CLEAN_BUILD       1=wipe build dirs first    (default: 0)
@@ -74,8 +74,8 @@ if [[ ! -f "${REPO}/pyproject.toml" ]]; then
 fi
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-VASP_SRC_TGZ="${VASP_SRC_TGZ:-${REPO}/external/vasp6/src/vasp.6.6.0.tgz}"
-VASP_ROOT="${VASP_ROOT:-${REPO}/external/vasp6/src/vasp.6.6.0}"
+VASP_SRC_TGZ="${VASP_SRC_TGZ:-${REPO}/external/vasp6/src/vasp.6.6.1.tgz}"
+VASP_ROOT="${VASP_ROOT:-${REPO}/external/vasp6/src/vasp.6.6.1}"
 PREFIX="${PREFIX:-build}"
 CLEAN_BUILD="${CLEAN_BUILD:-0}"
 VASP_TARGET="${VASP_TARGET:-all}"
