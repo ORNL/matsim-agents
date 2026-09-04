@@ -91,6 +91,11 @@ export NCCL_SHM_DISABLE=1
 cd "${WORK_DIR}"
 
 echo "[vasp-step] $(date) host=$(hostname) work_dir=${WORK_DIR}"
+NODE_ARGS=()
+if [[ -n "${MATSIM_DFT_ASSIGNED_NODES:-}" ]]; then
+  NODE_ARGS=(--nodelist "${MATSIM_DFT_ASSIGNED_NODES}")
+fi
+echo "[vasp-step] assigned_nodes=${MATSIM_DFT_ASSIGNED_NODES:-scheduler-selected}"
 echo "[vasp-step] srun --exclusive -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK} \\"
 echo "             --gpus-per-node=${RANKS_PER_NODE} --gpu-bind=closest ${VASP_BIN}"
 
@@ -103,6 +108,7 @@ echo "             --gpus-per-node=${RANKS_PER_NODE} --gpu-bind=closest ${VASP_B
 # For a single-node (-N1) allocation this is a harmless no-op.
 exec srun \
   --exclusive \
+  "${NODE_ARGS[@]}" \
   -N "${NNODES}" \
   -n "${TOTAL_RANKS}" \
   -c "${THREADS_PER_RANK}" \

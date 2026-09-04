@@ -119,6 +119,8 @@ dft:
 
 trainer:
   enabled: ${TRAINER_ENABLED:-true}
+  promote_model: true          # explicitly use the validated candidate in the next iteration
+  promotion_approved: true     # explicit acceptance after reviewing validation metrics
   train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
   train_launcher: ${TRAIN_LAUNCHER:-/global/cfs/projectdirs/m5216/mlupopa/matsim-agents/deployments/perlmutter/launchers/_hydragnn-train-step-perlmutter.sh}
   epochs_per_iter: 5

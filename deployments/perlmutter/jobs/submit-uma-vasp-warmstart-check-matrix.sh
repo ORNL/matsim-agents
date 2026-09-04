@@ -46,7 +46,7 @@ FIXTURE="${FIXTURE:-MoNbTaW_HEA}"
 REPEATS="${REPEATS:-3}"
 TIME_LIMIT="${TIME_LIMIT:-02:00:00}"
 QOS="${QOS:-regular}"
-ACCOUNT="${ACCOUNT:-m5216}"
+ACCOUNT="${ACCOUNT:?set ACCOUNT to your NERSC allocation}"
 
 POTCAR_DIR="${MATSIM_VASP_POTCAR_DIR:-${REPO_ROOT}/external/vasp6/potcar/potpaw_PBE.64}"
 VASP_LAUNCHER="${MATSIM_VASP_LAUNCHER:-${REPO_ROOT}/deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh}"
@@ -55,8 +55,8 @@ MLP_DEVICE="${MATSIM_VASP_MLP_DEVICE:-cuda}"
 UMA_MODEL="${MATSIM_UMA_MODEL_NAME:-uma-s-1p1}"
 UMA_TASK="${MATSIM_UMA_TASK:-omat}"
 
-VENV_ROOT="${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
-FAIRCHEM_VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+VENV_ROOT="${REPO_ROOT}/.hpc-build/perlmutter"
+FAIRCHEM_VENV="${MATSIM_FAIRCHEM_VENV:-${REPO_ROOT}/.venv-uma}"
 
 for req in "${POTCAR_DIR}" "${VASP_LAUNCHER}" "${FAIRCHEM_VENV}"; do
   if [[ ! -e "${req}" ]]; then

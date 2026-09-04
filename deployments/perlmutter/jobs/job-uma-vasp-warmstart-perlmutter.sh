@@ -18,7 +18,7 @@
 #   2. Runs vasp_std cold-start and vasp_std warm-start.
 #   3. Reports ionic steps / wall-time speed-up.
 #
-# Uses the fairchem_venv (NOT hydragnn_venv) — fairchem-core requires numpy>=2.
+# Uses the matsim-owned .venv-uma created with INSTALL_UMA=1.
 #
 # Artifacts:
 #   $RUNS_ROOT/uma-vasp-warmstart-$SLURM_JOB_ID/
@@ -51,8 +51,8 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+VENV_ROOT=$REPO/.hpc-build/perlmutter
+VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}"
 
 VASP_LAUNCHER=${MATSIM_VASP_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh}
 VASP_POTCAR_DIR=${MATSIM_VASP_POTCAR_DIR:-$REPO/external/vasp6/potcar/potpaw_PBE.64}
@@ -65,7 +65,7 @@ mkdir -p "$RUN_DIR" "$WARMSTART_DIR"
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
-# Activate fairchem_venv (plain venv, not conda).
+# Activate the UMA compatibility environment.
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 

@@ -33,7 +33,9 @@ vars:
   RUN_TAG: al-run-001
 
   # DFT executables and pseudopotential libraries.
-  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  # Prefers OLCF's facility VASP module; falls back to a from-source build
+  # (deployments/frontier/setup/build-vasp-gpu-frontier.sh) only if unavailable.
+  VASP_BIN:   /sw/frontier/vasp/6.6.1/bin/vasp_std
   POTCAR_DIR: /lustre/orion/mat746/proj-shared/POTCAR/PBE.54
   PW_BIN:     ${PROJ_ROOT}/external/quantum-espresso/install-gpu/bin/pw.x
   PSEUDO_DIR: /lustre/orion/mat746/proj-shared/SSSP_PBE_efficiency_v1.3
@@ -132,6 +134,8 @@ dft:
 
 trainer:
   enabled: true
+  promote_model: true          # explicitly use the validated candidate in the next iteration
+  promotion_approved: true     # explicit acceptance after reviewing validation metrics
   train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5

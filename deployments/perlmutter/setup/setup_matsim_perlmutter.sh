@@ -1,7 +1,7 @@
 #!/bin/bash
 # setup_matsim_perlmutter.sh
 # Setup environment for matsim-agents on NERSC Perlmutter
-# This script loads necessary Perlmutter modules and activates the HydraGNN virtual environment
+# This script loads Perlmutter modules and activates the matsim-owned environment.
 #
 # Usage:
 #   source setup_matsim_perlmutter.sh [--gpu]
@@ -14,32 +14,8 @@ set -euo pipefail
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 MATSIM_AGENTS_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-$(cd "${MATSIM_AGENTS_ROOT}/.." && pwd)/HydraGNN}"
-
-# Canonical install/runtime env path (matches install_matsim_perlmutter.sh:
-# the venv lives inside HydraGNN's install root alongside its build deps).
-SHARED_VENV="${HYDRAGNN_ROOT}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
-
-# Legacy local env path (deprecated; only used as a last-resort fallback).
-LOCAL_VENV="${MATSIM_AGENTS_ROOT}/perlmutter_venv"
-
-# Choose which environment to use:
-# 1) explicit override via MATSIM_PERLMUTTER_VENV
-# 2) canonical shared env inside HydraGNN (matches the installer)
-# 3) legacy local env in this repo (backward compatibility only)
-if [[ -n "${MATSIM_PERLMUTTER_VENV:-}" ]]; then
-    HYDRAGNN_VENV="${MATSIM_PERLMUTTER_VENV}"
-    ENV_SOURCE="override"
-elif [[ -d "${SHARED_VENV}" ]]; then
-    HYDRAGNN_VENV="${SHARED_VENV}"
-    ENV_SOURCE="shared"
-elif [[ -d "${LOCAL_VENV}" || -L "${LOCAL_VENV}" ]]; then
-    HYDRAGNN_VENV="${LOCAL_VENV}"
-    ENV_SOURCE="local"
-else
-    HYDRAGNN_VENV="${SHARED_VENV}"
-    ENV_SOURCE="missing"
-fi
+DEFAULT_VENV="${MATSIM_AGENTS_ROOT}/.venv"
+MATSIM_VENV="${MATSIM_PERLMUTTER_VENV:-${DEFAULT_VENV}}"
 
 # Check if we should use GPU modules
 USE_GPU=false
@@ -61,26 +37,25 @@ else
     load_perlmutter_modules
 fi
 
-# Activate HydraGNN conda environment
-if [[ ! -d "${HYDRAGNN_VENV}" ]]; then
-    echo "❌ Error: HydraGNN environment not found at:"
-    echo "   ${HYDRAGNN_VENV}"
+# Activate the matsim-owned Python environment.
+if [[ ! -d "${MATSIM_VENV}" ]]; then
+    echo "Error: matsim environment not found at:"
+    echo "   ${MATSIM_VENV}"
     echo ""
     echo "Install it with:"
-    echo "   bash ${SCRIPT_DIR}/install_matsim_perlmutter.sh [--gpu]"
+    echo "   bash ${SCRIPT_DIR}/install.sh"
     echo ""
     echo "Tip: override env path with MATSIM_PERLMUTTER_VENV=/path/to/env"
     return 1 2>/dev/null || exit 1
 fi
 
-echo "Activating HydraGNN environment..."
-echo "Using ${ENV_SOURCE} environment: ${HYDRAGNN_VENV}"
+echo "Activating matsim environment: ${MATSIM_VENV}"
 
 # This is a conda environment, activate it by updating PATH
-export PATH="${HYDRAGNN_VENV}/bin:${PATH}"
-export CONDA_PREFIX="${HYDRAGNN_VENV}"
+export PATH="${MATSIM_VENV}/bin:${PATH}"
+export CONDA_PREFIX="${MATSIM_VENV}"
 export CONDA_DEFAULT_ENV="matsim-agents"
-export VIRTUAL_ENV="${HYDRAGNN_VENV}"
+export VIRTUAL_ENV="${MATSIM_VENV}"
 
 # Ensure NVIDIA runtime libs used by VASP are resolvable at runtime.
 NVIDIA_SDK_ROOT="/opt/nvidia/hpc_sdk/Linux_x86_64/25.5"

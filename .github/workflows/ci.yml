@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -137,6 +137,9 @@ jobs:
 
       - name: Ruff format check
         run: ruff format --check src/ tests/
+
+      - name: Validate Codabench source bundle
+        run: python benchmarks/codabench/validate_bundle.py
 
       - name: mypy type check (src only)
         run: mypy src/matsim_agents --ignore-missing-imports

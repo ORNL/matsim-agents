@@ -17,9 +17,8 @@
 #   2. Runs pw.x cold-start and pw.x warm-start (initial coords from MACE).
 #   3. Reports SCF iterations / wall-time speed-up.
 #
-# This script activates the separate mace_venv (not hydragnn_venv/fairchem_venv)
-# because mace-torch pins e3nn==0.4.4 (the version the foundation checkpoints
-# were serialised with). See deployments/perlmutter/setup/build-mace-venv-perlmutter.sh.
+# This script activates .venv-mace because upstream MACE 0.3.16 declares
+# e3nn==0.4.4 while the primary HydraGNN environment declares e3nn==0.5.1.
 #
 # Submit:
 #   sbatch deployments/perlmutter/jobs/job-mace-warmstart-perlmutter.sh
@@ -46,9 +45,7 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-# mace_venv lives alongside hydragnn_venv under the HydraGNN install root.
-VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}"
+VENV="${MATSIM_MACE_VENV:-${REPO}/.venv-mace}"
 
 QE_LAUNCHER=${MATSIM_QE_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh}
 QE_PSEUDO_DIR=${MATSIM_QE_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}
@@ -61,8 +58,8 @@ mkdir -p "$RUN_DIR" "$WARMSTART_DIR"
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
-# Activate the plain Python venv (mace_venv), NOT conda.
-[[ ! -d "${VENV}" ]] && { echo "ERROR: mace_venv not found: ${VENV}" >&2; exit 2; }
+# Activate the matsim-owned MACE compatibility environment.
+[[ ! -d "${VENV}" ]] && { echo "ERROR: MACE environment not found: ${VENV}" >&2; exit 2; }
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 

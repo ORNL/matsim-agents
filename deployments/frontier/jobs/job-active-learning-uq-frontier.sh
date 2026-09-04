@@ -9,21 +9,13 @@
 # ---------------------------------------------------------------------------
 # matsim-agents: active-learning loop on Frontier.
 #
-# For each input structure:
-#   1. Relax with HydraGNN (multi-branch MLFF).
-#   2. Score uncertainty from the per-step branch-weight CSV
-#      (mean top-branch weight + mean normalized entropy).
-#   3. If the prediction is flagged unreliable, trigger TWO reference
-#      DFT calculations on the optimized structure:
-#        - Quantum ESPRESSO pw.x (Frontier launcher: run-pw-gpu-frontier.sh)
-#        - VASP vasp_std (skipped if MATSIM_VASP_LAUNCHER is unset)
-#   4. Append flagged structures to training_candidates.csv.
+# Production AL contract using the shared scheduler-neutral runner.
 #
 # Submit:
 #   sbatch deployments/frontier/jobs/job-active-learning-uq-frontier.sh
 #
 # Override:
-#   MATSIM_STRUCTURES="a.vasp b.vasp" MATSIM_TOP_W_THR=0.5 \
+#   MATSIM_STRUCTURES="a.vasp b.vasp" MATSIM_N_SELECT=4 \
 #     sbatch deployments/frontier/jobs/job-active-learning-uq-frontier.sh
 # Backward-compatible alias: MATSIM_AL_STRUCTURES
 # ---------------------------------------------------------------------------
@@ -35,7 +27,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=$REPO/.venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
 HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
@@ -75,11 +67,13 @@ TORCH_LIB=$VENV/lib/python3.11/site-packages/torch/lib
 export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
 
 # ── DFT launchers (the example skips cleanly if either is unset) ────────────
-export MATSIM_QE_LAUNCHER="${MATSIM_QE_LAUNCHER:-$REPO/deployments/frontier/launchers/run-pw-gpu-frontier.sh}"
-export MATSIM_VASP_LAUNCHER="${MATSIM_VASP_LAUNCHER:-}"
-
-TOP_W_THR=${MATSIM_TOP_W_THR:-0.6}
-ENT_THR=${MATSIM_ENT_THR:-0.5}
+export MATSIM_DFT_BACKEND="${MATSIM_DFT_BACKEND:-qe}"
+export MATSIM_PW_BIN="${MATSIM_PW_BIN:-$REPO/external/quantum-espresso/install-gpu/bin/pw.x}"
+export MATSIM_PSEUDO_DIR="${MATSIM_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}"
+export MATSIM_DFT_WRAPPER="${MATSIM_DFT_WRAPPER:-$REPO/deployments/frontier/launchers/_qe-step-frontier.sh}"
+export MATSIM_DFT_RANKS_PER_NODE="${MATSIM_DFT_RANKS_PER_NODE:-8}"
+export MATSIM_DFT_THREADS_PER_RANK="${MATSIM_DFT_THREADS_PER_RANK:-7}"
+export MATSIM_SEED_STRUCTURES="$(IFS=:; echo "${STRUCTURES[*]}")"
 
 # ── diagnostics ──────────────────────────────────────────────────────────────
 echo "=========================================="
@@ -93,24 +87,12 @@ echo "Logdir:      $LOGDIR"
 echo "MLP ckpt:    $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "Structures:  ${#STRUCTURES[@]}"
 for s in "${STRUCTURES[@]}"; do echo "             - $s"; done
-echo "QE launch:   ${MATSIM_QE_LAUNCHER:-<unset>}"
-echo "VASP launch: ${MATSIM_VASP_LAUNCHER:-<unset>}"
-echo "Thresholds:  top_weight<${TOP_W_THR}  entropy>${ENT_THR}"
+echo "DFT backend: ${MATSIM_DFT_BACKEND}"
+echo "DFT wrapper: ${MATSIM_DFT_WRAPPER}"
 echo "Run dir:     $RUN_DIR"
 echo "=========================================="
 
 # ── run the active-learning driver ──────────────────────────────────────────
-python "$REPO/examples/active_learning_uq.py" \
-    "${STRUCTURES[@]}" \
-    --logdir          "$LOGDIR" \
-    --mlp-checkpoint  "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
-    --output-dir      "$OUTPUT_DIR" \
-    --mlp-device      cuda \
-    --optimizer       FIRE \
-    --maxiter         200 \
-    --fmax            0.02 \
-    --top-weight-threshold "$TOP_W_THR" \
-    --entropy-threshold    "$ENT_THR" \
-    2>&1 | tee "$RUN_DIR/active-learning-uq.log"
+source "$REPO/deployments/common/run-active-learning.sh"
 
 echo "[$(date)] Active-learning loop complete. Artifacts in $OUTPUT_DIR"

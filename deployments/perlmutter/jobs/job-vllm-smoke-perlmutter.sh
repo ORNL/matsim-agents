@@ -29,7 +29,7 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
-INSTALL_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
+INSTALL_ROOT=$REPO/.hpc-build/perlmutter
 VLLM_VENV=$INSTALL_ROOT/vllm_venv
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-14B-Instruct}
 MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
@@ -61,8 +61,8 @@ export TRITON_CACHE_DIR="$_JIT_TMP/triton"
 export TORCHINDUCTOR_CACHE_DIR="$_JIT_TMP/inductor"
 export VLLM_CACHE_ROOT="$_JIT_TMP/vllm"
 # Triton/inductor may JIT-compile a CUDA stub needing Python.h, which is absent
-# in the system-python vllm_venv; borrow the conda py3.11 headers from hydragnn_venv.
-_PY_HDR="$INSTALL_ROOT/hydragnn_venv/include/python3.11"
+# in the system-python vllm_venv; borrow Python headers from the matsim .venv.
+_PY_HDR="$REPO/.venv/include/python3.11"
 export CPATH="${_PY_HDR}:${CPATH:-}"
 export C_INCLUDE_PATH="${_PY_HDR}:${C_INCLUDE_PATH:-}"
 

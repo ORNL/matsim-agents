@@ -35,7 +35,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 PROJ="$(dirname "${REPO}")"
 # Under sbatch BASH_SOURCE is wrong; anchor to the repo instead.
 UTILS_DIR="$REPO/deployments/frontier/utils"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=$REPO/.venv
 # Default: small model that loads quickly
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/Llama-3.1-8B-Instruct}
 SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-meta-llama/Llama-3.1-8B-Instruct}

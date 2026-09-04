@@ -35,6 +35,6 @@ HydraGNN runtime environments carry pinned dependency constraints that are neede
 
 If a platform download script reports missing or incompatible tooling, rebuild with the platform installer flow:
 
-- Perlmutter: deployments/perlmutter/setup/install_matsim_perlmutter.sh
-- Frontier: deployments/frontier/setup/install_matsim_frontier.sh
-- Aurora: deployments/aurora/setup/install_matsim_aurora.sh
+- Perlmutter: `deployments/perlmutter/setup/install.sh`
+- Frontier: `deployments/frontier/setup/install.sh`
+- Aurora: `deployments/aurora/setup/install.sh`

@@ -14,12 +14,12 @@
 #
 # Layout (single node, 4xA100 80GB):
 #   • vLLM server (Qwen2.5-14B)  : GPU 0           [vllm_venv, torch 2.11]
-#   • matsim-agents discovery    : GPUs 1,2,3      [hydragnn_venv, torch 2.8]
+#   • matsim-agents discovery    : GPUs 1,2,3      [.venv, torch 2.13]
 #       - HydraGNN MLFF relaxations run inline on the 3 reserved GPUs
 #       - LLM proposer + critic both talk to localhost:8000/v1
 #
 # The two stacks live in separate venvs because vLLM hard-pins torch 2.11
-# while HydraGNN/UMA require torch 2.8. The matsim vLLM client only needs the
+# while HydraGNN/UMA require torch 2.13. The matsim vLLM client only needs the
 # `openai` package plus the HTTP endpoint, so no torch conflict at the client.
 #
 # Usage:
@@ -42,8 +42,8 @@ RUNTIME_ENV="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}/
 source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
-INSTALL_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV=$INSTALL_ROOT/hydragnn_venv          # discovery client + HydraGNN MLFF
+INSTALL_ROOT=$REPO/.hpc-build/perlmutter
+VENV=$REPO/.venv          # discovery client + HydraGNN MLFF
 VLLM_VENV=$INSTALL_ROOT/vllm_venv         # isolated vLLM server (torch 2.11)
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
@@ -84,7 +84,7 @@ VLLM_LOG="$RUN_DIR/vllm-server.log"
   export TRITON_CACHE_DIR="$_JIT_TMP/triton"
   export TORCHINDUCTOR_CACHE_DIR="$_JIT_TMP/inductor"
   export VLLM_CACHE_ROOT="$_JIT_TMP/vllm"
-  _PY_HDR="$INSTALL_ROOT/hydragnn_venv/include/python3.11"
+  _PY_HDR="$REPO/.venv/include/python3.11"
   export CPATH="${_PY_HDR}:${CPATH:-}"
   export C_INCLUDE_PATH="${_PY_HDR}:${C_INCLUDE_PATH:-}"
   exec "$VLLM_VENV/bin/vllm" serve "$MODEL_DIR" \

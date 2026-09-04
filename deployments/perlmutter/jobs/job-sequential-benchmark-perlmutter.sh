@@ -6,7 +6,7 @@
 #SBATCH -N 1
 #SBATCH -C gpu
 #SBATCH -q premium
-#SBATCH -A m5216_g
+#SBATCH -A <allocation>
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
 # ---------------------------------------------------------------------------
@@ -15,19 +15,13 @@
 # For each model this job:
 #   1. Starts a vLLM server (vllm_venv) on localhost:8000
 #   2. Waits for the health endpoint
-#   3. Runs eval_six_models_search_prompt.py (hydragnn_venv)
+#   3. Runs eval_six_models_search_prompt.py (matsim-owned .venv)
 #   4. Kills the vLLM server
 #   5. Repeats for the next model
 # After all models:
 #   6. Merges per-model JSON results into one combined report
 #   7. Runs rank_model_eval.py  → leaderboard CSV
 #   8. Runs plot_model_eval.py  → comparison PNG
-#
-# Storage layout:
-#   $PROJ/models/<local_dir>/     – model weights on CFS (read-only by this job)
-#   $PROJ/runs/seq-model-bench-$JOBID/  – eval JSON + vLLM logs (CFS, persisted)
-#   /tmp/vllm-jit.<user>.$JOBID/  – JIT caches (node-local tmpfs, discarded at job end)
-#     CFS does not support fcntl.flock; Triton/HF/Torch JIT writes go to tmpfs.
 #
 # Required at submission:
 #   BENCHMARK_PROMPT   – the shared prompt text
@@ -57,12 +51,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
-# Under sbatch, BASH_SOURCE resolves to the spool copy; fall back to submit dir.
-[[ ! -f "${REPO}/pyproject.toml" ]] && REPO="${SLURM_SUBMIT_DIR:-}"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-INSTALL_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV=$INSTALL_ROOT/hydragnn_venv          # eval Python + matsim_agents
+INSTALL_ROOT=$REPO/.hpc-build/perlmutter
+VENV=$REPO/.venv          # eval Python + matsim_agents
 VLLM_VENV=$INSTALL_ROOT/vllm_venv         # isolated vLLM server (torch 2.11 / cu13)
 MODEL_ROOT=$PROJ/models
 RUN_DIR=$PROJ/runs/seq-model-bench-${SLURM_JOB_ID:-$$}
@@ -187,7 +179,7 @@ fi
 # ---------------------------------------------------------------------------
 wait_for_vllm() {
   local port=$1
-  local max_wait=900  # CFS weight load (27B→~3 min, 72B→~8 min) + CUDA graph capture
+  local max_wait=1200  # CFS weight load (~14 min worst-case) + CUDA graph capture
   local interval=5
   local elapsed=0
   echo "[vllm] Waiting for server on port $port ..."
@@ -270,14 +262,13 @@ for entry in "${MODEL_LIST[@]}"; do
     export TRITON_CACHE_DIR="$_JIT_TMP/triton"
     export TORCHINDUCTOR_CACHE_DIR="$_JIT_TMP/inductor"
     export VLLM_CACHE_ROOT="$_JIT_TMP/vllm"
-    # Redirect ALL user-cache/home dirs to tmpfs so the model-registry subprocess
-    # never touches CFS/GPFS (which blocks on fcntl.flock → Errno 524).
+    # CFS does not support fcntl.flock on compute nodes; redirect all caches to tmpfs.
     export XDG_CACHE_HOME="$_JIT_TMP/xdg-cache"
     export HF_HOME="$_JIT_TMP/hf-home"
     export TORCH_HOME="$_JIT_TMP/torch-home"
     export TMPDIR="$_JIT_TMP/tmp"
     mkdir -p "$TMPDIR"
-    _PY_HDR="$INSTALL_ROOT/hydragnn_venv/include/python3.11"
+    _PY_HDR="$REPO/.venv/include/python3.11"
     export CPATH="${_PY_HDR}:${CPATH:-}"
     export C_INCLUDE_PATH="${_PY_HDR}:${C_INCLUDE_PATH:-}"
     exec "$VLLM_VENV/bin/vllm" serve "$LOCAL_PATH" \
