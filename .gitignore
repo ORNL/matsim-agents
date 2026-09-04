@@ -127,6 +127,7 @@ matsim-*.e[0-9]*
 
 # Local scratch/runtime artifacts
 .venv-model-download/
+.scratch/
 CRASH
 input_tmp.in
 
