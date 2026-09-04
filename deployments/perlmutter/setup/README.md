@@ -132,6 +132,30 @@ bash install.sh
 These overrides are optional and mainly useful when site module paths or
 module names differ from the defaults.
 
+**Running as a Slurm batch job (recommended over a login-node build):**
+
+`install.sh` compiles mpi4py/ADIOS2/GPTL and builds several large Python
+environments; this is heavy, long-running CPU work that NERSC's login-node
+watchdog can silently kill if run there directly. Use the batch wrapper
+instead, which also pins the module versions needed for the CUDA 13 PyTorch
+wheels (`cray-mpich/9.1.0` — the default `cray-mpich/8.1.30`'s GTL library
+only supports CUDA 12 and breaks the mpi4py build):
+
+```bash
+sbatch deployments/perlmutter/setup/install-hydragnn-env-perlmutter.sh
+```
+
+NERSC-specific gotcha if you submit your own `sbatch`/`salloc` for this instead:
+submitting with `-q gpu_premium`/`-q gpu_shared`/etc. together with `-C gpu`
+is rejected by NERSC's submit filter ("Job request does not match any
+supported policy"). Use the generic QOS name without the `gpu_` prefix
+(`-q premium`, `-q shared`, ...) together with `-C gpu`; NERSC's filter maps
+it to the correct `gpu_*` QOS internally.
+
+Note HydraGNN's installer unconditionally recreates its venv from scratch on
+every run, so there is no incremental resume — a full rebuild has taken
+anywhere from ~3.5 to 8+ hours depending on which compute node is assigned.
+
 **Packages installed by the script (high level):**
 - Core HydraGNN + PyTorch/PyG stack (via delegated HydraGNN installer)
 - matsim-agents (non-editable wheel install)
