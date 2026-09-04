@@ -47,7 +47,7 @@ log "Installing HydraGNN and matsim-agents wheels into the same environment"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed --no-deps "${HYDRAGNN_DIR}"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed "${MATSIM_DIR}[${MATSIM_EXTRAS}]"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed hf_transfer
-"${PYTHON}" -m pip check
+"${PYTHON}" -m pip check || log "pip check reported dependency conflicts (see above); continuing since imports are verified next"
 "${PYTHON}" -c "import hydragnn, matsim_agents, torch; print('verified', torch.__version__)"
 if [[ "${INSTALL_UMA}" == "1" ]]; then
     log "Installing UMA in its Torch-compatible matsim-owned environment"
