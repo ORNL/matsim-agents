@@ -28,7 +28,9 @@ vars:
   HYDRAGNN_DIR: ${HYDRAGNN_DIR:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN}
   RUN_TAG:      hea-bcc-frontier-al-001
 
-  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  # Prefers OLCF's facility VASP module; falls back to a from-source build
+  # (deployments/frontier/setup/build-vasp-gpu-frontier.sh) only if unavailable.
+  VASP_BIN:   /sw/frontier/vasp/6.6.1/bin/vasp_std
   POTCAR_DIR: ${PROJ_ROOT}/external/vasp6/potcar/potpaw_PBE.64
 
   INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
