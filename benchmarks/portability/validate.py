@@ -41,7 +41,9 @@ def validate_run(path: Path) -> list[str]:
             errors.append("compute qualification has no real QE relaxation")
         if any(not case.get("converged") for case in compute.get("cases", [])):
             errors.append("one or more compute qualification cases did not converge")
-    if result.get("suite") == "all":
+    if result.get("suite") == "all" and result.get("qualification") != "compute":
+        # compute qualification intentionally executes only the real MLIP/QE
+        # relaxation cases (checked above), not the contract-suite stages.
         required = {
             "smoke",
             "relaxation",
