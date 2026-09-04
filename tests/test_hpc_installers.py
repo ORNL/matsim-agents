@@ -69,6 +69,17 @@ def test_uma_uses_matsim_owned_compatibility_environment() -> None:
     subprocess.run(["bash", "-n", str(common)], check=True)
 
 
+def test_frontier_install_entry_points_are_unambiguous() -> None:
+    setup = ROOT / "deployments/frontier/setup"
+    installers = sorted(path.name for path in setup.glob("*install*.sh"))
+    assert installers == ["install-vllm-rocm72.sh", "install.sh"]
+
+    vllm = (setup / "install-vllm-rocm72.sh").read_text(encoding="utf-8")
+    assert 'bash "${REPO}/deployments/frontier/setup/install.sh"' not in vllm
+    assert '[[ -x "${VENV}/bin/python" ]]' in vllm
+    assert "build-vllm-rocm72.sh" in vllm
+
+
 def test_installation_guidance_has_no_obsolete_environment_contracts() -> None:
     obsolete = (
         "hydragnn_venv",

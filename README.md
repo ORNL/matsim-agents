@@ -437,8 +437,12 @@ The build is cross-compiled on a login node and produces ~92 binaries
 `turbo_*` suite, `pioud.x`, `all_currents.x`, …) under
 `external/quantum-espresso/install-gpu/bin/` (gitignored). The recipe
 includes baked-in workarounds for the cce/18.0.1 ftn-7991 ICE, the
-PIOUD `etime()` link error (rewritten to F95 `cpu_time`), and the
-rocm/7.x cray-mpich SONAME mismatch.
+PIOUD `etime()` link error (rewritten to F95 `cpu_time`), the
+rocm/7.x cray-mpich SONAME mismatch, and a cce/18.0.1
+uninitialized-descriptor segfault in `pw_init_qexsd_input` that (if
+unpatched) both crashes `pw.x` and silently drops DFT+U/vdW restart
+data — see [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md#workarounds-baked-into-the-build-script)
+for details.
 
 QE uses a different module stack than matsim-agents' Python; the two
 are deliberately kept isolated and coupled only through Slurm + files.

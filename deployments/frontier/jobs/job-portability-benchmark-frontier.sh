@@ -34,12 +34,18 @@ source activate "${VENV}"
 
 # Real MLIP (--qualification compute) runs torch on-GPU; the QE step launcher
 # (deployments/frontier/launchers/run-pw-gpu-frontier.sh) does its own module
-# reset to the PrgEnv-cray/rocm-6.2.4 QE toolchain, so it is unaffected by
-# these rocm-7.2.0 vars (see docs/quantum-espresso-frontier.md).
+# reset to the PrgEnv-cray/rocm-6.2.4 QE toolchain. Note LD_LIBRARY_PATH below
+# still leaks into that subprocess (module reset doesn't clear exported env
+# vars), so the launcher itself unsets it before loading QE's module stack.
 export PYTHONNOUSERSITE=1
 export MIOPEN_DISABLE_CACHE=1
 export MIOPEN_USER_DB_PATH="/tmp/miopen-${SLURM_JOB_ID:-$$}"
 mkdir -p "${MIOPEN_USER_DB_PATH}"
+
+# Make HydraGNN example utilities importable (inference_fused, etc.), which the
+# HydraGNN ASE calculator in backends/mlip/relaxation.py imports at build time.
+HYDRAGNN_EXAMPLE="${HYDRAGNN_DIR:-$PROJ/HydraGNN}/examples/multidataset_hpo_sc26"
+export PYTHONPATH="$HYDRAGNN_EXAMPLE:${HYDRAGNN_DIR:-$PROJ/HydraGNN}:${PYTHONPATH:-}"
 export PYTORCH_ROCM_ARCH=gfx90a
 export ROCM_ARCH=gfx90a
 export LD_LIBRARY_PATH="${VENV}/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}"

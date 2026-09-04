@@ -26,7 +26,10 @@ fi
 
 PYTHON="${UMA_VENV_PATH}/bin/python"
 "${PYTHON}" -m pip install --upgrade pip setuptools wheel
-"${PYTHON}" -m pip install --upgrade-strategy only-if-needed \
+"${PYTHON}" -m pip install --upgrade-strategy only-if-needed "hatchling>=1.21"
+# --no-build-isolation: avoids pip's PEP 517 isolated build env, which needs
+# network/TLS to fetch hatchling; it is pre-installed above instead.
+"${PYTHON}" -m pip install --no-build-isolation --upgrade-strategy only-if-needed \
     "${MATSIM_DIR}[${UMA_MATSIM_EXTRAS}]"
 "${PYTHON}" -m pip check
 "${PYTHON}" - <<'PY'

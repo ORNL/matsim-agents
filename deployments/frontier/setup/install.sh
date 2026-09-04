@@ -50,8 +50,12 @@ log "Installing HydraGNN and its ROCm/PyG/MPI dependencies first"
 PYTHON="${VENV_PATH}/bin/python"
 [[ -x "${PYTHON}" ]] || die "HydraGNN did not create ${VENV_PATH}"
 log "Installing HydraGNN and matsim-agents wheels into the same environment"
-"${PYTHON}" -m pip install --upgrade-strategy only-if-needed --no-deps "${HYDRAGNN_DIR}"
-"${PYTHON}" -m pip install --upgrade-strategy only-if-needed "${MATSIM_DIR}[${MATSIM_EXTRAS}]"
+# --no-build-isolation: avoids pip's PEP 517 isolated build env, which needs
+# network/TLS to fetch build backends; those backends are pre-installed here
+# instead (setuptools/wheel already present for HydraGNN's setup.py).
+"${PYTHON}" -m pip install --no-build-isolation --upgrade-strategy only-if-needed --no-deps "${HYDRAGNN_DIR}"
+"${PYTHON}" -m pip install --upgrade-strategy only-if-needed "hatchling>=1.21"
+"${PYTHON}" -m pip install --no-build-isolation --upgrade-strategy only-if-needed "${MATSIM_DIR}[${MATSIM_EXTRAS}]"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed hf_transfer
 "${PYTHON}" -m pip check
 "${PYTHON}" -c "import hydragnn, matsim_agents, torch; print('verified', torch.__version__)"

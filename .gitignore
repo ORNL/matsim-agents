@@ -57,8 +57,8 @@ test_matsim_perlmutter.out
 external/
 
 # Explicit proprietary VASP inputs used for Aurora builds.
-external/vasp6/src/vasp.6.6.0/
-external/vasp6/src/vasp.6.6.0.tgz
+external/vasp6/src/vasp.6.6.1/
+external/vasp6/src/vasp.6.6.1.tgz
 
 # VASP POTCAR pseudopotential library (licensed by VASP, NOT redistributable).
 # Layout: external/vasp6/potcar/<set>/<Element>/POTCAR
@@ -127,6 +127,7 @@ matsim-*.e[0-9]*
 
 # Local scratch/runtime artifacts
 .venv-model-download/
+.scratch/
 CRASH
 input_tmp.in
 

@@ -1,0 +1,636 @@
+diff --git a/Modules/qes_init_module.f90 b/Modules/qes_init_module.f90
+index 5e22d7d78..86dbbc02b 100644
+--- a/Modules/qes_init_module.f90
++++ b/Modules/qes_init_module.f90
+@@ -1101,19 +1101,450 @@ MODULE qes_init_module
+     END IF
+     IF ( PRESENT(dftU)) THEN
+       obj%dftU_ispresent = .TRUE. 
+-      obj%dftU = dftU
++      CALL qes_safe_copy_dftU(obj%dftU, dftU)
+     ELSE
+       obj%dftU_ispresent = .FALSE.
+     END IF
+     IF ( PRESENT(vdW)) THEN
+       obj%vdW_ispresent = .TRUE. 
+-      obj%vdW = vdW
++      CALL qes_safe_copy_vdW(obj%vdW, vdW)
+     ELSE
+       obj%vdW_ispresent = .FALSE.
+     END IF
+     !
+   END SUBROUTINE qes_init_dft
+   !
++  ! ---------------------------------------------------------------------------
++  ! Frontier/cce-18.0.1 workaround: plain derived-type assignment of dftU_type
++  ! and vdW_type (e.g. "obj%dftU = dftU") crashes with a SIGSEGV inside the
++  ! Cray Fortran runtime (_F90_COPY_POLYMORPHIC / alloc_cpnts / __single_dealloc
++  ! / omp_free in libf.so.2), even though neither type is actually polymorphic.
++  !
++  ! Below, every array component is copied manually, field by field, via plain
++  ! ALLOCATE + scalar/fixed-array assignment only -- never via compiler-
++  ! synthesized structure assignment, SOURCE= allocation, or whole-array
++  ! intrinsic derived-type copy, all of which route through the same buggy
++  ! runtime path. This is safe now that the root descriptor-initialization bug
++  ! (see the SAVE comment in pw_init_qexsd_input.f90) is fixed at its source,
++  ! so src's *_ispresent flags and ALLOCATED() status can be trusted here.
++  ! ---------------------------------------------------------------------------
++  SUBROUTINE qes_safe_copy_dftU(dest, src)
++    IMPLICIT NONE
++    TYPE(dftU_type), INTENT(INOUT) :: dest
++    TYPE(dftU_type), INTENT(IN)    :: src
++    !
++    dest%tagname = src%tagname
++    dest%lwrite  = src%lwrite
++    dest%lread   = src%lread
++    dest%new_format_ispresent = src%new_format_ispresent
++    IF (src%new_format_ispresent) dest%new_format = src%new_format
++    dest%lda_plus_u_kind_ispresent = src%lda_plus_u_kind_ispresent
++    IF (src%lda_plus_u_kind_ispresent) dest%lda_plus_u_kind = src%lda_plus_u_kind
++    dest%U_projection_type_ispresent = src%U_projection_type_ispresent
++    IF (src%U_projection_type_ispresent) dest%U_projection_type = src%U_projection_type
++    !
++    CALL copy_HubbardOcc_array(dest%Hubbard_Occ, dest%Hubbard_Occ_ispresent, dest%ndim_Hubbard_Occ, &
++                                src%Hubbard_Occ, src%Hubbard_Occ_ispresent, src%ndim_Hubbard_Occ)
++    CALL copy_HubbardCommon_array(dest%Hubbard_U, dest%Hubbard_U_ispresent, dest%ndim_Hubbard_U, &
++                                src%Hubbard_U, src%Hubbard_U_ispresent, src%ndim_Hubbard_U)
++    CALL copy_HubbardM_array(dest%Hubbard_Um, dest%Hubbard_Um_ispresent, dest%ndim_Hubbard_Um, &
++                                src%Hubbard_Um, src%Hubbard_Um_ispresent, src%ndim_Hubbard_Um)
++    CALL copy_HubbardCommon_array(dest%Hubbard_J0, dest%Hubbard_J0_ispresent, dest%ndim_Hubbard_J0, &
++                                src%Hubbard_J0, src%Hubbard_J0_ispresent, src%ndim_Hubbard_J0)
++    CALL copy_HubbardCommon_array(dest%Hubbard_alpha, dest%Hubbard_alpha_ispresent, dest%ndim_Hubbard_alpha, &
++                                src%Hubbard_alpha, src%Hubbard_alpha_ispresent, src%ndim_Hubbard_alpha)
++    CALL copy_HubbardCommon_array(dest%Hubbard_beta, dest%Hubbard_beta_ispresent, dest%ndim_Hubbard_beta, &
++                                src%Hubbard_beta, src%Hubbard_beta_ispresent, src%ndim_Hubbard_beta)
++    CALL copy_HubbardJ_array(dest%Hubbard_J, dest%Hubbard_J_ispresent, dest%ndim_Hubbard_J, &
++                                src%Hubbard_J, src%Hubbard_J_ispresent, src%ndim_Hubbard_J)
++    CALL copy_starting_ns_array(dest%starting_ns, dest%starting_ns_ispresent, dest%ndim_starting_ns, &
++                                src%starting_ns, src%starting_ns_ispresent, src%ndim_starting_ns)
++    CALL copy_HubbardInterSpecieV_array(dest%Hubbard_V, dest%Hubbard_V_ispresent, dest%ndim_Hubbard_V, &
++                                src%Hubbard_V, src%Hubbard_V_ispresent, src%ndim_Hubbard_V)
++    CALL copy_Hubbard_ns_array(dest%Hubbard_ns, dest%Hubbard_ns_ispresent, dest%ndim_Hubbard_ns, &
++                                src%Hubbard_ns, src%Hubbard_ns_ispresent, src%ndim_Hubbard_ns)
++    CALL copy_orderUm_array(dest%Hub_m_order, dest%Hub_m_order_ispresent, dest%ndim_Hub_m_order, &
++                                src%Hub_m_order, src%Hub_m_order_ispresent, src%ndim_Hub_m_order)
++    CALL copy_HubbardBack_array(dest%Hubbard_back, dest%Hubbard_back_ispresent, dest%ndim_Hubbard_back, &
++                                src%Hubbard_back, src%Hubbard_back_ispresent, src%ndim_Hubbard_back)
++    CALL copy_HubbardCommon_array(dest%Hubbard_alpha_back, dest%Hubbard_alpha_back_ispresent, dest%ndim_Hubbard_alpha_back, &
++                                src%Hubbard_alpha_back, src%Hubbard_alpha_back_ispresent, src%ndim_Hubbard_alpha_back)
++    CALL copy_Hubbard_ns_array(dest%Hubbard_ns_nc, dest%Hubbard_ns_nc_ispresent, dest%ndim_Hubbard_ns_nc, &
++                                src%Hubbard_ns_nc, src%Hubbard_ns_nc_ispresent, src%ndim_Hubbard_ns_nc)
++    !
++  END SUBROUTINE qes_safe_copy_dftU
++  !
++  SUBROUTINE qes_safe_copy_vdW(dest, src)
++    IMPLICIT NONE
++    TYPE(vdW_type), INTENT(INOUT) :: dest
++    TYPE(vdW_type), INTENT(IN)    :: src
++    !
++    dest%tagname = src%tagname
++    dest%lwrite  = src%lwrite
++    dest%lread   = src%lread
++    dest%vdw_corr_ispresent = src%vdw_corr_ispresent
++    IF (src%vdw_corr_ispresent) dest%vdw_corr = src%vdw_corr
++    dest%dftd3_version_ispresent = src%dftd3_version_ispresent
++    IF (src%dftd3_version_ispresent) dest%dftd3_version = src%dftd3_version
++    dest%dftd3_threebody_ispresent = src%dftd3_threebody_ispresent
++    IF (src%dftd3_threebody_ispresent) dest%dftd3_threebody = src%dftd3_threebody
++    dest%non_local_term_ispresent = src%non_local_term_ispresent
++    IF (src%non_local_term_ispresent) dest%non_local_term = src%non_local_term
++    dest%functional_ispresent = src%functional_ispresent
++    IF (src%functional_ispresent) dest%functional = src%functional
++    dest%total_energy_term_ispresent = src%total_energy_term_ispresent
++    IF (src%total_energy_term_ispresent) dest%total_energy_term = src%total_energy_term
++    dest%london_s6_ispresent = src%london_s6_ispresent
++    IF (src%london_s6_ispresent) dest%london_s6 = src%london_s6
++    dest%ts_vdw_econv_thr_ispresent = src%ts_vdw_econv_thr_ispresent
++    IF (src%ts_vdw_econv_thr_ispresent) dest%ts_vdw_econv_thr = src%ts_vdw_econv_thr
++    dest%ts_vdw_isolated_ispresent = src%ts_vdw_isolated_ispresent
++    IF (src%ts_vdw_isolated_ispresent) dest%ts_vdw_isolated = src%ts_vdw_isolated
++    dest%london_rcut_ispresent = src%london_rcut_ispresent
++    IF (src%london_rcut_ispresent) dest%london_rcut = src%london_rcut
++    dest%xdm_a1_ispresent = src%xdm_a1_ispresent
++    IF (src%xdm_a1_ispresent) dest%xdm_a1 = src%xdm_a1
++    dest%xdm_a2_ispresent = src%xdm_a2_ispresent
++    IF (src%xdm_a2_ispresent) dest%xdm_a2 = src%xdm_a2
++    !
++    CALL copy_HubbardCommon_array(dest%london_c6, dest%london_c6_ispresent, dest%ndim_london_c6, &
++                                src%london_c6, src%london_c6_ispresent, src%ndim_london_c6)
++    !
++  END SUBROUTINE qes_safe_copy_vdW
++  !
++  ! ---- manual, descriptor-safe array-of-derived-type copy helpers ----------
++  ! Each helper: deallocate dest if allocated, copy the ispresent/ndim flags,
++  ! and if src is present/allocated, ALLOCATE dest to match and copy every
++  ! field one at a time (recursing the same pattern for any nested
++  ! ALLOCATABLE component). No compiler-synthesized structure copy is used
++  ! anywhere below.
++  !
++  SUBROUTINE copy_HubbardCommon_array(dest, dest_ispresent, dest_ndim, src, src_ispresent, src_ndim)
++    IMPLICIT NONE
++    TYPE(HubbardCommon_type), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: dest
++    LOGICAL, INTENT(INOUT) :: dest_ispresent
++    INTEGER, INTENT(INOUT) :: dest_ndim
++    TYPE(HubbardCommon_type), DIMENSION(:), ALLOCATABLE, INTENT(IN) :: src
++    LOGICAL, INTENT(IN) :: src_ispresent
++    INTEGER, INTENT(IN) :: src_ndim
++    INTEGER :: i, n
++    !
++    IF (ALLOCATED(dest)) DEALLOCATE(dest)
++    dest_ispresent = src_ispresent
++    dest_ndim = src_ndim
++    IF (src_ispresent .AND. ALLOCATED(src)) THEN
++      n = SIZE(src)
++      ALLOCATE(dest(n))
++      DO i = 1, n
++        dest(i)%tagname = src(i)%tagname
++        dest(i)%lwrite  = src(i)%lwrite
++        dest(i)%lread   = src(i)%lread
++        dest(i)%specie  = src(i)%specie
++        dest(i)%specie_ispresent = src(i)%specie_ispresent
++        dest(i)%label   = src(i)%label
++        dest(i)%label_ispresent = src(i)%label_ispresent
++        dest(i)%HubbardCommon = src(i)%HubbardCommon
++      END DO
++    END IF
++  END SUBROUTINE copy_HubbardCommon_array
++  !
++  SUBROUTINE copy_HubbardJ_array(dest, dest_ispresent, dest_ndim, src, src_ispresent, src_ndim)
++    IMPLICIT NONE
++    TYPE(HubbardJ_type), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: dest
++    LOGICAL, INTENT(INOUT) :: dest_ispresent
++    INTEGER, INTENT(INOUT) :: dest_ndim
++    TYPE(HubbardJ_type), DIMENSION(:), ALLOCATABLE, INTENT(IN) :: src
++    LOGICAL, INTENT(IN) :: src_ispresent
++    INTEGER, INTENT(IN) :: src_ndim
++    INTEGER :: i, n
++    !
++    IF (ALLOCATED(dest)) DEALLOCATE(dest)
++    dest_ispresent = src_ispresent
++    dest_ndim = src_ndim
++    IF (src_ispresent .AND. ALLOCATED(src)) THEN
++      n = SIZE(src)
++      ALLOCATE(dest(n))
++      DO i = 1, n
++        dest(i)%tagname = src(i)%tagname
++        dest(i)%lwrite  = src(i)%lwrite
++        dest(i)%lread   = src(i)%lread
++        dest(i)%specie  = src(i)%specie
++        dest(i)%specie_ispresent = src(i)%specie_ispresent
++        dest(i)%label   = src(i)%label
++        dest(i)%label_ispresent = src(i)%label_ispresent
++        dest(i)%HubbardJ = src(i)%HubbardJ
++      END DO
++    END IF
++  END SUBROUTINE copy_HubbardJ_array
++  !
++  SUBROUTINE copy_HubbardInterSpecieV_array(dest, dest_ispresent, dest_ndim, src, src_ispresent, src_ndim)
++    IMPLICIT NONE
++    TYPE(HubbardInterSpecieV_type), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: dest
++    LOGICAL, INTENT(INOUT) :: dest_ispresent
++    INTEGER, INTENT(INOUT) :: dest_ndim
++    TYPE(HubbardInterSpecieV_type), DIMENSION(:), ALLOCATABLE, INTENT(IN) :: src
++    LOGICAL, INTENT(IN) :: src_ispresent
++    INTEGER, INTENT(IN) :: src_ndim
++    INTEGER :: i, n
++    !
++    IF (ALLOCATED(dest)) DEALLOCATE(dest)
++    dest_ispresent = src_ispresent
++    dest_ndim = src_ndim
++    IF (src_ispresent .AND. ALLOCATED(src)) THEN
++      n = SIZE(src)
++      ALLOCATE(dest(n))
++      DO i = 1, n
++        dest(i)%tagname = src(i)%tagname
++        dest(i)%lwrite  = src(i)%lwrite
++        dest(i)%lread   = src(i)%lread
++        dest(i)%specie1 = src(i)%specie1
++        dest(i)%index1  = src(i)%index1
++        dest(i)%label1  = src(i)%label1
++        dest(i)%label1_ispresent = src(i)%label1_ispresent
++        dest(i)%specie2 = src(i)%specie2
++        dest(i)%index2  = src(i)%index2
++        dest(i)%label2  = src(i)%label2
++        dest(i)%label2_ispresent = src(i)%label2_ispresent
++        dest(i)%HubbardInterSpecieV = src(i)%HubbardInterSpecieV
++      END DO
++    END IF
++  END SUBROUTINE copy_HubbardInterSpecieV_array
++  !
++  SUBROUTINE copy_HubbardBack_array(dest, dest_ispresent, dest_ndim, src, src_ispresent, src_ndim)
++    IMPLICIT NONE
++    TYPE(HubbardBack_type), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: dest
++    LOGICAL, INTENT(INOUT) :: dest_ispresent
++    INTEGER, INTENT(INOUT) :: dest_ndim
++    TYPE(HubbardBack_type), DIMENSION(:), ALLOCATABLE, INTENT(IN) :: src
++    LOGICAL, INTENT(IN) :: src_ispresent
++    INTEGER, INTENT(IN) :: src_ndim
++    INTEGER :: i, n
++    !
++    IF (ALLOCATED(dest)) DEALLOCATE(dest)
++    dest_ispresent = src_ispresent
++    dest_ndim = src_ndim
++    IF (src_ispresent .AND. ALLOCATED(src)) THEN
++      n = SIZE(src)
++      ALLOCATE(dest(n))
++      DO i = 1, n
++        dest(i)%tagname    = src(i)%tagname
++        dest(i)%lwrite     = src(i)%lwrite
++        dest(i)%lread      = src(i)%lread
++        dest(i)%background = src(i)%background
++        dest(i)%label      = src(i)%label
++        dest(i)%label_ispresent = src(i)%label_ispresent
++        dest(i)%species    = src(i)%species
++        dest(i)%species_ispresent = src(i)%species_ispresent
++        dest(i)%Hubbard_U2 = src(i)%Hubbard_U2
++        dest(i)%n2_number  = src(i)%n2_number
++        dest(i)%l2_number  = src(i)%l2_number
++        dest(i)%n3_number_ispresent = src(i)%n3_number_ispresent
++        IF (src(i)%n3_number_ispresent) dest(i)%n3_number = src(i)%n3_number
++        dest(i)%l3_number_ispresent = src(i)%l3_number_ispresent
++        IF (src(i)%l3_number_ispresent) dest(i)%l3_number = src(i)%l3_number
++      END DO
++    END IF
++  END SUBROUTINE copy_HubbardBack_array
++  !
++  SUBROUTINE copy_HubbardOcc_array(dest, dest_ispresent, dest_ndim, src, src_ispresent, src_ndim)
++    IMPLICIT NONE
++    TYPE(HubbardOcc_type), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: dest
++    LOGICAL, INTENT(INOUT) :: dest_ispresent
++    INTEGER, INTENT(INOUT) :: dest_ndim
++    TYPE(HubbardOcc_type), DIMENSION(:), ALLOCATABLE, INTENT(IN) :: src
++    LOGICAL, INTENT(IN) :: src_ispresent
++    INTEGER, INTENT(IN) :: src_ndim
++    INTEGER :: i, j, n, m
++    !
++    IF (ALLOCATED(dest)) DEALLOCATE(dest)
++    dest_ispresent = src_ispresent
++    dest_ndim = src_ndim
++    IF (src_ispresent .AND. ALLOCATED(src)) THEN
++      n = SIZE(src)
++      ALLOCATE(dest(n))
++      DO i = 1, n
++        dest(i)%tagname  = src(i)%tagname
++        dest(i)%lwrite   = src(i)%lwrite
++        dest(i)%lread    = src(i)%lread
++        dest(i)%channels = src(i)%channels
++        dest(i)%specie   = src(i)%specie
++        dest(i)%ndim_channel_occ = src(i)%ndim_channel_occ
++        IF (ALLOCATED(src(i)%channel_occ)) THEN
++          m = SIZE(src(i)%channel_occ)
++          ALLOCATE(dest(i)%channel_occ(m))
++          DO j = 1, m
++            dest(i)%channel_occ(j)%tagname = src(i)%channel_occ(j)%tagname
++            dest(i)%channel_occ(j)%lwrite  = src(i)%channel_occ(j)%lwrite
++            dest(i)%channel_occ(j)%lread   = src(i)%channel_occ(j)%lread
++            dest(i)%channel_occ(j)%specie  = src(i)%channel_occ(j)%specie
++            dest(i)%channel_occ(j)%specie_ispresent = src(i)%channel_occ(j)%specie_ispresent
++            dest(i)%channel_occ(j)%label   = src(i)%channel_occ(j)%label
++            dest(i)%channel_occ(j)%label_ispresent = src(i)%channel_occ(j)%label_ispresent
++            dest(i)%channel_occ(j)%index   = src(i)%channel_occ(j)%index
++            dest(i)%channel_occ(j)%ChannelOcc = src(i)%channel_occ(j)%ChannelOcc
++          END DO
++        END IF
++      END DO
++    END IF
++  END SUBROUTINE copy_HubbardOcc_array
++  !
++  SUBROUTINE copy_HubbardM_array(dest, dest_ispresent, dest_ndim, src, src_ispresent, src_ndim)
++    IMPLICIT NONE
++    TYPE(HubbardM_type), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: dest
++    LOGICAL, INTENT(INOUT) :: dest_ispresent
++    INTEGER, INTENT(INOUT) :: dest_ndim
++    TYPE(HubbardM_type), DIMENSION(:), ALLOCATABLE, INTENT(IN) :: src
++    LOGICAL, INTENT(IN) :: src_ispresent
++    INTEGER, INTENT(IN) :: src_ndim
++    INTEGER :: i, n
++    !
++    IF (ALLOCATED(dest)) DEALLOCATE(dest)
++    dest_ispresent = src_ispresent
++    dest_ndim = src_ndim
++    IF (src_ispresent .AND. ALLOCATED(src)) THEN
++      n = SIZE(src)
++      ALLOCATE(dest(n))
++      DO i = 1, n
++        dest(i)%tagname = src(i)%tagname
++        dest(i)%lwrite  = src(i)%lwrite
++        dest(i)%lread   = src(i)%lread
++        dest(i)%size    = src(i)%size
++        dest(i)%specie  = src(i)%specie
++        dest(i)%specie_ispresent = src(i)%specie_ispresent
++        dest(i)%label   = src(i)%label
++        dest(i)%label_ispresent = src(i)%label_ispresent
++        dest(i)%spin    = src(i)%spin
++        dest(i)%spin_ispresent = src(i)%spin_ispresent
++        dest(i)%jjj     = src(i)%jjj
++        dest(i)%jjj_ispresent = src(i)%jjj_ispresent
++        IF (ALLOCATED(src(i)%HubbardM)) THEN
++          IF (ALLOCATED(dest(i)%HubbardM)) DEALLOCATE(dest(i)%HubbardM)
++          ALLOCATE(dest(i)%HubbardM(SIZE(src(i)%HubbardM)))
++          dest(i)%HubbardM = src(i)%HubbardM
++        END IF
++      END DO
++    END IF
++  END SUBROUTINE copy_HubbardM_array
++  !
++  SUBROUTINE copy_starting_ns_array(dest, dest_ispresent, dest_ndim, src, src_ispresent, src_ndim)
++    IMPLICIT NONE
++    TYPE(starting_ns_type), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: dest
++    LOGICAL, INTENT(INOUT) :: dest_ispresent
++    INTEGER, INTENT(INOUT) :: dest_ndim
++    TYPE(starting_ns_type), DIMENSION(:), ALLOCATABLE, INTENT(IN) :: src
++    LOGICAL, INTENT(IN) :: src_ispresent
++    INTEGER, INTENT(IN) :: src_ndim
++    INTEGER :: i, n
++    !
++    IF (ALLOCATED(dest)) DEALLOCATE(dest)
++    dest_ispresent = src_ispresent
++    dest_ndim = src_ndim
++    IF (src_ispresent .AND. ALLOCATED(src)) THEN
++      n = SIZE(src)
++      ALLOCATE(dest(n))
++      DO i = 1, n
++        dest(i)%tagname = src(i)%tagname
++        dest(i)%lwrite  = src(i)%lwrite
++        dest(i)%lread   = src(i)%lread
++        dest(i)%size    = src(i)%size
++        dest(i)%specie  = src(i)%specie
++        dest(i)%specie_ispresent = src(i)%specie_ispresent
++        dest(i)%label   = src(i)%label
++        dest(i)%label_ispresent = src(i)%label_ispresent
++        dest(i)%spin    = src(i)%spin
++        dest(i)%spin_ispresent = src(i)%spin_ispresent
++        IF (ALLOCATED(src(i)%starting_ns)) THEN
++          IF (ALLOCATED(dest(i)%starting_ns)) DEALLOCATE(dest(i)%starting_ns)
++          ALLOCATE(dest(i)%starting_ns(SIZE(src(i)%starting_ns)))
++          dest(i)%starting_ns = src(i)%starting_ns
++        END IF
++      END DO
++    END IF
++  END SUBROUTINE copy_starting_ns_array
++  !
++  SUBROUTINE copy_orderUm_array(dest, dest_ispresent, dest_ndim, src, src_ispresent, src_ndim)
++    IMPLICIT NONE
++    TYPE(orderUm_type), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: dest
++    LOGICAL, INTENT(INOUT) :: dest_ispresent
++    INTEGER, INTENT(INOUT) :: dest_ndim
++    TYPE(orderUm_type), DIMENSION(:), ALLOCATABLE, INTENT(IN) :: src
++    LOGICAL, INTENT(IN) :: src_ispresent
++    INTEGER, INTENT(IN) :: src_ndim
++    INTEGER :: i, n
++    !
++    IF (ALLOCATED(dest)) DEALLOCATE(dest)
++    dest_ispresent = src_ispresent
++    dest_ndim = src_ndim
++    IF (src_ispresent .AND. ALLOCATED(src)) THEN
++      n = SIZE(src)
++      ALLOCATE(dest(n))
++      DO i = 1, n
++        dest(i)%tagname = src(i)%tagname
++        dest(i)%lwrite  = src(i)%lwrite
++        dest(i)%lread   = src(i)%lread
++        dest(i)%size    = src(i)%size
++        dest(i)%specie  = src(i)%specie
++        dest(i)%specie_ispresent = src(i)%specie_ispresent
++        dest(i)%label   = src(i)%label
++        dest(i)%label_ispresent = src(i)%label_ispresent
++        dest(i)%spin    = src(i)%spin
++        dest(i)%spin_ispresent = src(i)%spin_ispresent
++        dest(i)%atomidx = src(i)%atomidx
++        dest(i)%atomidx_ispresent = src(i)%atomidx_ispresent
++        IF (ALLOCATED(src(i)%orderUm)) THEN
++          IF (ALLOCATED(dest(i)%orderUm)) DEALLOCATE(dest(i)%orderUm)
++          ALLOCATE(dest(i)%orderUm(SIZE(src(i)%orderUm)))
++          dest(i)%orderUm = src(i)%orderUm
++        END IF
++      END DO
++    END IF
++  END SUBROUTINE copy_orderUm_array
++  !
++  SUBROUTINE copy_Hubbard_ns_array(dest, dest_ispresent, dest_ndim, src, src_ispresent, src_ndim)
++    IMPLICIT NONE
++    TYPE(Hubbard_ns_type), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: dest
++    LOGICAL, INTENT(INOUT) :: dest_ispresent
++    INTEGER, INTENT(INOUT) :: dest_ndim
++    TYPE(Hubbard_ns_type), DIMENSION(:), ALLOCATABLE, INTENT(IN) :: src
++    LOGICAL, INTENT(IN) :: src_ispresent
++    INTEGER, INTENT(IN) :: src_ndim
++    INTEGER :: i, n
++    !
++    IF (ALLOCATED(dest)) DEALLOCATE(dest)
++    dest_ispresent = src_ispresent
++    dest_ndim = src_ndim
++    IF (src_ispresent .AND. ALLOCATED(src)) THEN
++      n = SIZE(src)
++      ALLOCATE(dest(n))
++      DO i = 1, n
++        dest(i)%tagname = src(i)%tagname
++        dest(i)%lwrite  = src(i)%lwrite
++        dest(i)%lread   = src(i)%lread
++        dest(i)%rank    = src(i)%rank
++        dest(i)%order   = src(i)%order
++        dest(i)%order_ispresent = src(i)%order_ispresent
++        dest(i)%specie  = src(i)%specie
++        dest(i)%specie_ispresent = src(i)%specie_ispresent
++        dest(i)%label   = src(i)%label
++        dest(i)%label_ispresent = src(i)%label_ispresent
++        dest(i)%spin    = src(i)%spin
++        dest(i)%spin_ispresent = src(i)%spin_ispresent
++        dest(i)%index   = src(i)%index
++        dest(i)%index_ispresent = src(i)%index_ispresent
++        IF (ALLOCATED(src(i)%dims)) THEN
++          IF (ALLOCATED(dest(i)%dims)) DEALLOCATE(dest(i)%dims)
++          ALLOCATE(dest(i)%dims(SIZE(src(i)%dims)))
++          dest(i)%dims = src(i)%dims
++        END IF
++        IF (ALLOCATED(src(i)%Hubbard_ns)) THEN
++          IF (ALLOCATED(dest(i)%Hubbard_ns)) DEALLOCATE(dest(i)%Hubbard_ns)
++          ALLOCATE(dest(i)%Hubbard_ns(SIZE(src(i)%Hubbard_ns)))
++          dest(i)%Hubbard_ns = src(i)%Hubbard_ns
++        END IF
++      END DO
++    END IF
++  END SUBROUTINE copy_Hubbard_ns_array
++  !
+   !
+   SUBROUTINE qes_init_hybrid(obj, tagname, qpoint_grid, ecutfock, exx_fraction, screening_parameter,&
+                             exxdiv_treatment, x_gamma_extrapolation, ecutvcut, localization_threshold,&
+diff --git a/PW/src/pw_init_qexsd_input.f90 b/PW/src/pw_init_qexsd_input.f90
+index ed1a20825..fb06635d8 100644
+--- a/PW/src/pw_init_qexsd_input.f90
++++ b/PW/src/pw_init_qexsd_input.f90
+@@ -120,9 +120,12 @@
+   LOGICAL,POINTER                          ::  gate_ptr, block_ptr, relaxz_ptr
+   REAL(DP),TARGET                          ::  block_1_tgt, block_2_tgt, block_height_tgt, zgate_tgt
+   REAL(DP),POINTER                         ::  block_1_ptr, block_2_ptr, block_height_ptr, zgate_ptr
+-  TYPE(hybrid_type)                        ::  hybrid_
+-  TYPE(dftU_type)                          ::  dftU_
+-  TYPE(vdW_type)                           ::  vdW_
++  ! SAVE: works around a cce-18.0.1 bug where these complex derived types'
++  ! ALLOCATABLE-component descriptors are left uninitialized as plain
++  ! automatic locals; static storage gets reliably zero-initialized instead.
++  TYPE(hybrid_type), SAVE                  ::  hybrid_
++  TYPE(dftU_type), SAVE                    ::  dftU_
++  TYPE(vdW_type), SAVE                     ::  vdW_
+   REAL(DP),TARGET                          ::  xdm_a1_, xdm_a2_, lond_s6_, lond_rcut_, ts_vdw_econv_thr_,&
+                                                scr_par_, exx_frc_, ecutvcut_, ecut_fock_, loc_thr_, cell_factor_tg      
+   REAL(DP),POINTER                         ::  xdm_a1_pt, xdm_a2_pt, lond_s6_pt, lond_rcut_pt, ts_vdw_econv_thr_pt, & 
+@@ -151,6 +154,87 @@
+   NULLIFY (loc_thr_p, cell_factor_pt) 
+   NULLIFY (ts_vdw_isolated_pt, dftd3_threebody_pt ) 
+   NULLIFY (dftd3_version_pt, nbnd_pt, nq1_pt, nq2_pt, nq3_pt) 
++  !
++  ! Frontier/cce-18.0.1 workaround: the default component initializers
++  ! (e.g. "LOGICAL :: Hubbard_Occ_ispresent = .FALSE.") declared in
++  ! dftU_type/vdW_type/hybrid_type are not reliably applied by the compiler
++  ! for these local variables, leaving *_ispresent flags (and the allocation
++  ! status of their several ALLOCATABLE array components) in an undefined
++  ! state. Downstream code (qes_init_dft, qes_reset_dftU) trusts these flags
++  ! and crashes on the resulting garbage. Force a known-good, all-absent
++  ! state explicitly here via plain scalar assignments (not a derived-type
++  ! structure constructor, which would hit the same compiler bug).
++  hybrid_%tagname = ""
++  hybrid_%lwrite  = .FALSE.
++  hybrid_%lread   = .FALSE.
++  hybrid_%qpoint_grid_ispresent = .FALSE.
++  hybrid_%ecutfock_ispresent = .FALSE.
++  hybrid_%exx_fraction_ispresent = .FALSE.
++  hybrid_%screening_parameter_ispresent = .FALSE.
++  hybrid_%exxdiv_treatment_ispresent = .FALSE.
++  hybrid_%x_gamma_extrapolation_ispresent = .FALSE.
++  hybrid_%ecutvcut_ispresent = .FALSE.
++  hybrid_%localization_threshold_ispresent = .FALSE.
++  hybrid_%use_ace_ispresent = .FALSE.
++  hybrid_%nbndproj_ispresent = .FALSE.
++  vdW_%tagname = ""
++  vdW_%lwrite  = .FALSE.
++  vdW_%lread   = .FALSE.
++  vdW_%vdw_corr_ispresent = .FALSE.
++  vdW_%dftd3_version_ispresent = .FALSE.
++  vdW_%dftd3_threebody_ispresent = .FALSE.
++  vdW_%non_local_term_ispresent = .FALSE.
++  vdW_%functional_ispresent = .FALSE.
++  vdW_%total_energy_term_ispresent = .FALSE.
++  vdW_%london_s6_ispresent = .FALSE.
++  vdW_%ts_vdw_econv_thr_ispresent = .FALSE.
++  vdW_%ts_vdw_isolated_ispresent = .FALSE.
++  vdW_%london_rcut_ispresent = .FALSE.
++  vdW_%xdm_a1_ispresent = .FALSE.
++  vdW_%xdm_a2_ispresent = .FALSE.
++  vdW_%london_c6_ispresent = .FALSE.
++  dftU_%tagname = ""
++  dftU_%lwrite  = .FALSE.
++  dftU_%lread   = .FALSE.
++  dftU_%new_format_ispresent = .FALSE.
++  dftU_%lda_plus_u_kind_ispresent = .FALSE.
++  dftU_%Hubbard_Occ_ispresent = .FALSE.
++  dftU_%Hubbard_U_ispresent = .FALSE.
++  dftU_%Hubbard_Um_ispresent = .FALSE.
++  dftU_%Hubbard_J0_ispresent = .FALSE.
++  dftU_%Hubbard_alpha_ispresent = .FALSE.
++  dftU_%Hubbard_beta_ispresent = .FALSE.
++  dftU_%Hubbard_J_ispresent = .FALSE.
++  dftU_%starting_ns_ispresent = .FALSE.
++  dftU_%Hubbard_V_ispresent = .FALSE.
++  dftU_%Hubbard_ns_ispresent = .FALSE.
++  dftU_%Hub_m_order_ispresent = .FALSE.
++  dftU_%U_projection_type_ispresent = .FALSE.
++  dftU_%Hubbard_back_ispresent = .FALSE.
++  dftU_%Hubbard_alpha_back_ispresent = .FALSE.
++  dftU_%Hubbard_ns_nc_ispresent = .FALSE.
++  ! The compiler's automatic end-of-scope finalization of these local
++  ! variables' ALLOCATABLE array components crashes (dealloc_cpnts/_DEALLOC)
++  ! when their allocation-status descriptor is left in the undefined state
++  ! from declaration. Give each a real, valid, zero-size allocation instead
++  ! (deliberately not guarded by ALLOCATED()/DEALLOCATE(), which would read
++  ! the same undefined descriptor and are the operations known to crash).
++  ALLOCATE(dftU_%Hubbard_Occ(0))
++  ALLOCATE(dftU_%Hubbard_U(0))
++  ALLOCATE(dftU_%Hubbard_Um(0))
++  ALLOCATE(dftU_%Hubbard_J0(0))
++  ALLOCATE(dftU_%Hubbard_alpha(0))
++  ALLOCATE(dftU_%Hubbard_beta(0))
++  ALLOCATE(dftU_%Hubbard_J(0))
++  ALLOCATE(dftU_%starting_ns(0))
++  ALLOCATE(dftU_%Hubbard_V(0))
++  ALLOCATE(dftU_%Hubbard_ns(0))
++  ALLOCATE(dftU_%Hub_m_order(0))
++  ALLOCATE(dftU_%Hubbard_back(0))
++  ALLOCATE(dftU_%Hubbard_alpha_back(0))
++  ALLOCATE(dftU_%Hubbard_ns_nc(0))
++  ALLOCATE(vdW_%london_c6(0))
++  !
+ 
+   obj%tagname=TRIM(obj_tagname)
+   IF ( ABS(ip_ibrav)  .GT. 0 ) THEN  
+diff --git a/PW/src/pw_restart_new.f90 b/PW/src/pw_restart_new.f90
+index bc091e844..b66c3f3e2 100644
+--- a/PW/src/pw_restart_new.f90
++++ b/PW/src/pw_restart_new.f90
+@@ -256,6 +256,66 @@ MODULE pw_restart_new
+       NULLIFY (vdw_corr_pt, non_local_term_pt)
+       NULLIFY (ts_thr_pt, ts_isol_pt)
+       !
++      ! Frontier/cce-18.0.1 workaround: the default component initializers
++      ! (e.g. "LOGICAL :: Hubbard_Occ_ispresent = .FALSE.") declared in
++      ! dftU_type/vdW_type/hybrid_type are not reliably applied by the
++      ! compiler for these local variables, leaving *_ispresent flags (and
++      ! the allocation status of their several ALLOCATABLE array components)
++      ! in an undefined state. Downstream code (qes_init_dft, qes_reset_dftU)
++      ! trusts these flags and crashes on the resulting garbage. Force a
++      ! known-good, all-absent state explicitly here via plain scalar
++      ! assignments (not a derived-type structure constructor, which would
++      ! hit the same compiler bug).
++      hybrid_obj_opt%tagname = ""
++      hybrid_obj_opt%lwrite  = .FALSE.
++      hybrid_obj_opt%lread   = .FALSE.
++      hybrid_obj_opt%qpoint_grid_ispresent = .FALSE.
++      hybrid_obj_opt%ecutfock_ispresent = .FALSE.
++      hybrid_obj_opt%exx_fraction_ispresent = .FALSE.
++      hybrid_obj_opt%screening_parameter_ispresent = .FALSE.
++      hybrid_obj_opt%exxdiv_treatment_ispresent = .FALSE.
++      hybrid_obj_opt%x_gamma_extrapolation_ispresent = .FALSE.
++      hybrid_obj_opt%ecutvcut_ispresent = .FALSE.
++      hybrid_obj_opt%localization_threshold_ispresent = .FALSE.
++      hybrid_obj_opt%use_ace_ispresent = .FALSE.
++      hybrid_obj_opt%nbndproj_ispresent = .FALSE.
++      vdw_obj_opt%tagname = ""
++      vdw_obj_opt%lwrite  = .FALSE.
++      vdw_obj_opt%lread   = .FALSE.
++      vdw_obj_opt%vdw_corr_ispresent = .FALSE.
++      vdw_obj_opt%dftd3_version_ispresent = .FALSE.
++      vdw_obj_opt%dftd3_threebody_ispresent = .FALSE.
++      vdw_obj_opt%non_local_term_ispresent = .FALSE.
++      vdw_obj_opt%functional_ispresent = .FALSE.
++      vdw_obj_opt%total_energy_term_ispresent = .FALSE.
++      vdw_obj_opt%london_s6_ispresent = .FALSE.
++      vdw_obj_opt%ts_vdw_econv_thr_ispresent = .FALSE.
++      vdw_obj_opt%ts_vdw_isolated_ispresent = .FALSE.
++      vdw_obj_opt%london_rcut_ispresent = .FALSE.
++      vdw_obj_opt%xdm_a1_ispresent = .FALSE.
++      vdw_obj_opt%xdm_a2_ispresent = .FALSE.
++      vdw_obj_opt%london_c6_ispresent = .FALSE.
++      dftU_obj_opt%tagname = ""
++      dftU_obj_opt%lwrite  = .FALSE.
++      dftU_obj_opt%lread   = .FALSE.
++      dftU_obj_opt%new_format_ispresent = .FALSE.
++      dftU_obj_opt%lda_plus_u_kind_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_Occ_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_U_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_Um_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_J0_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_alpha_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_beta_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_J_ispresent = .FALSE.
++      dftU_obj_opt%starting_ns_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_V_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_ns_ispresent = .FALSE.
++      dftU_obj_opt%Hub_m_order_ispresent = .FALSE.
++      dftU_obj_opt%U_projection_type_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_back_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_alpha_back_ispresent = .FALSE.
++      dftU_obj_opt%Hubbard_ns_nc_ispresent = .FALSE.
++      !
+       ! Global PW dimensions need to be properly computed, reducing across MPI tasks
+       ! If local PW dimensions are not available, set to 0
+       !

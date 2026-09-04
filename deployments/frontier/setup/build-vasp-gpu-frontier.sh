@@ -10,7 +10,10 @@
 # =============================================================================
 # build-vasp-gpu-frontier.sh
 #
-# Build VASP 6.6 with OpenMP GPU offloading to AMD MI250X (gfx90a) on Frontier.
+# Prefer OLCF's own pre-built VASP module when one is available and working;
+# only build VASP 6.6 from source (OpenMP GPU offload to AMD MI250X / gfx90a)
+# as a fallback when the facility module is missing or fails a smoke test.
+# See VASP_FACILITY_MODULE / VASP_SKIP_FACILITY_MODULE below.
 #
 # Toolchain mirrors the matsim-agents Python venv module stack:
 #   cpe/24.07  rocm/6.2.0  amd-mixed/6.2.0
@@ -37,8 +40,10 @@
 #
 # Configurable environment overrides
 # ------------------------------------
-#   VASP_SRC_TGZ      Path to vasp.6.6.0.tgz    (default: external/vasp6/src/vasp.6.6.0.tgz)
-#   VASP_ROOT         Extracted VASP source dir  (default: external/vasp6/src/vasp.6.6.0)
+#   VASP_FACILITY_MODULE      OLCF module to try first   (default: vasp/6.6.1-gpu)
+#   VASP_SKIP_FACILITY_MODULE 1=skip module, build from source (default: 0)
+#   VASP_SRC_TGZ      Path to vasp.6.6.1.tgz    (default: external/vasp6/src/vasp.6.6.1.tgz)
+#   VASP_ROOT         Extracted VASP source dir  (default: external/vasp6/src/vasp.6.6.1)
 #   PREFIX            Build sub-directory name   (default: build)
 #   NCORES            Parallel make jobs         (default: nproc or 16 on login)
 #   CLEAN_BUILD       1=wipe build dirs first    (default: 0)
@@ -46,6 +51,12 @@
 #   ROCM_MODULE       ROCm module to load        (default: rocm/6.2.0)
 #   AMD_MIXED_MODULE  amd-mixed module to load   (default: amd-mixed/6.2.0)
 #   VASP_HDF5_ROOT    Path to HDF5 install       (optional; enables -DVASP_HDF5)
+#
+# If OLCF's vasp/6.6.1-gpu module is present and passes a smoke test, this
+# script uses it directly and exits WITHOUT building anything (see
+# _vasp-step-frontier.sh, which loads the same module at runtime instead of
+# the manual PrgEnv-cray/rocm/6.2.0 stack below). Set
+# VASP_SKIP_FACILITY_MODULE=1 to always build from source regardless.
 #
 # NOTE on ROCm version: the GPU device link runs cce's llvm-link + lld (LLVM 18
 # for cce 18.x) over ROCm's device bitcode (amdgcn/bitcode/*.bc).  Two
@@ -74,8 +85,10 @@ if [[ ! -f "${REPO}/pyproject.toml" ]]; then
 fi
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-VASP_SRC_TGZ="${VASP_SRC_TGZ:-${REPO}/external/vasp6/src/vasp.6.6.0.tgz}"
-VASP_ROOT="${VASP_ROOT:-${REPO}/external/vasp6/src/vasp.6.6.0}"
+VASP_FACILITY_MODULE="${VASP_FACILITY_MODULE:-vasp/6.6.1-gpu}"
+VASP_SKIP_FACILITY_MODULE="${VASP_SKIP_FACILITY_MODULE:-0}"
+VASP_SRC_TGZ="${VASP_SRC_TGZ:-${REPO}/external/vasp6/src/vasp.6.6.1.tgz}"
+VASP_ROOT="${VASP_ROOT:-${REPO}/external/vasp6/src/vasp.6.6.1}"
 PREFIX="${PREFIX:-build}"
 CLEAN_BUILD="${CLEAN_BUILD:-0}"
 VASP_TARGET="${VASP_TARGET:-all}"
@@ -128,6 +141,51 @@ init_modules() {
     command -v module >/dev/null 2>&1 || die "module command not found"
 }
 
+# Returns 0 and sets FACILITY_BIN_DIR if the OLCF-provided module "$1" exists,
+# loads cleanly, ships all three executables, and passes a smoke test.
+try_facility_module() {
+    local mod="$1" bindir out smoke_dir smoke_log
+    init_modules
+    if ! module avail "${mod}" 2>&1 | grep -qF "${mod}"; then
+        warn "Facility module '${mod}' not found via 'module avail' — will build from source"
+        return 1
+    fi
+    # Load in a subshell: never let a failed/partial load pollute this
+    # script's environment before the from-source build's own `module reset`.
+    if ! out="$(
+        set -e
+        module reset >/dev/null 2>&1 || true
+        module load "${mod}" >/dev/null 2>&1
+        command -v vasp_std
+    )"; then
+        warn "Failed to load facility module '${mod}' — will build from source"
+        return 1
+    fi
+    bindir="$(dirname "${out}")"
+    for exe in vasp_std vasp_gam vasp_ncl; do
+        [[ -x "${bindir}/${exe}" ]] || { warn "Facility module '${mod}' missing/non-executable ${exe} — will build from source"; return 1; }
+    done
+    # Smoke test: a working install prints VASP's "I REFUSE TO CONTINUE"
+    # banner and exits when no INCAR is present; a broken one (bad dynamic
+    # linking, wrong GPU arch, etc.) errors out before reaching that banner.
+    smoke_dir="$(mktemp -d)"
+    smoke_log="${smoke_dir}/smoke.log"
+    (
+        module reset >/dev/null 2>&1 || true
+        module load "${mod}" >/dev/null 2>&1
+        cd "${smoke_dir}"
+        timeout 30 "${bindir}/vasp_std"
+    ) > "${smoke_log}" 2>&1 || true
+    if ! grep -q "I REFUSE TO CONTINUE" "${smoke_log}" 2>/dev/null; then
+        warn "Facility module '${mod}' smoke test failed — see ${smoke_log} — will build from source"
+        rm -rf "${smoke_dir}"
+        return 1
+    fi
+    rm -rf "${smoke_dir}"
+    FACILITY_BIN_DIR="${bindir}"
+    return 0
+}
+
 # ── Print banner ──────────────────────────────────────────────────────────────
 log "=========================================="
 log "VASP GPU build on Frontier (AMD MI250X)"
@@ -140,6 +198,25 @@ log "Target:       ${VASP_TARGET}"
 log "NCORES:       ${NCORES}"
 log "ROCm module:  ${ROCM_MODULE}"
 log "=========================================="
+
+# ── Prefer OLCF's own pre-built VASP module ──────────────────────────────────
+FACILITY_BIN_DIR=""
+if [[ "${VASP_SKIP_FACILITY_MODULE}" == "1" ]]; then
+    log "VASP_SKIP_FACILITY_MODULE=1 — skipping facility-module check, building from source."
+elif try_facility_module "${VASP_FACILITY_MODULE}"; then
+    log "=========================================="
+    log "Using OLCF-provided VASP module: ${VASP_FACILITY_MODULE}"
+    for exe in vasp_std vasp_gam vasp_ncl; do
+        log "  OK  ${FACILITY_BIN_DIR}/${exe}"
+    done
+    log "Point VASP_BIN at ${FACILITY_BIN_DIR}/vasp_std (or vasp_gam/vasp_ncl)."
+    log "Runtime module stack: 'module load ${VASP_FACILITY_MODULE}' (see _vasp-step-frontier.sh)."
+    log "To force a from-source build instead, re-run with VASP_SKIP_FACILITY_MODULE=1."
+    log "=========================================="
+    exit 0
+else
+    log "Facility module unavailable/unusable — building VASP from source instead."
+fi
 
 ensure_file "${VASP_SRC_TGZ}"
 ensure_file "${MAKEFILE_INCLUDE}"

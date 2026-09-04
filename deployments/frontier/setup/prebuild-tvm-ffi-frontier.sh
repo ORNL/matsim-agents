@@ -18,10 +18,10 @@
 # JIT-compile a C++ addon against PyTorch headers AND the system ROCm
 # toolchain (hipcc, /opt/rocm-7.1.1/include/*, libamdhip64). On Frontier:
 #
-#   • Login nodes:    /opt/rocm-7.1.1 is a 60-byte stub. hipcc/headers/libs
+#   • Login nodes:    /opt/rocm-7.2.0 is a 60-byte stub. hipcc/headers/libs
 #                     are NOT present. The compile cannot even start —
 #                     torch._find_cuda_home() returns None and aborts.
-#   • Compute nodes:  /opt/rocm-7.1.1 is bind-mounted with the real install.
+#   • Compute nodes:  /opt/rocm-7.2.0 is bind-mounted with the real install.
 #                     The compile succeeds.
 #
 # So the build MUST execute on a compute node — but the OUTPUT .so is
@@ -43,6 +43,13 @@
 # the --build-with-rocm flag, so any compute node consuming it from the
 # shared cache gets an ABI-compatible artifact as long as the conda env and
 # the rocm/X.Y.Z module pin match what produced it.
+#
+# Module pin: must match the venv's installed torch build (torch+rocm7.2) and
+# every other Frontier job script (load_frontier_rocm72_modules). Loading
+# rocm/7.1.1 instead pulls in an incompatible /opt/rocm-7.1.1/lib/libamd_smi.so
+# (missing symbols the venv's amdsmi wheel expects, since amdsmi was installed
+# from the ROCm 7.2 bundle), which crashes `import torch` before the build
+# can even start.
 #
 # Submit:
 #   sbatch scripts/prebuild-tvm-ffi-frontier.sh
@@ -69,7 +76,7 @@ mkdir -p "$CACHE_DIR" "$PROJ/runs"
 # ── conda + modules (must mirror install-time exactly) ──────────────────────
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 source "$REPO/deployments/frontier/setup/frontier-module-stack.sh"
-load_frontier_rocm711_modules
+load_frontier_rocm72_modules
 # Cray's PrgEnv-gnu loads gcc-native/13.2 but ONLY exposes Cray's `cc`/`CC`
 # wrappers. The actual `gcc`/`g++` 13.3 binaries live in the gcc-native
 # module's bin dir, which is NOT in PATH after PrgEnv-gnu alone. Loading
@@ -79,7 +86,7 @@ ml gcc-native
 source activate "$VENV"
 
 # torch's cpp_extension.include_paths() demands CUDA_HOME, even for ROCm.
-export CUDA_HOME="${ROCM_PATH:-/opt/rocm-7.1.1}"
+export CUDA_HOME="${ROCM_PATH:-/opt/rocm-7.2.0}"
 
 # Force the build to use Cray's gcc-native (GCC 13.3, satisfies PyTorch's
 # >=9 requirement). After `ml gcc-native`, `which g++` returns the Cray path.
