@@ -58,8 +58,14 @@ export CONDA_DEFAULT_ENV="matsim-agents"
 export VIRTUAL_ENV="${MATSIM_VENV}"
 
 # Ensure NVIDIA runtime libs used by VASP are resolvable at runtime.
+# math_libs/lib64 must come first: NVHPC 25.5 only ships libcusparse.so.12
+# there (not under math_libs/12.9/), and if it's missing the loader falls
+# through to a stray CUDA-13.2 libcusparse elsewhere on the system, which
+# pulls in libcudart.so.13 (absent on compute nodes) and VASP fails with
+# "error while loading shared libraries: libcudart.so.13".
 NVIDIA_SDK_ROOT="/opt/nvidia/hpc_sdk/Linux_x86_64/25.5"
 for libdir in \
+    "${NVIDIA_SDK_ROOT}/math_libs/lib64" \
     "${NVIDIA_SDK_ROOT}/compilers/lib" \
     "${NVIDIA_SDK_ROOT}/compilers/extras/qd/lib"; do
     if [[ -d "${libdir}" ]] && [[ ":${LD_LIBRARY_PATH:-}:" != *":${libdir}:"* ]]; then
@@ -67,12 +73,24 @@ for libdir in \
     fi
 done
 
+# Cray's GPU-aware MPI transport library (libmpi_gtl_cuda.so.0, loaded via
+# cray-mpich) has a hard dependency on libcudart.so.13, independent of the
+# CUDA 12.9 toolchain used to build VASP/QE. NVHPC 25.5 only ships CUDA 12.9,
+# so pull libcudart.so.13 from the NVHPC 26.5/CUDA 13.2 bundle instead. This
+# coexists fine with the CUDA 12.9 libs above since the SONAMEs differ
+# (libcudart.so.12 vs libcudart.so.13).
+CUDA13_LIBDIR="/opt/nvidia/hpc_sdk/Linux_x86_64/26.5/cuda/13.2/lib64"
+if [[ -d "${CUDA13_LIBDIR}" ]] && [[ ":${LD_LIBRARY_PATH:-}:" != *":${CUDA13_LIBDIR}:"* ]]; then
+    export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:${CUDA13_LIBDIR}"
+fi
+
 # Set PYTHONPATH to include matsim-agents
 MATSIM_AGENTS_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 export PYTHONPATH="${MATSIM_AGENTS_DIR}/src:${PYTHONPATH:-}"
 
 # Add the HydraGNN sc26 example dir to PYTHONPATH so `inference_fused`
 # (used by src/matsim_agents/tools/relaxation.py) can be imported.
+HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-$(dirname "${MATSIM_AGENTS_DIR}")/HydraGNN}"
 HYDRAGNN_SC26_DIR="${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26"
 if [[ -f "${HYDRAGNN_SC26_DIR}/inference_fused.py" ]]; then
     export PYTHONPATH="${HYDRAGNN_SC26_DIR}:${PYTHONPATH}"

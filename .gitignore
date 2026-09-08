@@ -147,6 +147,14 @@ uma-vasp-ws-*.err
 vasp-ws-*.out
 vasp-ws-*.err
 
+# VASP/QE smoke-test and ldd-diagnostic job stdout/stderr (deployments/perlmutter/setup/)
+smoke-vasp-qe-*.out
+smoke-vasp-qe-*.err
+ldd-check-*.out
+ldd-check-*.err
+ldd-full-*.out
+ldd-full-*.err
+
 # Fine-tune-eval SLURM logs (written to scripts/launchers/perlmutter/ by submit scripts)
 fte-*.out
 fte-*.err

@@ -2,18 +2,22 @@
 # =============================================================================
 # build-vasp-gpu-perlmutter.sh
 #
-# Build VASP 6.6.0 on NERSC Perlmutter (NVIDIA A100, sm_80) using the OpenACC
-# GPU offload port driven by NVHPC 25.5 (CUDA 12.9), cray-mpich, cray-libsci
-# (BLAS/LAPACK/scaLAPACK) and cray-fftw.
+# Prefer NERSC's own pre-built VASP module when one is available and working;
+# only build VASP 6.6.1 from source (NVHPC 25.5 OpenACC GPU offload port,
+# CUDA 12.9, cray-mpich, cray-libsci BLAS/LAPACK/scaLAPACK, cray-fftw) as a
+# fallback when the facility module is missing or fails a smoke test. See
+# VASP_FACILITY_MODULE / VASP_SKIP_FACILITY_MODULE below.
 #
 # Source layout convention (see README):
-#   ${REPO}/external/vasp6/src/vasp.6.6.0/...
+#   ${REPO}/external/vasp6/src/vasp.6.6.1/...
 #
 # Usage:
 #   bash deployments/perlmutter/setup/build-vasp-gpu-perlmutter.sh
 #
 # Optional overrides:
-#   VASP_ROOT=/path/to/vasp.6.6.0
+#   VASP_FACILITY_MODULE      NERSC module to try first  (default: vasp/6.6.1-gpu)
+#   VASP_SKIP_FACILITY_MODULE 1=skip module, build from source (default: 0)
+#   VASP_ROOT=/path/to/vasp.6.6.1
 #   PREFIX=build
 #   NCORES=16
 #   CLEAN_BUILD=0|1
@@ -21,6 +25,16 @@
 #   REGENERATE_MAKEFILE=0|1   # force-rewrite makefile.include even if present
 #   GPU_ARCH=cc80             # A100=cc80; H100=cc90; L40=cc89
 #   CUDA_VER=12.9             # must match NVHPC 25.5 bundled CUDA
+#
+# If NERSC's vasp/6.6.1-gpu module is present and passes a smoke test, this
+# script uses it directly and exits WITHOUT building anything (see
+# _vasp-step-perlmutter.sh, which loads the same module at runtime instead of
+# the manual NVHPC stack below). Set VASP_SKIP_FACILITY_MODULE=1 to always
+# build from source regardless. As of this writing NERSC's newest module is
+# vasp/6.6.0-gpu (no 6.6.1 yet — NERSC's help text for 6.6.0 states it will be
+# deprecated and replaced by 6.6.1 at an upcoming maintenance), so today this
+# check falls through to the from-source build; it will pick up 6.6.1
+# automatically once NERSC publishes it.
 # =============================================================================
 
 set -euo pipefail
@@ -34,7 +48,11 @@ if [[ ! -f "${REPO}/pyproject.toml" ]]; then
     exit 1
 fi
 
-VASP_ROOT="${VASP_ROOT:-${REPO}/external/vasp6/src/vasp.6.6.0}"
+# ── Facility-module preference (see try_facility_module() below) ───────────
+VASP_FACILITY_MODULE="${VASP_FACILITY_MODULE:-vasp/6.6.1-gpu}"
+VASP_SKIP_FACILITY_MODULE="${VASP_SKIP_FACILITY_MODULE:-0}"
+
+VASP_ROOT="${VASP_ROOT:-${REPO}/external/vasp6/src/vasp.6.6.1}"
 PREFIX="${PREFIX:-build}"
 CLEAN_BUILD="${CLEAN_BUILD:-0}"
 VASP_TARGET="${VASP_TARGET:-all}"
@@ -77,6 +95,52 @@ init_modules() {
         source /usr/share/lmod/lmod/init/bash
     fi
     command -v module >/dev/null 2>&1 || die "module command not found"
+}
+
+# Returns 0 and sets FACILITY_BIN_DIR if the NERSC-provided module "$1" exists,
+# loads cleanly, ships all three executables, and passes a smoke test.
+try_facility_module() {
+    local mod="$1" bindir out smoke_dir smoke_log
+    init_modules
+    if ! module avail "${mod}" 2>&1 | grep -qF "${mod}"; then
+        warn "Facility module '${mod}' not found via 'module avail' — will build from source"
+        return 1
+    fi
+    # Load in a subshell: never let a failed/partial load pollute this
+    # script's environment before the from-source build's own module loads.
+    if ! out="$(
+        set -e
+        module reset >/dev/null 2>&1 || true
+        module load "${mod}" >/dev/null 2>&1
+        command -v vasp_std
+    )"; then
+        warn "Failed to load facility module '${mod}' — will build from source"
+        return 1
+    fi
+    bindir="$(dirname "${out}")"
+    for exe in vasp_std vasp_gam vasp_ncl; do
+        [[ -x "${bindir}/${exe}" ]] || { warn "Facility module '${mod}' missing/non-executable ${exe} — will build from source"; return 1; }
+    done
+    # Smoke test: a working install prints VASP's "I REFUSE TO CONTINUE"
+    # banner and exits when no INCAR is present; a broken one (bad dynamic
+    # linking, missing VASP license access, wrong GPU arch, etc.) errors out
+    # before reaching that banner.
+    smoke_dir="$(mktemp -d)"
+    smoke_log="${smoke_dir}/smoke.log"
+    (
+        module reset >/dev/null 2>&1 || true
+        module load "${mod}" >/dev/null 2>&1
+        cd "${smoke_dir}"
+        timeout 30 "${bindir}/vasp_std"
+    ) > "${smoke_log}" 2>&1 || true
+    if ! grep -q "I REFUSE TO CONTINUE" "${smoke_log}" 2>/dev/null; then
+        warn "Facility module '${mod}' smoke test failed — see ${smoke_log} — will build from source"
+        rm -rf "${smoke_dir}"
+        return 1
+    fi
+    rm -rf "${smoke_dir}"
+    FACILITY_BIN_DIR="${bindir}"
+    return 0
 }
 
 load_perlmutter_nvhpc_modules() {
@@ -196,7 +260,7 @@ write_makefile_include() {
 
     cat > "${out}" <<EOF
 # =============================================================================
-# makefile.include for VASP 6.6.0 on NERSC Perlmutter (A100, NVHPC OpenACC)
+# makefile.include for VASP 6.6.1 on NERSC Perlmutter (A100, NVHPC OpenACC)
 # Auto-generated by deployments/perlmutter/setup/build-vasp-gpu-perlmutter.sh
 # Toolchain: PrgEnv-gnu + nvfortran/nvc/nvc++ (NVHPC 25.5)
 #            + cray-mpich/8.1.30 (GPU-aware via libmpi_gtl_cuda)
@@ -303,6 +367,25 @@ log "GPU arch:    ${GPU_ARCH}"
 log "CUDA ver:    ${CUDA_VER}"
 log "CLEAN_BUILD: ${CLEAN_BUILD}"
 log "=========================================="
+
+# ── Prefer NERSC's own pre-built VASP module ────────────────────────────────
+FACILITY_BIN_DIR=""
+if [[ "${VASP_SKIP_FACILITY_MODULE}" == "1" ]]; then
+    log "VASP_SKIP_FACILITY_MODULE=1 — skipping facility-module check, building from source."
+elif try_facility_module "${VASP_FACILITY_MODULE}"; then
+    log "=========================================="
+    log "Using NERSC-provided VASP module: ${VASP_FACILITY_MODULE}"
+    for exe in vasp_std vasp_gam vasp_ncl; do
+        log "  OK  ${FACILITY_BIN_DIR}/${exe}"
+    done
+    log "Point VASP_BIN at ${FACILITY_BIN_DIR}/vasp_std (or vasp_gam/vasp_ncl)."
+    log "Runtime module stack: 'module load ${VASP_FACILITY_MODULE}' (see _vasp-step-perlmutter.sh)."
+    log "To force a from-source build instead, re-run with VASP_SKIP_FACILITY_MODULE=1."
+    log "=========================================="
+    exit 0
+else
+    log "Facility module unavailable/unusable — building VASP from source instead."
+fi
 
 ensure_file "${VASP_ROOT}"
 ensure_file "${VASP_ROOT}/makefile"

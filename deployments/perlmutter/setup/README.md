@@ -318,9 +318,9 @@ shadows e3nn locally. MACE jobs use a separate Python process and default to
 
 ---
 
-## VASP 6.6.0 GPU build (NVHPC OpenACC, multi-node enabled)
+## VASP 6.6.1 GPU build (NVHPC OpenACC, multi-node enabled)
 
-Three scripts together produce a multi-node-capable VASP 6.6.0 GPU binary on
+Three scripts together produce a multi-node-capable VASP 6.6.1 GPU binary on
 Perlmutter A100 nodes (sm_80) and a runtime launcher consumed by
 `matsim_agents.backends.dft.vasp_relax` via the `MATSIM_VASP_LAUNCHER` env var.
 
@@ -366,9 +366,11 @@ bash deployments/perlmutter/setup/build-scalapack-perlmutter.sh
 ```
 
 #### `build-vasp-gpu-perlmutter.sh`
-Builds VASP 6.6.0 (`vasp_std`, `vasp_gam`, `vasp_ncl`) with the NVHPC OpenACC
-GPU port. Source layout convention:
-`${REPO}/external/vasp6/src/vasp.6.6.0/...`.
+Prefers NERSC's own pre-built `vasp/6.6.1-gpu` module (see `VASP_FACILITY_MODULE`)
+and exits immediately if it loads and passes a smoke test; otherwise builds
+VASP 6.6.1 (`vasp_std`, `vasp_gam`, `vasp_ncl`) with the NVHPC OpenACC GPU
+port. Source layout convention: `${REPO}/external/vasp6/src/vasp.6.6.1/...`.
+Set `VASP_SKIP_FACILITY_MODULE=1` to always build from source.
 
 **What it does:**
 1. Loads the NVIDIA-variant module stack (matches the launcher).
@@ -401,7 +403,7 @@ SCALAPACK_ROOT="" REGENERATE_MAKEFILE=1 CLEAN_BUILD=1 \
 (A100; use `cc90` for H100, `cc89` for L40), `CUDA_VER=12.9`,
 `SCALAPACK_ROOT`, `SCALAPACK_AUTOBUILD=0|1`.
 
-**Outputs:** `external/vasp6/src/vasp.6.6.0/bin/{vasp_std,vasp_gam,vasp_ncl}`.
+**Outputs:** `external/vasp6/src/vasp.6.6.1/bin/{vasp_std,vasp_gam,vasp_ncl}`.
 
 **Long builds:** the full preprocess + compile + link pass takes ~25 min per
 variant on a Perlmutter login node. Launch under `setsid nohup` so the build
@@ -435,7 +437,7 @@ For multi-node runs increase `NRANKS` to `4 * <num_nodes>` and keep
 ```bash
 # 1. Place the source tree (one-time)
 mkdir -p external/vasp6/src external/vasp6/logs
-tar -xzf vasp.6.6.0.tar.gz -C external/vasp6/src/
+tar -xzf vasp.6.6.1.tar.gz -C external/vasp6/src/
 
 # 2. Build (auto-builds scalapack first time)
 REGENERATE_MAKEFILE=1 CLEAN_BUILD=1 NCORES=16 \
@@ -443,7 +445,7 @@ REGENERATE_MAKEFILE=1 CLEAN_BUILD=1 NCORES=16 \
   2>&1 | tee external/vasp6/logs/build-$(date +%F).log
 
 # 3. Confirm scalapack REDIST symbols are linked in
-nm external/vasp6/src/vasp.6.6.0/bin/vasp_std | grep -E 'pzgemr2d_|pdgemr2d_'
+nm external/vasp6/src/vasp.6.6.1/bin/vasp_std | grep -E 'pzgemr2d_|pdgemr2d_'
 
 # 4. Smoke test in a 1-node allocation
 salloc -N 1 -C gpu -q interactive -t 30 -A <allocation>

@@ -22,7 +22,7 @@ source "${SCRIPT_DIR}/setup_matsim_perlmutter.sh" --gpu
 export MPICH_GPU_SUPPORT_ENABLED=0
 
 QE_BIN="${REPO_ROOT}/external/quantum-espresso/install-gpu/bin/pw.x"
-VASP_STD_BIN="${REPO_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std"
+VASP_STD_BIN="${REPO_ROOT}/external/vasp6/src/vasp.6.6.1/bin/vasp_std"
 
 PASS=0
 FAIL=0
