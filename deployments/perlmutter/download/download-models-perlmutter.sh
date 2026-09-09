@@ -128,22 +128,41 @@ if ! command -v hf >/dev/null 2>&1; then
   exit 1
 fi
 
+# CFS/GPFS does NOT support fcntl.flock (OSError [Errno 524]) on compute nodes,
+# which huggingface_hub's --local-dir download requires. Stage each model on
+# flock-capable $SCRATCH (seeded from the persistent dest for resumability),
+# then rsync the result back to CFS.
+STAGE_BASE="${SCRATCH:-/tmp}"
+STAGE_ROOT="${STAGE_BASE}/hf-stage.${USER}.${SLURM_JOB_ID:-manual}"
+mkdir -p "$STAGE_ROOT"
+trap 'rm -rf "$STAGE_ROOT" 2>/dev/null || true' EXIT
+
+if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
+  export HF_TOKEN="$(< "${HOME}/.cache/huggingface/token")"
+fi
+
+rc=0
 for model_id in "${MODELS[@]}"; do
   leaf="${model_id##*/}"
   dest="$MODEL_ROOT/$leaf"
+  stage="$STAGE_ROOT/$leaf"
   log="$RUN_DIR/${leaf}.download.log"
 
-  mkdir -p "$dest"
+  mkdir -p "$dest" "$stage"
+  rsync -a "$dest/" "$stage/" 2>/dev/null || true
   echo
-  echo "[$(date)] Downloading $model_id -> $dest"
+  echo "[$(date)] Downloading $model_id -> $stage (staged, flock-capable)"
 
-  if hf download "$model_id" --local-dir "$dest" >"$log" 2>&1; then
+  if hf download "$model_id" --local-dir "$stage" >"$log" 2>&1; then
+    rsync -a "$stage/" "$dest/"
     shards=$(ls "$dest"/*.safetensors 2>/dev/null | wc -l || true)
     echo "[$(date)] DONE: $model_id (safetensors shards: $shards)"
   else
     echo "[$(date)] FAILED: $model_id (see $log)"
+    rc=1
   fi
 done
 
 echo
 echo "[$(date)] Completed download job. Logs in $RUN_DIR"
+exit "$rc"
