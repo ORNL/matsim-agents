@@ -13,10 +13,19 @@ set -euo pipefail
 REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
 PROJ="$(dirname "${REPO}")"
 INSTALL_ROOT=$REPO/.hpc-build/perlmutter
-VENV=$REPO/.venv
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 RUN_DIR="${RUNS_ROOT}/portability/perlmutter-${SLURM_JOB_ID:-$$}"
 QUALIFICATION="${MATSIM_PORTABILITY_QUALIFICATION:-contract}"
+# Compute qualification exercises the real UMA MLIP case (config/relaxation/
+# uma-si.yaml), which requires fairchem-core; that only lives in the
+# matsim-owned .venv-uma compatibility environment, not the main .venv used
+# by the deterministic contract gate.
+if [[ "${QUALIFICATION}" == "compute" ]]; then
+  VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}"
+else
+  VENV="${MATSIM_PERLMUTTER_VENV:-${REPO}/.venv}"
+fi
+export MATSIM_PERLMUTTER_VENV="${VENV}"
 ARGS=(--facility perlmutter --suite all --backend qe --execute
   --qualification "${QUALIFICATION}" --output "${RUN_DIR}")
 if [[ "${QUALIFICATION}" == "compute" ]]; then
@@ -27,10 +36,7 @@ if [[ "${QUALIFICATION}" == "compute" ]]; then
   done
 fi
 
-source "${REPO}/deployments/perlmutter/setup/perlmutter-module-stack.sh"
-load_perlmutter_modules_gpu
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "${VENV}"
+source "${REPO}/deployments/perlmutter/setup/setup_matsim_perlmutter.sh" --gpu
 
 PYTHON="${VENV}/bin/python3"
 
