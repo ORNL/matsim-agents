@@ -61,31 +61,8 @@ export PATH="$VENV/bin:$PATH"
 export CONDA_PREFIX="$VENV"
 export CONDA_DEFAULT_ENV="matsim-agents"
 
-# Guard against unsupported Hugging Face CLI stacks that can overwrite sensitive
-# HydraGNN dependencies (for example click/typer constraints).
-if "$VENV/bin/python" - <<'PY'
-import importlib.metadata as m
-import sys
-try:
-    v = m.version("huggingface_hub")
-except m.PackageNotFoundError:
-    raise SystemExit(0)
-major = int(v.split(".", 1)[0])
-raise SystemExit(42 if major >= 1 else 0)
-PY
-then
-  :
-else
-  rc=$?
-  if [[ $rc -eq 42 ]]; then
-    echo "ERROR: Unsupported huggingface_hub>=1.0 detected in HydraGNN venv: $VENV" >&2
-    echo "Do not upgrade packages in-place in this environment." >&2
-    echo "Recreate/fix the Perlmutter environment with:" >&2
-    echo "  bash deployments/perlmutter/setup/install.sh" >&2
-    exit 1
-  fi
-  exit $rc
-fi
+# huggingface_hub>=1.0 (the "hf" CLI) is the supported stack in this venv;
+# no legacy huggingface-cli/click compatibility guard is needed.
 
 # ---------------------------------------------------------------------------
 # Model catalogue
