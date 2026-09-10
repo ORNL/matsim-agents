@@ -31,11 +31,15 @@ fi
 PYTHON="${VLLM_VENV_PATH}/bin/python"
 "${PYTHON}" -m pip install --upgrade pip setuptools wheel
 "${PYTHON}" -m pip install "vllm==${VLLM_VERSION}"
+# ray[default] powers vLLM's multi-node distributed_executor_backend=ray, used
+# by job-serve-multinode-perlmutter.sh for models spanning >1 node.
+"${PYTHON}" -m pip install "ray[default]"
 "${PYTHON}" -m pip check || log "pip check reported dependency conflicts (see above); continuing since imports are verified next"
 "${PYTHON}" - <<'PY'
+import ray
 import torch
 import vllm
 assert torch.__version__.split("+")[0] == "2.13.0", torch.__version__
-print("verified", "vllm", vllm.__version__, "torch", torch.__version__)
+print("verified", "vllm", vllm.__version__, "torch", torch.__version__, "ray", ray.__version__)
 PY
 log "Complete. Launch servers with: ${VLLM_VENV_PATH}/bin/vllm serve <model> ..."

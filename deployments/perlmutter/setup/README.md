@@ -235,6 +235,8 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | `job-active-learning-uq-perlmutter.sh` | Production `matsim-agents al run` workflow: MD sampling → acquisition → one selected DFT labeller → labelled dataset; retraining is opt-in. |
 | `job-llm-check-perlmutter.sh` | Dedicated live-vLLM deployment qualification: owns server startup/readiness/cleanup, runs all six `matsim-agents llm-check` stages, and optionally launches the live scientific portability suite. |
 | `job-qe-warmstart-perlmutter.sh` | QE warm-start benchmark job: exercises the HydraGNN-preconditioned `pw.x` cold-vs-warm convergence test via `tests/integration/test_qe_warmstart.py`. |
+| `job-serve-multinode-perlmutter.sh` | Serves one model across an `-N`-node allocation via Ray + `vllm serve` (TP = nodes × 4); `-N 1` skips Ray. Stays alive until the job time limit. |
+| `submit-all-model-debate-perlmutter.sh` | Submits `job-serve-multinode-perlmutter.sh` once per `open-model-catalog.json` entry with the right `--nodes` and `SERVE_EXTRA_ARGS`; prints the `base_url_env` export lines to wire up once each job is running. |
 
 ### Submission examples
 ```bash
@@ -365,6 +367,28 @@ Job scripts default to `$MATSIM_DIR/venv_vllm` and invoke it directly:
 ```bash
 $MATSIM_DIR/venv_vllm/bin/vllm serve <model_dir> --host 127.0.0.1 --port 8000 ...
 ```
+
+### Multi-node vLLM serving (models too large for one node)
+
+`deployments/perlmutter/jobs/job-serve-multinode-perlmutter.sh` serves a
+single model across an `-N`-node Slurm allocation: it bootstraps a Ray
+cluster over all allocated nodes (skipped for `-N 1`, where vLLM's native
+multiprocessing TP is used instead) and runs `vllm serve` with
+`--tensor-parallel-size = nodes * 4`. Requires `ray[default]` in `venv_vllm`
+(installed automatically by `install-vllm-compat.sh`).
+
+```bash
+SERVE_MODEL_PATH=$MATSIM_DIR/../models/GLM-4.7 \
+sbatch --nodes=4 deployments/perlmutter/jobs/job-serve-multinode-perlmutter.sh
+```
+
+`deployments/perlmutter/jobs/submit-all-model-debate-perlmutter.sh` submits
+one such job per `open-model-catalog.json` entry, sized per model (see the
+table in `job-serve-multinode-perlmutter.sh`'s header; ~25 nodes total if all
+10 run concurrently). Prints the `export MATSIM_VLLM_*_BASE_URL=...` line to
+run once each job's head-node IP is known, so
+`benchmarks/portability/all_model_scientific_debate.py` can reach every
+endpoint.
 
 ---
 
