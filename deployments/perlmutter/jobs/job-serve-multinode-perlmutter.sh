@@ -2,7 +2,7 @@
 #SBATCH -J vllm-multinode
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
-#SBATCH -t 04:00:00
+#SBATCH -t 24:00:00
 #SBATCH -N 4
 #SBATCH -C gpu&hbm80g
 #SBATCH -q premium
@@ -120,6 +120,9 @@ export VLLM_DO_NOT_TRACK=1
 export VLLM_USE_FLASHINFER_SAMPLER=0
 export RAY_USAGE_STATS_ENABLED=0
 export RAY_DISABLE_IMPORT_WARNING=1
+# Large multi-node models can take well over vLLM's 600s default to load
+# weights from CFS and stand up their engine core processes.
+export VLLM_ENGINE_READY_TIMEOUT_S=${VLLM_ENGINE_READY_TIMEOUT_S:-2400}
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY
 export no_proxy='*' NO_PROXY='*'
 
@@ -199,7 +202,29 @@ if [[ "$N_NODES" -gt 1 ]]; then
     WORKER_PIDS+=($!)
   done
 
-  sleep 15   # wait for workers to join the cluster
+  # Wait for every worker to actually register its GPUs with the head before
+  # starting vllm serve -- a fixed sleep here raced ahead on slower node
+  # joins, leaving vllm to see only the head node's GPUs ("Tensor parallel
+  # size (N) exceeds available GPUs") and fail after a long, confusing hang.
+  EXPECTED_GPUS=$(( N_NODES * GPUS_PER_NODE ))
+  echo "[ray] Waiting for all $EXPECTED_GPUS GPUs to join the cluster ..."
+  RAY_JOIN_WAIT=0
+  RAY_JOIN_MAX_WAIT=300
+  while true; do
+    TOTAL_GPUS=$("$VLLM_VENV/bin/ray" status --address="$RAY_ADDRESS" 2>/dev/null \
+      | grep -oE '[0-9.]+/[0-9.]+ GPU' | tail -1 | cut -d/ -f2 | cut -d. -f1)
+    TOTAL_GPUS=${TOTAL_GPUS:-0}
+    if (( TOTAL_GPUS >= EXPECTED_GPUS )); then
+      echo "[ray] All $TOTAL_GPUS GPUs joined after ${RAY_JOIN_WAIT}s."
+      break
+    fi
+    if (( RAY_JOIN_WAIT >= RAY_JOIN_MAX_WAIT )); then
+      echo "[ray] WARNING: only $TOTAL_GPUS/$EXPECTED_GPUS GPUs joined after ${RAY_JOIN_MAX_WAIT}s, proceeding anyway." >&2
+      break
+    fi
+    sleep 5
+    (( RAY_JOIN_WAIT += 5 ))
+  done
 
   echo ""
   echo "[ray] Cluster status:"
