@@ -63,9 +63,22 @@ for entry in "${CATALOG[@]}"; do
   fi
   echo ""
   echo "--- $name  (nodes=$nodes)  -> $base_url_env ---"
+  # premium/gpu_premium QOS caps at 5 submitted jobs per user (MaxSubmitPU=5);
+  # fall back to regular/gpu_regular (MaxSubmitPU=5000) once that's exhausted.
   jobid=$(SERVE_MODEL_PATH="$model_path" SERVE_MODEL_NAME="$name" \
           SERVE_EXTRA_ARGS="$extra" \
-          sbatch --parsable --nodes="$nodes" -J "vllm-$name" "$JOB_SCRIPT")
+          sbatch --parsable -A "${SLURM_ACCOUNT:-m5216_g}" --nodes="$nodes" -J "vllm-$name" "$JOB_SCRIPT" \
+          2>/tmp/submit-all-model-debate.$$.err) || {
+    if grep -q QOSMaxSubmitJobPerUserLimit /tmp/submit-all-model-debate.$$.err 2>/dev/null; then
+      echo "  premium QOS full, retrying with -q regular ..."
+      jobid=$(SERVE_MODEL_PATH="$model_path" SERVE_MODEL_NAME="$name" \
+              SERVE_EXTRA_ARGS="$extra" \
+              sbatch --parsable -A "${SLURM_ACCOUNT:-m5216_g}" -q regular --nodes="$nodes" -J "vllm-$name" "$JOB_SCRIPT")
+    else
+      cat /tmp/submit-all-model-debate.$$.err >&2
+    fi
+  }
+  rm -f /tmp/submit-all-model-debate.$$.err
   echo "  submitted job $jobid"
   echo "  once RUNNING, get head-node IP from: %x-%j.out (job name vllm-$name-$jobid)"
   echo "  then: export ${base_url_env}=http://<head_node_ip>:8000/v1"
