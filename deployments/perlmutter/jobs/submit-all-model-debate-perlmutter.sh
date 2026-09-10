@@ -45,6 +45,13 @@ CATALOG=(
 
 WANT=("$@")
 
+# Skipped by default: vllm 0.29.0's bundled Pixtral code imports symbols
+# (PixtralRotaryEmbedding, position_ids_in_meshgrid) that transformers 5.17.0
+# (installed in venv_vllm) renamed/removed, so mistral-large-3 crashes on
+# load. See "Known issues" in deployments/perlmutter/setup/README.md. Pass
+# `mistral-large-3` explicitly as an argument to force-include it anyway.
+DEFAULT_SKIP=("mistral-large-3")
+
 echo "=========================================="
 echo "Submitting multi-node vLLM serve jobs"
 echo "=========================================="
@@ -55,6 +62,13 @@ for entry in "${CATALOG[@]}"; do
     match=0
     for w in "${WANT[@]}"; do [[ "$w" == "$name" ]] && match=1; done
     (( match )) || continue
+  else
+    skip=0
+    for s in "${DEFAULT_SKIP[@]}"; do [[ "$s" == "$name" ]] && skip=1; done
+    if (( skip )); then
+      echo "--- $name  SKIPPED by default (transformers/Pixtral incompatibility; pass its name explicitly to force) ---"
+      continue
+    fi
   fi
   model_path="$MODELS_DIR/$dir"
   if [[ ! -d "$model_path" ]]; then

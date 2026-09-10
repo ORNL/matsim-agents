@@ -390,6 +390,30 @@ run once each job's head-node IP is known, so
 `benchmarks/portability/all_model_scientific_debate.py` can reach every
 endpoint.
 
+#### Known issues
+
+- **`mistral-large-3` is skipped by default** by
+  `submit-all-model-debate-perlmutter.sh` (pass `mistral-large-3` explicitly
+  as an argument to force-include it). Its on-disk architecture is
+  `PixtralForConditionalGeneration`, and vllm 0.29.0's bundled
+  `vllm/model_executor/models/pixtral.py` imports `PixtralRotaryEmbedding`
+  and `position_ids_in_meshgrid` from `transformers.models.pixtral.
+  modeling_pixtral`. `venv_vllm`'s installed transformers (5.17.0, pulled in
+  by vllm's unbounded `transformers>=5.10.4` pin) renamed the former to
+  `PixtralVisionRotaryEmbedding` and removed the latter entirely, so the
+  model fails to load. transformers 5.12.0 has both symbols, but
+  downgrading it in the shared `venv_vllm` risks breaking the other,
+  newer-architecture models (GLM MoE, DeepSeek V3.2, Kimi-K2.5, Qwen3 MoE)
+  that may rely on newer transformers APIs — not attempted yet.
+- **Gloo requires an exact `*_SOCKET_IFNAME` match, unlike NCCL.** NCCL
+  tolerates `hsn` as a prefix match against Perlmutter's real interfaces
+  (`hsn0`-`hsn3`), but Gloo (used for CPU-side bootstrap by Ray and even by
+  vLLM's single-node multiprocessing executor) does not, and fails with
+  `Unable to find address for: hsn` if `GLOO_SOCKET_IFNAME` is forced to the
+  bare prefix. `job-serve-multinode-perlmutter.sh` leaves `GLOO_SOCKET_IFNAME`
+  unset so Gloo auto-selects a real interface; only `NCCL_SOCKET_IFNAME` is
+  overridden.
+
 ---
 
 ## VASP 6.6.1 GPU build (NVHPC OpenACC, multi-node enabled)
