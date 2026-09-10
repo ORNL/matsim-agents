@@ -13,7 +13,7 @@
 # as the LLM backend (OpenAI-compatible /v1 endpoint).
 #
 # Layout (single node, 4xA100 80GB):
-#   • vLLM server (Qwen2.5-14B)  : GPU 0           [vllm_venv, torch 2.11]
+#   • vLLM server (Qwen2.5-14B)  : GPU 0           [venv_vllm, torch 2.13.0]
 #   • matsim-agents discovery    : GPUs 1,2,3      [.venv, torch 2.13]
 #       - HydraGNN MLFF relaxations run inline on the 3 reserved GPUs
 #       - LLM proposer + critic both talk to localhost:8000/v1
@@ -42,9 +42,8 @@ RUNTIME_ENV="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}/
 source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
-INSTALL_ROOT=$REPO/.hpc-build/perlmutter
 VENV=$REPO/.venv          # discovery client + HydraGNN MLFF
-VLLM_VENV=$INSTALL_ROOT/vllm_venv         # isolated vLLM server (torch 2.11)
+VLLM_VENV=$REPO/venv_vllm                 # isolated vLLM server (torch 2.13.0)
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
 HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}

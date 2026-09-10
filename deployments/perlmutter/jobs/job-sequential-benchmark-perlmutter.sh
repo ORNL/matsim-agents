@@ -13,7 +13,7 @@
 # matsim-agents: sequential single-node model benchmark on NERSC Perlmutter.
 #
 # For each model this job:
-#   1. Starts a vLLM server (vllm_venv) on localhost:8000
+#   1. Starts a vLLM server (venv_vllm) on localhost:8000
 #   2. Waits for the health endpoint
 #   3. Runs eval_six_models_search_prompt.py (matsim-owned .venv)
 #   4. Kills the vLLM server
@@ -53,9 +53,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-INSTALL_ROOT=$REPO/.hpc-build/perlmutter
 VENV=$REPO/.venv          # eval Python + matsim_agents
-VLLM_VENV=$INSTALL_ROOT/vllm_venv         # isolated vLLM server (torch 2.11 / cu13)
+VLLM_VENV=$REPO/venv_vllm                 # isolated vLLM server (torch 2.13.0 / cu13)
 MODEL_ROOT=$PROJ/models
 RUN_DIR=$PROJ/runs/seq-model-bench-${SLURM_JOB_ID:-$$}
 mkdir -p "$RUN_DIR"
@@ -246,7 +245,7 @@ for entry in "${MODEL_LIST[@]}"; do
   export MATSIM_VLLM_BASE_URL="$VLLM_BASE_URL"
   export MATSIM_VLLM_API_KEY="EMPTY"
 
-  # vllm_venv uses torch 2.11 (cu13); launch it before system CUDA modules load
+  # venv_vllm uses torch 2.13.0 (cu13); launch it before system CUDA modules load
   # so it picks up its own bundled wheels. Cache dirs go to node-local tmpfs:
   # CFS/GPFS does not support fcntl.flock → OSError [Errno 524] otherwise.
   (

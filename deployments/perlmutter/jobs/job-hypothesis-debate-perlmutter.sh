@@ -14,7 +14,7 @@
 # fine-tuning.
 #
 # A panel of *different* models from the local model zoo is served, each on its
-# own OpenAI-compatible vLLM endpoint (isolated vllm_venv, torch 2.11). A thin
+# own OpenAI-compatible vLLM endpoint (isolated venv_vllm, torch 2.13.0). A thin
 # client (`matsim-agents/.venv`) drives the real matsim-agents debate machinery
 # (_debate_hypothesis_response) twice -- once with the pretrained-MLIP evidence,
 # once with the fine-tuned-MLIP evidence -- and records the two transcripts.
@@ -40,9 +40,8 @@ RUNTIME_ENV="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}/
 source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
-INSTALL_ROOT=$REPO/.hpc-build/perlmutter
 VENV=$REPO/.venv          # debate client (matsim-agents + openai)
-VLLM_VENV=$INSTALL_ROOT/vllm_venv         # isolated vLLM servers (torch 2.11)
+VLLM_VENV=$REPO/venv_vllm                 # isolated vLLM servers (torch 2.13.0)
 MODELS_DIR=$PROJ/models
 init_run_dirs "$PROJ" "hyp-debate" "${SLURM_JOB_ID:-$$}"
 

@@ -9,7 +9,7 @@
 #SBATCH --gpus 1
 #SBATCH -c 32
 # ---------------------------------------------------------------------------
-# Minimal single-GPU smoke test for the isolated vLLM server (vllm_venv).
+# Minimal single-GPU smoke test for the isolated vLLM server (venv_vllm).
 #
 # Uses the `shared` QOS so the scheduler can backfill a single GPU quickly,
 # instead of waiting for a whole node. Validates the riskiest unknown:
@@ -29,8 +29,7 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
-INSTALL_ROOT=$REPO/.hpc-build/perlmutter
-VLLM_VENV=$INSTALL_ROOT/vllm_venv
+VLLM_VENV=$REPO/venv_vllm
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-14B-Instruct}
 MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
 
@@ -40,7 +39,7 @@ RUN_DIR=$RUNS_ROOT/vllm-smoke-${SLURM_JOB_ID:-$$}
 mkdir -p "$RUN_DIR"
 VLLM_LOG="$RUN_DIR/vllm-server.log"
 
-echo "[$(date)] Host $(hostname); serving $MODEL_NAME on 1 GPU (vllm_venv) ..."
+echo "[$(date)] Host $(hostname); serving $MODEL_NAME on 1 GPU (venv_vllm) ..."
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export HF_HUB_OFFLINE=1
@@ -61,7 +60,7 @@ export TRITON_CACHE_DIR="$_JIT_TMP/triton"
 export TORCHINDUCTOR_CACHE_DIR="$_JIT_TMP/inductor"
 export VLLM_CACHE_ROOT="$_JIT_TMP/vllm"
 # Triton/inductor may JIT-compile a CUDA stub needing Python.h, which is absent
-# in the system-python vllm_venv; borrow Python headers from the matsim .venv.
+# in the system-python venv_vllm; borrow Python headers from the matsim .venv.
 _PY_HDR="$REPO/.venv/include/python3.11"
 export CPATH="${_PY_HDR}:${CPATH:-}"
 export C_INCLUDE_PATH="${_PY_HDR}:${C_INCLUDE_PATH:-}"

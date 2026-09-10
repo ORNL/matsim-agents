@@ -15,6 +15,8 @@ UMA_VENV_PATH="${UMA_VENV_PATH:-${MATSIM_DIR}/.venv-uma}"
 INSTALL_MACE="${INSTALL_MACE:-0}"
 MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"
 RECREATE_MACE_ENV="${RECREATE_MACE_ENV:-0}"
+INSTALL_VLLM="${INSTALL_VLLM:-0}"
+VLLM_VENV_PATH="${VLLM_VENV_PATH:-${MATSIM_DIR}/venv_vllm}"
 EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
 
 log() { printf '\033[1;34m[perlmutter-install]\033[0m %s\n' "$*"; }
@@ -60,6 +62,12 @@ if [[ "${INSTALL_MACE}" == "1" ]]; then
     MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" MACE_VENV_PATH="${MACE_VENV_PATH}" \
         FACILITY=perlmutter RECREATE_MACE_ENV="${RECREATE_MACE_ENV}" \
         bash "${MATSIM_DIR}/deployments/common/setup/install-mace-compat.sh"
+fi
+if [[ "${INSTALL_VLLM}" == "1" ]]; then
+    log "Installing vLLM in its own torch-incompatible matsim-owned environment"
+    MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" VLLM_VENV_PATH="${VLLM_VENV_PATH}" \
+        RECREATE_VLLM_ENV="${RECREATE_MACE_ENV}" \
+        bash "${MATSIM_DIR}/deployments/common/setup/install-vllm-compat.sh"
 fi
 
 log "Complete. Activate with: source ${VENV_PATH}/bin/activate"

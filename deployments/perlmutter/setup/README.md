@@ -109,6 +109,9 @@ MATSIM_PERLMUTTER_VENV=/custom/path source setup_matsim_perlmutter.sh --gpu
 
 # Add FairChem/UMA and the isolated MACE compatibility environment
 INSTALL_UMA=1 INSTALL_MACE=1 bash install.sh
+
+# Add the isolated vLLM serving environment
+INSTALL_VLLM=1 bash install.sh
 ```
 
 **Advanced module/path overrides (forwarded to the delegated HydraGNN installer):**
@@ -167,6 +170,7 @@ anywhere from ~3.5 to 8+ hours depending on which compute node is assigned.
   `INSTALL_UMA=1`
 - Optional: `mace-torch==0.3.16` in `$MATSIM_DIR/.venv-mace` when
   `INSTALL_MACE=1`
+- Optional: `vllm` in `$MATSIM_DIR/venv_vllm` when `INSTALL_VLLM=1`
 
 **Install root + environment path (default):**
 ```
@@ -315,6 +319,52 @@ source $MATSIM_DIR/.venv-mace/bin/activate
 The MACE environment inherits Perlmutter's CUDA PyTorch stack from `.venv` but
 shadows e3nn locally. MACE jobs use a separate Python process and default to
 `.venv-mace`; override that location with `MATSIM_MACE_VENV` at runtime.
+
+---
+
+## vLLM compatibility environment
+
+Job scripts under `deployments/perlmutter/jobs/` (`job-llm-check-perlmutter.sh`,
+`job-hypothesis-debate-perlmutter.sh`, `job-discovery-vllm-perlmutter.sh`,
+`job-sequential-benchmark-perlmutter.sh`, `job-vllm-smoke-perlmutter.sh`) serve
+local model checkpoints through `vllm serve` and talk to it over its
+OpenAI-compatible `/v1` HTTP API.
+
+### Why a separate venv
+
+vLLM hard-pins `torch==2.13.0` and ships CUDA-version-specific compiled
+kernels (FlashInfer, custom attention/sampling ops, etc.) built against that
+exact torch build. `matsim-agents`/HydraGNN require `torch==2.14.0`, so the two
+stacks cannot share one Python environment without either downgrading torch
+(breaking HydraGNN) or risking ABI-mismatch crashes if vLLM's compiled
+extensions are forced to run against a torch version they weren't built for.
+
+This is not a problem in practice because vLLM only ever runs as a standalone
+server process — matsim-agents code never imports `vllm` or `torch` from that
+environment. It only needs the lightweight `openai` client package (already
+installed in `.venv`, `.venv-uma`, and `.venv-mace`) to call the server's
+`/v1` endpoint over HTTP. So vLLM is kept in its own isolated environment,
+and nothing about `.venv`, `.venv-uma`, or `.venv-mace` needs to change.
+
+### Installation
+
+```bash
+INSTALL_VLLM=1 bash deployments/perlmutter/setup/install.sh
+# or standalone:
+bash deployments/perlmutter/setup/build-vllm-venv-perlmutter.sh
+```
+
+This creates `$MATSIM_DIR/venv_vllm` and installs/import-checks `vllm` there.
+Override the version with `VLLM_VERSION` (default `0.29.0`) and the install
+location with `VLLM_VENV_PATH`.
+
+### Running vLLM jobs
+
+Job scripts default to `$MATSIM_DIR/venv_vllm` and invoke it directly:
+
+```bash
+$MATSIM_DIR/venv_vllm/bin/vllm serve <model_dir> --host 127.0.0.1 --port 8000 ...
+```
 
 ---
 

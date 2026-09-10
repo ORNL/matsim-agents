@@ -8,6 +8,7 @@ dist/
 .venv/
 .venv-mace/
 .venv-uma/
+venv_vllm/
 .hpc-build/
 venv/
 perlmutter_venv/
