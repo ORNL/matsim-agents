@@ -132,10 +132,14 @@ mkdir -p "$JIT"
 export FLASHINFER_WORKSPACE_BASE="$JIT" TRITON_CACHE_DIR="$JIT/triton"
 export TORCHINDUCTOR_CACHE_DIR="$JIT/inductor" VLLM_CACHE_ROOT="$JIT/vllm"
 
-# Perlmutter Slingshot NCCL/Gloo interface (differs from Frontier's hsn0)
+# Perlmutter Slingshot: NCCL matches the "hsn" prefix across hsn0-hsn3, but
+# Gloo (used by Ray/torch for CPU-side bootstrap) requires an *exact*
+# interface name and errors ("Unable to find address for: hsn") if given the
+# bare prefix. Leave GLOO_SOCKET_IFNAME unset so Gloo auto-selects a real
+# interface; only override NCCL's.
 export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-hsn}
-export GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-hsn}
 export NCCL_NET_GDR_LEVEL=${NCCL_NET_GDR_LEVEL:-PHB}
+[[ -n "${GLOO_SOCKET_IFNAME:-}" ]] && export GLOO_SOCKET_IFNAME
 
 ENFORCE_EAGER_FLAG=()
 [[ "$SERVE_ENFORCE_EAGER" == "1" ]] && ENFORCE_EAGER_FLAG=(--enforce-eager)
