@@ -151,10 +151,40 @@ VLLM_PID=""
 RAY_HEAD_PID=""
 WORKER_PIDS=()
 
+ray_gpu_count() {
+  timeout 15s env RAY_ADDRESS="$RAY_ADDRESS" "$VLLM_VENV/bin/python" -c \
+    'import os, ray; ray.init(address=os.environ["RAY_ADDRESS"], logging_level="ERROR"); print(int(ray.cluster_resources().get("GPU", 0))); ray.shutdown()' \
+    2>/dev/null || echo 0
+}
+
+wait_for_ray_gpus() {
+  local expected=$1 max_wait=$2 elapsed=0 total=0
+  while (( elapsed < max_wait )); do
+    total=$(ray_gpu_count | tail -1)
+    [[ "$total" =~ ^[0-9]+$ ]] || total=0
+    if (( total >= expected )); then
+      echo "[ray] $total/$expected GPUs available after ${elapsed}s."
+      return 0
+    fi
+    sleep 5
+    (( elapsed += 5 ))
+  done
+  echo "[ray] ERROR: only $total/$expected GPUs available after ${max_wait}s." >&2
+  return 1
+}
+
 cleanup() {
   echo ""
   echo "[cleanup] Stopping vLLM and Ray cluster ..."
-  [[ -n "$VLLM_PID" ]] && { kill "$VLLM_PID" 2>/dev/null || true; wait "$VLLM_PID" 2>/dev/null || true; }
+  if [[ -n "$VLLM_PID" ]]; then
+    kill "$VLLM_PID" 2>/dev/null || true
+    for _ in {1..12}; do
+      kill -0 "$VLLM_PID" 2>/dev/null || break
+      sleep 5
+    done
+    kill -9 "$VLLM_PID" 2>/dev/null || true
+    wait "$VLLM_PID" 2>/dev/null || true
+  fi
   if [[ "$N_NODES" -gt 1 ]]; then
     "$VLLM_VENV/bin/ray" stop --force 2>/dev/null || true
     for pid in "${WORKER_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
@@ -182,12 +212,14 @@ if [[ "$N_NODES" -gt 1 ]]; then
     --head \
     --node-ip-address="$HEAD_NODE_IP" \
     --port="$RAY_PORT" \
+    --include-dashboard=false \
     --num-cpus="$NCPUS" \
     --num-gpus="$GPUS_PER_NODE" \
     --block &
   RAY_HEAD_PID=$!
 
-  sleep 10   # give head a moment to fully initialize
+  echo "[ray] Waiting for the head node ..."
+  wait_for_ray_gpus "$GPUS_PER_NODE" 180 || exit 1
 
   for node in "${ALL_NODES[@]:1}"; do
     echo "[ray] Starting worker on $node ..."
@@ -202,29 +234,9 @@ if [[ "$N_NODES" -gt 1 ]]; then
     WORKER_PIDS+=($!)
   done
 
-  # Wait for every worker to actually register its GPUs with the head before
-  # starting vllm serve -- a fixed sleep here raced ahead on slower node
-  # joins, leaving vllm to see only the head node's GPUs ("Tensor parallel
-  # size (N) exceeds available GPUs") and fail after a long, confusing hang.
   EXPECTED_GPUS=$(( N_NODES * GPUS_PER_NODE ))
   echo "[ray] Waiting for all $EXPECTED_GPUS GPUs to join the cluster ..."
-  RAY_JOIN_WAIT=0
-  RAY_JOIN_MAX_WAIT=300
-  while true; do
-    TOTAL_GPUS=$("$VLLM_VENV/bin/ray" status --address="$RAY_ADDRESS" 2>/dev/null \
-      | grep -oE '[0-9.]+/[0-9.]+ GPU' | tail -1 | cut -d/ -f2 | cut -d. -f1)
-    TOTAL_GPUS=${TOTAL_GPUS:-0}
-    if (( TOTAL_GPUS >= EXPECTED_GPUS )); then
-      echo "[ray] All $TOTAL_GPUS GPUs joined after ${RAY_JOIN_WAIT}s."
-      break
-    fi
-    if (( RAY_JOIN_WAIT >= RAY_JOIN_MAX_WAIT )); then
-      echo "[ray] WARNING: only $TOTAL_GPUS/$EXPECTED_GPUS GPUs joined after ${RAY_JOIN_MAX_WAIT}s, proceeding anyway." >&2
-      break
-    fi
-    sleep 5
-    (( RAY_JOIN_WAIT += 5 ))
-  done
+  wait_for_ray_gpus "$EXPECTED_GPUS" 600 || exit 1
 
   echo ""
   echo "[ray] Cluster status:"
@@ -267,7 +279,7 @@ fi
 
 echo "[vllm] Server PID=$VLLM_PID, waiting for /health ..."
 
-MAX_WAIT=1800   # large multi-node models can take 15-25 min to load from CFS
+MAX_WAIT=5400
 ELAPSED=0
 INTERVAL=10
 while true; do
