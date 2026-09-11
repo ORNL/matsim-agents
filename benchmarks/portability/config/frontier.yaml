@@ -1,0 +1,11 @@
+{
+  "facility": "frontier",
+  "scheduler": "slurm",
+  "accelerator": "amd-mi250x",
+  "gpus_per_node": 8,
+  "ranks_per_node": 8,
+  "launchers": {
+    "qe": "deployments/frontier/launchers/_qe-step-frontier.sh",
+    "vasp": "deployments/frontier/launchers/_vasp-step-frontier.sh"
+  }
+}

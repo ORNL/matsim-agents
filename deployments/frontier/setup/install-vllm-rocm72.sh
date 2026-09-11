@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# install-rocm72.sh  —  Run on the LOGIN NODE (has internet).
+# install-vllm-rocm72.sh — prepare and submit the Frontier vLLM ROCm build.
 #
-# Phase 1: Build the full HydraGNN ROCm 7.2 environment (pip installs, git
-#          clones, PyG/mpi4py/ADIOS2 compilation).  SKIP_VLLM=1 here because
-#          vLLM must be built on a compute node (needs GPU/hipcc at link time).
+# Prerequisite: deployments/frontier/setup/install.sh has already built and
+# verified the matsim-agents/HydraGNN environment. This script deliberately
+# does not rebuild that base environment.
 #
-# Phase 2: Pre-download vLLM build dependencies into the new venv so the
+# Phase 1: Validate the base environment and apply vLLM compatibility pins.
+# Phase 2: Pre-download vLLM build dependencies into the existing venv so the
 #          compute job can run fully offline.
 #
 # Phase 3: Submit build-vllm-rocm72.sh as a compute batch job.
 #
 # Usage (on a login node):
-#   bash ${PROJECT_ROOT:?export PROJECT_ROOT}/deployments/frontier/setup/install-rocm72.sh
+#   bash ${PROJECT_ROOT:?export PROJECT_ROOT}/deployments/frontier/setup/install-vllm-rocm72.sh
 
 set -euo pipefail
 
@@ -19,15 +20,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV="${VENV_PATH:-$REPO/.venv}"
 VLLM_SRC=$PROJ/cache/vllm-src/vllm
 PROTECTED_REQS=$REPO/deployments/frontier/setup/vllm-rocm72-protected-requirements.txt
 
-# ── Phase 1: HydraGNN environment (login node, internet required) ─────────────
-echo "=== Phase 1: HydraGNN ROCm 7.2 environment ==="
-export SKIP_VLLM=1
-cd $PROJ/HydraGNN/installation_DOE_supercomputers
-bash hydragnn_installation_bash_script_frontier-rocm72.sh
+# ── Phase 1: Validate the base environment and prepare compatibility pins ────
+[[ -x "${VENV}/bin/python" ]] || {
+    echo "ERROR: matsim environment not found: ${VENV}" >&2
+    echo "Run first: bash ${REPO}/deployments/frontier/setup/install.sh" >&2
+    exit 1
+}
+echo "=== Phase 1: Validate existing HydraGNN/matsim environment ==="
 
 # Pin to versions satisfying both HydraGNN Phase 1 AND vLLM Phase 2 constraints.
 # Done here so Phase 2 never needs to reassert them.
@@ -44,13 +47,7 @@ pip install --force-reinstall \
     "grpcio==1.78.0" \
     "grpcio-reflection==1.78.0"
 
-# Install matsim-agents with all required extras.
-# langgraph: required by matsim_agents package init (state.py imports it)
-# langchain-huggingface: required for the huggingface provider
-# accelerate: required by HuggingFacePipeline for device_map="auto"
-echo "=== Phase 1 post-step: matsim-agents install ==="
-pip install -e "$REPO[huggingface]" --no-deps
-pip install langgraph langchain-huggingface accelerate
+python -c "import hydragnn, matsim_agents, torch; print('base environment verified', torch.__version__)"
 conda deactivate
 
 # ── Phase 2: Pre-download vLLM build deps into the venv ──────────────────────
@@ -101,10 +98,10 @@ else
     echo "triton source already at $TRITON_SRC ($(cd $TRITON_SRC && git describe --tags))"
 fi
 
-# Reassert only numpy and triton-rocm (no compatible intersection with vLLM)
+# Reassert the HydraGNN NumPy contract and the ROCm Triton build.
 echo "Reasserting numpy and triton-rocm..."
 pip uninstall -y triton || true
-pip install --no-deps --force-reinstall numpy==1.26.4 \
+pip install --no-deps --force-reinstall numpy==2.4.6 \
     --extra-index-url https://download.pytorch.org/whl/rocm7.2 triton-rocm==3.6.0
 python - <<'PY'
 import importlib.metadata as md
@@ -116,7 +113,7 @@ print("triton", installed.get("triton", "missing"))
 print("triton-rocm", installed.get("triton-rocm", "missing"))
 print("setuptools", installed.get("setuptools", "missing"))
 print("grpcio", installed.get("grpcio", "missing"))
-assert numpy.__version__ == "1.26.4",         f"numpy={numpy.__version__}"
+assert numpy.__version__ == "2.4.6",          f"numpy={numpy.__version__}"
 assert installed.get("triton") in (None, "missing"), f"triton={installed.get('triton')}"
 assert installed.get("triton-rocm") == "3.6.0",    f"triton-rocm={installed.get('triton-rocm')}"
 print("All package version assertions passed.")
@@ -142,5 +139,8 @@ pip install --no-deps \
 
 # ── Phase 3: Submit vLLM compute build job ────────────────────────────────────
 echo "=== Phase 3: Submitting vLLM build job ==="
+# sbatch runs the script from a spooled copy, so BASH_SOURCE-based REPO
+# detection fails on the compute node; pass REPO through explicitly.
+export PROJECT_ROOT="$REPO"
 sbatch "$REPO/deployments/frontier/setup/build-vllm-rocm72.sh"
 echo "Done. Monitor with: tail -f $PROJ/runs/build-vllm-rocm72-<jobid>.out"

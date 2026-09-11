@@ -4,6 +4,16 @@ This directory contains setup scripts for running matsim-agents on NERSC's Perlm
 
 This implementation mirrors the methodology used for Frontier, providing both quick-setup and full-installation options.
 
+The single full-install entry point is:
+
+```bash
+bash deployments/perlmutter/setup/install.sh
+```
+
+It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current Perlmutter installer,
+then installs and verifies matsim-agents in that environment.
+`install_matsim_perlmutter.sh` is only a compatibility alias.
+
 ## Model Download Safety Policy
 
 See the canonical cross-platform policy in `docs/model-download-safety.md`.
@@ -20,9 +30,9 @@ Perlmutter download entry points:
 You have two options:
 
 #### Option 1: Quick Setup (Activate Installer-Created Environment)
-Use the **quick setup** scripts to activate the HydraGNN environment created by the installer.
+Use the **quick setup** script to activate the matsim-owned environment created by the installer.
 
-**Best for:** Development, testing, quick runs when HydraGNN environment is stable
+**Best for:** Development, testing, and repeated runs after installation
 
 ```bash
 source setup_matsim_perlmutter.sh [--gpu]
@@ -34,7 +44,7 @@ Use the **full installation** script to recreate the HydraGNN-aligned conda envi
 **Best for:** Reproducible installs aligned with HydraGNN runtime expectations
 
 ```bash
-bash install_matsim_perlmutter.sh [--gpu]
+bash install.sh
 ```
 
 ---
@@ -57,9 +67,9 @@ Loads the necessary Perlmutter module stack for CPU and GPU computing.
 - CMake, Conda, and build tools
 
 ### `setup_matsim_perlmutter.sh` (Quick Setup)
-Quickly activates a pre-configured HydraGNN environment:
+Quickly activates the pre-configured matsim environment:
 1. Loads Perlmutter modules
-2. Activates the shared HydraGNN conda environment
+2. Activates `$MATSIM_DIR/.venv` (or `MATSIM_PERLMUTTER_VENV`)
 3. Sets up PYTHONPATH for matsim-agents
 
 **Usage:**
@@ -73,11 +83,11 @@ source setup_matsim_perlmutter.sh --gpu
 
 **Environment used:** 
 ```
-$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+$MATSIM_DIR/.venv
 ```
 
-### `install_matsim_perlmutter.sh` (Fresh Installation)
-Frontier-style phased installation that always recreates the Perlmutter HydraGNN environment used at runtime:
+### `install.sh` (Fresh Installation)
+Canonical installation that creates the Perlmutter environment used at runtime:
 
 **Phase 1:** Run HydraGNN Perlmutter installer (delegated build of CUDA/PyTorch/PyG stack)
 **Phase 2:** Activate resulting env and install matsim-agents + runtime extras
@@ -86,28 +96,22 @@ Frontier-style phased installation that always recreates the Perlmutter HydraGNN
 
 First-time full installation (creates new environment):
 ```bash
-bash install_matsim_perlmutter.sh [--gpu]
+bash install.sh
 ```
-
-**Flags:**
-- `--gpu` - Compatibility flag (installer already targets A100/CUDA)
 
 **Customization via environment variables:**
 ```bash
 # Custom environment location
-VENV_PATH=/custom/path bash install_matsim_perlmutter.sh --gpu
+VENV_PATH=/custom/path bash install.sh
 
 # Runtime setup override (quick setup script)
 MATSIM_PERLMUTTER_VENV=/custom/path source setup_matsim_perlmutter.sh --gpu
 
-# Python version
-PYTHON_VERSION=3.12 bash install_matsim_perlmutter.sh --gpu
+# Add FairChem/UMA and the isolated MACE compatibility environment
+INSTALL_UMA=1 INSTALL_MACE=1 bash install.sh
 
-# Parallel build jobs
-MAX_JOBS=32 bash install_matsim_perlmutter.sh --gpu
-
-# Also install vLLM server package
-INSTALL_VLLM_SERVER=1 bash install_matsim_perlmutter.sh --gpu
+# Add the isolated vLLM serving environment
+INSTALL_VLLM=1 bash install.sh
 ```
 
 **Advanced module/path overrides (forwarded to the delegated HydraGNN installer):**
@@ -116,7 +120,7 @@ INSTALL_VLLM_SERVER=1 bash install_matsim_perlmutter.sh --gpu
 MODULES_SH_PATH=/etc/profile.d/modules.sh \
 LMOD_INIT_BASH_PATH=/usr/share/lmod/lmod/init/bash \
 MODULES_INIT_BASH_PATH=/usr/share/Modules/init/bash \
-bash install_matsim_perlmutter.sh --gpu
+bash install.sh
 
 # Override Perlmutter module names/versions used by HydraGNN installer
 PERLMUTTER_CPE_MODULE=cpe/24.07 \
@@ -125,48 +129,66 @@ PERLMUTTER_MPICH_MODULE=cray-mpich/8.1.30 \
 PERLMUTTER_ACCEL_MODULE=craype-accel-nvidia80 \
 PERLMUTTER_GCC_MODULE=gcc-native/13.2 \
 PERLMUTTER_CONDA_PRIMARY_MODULE=conda/Miniforge3-24.11.3-0 \
-bash install_matsim_perlmutter.sh --gpu
+bash install.sh
 ```
 
 These overrides are optional and mainly useful when site module paths or
 module names differ from the defaults.
 
+**Running as a Slurm batch job (recommended over a login-node build):**
+
+`install.sh` compiles mpi4py/ADIOS2/GPTL and builds several large Python
+environments; this is heavy, long-running CPU work that NERSC's login-node
+watchdog can silently kill if run there directly. Use the batch wrapper
+instead, which also pins the module versions needed for the CUDA 13 PyTorch
+wheels (`cray-mpich/9.1.0` — the default `cray-mpich/8.1.30`'s GTL library
+only supports CUDA 12 and breaks the mpi4py build):
+
+```bash
+sbatch deployments/perlmutter/setup/install-hydragnn-env-perlmutter.sh
+```
+
+NERSC-specific gotcha if you submit your own `sbatch`/`salloc` for this instead:
+submitting with `-q gpu_premium`/`-q gpu_shared`/etc. together with `-C gpu`
+is rejected by NERSC's submit filter ("Job request does not match any
+supported policy"). Use the generic QOS name without the `gpu_` prefix
+(`-q premium`, `-q shared`, ...) together with `-C gpu`; NERSC's filter maps
+it to the correct `gpu_*` QOS internally.
+
+Note HydraGNN's installer unconditionally recreates its venv from scratch on
+every run, so there is no incremental resume — a full rebuild has taken
+anywhere from ~3.5 to 8+ hours depending on which compute node is assigned.
+
 **Packages installed by the script (high level):**
 - Core HydraGNN + PyTorch/PyG stack (via delegated HydraGNN installer)
-- matsim-agents (editable)
+- matsim-agents (non-editable wheel install)
 - Core runtime/test dependencies (`langchain-core`, `pytest`, `pytest-cov`)
-- HydraGNN runtime dependencies (`scikit-learn==1.5.1`, `vesin==0.4.2`)
+- HydraGNN runtime dependencies (`scikit-learn==1.7.2`, `vesin==0.4.2`)
 - `huggingface_hub` (includes `hf` CLI for resumable model downloads)
 - `transformers` + `accelerate`
-- Optional: `vllm` server package when `INSTALL_VLLM_SERVER=1`
-- Optional: `fairchem-core` (UMA MLIP backend) when `INSTALL_UMA=1` — **installed
-  in a separate `fairchem_venv`** due to a known numpy conflict (see below)
+- Optional: `fairchem-core` (UMA MLIP backend) in `$MATSIM_DIR/.venv-uma` when
+  `INSTALL_UMA=1`
+- Optional: `mace-torch==0.3.16` in `$MATSIM_DIR/.venv-mace` when
+  `INSTALL_MACE=1`
+- Optional: `vllm` in `$MATSIM_DIR/venv_vllm` when `INSTALL_VLLM=1`
 
 **Install root + environment path (default):**
 ```
-INSTALL_ROOT = $HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV_PATH    = $INSTALL_ROOT/hydragnn_venv
+INSTALL_ROOT = $MATSIM_DIR/.hpc-build/perlmutter
+VENV_PATH    = $MATSIM_DIR/.venv
 ```
-`INSTALL_ROOT` is the single source of truth: the conda env AND all HydraGNN
-dependency build trees (ADIOS2, MPI4PY, DDStore, GPTL, DeepHyper, PyG) live
-inside it. Override `INSTALL_ROOT=/custom/path` to relocate everything together.
-`VENV_PATH` defaults to `$INSTALL_ROOT/hydragnn_venv`; override it alone only to
-place the env elsewhere (build deps still stay under `INSTALL_ROOT`).
+`INSTALL_ROOT` owns HydraGNN dependency build trees (ADIOS2, MPI4PY, DDStore,
+GPTL, DeepHyper, and PyG). `VENV_PATH` independently names the Python
+environment owned by matsim-agents. Both defaults remain inside this checkout.
+`VENV_PATH` defaults to `$MATSIM_DIR/.venv`; override it alone only to place the
+environment elsewhere (build dependencies remain under `INSTALL_ROOT`).
 
-Quick setup (`setup_matsim_perlmutter.sh`) prefers this shared in-HydraGNN path,
-falling back to the legacy local `matsim-agents/perlmutter_venv` only if the
-shared env is absent.
-### `job_perlmutter.sh`
-Example SLURM job submission script with proper environment setup.
-
-**Usage:**
-```bash
-# Edit to set your project allocation
-vim job_perlmutter.sh
-
-# Submit
-sbatch job_perlmutter.sh
-```
+Quick setup (`setup_matsim_perlmutter.sh`) activates `matsim-agents/.venv`, or
+the explicit `MATSIM_PERLMUTTER_VENV` override. It does not search legacy paths.
+The obsolete generic `job_perlmutter.sh` template was removed because it
+invoked the nonexistent `matsim_agents.main` module and could not describe a
+specific scientific contract. Submit one of the explicit jobs under
+`deployments/perlmutter/jobs/` instead.
 
 ### `test_matsim_perlmutter.sh`
 Comprehensive test suite validating the complete environment:
@@ -209,10 +231,12 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | Script | Purpose |
 |---|---|
 | `job-discovery-chat-perlmutter.sh` | End-to-end discovery validation: **Phase A** runs `matsim-agents chat` with the HF provider against Qwen2.5-72B + HydraGNN MLFF (FIRE relaxation, 64+ atoms, 2 orderings). **Phase B** runs the QE warm-start `pytest` with the cu129-aligned `pw.x`. Toggle phases via `SKIP_LLM=1` / `SKIP_QE=1`. |
-| `job-single-relaxation-perlmutter.sh` | Runs `examples/single_relaxation.py` (HydraGNN FIRE relaxation) under a single A100 node; exports `MATSIM_HYDRAGNN_*` and `MATSIM_LLM_*` for the vLLM/HF backend. |
-| `job-active-learning-uq-perlmutter.sh` | Full active-learning loop (`matsim-agents al run`) on Perlmutter: MD sampling → ensemble uncertainty → DFT labelling (VASP or QE) → HydraGNN retraining. Multi-phase SBATCH with node-level srun steps. |
+| `job-single-relaxation-perlmutter.sh` | Runs the typed `matsim-agents relax` contract through the shared deployment runner. |
+| `job-active-learning-uq-perlmutter.sh` | Production `matsim-agents al run` workflow: MD sampling → acquisition → one selected DFT labeller → labelled dataset; retraining is opt-in. |
+| `job-llm-check-perlmutter.sh` | Dedicated live-vLLM deployment qualification: owns server startup/readiness/cleanup, runs all six `matsim-agents llm-check` stages, and optionally launches the live scientific portability suite. |
 | `job-qe-warmstart-perlmutter.sh` | QE warm-start benchmark job: exercises the HydraGNN-preconditioned `pw.x` cold-vs-warm convergence test via `tests/integration/test_qe_warmstart.py`. |
-| `job-sequential-benchmark-perlmutter.sh` | Sequential single-node LLM benchmark: starts a vLLM server (from `vllm_venv`) for each open-catalog model in turn, runs `eval_six_models_search_prompt.py` (via `hydragnn_venv`), then merges results into a leaderboard CSV and comparison PNG. All JIT caches are redirected to node-local `/tmp` to avoid CFS `fcntl.flock` hangs (Errno 524). Required env var: `BENCHMARK_PROMPT`. Optional: `BENCHMARK_PART=light\|heavy\|all`. See the storage layout comment at the top of the script. |
+| `job-serve-multinode-perlmutter.sh` | Serves one model across an `-N`-node allocation via Ray + `vllm serve` (TP = nodes × 4); `-N 1` skips Ray. Stays alive until the job time limit. |
+| `submit-all-model-debate-perlmutter.sh` | Submits `job-serve-multinode-perlmutter.sh` once per `open-model-catalog.json` entry with the right `--nodes` and `SERVE_EXTRA_ARGS`; prints the `base_url_env` export lines to wire up once each job is running. |
 
 ### Submission examples
 ```bash
@@ -231,10 +255,14 @@ sbatch deployments/perlmutter/launchers/run-qe-warmstart-benchmark-perlmutter.sh
 
 # Full discovery validation (LLM + HydraGNN + QE)
 sbatch deployments/perlmutter/jobs/job-discovery-chat-perlmutter.sh
+
+# Qualify one live vLLM deployment inside its compute allocation
+PROJECT_ROOT=$PWD sbatch -A <allocation> \
+  deployments/perlmutter/jobs/job-llm-check-perlmutter.sh
 ```
 
 All these scripts source `perlmutter-module-stack.sh` (`load_perlmutter_modules_gpu`)
-and activate the same `hydragnn_venv` produced by `install_matsim_perlmutter.sh`,
+and activate the same matsim-owned `.venv` produced by `install.sh`,
 so they inherit the unified HydraGNN-aligned toolchain (`cudatoolkit/12.9`,
 `gcc-native/13.2`, torch `2.11.0+cu129`).
 
@@ -248,59 +276,149 @@ the `mlip_backend="uma"` field on `RelaxStructureInput` (canonical:
 `matsim_agents.backends.mlip.relaxation.RelaxStructureInput`). The backend requires
 `fairchem-core`.
 
-### Why a separate venv is required
+### Compatibility environment
 
-`fairchem-core >= 2.0` requires `numpy >= 2.0` and `scipy >= 1.15`, but
-HydraGNN pins `numpy == 1.26.4` and `scipy == 1.14.1`. These constraints are
-mutually exclusive and cannot be satisfied in the same environment. Installing
-`fairchem-core` into `hydragnn_venv` will silently downgrade / upgrade packages
-and break HydraGNN at runtime.
+HydraGNN requires PyTorch 2.14, while `fairchem-core==2.22.0` requires
+PyTorch 2.13. The installer therefore keeps HydraGNN in `$MATSIM_DIR/.venv`
+and creates the independently resolved UMA environment at
+`$MATSIM_DIR/.venv-uma`. Both environments remain owned by matsim-agents.
 
 ### Installation
 
 ```bash
-INSTALL_UMA=1 bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu
+INSTALL_UMA=1 bash deployments/perlmutter/setup/install.sh
 ```
 
-This creates a **separate** `fairchem_venv` alongside `hydragnn_venv`:
-```
-INSTALL_ROOT/
-├── hydragnn_venv/   ← HydraGNN + matsim-agents (numpy 1.26.4)
-└── fairchem_venv/   ← fairchem-core + matsim-agents (numpy 2.x)
-```
-
-Default path:
-```
-$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/fairchem_venv
-```
+This installs and import-checks FairChem in `$MATSIM_DIR/.venv-uma`.
 
 ### Running UMA jobs
 
-UMA benchmark jobs must activate `fairchem_venv` instead of `hydragnn_venv`:
+UMA benchmark jobs activate the compatibility environment:
 
 ```bash
 # In a job script or interactive session:
-source $INSTALL_ROOT/fairchem_venv/bin/activate
+source $MATSIM_DIR/.venv-uma/bin/activate
 
 # Or set MATSIM_MLIP_BACKEND=uma and point to the fairchem venv:
 export MATSIM_MLIP_BACKEND=uma
-export MATSIM_FAIRCHEM_VENV=$INSTALL_ROOT/fairchem_venv
+export MATSIM_FAIRCHEM_VENV=$MATSIM_DIR/.venv-uma
 ```
 
 The warm-start test infrastructure (`test_qe_warmstart.py`, `test_vasp_warmstart.py`)
-supports `mlip_backend: uma` in fixtures.yaml when run inside `fairchem_venv`.
+supports `mlip_backend: uma` in fixtures.yaml when run in this environment.
 
-### Known limitation
+### MACE compatibility environment
 
-HydraGNN and UMA cannot share a runtime environment on Perlmutter until
-HydraGNN relaxes its `numpy==1.26.4` pin. Until then, maintain both venvs and
-select the appropriate one per job.
+Upstream `mace-torch==0.3.16` declares `e3nn==0.4.4`; HydraGNN declares
+`e3nn==0.5.1`. Because pip cannot satisfy both exact pins in one environment,
+request MACE through the same facility installer:
+
+```bash
+INSTALL_MACE=1 bash deployments/perlmutter/setup/install.sh
+source $MATSIM_DIR/.venv-mace/bin/activate
+```
+
+The MACE environment inherits Perlmutter's CUDA PyTorch stack from `.venv` but
+shadows e3nn locally. MACE jobs use a separate Python process and default to
+`.venv-mace`; override that location with `MATSIM_MACE_VENV` at runtime.
 
 ---
 
-## VASP 6.6.0 GPU build (NVHPC OpenACC, multi-node enabled)
+## vLLM compatibility environment
 
-Three scripts together produce a multi-node-capable VASP 6.6.0 GPU binary on
+Job scripts under `deployments/perlmutter/jobs/` (`job-llm-check-perlmutter.sh`,
+`job-hypothesis-debate-perlmutter.sh`, `job-discovery-vllm-perlmutter.sh`,
+`job-sequential-benchmark-perlmutter.sh`, `job-vllm-smoke-perlmutter.sh`) serve
+local model checkpoints through `vllm serve` and talk to it over its
+OpenAI-compatible `/v1` HTTP API.
+
+### Why a separate venv
+
+vLLM hard-pins `torch==2.13.0` and ships CUDA-version-specific compiled
+kernels (FlashInfer, custom attention/sampling ops, etc.) built against that
+exact torch build. `matsim-agents`/HydraGNN require `torch==2.14.0`, so the two
+stacks cannot share one Python environment without either downgrading torch
+(breaking HydraGNN) or risking ABI-mismatch crashes if vLLM's compiled
+extensions are forced to run against a torch version they weren't built for.
+
+This is not a problem in practice because vLLM only ever runs as a standalone
+server process — matsim-agents code never imports `vllm` or `torch` from that
+environment. It only needs the lightweight `openai` client package (already
+installed in `.venv`, `.venv-uma`, and `.venv-mace`) to call the server's
+`/v1` endpoint over HTTP. So vLLM is kept in its own isolated environment,
+and nothing about `.venv`, `.venv-uma`, or `.venv-mace` needs to change.
+
+### Installation
+
+```bash
+INSTALL_VLLM=1 bash deployments/perlmutter/setup/install.sh
+# or standalone:
+bash deployments/perlmutter/setup/build-vllm-venv-perlmutter.sh
+```
+
+This creates `$MATSIM_DIR/venv_vllm` and installs/import-checks `vllm` there.
+Override the version with `VLLM_VERSION` (default `0.29.0`) and the install
+location with `VLLM_VENV_PATH`.
+
+### Running vLLM jobs
+
+Job scripts default to `$MATSIM_DIR/venv_vllm` and invoke it directly:
+
+```bash
+$MATSIM_DIR/venv_vllm/bin/vllm serve <model_dir> --host 127.0.0.1 --port 8000 ...
+```
+
+### Multi-node vLLM serving (models too large for one node)
+
+`deployments/perlmutter/jobs/job-serve-multinode-perlmutter.sh` serves a
+single model across an `-N`-node Slurm allocation: it bootstraps a Ray
+cluster over all allocated nodes (skipped for `-N 1`, where vLLM's native
+multiprocessing TP is used instead) and runs `vllm serve` with
+`--tensor-parallel-size = nodes * 4`. Requires `ray[default]` in `venv_vllm`
+(installed automatically by `install-vllm-compat.sh`).
+
+```bash
+SERVE_MODEL_PATH=$MATSIM_DIR/../models/GLM-4.7 \
+sbatch --nodes=4 deployments/perlmutter/jobs/job-serve-multinode-perlmutter.sh
+```
+
+`deployments/perlmutter/jobs/submit-all-model-debate-perlmutter.sh` submits
+one such job per `open-model-catalog.json` entry, sized per model (see the
+table in `job-serve-multinode-perlmutter.sh`'s header; ~25 nodes total if all
+10 run concurrently). Prints the `export MATSIM_VLLM_*_BASE_URL=...` line to
+run once each job's head-node IP is known, so
+`benchmarks/portability/all_model_scientific_debate.py` can reach every
+endpoint.
+
+#### Known issues
+
+- **`mistral-large-3` is skipped by default** by
+  `submit-all-model-debate-perlmutter.sh` (pass `mistral-large-3` explicitly
+  as an argument to force-include it). Its on-disk architecture is
+  `PixtralForConditionalGeneration`, and vllm 0.29.0's bundled
+  `vllm/model_executor/models/pixtral.py` imports `PixtralRotaryEmbedding`
+  and `position_ids_in_meshgrid` from `transformers.models.pixtral.
+  modeling_pixtral`. `venv_vllm`'s installed transformers (5.17.0, pulled in
+  by vllm's unbounded `transformers>=5.10.4` pin) renamed the former to
+  `PixtralVisionRotaryEmbedding` and removed the latter entirely, so the
+  model fails to load. transformers 5.12.0 has both symbols, but
+  downgrading it in the shared `venv_vllm` risks breaking the other,
+  newer-architecture models (GLM MoE, DeepSeek V3.2, Kimi-K2.5, Qwen3 MoE)
+  that may rely on newer transformers APIs — not attempted yet.
+- **Gloo requires an exact `*_SOCKET_IFNAME` match, unlike NCCL.** NCCL
+  tolerates `hsn` as a prefix match against Perlmutter's real interfaces
+  (`hsn0`-`hsn3`), but Gloo (used for CPU-side bootstrap by Ray and even by
+  vLLM's single-node multiprocessing executor) does not, and fails with
+  `Unable to find address for: hsn` if `GLOO_SOCKET_IFNAME` is forced to the
+  bare prefix. `job-serve-multinode-perlmutter.sh` leaves `GLOO_SOCKET_IFNAME`
+  unset so Gloo auto-selects a real interface; only `NCCL_SOCKET_IFNAME` is
+  overridden.
+
+---
+
+## VASP 6.6.1 GPU build (NVHPC OpenACC, multi-node enabled)
+
+Three scripts together produce a multi-node-capable VASP 6.6.1 GPU binary on
 Perlmutter A100 nodes (sm_80) and a runtime launcher consumed by
 `matsim_agents.backends.dft.vasp_relax` via the `MATSIM_VASP_LAUNCHER` env var.
 
@@ -346,9 +464,11 @@ bash deployments/perlmutter/setup/build-scalapack-perlmutter.sh
 ```
 
 #### `build-vasp-gpu-perlmutter.sh`
-Builds VASP 6.6.0 (`vasp_std`, `vasp_gam`, `vasp_ncl`) with the NVHPC OpenACC
-GPU port. Source layout convention:
-`${REPO}/external/vasp6/src/vasp.6.6.0/...`.
+Prefers NERSC's own pre-built `vasp/6.6.1-gpu` module (see `VASP_FACILITY_MODULE`)
+and exits immediately if it loads and passes a smoke test; otherwise builds
+VASP 6.6.1 (`vasp_std`, `vasp_gam`, `vasp_ncl`) with the NVHPC OpenACC GPU
+port. Source layout convention: `${REPO}/external/vasp6/src/vasp.6.6.1/...`.
+Set `VASP_SKIP_FACILITY_MODULE=1` to always build from source.
 
 **What it does:**
 1. Loads the NVIDIA-variant module stack (matches the launcher).
@@ -381,7 +501,7 @@ SCALAPACK_ROOT="" REGENERATE_MAKEFILE=1 CLEAN_BUILD=1 \
 (A100; use `cc90` for H100, `cc89` for L40), `CUDA_VER=12.9`,
 `SCALAPACK_ROOT`, `SCALAPACK_AUTOBUILD=0|1`.
 
-**Outputs:** `external/vasp6/src/vasp.6.6.0/bin/{vasp_std,vasp_gam,vasp_ncl}`.
+**Outputs:** `external/vasp6/src/vasp.6.6.1/bin/{vasp_std,vasp_gam,vasp_ncl}`.
 
 **Long builds:** the full preprocess + compile + link pass takes ~25 min per
 variant on a Perlmutter login node. Launch under `setsid nohup` so the build
@@ -415,7 +535,7 @@ For multi-node runs increase `NRANKS` to `4 * <num_nodes>` and keep
 ```bash
 # 1. Place the source tree (one-time)
 mkdir -p external/vasp6/src external/vasp6/logs
-tar -xzf vasp.6.6.0.tar.gz -C external/vasp6/src/
+tar -xzf vasp.6.6.1.tar.gz -C external/vasp6/src/
 
 # 2. Build (auto-builds scalapack first time)
 REGENERATE_MAKEFILE=1 CLEAN_BUILD=1 NCORES=16 \
@@ -423,7 +543,7 @@ REGENERATE_MAKEFILE=1 CLEAN_BUILD=1 NCORES=16 \
   2>&1 | tee external/vasp6/logs/build-$(date +%F).log
 
 # 3. Confirm scalapack REDIST symbols are linked in
-nm external/vasp6/src/vasp.6.6.0/bin/vasp_std | grep -E 'pzgemr2d_|pdgemr2d_'
+nm external/vasp6/src/vasp.6.6.1/bin/vasp_std | grep -E 'pzgemr2d_|pdgemr2d_'
 
 # 4. Smoke test in a 1-node allocation
 salloc -N 1 -C gpu -q interactive -t 30 -A <allocation>
@@ -438,12 +558,12 @@ cd <work_dir_with_INCAR_POSCAR_KPOINTS_POTCAR>
 
 ### Quick Setup (`setup_matsim_perlmutter.sh`)
 - Running on a Perlmutter login or compute node
-- Existing HydraGNN environment at:
+- Existing matsim-owned environment at:
   ```
-  $HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+  $MATSIM_DIR/.venv
   ```
 
-### Full Installation (`install_matsim_perlmutter.sh`)
+### Full installation (`install.sh`)
 - Running on a Perlmutter login node (compute nodes work but slower)
 - Sufficient disk space for conda environment (~10-20 GB)
 - Internet access (for PyPI package downloads)
@@ -456,11 +576,11 @@ cd <work_dir_with_INCAR_POSCAR_KPOINTS_POTCAR>
 | Aspect | Quick Setup | Fresh Installation |
 |--------|------------|-------------------|
 | **Speed** | Minutes (1-2 min) | 30-45 minutes |
-| **Disk Usage** | None (shared env) | ~10-20 GB (at configured env path) |
-| **Isolation** | Shared unless overridden | Shared by default, isolated if `VENV_PATH` is custom |
+| **Disk Usage** | None beyond the installed environment | ~10-20 GB inside the checkout by default |
+| **Isolation** | Reuses `.venv` | Matsim-owned; `VENV_PATH` is configurable |
 | **Reproducibility** | Fast reuse | Rebuildable from script |
 | **Best for** | Development, testing | Aligned install/runtime and rebuilds |
-| **Env location** | Global (shared default) | Shared default (`VENV_PATH` configurable) |
+| **Env location** | `$MATSIM_DIR/.venv` | `$MATSIM_DIR/.venv` by default |
 
 ---
 
@@ -480,14 +600,14 @@ python -m matsim_agents ...
 ### Production Workflow (Fresh Installation)
 ```bash
 # Initial setup (30-45 min, run once)
-bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu
+bash deployments/perlmutter/setup/install.sh
 
 # Every session
 source deployments/perlmutter/setup/setup_matsim_perlmutter.sh --gpu
 python -m matsim_agents ...
 
 # Rebuild and reinstall in a fresh environment
-bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu
+RECREATE_MACE_ENV=1 bash deployments/perlmutter/setup/install.sh
 ```
 
 ### SLURM Job Submission (Both Approaches)
@@ -501,11 +621,11 @@ bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu
 
 # Load environment (choose one)
 
-# Option 1: Quick setup (if HydraGNN env exists)
+# Option 1: Quick setup (if the matsim environment exists)
 source deployments/perlmutter/setup/setup_matsim_perlmutter.sh --gpu
 
 # Option 2: Activate a custom env path used during install
-# conda activate /path/used/as/VENV_PATH
+# source /path/used/as/VENV_PATH/bin/activate
 
 python -m matsim_agents.run --config config.yaml
 ```
@@ -517,31 +637,29 @@ python -m matsim_agents.run --config config.yaml
 ### "module command not found"
 You must be running on a Perlmutter login node. The module system is not available on external machines.
 
-### "HydraGNN virtual environment not found" (Quick Setup)
-Ensure the shared HydraGNN environment exists at:
+### "Python virtual environment not found" (Quick Setup)
+Ensure the matsim-owned environment exists at:
 ```
-$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+$MATSIM_DIR/.venv
 ```
 
 Contact the project maintainers if it needs to be re-created.
 
-### "conda env not found" (Fresh Installation)
+### "virtual environment not found" (Fresh Installation)
 The environment was not created. Re-run the installation:
 ```bash
-bash install_matsim_perlmutter.sh --gpu
+bash install.sh
 ```
 Default expected path:
 ```
-$HYDRAGNN_DIR/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+$MATSIM_DIR/.venv
 ```
 
 ### CUDA not available
 - Ensure you're using GPU nodes (`-C gpu`)
-- Use the `--gpu` flag when loading modules:
+- Load the GPU module stack through the quick-setup helper:
   ```bash
   source setup_matsim_perlmutter.sh --gpu
-  # OR
-  bash install_matsim_perlmutter.sh --gpu
   ```
 
 ### PyTorch import fails
@@ -552,31 +670,24 @@ python -c "import torch; print(torch.__version__)"
 ```
 
 ### "hf command not found"
-`install_matsim_perlmutter.sh` now installs `huggingface_hub`, which provides `hf`.
+`install.sh` installs `huggingface_hub`, which provides `hf`.
 If your environment predates that update, re-run:
 ```bash
-bash install_matsim_perlmutter.sh --gpu
+bash install.sh
 ```
 
 ### Out of memory during build
 If the installation fails with OOM:
 ```bash
 # Reduce parallel jobs
-MAX_JOBS=4 bash install_matsim_perlmutter.sh --gpu
+MAX_JOBS=4 bash install.sh
 ```
 
-### `fairchem-core` conflicts with HydraGNN (numpy incompatibility)
-`fairchem-core >= 2.0` requires `numpy >= 2.0` but HydraGNN pins `numpy == 1.26.4`.
-Do **not** install `fairchem-core` into `hydragnn_venv`. Use `INSTALL_UMA=1`
-which creates a separate `fairchem_venv` automatically:
+### Install FairChem for UMA
+Use the canonical opt-in so FairChem is installed and verified against the
+shared dependency contract:
 ```bash
-INSTALL_UMA=1 bash install_matsim_perlmutter.sh --gpu
-```
-If you accidentally installed `fairchem-core` into `hydragnn_venv`, restore the
-HydraGNN pins:
-```bash
-$VENV/bin/pip install numpy==1.26.4 scipy==1.14.1 click==8.0.0
-$VENV/bin/pip uninstall -y fairchem-core
+INSTALL_UMA=1 bash install.sh
 ```
 
 ---

@@ -7,7 +7,7 @@
 # a different model directory using sbatch --export overrides.
 #
 # Why transformers (not vLLM)?  vLLM is not installed in the Perlmutter
-# hydragnn_venv. The HuggingFace `transformers + Accelerate` backend (with
+# matsim-owned `.venv`. The HuggingFace `transformers + Accelerate` backend (with
 # device_map="auto") is what `matsim_agents.llm.get_chat_model` already uses
 # when MATSIM_LLM_PROVIDER=huggingface, and it runs natively on cu129.
 # Models distribute themselves across the 4 A100s (320 GB total on 80 GB nodes)

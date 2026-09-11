@@ -9,7 +9,7 @@
 #
 # Compute-node job: build vLLM from source against ROCm 7.2.
 #
-# Prerequisites (must be done on the login node first via install-rocm72.sh):
+# Prerequisites (must be done on the login node first via install-vllm-rocm72.sh):
 #   - HydraGNN ROCm 7.2 venv already exists at $VENV
 #   - vLLM source already cloned at $VLLM_SRC
 #   - vLLM ROCm build deps already pip-installed into the venv
@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=$REPO/.venv
 VLLM_SRC=$PROJ/cache/vllm-src/vllm
 
 # Load ROCm 7.2 modules (compute node has /opt/rocm-7.2.0 bind-mounted)
@@ -33,6 +33,10 @@ conda activate "$VENV"
 [[ -d "$VLLM_SRC/.git" ]] || { echo "ERROR: vLLM source not found at $VLLM_SRC"; exit 1; }
 [[ -d "$VENV/bin" ]]       || { echo "ERROR: venv not found at $VENV"; exit 1; }
 
+# This torch build's headers use C++20 `requires` clauses unconditionally;
+# vllm's CMakeLists.txt hardcodes C++17, which fails to parse them.
+sed -i 's/set(CMAKE_CXX_STANDARD 17)/set(CMAKE_CXX_STANDARD 20)/' "$VLLM_SRC/CMakeLists.txt"
+
 echo "=== Building vLLM from source (ROCm 7.2, gfx90a) ==="
 echo "Source: $VLLM_SRC  ($(cd $VLLM_SRC && git describe --tags --always))"
 echo "venv:   $VENV"
@@ -42,6 +46,11 @@ export PYTORCH_ROCM_ARCH=gfx90a
 export ROCM_HOME=/opt/rocm-7.2.0
 export HIP_HOME=/opt/rocm-7.2.0
 export CMAKE_PREFIX_PATH="/opt/rocm-7.2.0:${CMAKE_PREFIX_PATH:-}"
+
+# This torch build's LoadHIP.cmake finds HIP fine (hip_FOUND, HIP language
+# enabled) but never sets the legacy HIP_FOUND that vllm's CMakeLists.txt
+# checks, so it falls through to "Can't find CUDA or HIP installation".
+export CMAKE_ARGS="-DHIP_FOUND=ON${CMAKE_ARGS:+ ${CMAKE_ARGS}}"
 
 # Force GCC 13 from gcc-native module (system /usr/bin/c++ is GCC 7.5 which is too old for PyTorch headers)
 GCC13=/opt/cray/pe/gcc-native/13/bin

@@ -48,7 +48,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
-VENV="${MATSIM_AURORA_VENV:-${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
+VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
 LOADER="${SCRIPT_DIR}/_mpi_xpu_loader.py"
 
 MODEL_DIR="${MATSIM_MODEL_DIR:-${PROJ}/models/Mistral-Small-24B-Instruct-2501}"

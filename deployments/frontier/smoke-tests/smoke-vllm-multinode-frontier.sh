@@ -35,7 +35,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 PROJ="$(dirname "${REPO}")"
 # Under sbatch BASH_SOURCE is wrong; anchor to the repo instead.
 UTILS_DIR="$REPO/deployments/frontier/utils"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=$REPO/.venv
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/DeepSeek-R1-Distill-Qwen-32B}
 SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-deepseek-ai/DeepSeek-R1-Distill-Qwen-32B}
 SMOKE_PORT=${SMOKE_PORT:-8000}

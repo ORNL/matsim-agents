@@ -4,19 +4,10 @@
 # Atomistic simulation environment (structure I/O, relaxation)
 ase>=3.22
 
-# MACE-MP-0 universal MLFF baseline
-mace-torch>=0.3.6
-
-# UMA and AllScAIP universal MLFF baselines (Meta FAIR Chemistry)
-# Weights require HuggingFace authentication + FAIR Chemistry License:
-#   huggingface-cli login
-#   Accept terms at https://huggingface.co/facebook/UMA
-#   Accept terms at https://huggingface.co/facebook/AllScAIP
-fairchem-core>=1.2.0
-# Cap <1.0: huggingface_hub 1.x breaks transformers<4.58 (which is what
-# fairchem-core and the bundled Aurora frameworks transformers require).
-huggingface_hub>=0.24.0,<1.0
-
 # Scoring utilities
 scipy>=1.10
 numpy>=1.24
+
+# Model backends are intentionally split because MACE requires e3nn==0.4.4
+# while FairChem/HydraGNN require e3nn>=0.5. Install requirements-mace.txt or
+# requirements-fairchem.txt in the corresponding process environment.

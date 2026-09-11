@@ -51,6 +51,7 @@ class DFTJobSpec:
     atoms: Atoms
     work_dir: str
     extra: dict[str, str] | None = None  # backend-specific per-job overrides
+    assigned_nodes: tuple[str, ...] = ()
 
 
 # --------------------------------------------------------------------------- #

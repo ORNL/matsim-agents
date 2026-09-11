@@ -34,9 +34,9 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
-# Use the shared HydraGNN Perlmutter environment by default.
+# Use the matsim-owned Perlmutter environment by default.
 # Override only with MATSIM_PERLMUTTER_VENV when you explicitly know what you are doing.
-VENV_SHARED_DEFAULT="$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
+VENV_SHARED_DEFAULT="$REPO/.venv"
 VENV="${MATSIM_PERLMUTTER_VENV:-$VENV_SHARED_DEFAULT}"
 MODEL_ROOT="${MODEL_ROOT:-$PROJ/models}"
 RUN_DIR="$PROJ/runs/download-open-models-${SLURM_JOB_ID:-manual}"
@@ -46,40 +46,17 @@ source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules
 
 if [[ ! -d "$VENV" ]]; then
-  echo "ERROR: Perlmutter HydraGNN env not found: $VENV" >&2
-  echo "Build it first with: bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu" >&2
+  echo "ERROR: Perlmutter matsim environment not found: $VENV" >&2
+  echo "Build it first with: bash deployments/perlmutter/setup/install.sh" >&2
   exit 1
 fi
 
 export PATH="$VENV/bin:$PATH"
 export CONDA_PREFIX="$VENV"
-export CONDA_DEFAULT_ENV="hydragnn_venv"
+export CONDA_DEFAULT_ENV="matsim-agents"
 
-# Guard against unsupported Hugging Face CLI stacks that can overwrite sensitive
-# HydraGNN dependencies (for example click/typer constraints).
-if "$VENV/bin/python" - <<'PY'
-import importlib.metadata as m
-import sys
-try:
-    v = m.version("huggingface_hub")
-except m.PackageNotFoundError:
-    raise SystemExit(0)
-major = int(v.split(".", 1)[0])
-raise SystemExit(42 if major >= 1 else 0)
-PY
-then
-  :
-else
-  rc=$?
-  if [[ $rc -eq 42 ]]; then
-    echo "ERROR: Unsupported huggingface_hub>=1.0 detected in HydraGNN venv: $VENV" >&2
-    echo "Do not upgrade packages in-place in this environment." >&2
-    echo "Recreate/fix the Perlmutter environment with:" >&2
-    echo "  INSTALL_LLM_EXTRAS=1 bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu" >&2
-    exit 1
-  fi
-  exit $rc
-fi
+# huggingface_hub>=1.0 (the "hf" CLI) is the supported stack in this venv;
+# no legacy huggingface-cli/click compatibility guard is needed.
 
 DEFAULT_MODELS=(
   "Qwen/Qwen2.5-72B-Instruct"
@@ -117,26 +94,45 @@ if ! command -v hf >/dev/null 2>&1; then
   echo "ERROR: hf CLI not found in active environment." >&2
   echo "Do not run ad-hoc pip upgrades in HydraGNN venv." >&2
   echo "Refresh the environment with pinned extras instead:" >&2
-  echo "  INSTALL_LLM_EXTRAS=1 bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu" >&2
+  echo "  bash deployments/perlmutter/setup/install.sh" >&2
   exit 1
 fi
 
+# CFS/GPFS does NOT support fcntl.flock (OSError [Errno 524]) on compute nodes,
+# which huggingface_hub's --local-dir download requires. Stage each model on
+# flock-capable $SCRATCH (seeded from the persistent dest for resumability),
+# then rsync the result back to CFS.
+STAGE_BASE="${SCRATCH:-/tmp}"
+STAGE_ROOT="${STAGE_BASE}/hf-stage.${USER}.${SLURM_JOB_ID:-manual}"
+mkdir -p "$STAGE_ROOT"
+trap 'rm -rf "$STAGE_ROOT" 2>/dev/null || true' EXIT
+
+if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
+  export HF_TOKEN="$(< "${HOME}/.cache/huggingface/token")"
+fi
+
+rc=0
 for model_id in "${MODELS[@]}"; do
   leaf="${model_id##*/}"
   dest="$MODEL_ROOT/$leaf"
+  stage="$STAGE_ROOT/$leaf"
   log="$RUN_DIR/${leaf}.download.log"
 
-  mkdir -p "$dest"
+  mkdir -p "$dest" "$stage"
+  rsync -a "$dest/" "$stage/" 2>/dev/null || true
   echo
-  echo "[$(date)] Downloading $model_id -> $dest"
+  echo "[$(date)] Downloading $model_id -> $stage (staged, flock-capable)"
 
-  if hf download "$model_id" --local-dir "$dest" >"$log" 2>&1; then
+  if hf download "$model_id" --local-dir "$stage" >"$log" 2>&1; then
+    rsync -a "$stage/" "$dest/"
     shards=$(ls "$dest"/*.safetensors 2>/dev/null | wc -l || true)
     echo "[$(date)] DONE: $model_id (safetensors shards: $shards)"
   else
     echo "[$(date)] FAILED: $model_id (see $log)"
+    rc=1
   fi
 done
 
 echo
 echo "[$(date)] Completed download job. Logs in $RUN_DIR"
+exit "$rc"

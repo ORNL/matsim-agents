@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Latest published MACE release; requires e3nn==0.4.4.
+mace-torch==0.3.16

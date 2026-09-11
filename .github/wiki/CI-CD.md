@@ -18,13 +18,13 @@ The pipeline has five jobs that run in the order shown below.
 
 ```
 lint  ─────────────────────────────────────────────────────────► ci-passed
-smoke (Python 3.10 / 3.11 / 3.12) ──► integration ──► full ──► ci-passed
+smoke (Python 3.11 / 3.12 / 3.13 / 3.14) ──► integration ──► full ──► ci-passed
 ```
 
 | Job | Trigger dependency | Python | What it does |
 |---|---|---|---|
 | **Lint + type check** | always | 3.11 | `ruff check`, `ruff format --check`, `mypy` (informational) |
-| **Smoke tests** | always | 3.10, 3.11, 3.12 | LLM provider factory tests — no model weights, CPU only |
+| **Smoke tests** | always | 3.11, 3.12, 3.13, 3.14 | LLM provider factory tests — no model weights, CPU only |
 | **Integration tests** | after smoke | 3.11 | Full agent graph + chat-flow tests with mocked LLM |
 | **Full test suite + coverage** | after smoke + integration | 3.11 | All non-GPU tests, uploads `coverage.xml` artifact |
 | **CI passed** | after all four above | — | Gate job: fails if any upstream job failed or was cancelled |
@@ -50,7 +50,7 @@ Files: [`tests/smoke/test_llm_providers.py`](https://github.com/ORNL/matsim-agen
 
 Tests the `get_chat_model()` factory for every supported provider (Ollama, vLLM, OpenAI, Anthropic, HuggingFace) using `unittest.mock` — no real API calls or model weights are needed.
 
-Runs on Python **3.10, 3.11, 3.12** in parallel.
+Runs on every supported Python minor version: **3.11, 3.12, 3.13, and 3.14**.
 
 ### Integration tests
 

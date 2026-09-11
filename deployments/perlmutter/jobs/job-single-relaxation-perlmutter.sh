@@ -9,8 +9,7 @@
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
 # ---------------------------------------------------------------------------
-# matsim-agents: smoke-test of the planner -> executor -> analyst LangGraph
-# on a single structure using the HydraGNN MLFF backend (NERSC Perlmutter).
+# matsim-agents: typed, provenance-tracked MLIP relaxation on Perlmutter.
 #
 # Mirrors scripts/advanced/{aurora,frontier}/job-single-relaxation-*.sh.
 #
@@ -34,7 +33,7 @@ REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+VENV=$REPO/.venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
 HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
@@ -71,14 +70,7 @@ echo "MLP ckpt:    $HYDRAGNN_BRANCH_MLP_CHECKPOINT"
 echo "Run dir:     $RUN_DIR"
 echo "=========================================="
 
-# ── run the agent graph on a single structure ───────────────────────────────
-matsim-agents run \
-    "Relax the structure at ${STRUCTURE} using HydraGNN and report the final energy." \
-    --logdir          "$LOGDIR" \
-    --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
-    --output-dir      "$OUTPUT_DIR" \
-    --mlp-device      cuda \
-    --max-iterations  3 \
-    2>&1 | tee "$RUN_DIR/single-relaxation.log"
+# ── run the typed relaxation contract ───────────────────────────────────────
+source "$REPO/deployments/common/run-mlip-relaxation.sh"
 
 echo "[$(date)] Single-relaxation finished. Artifacts in $OUTPUT_DIR"

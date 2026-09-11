@@ -69,7 +69,7 @@ module load rocm/7.2.0
 module load amd-mixed/7.2.0
 module load miniforge3/23.11.0-0
 
-VENV_ROOT="${VENV_ROOT:-$(dirname "${PROJECT_ROOT}")/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72}"
+VENV_ROOT="${VENV_ROOT:-${PROJECT_ROOT}/.venv}"
 if [[ ! -d "${VENV_ROOT}" ]]; then
   echo "ERROR: HydraGNN rocm/7.2.0 venv not found: ${VENV_ROOT}" >&2
   exit 2

@@ -30,7 +30,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv
+VENV=$REPO/.venv
 MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
 MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
 RUN_DIR=$PROJ/runs/smoke-transformers-pm-${SLURM_JOB_ID:-local}

@@ -68,7 +68,6 @@ PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
 HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-${PROJ}/HydraGNN}"
-VENV_ROOT="${HYDRAGNN_ROOT}/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
 
 # ── required inputs ─────────────────────────────────────────────────────────
 BACKEND="${BACKEND:?set BACKEND=hydragnn|uma|mace}"
@@ -121,18 +120,18 @@ source "${REPO}/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
 if [[ "${BACKEND}" == "uma" ]]; then
-  VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+  VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}"
 elif [[ "${BACKEND}" == "hydragnn" ]]; then
-  VENV="${MATSIM_HYDRAGNN_VENV:-${VENV_ROOT}/hydragnn_venv}"
+  VENV="${MATSIM_HYDRAGNN_VENV:-${REPO}/.venv}"
 elif [[ "${BACKEND}" == "mace" ]]; then
-  VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}"
+  VENV="${MATSIM_MACE_VENV:-${REPO}/.venv-mace}"
 else
   echo "ERROR: BACKEND must be 'hydragnn', 'uma', or 'mace' (got '${BACKEND}')" >&2
   exit 2
 fi
 [[ ! -d "${VENV}" ]] && { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
-# fairchem_venv is a plain Python venv (has bin/activate); hydragnn_venv is a
-# conda environment (no bin/activate) and must be activated via `conda activate`.
+# Both default environments are matsim-owned Python virtual environments;
+# retain conda activation support for explicit custom environment overrides.
 if [[ -f "${VENV}/bin/activate" ]]; then
   # shellcheck disable=SC1091
   source "${VENV}/bin/activate"

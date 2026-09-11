@@ -1,11 +1,11 @@
 # =============================================================================
 # makefile.include.frontier-gpu
 #
-# VASP 6.6.0 build for Frontier (OLCF) - AMD MI250X (gfx90a) OpenMP GPU offload.
+# VASP 6.6.1 build for Frontier (OLCF) - AMD MI250X (gfx90a) OpenMP GPU offload.
 #
 # Base: VASP-shipped arch/makefile.include.cray_omp_off (Cray + HIP, -DCRAYHIP).
 # Consumed by deployments/frontier/setup/build-vasp-gpu-frontier.sh, which copies
-# this to external/vasp6/src/vasp.6.6.0/makefile.include and runs make.
+# this to external/vasp6/src/vasp.6.6.1/makefile.include and runs make.
 #
 # The build script exports (read below via ?=):
 #   ROCM_PATH       -> ROCm root (rocBLAS/rocFFT/rocSOLVER/hip/rccl)

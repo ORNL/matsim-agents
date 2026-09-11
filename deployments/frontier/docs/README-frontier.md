@@ -93,7 +93,7 @@ All Frontier scripts source `frontier-module-stack.sh` which loads:
 - `miniforge3/23.11.0-0`
 
 Then activates the vLLM-on-ROCm-7.2 venv at:
-`$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72`
+`$REPO/.venv`
 
 ## Network policy
 

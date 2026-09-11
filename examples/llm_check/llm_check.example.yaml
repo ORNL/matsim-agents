@@ -1,0 +1,13 @@
+# Independent LLM deployment/readiness qualification.
+provider: vllm
+model: Qwen/Qwen2.5-72B-Instruct
+base_url: http://localhost:8000/v1
+output_root: ./runs/llm-check
+temperature: 0.0
+timeout_sec: 120
+expected_accelerators: null
+tensor_parallel_size: null
+context_length: null
+concurrent_requests: 1
+deterministic_prompt: Return exactly the token PORTABILITY_OK and no additional text.
+scientific_objective: Propose a testable hypothesis for stable elemental silicon.

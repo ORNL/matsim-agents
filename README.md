@@ -19,26 +19,27 @@ plugged in via the same interfaces.
 ## Table of contents
 
 1. [Architecture](#architecture)
-2. [Portability across DOE supercomputers](#portability-across-doe-supercomputers)
-3. [Running on Frontier (OLCF)](#running-on-frontier-olcf)
-4. [Running on Aurora (ALCF)](#running-on-aurora-alcf)
-5. [Running on Perlmutter (NERSC)](#running-on-perlmutter-nersc)
-6. [HPC Documentation Index](#hpc-documentation-index)
-7. [Installation](#installation)
-8. [LLM backends](#llm-backends)
-9. [Downloading models for vLLM](#downloading-models-for-vllm)
-10. [Quick start](#quick-start)
-11. [Graph orchestration modes](#graph-orchestration-modes)
-12. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
-13. [Programmatic API](#programmatic-api)
-14. [CLI reference](#cli-reference)
-15. [Active-learning loop (HydraGNN ↔ DFT)](#active-learning-loop-hydragnn--dft)
-16. [Codabench Competition](#codabench-competition)
-17. [Project layout](#project-layout)
-18. [Configuration reference](#configuration-reference)
-19. [Current capabilities and planned work](#current-capabilities-and-planned-work)
-20. [Contributing](#contributing)
-21. [License & citation](#license--citation)
+2. [Scientific workflow contracts](#scientific-workflow-contracts)
+3. [Portability across DOE supercomputers](#portability-across-doe-supercomputers)
+4. [Running on Frontier (OLCF)](#running-on-frontier-olcf)
+5. [Running on Aurora (ALCF)](#running-on-aurora-alcf)
+6. [Running on Perlmutter (NERSC)](#running-on-perlmutter-nersc)
+7. [HPC Documentation Index](#hpc-documentation-index)
+8. [Installation](#installation)
+9. [LLM backends](#llm-backends)
+10. [Downloading models for vLLM](#downloading-models-for-vllm)
+11. [Quick start](#quick-start)
+12. [Graph orchestration modes](#graph-orchestration-modes)
+13. [Hypothesis-driven discovery chat](#hypothesis-driven-discovery-chat)
+14. [Programmatic API](#programmatic-api)
+15. [CLI reference](#cli-reference)
+16. [Active-learning loop (HydraGNN ↔ DFT)](#active-learning-loop-hydragnn--dft)
+17. [Codabench Competition](#codabench-competition)
+18. [Project layout](#project-layout)
+19. [Configuration reference](#configuration-reference)
+20. [Current capabilities and planned work](#current-capabilities-and-planned-work)
+21. [Contributing](#contributing)
+22. [License & citation](#license--citation)
 
 ---
 
@@ -157,11 +158,13 @@ flowchart TD
   CUDA). Build scripts and SLURM/PBS launchers are checked in for each
   site — see [Portability across DOE supercomputers](#portability-across-doe-supercomputers).
 - **Pluggable LLMs**: Ollama, vLLM, OpenAI, Anthropic via a single factory.
-- **Active-learning loop** (`matsim-agents al run`): HydraGNN-driven MD
+- **Active-learning loop** (`matsim-agents al run`): MLIP-driven MD
   generates candidates → ensemble / MC-dropout uncertainty selects the
   most informative → a DFT backend (**VASP 6.6** *or* **Quantum
   ESPRESSO `pw.x`**) labels them in parallel inside one SLURM
-  allocation → dataset is grown and HydraGNN is retrained → repeat. The
+  allocation → validated labels grow the dataset. Optional training creates a
+  candidate model; only separately approved promotion lets it drive the next
+  iteration. The
   DFT backend is a single YAML toggle (`dft.backend: vasp | qe`); both
   share an INCAR-style template path (`INCAR.template` / `pw.template`).
 - **LLM-generated MD seeds** (`md.seed_source.kind: prompt`): the LLM
@@ -183,6 +186,83 @@ flowchart TD
   - `MLIP_BACKEND=uma matsim-agents supervisor-run <composition> ...` (UMA in supervisor path)
 
 ## Workflow selection matrix
+
+### Composable scientific workflow hierarchy
+
+The public workflows form a strict dependency ladder. Higher-level workflows
+reuse lower-level services and their typed results instead of duplicating
+relaxation, labeling, ranking, or provenance logic:
+
+```text
+scientific run directory + provenance + validation
+    -> structure relaxation (MLIP | DFT | MLIP-to-DFT)
+    -> uncertainty acquisition + DFT labeling (+ optional retraining)
+    -> composition/phase exploration (+ optional embedded AL)
+    -> property-driven agentic investigation and hypothesis revision
+```
+
+Every workflow writes a collision-resistant directory such as
+`runs/2026-09-01T14-32-18Z_a8f31c/` containing the resolved request,
+provenance, event stream, structures, calculations, datasets, models, and
+results. Failed and unconverged calculations are retained with an explicit
+reason; they are not silently dropped or included in phase rankings.
+
+### Scientific workflow contracts
+
+The authoritative guide to relaxation, active learning, phase exploration,
+agentic investigation, approval gates, evidence levels, and current execution
+status is [docs/scientific-workflows.md](docs/scientific-workflows.md).
+Run-directory layout and restart rules are documented in
+[docs/run-artifacts-and-restarts.md](docs/run-artifacts-and-restarts.md), while
+scheduler-neutral ensemble DFT execution is documented in
+[docs/distributed-dft-dispatch.md](docs/distributed-dft-dispatch.md).
+
+#### Unified structure relaxation
+
+Use `matsim-agents relax CONFIG.yaml` with `mode: mlip`, `mode: dft`, or
+`mode: mlip-dft`. The last mode performs an MLIP warm start and passes its
+optimized geometry to VASP or Quantum ESPRESSO. See
+`examples/relaxation/scientific_relaxation.example.yaml`. DFT execution
+requires explicit approval by default.
+
+#### Active-learning safety defaults
+
+Active learning defaults to DFT label collection without retraining:
+
+```yaml
+trainer:
+  enabled: false
+  promote_model: false
+  promotion_approved: false
+```
+
+`enabled: true` creates a candidate model. `promote_model: true` is a separate,
+explicit decision that permits the next iteration to use it and additionally
+requires `promotion_approved: true` after validation metrics have been reviewed. Newly labeled
+frames are checked for finite energies/forces, correct force shapes, and exact
+duplicate geometries; a SHA-256 dataset manifest records the DFT energy
+reference and validation summary.
+
+#### Consistent multi-node DFT labeling
+
+The DFT batch planner discovers Slurm allocations on Frontier/Perlmutter and
+PBS nodefiles on Aurora, partitions the nodes into stable disjoint groups, and
+processes one serial queue per group. This prevents a node from being reused
+while its preceding VASP/QE step is still running. Facility launchers consume
+the assigned host list and use every configured GPU rank per node. Set
+`MATSIM_GPUS_PER_NODE` on PBS (12 for Aurora tile-as-device runs); Slurm GPU
+counts are discovered from its environment. A mismatch between allocated GPUs
+and `ranks_per_node` fails before launching expensive calculations.
+Set `dft.max_concurrent_jobs` to impose a lower concurrency cap; when omitted,
+all complete `nodes_per_job` partitions are used.
+
+#### Thermodynamic claims
+
+`relative_phase_ranking` compares only converged candidates generated in one
+exploration. `convex_hull_ranking` additionally requires a compatible,
+method-identified elemental and competing-phase reference set and reports
+formation energy, energy above hull, and decomposition. Residual forces are a
+convergence filter, not a thermodynamic ranking term.
 
 Use this table to choose the right entry point quickly.
 
@@ -304,7 +384,7 @@ GTL pins, ROCm/Cray cross-builds, CUDA-aware MPI) baked in.
 | **vLLM model server**               | ROCm 7.2.0, source build          | oneAPI                                  | CUDA                            |
 | **VASP 6.6**                        | `build-vasp-gpu-frontier.sh`      | `build-vasp-gpu-aurora.sh` (`vasp_std`/`vasp_gam`/`vasp_ncl`) | (use site module if available)  |
 | **Quantum ESPRESSO `pw.x` (GPU)**   | OpenMP target offload to gfx90a   | `QE_GPU="openmp;oneapi"`, PVC arch      | CUDA build                      |
-| **Setup entry point**               | `deployments/frontier/setup/install-rocm72.sh` | `deployments/aurora/setup/install_matsim_aurora.sh` | `deployments/perlmutter/setup/install_matsim_perlmutter.sh` |
+| **Setup entry point**               | `deployments/frontier/setup/install.sh` | `deployments/aurora/setup/install.sh` | `deployments/perlmutter/setup/install.sh` |
 | **Active-learning launcher**        | `deployments/frontier/launchers/run-active-learning-frontier.sh` | (file-coupled via SLURM)                | (file-coupled via SLURM)        |
 | **Per-platform docs**               | [docs/quantum-espresso-frontier.md](docs/quantum-espresso-frontier.md) | [docs/quantum-espresso-aurora.md](docs/quantum-espresso-aurora.md), [docs/vasp-aurora.md](docs/vasp-aurora.md) | [docs/quantum-espresso-perlmutter.md](docs/quantum-espresso-perlmutter.md) |
 
@@ -357,8 +437,12 @@ The build is cross-compiled on a login node and produces ~92 binaries
 `turbo_*` suite, `pioud.x`, `all_currents.x`, …) under
 `external/quantum-espresso/install-gpu/bin/` (gitignored). The recipe
 includes baked-in workarounds for the cce/18.0.1 ftn-7991 ICE, the
-PIOUD `etime()` link error (rewritten to F95 `cpu_time`), and the
-rocm/7.x cray-mpich SONAME mismatch.
+PIOUD `etime()` link error (rewritten to F95 `cpu_time`), the
+rocm/7.x cray-mpich SONAME mismatch, and a cce/18.0.1
+uninitialized-descriptor segfault in `pw_init_qexsd_input` that (if
+unpatched) both crashes `pw.x` and silently drops DFT+U/vdW restart
+data — see [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md#workarounds-baked-into-the-build-script)
+for details.
 
 QE uses a different module stack than matsim-agents' Python; the two
 are deliberately kept isolated and coupled only through Slurm + files.
@@ -435,7 +519,7 @@ Aurora supports vLLM-XPU serving and inference via the official ALCF `frameworks
   ```
 2. Download a supported model (e.g., Mistral-Small-24B):
   ```bash
-  source /path/to/hydragnn_venv/bin/activate
+  source /path/to/matsim-agents/.venv/bin/activate
   python deployments/aurora/setup/hf_download.py mistralai/Mistral-Small-24B-Instruct-2501
   ```
 3. Submit the smoke test:
@@ -456,7 +540,7 @@ Perlmutter (NERSC, NVIDIA A100) is supported as a first-class target
 for both the Python/ML stack and Quantum ESPRESSO GPU.
 
 - Setup overview: [`deployments/perlmutter/setup/README.md`](deployments/perlmutter/setup/README.md)
-- Matsim env install: [`deployments/perlmutter/setup/install_matsim_perlmutter.sh`](deployments/perlmutter/setup/install_matsim_perlmutter.sh)
+- Matsim environment installer: [`deployments/perlmutter/setup/install.sh`](deployments/perlmutter/setup/install.sh)
 - QE GPU build: [`deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh`](deployments/perlmutter/setup/build-qe-gpu-perlmutter.sh)
   (CPU-only variant: [`build-qe-cpu-perlmutter.sh`](deployments/perlmutter/setup/build-qe-cpu-perlmutter.sh))
 - QE detailed build guide: [`deployments/perlmutter/setup/QE-BUILD-GUIDE.md`](deployments/perlmutter/setup/QE-BUILD-GUIDE.md)
@@ -502,17 +586,18 @@ cd matsim-agents
 # Local workstation (CPU or single GPU)
 ./scripts/setup_env.sh
 
-# Frontier (OLCF, ROCm 7.2 — current standard)
-bash deployments/frontier/setup/install-rocm72.sh
-
-# Perlmutter (NERSC)
-PLATFORM=perlmutter ./scripts/setup_env.sh
+# Frontier (OLCF), Aurora (ALCF), or Perlmutter (NERSC)
+bash deployments/frontier/setup/install.sh
+bash deployments/aurora/setup/install.sh
+bash deployments/perlmutter/setup/install.sh
 ```
 
-Available `PLATFORM` values for the generic `setup_env.sh`:
-`workstation` (default), `perlmutter`, `aurora`, `andes`,
-`frontier-rocm71`, `frontier-rocm64` (legacy — the supported Frontier
-path is `deployments/frontier/setup/install-rocm72.sh`).
+The generic `scripts/setup_env.sh` remains the workstation implementation. If
+called with `PLATFORM=frontier`, `PLATFORM=aurora`, or
+`PLATFORM=perlmutter`, it delegates immediately to the corresponding canonical
+facility `install.sh` above. Each facility installer runs HydraGNN's current
+official HPC installer first and leaves HydraGNN and matsim-agents in one
+verified environment.
 
 ### ROCm version matrix on Frontier
 
@@ -522,7 +607,7 @@ in the scripts and what you should expect at runtime:
 
 | Backend | Module | Why this version |
 |---|---|---|
-| **HydraGNN venv** (used by every Frontier launcher: vLLM, HF, downloaders, smoke tests, six-model bench) | `rocm/7.2.0` | Current Frontier-supported PyTorch + ROCm path; built once into `HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72/` |
+| **HydraGNN venv** (used by every Frontier launcher: vLLM, HF, downloaders, smoke tests, six-model bench) | `rocm/7.2.0` | Current Frontier-supported PyTorch + ROCm path; built once into `matsim-agents/.venv/` |
 | **vLLM model server** | `rocm/7.2.0` | Shares the HydraGNN ROCm 7.2 venv; built from source via [`deployments/frontier/setup/build-vllm-rocm72.sh`](deployments/frontier/setup/build-vllm-rocm72.sh) |
 | **Quantum ESPRESSO GPU** | `rocm/6.2.4` *(forced)* | Frontier's `cray-mpich/8.1.31` GTL `libmpi_gtl_hsa.so` is hard-linked against `libamdhip64.so.6` (rocm 6.x SONAME). rocm/7.x ships `.so.7` and breaks the MPI Fortran link probe at CMake configure. Pin documented in [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md). |
 
@@ -536,9 +621,14 @@ Environment overrides accepted by the installer:
 | `PYTHON` | Python interpreter | `python3` |
 | `HYDRAGNN_REPO` | HydraGNN git URL | `https://github.com/ORNL/HydraGNN.git` |
 | `HYDRAGNN_REF` | Branch/tag/commit | `main` |
-| `HYDRAGNN_DIR` | Reuse an existing HydraGNN checkout | `third_party/HydraGNN` |
-| `HYDRAGNN_EXTRAS` | Args forwarded to `install_dependencies.sh` | `all dev` |
-| `LLM_BACKENDS` | Subset of `ollama vllm openai anthropic huggingface` | `ollama vllm` |
+| `HYDRAGNN_DIR` | Reuse an existing HydraGNN checkout | sibling `HydraGNN` checkout |
+| `INSTALL_ROOT` | Compiled HydraGNN dependency build root | `.hpc-build/<facility>` |
+| `VENV_PATH` | Override the matsim-owned Python environment | `.venv` |
+| `MATSIM_EXTRAS` | matsim-agents extras installed in the target environment | `hydragnn,dev,openai,ollama,anthropic,huggingface` |
+| `INSTALL_UMA` | Create and verify the matsim-owned UMA compatibility environment | `0` |
+| `UMA_VENV_PATH` | Override the UMA compatibility environment | `.venv-uma` |
+| `INSTALL_MACE` | Create and verify the matsim-owned MACE compatibility environment | `0` |
+| `MACE_VENV_PATH` | Override the MACE compatibility environment | `.venv-mace` |
 | `BOOTSTRAP_OLLAMA` | Set to `1` to install the Ollama daemon, start it, and pull `OLLAMA_MODELS` (workstation only) | `0` |
 | `OLLAMA_MODELS` | Space-separated list of models to pull when `BOOTSTRAP_OLLAMA=1` | `qwen2.5:14b` |
 
@@ -548,6 +638,13 @@ After the script finishes:
 source .venv/bin/activate    # workstation case
 matsim-agents --help
 ```
+
+HydraGNN and optional FairChem/UMA share `.venv`. Current upstream
+`mace-torch==0.3.16` has a hard `e3nn==0.4.4` requirement, which conflicts with
+HydraGNN's `e3nn==0.5.1`. Requesting `INSTALL_MACE=1` therefore creates
+`.venv-mace` inside the matsim-agents checkout. It inherits the machine's
+PyTorch stack from `.venv` without modifying `.venv`; MACE jobs run in a
+separate Python process.
 
 To bootstrap the local Ollama daemon and pull a model in one go:
 
@@ -569,7 +666,7 @@ for Frontier (ROCm) — see [docs/llm-backends-comparison.md](docs/llm-backends-
 
 | Provider | Install | Typical model | Notes |
 |---|---|---|---|
-| **`ollama`** *(default)* | `brew install ollama && ollama pull qwen2.5:14b` | `qwen2.5:14b`, `llama3.1:8b`, `deepseek-r1:14b` | Fully local, CPU/GPU/Metal. |
+| **`ollama`** *(library default)* | `brew install ollama && ollama pull llama3.1:8b` | `llama3.1:8b` *(default)*; `qwen2.5:14b`, `deepseek-r1:14b` are examples | Fully local, CPU/GPU/Metal. |
 | **`vllm`** | Run a vLLM server (`vllm serve <model> --port 8000`) | `meta-llama/Llama-3.1-8B-Instruct` | OpenAI-compatible; great for HPC. |
 | **`openai`** | `pip install matsim-agents[openai]` | `gpt-4o-mini` | Hosted. Set `OPENAI_API_KEY`. |
 | **`anthropic`** | `pip install matsim-agents[anthropic]` | `claude-3-5-sonnet-latest` | Hosted. Set `ANTHROPIC_API_KEY`. |
@@ -595,11 +692,78 @@ Configuration knobs:
 
 ```bash
 export MATSIM_LLM_PROVIDER=ollama          # or vllm | openai | anthropic | huggingface
+export MATSIM_LLM_MODEL=llama3.1:8b         # provider-specific model ID or local path
 export MATSIM_OLLAMA_BASE_URL=http://...    # optional
 export MATSIM_VLLM_BASE_URL=http://node:8000/v1
 export MATSIM_VLLM_API_KEY=EMPTY            # only if vLLM is auth-protected
 export MATSIM_HF_MODEL_PATH=/path/to/model  # huggingface provider: local model dir
 ```
+
+The exact environment-variable contract is:
+
+| Variable | Allowed values / format | Default and scope |
+|---|---|---|
+| `MATSIM_LLM_PROVIDER` | `ollama`, `vllm`, `openai`, `anthropic`, or `huggingface` | General library default: `ollama`. The portability `--live-llm` path defaults to `vllm` so it can address an HPC model server. |
+| `MATSIM_LLM_MODEL` | Provider-specific model identifier, Ollama tag, or local model path | Used by entry points that expose environment-selected models, including the live portability benchmark. If omitted there, the provider default below is used. |
+| `MATSIM_VLLM_BASE_URL` | Full OpenAI-compatible vLLM API root, normally `http[s]://host:port/v1` | vLLM only; defaults to `http://localhost:8000/v1`. Include `/v1`. |
+
+Provider model defaults implemented by `get_chat_model` are:
+
+| Provider | Default model | Identifier convention |
+|---|---|---|
+| `ollama` | `llama3.1:8b` | Tag installed in the Ollama daemon |
+| `vllm` | `meta-llama/Llama-3.1-8B-Instruct` | The model name exposed by the OpenAI-compatible server |
+| `openai` | `gpt-4o-mini` | OpenAI model identifier; requires `OPENAI_API_KEY` |
+| `anthropic` | `claude-3-5-sonnet-latest` | Anthropic model identifier; requires `ANTHROPIC_API_KEY` |
+| `huggingface` | `Qwen/Qwen2.5-72B-Instruct` | Hugging Face ID or local path selected with `MATSIM_HF_MODEL_PATH` |
+
+For vLLM, `MATSIM_LLM_MODEL` must match a model identifier accepted by the
+running server; it is not necessarily the filesystem directory from which the
+server loaded its weights. `MATSIM_VLLM_API_KEY` defaults to `EMPTY`, which is
+appropriate for an unsecured local server. Set it when the endpoint requires
+authentication. `MATSIM_VLLM_BASE_URL` is ignored by non-vLLM providers.
+
+### Multi-model scientific debate
+
+Use `matsim-agents debate debate.yaml` to assign one scientific hypothesis to
+an enclave of two or more independently configured LLMs. The YAML specifies
+each participant's name, scientific role, provider, model and optional endpoint,
+plus the user-selected `rounds`. Models see and directly challenge prior peer
+arguments; speaking order rotates each round. A final synthesis preserves both
+consensus and unresolved disputes, while the complete transcript and model
+provenance are retained in a uniquely named run directory. See
+[`docs/scientific-workflows.md`](docs/scientific-workflows.md) for the complete
+configuration and evidence limitations.
+
+The dedicated [scientific debate guide](docs/scientific-debate.md) documents
+all four equal/role-based and independent/designated modalities with runnable
+YAML examples and their different outcome semantics.
+
+The default is a debate between equals: roles do not alter prompts, all models
+receive identical neutral instructions, and every model writes an independent
+final verdict. Role-based debate and designated-model synthesis remain explicit
+options for workflows that intentionally need an asymmetric review panel.
+
+The same debate is available as the `multi_llm_debate` hypothesis-discussion
+mode of `InvestigationConfig`. It replaces the single-LLM discussion before
+phase exploration; it is not embedded in active learning. See
+[the integration guide](docs/scientific-debate.md#using-debate-inside-the-agentic-materials-workflow).
+
+Before using a real model in a scientific workflow, qualify its configuration,
+endpoint or local artifacts, loading, structured output, multi-turn behavior,
+resource visibility, and latency independently:
+
+```bash
+matsim-agents llm-check examples/llm_check/llm_check.example.yaml
+```
+
+See [docs/llm-readiness.md](docs/llm-readiness.md) for the stage contract,
+artifacts, distributed checks, and portability integration.
+
+The provider factory can address arbitrary compatible model identifiers.
+“First-class supported” is narrower: it means a model is present in
+`deployments/common/open-model-catalog.json` and therefore has catalog,
+download, launch, and benchmark coverage on the supported facilities.
 
 ### First-class open-model support
 
@@ -1073,8 +1237,9 @@ YAML field.
         │                       ▼                                            │
         │             dataset.extxyz / dataset.db  (tagged with backend)      │
         │                       │                                            │
+        │                       ├── default: retain validated labels          │
         │                       ▼                                            │
-        └─ retrain HydraGNN ── next iteration ─────────────────────────────┘
+        └─ optional train + approved promotion ── next iteration ────────────┘
 ```
 
 ### Quick start
@@ -1223,7 +1388,7 @@ python run_baselines.py --model mace        # MACE-MP-0
 python run_baselines.py --model hydragnn    # HydraGNN
 python run_baselines.py --model uma         # UMA (requires fairchem-core ≥2.20)
 python run_baselines.py --model allscaip    # AllScAIP (requires fairchem-core ≥2.20)
-python run_baselines.py --model all --relax # all baselines incl. relaxation (Tasks 3/4)
+python run_baselines.py --model all --relax # dispatches through .venv and .venv-mace
 ```
 
 UMA and AllScAIP require the `fairchem-core` package and the model checkpoints
@@ -1238,7 +1403,9 @@ benchmarks/codabench/
 ├── competition.yaml             # Codabench bundle manifest & leaderboard config
 ├── run_baselines.py             # entry point: --model mace/hydragnn/uma/allscaip/all
 ├── evaluate.py                  # local evaluation helper (mirrors the Codabench scorer)
-├── requirements.txt             # Python deps for the competition bundle
+├── requirements.txt             # backend-neutral competition dependencies
+├── requirements-mace.txt        # MACE process dependencies (e3nn 0.4.4)
+├── requirements-fairchem.txt    # UMA/AllScAIP process dependencies
 ├── install_mace_aurora.sh       # MACE-MP-0 install helper for Aurora (XPU)
 ├── fix_h5py_system_conflict_aurora.sh  # h5py/HDF5 conflict workaround (Aurora)
 ├── baselines/
@@ -1271,6 +1438,13 @@ for the full participant guide including submission formats.
 
 ## Project layout
 
+The concise, responsibility-oriented package map is maintained in
+[docs/architecture.md](docs/architecture.md). Machine assets live under
+`deployments/<facility>/{setup,launchers,jobs,smoke-tests}`. The compact tree
+below shows the current ownership model; use the per-facility READMEs for full
+file inventories. The cross-facility release gate lives under
+`benchmarks/portability/`.
+
 ```
 matsim-agents/
 ├── pyproject.toml
@@ -1283,32 +1457,25 @@ matsim-agents/
 │   ├── quantum-espresso-perlmutter.md       # QE GPU build/run on Perlmutter (A100)
 │   └── vasp-aurora.md                       # VASP 6.6 makefile lineage on Aurora
 ├── scripts/
-│   ├── setup_env.sh                         # workstation / legacy HPC env install
-│   ├── setup/
-│   │   ├── frontier/                        # Frontier (OLCF, MI250X) installers
-│   │   │   ├── install-rocm72.sh            # vLLM ROCm 7.2 master install
-│   │   │   ├── install_matsim_frontier.sh   # matsim-agents env on Frontier
-│   │   │   ├── prebuild-tvm-ffi-frontier.sh
-│   │   │   ├── build-vllm-rocm72.sh         # vLLM source build
-│   │   │   ├── build-qe-cpu-frontier.sh     # Quantum ESPRESSO CPU build
-│   │   │   ├── build-qe-gpu-frontier.sh     # Quantum ESPRESSO MI250X build
-│   │   │   ├── build-vasp-gpu-frontier.sh   # VASP 6.6 MI250X build
-│   │   │   └── frontier-module-stack.sh     # shared module-load helpers
-│   │   ├── aurora/                          # Aurora (ALCF, Intel PVC) installers
-│   │   │   ├── install_matsim_aurora.sh
-│   │   │   ├── setup_matsim_aurora.sh
-│   │   │   ├── build-qe-cpu-aurora.sh
-│   │   │   ├── build-qe-gpu-aurora.sh       # QE PVC build (oneapi+openmp)
-│   │   │   └── build-vasp-gpu-aurora.sh     # VASP 6.6 PVC build (vasp_std/_gam/_ncl)
-│   │   └── perlmutter/                      # Perlmutter (NERSC, A100) installers
-│   │       ├── install_matsim_perlmutter.sh
-│   │       ├── setup_matsim_perlmutter.sh
-│   │       ├── build-qe-cpu-perlmutter.sh
-│   │       ├── build-qe-gpu-perlmutter.sh   # QE A100 CUDA build
-│   │       ├── perlmutter-module-stack.sh
-│   │       └── QE-BUILD-GUIDE.md
-│   ├── launchers/
-│   │   ├── frontier/                        # Frontier sbatch launchers
+│   └── setup_env.sh                         # workstation install / facility dispatcher
+├── deployments/
+│   ├── frontier/setup/                      # Frontier (OLCF, MI250X) installers
+│   │   ├── install.sh                       # canonical matsim/HydraGNN installer
+│   │   ├── build-vllm-rocm72.sh             # optional vLLM source build
+│   │   ├── build-qe-{cpu,gpu}-frontier.sh
+│   │   └── build-vasp-gpu-frontier.sh
+│   ├── aurora/setup/                        # Aurora (ALCF, Intel PVC) installers
+│   │   ├── install.sh
+│   │   ├── build-qe-{cpu,gpu}-aurora.sh
+│   │   └── build-vasp-gpu-aurora.sh
+│   └── perlmutter/setup/                    # Perlmutter (NERSC, A100) installers
+│       ├── install.sh
+│       ├── build-qe-{cpu,gpu}-perlmutter.sh
+│       └── build-vasp-gpu-perlmutter.sh
+│
+│   # Each facility also owns launchers/, jobs/, smoke-tests/, and downloads.
+│   # For example:
+│   ├── frontier/launchers/                  # Frontier sbatch launchers
 │   │   │   ├── run-active-learning-frontier.sh  # `matsim-agents al run` driver
 │   │   │   ├── _vasp-step-frontier.sh       # in-allocation VASP step
 │   │   │   ├── _qe-step-frontier.sh         # in-allocation QE step
@@ -1318,28 +1485,26 @@ matsim-agents/
 │   │   │   ├── launch-test-singlenode-resume-frontier.sh
 │   │   │   ├── launch-test-multinode-frontier.sh
 │   │   │   └── launch-test-all-models-frontier.sh
-│   │   ├── aurora/
+│   ├── aurora/launchers/
 │   │   │   └── run-pw-gpu-aurora.sh         # QE pw.x GPU launcher
-│   │   └── perlmutter/
+│   ├── perlmutter/launchers/
 │   │       ├── run-pw-gpu-perlmutter.sh
 │   │       ├── run-vasp-gpu-perlmutter.sh
 │   │       ├── run-qe-warmstart-benchmark-perlmutter.sh
 │   │       ├── launch-test-singlenode-resume-perlmutter.sh
 │   │       ├── launch-test-multinode-perlmutter.sh
 │   │       └── launch-test-all-models-perlmutter.sh
-│   ├── smoke-tests/
-│   │   ├── frontier/
+│   ├── frontier/smoke-tests/
 │   │   │   ├── smoke-vllm-singlenode-frontier.sh
 │   │   │   ├── smoke-vllm-multinode-frontier.sh
 │   │   │   └── smoke-transformers-frontier.sh
-│   │   ├── aurora/
+│   ├── aurora/smoke-tests/
 │   │   │   └── smoke-vllm-singlenode-aurora.sh   # vLLM-XPU single-node smoke (qsub)
-│   │   └── perlmutter/
+│   ├── perlmutter/smoke-tests/
 │   │       ├── smoke-transformers-perlmutter.sh
 │   │       ├── smoke-transformers-multinode-perlmutter.sh
 │   │       └── _torchrun_smoke_loader.py
-│   ├── advanced/
-│   │   ├── frontier/                        # Frontier multi-step sbatch job scripts
+│   ├── frontier/jobs/                       # Frontier multi-step sbatch jobs
 │   │   │   ├── job-serve-multinode-frontier.sh
 │   │   │   ├── job-discovery-chat-frontier.sh
 │   │   │   ├── job-discovery-chat-vllm-frontier.sh
@@ -1348,7 +1513,7 @@ matsim-agents/
 │   │   │   ├── job-qe-warmstart-frontier.sh
 │   │   │   ├── job-sequential-benchmark-frontier.sh
 │   │   │   └── job-six-model-benchmark-frontier.sh
-│   │   ├── aurora/                          # Aurora multi-step qsub job scripts
+│   ├── aurora/jobs/                         # Aurora multi-step PBS jobs
 │   │   │   ├── job-serve-multinode-aurora.sh
 │   │   │   ├── job-serve-multinode-vllm-aurora.sh
 │   │   │   ├── job-discovery-chat-aurora.sh
@@ -1356,15 +1521,11 @@ matsim-agents/
 │   │   │   ├── job-active-learning-uq-aurora.sh
 │   │   │   ├── job-qe-warmstart-aurora.sh
 │   │   │   └── _mpi_xpu_loader.py
-│   │   └── perlmutter/                      # Perlmutter multi-step sbatch job scripts
+│   └── perlmutter/jobs/                     # Perlmutter multi-step sbatch jobs
 │   │       ├── job-discovery-chat-perlmutter.sh
 │   │       ├── job-single-relaxation-perlmutter.sh
 │   │       ├── job-active-learning-uq-perlmutter.sh
 │   │       └── job-qe-warmstart-perlmutter.sh
-│   └── docs/
-│       └── frontier/                        # Frontier-specific docs
-│           ├── README-frontier.md
-│           └── README-six-model-benchmark.md
 ├── src/matsim_agents/
 │   ├── cli.py                    # `matsim-agents run|plan|chat|supervisor-run|al`
 │   ├── chat.py                   # interactive discovery REPL
@@ -1451,7 +1612,9 @@ matsim-agents/
 │       └── test_vasp_warmstart.py    # end-to-end VASP warm-start (env-gated)
 ├── external/                     # gitignored: large external builds
 │   └── quantum-espresso/         # src/, build-gpu/, install-gpu/
-└── third_party/HydraGNN/         # cloned by setup_env.sh
+├── .venv/                        # matsim-owned HydraGNN/UMA environment
+├── .venv-mace/                   # optional MACE compatibility environment
+└── ../HydraGNN/                  # sibling source checkout used by HPC installers
 ```
 
 ---

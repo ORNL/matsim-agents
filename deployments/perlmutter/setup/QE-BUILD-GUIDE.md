@@ -70,7 +70,7 @@ Always load the environment:
 source deployments/perlmutter/setup/perlmutter-module-stack.sh
 load_perlmutter_modules_gpu     # for GPU runs
 # or: load_perlmutter_modules   # for CPU-only
-conda activate scripts/perlmutter_venv
+source .venv/bin/activate
 ```
 
 ### GPU Run (on GPU partition)

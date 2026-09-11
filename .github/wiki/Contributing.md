@@ -38,7 +38,7 @@ pytest tests/ -v -m "not gpu"   # full test suite (no GPU)
 3. Push to your branch and open a PR targeting `main`.
 4. **All CI checks must pass** before the PR can be merged:
    - `Lint + type check` — ruff lint, ruff format, mypy
-   - `Smoke tests (Python 3.10)`, `Smoke tests (Python 3.11)`, `Smoke tests (Python 3.12)`
+   - `Smoke tests (Python 3.11–3.14)` matrix
    - `Integration tests (agent graph + chat)`
    - `Full test suite + coverage`
    - **`CI passed`** — the gate job that summarises all of the above
