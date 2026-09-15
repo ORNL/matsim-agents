@@ -1,0 +1,11 @@
+{
+  "facility": "perlmutter",
+  "scheduler": "slurm",
+  "accelerator": "nvidia-a100",
+  "gpus_per_node": 4,
+  "ranks_per_node": 4,
+  "launchers": {
+    "qe": "deployments/perlmutter/launchers/_qe-step-perlmutter.sh",
+    "vasp": "deployments/perlmutter/launchers/_vasp-step-perlmutter.sh"
+  }
+}

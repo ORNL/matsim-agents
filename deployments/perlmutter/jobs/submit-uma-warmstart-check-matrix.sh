@@ -17,10 +17,10 @@ Environment overrides:
   PROJECT_ROOT, RUNS_ROOT, FIXTURE, REPEATS, TIME_LIMIT, QOS, ACCOUNT
   MATSIM_QE_PSEUDO_DIR, MATSIM_QE_LAUNCHER, MATSIM_QE_TIMEOUT_SEC
   MATSIM_QE_MLP_DEVICE, MATSIM_UMA_MODEL_NAME, MATSIM_UMA_TASK
-  MATSIM_FAIRCHEM_VENV   # override fairchem_venv path
+  MATSIM_FAIRCHEM_VENV   # override the matsim .venv path
 
 Example:
-  REPEATS=3 FIXTURE=MoNbTaW_HEA QOS=premium ACCOUNT=m5216_g \
+  REPEATS=3 FIXTURE=MoNbTaW_HEA QOS=premium ACCOUNT=<allocation> \
   deployments/perlmutter/jobs/submit-uma-warmstart-check-matrix.sh
 EOF
   exit 0
@@ -42,7 +42,7 @@ FIXTURE="${FIXTURE:-MoNbTaW_HEA}"
 REPEATS="${REPEATS:-3}"
 TIME_LIMIT="${TIME_LIMIT:-02:00:00}"
 QOS="${QOS:-regular}"
-ACCOUNT="${ACCOUNT:-m5216}"
+ACCOUNT="${ACCOUNT:?set ACCOUNT to your NERSC allocation}"
 
 PSEUDO_DIR="${MATSIM_QE_PSEUDO_DIR:-${REPO_ROOT}/external/quantum-espresso/src/pseudo}"
 QE_LAUNCHER="${MATSIM_QE_LAUNCHER:-${REPO_ROOT}/deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh}"
@@ -51,8 +51,8 @@ MLP_DEVICE="${MATSIM_QE_MLP_DEVICE:-cuda}"
 UMA_MODEL="${MATSIM_UMA_MODEL_NAME:-uma-s-1p1}"
 UMA_TASK="${MATSIM_UMA_TASK:-omat}"
 
-VENV_ROOT="${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
-FAIRCHEM_VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+VENV_ROOT="${REPO_ROOT}/.hpc-build/perlmutter"
+FAIRCHEM_VENV="${MATSIM_FAIRCHEM_VENV:-${REPO_ROOT}/.venv-uma}"
 
 for req in "${PSEUDO_DIR}" "${QE_LAUNCHER}" "${FAIRCHEM_VENV}"; do
   if [[ ! -e "${req}" ]]; then
@@ -62,10 +62,7 @@ for req in "${PSEUDO_DIR}" "${QE_LAUNCHER}" "${FAIRCHEM_VENV}"; do
 done
 
 mkdir -p "${RUNS_ROOT}"
-
-# Shared HF cache so the model is downloaded once and reused across jobs.
-HF_HOME_DIR="${PROJ}/models/hf_cache"
-mkdir -p "${HF_HOME_DIR}"
+MODEL_ARTIFACTS_ROOT="${MATSIM_MODEL_ARTIFACTS_ROOT:-${PROJ}/models/artifacts}"
 
 # facebook/UMA is gated — the job script reads the token itself from
 # ~/.cache/huggingface/token at runtime (HOME is shared on Perlmutter).
@@ -93,8 +90,7 @@ for ((i = 1; i <= REPEATS; i++)); do
   export_vars+=",MATSIM_UMA_MODEL_NAME=${UMA_MODEL}"
   export_vars+=",MATSIM_UMA_TASK=${UMA_TASK}"
   export_vars+=",MATSIM_FAIRCHEM_VENV=${FAIRCHEM_VENV}"
-  export_vars+=",HF_HOME=${HF_HOME_DIR}"
-  export_vars+=",FAIRCHEM_CACHE_DIR=${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
+  export_vars+=",MATSIM_MODEL_ARTIFACTS_ROOT=${MODEL_ARTIFACTS_ROOT}"
 
   jid="$(sbatch --parsable \
     --account="${ACCOUNT}" \

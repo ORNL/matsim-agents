@@ -74,10 +74,17 @@ export OMP_STACKSIZE="${OMP_STACKSIZE:-512M}"
 cd "${WORK_DIR}"
 
 echo "[qe-step] $(date) host=$(hostname) work_dir=${WORK_DIR}"
+NODE_ARGS=()
+if [[ -n "${MATSIM_DFT_ASSIGNED_NODES:-}" ]]; then
+  NODE_ARGS=(--nodelist "${MATSIM_DFT_ASSIGNED_NODES}")
+fi
+echo "[qe-step] assigned_nodes=${MATSIM_DFT_ASSIGNED_NODES:-scheduler-selected}"
 echo "[qe-step] srun -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK} \\"
 echo "             --gpus-per-node=${RANKS_PER_NODE} --gpu-bind=closest ${PW_BIN} -in ${INPUT}"
 
 exec srun \
+  --exclusive \
+  "${NODE_ARGS[@]}" \
   -N "${NNODES}" \
   -n "${TOTAL_RANKS}" \
   -c "${THREADS_PER_RANK}" \

@@ -79,8 +79,9 @@ special memory management — each call processes one prompt at a time.
 
 - **Zero build required** — both packages are pure Python wheels; `pip install
   accelerate` is all you need.
-- **Works immediately on ROCm** — no source compilation; validated on Frontier
-  with `torch 2.11.0+rocm7.1` and 8 MI250X GCDs.
+- **Works without a separate inference-server build** — Transformers uses the
+  PyTorch 2.14 environment installed by the current HydraGNN recipe. Frontier
+  accelerator execution must be qualified against the selected ROCm module.
 - **Full model flexibility** — you can inspect activations, attach hooks,
   modify the forward pass, or inject custom layers with a few lines of Python.
 - **Supports every architecture on day 0** — new models land in Transformers
@@ -134,7 +135,7 @@ sbatch deployments/frontier/smoke-tests/smoke-vllm-singlenode-frontier.sh   # th
 
 ## Choosing for Perlmutter (NERSC, NVIDIA A100)
 
-The Perlmutter `hydragnn_venv` ships with `transformers` + `accelerate` but
+The Perlmutter matsim-owned `.venv` ships with `transformers` + `accelerate` but
 **no vLLM and no DeepSpeed**, so all bundled smoke jobs use the
 HuggingFace `transformers` backend. Multi-node sharding is done with
 `transformers`' built-in `tp_plan="auto"` tensor-parallel planner over

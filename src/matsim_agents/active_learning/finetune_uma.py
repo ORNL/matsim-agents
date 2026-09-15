@@ -107,6 +107,11 @@ def _resolve_base_checkpoint(base_model: str) -> str:
 
     if os.path.isfile(base_model):
         return base_model
+    from matsim_agents.backends.mlip.uma_artifacts import resolve_uma_artifact_bundle
+
+    bundle = resolve_uma_artifact_bundle(base_model)
+    if bundle is not None:
+        return str(bundle.checkpoint)
     from fairchem.core.calculate.pretrained_mlip import (
         pretrained_checkpoint_path_from_name,
     )

@@ -170,13 +170,12 @@ RUN_TAG per case (`vars.RUN_TAG` in each `examples/paper_cases/al_*.yaml`):
 ### 5. UMA weights must be prefetched (AL loop prerequisite)
 
 The AL loop that drives VASP uses the UMA MLFF, and compute nodes have no
-internet. `fairchem-core` ignores `HF_HOME` and uses `FAIRCHEM_CACHE_DIR`
-(default `~/.cache/fairchem` on CFS, which cannot `fcntl.flock` over DVS →
-`OSError [Errno 524]`). Prefetch once and point the cache at `$SCRATCH`:
+internet. Install the model once as a durable local bundle before submitting
+the AL job:
 
 ```bash
 sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
-# the job scripts export FAIRCHEM_CACHE_DIR=$SCRATCH/matsim-agents/fairchem_cache
+# the job scripts load $PROJ/models/artifacts/uma/<model>/ directly
 ```
 
 See [`docs/model-download.md`](model-download.md) ("UMA MLIP weights on
