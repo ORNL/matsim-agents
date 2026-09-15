@@ -53,7 +53,7 @@ FIXTURE="${FIXTURE:-MoNbTaW_HEA}"
 REPEATS="${REPEATS:-5}"
 TIME_LIMIT="${TIME_LIMIT:-02:00:00}"
 QOS="${QOS:-regular}"
-ACCOUNT="${ACCOUNT:-m5216}"
+ACCOUNT="${ACCOUNT:?set ACCOUNT to your NERSC allocation}"
 
 POTCAR_DIR="${MATSIM_VASP_POTCAR_DIR:-${REPO_ROOT}/external/vasp6/potcar/potpaw_PBE.64}"
 HYDRAGNN_LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${PROJ}/HydraGNN/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64}"

@@ -1,0 +1,15 @@
+objective: >
+  Identify a chemically stable, reasonably abundant material with high
+  thermoelectric figure of merit ZT near 800 K.
+output_root: ./runs
+hypothesis_discussion:
+  mode: single_llm
+  single_llm:
+    provider: vllm
+    model: org/model-a
+    base_url: http://node-a:8000/v1
+phase_policy:
+  relax_structures: true
+  active_learning: true
+  retrain_mlip: false
+  reevaluate_after_retraining: false

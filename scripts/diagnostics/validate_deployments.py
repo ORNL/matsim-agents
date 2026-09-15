@@ -17,6 +17,14 @@ MOVED_PATH = re.compile(
 EMBEDDED_ACCOUNT = re.compile(r"^#(?:SBATCH|PBS) -A\s+(?!<)", re.MULTILINE)
 ABSOLUTE_SCHEDULER_LOG = re.compile(r"^#SBATCH -[oe]\s+/", re.MULTILINE)
 SITE_PROJECT_PATH = re.compile(r"/(?:lustre/orion|lus/flare|global/cfs)/")
+NONEXISTENT_MAIN_MODULE = re.compile(r"python(?:3)?\s+-m\s+matsim_agents\.main\b")
+LEGACY_UQ_DRIVER = re.compile(r"examples/active_learning_uq\.py")
+
+FACILITIES = ("frontier", "aurora", "perlmutter")
+SHARED_JOB_CONTRACTS = {
+    "job-single-relaxation-{facility}.sh": "deployments/common/run-mlip-relaxation.sh",
+    "job-active-learning-uq-{facility}.sh": "deployments/common/run-active-learning.sh",
+}
 
 
 def validate() -> list[str]:
@@ -47,12 +55,37 @@ def validate() -> list[str]:
                 "use --hydragnn-branch-mlp-checkpoint"
             )
 
+        if match := NONEXISTENT_MAIN_MODULE.search(text):
+            errors.append(f"{rel}: references nonexistent Python module: {match.group(0)!r}")
+        if match := LEGACY_UQ_DRIVER.search(text):
+            errors.append(
+                f"{rel}: uses retired standalone UQ driver; use matsim-agents al run: "
+                f"{match.group(0)!r}"
+            )
+        if "examples/paper_cases/singlepass.py" in text and (
+            "MATSIM_LEGACY_MANUSCRIPT_REPRODUCTION=1" not in text
+        ):
+            errors.append(f"{rel}: singlepass manuscript driver must be explicitly marked legacy")
+
         if path.suffix == ".sh":
             result = subprocess.run(
                 ["bash", "-n", str(path)], capture_output=True, text=True, check=False
             )
             if result.returncode:
                 errors.append(f"{rel}: bash -n failed: {result.stderr.strip()}")
+
+    for facility in FACILITIES:
+        for pattern, shared_runner in SHARED_JOB_CONTRACTS.items():
+            name = pattern.format(facility=facility)
+            path = DEPLOYMENTS / facility / "jobs" / name
+            if not path.is_file():
+                errors.append(f"missing cross-facility workflow job: {path.relative_to(ROOT)}")
+                continue
+            text = path.read_text(encoding="utf-8")
+            if shared_runner not in text:
+                errors.append(
+                    f"{path.relative_to(ROOT)}: must delegate to shared runner {shared_runner}"
+                )
     return errors
 
 

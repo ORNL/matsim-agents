@@ -47,7 +47,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=$REPO/.venv
 RUN_DIR=$PROJ/runs/vllm-multinode-$SLURM_JOB_ID
 mkdir -p "$RUN_DIR"
 
@@ -119,14 +119,8 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_prox
 export no_proxy='*'
 export NO_PROXY='*'
 
-# Use prebuilt tvm_ffi torch-c-dlpack .so from proj-shared (avoids JIT rebuild hang at import)
-export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
-TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
-if [[ ! -s "$TVM_FFI_SO" ]]; then
-  echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
-  echo "       Rebuild with: deployments/frontier/setup/prebuild-tvm-ffi-frontier.sh" >&2
-  exit 1
-fi
+source "$REPO/deployments/frontier/setup/tvm-ffi-artifact.sh"
+require_tvm_ffi_artifact "$REPO" "$VENV"
 rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true
 
 # Allow Ray/vLLM to use all GCDs on each node

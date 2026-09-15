@@ -3,10 +3,10 @@
 # Quick compute-node smoke checks for QE and VASP runtimes on Perlmutter.
 #
 # Usage examples:
-#   srun -A m5216 -q interactive -C gpu -N 1 -G 1 -t 00:10:00 \
+#   srun -A <allocation> -q interactive -C gpu -N 1 -G 1 -t 00:10:00 \
 #     bash deployments/perlmutter/setup/smoke_qe_vasp_perlmutter.sh
 #
-#   sbatch -A m5216 -q debug -C gpu -N 1 -t 00:10:00 \
+#   sbatch -A <allocation> -q debug -C gpu -N 1 -t 00:10:00 \
 #     --output=%x-%j.out --error=%x-%j.err \
 #     --wrap="bash deployments/perlmutter/setup/smoke_qe_vasp_perlmutter.sh"
 
@@ -22,7 +22,7 @@ source "${SCRIPT_DIR}/setup_matsim_perlmutter.sh" --gpu
 export MPICH_GPU_SUPPORT_ENABLED=0
 
 QE_BIN="${REPO_ROOT}/external/quantum-espresso/install-gpu/bin/pw.x"
-VASP_STD_BIN="${REPO_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std"
+VASP_STD_BIN="${REPO_ROOT}/external/vasp6/src/vasp.6.6.1/bin/vasp_std"
 
 PASS=0
 FAIL=0

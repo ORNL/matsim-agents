@@ -27,6 +27,8 @@
     "name": "mistral-large-3",
     "model": "mistralai/Mistral-Large-3-675B-Instruct-2512",
     "base_url_env": "MATSIM_VLLM_MISTRAL_LARGE3_BASE_URL",
+    "debate_enabled": false,
+    "debate_skip_reason": "vLLM 0.29.0 Pixtral imports are incompatible with transformers 5.17.0",
     "capabilities": ["agentic", "multilingual", "multimodal"]
   },
   {

@@ -1,0 +1,44 @@
+# Compute-qualification case: pure QE relaxation of the benchmark Si cell.
+# structure_path and output_root are overridden by qualification.py at run time.
+#
+# The launcher is deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh
+# rather than a bare pw.x path: it loads the matching PrgEnv-nvidia/NVHPC 25.5
+# module stack, sets CUDA_HOME/LD_LIBRARY_PATH, disables GPU-aware MPI
+# (MPICH_GPU_SUPPORT_ENABLED=0) to avoid a GTL-library-not-linked abort on
+# this launch path, and runs pw.x under srun. A bare pw.x path inherits
+# whatever MPICH_GPU_SUPPORT_ENABLED the driver process happens to have and
+# aborts with "GTL library is not linked".
+mode: dft
+
+geometry:
+  relax_atoms: true
+  relax_cell: true
+  fixed_atom_indices: []
+  charge: 0.0
+  spin: 0.0
+  preserve_symmetry: false
+
+dft:
+  backend: qe
+  launcher:
+    - bash
+    - /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh
+  pseudo_dir: /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/external/quantum-espresso/src/pseudo
+  timeout_sec: 7200
+  settings:
+    pseudopotentials:
+      Si: Si_r.upf
+    kpts: [4, 4, 4]
+    koffset: [0, 0, 0]
+    occupations: smearing
+    smearing: gaussian
+    degauss_ry: 0.007
+
+dft_approved: true
+approvals:
+  before_dft: true
+  before_retraining: true
+  before_model_promotion: true
+
+max_steps: 200
+force_tolerance_eV_per_A: 0.02

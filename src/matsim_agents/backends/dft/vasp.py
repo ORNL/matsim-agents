@@ -62,6 +62,9 @@ class VASPBackend:
         t0 = time.time()
         with open(log_path, "w") as logf:
             try:
+                env = os.environ.copy()
+                if spec.assigned_nodes:
+                    env["MATSIM_DFT_ASSIGNED_NODES"] = ",".join(spec.assigned_nodes)
                 proc = subprocess.run(
                     argv,
                     cwd=spec.work_dir,
@@ -69,6 +72,7 @@ class VASPBackend:
                     stderr=subprocess.STDOUT,
                     timeout=cfg.timeout_sec,
                     check=False,
+                    env=env,
                 )
                 rc = proc.returncode
             except subprocess.TimeoutExpired:

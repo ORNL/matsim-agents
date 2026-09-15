@@ -349,6 +349,26 @@ else
   echo "--- pimd_subrout.f90 already patched (or missing); skipping ---"
 fi
 
+# ---- Source patch: cce-18.0.1 uninitialized-descriptor segfault fix --------
+# pw.x segfaults deterministically inside pw_init_qexsd_input on cce-18.0.1:
+# hybrid_type/dftU_type/vdW_type have several ALLOCATABLE array components,
+# and when declared as plain automatic locals here, cce-18.0.1 does not
+# reliably initialize their allocation-status descriptor. Fix: SAVE +
+# explicit reset/allocate on those locals (pw_init_qexsd_input.f90), plus a
+# descriptor-safe manual deep-copy replacing whole-structure derived-type
+# assignment in qes_init_dft (Modules/qes_init_module.f90), plus matching
+# defensive hardening in pw_write_schema (PW/src/pw_restart_new.f90). See
+# deployments/frontier/setup/patches/qe-cce-segfault-fix/ for the full patch
+# and rationale. Idempotent: skipped if the marker comment is already present.
+QES_INIT_F="${SRC_DIR}/Modules/qes_init_module.f90"
+CCE_SEGFAULT_PATCH="${SCRIPT_DIR}/patches/qe-cce-segfault-fix/cce-uninitialized-descriptor-segfault.patch"
+if [[ -f "${QES_INIT_F}" ]] && ! grep -q 'Frontier/cce-18.0.1 workaround' "${QES_INIT_F}"; then
+  echo "--- Patching cce-18.0.1 uninitialized-descriptor segfault (pw_init_qexsd_input, qes_init_module, pw_restart_new) ---"
+  ( cd "${SRC_DIR}" && patch -p1 --forward < "${CCE_SEGFAULT_PATCH}" )
+else
+  echo "--- cce-18.0.1 segfault fix already applied (or files missing); skipping ---"
+fi
+
 # ---- Build ------------------------------------------------------------------
 # Build the QE target groups we actually need under the ICE retry loop.
 # Avoid `make all` because it pulls in dev/test targets that reference

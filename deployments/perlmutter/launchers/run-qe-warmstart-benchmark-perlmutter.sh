@@ -14,7 +14,7 @@
 # (tests/integration/test_qe_warmstart.py) on a single Perlmutter GPU node.
 #
 # Architecture (Perlmutter is simpler than Frontier here):
-#   * HydraGNN ASE relax phase  : cudatoolkit/12.9 + hydragnn_venv (torch cu129)
+#   * HydraGNN ASE relax phase  : cudatoolkit/12.9 + matsim .venv (torch 2.13)
 #   * pw.x phase                : NVHPC 25.5 (also CUDA 12.9) — same major.minor
 #                                 as the PyTorch wheel, so no module conflict.
 #   The pw.x launcher handles the PrgEnv-nvidia swap inside its own subshell
@@ -68,7 +68,7 @@ fi
 source "${PROJECT_ROOT}/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
-VENV_ROOT="$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv"
+VENV_ROOT="${PROJECT_ROOT}/.venv"
 if [[ ! -d "${VENV_ROOT}" ]]; then
   echo "ERROR: HydraGNN venv not found: ${VENV_ROOT}" >&2
   exit 2

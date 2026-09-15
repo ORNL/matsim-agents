@@ -7,7 +7,7 @@ name = "matsim-agents"
 version = "0.1.0"
 description = "Multi-agent AI framework for atomistic materials simulation and discovery."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.15"
 license = { text = "BSD-3-Clause" }
 authors = [{ name = "ORNL Multi-Agentic AI for Materials" }]
 keywords = ["agents", "langgraph", "materials", "atomistic", "hydragnn", "ase", "mlff"]
@@ -16,6 +16,10 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Physics",
 ]
@@ -24,8 +28,11 @@ dependencies = [
     "langgraph>=0.2.40",
     "langchain-core>=0.3.0",
     "pydantic>=2.7",
-    "ase>=3.23",
-    "numpy>=1.26",
+    # Keep the scientific ABI aligned with HydraGNN main. Its compiled PyG
+    # extensions and FairChem/UMA integration are qualified against this pair.
+    "ase==3.26.0",
+    "numpy==2.4.6",
+    "scipy==1.17.1",
     "typer>=0.12",
     "rich>=13.7",
     "pyyaml>=6.0",
@@ -40,24 +47,33 @@ dependencies = [
 
 [project.optional-dependencies]
 hydragnn = [
-    # HydraGNN and torch_geometric must be installed manually following
-    # https://github.com/ORNL/HydraGNN. Listed here for reference.
-    "torch>=2.2",
+    # HydraGNN itself and compiled PyG extensions remain facility-installed;
+    # these pins declare the Python-level compatibility contract from main.
+    "torch==2.14.0",
+    "torchvision==0.29.0",
+    "e3nn==0.5.1",
+    "torch-ema==0.3",
+    "torchmetrics==1.4.0",
+    "torch-geometric==2.8.0",
 ]
-mace = ["mace-torch>=0.3.6"]
+mace = [
+    # Upstream MACE 0.3.16 pins e3nn==0.4.4, which cannot coexist with the
+    # HydraGNN e3nn==0.5.1 extra. HPC installers therefore put this extra in
+    # the matsim-owned .venv-mace compatibility environment.
+    "mace-torch==0.3.16",
+]
 uma = [
-    # fairchem-core >= 2.0 requires numpy >= 2.0 and scipy >= 1.15, which
-    # conflicts with HydraGNN's numpy==1.26.4 / scipy==1.14.1 pins.
-    # Do NOT install this extra into the HydraGNN venv.
-    # Use INSTALL_UMA=1 with the machine install scripts, which create a
-    # separate fairchem_venv to avoid the conflict.
-    "fairchem-core",
+    # UMA is provided by FairChem. FairChem 2.22 requires torch<2.14 and e3nn
+    # 0.6, so HPC installers isolate it from HydraGNN in .venv-uma.
+    # UMA/OMat support is part of FairChem 2.x; leaving this unbounded allows
+    # pip to backtrack to fairchem-core 1.0, which does not provide the UMS API.
+    "fairchem-core>=2.20",
 ]
 openai = ["langchain-openai>=0.2.0"]
 ollama = ["langchain-ollama>=0.2.0"]
 vllm = ["langchain-openai>=0.2.0"]  # vLLM uses the OpenAI-compatible client
 anthropic = ["langchain-anthropic>=0.2.0"]
-huggingface = ["langchain-huggingface>=0.1.0", "transformers>=4.40", "accelerate>=0.30"]
+huggingface = ["langchain-huggingface>=0.1.0", "hf_transfer", "transformers>=4.40", "accelerate>=0.30"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
@@ -76,7 +92,7 @@ packages = ["src/matsim_agents"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.format]
 # Match black==21.5b1 (HydraGNN pinned version):

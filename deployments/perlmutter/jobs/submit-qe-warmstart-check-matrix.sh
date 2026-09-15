@@ -42,7 +42,7 @@ FIXTURE="${FIXTURE:-MoNbTaW_HEA}"
 REPEATS="${REPEATS:-5}"
 TIME_LIMIT="${TIME_LIMIT:-02:00:00}"
 QOS="${QOS:-regular}"
-ACCOUNT="${ACCOUNT:-m5216}"
+ACCOUNT="${ACCOUNT:?set ACCOUNT to your NERSC allocation}"
 
 PSEUDO_DIR="${MATSIM_QE_PSEUDO_DIR:-${REPO_ROOT}/external/quantum-espresso/src/pseudo}"
 HYDRAGNN_LOGDIR="${MATSIM_HYDRAGNN_LOGDIR:-${PROJ}/HydraGNN/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64}"
