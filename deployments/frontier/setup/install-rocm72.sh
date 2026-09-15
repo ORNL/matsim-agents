@@ -84,10 +84,12 @@ fi
 # vLLM v0.20.0 uses amdsmi (not torch.cuda.is_available()) to detect ROCm GPUs.
 # The source directory is read-only so copy to /tmp first.
 echo "Installing amdsmi from ROCm 7.2..."
-rm -rf /tmp/amd_smi_build
-cp -r /opt/rocm-7.2.0/share/amd_smi /tmp/amd_smi_build
-pip install /tmp/amd_smi_build --no-deps
-rm -rf /tmp/amd_smi_build
+(
+    amd_smi_build_dir="$(mktemp -d /tmp/amd_smi_build.XXXXXX)"
+    trap 'rm -rf -- "$amd_smi_build_dir"' EXIT
+    cp -r /opt/rocm-7.2.0/share/amd_smi "$amd_smi_build_dir/amd_smi"
+    pip install "$amd_smi_build_dir/amd_smi" --no-deps
+)
 
 # Pre-clone triton v3.6.0 for the compute-node build (no internet on compute nodes).
 # build-vllm-rocm72.sh sets TRITON_KERNELS_SRC_DIR to bypass cmake FetchContent.
