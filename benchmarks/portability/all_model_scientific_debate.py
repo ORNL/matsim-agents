@@ -132,12 +132,32 @@ def execute_all_model_scientific_debate(
     rounds: int,
     catalog: Path = CATALOG,
     models_root: Path = DEFAULT_MODELS_ROOT,
+    excluded_models: set[str] | None = None,
     environment: dict[str, str] | None = None,
     model_factory=get_chat_model,
 ) -> dict[str, Any]:
     if rounds < 2:
         raise ValueError("LLM portability debate requires at least two rounds")
     entries, skipped_nonlocal, disabled = local_catalog_entries(load_catalog(catalog), models_root)
+    exclusions = excluded_models or set()
+    matched_exclusions = {
+        exclusion
+        for exclusion in exclusions
+        if any(
+            exclusion in {str(entry["name"]), str(entry["model"])} for entry in entries
+        )
+    }
+    known_exclusions = {
+        str(entry["name"])
+        for entry in entries
+        if {str(entry["name"]), str(entry["model"])} & exclusions
+    }
+    unknown_exclusions = exclusions - matched_exclusions
+    if unknown_exclusions:
+        raise ValueError(f"unknown or unavailable excluded models: {sorted(unknown_exclusions)}")
+    entries = [entry for entry in entries if str(entry["name"]) not in known_exclusions]
+    if len(entries) < 2:
+        raise ValueError("runtime model exclusions leave fewer than two debate participants")
     participants = catalog_participants(entries, environment=environment)
     output.mkdir(parents=True, exist_ok=True)
     config = ScientificDebateConfig(
@@ -162,6 +182,7 @@ def execute_all_model_scientific_debate(
             "models_root": str(models_root),
             "skipped_nonlocal_models": skipped_nonlocal,
             "disabled_models": disabled,
+            "runtime_excluded_models": sorted(known_exclusions),
             "turn_count": len(debate.turns),
             "debate_run_directory": debate.run_directory,
             "transcript_path": debate.transcript_path,
@@ -180,6 +201,7 @@ def execute_all_model_scientific_debate(
             "models_root": str(models_root),
             "skipped_nonlocal_models": skipped_nonlocal,
             "disabled_models": disabled,
+            "runtime_excluded_models": sorted(known_exclusions),
             "errors": [f"{type(error).__name__}: {error}"],
         }
     (output / "all_model_scientific_debate_result.json").write_text(
@@ -198,6 +220,12 @@ def main() -> int:
         type=Path,
         default=Path(os.environ.get("MODEL_ROOT", DEFAULT_MODELS_ROOT)),
     )
+    parser.add_argument(
+        "--exclude-model",
+        action="append",
+        default=[],
+        help="catalog name or model ID to exclude for this facility run (repeatable)",
+    )
     args = parser.parse_args()
     if args.rounds < 2:
         parser.error("--rounds must be at least 2")
@@ -206,6 +234,7 @@ def main() -> int:
         rounds=args.rounds,
         catalog=args.catalog,
         models_root=args.models_root,
+        excluded_models=set(args.exclude_model),
     )
     print(json.dumps(result, indent=2))
     return 0 if result["status"] == "passed" else 1

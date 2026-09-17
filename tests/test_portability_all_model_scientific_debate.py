@@ -161,6 +161,26 @@ def test_enclave_excludes_models_disabled_by_catalog_policy(tmp_path):
     assert result["disabled_models"] == {"model-1": "known runtime incompatibility"}
 
 
+@pytest.mark.parametrize("exclusion", ["model-1", "org/model-1"])
+def test_enclave_excludes_model_for_facility_runtime(tmp_path, exclusion):
+    result = execute_all_model_scientific_debate(
+        output=tmp_path / "output",
+        rounds=2,
+        catalog=_catalog(tmp_path),
+        models_root=_models_root(tmp_path, 0, 1, 2),
+        excluded_models={exclusion},
+        environment={
+            "MODEL_0_URL": "http://node:8000/v1",
+            "MODEL_2_URL": "http://node:8002/v1",
+        },
+        model_factory=lambda **kwargs: _FakeModel(kwargs["model"]),
+    )
+
+    assert result["status"] == "passed"
+    assert result["required_models"] == ["org/model-0", "org/model-2"]
+    assert result["runtime_excluded_models"] == ["model-1"]
+
+
 def test_enclave_rejects_fewer_than_two_rounds(tmp_path):
     with pytest.raises(ValueError, match="at least two"):
         execute_all_model_scientific_debate(

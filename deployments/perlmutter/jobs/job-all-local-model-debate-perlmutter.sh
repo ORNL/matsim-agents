@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J local-llm-debate
-#SBATCH -N 21
+#SBATCH -N 17
 #SBATCH -C gpu&hbm80g
 #SBATCH -q premium
 #SBATCH --gpus-per-node=4
@@ -19,25 +19,25 @@ OUTPUT="${RUNS_ROOT:-$PROJ/runs}/portability/local-llm-debate-${SLURM_JOB_ID}"
 PYTHON="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}/bin/python3"
 
 NAMES=(
-  kimi-k2.5 glm-4.7 glm-4.7-flash deepseek-v3.2
+  kimi-k2.5 glm-4.7 glm-4.7-flash
   qwen3-235b-a22b-instruct-2507 qwen3-235b-a22b-thinking-2507
   devstral-2 gemma-4-31b-it gemma-4-26b-a4b-it
 )
 MODEL_IDS=(
   moonshotai/Kimi-K2.5 zai-org/GLM-4.7 zai-org/GLM-4.7-Flash
-  deepseek-ai/DeepSeek-V3.2 Qwen/Qwen3-235B-A22B-Instruct-2507
+  Qwen/Qwen3-235B-A22B-Instruct-2507
   Qwen/Qwen3-235B-A22B-Thinking-2507 mistralai/Devstral-2-123B-Instruct-2512
   google/gemma-4-31B-it google/gemma-4-26B-A4B-it
 )
 MODEL_DIRS=(
-  Kimi-K2.5 GLM-4.7 GLM-4.7-Flash DeepSeek-V3.2
+  Kimi-K2.5 GLM-4.7 GLM-4.7-Flash
   Qwen3-235B-A22B-Instruct-2507 Qwen3-235B-A22B-Thinking-2507
   Devstral-2-123B-Instruct-2512 gemma-4-31B-it gemma-4-26B-A4B-it
 )
-NODE_COUNTS=(4 4 1 4 2 2 2 1 1)
+NODE_COUNTS=(4 4 1 2 2 2 1 1)
 URL_VARS=(
   MATSIM_VLLM_KIMI_K25_BASE_URL MATSIM_VLLM_GLM47_BASE_URL
-  MATSIM_VLLM_GLM47_FLASH_BASE_URL MATSIM_VLLM_DEEPSEEK_V32_BASE_URL
+  MATSIM_VLLM_GLM47_FLASH_BASE_URL
   MATSIM_VLLM_QWEN3_235B_INSTRUCT_BASE_URL
   MATSIM_VLLM_QWEN3_235B_THINKING_BASE_URL MATSIM_VLLM_DEVSTRAL2_BASE_URL
   MATSIM_VLLM_GEMMA4_31B_BASE_URL MATSIM_VLLM_GEMMA4_26B_BASE_URL
@@ -45,7 +45,11 @@ URL_VARS=(
 
 mkdir -p "$OUTPUT/servers"
 mapfile -t ALL_NODES < <(scontrol show hostnames "$SLURM_JOB_NODELIST")
-(( ${#ALL_NODES[@]} == 21 )) || { echo "ERROR: expected 21 nodes" >&2; exit 2; }
+EXPECTED_NODES=17
+(( ${#ALL_NODES[@]} == EXPECTED_NODES )) || {
+  echo "ERROR: expected $EXPECTED_NODES nodes" >&2
+  exit 2
+}
 
 SERVER_PIDS=()
 SERVER_IPS=()
@@ -105,7 +109,8 @@ for index in "${!NAMES[@]}"; do
   (( offset += nodes ))
 done
 
-echo "[$(date)] Waiting for all nine local model endpoints ..."
+EXPECTED_MODELS=${#NAMES[@]}
+echo "[$(date)] Waiting for all $EXPECTED_MODELS compatible local model endpoints ..."
 deadline=$(( SECONDS + 7200 ))
 while true; do
   ready=0
@@ -118,8 +123,8 @@ while true; do
       exit 1
     fi
   done
-  echo "[$(date)] Ready endpoints: $ready/9"
-  (( ready == 9 )) && break
+  echo "[$(date)] Ready endpoints: $ready/$EXPECTED_MODELS"
+  (( ready == EXPECTED_MODELS )) && break
   (( SECONDS < deadline )) || { echo "ERROR: endpoint readiness timed out" >&2; exit 1; }
   sleep 30
 done
@@ -129,6 +134,7 @@ PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON" \
   "$REPO/benchmarks/portability/all_model_scientific_debate.py" \
   --rounds "${MATSIM_DEBATE_ROUNDS:-2}" \
   --models-root "$MODELS_ROOT" \
+  --exclude-model deepseek-v3.2 \
   --output "$OUTPUT/debate"
 
 RESULT="$OUTPUT/debate/all_model_scientific_debate_result.json"

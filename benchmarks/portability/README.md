@@ -107,7 +107,10 @@ filesystem. It dynamically reads `deployments/common/open-model-catalog.json`
 and includes entries whose checkpoint directory exists under `--models-root`
 (or `MODEL_ROOT`, defaulting to the project-level `models` directory). Entries
 temporarily marked `debate_enabled: false` are also excluded with their reason
-recorded in the result. Every selected model must contribute exactly once in each of at least two rounds,
+recorded in the result. A facility launcher may repeat `--exclude-model` with a
+catalog name or model ID when the local accelerator cannot execute that model;
+these runtime exclusions are recorded separately in `runtime_excluded_models`.
+Every selected model must contribute exactly once in each of at least two rounds,
 directly respond to the accumulated peer dialogue, and return non-empty text.
 Every participant receives identical neutral system instructions and produces
 its own final verdict; the benchmark has no privileged synthesizer. The
@@ -132,6 +135,12 @@ python benchmarks/portability/all_model_scientific_debate.py \
   --rounds 2 --models-root "$MODEL_ROOT" \
   --output runs/portability/all-model-scientific-debate
 ```
+
+The coordinated Perlmutter job excludes `deepseek-v3.2`: vLLM 0.29.0 requires
+a sparse MLA backend for DeepSeek-V3.2, while those kernels require Hopper or
+Blackwell and Perlmutter provides Ampere A100 GPUs. Its eight compatible local
+models use 17 nodes. This is a facility runtime exclusion, not a global catalog
+policy; facilities with supported accelerators may still qualify DeepSeek-V3.2.
 
 The required `dialogue.json` artifact contains the original user question,
 every model argument in chronological dialogue order, and the final synthesis.
