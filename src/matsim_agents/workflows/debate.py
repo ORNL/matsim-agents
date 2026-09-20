@@ -166,16 +166,18 @@ def run_scientific_debate(
                     ),
                 ]
             )
-            turns.append(
-                DebateTurn(
-                    turn_id=f"round-{round_index + 1:03d}-turn-{len(turns) + 1:04d}",
-                    round=round_index + 1,
-                    participant=participant.name,
-                    provider=participant.provider,
-                    model=participant.model,
-                    response=_content(response),
-                )
+            turn = DebateTurn(
+                turn_id=f"round-{round_index + 1:03d}-turn-{len(turns) + 1:04d}",
+                round=round_index + 1,
+                participant=participant.name,
+                provider=participant.provider,
+                model=participant.model,
+                response=_content(response),
             )
+            turns.append(turn)
+            # Checkpoint every turn: a crash/timeout mid-debate must not lose
+            # already-generated dialogue held only in this process's memory.
+            run.append_event("turn_completed", turn.model_dump(mode="json"))
 
     verdict_participants = (
         cfg.participants
@@ -216,15 +218,15 @@ def run_scientific_debate(
                 ]
             )
         )
-        verdicts.append(
-            DebateVerdict(
-                contribution_id=f"verdict-{index:03d}-turn-{len(turns) + index:04d}",
-                participant=participant.name,
-                provider=participant.provider,
-                model=participant.model,
-                response=response,
-            )
+        verdict = DebateVerdict(
+            contribution_id=f"verdict-{index:03d}-turn-{len(turns) + index:04d}",
+            participant=participant.name,
+            provider=participant.provider,
+            model=participant.model,
+            response=response,
         )
+        verdicts.append(verdict)
+        run.append_event("verdict_completed", verdict.model_dump(mode="json"))
     synthesis = "\n\n".join(
         f"[{verdict.participant} independent verdict]\n{verdict.response}" for verdict in verdicts
     )

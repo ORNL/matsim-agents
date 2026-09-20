@@ -66,6 +66,18 @@ def test_models_debate_each_other_for_user_selected_rounds(tmp_path):
     assert len(identifiers) == len(set(identifiers))
     assert all(identifier for identifier in identifiers)
     assert len({models[name].system_prompts[0] for name in models}) == 1
+    events = [
+        json.loads(line)
+        for line in (tmp_path / result.run_id / "events.jsonl").read_text().splitlines()
+    ]
+    turn_events = [event for event in events if event["event"] == "turn_completed"]
+    verdict_events = [event for event in events if event["event"] == "verdict_completed"]
+    assert [event["payload"]["turn_id"] for event in turn_events] == [
+        turn.turn_id for turn in result.turns
+    ]
+    assert [event["payload"]["contribution_id"] for event in verdict_events] == [
+        verdict.contribution_id for verdict in result.verdicts
+    ]
 
 
 def test_designated_synthesis_remains_available_for_role_based_debate(tmp_path):
