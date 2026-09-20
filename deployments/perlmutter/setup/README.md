@@ -237,7 +237,7 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | `job-llm-check-perlmutter.sh` | Dedicated live-vLLM deployment qualification: owns server startup/readiness/cleanup, runs all six `matsim-agents llm-check` stages, and optionally launches the live scientific portability suite. |
 | `job-qe-warmstart-perlmutter.sh` | QE warm-start benchmark job: exercises the HydraGNN-preconditioned `pw.x` cold-vs-warm convergence test via `tests/integration/test_qe_warmstart.py`. |
 | `job-serve-multinode-perlmutter.sh` | Serves one model across an `-N`-node allocation via Ray + `vllm serve` (TP = nodes × 4); `-N 1` skips Ray. Stays alive until the job time limit. |
-| `job-all-local-model-debate-perlmutter.sh` | Starts the eight Perlmutter-compatible local catalog models in one 17-node allocation, waits for every endpoint, and runs the two-round scientific debate. DeepSeek-V3.2 and Mistral-Large-3 are excluded for the compatibility reasons below. |
+| `job-all-local-model-debate-perlmutter.sh` | Starts the seven Perlmutter-compatible local catalog models in one 15-node allocation, waits for every endpoint, and runs the two-round scientific debate. DeepSeek-V3.2, Devstral-2, and Mistral-Large-3 are excluded for the compatibility reasons below. |
 | `submit-all-model-debate-perlmutter.sh` | Submits `job-serve-multinode-perlmutter.sh` once per `open-model-catalog.json` entry with the right `--nodes` and `SERVE_EXTRA_ARGS`; prints the `base_url_env` export lines to wire up once each job is running. |
 
 ### vLLM model limitations on Perlmutter
@@ -251,13 +251,24 @@ fix this architecture-level incompatibility. The failure occurs during engine
 initialization as `No valid attention backend found` with
 `use_sparse=True` and `compute capability not supported`.
 
+Devstral-2 also fails on Perlmutter A100s: its checkpoint is FP8-quantized
+(`config.json` -> `quantization_config.quant_method: "fp8"`), and vLLM's
+CUTLASS `scaled_mm_sm80_epilogue` kernel crashes during the engine's memory-
+profiling pass (`RuntimeError: Worker failed with error
+'cutlass_scaled_mm_sm80_epilogue, .../scaled_mm_c2x.cu:89, '`) because A100
+lacks native FP8 tensor-core support. Observed in job `58627251`; the crash
+killed the whole coordinated allocation because the launcher fails fast on any
+single model's server exiting. Full traceback preserved in that job's
+`runs/vllm-coordinated-devstral-2-<jobid>/vllm-serve.log` (the tailed 60 lines
+in `.err` do not include it -- read the full log on CFS instead).
+
 The coordinated Perlmutter debate therefore passes
-`--exclude-model deepseek-v3.2`; the result records this separately under
-`runtime_excluded_models`. This is a Perlmutter runtime exclusion rather than a
-global catalog policy, so facilities with Hopper or Blackwell GPUs may still
-qualify DeepSeek-V3.2. Mistral-Large-3 remains globally debate-disabled because
-vLLM 0.29.0's Pixtral integration is incompatible with the shared transformers
-5.17.0 environment.
+`--exclude-model deepseek-v3.2 --exclude-model devstral-2`; the result records
+this separately under `runtime_excluded_models`. This is a Perlmutter runtime
+exclusion rather than a global catalog policy, so facilities with Hopper or
+Blackwell GPUs may still qualify DeepSeek-V3.2 and Devstral-2. Mistral-Large-3
+remains globally debate-disabled because vLLM 0.29.0's Pixtral integration is
+incompatible with the shared transformers 5.17.0 environment.
 
 ### Submission examples
 ```bash
@@ -281,7 +292,7 @@ sbatch deployments/perlmutter/jobs/job-discovery-chat-perlmutter.sh
 PROJECT_ROOT=$PWD sbatch -A <allocation> \
   deployments/perlmutter/jobs/job-llm-check-perlmutter.sh
 
-# Coordinated 17-node debate across all Perlmutter-compatible local models.
+# Coordinated 15-node debate across all Perlmutter-compatible local models.
 # PROJECT_ROOT is required -- Slurm spools the script, so it cannot self-locate
 # the checkout; omitting it fails the job in seconds with no servers started.
 PROJECT_ROOT=$PWD sbatch -A <allocation> -q premium \

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J local-llm-debate
-#SBATCH -N 17
+#SBATCH -N 15
 #SBATCH -C gpu&hbm80g
 #SBATCH -q premium
 #SBATCH --gpus-per-node=4
@@ -28,34 +28,37 @@ SERVER="$REPO/deployments/perlmutter/jobs/job-serve-multinode-perlmutter.sh"
 OUTPUT="${RUNS_ROOT:-$PROJ/runs}/portability/local-llm-debate-${SLURM_JOB_ID}"
 PYTHON="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}/bin/python3"
 
+# devstral-2 excluded: its FP8-quantized checkpoint crashes vLLM's CUTLASS
+# scaled_mm_sm80_epilogue kernel on A100 (job 58627251, scaled_mm_c2x.cu:89) --
+# same category as the DeepSeek-V3.2 sm80 exclusion below.
 NAMES=(
   kimi-k2.5 glm-4.7 glm-4.7-flash
   qwen3-235b-a22b-instruct-2507 qwen3-235b-a22b-thinking-2507
-  devstral-2 gemma-4-31b-it gemma-4-26b-a4b-it
+  gemma-4-31b-it gemma-4-26b-a4b-it
 )
 MODEL_IDS=(
   moonshotai/Kimi-K2.5 zai-org/GLM-4.7 zai-org/GLM-4.7-Flash
   Qwen/Qwen3-235B-A22B-Instruct-2507
-  Qwen/Qwen3-235B-A22B-Thinking-2507 mistralai/Devstral-2-123B-Instruct-2512
+  Qwen/Qwen3-235B-A22B-Thinking-2507
   google/gemma-4-31B-it google/gemma-4-26B-A4B-it
 )
 MODEL_DIRS=(
   Kimi-K2.5 GLM-4.7 GLM-4.7-Flash
   Qwen3-235B-A22B-Instruct-2507 Qwen3-235B-A22B-Thinking-2507
-  Devstral-2-123B-Instruct-2512 gemma-4-31B-it gemma-4-26B-A4B-it
+  gemma-4-31B-it gemma-4-26B-A4B-it
 )
-NODE_COUNTS=(4 4 1 2 2 2 1 1)
+NODE_COUNTS=(4 4 1 2 2 1 1)
 URL_VARS=(
   MATSIM_VLLM_KIMI_K25_BASE_URL MATSIM_VLLM_GLM47_BASE_URL
   MATSIM_VLLM_GLM47_FLASH_BASE_URL
   MATSIM_VLLM_QWEN3_235B_INSTRUCT_BASE_URL
-  MATSIM_VLLM_QWEN3_235B_THINKING_BASE_URL MATSIM_VLLM_DEVSTRAL2_BASE_URL
+  MATSIM_VLLM_QWEN3_235B_THINKING_BASE_URL
   MATSIM_VLLM_GEMMA4_31B_BASE_URL MATSIM_VLLM_GEMMA4_26B_BASE_URL
 )
 
 mkdir -p "$OUTPUT/servers"
 mapfile -t ALL_NODES < <(scontrol show hostnames "$SLURM_JOB_NODELIST")
-EXPECTED_NODES=17
+EXPECTED_NODES=15
 (( ${#ALL_NODES[@]} == EXPECTED_NODES )) || {
   echo "ERROR: expected $EXPECTED_NODES nodes" >&2
   exit 2
@@ -145,6 +148,7 @@ PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON" \
   --rounds "${MATSIM_DEBATE_ROUNDS:-2}" \
   --models-root "$MODELS_ROOT" \
   --exclude-model deepseek-v3.2 \
+  --exclude-model devstral-2 \
   --output "$OUTPUT/debate"
 
 RESULT="$OUTPUT/debate/all_model_scientific_debate_result.json"
