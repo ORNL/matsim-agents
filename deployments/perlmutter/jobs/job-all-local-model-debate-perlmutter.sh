@@ -8,6 +8,16 @@
 #SBATCH -t 24:00:00
 #SBATCH -o %x-%j.out
 #SBATCH -e %x-%j.err
+# ---------------------------------------------------------------------------
+# Required at submission (Slurm spools this script, so it cannot self-locate
+# the checkout -- forgetting this makes the job fail in seconds with no
+# servers ever started):
+#   PROJECT_ROOT   matsim-agents checkout
+#
+# Submit with:
+#   PROJECT_ROOT=$PWD sbatch -A <allocation> -q premium \
+#     deployments/perlmutter/jobs/job-all-local-model-debate-perlmutter.sh
+# ---------------------------------------------------------------------------
 
 set -euo pipefail
 

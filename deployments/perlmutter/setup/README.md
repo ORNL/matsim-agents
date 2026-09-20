@@ -280,6 +280,12 @@ sbatch deployments/perlmutter/jobs/job-discovery-chat-perlmutter.sh
 # Qualify one live vLLM deployment inside its compute allocation
 PROJECT_ROOT=$PWD sbatch -A <allocation> \
   deployments/perlmutter/jobs/job-llm-check-perlmutter.sh
+
+# Coordinated 17-node debate across all Perlmutter-compatible local models.
+# PROJECT_ROOT is required -- Slurm spools the script, so it cannot self-locate
+# the checkout; omitting it fails the job in seconds with no servers started.
+PROJECT_ROOT=$PWD sbatch -A <allocation> -q premium \
+  deployments/perlmutter/jobs/job-all-local-model-debate-perlmutter.sh
 ```
 
 All these scripts source `perlmutter-module-stack.sh` (`load_perlmutter_modules_gpu`)
