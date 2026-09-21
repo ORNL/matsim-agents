@@ -77,6 +77,12 @@ CI/release gate because it does not require external model or DFT assets.
 
 `config/relaxation/qe-si.yaml` and `config/relaxation/uma-si.yaml` are worked
 Perlmutter examples (NERSC paths, `mlp_device: cuda` on the A100s).
+`config/relaxation/vasp-si.yaml` adds a third, optional Perlmutter case for
+the VASP DFT backend (`dft.launcher` at
+[`deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh`](../../deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh),
+`potcar_dir` under `external/vasp6/potcar/potpaw_PBE.64`); it is not required
+to satisfy the mandatory MLIP+QE pair above but can be passed as a third
+`--relaxation-config`.
 `config/relaxation/qe-si-frontier.yaml` and
 `config/relaxation/hydragnn-si-frontier.yaml` are the Frontier equivalents:
 the QE case points `dft.launcher` at
