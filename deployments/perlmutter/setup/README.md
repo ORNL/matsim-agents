@@ -238,6 +238,7 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | `job-qe-warmstart-perlmutter.sh` | QE warm-start benchmark job: exercises the HydraGNN-preconditioned `pw.x` cold-vs-warm convergence test via `tests/integration/test_qe_warmstart.py`. |
 | `job-serve-multinode-perlmutter.sh` | Serves one model across an `-N`-node allocation via Ray + `vllm serve` (TP = nodes × 4); `-N 1` skips Ray. Stays alive until the job time limit. |
 | `job-all-local-model-debate-perlmutter.sh` | Starts the seven Perlmutter-compatible local catalog models in one 15-node allocation, waits for every endpoint, and runs the two-round scientific debate. DeepSeek-V3.2, Devstral-2, and Mistral-Large-3 are excluded for the compatibility reasons below. |
+| `job-al-debate-portability-perlmutter.sh` | Same 15-node, seven-model debate panel plus a 16th dedicated node that runs a real UMA+QE active-learning iteration on the benchmark Si cell first; the debate then argues from that loop's labelled DFT evidence instead of the synthetic thermoelectric prompt (`benchmarks/portability/active_learning_scientific_debate.py`). |
 | `submit-all-model-debate-perlmutter.sh` | Submits `job-serve-multinode-perlmutter.sh` once per `open-model-catalog.json` entry with the right `--nodes` and `SERVE_EXTRA_ARGS`; prints the `base_url_env` export lines to wire up once each job is running. |
 
 ### vLLM model limitations on Perlmutter

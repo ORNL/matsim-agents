@@ -167,6 +167,42 @@ allocation. Large catalog checkpoints will generally require separate or
 multi-node servers; catalog membership does not imply simultaneous one-node
 residency.
 
+### Active-learning + scientific debate qualification
+
+`active_learning_scientific_debate.py` closes the gap between the two
+qualification tracks above: it runs a real active-learning iteration, then
+hands its output to the same all-model debate machinery as
+`all_model_scientific_debate.py` instead of the abstract thermoelectric
+prompt. Nothing about the debate wiring is duplicated — this module imports
+`execute_all_model_scientific_debate` and only supplies a different
+`hypothesis`.
+
+The active-learning stage runs
+[`config/active_learning/al-si-uma-qe.yaml`](config/active_learning/al-si-uma-qe.yaml):
+UMA MD sampling of the benchmark Si cell, random acquisition, and real QE
+single-point DFT labelling of the selected candidates (one iteration, sized
+for a fast qualification rather than production accuracy). The resulting
+iteration `state.json` and labelled `dataset.extxyz` are summarized into an
+evidence block — candidate/selection/convergence counts plus each labelled
+frame's DFT energy and max force — which is substituted into the debate
+hypothesis so every catalog model argues from the same real numbers instead
+of a synthetic scenario.
+
+Run it the same way as the plain debate, with an additional `--al-config` if
+you want to point at a different loop configuration:
+
+```bash
+python benchmarks/portability/active_learning_scientific_debate.py \
+  --rounds 2 --models-root "$MODEL_ROOT" \
+  --output runs/portability/active-learning-scientific-debate
+```
+
+`active_learning_scientific_debate_result.json` records the active-learning
+state, the labelled-frame evidence, and the full debate payload (including
+`dialogue_path`) under one `status`; it passes only when the active-learning
+iteration completes with at least one converged DFT label *and* the debate
+covers every expected participant with non-empty turns and verdicts.
+
 ## Running
 
 Plan locally without a scheduler:

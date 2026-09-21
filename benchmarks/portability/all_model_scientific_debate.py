@@ -135,6 +135,7 @@ def execute_all_model_scientific_debate(
     excluded_models: set[str] | None = None,
     environment: dict[str, str] | None = None,
     model_factory=get_chat_model,
+    hypothesis: str = THERMOELECTRIC_HYPOTHESIS,
 ) -> dict[str, Any]:
     if rounds < 2:
         raise ValueError("LLM portability debate requires at least two rounds")
@@ -161,7 +162,7 @@ def execute_all_model_scientific_debate(
     participants = catalog_participants(entries, environment=environment)
     output.mkdir(parents=True, exist_ok=True)
     config = ScientificDebateConfig(
-        hypothesis=THERMOELECTRIC_HYPOTHESIS,
+        hypothesis=hypothesis,
         participants=participants,
         rounds=rounds,
         output_root=str(output / "runs"),
@@ -175,7 +176,7 @@ def execute_all_model_scientific_debate(
             "schema_version": 1,
             "benchmark": "first-class-llm-scientific-enclave",
             "status": "passed" if not errors else "failed",
-            "hypothesis": THERMOELECTRIC_HYPOTHESIS,
+            "hypothesis": hypothesis,
             "required_rounds": rounds,
             "required_models": [participant.model for participant in participants],
             "required_participants": [participant.name for participant in participants],
@@ -194,7 +195,7 @@ def execute_all_model_scientific_debate(
             "schema_version": 1,
             "benchmark": "first-class-llm-scientific-enclave",
             "status": "failed",
-            "hypothesis": THERMOELECTRIC_HYPOTHESIS,
+            "hypothesis": hypothesis,
             "required_rounds": rounds,
             "required_models": [participant.model for participant in participants],
             "required_participants": [participant.name for participant in participants],
