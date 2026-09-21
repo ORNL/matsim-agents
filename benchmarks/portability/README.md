@@ -142,6 +142,10 @@ Blackwell and Perlmutter provides Ampere A100 GPUs. Its eight compatible local
 models use 17 nodes. This is a facility runtime exclusion, not a global catalog
 policy; facilities with supported accelerators may still qualify DeepSeek-V3.2.
 
+Each debate turn and verdict is checkpointed to the run's `events.jsonl` as
+soon as it completes, not just at the end of the debate, so a crash or
+walltime cutoff on a long multi-round job loses at most the in-flight turn.
+
 The required `dialogue.json` artifact contains the original user question,
 every model argument in chronological dialogue order, and the final synthesis.
 Every model argument and synthesis has a unique `contribution_id`, together
