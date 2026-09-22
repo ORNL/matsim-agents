@@ -60,8 +60,8 @@ launch_server() {
   [[ -d "${model_dir}" ]] || { echo "ERROR: model directory not found: ${model_dir}" >&2; return 2; }
   echo "[$(date)] Serving ${model_name} on GCDs ${visible_gpus}, port ${port}, TP=${tensor_parallel}"
   (
-    export ROCR_VISIBLE_DEVICES="${visible_gpus}"
     export HIP_VISIBLE_DEVICES="${visible_gpus}"
+    unset ROCR_VISIBLE_DEVICES CUDA_VISIBLE_DEVICES
     local jit="/tmp/vllm-jit.${USER}.${SLURM_JOB_ID:-$$}.${port}"
     rm -rf "${jit}"
     mkdir -p "${jit}/tmp" "${jit}/miopen"
@@ -91,7 +91,10 @@ launch_server() {
 
 cleanup() {
   echo "[$(date)] Stopping ${#SERVER_PIDS[@]} vLLM servers"
-  for pid in "${SERVER_PIDS[@]}"; do kill "${pid}" 2>/dev/null || true; done
+  for pid in "${SERVER_PIDS[@]}"; do
+    pkill -TERM -P "${pid}" 2>/dev/null || true
+    kill "${pid}" 2>/dev/null || true
+  done
   for pid in "${SERVER_PIDS[@]}"; do wait "${pid}" 2>/dev/null || true; done
 }
 trap cleanup EXIT
