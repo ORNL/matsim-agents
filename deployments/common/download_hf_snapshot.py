@@ -37,8 +37,12 @@ def main() -> None:
     api = HfApi(token=token)
     files = api.list_repo_files(args.repo_id, repo_type="model", token=token)
     for filename in files:
+        destination = args.destination / filename
+        if destination.is_file() and destination.stat().st_size:
+            print(f"skipping complete file {destination}", flush=True)
+            continue
         print(f"downloading {args.repo_id}/{filename}", flush=True)
-        download_file(args.repo_id, filename, args.destination / filename, token)
+        download_file(args.repo_id, filename, destination, token)
 
 
 if __name__ == "__main__":

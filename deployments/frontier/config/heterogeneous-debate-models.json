@@ -1,0 +1,20 @@
+[
+  {
+    "name": "qwen2.5-14b",
+    "model": "Qwen/Qwen2.5-14B-Instruct",
+    "model_dir": "Qwen2.5-14B-Instruct",
+    "base_url_env": "MATSIM_VLLM_QWEN25_14B_BASE_URL"
+  },
+  {
+    "name": "deepseek-r1-distill-32b",
+    "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "model_dir": "DeepSeek-R1-Distill-Qwen-32B",
+    "base_url_env": "MATSIM_VLLM_DEEPSEEK_R1_32B_BASE_URL"
+  },
+  {
+    "name": "llama3.1-8b",
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "model_dir": "Llama-3.1-8B-Instruct",
+    "base_url_env": "MATSIM_VLLM_LLAMA31_8B_BASE_URL"
+  }
+]
