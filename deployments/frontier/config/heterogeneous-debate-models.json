@@ -6,10 +6,10 @@
     "base_url_env": "MATSIM_VLLM_QWEN25_14B_BASE_URL"
   },
   {
-    "name": "deepseek-r1-distill-32b",
-    "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-    "model_dir": "DeepSeek-R1-Distill-Qwen-32B",
-    "base_url_env": "MATSIM_VLLM_DEEPSEEK_R1_32B_BASE_URL"
+    "name": "smollm3-3b",
+    "model": "HuggingFaceTB/SmolLM3-3B",
+    "model_dir": "SmolLM3-3B",
+    "base_url_env": "MATSIM_VLLM_SMOLLM3_BASE_URL"
   },
   {
     "name": "llama3.1-8b",

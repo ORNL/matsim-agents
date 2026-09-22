@@ -100,8 +100,8 @@ cleanup() {
 trap cleanup EXIT
 
 launch_server "0" "1" "8000" "${MODELS_ROOT}/Qwen2.5-14B-Instruct" "Qwen/Qwen2.5-14B-Instruct"
-launch_server "1,2" "2" "8001" "${MODELS_ROOT}/DeepSeek-R1-Distill-Qwen-32B" "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
-launch_server "3" "1" "8002" "${MODELS_ROOT}/Llama-3.1-8B-Instruct" "meta-llama/Llama-3.1-8B-Instruct"
+launch_server "1" "1" "8001" "${MODELS_ROOT}/SmolLM3-3B" "HuggingFaceTB/SmolLM3-3B"
+launch_server "2" "1" "8002" "${MODELS_ROOT}/Llama-3.1-8B-Instruct" "meta-llama/Llama-3.1-8B-Instruct"
 
 wait_ready() {
   local port="$1" expected_model="$2" elapsed=0 response
@@ -127,11 +127,11 @@ wait_ready() {
 }
 
 wait_ready "8000" "Qwen/Qwen2.5-14B-Instruct"
-wait_ready "8001" "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+wait_ready "8001" "HuggingFaceTB/SmolLM3-3B"
 wait_ready "8002" "meta-llama/Llama-3.1-8B-Instruct"
 
 export MATSIM_VLLM_QWEN25_14B_BASE_URL="http://127.0.0.1:8000/v1"
-export MATSIM_VLLM_DEEPSEEK_R1_32B_BASE_URL="http://127.0.0.1:8001/v1"
+export MATSIM_VLLM_SMOLLM3_BASE_URL="http://127.0.0.1:8001/v1"
 export MATSIM_VLLM_LLAMA31_8B_BASE_URL="http://127.0.0.1:8002/v1"
 export MATSIM_VLLM_API_KEY=EMPTY
 
