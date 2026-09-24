@@ -25,12 +25,12 @@ Frontier-specific assets are split by intent:
 
 ---
 
-## ⚠️ CRITICAL: prebuilt `tvm_ffi` `.so` MUST exist before launching ANY vLLM job
+## Prebuilt `tvm_ffi` artifact
 
-**TL;DR**: If the file
-`$PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so`
-(where `$PROJ` is your project's proj-shared directory) is missing or 0 bytes,
-**every vLLM job will silently hang forever** with no log output.
+The Torch DLPack addon is installed under
+`<repo>/external/tvm-ffi/lib/` on project-shared Lustre. Its filename includes
+the full Torch version, ROCm backend, and C++ ABI hash. Every Frontier vLLM job
+resolves and validates that exact artifact before starting the server.
 
 ### Symptoms
 
@@ -41,8 +41,8 @@ Frontier-specific assets are split by intent:
 ### Root cause
 
 `vllm.entrypoints.openai.api_server` imports `xgrammar`, which imports `tvm_ffi`.
-At import time, `tvm_ffi/_optional_torch_c_dlpack.py:158` calls `subprocess.run()`
-to JIT-compile a small torch C++/HIP extension if its cached `.so` is missing.
+At import time, `tvm_ffi/_optional_torch_c_dlpack.py` calls `subprocess.run()`
+to JIT-compile a small torch C++/HIP extension if its `.so` is missing.
 On Frontier compute nodes (under srun's GPU binding), this build subprocess
 hangs, and the parent Python waits forever in `selectors.select()`.
 
@@ -60,23 +60,22 @@ sbatch deployments/frontier/setup/prebuild-tvm-ffi-frontier.sh    # rebuilds the
 After it completes, verify:
 
 ```bash
-ls -la $PROJ/cache/tvm-ffi/
-# Expected: libtorch_c_dlpack_addon_torch211-rocm.so   (~200 KB)
+ls -la external/tvm-ffi/lib/
+# Expected: libtorch_c_dlpack_addon_torch<major><minor>-rocm-<abi>.so
 ```
 
 ### How it's prevented
 
-Every vLLM job script in this directory has these two lines near the top:
+Every vLLM job sources the shared resolver and requires the installed artifact:
 
 ```bash
-export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
-TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
-[[ ! -s "$TVM_FFI_SO" ]] && { echo "[FAIL] missing $TVM_FFI_SO"; exit 1; }
-rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true
+source "$REPO/deployments/frontier/setup/tvm-ffi-artifact.sh"
+require_tvm_ffi_artifact "$REPO" "$VENV"
 ```
 
-This causes jobs to **fail in 2 seconds with a clear error message** if the
-`.so` is gone, instead of silently hanging for the whole job time limit.
+`TVM_FFI_CACHE_DIR` is set internally because that is the variable name required
+by tvm-ffi; it points to the durable `external/tvm-ffi/lib` install directory,
+not an expendable cache.
 
 **Do not remove these lines from any vLLM job script.**
 
@@ -93,7 +92,7 @@ All Frontier scripts source `frontier-module-stack.sh` which loads:
 - `miniforge3/23.11.0-0`
 
 Then activates the vLLM-on-ROCm-7.2 venv at:
-`$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72`
+`$REPO/.venv`
 
 ## Network policy
 
@@ -166,10 +165,9 @@ scancel <JOBID>
 
 ## When vLLM hangs with no output
 
-1. **First check**: is `~/.cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so` present and non-empty?
-2. **Second check**: is `$PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so` present and non-empty?
-3. If the proj-shared `.so` is missing → run `prebuild-tvm-ffi-frontier.sh`.
-4. If both `.so` files exist → look at the faulthandler stack trace technique below.
+1. Check that `external/tvm-ffi/lib/` contains a nonempty ABI-keyed `.so`.
+2. If it is missing, run `prebuild-tvm-ffi-frontier.sh` on a compute node.
+3. If it exists, use the faulthandler stack trace technique below.
 
 ### Generic Python hang stack trace
 

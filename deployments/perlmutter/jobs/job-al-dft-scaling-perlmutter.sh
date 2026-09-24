@@ -41,8 +41,8 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+VENV_ROOT=$REPO/.hpc-build/perlmutter
+VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}"
 
 AL_CONFIG="$REPO/examples/paper_cases/al_hea_fcc_scaling.yaml"
 [[ ! -f "$AL_CONFIG" ]] && { echo "ERROR: missing $AL_CONFIG" >&2; exit 2; }
@@ -62,7 +62,7 @@ mkdir -p "$RUN_DIR"
 export MLIP_BACKEND="${MLIP_BACKEND:-uma}"
 export DFT_BACKEND="${DFT_BACKEND:-vasp}"
 
-# ── modules & venv (fairchem_venv for UMA) ────────────────────────────────────
+# ── modules and matsim-owned .venv for UMA ───────────────────────────────────
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 # shellcheck disable=SC1091
@@ -73,14 +73,14 @@ export PYTHONUNBUFFERED=1
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 
-# ── UMA model cache (identical to the paper-case job) ─────────────────────────
-export HF_HOME="${HF_HOME:-${PROJ}/models/hf_cache}"
-mkdir -p "${HF_HOME}"
+# ── Durable UMA model artifacts ───────────────────────────────────────────────
+source "${REPO}/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+if [[ "${MLIP_BACKEND}" == "uma" ]]; then
+  configure_uma_model_artifacts "${REPO}"
+fi
 if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
   export HF_TOKEN="$(< "${HOME}/.cache/huggingface/token")"
 fi
-export FAIRCHEM_CACHE_DIR="${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
-mkdir -p "${FAIRCHEM_CACHE_DIR}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 

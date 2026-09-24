@@ -3,6 +3,12 @@
 Machine support is a tested toolchain claim, not a synonym for having a job
 script. Record a row here only after running the checks on the named machine.
 
+The canonical release gate is `benchmarks/portability/`. It owns one fixed Si
+input and one machine-independent science configuration; Frontier, Aurora, and
+Perlmutter overlays contain only scheduler, accelerator, rank, and launcher
+settings. Paper cases and scaling sweeps provide additional evidence but do
+not replace this common gate.
+
 | Site | Scheduler | Accelerator | Python/ML stack | DFT stack | Status |
 |---|---|---|---|---|---|
 | OLCF Frontier | Slurm | MI250X (`gfx90a`, 8 GCD/node) | ROCm 7.2 recipe | QE ROCm 6.2.4 / VASP ROCm 6.2 | recipe present; on-system revalidation required |
@@ -24,9 +30,17 @@ Save the following with the job output:
 5. One small QE or VASP calculation using a separate module-clean launcher.
 6. For vLLM, server health, model identity, tensor-parallel size, and a short request.
 7. For active learning, restart a run and show that completed labels are not duplicated.
+8. Run the facility's `job-portability-benchmark-<facility>.sh`, retain its
+   `environment.json`, `resolved_config.json`, and `result.json`, and compare
+   all three sites with `benchmarks/portability/compare.py`.
 
 The tests under `deployments/<site>/smoke-tests/` are the starting point. Logs
 may contain site paths or allocation IDs; reusable scripts may not.
+
+See [distributed-dft-dispatch.md](distributed-dft-dispatch.md) for allocation
+partitioning and launcher requirements and
+[run-artifacts-and-restarts.md](run-artifacts-and-restarts.md) for the artifact
+and restart contract.
 
 ## Resource and data separation
 

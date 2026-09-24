@@ -95,40 +95,14 @@ Highlights:
 - SIGSEGV in vLLM's model-registry subprocess fixed via `aurora_vllm_entrypoint.py`
   (sets `ONEAPI_DEVICE_SELECTOR=opencl:cpu` for the registry child process)
 - Server must be launched via `mpiexec -n 1 --ppn 1` for PALS device-fabric permissions
-- Do **not** pin numpy to 1.x on Aurora — the XPU stack requires numpy 2.2.6 (2.x ABI)
+- Do **not** pin NumPy to 1.x on Aurora. HydraGNN now pins NumPy 2.4.6;
+  its installer shadows the frameworks module's NumPy 2.2.6 while preserving
+  the required 2.x ABI.
 - Smoke test confirmed passing: job 8506887, May 25 2026
 
 ### Frontier (OLCF, AMD MI250X)
 
 See the Frontier vLLM smoke test: [deployments/frontier/smoke-tests/smoke-vllm-singlenode-frontier.sh](../deployments/frontier/smoke-tests/smoke-vllm-singlenode-frontier.sh)
-
-### Perlmutter (NERSC, NVIDIA A100)
-
-- Benchmark job: [deployments/perlmutter/jobs/job-sequential-benchmark-perlmutter.sh](../deployments/perlmutter/jobs/job-sequential-benchmark-perlmutter.sh)
-- Open-model download: [deployments/perlmutter/download/download-open-models-perlmutter.sh](../deployments/perlmutter/download/download-open-models-perlmutter.sh)
-- Model catalog: [deployments/common/open-model-catalog.json](../deployments/common/open-model-catalog.json)
-
-Highlights:
-
-- **Two-venv split**: `vllm_venv` (torch 2.11 / CUDA 13) runs the vLLM server; `hydragnn_venv` runs the eval client. The server subshell is isolated so it never pollutes the eval Python path.
-- **CFS does not support `fcntl.flock` on compute nodes** (Errno 524). All JIT caches (`TRITON_CACHE_DIR`, `TORCHINDUCTOR_CACHE_DIR`, `FLASHINFER_WORKSPACE_BASE`, `VLLM_CACHE_ROOT`) and HuggingFace / Torch home directories (`XDG_CACHE_HOME`, `HF_HOME`, `TORCH_HOME`, `TMPDIR`) are redirected to node-local `/tmp`. vLLM's model-registry subprocess (`registry.py:_run_in_subprocess`) hangs indefinitely if any of these remain on CFS.
-- Model weights stay on CFS permanently and are read directly by vLLM; only ephemeral JIT artifacts go to tmpfs.
-- Submission: `-q premium -C gpu -A <alloc> -N 1 --gpus-per-node=4`
-
-Quick start:
-
-```bash
-# 1. Download all open-catalog models to $PROJ/models/ (login node)
-sbatch deployments/perlmutter/download/download-open-models-perlmutter.sh
-
-# 2. Run the sequential benchmark (all models, 8 h walltime)
-BENCHMARK_PROMPT="Propose a candidate inorganic material and justify expected stability." \
-sbatch deployments/perlmutter/jobs/job-sequential-benchmark-perlmutter.sh
-
-# Light subset only (~2 h)
-BENCHMARK_PART=light BENCHMARK_PROMPT="..." \
-sbatch deployments/perlmutter/jobs/job-sequential-benchmark-perlmutter.sh
-```
 
 ## LLM and model-serving docs on HPC
 

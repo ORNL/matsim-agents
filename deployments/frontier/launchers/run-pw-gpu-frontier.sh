@@ -47,14 +47,30 @@ INPUT="$1"; shift
 [[ ! -f "${INPUT}" ]] && { echo "Input file not found: ${INPUT}" >&2; exit 2; }
 [[ ! -x "${PW_BIN}" ]] && { echo "pw.x not found or not executable: ${PW_BIN}" >&2; exit 2; }
 
+# A caller (e.g. job-portability-benchmark-frontier.sh) may have this launcher
+# as a subprocess of a rocm-7.2.0 Python venv shell, which exports
+# LD_LIBRARY_PATH pointing at torch's bundled libtinfo.so.6. module reset does
+# not clear manually-exported env vars, so without this the venv's libtinfo
+# gets picked up by pw.x instead of the system one, crashing it (SIGSEGV).
+# Clearing it here lets the module loads below repopulate it from scratch.
+unset LD_LIBRARY_PATH
+
 # Same module stack as the build (see build-qe-gpu-frontier.sh for rationale
 # on the rocm/6.2.4 pin).
+#
+# module commands here can spuriously return non-zero: Cray's Lmod init
+# (sourced via BASH_ENV in every subshell) tries to auto-deactivate conda
+# and fails with "CondaError: Run 'conda init' before 'conda deactivate'"
+# when invoked from a script rather than a login shell, which otherwise
+# aborts this script under set -e before pw.x ever runs.
+set +e
 module reset
 module load PrgEnv-cray
 module load cce
 module load craype-accel-amd-gfx90a
 module load "${ROCM_MODULE}"
 module load cray-fftw
+set -e
 
 export MPICH_GPU_SUPPORT_ENABLED=1
 export OMP_TARGET_OFFLOAD="${OMP_TARGET_OFFLOAD:-DEFAULT}"
