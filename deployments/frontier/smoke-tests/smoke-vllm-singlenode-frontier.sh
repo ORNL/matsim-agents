@@ -6,8 +6,8 @@
 # 8 GCDs, multiprocessing backend) before attempting multi-node runs.
 #
 # !!! REQUIRED !!!
-# A prebuilt tvm_ffi shared library MUST exist at:
-#   $PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so
+# A prebuilt tvm_ffi shared library matching the venv's Torch ABI MUST exist in
+# the repository's external/tvm-ffi/lib install directory on Lustre.
 # Otherwise vLLM hangs FOREVER at import (no log output). If missing, run:
 #   sbatch deployments/frontier/setup/prebuild-tvm-ffi-frontier.sh
 # See deployments/frontier/docs/README-frontier.md for full details.
@@ -35,7 +35,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 PROJ="$(dirname "${REPO}")"
 # Under sbatch BASH_SOURCE is wrong; anchor to the repo instead.
 UTILS_DIR="$REPO/deployments/frontier/utils"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=$REPO/.venv
 # Default: small model that loads quickly
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/Llama-3.1-8B-Instruct}
 SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-meta-llama/Llama-3.1-8B-Instruct}
@@ -114,17 +114,8 @@ export TRITON_CACHE_DIR=$RUN_DIR/vllm-cache/triton
 rm -rf "$VLLM_CACHE_ROOT"
 mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 
-# Use prebuilt tvm_ffi torch-c-dlpack .so from proj-shared (avoids JIT rebuild hang at import)
-export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
-
-# Preflight: tvm_ffi will silently hang at import if its prebuilt .so is missing.
-# A stale 0-byte .so.lock file from a previously-killed build also causes this.
-TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
-if [[ ! -s "$TVM_FFI_SO" ]]; then
-  echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
-  echo "       Rebuild with: deployments/frontier/setup/prebuild-tvm-ffi-frontier.sh (or copy from a backup)" >&2
-  exit 1
-fi
+source "$REPO/deployments/frontier/setup/tvm-ffi-artifact.sh"
+require_tvm_ffi_artifact "$REPO" "$VENV"
 # Remove any stale lock files in user cache that would re-trigger the JIT path
 rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true
 

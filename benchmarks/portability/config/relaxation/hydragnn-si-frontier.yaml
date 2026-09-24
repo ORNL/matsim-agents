@@ -1,0 +1,23 @@
+# Compute-qualification case: pure MLIP relaxation of the benchmark Si cell,
+# on OLCF Frontier. UMA/fairchem is not installed on Frontier (see
+# deployments/frontier/setup/README.md), so this uses the HydraGNN backend
+# already qualified by deployments/frontier/jobs/job-single-relaxation-frontier.sh.
+# structure_path and output_root are overridden by qualification.py at run time.
+mode: mlip
+
+geometry:
+  relax_atoms: true
+  relax_cell: true
+  fixed_atom_indices: []
+  charge: 0.0
+  spin: 0.0
+  preserve_symmetry: false
+
+mlip:
+  mlip_backend: hydragnn
+  logdir: /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64
+  hydragnn_branch_mlp_checkpoint: /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN/examples/multidataset_hpo_sc26/mlp_branch_weights.pt
+  mlp_device: cuda  # ROCm PyTorch exposes the MI250X through the "cuda" device API
+
+max_steps: 200
+force_tolerance_eV_per_A: 0.02

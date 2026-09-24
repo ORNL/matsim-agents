@@ -24,7 +24,7 @@
 #   sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
 #
 # Alternate cache location:
-#   HF_HOME=/path/to/project/models/hf_cache \
+#   MATSIM_UMA_ARTIFACT_DIR=/path/to/project/models/artifacts/uma \
 #   sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
 #
 # Notes:
@@ -32,7 +32,7 @@
 #   and provide a token. This script reads ~/.cache/huggingface/token if HF_TOKEN
 #   is not already set (run `hf auth login` once beforehand).
 # - Downloads are resumable; rerunning skips files already in the cache.
-# - Runs from fairchem_venv (UMA requires numpy>=2), NOT hydragnn_venv.
+# - Runs from the matsim-owned .venv-uma built with INSTALL_UMA=1.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -45,20 +45,20 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
-# fairchem_venv lives alongside hydragnn_venv under the HydraGNN install root.
-VENV_ROOT="$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
-VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+# Isolated FairChem/UMA compatibility environment.
+VENV_ROOT="$REPO/.hpc-build/perlmutter"
+VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}"
 RUN_DIR="$PROJ/runs/download-uma-${SLURM_JOB_ID:-manual}"
 mkdir -p "$RUN_DIR"
 
 if [[ ! -d "$VENV" ]]; then
-  echo "ERROR: fairchem_venv not found: $VENV" >&2
+  echo "ERROR: matsim .venv-uma not found: $VENV" >&2
   echo "Build it first with:" >&2
-  echo "  INSTALL_UMA=1 bash deployments/perlmutter/setup/install_matsim_perlmutter.sh --gpu" >&2
+  echo "  INSTALL_UMA=1 bash deployments/perlmutter/setup/install.sh" >&2
   exit 1
 fi
 
-# ── modules & venv (fairchem_venv for UMA) ───────────────────────────────────
+# ── modules and matsim-owned environment ─────────────────────────────────────
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules
 # shellcheck disable=SC1091
@@ -67,22 +67,11 @@ source "${VENV}/bin/activate"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
-# Persistent (shared) destination cache on CFS.
-DEST_HF="${HF_HOME:-${PROJ}/models/hf_cache}"
-mkdir -p "${DEST_HF}"
-
-# CFS/GPFS does NOT support fcntl.flock (OSError [Errno 524]), which
-# huggingface_hub requires while downloading. Stage the download on a
-# flock-capable filesystem ($SCRATCH Lustre, else node-local /tmp), then copy
-# the result into the persistent CFS cache.
-STAGE_BASE="${SCRATCH:-/tmp}"
-STAGE_HF="${STAGE_BASE}/hf-stage.${USER}.${SLURM_JOB_ID:-manual}"
-mkdir -p "${STAGE_HF}"
-trap 'rm -rf "${STAGE_HF}" 2>/dev/null || true' EXIT
-# Seed the stage with whatever is already cached so downloads stay incremental.
-rsync -a "${DEST_HF}/" "${STAGE_HF}/" 2>/dev/null || true
-export HF_HOME="${STAGE_HF}"
-mkdir -p "${HF_HOME}"
+# Durable shared model artifacts on CFS. Downloads stream directly into this
+# tree and atomically rename on completion, bypassing Hugging Face cache locks.
+ARTIFACT_ROOT="${MATSIM_MODEL_ARTIFACTS_ROOT:-${PROJ}/models/artifacts}"
+UMA_ARTIFACT_DIR="${MATSIM_UMA_ARTIFACT_DIR:-${ARTIFACT_ROOT}/uma}"
+mkdir -p "${UMA_ARTIFACT_DIR}"
 if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
   export HF_TOKEN="$(< "${HOME}/.cache/huggingface/token")"
 fi
@@ -92,23 +81,10 @@ if [[ -z "${HF_TOKEN:-}" ]]; then
   echo "         Run 'hf auth login' once, or export HF_TOKEN=hf_..." >&2
 fi
 
-echo "[$(date)] Staging cache (flock-capable): $HF_HOME"
-echo "[$(date)] Persistent destination (CFS):  $DEST_HF"
-
-# fairchem's pretrained_mlip.get_predict_unit()/pretrained_checkpoint_path_from_name()
-# call hf_hub_download(..., cache_dir=CACHE_DIR) with a HARDCODED cache_dir that
-# ignores HF_HOME entirely. CACHE_DIR comes from FAIRCHEM_CACHE_DIR (env var),
-# defaulting to ~/.cache/fairchem on $HOME (CFS -> no flock support, same
-# OSError [Errno 524]). Point it at the flock-capable $SCRATCH directly; unlike
-# a job-scoped stage, $SCRATCH persists across jobs, so no CFS copy-back needed.
-export FAIRCHEM_CACHE_DIR="${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
-mkdir -p "${FAIRCHEM_CACHE_DIR}"
-echo "[$(date)] FAIRCHEM_CACHE_DIR (flock-capable, persistent): $FAIRCHEM_CACHE_DIR"
-
 # ── model list ───────────────────────────────────────────────────────────────
 UMA_MODELS="${UMA_MODELS:-uma-s-1p1}"
 
-echo "[$(date)] Cache destination (HF_HOME): $HF_HOME"
+echo "[$(date)] Durable UMA artifact directory: $UMA_ARTIFACT_DIR"
 echo "[$(date)] UMA models to pre-fetch: $UMA_MODELS"
 echo "[$(date)] Using venv: $VENV"
 
@@ -117,16 +93,67 @@ for model_name in $UMA_MODELS; do
   log="$RUN_DIR/${model_name}.download.log"
   echo
   echo "[$(date)] Fetching + validating UMA model: $model_name"
-  if python - "$model_name" >"$log" 2>&1 <<'PY'
+  if python - "$model_name" "$UMA_ARTIFACT_DIR" >"$log" 2>&1 <<'PY'
+import json
+import os
+from pathlib import Path
 import sys
+import urllib.request
 
-model_name = sys.argv[1]
-from fairchem.core import pretrained_mlip
+from fairchem.core.calculate import pretrained_mlip
+from fairchem.core.units.mlip_unit import load_predict_unit
+from huggingface_hub import hf_hub_url
+from omegaconf import OmegaConf
 
-print("available_models:", getattr(pretrained_mlip, "available_models", "?"))
-# device="cpu" avoids needing a GPU just to download + load the checkpoint.
-predictor = pretrained_mlip.get_predict_unit(model_name, device="cpu")
-print(f"OK: {model_name} downloaded and loaded on CPU -> {type(predictor).__name__}")
+model_name, artifact_root = sys.argv[1:]
+metadata = pretrained_mlip._MODEL_CKPTS.checkpoints[model_name]
+bundle = Path(artifact_root) / model_name
+bundle.mkdir(parents=True, exist_ok=True)
+token = os.environ.get("HF_TOKEN")
+
+
+def download(filename, subfolder, destination):
+    if destination.is_file() and destination.stat().st_size:
+        return
+    url = hf_hub_url(
+        metadata.repo_id,
+        filename,
+        subfolder=subfolder,
+        revision=metadata.revision,
+    )
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    request = urllib.request.Request(url, headers=headers)
+    temporary = destination.with_suffix(destination.suffix + f".part.{os.getpid()}")
+    try:
+        with urllib.request.urlopen(request) as response, temporary.open("wb") as output:
+            while chunk := response.read(8 * 1024 * 1024):
+                output.write(chunk)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+download(metadata.filename, metadata.subfolder, bundle / "checkpoint.pt")
+download(metadata.atom_refs["filename"], metadata.atom_refs["subfolder"], bundle / "atom_refs.yaml")
+if metadata.form_elem_refs is not None:
+    download(
+        metadata.form_elem_refs["filename"],
+        metadata.form_elem_refs["subfolder"],
+        bundle / "form_elem_refs.yaml",
+    )
+(bundle / "manifest.json").write_text(
+    json.dumps({"model": model_name, "repo_id": metadata.repo_id, "revision": metadata.revision}, indent=2) + "\n"
+)
+atom_refs = OmegaConf.load(bundle / "atom_refs.yaml")
+form_path = bundle / "form_elem_refs.yaml"
+form_elem_refs = OmegaConf.load(form_path)["refs"] if form_path.is_file() else None
+predictor = load_predict_unit(
+    bundle / "checkpoint.pt",
+    device="cpu",
+    atom_refs=atom_refs,
+    form_elem_refs=form_elem_refs,
+)
+print(f"OK: {model_name} loaded from durable bundle -> {type(predictor).__name__}")
 PY
   then
     echo "[$(date)] DONE: $model_name"
@@ -135,10 +162,6 @@ PY
     rc=1
   fi
 done
-
-echo
-echo "[$(date)] Persisting staged cache to CFS: $DEST_HF"
-rsync -a "${STAGE_HF}/" "${DEST_HF}/"
 
 echo
 echo "[$(date)] Completed UMA download job. Logs in $RUN_DIR"

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "qwen2.5-14b",
+    "model": "Qwen/Qwen2.5-14B-Instruct",
+    "model_dir": "Qwen2.5-14B-Instruct",
+    "base_url_env": "MATSIM_VLLM_QWEN25_14B_BASE_URL"
+  },
+  {
+    "name": "smollm3-3b",
+    "model": "HuggingFaceTB/SmolLM3-3B",
+    "model_dir": "SmolLM3-3B",
+    "base_url_env": "MATSIM_VLLM_SMOLLM3_BASE_URL"
+  },
+  {
+    "name": "llama3.1-8b",
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "model_dir": "Llama-3.1-8B-Instruct",
+    "base_url_env": "MATSIM_VLLM_LLAMA31_8B_BASE_URL"
+  }
+]

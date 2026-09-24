@@ -4,9 +4,8 @@
 #
 # Create a local Python virtual environment and install everything needed
 # to run matsim-agents *and* HydraGNN. PyTorch / PyG / HydraGNN are
-# installed by delegating to HydraGNN's own installation scripts, which
-# already handle the tricky platform matrix (laptops, workstations, and
-# DOE supercomputers Frontier/Perlmutter/Aurora/Andes).
+# installed through HydraGNN's workstation installer. Supported DOE systems
+# delegate immediately to deployments/<facility>/setup/install.sh.
 #
 # Usage:
 #   ./scripts/setup_env.sh [VENV_DIR]
@@ -16,8 +15,7 @@
 #   HYDRAGNN_REPO   Git URL                (default: https://github.com/ORNL/HydraGNN.git)
 #   HYDRAGNN_REF    Branch/tag/commit      (default: main)
 #   HYDRAGNN_DIR    Pre-existing checkout  (skip clone if set)
-#   PLATFORM        workstation | frontier-rocm71 | frontier-rocm64
-#                   | perlmutter | aurora | andes
+#   PLATFORM        workstation | frontier | perlmutter | aurora
 #                   (default: workstation -> uses ./install_dependencies.sh)
 #   HYDRAGNN_EXTRAS Args forwarded to install_dependencies.sh
 #                   (default: "all dev")
@@ -33,8 +31,8 @@
 #   # Local workstation (CPU or single GPU)
 #   ./scripts/setup_env.sh
 #
-#   # Frontier (OLCF, ROCm 7.1)
-#   PLATFORM=frontier-rocm71 ./scripts/setup_env.sh /lustre/orion/.../venv
+#   # Frontier (OLCF, current ROCm contract)
+#   PLATFORM=frontier ./scripts/setup_env.sh
 #
 #   # Perlmutter (NERSC)
 #   PLATFORM=perlmutter ./scripts/setup_env.sh
@@ -52,12 +50,46 @@ BOOTSTRAP_OLLAMA="${BOOTSTRAP_OLLAMA:-0}"
 OLLAMA_MODELS="${OLLAMA_MODELS:-qwen2.5:14b}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-THIRD_PARTY_DIR="${REPO_ROOT}/third_party"
-HYDRAGNN_DIR="${HYDRAGNN_DIR:-${THIRD_PARTY_DIR}/HydraGNN}"
+HYDRAGNN_DIR="${HYDRAGNN_DIR:-$(dirname "${REPO_ROOT}")/HydraGNN}"
 
 log()  { printf '\033[1;34m[setup]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[setup]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[setup]\033[0m %s\n' "$*" >&2; exit 1; }
+
+# The facility installers own cloning, module setup, compiled dependencies,
+# and the matsim-owned environment. Delegate before the workstation path can
+# clone HydraGNN or alter its requirements.
+case "${PLATFORM}" in
+    frontier|frontier-rocm71|frontier-rocm64)
+        [[ "${PLATFORM}" == "frontier" ]] || \
+            warn "${PLATFORM} is a legacy name; using Frontier's current installer."
+        FACILITY="frontier"
+        ;;
+    perlmutter|aurora)
+        FACILITY="${PLATFORM}"
+        ;;
+    workstation)
+        FACILITY=""
+        ;;
+    andes)
+        die "Andes has no canonical installer in this repository. Use PLATFORM=workstation or add deployments/andes/setup/install.sh."
+        ;;
+    *)
+        die "Unknown PLATFORM='${PLATFORM}'. Valid: workstation | frontier | perlmutter | aurora."
+        ;;
+esac
+if [[ -n "${FACILITY}" ]]; then
+    if [[ "${VENV_DIR}" == /* ]]; then
+        FACILITY_VENV="${VENV_DIR}"
+    else
+        FACILITY_VENV="${REPO_ROOT}/${VENV_DIR#./}"
+    fi
+    log "Delegating ${FACILITY} installation to deployments/${FACILITY}/setup/install.sh"
+    MATSIM_DIR="${REPO_ROOT}" HYDRAGNN_DIR="${HYDRAGNN_DIR}" \
+        HYDRAGNN_REPO="${HYDRAGNN_REPO}" HYDRAGNN_REF="${HYDRAGNN_REF}" \
+        VENV_PATH="${FACILITY_VENV}" \
+        exec bash "${REPO_ROOT}/deployments/${FACILITY}/setup/install.sh"
+fi
 
 command -v "$PYTHON" >/dev/null 2>&1 || die "Python interpreter '$PYTHON' not found."
 command -v git       >/dev/null 2>&1 || die "git is required."
@@ -127,28 +159,7 @@ case "$PLATFORM" in
         python -m pip install -e "$HYDRAGNN_DIR"
         ;;
 
-    frontier-rocm71|frontier-rocm64|perlmutter|aurora|andes)
-        # ---- DOE supercomputer install ----
-        SC_SCRIPT="${HYDRAGNN_DIR}/installation_DOE_supercomputers/hydragnn_installation_bash_script_${PLATFORM}.sh"
-        [[ -f "$SC_SCRIPT" ]] || die "Supercomputer installer not found: ${SC_SCRIPT}"
-        warn "Supercomputer installs manage their own modules and Python environment."
-        warn "Delegating to: ${SC_SCRIPT}"
-        warn "After it finishes, this script will install matsim-agents on top."
-        ( cd "${HYDRAGNN_DIR}/installation_DOE_supercomputers" \
-            && bash "hydragnn_installation_bash_script_${PLATFORM}.sh" )
-
-        # On HPC the supercomputer script sets up a conda/venv environment.
-        # The user must activate it before re-running this script with
-        # PLATFORM=workstation, OR pass VENV_DIR pointing at
-        # the activated env's prefix. We detect activation here:
-        if [[ -z "${VIRTUAL_ENV:-}${CONDA_PREFIX:-}" ]]; then
-            die "Supercomputer install finished. Activate the environment it created, then rerun:
-    PLATFORM=workstation ./scripts/setup_env.sh \$VIRTUAL_ENV"
-        fi
-        log "Active environment: ${VIRTUAL_ENV:-$CONDA_PREFIX}"
-        ;;
-
-    *) die "Unknown PLATFORM='${PLATFORM}'. Valid: workstation | frontier-rocm71 | frontier-rocm64 | perlmutter | aurora | andes." ;;
+    *) die "Internal platform dispatch error: ${PLATFORM}" ;;
 esac
 
 # --------------------------- matsim-agents itself --------------------------

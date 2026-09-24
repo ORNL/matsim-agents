@@ -18,7 +18,7 @@
 #   2. Runs vasp_std cold-start and vasp_std warm-start.
 #   3. Reports ionic steps / wall-time speed-up.
 #
-# Uses the fairchem_venv (NOT hydragnn_venv) — fairchem-core requires numpy>=2.
+# Uses the matsim-owned .venv-uma created with INSTALL_UMA=1.
 #
 # Artifacts:
 #   $RUNS_ROOT/uma-vasp-warmstart-$SLURM_JOB_ID/
@@ -51,8 +51,8 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+VENV_ROOT=$REPO/.hpc-build/perlmutter
+VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}"
 
 VASP_LAUNCHER=${MATSIM_VASP_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh}
 VASP_POTCAR_DIR=${MATSIM_VASP_POTCAR_DIR:-$REPO/external/vasp6/potcar/potpaw_PBE.64}
@@ -65,7 +65,7 @@ mkdir -p "$RUN_DIR" "$WARMSTART_DIR"
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
-# Activate fairchem_venv (plain venv, not conda).
+# Activate the UMA compatibility environment.
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 
@@ -75,17 +75,8 @@ export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 
 # Cache UMA model in shared project directory.
-export HF_HOME="${HF_HOME:-${PROJ}/models/hf_cache}"
-mkdir -p "${HF_HOME}"
-
-# fairchem's pretrained_mlip.get_predict_unit() ignores HF_HOME entirely -- it
-# always calls hf_hub_download(..., cache_dir=FAIRCHEM_CACHE_DIR), which
-# defaults to ~/.cache/fairchem on $HOME (CFS/DVS, no fcntl.flock support ->
-# OSError [Errno 524], regardless of offline mode). Point it at $SCRATCH
-# (flock-capable, persistent across jobs). Requires a prior run of
-# deployments/perlmutter/download/download-uma-perlmutter.sh.
-export FAIRCHEM_CACHE_DIR="${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
-mkdir -p "${FAIRCHEM_CACHE_DIR}"
+source "${REPO}/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+configure_uma_model_artifacts "${REPO}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 

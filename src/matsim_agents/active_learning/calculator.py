@@ -25,6 +25,10 @@ from matsim_agents.active_learning.config import (
     MLIPConfig,
     UMAConfig,
 )
+from matsim_agents.backends.mlip.uma_artifacts import (
+    load_uma_predict_unit_from_bundle,
+    resolve_uma_artifact_bundle,
+)
 
 log = logging.getLogger(__name__)
 
@@ -389,7 +393,12 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
         log.info("Loading fine-tuned UMA checkpoint from %s", ckpt)
         predictor = load_predict_unit(str(ckpt), device=cfg.device)
     else:
-        predictor = pretrained_mlip.get_predict_unit(cfg.model_name, device=cfg.device)
+        bundle = resolve_uma_artifact_bundle(cfg.model_name)
+        if bundle is not None:
+            log.info("Loading pretrained UMA bundle from %s", bundle.checkpoint.parent)
+            predictor = load_uma_predict_unit_from_bundle(bundle, device=cfg.device)
+        else:
+            predictor = pretrained_mlip.get_predict_unit(cfg.model_name, device=cfg.device)
     calc = FAIRChemCalculator(predictor, task_name=cfg.task_name)
 
     # Expose the underlying torch module as `.model` so uncertainty.score_mc_dropout

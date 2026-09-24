@@ -74,6 +74,35 @@ relocate everything as a unit, or override `SRC_DIR`/`BUILD_DIR`/
    reference uninstalled tools. The script builds an explicit list of
    user-facing target groups and copies `bin/*.x` to `install-gpu/bin/`.
 
+4. **cce/18.0.1 uninitialized-descriptor segfault in `pw_init_qexsd_input`.**
+   `pw.x` segfaults deterministically on every run: `hybrid_type`/`dftU_type`/
+   `vdW_type` (`Modules/qes_types_module.f90`) carry several `ALLOCATABLE`
+   array components, and cce/18.0.1 does not reliably initialize the
+   allocation-status descriptor of those components when the containing type
+   is a plain automatic local variable. The fix (developed upstream on
+   [`fix/frontier-cce-uninitialized-descriptor-segfault`](https://gitlab.com/max.lupopasini/q-e/-/tree/fix/frontier-cce-uninitialized-descriptor-segfault))
+   has two parts:
+   - `SAVE` + explicit reset/allocate of the affected locals in
+     `PW/src/pw_init_qexsd_input.f90` (and matching hardening in
+     `PW/src/pw_restart_new.f90`), so cce always sees a validly-initialized
+     descriptor.
+   - a descriptor-safe manual deep copy (`qes_safe_copy_dftU`/
+     `qes_safe_copy_vdW` in `Modules/qes_init_module.f90`) that replaces
+     whole-structure derived-type assignment (`obj%dftU = dftU`) with
+     explicit `ALLOCATE` + element-by-element field copies for every
+     Hubbard/vdW array component (including nested allocatable
+     sub-components), so DFT+U/vdW-correction data is actually preserved in
+     the XML restart file rather than silently dropped.
+
+   The script applies this as a single unified diff,
+   [`patches/qe-cce-segfault-fix/cce-uninitialized-descriptor-segfault.patch`](patches/qe-cce-segfault-fix/cce-uninitialized-descriptor-segfault.patch),
+   right after the `pimd_subrout.f90` patch above, guarded by a
+   `grep -q 'Frontier/cce-18.0.1 workaround'` marker check so re-running the
+   build script against an already-patched source tree is a no-op. Verified
+   with a bulk BCC-Fe DFT+U SCF run: `pw.x` converges (`JOB DONE`) and the
+   written `data-file-schema.xml` contains real `Hubbard_Occ`/`Hubbard_ns`
+   occupation data.
+
 ## Run
 
 ```bash

@@ -1,0 +1,37 @@
+# Compute-qualification case: pure VASP relaxation of the benchmark Si cell.
+# structure_path and output_root are overridden by qualification.py at run time.
+#
+# Modeled on the standalone job-vasp-warmstart-perlmutter.sh benchmark: same
+# launcher (deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh, which
+# loads the PrgEnv-gnu/cudatoolkit-12.9/NVHPC-25.5 toolchain and runs vasp_std
+# under srun) and the same POTCAR set (external/vasp6/potcar/potpaw_PBE.64).
+# `settings` is left empty so recommend_settings() derives ENCUT from the Si
+# POTCAR's ENMAX and picks non-metallic defaults (ISMEAR=0, SIGMA=0.05,
+# KSPACING=0.30) for this semiconductor.
+mode: dft
+
+geometry:
+  relax_atoms: true
+  relax_cell: true
+  fixed_atom_indices: []
+  charge: 0.0
+  spin: 0.0
+  preserve_symmetry: false
+
+dft:
+  backend: vasp
+  launcher:
+    - bash
+    - /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh
+  potcar_dir: /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/external/vasp6/potcar/potpaw_PBE.64
+  timeout_sec: 7200
+  settings: {}
+
+dft_approved: true
+approvals:
+  before_dft: true
+  before_retraining: true
+  before_model_promotion: true
+
+max_steps: 200
+force_tolerance_eV_per_A: 0.02

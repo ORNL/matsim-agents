@@ -37,7 +37,7 @@ PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}
 
 AL_CONFIG="${AL_CONFIG:-}"
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
-VENV_ROOT="${VENV_ROOT:-$(dirname "${PROJECT_ROOT}")/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72}"
+VENV_ROOT="${VENV_ROOT:-${PROJECT_ROOT}/.venv}"
 
 if [[ -z "${AL_CONFIG}" ]]; then
   echo "ERROR: AL_CONFIG must be set (path to AL YAML config)." >&2

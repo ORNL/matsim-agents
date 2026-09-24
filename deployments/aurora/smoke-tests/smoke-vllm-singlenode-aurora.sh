@@ -34,10 +34,10 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 PROJ="$(dirname "${REPO}")"
 
 # vLLM is provided by the `frameworks` module (vLLM 0.15 + PyTorch 2.10/XPU as
-# of frameworks/2025.3.1).  We then activate hydragnn_venv (built with
+# of frameworks/2025.3.1). We then activate the matsim-owned .venv (built with
 # --system-site-packages on top of that same Python 3.12) so HydraGNN +
 # matsim-agents are importable alongside vLLM.
-VENV_PATH="${VENV_PATH:-$(dirname "${REPO}")/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
+VENV_PATH="${VENV_PATH:-${REPO}/.venv}"
 
 SMOKE_MODEL_PATH="${SMOKE_MODEL_PATH:-${PROJ}/models/Mistral-Small-24B-Instruct-2501}"
 SMOKE_MODEL_NAME="${SMOKE_MODEL_NAME:-$(basename "$SMOKE_MODEL_PATH")}"

@@ -35,8 +35,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && \
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV_ROOT="${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter"
-VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}"
+VENV="${MATSIM_MACE_VENV:-${REPO}/.venv-mace}"
 [[ ! -d "${VENV}" ]] && { echo "ERROR: MACE venv not found: ${VENV}" >&2; exit 2; }
 
 # shellcheck disable=SC1091
@@ -57,10 +56,10 @@ export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 export PYTHONPATH="${REPO}/src:${PYTHONPATH:-}"
 
-# MACE foundation weights + fine-tune outputs cache (shared project dir).
-export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${PROJ}/models/mace_cache}"
-export MACE_CACHE="${MACE_CACHE:-${XDG_CACHE_HOME}/mace}"
-mkdir -p "${MACE_CACHE}" "${OUT_DIR}"
+# MACE foundation weights from durable project storage.
+source "${REPO}/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+configure_mace_model_artifacts "${REPO}"
+mkdir -p "${OUT_DIR}"
 
 ARGS=(
   --dataset "${DATASET}"

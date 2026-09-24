@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""Qualify every first-class LLM through a multi-round scientific debate."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+from typing import Any
+
+from matsim_agents.backends.llm.provider import get_chat_model
+from matsim_agents.workflows.debate import (
+    DebateParticipant,
+    ScientificDebateConfig,
+    ScientificDebateResult,
+    run_scientific_debate,
+)
+
+ROOT = Path(__file__).resolve().parents[2]
+CATALOG = ROOT / "deployments" / "common" / "open-model-catalog.json"
+DEFAULT_MODELS_ROOT = ROOT.parent / "models"
+
+THERMOELECTRIC_HYPOTHESIS = (
+    "What candidate material provides an optimal thermoelectric functional property—"
+    "specifically a high dimensionless figure of merit ZT near 800 K—while remaining "
+    "chemically stable and composed of reasonably abundant elements?"
+)
+
+
+def load_catalog(path: Path = CATALOG) -> list[dict[str, Any]]:
+    entries = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(entries, list) or len(entries) < 2:
+        raise ValueError("the first-class model catalog must contain at least two models")
+    return entries
+
+
+def local_catalog_entries(
+    entries: list[dict[str, Any]], models_root: Path
+) -> tuple[list[dict[str, Any]], list[str], dict[str, str]]:
+    local = []
+    skipped = []
+    disabled = {}
+    for entry in entries:
+        if entry.get("debate_enabled") is False:
+            disabled[str(entry["name"])] = str(
+                entry.get("debate_skip_reason") or "disabled for scientific debate"
+            )
+            continue
+        model_dir = str(entry.get("model_dir") or str(entry["model"]).rsplit("/", 1)[-1])
+        if (models_root / model_dir).is_dir():
+            local.append(entry)
+        else:
+            skipped.append(str(entry["name"]))
+    if len(local) < 2:
+        raise ValueError(
+            f"local model selection requires at least two catalog checkpoints under {models_root}"
+        )
+    return local, skipped, disabled
+
+
+def catalog_participants(
+    entries: list[dict[str, Any]],
+    *,
+    environment: dict[str, str] | None = None,
+) -> list[DebateParticipant]:
+    """Resolve every catalog model to its facility endpoint or fail closed."""
+
+    env = os.environ if environment is None else environment
+    shared_url = env.get("MATSIM_VLLM_BASE_URL")
+    participants = []
+    missing = []
+    for entry in entries:
+        endpoint = env.get(str(entry["base_url_env"])) or shared_url
+        if not endpoint:
+            missing.append(str(entry["base_url_env"]))
+            continue
+        participants.append(
+            DebateParticipant(
+                name=str(entry["name"]),
+                provider="vllm",
+                model=str(entry["model"]),
+                base_url=endpoint,
+                role=(
+                    "independent materials scientist assessing thermoelectric transport, "
+                    "stability, abundance, and experimental falsifiability"
+                ),
+            )
+        )
+    if missing:
+        raise ValueError("missing endpoint variables for first-class models: " + ", ".join(missing))
+    return participants
+
+
+def validate_enclave_result(
+    result: ScientificDebateResult,
+    participants: list[DebateParticipant],
+    rounds: int,
+) -> list[str]:
+    errors = []
+    expected = {participant.name for participant in participants}
+    contribution_ids = [turn.turn_id for turn in result.turns] + [
+        verdict.contribution_id for verdict in result.verdicts
+    ]
+    if len(contribution_ids) != len(set(contribution_ids)):
+        errors.append("model contribution IDs are not unique")
+    if any(not contribution_id.strip() for contribution_id in contribution_ids):
+        errors.append("one or more model contributions have no ID")
+    for round_index in range(1, rounds + 1):
+        turns = [turn for turn in result.turns if turn.round == round_index]
+        observed = {turn.participant for turn in turns}
+        if observed != expected:
+            errors.append(
+                f"round {round_index} model set differs: missing={sorted(expected - observed)} "
+                f"unexpected={sorted(observed - expected)}"
+            )
+        empty = [turn.participant for turn in turns if not turn.response.strip()]
+        if empty:
+            errors.append(f"round {round_index} has empty responses from {sorted(empty)}")
+    verdict_models = {verdict.model for verdict in result.verdicts}
+    expected_models = {participant.model for participant in participants}
+    if verdict_models != expected_models:
+        errors.append("independent final verdicts do not cover every model")
+    if any(not verdict.response.strip() for verdict in result.verdicts):
+        errors.append("one or more independent final verdicts are empty")
+    return errors
+
+
+def execute_all_model_scientific_debate(
+    *,
+    output: Path,
+    rounds: int,
+    catalog: Path = CATALOG,
+    models_root: Path = DEFAULT_MODELS_ROOT,
+    excluded_models: set[str] | None = None,
+    environment: dict[str, str] | None = None,
+    model_factory=get_chat_model,
+    hypothesis: str = THERMOELECTRIC_HYPOTHESIS,
+) -> dict[str, Any]:
+    if rounds < 2:
+        raise ValueError("LLM portability debate requires at least two rounds")
+    entries, skipped_nonlocal, disabled = local_catalog_entries(load_catalog(catalog), models_root)
+    exclusions = excluded_models or set()
+    matched_exclusions = {
+        exclusion
+        for exclusion in exclusions
+        if any(
+            exclusion in {str(entry["name"]), str(entry["model"])} for entry in entries
+        )
+    }
+    known_exclusions = {
+        str(entry["name"])
+        for entry in entries
+        if {str(entry["name"]), str(entry["model"])} & exclusions
+    }
+    unknown_exclusions = exclusions - matched_exclusions
+    if unknown_exclusions:
+        raise ValueError(f"unknown or unavailable excluded models: {sorted(unknown_exclusions)}")
+    entries = [entry for entry in entries if str(entry["name"]) not in known_exclusions]
+    if len(entries) < 2:
+        raise ValueError("runtime model exclusions leave fewer than two debate participants")
+    participants = catalog_participants(entries, environment=environment)
+    output.mkdir(parents=True, exist_ok=True)
+    config = ScientificDebateConfig(
+        hypothesis=hypothesis,
+        participants=participants,
+        rounds=rounds,
+        output_root=str(output / "runs"),
+        debate_mode="equal",
+        synthesis_method="independent_verdicts",
+    )
+    try:
+        debate = run_scientific_debate(config, model_factory=model_factory)
+        errors = validate_enclave_result(debate, participants, rounds)
+        payload = {
+            "schema_version": 1,
+            "benchmark": "first-class-llm-scientific-enclave",
+            "status": "passed" if not errors else "failed",
+            "hypothesis": hypothesis,
+            "required_rounds": rounds,
+            "required_models": [participant.model for participant in participants],
+            "required_participants": [participant.name for participant in participants],
+            "models_root": str(models_root),
+            "skipped_nonlocal_models": skipped_nonlocal,
+            "disabled_models": disabled,
+            "runtime_excluded_models": sorted(known_exclusions),
+            "turn_count": len(debate.turns),
+            "debate_run_directory": debate.run_directory,
+            "transcript_path": debate.transcript_path,
+            "dialogue_path": debate.dialogue_path,
+            "errors": errors,
+        }
+    except Exception as error:
+        payload = {
+            "schema_version": 1,
+            "benchmark": "first-class-llm-scientific-enclave",
+            "status": "failed",
+            "hypothesis": hypothesis,
+            "required_rounds": rounds,
+            "required_models": [participant.model for participant in participants],
+            "required_participants": [participant.name for participant in participants],
+            "models_root": str(models_root),
+            "skipped_nonlocal_models": skipped_nonlocal,
+            "disabled_models": disabled,
+            "runtime_excluded_models": sorted(known_exclusions),
+            "errors": [f"{type(error).__name__}: {error}"],
+        }
+    (output / "all_model_scientific_debate_result.json").write_text(
+        json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+    )
+    return payload
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--rounds", type=int, default=2)
+    parser.add_argument("--catalog", type=Path, default=CATALOG)
+    parser.add_argument(
+        "--models-root",
+        type=Path,
+        default=Path(os.environ.get("MODEL_ROOT", DEFAULT_MODELS_ROOT)),
+    )
+    parser.add_argument(
+        "--exclude-model",
+        action="append",
+        default=[],
+        help="catalog name or model ID to exclude for this facility run (repeatable)",
+    )
+    args = parser.parse_args()
+    if args.rounds < 2:
+        parser.error("--rounds must be at least 2")
+    result = execute_all_model_scientific_debate(
+        output=args.output,
+        rounds=args.rounds,
+        catalog=args.catalog,
+        models_root=args.models_root,
+        excluded_models=set(args.exclude_model),
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result["status"] == "passed" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

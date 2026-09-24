@@ -74,7 +74,7 @@ to activate it (activation in subshells can fail on Frontier because
 `module` commands are not available there):
 
 ```bash
-VENV=/lustre/orion/<project>/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=/lustre/orion/<project>/proj-shared/matsim-agents/.venv
 MODEL_DIR=/lustre/orion/<project>/proj-shared/models/Qwen2.5-72B-Instruct
 LOG=/lustre/orion/<project>/proj-shared/models/qwen_download.log
 
@@ -154,7 +154,7 @@ interactive allocation. Example for Frontier (single node, 8 GPUs):
 module reset
 ml rocm/7.2.0 amd-mixed/7.2.0 PrgEnv-gnu miniforge3/23.11.0-0
 module unload darshan-runtime
-conda activate /lustre/orion/<project>/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+conda activate /lustre/orion/<project>/proj-shared/matsim-agents/.venv
 
 pip install vllm  # if not already installed
 
@@ -221,22 +221,20 @@ job will *not* download them itself. There are two independent reasons:
    lock while writing to its cache, so a download that targets CFS from a
    compute node fails immediately with `OSError: [Errno 524] Unknown error 524`.
 
-Because of this, the compute-side jobs read the cache in **offline mode**
-(`HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`), which resolves the cached path
-directly and never takes a lock.
+Because of this, the download job streams each checkpoint and reference file
+directly into a self-contained bundle on non-purgeable project storage. Compute
+jobs load those local files directly and never invoke Hugging Face cache logic.
 
-> ⚠️ **Caveat — the cache must be prefetched first.** Because reads are
-> offline, if a model is **not** already in the cache the job fails fast with a
-> "not found locally" / offline error instead of downloading it. This is the
-> intended trade-off on compute nodes (which have no internet anyway). Run the
-> prefetch step below once per model before submitting AL / warm-start jobs.
+> **Caveat — the bundle must be installed first.** If a model bundle is absent,
+> the job fails fast with its expected project-storage path. Run the download
+> step below once per model before submitting AL or warm-start jobs.
 
 ### Step 0 — one-time Hugging Face auth (gated repo)
 
 `facebook/UMA` is gated. Accept the license at
 <https://huggingface.co/facebook/UMA>, then log in once on a login node:
 ```bash
-source $PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/fairchem_venv/bin/activate
+source $REPO/.venv-uma/bin/activate
 hf auth login          # paste your hf_... token; writes ~/.cache/huggingface/token
 hf auth whoami         # should print your username
 ```
@@ -249,27 +247,24 @@ sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
 UMA_MODELS="uma-s-1p1 uma-m-1p1" sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
 ```
 
-The download job **stages** the cache on a flock-capable filesystem
-(`$SCRATCH` Lustre, else node-local `/tmp`), then copies the finished cache
-into the persistent shared location on CFS
-(`$PROJ/models/hf_cache`, override with `HF_HOME=...`). This is what side-steps
-the errno-524 lock failure while still leaving the weights on CFS for reuse.
+The download job bypasses `huggingface_hub` cache locking and writes each file
+atomically into `$PROJ/models/artifacts/uma/<model>/`. No scratch or node-local
+staging directory is used.
 
-### Step 2 — verify the cache
+### Step 2 — verify the bundle
 
 ```bash
-ls $PROJ/models/hf_cache/hub/models--facebook--UMA
-# should list blobs/, refs/, snapshots/ once the prefetch succeeded
+ls $PROJ/models/artifacts/uma/uma-s-1p1
+# checkpoint.pt  atom_refs.yaml  form_elem_refs.yaml  manifest.json
 ```
 
 ### Step 3 — run compute jobs (offline reads)
 
-The following jobs already set `HF_HOME=$PROJ/models/hf_cache` and
-`HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1`, so they read the prefetched
-cache without any download or lock:
+The following jobs set `MATSIM_UMA_ARTIFACT_DIR` and load the bundle without any
+download, cache lookup, or lock:
 
 - `deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh`
 - `deployments/perlmutter/jobs/job-uma-warmstart-perlmutter.sh`
 - `deployments/perlmutter/jobs/job-uma-vasp-warmstart-perlmutter.sh`
 
-If you point them at a different `HF_HOME`, prefetch into that directory first.
+Override `MATSIM_MODEL_ARTIFACTS_ROOT` to use another non-purgeable project path.

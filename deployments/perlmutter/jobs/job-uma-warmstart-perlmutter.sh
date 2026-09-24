@@ -17,9 +17,7 @@
 #   2. Runs pw.x cold-start and pw.x warm-start (initial coords from UMA).
 #   3. Reports SCF iterations / wall-time speed-up.
 #
-# This script activates the separate fairchem_venv (not hydragnn_venv) because
-# fairchem-core requires numpy>=2.0 which conflicts with HydraGNN's pin.
-# See deployments/perlmutter/setup/README.md for details.
+# This script activates the matsim-owned .venv-uma created with INSTALL_UMA=1.
 #
 # Submit:
 #   sbatch deployments/perlmutter/jobs/job-uma-warmstart-perlmutter.sh
@@ -28,13 +26,10 @@
 #   MATSIM_WARMSTART_FIXTURES=MoNbTaW_HEA \
 #     sbatch deployments/perlmutter/jobs/job-uma-warmstart-perlmutter.sh
 #
-# PREREQUISITE — prefetch the UMA weights first. This job reads the shared HF
-# cache in OFFLINE mode (HF_HUB_OFFLINE=1): compute nodes have no internet and
-# CFS does not support fcntl.flock over DVS (OSError [Errno 524]). It will NOT
-# download UMA on first use; if the cache is missing it fails fast. Run once:
+# PREREQUISITE — install the UMA bundle on non-purgeable project storage first.
+# Compute nodes run offline and load the checkpoint and references directly.
 #   sbatch deployments/perlmutter/download/download-uma-perlmutter.sh
-# The cache lives at HF_HOME (default $PROJ/models/hf_cache); override with:
-#   export HF_HOME=/path/to/project/models/hf_cache
+# Bundles live under $PROJ/models/artifacts/uma by default.
 # See docs/model-download.md ("UMA MLIP weights on Perlmutter").
 # ---------------------------------------------------------------------------
 
@@ -49,9 +44,9 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 
-# fairchem_venv lives alongside hydragnn_venv under the HydraGNN install root.
-VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
-VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}"
+# Isolated FairChem/UMA compatibility environment.
+VENV_ROOT=$REPO/.hpc-build/perlmutter
+VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}"
 
 QE_LAUNCHER=${MATSIM_QE_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-pw-gpu-perlmutter.sh}
 QE_PSEUDO_DIR=${MATSIM_QE_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}
@@ -64,7 +59,7 @@ mkdir -p "$RUN_DIR" "$WARMSTART_DIR"
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
-# Activate the plain Python venv (fairchem_venv), NOT conda.
+# Activate the UMA compatibility environment.
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 
@@ -73,19 +68,8 @@ export PYTHONUNBUFFERED=1
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 
-# Cache UMA model downloads in a shared project directory so multiple jobs
-# share one copy.  The directory is created on first use.
-export HF_HOME="${HF_HOME:-${PROJ}/models/hf_cache}"
-mkdir -p "${HF_HOME}"
-
-# fairchem's pretrained_mlip.get_predict_unit() ignores HF_HOME entirely -- it
-# always calls hf_hub_download(..., cache_dir=FAIRCHEM_CACHE_DIR), which
-# defaults to ~/.cache/fairchem on $HOME (CFS/DVS, no fcntl.flock support ->
-# OSError [Errno 524], regardless of offline mode). Point it at $SCRATCH
-# (flock-capable, persistent across jobs). Requires a prior run of
-# deployments/perlmutter/download/download-uma-perlmutter.sh.
-export FAIRCHEM_CACHE_DIR="${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
-mkdir -p "${FAIRCHEM_CACHE_DIR}"
+source "${REPO}/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+configure_uma_model_artifacts "${REPO}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 

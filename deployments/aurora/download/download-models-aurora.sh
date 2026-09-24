@@ -30,7 +30,7 @@
 set -euo pipefail
 
 # Safety policy:
-# - This downloader must run from the HydraGNN Aurora environment.
+# - This downloader must run from the matsim-owned Aurora environment.
 # - This script never runs pip installs or mutates Python package versions.
 # - If tooling is missing, refresh the environment via setup scripts instead of
 #   installing ad-hoc packages here.
@@ -40,7 +40,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 
-VENV_DEFAULT="${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv"
+VENV_DEFAULT="${REPO}/.venv"
 VENV="${MATSIM_AURORA_VENV:-$VENV_DEFAULT}"
 MODEL_ROOT="${MODEL_ROOT:-$PROJ/models}"
 JOB_TAG="${PBS_JOBID:-manual}"
@@ -53,8 +53,8 @@ if command -v module >/dev/null 2>&1; then
 fi
 
 if [[ ! -d "$VENV" ]]; then
-  echo "ERROR: Aurora HydraGNN env not found: $VENV" >&2
-  echo "Build it first with: bash deployments/aurora/setup/install_matsim_aurora.sh" >&2
+  echo "ERROR: Aurora matsim environment not found: $VENV" >&2
+  echo "Build it first with: bash deployments/aurora/setup/install.sh" >&2
   exit 1
 fi
 
@@ -80,7 +80,7 @@ else
     echo "ERROR: Unsupported huggingface_hub>=1.0 detected in HydraGNN venv: $VENV" >&2
     echo "Do not upgrade packages in-place in this environment." >&2
     echo "Recreate/fix the Aurora environment with:" >&2
-    echo "  INSTALL_LLM_EXTRAS=1 bash deployments/aurora/setup/install_matsim_aurora.sh" >&2
+    echo "  bash deployments/aurora/setup/install.sh" >&2
     exit 1
   fi
   exit $rc
@@ -136,7 +136,7 @@ if ! command -v hf >/dev/null 2>&1; then
   echo "ERROR: hf CLI not found in active environment." >&2
   echo "Do not run ad-hoc pip upgrades in HydraGNN venv." >&2
   echo "Refresh the environment with pinned extras instead:" >&2
-  echo "  INSTALL_LLM_EXTRAS=1 bash deployments/aurora/setup/install_matsim_aurora.sh" >&2
+  echo "  bash deployments/aurora/setup/install.sh" >&2
   exit 1
 fi
 

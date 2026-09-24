@@ -44,12 +44,15 @@ Each iteration of the loop performs four steps:
    would move the atoms back toward equilibrium and discard exactly the
    information AL is trying to capture.
 
-4. **Augment the dataset and retrain.** Converged DFT results are appended to a
-   cumulative `dataset.extxyz` (each frame tagged with `al_iteration` and
-   `dft_backend`), and HydraGNN is retrained by resuming from the previous
-   iteration's checkpoint. The updated surrogate then drives the next
-   iteration's MD, closing the loop. (With a frozen UMA foundation model,
-   retraining is skipped and the labels accumulate for offline fine-tuning.)
+4. **Validate and augment the dataset.** Converged DFT results are validated
+   and appended to a cumulative `dataset.extxyz` (each frame tagged with
+   `al_iteration` and `dft_backend`). This is the safe default and completes a
+   useful data-acquisition iteration without changing the deployed model.
+5. **Optionally train and promote.** `trainer.enabled: true` trains a candidate
+   model. It drives the next iteration only when `promote_model: true` and
+   `promotion_approved: true` are both explicit. Training alone never silently
+   replaces the active surrogate. Frozen foundation models can accumulate
+   labels for offline fine-tuning.
 
 ```mermaid
 flowchart LR
@@ -58,9 +61,22 @@ flowchart LR
   UQ --> SEL[Select top-K<br/>+ diversity filter]
   SEL --> DFT[3. Single-point DFT<br/>VASP/QE · frozen ions]
   DFT --> DS[4. Append to dataset.extxyz]
-  DS --> RT[Retrain HydraGNN<br/>resume from checkpoint]
-  RT -->|next iteration| MD
+  DS --> STOP[Default: retain labels<br/>without model mutation]
+  DS -->|trainer.enabled| RT[Train candidate model]
+  RT -->|promotion explicitly approved| MD
 ```
+
+```yaml
+# Safe default: acquire data only.
+trainer:
+  enabled: false
+  promote_model: false
+  promotion_approved: false
+```
+
+These are three different actions: DFT labeling grows the dataset, retraining
+produces a candidate model, and promotion authorizes that candidate for future
+sampling. See [Scientific workflow contracts](../../docs/scientific-workflows.md).
 
 ## How this relates to other workflows
 

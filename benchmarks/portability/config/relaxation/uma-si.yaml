@@ -1,0 +1,20 @@
+# Compute-qualification case: pure MLIP relaxation of the benchmark Si cell.
+# structure_path and output_root are overridden by qualification.py at run time.
+mode: mlip
+
+geometry:
+  relax_atoms: true
+  relax_cell: true
+  fixed_atom_indices: []
+  charge: 0.0
+  spin: 0.0
+  preserve_symmetry: false
+
+mlip:
+  mlip_backend: uma
+  uma_model_name: uma-s-1p1
+  uma_task: omat
+  mlp_device: cuda
+
+max_steps: 200
+force_tolerance_eV_per_A: 0.02

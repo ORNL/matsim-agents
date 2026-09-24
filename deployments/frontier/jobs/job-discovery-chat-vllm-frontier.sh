@@ -28,7 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=$REPO/.venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
 HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
@@ -75,11 +75,13 @@ export RCCL_UNROLL_FACTOR=0
 export RCCL_P2P_BATCH_ENABLE=0
 export RCCL_P2P_BATCH_THRESHOLD=0
 
-# Compile / kernel cache on Lustre (avoids NFS Stale file handle errors)
-export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
-export VLLM_CACHE_ROOT=$PROJ/cache/vllm-cache
-export TRITON_CACHE_DIR=$PROJ/cache/vllm-cache/triton
-rm -rf "$VLLM_CACHE_ROOT"
+# Durable tvm_ffi addon plus disposable per-job kernel caches.
+source "$REPO/deployments/frontier/setup/tvm-ffi-artifact.sh"
+require_tvm_ffi_artifact "$REPO" "$VENV"
+JIT_TMP="/tmp/vllm-jit.${USER}.${SLURM_JOB_ID:-$$}"
+export VLLM_CACHE_ROOT="${JIT_TMP}/vllm"
+export TRITON_CACHE_DIR="${JIT_TMP}/triton"
+rm -rf "${JIT_TMP}"
 mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 
 # ── vLLM server ──────────────────────────────────────────────────────────────

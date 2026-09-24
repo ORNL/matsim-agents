@@ -35,7 +35,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 PROJ="$(dirname "${REPO}")"
 # Under sbatch BASH_SOURCE is wrong; anchor to the repo instead.
 UTILS_DIR="$REPO/deployments/frontier/utils"
-VENV=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+VENV=$REPO/.venv
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/DeepSeek-R1-Distill-Qwen-32B}
 SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-deepseek-ai/DeepSeek-R1-Distill-Qwen-32B}
 SMOKE_PORT=${SMOKE_PORT:-8000}
@@ -123,16 +123,8 @@ export TRITON_CACHE_DIR=$RUN_DIR/vllm-cache/triton
 rm -rf "$VLLM_CACHE_ROOT"
 mkdir -p "$VLLM_CACHE_ROOT" "$TRITON_CACHE_DIR"
 
-# Use prebuilt tvm_ffi torch-c-dlpack .so from proj-shared (avoids JIT rebuild hang at import)
-export TVM_FFI_CACHE_DIR=$PROJ/cache/tvm-ffi
-
-# Preflight: tvm_ffi will silently hang at import if its prebuilt .so is missing.
-TVM_FFI_SO=$TVM_FFI_CACHE_DIR/libtorch_c_dlpack_addon_torch211-rocm.so
-if [[ ! -s "$TVM_FFI_SO" ]]; then
-  echo "[FAIL] Missing or empty tvm_ffi prebuilt: $TVM_FFI_SO" >&2
-  echo "       Rebuild with: deployments/frontier/setup/prebuild-tvm-ffi-frontier.sh (or copy from a backup)" >&2
-  exit 1
-fi
+source "$REPO/deployments/frontier/setup/tvm-ffi-artifact.sh"
+require_tvm_ffi_artifact "$REPO" "$VENV"
 rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true
 
 unset ROCR_VISIBLE_DEVICES

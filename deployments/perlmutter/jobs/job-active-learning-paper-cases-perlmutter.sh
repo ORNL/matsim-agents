@@ -19,7 +19,7 @@
 #
 # Runs `matsim-agents al run examples/paper_cases/al_<case>.yaml` with
 #   MLIP_BACKEND=uma DFT_BACKEND=vasp
-# from the fairchem_venv (UMA requires numpy>=2; not the hydragnn_venv).
+# from the matsim-owned .venv-uma created with INSTALL_UMA=1.
 #
 # Select the case with the CASE env var (default: hea_bcc):
 #   CASE=lifepo4    sbatch deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh
@@ -34,8 +34,8 @@
 #   MLIP_BACKEND=mace     CASE=hea_bcc sbatch ...            (frozen MACE-MP loop)
 #   MLIP_BACKEND=mace MACE_MODEL=large MACE_RETRAIN=1 CASE=hea_bcc sbatch ...
 # MACE runs FROZEN by default (comparable to the frozen-UMA loop); MACE_RETRAIN=1
-# fine-tunes each iteration and requires the mace_venv + a prefetched foundation
-# model cache under $PROJ/models/mace_cache.
+# fine-tunes each iteration and requires `.venv-mace` plus a prefetched foundation
+# model artifacts under $PROJ/models/artifacts/mace.
 #
 # MULTI-NODE DFT CONCURRENCY — the AL driver dispatches the selected VASP
 # single-points concurrently, up to (SLURM_JOB_NUM_NODES / nodes_per_job) at a
@@ -65,8 +65,6 @@ REPO="${PROJECT_ROOT:-${REPO_DEFAULT}}"
   REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
-
-VENV_ROOT=$PROJ/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter
 
 # ── case -> AL YAML mapping ──────────────────────────────────────────────────
 CASE="${CASE:-hea_bcc}"
@@ -103,13 +101,13 @@ source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 
 case "$MLIP_BACKEND" in
-  uma)      VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}" ;;
-  mace)     VENV="${MATSIM_MACE_VENV:-${VENV_ROOT}/mace_venv}" ;;
-  hydragnn) VENV="${MATSIM_HYDRAGNN_VENV:-${VENV_ROOT}/hydragnn_venv}" ;;
-  *)        VENV="${MATSIM_FAIRCHEM_VENV:-${VENV_ROOT}/fairchem_venv}" ;;
+  uma)      VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}" ;;
+  mace)     VENV="${MATSIM_MACE_VENV:-${REPO}/.venv-mace}" ;;
+  hydragnn) VENV="${MATSIM_HYDRAGNN_VENV:-${REPO}/.venv}" ;;
+  *)        VENV="${MATSIM_FAIRCHEM_VENV:-${REPO}/.venv-uma}" ;;
 esac
 [[ ! -d "${VENV}" ]] && { echo "ERROR: venv not found: ${VENV}" >&2; exit 2; }
-# fairchem_venv/mace_venv are plain venvs (bin/activate); hydragnn_venv is conda.
+# Both default environments are matsim-owned Python virtual environments.
 if [[ -f "${VENV}/bin/activate" ]]; then
   # shellcheck disable=SC1091
   source "${VENV}/bin/activate"
@@ -126,20 +124,13 @@ export PYTHONUNBUFFERED=1
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 
-# UMA model cache (shared project dir).
-export HF_HOME="${HF_HOME:-${PROJ}/models/hf_cache}"
-mkdir -p "${HF_HOME}"
+source "${REPO}/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+if [[ "${MLIP_BACKEND}" == "uma" ]]; then
+  configure_uma_model_artifacts "${REPO}"
+fi
 if [[ -z "${HF_TOKEN:-}" && -f "${HOME}/.cache/huggingface/token" ]]; then
   export HF_TOKEN="$(< "${HOME}/.cache/huggingface/token")"
 fi
-# fairchem's pretrained_mlip.get_predict_unit() ignores HF_HOME entirely -- it
-# always calls hf_hub_download(..., cache_dir=FAIRCHEM_CACHE_DIR), which
-# defaults to ~/.cache/fairchem on $HOME (CFS/GPFS, no fcntl.flock support ->
-# OSError [Errno 524], regardless of offline mode). Point it at $SCRATCH
-# (flock-capable, persistent across jobs). Requires a prior successful run of
-# deployments/perlmutter/download/download-uma-perlmutter.sh.
-export FAIRCHEM_CACHE_DIR="${FAIRCHEM_CACHE_DIR:-${SCRATCH:-/tmp}/matsim-agents/fairchem_cache}"
-mkdir -p "${FAIRCHEM_CACHE_DIR}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 
@@ -151,9 +142,7 @@ export DFT_BACKEND="${DFT_BACKEND:-vasp}"
 # loop FROZEN by default (directly comparable to the frozen-UMA loop). Set
 # MACE_RETRAIN=1 to fine-tune each iteration via the MACE train-step launcher.
 if [[ "$MLIP_BACKEND" == "mace" ]]; then
-  export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${PROJ}/models/mace_cache}"
-  export MACE_CACHE="${MACE_CACHE:-${XDG_CACHE_HOME}/mace}"
-  mkdir -p "${MACE_CACHE}"
+  configure_mace_model_artifacts "${REPO}"
   export MACE_FAMILY="${MACE_FAMILY:-mace_mp}"
   export MACE_MODEL="${MACE_MODEL:-medium}"
   if [[ "${MACE_RETRAIN:-0}" == "1" ]]; then

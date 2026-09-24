@@ -1,6 +1,14 @@
 # Frontier Setup Scripts for matsim-agents
 
-This directory provides both full-install and quick-setup scripts for Frontier.
+The single full-install entry point for Frontier is:
+
+```bash
+bash deployments/frontier/setup/install.sh
+```
+
+It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current ROCm 7.2 installer,
+then installs and verifies matsim-agents in the resulting environment. There is
+no second general-purpose installer or legacy alias.
 
 ## Model Download Safety Policy
 
@@ -13,30 +21,55 @@ Download entry points:
 
 ## Scripts
 
-### install_matsim_frontier.sh
+### install.sh
 Frontier phased install that builds the HydraGNN runtime environment first, then
 installs matsim-agents and supporting dependencies.
 
 Usage:
 
 ```bash
-bash deployments/frontier/setup/install_matsim_frontier.sh
-# ROCm 7.2 variant
-bash deployments/frontier/setup/install_matsim_frontier.sh --rocm72
+bash deployments/frontier/setup/install.sh
+```
+
+### install-vllm-rocm72.sh
+
+Optional vLLM deployment workflow. Run `install.sh` first; this script then
+validates the existing `.venv`, prepares pinned vLLM/Ray/Triton dependencies
+on the login node, and submits `build-vllm-rocm72.sh` for the GPU build. It
+does not recreate or reinstall the base HydraGNN/matsim environment.
+
+```bash
+bash deployments/frontier/setup/install.sh
+bash deployments/frontier/setup/install-vllm-rocm72.sh
 ```
 
 ### UMA MLIP Backend (fairchem-core)
 
-`fairchem-core >= 2.0` requires `numpy >= 2.0`, which conflicts with HydraGNN's
-`numpy == 1.26.4` pin. **Do not install `fairchem-core` into `hydragnn_venv`.**
-Use `INSTALL_UMA=1` to create a separate `fairchem_venv` alongside `hydragnn_venv`:
+HydraGNN main and matsim-agents now use NumPy 2.4.6, SciPy 1.17.1,
+PyTorch 2.14, torchvision 0.29, and e3nn 0.5.1. FairChem cannot yet share
+that environment: FairChem 2.22 requires Torch 2.13. Request the matsim-owned
+`.venv-uma` environment with:
 
 ```bash
-INSTALL_UMA=1 bash deployments/frontier/setup/install_matsim_frontier.sh
+INSTALL_UMA=1 bash deployments/frontier/setup/install.sh
 ```
 
-UMA jobs must activate `fairchem_venv` instead of `hydragnn_venv`. This is a
-known incompatibility until HydraGNN relaxes its numpy pin.
+The installer verifies FairChem imports. UMA on ROCm remains unqualified until
+the resulting environment passes a model inference smoke test on Frontier.
+
+### MACE compatibility environment
+
+Current `mace-torch==0.3.16` requires `e3nn==0.4.4`, which conflicts with
+HydraGNN's `e3nn==0.5.1`. Install and verify the matsim-owned compatibility
+environment from the same entry point:
+
+```bash
+INSTALL_MACE=1 bash deployments/frontier/setup/install.sh
+source .venv-mace/bin/activate
+```
+
+`.venv-mace` inherits the ROCm PyTorch stack from `.venv` but has its own e3nn
+and MACE packages. HydraGNN and MACE must run as separate Python processes.
 
 ### setup_matsim_frontier.sh
 Quick setup script for daily use after installation.

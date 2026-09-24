@@ -1,0 +1,43 @@
+# Compute-qualification case: pure QE relaxation of the benchmark Si cell,
+# on OLCF Frontier (AMD MI250X). structure_path and output_root are
+# overridden by qualification.py at run time.
+#
+# The launcher is deployments/frontier/launchers/run-pw-gpu-frontier.sh
+# rather than a bare pw.x path: it performs its own `module reset` to the
+# PrgEnv-cray/rocm-6.2.4 QE toolchain, keeping it isolated from the
+# rocm-7.2.0 stack the driver process (this job) loads for torch. See
+# docs/quantum-espresso-frontier.md ("Module-stack isolation").
+mode: dft
+
+geometry:
+  relax_atoms: true
+  relax_cell: true
+  fixed_atom_indices: []
+  charge: 0.0
+  spin: 0.0
+  preserve_symmetry: false
+
+dft:
+  backend: qe
+  launcher:
+    - bash
+    - /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents/deployments/frontier/launchers/run-pw-gpu-frontier.sh
+  pseudo_dir: /lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents/external/quantum-espresso/src/pseudo
+  timeout_sec: 7200
+  settings:
+    pseudopotentials:
+      Si: Si_r.upf
+    kpts: [4, 4, 4]
+    koffset: [0, 0, 0]
+    occupations: smearing
+    smearing: gaussian
+    degauss_ry: 0.007
+
+dft_approved: true
+approvals:
+  before_dft: true
+  before_retraining: true
+  before_model_promotion: true
+
+max_steps: 200
+force_tolerance_eV_per_A: 0.02

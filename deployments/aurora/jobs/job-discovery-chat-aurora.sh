@@ -38,7 +38,7 @@ source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
 
-VENV="${MATSIM_AURORA_VENV:-${PROJ}/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}"
+VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
 HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
