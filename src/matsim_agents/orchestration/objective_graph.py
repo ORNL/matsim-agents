@@ -12,7 +12,7 @@ The graph implements a Plan -> Execute (loop) -> UQ gate -> Analyze pipeline:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -68,7 +68,7 @@ def _append_handoff_audit_record(
         frac_unrel = sum(1 for w in top_weights if w < threshold) / len(top_weights)
 
     record = {
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "timestamp_utc": datetime.now(UTC).isoformat(),
         "objective": state.objective,
         "composition": _infer_formula_from_latest_result(state),
         "n_relaxations": len(state.results),

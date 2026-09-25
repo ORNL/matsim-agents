@@ -1,0 +1,6 @@
+# Public interfaces and user-facing documentation require repository-owner review.
+/README.md @allaffa
+/docs/ @allaffa
+/src/matsim_agents/cli.py @allaffa
+/src/matsim_agents/**/__init__.py @allaffa
+/deployments/ @allaffa

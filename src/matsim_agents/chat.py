@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable
 
@@ -356,7 +356,7 @@ def _audit_handoff_event(
         if r.top_branch_weight is not None
     ]
     record = {
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "timestamp_utc": datetime.now(UTC).isoformat(),
         "composition": exploration.composition.formula,
         "n_relaxations": len(exploration.relaxations),
         "n_relaxations_with_uq": n_with_weights,

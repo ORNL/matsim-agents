@@ -111,7 +111,8 @@ pip() {
     test "$1" = install
     shift
     printf '%s\\n' "$1" > "$RECORD"
-    "$PYTHON" -c 'import os, stat, sys; print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode))[2:])' \
+    "$PYTHON" -c \
+        'import os, stat, sys; print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode))[2:])' \
         "$(dirname "$1")" > "$MODE"
     if [ "$FAILURE" = pip ]; then return 23; fi
     "$PYTHON" -m pip install --no-index --no-build-isolation --no-cache-dir \

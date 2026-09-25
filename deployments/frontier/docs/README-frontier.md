@@ -21,7 +21,7 @@ Frontier-specific assets are split by intent:
 | `deployments/frontier/docs/` | This document and the six-model benchmark notes |
 
 **Other backends documented separately** (also Frontier-targeted):
-- Quantum ESPRESSO `develop` with AMD MI250X (gfx90a) OpenMP target offload — see [`docs/quantum-espresso-frontier.md`](../../../docs/quantum-espresso-frontier.md). Build script: [`deployments/frontier/setup/build-qe-gpu-frontier.sh`](../../setup/frontier/build-qe-gpu-frontier.sh); launcher: [`deployments/frontier/launchers/run-pw-gpu-frontier.sh`](../../launchers/frontier/run-pw-gpu-frontier.sh).
+- Quantum ESPRESSO `develop` with AMD MI250X (gfx90a) OpenMP target offload — see [`docs/quantum-espresso-frontier.md`](../../../docs/quantum-espresso-frontier.md). Build script: [`deployments/frontier/setup/build-qe-gpu-frontier.sh`](../setup/build-qe-gpu-frontier.sh); launcher: [`deployments/frontier/launchers/run-pw-gpu-frontier.sh`](../launchers/run-pw-gpu-frontier.sh).
 
 ---
 

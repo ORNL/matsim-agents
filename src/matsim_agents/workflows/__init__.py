@@ -17,6 +17,11 @@ from matsim_agents.workflows.investigation import (
     run_investigation,
 )
 from matsim_agents.workflows.llm_check import LLMCheckConfig, LLMCheckResult, run_llm_check
+from matsim_agents.workflows.phase_exploration import (
+    PhaseExplorationPolicy,
+    PhaseExplorationWorkflowResult,
+    run_phase_exploration,
+)
 from matsim_agents.workflows.relaxation import (
     RelaxationMode,
     ScientificRelaxationConfig,
@@ -32,6 +37,8 @@ __all__ = [
     "InvestigationConfig",
     "InvestigationResult",
     "MultiLLMDebateDiscussionConfig",
+    "PhaseExplorationPolicy",
+    "PhaseExplorationWorkflowResult",
     "RelaxationMode",
     "ScientificRelaxationConfig",
     "ScientificRelaxationResult",
@@ -43,5 +50,6 @@ __all__ = [
     "run_relaxation",
     "run_scientific_debate",
     "run_llm_check",
+    "run_phase_exploration",
     "run_investigation",
 ]

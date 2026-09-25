@@ -55,7 +55,8 @@ qsub deployments/aurora/smoke-tests/smoke-vllm-singlenode-aurora.sh
 
 Runs a two-stage install:
 
-1. Run HydraGNN's Aurora installer from `scripts/hpc/alcf/aurora` to
+1. Run HydraGNN's Aurora installer from
+   `scripts/hpc/alcf/aurora/installation/install.sh` in the HydraGNN checkout to
 	create/configure the environment and install HydraGNN dependencies.
 2. Install matsim-agents and additional runtime dependencies.
 

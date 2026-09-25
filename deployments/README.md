@@ -25,11 +25,16 @@ bash deployments/perlmutter/setup/install.sh
 ```
 
 Every entry point clones or updates `ORNL/HydraGNN`, runs HydraGNN's current
-facility recipe under `scripts/hpc/` first, and installs non-editable HydraGNN
+facility recipe first, and installs non-editable HydraGNN
 and matsim-agents packages into `matsim-agents/.venv`. Compiled dependency
 build trees are kept under `matsim-agents/.hpc-build/`. The script
 finishes with `pip check` and import checks; a successful exit therefore means
 there is one Python environment for the HydraGNN-based matsim workflow.
+
+The delegated HydraGNN recipes are
+`scripts/hpc/olcf/frontier/installation/install-rocm72.sh`,
+`scripts/hpc/alcf/aurora/installation/install.sh`, and
+`scripts/hpc/nersc/perlmutter/installation/install.sh` in the HydraGNN checkout.
 
 Common overrides are `HYDRAGNN_DIR`, `HYDRAGNN_REF`, `INSTALL_ROOT`,
 `VENV_PATH`, and `MATSIM_EXTRAS`. Set `INSTALL_UMA=1` to install

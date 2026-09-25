@@ -95,7 +95,7 @@ relocate everything as a unit, or override `SRC_DIR`/`BUILD_DIR`/
      the XML restart file rather than silently dropped.
 
    The script applies this as a single unified diff,
-   [`patches/qe-cce-segfault-fix/cce-uninitialized-descriptor-segfault.patch`](patches/qe-cce-segfault-fix/cce-uninitialized-descriptor-segfault.patch),
+   [`deployments/frontier/setup/patches/qe-cce-segfault-fix/cce-uninitialized-descriptor-segfault.patch`](../deployments/frontier/setup/patches/qe-cce-segfault-fix/cce-uninitialized-descriptor-segfault.patch),
    right after the `pimd_subrout.f90` patch above, guarded by a
    `grep -q 'Frontier/cce-18.0.1 workaround'` marker check so re-running the
    build script against an already-patched source tree is a no-op. Verified

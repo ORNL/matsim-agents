@@ -43,7 +43,7 @@ def test_deployment_scripts_do_not_reference_hydragnn_owned_environment() -> Non
     generic = (ROOT / "scripts/setup_env.sh").read_text(encoding="utf-8")
     assert "installation_DOE_supercomputers" not in generic
     assert "hydragnn_installation_bash_script" not in generic
-    assert 'deployments/${FACILITY}/setup/install.sh' in generic
+    assert "deployments/${FACILITY}/setup/install.sh" in generic
     assert "frontier|frontier-rocm71|frontier-rocm64)" in generic
     assert "perlmutter|aurora)" in generic
 
