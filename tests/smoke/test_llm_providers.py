@@ -47,6 +47,27 @@ class TestGetChatModelInstantiation:
         assert isinstance(result, ChatVLLM)
         assert result.model == "Qwen/Qwen2.5-72B-Instruct"
         assert result.base_url == "http://localhost:8000/v1"
+        assert result.max_completion_tokens == 8192
+
+    def test_vllm_completion_tokens_from_environment(self, monkeypatch):
+        from matsim_agents.llm import get_chat_model
+
+        monkeypatch.setenv("MATSIM_VLLM_MAX_TOKENS", "4096")
+        result = get_chat_model(provider="vllm", model="test-model")
+
+        assert result.max_completion_tokens == 4096
+
+    def test_vllm_explicit_completion_tokens_override_environment(self, monkeypatch):
+        from matsim_agents.llm import get_chat_model
+
+        monkeypatch.setenv("MATSIM_VLLM_MAX_TOKENS", "4096")
+        result = get_chat_model(
+            provider="vllm",
+            model="test-model",
+            max_completion_tokens=2048,
+        )
+
+        assert result.max_completion_tokens == 2048
 
     def test_openai_provider(self):
         mock_openai = MagicMock()

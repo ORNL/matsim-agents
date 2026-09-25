@@ -69,6 +69,20 @@ else
   )
 fi
 
+# ── fail closed if any panel model isn't actually checked out on CFS ─────────
+# (same "local-only" policy as benchmarks/portability/all_model_scientific_debate.py)
+MISSING=()
+for spec in "${SERVERS[@]}"; do
+  read -r _g _p model_dir <<<"$spec"
+  [[ -d "$model_dir" ]] || MISSING+=("$model_dir")
+done
+if ((${#MISSING[@]} > 0)); then
+  echo "[ERROR] not locally stored under $MODELS_DIR: ${MISSING[*]}" >&2
+  exit 2
+fi
+
+# The 32B models share one A100 each with their KV cache. Keep the qualified
+# default conservative; larger contexts remain an explicit runtime override.
 VLLM_MAXLEN=${MATSIM_VLLM_MAXLEN:-8192}
 VLLM_GPU_UTIL=${MATSIM_VLLM_GPU_UTIL:-0.90}
 declare -a VLLM_PIDS=()

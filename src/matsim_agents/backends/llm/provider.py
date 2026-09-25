@@ -43,7 +43,7 @@ class ChatVLLM(BaseChatModel):
     base_url: str = "http://localhost:8000/v1"
     api_key: str = "EMPTY"
     temperature: float = 0.0
-    max_completion_tokens: int = 2048
+    max_completion_tokens: int = 8192
 
     @property
     def _llm_type(self) -> str:
@@ -157,7 +157,17 @@ def get_chat_model(
         # which talks directly to the openai package — no langchain_openai required.
         url = base_url or os.environ.get("MATSIM_VLLM_BASE_URL", "http://localhost:8000/v1")
         key = api_key or os.environ.get("MATSIM_VLLM_API_KEY", "EMPTY")
-        return ChatVLLM(model=model, temperature=temperature, base_url=url, api_key=key)
+        max_tokens = kwargs.pop(
+            "max_completion_tokens",
+            int(os.environ.get("MATSIM_VLLM_MAX_TOKENS", 8192)),
+        )
+        return ChatVLLM(
+            model=model,
+            temperature=temperature,
+            base_url=url,
+            api_key=key,
+            max_completion_tokens=max_tokens,
+        )
 
     if provider == "openai":
         from langchain_openai import ChatOpenAI
