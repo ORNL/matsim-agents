@@ -140,7 +140,7 @@ pytest tests/ -v -m "not gpu" --cov=matsim_agents --cov-report=term-missing
 ### Run a single test file
 
 ```bash
-pytest tests/test_phase_explorer.py -v
+pytest tests/test_seeds.py -v
 pytest tests/smoke/test_llm_providers.py -v -k "ollama"
 ```
 
