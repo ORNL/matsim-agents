@@ -10,8 +10,9 @@ Supported providers (set ``MATSIM_LLM_PROVIDER`` or pass ``provider=...``):
     huggingface  - local HuggingFace transformers pipeline (no server needed)
 
 For vLLM, set the server URL via ``MATSIM_VLLM_BASE_URL`` (default
-``http://localhost:8000/v1``) and, if your server requires it,
-``MATSIM_VLLM_API_KEY`` (default ``"EMPTY"``).
+``http://localhost:8000/v1``), request timeout via
+``MATSIM_VLLM_TIMEOUT_SECONDS`` (default ``3600``), and, if your server requires
+it, ``MATSIM_VLLM_API_KEY`` (default ``"EMPTY"``).
 
 For Ollama, set ``MATSIM_OLLAMA_BASE_URL`` to point at a non-default host
 (default ``http://localhost:11434``).
@@ -44,6 +45,7 @@ class ChatVLLM(BaseChatModel):
     api_key: str = "EMPTY"
     temperature: float = 0.0
     max_completion_tokens: int = 8192
+    request_timeout: float = 3600.0
 
     @property
     def _llm_type(self) -> str:
@@ -71,7 +73,11 @@ class ChatVLLM(BaseChatModel):
     ) -> ChatResult:
         import openai
 
-        client = openai.OpenAI(base_url=self.base_url, api_key=self.api_key)
+        client = openai.OpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            timeout=self.request_timeout,
+        )
         response = client.chat.completions.create(
             model=self.model,
             messages=self._convert_messages(messages),
@@ -92,7 +98,11 @@ class ChatVLLM(BaseChatModel):
     ) -> Iterator[ChatGenerationChunk]:
         import openai
 
-        client = openai.OpenAI(base_url=self.base_url, api_key=self.api_key)
+        client = openai.OpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            timeout=self.request_timeout,
+        )
         stream = client.chat.completions.create(
             model=self.model,
             messages=self._convert_messages(messages),
@@ -161,12 +171,17 @@ def get_chat_model(
             "max_completion_tokens",
             int(os.environ.get("MATSIM_VLLM_MAX_TOKENS", 8192)),
         )
+        request_timeout = kwargs.pop(
+            "request_timeout",
+            float(os.environ.get("MATSIM_VLLM_TIMEOUT_SECONDS", 3600)),
+        )
         return ChatVLLM(
             model=model,
             temperature=temperature,
             base_url=url,
             api_key=key,
             max_completion_tokens=max_tokens,
+            request_timeout=request_timeout,
         )
 
     if provider == "openai":

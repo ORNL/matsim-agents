@@ -48,6 +48,7 @@ class TestGetChatModelInstantiation:
         assert result.model == "Qwen/Qwen2.5-72B-Instruct"
         assert result.base_url == "http://localhost:8000/v1"
         assert result.max_completion_tokens == 8192
+        assert result.request_timeout == 3600
 
     def test_vllm_completion_tokens_from_environment(self, monkeypatch):
         from matsim_agents.llm import get_chat_model
@@ -68,6 +69,43 @@ class TestGetChatModelInstantiation:
         )
 
         assert result.max_completion_tokens == 2048
+
+    def test_vllm_timeout_from_environment(self, monkeypatch):
+        from matsim_agents.llm import get_chat_model
+
+        monkeypatch.setenv("MATSIM_VLLM_TIMEOUT_SECONDS", "7200")
+        result = get_chat_model(provider="vllm", model="test-model")
+
+        assert result.request_timeout == 7200
+
+    def test_vllm_explicit_timeout_overrides_environment(self, monkeypatch):
+        from matsim_agents.llm import get_chat_model
+
+        monkeypatch.setenv("MATSIM_VLLM_TIMEOUT_SECONDS", "7200")
+        result = get_chat_model(
+            provider="vllm",
+            model="test-model",
+            request_timeout=1800,
+        )
+
+        assert result.request_timeout == 1800
+
+    def test_vllm_passes_timeout_to_client(self):
+        from matsim_agents.llm import ChatVLLM
+
+        response = MagicMock()
+        response.choices[0].message.content = "local response"
+        client = MagicMock()
+        client.chat.completions.create.return_value = response
+        with patch("openai.OpenAI", return_value=client) as openai_client:
+            result = ChatVLLM(model="test-model").invoke([HumanMessage(content="hello")])
+
+        openai_client.assert_called_once_with(
+            base_url="http://localhost:8000/v1",
+            api_key="EMPTY",
+            timeout=3600,
+        )
+        assert result.content == "local response"
 
     def test_openai_provider(self):
         mock_openai = MagicMock()
