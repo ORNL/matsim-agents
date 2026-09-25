@@ -140,7 +140,7 @@ pytest tests/ -v -m "not gpu" --cov=matsim_agents --cov-report=term-missing
 ### Run a single test file
 
 ```bash
-pytest tests/test_phase_explorer.py -v
+pytest tests/test_seeds.py -v
 pytest tests/smoke/test_llm_providers.py -v -k "ollama"
 ```
 
@@ -160,7 +160,8 @@ pytest tests/smoke/test_llm_providers.py -v -k "ollama"
 | `tests/smoke/test_llm_providers.py` | Smoke | 12 | LLM factory, all providers, CPU, mocked |
 | `tests/integration/test_agent_graph.py` | Integration | 12 | Planner/executor/analyst graph, fake LLM |
 | `tests/integration/test_chat_flow.py` | Integration | 9 | `chat_once()`, `DiscoveryChatSession`, mocked exploration |
-| `tests/test_phase_explorer.py` | Full | 12 | Crystal-phase seed enumeration (2 require pymatgen) |
+| `tests/test_seeds.py` | Full | — | Crystal-phase seed generation and ranking |
+| `tests/test_workflow_policies.py` | Full | — | Phase-exploration and workflow policy contracts |
 | `tests/test_discovery.py` | Full | — | Discovery wrapper |
 | `tests/test_state_and_graph.py` | Full | — | `MatSimState`, LangGraph wiring |
 

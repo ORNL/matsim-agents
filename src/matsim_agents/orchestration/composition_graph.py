@@ -8,7 +8,7 @@ LangGraph for control-flow decisions.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
@@ -86,7 +86,7 @@ def _append_handoff_audit_record(state: SupervisorState, action: str, message: s
     n_relaxations = len(exploration.relaxations) if exploration is not None else 0
 
     record = {
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "timestamp_utc": datetime.now(UTC).isoformat(),
         "composition": cfg.composition,
         "n_relaxations": n_relaxations,
         "uq": {

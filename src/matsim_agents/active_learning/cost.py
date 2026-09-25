@@ -28,7 +28,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ def track_cost(report: CostReport, *, reset_cuda_peak: bool = True):
             except Exception:  # noqa: BLE001
                 pass
         report.hostname = socket.gethostname()
-        report.timestamp = datetime.now(timezone.utc).isoformat()
+        report.timestamp = datetime.now(UTC).isoformat()
 
 
 class GpuMemorySampler:

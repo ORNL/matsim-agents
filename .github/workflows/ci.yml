@@ -95,13 +95,7 @@ jobs:
           pip install langchain-ollama langchain-openai langchain-anthropic
 
       - name: Run full test suite (all tiers, skip GPU-marked)
-        run: |
-          pytest tests/ -v --tb=short \
-            -m "not gpu" \
-            --cov=matsim_agents \
-            --cov-report=term-missing \
-            --cov-report=xml:coverage.xml \
-            -p no:warnings
+        run: bash scripts/check.sh coverage
         env:
           MATSIM_LLM_PROVIDER: "ollama"
           HF_HUB_OFFLINE: "1"
@@ -132,14 +126,8 @@ jobs:
           pip install -e ".[dev]"
           pip install langchain-ollama langchain-openai langchain-anthropic
 
-      - name: Ruff lint
-        run: ruff check src/ tests/
-
-      - name: Ruff format check
-        run: ruff format --check src/ tests/
-
-      - name: Validate Codabench source bundle
-        run: python benchmarks/codabench/validate_bundle.py
+      - name: Run repository lint and documentation contracts
+        run: bash scripts/check.sh lint
 
       - name: mypy type check (src only)
         run: mypy src/matsim_agents --ignore-missing-imports

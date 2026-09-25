@@ -1146,6 +1146,9 @@ matsim-agents run     OBJECTIVE [options]   # planner -> executor -> uq_gate -> 
 matsim-agents plan    OBJECTIVE             # show the planner's task list
 matsim-agents chat    [options]             # interactive discovery REPL
 matsim-agents supervisor-run COMPOSITION [options]  # discovery -> UQ -> optional AL handoff
+matsim-agents relax   CONFIG.yaml           # provenance-tracked MLIP/DFT relaxation
+matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
+matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
 matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
 ```
@@ -1445,176 +1448,21 @@ below shows the current ownership model; use the per-facility READMEs for full
 file inventories. The cross-facility release gate lives under
 `benchmarks/portability/`.
 
-```
+```text
 matsim-agents/
-├── pyproject.toml
-├── docs/
-│   ├── hpc-platforms.md                     # single index across Frontier/Aurora/Perlmutter
-│   ├── llm-backends-comparison.md           # vLLM vs HF Transformers on ROCm
-│   ├── model-download.md                    # HF model download how-to
-│   ├── quantum-espresso-frontier.md         # QE GPU build/run on Frontier (MI250X)
-│   ├── quantum-espresso-aurora.md           # QE GPU build/run on Aurora (PVC)
-│   ├── quantum-espresso-perlmutter.md       # QE GPU build/run on Perlmutter (A100)
-│   └── vasp-aurora.md                       # VASP 6.6 makefile lineage on Aurora
-├── scripts/
-│   └── setup_env.sh                         # workstation install / facility dispatcher
-├── deployments/
-│   ├── frontier/setup/                      # Frontier (OLCF, MI250X) installers
-│   │   ├── install.sh                       # canonical matsim/HydraGNN installer
-│   │   ├── build-vllm-rocm72.sh             # optional vLLM source build
-│   │   ├── build-qe-{cpu,gpu}-frontier.sh
-│   │   └── build-vasp-gpu-frontier.sh
-│   ├── aurora/setup/                        # Aurora (ALCF, Intel PVC) installers
-│   │   ├── install.sh
-│   │   ├── build-qe-{cpu,gpu}-aurora.sh
-│   │   └── build-vasp-gpu-aurora.sh
-│   └── perlmutter/setup/                    # Perlmutter (NERSC, A100) installers
-│       ├── install.sh
-│       ├── build-qe-{cpu,gpu}-perlmutter.sh
-│       └── build-vasp-gpu-perlmutter.sh
-│
-│   # Each facility also owns launchers/, jobs/, smoke-tests/, and downloads.
-│   # For example:
-│   ├── frontier/launchers/                  # Frontier sbatch launchers
-│   │   │   ├── run-active-learning-frontier.sh  # `matsim-agents al run` driver
-│   │   │   ├── _vasp-step-frontier.sh       # in-allocation VASP step
-│   │   │   ├── _qe-step-frontier.sh         # in-allocation QE step
-│   │   │   ├── _hydragnn-train-step-frontier.sh
-│   │   │   ├── run-pw-gpu-frontier.sh       # QE pw.x GPU launcher
-│   │   │   ├── run-qe-warmstart-benchmark.sh
-│   │   │   ├── launch-test-singlenode-resume-frontier.sh
-│   │   │   ├── launch-test-multinode-frontier.sh
-│   │   │   └── launch-test-all-models-frontier.sh
-│   ├── aurora/launchers/
-│   │   │   └── run-pw-gpu-aurora.sh         # QE pw.x GPU launcher
-│   ├── perlmutter/launchers/
-│   │       ├── run-pw-gpu-perlmutter.sh
-│   │       ├── run-vasp-gpu-perlmutter.sh
-│   │       ├── run-qe-warmstart-benchmark-perlmutter.sh
-│   │       ├── launch-test-singlenode-resume-perlmutter.sh
-│   │       ├── launch-test-multinode-perlmutter.sh
-│   │       └── launch-test-all-models-perlmutter.sh
-│   ├── frontier/smoke-tests/
-│   │   │   ├── smoke-vllm-singlenode-frontier.sh
-│   │   │   ├── smoke-vllm-multinode-frontier.sh
-│   │   │   └── smoke-transformers-frontier.sh
-│   ├── aurora/smoke-tests/
-│   │   │   └── smoke-vllm-singlenode-aurora.sh   # vLLM-XPU single-node smoke (qsub)
-│   ├── perlmutter/smoke-tests/
-│   │       ├── smoke-transformers-perlmutter.sh
-│   │       ├── smoke-transformers-multinode-perlmutter.sh
-│   │       └── _torchrun_smoke_loader.py
-│   ├── frontier/jobs/                       # Frontier multi-step sbatch jobs
-│   │   │   ├── job-serve-multinode-frontier.sh
-│   │   │   ├── job-discovery-chat-frontier.sh
-│   │   │   ├── job-discovery-chat-vllm-frontier.sh
-│   │   │   ├── job-single-relaxation-frontier.sh
-│   │   │   ├── job-active-learning-uq-frontier.sh
-│   │   │   ├── job-qe-warmstart-frontier.sh
-│   │   │   ├── job-sequential-benchmark-frontier.sh
-│   │   │   └── job-six-model-benchmark-frontier.sh
-│   ├── aurora/jobs/                         # Aurora multi-step PBS jobs
-│   │   │   ├── job-serve-multinode-aurora.sh
-│   │   │   ├── job-serve-multinode-vllm-aurora.sh
-│   │   │   ├── job-discovery-chat-aurora.sh
-│   │   │   ├── job-single-relaxation-aurora.sh
-│   │   │   ├── job-active-learning-uq-aurora.sh
-│   │   │   ├── job-qe-warmstart-aurora.sh
-│   │   │   └── _mpi_xpu_loader.py
-│   └── perlmutter/jobs/                     # Perlmutter multi-step sbatch jobs
-│   │       ├── job-discovery-chat-perlmutter.sh
-│   │       ├── job-single-relaxation-perlmutter.sh
-│   │       ├── job-active-learning-uq-perlmutter.sh
-│   │       └── job-qe-warmstart-perlmutter.sh
-├── src/matsim_agents/
-│   ├── cli.py                    # `matsim-agents run|plan|chat|supervisor-run|al`
-│   ├── chat.py                   # interactive discovery REPL
-│   ├── supervisor.py             # compat alias → orchestration/composition_graph
-│   ├── graph.py                  # compat alias → orchestration/objective_graph
-│   ├── state.py                  # compat alias → orchestration/state
-│   ├── llm.py                    # compat alias → backends/llm/provider
-│   │
-│   ├── orchestration/            # typed workflow state, graphs, and policies
-│   │   ├── state.py              # MatSimState, RelaxationResult, TaskSpec
-│   │   ├── objective_graph.py    # planner -> executor -> uq_gate -> analyst
-│   │   ├── composition_graph.py  # supervisor (discovery -> UQ -> optional AL)
-│   │   └── policies/             # UQ handoff policy helpers
-│   │
-│   ├── backends/                 # five stable backend interfaces (Protocols)
-│   │   ├── llm/
-│   │   │   ├── __init__.py       # LLMBackend type alias (BaseChatModel)
-│   │   │   └── provider.py       # get_chat_model() — Ollama | vLLM | OpenAI | Anthropic | HF
-│   │   ├── mlip/
-│   │   │   ├── __init__.py       # MLIPBackend Protocol (as_calculator, relax)
-│   │   │   └── relaxation.py     # HydraGNN + UMA + ASE relaxation tool
-│   │   └── dft/
-│   │       ├── __init__.py       # DFTBackend Protocol, DFTJobSpec, DFTResult
-│   │       ├── vasp.py           # VASP 6.6 DFTBackend implementation
-│   │       ├── vasp_relax.py     # VASP relaxer (scf|relax|vc-relax|vc-relax-shape)
-│   │       ├── qe.py             # QE DFTBackend implementation
-│   │       └── qe_relax.py       # QE pw.x relaxer (scf|relax|vc-relax)
-│   │
-│   ├── execution/                # HPC-neutral resource, launch, and provenance
-│   │   ├── __init__.py           # ExecutionPlatform Protocol, ResourceRequest, RunStore
-│   │   ├── resources.py          # ResourceRequest frozen dataclass
-│   │   ├── launchers.py          # Launcher Protocol stub
-│   │   └── provenance.py         # RunStore Protocol + JsonlRunStore implementation
-│   │
-│   ├── agents/
-│   │   ├── planner.py
-│   │   ├── executor.py
-│   │   └── analyst.py
-│   ├── tools/
-│   │   ├── relaxation.py         # compat alias → backends/mlip/relaxation
-│   │   ├── qe_relax.py           # compat alias → backends/dft/qe_relax
-│   │   ├── vasp_relax.py         # compat alias → backends/dft/vasp_relax
-│   │   ├── warmstart_benchmark_qe.py   # HydraGNN warm-start vs cold-start QE benchmark
-│   │   └── warmstart_benchmark_vasp.py # HydraGNN warm-start vs cold-start VASP benchmark
-│   ├── discovery/
-│   │   ├── composition.py        # formula parsing
-│   │   ├── seeds.py              # crystal-phase seed generation (AFLOW + pyXtal)
-│   │   ├── stability.py          # ΔE/atom ranking & |F|max proxy
-│   │   └── wrapper.py            # explore_composition()
-│   └── active_learning/          # HydraGNN <-> DFT active-learning loop
-│       ├── config.py             # pydantic schema + ${VAR} substitution
-│       ├── loop.py               # top-level driver (matsim-agents al run)
-│       ├── candidates.py         # MD sampling + per-step candidate capture
-│       ├── uncertainty.py        # ensemble / MC-dropout scoring + diversity
-│       ├── seeds.py              # paths or LLM-prompted seed materialisation
-│       ├── trainer.py            # HydraGNN / MACE retraining wrappers
-│       ├── dft_backend.py        # DFTBackend Protocol source (re-exported via backends/dft)
-│       ├── dft_runner.py         # in-allocation parallel job dispatcher
-│       ├── vasp_io.py            # POSCAR/INCAR/KPOINTS/POTCAR writers + parser
-│       ├── vasp_runner.py        # VASP step runner
-│       └── backends/             # AL-specific DFT adapters (single-point only)
-│           ├── vasp.py           # VASP 6.6 single-point labeller
-│           └── qe.py             # Quantum ESPRESSO pw.x single-point labeller
-├── examples/
-│   ├── single_relaxation.py
-│   ├── discovery_chat.py
-│   └── active_learning/
-│       ├── al_config.example.yaml          # unified VASP+QE templated config
-│       ├── al_config.prompt.example.yaml   # LLM-seeded variant
-│       ├── INCAR.template                  # VASP single-point template
-│       ├── pw.template                     # QE pw.in namelist template
-│       └── README.md
-├── tests/
-│   ├── test_state_and_graph.py
-│   ├── test_discovery.py
-│   ├── test_phase_explorer.py
-│   ├── test_al_config.py         # AL config: ${VAR} substitution + validators + legacy shims
-│   ├── test_al_uncertainty.py    # acquisition strategies (ensemble / random / FPS)
-│   ├── test_al_seeds.py          # seed resolution: paths + LLM-prompted (stubbed)
-│   ├── test_vasp_relax.py        # vasp_relax driver + parser
-│   └── integration/
-│       ├── test_al_loop_dryrun.py    # one full AL iteration, all heavy parts mocked
-│       ├── test_qe_warmstart.py      # end-to-end QE warm-start (env-gated)
-│       └── test_vasp_warmstart.py    # end-to-end VASP warm-start (env-gated)
-├── external/                     # gitignored: large external builds
-│   └── quantum-espresso/         # src/, build-gpu/, install-gpu/
-├── .venv/                        # matsim-owned HydraGNN/UMA environment
-├── .venv-mace/                   # optional MACE compatibility environment
-└── ../HydraGNN/                  # sibling source checkout used by HPC installers
+├── src/matsim_agents/     # library code and stable public interfaces
+│   ├── orchestration/     # agent graphs, state, and routing policies
+│   ├── workflows/         # composable scientific workflow contracts
+│   ├── backends/          # LLM, MLIP, and DFT adapters
+│   ├── execution/         # resources, allocation, provenance, and run directories
+│   ├── discovery/         # composition parsing, seed generation, and stability
+│   └── active_learning/   # acquisition, labeling, training, and promotion
+├── tests/                 # unit, integration, smoke, and documentation contracts
+├── examples/              # runnable configuration and workflow examples
+├── deployments/           # facility-specific setup, launchers, jobs, and smoke tests
+├── benchmarks/            # portability and Codabench workflows
+├── docs/                  # architecture, scientific, and deployment guides
+└── scripts/               # setup, diagnostics, validation, and reporting utilities
 ```
 
 ---
