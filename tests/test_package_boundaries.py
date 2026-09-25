@@ -141,3 +141,15 @@ def test_jsonl_run_store_satisfies_protocol(tmp_path) -> None:
     assert len(records) == 2
     assert records[0]["iteration"] == 0
     assert records[1]["n_frames"] == 5
+
+
+def test_phase_exploration_api_is_public() -> None:
+    from matsim_agents.workflows import (
+        PhaseExplorationPolicy,
+        PhaseExplorationWorkflowResult,
+        run_phase_exploration,
+    )
+
+    assert callable(PhaseExplorationPolicy)
+    assert callable(PhaseExplorationWorkflowResult)
+    assert callable(run_phase_exploration)

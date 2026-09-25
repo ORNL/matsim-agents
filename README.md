@@ -1146,6 +1146,9 @@ matsim-agents run     OBJECTIVE [options]   # planner -> executor -> uq_gate -> 
 matsim-agents plan    OBJECTIVE             # show the planner's task list
 matsim-agents chat    [options]             # interactive discovery REPL
 matsim-agents supervisor-run COMPOSITION [options]  # discovery -> UQ -> optional AL handoff
+matsim-agents relax   CONFIG.yaml           # provenance-tracked MLIP/DFT relaxation
+matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
+matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
 matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
 ```
@@ -1527,7 +1530,7 @@ matsim-agents/
 │   │       ├── job-active-learning-uq-perlmutter.sh
 │   │       └── job-qe-warmstart-perlmutter.sh
 ├── src/matsim_agents/
-│   ├── cli.py                    # `matsim-agents run|plan|chat|supervisor-run|al`
+│   ├── cli.py                    # `run|plan|chat|supervisor-run|relax|debate|llm-check|al`
 │   ├── chat.py                   # interactive discovery REPL
 │   ├── supervisor.py             # compat alias → orchestration/composition_graph
 │   ├── graph.py                  # compat alias → orchestration/objective_graph
@@ -1555,10 +1558,20 @@ matsim-agents/
 │   │       └── qe_relax.py       # QE pw.x relaxer (scf|relax|vc-relax)
 │   │
 │   ├── execution/                # HPC-neutral resource, launch, and provenance
-│   │   ├── __init__.py           # ExecutionPlatform Protocol, ResourceRequest, RunStore
+│   │   ├── __init__.py           # public execution contracts
+│   │   ├── allocation.py         # scheduler allocation discovery and partitioning
+│   │   ├── contracts.py          # approval, evidence, budget, validation, result models
+│   │   ├── launchers.py          # scheduler-independent Launcher Protocol
+│   │   ├── provenance.py         # RunStore Protocol + JSONL implementation
 │   │   ├── resources.py          # ResourceRequest frozen dataclass
-│   │   ├── launchers.py          # Launcher Protocol stub
-│   │   └── provenance.py         # RunStore Protocol + JsonlRunStore implementation
+│   │   └── run_directory.py      # collision-resistant scientific run directories
+│   │
+│   ├── workflows/                # composable scientific workflow contracts
+│   │   ├── debate.py             # persisted multi-model hypothesis debate
+│   │   ├── investigation.py      # property-driven hypothesis investigation
+│   │   ├── llm_check.py          # independent LLM readiness qualification
+│   │   ├── phase_exploration.py  # phase exploration with optional AL
+│   │   └── relaxation.py         # typed MLIP, DFT, and MLIP-to-DFT workflow
 │   │
 │   ├── agents/
 │   │   ├── planner.py
@@ -1576,12 +1589,18 @@ matsim-agents/
 │   │   ├── stability.py          # ΔE/atom ranking & |F|max proxy
 │   │   └── wrapper.py            # explore_composition()
 │   └── active_learning/          # HydraGNN <-> DFT active-learning loop
+│       ├── branch_routing.py      # backend-aware training and promotion routing
+│       ├── calculator.py          # MLIP calculator construction
 │       ├── config.py             # pydantic schema + ${VAR} substitution
+│       ├── cost.py               # iteration cost accounting
+│       ├── dataset_governance.py # label validation and dataset manifests
+│       ├── evaluate.py           # candidate-model validation
 │       ├── loop.py               # top-level driver (matsim-agents al run)
 │       ├── candidates.py         # MD sampling + per-step candidate capture
 │       ├── uncertainty.py        # ensemble / MC-dropout scoring + diversity
 │       ├── seeds.py              # paths or LLM-prompted seed materialisation
-│       ├── trainer.py            # HydraGNN / MACE retraining wrappers
+│       ├── trainer.py            # shared training dispatch
+│       ├── finetune_*.py         # HydraGNN, MACE, and UMA finetuning/evaluation
 │       ├── dft_backend.py        # DFTBackend Protocol source (re-exported via backends/dft)
 │       ├── dft_runner.py         # in-allocation parallel job dispatcher
 │       ├── vasp_io.py            # POSCAR/INCAR/KPOINTS/POTCAR writers + parser
@@ -1592,16 +1611,22 @@ matsim-agents/
 ├── examples/
 │   ├── single_relaxation.py
 │   ├── discovery_chat.py
-│   └── active_learning/
-│       ├── al_config.example.yaml          # unified VASP+QE templated config
-│       ├── al_config.prompt.example.yaml   # LLM-seeded variant
-│       ├── INCAR.template                  # VASP single-point template
-│       ├── pw.template                     # QE pw.in namelist template
-│       └── README.md
+│   ├── active_learning/
+│   │   ├── al_config.example.yaml          # unified VASP+QE templated config
+│   │   ├── al_config.prompt.example.yaml   # LLM-seeded variant
+│   │   ├── INCAR.template                  # VASP single-point template
+│   │   ├── pw.template                     # QE pw.in namelist template
+│   │   └── README.md
+│   ├── debate/                   # equal and role-based debate examples
+│   ├── investigation/            # single- and multi-LLM investigation configs
+│   ├── llm_check/                # LLM readiness example
+│   ├── paper_cases/              # reproducible scientific cases
+│   └── relaxation/               # typed relaxation example
 ├── tests/
 │   ├── test_state_and_graph.py
 │   ├── test_discovery.py
-│   ├── test_phase_explorer.py
+│   ├── test_seeds.py              # crystal seed generation
+│   ├── test_workflow_policies.py  # phase-exploration policy contracts
 │   ├── test_al_config.py         # AL config: ${VAR} substitution + validators + legacy shims
 │   ├── test_al_uncertainty.py    # acquisition strategies (ensemble / random / FPS)
 │   ├── test_al_seeds.py          # seed resolution: paths + LLM-prompted (stubbed)

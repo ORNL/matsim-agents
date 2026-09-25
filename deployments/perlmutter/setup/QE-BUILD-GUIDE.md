@@ -220,8 +220,8 @@ export PATH=/path/to/project/qe-7.4/install-gpu/bin:$PATH
 
 ## Further Reading
 
-- Full documentation: [docs/quantum-espresso-perlmutter.md](../../docs/quantum-espresso-perlmutter.md)
-- Frontier build guide: [docs/quantum-espresso-frontier.md](../../docs/quantum-espresso-frontier.md)
+- Full documentation: [docs/quantum-espresso-perlmutter.md](../../../docs/quantum-espresso-perlmutter.md)
+- Frontier build guide: [docs/quantum-espresso-frontier.md](../../../docs/quantum-espresso-frontier.md)
 - QE homepage: https://www.quantum-espresso.org/
 - NERSC Perlmutter docs: https://docs.nersc.gov/systems/perlmutter/
 
