@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -95,7 +95,7 @@ def write_dataset_manifest(
     digest = sha256_file(path)
     manifest = DatasetManifest(
         dataset_id=digest[:16],
-        created_at_utc=datetime.now(timezone.utc).isoformat(),
+        created_at_utc=datetime.now(UTC).isoformat(),
         path=str(path.resolve()),
         sha256=digest,
         dft_backend=dft_backend,

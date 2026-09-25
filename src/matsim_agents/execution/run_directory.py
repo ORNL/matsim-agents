@@ -8,7 +8,7 @@ import re
 import tempfile
 import uuid
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +30,7 @@ def safe_component(value: str, *, fallback: str = "run") -> str:
 def make_run_id(now: datetime | None = None) -> str:
     """Return ``UTC timestamp + random suffix`` suitable for concurrent jobs."""
 
-    stamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    stamp = (now or datetime.now(UTC)).astimezone(UTC)
     return f"{stamp.strftime('%Y-%m-%dT%H-%M-%SZ')}_{uuid.uuid4().hex[:8]}"
 
 
@@ -96,7 +96,7 @@ class ScientificRunDirectory:
 
     def append_event(self, event: str, payload: Mapping[str, Any]) -> Path:
         record = {
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "timestamp_utc": datetime.now(UTC).isoformat(),
             "event": event,
             "payload": _jsonable(dict(payload)),
         }

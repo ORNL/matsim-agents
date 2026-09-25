@@ -22,7 +22,9 @@ def test_resolve_uma_artifact_bundle(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     assert bundle.form_elem_refs == bundle_dir / "form_elem_refs.yaml"
 
 
-def test_incomplete_configured_uma_bundle_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_incomplete_configured_uma_bundle_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("MATSIM_UMA_ARTIFACT_DIR", str(tmp_path))
 
     with pytest.raises(FileNotFoundError, match="Incomplete durable UMA bundle"):
@@ -34,10 +36,10 @@ def test_deployments_do_not_store_required_assets_in_cache_or_scratch() -> None:
     forbidden = (
         "VLLM_SRC=$PROJ/cache",
         "TRITON_SRC=$PROJ/cache",
-        "FAIRCHEM_CACHE_DIR=\"${FAIRCHEM_CACHE_DIR:-${SCRATCH",
-        "HF_HOME=\"${HF_HOME:-${PROJ}/models/hf_cache",
-        "STAGE_BASE=\"${SCRATCH",
-        "STAGE_ROOT=\"${SCRATCH",
+        'FAIRCHEM_CACHE_DIR="${FAIRCHEM_CACHE_DIR:-${SCRATCH',
+        'HF_HOME="${HF_HOME:-${PROJ}/models/hf_cache',
+        'STAGE_BASE="${SCRATCH',
+        'STAGE_ROOT="${SCRATCH',
     )
     violations: list[str] = []
     for path in (repo / "deployments").rglob("*.sh"):
@@ -46,4 +48,6 @@ def test_deployments_do_not_store_required_assets_in_cache_or_scratch() -> None:
             if pattern in text:
                 violations.append(f"{path.relative_to(repo)}: {pattern}")
 
-    assert not violations, "required artifacts must use durable project storage:\n" + "\n".join(violations)
+    assert not violations, "required artifacts must use durable project storage:\n" + "\n".join(
+        violations
+    )

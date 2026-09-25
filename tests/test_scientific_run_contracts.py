@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -43,7 +43,7 @@ def test_run_directory_creates_canonical_restartable_layout(tmp_path):
 
 
 def test_run_ids_are_timestamped_and_collision_resistant():
-    now = datetime(2026, 9, 1, 12, 30, tzinfo=timezone.utc)
+    now = datetime(2026, 9, 1, 12, 30, tzinfo=UTC)
     first, second = make_run_id(now), make_run_id(now)
     assert first.startswith("2026-09-01T12-30-00Z_")
     assert first != second

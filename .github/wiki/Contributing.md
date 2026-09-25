@@ -12,9 +12,7 @@ Before opening a PR, make sure all of these pass locally:
 pip install -e ".[dev]"
 pip install langchain-ollama langchain-openai langchain-anthropic
 
-ruff check src/ tests/          # lint
-ruff format src/ tests/         # auto-format
-pytest tests/ -v -m "not gpu"   # full test suite (no GPU)
+bash scripts/check.sh           # lint, docs/deployments, and non-GPU tests
 ```
 
 ---
@@ -62,11 +60,14 @@ skip-magic-trailing-comma = false
 preview = false
 ```
 
-Run `ruff format src/ tests/` before pushing. The CI `ruff format --check` step will fail if the code is not formatted.
+Run `ruff format src/ tests/ scripts/diagnostics/validate_documentation.py`
+before pushing. The shared `bash scripts/check.sh` command runs the same
+formatting check in CI.
 
 ### Linter
 
-`ruff check` enforces rules `E`, `F`, `I`, `B`, `UP`, `SIM` with `line-length = 100` and `target-version = "py310"`.
+`ruff check` enforces rules `E`, `F`, `I`, `B`, `UP`, `SIM` with
+`line-length = 100` and `target-version = "py311"`.
 
 Run `ruff check src/ tests/` and fix any errors. Auto-fixable issues can be resolved with `ruff check --fix src/ tests/`.
 
@@ -75,6 +76,14 @@ Some pre-existing files in `src/matsim_agents/` have `per-file-ignores` entries 
 ### Type annotations
 
 `mypy` is run with `--ignore-missing-imports`. Type errors are **informational** (the mypy step is `continue-on-error`) but new public functions should have type annotations where practical.
+
+### Documentation contracts
+
+`python scripts/diagnostics/validate_documentation.py` derives the top-level
+command set from Typer and checks the README CLI reference, documented
+`matsim_agents` imports, pytest file arguments, and repository-local Markdown
+file targets. Do not add exhaustive hand-maintained directory trees; document
+stable package responsibilities and link to focused guides instead.
 
 ---
 
