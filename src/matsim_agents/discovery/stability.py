@@ -72,6 +72,7 @@ class ReferenceEnergySet(BaseModel):
 
     identifier: str
     method_signature: str
+    backend: str | None = None
     elemental_energies_eV_per_atom: dict[str, float]
     competing_phases: dict[str, float] = Field(
         default_factory=dict,

@@ -13,13 +13,44 @@ any of that.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
+from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
 from matsim_agents.discovery.stability import RankingMode, ReferenceEnergySet, StabilityReport
 from matsim_agents.execution.contracts import ComputeBudget, WorkflowStatus
+
+
+class FormulaRunRecord(BaseModel):
+    """Durable execution state for one formula in a campaign."""
+
+    formula: str
+    status: WorkflowStatus = WorkflowStatus.PLANNED
+    iteration: int = 0
+    attempts: int = 0
+    output_dir: str | None = None
+    failure_reason: str | None = None
+    n_mlip_relaxations: int = 0
+    n_dft_calculations: int = 0
+    n_active_learning_iterations: int = 0
+    node_hours: float = 0.0
+    model_promoted: bool = False
+    evidence: dict[str, Any] = Field(default_factory=dict)
+
+
+class CampaignReviewRecord(BaseModel):
+    """Auditable outcome of one campaign evidence review."""
+
+    iteration: int
+    debate_run_id: str | None = None
+    deactivate_formulas: list[str] = Field(default_factory=list)
+    reactivate_formulas: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class CampaignState(BaseModel):
@@ -31,10 +62,26 @@ class CampaignState(BaseModel):
     formulas: dict[str, FormulaCandidate] = Field(default_factory=dict)
     reference_energies: ReferenceEnergySet | None = None
     stability_reports: dict[str, StabilityReport] = Field(default_factory=dict)
+    formula_runs: dict[str, FormulaRunRecord] = Field(default_factory=dict)
+    review_history: list[CampaignReviewRecord] = Field(default_factory=list)
     debate_run_ids: list[str] = Field(default_factory=list)
     iteration: int = 0
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
     status: WorkflowStatus = WorkflowStatus.PLANNED
+
+    @classmethod
+    def load(cls, path: str | Path) -> CampaignState:
+        return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
+
+    def save(self, path: str | Path) -> None:
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_suffix(destination.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(self.model_dump(mode="json"), indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(destination)
 
     def upsert_formulas(self, candidates: Iterable[FormulaCandidate]) -> None:
         for candidate in candidates:

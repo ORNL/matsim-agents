@@ -239,7 +239,22 @@ ready-to-submit Slurm jobs that mirror the Frontier set:
 | `job-serve-multinode-perlmutter.sh` | Serves one model across an `-N`-node allocation via Ray + `vllm serve` (TP = nodes × 4); `-N 1` skips Ray. Stays alive until the job time limit. |
 | `job-all-local-model-debate-perlmutter.sh` | Starts the seven Perlmutter-compatible local catalog models in one 15-node allocation, waits for every endpoint, and runs the two-round scientific debate. DeepSeek-V3.2, Devstral-2, and Mistral-Large-3 are excluded for the compatibility reasons below. |
 | `job-al-debate-portability-perlmutter.sh` | Same 15-node, seven-model debate panel plus a 16th dedicated node that runs a real UMA+QE active-learning iteration on the benchmark Si cell first; the debate then argues from that loop's labelled DFT evidence instead of the synthetic thermoelectric prompt (`benchmarks/portability/active_learning_scientific_debate.py`). |
+| `job-campaign-formula-discovery-all-models-perlmutter.sh` | Runs a bounded, resumable Nb-Ta-O campaign: 15 nodes serve the seven-model panel while a dedicated 16th node performs UMA phase exploration, UMA-MD acquisition, QE labelling, DFT relaxation, convex-hull ranking, and consensus-gated evidence reviews. The job generates bcc Nb, bcc Ta, and spin-polarized boxed O2 bootstrap references and records their method signature; set `MATSIM_CAMPAIGN_DFT_REFINE=0` to disable this stage. These bootstrap references support campaign steering, not publication thermochemistry without convergence and reference-correction studies. Set `MATSIM_CAMPAIGN_RETRAIN=1` for UMA fine-tuning; separately set `MATSIM_CAMPAIGN_PROMOTE_MODEL=1` to approve checkpoint promotion and post-training reevaluation. |
+| `job-campaign-formula-discovery-all-models-vasp-perlmutter.sh` | Runs the same seven-model Nb-Ta-O campaign with VASP 6.6.1/PBE.64 for AL labels, DFT relaxations, elemental references, and hull feedback. Defaults to the repository GPU build and POTCAR tree; override them with `MATSIM_VASP_BIN` and `MATSIM_VASP_POTCAR_DIR`. |
 | `submit-all-model-debate-perlmutter.sh` | Submits `job-serve-multinode-perlmutter.sh` once per `open-model-catalog.json` entry with the right `--nodes` and `SERVE_EXTRA_ARGS`; prints the `base_url_env` export lines to wire up once each job is running. |
+
+`campaign_execute.py` selects QE or VASP refinement from the active-learning
+configuration's `dft.backend`. Both paths reuse the matching numerical inputs
+and launcher contract. Reference-energy sets persist their backend and cannot
+be reused after a QE/VASP switch; generate a new backend-specific reference
+manifest with `prepare_nb_ta_o_references.py --backend qe|vasp`.
+
+Submit the VASP campaign with:
+
+```bash
+PROJECT_ROOT=$PWD sbatch -A m5216_g -q premium \
+  deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-vasp-perlmutter.sh
+```
 
 ### vLLM model limitations on Perlmutter
 

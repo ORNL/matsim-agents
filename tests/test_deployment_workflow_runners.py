@@ -71,3 +71,24 @@ def test_shared_active_learning_runner_generates_current_schema(tmp_path: Path) 
     assert cfg.dft.backend == "qe"
     assert cfg.trainer.enabled is False
     assert list(cfg.md.seed_source.paths) == seeds
+
+
+def test_perlmutter_vasp_campaign_config_resolves(tmp_path: Path, monkeypatch) -> None:
+    vasp_bin = tmp_path / "vasp_std"
+    vasp_bin.touch()
+    potcar_dir = tmp_path / "potpaw_PBE.64"
+    potcar_dir.mkdir()
+    monkeypatch.setenv("PROJECT_ROOT", str(ROOT))
+    monkeypatch.setenv("MATSIM_VASP_BIN", str(vasp_bin))
+    monkeypatch.setenv("MATSIM_VASP_POTCAR_DIR", str(potcar_dir))
+
+    cfg = ALConfig.from_yaml(
+        ROOT / "deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-vasp.yaml"
+    )
+
+    assert cfg.dft.backend == "vasp"
+    assert cfg.dft.vasp is not None
+    assert cfg.dft.vasp.vasp_bin == vasp_bin
+    assert cfg.dft.vasp.potcar_dir == potcar_dir
+    assert cfg.dft.vasp.ranks_per_node == 4
+    assert cfg.dft.vasp.extra_incar["KSPACING"] == "0.25"

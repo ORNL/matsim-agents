@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.discovery.wrapper import CompositionExplorationResult, explore_composition
-from matsim_agents.execution.contracts import ComputeBudget
+from matsim_agents.execution.contracts import ApprovalPolicy, ComputeBudget
 
 
 class PhaseExplorationPolicy(BaseModel):
@@ -19,6 +19,9 @@ class PhaseExplorationPolicy(BaseModel):
     reevaluate_after_retraining: bool = False
     ranking_mode: str = "relative_phase_ranking"
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
+    approvals: ApprovalPolicy = Field(default_factory=ApprovalPolicy)
+    dft_approved: bool = False
+    retraining_approved: bool = False
 
     @model_validator(mode="after")
     def _consistent_options(self) -> PhaseExplorationPolicy:
@@ -51,6 +54,15 @@ def run_phase_exploration(
     return a mapping containing ``model_promoted`` plus any provenance.  This
     keeps the workflow independent of facility-specific launch mechanics.
     """
+
+    if policy.active_learning and policy.approvals.before_dft and not policy.dft_approved:
+        raise PermissionError("active learning requires explicit DFT approval")
+    if (
+        policy.retrain_mlip
+        and policy.approvals.before_retraining
+        and not policy.retraining_approved
+    ):
+        raise PermissionError("MLIP retraining requires explicit approval")
 
     kwargs = dict(exploration_kwargs or {})
     n_random = int(kwargs.get("n_random", 50))

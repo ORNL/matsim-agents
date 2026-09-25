@@ -7,7 +7,7 @@ from matsim_agents.active_learning.dataset_governance import validate_labelled_f
 from matsim_agents.active_learning.trainer import LabelledFrame
 from matsim_agents.discovery.stability import RankingMode, score_stability
 from matsim_agents.orchestration.state import RelaxationResult
-from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy
+from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy, run_phase_exploration
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 
 
@@ -32,6 +32,32 @@ def test_model_promotion_requires_explicit_approval(tmp_path):
 def test_phase_reevaluation_requires_retraining():
     with pytest.raises(ValueError, match="requires retrain_mlip"):
         PhaseExplorationPolicy(reevaluate_after_retraining=True)
+
+
+def test_phase_active_learning_requires_dft_approval(tmp_path):
+    policy = PhaseExplorationPolicy(active_learning=True)
+    with pytest.raises(PermissionError, match="DFT approval"):
+        run_phase_exploration(
+            "Si",
+            policy=policy,
+            output_dir=str(tmp_path),
+            active_learning_runner=lambda *_: {},
+        )
+
+
+def test_phase_retraining_requires_approval(tmp_path):
+    policy = PhaseExplorationPolicy(
+        active_learning=True,
+        retrain_mlip=True,
+        dft_approved=True,
+    )
+    with pytest.raises(PermissionError, match="retraining requires explicit approval"):
+        run_phase_exploration(
+            "Si",
+            policy=policy,
+            output_dir=str(tmp_path),
+            active_learning_runner=lambda *_: {},
+        )
 
 
 def test_dft_relaxation_requires_dft_configuration():

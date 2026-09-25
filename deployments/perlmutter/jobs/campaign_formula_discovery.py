@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
-"""End-to-end integration test: real multi-LLM debate -> formula-discovery stage.
+"""Initialize a campaign with a real multi-LLM formula-discovery debate.
 
 Exercises the campaign formula-generation slice (element-set-to-formula
 enumeration + LLM-formula merge, see :mod:`matsim_agents.discovery.formula`,
 :mod:`matsim_agents.discovery.formula_merge`, and
 :mod:`matsim_agents.campaign`) against a *real* multi-LLM scientific debate
-served on real vLLM endpoints -- no mocked LLM calls. This intentionally
-stops at the formula registry: AFLOW/pyXtal candidate generation, MLIP
-relaxation, DFT labelling, and the adaptive acquisition/hull loop already
-exist for a single composition (:mod:`matsim_agents.discovery.wrapper`) and
-are out of scope for this driver.
+served on real vLLM endpoints -- no mocked LLM calls. This stage writes the
+resumable formula registry consumed by ``campaign_execute.py``, which owns
+per-formula exploration, active learning, DFT labelling, and evidence review.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -126,11 +123,15 @@ def main(argv: list[str] | None = None) -> int:
         synthesis_method="independent_verdicts",
     )
 
-    print(f"[{__name__}] running real multi-LLM debate ({len(participants)} participants, "
-          f"{args.rounds} rounds) ...")
+    print(
+        f"[{__name__}] running real multi-LLM debate ({len(participants)} participants, "
+        f"{args.rounds} rounds) ..."
+    )
     debate_result = run_scientific_debate(debate_cfg)
-    print(f"[{__name__}] debate complete: run_id={debate_result.run_id}, "
-          f"turns={len(debate_result.turns)}, verdicts={len(debate_result.verdicts)}")
+    print(
+        f"[{__name__}] debate complete: run_id={debate_result.run_id}, "
+        f"turns={len(debate_result.turns)}, verdicts={len(debate_result.verdicts)}"
+    )
 
     campaign = CampaignState(
         campaign_id=args.campaign_id,
@@ -148,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     campaign_path = output_dir / "campaign_state.json"
-    campaign_path.write_text(json.dumps(campaign.model_dump(mode="json"), indent=2))
+    campaign.save(campaign_path)
     print(f"[{__name__}] wrote {campaign_path}")
 
     # Minimal end-to-end sanity gate: the debate actually produced dialogue,
