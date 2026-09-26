@@ -38,6 +38,7 @@ set -euo pipefail
 export MATSIM_CAMPAIGN_MAX_DFT="${MATSIM_CAMPAIGN_MAX_DFT:-12}"
 
 REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
+export PYTHONPATH="${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
 PROJ="$(dirname "$REPO")"
 MODELS_ROOT="${MODEL_ROOT:-$PROJ/models}"
 SERVER="$REPO/deployments/perlmutter/jobs/job-serve-multinode-perlmutter.sh"
