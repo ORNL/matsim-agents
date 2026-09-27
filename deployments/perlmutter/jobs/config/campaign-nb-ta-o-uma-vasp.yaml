@@ -39,7 +39,7 @@ dft:
     nodes_per_job: 1
     ranks_per_node: 4
     threads_per_rank: 16
-    timeout_sec: 3600
+    timeout_sec: 14400
     extra_incar:
       ENCUT: "520"
       EDIFF: "1E-6"
@@ -49,6 +49,7 @@ dft:
       KGAMMA: ".TRUE."
       LASPH: ".TRUE."
       LMAXMIX: "4"
+      KPAR: "4"
 
 trainer:
   enabled: false

@@ -648,19 +648,26 @@ def run_pw(
     or a single string treated as one argv element. The QE input file path is
     appended as the final argument. Set the env var
     ``MATSIM_QE_LAUNCHER_APPEND_FLAG`` to e.g. ``-in`` if your wrapper expects
-    a flag before the input path.
+    a flag before the input path. A list may contain ``{input}`` and
+    ``{work_dir}`` placeholders when the wrapper requires a specific argument
+    order.
     """
     work_dir = os.path.abspath(work_dir)
     Path(work_dir).mkdir(parents=True, exist_ok=True)
     stdout_path = os.path.join(work_dir, stdout_name)
 
     argv = [launcher_cmd] if isinstance(launcher_cmd, str) else list(launcher_cmd)
-
-    flag = os.environ.get("MATSIM_QE_LAUNCHER_APPEND_FLAG", "").strip()
-    if flag:
-        argv += [flag, input_path]
+    if "{input}" in argv:
+        argv = [
+            input_path if value == "{input}" else work_dir if value == "{work_dir}" else value
+            for value in argv
+        ]
     else:
-        argv += [input_path]
+        flag = os.environ.get("MATSIM_QE_LAUNCHER_APPEND_FLAG", "").strip()
+        if flag:
+            argv += [flag, input_path]
+        else:
+            argv += [input_path]
 
     t0 = time.time()
     with open(stdout_path, "w") as out:

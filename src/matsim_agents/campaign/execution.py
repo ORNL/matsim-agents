@@ -281,7 +281,16 @@ def _dft_relaxation_config(
         geometry=GeometryControls(relax_cell=refinement.relax_cell),
         dft=DFTBackendConfig(
             backend="qe",
-            launcher=str(qe.pw_wrapper),
+            launcher=[
+                "bash",
+                str(qe.pw_wrapper),
+                "{work_dir}",
+                str(qe.pw_bin),
+                "{input}",
+                str(qe.nodes_per_job),
+                str(qe.ranks_per_node),
+                str(qe.threads_per_rank),
+            ],
             pseudo_dir=str(qe.pseudo_dir),
             settings={key: value for key, value in settings.items() if value is not None},
             timeout_sec=qe.timeout_sec,

@@ -46,11 +46,24 @@ Do not wrap the JSON in Markdown."""
 
 
 def _parse_verdict(text: str) -> ReviewVerdict:
-    candidate = text.strip()
-    if candidate.startswith("```"):
-        lines = candidate.splitlines()
-        candidate = "\n".join(lines[1:-1]).strip()
-    return ReviewVerdict.model_validate(json.loads(candidate))
+    decoder = json.JSONDecoder()
+    parsed: list[ReviewVerdict] = []
+    validation_errors: list[ValueError] = []
+    for offset, character in enumerate(text):
+        if character != "{":
+            continue
+        try:
+            candidate, _ = decoder.raw_decode(text, offset)
+            if not isinstance(candidate, dict) or "decisions" not in candidate:
+                continue
+            parsed.append(ReviewVerdict.model_validate(candidate))
+        except (json.JSONDecodeError, ValueError) as exc:
+            validation_errors.append(exc)
+    if parsed:
+        return parsed[-1]
+    if validation_errors:
+        raise ValueError("response contains no valid review verdict") from validation_errors[-1]
+    raise ValueError("response contains no JSON object")
 
 
 def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -> str:
@@ -99,12 +112,16 @@ def run_campaign_debate_review(
         ),
         model_factory=model_factory,
     )
-    parsed = [_parse_verdict(verdict.response) for verdict in debate.verdicts]
-    threshold = math.ceil(config.minimum_agreement_fraction * len(parsed))
+    threshold = math.ceil(config.minimum_agreement_fraction * len(debate.verdicts))
     votes: Counter[tuple[str, str]] = Counter()
     notes: list[str] = []
     allowed = set(campaign.formulas)
-    for verdict, payload in zip(debate.verdicts, parsed, strict=True):
+    for verdict in debate.verdicts:
+        try:
+            payload = _parse_verdict(verdict.response)
+        except ValueError as exc:
+            notes.append(f"[{verdict.participant}] invalid review verdict: {exc}")
+            continue
         seen: set[str] = set()
         for decision in payload.decisions:
             if decision.formula not in allowed or decision.formula in seen:

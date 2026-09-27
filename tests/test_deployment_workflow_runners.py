@@ -91,4 +91,6 @@ def test_perlmutter_vasp_campaign_config_resolves(tmp_path: Path, monkeypatch) -
     assert cfg.dft.vasp.vasp_bin == vasp_bin
     assert cfg.dft.vasp.potcar_dir == potcar_dir
     assert cfg.dft.vasp.ranks_per_node == 4
+    assert cfg.dft.vasp.timeout_sec == 14400
     assert cfg.dft.vasp.extra_incar["KSPACING"] == "0.25"
+    assert cfg.dft.vasp.extra_incar["KPAR"] == "4"

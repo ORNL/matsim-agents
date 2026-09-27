@@ -246,6 +246,16 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
     def relaxation_runner(cfg):
         assert cfg.mode == RelaxationMode.DFT
         assert cfg.dft is not None
+        assert cfg.dft.launcher == [
+            "bash",
+            "/unused/wrapper.sh",
+            "{work_dir}",
+            "/unused/pw.x",
+            "{input}",
+            "1",
+            "8",
+            "7",
+        ]
         observed_settings.append(cfg.dft.settings)
         source = next(
             formula for formula, path in structures.items() if str(path) == cfg.structure_path
