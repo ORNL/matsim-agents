@@ -14,13 +14,14 @@
 # job-all-local-model-debate-perlmutter.sh (kimi-k2.5, glm-4.7, glm-4.7-flash,
 # qwen3-235b-a22b-instruct-2507, qwen3-235b-a22b-thinking-2507, gemma-4-31b-it,
 # gemma-4-26b-a4b-it -- deepseek-v3.2 and devstral-2 excluded, see NAMES below),
-# then runs an initial formula-discovery debate followed by a bounded,
-# resumable campaign on the 16th node: UMA phase exploration, UMA-driven MD,
-# QE DFT labelling, and repeated seven-model evidence reviews.
+# then runs either formula-discovery debate alone or a bounded, resumable
+# campaign on the 16th node. MATSIM_CAMPAIGN_MODE selects debate-only,
+# uma-only MLIP polymorph labelling, or the existing DFT workflow.
 #
 # Required at submission (Slurm spools this script, so it cannot self-locate
 # the checkout):
 #   PROJECT_ROOT   matsim-agents checkout
+#   MATSIM_CAMPAIGN_MODE=single-llm-once|debate-only|uma-only|dft (default: dft)
 # Optional retraining controls:
 #   MATSIM_CAMPAIGN_RETRAIN=1              train a candidate UMA checkpoint
 #   MATSIM_CAMPAIGN_TRAIN_EPOCHS=5         fine-tuning epochs per formula
@@ -34,12 +35,28 @@
 #   MATSIM_CAMPAIGN_OXYGEN_CORRECTION=0.0    O2 correction in eV/O atom
 #
 # Submit with:
-#   PROJECT_ROOT=$PWD sbatch -A m5216_g -q premium \
+#   PROJECT_ROOT=$PWD MATSIM_CAMPAIGN_MODE=uma-only sbatch -A m5216_g -q premium \
 #     deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh
+# Submit single-llm-once with -N 1 and debate-only with -N 15.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
 export MATSIM_CAMPAIGN_MAX_DFT="${MATSIM_CAMPAIGN_MAX_DFT:-32}"
+CAMPAIGN_MODE="${MATSIM_CAMPAIGN_MODE:-dft}"
+[[ "$CAMPAIGN_MODE" == "single-llm-once" || "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == "uma-only" || "$CAMPAIGN_MODE" == "dft" ]] || {
+  echo "ERROR: MATSIM_CAMPAIGN_MODE must be single-llm-once, debate-only, uma-only, or dft" >&2
+  exit 2
+}
+if [[ "$CAMPAIGN_MODE" == "uma-only" ]]; then
+  [[ "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "0" && "${MATSIM_CAMPAIGN_PROMOTE_MODEL:-0}" == "0" ]] || {
+    echo "ERROR: uma-only mode forbids retraining and model promotion" >&2
+    exit 2
+  }
+  [[ "${MATSIM_CAMPAIGN_DFT_REFINE:-0}" == "0" ]] || {
+    echo "ERROR: uma-only mode forbids DFT refinement" >&2
+    exit 2
+  }
+fi
 
 REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
 export PYTHONPATH="${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
@@ -52,8 +69,10 @@ PYTHON="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}/bin/python3"
 AL_CONFIG="${MATSIM_CAMPAIGN_AL_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-qe.yaml}"
 REFERENCE_BACKEND="${MATSIM_CAMPAIGN_REFERENCE_BACKEND:-qe}"
 DFT_METHOD_SIGNATURE="${MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE:-qe-pbe-pslibrary-k4-o2-triplet-gamma-v1}"
-[[ -f "$AL_CONFIG" ]] || { echo "ERROR: campaign AL config not found: $AL_CONFIG" >&2; exit 2; }
-[[ "$REFERENCE_BACKEND" == "qe" || "$REFERENCE_BACKEND" == "vasp" ]] || {
+if [[ "$CAMPAIGN_MODE" != "debate-only" && "$CAMPAIGN_MODE" != "single-llm-once" ]]; then
+  [[ -f "$AL_CONFIG" ]] || { echo "ERROR: campaign AL config not found: $AL_CONFIG" >&2; exit 2; }
+fi
+[[ "$CAMPAIGN_MODE" != "dft" || "$REFERENCE_BACKEND" == "qe" || "$REFERENCE_BACKEND" == "vasp" ]] || {
   echo "ERROR: MATSIM_CAMPAIGN_REFERENCE_BACKEND must be qe or vasp" >&2
   exit 2
 }
@@ -78,14 +97,26 @@ MODEL_DIRS=(
 )
 NODE_COUNTS=(4 4 1 2 2 1 1)
 
+if [[ "$CAMPAIGN_MODE" == "single-llm-once" ]]; then
+  NAMES=(glm-4.7-flash)
+  MODEL_IDS=(zai-org/GLM-4.7-Flash)
+  MODEL_DIRS=(GLM-4.7-Flash)
+  NODE_COUNTS=(1)
+fi
+
 mkdir -p "$OUTPUT/servers"
 mapfile -t ALL_NODES < <(scontrol show hostnames "$SLURM_JOB_NODELIST")
 EXPECTED_NODES=16
+[[ "$CAMPAIGN_MODE" == "debate-only" ]] && EXPECTED_NODES=15
+[[ "$CAMPAIGN_MODE" == "single-llm-once" ]] && EXPECTED_NODES=1
 (( ${#ALL_NODES[@]} == EXPECTED_NODES )) || {
-  echo "ERROR: expected $EXPECTED_NODES nodes (15 model-serving + 1 campaign compute)" >&2
+  echo "ERROR: expected $EXPECTED_NODES nodes for $CAMPAIGN_MODE mode" >&2
   exit 2
 }
-CAMPAIGN_NODE="${ALL_NODES[15]}"
+CAMPAIGN_NODE=""
+if [[ "$CAMPAIGN_MODE" == "uma-only" || "$CAMPAIGN_MODE" == "dft" ]]; then
+  CAMPAIGN_NODE="${ALL_NODES[15]}"
+fi
 
 SERVER_PIDS=()
 SERVER_IPS=()
@@ -171,18 +202,30 @@ for index in "${!NAMES[@]}"; do
 done
 
 echo "[$(date)] Running campaign formula-discovery driver against $EXPECTED_MODELS local models ..."
+DISCOVERY_ROUNDS="${MATSIM_CAMPAIGN_ROUNDS:-2}"
+DISCOVERY_ARGS=()
+if [[ "$CAMPAIGN_MODE" == "single-llm-once" ]]; then
+  DISCOVERY_ROUNDS=1
+  DISCOVERY_ARGS+=(--single-call)
+fi
 "$PYTHON" "$REPO/deployments/perlmutter/jobs/campaign_formula_discovery.py" \
   --elements Nb Ta O \
   --oxidation-state Nb:3,4,5 --oxidation-state Ta:3,4,5 --oxidation-state O:-2 \
   --max-coefficient 6 --max-atoms 12 \
-  --rounds "${MATSIM_CAMPAIGN_ROUNDS:-2}" \
+  --rounds "$DISCOVERY_ROUNDS" \
   --campaign-id "nb-ta-o-e2e-all-${SLURM_JOB_ID}" \
   --output-dir "$OUTPUT/campaign" --output-root "$OUTPUT" \
+  "${DISCOVERY_ARGS[@]}" \
   "${MODEL_ARGS[@]}"
+
+if [[ "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == "single-llm-once" ]]; then
+  echo "[$(date)] $CAMPAIGN_MODE campaign complete. Artifacts in $OUTPUT/campaign"
+  exit 0
+fi
 
 printf -v MODEL_ARGS_QUOTED '%q ' "${MODEL_ARGS[@]}"
 TRAIN_ARGS=()
-if [[ "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; then
+if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; then
   TRAIN_ARGS=(
     --retrain
     --approve-retraining
@@ -215,7 +258,7 @@ if (( ${#TRAIN_ARGS[@]} > 0 )); then
   printf -v TRAIN_ARGS_QUOTED '%q ' "${TRAIN_ARGS[@]}"
 fi
 DFT_REFINEMENT_ARGS=()
-if [[ "${MATSIM_CAMPAIGN_DFT_REFINE:-1}" == "1" ]]; then
+if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_DFT_REFINE:-1}" == "1" ]]; then
   REFERENCE_DIR="$OUTPUT/campaign/dft-references"
   REFERENCE_PREP_ARGS=(
     --output-dir "$REFERENCE_DIR"
@@ -245,7 +288,10 @@ if (( ${#DFT_REFINEMENT_ARGS[@]} > 0 )); then
   printf -v DFT_REFINEMENT_ARGS_QUOTED '%q ' "${DFT_REFINEMENT_ARGS[@]}"
 fi
 TRAIN_ARGS_QUOTED="$DFT_REFINEMENT_ARGS_QUOTED$TRAIN_ARGS_QUOTED"
-echo "[$(date)] Running bounded UMA/QE campaign on $CAMPAIGN_NODE ..."
+EXECUTION_ARGS=(--execution-mode "$CAMPAIGN_MODE")
+[[ "$CAMPAIGN_MODE" == "dft" ]] && EXECUTION_ARGS+=(--approve-dft)
+printf -v EXECUTION_ARGS_QUOTED '%q ' "${EXECUTION_ARGS[@]}"
+echo "[$(date)] Running bounded $CAMPAIGN_MODE campaign on $CAMPAIGN_NODE ..."
 srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
   --gpus-per-node=1 --cpus-per-task=16 \
   bash -c "
@@ -265,10 +311,10 @@ srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
       --minimum-review-agreement \"\${MATSIM_CAMPAIGN_REVIEW_AGREEMENT:-1.0}\" \
       \${MATSIM_CAMPAIGN_FINAL_REVIEW_ARGS:-} \
       --formulas-per-iteration \"\${MATSIM_CAMPAIGN_FORMULAS_PER_ITERATION:-1}\" \
-      --acquisition-mode \"\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-legacy}\" \
+      --acquisition-mode \"\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-insertion-order}\" \
       --acquisition-seed \"\${MATSIM_CAMPAIGN_ACQUISITION_SEED:-0}\" \
       --lambda-initial \"\${MATSIM_CAMPAIGN_LAMBDA_INITIAL:-0.5}\" \
-      --lambda-minimum \"\${MATSIM_CAMPAIGN_LAMBDA_MINIMUM:-0.2}\" \
+        --acquisition-mode "\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-insertion-order}" \
       --lambda-maximum \"\${MATSIM_CAMPAIGN_LAMBDA_MAXIMUM:-0.8}\" \
       --lambda-update-rate \"\${MATSIM_CAMPAIGN_LAMBDA_UPDATE_RATE:-0.15}\" \
       --minimum-exploitation-fraction \"\${MATSIM_CAMPAIGN_MIN_EXPLOITATION:-0.2}\" \
@@ -284,7 +330,8 @@ srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
       --max-node-hours \"\${MATSIM_CAMPAIGN_MAX_NODE_HOURS:-8}\" \
       --n-random \"\${MATSIM_CAMPAIGN_RANDOM_SEEDS:-0}\" \
       --relax-maxiter \"\${MATSIM_CAMPAIGN_RELAX_MAXITER:-100}\" \
-      --approve-dft \
+      --degeneracy-tolerance-ev-per-atom \"\${MATSIM_CAMPAIGN_DEGENERACY_TOLERANCE_EV_PER_ATOM:-0.01}\" \
+      $EXECUTION_ARGS_QUOTED \
       $TRAIN_ARGS_QUOTED \
       $MODEL_ARGS_QUOTED
   " 2>&1 | tee "$OUTPUT/campaign-execute.log"

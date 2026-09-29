@@ -92,10 +92,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Repeatable debate participant: NAME PROVIDER MODEL BASE_URL",
     )
     parser.add_argument("--rounds", type=int, default=2)
+    parser.add_argument(
+        "--single-call",
+        action="store_true",
+        help="Invoke exactly one configured model once and reuse its response as the verdict.",
+    )
     parser.add_argument("--campaign-id", default="campaign-e2e")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--output-root", default="./runs")
     args = parser.parse_args(argv)
+    if args.single_call and (len(args.models) != 1 or args.rounds != 1):
+        parser.error("--single-call requires exactly one --model and --rounds 1")
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -121,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         output_root=args.output_root,
         debate_mode="equal",
         synthesis_method="independent_verdicts",
+        single_call=args.single_call,
     )
 
     print(

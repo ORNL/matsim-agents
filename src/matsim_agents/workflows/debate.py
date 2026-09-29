@@ -25,7 +25,7 @@ class DebateParticipant(BaseModel):
 
 class ScientificDebateConfig(BaseModel):
     hypothesis: str = Field(min_length=1)
-    participants: list[DebateParticipant] = Field(min_length=2)
+    participants: list[DebateParticipant] = Field(min_length=1)
     rounds: int = Field(2, ge=1, le=100)
     output_root: str = "./runs"
     debate_mode: Literal["equal", "role_based"] = "equal"
@@ -33,6 +33,7 @@ class ScientificDebateConfig(BaseModel):
     synthesis_participant: str | None = None
     max_transcript_chars: int = Field(60_000, ge=1_000)
     final_response_instruction: str | None = None
+    single_call: bool = False
 
     @model_validator(mode="after")
     def _validate_participants(self) -> ScientificDebateConfig:
@@ -45,6 +46,10 @@ class ScientificDebateConfig(BaseModel):
             raise ValueError(
                 "synthesis_participant is only valid with synthesis_method=designated_model"
             )
+        if self.single_call and (len(self.participants) != 1 or self.rounds != 1):
+            raise ValueError("single_call requires exactly one participant and one round")
+        if not self.single_call and len(self.participants) < 2:
+            raise ValueError("scientific debate requires at least two participants")
         return self
 
 
@@ -191,7 +196,21 @@ def run_scientific_debate(
         ]
     )
     verdicts = []
-    for index, participant in enumerate(verdict_participants, start=1):
+    if cfg.single_call:
+        participant = cfg.participants[0]
+        verdict = DebateVerdict(
+            contribution_id="verdict-001-turn-0001",
+            participant=participant.name,
+            provider=participant.provider,
+            model=participant.model,
+            response=turns[0].response,
+        )
+        verdicts.append(verdict)
+        run.append_event("verdict_reused_from_single_call", verdict.model_dump(mode="json"))
+    for index, participant in enumerate(
+        [] if cfg.single_call else verdict_participants,
+        start=1,
+    ):
         final_instruction = (
             f"\n\nRequired response format:\n{cfg.final_response_instruction}"
             if cfg.final_response_instruction

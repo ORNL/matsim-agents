@@ -43,6 +43,7 @@ def explore_composition(
     maxiter: int = 200,
     maxstep: float = 1e-2,
     fmax: float = 0.02,
+    degeneracy_tol_eV_per_atom: float = 0.01,
     relative_increase_threshold: float = 0.05,
     mlp_device: str = "cuda",
     precision: str | None = None,
@@ -136,6 +137,7 @@ def explore_composition(
         report = score_stability(
             composition.formula,
             relaxations,
+            degeneracy_tol_eV_per_atom=degeneracy_tol_eV_per_atom,
             candidates=candidates,
         )
 

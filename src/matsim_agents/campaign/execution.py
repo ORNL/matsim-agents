@@ -6,7 +6,7 @@ import json
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from ase.io import read as ase_read
@@ -55,9 +55,19 @@ class CampaignFormulaExecutionConfig(BaseModel):
     phase_policy: PhaseExplorationPolicy
     exploration_kwargs: dict[str, Any] = Field(default_factory=dict)
     compute_nodes: int = Field(1, ge=1)
+    execution_mode: Literal["dft", "uma_only"] = "dft"
     retraining: CampaignRetrainingConfig | None = None
     dft_refinement: CampaignDFTRefinementConfig | None = None
     model_override: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_execution_mode(self) -> CampaignFormulaExecutionConfig:
+        if self.execution_mode == "uma_only":
+            if self.phase_policy.active_learning or self.phase_policy.retrain_mlip:
+                raise ValueError("uma_only execution disables active learning and retraining")
+            if self.retraining is not None or self.dft_refinement is not None:
+                raise ValueError("uma_only execution cannot configure retraining or DFT refinement")
+        return self
 
 
 class CampaignRetrainingConfig(BaseModel):
@@ -583,6 +593,10 @@ def run_formula_with_active_learning(
     """Explore and label one formula using a fresh copy of the AL template."""
 
     al_cfg = ALConfig.from_yaml(config.active_learning_config)
+    if config.execution_mode == "uma_only" and al_cfg.mlip.backend != "uma":
+        raise ValueError(
+            f"uma_only execution requires mlip.backend='uma', got {al_cfg.mlip.backend!r}"
+        )
     if config.model_override:
         if al_cfg.mlip.backend == "uma" and al_cfg.mlip.uma is not None:
             al_cfg.mlip.uma.model_name = config.model_override
@@ -591,7 +605,8 @@ def run_formula_with_active_learning(
             al_cfg.mlip.mace.model = config.model_override
         elif al_cfg.mlip.hydragnn is not None:
             al_cfg.mlip.hydragnn.logdir = Path(config.model_override)
-    _validate_dft_inputs(formula, al_cfg)
+    if config.execution_mode == "dft":
+        _validate_dft_inputs(formula, al_cfg)
     if config.phase_policy.retrain_mlip:
         if config.retraining is None:
             raise ValueError("phase policy requests retraining but no retraining config is set")
@@ -673,6 +688,7 @@ def run_formula_with_active_learning(
                     result["exploration_kwargs"] = {"logdir": latest_model}
         return result
 
+    phase_started = time.monotonic()
     result = phase_runner(
         formula,
         policy=config.phase_policy,
@@ -680,11 +696,53 @@ def run_formula_with_active_learning(
         exploration_kwargs=_exploration_kwargs(al_cfg, config.exploration_kwargs),
         active_learning_runner=active_learning_runner,
     )
+    phase_seconds = time.monotonic() - phase_started
     exploration = result.after_retraining or result.initial
+    candidate_uncertainty = _score_relaxed_candidate_uncertainty(exploration, al_cfg)
+    if config.execution_mode == "uma_only":
+        candidate_by_path = {
+            candidate.structure_path: candidate for candidate in exploration.phase_candidates
+        }
+        labels = []
+        for relaxation in exploration.relaxations:
+            candidate = candidate_by_path.get(relaxation.structure_path)
+            atom_count = candidate.num_atoms if candidate is not None else None
+            labels.append(
+                {
+                    "candidate_id": candidate.candidate_id if candidate is not None else None,
+                    "structure_path": relaxation.structure_path,
+                    "optimized_structure_path": relaxation.optimized_structure_path,
+                    "converged": relaxation.converged,
+                    "final_energy_eV": relaxation.final_energy_eV,
+                    "energy_per_atom_eV": (
+                        relaxation.final_energy_eV / atom_count if atom_count else None
+                    ),
+                    "residual_force_eV_per_A": relaxation.final_max_force_eV_per_A,
+                    "uncertainty": (
+                        candidate_uncertainty.get(candidate.candidate_id)
+                        if candidate is not None and candidate.candidate_id is not None
+                        else None
+                    ),
+                }
+            )
+        model_identifier = None
+        if al_cfg.mlip.uma is not None:
+            model_identifier = al_cfg.mlip.uma.model_name
+        result.active_learning_result = {
+            "execution_mode": "uma_only",
+            "evidence_level": "mlip_prediction",
+            "backend": "uma",
+            "model_identifier": model_identifier,
+            "n_dft_calculations": 0,
+            "n_active_learning_iterations": 0,
+            "node_hours": phase_seconds * config.compute_nodes / 3600.0,
+            "model_promoted": False,
+            "candidate_uncertainty": candidate_uncertainty,
+            "mlip_labels": labels,
+        }
+        return result
     if result.active_learning_result is not None:
-        result.active_learning_result["candidate_uncertainty"] = (
-            _score_relaxed_candidate_uncertainty(exploration, al_cfg)
-        )
+        result.active_learning_result["candidate_uncertainty"] = candidate_uncertainty
     refinement = config.dft_refinement
     if refinement is None:
         return result

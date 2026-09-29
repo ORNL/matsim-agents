@@ -5,7 +5,10 @@ from ase import Atoms
 from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.dataset_governance import validate_labelled_frames
 from matsim_agents.active_learning.trainer import LabelledFrame
+from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.stability import RankingMode, score_stability
+from matsim_agents.discovery.wrapper import CompositionExplorationResult
+from matsim_agents.execution.contracts import ComputeBudget
 from matsim_agents.orchestration.state import RelaxationResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy, run_phase_exploration
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
@@ -70,6 +73,29 @@ def test_phase_retraining_requires_approval(tmp_path):
             output_dir=str(tmp_path),
             active_learning_runner=lambda *_: {},
         )
+
+
+def test_formula_budget_does_not_truncate_random_structure_quota(tmp_path, monkeypatch):
+    observed = {}
+
+    def fake_explore(composition, *, output_dir, **kwargs):
+        observed.update(kwargs)
+        parsed = parse_composition(composition)
+        assert parsed is not None
+        return CompositionExplorationResult(composition=parsed, phase_candidates=[])
+
+    monkeypatch.setattr(
+        "matsim_agents.workflows.phase_exploration.explore_composition",
+        fake_explore,
+    )
+    run_phase_exploration(
+        "Si",
+        policy=PhaseExplorationPolicy(budget=ComputeBudget(max_candidates=3)),
+        output_dir=str(tmp_path),
+        exploration_kwargs={"n_random": 50},
+    )
+
+    assert observed["n_random"] == 50
 
 
 def test_dft_relaxation_requires_dft_configuration():

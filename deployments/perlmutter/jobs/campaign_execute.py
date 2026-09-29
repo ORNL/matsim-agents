@@ -66,11 +66,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--review-rounds", type=int, default=2)
     parser.add_argument("--minimum-review-agreement", type=float, default=1.0)
     parser.add_argument("--final-review", action="store_true")
+    parser.add_argument(
+        "--execution-mode",
+        choices=["dft", "uma-only"],
+        default="dft",
+    )
     parser.add_argument("--formulas-per-iteration", type=int, default=1)
     parser.add_argument(
         "--acquisition-mode",
-        choices=["legacy", "random", "exploitation", "exploration", "adaptive"],
-        default="legacy",
+        choices=["insertion-order", "random", "exploitation", "exploration", "adaptive"],
+        default="insertion-order",
     )
     parser.add_argument("--acquisition-seed", type=int, default=0)
     parser.add_argument("--lambda-initial", type=float, default=0.5)
@@ -94,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-node-hours", type=float, default=8.0)
     parser.add_argument("--n-random", type=int, default=0)
     parser.add_argument("--relax-maxiter", type=int, default=100)
+    parser.add_argument("--degeneracy-tolerance-ev-per-atom", type=float, default=0.01)
     parser.add_argument(
         "--dft-reference-structures",
         type=Path,
@@ -124,9 +130,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--promotion-min-evaluated-frames", type=int, default=1)
     parser.add_argument("--retry-failed", action="store_true")
     args = parser.parse_args(argv)
+    if args.degeneracy_tolerance_ev_per_atom <= 0:
+        parser.error("--degeneracy-tolerance-ev-per-atom must be positive")
 
-    if not args.approve_dft:
+    if args.execution_mode == "dft" and not args.approve_dft:
         parser.error("real campaign execution requires --approve-dft")
+    if args.execution_mode == "uma-only":
+        if args.approve_dft or args.dft_reference_structures or args.dft_method_signature:
+            parser.error("uma-only execution forbids all DFT approval and reference options")
+        if args.retrain or args.promote_model:
+            parser.error("uma-only execution forbids retraining and model promotion")
     if args.retrain and not args.approve_retraining:
         parser.error("--retrain requires --approve-retraining")
     if args.promote_model and not args.retrain:
@@ -161,8 +174,12 @@ def main(argv: list[str] | None = None) -> int:
     campaign = CampaignState.load(args.campaign_state)
     al_config = ALConfig.from_yaml(args.al_config)
     campaign.budget.max_candidates = args.max_candidates
-    campaign.budget.max_dft_calculations = args.max_dft_calculations
-    campaign.budget.max_active_learning_iterations = args.max_al_iterations
+    campaign.budget.max_dft_calculations = (
+        args.max_dft_calculations if args.execution_mode == "dft" else None
+    )
+    campaign.budget.max_active_learning_iterations = (
+        args.max_al_iterations if args.execution_mode == "dft" else None
+    )
     campaign.budget.max_node_hours = args.max_node_hours
     refinement = None
     if args.dft_reference_structures:
@@ -234,9 +251,11 @@ def main(argv: list[str] | None = None) -> int:
             max_steps=args.dft_relax_max_steps,
             force_tolerance_eV_per_A=args.dft_force_tolerance,
             candidate_acquisition=CandidateSelectionPolicy(
-                enabled=args.acquisition_mode != "legacy",
+                enabled=args.acquisition_mode != "insertion-order",
                 mode=(
-                    "adaptive" if args.acquisition_mode == "legacy" else args.acquisition_mode
+                    "adaptive"
+                    if args.acquisition_mode == "insertion-order"
+                    else args.acquisition_mode
                 ),
                 lambda_value=args.lambda_initial,
                 minimum_exploitation_fraction=args.minimum_exploitation_fraction,
@@ -247,11 +266,11 @@ def main(argv: list[str] | None = None) -> int:
         campaign.reference_energies = references
 
     phase_policy = PhaseExplorationPolicy(
-        active_learning=True,
+        active_learning=args.execution_mode == "dft",
         retrain_mlip=args.retrain,
         reevaluate_after_retraining=args.promote_model,
         approvals=ApprovalPolicy(
-            before_dft=True,
+            before_dft=args.execution_mode == "dft",
             before_retraining=True,
             before_model_promotion=True,
         ),
@@ -262,10 +281,12 @@ def main(argv: list[str] | None = None) -> int:
     formula_runner = make_formula_runner(
         CampaignFormulaExecutionConfig(
             active_learning_config=args.al_config,
+            execution_mode=("uma_only" if args.execution_mode == "uma-only" else "dft"),
             phase_policy=phase_policy,
             exploration_kwargs={
                 "n_random": args.n_random,
                 "maxiter": args.relax_maxiter,
+                "degeneracy_tol_eV_per_atom": args.degeneracy_tolerance_ev_per_atom,
             },
             compute_nodes=1,
             retraining=(
@@ -316,9 +337,11 @@ def main(argv: list[str] | None = None) -> int:
             require_low_uncertainty_near_hull=args.require_low_uncertainty_near_hull,
             low_uncertainty_threshold=args.low_uncertainty_threshold,
             acquisition=CampaignAcquisitionPolicy(
-                enabled=args.acquisition_mode != "legacy",
+                enabled=args.acquisition_mode != "insertion-order",
                 mode=(
-                    "adaptive" if args.acquisition_mode == "legacy" else args.acquisition_mode
+                    "adaptive"
+                    if args.acquisition_mode == "insertion-order"
+                    else args.acquisition_mode
                 ),
                 random_seed=args.acquisition_seed,
                 lambda_initial=args.lambda_initial,

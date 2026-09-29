@@ -248,6 +248,9 @@ class StabilityReport(BaseModel):
     summary: str
     ranking_mode: RankingMode = RankingMode.RELATIVE
     reference_set_id: str | None = None
+    degeneracy_tolerance_eV_per_atom: float = 0.01
+    degeneracy_reference_structure_path: str | None = None
+    near_degenerate_structure_paths: list[str] = Field(default_factory=list)
 
 
 def recalibrate_hull_reports(
@@ -461,9 +464,13 @@ def score_stability(
             ),
         )
     ground = ranking[0]
-
+    degeneracy_reference = min(eligible, key=lambda item: item.energy_per_atom_eV)
     near_degenerate = [
-        it for it in ranking[1:] if it.delta_e_above_min_eV_per_atom < degeneracy_tol_eV_per_atom
+        item
+        for item in eligible
+        if item is not degeneracy_reference
+        and item.energy_per_atom_eV - degeneracy_reference.energy_per_atom_eV
+        < degeneracy_tol_eV_per_atom
     ]
     chem_stable = ground.dynamically_stable_proxy and not near_degenerate
 
@@ -490,9 +497,14 @@ def score_stability(
             "any stability claim can be published."
         )
     if near_degenerate:
+        tolerance_meV_per_atom = degeneracy_tol_eV_per_atom * 1000.0
         summary_lines.append(
-            f"WARNING: {len(near_degenerate)} other phase(s) within "
-            f"{degeneracy_tol_eV_per_atom:.3f} eV/atom; ground-state assignment is uncertain."
+            "**Energetically near-degenerate polymorphs within "
+            f"{tolerance_meV_per_atom:g} meV/atom**: {len(near_degenerate)} other phase(s) "
+            "fall within this energy window relative to the lowest-energy eligible "
+            f"polymorph, {degeneracy_reference.optimized_structure_path} "
+            f"(E/atom = {degeneracy_reference.energy_per_atom_eV:.6f} eV). "
+            "Ground-state assignment is uncertain."
         )
     summary_lines.append(f"Chemical-stability proxy: {'PASS' if chem_stable else 'INCONCLUSIVE'}.")
 
@@ -504,4 +516,9 @@ def score_stability(
         summary="\n".join(summary_lines),
         ranking_mode=ranking_mode,
         reference_set_id=(reference_energies.identifier if reference_energies else None),
+        degeneracy_tolerance_eV_per_atom=degeneracy_tol_eV_per_atom,
+        degeneracy_reference_structure_path=degeneracy_reference.optimized_structure_path,
+        near_degenerate_structure_paths=[
+            item.optimized_structure_path for item in near_degenerate
+        ],
     )

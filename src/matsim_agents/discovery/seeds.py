@@ -327,6 +327,7 @@ def random_search(
 
     import random as _random
 
+    from pymatgen.analysis.structure_matcher import StructureMatcher
     from pyxtal import pyxtal
 
     rng = _random.Random(seed)
@@ -334,8 +335,10 @@ def random_search(
     counts = [comp.elements[e] for e in elements]
 
     results: list[tuple[object, int]] = []
+    matcher = StructureMatcher(primitive_cell=True, attempt_supercell=False)
     max_attempts = max(n * max_attempts_factor, n + 20)
     attempts = 0
+    duplicates = 0
     while len(results) < n and attempts < max_attempts:
         attempts += 1
         spg = rng.randint(1, 230)
@@ -345,16 +348,20 @@ def random_search(
             if not x.valid:
                 continue
             pmg = x.to_pymatgen()
+            if any(matcher.fit(existing, pmg) for existing, _ in results):
+                duplicates += 1
+                continue
             results.append((pmg, spg))
         except Exception as exc:
             logger.debug("pyXtal SG=%d failed: %s", spg, exc)
             continue
     if len(results) < n:
         logger.info(
-            "pyXtal produced %d/%d structures after %d attempts.",
+            "pyXtal produced %d/%d unique structures after %d attempts (%d duplicates).",
             len(results),
             n,
             attempts,
+            duplicates,
         )
     return results
 

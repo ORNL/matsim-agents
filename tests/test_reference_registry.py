@@ -125,3 +125,41 @@ def test_hull_decomposition_retains_reference_polymorph_identity(tmp_path: Path)
 
     assert report.ground_state.energy_above_hull_eV_per_atom == pytest.approx(0.1)
     assert report.ground_state.decomposition == {"NbO2-ground": pytest.approx(1.0)}
+
+
+def test_degeneracy_tolerance_is_user_configurable(tmp_path: Path) -> None:
+    structures = [tmp_path / "phase-a.extxyz", tmp_path / "phase-b.extxyz"]
+    for structure in structures:
+        write(structure, Atoms(["Nb"], positions=[[0, 0, 0]]))
+    relaxations = [
+        RelaxationResult(
+            structure_path=str(structure),
+            optimized_structure_path=str(structure),
+            trajectory_path="",
+            log_csv_path="",
+            final_energy_eV=energy,
+            final_max_force_eV_per_A=0.01,
+            num_steps=1,
+            converged=True,
+        )
+        for structure, energy in zip(structures, [-1.0, -0.985], strict=True)
+    ]
+
+    default_report = score_stability("Nb", relaxations)
+    wider_report = score_stability(
+        "Nb",
+        relaxations,
+        degeneracy_tol_eV_per_atom=0.02,
+    )
+
+    assert default_report.chemically_stable_proxy is True
+    assert wider_report.chemically_stable_proxy is False
+    assert "**Energetically near-degenerate polymorphs within 20 meV/atom**" in (
+        wider_report.summary
+    )
+    assert wider_report.degeneracy_tolerance_eV_per_atom == 0.02
+    assert wider_report.degeneracy_reference_structure_path == str(structures[0])
+    assert wider_report.near_degenerate_structure_paths == [str(structures[1])]
+    assert f"relative to the lowest-energy eligible polymorph, {structures[0]}" in (
+        wider_report.summary
+    )

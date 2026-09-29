@@ -65,9 +65,6 @@ def run_phase_exploration(
         raise PermissionError("MLIP retraining requires explicit approval")
 
     kwargs = dict(exploration_kwargs or {})
-    n_random = int(kwargs.get("n_random", 50))
-    if policy.budget.max_candidates is not None:
-        kwargs["n_random"] = min(n_random, policy.budget.max_candidates)
     if not policy.relax_structures:
         # Seed-only exploration is explicit and uses a runner that records no
         # fake relaxation result. The existing wrapper still owns generation.

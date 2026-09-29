@@ -35,7 +35,10 @@ def test_perlmutter_campaign_exposes_adaptive_acquisition_controls() -> None:
     )
     content = script.read_text(encoding="utf-8")
 
-    assert '--acquisition-mode \\"\\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-legacy}\\"' in content
+    assert (
+        '--acquisition-mode \\"\\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-insertion-order}\\"'
+        in content
+    )
     assert '--lambda-initial \\"\\${MATSIM_CAMPAIGN_LAMBDA_INITIAL:-0.5}\\"' in content
     assert '--maximum-per-relaxed-family \\"\\${MATSIM_CAMPAIGN_MAX_PER_FAMILY:-1}\\"' in content
     assert (
@@ -44,6 +47,40 @@ def test_perlmutter_campaign_exposes_adaptive_acquisition_controls() -> None:
     )
     assert "\\${MATSIM_CAMPAIGN_STOPPING_ARGS:-}" in content
     assert "\\${MATSIM_CAMPAIGN_FINAL_REVIEW_ARGS:-}" in content
+    assert (
+        '--degeneracy-tolerance-ev-per-atom '
+        '\\"\\${MATSIM_CAMPAIGN_DEGENERACY_TOLERANCE_EV_PER_ATOM:-0.01}\\"'
+        in content
+    )
+
+
+def test_perlmutter_campaign_supports_debate_only_and_uma_only_modes() -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = (
+        root
+        / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
+    )
+    content = script.read_text(encoding="utf-8")
+
+    discovery_call = content.index("campaign_formula_discovery.py")
+    debate_exit = content.index(
+        'if [[ "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == '
+        '"single-llm-once" ]]',
+        discovery_call,
+    )
+    execution_call = content.index("campaign_execute.py")
+    assert discovery_call < debate_exit < execution_call
+    assert '[[ "$CAMPAIGN_MODE" == "single-llm-once" ]] && EXPECTED_NODES=1' in content
+    assert "NAMES=(glm-4.7-flash)" in content
+    assert "DISCOVERY_ARGS+=(--single-call)" in content
+    assert (
+        '[[ "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == '
+        '"single-llm-once" ]]' in content
+    )
+    assert 'EXECUTION_ARGS=(--execution-mode "$CAMPAIGN_MODE")' in content
+    assert '[[ "$CAMPAIGN_MODE" == "dft" ]] && EXECUTION_ARGS+=(--approve-dft)' in content
+    assert '[[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_DFT_REFINE:-1}"' in content
+    assert '[[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}"' in content
 
     def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> None:
         root = Path(__file__).resolve().parents[1]

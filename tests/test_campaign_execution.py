@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -115,6 +116,112 @@ def test_relaxed_candidate_uncertainty_uses_registry_candidate_ids(tmp_path, mon
     scores = _score_relaxed_candidate_uncertainty(exploration, cfg)
 
     assert scores == {"NbO-P0042": 0.73}
+
+
+def test_uma_only_execution_labels_polymorphs_without_dft_or_active_learning(tmp_path):
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    structure = tmp_path / "NbO2.extxyz"
+    write(
+        structure,
+        Atoms(["Nb", "O", "O"], positions=[[0, 0, 0], [1, 0, 0], [2, 0, 0]]),
+    )
+    relaxation = RelaxationResult(
+        structure_path=str(structure),
+        optimized_structure_path=str(structure),
+        trajectory_path="",
+        log_csv_path="",
+        final_energy_eV=-9.0,
+        final_max_force_eV_per_A=0.02,
+        num_steps=4,
+        converged=True,
+    )
+
+    def phase_runner(formula, *, policy, **kwargs):
+        assert policy.active_learning is False
+        composition = parse_composition(formula)
+        assert composition is not None
+        return PhaseExplorationWorkflowResult(
+            composition=formula,
+            initial=CompositionExplorationResult(
+                composition=composition,
+                phase_candidates=[
+                    PhaseCandidate(
+                        formula=formula,
+                        candidate_id="NbO2-P0001",
+                        structure_path=str(structure),
+                        num_atoms=3,
+                    )
+                ],
+                relaxations=[relaxation],
+            ),
+        )
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("UMA-only execution invoked a forbidden DFT/AL path")
+
+    result = run_formula_with_active_learning(
+        "NbO2",
+        str(tmp_path / "formula"),
+        config=CampaignFormulaExecutionConfig(
+            active_learning_config=config_path,
+            execution_mode="uma_only",
+            phase_policy=PhaseExplorationPolicy(active_learning=False),
+        ),
+        al_runner=forbidden,
+        phase_runner=phase_runner,
+        relaxation_runner=forbidden,
+    )
+
+    evidence = result.active_learning_result
+    assert evidence is not None
+    assert evidence["execution_mode"] == "uma_only"
+    assert evidence["evidence_level"] == "mlip_prediction"
+    assert evidence["n_dft_calculations"] == 0
+    assert evidence["mlip_labels"] == [
+        {
+            "candidate_id": "NbO2-P0001",
+            "structure_path": str(structure),
+            "optimized_structure_path": str(structure),
+            "converged": True,
+            "final_energy_eV": -9.0,
+            "energy_per_atom_eV": -3.0,
+            "residual_force_eV_per_A": 0.02,
+            "uncertainty": None,
+        }
+    ]
+
+
+def test_uma_only_execution_rejects_dft_or_active_learning_configuration(tmp_path):
+    config_path = tmp_path / "al.yaml"
+    config_path.touch()
+    with pytest.raises(ValueError, match="disables active learning"):
+        CampaignFormulaExecutionConfig(
+            active_learning_config=config_path,
+            execution_mode="uma_only",
+            phase_policy=PhaseExplorationPolicy(active_learning=True, dft_approved=True),
+        )
+
+
+def test_uma_only_execution_rejects_non_uma_backend(tmp_path, monkeypatch):
+    config_path = tmp_path / "al.yaml"
+    config_path.touch()
+    monkeypatch.setattr(
+        "matsim_agents.campaign.execution.ALConfig.from_yaml",
+        lambda path: SimpleNamespace(mlip=SimpleNamespace(backend="mace")),
+    )
+
+    with pytest.raises(ValueError, match="requires mlip.backend='uma'"):
+        run_formula_with_active_learning(
+            "NbO2",
+            str(tmp_path / "formula"),
+            config=CampaignFormulaExecutionConfig(
+                active_learning_config=config_path,
+                execution_mode="uma_only",
+                phase_policy=PhaseExplorationPolicy(active_learning=False),
+            ),
+            phase_runner=lambda *args, **kwargs: pytest.fail("phase runner was invoked"),
+        )
 
 
 def _vasp_config_yaml(tmp_path) -> str:

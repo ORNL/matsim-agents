@@ -8,7 +8,9 @@ unavailable in the test environment.
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -114,6 +116,28 @@ def test_random_search_degrades_without_pyxtal():
     with pytest.warns(UserWarning, match="pyXtal is not installed"):
         out = random_search(_comp("Si"), n=5)
     assert out == []
+
+
+@requires_pymatgen
+def test_random_search_filters_symmetry_equivalent_structures(monkeypatch):
+    from pymatgen.core import Lattice, Structure
+
+    structure = Structure(Lattice.cubic(4.0), ["Si"], [[0, 0, 0]])
+
+    class FakePyXtal:
+        valid = True
+
+        def from_random(self, **kwargs):
+            return None
+
+        def to_pymatgen(self):
+            return structure.copy()
+
+    monkeypatch.setattr("matsim_agents.discovery.seeds._pyxtal_available", lambda: True)
+    monkeypatch.setitem(sys.modules, "pyxtal", SimpleNamespace(pyxtal=FakePyXtal))
+
+    results = random_search(_comp("Si"), n=2, seed=3, max_attempts_factor=1)
+    assert len(results) == 1
 
 
 # --------------------------------------------------------------------- #

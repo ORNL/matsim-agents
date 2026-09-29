@@ -26,6 +26,38 @@ class _Model:
         return SimpleNamespace(content=f"argument from {self.name} call {len(self.prompts)}")
 
 
+def test_single_call_mode_invokes_one_model_exactly_once(tmp_path):
+    model = _Model("baseline")
+    result = run_scientific_debate(
+        ScientificDebateConfig(
+            hypothesis="Propose candidate Nb-Ta-O formulas.",
+            participants=[
+                DebateParticipant(name="baseline", provider="vllm", model="baseline")
+            ],
+            rounds=1,
+            single_call=True,
+            output_root=str(tmp_path),
+        ),
+        model_factory=lambda **kwargs: model,
+    )
+
+    assert len(model.prompts) == 1
+    assert len(result.turns) == 1
+    assert len(result.verdicts) == 1
+    assert result.verdicts[0].response == result.turns[0].response
+
+
+def test_single_call_mode_rejects_multiple_models_or_rounds():
+    participant = DebateParticipant(name="baseline", provider="vllm", model="baseline")
+    with pytest.raises(ValueError, match="exactly one participant and one round"):
+        ScientificDebateConfig(
+            hypothesis="h",
+            participants=[participant],
+            rounds=2,
+            single_call=True,
+        )
+
+
 def test_models_debate_each_other_for_user_selected_rounds(tmp_path):
     models = {}
 
