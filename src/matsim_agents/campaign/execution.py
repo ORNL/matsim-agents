@@ -8,10 +8,15 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+from ase.io import read as ase_read
 from pydantic import BaseModel, Field, model_validator
 
+from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_calculator
+from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.loop import run_active_learning
+from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.campaign.registry import (
     CandidateSelectionPolicy,
     select_dft_refinement_candidates,
@@ -55,6 +60,12 @@ class CampaignRetrainingConfig(BaseModel):
     epochs: int = Field(5, ge=1)
     promote_model: bool = False
     promotion_approved: bool = False
+    validation_set: Path | None = None
+    validation_reference_set: Path | None = None
+    promotion_max_energy_mae_eV_per_atom: float = Field(0.1, gt=0)
+    promotion_max_force_mae_eV_per_A: float = Field(0.2, gt=0)
+    promotion_max_relative_regression: float = Field(0.05, ge=0)
+    promotion_min_evaluated_frames: int = Field(1, ge=1)
 
     @model_validator(mode="after")
     def _validate_training_paths_and_approval(self) -> CampaignRetrainingConfig:
@@ -64,6 +75,8 @@ class CampaignRetrainingConfig(BaseModel):
             raise ValueError(f"training launcher does not exist: {self.train_launcher}")
         if self.promote_model and not self.promotion_approved:
             raise ValueError("model promotion requires explicit approval")
+        if self.promote_model and self.validation_set is None:
+            raise ValueError("model promotion requires a held-out validation_set")
         return self
 
 
@@ -82,6 +95,51 @@ class CampaignDFTRefinementConfig(BaseModel):
     candidate_acquisition: CandidateSelectionPolicy = Field(
         default_factory=CandidateSelectionPolicy
     )
+
+
+def _score_relaxed_candidate_uncertainty(
+    exploration: Any,
+    al_cfg: ALConfig,
+) -> dict[str, float]:
+    """Score the relaxed phase candidates in the registry's candidate-ID space."""
+    if al_cfg.acquisition.strategy == "random":
+        return {}
+    relaxation_by_path = {item.structure_path: item for item in exploration.relaxations}
+    candidates: list[Candidate] = []
+    for index, phase in enumerate(exploration.phase_candidates):
+        relaxation = relaxation_by_path.get(phase.structure_path)
+        if relaxation is None or not relaxation.converged:
+            continue
+        candidate_id = phase.candidate_id or f"{phase.formula}-{phase.source[0].upper()}{index:04d}"
+        candidates.append(
+            Candidate(
+                candidate_id=candidate_id,
+                atoms=ase_read(relaxation.optimized_structure_path),
+                seed_path=phase.structure_path,
+                md_step=0,
+            )
+        )
+    if not candidates:
+        return {}
+    enable_dropout = al_cfg.acquisition.strategy in {"mc_dropout", "ensemble_then_dropout"}
+    primary = make_mlip_calculator(al_cfg.mlip, enable_mc_dropout=enable_dropout)
+    ensemble = (
+        build_ensemble(al_cfg.mlip, enable_mc_dropout=enable_dropout)
+        if al_cfg.mlip.ensemble_paths
+        else []
+    )
+    _selected, scores = select_candidates(
+        candidates,
+        al_cfg.acquisition,
+        primary_calculator=primary,
+        ensemble_calculators=ensemble or None,
+        seed=0,
+    )
+    return {
+        candidate.candidate_id: float(score)
+        for candidate, score in zip(candidates, scores, strict=True)
+        if np.isfinite(score)
+    }
 
     @model_validator(mode="after")
     def _validate_references(self) -> CampaignDFTRefinementConfig:
@@ -458,6 +516,20 @@ def run_formula_with_active_learning(
         al_cfg.trainer.epochs_per_iter = config.retraining.epochs
         al_cfg.trainer.promote_model = config.retraining.promote_model
         al_cfg.trainer.promotion_approved = config.retraining.promotion_approved
+        al_cfg.trainer.validation_set = config.retraining.validation_set
+        al_cfg.trainer.validation_reference_set = config.retraining.validation_reference_set
+        al_cfg.trainer.promotion_max_energy_mae_eV_per_atom = (
+            config.retraining.promotion_max_energy_mae_eV_per_atom
+        )
+        al_cfg.trainer.promotion_max_force_mae_eV_per_A = (
+            config.retraining.promotion_max_force_mae_eV_per_A
+        )
+        al_cfg.trainer.promotion_max_relative_regression = (
+            config.retraining.promotion_max_relative_regression
+        )
+        al_cfg.trainer.promotion_min_evaluated_frames = (
+            config.retraining.promotion_min_evaluated_frames
+        )
         if config.phase_policy.reevaluate_after_retraining and not al_cfg.trainer.promote_model:
             raise ValueError("post-retraining reevaluation requires model promotion")
     else:
@@ -487,6 +559,11 @@ def run_formula_with_active_learning(
             float(state.get("timings_sec", {}).get("total", 0.0)) for state in states
         )
         promoted = [state for state in states if state.get("model_promoted")]
+        candidate_uncertainty = {
+            str(candidate_id): float(score)
+            for state in states
+            for candidate_id, score in state.get("candidate_uncertainty", {}).items()
+        }
         result: dict[str, Any] = {
             "n_dft_calculations": sum(
                 int(state.get("n_dft_converged", 0)) + int(state.get("n_dft_failed", 0))
@@ -496,6 +573,7 @@ def run_formula_with_active_learning(
             "n_active_learning_iterations": len(states),
             "node_hours": total_seconds * config.compute_nodes / 3600.0,
             "model_promoted": bool(promoted),
+            "md_candidate_uncertainty": candidate_uncertainty,
             "iteration_states": states,
             "phase_output_dir": phase_output_dir,
         }
@@ -517,12 +595,16 @@ def run_formula_with_active_learning(
         exploration_kwargs=_exploration_kwargs(al_cfg, config.exploration_kwargs),
         active_learning_runner=active_learning_runner,
     )
+    exploration = result.after_retraining or result.initial
+    if result.active_learning_result is not None:
+        result.active_learning_result["candidate_uncertainty"] = (
+            _score_relaxed_candidate_uncertainty(exploration, al_cfg)
+        )
     refinement = config.dft_refinement
     if refinement is None:
         return result
     if not config.phase_policy.dft_approved:
         raise PermissionError("campaign DFT refinement requires explicit DFT approval")
-    exploration = result.after_retraining or result.initial
     candidates = [relaxation for relaxation in exploration.relaxations if relaxation.converged]
     if refinement.candidate_acquisition.enabled:
         selected, candidate_scores = select_dft_refinement_candidates(

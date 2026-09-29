@@ -29,6 +29,18 @@ def test_model_promotion_requires_explicit_approval(tmp_path):
         TrainerConfig(enabled=True, train_script=script, promote_model=True)
 
 
+def test_model_promotion_requires_held_out_validation(tmp_path):
+    script = tmp_path / "train.py"
+    script.touch()
+    with pytest.raises(ValueError, match="validation_set"):
+        TrainerConfig(
+            enabled=True,
+            train_script=script,
+            promote_model=True,
+            promotion_approved=True,
+        )
+
+
 def test_phase_reevaluation_requires_retraining():
     with pytest.raises(ValueError, match="requires retrain_mlip"):
         PhaseExplorationPolicy(reevaluate_after_retraining=True)

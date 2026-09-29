@@ -39,7 +39,7 @@ import numpy as np
 from ase import Atoms
 from ase.io import read as ase_read
 
-from matsim_agents.active_learning.config import ALConfig, MLIPConfig
+from matsim_agents.active_learning.config import ALConfig, MLIPConfig, TrainerConfig
 
 log = logging.getLogger(__name__)
 
@@ -107,6 +107,67 @@ class EvalMetrics:
     force_rmse_eV_per_A: float
 
     failures: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PromotionDecision:
+    """Auditable held-out comparison between a candidate and incumbent model."""
+
+    approved: bool
+    reasons: list[str]
+    candidate_metrics: dict[str, object]
+    incumbent_metrics: dict[str, object]
+
+
+def assess_promotion(
+    candidate: EvalMetrics,
+    incumbent: EvalMetrics,
+    trainer: TrainerConfig,
+) -> PromotionDecision:
+    """Apply absolute accuracy and incumbent-regression promotion gates."""
+    reasons: list[str] = []
+    if candidate.n_frames_evaluated < trainer.promotion_min_evaluated_frames:
+        reasons.append(
+            f"candidate evaluated {candidate.n_frames_evaluated} frames; "
+            f"minimum is {trainer.promotion_min_evaluated_frames}"
+        )
+    metrics = (
+        (
+            "energy_mae_eV_per_atom_shifted",
+            candidate.energy_mae_eV_per_atom_shifted,
+            incumbent.energy_mae_eV_per_atom_shifted,
+            trainer.promotion_max_energy_mae_eV_per_atom,
+        ),
+        (
+            "force_mae_eV_per_A",
+            candidate.force_mae_eV_per_A,
+            incumbent.force_mae_eV_per_A,
+            trainer.promotion_max_force_mae_eV_per_A,
+        ),
+    )
+    for name, candidate_value, incumbent_value, absolute_limit in metrics:
+        if not np.isfinite(candidate_value):
+            reasons.append(f"candidate {name} is not finite")
+            continue
+        if candidate_value > absolute_limit:
+            reasons.append(
+                f"candidate {name}={candidate_value:.6g} exceeds limit {absolute_limit:.6g}"
+            )
+        if not np.isfinite(incumbent_value):
+            reasons.append(f"incumbent {name} is not finite")
+            continue
+        regression_limit = incumbent_value * (1.0 + trainer.promotion_max_relative_regression)
+        if candidate_value > regression_limit + 1e-12:
+            reasons.append(
+                f"candidate {name}={candidate_value:.6g} exceeds incumbent regression "
+                f"limit {regression_limit:.6g}"
+            )
+    return PromotionDecision(
+        approved=not reasons,
+        reasons=reasons,
+        candidate_metrics=asdict(candidate),
+        incumbent_metrics=asdict(incumbent),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -318,8 +379,54 @@ def _apply_model_override(cfg: ALConfig, model_path: str | None) -> None:
         cfg.mlip.hydragnn.logdir = Path(model_path)
     elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
         cfg.mlip.uma.model_name = model_path
+    elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
+        cfg.mlip.mace.family = "checkpoint"
+        cfg.mlip.mace.model = model_path
     else:  # pragma: no cover — guarded by MLIPConfig validator
         raise ValueError(f"Cannot apply model override for backend {cfg.mlip.backend!r}")
+
+
+def evaluate_promotion_candidate(
+    cfg: ALConfig,
+    candidate_model_path: str,
+    *,
+    iteration: int,
+    training_set: Path,
+) -> PromotionDecision:
+    """Evaluate incumbent and candidate models on the configured held-out set."""
+    validation_set = cfg.trainer.validation_set
+    if validation_set is None:
+        raise ValueError("model promotion requires trainer.validation_set")
+    validation_frames = list(ase_read(validation_set, index=":"))
+    reference_path = cfg.trainer.validation_reference_set
+    if reference_path is not None:
+        reference_frames = list(ase_read(reference_path, index=":"))
+    elif training_set.is_file():
+        reference_frames = list(ase_read(training_set, index=":"))
+    else:
+        reference_frames = None
+
+    incumbent_cfg = cfg.mlip.model_copy(deep=True)
+    candidate_cfg = cfg.mlip.model_copy(deep=True)
+    candidate_wrapper = cfg.model_copy(deep=True)
+    candidate_wrapper.mlip = candidate_cfg
+    _apply_model_override(candidate_wrapper, candidate_model_path)
+    incumbent_metrics, _ = evaluate_frames(
+        incumbent_cfg,
+        validation_frames,
+        iteration=iteration,
+        test_set_label=str(validation_set),
+        ref_frames=reference_frames,
+    )
+    candidate_metrics, _ = evaluate_frames(
+        candidate_cfg,
+        validation_frames,
+        iteration=iteration,
+        model_path=candidate_model_path,
+        test_set_label=str(validation_set),
+        ref_frames=reference_frames,
+    )
+    return assess_promotion(candidate_metrics, incumbent_metrics, cfg.trainer)
 
 
 def _subsample(parity: dict[str, np.ndarray], max_points: int) -> dict[str, np.ndarray]:

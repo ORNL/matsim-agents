@@ -112,6 +112,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--train-epochs", type=int, default=5)
     parser.add_argument("--promote-model", action="store_true")
     parser.add_argument("--approve-model-promotion", action="store_true")
+    parser.add_argument("--promotion-validation-set", type=Path)
+    parser.add_argument("--promotion-validation-reference-set", type=Path)
+    parser.add_argument("--promotion-max-energy-mae", type=float, default=0.1)
+    parser.add_argument("--promotion-max-force-mae", type=float, default=0.2)
+    parser.add_argument("--promotion-max-relative-regression", type=float, default=0.05)
+    parser.add_argument("--promotion-min-evaluated-frames", type=int, default=1)
     parser.add_argument("--retry-failed", action="store_true")
     args = parser.parse_args(argv)
 
@@ -123,6 +129,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--promote-model requires --retrain")
     if args.promote_model and not args.approve_model_promotion:
         parser.error("--promote-model requires --approve-model-promotion")
+    if args.promote_model and args.promotion_validation_set is None:
+        parser.error("--promote-model requires --promotion-validation-set")
+    if args.promotion_validation_set is not None and not args.promotion_validation_set.is_file():
+        parser.error(
+            f"promotion validation set does not exist: {args.promotion_validation_set}"
+        )
+    if (
+        args.promotion_validation_reference_set is not None
+        and not args.promotion_validation_reference_set.is_file()
+    ):
+        parser.error(
+            "promotion validation reference set does not exist: "
+            f"{args.promotion_validation_reference_set}"
+        )
     if not args.campaign_state.is_file():
         parser.error(f"campaign state does not exist: {args.campaign_state}")
     if bool(args.dft_reference_structures) != bool(args.dft_method_signature):
@@ -217,6 +237,12 @@ def main(argv: list[str] | None = None) -> int:
                     epochs=args.train_epochs,
                     promote_model=args.promote_model,
                     promotion_approved=args.approve_model_promotion,
+                    validation_set=args.promotion_validation_set,
+                    validation_reference_set=args.promotion_validation_reference_set,
+                    promotion_max_energy_mae_eV_per_atom=args.promotion_max_energy_mae,
+                    promotion_max_force_mae_eV_per_A=args.promotion_max_force_mae,
+                    promotion_max_relative_regression=args.promotion_max_relative_regression,
+                    promotion_min_evaluated_frames=args.promotion_min_evaluated_frames,
                 )
                 if args.retrain
                 else None

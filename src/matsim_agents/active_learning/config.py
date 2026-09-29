@@ -483,6 +483,18 @@ class TrainerConfig(BaseModel):
             "Explicit human/policy approval after reviewing candidate validation metrics."
         ),
     )
+    validation_set: Path | None = Field(
+        None,
+        description="Held-out DFT-labelled extxyz required for automatic model promotion.",
+    )
+    validation_reference_set: Path | None = Field(
+        None,
+        description="Optional independent frames used to fit elemental energy references.",
+    )
+    promotion_max_energy_mae_eV_per_atom: float = Field(0.1, gt=0)
+    promotion_max_force_mae_eV_per_A: float = Field(0.2, gt=0)
+    promotion_max_relative_regression: float = Field(0.05, ge=0)
+    promotion_min_evaluated_frames: int = Field(1, ge=1)
     train_script: Path | None = Field(
         None,
         description=(
@@ -516,6 +528,8 @@ class TrainerConfig(BaseModel):
                 "trainer.promote_model=True requires trainer.promotion_approved=True "
                 "after candidate validation."
             )
+        if self.promote_model and self.validation_set is None:
+            raise ValueError("trainer.promote_model=True requires trainer.validation_set")
         return self
 
 

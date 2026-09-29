@@ -25,6 +25,7 @@
 #   MATSIM_CAMPAIGN_RETRAIN=1              train a candidate UMA checkpoint
 #   MATSIM_CAMPAIGN_TRAIN_EPOCHS=5         fine-tuning epochs per formula
 #   MATSIM_CAMPAIGN_PROMOTE_MODEL=1        approve promotion and reevaluation
+#   MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET=/path/to/held-out.extxyz
 # Optional DFT hull controls:
 #   MATSIM_CAMPAIGN_DFT_REFINE=0            disable DFT relaxation/hull ranking
 #   MATSIM_CAMPAIGN_DFT_REFINE_CANDIDATES=1 refined phases per formula
@@ -189,7 +190,21 @@ if [[ "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; then
     TRAIN_ARGS+=(--train-launcher "$MATSIM_CAMPAIGN_TRAIN_LAUNCHER")
   fi
   if [[ "${MATSIM_CAMPAIGN_PROMOTE_MODEL:-0}" == "1" ]]; then
-    TRAIN_ARGS+=(--promote-model --approve-model-promotion)
+    PROMOTION_VALIDATION_SET="${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET:?set MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET to a held-out extxyz before promotion}"
+    TRAIN_ARGS+=(
+      --promote-model
+      --approve-model-promotion
+      --promotion-validation-set "$PROMOTION_VALIDATION_SET"
+      --promotion-max-energy-mae "${MATSIM_CAMPAIGN_PROMOTION_MAX_ENERGY_MAE:-0.1}"
+      --promotion-max-force-mae "${MATSIM_CAMPAIGN_PROMOTION_MAX_FORCE_MAE:-0.2}"
+      --promotion-max-relative-regression "${MATSIM_CAMPAIGN_PROMOTION_MAX_RELATIVE_REGRESSION:-0.05}"
+      --promotion-min-evaluated-frames "${MATSIM_CAMPAIGN_PROMOTION_MIN_EVALUATED_FRAMES:-1}"
+    )
+    if [[ -n "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" ]]; then
+      TRAIN_ARGS+=(
+        --promotion-validation-reference-set "$MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET"
+      )
+    fi
   fi
 fi
 TRAIN_ARGS_QUOTED=""

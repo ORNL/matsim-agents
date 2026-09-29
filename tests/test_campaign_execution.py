@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
 import pytest
 from ase import Atoms
 from ase.io import write
@@ -10,6 +11,7 @@ from matsim_agents.campaign.execution import (
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,
+    _score_relaxed_candidate_uncertainty,
     latest_promoted_model,
     run_formula_with_active_learning,
 )
@@ -67,6 +69,52 @@ loop:
   n_iterations: 1
   out_dir: /unused/output
 """
+
+
+def test_relaxed_candidate_uncertainty_uses_registry_candidate_ids(tmp_path, monkeypatch):
+    import matsim_agents.campaign.execution as execution
+    from matsim_agents.active_learning.config import ALConfig
+
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    cfg = ALConfig.from_yaml(config_path)
+    cfg.acquisition.strategy = "mc_dropout"
+    structure = tmp_path / "relaxed.extxyz"
+    write(structure, Atoms(["Nb", "O"], positions=[[0, 0, 0], [1, 0, 0]]))
+    composition = parse_composition("NbO")
+    assert composition is not None
+    exploration = CompositionExplorationResult(
+        composition=composition,
+        phase_candidates=[
+            PhaseCandidate(
+                formula="NbO",
+                structure_path=str(structure),
+                candidate_id="NbO-P0042",
+            )
+        ],
+        relaxations=[
+            RelaxationResult(
+                structure_path=str(structure),
+                optimized_structure_path=str(structure),
+                trajectory_path="",
+                log_csv_path="",
+                final_energy_eV=-2.0,
+                final_max_force_eV_per_A=0.01,
+                num_steps=2,
+                converged=True,
+            )
+        ],
+    )
+    monkeypatch.setattr(execution, "make_mlip_calculator", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        execution,
+        "select_candidates",
+        lambda candidates, *args, **kwargs: (candidates, np.asarray([0.73])),
+    )
+
+    scores = _score_relaxed_candidate_uncertainty(exploration, cfg)
+
+    assert scores == {"NbO-P0042": 0.73}
 
 
 def _vasp_config_yaml(tmp_path) -> str:
@@ -519,6 +567,8 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path):
     )
     train_script = tmp_path / "train.py"
     train_script.touch()
+    validation_set = tmp_path / "held-out.extxyz"
+    validation_set.touch()
     checkpoint = tmp_path / "promoted" / "inference_ckpt.pt"
     observed = {}
 
@@ -536,6 +586,7 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path):
                     "n_dft_failed": 0,
                     "model_promoted": True,
                     "new_logdir": str(checkpoint),
+                    "candidate_uncertainty": {"md-001": 0.75},
                     "timings_sec": {"total": 60.0},
                 }
             ),
@@ -570,6 +621,7 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path):
                 epochs=3,
                 promote_model=True,
                 promotion_approved=True,
+                validation_set=validation_set,
             ),
         ),
         al_runner=al_runner,
@@ -579,10 +631,13 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path):
     assert observed["trainer"]["enabled"] is True
     assert observed["trainer"]["epochs_per_iter"] == 3
     assert observed["trainer"]["promote_model"] is True
+    assert observed["trainer"]["validation_set"] == validation_set
     assert result.model_promoted is True
     assert result.active_learning_result["exploration_kwargs"] == {
         "uma_model_name": str(checkpoint)
     }
+    assert result.active_learning_result["md_candidate_uncertainty"] == {"md-001": 0.75}
+    assert result.active_learning_result["candidate_uncertainty"] == {}
 
 
 def test_retraining_rejects_unapproved_promotion(tmp_path):

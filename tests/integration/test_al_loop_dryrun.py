@@ -39,6 +39,7 @@ from matsim_agents.active_learning.config import (
     VASPConfig,
 )
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
+from matsim_agents.active_learning.evaluate import PromotionDecision
 
 # --------------------------------------------------------------------------- #
 # Stubs                                                                       #
@@ -146,26 +147,23 @@ def _make_candidate(idx: int) -> Candidate:
     )
 
 
-def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = _make_cfg(tmp_path)
-
-    # Patch the heavy components inside `loop` (where they are imported).
-    import matsim_agents.active_learning.loop as loop_mod
-
+def _patch_runtime(
+    loop_mod,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    trained_model: Path | None = None,
+    promotion_decision: PromotionDecision | None = None,
+) -> None:
     monkeypatch.setattr(
         loop_mod,
         "make_mlip_calculator",
         lambda mlip_cfg, **kw: _ConstantForceCalc(forces=np.zeros((2, 3))),
     )
-    monkeypatch.setattr(
-        loop_mod,
-        "build_ensemble",
-        lambda hcfg: [],
-    )
+    monkeypatch.setattr(loop_mod, "build_ensemble", lambda hcfg: [])
     monkeypatch.setattr(
         loop_mod,
         "resolve_seed_structures",
-        lambda src, out_dir: [Path(p) for p in src.paths],
+        lambda src, out_dir: [Path(path) for path in src.paths],
     )
     monkeypatch.setattr(
         loop_mod,
@@ -176,8 +174,23 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         loop_mod,
         "retrain_hydragnn",
-        lambda tcfg, hcfg, dataset_path, iteration, out_logdir: hcfg.logdir,
+        lambda tcfg, hcfg, dataset_path, iteration, out_logdir: trained_model or hcfg.logdir,
     )
+    if promotion_decision is not None:
+        monkeypatch.setattr(
+            loop_mod,
+            "evaluate_promotion_candidate",
+            lambda *args, **kwargs: promotion_decision,
+        )
+
+
+def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = _make_cfg(tmp_path)
+
+    # Patch the heavy components inside `loop` (where they are imported).
+    import matsim_agents.active_learning.loop as loop_mod
+
+    _patch_runtime(loop_mod, monkeypatch)
 
     # Run one iteration end-to-end.
     loop_mod.run_active_learning(cfg)
@@ -196,6 +209,9 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert state["n_candidates"] == 3
     # n_select=2 with random strategy on 3 candidates -> exactly 2 selected.
     assert state["n_selected"] == 2
+    assert len(state["selected_candidate_ids"]) == 2
+    assert set(state["candidate_uncertainty"]) == set(state["selected_candidate_ids"])
+    assert all(0.0 <= score <= 1.0 for score in state["candidate_uncertainty"].values())
     assert state["n_dft_converged"] == 2
     assert state["n_dft_failed"] == 0
     assert state["dft_backend"] == "vasp"
@@ -209,3 +225,48 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     dft_dir = iter_dir / "dft"
     assert dft_dir.is_dir()
     assert any(dft_dir.iterdir()), "DFT working directories were not created"
+
+
+@pytest.mark.parametrize("approved", [True, False])
+def test_promotion_decision_controls_model_activation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    approved: bool,
+) -> None:
+    cfg = _make_cfg(tmp_path)
+    validation_set = tmp_path / "held-out.extxyz"
+    validation_set.touch()
+    cfg.trainer = TrainerConfig(
+        enabled=True,
+        promote_model=True,
+        promotion_approved=True,
+        train_script=cfg.trainer.train_script,
+        validation_set=validation_set,
+    )
+    incumbent = cfg.mlip.hydragnn.logdir
+    trained_model = tmp_path / "candidate-model"
+    trained_model.mkdir()
+    decision = PromotionDecision(
+        approved=approved,
+        reasons=[] if approved else ["held-out force MAE regressed"],
+        candidate_metrics={"force_mae_eV_per_A": 0.1},
+        incumbent_metrics={"force_mae_eV_per_A": 0.08},
+    )
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    _patch_runtime(
+        loop_mod,
+        monkeypatch,
+        trained_model=trained_model,
+        promotion_decision=decision,
+    )
+    loop_mod.run_active_learning(cfg)
+
+    import json
+
+    state = json.loads((cfg.loop.out_dir / "iteration_0000" / "state.json").read_text())
+    assert state["model_promoted"] is approved
+    assert state["promotion_validation"]["approved"] is approved
+    expected_model = trained_model if approved else incumbent
+    assert cfg.mlip.hydragnn.logdir == expected_model

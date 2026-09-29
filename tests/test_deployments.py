@@ -44,3 +44,19 @@ def test_perlmutter_campaign_exposes_adaptive_acquisition_controls() -> None:
     )
     assert "\\${MATSIM_CAMPAIGN_STOPPING_ARGS:-}" in content
     assert "\\${MATSIM_CAMPAIGN_FINAL_REVIEW_ARGS:-}" in content
+
+    def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> None:
+        root = Path(__file__).resolve().parents[1]
+        job = (
+            root
+            / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
+        ).read_text(encoding="utf-8")
+        executor = (root / "deployments/perlmutter/jobs/campaign_execute.py").read_text(
+            encoding="utf-8"
+        )
+
+        assert "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET:?" in job
+        assert "--promotion-validation-set" in job
+        assert "--promotion-max-energy-mae" in job
+        assert "--promotion-max-force-mae" in job
+        assert 'parser.error("--promote-model requires --promotion-validation-set")' in executor

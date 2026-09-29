@@ -48,6 +48,7 @@ from matsim_agents.active_learning.dataset_governance import (
 )
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
 from matsim_agents.active_learning.dft_runner import run_dft_batch
+from matsim_agents.active_learning.evaluate import evaluate_promotion_candidate
 from matsim_agents.active_learning.seeds import resolve_seed_structures
 from matsim_agents.active_learning.trainer import (
     append_frames_to_extxyz,
@@ -87,9 +88,12 @@ class IterationState:
     score_min: float | None = None
     score_max: float | None = None
     score_mean: float | None = None
+    selected_candidate_ids: list[str] = field(default_factory=list)
+    candidate_uncertainty: dict[str, float] = field(default_factory=dict)
     dataset_path: str | None = None
     candidate_model_path: str | None = None
     model_promoted: bool = False
+    promotion_validation: dict[str, Any] | None = None
     new_logdir: str | None = None
     timings_sec: dict[str, float] = field(default_factory=dict)
     notes: str | None = None
@@ -213,6 +217,13 @@ def run_active_learning(cfg: ALConfig) -> None:
                 seed=42 + i,
             )
             state.n_selected = len(selected)
+            state.selected_candidate_ids = [candidate.candidate_id for candidate in selected]
+            selected_ids = set(state.selected_candidate_ids)
+            state.candidate_uncertainty = {
+                candidate.candidate_id: float(score)
+                for candidate, score in zip(candidates, scores, strict=True)
+                if candidate.candidate_id in selected_ids and np.isfinite(score)
+            }
             finite_scores = scores[np.isfinite(scores)]
             if finite_scores.size:
                 state.score_min = float(np.min(finite_scores))
@@ -326,12 +337,6 @@ def run_active_learning(cfg: ALConfig) -> None:
                     out_logdir=it_dir / "model",
                 )
                 state.candidate_model_path = str(new_logdir)
-                if cfg.trainer.promote_model:
-                    state.new_logdir = str(new_logdir)
-                    state.model_promoted = True
-                    # Promotion is explicit: only an accepted candidate becomes
-                    # the surrogate used by the next iteration.
-                    cfg.mlip.hydragnn.logdir = new_logdir
             elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None and cfg.trainer.enabled:
                 new_model = retrain_uma(
                     cfg.trainer,
@@ -341,10 +346,6 @@ def run_active_learning(cfg: ALConfig) -> None:
                     out_model_dir=it_dir / "model",
                 )
                 state.candidate_model_path = str(new_model)
-                if cfg.trainer.promote_model:
-                    state.new_logdir = str(new_model)
-                    state.model_promoted = True
-                    cfg.mlip.uma.model_name = str(new_model)
             elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None and cfg.trainer.enabled:
                 new_model = retrain_mace(
                     cfg.trainer,
@@ -354,11 +355,6 @@ def run_active_learning(cfg: ALConfig) -> None:
                     out_model_dir=it_dir / "model",
                 )
                 state.candidate_model_path = str(new_model)
-                if cfg.trainer.promote_model:
-                    state.new_logdir = str(new_model)
-                    state.model_promoted = True
-                    cfg.mlip.mace.family = "checkpoint"
-                    cfg.mlip.mace.model = str(new_model)
             else:
                 # Frozen foundation model / disabled trainer: keep accumulating labels.
                 log.info(
@@ -367,6 +363,33 @@ def run_active_learning(cfg: ALConfig) -> None:
                     n_appended,
                     dataset_path,
                 )
+            if cfg.trainer.promote_model and state.candidate_model_path is not None:
+                try:
+                    decision = evaluate_promotion_candidate(
+                        cfg,
+                        state.candidate_model_path,
+                        iteration=i,
+                        training_set=dataset_path,
+                    )
+                    state.promotion_validation = asdict(decision)
+                except Exception as exc:  # noqa: BLE001
+                    state.promotion_validation = {
+                        "approved": False,
+                        "reasons": [f"promotion validation failed: {exc}"],
+                        "candidate_metrics": {},
+                        "incumbent_metrics": {},
+                    }
+                    log.exception("Iteration %d candidate promotion validation failed", i)
+                if state.promotion_validation["approved"]:
+                    state.new_logdir = state.candidate_model_path
+                    state.model_promoted = True
+                    if cfg.mlip.backend == "hydragnn" and cfg.mlip.hydragnn is not None:
+                        cfg.mlip.hydragnn.logdir = Path(state.candidate_model_path)
+                    elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
+                        cfg.mlip.uma.model_name = state.candidate_model_path
+                    elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
+                        cfg.mlip.mace.family = "checkpoint"
+                        cfg.mlip.mace.model = state.candidate_model_path
             state.timings_sec["retrain"] = time.time() - t0
 
             state.status = "complete"
