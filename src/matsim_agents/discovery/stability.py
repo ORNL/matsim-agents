@@ -96,6 +96,75 @@ class StabilityReport(BaseModel):
     reference_set_id: str | None = None
 
 
+def recalibrate_hull_reports(
+    reports: Iterable[StabilityReport],
+    reference_energies: ReferenceEnergySet,
+) -> None:
+    """Recompute stored phase-diagram results against one reference set."""
+    try:
+        from pymatgen.analysis.phase_diagram import PhaseDiagram
+        from pymatgen.core import Composition as PMGComposition
+        from pymatgen.entries.computed_entries import ComputedEntry
+    except ImportError as exc:  # pragma: no cover - dependency error is environment-specific
+        raise RuntimeError("convex-hull ranking requires pymatgen") from exc
+
+    compatible_reports = [
+        report
+        for report in reports
+        if report.ranking_mode == RankingMode.CONVEX_HULL
+        and report.reference_set_id == reference_energies.identifier
+    ]
+    entries = [
+        ComputedEntry(element, energy)
+        for element, energy in reference_energies.elemental_energies_eV_per_atom.items()
+    ]
+    for phase_formula, formation_per_atom in reference_energies.competing_phases.items():
+        composition = PMGComposition(phase_formula)
+        reference_total = sum(
+            amount * reference_energies.elemental_energies_eV_per_atom[element]
+            for element, amount in composition.as_dict().items()
+        )
+        entries.append(
+            ComputedEntry(
+                composition,
+                reference_total + formation_per_atom * composition.num_atoms,
+            )
+        )
+
+    candidate_entries: list[tuple[StabilityReport, PhaseStability, object]] = []
+    for report in compatible_reports:
+        composition = PMGComposition(report.formula)
+        for index, phase in enumerate(report.ranking):
+            entry = ComputedEntry(
+                composition,
+                phase.final_energy_eV,
+                entry_id=f"campaign-{report.formula}-{index}",
+            )
+            entries.append(entry)
+            candidate_entries.append((report, phase, entry))
+
+    if not candidate_entries:
+        return
+    diagram = PhaseDiagram(entries)
+    for _report, phase, entry in candidate_entries:
+        decomposition, energy_above_hull = diagram.get_decomp_and_e_above_hull(entry)
+        phase.formation_energy_eV_per_atom = diagram.get_form_energy_per_atom(entry)
+        phase.energy_above_hull_eV_per_atom = float(energy_above_hull)
+        phase.decomposition = {
+            product.composition.reduced_formula: float(fraction)
+            for product, fraction in decomposition.items()
+        }
+    for report in compatible_reports:
+        report.ranking.sort(
+            key=lambda phase: (
+                phase.energy_above_hull_eV_per_atom
+                if phase.energy_above_hull_eV_per_atom is not None
+                else float("inf")
+            )
+        )
+        report.ground_state = report.ranking[0]
+
+
 def _atoms_count_from_path(path: str) -> int:
     from ase.io import read
 

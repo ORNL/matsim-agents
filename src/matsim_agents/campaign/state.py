@@ -23,7 +23,12 @@ from pydantic import BaseModel, Field
 from matsim_agents.campaign.acquisition import CampaignAcquisitionState
 from matsim_agents.campaign.registry import CandidateRegistry
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
-from matsim_agents.discovery.stability import RankingMode, ReferenceEnergySet, StabilityReport
+from matsim_agents.discovery.stability import (
+    RankingMode,
+    ReferenceEnergySet,
+    StabilityReport,
+    recalibrate_hull_reports,
+)
 from matsim_agents.execution.contracts import ComputeBudget, WorkflowStatus
 
 
@@ -114,19 +119,29 @@ class CampaignState(BaseModel):
         return [candidate for candidate in self.formulas.values() if candidate.active]
 
     def record_stability(self, report: StabilityReport) -> None:
-        """Record a formula's stability report and, if it is a hull-consistent
-        new ground state, fold it into the campaign's growing reference set so
-        the *next* formula's hull ranking accounts for it."""
+        """Record a report, admit true hull phases, and recalibrate the hull."""
         self.stability_reports[report.formula] = report
         ground_state = report.ground_state
         if (
             report.ranking_mode == RankingMode.CONVEX_HULL
             and report.chemically_stable_proxy
             and ground_state.formation_energy_eV_per_atom is not None
+            and ground_state.energy_above_hull_eV_per_atom is not None
+            and ground_state.energy_above_hull_eV_per_atom <= 1e-8
             and self.reference_energies is not None
+            and report.reference_set_id == self.reference_energies.identifier
         ):
             self.reference_energies.competing_phases[report.formula] = (
                 ground_state.formation_energy_eV_per_atom
+            )
+        if (
+            report.ranking_mode == RankingMode.CONVEX_HULL
+            and self.reference_energies is not None
+            and report.reference_set_id == self.reference_energies.identifier
+        ):
+            recalibrate_hull_reports(
+                self.stability_reports.values(),
+                self.reference_energies,
             )
             self._snapshot_hull()
 

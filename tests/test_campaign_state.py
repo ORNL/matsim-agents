@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from matsim_agents.campaign.orchestrator import run_formula_discovery_stage
 from matsim_agents.campaign.state import CampaignState
 from matsim_agents.discovery.formula import FormulaGenerationPolicy
@@ -103,3 +105,62 @@ def test_record_stability_feeds_hull_reference_set():
     assert campaign.current_hull.version == 1
     assert campaign.current_hull.new_hull_vertices == ["NbTaO4"]
     assert campaign.current_hull.hull_vertices["NbTaO4"].endswith("P003-relaxed.vasp")
+
+
+def _hull_report(formula: str, energy: float, formation_energy: float) -> StabilityReport:
+    phase = PhaseStability(
+        structure_path=f"candidates/{formula}.vasp",
+        optimized_structure_path=f"candidates/{formula}-relaxed.vasp",
+        final_energy_eV=energy,
+        energy_per_atom_eV=energy,
+        delta_e_above_min_eV_per_atom=0.0,
+        final_max_force_eV_per_A=0.01,
+        converged=True,
+        dynamically_stable_proxy=True,
+        formation_energy_eV_per_atom=formation_energy,
+        energy_above_hull_eV_per_atom=0.0,
+    )
+    return StabilityReport(
+        formula=formula,
+        ground_state=phase,
+        ranking=[phase],
+        chemically_stable_proxy=True,
+        summary=f"{formula} hull result",
+        ranking_mode=RankingMode.CONVEX_HULL,
+        reference_set_id="nb-o-pbe-v1",
+    )
+
+
+def test_record_stability_recalibrates_prior_reports_when_hull_changes():
+    campaign = CampaignState(
+        campaign_id="nb-o-001",
+        element_set=["Nb", "O"],
+        formula_policy=_policy(),
+        reference_energies=ReferenceEnergySet(
+            identifier="nb-o-pbe-v1",
+            method_signature="pbe-v1",
+            elemental_energies_eV_per_atom={"Nb": 0.0, "O": 0.0},
+        ),
+    )
+    campaign.record_stability(_hull_report("NbO", -2.0, -1.0))
+    campaign.record_stability(_hull_report("Nb2O", -4.8, -1.6))
+
+    assert campaign.stability_reports[
+        "NbO"
+    ].ground_state.energy_above_hull_eV_per_atom == pytest.approx(0.2)
+    assert campaign.current_hull is not None
+    assert campaign.current_hull.version == 2
+    assert campaign.current_hull.new_hull_vertices == ["Nb2O"]
+    assert campaign.current_hull.removed_hull_vertices == ["NbO"]
+    assert campaign.current_hull.uncompetitive_formulas == ["NbO"]
+
+
+def test_record_stability_does_not_admit_above_hull_phase():
+    campaign = _campaign()
+    report = _hull_report("NbO", -2.0, -1.0)
+    report.reference_set_id = campaign.reference_energies.identifier
+    report.ground_state.energy_above_hull_eV_per_atom = 0.1
+
+    campaign.record_stability(report)
+
+    assert "NbO" not in campaign.reference_energies.competing_phases
