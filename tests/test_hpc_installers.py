@@ -65,6 +65,7 @@ def test_uma_uses_matsim_owned_compatibility_environment() -> None:
     assert common.stat().st_mode & 0o111
     assert 'UMA_VENV_PATH="${UMA_VENV_PATH:-${MATSIM_DIR}/.venv-uma}"' in text
     assert '"${MATSIM_DIR}[${UMA_MATSIM_EXTRAS}]"' in text
+    assert "import dscribe" in text
     assert "from fairchem.core import FAIRChemCalculator, pretrained_mlip" in text
     subprocess.run(["bash", "-n", str(common)], check=True)
 
