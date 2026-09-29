@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-run_baselines.py — Run MACE-MP-0, HydraGNN, UMA, and AllScAIP over all test
+run_baselines.py — Run MACE, HydraGNN, UMA, and AllScAIP over all test
 structures and write predictions/ directories. These serve as leaderboard seeds
 and pipeline-validation baselines.
 
 Usage
 -----
-# MACE-MP-0 only:
-    python run_baselines.py --model mace --mace-size medium --device cpu
+# One MACE model or all bulk-material MACE models:
+    python run_baselines.py --model mace --mace-variant mace_omat_medium --device cpu
+    python run_baselines.py --model mace --mace-variant materials --device cuda
 
 # HydraGNN only:
     python run_baselines.py --model hydragnn --hydragnn-logdir /path/to/logdir
@@ -19,16 +20,16 @@ Usage
     python run_baselines.py --model allscaip --allscaip-model facebook/AllScAIP --device cuda
 
 # MACE + HydraGNN only:
-    python run_baselines.py --model both --mace-size medium \\
+    python run_baselines.py --model both --mace-variant mace_mp_medium \\
                             --hydragnn-logdir /path/to/logdir
 
 # All four models (MACE is dispatched to .venv-mace; the others to .venv):
-    python run_baselines.py --model all --mace-size medium \\
+    python run_baselines.py --model all --mace-variant mace_mp_medium \\
                             --hydragnn-logdir /path/to/logdir --device cuda
 
 Outputs
 -------
-    predictions/mace_mp0/       — energies.csv + forces/
+    predictions/mace_<variant>/ — energies.csv + forces/
     predictions/hydragnn/       — energies.csv + forces/
     predictions/uma/            — energies.csv + forces/
     predictions/allscaip/       — energies.csv + forces/
@@ -53,6 +54,36 @@ HERE = Path(__file__).parent
 STRUCT_META = HERE / "public_data" / "structures_metadata.csv"
 STRUCT_ROOT = HERE / "public_data" / "structures"
 PRED_ROOT = HERE / "predictions"
+
+MACE_MODELS: dict[str, tuple[str, str]] = {
+    "mace_mp_small": ("mace_mp", "small"),
+    "mace_mp_medium": ("mace_mp", "medium"),
+    "mace_mp_large": ("mace_mp", "large"),
+    "mace_mp_small_0b": ("mace_mp", "small-0b"),
+    "mace_mp_medium_0b": ("mace_mp", "medium-0b"),
+    "mace_mp_small_0b2": ("mace_mp", "small-0b2"),
+    "mace_mp_medium_0b2": ("mace_mp", "medium-0b2"),
+    "mace_mp_large_0b2": ("mace_mp", "large-0b2"),
+    "mace_mp_medium_0b3": ("mace_mp", "medium-0b3"),
+    "mace_mpa_medium": ("mace_mp", "medium-mpa-0"),
+    "mace_omat_small": ("mace_mp", "small-omat-0"),
+    "mace_omat_medium": ("mace_mp", "medium-omat-0"),
+    "mace_matpes_pbe": ("mace_mp", "mace-matpes-pbe-0"),
+    "mace_matpes_r2scan": ("mace_mp", "mace-matpes-r2scan-0"),
+    "mace_mh_0": ("mace_mp", "mh-0"),
+    "mace_mh_1": ("mace_mp", "mh-1"),
+    "mace_off_small": ("mace_off", "small"),
+    "mace_off_medium": ("mace_off", "medium"),
+    "mace_off_large": ("mace_off", "large"),
+    "mace_omol_extra_large": ("mace_omol", "extra_large"),
+    "mace_polar_small": ("mace_polar", "polar-1-s"),
+    "mace_polar_medium": ("mace_polar", "polar-1-m"),
+    "mace_polar_large": ("mace_polar", "polar-1-l"),
+    "mace_anicc": ("mace_anicc", "default"),
+}
+MACE_MATERIAL_MODELS = tuple(
+    name for name, (family, _model) in MACE_MODELS.items() if family == "mace_mp"
+)
 
 
 def load_baseline_class(name: str):
@@ -84,10 +115,31 @@ def parse_args() -> argparse.Namespace:
     )
     # MACE
     p.add_argument(
-        "--mace-size",
-        default="medium",
-        help="MACE-MP-0 size: small | medium | large (or path to .model).",
+        "--mace-variant",
+        default="mace_mp_medium",
+        choices=[*MACE_MODELS, "materials", "all"],
+        help=(
+            "Curated MACE model id, 'materials' for all bulk-material models, "
+            "or 'all' for every installed family."
+        ),
     )
+    p.add_argument(
+        "--mace-family",
+        choices=[
+            "mace_mp",
+            "mace_off",
+            "mace_omol",
+            "mace_polar",
+            "mace_anicc",
+            "checkpoint",
+        ],
+        help="Override the curated variant with a native MACE loader family.",
+    )
+    p.add_argument(
+        "--mace-model",
+        help="Model alias, URL, or local path used with --mace-family.",
+    )
+    p.add_argument("--mace-size", dest="legacy_mace_size", help=argparse.SUPPRESS)
     # HydraGNN
     p.add_argument(
         "--hydragnn-logdir",
@@ -229,6 +281,26 @@ def _dispatch_aggregate(model: str) -> None:
         subprocess.run([str(python), str(Path(__file__).resolve()), *child_args], check=True)
 
 
+def selected_mace_models(args: argparse.Namespace) -> list[tuple[str, str, str]]:
+    """Return ``(output_label, family, model)`` selections for this invocation."""
+    if args.mace_family or args.mace_model:
+        if not args.mace_family or not args.mace_model:
+            raise SystemExit("--mace-family and --mace-model must be supplied together")
+        safe_model = "".join(
+            character if character.isalnum() else "_" for character in args.mace_model
+        ).strip("_")
+        return [(f"mace_{args.mace_family}_{safe_model}", args.mace_family, args.mace_model)]
+    if args.legacy_mace_size:
+        return [("mace_mp0", "mace_mp", args.legacy_mace_size)]
+    if args.mace_variant == "materials":
+        names = MACE_MATERIAL_MODELS
+    elif args.mace_variant == "all":
+        names = tuple(MACE_MODELS)
+    else:
+        names = (args.mace_variant,)
+    return [(name, *MACE_MODELS[name]) for name in names]
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -247,13 +319,28 @@ def main() -> None:
     run_allscaip = args.model == "allscaip"
 
     if run_mace:
-        print(f"\n=== MACE-MP-0 ({args.mace_size}) ===")
-        try:
-            MACE = load_baseline_class("mace_mp0")
-            calc_mace = MACE.from_checkpoint(args.mace_size, device=args.device)
-            run_predictions(calc_mace, "mace_mp0", args.device, args.relax, args.fmax, args.steps)
-        except ImportError:
-            print("  mace-torch not installed. Run: pip install mace-torch")
+        for label, family, mace_model in selected_mace_models(args):
+            print(f"\n=== MACE ({family}:{mace_model}) ===")
+            try:
+                MACE = load_baseline_class("mace_mp0")
+                calc_mace = MACE.from_checkpoint(
+                    mace_model,
+                    device=args.device,
+                    family=family,
+                )
+                run_predictions(
+                    calc_mace,
+                    label,
+                    args.device,
+                    args.relax,
+                    args.fmax,
+                    args.steps,
+                )
+            except ImportError:
+                print("  mace-torch not installed. Run: pip install mace-torch")
+                break
+            except Exception:
+                traceback.print_exc()
 
     if run_hydragnn:
         if not args.hydragnn_logdir:

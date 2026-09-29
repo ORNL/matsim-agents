@@ -204,7 +204,7 @@ Four baselines are provided in `baselines/`:
 
 | Baseline | Architecture | Tasks | Notes |
 |----------|-------------|-------|-------|
-| **MACE-MP-0** | Equivariant GNN (MACE) | 1–3, 5 | Universal MLIP, no extra auth needed |
+| **MACE foundations** | Equivariant GNN (MACE) | 1–3, 5 | MP, MPA, OMAT, MATPES, and MH crystal models; no extra auth needed |
 | **HydraGNN** | Multi-headed graph NN | 1–3, 5 | ORNL model |
 | **UMA** (`uma-s-1p2`) | Transformer-based universal model | 1–3, 5 | Requires `fairchem-core ≥2.20` and HF model card acceptance |
 | **AllScAIP** (`allscaip-md-conserving-all-omol`) | Message-passing NN (OMol102M) | 1–3, 5 | Requires `fairchem-core ≥2.20` and HF model card acceptance |
@@ -212,12 +212,21 @@ Four baselines are provided in `baselines/`:
 Run with:
 
 ```bash
-python run_baselines.py --model mace        # MACE-MP-0
+python run_baselines.py --model mace --mace-variant mace_omat_medium
+python run_baselines.py --model mace --mace-variant materials  # 16 crystal models
 python run_baselines.py --model hydragnn    # HydraGNN
 python run_baselines.py --model uma         # UMA
 python run_baselines.py --model allscaip    # AllScAIP
 python run_baselines.py --model all --relax # dispatches MACE to its compatibility env
 ```
+
+`--mace-variant` accepts every MACE model exposed by the workflow. Use
+`materials` for the Codabench bulk-crystal matrix (MP, MPA, OMAT, MATPES, and
+MH), or `all` to include all 24 installed variants. The latter also includes
+OFF, OMOL, Polar, and ANI-CC molecular models; those are selectable for explicit
+diagnostics but are not general-purpose bulk-crystal potentials. MACE-OFF and
+MACE-OMOL use the non-commercial Academic Software License; verify each model's
+upstream terms before publishing or redistributing results.
 
 Install backend dependencies separately: `requirements-mace.txt` in the MACE
 environment and `requirements-fairchem.txt` in the HydraGNN/FairChem

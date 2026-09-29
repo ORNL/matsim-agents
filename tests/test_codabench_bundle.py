@@ -6,7 +6,9 @@ import json
 import subprocess
 import sys
 import zipfile
+from argparse import Namespace
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 
@@ -38,6 +40,71 @@ def test_baselines_load_as_distinct_modules() -> None:
     assert mace.__module__ == "matsim_codabench_baseline_mace_mp0"
     assert hydragnn.__module__ == "matsim_codabench_baseline_hydragnn"
     assert mace is not hydragnn
+
+
+def test_codabench_mace_catalog_matches_workflow() -> None:
+    runner = _load("codabench_mace_catalog", CODEBENCH / "run_baselines.py")
+    from matsim_agents.active_learning.finetune_mace import MACE_MODELS
+
+    expected = {
+        name: (entry["family"], entry["model"])
+        for name, entry in MACE_MODELS.items()
+    }
+    assert expected == runner.MACE_MODELS
+
+    common = {
+        "mace_family": None,
+        "mace_model": None,
+        "legacy_mace_size": None,
+    }
+    materials = runner.selected_mace_models(
+        Namespace(**common, mace_variant="materials")
+    )
+    all_models = runner.selected_mace_models(Namespace(**common, mace_variant="all"))
+
+    assert len(materials) == 16
+    assert all(family == "mace_mp" for _name, family, _model in materials)
+    assert len(all_models) == 24
+
+
+def test_codabench_mace_adapter_dispatches_native_families(monkeypatch) -> None:
+    calls: dict[str, dict] = {}
+    calculators = ModuleType("mace.calculators")
+
+    def loader(name):
+        def load(**kwargs):
+            calls[name] = kwargs
+            return SimpleNamespace()
+
+        return load
+
+    calculators.MACECalculator = loader("checkpoint")
+    for name in ("mace_mp", "mace_off", "mace_omol", "mace_polar", "mace_anicc"):
+        setattr(calculators, name, loader(name))
+    mace_module = ModuleType("mace")
+    mace_module.calculators = calculators
+    monkeypatch.setitem(sys.modules, "mace", mace_module)
+    monkeypatch.setitem(sys.modules, "mace.calculators", calculators)
+
+    adapter = _load(
+        "codabench_mace_adapter",
+        CODEBENCH / "baselines" / "mace_mp0" / "model.py",
+    ).AtomisticCalculator
+    selections = {
+        "mace_mp": "medium-omat-0",
+        "mace_off": "large",
+        "mace_omol": "extra_large",
+        "mace_polar": "polar-1-m",
+        "mace_anicc": "default",
+        "checkpoint": "fine-tuned.model",
+    }
+    for family, model in selections.items():
+        adapter.from_checkpoint(model, device="cpu", family=family)
+
+    assert set(calls) == set(selections)
+    assert calls["mace_mp"]["model"] == "medium-omat-0"
+    assert calls["mace_anicc"]["model_path"] is None
+    assert calls["checkpoint"]["model_paths"] == ["fine-tuned.model"]
 
 
 def test_aggregate_baselines_dispatch_incompatible_backends(tmp_path, monkeypatch) -> None:
