@@ -12,6 +12,10 @@ from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.loop import run_active_learning
+from matsim_agents.campaign.registry import (
+    CandidateSelectionPolicy,
+    select_dft_refinement_candidates,
+)
 from matsim_agents.campaign.state import CampaignState
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.stability import RankingMode, ReferenceEnergySet, score_stability
@@ -75,6 +79,9 @@ class CampaignDFTRefinementConfig(BaseModel):
     relax_cell: bool = True
     max_steps: int = Field(100, ge=1)
     force_tolerance_eV_per_A: float = Field(0.02, gt=0)
+    candidate_acquisition: CandidateSelectionPolicy = Field(
+        default_factory=CandidateSelectionPolicy
+    )
 
     @model_validator(mode="after")
     def _validate_references(self) -> CampaignDFTRefinementConfig:
@@ -517,8 +524,19 @@ def run_formula_with_active_learning(
         raise PermissionError("campaign DFT refinement requires explicit DFT approval")
     exploration = result.after_retraining or result.initial
     candidates = [relaxation for relaxation in exploration.relaxations if relaxation.converged]
-    candidates.sort(key=lambda relaxation: relaxation.final_energy_eV)
-    selected = candidates[: refinement.max_candidates]
+    if refinement.candidate_acquisition.enabled:
+        selected, candidate_scores = select_dft_refinement_candidates(
+            exploration,
+            max_candidates=refinement.max_candidates,
+            policy=refinement.candidate_acquisition,
+            uncertainty_by_candidate=(result.active_learning_result or {}).get(
+                "candidate_uncertainty", {}
+            ),
+        )
+    else:
+        candidates.sort(key=lambda relaxation: relaxation.final_energy_eV)
+        selected = candidates[: refinement.max_candidates]
+        candidate_scores = {}
     if not selected:
         raise RuntimeError("DFT refinement requires at least one converged MLIP relaxation")
 
@@ -571,6 +589,9 @@ def run_formula_with_active_learning(
         "reference_calculations": reference_calculations,
         "candidate_calculations": len(refined),
         "ranking_mode": RankingMode.CONVEX_HULL,
+        "candidate_acquisition": {
+            key: value.model_dump(mode="json") for key, value in candidate_scores.items()
+        },
     }
     result.active_learning_result = evidence
     return result

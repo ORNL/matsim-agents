@@ -7,9 +7,19 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from matsim_agents.campaign.acquisition import (
+    CampaignAcquisitionPolicy,
+    select_formula_batch,
+    update_adaptive_lambda,
+)
+from matsim_agents.campaign.registry import formula_acquisition_metrics, ingest_exploration_result
 from matsim_agents.campaign.state import CampaignReviewRecord, CampaignState, FormulaRunRecord
 from matsim_agents.discovery.formula import enumerate_formulas
-from matsim_agents.discovery.formula_merge import extract_llm_formula_proposals, merge_formulas
+from matsim_agents.discovery.formula_merge import (
+    LLMFormulaProposal,
+    extract_llm_formula_proposals,
+    merge_formulas,
+)
 from matsim_agents.execution.contracts import WorkflowStatus
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
@@ -22,6 +32,14 @@ class CampaignRunPolicy(BaseModel):
     max_iterations: int | None = Field(None, ge=1)
     continue_on_failure: bool = True
     retry_failed: bool = False
+    reserved_dft_calculations_per_formula: int = Field(0, ge=0)
+    reserved_node_hours_per_formula: float = Field(0.0, ge=0.0)
+    no_new_hull_vertex_iterations: int | None = Field(None, ge=1)
+    hull_energy_change_eV_per_atom: float | None = Field(None, ge=0.0)
+    minimum_formula_coverage: float | None = Field(None, ge=0.0, le=1.0)
+    require_low_uncertainty_near_hull: bool = False
+    low_uncertainty_threshold: float = Field(0.1, ge=0.0, le=1.0)
+    acquisition: CampaignAcquisitionPolicy = Field(default_factory=CampaignAcquisitionPolicy)
 
 
 class CampaignReviewDecision(BaseModel):
@@ -30,6 +48,8 @@ class CampaignReviewDecision(BaseModel):
     debate_run_id: str | None = None
     deactivate_formulas: list[str] = Field(default_factory=list)
     reactivate_formulas: list[str] = Field(default_factory=list)
+    formula_proposals: list[LLMFormulaProposal] = Field(default_factory=list)
+    hypothesis_revisions: list[dict[str, str | list[str]]] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
 
@@ -123,6 +143,75 @@ def _budget_stop_reason(campaign: CampaignState) -> str | None:
     return None
 
 
+def _admissible_batch_size(
+    campaign: CampaignState,
+    policy: CampaignRunPolicy,
+    requested: int,
+) -> int:
+    """Limit a batch to work that fits conservative per-formula reservations."""
+    admitted = requested
+    if campaign.budget.max_dft_calculations is not None:
+        used = sum(record.n_dft_calculations for record in campaign.formula_runs.values())
+        remaining = max(0, campaign.budget.max_dft_calculations - used)
+        if policy.reserved_dft_calculations_per_formula:
+            admitted = min(admitted, remaining // policy.reserved_dft_calculations_per_formula)
+    if campaign.budget.max_node_hours is not None:
+        used = sum(record.node_hours for record in campaign.formula_runs.values())
+        remaining = max(0.0, campaign.budget.max_node_hours - used)
+        if policy.reserved_node_hours_per_formula:
+            admitted = min(admitted, int(remaining // policy.reserved_node_hours_per_formula))
+    return admitted
+
+
+def _scientific_stop_reason(
+    campaign: CampaignState,
+    policy: CampaignRunPolicy,
+) -> str | None:
+    if policy.minimum_formula_coverage is not None:
+        active = {candidate.reduced_formula for candidate in campaign.active_formulas()}
+        completed = {
+            formula
+            for formula, record in campaign.formula_runs.items()
+            if record.status == WorkflowStatus.COMPLETE and formula in active
+        }
+        coverage = len(completed) / len(active) if active else 1.0
+        if coverage >= policy.minimum_formula_coverage:
+            return "minimum formula coverage reached"
+
+    stale = policy.no_new_hull_vertex_iterations
+    if (
+        stale is not None
+        and len(campaign.hull_history) >= stale
+        and all(not state.new_hull_vertices for state in campaign.hull_history[-stale:])
+    ):
+        return "no new hull vertex threshold reached"
+
+    tolerance = policy.hull_energy_change_eV_per_atom
+    if tolerance is not None and len(campaign.hull_history) >= 2:
+        previous, current = campaign.hull_history[-2:]
+        common = set(previous.energy_above_hull_eV_per_atom) & set(
+            current.energy_above_hull_eV_per_atom
+        )
+        if common and max(
+            abs(
+                current.energy_above_hull_eV_per_atom[formula]
+                - previous.energy_above_hull_eV_per_atom[formula]
+            )
+            for formula in common
+        ) <= tolerance:
+            if not policy.require_low_uncertainty_near_hull:
+                return "hull energy change tolerance reached"
+            near_hull = set(current.hull_vertices) | set(current.near_hull_phases)
+            if near_hull and all(
+                campaign.acquisition.formula_metrics.get(formula) is not None
+                and campaign.acquisition.formula_metrics[formula].mlip_uncertainty
+                <= policy.low_uncertainty_threshold
+                for formula in near_hull
+            ):
+                return "hull and near-hull uncertainty converged"
+    return None
+
+
 def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> None:
     unknown = (set(decision.deactivate_formulas) | set(decision.reactivate_formulas)) - set(
         campaign.formulas
@@ -137,6 +226,14 @@ def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> 
         campaign.formulas[formula].rejection_reason = None
     if decision.debate_run_id and decision.debate_run_id not in campaign.debate_run_ids:
         campaign.debate_run_ids.append(decision.debate_run_id)
+    if decision.formula_proposals:
+        merged = merge_formulas(
+            list(campaign.formulas.values()),
+            decision.formula_proposals,
+            campaign.formula_policy,
+            iteration=campaign.iteration,
+        )
+        campaign.upsert_formulas(merged)
     campaign.review_history.append(
         CampaignReviewRecord(
             iteration=campaign.iteration,
@@ -144,6 +241,7 @@ def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> 
             deactivate_formulas=decision.deactivate_formulas,
             reactivate_formulas=decision.reactivate_formulas,
             notes=decision.notes,
+            metadata={"hypothesis_revisions": decision.hypothesis_revisions},
         )
     )
 
@@ -155,6 +253,7 @@ def run_campaign(
     formula_runner: FormulaRunner,
     policy: CampaignRunPolicy | None = None,
     review_runner: ReviewRunner | None = None,
+    final_review_runner: ReviewRunner | None = None,
     resume: bool = True,
 ) -> CampaignRunResult:
     """Run active formulas through phase exploration with durable checkpoints."""
@@ -183,6 +282,10 @@ def run_campaign(
         if budget_reason:
             stop_reason = budget_reason
             break
+        scientific_reason = _scientific_stop_reason(campaign, policy)
+        if scientific_reason:
+            stop_reason = scientific_reason
+            break
         if policy.max_iterations is not None and iterations_run >= policy.max_iterations:
             stop_reason = "iteration limit reached"
             break
@@ -190,7 +293,26 @@ def run_campaign(
         eligible = _eligible_formulas(campaign, retry_failed=policy.retry_failed)
         if not eligible:
             break
-        batch = eligible[: policy.formulas_per_iteration]
+        batch_size = _admissible_batch_size(
+            campaign,
+            policy,
+            min(policy.formulas_per_iteration, len(eligible)),
+        )
+        if batch_size == 0:
+            stop_reason = "remaining budget is below per-formula reservation"
+            break
+        selection = None
+        if policy.acquisition.enabled:
+            selection = select_formula_batch(
+                eligible=eligible,
+                batch_size=batch_size,
+                iteration=campaign.iteration,
+                policy=policy.acquisition,
+                state=campaign.acquisition,
+            )
+            batch = selection.selected_formulas
+        else:
+            batch = eligible[:batch_size]
         iteration_records: list[FormulaRunRecord] = []
         for formula in batch:
             budget_reason = _budget_stop_reason(campaign)
@@ -204,6 +326,8 @@ def run_campaign(
             record.attempts += 1
             record.output_dir = str(formula_dir)
             record.failure_reason = None
+            if selection is not None:
+                record.acquisition_branch = selection.scores[formula].assigned_branch
             campaign.formula_runs[formula] = record
             campaign.save(state_path)
             try:
@@ -222,8 +346,50 @@ def run_campaign(
                 record.evidence = {
                     key: value for key, value in al_result.items() if key != "exploration_kwargs"
                 }
+                prior_families = set(campaign.candidate_registry.relaxed_families)
+                novelty_references = [
+                    candidate.optimized_structure_path
+                    for candidate in campaign.candidate_registry.candidates.values()
+                    if candidate.optimized_structure_path is not None
+                ]
+                uncertainty_by_candidate = {
+                    str(key): float(value)
+                    for key, value in record.evidence.get("candidate_uncertainty", {}).items()
+                }
+                ingest_exploration_result(
+                    campaign.candidate_registry,
+                    exploration,
+                    iteration=campaign.iteration,
+                    backend=record.evidence.get("dft_refinement", {}).get("backend"),
+                    model_identifier=record.evidence.get("model_identifier"),
+                    model_checkpoint_hash=record.evidence.get("model_checkpoint_hash"),
+                    uncertainty_by_candidate=uncertainty_by_candidate,
+                    novelty_reference_paths=novelty_references,
+                )
                 if exploration.stability is not None:
                     campaign.record_stability(exploration.stability)
+                candidate = campaign.formulas[formula]
+                disagreement_count = len(candidate.model_disagreements)
+                panel_evidence_count = len(candidate.llm_contributors) + disagreement_count
+                disagreement = (
+                    disagreement_count / panel_evidence_count if panel_evidence_count else 0.0
+                )
+                hull_energy = None
+                if exploration.stability is not None:
+                    hull_energy = exploration.stability.ground_state.energy_above_hull_eV_per_atom
+                campaign.acquisition.formula_metrics[formula] = formula_acquisition_metrics(
+                    campaign.candidate_registry,
+                    formula,
+                    energy_above_hull_eV_per_atom=hull_energy,
+                    llm_disagreement=disagreement,
+                )
+                new_families = set(campaign.candidate_registry.relaxed_families) - prior_families
+                near_hull = hull_energy is not None and hull_energy <= 0.05
+                dft_verified_family = bool(new_families and record.n_dft_calculations)
+                record.evidence.setdefault(
+                    "useful_outcome",
+                    bool(near_hull or dft_verified_family or record.model_promoted),
+                )
                 record.status = WorkflowStatus.COMPLETE
                 completed.append(formula)
             except Exception as exc:  # noqa: BLE001
@@ -238,6 +404,17 @@ def run_campaign(
                 campaign.formula_runs[formula] = record
                 campaign.save(state_path)
             iteration_records.append(record)
+
+        if policy.acquisition.enabled and policy.acquisition.mode == "adaptive":
+            for record in iteration_records:
+                useful = bool(record.evidence.get("useful_outcome", False))
+                if record.acquisition_branch == "exploitation":
+                    campaign.acquisition.exploitation_attempts += 1
+                    campaign.acquisition.exploitation_useful += int(useful)
+                elif record.acquisition_branch == "exploration":
+                    campaign.acquisition.exploration_attempts += 1
+                    campaign.acquisition.exploration_useful += int(useful)
+            update_adaptive_lambda(campaign.acquisition, policy.acquisition)
 
         if review_runner is not None and iteration_records:
             try:
@@ -259,6 +436,12 @@ def run_campaign(
     campaign.status = (
         WorkflowStatus.PARTIAL if remaining or has_failures else WorkflowStatus.COMPLETE
     )
+    if final_review_runner is not None and campaign.formula_runs:
+        final_records = sorted(
+            campaign.formula_runs.values(),
+            key=lambda record: (record.iteration, record.formula),
+        )
+        _apply_review(campaign, final_review_runner(campaign, final_records))
     campaign.save(state_path)
     return CampaignRunResult(
         campaign=campaign,

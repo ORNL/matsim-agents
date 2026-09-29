@@ -99,3 +99,7 @@ def test_record_stability_feeds_hull_reference_set():
     campaign.record_stability(report)
     assert campaign.stability_reports["NbTaO4"] is report
     assert campaign.reference_energies.competing_phases["NbTaO4"] == -0.45
+    assert campaign.current_hull is not None
+    assert campaign.current_hull.version == 1
+    assert campaign.current_hull.new_hull_vertices == ["NbTaO4"]
+    assert campaign.current_hull.hull_vertices["NbTaO4"].endswith("P003-relaxed.vasp")

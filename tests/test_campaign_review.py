@@ -112,6 +112,91 @@ def test_parse_verdict_accepts_json_after_reasoning() -> None:
     assert verdict.decisions[0].action == "keep"
 
 
+def test_campaign_review_preserves_revisions_and_validates_new_formulas(tmp_path) -> None:
+    policy = FormulaGenerationPolicy(
+        elements=["Nb", "O"],
+        require_charge_balance=True,
+        oxidation_states={"Nb": [4], "O": [-2]},
+    )
+    campaign = CampaignState(
+        campaign_id="revision-test",
+        element_set=["Nb", "O"],
+        formula_policy=policy,
+        formulas={
+            "NbO2": FormulaCandidate(
+                formula_id="det-NbO2",
+                reduced_formula="NbO2",
+                elements={"Nb": 1, "O": 2},
+                charge_balanced=True,
+            )
+        },
+    )
+    records = [FormulaRunRecord(formula="NbO2", status=WorkflowStatus.COMPLETE)]
+    participants = [
+        DebateParticipant(name="model-a", provider="vllm", model="a"),
+        DebateParticipant(name="model-b", provider="vllm", model="b"),
+    ]
+
+    def debate_runner(config, *, model_factory):
+        response = {
+            "decisions": [],
+            "revisions": [
+                {
+                    "claim": "NbO2 is competitive",
+                    "status": "supported",
+                    "evidence": ["DFT hull distance"],
+                    "proposed_test": "phonons",
+                }
+            ],
+            "new_formula_proposals": [
+                {
+                    "formula": "Nb2O4",
+                    "rationale": "equivalent notation",
+                    "falsification_tests": ["DFT"],
+                },
+                {
+                    "formula": "TaO2",
+                    "rationale": "out of scope",
+                    "falsification_tests": ["DFT"],
+                },
+            ],
+        }
+        verdicts = [
+            DebateVerdict(
+                contribution_id=f"verdict-{participant.name}",
+                participant=participant.name,
+                provider=participant.provider,
+                model=participant.model,
+                response=json.dumps(response),
+            )
+            for participant in participants
+        ]
+        return ScientificDebateResult(
+            run_id="review-revision",
+            run_directory=str(tmp_path),
+            status=WorkflowStatus.COMPLETE,
+            hypothesis=config.hypothesis,
+            rounds_completed=config.rounds,
+            turns=[],
+            verdicts=verdicts,
+            synthesis="",
+            transcript_path=str(tmp_path / "transcript.json"),
+            dialogue_path=str(tmp_path / "dialogue.json"),
+        )
+
+    decision = run_campaign_debate_review(
+        campaign,
+        records,
+        config=CampaignDebateReviewConfig(participants=participants, output_root=str(tmp_path)),
+        model_factory=lambda **_: None,
+        debate_runner=debate_runner,
+    )
+
+    assert len(decision.hypothesis_revisions) == 2
+    assert {proposal.formula for proposal in decision.formula_proposals} == {"NbO2"}
+    assert sum("out-of-scope" in note for note in decision.notes) == 2
+
+
 def test_campaign_review_treats_invalid_verdict_as_abstention(tmp_path) -> None:
     policy = FormulaGenerationPolicy(elements=["Nb", "O"], require_charge_balance=False)
     campaign = CampaignState(

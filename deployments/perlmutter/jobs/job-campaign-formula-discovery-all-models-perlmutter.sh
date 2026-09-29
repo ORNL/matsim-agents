@@ -232,7 +232,20 @@ srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
       --al-config '$AL_CONFIG' \
       --review-rounds \"\${MATSIM_CAMPAIGN_REVIEW_ROUNDS:-2}\" \
       --minimum-review-agreement \"\${MATSIM_CAMPAIGN_REVIEW_AGREEMENT:-1.0}\" \
+      \${MATSIM_CAMPAIGN_FINAL_REVIEW_ARGS:-} \
       --formulas-per-iteration \"\${MATSIM_CAMPAIGN_FORMULAS_PER_ITERATION:-1}\" \
+      --acquisition-mode \"\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-legacy}\" \
+      --acquisition-seed \"\${MATSIM_CAMPAIGN_ACQUISITION_SEED:-0}\" \
+      --lambda-initial \"\${MATSIM_CAMPAIGN_LAMBDA_INITIAL:-0.5}\" \
+      --lambda-minimum \"\${MATSIM_CAMPAIGN_LAMBDA_MINIMUM:-0.2}\" \
+      --lambda-maximum \"\${MATSIM_CAMPAIGN_LAMBDA_MAXIMUM:-0.8}\" \
+      --lambda-update-rate \"\${MATSIM_CAMPAIGN_LAMBDA_UPDATE_RATE:-0.15}\" \
+      --minimum-exploitation-fraction \"\${MATSIM_CAMPAIGN_MIN_EXPLOITATION:-0.2}\" \
+      --minimum-exploration-fraction \"\${MATSIM_CAMPAIGN_MIN_EXPLORATION:-0.2}\" \
+      --maximum-per-relaxed-family \"\${MATSIM_CAMPAIGN_MAX_PER_FAMILY:-1}\" \
+      --reserved-dft-per-formula \"\${MATSIM_CAMPAIGN_RESERVED_DFT_PER_FORMULA:-0}\" \
+      --reserved-node-hours-per-formula \"\${MATSIM_CAMPAIGN_RESERVED_NODE_HOURS_PER_FORMULA:-0}\" \
+      \${MATSIM_CAMPAIGN_STOPPING_ARGS:-} \
       --max-iterations \"\${MATSIM_CAMPAIGN_MAX_ITERATIONS:-3}\" \
       --max-candidates \"\${MATSIM_CAMPAIGN_MAX_CANDIDATES:-3}\" \
       --max-dft-calculations \"\${MATSIM_CAMPAIGN_MAX_DFT:-6}\" \

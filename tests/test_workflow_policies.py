@@ -75,6 +75,49 @@ def test_label_validation_rejects_duplicates_and_nonfinite_values():
     assert summary.rejected == 1
 
 
+def test_label_validation_checks_existing_dataset_and_element_scope():
+    existing_atoms = Atoms("Nb", positions=[[0.0, 0.0, 0.0]])
+    existing = LabelledFrame(
+        existing_atoms,
+        -1.0,
+        np.zeros((1, 3)),
+        None,
+        "existing",
+        0,
+        "qe",
+    )
+    duplicate = LabelledFrame(
+        existing_atoms.copy(),
+        -2.0,
+        np.zeros((1, 3)),
+        None,
+        "duplicate",
+        1,
+        "qe",
+    )
+    wrong_atoms = Atoms("Ta", positions=[[0.0, 0.0, 0.0]])
+    wrong_element = LabelledFrame(
+        wrong_atoms,
+        -3.0,
+        np.zeros((1, 3)),
+        None,
+        "wrong",
+        1,
+        "qe",
+    )
+
+    accepted, summary = validate_labelled_frames(
+        [duplicate, wrong_element],
+        existing_frames=[existing],
+        expected_atomic_numbers={41},
+    )
+
+    assert accepted == []
+    assert summary.duplicate == 1
+    assert summary.rejected == 1
+    assert "outside the campaign element set" in summary.rejection_reasons[0]
+
+
 def test_convex_hull_claim_requires_reference_energies(tmp_path):
     structure = tmp_path / "H.xyz"
     atoms = Atoms("H", positions=[[0.0, 0.0, 0.0]])

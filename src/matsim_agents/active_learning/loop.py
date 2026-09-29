@@ -27,6 +27,7 @@ Usage (Python)
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import shutil
@@ -41,6 +42,7 @@ from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_c
 from matsim_agents.active_learning.candidates import sample_md_candidates
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dataset_governance import (
+    DatasetManifest,
     validate_labelled_frames,
     write_dataset_manifest,
 )
@@ -57,6 +59,15 @@ from matsim_agents.active_learning.trainer import (
 from matsim_agents.active_learning.uncertainty import select_candidates
 
 log = logging.getLogger(__name__)
+
+
+def _dft_method_signature(cfg: ALConfig) -> str:
+    payload = json.dumps(
+        cfg.dft.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"{cfg.dft.backend}-{hashlib.sha256(payload).hexdigest()[:16]}"
 
 
 # --------------------------------------------------------------------------- #
@@ -256,7 +267,36 @@ def run_active_learning(cfg: ALConfig) -> None:
             # --- 5. Append to dataset -----------------------------------------
             t0 = time.time()
             frames = dft_results_to_frames(results, iteration=i)
-            frames, validation = validate_labelled_frames(frames)
+            existing_frames = []
+            manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
+            parent_dataset_id = None
+            method_signature = _dft_method_signature(cfg)
+            if dataset_path.exists():
+                from ase.io import read as ase_read
+
+                existing_frames = list(ase_read(dataset_path, index=":"))
+            if manifest_path.exists():
+                previous_manifest = DatasetManifest.model_validate_json(
+                    manifest_path.read_text(encoding="utf-8")
+                )
+                if previous_manifest.dft_backend != backend.name:
+                    raise ValueError("cannot append labels from a different DFT backend")
+                if (
+                    previous_manifest.method_signature is not None
+                    and previous_manifest.method_signature != method_signature
+                ):
+                    raise ValueError("cannot append labels with a different DFT method signature")
+                parent_dataset_id = previous_manifest.dataset_id
+            expected_atomic_numbers = {
+                int(number)
+                for candidate in selected
+                for number in candidate.atoms.get_atomic_numbers()
+            }
+            frames, validation = validate_labelled_frames(
+                frames,
+                existing_frames=existing_frames,
+                expected_atomic_numbers=expected_atomic_numbers,
+            )
             n_appended = append_frames_to_extxyz(frames, dataset_path)
             state.dataset_path = str(dataset_path)
             if dataset_path.exists():
@@ -265,6 +305,8 @@ def run_active_learning(cfg: ALConfig) -> None:
                     dft_backend=backend.name,
                     energy_reference=f"{backend.name}:native_total_energy",
                     validation=validation,
+                    parent_dataset_id=parent_dataset_id,
+                    method_signature=method_signature,
                 )
             state.timings_sec["append_dataset"] = time.time() - t0
             log.info("Iter %d: appended %d labelled frames to %s", i, n_appended, dataset_path)

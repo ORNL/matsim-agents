@@ -25,6 +25,7 @@ class DatasetManifest(BaseModel):
     path: str
     sha256: str
     dft_backend: str
+    method_signature: str | None = None
     energy_reference: str
     parent_dataset_id: str | None = None
     split_role: str = "training_pool"
@@ -39,14 +40,33 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def validate_labelled_frames(frames: Iterable[Any]) -> tuple[list[Any], DatasetValidationSummary]:
+def _geometry_key(atoms: Any) -> str:
+    import numpy as np
+
+    key_data = {
+        "numbers": atoms.numbers.tolist(),
+        "positions": np.round(np.asarray(atoms.positions), decimals=8).tolist(),
+        "cell": np.round(np.asarray(atoms.cell), decimals=8).tolist(),
+        "pbc": np.asarray(atoms.pbc, dtype=bool).tolist(),
+    }
+    return hashlib.sha256(json.dumps(key_data, sort_keys=True).encode()).hexdigest()
+
+
+def validate_labelled_frames(
+    frames: Iterable[Any],
+    *,
+    existing_frames: Iterable[Any] = (),
+    expected_atomic_numbers: set[int] | None = None,
+) -> tuple[list[Any], DatasetValidationSummary]:
     """Reject malformed/non-finite labels and exact duplicate geometries."""
 
     import numpy as np
 
     accepted: list[Any] = []
     summary = DatasetValidationSummary()
-    seen: set[str] = set()
+    seen = {
+        _geometry_key(getattr(existing, "atoms", existing)) for existing in existing_frames
+    }
     for index, frame in enumerate(frames):
         try:
             atoms = getattr(frame, "atoms", frame)
@@ -54,6 +74,13 @@ def validate_labelled_frames(frames: Iterable[Any]) -> tuple[list[Any], DatasetV
             raw_forces = getattr(frame, "forces_eV_per_A", atoms.arrays.get("forces"))
             forces = np.asarray(raw_forces, dtype=float)
             positions = np.asarray(atoms.positions, dtype=float)
+            numbers = np.asarray(atoms.numbers, dtype=int)
+            if np.any(numbers <= 0):
+                raise ValueError("atomic numbers must be positive")
+            if expected_atomic_numbers is not None and not set(numbers).issubset(
+                expected_atomic_numbers
+            ):
+                raise ValueError("frame contains an atomic number outside the campaign element set")
             if forces.shape != positions.shape:
                 raise ValueError(
                     f"forces shape {forces.shape} != positions shape {positions.shape}"
@@ -64,13 +91,7 @@ def validate_labelled_frames(frames: Iterable[Any]) -> tuple[list[Any], DatasetV
                 or not np.isfinite(positions).all()
             ):
                 raise ValueError("energy, forces, and positions must be finite")
-            key_data = {
-                "numbers": atoms.numbers.tolist(),
-                "positions": np.round(positions, decimals=8).tolist(),
-                "cell": np.round(np.asarray(atoms.cell), decimals=8).tolist(),
-                "pbc": np.asarray(atoms.pbc, dtype=bool).tolist(),
-            }
-            key = hashlib.sha256(json.dumps(key_data, sort_keys=True).encode()).hexdigest()
+            key = _geometry_key(atoms)
             if key in seen:
                 summary.duplicate += 1
                 continue
@@ -90,6 +111,7 @@ def write_dataset_manifest(
     energy_reference: str,
     validation: DatasetValidationSummary,
     parent_dataset_id: str | None = None,
+    method_signature: str | None = None,
 ) -> Path:
     path = Path(dataset_path)
     digest = sha256_file(path)
@@ -99,6 +121,7 @@ def write_dataset_manifest(
         path=str(path.resolve()),
         sha256=digest,
         dft_backend=dft_backend,
+        method_signature=method_signature,
         energy_reference=energy_reference,
         parent_dataset_id=parent_dataset_id,
         validation=validation,

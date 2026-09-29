@@ -63,13 +63,19 @@ class PhaseCandidate(BaseModel):
     """
 
     formula: str
+    candidate_id: str | None = None
     structure_path: str
+    structure_hash: str | None = None
     source: Literal["prototype", "random"] = "prototype"
     prototype_id: str | None = Field(
         default=None,
         description="AFLOW prototype label, e.g. 'AB_cF8_216_c_a' (zincblende).",
     )
     space_group: int | None = None
+    decoration_mapping: str | None = None
+    random_seed: int | None = None
+    parent_candidate_id: str | None = None
+    iteration_created: int = 0
     num_atoms: int | None = None
     needs_dft_verification: bool = Field(
         default=False,
@@ -413,6 +419,7 @@ def generate_seeds(
                 f"{composition.formula}__{safe_label}{o_tag}{ext}",
             )
             write(path, atoms, format=fmt)
+            candidate_id = f"{composition.formula}-P{len(candidates):04d}"
 
             notes_bits = [f"AFLOW prototype {proto.aflow} (SG {spg})."]
             if proto.mineral:
@@ -424,10 +431,12 @@ def generate_seeds(
             candidates.append(
                 PhaseCandidate(
                     formula=composition.formula,
+                    candidate_id=candidate_id,
                     structure_path=path,
                     source="prototype",
                     prototype_id=proto.aflow,
                     space_group=spg,
+                    decoration_mapping=mapping_str,
                     num_atoms=len(atoms),
                     needs_dft_verification=False,
                     notes=" ".join(notes_bits),
@@ -446,10 +455,12 @@ def generate_seeds(
         candidates.append(
             PhaseCandidate(
                 formula=composition.formula,
+                candidate_id=f"{composition.formula}-R{r_idx:04d}",
                 structure_path=path,
                 source="random",
                 prototype_id=None,
                 space_group=int(spg),
+                random_seed=random_seed,
                 num_atoms=len(atoms),
                 needs_dft_verification=True,
                 notes=(

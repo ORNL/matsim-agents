@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.campaign.orchestrator import CampaignReviewDecision, ReviewRunner
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
+from matsim_agents.discovery.composition import parse_composition
+from matsim_agents.discovery.formula_merge import LLMFormulaProposal
 from matsim_agents.workflows.debate import (
     DebateParticipant,
     ScientificDebateConfig,
@@ -34,14 +36,34 @@ class FormulaReview(BaseModel):
     rationale: str
 
 
+class HypothesisRevision(BaseModel):
+    claim: str
+    status: Literal["supported", "contradicted", "unresolved", "superseded"]
+    evidence: list[str] = Field(default_factory=list)
+    proposed_test: str | None = None
+
+
+class ReviewFormulaProposal(BaseModel):
+    formula: str
+    rationale: str
+    falsification_tests: list[str] = Field(default_factory=list)
+
+
 class ReviewVerdict(BaseModel):
     decisions: list[FormulaReview] = Field(default_factory=list)
+    revisions: list[HypothesisRevision] = Field(default_factory=list)
+    new_formula_proposals: list[ReviewFormulaProposal] = Field(default_factory=list)
 
 
 _REVIEW_INSTRUCTION = """Return JSON only with this exact structure:
-{"decisions": [{"formula": "...", "action": "keep|deactivate|reactivate", "rationale": "..."}]}
+{"decisions": [{"formula": "...", "action": "keep|deactivate|reactivate", "rationale": "..."}],
+ "revisions": [{"claim": "...", "status": "supported|contradicted|unresolved|superseded",
+ "evidence": ["..."], "proposed_test": "..."}],
+ "new_formula_proposals": [{"formula": "...", "rationale": "...",
+ "falsification_tests": ["..."]}]}
 Only review formulas present in the evidence. Deactivate only when numerical evidence makes
 continued computation scientifically unjustified; uncertainty alone is not evidence of failure.
+New formulas are proposals only and will undergo deterministic chemical and budget validation.
 Do not wrap the JSON in Markdown."""
 
 
@@ -115,6 +137,8 @@ def run_campaign_debate_review(
     threshold = math.ceil(config.minimum_agreement_fraction * len(debate.verdicts))
     votes: Counter[tuple[str, str]] = Counter()
     notes: list[str] = []
+    proposals: list[LLMFormulaProposal] = []
+    revisions: list[dict[str, str | list[str]]] = []
     allowed = set(campaign.formulas)
     for verdict in debate.verdicts:
         try:
@@ -132,6 +156,33 @@ def run_campaign_debate_review(
                 f"[{verdict.participant}] {decision.formula}: "
                 f"{decision.action} - {decision.rationale}"
             )
+        for revision in payload.revisions:
+            revisions.append(
+                {
+                    "participant": verdict.participant,
+                    "claim": revision.claim,
+                    "status": revision.status,
+                    "evidence": revision.evidence,
+                    "proposed_test": revision.proposed_test or "",
+                }
+            )
+        for proposal in payload.new_formula_proposals:
+            composition = parse_composition(proposal.formula)
+            if composition is None or not set(composition.elements).issubset(
+                campaign.formula_policy.elements
+            ):
+                notes.append(
+                    f"[{verdict.participant}] rejected out-of-scope formula proposal: "
+                    f"{proposal.formula}"
+                )
+                continue
+            proposals.append(
+                LLMFormulaProposal(
+                    participant=verdict.participant,
+                    formula=composition.formula,
+                    elements=composition.elements,
+                )
+            )
 
     deactivate = sorted(
         formula
@@ -147,6 +198,8 @@ def run_campaign_debate_review(
         debate_run_id=debate.run_id,
         deactivate_formulas=deactivate,
         reactivate_formulas=reactivate,
+        formula_proposals=proposals,
+        hypothesis_revisions=revisions,
         notes=notes,
     )
 

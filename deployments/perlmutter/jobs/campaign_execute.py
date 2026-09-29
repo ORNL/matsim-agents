@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from matsim_agents.active_learning.config import ALConfig  # noqa: E402
+from matsim_agents.campaign.acquisition import CampaignAcquisitionPolicy  # noqa: E402
 from matsim_agents.campaign.execution import (  # noqa: E402
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
@@ -21,6 +22,7 @@ from matsim_agents.campaign.execution import (  # noqa: E402
     make_formula_runner,
 )
 from matsim_agents.campaign.orchestrator import CampaignRunPolicy, run_campaign  # noqa: E402
+from matsim_agents.campaign.registry import CandidateSelectionPolicy  # noqa: E402
 from matsim_agents.campaign.review import (  # noqa: E402
     CampaignDebateReviewConfig,
     make_debate_review_runner,
@@ -59,7 +61,28 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--review-rounds", type=int, default=2)
     parser.add_argument("--minimum-review-agreement", type=float, default=1.0)
+    parser.add_argument("--final-review", action="store_true")
     parser.add_argument("--formulas-per-iteration", type=int, default=1)
+    parser.add_argument(
+        "--acquisition-mode",
+        choices=["legacy", "random", "exploitation", "exploration", "adaptive"],
+        default="legacy",
+    )
+    parser.add_argument("--acquisition-seed", type=int, default=0)
+    parser.add_argument("--lambda-initial", type=float, default=0.5)
+    parser.add_argument("--lambda-minimum", type=float, default=0.2)
+    parser.add_argument("--lambda-maximum", type=float, default=0.8)
+    parser.add_argument("--lambda-update-rate", type=float, default=0.15)
+    parser.add_argument("--minimum-exploitation-fraction", type=float, default=0.2)
+    parser.add_argument("--minimum-exploration-fraction", type=float, default=0.2)
+    parser.add_argument("--maximum-per-relaxed-family", type=int, default=1)
+    parser.add_argument("--reserved-dft-per-formula", type=int, default=0)
+    parser.add_argument("--reserved-node-hours-per-formula", type=float, default=0.0)
+    parser.add_argument("--no-new-hull-vertex-iterations", type=int)
+    parser.add_argument("--hull-energy-change-ev-per-atom", type=float)
+    parser.add_argument("--minimum-formula-coverage", type=float)
+    parser.add_argument("--require-low-uncertainty-near-hull", action="store_true")
+    parser.add_argument("--low-uncertainty-threshold", type=float, default=0.1)
     parser.add_argument("--max-iterations", type=int, default=3)
     parser.add_argument("--max-candidates", type=int, default=3)
     parser.add_argument("--max-dft-calculations", type=int, default=6)
@@ -152,6 +175,16 @@ def main(argv: list[str] | None = None) -> int:
             relax_cell=not args.dft_relax_atoms_only,
             max_steps=args.dft_relax_max_steps,
             force_tolerance_eV_per_A=args.dft_force_tolerance,
+            candidate_acquisition=CandidateSelectionPolicy(
+                enabled=args.acquisition_mode != "legacy",
+                mode=(
+                    "adaptive" if args.acquisition_mode == "legacy" else args.acquisition_mode
+                ),
+                lambda_value=args.lambda_initial,
+                minimum_exploitation_fraction=args.minimum_exploitation_fraction,
+                minimum_exploration_fraction=args.minimum_exploration_fraction,
+                maximum_per_relaxed_family=args.maximum_per_relaxed_family,
+            ),
         )
         campaign.reference_energies = references
 
@@ -206,10 +239,31 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=args.campaign_state.parent,
         formula_runner=formula_runner,
         review_runner=review_runner,
+        final_review_runner=review_runner if args.final_review else None,
         policy=CampaignRunPolicy(
             formulas_per_iteration=args.formulas_per_iteration,
             max_iterations=args.max_iterations,
             retry_failed=args.retry_failed,
+            reserved_dft_calculations_per_formula=args.reserved_dft_per_formula,
+            reserved_node_hours_per_formula=args.reserved_node_hours_per_formula,
+            no_new_hull_vertex_iterations=args.no_new_hull_vertex_iterations,
+            hull_energy_change_eV_per_atom=args.hull_energy_change_ev_per_atom,
+            minimum_formula_coverage=args.minimum_formula_coverage,
+            require_low_uncertainty_near_hull=args.require_low_uncertainty_near_hull,
+            low_uncertainty_threshold=args.low_uncertainty_threshold,
+            acquisition=CampaignAcquisitionPolicy(
+                enabled=args.acquisition_mode != "legacy",
+                mode=(
+                    "adaptive" if args.acquisition_mode == "legacy" else args.acquisition_mode
+                ),
+                random_seed=args.acquisition_seed,
+                lambda_initial=args.lambda_initial,
+                lambda_minimum=args.lambda_minimum,
+                lambda_maximum=args.lambda_maximum,
+                update_rate=args.lambda_update_rate,
+                minimum_exploitation_fraction=args.minimum_exploitation_fraction,
+                minimum_exploration_fraction=args.minimum_exploration_fraction,
+            ),
         ),
     )
     if refinement is not None:

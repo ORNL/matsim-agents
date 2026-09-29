@@ -20,6 +20,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from matsim_agents.campaign.acquisition import CampaignAcquisitionState
+from matsim_agents.campaign.registry import CandidateRegistry
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
 from matsim_agents.discovery.stability import RankingMode, ReferenceEnergySet, StabilityReport
 from matsim_agents.execution.contracts import ComputeBudget, WorkflowStatus
@@ -39,6 +41,7 @@ class FormulaRunRecord(BaseModel):
     n_active_learning_iterations: int = 0
     node_hours: float = 0.0
     model_promoted: bool = False
+    acquisition_branch: str | None = None
     evidence: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -53,6 +56,22 @@ class CampaignReviewRecord(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class HullState(BaseModel):
+    """Versioned thermodynamic state derived from compatible DFT reports."""
+
+    version: int
+    parent_version: int | None = None
+    reference_set_id: str
+    method_signature: str
+    hull_vertices: dict[str, str] = Field(default_factory=dict)
+    near_hull_phases: dict[str, float] = Field(default_factory=dict)
+    energy_above_hull_eV_per_atom: dict[str, float] = Field(default_factory=dict)
+    new_hull_vertices: list[str] = Field(default_factory=list)
+    removed_hull_vertices: list[str] = Field(default_factory=list)
+    uncompetitive_formulas: list[str] = Field(default_factory=list)
+    iteration: int
+
+
 class CampaignState(BaseModel):
     """Persistent record of a multi-formula discovery campaign."""
 
@@ -62,8 +81,12 @@ class CampaignState(BaseModel):
     formulas: dict[str, FormulaCandidate] = Field(default_factory=dict)
     reference_energies: ReferenceEnergySet | None = None
     stability_reports: dict[str, StabilityReport] = Field(default_factory=dict)
+    current_hull: HullState | None = None
+    hull_history: list[HullState] = Field(default_factory=list)
     formula_runs: dict[str, FormulaRunRecord] = Field(default_factory=dict)
     review_history: list[CampaignReviewRecord] = Field(default_factory=list)
+    acquisition: CampaignAcquisitionState = Field(default_factory=CampaignAcquisitionState)
+    candidate_registry: CandidateRegistry = Field(default_factory=CandidateRegistry)
     debate_run_ids: list[str] = Field(default_factory=list)
     iteration: int = 0
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
@@ -105,3 +128,40 @@ class CampaignState(BaseModel):
             self.reference_energies.competing_phases[report.formula] = (
                 ground_state.formation_energy_eV_per_atom
             )
+            self._snapshot_hull()
+
+    def _snapshot_hull(self, near_hull_threshold_eV_per_atom: float = 0.05) -> None:
+        assert self.reference_energies is not None
+        energies: dict[str, float] = {}
+        vertices: dict[str, str] = {}
+        near_hull: dict[str, float] = {}
+        uncompetitive: list[str] = []
+        for formula, report in self.stability_reports.items():
+            energy = report.ground_state.energy_above_hull_eV_per_atom
+            if report.ranking_mode != RankingMode.CONVEX_HULL or energy is None:
+                continue
+            energies[formula] = energy
+            if energy <= 1e-8:
+                vertices[formula] = report.ground_state.optimized_structure_path
+            elif energy <= near_hull_threshold_eV_per_atom:
+                near_hull[formula] = energy
+            else:
+                uncompetitive.append(formula)
+        previous = self.current_hull
+        previous_vertices = set(previous.hull_vertices) if previous is not None else set()
+        current_vertices = set(vertices)
+        snapshot = HullState(
+            version=len(self.hull_history) + 1,
+            parent_version=previous.version if previous is not None else None,
+            reference_set_id=self.reference_energies.identifier,
+            method_signature=self.reference_energies.method_signature,
+            hull_vertices=vertices,
+            near_hull_phases=near_hull,
+            energy_above_hull_eV_per_atom=energies,
+            new_hull_vertices=sorted(current_vertices - previous_vertices),
+            removed_hull_vertices=sorted(previous_vertices - current_vertices),
+            uncompetitive_formulas=sorted(uncompetitive),
+            iteration=self.iteration,
+        )
+        self.current_hull = snapshot
+        self.hull_history.append(snapshot)
