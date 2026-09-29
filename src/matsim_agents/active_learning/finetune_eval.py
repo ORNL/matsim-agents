@@ -244,7 +244,7 @@ def run_campaign(
     uma_lora: bool = False,
     uma_lora_r: int = 8,
     uma_lora_alpha: float = 16.0,
-    # MACE (all versions: family in {mace_mp, mace_off, checkpoint}; model in
+    # MACE (all installed foundation families; model is an alias, URL, or path).
     # {small, medium, large}/tag/URL/path, or a MACE_MODELS id). Fine-tuning is
     # delegated to mace_run_train (reference recipe), with optional native LoRA.
     mace_family: str = "mace_mp",
@@ -602,8 +602,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--mace-family",
         default="mace_mp",
-        choices=["mace_mp", "mace_off", "checkpoint"],
-        help="MACE family: mace_mp (inorganic), mace_off (organic), or checkpoint (local .model).",
+        choices=[
+            "mace_mp",
+            "mace_off",
+            "mace_omol",
+            "mace_polar",
+            "mace_anicc",
+            "checkpoint",
+        ],
+        help="MACE foundation-loader family or checkpoint (local .model).",
     )
     parser.add_argument(
         "--mace-model",

@@ -439,18 +439,22 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
 def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
     """Build an ASE calculator backed by a MACE MLIP.
 
-    Loads a foundation model by variant (``mace_mp`` / ``mace_off`` with
-    ``cfg.model`` in ``{small, medium, large}`` or a release tag/URL), or a local
-    fine-tuned ``.model`` checkpoint when ``cfg.family == 'checkpoint'``. This
-    lets multiple MACE versions be benchmarked behind ``mlip.backend: mace``,
-    mirroring the Frontier HydraGNN-vs-MACE-vs-UMA comparison pipeline.
+    Loads any foundation family exposed by mace-torch 0.3.16, or a local
+    fine-tuned ``.model`` checkpoint when ``cfg.family == 'checkpoint'``.
 
     When ``enable_mc_dropout`` and ``cfg.dropout.enabled`` are both True, dropout
     is injected into the underlying torch model so MC-Dropout acquisition yields
     non-zero variance. The dropout is dormant for ordinary energy/force calls.
     """
     try:
-        from mace.calculators import MACECalculator, mace_mp, mace_off
+        from mace.calculators import (
+            MACECalculator,
+            mace_anicc,
+            mace_mp,
+            mace_off,
+            mace_omol,
+            mace_polar,
+        )
     except ImportError as exc:  # pragma: no cover - depends on optional dep
         raise ImportError(
             "The MACE backend requires the 'mace-torch' package. Install it with the "
@@ -470,7 +474,16 @@ def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
         calc = MACECalculator(model_paths=[str(ckpt)], device=cfg.device, default_dtype=dtype)
     elif cfg.family == "mace_off":
         calc = mace_off(model=cfg.model, device=cfg.device, default_dtype=dtype)
-    else:  # mace_mp
+    elif cfg.family == "mace_omol":
+        calc = mace_omol(model=cfg.model, device=cfg.device, default_dtype=dtype)
+    elif cfg.family == "mace_polar":
+        calc = mace_polar(model=cfg.model, device=cfg.device, default_dtype=dtype)
+    elif cfg.family == "mace_anicc":
+        calc = mace_anicc(
+            model_path=None if cfg.model == "default" else cfg.model,
+            device=cfg.device,
+        )
+    else:
         calc = mace_mp(
             model=cfg.model,
             device=cfg.device,

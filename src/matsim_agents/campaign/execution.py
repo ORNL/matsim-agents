@@ -251,7 +251,9 @@ def _exploration_kwargs(cfg: ALConfig, overrides: dict[str, Any]) -> dict[str, A
         values.setdefault("mlp_device", cfg.mlip.uma.device)
         values.setdefault("precision", cfg.mlip.uma.precision)
     elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
-        values.setdefault("checkpoint", cfg.mlip.mace.model)
+        values.setdefault("mace_family", cfg.mlip.mace.family)
+        values.setdefault("mace_model", cfg.mlip.mace.model)
+        values.setdefault("mace_dispersion", cfg.mlip.mace.dispersion)
         values.setdefault("mlp_device", cfg.mlip.mace.device)
         values.setdefault("precision", cfg.mlip.mace.precision)
     elif cfg.mlip.hydragnn is not None:

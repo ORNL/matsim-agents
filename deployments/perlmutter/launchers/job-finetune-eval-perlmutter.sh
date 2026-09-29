@@ -37,8 +37,9 @@
 # Optional env (with defaults):
 #   UMA_TASK      omat | omol | oc20 | odac | omc   (uma only; default omat)
 #   UMA_LORA      1 = LoRA fine-tune of UMA backbone scalar linears (default 0)
-#   MACE_FAMILY   mace_mp | mace_off | checkpoint   (mace only; default mace_mp)
-#   MACE_MODEL    small | medium | large | tag/URL | .model path
+#   MACE_FAMILY   mace_mp | mace_off | mace_omol | mace_polar | mace_anicc |
+#                 checkpoint                           (mace only; default mace_mp)
+#   MACE_MODEL    family alias | URL | .model path
 #                                                   (mace only; default medium)
 #   MACE_MODEL_ID curated MACE_MODELS id (overrides MACE_FAMILY/MACE_MODEL)
 #   MACE_LORA     1 = native mace_run_train LoRA fine-tune (default 0)

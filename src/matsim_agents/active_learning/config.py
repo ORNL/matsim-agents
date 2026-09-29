@@ -119,25 +119,31 @@ class UMAConfig(BaseModel):
     )
 
 
+MACEFamily = Literal[
+    "mace_mp",
+    "mace_off",
+    "mace_omol",
+    "mace_polar",
+    "mace_anicc",
+    "checkpoint",
+]
+
+
 class MACEConfig(BaseModel):
     """Inputs to load a MACE MLIP as an ASE calculator.
 
-    Supports the foundation models shipped with ``mace-torch`` -- ``mace_mp``
-    (Materials Project, inorganic) and ``mace_off`` (organic molecules) -- as
-    well as a local fine-tuned ``.model`` checkpoint. ``model`` selects the
-    size/variant (``small`` | ``medium`` | ``large``, or a release tag/URL) so
-    multiple MACE versions are benchmarkable behind the same backend, matching
-    the Frontier HydraGNN-vs-MACE-vs-UMA comparison pipeline.
+    Supports every foundation-model loader shipped by mace-torch 0.3.16, plus
+    local fine-tuned ``.model`` checkpoints. Materials variants such as MPA,
+    OMAT, MATPES, and MH are selected as ``mace_mp`` model aliases.
     """
 
     model_config = ConfigDict(populate_by_name=True)
 
-    family: Literal["mace_mp", "mace_off", "checkpoint"] = Field(
+    family: MACEFamily = Field(
         "mace_mp",
         description=(
-            "Which MACE model family to load: 'mace_mp' (Materials Project, "
-            "inorganic), 'mace_off' (organic molecules), or 'checkpoint' (a local "
-            ".model file given by `model`)."
+            "MACE calculator family: mace_mp, mace_off, mace_omol, mace_polar, "
+            "mace_anicc, or checkpoint."
         ),
     )
     model: str = Field(
@@ -154,7 +160,7 @@ class MACEConfig(BaseModel):
         description="Calculator dtype -> MACE default_dtype (fp64 recommended for relaxation).",
     )
     dispersion: bool = Field(
-        False, description="Add DFT-D3 dispersion correction (mace_mp / mace_off only)."
+        False, description="Add DFT-D3 dispersion correction (mace_mp only)."
     )
     ensemble_models: list[str] = Field(
         default_factory=list,
@@ -169,6 +175,20 @@ class MACEConfig(BaseModel):
             "Test-time dropout injection for MC-Dropout acquisition (MACE has no native dropout)."
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_family_options(self) -> MACEConfig:
+        if self.model == "medium":
+            self.model = {
+                "mace_omol": "extra_large",
+                "mace_polar": "polar-1-m",
+                "mace_anicc": "default",
+            }.get(self.family, self.model)
+        if self.family == "checkpoint" and not Path(self.model).is_file():
+            raise ValueError("MACE checkpoint family requires model to be an existing file")
+        if self.dispersion and self.family != "mace_mp":
+            raise ValueError("MACE dispersion is supported only for family='mace_mp'")
+        return self
 
 
 class MLIPConfig(BaseModel):

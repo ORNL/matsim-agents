@@ -26,7 +26,7 @@ class RelaxStructureInput(BaseModel):
     structure_path: str = Field(
         ..., description="Path to the input structure file (e.g. .vasp, .cif, .xyz)."
     )
-    mlip_backend: Literal["hydragnn", "uma"] = Field(
+    mlip_backend: Literal["hydragnn", "uma", "mace"] = Field(
         "hydragnn",
         description="Surrogate backend used by the relaxation tool.",
     )
@@ -59,6 +59,14 @@ class RelaxStructureInput(BaseModel):
         "omat",
         description="UMA task head when mlip_backend='uma'.",
     )
+    mace_family: Literal[
+        "mace_mp", "mace_off", "mace_omol", "mace_polar", "mace_anicc", "checkpoint"
+    ] = "mace_mp"
+    mace_model: str = Field(
+        "medium",
+        description="MACE model alias, URL, or local checkpoint path.",
+    )
+    mace_dispersion: bool = False
     relax_cell: bool = Field(
         False,
         description=(
@@ -374,7 +382,7 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
             args.spin,
         )
         uq_note = None
-    else:
+    elif args.mlip_backend == "uma":
         from matsim_agents.active_learning.calculator import build_uma_calculator
         from matsim_agents.active_learning.config import UMAConfig
 
@@ -388,6 +396,22 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
         )
         num_branches = 0
         uq_note = "branch-weight UQ unavailable for UMA backend"
+    else:
+        from matsim_agents.active_learning.calculator import build_mace_calculator
+        from matsim_agents.active_learning.config import MACEConfig
+
+        calculator = build_mace_calculator(
+            MACEConfig(
+                family=args.mace_family,
+                model=args.mace_model,
+                device=args.mlp_device,
+                precision=args.precision or "float32",
+                dispersion=args.mace_dispersion,
+            ),
+            enable_mc_dropout=False,
+        )
+        num_branches = 0
+        uq_note = "branch-weight UQ unavailable for MACE backend"
 
     atoms = read(structure_path)
     atoms.calc = calculator

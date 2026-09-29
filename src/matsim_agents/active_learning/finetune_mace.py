@@ -61,7 +61,14 @@ from matsim_agents.active_learning.finetune_uma import (
 log = logging.getLogger(__name__)
 
 # Foundation families MACE ships; "checkpoint" continues from a local .model.
-_MACE_FAMILIES = {"mace_mp", "mace_off", "checkpoint"}
+_MACE_FAMILIES = {
+    "mace_mp",
+    "mace_off",
+    "mace_omol",
+    "mace_polar",
+    "mace_anicc",
+    "checkpoint",
+}
 
 # Reference recipe defaults (run_mace_finetune.py): naive vs. LoRA fine-tune.
 _NAIVE_DEFAULTS = {"lr": 1e-3, "epochs": 50}
@@ -78,9 +85,63 @@ MACE_MODELS: dict[str, dict[str, str]] = {
     "mace_mp_small": {"family": "mace_mp", "model": "small", "label": "MACE-MP-0 small"},
     "mace_mp_medium": {"family": "mace_mp", "model": "medium", "label": "MACE-MP-0 medium"},
     "mace_mp_large": {"family": "mace_mp", "model": "large", "label": "MACE-MP-0 large"},
+    "mace_mp_small_0b": {"family": "mace_mp", "model": "small-0b", "label": "MACE-MP-0b small"},
+    "mace_mp_medium_0b": {"family": "mace_mp", "model": "medium-0b", "label": "MACE-MP-0b medium"},
+    "mace_mp_small_0b2": {"family": "mace_mp", "model": "small-0b2", "label": "MACE-MP-0b2 small"},
+    "mace_mp_medium_0b2": {
+        "family": "mace_mp",
+        "model": "medium-0b2",
+        "label": "MACE-MP-0b2 medium",
+    },
+    "mace_mp_large_0b2": {"family": "mace_mp", "model": "large-0b2", "label": "MACE-MP-0b2 large"},
+    "mace_mp_medium_0b3": {
+        "family": "mace_mp",
+        "model": "medium-0b3",
+        "label": "MACE-MP-0b3 medium",
+    },
+    "mace_mpa_medium": {"family": "mace_mp", "model": "medium-mpa-0", "label": "MACE-MPA-0 medium"},
+    "mace_omat_small": {"family": "mace_mp", "model": "small-omat-0", "label": "MACE-OMAT-0 small"},
+    "mace_omat_medium": {
+        "family": "mace_mp",
+        "model": "medium-omat-0",
+        "label": "MACE-OMAT-0 medium",
+    },
+    "mace_matpes_pbe": {
+        "family": "mace_mp",
+        "model": "mace-matpes-pbe-0",
+        "label": "MACE-MATPES PBE",
+    },
+    "mace_matpes_r2scan": {
+        "family": "mace_mp",
+        "model": "mace-matpes-r2scan-0",
+        "label": "MACE-MATPES r2SCAN",
+    },
+    "mace_mh_0": {"family": "mace_mp", "model": "mh-0", "label": "MACE-MH-0"},
+    "mace_mh_1": {"family": "mace_mp", "model": "mh-1", "label": "MACE-MH-1"},
     "mace_off_small": {"family": "mace_off", "model": "small", "label": "MACE-OFF23 small"},
     "mace_off_medium": {"family": "mace_off", "model": "medium", "label": "MACE-OFF23 medium"},
     "mace_off_large": {"family": "mace_off", "model": "large", "label": "MACE-OFF23 large"},
+    "mace_omol_extra_large": {
+        "family": "mace_omol",
+        "model": "extra_large",
+        "label": "MACE-OMOL-0 extra large",
+    },
+    "mace_polar_small": {
+        "family": "mace_polar",
+        "model": "polar-1-s",
+        "label": "MACE-Polar-1 small",
+    },
+    "mace_polar_medium": {
+        "family": "mace_polar",
+        "model": "polar-1-m",
+        "label": "MACE-Polar-1 medium",
+    },
+    "mace_polar_large": {
+        "family": "mace_polar",
+        "model": "polar-1-l",
+        "label": "MACE-Polar-1 large",
+    },
+    "mace_anicc": {"family": "mace_anicc", "model": "default", "label": "MACE ANI-CC"},
 }
 
 
@@ -460,7 +521,7 @@ def main(argv: list[str] | None = None) -> int:
         "--family",
         default="mace_mp",
         choices=sorted(_MACE_FAMILIES),
-        help="MACE family: mace_mp (inorganic), mace_off (organic), or checkpoint (local .model).",
+        help="MACE foundation-loader family or checkpoint (local .model).",
     )
     parser.add_argument(
         "--base-model",

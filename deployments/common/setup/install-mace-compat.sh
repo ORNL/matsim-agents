@@ -75,7 +75,14 @@ import dscribe
 import e3nn
 import mace
 import torch
-from mace.calculators import MACECalculator, mace_mp, mace_off  # noqa: F401
+from mace.calculators import (  # noqa: F401
+    MACECalculator,
+    mace_anicc,
+    mace_mp,
+    mace_off,
+    mace_omol,
+    mace_polar,
+)
 from matsim_agents.active_learning.calculator import build_mace_calculator  # noqa: F401
 
 assert e3nn.__version__ == "0.4.4", e3nn.__version__
