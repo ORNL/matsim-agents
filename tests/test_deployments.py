@@ -27,6 +27,14 @@ def test_perlmutter_campaign_imports_current_checkout() -> None:
     assert content.index(source_path_export) < content.index(".venv-uma/bin/activate")
 
 
+def test_perlmutter_multinode_server_extends_raylet_startup_wait() -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = root / "deployments/perlmutter/jobs/job-serve-multinode-perlmutter.sh"
+    content = script.read_text(encoding="utf-8")
+
+    assert "RAY_raylet_start_wait_time_s=${RAY_raylet_start_wait_time_s:-300}" in content
+
+
 def test_perlmutter_campaign_exposes_adaptive_acquisition_controls() -> None:
     root = Path(__file__).resolve().parents[1]
     script = (
