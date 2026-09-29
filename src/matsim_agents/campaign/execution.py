@@ -20,10 +20,18 @@ from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.campaign.registry import (
     CandidateSelectionPolicy,
     select_dft_refinement_candidates,
+    structure_content_hash,
 )
 from matsim_agents.campaign.state import CampaignState
 from matsim_agents.discovery.composition import parse_composition
-from matsim_agents.discovery.stability import RankingMode, ReferenceEnergySet, score_stability
+from matsim_agents.discovery.stability import (
+    ElementalReferenceEntry,
+    RankingMode,
+    ReferenceCompletenessPolicy,
+    ReferenceEnergySet,
+    ReferencePhaseEntry,
+    score_stability,
+)
 from matsim_agents.orchestration.state import RelaxationResult
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
@@ -80,6 +88,19 @@ class CampaignRetrainingConfig(BaseModel):
         return self
 
 
+class ReferenceStructureSpec(BaseModel):
+    """A structure that must be calculated as part of the reference hull."""
+
+    phase_id: str = Field(pattern=r"^[A-Za-z0-9_.:-]+$")
+    formula: str
+    structure_path: Path
+    relax_cell: bool | None = None
+    settings: dict[str, Any] = Field(default_factory=dict)
+    source: str = "user_supplied"
+    provenance: dict[str, str] = Field(default_factory=dict)
+    energy_correction_eV_per_atom: float = 0.0
+
+
 class CampaignDFTRefinementConfig(BaseModel):
     """DFT relaxation and compatible reference generation for hull ranking."""
 
@@ -87,6 +108,10 @@ class CampaignDFTRefinementConfig(BaseModel):
     reference_structures: dict[str, Path] = Field(default_factory=dict)
     reference_relax_cell: dict[str, bool] = Field(default_factory=dict)
     reference_settings: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    reference_phases: list[ReferenceStructureSpec] = Field(default_factory=list)
+    reference_completeness_policy: ReferenceCompletenessPolicy = Field(
+        default_factory=ReferenceCompletenessPolicy
+    )
     reference_energies: ReferenceEnergySet | None = None
     max_candidates: int = Field(1, ge=1)
     relax_cell: bool = True
@@ -401,6 +426,7 @@ def _generate_reference_energies(
         method_signature=refinement.method_signature,
         backend=al_cfg.dft.backend,
         elemental_energies_eV_per_atom={},
+        completeness_policy=refinement.reference_completeness_policy,
     )
     if references.backend is not None and references.backend != al_cfg.dft.backend:
         raise ValueError(
@@ -408,50 +434,72 @@ def _generate_reference_energies(
             f"{al_cfg.dft.backend}"
         )
     if references.backend is None and (
-        references.elemental_energies_eV_per_atom or references.competing_phases
+        references.elemental_energies_eV_per_atom
+        or references.competing_phases
+        or references.phase_entries
     ):
         raise ValueError(
             "populated reference energies lack backend provenance; regenerate or migrate them"
         )
     references.backend = al_cfg.dft.backend
-    pending: list[tuple[str, Any, Path]] = []
-    for formula, path in refinement.reference_structures.items():
-        composition = parse_composition(formula)
+    legacy_specs = [
+        ReferenceStructureSpec(
+            phase_id=formula,
+            formula=formula,
+            structure_path=path,
+            relax_cell=refinement.reference_relax_cell.get(formula),
+            settings=refinement.reference_settings.get(formula, {}),
+            source="legacy_manifest",
+        )
+        for formula, path in refinement.reference_structures.items()
+    ]
+    specs = [*legacy_specs, *refinement.reference_phases]
+    phase_ids = [spec.phase_id for spec in specs]
+    if len(phase_ids) != len(set(phase_ids)):
+        raise ValueError("reference structure phase IDs must be unique")
+    existing_phase_ids = {entry.phase_id for entry in references.phase_entries}
+    pending: list[tuple[ReferenceStructureSpec, Any]] = []
+    for spec in specs:
+        composition = parse_composition(spec.formula)
         if composition is None:
-            raise ValueError(f"Could not parse reference formula {formula!r}")
+            raise ValueError(f"Could not parse reference formula {spec.formula!r}")
         if len(composition.elements) == 1:
             element = next(iter(composition.elements))
             if element in references.elemental_energies_eV_per_atom:
                 continue
-        elif formula in references.competing_phases:
+        elif spec.phase_id in existing_phase_ids or (
+            spec.source == "legacy_manifest" and spec.formula in references.competing_phases
+        ):
             continue
-        pending.append((formula, composition, path))
+        pending.append((spec, composition))
     pending.sort(key=lambda item: len(item[1].elements))
 
     calculations = 0
     elapsed_seconds = 0.0
-    for formula, composition, path in pending:
+    for spec, composition in pending:
         started = time.monotonic()
         result = relaxation_runner(
             _dft_relaxation_config(
-                str(path),
-                output_root / "references" / formula,
+                str(spec.structure_path),
+                output_root / "references" / spec.phase_id,
                 al_cfg,
                 refinement.model_copy(
                     update={
-                        "relax_cell": refinement.reference_relax_cell.get(
-                            formula, refinement.relax_cell
+                        "relax_cell": (
+                            spec.relax_cell
+                            if spec.relax_cell is not None
+                            else refinement.relax_cell
                         )
                     }
                 ),
-                refinement.reference_settings.get(formula),
+                spec.settings,
             )
         )
         elapsed_seconds += time.monotonic() - started
         calculations += 1
         source = RelaxationResult(
-            structure_path=str(path),
-            optimized_structure_path=str(path),
+            structure_path=str(spec.structure_path),
+            optimized_structure_path=str(spec.structure_path),
             trajectory_path="",
             log_csv_path="",
             final_energy_eV=0.0,
@@ -466,7 +514,24 @@ def _generate_reference_energies(
         energy_per_atom = relaxed.final_energy_eV / len(atoms)
         if len(composition.elements) == 1:
             element = next(iter(composition.elements))
-            references.elemental_energies_eV_per_atom[element] = energy_per_atom
+            corrected_energy = energy_per_atom + spec.energy_correction_eV_per_atom
+            references.elemental_energies_eV_per_atom[element] = corrected_energy
+            references.elemental_entries[element] = ElementalReferenceEntry(
+                element=element,
+                phase_id=spec.phase_id,
+                reference_formula=spec.formula,
+                energy_eV_per_atom=corrected_energy,
+                method_signature=refinement.method_signature,
+                backend=al_cfg.dft.backend,
+                structure_path=relaxed.optimized_structure_path,
+                structure_hash=structure_content_hash(relaxed.optimized_structure_path),
+                total_energy_eV=relaxed.final_energy_eV,
+                source=spec.source,
+                provenance=spec.provenance,
+                corrections={
+                    "energy_correction_eV_per_atom": spec.energy_correction_eV_per_atom
+                },
+            )
             continue
         missing = set(composition.elements) - set(references.elemental_energies_eV_per_atom)
         if missing:
@@ -477,9 +542,29 @@ def _generate_reference_energies(
             amount * references.elemental_energies_eV_per_atom[element]
             for element, amount in composition.elements.items()
         )
-        references.competing_phases[formula] = (
-            relaxed.final_energy_eV - elemental_total
-        ) / composition.total_atoms
+        formation_energy = (
+            (relaxed.final_energy_eV - elemental_total) / composition.total_atoms
+            + spec.energy_correction_eV_per_atom
+        )
+        references.phase_entries.append(
+            ReferencePhaseEntry(
+                phase_id=spec.phase_id,
+                formula=spec.formula,
+                formation_energy_eV_per_atom=formation_energy,
+                method_signature=refinement.method_signature,
+                backend=al_cfg.dft.backend,
+                structure_path=relaxed.optimized_structure_path,
+                structure_hash=structure_content_hash(relaxed.optimized_structure_path),
+                total_energy_eV=relaxed.final_energy_eV,
+                energy_per_atom_eV=energy_per_atom,
+                source=spec.source,
+                provenance=spec.provenance,
+                corrections={
+                    "energy_correction_eV_per_atom": spec.energy_correction_eV_per_atom
+                },
+            )
+        )
+    references = ReferenceEnergySet.model_validate(references.model_dump())
     refinement.reference_energies = references
     return references, calculations, elapsed_seconds
 
@@ -668,6 +753,7 @@ def run_formula_with_active_learning(
         "backend": al_cfg.dft.backend,
         "method_signature": refinement.method_signature,
         "reference_set_id": references.identifier,
+        "reference_energy_set": references.model_dump(mode="json"),
         "reference_calculations": reference_calculations,
         "candidate_calculations": len(refined),
         "ranking_mode": RankingMode.CONVEX_HULL,

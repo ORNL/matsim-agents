@@ -20,6 +20,7 @@ from matsim_agents.discovery.formula_merge import (
     extract_llm_formula_proposals,
     merge_formulas,
 )
+from matsim_agents.discovery.stability import ReferenceEnergySet
 from matsim_agents.execution.contracts import WorkflowStatus
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
@@ -366,6 +367,13 @@ def run_campaign(
                     uncertainty_by_candidate=uncertainty_by_candidate,
                     novelty_reference_paths=novelty_references,
                 )
+                reference_payload = record.evidence.get("dft_refinement", {}).get(
+                    "reference_energy_set"
+                )
+                if reference_payload is not None:
+                    campaign.reference_energies = ReferenceEnergySet.model_validate(
+                        reference_payload
+                    )
                 if exploration.stability is not None:
                     campaign.record_stability(exploration.stability)
                 candidate = campaign.formulas[formula]

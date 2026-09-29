@@ -25,6 +25,7 @@ from matsim_agents.campaign.registry import CandidateRegistry
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
 from matsim_agents.discovery.stability import (
     RankingMode,
+    ReferenceCompletenessReport,
     ReferenceEnergySet,
     StabilityReport,
     recalibrate_hull_reports,
@@ -71,8 +72,12 @@ class HullState(BaseModel):
     hull_vertices: dict[str, str] = Field(default_factory=dict)
     near_hull_phases: dict[str, float] = Field(default_factory=dict)
     energy_above_hull_eV_per_atom: dict[str, float] = Field(default_factory=dict)
+    decomposition_products: dict[str, dict[str, float]] = Field(default_factory=dict)
     new_hull_vertices: list[str] = Field(default_factory=list)
     removed_hull_vertices: list[str] = Field(default_factory=list)
+    reference_completeness: ReferenceCompletenessReport | None = None
+    provisional: bool = True
+    undersampled_regions: list[str] = Field(default_factory=list)
     uncompetitive_formulas: list[str] = Field(default_factory=list)
     iteration: int
 
@@ -150,12 +155,14 @@ class CampaignState(BaseModel):
         energies: dict[str, float] = {}
         vertices: dict[str, str] = {}
         near_hull: dict[str, float] = {}
+        decompositions: dict[str, dict[str, float]] = {}
         uncompetitive: list[str] = []
         for formula, report in self.stability_reports.items():
             energy = report.ground_state.energy_above_hull_eV_per_atom
             if report.ranking_mode != RankingMode.CONVEX_HULL or energy is None:
                 continue
             energies[formula] = energy
+            decompositions[formula] = dict(report.ground_state.decomposition)
             if energy <= 1e-8:
                 vertices[formula] = report.ground_state.optimized_structure_path
             elif energy <= near_hull_threshold_eV_per_atom:
@@ -165,6 +172,21 @@ class CampaignState(BaseModel):
         previous = self.current_hull
         previous_vertices = set(previous.hull_vertices) if previous is not None else set()
         current_vertices = set(vertices)
+        completeness = self.reference_energies.audit_completeness(self.element_set)
+        undersampled = [
+            f"missing elemental reference: {element}"
+            for element in completeness.missing_elemental_references
+        ]
+        undersampled.extend(
+            f"missing required phase: {formula}"
+            for formula in completeness.missing_required_formulas
+        )
+        undersampled.extend(
+            f"missing binary subsystem: {pair}"
+            for pair in completeness.missing_binary_subsystems
+        )
+        if completeness.missing_ternary_competitor:
+            undersampled.append("missing ternary competing phase")
         snapshot = HullState(
             version=len(self.hull_history) + 1,
             parent_version=previous.version if previous is not None else None,
@@ -173,8 +195,12 @@ class CampaignState(BaseModel):
             hull_vertices=vertices,
             near_hull_phases=near_hull,
             energy_above_hull_eV_per_atom=energies,
+            decomposition_products=decompositions,
             new_hull_vertices=sorted(current_vertices - previous_vertices),
             removed_hull_vertices=sorted(previous_vertices - current_vertices),
+            reference_completeness=completeness,
+            provisional=completeness.provisional,
+            undersampled_regions=undersampled,
             uncompetitive_formulas=sorted(uncompetitive),
             iteration=self.iteration,
         )

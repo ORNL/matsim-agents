@@ -18,6 +18,7 @@ from matsim_agents.campaign.execution import (  # noqa: E402
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,
+    ReferenceStructureSpec,
     latest_promoted_model,
     make_formula_runner,
 )
@@ -28,7 +29,10 @@ from matsim_agents.campaign.review import (  # noqa: E402
     make_debate_review_runner,
 )
 from matsim_agents.campaign.state import CampaignState  # noqa: E402
-from matsim_agents.discovery.stability import ReferenceEnergySet  # noqa: E402
+from matsim_agents.discovery.stability import (  # noqa: E402
+    ReferenceCompletenessPolicy,
+    ReferenceEnergySet,
+)
 from matsim_agents.execution.contracts import ApprovalPolicy  # noqa: E402
 from matsim_agents.workflows.debate import DebateParticipant  # noqa: E402
 from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy  # noqa: E402
@@ -165,31 +169,65 @@ def main(argv: list[str] | None = None) -> int:
         raw_references = json.loads(args.dft_reference_structures.read_text(encoding="utf-8"))
         if not isinstance(raw_references, dict) or not raw_references:
             parser.error("DFT reference structure manifest must be a non-empty JSON object")
+        if "phases" in raw_references:
+            raw_phases = raw_references["phases"]
+            raw_completeness = raw_references.get("completeness", {})
+        else:
+            raw_phases = raw_references
+            raw_completeness = {}
+        if not isinstance(raw_phases, dict) or not raw_phases:
+            parser.error("DFT reference manifest 'phases' must be a non-empty object")
+        try:
+            completeness_policy = ReferenceCompletenessPolicy.model_validate(raw_completeness)
+        except ValueError as exc:
+            parser.error(f"invalid reference completeness policy: {exc}")
         reference_paths = {}
         reference_relax_cell = {}
         reference_settings = {}
-        for formula, spec in raw_references.items():
+        reference_phases = []
+        for phase_id, spec in raw_phases.items():
             if isinstance(spec, str):
-                reference_paths[str(formula)] = Path(spec).expanduser().resolve()
+                reference_paths[str(phase_id)] = Path(spec).expanduser().resolve()
                 continue
             if not isinstance(spec, dict) or "path" not in spec:
                 parser.error(
-                    f"reference {formula!r} must be a path or an object containing 'path'"
+                    f"reference {phase_id!r} must be a path or an object containing 'path'"
                 )
-            reference_paths[str(formula)] = Path(spec["path"]).expanduser().resolve()
-            reference_relax_cell[str(formula)] = bool(spec.get("relax_cell", True))
-            reference_settings[str(formula)] = dict(spec.get("settings", {}))
+            path = Path(spec["path"]).expanduser().resolve()
+            if not path.is_file():
+                parser.error(f"reference structure does not exist: {path}")
+            reference_phases.append(
+                ReferenceStructureSpec(
+                    phase_id=str(spec.get("phase_id", phase_id)),
+                    formula=str(spec.get("formula", phase_id)),
+                    structure_path=path,
+                    relax_cell=bool(spec.get("relax_cell", True)),
+                    settings=dict(spec.get("settings", {})),
+                    source=str(spec.get("source", "manifest")),
+                    provenance={
+                        str(key): str(value)
+                        for key, value in dict(spec.get("provenance", {})).items()
+                    },
+                    energy_correction_eV_per_atom=float(
+                        spec.get("energy_correction_eV_per_atom", 0.0)
+                    ),
+                )
+            )
         references = campaign.reference_energies or ReferenceEnergySet(
             identifier=f"campaign-{args.dft_method_signature}",
             method_signature=args.dft_method_signature,
             backend=al_config.dft.backend,
             elemental_energies_eV_per_atom={},
+            completeness_policy=completeness_policy,
         )
+        references.completeness_policy = completeness_policy
         refinement = CampaignDFTRefinementConfig(
             method_signature=args.dft_method_signature,
             reference_structures=reference_paths,
             reference_relax_cell=reference_relax_cell,
             reference_settings=reference_settings,
+            reference_phases=reference_phases,
+            reference_completeness_policy=completeness_policy,
             reference_energies=references,
             max_candidates=args.dft_refine_candidates,
             relax_cell=not args.dft_relax_atoms_only,

@@ -13,6 +13,7 @@ from matsim_agents.campaign.orchestrator import (
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
+from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.contracts import ComputeBudget, WorkflowStatus
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
@@ -118,6 +119,41 @@ def test_campaign_resume_does_not_repeat_completed_formula(tmp_path):
     assert calls == ["NbO2", "NbO"]
     assert second.formulas_completed == ["NbO"]
     assert second.campaign.formula_runs["NbO2"].attempts == 1
+
+
+def test_campaign_persists_reference_registry_from_formula_evidence(tmp_path):
+    references = ReferenceEnergySet(
+        identifier="nb-o-pbe-v1",
+        method_signature="pbe-v1",
+        backend="qe",
+        elemental_energies_eV_per_atom={"Nb": -10.0, "O": -5.0},
+        phase_entries=[
+            ReferencePhaseEntry(
+                phase_id="NbO2-rutile",
+                formula="NbO2",
+                formation_energy_eV_per_atom=-2.0,
+                method_signature="pbe-v1",
+                backend="qe",
+            )
+        ],
+    )
+
+    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+        result = _result(formula, output_dir)
+        result.active_learning_result["dft_refinement"] = {
+            "reference_energy_set": references.model_dump(mode="json")
+        }
+        return result
+
+    result = run_campaign(
+        _campaign(max_candidates=1),
+        output_dir=tmp_path,
+        formula_runner=runner,
+    )
+
+    persisted = CampaignState.load(result.state_path)
+    assert persisted.reference_energies is not None
+    assert persisted.reference_energies.phase_entries[0].phase_id == "NbO2-rutile"
 
 
 def test_campaign_applies_review_decision_before_next_iteration(tmp_path):

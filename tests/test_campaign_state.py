@@ -105,6 +105,9 @@ def test_record_stability_feeds_hull_reference_set():
     assert campaign.current_hull.version == 1
     assert campaign.current_hull.new_hull_vertices == ["NbTaO4"]
     assert campaign.current_hull.hull_vertices["NbTaO4"].endswith("P003-relaxed.vasp")
+    assert campaign.current_hull.provisional is True
+    assert campaign.current_hull.reference_completeness is not None
+    assert campaign.current_hull.reference_completeness.missing_binary_subsystems
 
 
 def _hull_report(formula: str, energy: float, formation_energy: float) -> StabilityReport:

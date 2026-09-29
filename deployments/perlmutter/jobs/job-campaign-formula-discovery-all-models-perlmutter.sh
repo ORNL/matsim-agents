@@ -29,6 +29,9 @@
 # Optional DFT hull controls:
 #   MATSIM_CAMPAIGN_DFT_REFINE=0            disable DFT relaxation/hull ranking
 #   MATSIM_CAMPAIGN_DFT_REFINE_CANDIDATES=1 refined phases per formula
+#   MATSIM_CAMPAIGN_REFERENCE_PROTOTYPES=1   AFLOW polymorphs per reference formula
+#   MATSIM_CAMPAIGN_CURATED_REFERENCES=...   optional curated manifest override
+#   MATSIM_CAMPAIGN_OXYGEN_CORRECTION=0.0    O2 correction in eV/O atom
 #
 # Submit with:
 #   PROJECT_ROOT=$PWD sbatch -A m5216_g -q premium \
@@ -36,7 +39,7 @@
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
-export MATSIM_CAMPAIGN_MAX_DFT="${MATSIM_CAMPAIGN_MAX_DFT:-12}"
+export MATSIM_CAMPAIGN_MAX_DFT="${MATSIM_CAMPAIGN_MAX_DFT:-32}"
 
 REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
 export PYTHONPATH="${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
@@ -214,8 +217,21 @@ fi
 DFT_REFINEMENT_ARGS=()
 if [[ "${MATSIM_CAMPAIGN_DFT_REFINE:-1}" == "1" ]]; then
   REFERENCE_DIR="$OUTPUT/campaign/dft-references"
+  REFERENCE_PREP_ARGS=(
+    --output-dir "$REFERENCE_DIR"
+    --backend "$REFERENCE_BACKEND"
+    --max-prototypes-per-formula "${MATSIM_CAMPAIGN_REFERENCE_PROTOTYPES:-1}"
+    --oxygen-correction-eV-per-atom "${MATSIM_CAMPAIGN_OXYGEN_CORRECTION:-0.0}"
+  )
+  if [[ -n "${MATSIM_CAMPAIGN_CURATED_REFERENCES:-}" ]]; then
+    REFERENCE_PREP_ARGS+=(--curated-manifest "$MATSIM_CAMPAIGN_CURATED_REFERENCES")
+  fi
+  if [[ -n "${MATSIM_CAMPAIGN_REFERENCE_FORMULAS:-}" ]]; then
+    read -r -a REFERENCE_FORMULAS <<<"$MATSIM_CAMPAIGN_REFERENCE_FORMULAS"
+    REFERENCE_PREP_ARGS+=(--competing-formulas "${REFERENCE_FORMULAS[@]}")
+  fi
   "$PYTHON" "$REPO/deployments/perlmutter/jobs/prepare_nb_ta_o_references.py" \
-    --output-dir "$REFERENCE_DIR" --backend "$REFERENCE_BACKEND"
+    "${REFERENCE_PREP_ARGS[@]}"
   DFT_REFINEMENT_ARGS=(
     --dft-reference-structures "$REFERENCE_DIR/reference_structures.json"
     --dft-method-signature "$DFT_METHOD_SIGNATURE"

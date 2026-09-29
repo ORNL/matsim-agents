@@ -22,7 +22,15 @@ from matsim_agents.discovery.seeds import (
     load_prototypes,
     random_search,
 )
-from matsim_agents.discovery.stability import StabilityReport, score_stability
+from matsim_agents.discovery.stability import (
+  ElementalReferenceEntry,
+  ReferenceCompletenessPolicy,
+  ReferenceCompletenessReport,
+  ReferenceEnergySet,
+  ReferencePhaseEntry,
+  StabilityReport,
+  score_stability,
+)
 from matsim_agents.discovery.wrapper import (
     CompositionExplorationResult,
     explore_composition,
@@ -31,7 +39,12 @@ from matsim_agents.discovery.wrapper import (
 __all__ = [
     "Composition",
     "CompositionExplorationResult",
+    "ElementalReferenceEntry",
     "PhaseCandidate",
+    "ReferenceCompletenessPolicy",
+    "ReferenceCompletenessReport",
+    "ReferenceEnergySet",
+    "ReferencePhaseEntry",
     "StabilityReport",
     "compatible_prototypes",
     "explore_composition",
