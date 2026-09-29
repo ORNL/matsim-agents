@@ -55,7 +55,9 @@ def test_mace_runtime_paths_use_matsim_owned_compatibility_environment() -> None
         assert "e3nn 0.6.x" not in text, script
 
     common = ROOT / "deployments/common/setup/install-mace-compat.sh"
+    text = common.read_text(encoding="utf-8")
     assert common.stat().st_mode & 0o111
+    assert "import dscribe" in text
     subprocess.run(["bash", "-n", str(common)], check=True)
 
 

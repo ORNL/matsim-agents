@@ -71,6 +71,7 @@ fi
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 
 "${PYTHON}" - <<'PY'
+import dscribe
 import e3nn
 import mace
 import torch
@@ -78,6 +79,7 @@ from mace.calculators import MACECalculator, mace_mp, mace_off  # noqa: F401
 from matsim_agents.active_learning.calculator import build_mace_calculator  # noqa: F401
 
 assert e3nn.__version__ == "0.4.4", e3nn.__version__
-print("verified", "torch", torch.__version__, "e3nn", e3nn.__version__, "mace", mace.__version__)
+print("verified", "torch", torch.__version__, "e3nn", e3nn.__version__, "mace", mace.__version__,
+    "dscribe", getattr(dscribe, "__version__", "unknown"))
 PY
 log "Complete. Activate MACE workflows with: source ${MACE_VENV_PATH}/bin/activate"
