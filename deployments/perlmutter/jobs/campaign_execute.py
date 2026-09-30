@@ -367,7 +367,7 @@ def main(argv: list[str] | None = None) -> int:
     summary_path = args.campaign_state.parent / "campaign_result.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2))
-    return 0 if not result.formulas_failed else 1
+    return 0 if result.campaign.status != WorkflowStatus.FAILED else 1
 
 
 if __name__ == "__main__":

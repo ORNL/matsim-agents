@@ -90,6 +90,11 @@ def test_perlmutter_campaign_supports_debate_only_and_uma_only_modes() -> None:
     assert '[[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_DFT_REFINE:-1}"' in content
     assert '[[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}"' in content
 
+    executor = (root / "deployments/perlmutter/jobs/campaign_execute.py").read_text(
+        encoding="utf-8"
+    )
+    assert "return 0 if result.campaign.status != WorkflowStatus.FAILED else 1" in executor
+
     def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> None:
         root = Path(__file__).resolve().parents[1]
         job = (
