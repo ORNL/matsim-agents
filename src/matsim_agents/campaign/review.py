@@ -63,8 +63,39 @@ _REVIEW_INSTRUCTION = """Return JSON only with this exact structure:
  "falsification_tests": ["..."]}]}
 Only review formulas present in the evidence. Deactivate only when numerical evidence makes
 continued computation scientifically unjustified; uncertainty alone is not evidence of failure.
+Treat authoritative_facts and evidence_semantics as constraints, not hypotheses. Do not infer
+composition from prototype_id, reinterpret charge balance, equate missing or zero summary counters
+with zero attempted calculations, or treat MLIP convergence/relative energies as thermodynamic
+stability. Cite the numerical field and evidence level that support every decision.
 New formulas are proposals only and will undergo deterministic chemical and budget validation.
 Do not wrap the JSON in Markdown."""
+
+
+_EVIDENCE_SEMANTICS = {
+    "composition": (
+        "canonical_formula, element_counts, and charge_balanced_by_policy are authoritative. "
+        "Prototype A/B labels are abstract sites whose species mapping may be reordered; never "
+        "infer composition from prototype_id."
+    ),
+    "execution_counts": (
+        "observed_mlip_labels is the number of persisted MLIP calculation records and "
+        "converged_mlip_labels is the subset meeting the configured convergence criterion. "
+        "A zero summary counter does not prove that candidate generation was not attempted."
+    ),
+    "failed_formula": (
+        "A formula-level failure or absence of converged candidates is not evidence that the "
+        "composition is chemically impossible and is not a campaign/infrastructure failure."
+    ),
+    "energy_scope": (
+        "MLIP total or per-atom energies are comparable only within their declared ranking scope. "
+        "Relative phase ranking does not establish formation energy, convex-hull stability, or "
+        "experimental synthesizability."
+    ),
+    "dft_scope": (
+        "DFT evidence supports thermodynamic claims only when compatible elemental and competing-"
+        "phase references produce an explicit formation energy or energy above hull."
+    ),
+}
 
 
 def _parse_verdict(text: str) -> ReviewVerdict:
@@ -92,9 +123,38 @@ def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -
     formulas: list[dict[str, Any]] = []
     for record in records:
         report = campaign.stability_reports.get(record.formula)
+        candidate = campaign.formulas[record.formula]
+        labels = record.evidence.get("mlip_labels", [])
+        if not isinstance(labels, list):
+            labels = []
+        converged_labels = sum(
+            isinstance(label, dict) and bool(label.get("converged")) for label in labels
+        )
+        ranking_mode = report.ranking_mode if report is not None else None
+        has_formation_energy = bool(
+            report is not None
+            and any(entry.formation_energy_eV_per_atom is not None for entry in report.ranking)
+        )
+        has_hull_energy = bool(
+            report is not None
+            and any(entry.energy_above_hull_eV_per_atom is not None for entry in report.ranking)
+        )
         formulas.append(
             {
                 "formula": record.formula,
+                "authoritative_facts": {
+                    "canonical_formula": candidate.reduced_formula,
+                    "element_counts": candidate.elements,
+                    "charge_balanced_by_policy": candidate.charge_balanced,
+                    "run_status": record.status,
+                    "failure_reason": record.failure_reason,
+                    "observed_mlip_labels": len(labels),
+                    "converged_mlip_labels": converged_labels,
+                    "dft_calculations": record.n_dft_calculations,
+                    "ranking_mode": ranking_mode,
+                    "has_formation_energy": has_formation_energy,
+                    "has_energy_above_hull": has_hull_energy,
+                },
                 "run": record.model_dump(mode="json"),
                 "stability": report.model_dump(mode="json") if report is not None else None,
             }
@@ -103,9 +163,28 @@ def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -
         {
             "campaign_id": campaign.campaign_id,
             "iteration": campaign.iteration,
+            "evidence_semantics": _EVIDENCE_SEMANTICS,
             "formulas": formulas,
         },
         sort_keys=True,
+    )
+
+
+def _deactivation_block_reason(
+    campaign: CampaignState,
+    record: FormulaRunRecord,
+) -> str | None:
+    report = campaign.stability_reports.get(record.formula)
+    if report is None:
+        return None
+    ground_state = report.ground_state
+    if not ground_state.converged or not ground_state.eligible_for_ranking:
+        return None
+    if any(entry.energy_above_hull_eV_per_atom is not None for entry in report.ranking):
+        return None
+    return (
+        "authoritative numerical evidence contains a converged, ranking-eligible candidate "
+        "but no energy-above-hull result; relative MLIP ranking cannot justify deactivation"
     )
 
 
@@ -140,6 +219,7 @@ def run_campaign_debate_review(
     proposals: list[LLMFormulaProposal] = []
     revisions: list[dict[str, str | list[str]]] = []
     allowed = set(campaign.formulas)
+    records_by_formula = {record.formula: record for record in records}
     for verdict in debate.verdicts:
         try:
             payload = _parse_verdict(verdict.response)
@@ -151,6 +231,17 @@ def run_campaign_debate_review(
             if decision.formula not in allowed or decision.formula in seen:
                 continue
             seen.add(decision.formula)
+            if decision.action == "deactivate" and decision.formula in records_by_formula:
+                block_reason = _deactivation_block_reason(
+                    campaign,
+                    records_by_formula[decision.formula],
+                )
+                if block_reason is not None:
+                    notes.append(
+                        f"[{verdict.participant}] rejected {decision.formula} deactivation: "
+                        f"{block_reason}"
+                    )
+                    continue
             votes[(decision.formula, decision.action)] += 1
             notes.append(
                 f"[{verdict.participant}] {decision.formula}: "
