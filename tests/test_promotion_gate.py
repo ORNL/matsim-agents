@@ -1,7 +1,14 @@
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from matsim_agents.active_learning.config import TrainerConfig
-from matsim_agents.active_learning.evaluate import EvalMetrics, assess_promotion
+from matsim_agents.active_learning.evaluate import (
+    EvalMetrics,
+    assess_promotion,
+    evaluate_promotion_candidate,
+)
 
 
 def _metrics(*, energy_mae: float, force_mae: float, model_path: str) -> EvalMetrics:
@@ -65,3 +72,30 @@ def test_promotion_gate_rejects_inaccurate_or_regressing_candidate(tmp_path: Pat
     assert decision.approved is False
     assert any("exceeds limit" in reason for reason in decision.reasons)
     assert any("incumbent regression limit" in reason for reason in decision.reasons)
+
+
+@pytest.mark.parametrize("reference_kind", [None, "training", "validation"])
+def test_promotion_requires_distinct_held_out_paths(
+    tmp_path: Path, reference_kind: str | None
+) -> None:
+    training_set = tmp_path / "training.extxyz"
+    validation_set = training_set if reference_kind is None else tmp_path / "validation.extxyz"
+    reference_set = {
+        None: None,
+        "training": training_set,
+        "validation": validation_set,
+    }[reference_kind]
+    cfg = SimpleNamespace(
+        trainer=SimpleNamespace(
+            validation_set=validation_set,
+            validation_reference_set=reference_set,
+        )
+    )
+
+    with pytest.raises(ValueError, match="held out|must differ"):
+        evaluate_promotion_candidate(
+            cfg,
+            "candidate.pt",
+            iteration=1,
+            training_set=training_set,
+        )

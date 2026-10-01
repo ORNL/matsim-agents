@@ -254,10 +254,13 @@ def retrain_uma(
     if proc.returncode != 0:
         raise RuntimeError(f"UMA fine-tune failed with exit {proc.returncode}; see {log_path}")
 
-    checkpoint = out_model_dir / "inference_ckpt.pt"
-    if not checkpoint.is_file():
+    from matsim_agents.active_learning.calculator import _resolve_finetuned_uma_checkpoint
+
+    checkpoint = _resolve_finetuned_uma_checkpoint(str(out_model_dir))
+    if checkpoint is None:
         raise RuntimeError(
-            f"UMA fine-tune exited successfully but did not produce {checkpoint}; see {log_path}"
+            "UMA fine-tune exited successfully but did not produce an inference_ckpt.pt "
+            f"under {out_model_dir}; see {log_path}"
         )
     return checkpoint
 

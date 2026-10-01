@@ -435,7 +435,7 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 family=args.mace_family,
                 model=args.mace_model,
                 device=args.mlp_device,
-                precision=args.precision or "float32",
+                precision=args.precision,
                 dispersion=args.mace_dispersion,
             ),
             enable_mc_dropout=False,

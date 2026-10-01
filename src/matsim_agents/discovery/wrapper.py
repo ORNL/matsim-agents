@@ -31,6 +31,7 @@ class CompositionExplorationResult(BaseModel):
     outcome_class: Literal[
         "generation_failure",
         "relaxation_non_convergence",
+        "ranking_failure",
         "usable_minimum",
     ] = "generation_failure"
 
@@ -171,6 +172,8 @@ def explore_composition(
 
     if not candidates:
         outcome_class = "generation_failure"
+    elif ranking_failure is not None and any(result.converged for result in relaxations):
+        outcome_class = "ranking_failure"
     elif report is None:
         outcome_class = "relaxation_non_convergence"
     else:

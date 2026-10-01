@@ -35,3 +35,36 @@ Path(a.output_dir).mkdir(parents=True, exist_ok=True)
 
     assert checkpoint == output / "inference_ckpt.pt"
     assert checkpoint.is_file()
+
+
+def test_retrain_uma_finds_nested_fairchem_checkpoint(tmp_path):
+    script = tmp_path / "train.py"
+    script.write_text(
+        """from pathlib import Path
+import argparse
+p = argparse.ArgumentParser()
+p.add_argument('--dataset')
+p.add_argument('--output-dir')
+p.add_argument('--base-model')
+p.add_argument('--task-name')
+p.add_argument('--epochs')
+a = p.parse_args()
+checkpoint = Path(a.output_dir) / 'run-1' / 'checkpoints' / 'final' / 'inference_ckpt.pt'
+checkpoint.parent.mkdir(parents=True, exist_ok=True)
+checkpoint.write_text('checkpoint')
+""",
+        encoding="utf-8",
+    )
+    dataset = tmp_path / "dataset.extxyz"
+    dataset.touch()
+    output = tmp_path / "model"
+
+    checkpoint = retrain_uma(
+        TrainerConfig(enabled=True, train_script=script, epochs_per_iter=2),
+        UMAConfig(model_name="uma-s-1p1"),
+        dataset,
+        iteration=0,
+        out_model_dir=output,
+    )
+
+    assert checkpoint == output / "run-1" / "checkpoints" / "final" / "inference_ckpt.pt"

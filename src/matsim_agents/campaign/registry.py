@@ -89,12 +89,15 @@ def structure_content_hash(path: str | Path) -> str:
 
     atoms = read(str(path))
     numbers = np.asarray(atoms.numbers, dtype=int)
-    scaled = np.mod(np.asarray(atoms.get_scaled_positions(wrap=True)), 1.0)
+    pbc = np.asarray(atoms.pbc, dtype=bool)
+    scaled = np.asarray(atoms.get_scaled_positions(wrap=False))
+    scaled[:, pbc] = np.mod(scaled[:, pbc], 1.0)
     metric = np.asarray(atoms.cell) @ np.asarray(atoms.cell).T
     origins = scaled if len(scaled) else np.zeros((1, 3))
     representations: list[str] = []
     for origin in origins:
-        shifted = np.mod(scaled - origin, 1.0)
+        shifted = scaled - origin
+        shifted[:, pbc] = np.mod(shifted[:, pbc], 1.0)
         sites = sorted(
             (int(number), *(round(float(value), 8) for value in position))
             for number, position in zip(numbers, shifted, strict=True)
@@ -102,7 +105,7 @@ def structure_content_hash(path: str | Path) -> str:
         payload = {
             "sites": sites,
             "metric": np.round(metric, decimals=8).tolist(),
-            "pbc": np.asarray(atoms.pbc, dtype=bool).tolist(),
+            "pbc": pbc.tolist(),
         }
         representations.append(json.dumps(payload, sort_keys=True, separators=(",", ":")))
     return hashlib.sha256(min(representations).encode("utf-8")).hexdigest()

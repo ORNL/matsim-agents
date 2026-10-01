@@ -7,7 +7,7 @@ import pytest
 
 from matsim_agents.active_learning.calculator import build_mace_calculator
 from matsim_agents.active_learning.config import MACEConfig
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 from matsim_agents.campaign.execution import _exploration_kwargs
 from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.discovery.wrapper import explore_composition
@@ -104,6 +104,29 @@ def test_relaxation_input_accepts_mace():
     assert args.mace_model == "polar-1-s"
 
 
+def test_direct_mace_relaxation_preserves_default_precision(tmp_path, monkeypatch):
+    captured = {}
+
+    def capture_config(config, **kwargs):
+        captured["precision"] = config.precision
+        raise RuntimeError("captured")
+
+    monkeypatch.setattr(
+        "matsim_agents.active_learning.calculator.build_mace_calculator", capture_config
+    )
+
+    with pytest.raises(RuntimeError, match="captured"):
+        _run(
+            RelaxStructureInput(
+                structure_path=str(tmp_path / "structure.extxyz"),
+                output_dir=str(tmp_path),
+                mlip_backend="mace",
+            )
+        )
+
+    assert captured["precision"] is None
+
+
 def test_exploration_wrapper_forwards_mace_selection(tmp_path, monkeypatch):
     seed = tmp_path / "seed.extxyz"
     seed.touch()
@@ -135,3 +158,33 @@ def test_exploration_wrapper_forwards_mace_selection(tmp_path, monkeypatch):
     assert captured["mace_family"] == "mace_omol"
     assert captured["mace_model"] == "extra_large"
     assert captured["mace_dispersion"] is True
+
+
+def test_exploration_reports_ranking_failure_after_convergence(
+    tmp_path, monkeypatch, fake_relaxation_result
+):
+    seed = tmp_path / "seed.extxyz"
+    seed.touch()
+    candidate = PhaseCandidate(
+        formula="Si",
+        source="prototype",
+        structure_path=str(seed),
+        prototype_id="A_cI2_229_a",
+    )
+    monkeypatch.setattr(
+        "matsim_agents.discovery.wrapper.generate_seeds", lambda *args, **kwargs: [candidate]
+    )
+    monkeypatch.setattr(
+        "matsim_agents.discovery.wrapper.score_stability",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("ranking failed")),
+    )
+
+    result = explore_composition(
+        "Si",
+        output_dir=str(tmp_path),
+        mlip_backend="mace",
+        relax_fn=lambda request: fake_relaxation_result,
+    )
+
+    assert result.outcome_class == "ranking_failure"
+    assert result.ranking_failure == "ranking failed"

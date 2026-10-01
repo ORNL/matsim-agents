@@ -214,3 +214,19 @@ def test_structure_hash_and_soap_are_translation_invariant(tmp_path):
     first_descriptor = soap_descriptor(first, species=["Nb", "O"])
     shifted_descriptor = soap_descriptor(shifted, species=["Nb", "O"])
     assert soap_novelty(first_descriptor, [shifted_descriptor]) < 1e-12
+
+
+def test_structure_hash_preserves_nonperiodic_separation(tmp_path):
+    first = tmp_path / "first.extxyz"
+    separated = tmp_path / "separated.extxyz"
+    atoms = Atoms(
+        ["O", "O"],
+        positions=[[0.0, 0.0, 1.0], [0.0, 0.0, 2.0]],
+        cell=[5.0, 5.0, 5.0],
+        pbc=[True, True, False],
+    )
+    write(first, atoms)
+    atoms.positions[1, 2] += 5.0
+    write(separated, atoms)
+
+    assert structure_content_hash(first) != structure_content_hash(separated)

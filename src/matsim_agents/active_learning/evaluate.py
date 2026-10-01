@@ -398,8 +398,22 @@ def evaluate_promotion_candidate(
     validation_set = cfg.trainer.validation_set
     if validation_set is None:
         raise ValueError("model promotion requires trainer.validation_set")
-    validation_frames = list(ase_read(validation_set, index=":"))
+    training_path = Path(training_set).resolve()
+    validation_path = Path(validation_set).resolve()
+    if validation_path == training_path:
+        raise ValueError("trainer.validation_set must be held out from the training set")
     reference_path = cfg.trainer.validation_reference_set
+    if reference_path is not None:
+        resolved_reference = Path(reference_path).resolve()
+        if resolved_reference == training_path:
+            raise ValueError(
+                "trainer.validation_reference_set must be held out from the training set"
+            )
+        if resolved_reference == validation_path:
+            raise ValueError(
+                "trainer.validation_reference_set must differ from trainer.validation_set"
+            )
+    validation_frames = list(ase_read(validation_set, index=":"))
     if reference_path is not None:
         reference_frames = list(ase_read(reference_path, index=":"))
     elif training_set.is_file():
