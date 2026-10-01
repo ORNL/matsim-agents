@@ -17,8 +17,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SOURCE_ROOT = ROOT / "src"
+if str(SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_ROOT))
 
 from matsim_agents.campaign.orchestrator import run_formula_discovery_stage  # noqa: E402
 from matsim_agents.campaign.state import CampaignState  # noqa: E402

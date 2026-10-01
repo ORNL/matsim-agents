@@ -1184,7 +1184,7 @@ Common options (all commands that touch HydraGNN):
 HydraGNN uses fused 16-head inference by default, which requires
 `--hydragnn-branch-mlp-checkpoint`. To pin one head for MLIP inference, pass a
 case-insensitive dataset name or its index, for example
-`--hydragnn-inference-head OMat24` or set `mlip.inference_head: OMat24` in an
+`--hydragnn-inference-head OMat24` or set `mlip.hydragnn.inference_head: OMat24` in an
 active-learning YAML. Pinned mode invokes only that decoder, does not require
 the branch MLP, and does not report branch-weight uncertainty.
 

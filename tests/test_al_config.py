@@ -18,6 +18,7 @@ from textwrap import dedent
 import pytest
 
 from matsim_agents.active_learning import ALConfig
+from matsim_agents.active_learning.loop import _dft_method_signature
 
 
 def _write(tmp_path: Path, name: str, body: str) -> Path:
@@ -287,6 +288,33 @@ def test_ensemble_strategy_requires_ensemble_paths(
 
     with pytest.raises(ValueError, match=r"ensemble"):
         ALConfig.from_yaml(cfg_path)
+
+
+def test_dft_method_signature_excludes_operational_settings(
+    tmp_path: Path,
+    required_paths: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
+    cfg_path = _write(tmp_path, "al.yaml", body)
+    for key, value in required_paths.items():
+        if key != "seed_path":
+            monkeypatch.setenv(key, value)
+    cfg = ALConfig.from_yaml(cfg_path)
+    operational_change = cfg.model_copy(deep=True)
+    assert operational_change.dft.vasp is not None
+    operational_change.dft.vasp.vasp_wrapper = tmp_path / "relocated-wrapper.sh"
+    operational_change.dft.vasp.timeout_sec = 99
+    operational_change.dft.vasp.ranks_per_node = 2
+    operational_change.dft.max_concurrent_jobs = 3
+
+    assert _dft_method_signature(operational_change) == _dft_method_signature(cfg)
+
+    scientific_change = cfg.model_copy(deep=True)
+    assert scientific_change.dft.vasp is not None
+    scientific_change.dft.vasp.extra_incar["ENCUT"] = "700"
+
+    assert _dft_method_signature(scientific_change) != _dft_method_signature(cfg)
 
 
 # --------------------------------------------------------------------------- #

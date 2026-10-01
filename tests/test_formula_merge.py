@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from matsim_agents.discovery.formula import FormulaGenerationPolicy, enumerate_formulas
-from matsim_agents.discovery.formula_merge import extract_llm_formula_proposals, merge_formulas
+from matsim_agents.discovery.formula_merge import (
+    LLMFormulaProposal,
+    extract_llm_formula_proposals,
+    merge_formulas,
+)
 from matsim_agents.workflows.debate import DebateVerdict
 
 
@@ -69,7 +73,8 @@ def test_merge_formulas_adds_llm_only_formula_outside_deterministic_grid():
     assert "Nb2O7Ta2" not in {c.reduced_formula for c in deterministic}
     candidate = merged["Nb2O7Ta2"]
     assert candidate.generation_source == "llm"
-    assert candidate.active
+    assert candidate.active is False
+    assert "coefficient" in candidate.rejection_reason
     assert candidate.llm_contributors == ["gemma"]
 
 
@@ -80,3 +85,18 @@ def test_merge_formulas_marks_charge_imbalanced_llm_proposal_inactive():
     merged = {c.reduced_formula: c for c in merge_formulas(deterministic, proposals, _policy())}
     assert merged["NbO"].active is False
     assert merged["NbO"].rejection_reason is not None
+
+
+def test_merge_formulas_enforces_non_charge_policy_constraints():
+    proposal = LLMFormulaProposal(
+        participant="qwen",
+        formula="NbO2Ta",
+        elements={"Nb": 1, "O": 2, "Ta": 1},
+    )
+    policy = _policy(maximum_species=2, include_mixed_oxides=False)
+
+    candidate = merge_formulas([], [proposal], policy)[0]
+
+    assert candidate.active is False
+    assert "species count" in candidate.rejection_reason
+    assert "mixed compositions" in candidate.rejection_reason

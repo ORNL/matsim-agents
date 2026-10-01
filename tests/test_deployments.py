@@ -28,6 +28,11 @@ def test_perlmutter_campaign_imports_current_checkout() -> None:
     assert source_path_export in content
     assert content.index(source_path_export) < content.index(".venv-uma/bin/activate")
 
+    standalone = root / "deployments/perlmutter/jobs/campaign_formula_discovery.py"
+    standalone_content = standalone.read_text(encoding="utf-8")
+    assert 'SOURCE_ROOT = ROOT / "src"' in standalone_content
+    assert "sys.path.insert(0, str(SOURCE_ROOT))" in standalone_content
+
 
 def test_perlmutter_multinode_server_extends_raylet_startup_wait() -> None:
     root = Path(__file__).resolve().parents[1]

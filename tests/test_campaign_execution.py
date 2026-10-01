@@ -114,7 +114,7 @@ def test_unary_reference_search_relaxes_and_selects_each_model_endpoint(tmp_path
     phases = []
     for phase_id, crystal, correction in (
         ("Nb-bcc", "bcc", 0.0),
-        ("Nb-bcc-copy", "bcc", 0.0),
+        ("Nb-bcc-copy", "bcc", -1.0),
         ("Nb-fcc", "fcc", -20.0),
     ):
         path = tmp_path / f"{phase_id}.extxyz"
@@ -151,8 +151,8 @@ def test_unary_reference_search_relaxes_and_selects_each_model_endpoint(tmp_path
         for phase in result.phases
         if phase.converged
     )
-    duplicate = next(phase for phase in result.phases if phase.phase_id == "Nb-bcc-copy")
-    assert duplicate.duplicate_of == "Nb-bcc"
+    duplicate = next(phase for phase in result.phases if phase.phase_id == "Nb-bcc")
+    assert duplicate.duplicate_of == "Nb-bcc-copy"
     assert result.missing_elements == ["O"]
     assert result.provisional is True
     assert (tmp_path / "relaxed" / "unary_reference_search.json").is_file()
@@ -166,6 +166,50 @@ def test_unary_reference_search_relaxes_and_selects_each_model_endpoint(tmp_path
         relax_cell=False,
     )
     assert cached == result
+
+
+def test_surrogate_hull_stops_when_target_element_is_absent_from_manifest(tmp_path):
+    from ase.build import bulk
+    from ase.calculators.calculator import Calculator, all_changes
+
+    class ElementCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            self.results = {
+                "energy": -float(len(atoms)),
+                "forces": np.zeros((len(atoms), 3)),
+            }
+
+    niobium = tmp_path / "Nb.extxyz"
+    write(niobium, bulk("Nb", "bcc", a=3.0))
+    manifest = tmp_path / "references.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "phases": {
+                    "Nb-bcc": {
+                        "formula": "Nb",
+                        "path": str(niobium),
+                        "relax_cell": False,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = evaluate_surrogate_hull(
+        manifest,
+        "NbO",
+        [{"structure_path": str(tmp_path / "must-not-be-read.extxyz"), "energy_eV": -2.0}],
+        ElementCalculator(),
+        model_identifier="test:missing-target-element",
+        unary_max_steps=2,
+    )
+
+    assert report["missing_elemental_references"] == ["O"]
 
 
 def test_surrogate_hull_uses_relaxed_model_specific_unary_endpoints(tmp_path):
@@ -187,12 +231,22 @@ def test_surrogate_hull_uses_relaxed_model_specific_unary_endpoints(tmp_path):
     nb_fcc = tmp_path / "Nb-fcc.extxyz"
     ta_bcc = tmp_path / "Ta-bcc.extxyz"
     oxygen = tmp_path / "O2.extxyz"
+    target = tmp_path / "target.extxyz"
     write(nb_bcc, bulk("Nb", "bcc", a=3.0))
     write(nb_fcc, bulk("Nb", "fcc", a=3.0))
     write(ta_bcc, bulk("Ta", "bcc", a=3.0))
     write(
         oxygen,
         Atoms("O2", positions=[[0, 0, 0], [1.2, 0, 0]], cell=[12.0] * 3, pbc=True),
+    )
+    write(
+        target,
+        Atoms(
+            "Nb2O2",
+            positions=[[0, 0, 0], [2, 0, 0], [0, 2, 0], [2, 2, 0]],
+            cell=[8.0] * 3,
+            pbc=True,
+        ),
     )
     manifest = tmp_path / "references.json"
     manifest.write_text(
@@ -224,7 +278,7 @@ def test_surrogate_hull_uses_relaxed_model_specific_unary_endpoints(tmp_path):
         ),
         encoding="utf-8",
     )
-    labels = [{"structure_path": "target.extxyz", "energy_eV": -3.0}]
+    labels = [{"structure_path": str(target), "energy_eV": -6.0}]
 
     report = evaluate_surrogate_hull(
         manifest,
@@ -254,6 +308,61 @@ def test_surrogate_hull_uses_relaxed_model_specific_unary_endpoints(tmp_path):
     assert report["undercovered_unary_elements"] == ["O"]
     assert report["provisional"] is True
     assert labels[0]["surrogate_formation_energy_eV_per_atom"] == pytest.approx(0.0)
+    assert labels[0]["surrogate_energy_above_hull_eV_per_atom"] == pytest.approx(0.0)
+
+
+def test_surrogate_hull_scales_compound_reference_from_loaded_structure(tmp_path):
+    from ase.build import bulk
+    from ase.calculators.calculator import Calculator, all_changes
+
+    class ElementCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            energy = sum(-2.0 if symbol == "Nb" else -1.0 for symbol in atoms.symbols)
+            self.results = {"energy": energy, "forces": np.zeros((len(atoms), 3))}
+
+    nb = tmp_path / "Nb.extxyz"
+    oxygen = tmp_path / "O2.extxyz"
+    compound = tmp_path / "Nb2O2.extxyz"
+    target = tmp_path / "NbO.extxyz"
+    write(nb, bulk("Nb", "bcc", a=3.0))
+    write(oxygen, Atoms("O2", positions=[[0, 0, 0], [1.2, 0, 0]], cell=[12.0] * 3, pbc=True))
+    write(
+        compound,
+        Atoms(
+            "Nb2O2",
+            positions=[[0, 0, 0], [2, 0, 0], [0, 2, 0], [2, 2, 0]],
+            cell=[8.0] * 3,
+            pbc=True,
+        ),
+    )
+    write(target, Atoms("NbO", positions=[[0, 0, 0], [2, 0, 0]], cell=[8.0] * 3, pbc=True))
+    manifest = tmp_path / "references.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "phases": {
+                    "Nb": {"formula": "Nb", "path": str(nb), "relax_cell": False},
+                    "O2": {"formula": "O2", "path": str(oxygen), "relax_cell": False},
+                    "NbO-reference": {"formula": "NbO", "path": str(compound)},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    labels = [{"structure_path": str(target), "energy_eV": -3.0}]
+
+    evaluate_surrogate_hull(
+        manifest,
+        "NbO",
+        labels,
+        ElementCalculator(),
+        model_identifier="test:compound-scaling",
+        unary_max_steps=2,
+    )
+
     assert labels[0]["surrogate_energy_above_hull_eV_per_atom"] == pytest.approx(0.0)
 
 

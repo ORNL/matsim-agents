@@ -114,7 +114,7 @@ def evaluate_surrogate_hull(
     coverage["minimum_unique_unary_polymorphs"] = minimum_unique_unary
     coverage["undercovered_unary_elements"] = undercovered
     coverage["provisional"] = bool(coverage["provisional"] or undercovered)
-    if unary_search.missing_elements:
+    if coverage["missing_elemental_references"]:
         return coverage
 
     entries = []
@@ -128,10 +128,17 @@ def evaluate_surrogate_hull(
         entries.append(ComputedEntry(composition, corrected_total, entry_id=phase.phase_id))
 
     for spec in specs:
-        composition = Composition(str(spec["formula"]))
-        if len(composition.elements) == 1:
+        declared_composition = Composition(str(spec["formula"]))
+        if len(declared_composition.elements) == 1:
             continue
         atoms = ase_read(str(spec["path"]))
+        composition = Composition(atoms.get_chemical_formula())
+        if composition.reduced_composition != declared_composition.reduced_composition:
+            raise ValueError(
+                f"Reference phase {spec['phase_id']} structure composition "
+                f"{composition.reduced_formula} does not match declared formula "
+                f"{declared_composition.reduced_formula}"
+            )
         atoms.calc = calculator
         correction = float(spec.get("energy_correction_eV_per_atom", 0.0))
         total_energy = float(atoms.get_potential_energy()) + correction * len(atoms)
@@ -145,8 +152,15 @@ def evaluate_surrogate_hull(
 
     targets = []
     for index, label in enumerate(labels):
+        atoms = ase_read(str(label["structure_path"]))
+        composition = Composition(atoms.get_chemical_formula())
+        if composition.reduced_composition != target_composition.reduced_composition:
+            raise ValueError(
+                f"Target structure composition {composition.reduced_formula} does not match "
+                f"target formula {target_composition.reduced_formula}"
+            )
         entry = ComputedEntry(
-            target_composition,
+            composition,
             float(label["energy_eV"]),
             entry_id=f"target-{index}",
         )

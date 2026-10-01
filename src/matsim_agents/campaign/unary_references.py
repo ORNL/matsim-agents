@@ -178,7 +178,15 @@ def relax_unary_references(
     matcher = StructureMatcher(primitive_cell=True, attempt_supercell=True)
     for element in sorted(target_elements):
         representatives: list[tuple[str, Any]] = []
-        for record in sorted(records, key=lambda item: item.phase_id):
+        for record in sorted(
+            records,
+            key=lambda item: (
+                float(item.corrected_energy_per_atom_eV)
+                if item.corrected_energy_per_atom_eV is not None
+                else float("inf"),
+                item.phase_id,
+            ),
+        ):
             if (
                 record.element != element
                 or not record.converged

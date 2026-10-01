@@ -9,6 +9,8 @@ from matsim_agents.active_learning.calculator import build_mace_calculator
 from matsim_agents.active_learning.config import MACEConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
 from matsim_agents.campaign.execution import _exploration_kwargs
+from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.discovery.wrapper import explore_composition
 
 
 @pytest.fixture
@@ -100,3 +102,36 @@ def test_relaxation_input_accepts_mace():
 
     assert args.mace_family == "mace_polar"
     assert args.mace_model == "polar-1-s"
+
+
+def test_exploration_wrapper_forwards_mace_selection(tmp_path, monkeypatch):
+    seed = tmp_path / "seed.extxyz"
+    seed.touch()
+    candidate = PhaseCandidate(
+        formula="Nb",
+        source="prototype",
+        structure_path=str(seed),
+        prototype_id="A_cI2_229_a",
+    )
+    monkeypatch.setattr(
+        "matsim_agents.discovery.wrapper.generate_seeds", lambda *args, **kwargs: [candidate]
+    )
+    captured = {}
+
+    def relax(request):
+        captured.update(request.model_dump())
+        raise RuntimeError("stop after capturing request")
+
+    explore_composition(
+        "Nb",
+        output_dir=str(tmp_path),
+        mlip_backend="mace",
+        mace_family="mace_omol",
+        mace_model="extra_large",
+        mace_dispersion=True,
+        relax_fn=relax,
+    )
+
+    assert captured["mace_family"] == "mace_omol"
+    assert captured["mace_model"] == "extra_large"
+    assert captured["mace_dispersion"] is True

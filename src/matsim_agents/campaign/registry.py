@@ -143,8 +143,21 @@ def soap_novelty(descriptor: np.ndarray, references: list[np.ndarray]) -> float:
     return float(np.clip(min(distances) / 2.0, 0.0, 1.0))
 
 
-def _candidate_id(candidate: PhaseCandidate, index: int) -> str:
-    return candidate.candidate_id or f"{candidate.formula}-{candidate.source[0].upper()}{index:04d}"
+def _candidate_id(
+    registry: CandidateRegistry,
+    candidate: PhaseCandidate,
+    index: int,
+    iteration: int,
+) -> tuple[str, str]:
+    base = candidate.candidate_id or f"{candidate.formula}-{candidate.source[0].upper()}{index:04d}"
+    if base not in registry.candidates:
+        return base, base
+    candidate_id = f"{base}-iter{iteration:04d}"
+    suffix = 2
+    while candidate_id in registry.candidates:
+        candidate_id = f"{base}-iter{iteration:04d}-{suffix}"
+        suffix += 1
+    return candidate_id, base
 
 
 def _assign_relaxed_families(registry: CandidateRegistry, candidate_ids: list[str]) -> None:
@@ -185,7 +198,7 @@ def ingest_exploration_result(
     relaxation_by_path = {item.structure_path: item for item in exploration.relaxations}
     candidate_ids: list[str] = []
     for index, candidate in enumerate(exploration.phase_candidates):
-        candidate_id = _candidate_id(candidate, index)
+        candidate_id, source_candidate_id = _candidate_id(registry, candidate, index, iteration)
         candidate_ids.append(candidate_id)
         relaxation = relaxation_by_path.get(candidate.structure_path)
         optimized_path = relaxation.optimized_structure_path if relaxation is not None else None
@@ -223,7 +236,7 @@ def ingest_exploration_result(
             ),
             residual_force_eV_per_A=(relaxation.final_max_force_eV_per_A if relaxation else None),
             optimization_steps=(relaxation.num_steps if relaxation else None),
-            uncertainty=(uncertainty_by_candidate or {}).get(candidate_id),
+            uncertainty=(uncertainty_by_candidate or {}).get(source_candidate_id),
             failure_reason=None if relaxation is not None else "no relaxation result",
         )
     _assign_relaxed_families(registry, candidate_ids)

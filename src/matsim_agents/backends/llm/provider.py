@@ -44,7 +44,7 @@ class ChatVLLM(BaseChatModel):
     base_url: str = "http://localhost:8000/v1"
     api_key: str = "EMPTY"
     temperature: float = 0.0
-    max_completion_tokens: int = 8192
+    max_completion_tokens: int = 4096
     request_timeout: float = 3600.0
 
     @property
@@ -169,7 +169,7 @@ def get_chat_model(
         key = api_key or os.environ.get("MATSIM_VLLM_API_KEY", "EMPTY")
         max_tokens = kwargs.pop(
             "max_completion_tokens",
-            int(os.environ.get("MATSIM_VLLM_MAX_TOKENS", 8192)),
+            int(os.environ.get("MATSIM_VLLM_MAX_TOKENS", 4096)),
         )
         request_timeout = kwargs.pop(
             "request_timeout",

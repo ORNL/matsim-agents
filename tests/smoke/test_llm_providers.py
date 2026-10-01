@@ -47,7 +47,7 @@ class TestGetChatModelInstantiation:
         assert isinstance(result, ChatVLLM)
         assert result.model == "Qwen/Qwen2.5-72B-Instruct"
         assert result.base_url == "http://localhost:8000/v1"
-        assert result.max_completion_tokens == 8192
+        assert result.max_completion_tokens == 4096
         assert result.request_timeout == 3600
 
     def test_vllm_completion_tokens_from_environment(self, monkeypatch):

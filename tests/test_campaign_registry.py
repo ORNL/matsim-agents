@@ -114,6 +114,45 @@ def test_registry_retains_lineage_when_seeds_collapse_to_one_family(tmp_path):
     assert set(scores) == {"NbO2-P0000", "NbO2-R0000"}
 
 
+def test_registry_namespaces_retried_candidate_ids(tmp_path):
+    seed = tmp_path / "seed.vasp"
+    relaxed = tmp_path / "relaxed.vasp"
+    _write_structure(seed, displacement=0.02)
+    _write_structure(relaxed)
+    composition = parse_composition("NbO2")
+    assert composition is not None
+    candidate = PhaseCandidate(
+        formula="NbO2",
+        candidate_id="NbO2-P0000",
+        structure_path=str(seed),
+        source="prototype",
+    )
+    relaxation = RelaxationResult(
+        structure_path=str(seed),
+        optimized_structure_path=str(relaxed),
+        trajectory_path="",
+        log_csv_path="",
+        final_energy_eV=-21.0,
+        final_max_force_eV_per_A=0.01,
+        num_steps=5,
+        converged=True,
+    )
+    exploration = CompositionExplorationResult(
+        composition=composition,
+        phase_candidates=[candidate],
+        relaxations=[relaxation],
+    )
+    registry = CandidateRegistry()
+
+    first = ingest_exploration_result(registry, exploration, iteration=1)
+    second = ingest_exploration_result(registry, exploration, iteration=2)
+
+    assert first == ["NbO2-P0000"]
+    assert second == ["NbO2-P0000-iter0002"]
+    assert set(registry.candidates) == {"NbO2-P0000", "NbO2-P0000-iter0002"}
+    assert set(registry.evaluations) == set(registry.candidates)
+
+
 def test_structure_hash_and_soap_are_translation_invariant(tmp_path):
     first = tmp_path / "first.vasp"
     shifted = tmp_path / "shifted.vasp"

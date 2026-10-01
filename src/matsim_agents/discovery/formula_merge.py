@@ -21,6 +21,27 @@ from matsim_agents.discovery.formula import (
 from matsim_agents.workflows.debate import DebateVerdict
 
 
+def _policy_rejection_reasons(
+    elements: dict[str, int], policy: FormulaGenerationPolicy
+) -> list[str]:
+    species_count = len(elements)
+    reasons = []
+    if not policy.minimum_species <= species_count <= policy.maximum_species:
+        reasons.append("species count is outside formula policy bounds")
+    if species_count == 2 and not policy.include_binary_endmembers:
+        reasons.append("binary endmembers are disabled")
+    if species_count >= 3 and not policy.include_mixed_oxides:
+        reasons.append("mixed compositions are disabled")
+    if any(
+        coefficient < policy.minimum_coefficient or coefficient > policy.maximum_coefficient
+        for coefficient in elements.values()
+    ):
+        reasons.append("coefficient is outside formula policy bounds")
+    if sum(elements.values()) > policy.maximum_atoms_in_reduced_formula:
+        reasons.append("reduced formula exceeds atom-count limit")
+    return reasons
+
+
 class LLMFormulaProposal(BaseModel):
     """One formula mention attributed to one debate participant."""
 
@@ -73,9 +94,13 @@ def merge_formulas(
             continue
         # LLM proposed a formula outside the deterministic grid (e.g. a
         # coefficient beyond the configured range) -- validate it the same way.
+        rejection_reasons = _policy_rejection_reasons(proposal.elements, policy)
         charge_ok = True
         if policy.require_charge_balance:
             charge_ok = _charge_balance_possible(proposal.elements, policy.oxidation_states)
+            if not charge_ok:
+                rejection_reasons.append("fails charge balance for given oxidation states")
+        active = not rejection_reasons
         by_formula[proposal.formula] = FormulaCandidate(
             formula_id=f"llm-{proposal.formula}",
             reduced_formula=proposal.formula,
@@ -86,12 +111,10 @@ def merge_formulas(
             charge_balanced=charge_ok,
             generation_source="llm",
             llm_contributors=[proposal.participant],
-            active=charge_ok,
+            active=active,
             iteration_created=iteration,
-            acceptance_reason="proposed by LLM panel" if charge_ok else None,
-            rejection_reason=(
-                None if charge_ok else "fails charge balance for given oxidation states"
-            ),
+            acceptance_reason="proposed by LLM panel" if active else None,
+            rejection_reason="; ".join(rejection_reasons) or None,
         )
     return sorted(
         by_formula.values(),
