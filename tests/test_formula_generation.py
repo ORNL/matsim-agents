@@ -55,6 +55,16 @@ def test_enumerate_formulas_respects_atom_and_coefficient_limits():
         assert sum(candidate.elements.values()) <= 4
 
 
+def test_enumerate_formulas_reapplies_coefficient_bounds_after_reduction():
+    policy = _nb_ta_o_policy(
+        minimum_coefficient=2,
+        maximum_coefficient=2,
+        require_charge_balance=False,
+    )
+
+    assert enumerate_formulas(policy) == []
+
+
 def test_enumerate_formulas_honors_species_count_toggles():
     binary_only = _nb_ta_o_policy(include_mixed_oxides=False)
     assert all(len(c.elements) == 2 for c in enumerate_formulas(binary_only))

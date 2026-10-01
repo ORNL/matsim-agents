@@ -247,10 +247,16 @@ def ingest_exploration_result(
         if registry.candidates[candidate_id].optimized_structure_path is not None
     ]
     if relaxed and novelty_reference_paths is not None:
-        species = sorted(exploration.composition.elements)
-        references = [soap_descriptor(path, species=species) for path in novelty_reference_paths]
+        from ase.io import read
+
+        reference_paths = list(novelty_reference_paths)
+        species = set(exploration.composition.elements)
+        for path in reference_paths:
+            species.update(read(str(path)).get_chemical_symbols())
+        soap_species = sorted(species)
+        references = [soap_descriptor(path, species=soap_species) for path in reference_paths]
         for record in relaxed:
-            descriptor = soap_descriptor(record.optimized_structure_path, species=species)
+            descriptor = soap_descriptor(record.optimized_structure_path, species=soap_species)
             novelty = soap_novelty(descriptor, references)
             evaluation = registry.evaluations[record.candidate_id]
             evaluation.structural_novelty = novelty

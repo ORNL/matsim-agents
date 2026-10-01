@@ -805,6 +805,7 @@ def _generate_reference_energies(
         )
         relaxed = _converged_dft_relaxation(source, result)
         from ase.io import read
+        from pymatgen.core import Composition as PymatgenComposition
 
         atoms = read(relaxed.optimized_structure_path)
         energy_per_atom = relaxed.final_energy_eV / len(atoms)
@@ -827,18 +828,26 @@ def _generate_reference_energies(
                 corrections={"energy_correction_eV_per_atom": spec.energy_correction_eV_per_atom},
             )
             continue
-        missing = set(composition.elements) - set(references.elemental_energies_eV_per_atom)
+        cell_composition = PymatgenComposition(atoms.get_chemical_formula())
+        declared_composition = PymatgenComposition(spec.formula)
+        if cell_composition.reduced_composition != declared_composition.reduced_composition:
+            raise ValueError(
+                f"relaxed reference composition {cell_composition.formula} does not match "
+                f"declared formula {spec.formula}"
+            )
+        cell_amounts = cell_composition.get_el_amt_dict()
+        missing = set(cell_amounts) - set(references.elemental_energies_eV_per_atom)
         if missing:
             raise ValueError(
                 f"reference structures lack elemental references for {sorted(missing)}"
             )
         elemental_total = sum(
             amount * references.elemental_energies_eV_per_atom[element]
-            for element, amount in composition.elements.items()
+            for element, amount in cell_amounts.items()
         )
-        formation_energy = (
-            relaxed.final_energy_eV - elemental_total
-        ) / composition.total_atoms + spec.energy_correction_eV_per_atom
+        formation_energy = (relaxed.final_energy_eV - elemental_total) / len(
+            atoms
+        ) + spec.energy_correction_eV_per_atom
         references.phase_entries.append(
             ReferencePhaseEntry(
                 phase_id=spec.phase_id,

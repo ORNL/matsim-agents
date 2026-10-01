@@ -13,6 +13,7 @@ from matsim_agents.campaign.execution import (
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,
+    ReferenceStructureSpec,
     _cross_model_scores,
     _perturbation_robustness,
     _score_relaxed_candidate_uncertainty,
@@ -895,6 +896,7 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
         "Nb": ["Nb"],
         "O2": ["O", "O"],
         "NbO2": ["Nb", "O", "O"],
+        "Nb2O4": ["Nb", "Nb", "O", "O", "O", "O"],
     }.items():
         path = tmp_path / f"{formula}.extxyz"
         write(path, Atoms(symbols, positions=[[index, 0, 0] for index in range(len(symbols))]))
@@ -926,7 +928,7 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
             active_learning_result={"n_dft_calculations": 1, "node_hours": 0.0},
         )
 
-    energies = {"Nb": -10.0, "O2": -8.0, "NbO2": -20.0}
+    energies = {"Nb": -10.0, "O2": -8.0, "NbO2": -20.0, "Nb2O4": -42.0}
     observed_settings = []
 
     def relaxation_runner(cfg):
@@ -974,6 +976,13 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
     refinement = CampaignDFTRefinementConfig(
         method_signature="qe-test-v1",
         reference_structures={"Nb": structures["Nb"], "O2": structures["O2"]},
+        reference_phases=[
+            ReferenceStructureSpec(
+                phase_id="NbO2-reference",
+                formula="NbO2",
+                structure_path=structures["Nb2O4"],
+            )
+        ],
         reference_relax_cell={"O2": False},
         reference_settings={
             "O2": {
@@ -1013,9 +1022,10 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
     assert report.ranking_mode == "convex_hull_ranking"
     assert report.reference_set_id == refinement.reference_energies.identifier
     assert report.ground_state.formation_energy_eV_per_atom == pytest.approx(-2 / 3)
-    assert result.active_learning_result["n_dft_calculations"] == 4
-    assert result.active_learning_result["dft_refinement"]["reference_calculations"] == 2
-    assert sum(settings["kpts"] == (4, 4, 4) for settings in observed_settings) == 2
+    assert refinement.reference_energies.phase_entries[0].formation_energy_eV_per_atom == -1.0
+    assert result.active_learning_result["n_dft_calculations"] == 5
+    assert result.active_learning_result["dft_refinement"]["reference_calculations"] == 3
+    assert sum(settings["kpts"] == (4, 4, 4) for settings in observed_settings) == 3
 
     resumed = run_formula_with_active_learning(
         "NbO2",
@@ -1029,7 +1039,7 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
         relaxation_runner=relaxation_runner,
     )
     assert resumed.active_learning_result["dft_refinement"]["reference_calculations"] == 0
-    assert len(observed_settings) == 4
+    assert len(observed_settings) == 5
 
 
 def test_formula_execution_rejects_missing_pseudopotential_mapping(tmp_path):

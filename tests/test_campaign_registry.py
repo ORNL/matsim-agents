@@ -114,6 +114,51 @@ def test_registry_retains_lineage_when_seeds_collapse_to_one_family(tmp_path):
     assert set(scores) == {"NbO2-P0000", "NbO2-R0000"}
 
 
+def test_registry_soap_species_include_cross_composition_references(tmp_path):
+    current = tmp_path / "nb-o.vasp"
+    reference = tmp_path / "ta-o.vasp"
+    _write_structure(current)
+    write(
+        reference,
+        Atoms(
+            ["Ta", "O"],
+            scaled_positions=[[0, 0, 0], [0.5, 0.5, 0.5]],
+            cell=[5.0, 5.0, 5.0],
+            pbc=True,
+        ),
+        format="vasp",
+    )
+    composition = parse_composition("NbO2")
+    assert composition is not None
+    candidate = PhaseCandidate(formula="NbO2", structure_path=str(current))
+    exploration = CompositionExplorationResult(
+        composition=composition,
+        phase_candidates=[candidate],
+        relaxations=[
+            RelaxationResult(
+                structure_path=str(current),
+                optimized_structure_path=str(current),
+                trajectory_path="",
+                log_csv_path="",
+                final_energy_eV=-1.0,
+                final_max_force_eV_per_A=0.01,
+                num_steps=1,
+                converged=True,
+            )
+        ],
+    )
+
+    registry = CandidateRegistry()
+    candidate_ids = ingest_exploration_result(
+        registry,
+        exploration,
+        iteration=1,
+        novelty_reference_paths=[str(reference)],
+    )
+
+    assert registry.evaluations[candidate_ids[0]].structural_novelty is not None
+
+
 def test_registry_namespaces_retried_candidate_ids(tmp_path):
     seed = tmp_path / "seed.vasp"
     relaxed = tmp_path / "relaxed.vasp"

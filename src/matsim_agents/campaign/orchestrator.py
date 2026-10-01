@@ -112,7 +112,7 @@ def _eligible_formulas(
         record = campaign.formula_runs.get(candidate.reduced_formula)
         if (
             record is None
-            or record.status == WorkflowStatus.PLANNED
+            or record.status in {WorkflowStatus.PLANNED, WorkflowStatus.RUNNING}
             or (retry_failed and record.status == WorkflowStatus.FAILED)
             or (
                 retry_inconclusive

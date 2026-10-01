@@ -130,6 +130,31 @@ def test_campaign_resume_does_not_repeat_completed_formula(tmp_path):
     assert second.campaign.formula_runs["NbO2"].attempts == 1
 
 
+def test_campaign_resume_retries_interrupted_running_formula(tmp_path):
+    campaign = _campaign()
+    campaign.formula_runs["NbO2"] = FormulaRunRecord(
+        formula="NbO2",
+        status=WorkflowStatus.RUNNING,
+        attempts=1,
+    )
+    calls: list[str] = []
+
+    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+        calls.append(formula)
+        return _result(formula, output_dir)
+
+    result = run_campaign(
+        campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(max_iterations=1),
+        resume=False,
+    )
+
+    assert calls == ["NbO2"]
+    assert result.campaign.formula_runs["NbO2"].attempts == 2
+
+
 def test_campaign_retry_inconclusive_skips_usable_completed_formula(tmp_path):
     campaign = _campaign()
     campaign.formula_runs["NbO2"] = FormulaRunRecord(

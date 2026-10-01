@@ -97,6 +97,12 @@ def enumerate_formulas(policy: FormulaGenerationPolicy) -> list[FormulaCandidate
             for coeffs in product(coeff_range, repeat=n_species):
                 raw = dict(zip(combo, coeffs, strict=True))
                 reduced = _reduce(raw)
+                if any(
+                    coefficient < policy.minimum_coefficient
+                    or coefficient > policy.maximum_coefficient
+                    for coefficient in reduced.values()
+                ):
+                    continue
                 if sum(reduced.values()) > policy.maximum_atoms_in_reduced_formula:
                     continue
                 formula = "".join(
