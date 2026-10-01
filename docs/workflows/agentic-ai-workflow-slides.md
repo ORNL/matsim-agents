@@ -11,20 +11,23 @@ flowchart LR
     R1 --> R2[executor]
     R2 --> R3[uq_gate]
     R3 -->|high confidence| R4[analyst]
-    R3 -->|low confidence + policy| AL[active learning loop]
-    AL --> R4
+    R3 -->|low confidence + policy| RAL[active learning loop]
+    RAL --> R4
 
     U --> S0[supervisor-run]
     S0 --> S1[prepare]
     S1 --> S2[explore]
     S2 --> S3[evaluate_uq]
-    S3 -->|low confidence + policy| AL
+    S3 -->|low confidence + policy| SAL[active learning loop]
+    SAL --> S4[summarize]
     S3 -->|otherwise| S4[summarize]
 
     U --> C0[chat]
     C0 --> C1[composition detection or /relax]
     C1 --> C2[uq policy]
-    C2 -->|low confidence + policy| AL
+    C2 -->|low confidence + policy| CAL[active learning loop]
+    CAL --> C3[chat response]
+    C2 -->|otherwise| C3
 ```
 
 ## Slide Notes

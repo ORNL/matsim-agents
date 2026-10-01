@@ -21,6 +21,48 @@ discovery and disjoint DFT node grouping are owned by `execution.allocation`.
 See [Scientific workflow contracts](scientific-workflows.md) for behavior and
 [Run artifacts and restarts](run-artifacts-and-restarts.md) for persistence.
 
+## Orchestration topology
+
+The CLI exposes three user-facing orchestration paths. Each can hand
+low-confidence work to the same active-learning implementation when its UQ
+policy permits it. The full diagram is maintained in
+[Agentic AI Workflow Diagram](workflows/agentic-ai-workflow.md), with a compact
+variant in [Agentic AI Workflow Slides](workflows/agentic-ai-workflow-slides.md).
+
+```mermaid
+flowchart TD
+		U[User objective or chat dialogue]
+		U --> R[run graph]
+		U --> C[chat REPL]
+		U --> S[supervisor graph]
+
+		subgraph RPATH[Core run path]
+			R --> RP[planner]
+			RP --> RE[executor]
+			RE --> RU[uq_gate]
+			RU -->|high confidence| RA[analyst]
+			RU -->|low confidence + policy enabled| RAL[active learning loop]
+			RAL --> RA
+		end
+
+		subgraph SPATH[Supervisor path]
+			S --> SP[prepare]
+			SP --> SX[explore]
+			SX --> SU[evaluate_uq]
+			SU -->|low confidence + policy enabled| SAL[active learning loop]
+			SAL --> SS[summarize]
+			SU -->|otherwise| SS
+		end
+
+		subgraph CPATH[Chat path]
+			C --> CC[composition detection / optional relax]
+			CC --> CU[uq policy]
+			CU -->|low confidence + policy enabled| CAL[active learning loop]
+			CAL --> CR[chat response]
+			CU -->|otherwise| CR
+		end
+```
+
 Machine-specific setup and job scripts live in `deployments/`; research-only
 paper and Codabench artifacts live in `research/`.
 

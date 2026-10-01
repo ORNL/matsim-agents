@@ -5,14 +5,14 @@
 `matsim-agents` orchestrates large language models, machine-learned
 interatomic potentials, and ASE-based atomistic workflows into a single
 agentic loop. The user states a research objective in natural language;
-agents plan, run HydraGNN-driven simulations, score chemical and
+agents plan, run MLIP-driven simulations, score chemical and
 dynamical stability, and report the findings — with optional human
 review at every gate.
 
-The framework is **backend-agnostic**: HydraGNN is the default MLFF
-backend, but the relaxation tool, crystal-phase generator, and stability
-scorer are written so other potentials (MACE, NequIP, Orb, ...) can be
-plugged in via the same interfaces.
+The framework is **backend-agnostic**: HydraGNN, UMA, and the open MACE
+foundation-model families are selectable MLIP backends. The relaxation tool,
+crystal-phase generator, and stability scorer use shared interfaces so further
+potentials can be added without changing orchestration logic.
 
 ---
 
@@ -68,12 +68,13 @@ Reusable standalone workflow graphics:
                 ┌───────────────────────▼──────────────────────┐
                 │              Discovery wrapper               │
                 │   composition parsing → phase enumeration    │
-                │   → relaxation (HydraGNN+ASE) → stability    │
+                │   → relaxation (selected MLIP+ASE) → stability│
                 └───────────────────────┬──────────────────────┘
                                         │
                 ┌───────────────────────▼──────────────────────┐
                 │             Atomistic backends               │
-                │   HydraGNN (fused MLFF + BranchWeightMLP)    │
+                │   HydraGNN (fused or selected decoder head)  │
+                │   UMA + open MACE foundation-model families │
                 │   ASE (FIRE / BFGS / BFGSLineSearch)         │
                 │   pymatgen (AFLOW prototype encyclopedia)    │
                 │   pyXtal (random symmetry-aware search)      │
@@ -88,23 +89,29 @@ flowchart TD
     U --> S[supervisor graph]
 
     subgraph RPATH[Core run path]
-      RP[planner] --> RE[executor]
+      R --> RP[planner]
+      RP --> RE[executor]
       RE --> RU[uq_gate]
       RU -->|high confidence| RA[analyst]
-      RU -->|low confidence + policy enabled| AL[active learning loop]
-      AL --> RA
+      RU -->|low confidence + policy enabled| RAL[active learning loop]
+      RAL --> RA
     end
 
     subgraph SPATH[Supervisor path]
-      SP[prepare] --> SX[explore]
+      S --> SP[prepare]
+      SP --> SX[explore]
       SX --> SU[evaluate_uq]
-      SU -->|low confidence + policy enabled| AL
+      SU -->|low confidence + policy enabled| SAL[active learning loop]
+      SAL --> SS[summarize]
       SU -->|otherwise| SS[summarize]
     end
 
     subgraph CPATH[Chat path]
-      CC[composition detection / optional relax] --> CU[uq policy]
-      CU -->|low confidence + policy enabled| AL
+      C --> CC[composition detection / optional relax]
+      CC --> CU[uq policy]
+      CU -->|low confidence + policy enabled| CAL[active learning loop]
+      CAL --> CR[chat response]
+      CU -->|otherwise| CR
     end
 ```
 
@@ -121,9 +128,14 @@ flowchart TD
 - **Discovery-to-active-learning escalation policy**: when branch-weight UQ indicates low confidence, discovery can hand off to AL automatically from the same run.
 - **Structured handoff audit artifacts**: JSONL records of UQ metrics, thresholds, trigger rationale, and action (`not_triggered`, `triggered_dry_run`, `triggered_run`).
 - **Selectable surrogate backend for geometry relaxation**:
-  - **HydraGNN** fused MLFF + branch-weight MLP stack (default).
+  - **HydraGNN** fused MLFF + branch-weight MLP stack (default), or one
+    explicitly selected decoder head for dataset-specific inference.
   - **UMA** (Universal Models for Atoms) via fairchem (`--mlip-backend uma`).
-  - Note: branch-weight UQ is specific to HydraGNN; UMA relaxations do not emit branch-weight metrics.
+  - **MACE** open foundation-model families and user checkpoints
+    (`--mlip-backend mace`), isolated from UMA in multi-model validation.
+  - Note: branch-weight UQ is specific to fused HydraGNN inference. Pinned-head
+    HydraGNN supports MC-dropout UQ but does not report branch weights; UMA and
+    MACE relaxations do not emit branch-weight metrics.
 - **Unified crystal-phase seed generation** (`matsim_agents.discovery.seeds`)
   combining two complementary sources into one ranked candidate list:
   - **AFLOW prototype decoration** — every entry of the

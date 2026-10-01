@@ -56,7 +56,7 @@ Each iteration of the loop performs four steps:
 
 ```mermaid
 flowchart LR
-  S[Seed structures] --> MD[1. Cheap MD<br/>HydraGNN/UMA surrogate]
+  S[Seed structures] --> MD[1. Cheap MD<br/>HydraGNN/UMA/MACE surrogate]
   MD --> UQ[2. Score uncertainty<br/>ensemble / MC-dropout]
   UQ --> SEL[Select top-K<br/>+ diversity filter]
   SEL --> DFT[3. Single-point DFT<br/>VASP/QE · frozen ions]
