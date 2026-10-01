@@ -9,6 +9,7 @@ from matsim_agents.discovery.stability import (
     ReferenceCompletenessPolicy,
     ReferenceEnergySet,
     ReferencePhaseEntry,
+    recalibrate_hull_reports,
     score_stability,
 )
 from matsim_agents.orchestration.state import RelaxationResult
@@ -125,6 +126,47 @@ def test_hull_decomposition_retains_reference_polymorph_identity(tmp_path: Path)
 
     assert report.ground_state.energy_above_hull_eV_per_atom == pytest.approx(0.1)
     assert report.ground_state.decomposition == {"NbO2-ground": pytest.approx(1.0)}
+
+
+def test_supercell_composition_survives_hull_recalibration(tmp_path: Path) -> None:
+    structure = tmp_path / "Nb2O4.extxyz"
+    write(
+        structure,
+        Atoms(
+            ["Nb", "Nb", "O", "O", "O", "O"],
+            positions=[[index, 0, 0] for index in range(6)],
+        ),
+    )
+    relaxation = RelaxationResult(
+        structure_path=str(structure),
+        optimized_structure_path=str(structure),
+        trajectory_path="",
+        log_csv_path="",
+        final_energy_eV=-12.0,
+        final_max_force_eV_per_A=0.01,
+        num_steps=1,
+        converged=True,
+    )
+    references = ReferenceEnergySet(
+        identifier="nb-o-pbe-v1",
+        method_signature="pbe-v1",
+        elemental_energies_eV_per_atom={"Nb": 0.0, "O": 0.0},
+    )
+    report = score_stability(
+        "NbO2",
+        [relaxation],
+        ranking_mode=RankingMode.CONVEX_HULL,
+        reference_energies=references,
+        method_signature="pbe-v1",
+    )
+
+    assert report.ground_state.composition == {"Nb": 2.0, "O": 4.0}
+    assert report.ground_state.formation_energy_eV_per_atom == pytest.approx(-2.0)
+
+    references.competing_phases["NbO"] = -1.0
+    recalibrate_hull_reports([report], references)
+
+    assert report.ground_state.formation_energy_eV_per_atom == pytest.approx(-2.0)
 
 
 def test_degeneracy_tolerance_is_user_configurable(tmp_path: Path) -> None:

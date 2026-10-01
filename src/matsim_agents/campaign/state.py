@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.campaign.acquisition import CampaignAcquisitionState
 from matsim_agents.campaign.registry import CandidateRegistry
@@ -103,6 +103,14 @@ class CampaignState(BaseModel):
     iteration: int = 0
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
     status: WorkflowStatus = WorkflowStatus.PLANNED
+
+    @model_validator(mode="after")
+    def _validate_element_set(self) -> CampaignState:
+        if len(self.element_set) != len(set(self.element_set)):
+            raise ValueError("element_set must not contain duplicates")
+        if set(self.element_set) != set(self.formula_policy.elements):
+            raise ValueError("element_set must match formula_policy.elements")
+        return self
 
     @classmethod
     def load(cls, path: str | Path) -> CampaignState:

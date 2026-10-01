@@ -248,6 +248,8 @@ def run_predictions(
     elapsed = time.perf_counter() - t0
     print(f"[{label}] Done: {n_ok} OK, {n_fail} failed  ({elapsed:.1f}s)")
     print(f"  → {out}/")
+    if n_fail:
+        raise RuntimeError(f"{label} failed for {n_fail} of {len(structures)} structures")
 
 
 def _dispatch_aggregate(model: str) -> None:
@@ -338,13 +340,14 @@ def main() -> None:
                 )
             except ImportError:
                 print("  mace-torch not installed. Run: pip install mace-torch")
-                break
+                raise
             except Exception:
                 traceback.print_exc()
+                raise
 
     if run_hydragnn:
         if not args.hydragnn_logdir:
-            print("\n[HydraGNN] --hydragnn-logdir required. Skipping.")
+            raise ValueError("HydraGNN requires --hydragnn-logdir")
         else:
             print(f"\n=== HydraGNN ({args.hydragnn_logdir}) ===")
             try:
@@ -355,6 +358,7 @@ def main() -> None:
                 )
             except Exception:
                 traceback.print_exc()
+                raise
 
     if run_uma:
         print(f"\n=== UMA ({args.uma_model}, task={args.uma_task}) ===")
@@ -367,8 +371,10 @@ def main() -> None:
             run_predictions(calc_uma, "uma", args.device, args.relax, args.fmax, args.steps)
         except ImportError:
             print("  fairchem-core not installed. Run: pip install fairchem-core")
+            raise
         except Exception:
             traceback.print_exc()
+            raise
 
     if run_allscaip:
         print(f"\n=== AllScAIP ({args.allscaip_model}, task={args.allscaip_task}) ===")
@@ -384,8 +390,10 @@ def main() -> None:
             )
         except ImportError:
             print("  fairchem-core not installed. Run: pip install fairchem-core")
+            raise
         except Exception:
             traceback.print_exc()
+            raise
 
     print("\nAll baselines complete.")
     print("Next: populate reference_data/ with DFT labels, then run score.py.")

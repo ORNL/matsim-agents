@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from matsim_agents.campaign.orchestrator import run_formula_discovery_stage
 from matsim_agents.campaign.state import CampaignState
@@ -80,6 +81,7 @@ def test_record_stability_feeds_hull_reference_set():
     ground_state = PhaseStability(
         structure_path="candidates/NbTaO4-P003.vasp",
         optimized_structure_path="candidates/NbTaO4-P003-relaxed.vasp",
+        composition={"Nb": 1, "Ta": 1, "O": 4},
         final_energy_eV=-62.56,
         energy_per_atom_eV=-7.82,
         delta_e_above_min_eV_per_atom=0.0,
@@ -115,6 +117,7 @@ def test_record_stability_admits_near_degenerate_hull_vertex():
     ground_state = PhaseStability(
         structure_path="candidates/NbTaO4-P003.vasp",
         optimized_structure_path="candidates/NbTaO4-P003-relaxed.vasp",
+        composition={"Nb": 1, "Ta": 1, "O": 4},
         final_energy_eV=-62.56,
         energy_per_atom_eV=-7.82,
         delta_e_above_min_eV_per_atom=0.0,
@@ -143,9 +146,12 @@ def test_record_stability_admits_near_degenerate_hull_vertex():
 
 
 def _hull_report(formula: str, energy: float, formation_energy: float) -> StabilityReport:
+    from pymatgen.core import Composition
+
     phase = PhaseStability(
         structure_path=f"candidates/{formula}.vasp",
         optimized_structure_path=f"candidates/{formula}-relaxed.vasp",
+        composition=Composition(formula).as_dict(),
         final_energy_eV=energy,
         energy_per_atom_eV=energy,
         delta_e_above_min_eV_per_atom=0.0,
@@ -170,7 +176,10 @@ def test_record_stability_recalibrates_prior_reports_when_hull_changes():
     campaign = CampaignState(
         campaign_id="nb-o-001",
         element_set=["Nb", "O"],
-        formula_policy=_policy(),
+        formula_policy=FormulaGenerationPolicy(
+            elements=["Nb", "O"],
+            require_charge_balance=False,
+        ),
         reference_energies=ReferenceEnergySet(
             identifier="nb-o-pbe-v1",
             method_signature="pbe-v1",
@@ -188,6 +197,21 @@ def test_record_stability_recalibrates_prior_reports_when_hull_changes():
     assert campaign.current_hull.new_hull_vertices == ["Nb2O"]
     assert campaign.current_hull.removed_hull_vertices == ["NbO"]
     assert campaign.current_hull.uncompetitive_formulas == ["NbO"]
+
+
+def test_campaign_requires_matching_unique_element_set():
+    with pytest.raises(ValidationError, match="element_set must match"):
+        CampaignState(
+            campaign_id="mismatch",
+            element_set=["Nb", "O"],
+            formula_policy=_policy(),
+        )
+    with pytest.raises(ValidationError, match="element_set must not contain duplicates"):
+        CampaignState(
+            campaign_id="duplicates",
+            element_set=["Nb", "Nb", "Ta", "O"],
+            formula_policy=_policy(),
+        )
 
 
 def test_record_stability_does_not_admit_above_hull_phase():

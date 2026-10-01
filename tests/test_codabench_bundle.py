@@ -11,6 +11,7 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import numpy as np
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CODEBENCH = ROOT / "benchmarks" / "codabench"
@@ -126,6 +127,24 @@ def test_aggregate_baselines_dispatch_incompatible_backends(tmp_path, monkeypatc
         "--model=uma",
         "--model=allscaip",
     ]
+
+
+def test_baseline_prediction_failures_raise(tmp_path, monkeypatch) -> None:
+    runner = _load("codabench_run_failure", CODEBENCH / "run_baselines.py")
+    structures = tmp_path / "structures"
+    structures.mkdir()
+    metadata = tmp_path / "structures_metadata.csv"
+    _write_csv(
+        metadata,
+        ["structure_id", "file_path"],
+        [{"structure_id": "missing", "file_path": "missing.extxyz"}],
+    )
+    monkeypatch.setattr(runner, "STRUCT_META", metadata)
+    monkeypatch.setattr(runner, "STRUCT_ROOT", structures)
+    monkeypatch.setattr(runner, "PRED_ROOT", tmp_path / "predictions")
+
+    with pytest.raises(RuntimeError, match="failed for 1 of 1 structures"):
+        runner.run_predictions(SimpleNamespace(), "broken", "cpu")
 
 
 def test_submission_packager_rejects_raw_total_energies(tmp_path) -> None:

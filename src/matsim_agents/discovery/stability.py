@@ -39,6 +39,7 @@ class PhaseStability(BaseModel):
 
     structure_path: str
     optimized_structure_path: str
+    composition: dict[str, float] | None = None
     final_energy_eV: float
     energy_per_atom_eV: float
     delta_e_above_min_eV_per_atom: float
@@ -287,8 +288,18 @@ def recalibrate_hull_reports(
 
     candidate_entries: list[tuple[StabilityReport, PhaseStability, object]] = []
     for report in compatible_reports:
-        composition = PMGComposition(report.formula)
         for index, phase in enumerate(report.ranking):
+            composition = PMGComposition(
+                phase.composition or _composition_from_path(phase.optimized_structure_path)
+            )
+            if (
+                composition.reduced_composition
+                != PMGComposition(report.formula).reduced_composition
+            ):
+                raise ValueError(
+                    f"optimized composition {composition.formula} does not match "
+                    f"reported formula {report.formula}"
+                )
             entry = ComputedEntry(
                 composition,
                 phase.final_energy_eV,
@@ -319,10 +330,12 @@ def recalibrate_hull_reports(
         report.ground_state = report.ranking[0]
 
 
-def _atoms_count_from_path(path: str) -> int:
+def _composition_from_path(path: str) -> dict[str, float]:
+    from collections import Counter
+
     from ase.io import read
 
-    return len(read(path))
+    return {element: float(amount) for element, amount in Counter(read(path).symbols).items()}
 
 
 def score_stability(
@@ -360,13 +373,15 @@ def score_stability(
 
     items: list[PhaseStability] = []
     for r in relaxations:
-        n_atoms = _atoms_count_from_path(r.optimized_structure_path)
+        composition = _composition_from_path(r.optimized_structure_path)
+        n_atoms = int(sum(composition.values()))
         e_per_atom = r.final_energy_eV / max(n_atoms, 1)
         cand = cand_by_path.get(r.structure_path)
         items.append(
             PhaseStability(
                 structure_path=r.structure_path,
                 optimized_structure_path=r.optimized_structure_path,
+                composition=composition,
                 final_energy_eV=r.final_energy_eV,
                 energy_per_atom_eV=e_per_atom,
                 delta_e_above_min_eV_per_atom=0.0,  # filled in below
@@ -439,7 +454,17 @@ def score_stability(
             )
         candidate_entries = []
         for index, item in enumerate(ranking):
-            entry = ComputedEntry(target_comp, item.final_energy_eV, entry_id=f"candidate-{index}")
+            candidate_comp = PMGComposition(item.composition)
+            if candidate_comp.reduced_composition != target_comp.reduced_composition:
+                raise ValueError(
+                    f"optimized composition {candidate_comp.formula} does not match "
+                    f"target formula {formula}"
+                )
+            entry = ComputedEntry(
+                candidate_comp,
+                item.final_energy_eV,
+                entry_id=f"candidate-{index}",
+            )
             entries.append(entry)
             candidate_entries.append((item, entry))
         diagram = PhaseDiagram(entries)
