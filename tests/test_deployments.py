@@ -128,18 +128,18 @@ def test_reference_preparation_deduplicates_unary_polymorphs(tmp_path: Path) -> 
     assert list(retained) == ["Nb-bcc", "Nb-fcc"]
     assert duplicates == ["Nb-bcc-copy"]
 
-    def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> None:
-        root = Path(__file__).resolve().parents[1]
-        job = (
-            root
-            / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
-        ).read_text(encoding="utf-8")
-        executor = (root / "deployments/perlmutter/jobs/campaign_execute.py").read_text(
-            encoding="utf-8"
-        )
 
-        assert "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET:?" in job
-        assert "--promotion-validation-set" in job
-        assert "--promotion-max-energy-mae" in job
-        assert "--promotion-max-force-mae" in job
-        assert 'parser.error("--promote-model requires --promotion-validation-set")' in executor
+def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> None:
+    root = Path(__file__).resolve().parents[1]
+    job = (
+        root / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
+    ).read_text(encoding="utf-8")
+    executor = (root / "deployments/perlmutter/jobs/campaign_execute.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET:?" in job
+    assert "--promotion-validation-set" in job
+    assert "--promotion-max-energy-mae" in job
+    assert "--promotion-max-force-mae" in job
+    assert 'parser.error("--promote-model requires --promotion-validation-set")' in executor

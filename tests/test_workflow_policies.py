@@ -75,6 +75,46 @@ def test_phase_retraining_requires_approval(tmp_path):
         )
 
 
+def test_phase_model_promotion_requires_approval(tmp_path, monkeypatch):
+    parsed = parse_composition("Si")
+    assert parsed is not None
+    monkeypatch.setattr(
+        "matsim_agents.workflows.phase_exploration.explore_composition",
+        lambda *args, **kwargs: CompositionExplorationResult(
+            composition=parsed,
+            phase_candidates=[],
+        ),
+    )
+    policy = PhaseExplorationPolicy(active_learning=True, dft_approved=True)
+
+    with pytest.raises(PermissionError, match="model promotion requires explicit approval"):
+        run_phase_exploration(
+            "Si",
+            policy=policy,
+            output_dir=str(tmp_path),
+            active_learning_runner=lambda *_: {"model_promoted": True},
+        )
+
+
+def test_seed_only_phase_is_not_a_usable_minimum(tmp_path, monkeypatch):
+    parsed = parse_composition("Si")
+    assert parsed is not None
+    monkeypatch.setattr(
+        "matsim_agents.discovery.seeds.generate_seeds",
+        lambda *args, **kwargs: [
+            {"formula": "Si", "source": "prototype", "structure_path": "Si.vasp"}
+        ],
+    )
+
+    result = run_phase_exploration(
+        "Si",
+        policy=PhaseExplorationPolicy(relax_structures=False),
+        output_dir=str(tmp_path),
+    )
+
+    assert result.initial.outcome_class == "seed_only"
+
+
 def test_formula_budget_does_not_truncate_random_structure_quota(tmp_path, monkeypatch):
     observed = {}
 

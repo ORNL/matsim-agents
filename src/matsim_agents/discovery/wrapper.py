@@ -32,6 +32,7 @@ class CompositionExplorationResult(BaseModel):
         "generation_failure",
         "relaxation_non_convergence",
         "ranking_failure",
+        "seed_only",
         "usable_minimum",
     ] = "generation_failure"
 

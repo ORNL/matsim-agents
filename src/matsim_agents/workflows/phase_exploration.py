@@ -22,6 +22,7 @@ class PhaseExplorationPolicy(BaseModel):
     approvals: ApprovalPolicy = Field(default_factory=ApprovalPolicy)
     dft_approved: bool = False
     retraining_approved: bool = False
+    promotion_approved: bool = False
 
     @model_validator(mode="after")
     def _consistent_options(self) -> PhaseExplorationPolicy:
@@ -83,7 +84,7 @@ def run_phase_exploration(
         initial = CompositionExplorationResult(
             composition=parsed,
             phase_candidates=candidates,
-            outcome_class="usable_minimum" if candidates else "generation_failure",
+            outcome_class="seed_only" if candidates else "generation_failure",
         )
     else:
         initial = explore_composition(composition, output_dir=output_dir, **kwargs)
@@ -96,6 +97,8 @@ def run_phase_exploration(
             raise ValueError("active_learning=True requires active_learning_runner")
         al_result = active_learning_runner(composition, output_dir, policy.retrain_mlip)
         promoted = bool(al_result.get("model_promoted", False))
+        if promoted and policy.approvals.before_model_promotion and not policy.promotion_approved:
+            raise PermissionError("model promotion requires explicit approval")
         if policy.reevaluate_after_retraining:
             if not promoted:
                 raise RuntimeError("cannot reevaluate: active learning did not promote a model")

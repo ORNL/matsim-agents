@@ -657,12 +657,12 @@ def run_pw(
     stdout_path = os.path.join(work_dir, stdout_name)
 
     argv = [launcher_cmd] if isinstance(launcher_cmd, str) else list(launcher_cmd)
-    if "{input}" in argv:
-        argv = [
-            input_path if value == "{input}" else work_dir if value == "{work_dir}" else value
-            for value in argv
-        ]
-    else:
+    has_input_placeholder = "{input}" in argv
+    argv = [
+        input_path if value == "{input}" else work_dir if value == "{work_dir}" else value
+        for value in argv
+    ]
+    if not has_input_placeholder:
         flag = os.environ.get("MATSIM_QE_LAUNCHER_APPEND_FLAG", "").strip()
         if flag:
             argv += [flag, input_path]
