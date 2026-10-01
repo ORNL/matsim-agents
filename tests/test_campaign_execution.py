@@ -1090,7 +1090,9 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
     assert result.active_learning_result["dft_refinement"]["candidate_calculations"] == 1
 
 
-def test_formula_execution_applies_retraining_and_promotion(tmp_path):
+def test_formula_execution_applies_retraining_and_promotion(tmp_path, monkeypatch):
+    import matsim_agents.campaign.execution as execution
+
     config_path = tmp_path / "al.yaml"
     config_path.write_text(
         _config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"),
@@ -1135,6 +1137,12 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path):
         al_result = active_learning_runner(formula, output_dir, True)
         return _empty_result(formula, al_result)
 
+    def capture_cross_model(_exploration, configs, **_kwargs):
+        observed["post_promotion_model"] = configs[0].mlip.uma.model_name
+        return {"models": {}, "ranking_disagreement": False, "rankings": {}}
+
+    monkeypatch.setattr(execution, "_cross_model_scores", capture_cross_model)
+
     result = run_formula_with_active_learning(
         "NbO2",
         str(tmp_path / "formula"),
@@ -1169,6 +1177,7 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path):
     }
     assert result.active_learning_result["md_candidate_uncertainty"] == {"md-001": 0.75}
     assert result.active_learning_result["candidate_uncertainty"] == {}
+    assert observed["post_promotion_model"] == str(checkpoint)
 
 
 def test_retraining_rejects_unapproved_promotion(tmp_path):

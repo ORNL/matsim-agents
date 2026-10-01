@@ -129,6 +129,29 @@ def _model_identifier(cfg: ALConfig) -> str:
     return cfg.mlip.backend
 
 
+def _apply_model_override(cfg: ALConfig, model_path: str) -> None:
+    """Point an AL configuration at a promoted backend artifact."""
+    if cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
+        cfg.mlip.uma.model_name = model_path
+    elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
+        cfg.mlip.mace.family = "checkpoint"
+        cfg.mlip.mace.model = model_path
+    elif cfg.mlip.hydragnn is not None:
+        cfg.mlip.hydragnn.logdir = Path(model_path)
+
+
+def _promoted_model_path(result: PhaseExplorationWorkflowResult) -> str | None:
+    evidence = result.active_learning_result or {}
+    overrides = evidence.get("exploration_kwargs", {})
+    promoted = (
+        overrides.get("uma_model_name")
+        or overrides.get("mace_model")
+        or overrides.get("checkpoint")
+        or overrides.get("logdir")
+    )
+    return str(promoted) if promoted else None
+
+
 def _cross_model_scores(
     exploration: Any,
     configs: list[ALConfig],
@@ -860,13 +883,7 @@ def run_formula_with_active_learning(
             f"uma_only execution requires mlip.backend='uma', got {al_cfg.mlip.backend!r}"
         )
     if config.model_override:
-        if al_cfg.mlip.backend == "uma" and al_cfg.mlip.uma is not None:
-            al_cfg.mlip.uma.model_name = config.model_override
-        elif al_cfg.mlip.backend == "mace" and al_cfg.mlip.mace is not None:
-            al_cfg.mlip.mace.family = "checkpoint"
-            al_cfg.mlip.mace.model = config.model_override
-        elif al_cfg.mlip.hydragnn is not None:
-            al_cfg.mlip.hydragnn.logdir = Path(config.model_override)
+        _apply_model_override(al_cfg, config.model_override)
     if config.execution_mode == "dft":
         _validate_dft_inputs(formula, al_cfg)
     if config.phase_policy.retrain_mlip:
@@ -960,9 +977,15 @@ def run_formula_with_active_learning(
     )
     phase_seconds = time.monotonic() - phase_started
     exploration = result.after_retraining or result.initial
-    candidate_uncertainty = _score_relaxed_candidate_uncertainty(exploration, al_cfg)
+    effective_al_cfg = al_cfg.model_copy(deep=True)
+    promoted_model = _promoted_model_path(result)
+    if promoted_model is not None:
+        _apply_model_override(effective_al_cfg, promoted_model)
+    candidate_uncertainty = _score_relaxed_candidate_uncertainty(
+        exploration, effective_al_cfg
+    )
     validation_configs = [
-        al_cfg,
+        effective_al_cfg,
         *(ALConfig.from_yaml(path) for path in config.validation_configs),
     ]
     cross_model = _cross_model_scores(
@@ -991,7 +1014,7 @@ def run_formula_with_active_learning(
     )
     robustness = _perturbation_robustness(
         exploration,
-        al_cfg,
+        effective_al_cfg,
         config,
         formula_root / "robustness",
         relaxation_runner=mlip_relaxation_runner,
@@ -1128,12 +1151,7 @@ def make_formula_runner(
     def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
         result = run_formula_with_active_learning(formula, output_dir, config=config)
         if result.model_promoted and result.active_learning_result:
-            overrides = result.active_learning_result.get("exploration_kwargs", {})
-            promoted = (
-                overrides.get("uma_model_name")
-                or overrides.get("checkpoint")
-                or overrides.get("logdir")
-            )
+            promoted = _promoted_model_path(result)
             if promoted:
                 config.model_override = str(promoted)
         return result
