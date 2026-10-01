@@ -33,7 +33,7 @@ from matsim_agents.discovery.stability import (  # noqa: E402
     ReferenceCompletenessPolicy,
     ReferenceEnergySet,
 )
-from matsim_agents.execution.contracts import ApprovalPolicy  # noqa: E402
+from matsim_agents.execution.contracts import ApprovalPolicy, WorkflowStatus  # noqa: E402
 from matsim_agents.workflows.debate import DebateParticipant  # noqa: E402
 from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy  # noqa: E402
 
