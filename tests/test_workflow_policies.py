@@ -49,6 +49,11 @@ def test_phase_reevaluation_requires_retraining():
         PhaseExplorationPolicy(reevaluate_after_retraining=True)
 
 
+def test_phase_model_promotion_requires_retraining():
+    with pytest.raises(ValueError, match="promote_model requires retrain_mlip"):
+        PhaseExplorationPolicy(promote_model=True)
+
+
 def test_phase_active_learning_requires_dft_approval(tmp_path):
     policy = PhaseExplorationPolicy(active_learning=True)
     with pytest.raises(PermissionError, match="DFT approval"):
@@ -78,6 +83,8 @@ def test_phase_retraining_requires_approval(tmp_path):
 def test_phase_model_promotion_requires_approval(tmp_path, monkeypatch):
     parsed = parse_composition("Si")
     assert parsed is not None
+    called = False
+
     monkeypatch.setattr(
         "matsim_agents.workflows.phase_exploration.explore_composition",
         lambda *args, **kwargs: CompositionExplorationResult(
@@ -85,15 +92,27 @@ def test_phase_model_promotion_requires_approval(tmp_path, monkeypatch):
             phase_candidates=[],
         ),
     )
-    policy = PhaseExplorationPolicy(active_learning=True, dft_approved=True)
+    policy = PhaseExplorationPolicy(
+        active_learning=True,
+        retrain_mlip=True,
+        promote_model=True,
+        dft_approved=True,
+        retraining_approved=True,
+    )
+
+    def active_learning_runner(*_args):
+        nonlocal called
+        called = True
+        return {"model_promoted": True}
 
     with pytest.raises(PermissionError, match="model promotion requires explicit approval"):
         run_phase_exploration(
             "Si",
             policy=policy,
             output_dir=str(tmp_path),
-            active_learning_runner=lambda *_: {"model_promoted": True},
+            active_learning_runner=active_learning_runner,
         )
+    assert called is False
 
 
 def test_seed_only_phase_is_not_a_usable_minimum(tmp_path, monkeypatch):

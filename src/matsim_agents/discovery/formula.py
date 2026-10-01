@@ -20,6 +20,7 @@ from __future__ import annotations
 from itertools import combinations, product
 
 from pydantic import BaseModel, Field, model_validator
+from pymatgen.core import Element
 
 from matsim_agents.discovery.composition import _hill_order, _reduce
 
@@ -40,8 +41,19 @@ class FormulaGenerationPolicy(BaseModel):
 
     @model_validator(mode="after")
     def _consistent_bounds(self) -> FormulaGenerationPolicy:
+        invalid_elements = [
+            symbol for symbol in self.elements if not Element.is_valid_symbol(symbol)
+        ]
+        if invalid_elements:
+            raise ValueError(f"invalid element symbols: {invalid_elements}")
         if len(self.elements) != len(set(self.elements)):
             raise ValueError("elements must not contain duplicates")
+        unknown_oxidation_states = set(self.oxidation_states) - set(self.elements)
+        if unknown_oxidation_states:
+            raise ValueError(
+                "oxidation-state keys must be declared in elements: "
+                f"{sorted(unknown_oxidation_states)}"
+            )
         if self.maximum_species < self.minimum_species:
             raise ValueError("maximum_species must be >= minimum_species")
         if self.maximum_coefficient < self.minimum_coefficient:

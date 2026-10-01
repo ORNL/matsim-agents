@@ -73,6 +73,17 @@ def test_formula_policy_rejects_duplicate_elements():
         _nb_ta_o_policy(elements=["Nb", "Nb", "O"])
 
 
+@pytest.mark.parametrize("symbol", ["NB", "Xx"])
+def test_formula_policy_rejects_invalid_element_symbols(symbol):
+    with pytest.raises(ValidationError, match="invalid element symbols"):
+        _nb_ta_o_policy(elements=[symbol, "O"])
+
+
+def test_formula_policy_rejects_oxidation_states_for_undeclared_elements():
+    with pytest.raises(ValidationError, match="oxidation-state keys must be declared"):
+        _nb_ta_o_policy(oxidation_states={"Nb": [5], "Ta": [5], "O": [-2], "W": [6]})
+
+
 def test_enumerate_formulas_honors_species_count_toggles():
     binary_only = _nb_ta_o_policy(include_mixed_oxides=False)
     assert all(len(c.elements) == 2 for c in enumerate_formulas(binary_only))

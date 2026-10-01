@@ -1295,6 +1295,69 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path, monkeypatc
     assert observed["post_promotion_model"] == str(checkpoint)
 
 
+def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path):
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(
+        _config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}").replace(
+            "backend: uma\n  uma:\n    model_name: uma-s-1p1\n"
+            "    task_name: omat\n    device: cuda",
+            "backend: mace\n  mace:\n    family: mace_mp\n    model: medium\n    device: cuda",
+        ),
+        encoding="utf-8",
+    )
+    checkpoint = tmp_path / "promoted.model"
+    observed = {}
+
+    def al_runner(cfg):
+        state_dir = cfg.loop.out_dir / "iteration_0000"
+        state_dir.mkdir(parents=True)
+        (state_dir / "state.json").write_text(
+            json.dumps(
+                {
+                    "status": "complete",
+                    "model_promoted": True,
+                    "new_logdir": str(checkpoint),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def phase_runner(formula, *, policy, output_dir, exploration_kwargs, active_learning_runner):
+        assert policy.promote_model is True
+        assert policy.promotion_approved is True
+        result = active_learning_runner(formula, output_dir, True)
+        observed.update(result["exploration_kwargs"])
+        return _empty_result(formula, result)
+
+    train_script = tmp_path / "train.py"
+    train_script.touch()
+    validation_set = tmp_path / "validation.extxyz"
+    validation_set.touch()
+    run_formula_with_active_learning(
+        "NbO2",
+        str(tmp_path / "formula"),
+        config=CampaignFormulaExecutionConfig(
+            active_learning_config=config_path,
+            phase_policy=PhaseExplorationPolicy(
+                active_learning=True,
+                retrain_mlip=True,
+                dft_approved=True,
+                retraining_approved=True,
+            ),
+            retraining=CampaignRetrainingConfig(
+                train_script=train_script,
+                promote_model=True,
+                promotion_approved=True,
+                validation_set=validation_set,
+            ),
+        ),
+        al_runner=al_runner,
+        phase_runner=phase_runner,
+    )
+
+    assert observed == {"mace_family": "checkpoint", "mace_model": str(checkpoint)}
+
+
 def test_retraining_rejects_unapproved_promotion(tmp_path):
     train_script = tmp_path / "train.py"
     train_script.touch()

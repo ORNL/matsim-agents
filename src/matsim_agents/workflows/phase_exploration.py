@@ -16,6 +16,7 @@ class PhaseExplorationPolicy(BaseModel):
     relax_structures: bool = True
     active_learning: bool = False
     retrain_mlip: bool = False
+    promote_model: bool = False
     reevaluate_after_retraining: bool = False
     ranking_mode: str = "relative_phase_ranking"
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
@@ -28,6 +29,8 @@ class PhaseExplorationPolicy(BaseModel):
     def _consistent_options(self) -> PhaseExplorationPolicy:
         if self.retrain_mlip and not self.active_learning:
             raise ValueError("retrain_mlip requires active_learning")
+        if self.promote_model and not self.retrain_mlip:
+            raise ValueError("promote_model requires retrain_mlip")
         if self.reevaluate_after_retraining and not self.retrain_mlip:
             raise ValueError("reevaluate_after_retraining requires retrain_mlip")
         return self
@@ -64,6 +67,12 @@ def run_phase_exploration(
         and not policy.retraining_approved
     ):
         raise PermissionError("MLIP retraining requires explicit approval")
+    if (
+        policy.promote_model
+        and policy.approvals.before_model_promotion
+        and not policy.promotion_approved
+    ):
+        raise PermissionError("model promotion requires explicit approval")
 
     kwargs = dict(exploration_kwargs or {})
     if not policy.relax_structures:
@@ -97,6 +106,8 @@ def run_phase_exploration(
             raise ValueError("active_learning=True requires active_learning_runner")
         al_result = active_learning_runner(composition, output_dir, policy.retrain_mlip)
         promoted = bool(al_result.get("model_promoted", False))
+        if promoted and not policy.promote_model:
+            raise RuntimeError("active learning promoted a model without promotion being requested")
         if promoted and policy.approvals.before_model_promotion and not policy.promotion_approved:
             raise PermissionError("model promotion requires explicit approval")
         if policy.reevaluate_after_retraining:

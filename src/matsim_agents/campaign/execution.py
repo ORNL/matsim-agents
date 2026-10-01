@@ -969,15 +969,24 @@ def run_formula_with_active_learning(
                 if al_cfg.mlip.backend == "uma":
                     result["exploration_kwargs"] = {"uma_model_name": latest_model}
                 elif al_cfg.mlip.backend == "mace":
-                    result["exploration_kwargs"] = {"checkpoint": latest_model}
+                    result["exploration_kwargs"] = {
+                        "mace_family": "checkpoint",
+                        "mace_model": latest_model,
+                    }
                 else:
                     result["exploration_kwargs"] = {"logdir": latest_model}
         return result
 
     phase_started = time.monotonic()
+    phase_policy = config.phase_policy.model_copy(
+        update={
+            "promote_model": al_cfg.trainer.promote_model,
+            "promotion_approved": al_cfg.trainer.promotion_approved,
+        }
+    )
     result = phase_runner(
         formula,
-        policy=config.phase_policy,
+        policy=phase_policy,
         output_dir=str(formula_root / "phase_exploration"),
         exploration_kwargs=_exploration_kwargs(al_cfg, config.exploration_kwargs),
         active_learning_runner=active_learning_runner,
