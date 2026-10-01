@@ -377,6 +377,7 @@ def _apply_model_override(cfg: ALConfig, model_path: str | None) -> None:
         return
     if cfg.mlip.backend == "hydragnn" and cfg.mlip.hydragnn is not None:
         cfg.mlip.hydragnn.logdir = Path(model_path)
+        cfg.mlip.hydragnn.checkpoint = None
     elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
         cfg.mlip.uma.model_name = model_path
     elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:

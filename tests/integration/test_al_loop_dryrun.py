@@ -39,7 +39,7 @@ from matsim_agents.active_learning.config import (
     VASPConfig,
 )
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
-from matsim_agents.active_learning.evaluate import PromotionDecision
+from matsim_agents.active_learning.evaluate import PromotionDecision, _apply_model_override
 
 # --------------------------------------------------------------------------- #
 # Stubs                                                                       #
@@ -244,6 +244,7 @@ def test_promotion_decision_controls_model_activation(
         validation_set=validation_set,
     )
     incumbent = cfg.mlip.hydragnn.logdir
+    cfg.mlip.hydragnn.checkpoint = "incumbent.pk"
     trained_model = tmp_path / "candidate-model"
     trained_model.mkdir()
     decision = PromotionDecision(
@@ -270,3 +271,16 @@ def test_promotion_decision_controls_model_activation(
     assert state["promotion_validation"]["approved"] is approved
     expected_model = trained_model if approved else incumbent
     assert cfg.mlip.hydragnn.logdir == expected_model
+    assert cfg.mlip.hydragnn.checkpoint == (None if approved else "incumbent.pk")
+
+
+def test_hydragnn_candidate_override_discovers_checkpoint_in_new_logdir(tmp_path: Path) -> None:
+    cfg = _make_cfg(tmp_path)
+    cfg.mlip.hydragnn.checkpoint = "incumbent.pk"
+    candidate = tmp_path / "candidate-model"
+    candidate.mkdir()
+
+    _apply_model_override(cfg, str(candidate))
+
+    assert cfg.mlip.hydragnn.logdir == candidate
+    assert cfg.mlip.hydragnn.checkpoint is None

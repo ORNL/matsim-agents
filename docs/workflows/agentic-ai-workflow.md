@@ -19,12 +19,12 @@ flowchart TD
     G --> P
     G --> I
 
-    OP --> X
-    PP --> X
-    IP --> X
+    OP -->|HydraGNN, UMA, or MACE| X
+    PP -->|HydraGNN, UMA, or MACE| X
+    IP -->|HydraGNN or UMA| X
 
     subgraph SCIENCE[Shared scientific capabilities]
-      X[Phase search and MLIP relaxation<br/>HydraGNN, UMA, or MACE]
+      X[Phase search and MLIP relaxation]
       Q[Evaluate uncertainty]
       AL[Active learning loop]
       E[Results and auditable evidence]

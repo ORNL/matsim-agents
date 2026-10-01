@@ -48,7 +48,10 @@ from matsim_agents.active_learning.dataset_governance import (
 )
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
 from matsim_agents.active_learning.dft_runner import run_dft_batch
-from matsim_agents.active_learning.evaluate import evaluate_promotion_candidate
+from matsim_agents.active_learning.evaluate import (
+    _apply_model_override,
+    evaluate_promotion_candidate,
+)
 from matsim_agents.active_learning.seeds import resolve_seed_structures
 from matsim_agents.active_learning.trainer import (
     append_frames_to_extxyz,
@@ -428,13 +431,7 @@ def run_active_learning(cfg: ALConfig) -> None:
                 if state.promotion_validation["approved"]:
                     state.new_logdir = state.candidate_model_path
                     state.model_promoted = True
-                    if cfg.mlip.backend == "hydragnn" and cfg.mlip.hydragnn is not None:
-                        cfg.mlip.hydragnn.logdir = Path(state.candidate_model_path)
-                    elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
-                        cfg.mlip.uma.model_name = state.candidate_model_path
-                    elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
-                        cfg.mlip.mace.family = "checkpoint"
-                        cfg.mlip.mace.model = state.candidate_model_path
+                    _apply_model_override(cfg, state.candidate_model_path)
             state.timings_sec["retrain"] = time.time() - t0
 
             state.status = "complete"

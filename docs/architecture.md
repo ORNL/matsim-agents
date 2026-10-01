@@ -1,87 +1,70 @@
 # Package architecture
 
-		U[User objective or dialogue] --> G{Choose interaction mode}
+The library is organized around stable scientific responsibilities rather than
 individual experiments or machines.
 
 | Package | Responsibility |
-			O[Objective<br/>run] --> OP[Plan and execute]
-			P[Composition<br/>supervisor-run] --> PP[Prepare and explore]
-			I[Interactive<br/>chat] --> IP[Detect and confirm]
+| --- | --- |
+| `orchestration` | Typed workflow state, objective/composition graphs, and explicit policies |
+| `discovery` | Composition parsing, structure generation, and stability analysis |
 | `active_learning` | Candidate acquisition, uncertainty evaluation, labeling, and adaptation loops |
 | `backends.llm` | Configuration-selected language-model providers |
-		G --> O
-		G --> P
-		G --> I
-
-		OP --> X
-		PP --> X
-		IP --> X
+| `backends.mlip` | MLIP calculators, relaxation, and exploration interfaces |
+| `backends.dft` | Quantum ESPRESSO and VASP interfaces |
+| `execution` | Scheduler-neutral resources, launch contracts, and provenance |
 | `workflows` | Composable relaxation, phase-exploration, and investigation policies/results |
 
 The workflow layer uses `execution.contracts` for evidence, validation,
-			Q[Evaluate uncertainty]
+approval, compute-budget, provenance, status, and result envelopes. Scientific
 run directories are owned by `execution.run_directory`; scheduler allocation
 discovery and disjoint DFT node grouping are owned by `execution.allocation`.
 See [Scientific workflow contracts](scientific-workflows.md) for behavior and
 [Run artifacts and restarts](run-artifacts-and-restarts.md) for persistence.
 
-			Q -->|sufficient confidence| E
+## Orchestration topology
 
 The CLI exposes objective, composition, and interactive modes over shared
 scientific capabilities. Each mode can hand low-confidence work to the same
-		U[User objective or chat dialogue]
+active-learning implementation when its UQ policy permits it. The full diagram
+is maintained in [Agentic AI Workflow Diagram](workflows/agentic-ai-workflow.md),
+with a compact variant in
+[Agentic AI Workflow Slides](workflows/agentic-ai-workflow-slides.md).
 
-		subgraph OUTPUTS[Mode-specific presentation]
-			direction LR
-			OA[Analyst report]
-			PS[Composition summary]
-			IR[Chat response]
-		end
+```mermaid
+flowchart TD
+    U[User objective or dialogue] --> G{Choose interaction mode}
 
-		R --> OA
-		R --> PS
-		R --> IR
+    subgraph MODES[User-facing modes]
+      direction LR
+      O[Objective<br/>run] --> OP[Plan and execute]
+      P[Composition<br/>supervisor-run] --> PP[Prepare and explore]
+      I[Interactive<br/>chat] --> IP[Detect and confirm]
+    end
 
-		classDef entry fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.5px
-		classDef mode fill:#eff6ff,stroke:#2563eb,color:#172554
-		classDef science fill:#ecfdf5,stroke:#059669,color:#052e16
-		classDef decision fill:#fff7ed,stroke:#ea580c,color:#431407
-		classDef output fill:#faf5ff,stroke:#9333ea,color:#3b0764
-		class U entry
-		class G,R decision
-		class O,OP,P,PP,I,IP mode
-		class X,Q,AL,E science
-		class OA,PS,IR output
-			P[Composition mode<br/>supervisor-run] --> PP[Prepare and explore composition]
-			I[Interactive mode<br/>chat] --> IP[Dialogue, detect composition, confirm action]
-		end
+    G --> O
+    G --> P
+    G --> I
 
-		U --> O
-		U --> P
-		U --> I
+    OP -->|HydraGNN, UMA, or MACE| X
+    PP -->|HydraGNN, UMA, or MACE| X
+    IP -->|HydraGNN or UMA| X
 
-		subgraph SCIENCE[Shared scientific capabilities]
-			X[Phase search and MLIP relaxation<br/>HydraGNN, UMA, or MACE]
-			Q[UQ evaluation<br/>entry-mode policy adapter]
-			AL[Active learning loop]
-			E[Results and auditable evidence]
+    subgraph SCIENCE[Shared scientific capabilities]
+      X[Phase search and MLIP relaxation]
+      Q[Evaluate uncertainty]
+      AL[Active learning loop]
+      E[Results and auditable evidence]
 
-			X --> Q
-			Q -->|low confidence + policy enabled| AL
-			Q -->|otherwise| E
-			AL --> E
-		end
+      X --> Q
+      Q -->|low confidence + policy enabled| AL
+      Q -->|sufficient confidence| E
+      AL --> E
+    end
 
-		OP --> X
-		PP --> X
-		IP -->|explore or /relax| X
-		IP -->|/al| AL
-		IP -->|conversation only| IR[Chat response]
-
-		E --> R{Return to invoking mode}
-		R -->|objective| OA[Analyst report]
-		R -->|composition| PS[Composition summary]
-		R -->|interactive| IR
+    E --> R{Return to invoking mode}
+    R --> OA[Analyst report]
+    R --> PS[Composition summary]
+    R --> IR[Chat response]
 ```
 
 Machine-specific setup and job scripts live in `deployments/`; research-only

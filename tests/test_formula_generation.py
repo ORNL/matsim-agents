@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from matsim_agents.discovery.formula import FormulaGenerationPolicy, enumerate_formulas
 
 
@@ -63,6 +66,11 @@ def test_enumerate_formulas_reapplies_coefficient_bounds_after_reduction():
     )
 
     assert enumerate_formulas(policy) == []
+
+
+def test_formula_policy_rejects_duplicate_elements():
+    with pytest.raises(ValidationError, match="elements must not contain duplicates"):
+        _nb_ta_o_policy(elements=["Nb", "Nb", "O"])
 
 
 def test_enumerate_formulas_honors_species_count_toggles():

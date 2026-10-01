@@ -40,6 +40,8 @@ class FormulaGenerationPolicy(BaseModel):
 
     @model_validator(mode="after")
     def _consistent_bounds(self) -> FormulaGenerationPolicy:
+        if len(self.elements) != len(set(self.elements)):
+            raise ValueError("elements must not contain duplicates")
         if self.maximum_species < self.minimum_species:
             raise ValueError("maximum_species must be >= minimum_species")
         if self.maximum_coefficient < self.minimum_coefficient:
