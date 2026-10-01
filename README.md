@@ -84,35 +84,39 @@ Reusable standalone workflow graphics:
 ```mermaid
 flowchart TD
     U[User objective or chat dialogue]
-    U --> R[run graph]
-    U --> C[chat REPL]
-    U --> S[supervisor graph]
 
-    subgraph RPATH[Core run path]
-      R --> RP[planner]
-      RP --> RE[executor]
-      RE --> RU[uq_gate]
-      RU -->|high confidence| RA[analyst]
-      RU -->|low confidence + policy enabled| RAL[active learning loop]
-      RAL --> RA
+    subgraph MODES[User-facing modes]
+      O[Objective mode<br/>run] --> OP[Plan and execute tasks]
+      P[Composition mode<br/>supervisor-run] --> PP[Prepare and explore composition]
+      I[Interactive mode<br/>chat] --> IP[Dialogue, detect composition, confirm action]
     end
 
-    subgraph SPATH[Supervisor path]
-      S --> SP[prepare]
-      SP --> SX[explore]
-      SX --> SU[evaluate_uq]
-      SU -->|low confidence + policy enabled| SAL[active learning loop]
-      SAL --> SS[summarize]
-      SU -->|otherwise| SS[summarize]
+    U --> O
+    U --> P
+    U --> I
+
+    subgraph SCIENCE[Shared scientific capabilities]
+      X[Phase search and MLIP relaxation<br/>HydraGNN, UMA, or MACE]
+      Q[UQ evaluation<br/>entry-mode policy adapter]
+      AL[Active learning loop]
+      E[Results and auditable evidence]
+
+      X --> Q
+      Q -->|low confidence + policy enabled| AL
+      Q -->|otherwise| E
+      AL --> E
     end
 
-    subgraph CPATH[Chat path]
-      C --> CC[composition detection / optional relax]
-      CC --> CU[uq policy]
-      CU -->|low confidence + policy enabled| CAL[active learning loop]
-      CAL --> CR[chat response]
-      CU -->|otherwise| CR
-    end
+    OP --> X
+    PP --> X
+    IP -->|explore or /relax| X
+    IP -->|/al| AL
+    IP -->|conversation only| IR[Chat response]
+
+    E --> R{Return to invoking mode}
+    R -->|objective| OA[Analyst report]
+    R -->|composition| PS[Composition summary]
+    R -->|interactive| IR
 ```
 
 ### Capabilities
