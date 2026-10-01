@@ -110,6 +110,38 @@ def test_record_stability_feeds_hull_reference_set():
     assert campaign.current_hull.reference_completeness.missing_binary_subsystems
 
 
+def test_record_stability_admits_near_degenerate_hull_vertex():
+    campaign = _campaign()
+    ground_state = PhaseStability(
+        structure_path="candidates/NbTaO4-P003.vasp",
+        optimized_structure_path="candidates/NbTaO4-P003-relaxed.vasp",
+        final_energy_eV=-62.56,
+        energy_per_atom_eV=-7.82,
+        delta_e_above_min_eV_per_atom=0.0,
+        final_max_force_eV_per_A=0.01,
+        converged=True,
+        eligible_for_ranking=True,
+        dynamically_stable_proxy=True,
+        formation_energy_eV_per_atom=-0.45,
+        energy_above_hull_eV_per_atom=0.0,
+    )
+    report = StabilityReport(
+        formula="NbTaO4",
+        ground_state=ground_state,
+        ranking=[ground_state],
+        chemically_stable_proxy=False,
+        summary="NbTaO4 has a near-degenerate polymorph.",
+        ranking_mode=RankingMode.CONVEX_HULL,
+        reference_set_id="nb-ta-o-pbe-v1",
+        near_degenerate_structure_paths=["candidates/NbTaO4-P004-relaxed.vasp"],
+    )
+
+    campaign.record_stability(report)
+
+    assert campaign.reference_energies.competing_phases["NbTaO4"] == -0.45
+    assert campaign.stability_reports["NbTaO4"].chemically_stable_proxy is False
+
+
 def _hull_report(formula: str, energy: float, formation_energy: float) -> StabilityReport:
     phase = PhaseStability(
         structure_path=f"candidates/{formula}.vasp",

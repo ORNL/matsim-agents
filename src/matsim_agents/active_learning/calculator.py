@@ -86,6 +86,7 @@ def _build_single_head_calculator(
 
         def __init__(self):
             super().__init__()
+            self.model = model
             self.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
         def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
@@ -131,6 +132,7 @@ def _build_selected_head_calculator(
 
         def __init__(self):
             super().__init__()
+            self.model = model
             self.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
             self.inference_head_index = head_index
             self.inference_head_name = HYDRAGNN_DATASET_HEADS[head_index]

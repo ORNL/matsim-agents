@@ -131,7 +131,7 @@ class CampaignState(BaseModel):
         ground_state = report.ground_state
         if (
             report.ranking_mode == RankingMode.CONVEX_HULL
-            and report.chemically_stable_proxy
+            and ground_state.eligible_for_ranking
             and ground_state.formation_energy_eV_per_atom is not None
             and ground_state.energy_above_hull_eV_per_atom is not None
             and ground_state.energy_above_hull_eV_per_atom <= 1e-8

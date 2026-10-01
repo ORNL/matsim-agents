@@ -99,6 +99,29 @@ def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
     assert captured["max_neighbours"] == 24
 
 
+def test_selected_head_calculator_exposes_model_for_mc_dropout(monkeypatch):
+    import matsim_agents.active_learning.calculator as calculator
+
+    torch = ModuleType("torch")
+    torch.float32 = "float32"
+    torch.tensor = lambda value, dtype: (value, dtype)
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    model = SimpleNamespace()
+
+    result = calculator._build_selected_head_calculator(
+        model,
+        head_index=7,
+        radius=6.0,
+        max_neighbours=24,
+        param_dtype="float64",
+        device="cuda",
+        charge=0,
+        spin=0,
+    )
+
+    assert result.model is model
+
+
 def test_hydragnn_head_selector_is_exposed_by_public_commands():
     root_command = get_command(app)
 
