@@ -346,6 +346,11 @@ def plan(objective: str):
 
 @app.command()
 def chat(
+    llm_only: bool = typer.Option(
+        False,
+        "--llm-only/--with-mlip",
+        help="Run conversational LLMs only, without MLIP validation or atomistic tools.",
+    ),
     mlip_backend: str = _opt_mlip_backend(),
     logdir: Path | None = _opt_logdir(),
     hydragnn_branch_mlp_checkpoint: Path | None = _opt_hydragnn_branch_mlp_checkpoint(),
@@ -464,6 +469,7 @@ def chat(
     panel_base_urls = [s.strip() for s in (critic_panel_base_urls or "").split(",") if s.strip()]
 
     cfg = DiscoveryChatConfig(
+        llm_only=llm_only,
         mlip_backend=mlip_backend,
         logdir=_path_or_none(logdir),
         hydragnn_branch_mlp_checkpoint=_path_or_none(hydragnn_branch_mlp_checkpoint),

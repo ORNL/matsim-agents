@@ -51,6 +51,7 @@ Guidelines:
 
 @dataclass
 class DiscoveryChatConfig:
+    llm_only: bool = False
     mlip_backend: str = "hydragnn"
     logdir: str | None = None
     hydragnn_branch_mlp_checkpoint: str | None = None
@@ -101,6 +102,9 @@ class DiscoveryChatConfig:
         error surfaces at configuration time rather than at the first
         relaxation.
         """
+        if self.llm_only:
+            self.trigger_active_learning_on_high_uq = False
+            return
         if self.mlip_backend not in {"hydragnn", "uma"}:
             raise ValueError(
                 f"mlip_backend must be 'hydragnn' or 'uma', got {self.mlip_backend!r}."
@@ -606,25 +610,31 @@ def chat_once(
     is_al, al_formula = _extract_al_command(user_text)
     if is_al:
         session.messages.append(HumanMessage(content=user_text))
-        if al_formula is None:
-            if session.explorations:
-                al_formula = session.explorations[-1].composition.formula
-            elif session.seen_compositions:
-                al_formula = next(iter(session.seen_compositions))
-        if al_formula is None:
+        if cfg.llm_only:
             assistant_text = (
-                "Active learning command received but no composition was given and "
-                "none has been discussed yet. Use '/al <composition>' "
-                "(e.g. '/al Li2MnO3')."
+                "Active learning is unavailable in LLM-only mode. "
+                "Restart chat with --with-mlip to enable atomistic tools."
             )
         else:
-            try:
-                assistant_text = _run_active_learning_for_formula(al_formula, cfg)
-            except Exception as exc:  # pragma: no cover - depends on runtime environment
+            if al_formula is None:
+                if session.explorations:
+                    al_formula = session.explorations[-1].composition.formula
+                elif session.seen_compositions:
+                    al_formula = next(iter(session.seen_compositions))
+            if al_formula is None:
                 assistant_text = (
-                    f"Active learning failed for {al_formula}: {exc!s}. "
-                    "Check active_learning_config and retry."
+                    "Active learning command received but no composition was given and "
+                    "none has been discussed yet. Use '/al <composition>' "
+                    "(e.g. '/al Li2MnO3')."
                 )
+            else:
+                try:
+                    assistant_text = _run_active_learning_for_formula(al_formula, cfg)
+                except Exception as exc:  # pragma: no cover - depends on runtime environment
+                    assistant_text = (
+                        f"Active learning failed for {al_formula}: {exc!s}. "
+                        "Check active_learning_config and retry."
+                    )
         session.messages.append(AIMessage(content=assistant_text))
         if on_assistant is not None:
             on_assistant(assistant_text)
@@ -634,13 +644,19 @@ def chat_once(
     relax_path = _extract_relax_command(user_text)
     if relax_path is not None:
         session.messages.append(HumanMessage(content=user_text))
-        try:
-            assistant_text = _run_single_structure_relaxation(relax_path, cfg)
-        except Exception as exc:  # pragma: no cover - depends on runtime environment
+        if cfg.llm_only:
             assistant_text = (
-                f"Single-structure relaxation failed for {relax_path}: {exc!s}. "
-                "Check path/model configuration and retry."
+                "Structure relaxation is unavailable in LLM-only mode. "
+                "Restart chat with --with-mlip to enable atomistic tools."
             )
+        else:
+            try:
+                assistant_text = _run_single_structure_relaxation(relax_path, cfg)
+            except Exception as exc:  # pragma: no cover - depends on runtime environment
+                assistant_text = (
+                    f"Single-structure relaxation failed for {relax_path}: {exc!s}. "
+                    "Check path/model configuration and retry."
+                )
         session.messages.append(AIMessage(content=assistant_text))
         if on_assistant is not None:
             on_assistant(assistant_text)
@@ -665,6 +681,9 @@ def chat_once(
     session.messages.append(AIMessage(content=assistant_text))
     if on_assistant is not None:
         on_assistant(assistant_text)
+
+    if cfg.llm_only:
+        return assistant_text
 
     # Discovery hook: scan both user and assistant text for new compositions.
     for blob in (user_text, assistant_text):
