@@ -171,12 +171,6 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     import json
     import sys
 
-    import torch
-
-    from matsim_agents.backends.mlip.relaxation import (
-        _build_calculator,  # type: ignore[attr-defined]
-    )
-
     logdir = Path(logdir_override) if logdir_override is not None else cfg.logdir
     config_path = logdir / "config.json"
     if not config_path.is_file():
@@ -223,6 +217,12 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
             charge=cfg.charge,
             spin=cfg.spin,
         )
+
+    import torch
+
+    from matsim_agents.backends.mlip.relaxation import (
+        _build_calculator,  # type: ignore[attr-defined]
+    )
 
     # --- new-head (single-branch) fine-tune models -----------------------------
     # When ``newhead_ft_config`` is set, the checkpoint was produced by

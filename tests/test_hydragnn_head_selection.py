@@ -83,6 +83,7 @@ def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
         "float64",
     )
     monkeypatch.setitem(sys.modules, "inference_random_structures", inference)
+    monkeypatch.setitem(sys.modules, "torch", None)
     captured = {}
 
     def selected_builder(model, **kwargs):
