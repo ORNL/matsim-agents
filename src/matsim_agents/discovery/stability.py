@@ -171,9 +171,7 @@ class ReferenceEnergySet(BaseModel):
                     f"expected {self.backend!r}"
                 )
             if self.elemental_energies_eV_per_atom.get(element) != entry.energy_eV_per_atom:
-                raise ValueError(
-                    f"elemental energy for {element!r} does not match its typed entry"
-                )
+                raise ValueError(f"elemental energy for {element!r} does not match its typed entry")
         return self
 
     def competing_phase_records(self) -> list[tuple[str, str, float]]:
@@ -193,9 +191,7 @@ class ReferenceEnergySet(BaseModel):
         from pymatgen.core import Composition as PMGComposition
 
         elements = sorted(set(target_elements))
-        missing_elements = sorted(
-            set(elements) - set(self.elemental_energies_eV_per_atom)
-        )
+        missing_elements = sorted(set(elements) - set(self.elemental_energies_eV_per_atom))
         formulas = {
             PMGComposition(formula).reduced_formula
             for _phase_id, formula, _energy in self.competing_phase_records()
@@ -275,9 +271,7 @@ def recalibrate_hull_reports(
         ComputedEntry(element, energy)
         for element, energy in reference_energies.elemental_energies_eV_per_atom.items()
     ]
-    for phase_id, phase_formula, formation_per_atom in (
-        reference_energies.competing_phase_records()
-    ):
+    for phase_id, phase_formula, formation_per_atom in reference_energies.competing_phase_records():
         composition = PMGComposition(phase_formula)
         reference_total = sum(
             amount * reference_energies.elemental_energies_eV_per_atom[element]
@@ -426,9 +420,11 @@ def score_stability(
             ComputedEntry(element, energy)
             for element, energy in reference_energies.elemental_energies_eV_per_atom.items()
         ]
-        for phase_id, phase_formula, formation_per_atom in (
-            reference_energies.competing_phase_records()
-        ):
+        for (
+            phase_id,
+            phase_formula,
+            formation_per_atom,
+        ) in reference_energies.competing_phase_records():
             comp = PMGComposition(phase_formula)
             ref_total = sum(
                 amount * reference_energies.elemental_energies_eV_per_atom[element]
@@ -518,7 +514,5 @@ def score_stability(
         reference_set_id=(reference_energies.identifier if reference_energies else None),
         degeneracy_tolerance_eV_per_atom=degeneracy_tol_eV_per_atom,
         degeneracy_reference_structure_path=degeneracy_reference.optimized_structure_path,
-        near_degenerate_structure_paths=[
-            item.optimized_structure_path for item in near_degenerate
-        ],
+        near_degenerate_structure_paths=[item.optimized_structure_path for item in near_degenerate],
     )

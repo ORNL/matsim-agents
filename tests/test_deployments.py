@@ -20,8 +20,7 @@ def test_deployment_assets_are_portable() -> None:
 def test_perlmutter_campaign_imports_current_checkout() -> None:
     root = Path(__file__).resolve().parents[1]
     script = (
-        root
-        / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
+        root / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
     )
     content = script.read_text(encoding="utf-8")
 
@@ -41,14 +40,12 @@ def test_perlmutter_multinode_server_extends_raylet_startup_wait() -> None:
 def test_perlmutter_campaign_exposes_adaptive_acquisition_controls() -> None:
     root = Path(__file__).resolve().parents[1]
     script = (
-        root
-        / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
+        root / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
     )
     content = script.read_text(encoding="utf-8")
 
     assert (
-        '--acquisition-mode \\"\\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-insertion-order}\\"'
-        in content
+        '--acquisition-mode \\"\\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-insertion-order}\\"' in content
     )
     assert '--lambda-initial \\"\\${MATSIM_CAMPAIGN_LAMBDA_INITIAL:-0.5}\\"' in content
     assert '--maximum-per-relaxed-family \\"\\${MATSIM_CAMPAIGN_MAX_PER_FAMILY:-1}\\"' in content
@@ -59,31 +56,24 @@ def test_perlmutter_campaign_exposes_adaptive_acquisition_controls() -> None:
     assert "\\${MATSIM_CAMPAIGN_STOPPING_ARGS:-}" in content
     assert "\\${MATSIM_CAMPAIGN_FINAL_REVIEW_ARGS:-}" in content
     assert (
-        '--degeneracy-tolerance-ev-per-atom '
-        '\\"\\${MATSIM_CAMPAIGN_DEGENERACY_TOLERANCE_EV_PER_ATOM:-0.01}\\"'
-        in content
+        "--degeneracy-tolerance-ev-per-atom "
+        '\\"\\${MATSIM_CAMPAIGN_DEGENERACY_TOLERANCE_EV_PER_ATOM:-0.01}\\"' in content
     )
     assert "--expand-unary-polymorphs" in content
     assert '--unary-random "${MATSIM_CAMPAIGN_UNARY_RANDOM:-50}"' in content
-    assert (
-        '--surrogate-minimum-unique-unary '
-        '"${MATSIM_CAMPAIGN_MIN_UNIQUE_UNARY:-2}"'
-        in content
-    )
+    assert '--surrogate-minimum-unique-unary "${MATSIM_CAMPAIGN_MIN_UNIQUE_UNARY:-2}"' in content
 
 
 def test_perlmutter_campaign_supports_debate_only_and_uma_only_modes() -> None:
     root = Path(__file__).resolve().parents[1]
     script = (
-        root
-        / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
+        root / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
     )
     content = script.read_text(encoding="utf-8")
 
     discovery_call = content.index("campaign_formula_discovery.py")
     debate_exit = content.index(
-        'if [[ "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == '
-        '"single-llm-once" ]]',
+        'if [[ "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == "single-llm-once" ]]',
         discovery_call,
     )
     execution_call = content.index("campaign_execute.py")

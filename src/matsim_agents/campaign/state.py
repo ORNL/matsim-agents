@@ -184,8 +184,7 @@ class CampaignState(BaseModel):
             for formula in completeness.missing_required_formulas
         )
         undersampled.extend(
-            f"missing binary subsystem: {pair}"
-            for pair in completeness.missing_binary_subsystems
+            f"missing binary subsystem: {pair}" for pair in completeness.missing_binary_subsystems
         )
         if completeness.missing_ternary_competitor:
             undersampled.append("missing ternary competing phase")

@@ -55,9 +55,7 @@ def test_mace_checkpoint_dispatch(fake_mace, tmp_path):
     checkpoint = tmp_path / "fine-tuned.model"
     checkpoint.touch()
 
-    build_mace_calculator(
-        MACEConfig(family="checkpoint", model=str(checkpoint), device="cpu")
-    )
+    build_mace_calculator(MACEConfig(family="checkpoint", model=str(checkpoint), device="cpu"))
 
     assert fake_mace["checkpoint"]["model_paths"] == [str(checkpoint)]
 

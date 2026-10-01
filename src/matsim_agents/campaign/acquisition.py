@@ -205,9 +205,7 @@ def update_adaptive_lambda(
         else 0.0
     )
     explore_yield = (
-        state.exploration_useful / state.exploration_attempts
-        if state.exploration_attempts
-        else 0.0
+        state.exploration_useful / state.exploration_attempts if state.exploration_attempts else 0.0
     )
     updated = current + policy.update_rate * (exploit_yield - explore_yield)
     state.lambda_value = min(policy.lambda_maximum, max(policy.lambda_minimum, updated))

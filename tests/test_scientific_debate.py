@@ -31,9 +31,7 @@ def test_single_call_mode_invokes_one_model_exactly_once(tmp_path):
     result = run_scientific_debate(
         ScientificDebateConfig(
             hypothesis="Propose candidate Nb-Ta-O formulas.",
-            participants=[
-                DebateParticipant(name="baseline", provider="vllm", model="baseline")
-            ],
+            participants=[DebateParticipant(name="baseline", provider="vllm", model="baseline")],
             rounds=1,
             single_call=True,
             output_root=str(tmp_path),

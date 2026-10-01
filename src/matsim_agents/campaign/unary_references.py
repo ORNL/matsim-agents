@@ -242,7 +242,5 @@ def relax_unary_references(
         missing_elements=missing,
         provisional=bool(missing),
     )
-    result_path.write_text(
-        result.model_dump_json(indent=2) + "\n", encoding="utf-8"
-    )
+    result_path.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
     return result

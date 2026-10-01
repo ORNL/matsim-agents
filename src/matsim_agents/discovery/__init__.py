@@ -23,13 +23,13 @@ from matsim_agents.discovery.seeds import (
     random_search,
 )
 from matsim_agents.discovery.stability import (
-  ElementalReferenceEntry,
-  ReferenceCompletenessPolicy,
-  ReferenceCompletenessReport,
-  ReferenceEnergySet,
-  ReferencePhaseEntry,
-  StabilityReport,
-  score_stability,
+    ElementalReferenceEntry,
+    ReferenceCompletenessPolicy,
+    ReferenceCompletenessReport,
+    ReferenceEnergySet,
+    ReferencePhaseEntry,
+    StabilityReport,
+    score_stability,
 )
 from matsim_agents.discovery.wrapper import (
     CompositionExplorationResult,

@@ -34,9 +34,7 @@ def surrogate_hull_coverage(
     from pymatgen.core import Composition
 
     manifest_endpoints, covered_subsystems = reference_coverage(formulas)
-    available_endpoints = (
-        manifest_endpoints if elemental_endpoints is None else elemental_endpoints
-    )
+    available_endpoints = manifest_endpoints if elemental_endpoints is None else elemental_endpoints
     target_elements = {str(element) for element in Composition(target_formula).elements}
     required_subsystems = {frozenset(pair) for pair in combinations(target_elements, 2)}
     missing_elements = target_elements - available_endpoints
@@ -46,9 +44,7 @@ def surrogate_hull_coverage(
         "reference_manifest": reference_manifest,
         "provisional": bool(missing_elements or missing_subsystems),
         "missing_elemental_references": sorted(missing_elements),
-        "missing_binary_subsystems": sorted(
-            "-".join(sorted(pair)) for pair in missing_subsystems
-        ),
+        "missing_binary_subsystems": sorted("-".join(sorted(pair)) for pair in missing_subsystems),
     }
 
 
@@ -123,20 +119,13 @@ def evaluate_surrogate_hull(
 
     entries = []
     for phase in unary_search.phases:
-        if (
-            not phase.converged
-            or phase.duplicate_of is not None
-            or phase.total_energy_eV is None
-        ):
+        if not phase.converged or phase.duplicate_of is not None or phase.total_energy_eV is None:
             continue
         composition = Composition(phase.formula)
         corrected_total = (
-            phase.total_energy_eV
-            + phase.energy_correction_eV_per_atom * composition.num_atoms
+            phase.total_energy_eV + phase.energy_correction_eV_per_atom * composition.num_atoms
         )
-        entries.append(
-            ComputedEntry(composition, corrected_total, entry_id=phase.phase_id)
-        )
+        entries.append(ComputedEntry(composition, corrected_total, entry_id=phase.phase_id))
 
     for spec in specs:
         composition = Composition(str(spec["formula"]))

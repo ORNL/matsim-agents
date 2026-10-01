@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
-from ase.io import read as ase_read, write as ase_write
+from ase.io import read as ase_read
+from ase.io import write as ase_write
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_calculator
@@ -24,6 +25,8 @@ from matsim_agents.active_learning.loop import run_active_learning
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.mlip.relaxation import (
     RelaxStructureInput,
+)
+from matsim_agents.backends.mlip.relaxation import (
     _run as run_mlip_relaxation,
 )
 from matsim_agents.campaign.registry import (
@@ -300,7 +303,10 @@ def _perturbation_robustness(
     converged = [item for item in exploration.relaxations if item.converged]
     if not converged or config.perturbation_trials == 0:
         return {"trials": [], "robust_fraction": None}
-    reference = min(converged, key=lambda item: item.final_energy_eV / len(ase_read(item.optimized_structure_path)))
+    reference = min(
+        converged,
+        key=lambda item: item.final_energy_eV / len(ase_read(item.optimized_structure_path)),
+    )
     backend_kwargs = _exploration_kwargs(al_cfg, {})
     trials: list[dict[str, Any]] = []
     for index in range(config.perturbation_trials):
@@ -574,9 +580,7 @@ def _vasp_template_settings(al_cfg: ALConfig) -> dict[str, Any]:
         "NELM": "nelm",
         "NELMIN": "nelmin",
     }
-    settings = {
-        field_map[key]: value for key, value in incar.items() if key in field_map
-    }
+    settings = {field_map[key]: value for key, value in incar.items() if key in field_map}
     relaxation_keys = {"IBRION", "ISIF", "NSW", "EDIFFG"}
     settings["extra_incar"] = {
         key: value
@@ -723,8 +727,7 @@ def _generate_reference_energies(
     )
     if references.backend is not None and references.backend != al_cfg.dft.backend:
         raise ValueError(
-            f"reference energies use {references.backend}, but refinement uses "
-            f"{al_cfg.dft.backend}"
+            f"reference energies use {references.backend}, but refinement uses {al_cfg.dft.backend}"
         )
     if references.backend is None and (
         references.elemental_energies_eV_per_atom
@@ -821,9 +824,7 @@ def _generate_reference_energies(
                 total_energy_eV=relaxed.final_energy_eV,
                 source=spec.source,
                 provenance=spec.provenance,
-                corrections={
-                    "energy_correction_eV_per_atom": spec.energy_correction_eV_per_atom
-                },
+                corrections={"energy_correction_eV_per_atom": spec.energy_correction_eV_per_atom},
             )
             continue
         missing = set(composition.elements) - set(references.elemental_energies_eV_per_atom)
@@ -836,9 +837,8 @@ def _generate_reference_energies(
             for element, amount in composition.elements.items()
         )
         formation_energy = (
-            (relaxed.final_energy_eV - elemental_total) / composition.total_atoms
-            + spec.energy_correction_eV_per_atom
-        )
+            relaxed.final_energy_eV - elemental_total
+        ) / composition.total_atoms + spec.energy_correction_eV_per_atom
         references.phase_entries.append(
             ReferencePhaseEntry(
                 phase_id=spec.phase_id,
@@ -852,9 +852,7 @@ def _generate_reference_energies(
                 energy_per_atom_eV=energy_per_atom,
                 source=spec.source,
                 provenance=spec.provenance,
-                corrections={
-                    "energy_correction_eV_per_atom": spec.energy_correction_eV_per_atom
-                },
+                corrections={"energy_correction_eV_per_atom": spec.energy_correction_eV_per_atom},
             )
         )
     references = ReferenceEnergySet.model_validate(references.model_dump())
@@ -981,9 +979,7 @@ def run_formula_with_active_learning(
     promoted_model = _promoted_model_path(result)
     if promoted_model is not None:
         _apply_model_override(effective_al_cfg, promoted_model)
-    candidate_uncertainty = _score_relaxed_candidate_uncertainty(
-        exploration, effective_al_cfg
-    )
+    candidate_uncertainty = _score_relaxed_candidate_uncertainty(exploration, effective_al_cfg)
     validation_configs = [
         effective_al_cfg,
         *(ALConfig.from_yaml(path) for path in config.validation_configs),
@@ -1123,12 +1119,13 @@ def run_formula_with_active_learning(
         method_signature=refinement.method_signature,
     )
     evidence = result.active_learning_result or {}
-    evidence["n_dft_calculations"] = int(evidence.get("n_dft_calculations", 0)) + len(
-        refined
-    ) + reference_calculations
-    evidence["node_hours"] = float(evidence.get("node_hours", 0.0)) + (
-        refinement_seconds + reference_seconds
-    ) * config.compute_nodes / 3600.0
+    evidence["n_dft_calculations"] = (
+        int(evidence.get("n_dft_calculations", 0)) + len(refined) + reference_calculations
+    )
+    evidence["node_hours"] = (
+        float(evidence.get("node_hours", 0.0))
+        + (refinement_seconds + reference_seconds) * config.compute_nodes / 3600.0
+    )
     evidence["dft_refinement"] = {
         "backend": al_cfg.dft.backend,
         "method_signature": refinement.method_signature,

@@ -46,10 +46,7 @@ def test_codabench_mace_catalog_matches_workflow() -> None:
     runner = _load("codabench_mace_catalog", CODEBENCH / "run_baselines.py")
     from matsim_agents.active_learning.finetune_mace import MACE_MODELS
 
-    expected = {
-        name: (entry["family"], entry["model"])
-        for name, entry in MACE_MODELS.items()
-    }
+    expected = {name: (entry["family"], entry["model"]) for name, entry in MACE_MODELS.items()}
     assert expected == runner.MACE_MODELS
 
     common = {
@@ -57,9 +54,7 @@ def test_codabench_mace_catalog_matches_workflow() -> None:
         "mace_model": None,
         "legacy_mace_size": None,
     }
-    materials = runner.selected_mace_models(
-        Namespace(**common, mace_variant="materials")
-    )
+    materials = runner.selected_mace_models(Namespace(**common, mace_variant="materials"))
     all_models = runner.selected_mace_models(Namespace(**common, mace_variant="all"))
 
     assert len(materials) == 16

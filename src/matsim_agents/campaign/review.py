@@ -169,13 +169,14 @@ def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -
                     "ranking_mode": ranking_mode,
                     "has_formation_energy": has_formation_energy,
                     "has_energy_above_hull": has_hull_energy,
-                    "cross_model_ranking_disagreement": cross_model.get(
-                        "ranking_disagreement"
-                    ),
+                    "cross_model_ranking_disagreement": cross_model.get("ranking_disagreement"),
                     "perturbation_robust_fraction": robustness.get("robust_fraction"),
                     "surrogate_hull_evidence_level": (
                         "mlip_proxy"
-                        if any(str(key).endswith(":surrogate_hull") for key in cross_model.get("models", {}))
+                        if any(
+                            str(key).endswith(":surrogate_hull")
+                            for key in cross_model.get("models", {})
+                        )
                         else None
                     ),
                 },

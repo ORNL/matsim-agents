@@ -16,7 +16,6 @@ from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
 from matsim_agents.chat import DiscoveryChatConfig
 from matsim_agents.cli import app
 
-
 EXPECTED_HEADS = (
     "Alexandria",
     "ANI1x",
@@ -92,9 +91,7 @@ def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
 
     monkeypatch.setattr(calculator, "_build_selected_head_calculator", selected_builder)
 
-    result = build_hydragnn_calculator(
-        HydraGNNConfig(logdir=logdir, inference_head="OMat24")
-    )
+    result = build_hydragnn_calculator(HydraGNNConfig(logdir=logdir, inference_head="OMat24"))
 
     assert result.head_index == 7
     assert captured["radius"] == 6.0
@@ -107,8 +104,6 @@ def test_hydragnn_head_selector_is_exposed_by_public_commands():
     for command_name in ("run", "chat", "supervisor-run"):
         command = root_command.commands[command_name]
         option_names = {
-            option
-            for parameter in command.params
-            for option in getattr(parameter, "opts", ())
+            option for parameter in command.params for option in getattr(parameter, "opts", ())
         }
         assert "--hydragnn-inference-head" in option_names

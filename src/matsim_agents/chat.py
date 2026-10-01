@@ -111,10 +111,7 @@ class DiscoveryChatConfig:
                     "mlip_backend='hydragnn' requires 'logdir' "
                     "(HydraGNN logdir containing config.json + checkpoint)."
                 )
-            if (
-                not self.hydragnn_branch_mlp_checkpoint
-                and self.hydragnn_inference_head is None
-            ):
+            if not self.hydragnn_branch_mlp_checkpoint and self.hydragnn_inference_head is None:
                 raise ValueError(
                     "mlip_backend='hydragnn' requires 'hydragnn_branch_mlp_checkpoint' "
                     "(BranchWeightMLP .pt checkpoint)."

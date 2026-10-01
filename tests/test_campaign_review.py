@@ -55,12 +55,10 @@ def test_review_evidence_defines_authoritative_numerical_semantics() -> None:
     assert facts["converged_mlip_labels"] == 1
     assert facts["has_formation_energy"] is False
     assert facts["has_energy_above_hull"] is False
-    assert "never infer composition from prototype_id" in evidence["evidence_semantics"][
-        "composition"
-    ]
-    assert "does not establish formation energy" in evidence["evidence_semantics"][
-        "energy_scope"
-    ]
+    assert (
+        "never infer composition from prototype_id" in evidence["evidence_semantics"]["composition"]
+    )
+    assert "does not establish formation energy" in evidence["evidence_semantics"]["energy_scope"]
 
 
 def test_campaign_review_requires_cross_model_agreement(tmp_path):

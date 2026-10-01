@@ -13,9 +13,9 @@ from matsim_agents.campaign.execution import (
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,
-    _score_relaxed_candidate_uncertainty,
     _cross_model_scores,
     _perturbation_robustness,
+    _score_relaxed_candidate_uncertainty,
     latest_promoted_model,
     run_formula_with_active_learning,
 )
@@ -82,9 +82,7 @@ loop:
 
 
 def test_surrogate_reference_coverage_requires_pure_element_endpoints():
-    elemental_endpoints, subsystems = reference_coverage(
-        ["Nb", "NbO", "NbTa", "NbTaO4"]
-    )
+    elemental_endpoints, subsystems = reference_coverage(["Nb", "NbO", "NbTa", "NbTaO4"])
 
     assert elemental_endpoints == {"Nb"}
     assert subsystems == {
@@ -306,8 +304,9 @@ def test_relaxed_candidate_uncertainty_uses_registry_candidate_ids(tmp_path, mon
 
 
 def test_cross_model_scores_records_ranking_disagreement(tmp_path):
-    from matsim_agents.active_learning.config import ALConfig
     from ase.calculators.calculator import Calculator, all_changes
+
+    from matsim_agents.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
@@ -367,9 +366,10 @@ def test_cross_model_scores_records_ranking_disagreement(tmp_path):
 
 
 def test_cross_model_scores_dispatches_validator_to_independent_python(tmp_path, monkeypatch):
+    from ase.calculators.calculator import Calculator, all_changes
+
     import matsim_agents.campaign.execution as execution
     from matsim_agents.active_learning.config import ALConfig
-    from ase.calculators.calculator import Calculator, all_changes
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
@@ -462,9 +462,7 @@ def test_cross_model_scores_uses_per_validator_python(tmp_path, monkeypatch):
     def fake_run(command, **kwargs):
         calls.append(command)
         return SimpleNamespace(
-            stdout=json.dumps(
-                {"labels": [], "ranking": [], "surrogate_hull": None}
-            )
+            stdout=json.dumps({"labels": [], "ranking": [], "surrogate_hull": None})
         )
 
     monkeypatch.setattr(execution.subprocess, "run", fake_run)
@@ -649,18 +647,18 @@ def test_uma_only_execution_rejects_non_uma_backend(tmp_path, monkeypatch):
 
 
 def _vasp_config_yaml(tmp_path) -> str:
-        vasp_bin = tmp_path / "vasp_std"
-        wrapper = tmp_path / "vasp-wrapper.sh"
-        incar = tmp_path / "INCAR.template"
-        potcar_dir = tmp_path / "potcars"
-        vasp_bin.touch()
-        wrapper.touch()
-        incar.write_text(
-                "ENCUT = 600\nISMEAR = 0\nSIGMA = 0.05\nIBRION = -1\nNSW = 0\n",
-                encoding="utf-8",
-        )
-        potcar_dir.mkdir()
-        return f"""
+    vasp_bin = tmp_path / "vasp_std"
+    wrapper = tmp_path / "vasp-wrapper.sh"
+    incar = tmp_path / "INCAR.template"
+    potcar_dir = tmp_path / "potcars"
+    vasp_bin.touch()
+    wrapper.touch()
+    incar.write_text(
+        "ENCUT = 600\nISMEAR = 0\nSIGMA = 0.05\nIBRION = -1\nNSW = 0\n",
+        encoding="utf-8",
+    )
+    potcar_dir.mkdir()
+    return f"""
 mlip:
     backend: uma
     uma:
@@ -1066,9 +1064,7 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
                 ),
                 reference_structures={"O2": oxygen},
                 reference_relax_cell={"O2": False},
-                reference_settings={
-                    "O2": {"ispin": 2, "extra_incar": {"MAGMOM": "2*1.0"}}
-                },
+                reference_settings={"O2": {"ispin": 2, "extra_incar": {"MAGMOM": "2*1.0"}}},
             ),
         ),
         phase_runner=phase_runner,

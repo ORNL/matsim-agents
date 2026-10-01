@@ -64,9 +64,7 @@ def validate_labelled_frames(
 
     accepted: list[Any] = []
     summary = DatasetValidationSummary()
-    seen = {
-        _geometry_key(getattr(existing, "atoms", existing)) for existing in existing_frames
-    }
+    seen = {_geometry_key(getattr(existing, "atoms", existing)) for existing in existing_frames}
     for index, frame in enumerate(frames):
         try:
             atoms = getattr(frame, "atoms", frame)

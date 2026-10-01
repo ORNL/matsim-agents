@@ -12,7 +12,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 HYDRAGNN_DATASET_HEADS = (
     "Alexandria",
     "ANI1x",
@@ -50,6 +49,7 @@ def resolve_hydragnn_inference_head(value: str | int | None) -> int | None:
             f"{', '.join(HYDRAGNN_DATASET_HEADS)}"
         )
     return by_name[normalized]
+
 
 # --------------------------------------------------------------------------- #
 # Sub-configs                                                                 #
@@ -212,9 +212,7 @@ class MACEConfig(BaseModel):
         None,
         description="Calculator dtype -> MACE default_dtype (fp64 recommended for relaxation).",
     )
-    dispersion: bool = Field(
-        False, description="Add DFT-D3 dispersion correction (mace_mp only)."
-    )
+    dispersion: bool = Field(False, description="Add DFT-D3 dispersion correction (mace_mp only).")
     ensemble_models: list[str] = Field(
         default_factory=list,
         description=(

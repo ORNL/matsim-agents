@@ -213,13 +213,17 @@ def _scientific_stop_reason(
         common = set(previous.energy_above_hull_eV_per_atom) & set(
             current.energy_above_hull_eV_per_atom
         )
-        if common and max(
-            abs(
-                current.energy_above_hull_eV_per_atom[formula]
-                - previous.energy_above_hull_eV_per_atom[formula]
+        if (
+            common
+            and max(
+                abs(
+                    current.energy_above_hull_eV_per_atom[formula]
+                    - previous.energy_above_hull_eV_per_atom[formula]
+                )
+                for formula in common
             )
-            for formula in common
-        ) <= tolerance:
+            <= tolerance
+        ):
             if not policy.require_low_uncertainty_near_hull:
                 return "hull energy change tolerance reached"
             near_hull = set(current.hull_vertices) | set(current.near_hull_phases)

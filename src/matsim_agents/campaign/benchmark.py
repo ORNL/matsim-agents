@@ -182,8 +182,7 @@ def compare_paired_metric(
     bootstrap_means = np.mean(draws, axis=1)
     alpha = 1.0 - confidence_level
     interval = tuple(
-        float(value)
-        for value in np.quantile(bootstrap_means, [alpha / 2.0, 1.0 - alpha / 2.0])
+        float(value) for value in np.quantile(bootstrap_means, [alpha / 2.0, 1.0 - alpha / 2.0])
     )
     if differences.size <= 16:
         null_means = np.asarray(
@@ -196,9 +195,7 @@ def compare_paired_metric(
         signs = rng.choice((-1.0, 1.0), size=(bootstrap_samples, differences.size))
         null_means = np.mean(signs * differences, axis=1)
     p_value = float(np.mean(np.abs(null_means) >= abs(mean_difference)))
-    favorable_difference = (
-        mean_difference if metric.direction == "maximize" else -mean_difference
-    )
+    favorable_difference = mean_difference if metric.direction == "maximize" else -mean_difference
     threshold = metric.success_threshold or 0.0
     return PairedComparison(
         metric=metric.name,

@@ -221,9 +221,7 @@ def ingest_exploration_result(
             energy_per_atom_eV=(
                 relaxation.final_energy_eV / atom_count if relaxation and atom_count else None
             ),
-            residual_force_eV_per_A=(
-                relaxation.final_max_force_eV_per_A if relaxation else None
-            ),
+            residual_force_eV_per_A=(relaxation.final_max_force_eV_per_A if relaxation else None),
             optimization_steps=(relaxation.num_steps if relaxation else None),
             uncertainty=(uncertainty_by_candidate or {}).get(candidate_id),
             failure_reason=None if relaxation is not None else "no relaxation result",
@@ -307,9 +305,7 @@ def select_dft_refinement_candidates(
     )
     relaxation_by_path = {item.structure_path: item for item in exploration.relaxations}
     converged_ids = [
-        candidate_id
-        for candidate_id in ids
-        if temporary.evaluations[candidate_id].converged
+        candidate_id for candidate_id in ids if temporary.evaluations[candidate_id].converged
     ]
     if not converged_ids:
         return [], {}
@@ -337,25 +333,18 @@ def select_dft_refinement_candidates(
         evaluation = temporary.evaluations[candidate_id]
         descriptor = soap_descriptor(record.optimized_structure_path, species=species)
         novelty = (
-            0.0
-            if record.source == "prototype"
-            else soap_novelty(descriptor, prototype_descriptors)
+            0.0 if record.source == "prototype" else soap_novelty(descriptor, prototype_descriptors)
         )
         uncertainty = float(np.clip(evaluation.uncertainty or 0.0, 0.0, 1.0))
         exploitation = 0.7 * float(energy_quality[index]) + 0.3 * (1.0 - uncertainty)
         exploration = 0.5 * uncertainty + 0.3 * novelty + 0.2 * float(record.source == "random")
-        combined = (
-            policy.lambda_value * exploitation
-            + (1.0 - policy.lambda_value) * exploration
-        )
+        combined = policy.lambda_value * exploitation + (1.0 - policy.lambda_value) * exploration
         scores[candidate_id] = CandidateSelectionScore(
             candidate_id=candidate_id,
             exploitation_score=exploitation,
             exploration_score=exploration,
             combined_score=combined,
-            assigned_branch=(
-                "exploitation" if exploitation >= exploration else "exploration"
-            ),
+            assigned_branch=("exploitation" if exploitation >= exploration else "exploration"),
             relaxed_family_id=record.relaxed_family_id or candidate_id,
         )
 
@@ -364,13 +353,9 @@ def select_dft_refinement_candidates(
         ordered = sorted(converged_ids)
         random.Random(0).shuffle(ordered)
     elif policy.mode == "exploitation":
-        ordered = sorted(
-            converged_ids, key=lambda key: (-scores[key].exploitation_score, key)
-        )
+        ordered = sorted(converged_ids, key=lambda key: (-scores[key].exploitation_score, key))
     elif policy.mode == "exploration":
-        ordered = sorted(
-            converged_ids, key=lambda key: (-scores[key].exploration_score, key)
-        )
+        ordered = sorted(converged_ids, key=lambda key: (-scores[key].exploration_score, key))
     else:
         n_exploit = min(limit, int(np.ceil(limit * policy.minimum_exploitation_fraction)))
         n_explore = min(
