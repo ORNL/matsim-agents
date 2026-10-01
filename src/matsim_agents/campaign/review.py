@@ -66,7 +66,10 @@ continued computation scientifically unjustified; uncertainty alone is not evide
 Treat authoritative_facts and evidence_semantics as constraints, not hypotheses. Do not infer
 composition from prototype_id, reinterpret charge balance, equate missing or zero summary counters
 with zero attempted calculations, or treat MLIP convergence/relative energies as thermodynamic
-stability. Cite the numerical field and evidence level that support every decision.
+stability. Use outcome_class as the authoritative stage classification and do not infer a software,
+generation, or pre-relaxation root cause beyond that classification unless a corresponding recorded
+exception identifies it. Surrogate hull values are MLIP proxies, not DFT validation. Cite the
+numerical field and evidence level that support every decision.
 New formulas are proposals only and will undergo deterministic chemical and budget validation.
 Do not wrap the JSON in Markdown."""
 
@@ -78,9 +81,9 @@ _EVIDENCE_SEMANTICS = {
         "infer composition from prototype_id."
     ),
     "execution_counts": (
-        "observed_mlip_labels is the number of persisted MLIP calculation records and "
-        "converged_mlip_labels is the subset meeting the configured convergence criterion. "
-        "A zero summary counter does not prove that candidate generation was not attempted."
+        "candidate_counts separately reports generated, attempted, completed, converged, and "
+        "failed candidates. outcome_class is the authoritative conservative classification. "
+        "Do not infer a more specific root cause without a recorded exception from that stage."
     ),
     "failed_formula": (
         "A formula-level failure or absence of converged candidates is not evidence that the "
@@ -94,6 +97,14 @@ _EVIDENCE_SEMANTICS = {
     "dft_scope": (
         "DFT evidence supports thermodynamic claims only when compatible elemental and competing-"
         "phase references produce an explicit formation energy or energy above hull."
+    ),
+    "cross_model_scope": (
+        "Cross-model ranking disagreement is an uncertainty signal. Agreement is corroboration "
+        "among related MLIPs, not independent thermodynamic validation."
+    ),
+    "surrogate_hull_scope": (
+        "Surrogate formation and hull energies are model-specific MLIP proxies. They must be "
+        "reported by model with reference completeness and cannot be described as DFT evidence."
     ),
 }
 
@@ -139,6 +150,8 @@ def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -
             report is not None
             and any(entry.energy_above_hull_eV_per_atom is not None for entry in report.ranking)
         )
+        cross_model = record.evidence.get("cross_model_validation", {})
+        robustness = record.evidence.get("perturbation_robustness", {})
         formulas.append(
             {
                 "formula": record.formula,
@@ -148,12 +161,23 @@ def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -
                     "charge_balanced_by_policy": candidate.charge_balanced,
                     "run_status": record.status,
                     "failure_reason": record.failure_reason,
+                    "outcome_class": record.outcome_class,
+                    "candidate_counts": record.candidate_counts,
                     "observed_mlip_labels": len(labels),
                     "converged_mlip_labels": converged_labels,
                     "dft_calculations": record.n_dft_calculations,
                     "ranking_mode": ranking_mode,
                     "has_formation_energy": has_formation_energy,
                     "has_energy_above_hull": has_hull_energy,
+                    "cross_model_ranking_disagreement": cross_model.get(
+                        "ranking_disagreement"
+                    ),
+                    "perturbation_robust_fraction": robustness.get("robust_fraction"),
+                    "surrogate_hull_evidence_level": (
+                        "mlip_proxy"
+                        if any(str(key).endswith(":surrogate_hull") for key in cross_model.get("models", {}))
+                        else None
+                    ),
                 },
                 "run": record.model_dump(mode="json"),
                 "stability": report.model_dump(mode="json") if report is not None else None,

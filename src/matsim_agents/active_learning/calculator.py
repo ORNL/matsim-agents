@@ -20,10 +20,12 @@ from pathlib import Path
 from typing import Any
 
 from matsim_agents.active_learning.config import (
+    HYDRAGNN_DATASET_HEADS,
     HydraGNNConfig,
     MACEConfig,
     MLIPConfig,
     UMAConfig,
+    resolve_hydragnn_inference_head,
 )
 from matsim_agents.backends.mlip.uma_artifacts import (
     load_uma_predict_unit_from_bundle,
@@ -107,6 +109,58 @@ def _build_single_head_calculator(
     return SingleHeadHydraGNNCalculator()
 
 
+def _build_selected_head_calculator(
+    model,
+    *,
+    head_index,
+    radius,
+    max_neighbours,
+    param_dtype,
+    device,
+    charge,
+    spin,
+):
+    """ASE calculator pinned to one decoding head of a multi-branch HydraGNN."""
+    import torch
+    from ase.calculators.calculator import Calculator, all_changes
+
+    from matsim_agents.backends.mlip.relaxation import _atoms_to_graph
+
+    class SelectedHeadHydraGNNCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def __init__(self):
+            super().__init__()
+            self.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+            self.inference_head_index = head_index
+            self.inference_head_name = HYDRAGNN_DATASET_HEADS[head_index]
+            self.last_branch_weights = None
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            data = _atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours).to(device)
+            data.pos = data.pos.to(param_dtype)
+            if hasattr(data, "cell") and data.cell is not None:
+                data.cell = data.cell.to(param_dtype)
+            data.x = data.x.to(param_dtype)
+            data.dataset_name = torch.full((1, 1), head_index, dtype=torch.long, device=device)
+            data.pos.requires_grad_(True)
+            with torch.enable_grad():
+                prediction = model(data)
+                if isinstance(prediction, (list, tuple)):
+                    energy = prediction[0]
+                elif isinstance(prediction, dict) and "graph" in prediction:
+                    energy = prediction["graph"][0]
+                else:
+                    energy = prediction
+                energy = energy.squeeze(-1).sum()
+                forces = -torch.autograd.grad(energy, data.pos)[0]
+            self.results["energy"] = float(energy.detach())
+            self.results["forces"] = forces.detach().cpu().numpy()
+
+    return SelectedHeadHydraGNNCalculator()
+
+
 def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path | None = None):
     """Build a ready-to-use ASE calculator from a HydraGNN logdir.
 
@@ -140,6 +194,35 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     for _d in _example_dirs:
         if (_d / "inference_fused.py").is_file() and str(_d) not in sys.path:
             sys.path.insert(0, str(_d))
+
+    selected_head = resolve_hydragnn_inference_head(cfg.inference_head)
+    if selected_head is not None:
+        from inference_random_structures import load_config_and_model
+
+        model, config, device, _autocast_ctx, param_dtype = load_config_and_model(
+            str(logdir), cfg.checkpoint, cfg.precision
+        )
+        num_branches = int(getattr(model, "num_branches", 1))
+        if selected_head >= num_branches:
+            raise ValueError(
+                f"HydraGNN head {selected_head} ({HYDRAGNN_DATASET_HEADS[selected_head]}) "
+                f"is unavailable in a model with {num_branches} branches"
+            )
+        arch = config["NeuralNetwork"]["Architecture"]
+        return _build_selected_head_calculator(
+            model,
+            head_index=selected_head,
+            radius=float(cfg.radius if cfg.radius is not None else arch.get("radius", 5.0)),
+            max_neighbours=int(
+                cfg.max_neighbours
+                if cfg.max_neighbours is not None
+                else arch.get("max_neighbours", 20)
+            ),
+            param_dtype=param_dtype,
+            device=device,
+            charge=cfg.charge,
+            spin=cfg.spin,
+        )
 
     # --- new-head (single-branch) fine-tune models -----------------------------
     # When ``newhead_ft_config`` is set, the checkpoint was produced by

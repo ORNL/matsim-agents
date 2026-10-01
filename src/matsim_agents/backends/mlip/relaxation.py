@@ -38,6 +38,13 @@ class RelaxStructureInput(BaseModel):
         None,
         description="HydraGNN BranchWeightMLP checkpoint (.pt), required for mlip_backend='hydragnn'.",
     )
+    hydragnn_inference_head: str | int | None = Field(
+        None,
+        description=(
+            "Optional HydraGNN decoding head dataset name or index. When set, "
+            "BranchWeightMLP is bypassed."
+        ),
+    )
     checkpoint: str | None = Field(
         None, description="Optional HydraGNN checkpoint filename or absolute path."
     )
@@ -89,7 +96,7 @@ class RelaxStructureInput(BaseModel):
         if self.mlip_backend == "hydragnn":
             if not self.logdir:
                 raise ValueError("mlip_backend='hydragnn' requires logdir.")
-            if not self.hydragnn_branch_mlp_checkpoint:
+            if not self.hydragnn_branch_mlp_checkpoint and self.hydragnn_inference_head is None:
                 raise ValueError("mlip_backend='hydragnn' requires hydragnn_branch_mlp_checkpoint.")
         return self
 
@@ -338,50 +345,73 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
     )
 
     if args.mlip_backend == "hydragnn":
-        from inference_fused import load_fused_stack
+        if args.hydragnn_inference_head is not None:
+            from matsim_agents.active_learning.calculator import build_hydragnn_calculator
+            from matsim_agents.active_learning.config import HydraGNNConfig
 
-        (
-            model,
-            mlp,
-            config,
-            device,
-            autocast_ctx,
-            param_dtype,
-            num_branches,
-            mlp_device,
-            mlp_autocast_ctx,
-            unified_mlp_gnn_stack,
-            _gnn_prec,
-            _mlp_prec,
-        ) = load_fused_stack(
-            args.logdir,
-            args.checkpoint,
-            args.hydragnn_branch_mlp_checkpoint,
-            args.precision,
-            args.mlp_precision,
-            args.mlp_device,
-        )
+            calculator = build_hydragnn_calculator(
+                HydraGNNConfig(
+                    logdir=args.logdir,
+                    checkpoint=args.checkpoint,
+                    hydragnn_branch_mlp_checkpoint=args.hydragnn_branch_mlp_checkpoint,
+                    inference_head=args.hydragnn_inference_head,
+                    precision=args.precision,
+                    mlp_device=args.mlp_device,
+                    charge=args.charge,
+                    spin=args.spin,
+                )
+            )
+            num_branches = 1
+            uq_note = (
+                "HydraGNN inference pinned to "
+                f"{calculator.inference_head_name} head ({calculator.inference_head_index}); "
+                "branch-weight UQ disabled"
+            )
+        else:
+            from inference_fused import load_fused_stack
 
-        arch = config["NeuralNetwork"]["Architecture"]
-        radius = float(arch.get("radius", 5.0))
-        max_neighbours = int(arch.get("max_neighbours", 20))
+            (
+                model,
+                mlp,
+                config,
+                device,
+                autocast_ctx,
+                param_dtype,
+                num_branches,
+                mlp_device,
+                mlp_autocast_ctx,
+                unified_mlp_gnn_stack,
+                _gnn_prec,
+                _mlp_prec,
+            ) = load_fused_stack(
+                args.logdir,
+                args.checkpoint,
+                args.hydragnn_branch_mlp_checkpoint,
+                args.precision,
+                args.mlp_precision,
+                args.mlp_device,
+            )
 
-        calculator = _build_calculator(
-            model,
-            mlp,
-            radius,
-            max_neighbours,
-            param_dtype,
-            autocast_ctx,
-            device,
-            num_branches,
-            mlp_device,
-            mlp_autocast_ctx,
-            unified_mlp_gnn_stack,
-            args.charge,
-            args.spin,
-        )
-        uq_note = None
+            arch = config["NeuralNetwork"]["Architecture"]
+            radius = float(arch.get("radius", 5.0))
+            max_neighbours = int(arch.get("max_neighbours", 20))
+
+            calculator = _build_calculator(
+                model,
+                mlp,
+                radius,
+                max_neighbours,
+                param_dtype,
+                autocast_ctx,
+                device,
+                num_branches,
+                mlp_device,
+                mlp_autocast_ctx,
+                unified_mlp_gnn_stack,
+                args.charge,
+                args.spin,
+            )
+            uq_note = None
     elif args.mlip_backend == "uma":
         from matsim_agents.active_learning.calculator import build_uma_calculator
         from matsim_agents.active_learning.config import UMAConfig

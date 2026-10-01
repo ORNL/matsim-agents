@@ -33,6 +33,7 @@ class CampaignRunPolicy(BaseModel):
     max_iterations: int | None = Field(None, ge=1)
     continue_on_failure: bool = True
     retry_failed: bool = False
+    retry_inconclusive: bool = False
     reserved_dft_calculations_per_formula: int = Field(0, ge=0)
     reserved_node_hours_per_formula: float = Field(0.0, ge=0.0)
     no_new_hull_vertex_iterations: int | None = Field(None, ge=1)
@@ -91,7 +92,21 @@ def _formula_priority(campaign: CampaignState, formula: str) -> tuple[int, int, 
     )
 
 
-def _eligible_formulas(campaign: CampaignState, *, retry_failed: bool) -> list[str]:
+def _record_has_usable_minimum(campaign: CampaignState, record: FormulaRunRecord) -> bool:
+    if record.outcome_class == "usable_minimum" or record.formula in campaign.stability_reports:
+        return True
+    labels = record.evidence.get("mlip_labels", [])
+    return isinstance(labels, list) and any(
+        isinstance(label, dict) and bool(label.get("converged")) for label in labels
+    )
+
+
+def _eligible_formulas(
+    campaign: CampaignState,
+    *,
+    retry_failed: bool,
+    retry_inconclusive: bool = False,
+) -> list[str]:
     eligible: list[str] = []
     for candidate in campaign.active_formulas():
         record = campaign.formula_runs.get(candidate.reduced_formula)
@@ -99,6 +114,11 @@ def _eligible_formulas(campaign: CampaignState, *, retry_failed: bool) -> list[s
             record is None
             or record.status == WorkflowStatus.PLANNED
             or (retry_failed and record.status == WorkflowStatus.FAILED)
+            or (
+                retry_inconclusive
+                and record.status == WorkflowStatus.COMPLETE
+                and not _record_has_usable_minimum(campaign, record)
+            )
         ):
             eligible.append(candidate.reduced_formula)
     return sorted(eligible, key=lambda formula: _formula_priority(campaign, formula))
@@ -291,7 +311,11 @@ def run_campaign(
             stop_reason = "iteration limit reached"
             break
 
-        eligible = _eligible_formulas(campaign, retry_failed=policy.retry_failed)
+        eligible = _eligible_formulas(
+            campaign,
+            retry_failed=policy.retry_failed,
+            retry_inconclusive=policy.retry_inconclusive,
+        )
         if not eligible:
             break
         batch_size = _admissible_batch_size(
@@ -335,6 +359,8 @@ def run_campaign(
                 result = formula_runner(formula, str(formula_dir))
                 exploration = result.after_retraining or result.initial
                 record.n_mlip_relaxations += len(exploration.relaxations)
+                record.outcome_class = exploration.outcome_class
+                record.candidate_counts = exploration.candidate_counts
                 al_result = result.active_learning_result or {}
                 record.n_dft_calculations += int(
                     al_result.get("n_dft_calculations", al_result.get("n_dft_converged", 0))
@@ -347,6 +373,10 @@ def run_campaign(
                 record.evidence = {
                     key: value for key, value in al_result.items() if key != "exploration_kwargs"
                 }
+                record.evidence["candidate_counts"] = record.candidate_counts
+                record.evidence["outcome_class"] = record.outcome_class
+                record.evidence["relaxation_failures"] = list(exploration.failures)
+                record.evidence["ranking_failure"] = exploration.ranking_failure
                 prior_families = set(campaign.candidate_registry.relaxed_families)
                 novelty_references = [
                     candidate.optimized_structure_path
@@ -437,7 +467,11 @@ def run_campaign(
         if budget_reason:
             break
 
-    remaining = _eligible_formulas(campaign, retry_failed=policy.retry_failed)
+    remaining = _eligible_formulas(
+        campaign,
+        retry_failed=policy.retry_failed,
+        retry_inconclusive=False,
+    )
     has_failures = any(
         record.status == WorkflowStatus.FAILED for record in campaign.formula_runs.values()
     )

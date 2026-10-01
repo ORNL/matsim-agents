@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -13,10 +14,18 @@ from matsim_agents.campaign.execution import (
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,
     _score_relaxed_candidate_uncertainty,
+    _cross_model_scores,
+    _perturbation_robustness,
     latest_promoted_model,
     run_formula_with_active_learning,
 )
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
+from matsim_agents.campaign.surrogate_hull import (
+    evaluate_surrogate_hull,
+    reference_coverage,
+    surrogate_hull_coverage,
+)
+from matsim_agents.campaign.unary_references import relax_unary_references
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.formula import FormulaGenerationPolicy
 from matsim_agents.discovery.seeds import PhaseCandidate
@@ -72,6 +81,184 @@ loop:
 """
 
 
+def test_surrogate_reference_coverage_requires_pure_element_endpoints():
+    elemental_endpoints, subsystems = reference_coverage(
+        ["Nb", "NbO", "NbTa", "NbTaO4"]
+    )
+
+    assert elemental_endpoints == {"Nb"}
+    assert subsystems == {
+        frozenset({"Nb", "O"}),
+        frozenset({"Nb", "Ta"}),
+        frozenset({"Nb", "Ta", "O"}),
+    }
+
+    report = surrogate_hull_coverage(["Nb", "NbO"], "NbO", "references.json")
+    assert report["provisional"] is True
+    assert report["missing_elemental_references"] == ["O"]
+    assert report["missing_binary_subsystems"] == []
+
+
+def test_unary_reference_search_relaxes_and_selects_each_model_endpoint(tmp_path):
+    from ase.build import bulk
+    from ase.calculators.calculator import Calculator, all_changes
+
+    class VolumeCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            self.results = {
+                "energy": float(atoms.get_volume()),
+                "forces": np.zeros((len(atoms), 3)),
+            }
+
+    phases = []
+    for phase_id, crystal, correction in (
+        ("Nb-bcc", "bcc", 0.0),
+        ("Nb-bcc-copy", "bcc", 0.0),
+        ("Nb-fcc", "fcc", -20.0),
+    ):
+        path = tmp_path / f"{phase_id}.extxyz"
+        write(path, bulk("Nb", crystal, a=3.0))
+        phases.append(
+            {
+                "phase_id": phase_id,
+                "formula": "Nb",
+                "path": str(path),
+                "source": "test",
+                "energy_correction_eV_per_atom": correction,
+            }
+        )
+
+    result = relax_unary_references(
+        phases,
+        {"Nb", "O"},
+        VolumeCalculator(),
+        model_identifier="test:model",
+        output_dir=tmp_path / "relaxed",
+        relax_cell=False,
+    )
+
+    assert len(result.phases) == 3
+    assert result.generated_counts == {"Nb": 3, "O": 0}
+    assert result.converged_counts == {"Nb": 3, "O": 0}
+    assert result.unique_converged_counts == {"Nb": 2, "O": 0}
+    assert result.selected_endpoints == {"Nb": "Nb-fcc"}
+    assert [phase.phase_id for phase in result.phases if phase.selected_endpoint] == ["Nb-fcc"]
+    selected = next(phase for phase in result.phases if phase.selected_endpoint)
+    assert selected.energy_above_endpoint_eV_per_atom == pytest.approx(0.0)
+    assert all(
+        phase.energy_above_endpoint_eV_per_atom is not None
+        for phase in result.phases
+        if phase.converged
+    )
+    duplicate = next(phase for phase in result.phases if phase.phase_id == "Nb-bcc-copy")
+    assert duplicate.duplicate_of == "Nb-bcc"
+    assert result.missing_elements == ["O"]
+    assert result.provisional is True
+    assert (tmp_path / "relaxed" / "unary_reference_search.json").is_file()
+
+    cached = relax_unary_references(
+        phases,
+        {"Nb", "O"},
+        object(),
+        model_identifier="test:model",
+        output_dir=tmp_path / "relaxed",
+        relax_cell=False,
+    )
+    assert cached == result
+
+
+def test_surrogate_hull_uses_relaxed_model_specific_unary_endpoints(tmp_path):
+    from ase.build import bulk
+    from ase.calculators.calculator import Calculator, all_changes
+
+    class ElementCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            energy = sum(-2.0 if symbol == "Nb" else -1.0 for symbol in atoms.symbols)
+            self.results = {
+                "energy": energy,
+                "forces": np.zeros((len(atoms), 3)),
+            }
+
+    nb_bcc = tmp_path / "Nb-bcc.extxyz"
+    nb_fcc = tmp_path / "Nb-fcc.extxyz"
+    ta_bcc = tmp_path / "Ta-bcc.extxyz"
+    oxygen = tmp_path / "O2.extxyz"
+    write(nb_bcc, bulk("Nb", "bcc", a=3.0))
+    write(nb_fcc, bulk("Nb", "fcc", a=3.0))
+    write(ta_bcc, bulk("Ta", "bcc", a=3.0))
+    write(
+        oxygen,
+        Atoms("O2", positions=[[0, 0, 0], [1.2, 0, 0]], cell=[12.0] * 3, pbc=True),
+    )
+    manifest = tmp_path / "references.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "phases": {
+                    "Nb-bcc": {
+                        "formula": "Nb",
+                        "path": str(nb_bcc),
+                        "relax_cell": False,
+                    },
+                    "Nb-fcc": {
+                        "formula": "Nb",
+                        "path": str(nb_fcc),
+                        "relax_cell": False,
+                    },
+                    "Ta-bcc": {
+                        "formula": "Ta",
+                        "path": str(ta_bcc),
+                        "relax_cell": False,
+                    },
+                    "O2": {
+                        "formula": "O2",
+                        "path": str(oxygen),
+                        "relax_cell": False,
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    labels = [{"structure_path": "target.extxyz", "energy_eV": -3.0}]
+
+    report = evaluate_surrogate_hull(
+        manifest,
+        "NbO",
+        labels,
+        ElementCalculator(),
+        model_identifier="test:model",
+        unary_max_steps=2,
+    )
+
+    assert report["missing_elemental_references"] == []
+    assert report["unary_reference_search"]["generated_counts"] == {
+        "Nb": 2,
+        "O": 1,
+        "Ta": 1,
+    }
+    assert report["unary_reference_search"]["converged_counts"] == {
+        "Nb": 2,
+        "O": 1,
+        "Ta": 1,
+    }
+    assert set(report["unary_reference_search"]["selected_endpoints"]) == {
+        "Nb",
+        "O",
+        "Ta",
+    }
+    assert report["undercovered_unary_elements"] == ["O"]
+    assert report["provisional"] is True
+    assert labels[0]["surrogate_formation_energy_eV_per_atom"] == pytest.approx(0.0)
+    assert labels[0]["surrogate_energy_above_hull_eV_per_atom"] == pytest.approx(0.0)
+
+
 def test_relaxed_candidate_uncertainty_uses_registry_candidate_ids(tmp_path, monkeypatch):
     import matsim_agents.campaign.execution as execution
     from matsim_agents.active_learning.config import ALConfig
@@ -116,6 +303,243 @@ def test_relaxed_candidate_uncertainty_uses_registry_candidate_ids(tmp_path, mon
     scores = _score_relaxed_candidate_uncertainty(exploration, cfg)
 
     assert scores == {"NbO-P0042": 0.73}
+
+
+def test_cross_model_scores_records_ranking_disagreement(tmp_path):
+    from matsim_agents.active_learning.config import ALConfig
+    from ase.calculators.calculator import Calculator, all_changes
+
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    cfg = ALConfig.from_yaml(config_path)
+    paths = []
+    relaxations = []
+    for index in range(2):
+        path = tmp_path / f"candidate-{index}.extxyz"
+        write(path, Atoms(["Nb", "O"], positions=[[0, 0, 0], [1 + index, 0, 0]]))
+        paths.append(path)
+        relaxations.append(
+            RelaxationResult(
+                structure_path=str(path),
+                optimized_structure_path=str(path),
+                trajectory_path="",
+                log_csv_path="",
+                final_energy_eV=-2.0,
+                final_max_force_eV_per_A=0.01,
+                num_steps=1,
+                converged=True,
+            )
+        )
+    composition = parse_composition("NbO")
+    assert composition is not None
+    exploration = CompositionExplorationResult(
+        composition=composition,
+        phase_candidates=[],
+        relaxations=relaxations,
+    )
+    calls = 0
+
+    def calculator_factory(_cfg):
+        nonlocal calls
+        order = [-2.0, -1.0] if calls == 0 else [-1.0, -2.0]
+        calls += 1
+
+        class PositionCalculator(Calculator):
+            implemented_properties = ["energy", "forces"]
+
+            def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+                super().calculate(atoms, properties, system_changes)
+                index = int(round(atoms.positions[1, 0] - 1))
+                self.results = {
+                    "energy": order[index],
+                    "forces": np.zeros((len(atoms), 3)),
+                }
+
+        return PositionCalculator()
+
+    scores = _cross_model_scores(
+        exploration,
+        [cfg, cfg.model_copy(deep=True)],
+        calculator_factory=calculator_factory,
+    )
+
+    assert scores["ranking_disagreement"] is True
+
+
+def test_cross_model_scores_dispatches_validator_to_independent_python(tmp_path, monkeypatch):
+    import matsim_agents.campaign.execution as execution
+    from matsim_agents.active_learning.config import ALConfig
+    from ase.calculators.calculator import Calculator, all_changes
+
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    cfg = ALConfig.from_yaml(config_path)
+    structure = tmp_path / "candidate.extxyz"
+    write(structure, Atoms(["Nb", "O"], positions=[[0, 0, 0], [1, 0, 0]]))
+    composition = parse_composition("NbO")
+    assert composition is not None
+    exploration = CompositionExplorationResult(
+        composition=composition,
+        phase_candidates=[],
+        relaxations=[
+            RelaxationResult(
+                structure_path=str(structure),
+                optimized_structure_path=str(structure),
+                trajectory_path="",
+                log_csv_path="",
+                final_energy_eV=-2.0,
+                final_max_force_eV_per_A=0.01,
+                num_steps=1,
+                converged=True,
+            )
+        ],
+    )
+
+    class PrimaryCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            self.results = {"energy": -2.0, "forces": np.zeros((len(atoms), 3))}
+
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, json.loads(kwargs["input"])))
+        return SimpleNamespace(
+            stdout=json.dumps(
+                {
+                    "labels": [{"structure_path": str(structure), "energy_per_atom_eV": -1.5}],
+                    "ranking": [str(structure)],
+                    "surrogate_hull": None,
+                }
+            )
+        )
+
+    monkeypatch.setattr(execution.subprocess, "run", fake_run)
+    scores = _cross_model_scores(
+        exploration,
+        [cfg, cfg.model_copy(deep=True)],
+        config_paths=[None, config_path],
+        validation_python=Path("/independent/mace/python"),
+        calculator_factory=lambda _cfg: PrimaryCalculator(),
+    )
+
+    assert calls[0][0][0] == "/independent/mace/python"
+    assert calls[0][1]["config"] == str(config_path)
+    assert len(scores["rankings"]) == 2
+
+
+def test_cross_model_scores_uses_per_validator_python(tmp_path, monkeypatch):
+    import matsim_agents.campaign.execution as execution
+    from matsim_agents.active_learning.config import ALConfig
+
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    cfg = ALConfig.from_yaml(config_path)
+    structure = tmp_path / "candidate.extxyz"
+    write(structure, Atoms(["Nb", "O"], positions=[[0, 0, 0], [1, 0, 0]]))
+    composition = parse_composition("NbO")
+    assert composition is not None
+    exploration = CompositionExplorationResult(
+        composition=composition,
+        phase_candidates=[],
+        relaxations=[
+            RelaxationResult(
+                structure_path=str(structure),
+                optimized_structure_path=str(structure),
+                trajectory_path="",
+                log_csv_path="",
+                final_energy_eV=-2.0,
+                final_max_force_eV_per_A=0.01,
+                num_steps=1,
+                converged=True,
+            )
+        ],
+    )
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(
+            stdout=json.dumps(
+                {"labels": [], "ranking": [], "surrogate_hull": None}
+            )
+        )
+
+    monkeypatch.setattr(execution.subprocess, "run", fake_run)
+    _cross_model_scores(
+        exploration,
+        [cfg, cfg.model_copy(deep=True), cfg.model_copy(deep=True)],
+        config_paths=[None, config_path, config_path],
+        validation_pythons=[
+            None,
+            Path("/independent/mace/python"),
+            Path("/independent/hydragnn/python"),
+        ],
+    )
+
+    assert [call[0] for call in calls] == [
+        "/independent/mace/python",
+        "/independent/hydragnn/python",
+    ]
+
+
+def test_perturbation_robustness_records_each_seed(tmp_path):
+    from matsim_agents.active_learning.config import ALConfig
+
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    cfg = ALConfig.from_yaml(config_path)
+    structure = tmp_path / "relaxed.extxyz"
+    atoms = Atoms(["Nb", "O"], positions=[[0, 0, 0], [1, 0, 0]])
+    write(structure, atoms)
+    composition = parse_composition("NbO")
+    assert composition is not None
+    exploration = CompositionExplorationResult(
+        composition=composition,
+        phase_candidates=[],
+        relaxations=[
+            RelaxationResult(
+                structure_path=str(structure),
+                optimized_structure_path=str(structure),
+                trajectory_path="",
+                log_csv_path="",
+                final_energy_eV=-2.0,
+                final_max_force_eV_per_A=0.01,
+                num_steps=1,
+                converged=True,
+            )
+        ],
+    )
+
+    def runner(request):
+        return RelaxationResult(
+            structure_path=request.structure_path,
+            optimized_structure_path=request.structure_path,
+            trajectory_path="",
+            log_csv_path="",
+            final_energy_eV=-2.0,
+            final_max_force_eV_per_A=0.01,
+            num_steps=1,
+            converged=True,
+        )
+
+    evidence = _perturbation_robustness(
+        exploration,
+        cfg,
+        CampaignFormulaExecutionConfig(
+            active_learning_config=config_path,
+            phase_policy=PhaseExplorationPolicy(),
+            perturbation_trials=3,
+            perturbation_seed=17,
+        ),
+        tmp_path / "robustness",
+        relaxation_runner=runner,
+    )
+
+    assert [trial["seed"] for trial in evidence["trials"]] == [17, 18, 19]
+    assert evidence["robust_fraction"] == 1.0
 
 
 def test_uma_only_execution_labels_polymorphs_without_dft_or_active_learning(tmp_path):

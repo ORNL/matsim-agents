@@ -65,6 +65,7 @@ def _result(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
             composition=composition,
             phase_candidates=[],
             relaxations=[],
+            outcome_class="generation_failure",
         ),
         active_learning_result={
             "n_dft_converged": 2,
@@ -91,6 +92,14 @@ def test_campaign_enforces_budget_and_prioritizes_llm_formula(tmp_path):
     assert result.stop_reason == "max_candidates budget reached"
     assert result.campaign.status == WorkflowStatus.PARTIAL
     assert result.campaign.formula_runs["NbO2"].status == WorkflowStatus.COMPLETE
+    assert result.campaign.formula_runs["NbO2"].candidate_counts == {
+        "generated": 0,
+        "attempted": 0,
+        "completed": 0,
+        "converged": 0,
+        "failed": 0,
+    }
+    assert result.campaign.formula_runs["NbO2"].outcome_class == "generation_failure"
     assert result.campaign.formula_runs["NbO2"].evidence["iteration_states"][0]["score_mean"] == 0.5
     assert CampaignState.load(result.state_path) == result.campaign
 
@@ -119,6 +128,37 @@ def test_campaign_resume_does_not_repeat_completed_formula(tmp_path):
     assert calls == ["NbO2", "NbO"]
     assert second.formulas_completed == ["NbO"]
     assert second.campaign.formula_runs["NbO2"].attempts == 1
+
+
+def test_campaign_retry_inconclusive_skips_usable_completed_formula(tmp_path):
+    campaign = _campaign()
+    campaign.formula_runs["NbO2"] = FormulaRunRecord(
+        formula="NbO2",
+        status=WorkflowStatus.COMPLETE,
+        outcome_class="generation_failure",
+    )
+    campaign.formula_runs["NbO"] = FormulaRunRecord(
+        formula="NbO",
+        status=WorkflowStatus.COMPLETE,
+        outcome_class="usable_minimum",
+    )
+    calls: list[str] = []
+
+    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+        calls.append(formula)
+        return _result(formula, output_dir)
+
+    result = run_campaign(
+        campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(max_iterations=1, retry_inconclusive=True),
+        resume=False,
+    )
+
+    assert calls == ["NbO2"]
+    assert result.campaign.formula_runs["NbO2"].attempts == 1
+    assert result.campaign.formula_runs["NbO"].attempts == 0
 
 
 def test_campaign_persists_reference_registry_from_formula_evidence(tmp_path):

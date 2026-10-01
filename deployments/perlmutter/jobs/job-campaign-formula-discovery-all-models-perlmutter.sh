@@ -27,12 +27,19 @@
 #   MATSIM_CAMPAIGN_TRAIN_EPOCHS=5         fine-tuning epochs per formula
 #   MATSIM_CAMPAIGN_PROMOTE_MODEL=1        approve promotion and reevaluation
 #   MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET=/path/to/held-out.extxyz
+# Optional no-DFT validation controls:
+#   MATSIM_CAMPAIGN_STATE_SOURCE=/path/to/campaign_state.json  reuse a prior registry
+#   MATSIM_CAMPAIGN_RANDOM_SEEDS=50         pyXtal structures per formula
+#   MATSIM_CAMPAIGN_PERTURBATION_TRIALS=5  robustness rerelaxations
+#   MATSIM_CAMPAIGN_SURROGATE_HULL=1        model-specific MLIP proxy hulls
 # Optional DFT hull controls:
 #   MATSIM_CAMPAIGN_DFT_REFINE=0            disable DFT relaxation/hull ranking
 #   MATSIM_CAMPAIGN_DFT_REFINE_CANDIDATES=1 refined phases per formula
 #   MATSIM_CAMPAIGN_REFERENCE_PROTOTYPES=1   AFLOW polymorphs per reference formula
 #   MATSIM_CAMPAIGN_CURATED_REFERENCES=...   optional curated manifest override
 #   MATSIM_CAMPAIGN_OXYGEN_CORRECTION=0.0    O2 correction in eV/O atom
+#   MATSIM_CAMPAIGN_UNARY_RANDOM=50           pyXtal unary candidates per element
+#   MATSIM_CAMPAIGN_UNARY_RELAX_STEPS=200     MLIP unary relaxation steps
 #
 # Submit with:
 #   PROJECT_ROOT=$PWD MATSIM_CAMPAIGN_MODE=uma-only sbatch -A m5216_g -q premium \
@@ -67,6 +74,12 @@ CAMPAIGN_RUN_TAG="${MATSIM_CAMPAIGN_RUN_TAG:-campaign-formula-e2e-all}"
 OUTPUT="${RUNS_ROOT:-$PROJ/runs}/portability/${CAMPAIGN_RUN_TAG}-${SLURM_JOB_ID}"
 PYTHON="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}/bin/python3"
 AL_CONFIG="${MATSIM_CAMPAIGN_AL_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-qe.yaml}"
+MACE_MPA_CONFIG="${MATSIM_CAMPAIGN_MACE_MPA_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-mace-mpa-qe.yaml}"
+MACE_OMAT_CONFIG="${MATSIM_CAMPAIGN_MACE_OMAT_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-mace-omat-qe.yaml}"
+MACE_MATPES_CONFIG="${MATSIM_CAMPAIGN_MACE_MATPES_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-mace-matpes-qe.yaml}"
+MACE_PYTHON="${MATSIM_MACE_PYTHON:-$REPO/.venv-mace/bin/python}"
+HYDRAGNN_CONFIG="${MATSIM_CAMPAIGN_HYDRAGNN_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-hydragnn-qe.yaml}"
+HYDRAGNN_PYTHON="${MATSIM_HYDRAGNN_PYTHON:-$REPO/.venv/bin/python}"
 REFERENCE_BACKEND="${MATSIM_CAMPAIGN_REFERENCE_BACKEND:-qe}"
 DFT_METHOD_SIGNATURE="${MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE:-qe-pbe-pslibrary-k4-o2-triplet-gamma-v1}"
 if [[ "$CAMPAIGN_MODE" != "debate-only" && "$CAMPAIGN_MODE" != "single-llm-once" ]]; then
@@ -167,6 +180,7 @@ for index in "${!NAMES[@]}"; do
     env PROJECT_ROOT="$REPO" SERVE_MODEL_PATH="$model_path" \
       SERVE_MODEL_NAME="${MODEL_IDS[$index]}" SERVE_N_NODES="$nodes" \
       SERVE_NODELIST="$nodelist" SERVE_RUN_PREFIX="vllm-coordinated-$name" \
+      SERVE_MAX_MODEL_LEN="${MATSIM_VLLM_MAXLEN:-32768}" \
       "$SERVER" >"$server_log" 2>&1 &
   SERVER_PIDS+=("$!")
   if (( nodes > 1 )); then
@@ -201,22 +215,32 @@ for index in "${!NAMES[@]}"; do
   MODEL_ARGS+=(--model "${NAMES[$index]}" vllm "${MODEL_IDS[$index]}" "http://${SERVER_IPS[$index]}:8000/v1")
 done
 
-echo "[$(date)] Running campaign formula-discovery driver against $EXPECTED_MODELS local models ..."
-DISCOVERY_ROUNDS="${MATSIM_CAMPAIGN_ROUNDS:-2}"
-DISCOVERY_ARGS=()
-if [[ "$CAMPAIGN_MODE" == "single-llm-once" ]]; then
-  DISCOVERY_ROUNDS=1
-  DISCOVERY_ARGS+=(--single-call)
+if [[ -n "${MATSIM_CAMPAIGN_STATE_SOURCE:-}" ]]; then
+  [[ -f "$MATSIM_CAMPAIGN_STATE_SOURCE" ]] || {
+    echo "ERROR: campaign state source not found: $MATSIM_CAMPAIGN_STATE_SOURCE" >&2
+    exit 2
+  }
+  mkdir -p "$OUTPUT/campaign"
+  cp "$MATSIM_CAMPAIGN_STATE_SOURCE" "$OUTPUT/campaign/campaign_state.json"
+  echo "[$(date)] Reusing campaign registry from $MATSIM_CAMPAIGN_STATE_SOURCE"
+else
+  echo "[$(date)] Running campaign formula-discovery driver against $EXPECTED_MODELS local models ..."
+  DISCOVERY_ROUNDS="${MATSIM_CAMPAIGN_ROUNDS:-2}"
+  DISCOVERY_ARGS=()
+  if [[ "$CAMPAIGN_MODE" == "single-llm-once" ]]; then
+    DISCOVERY_ROUNDS=1
+    DISCOVERY_ARGS+=(--single-call)
+  fi
+  "$PYTHON" "$REPO/deployments/perlmutter/jobs/campaign_formula_discovery.py" \
+    --elements Nb Ta O \
+    --oxidation-state Nb:3,4,5 --oxidation-state Ta:3,4,5 --oxidation-state O:-2 \
+    --max-coefficient 6 --max-atoms 12 \
+    --rounds "$DISCOVERY_ROUNDS" \
+    --campaign-id "nb-ta-o-e2e-all-${SLURM_JOB_ID}" \
+    --output-dir "$OUTPUT/campaign" --output-root "$OUTPUT" \
+    "${DISCOVERY_ARGS[@]}" \
+    "${MODEL_ARGS[@]}"
 fi
-"$PYTHON" "$REPO/deployments/perlmutter/jobs/campaign_formula_discovery.py" \
-  --elements Nb Ta O \
-  --oxidation-state Nb:3,4,5 --oxidation-state Ta:3,4,5 --oxidation-state O:-2 \
-  --max-coefficient 6 --max-atoms 12 \
-  --rounds "$DISCOVERY_ROUNDS" \
-  --campaign-id "nb-ta-o-e2e-all-${SLURM_JOB_ID}" \
-  --output-dir "$OUTPUT/campaign" --output-root "$OUTPUT" \
-  "${DISCOVERY_ARGS[@]}" \
-  "${MODEL_ARGS[@]}"
 
 if [[ "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == "single-llm-once" ]]; then
   echo "[$(date)] $CAMPAIGN_MODE campaign complete. Artifacts in $OUTPUT/campaign"
@@ -291,6 +315,37 @@ TRAIN_ARGS_QUOTED="$DFT_REFINEMENT_ARGS_QUOTED$TRAIN_ARGS_QUOTED"
 EXECUTION_ARGS=(--execution-mode "$CAMPAIGN_MODE")
 [[ "$CAMPAIGN_MODE" == "dft" ]] && EXECUTION_ARGS+=(--approve-dft)
 printf -v EXECUTION_ARGS_QUOTED '%q ' "${EXECUTION_ARGS[@]}"
+VALIDATION_ARGS=(
+  --validation-config "$MACE_MPA_CONFIG"
+  --validation-python "$MACE_PYTHON"
+  --validation-config "$MACE_OMAT_CONFIG"
+  --validation-python "$MACE_PYTHON"
+  --validation-config "$MACE_MATPES_CONFIG"
+  --validation-python "$MACE_PYTHON"
+  --validation-config "$HYDRAGNN_CONFIG"
+  --validation-python "$HYDRAGNN_PYTHON"
+  --perturbation-trials "${MATSIM_CAMPAIGN_PERTURBATION_TRIALS:-5}"
+  --perturbation-scale-A "${MATSIM_CAMPAIGN_PERTURBATION_SCALE_A:-0.05}"
+  --perturbation-seed "${MATSIM_CAMPAIGN_PERTURBATION_SEED:-20261001}"
+  --surrogate-unary-max-steps "${MATSIM_CAMPAIGN_UNARY_RELAX_STEPS:-200}"
+  --surrogate-unary-fmax "${MATSIM_CAMPAIGN_UNARY_FMAX:-0.02}"
+  --surrogate-unary-maxstep "${MATSIM_CAMPAIGN_UNARY_MAXSTEP:-0.01}"
+  --surrogate-minimum-unique-unary "${MATSIM_CAMPAIGN_MIN_UNIQUE_UNARY:-2}"
+)
+if [[ ( "$CAMPAIGN_MODE" == "uma-only" || "$CAMPAIGN_MODE" == "dft" ) && "${MATSIM_CAMPAIGN_SURROGATE_HULL:-1}" == "1" ]]; then
+  SURROGATE_REFERENCE_DIR="$OUTPUT/campaign/surrogate-references"
+  "$PYTHON" "$REPO/deployments/perlmutter/jobs/prepare_nb_ta_o_references.py" \
+    --output-dir "$SURROGATE_REFERENCE_DIR" \
+    --backend qe \
+    --max-prototypes-per-formula "${MATSIM_CAMPAIGN_REFERENCE_PROTOTYPES:-1}" \
+    --expand-unary-polymorphs \
+    --unary-random "${MATSIM_CAMPAIGN_UNARY_RANDOM:-50}" \
+    --unary-random-seed "${MATSIM_CAMPAIGN_UNARY_SEED:-20261001}"
+  VALIDATION_ARGS+=(
+    --surrogate-reference-structures "$SURROGATE_REFERENCE_DIR/reference_structures.json"
+  )
+fi
+printf -v VALIDATION_ARGS_QUOTED '%q ' "${VALIDATION_ARGS[@]}"
 echo "[$(date)] Running bounded $CAMPAIGN_MODE campaign on $CAMPAIGN_NODE ..."
 srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
   --gpus-per-node=1 --cpus-per-task=16 \
@@ -298,6 +353,8 @@ srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
     set -euo pipefail
     source '$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh'
     load_perlmutter_modules_gpu
+    source '$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh'
+    configure_mace_model_artifacts '$REPO'
     source '$REPO/.venv-uma/bin/activate'
     export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 CUDA_DEVICE_ORDER=PCI_BUS_ID
     export HF_HUB_OFFLINE=\"\${HF_HUB_OFFLINE:-1}\" TRANSFORMERS_OFFLINE=\"\${TRANSFORMERS_OFFLINE:-1}\"
@@ -314,7 +371,6 @@ srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
       --acquisition-mode \"\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-insertion-order}\" \
       --acquisition-seed \"\${MATSIM_CAMPAIGN_ACQUISITION_SEED:-0}\" \
       --lambda-initial \"\${MATSIM_CAMPAIGN_LAMBDA_INITIAL:-0.5}\" \
-        --acquisition-mode "\${MATSIM_CAMPAIGN_ACQUISITION_MODE:-insertion-order}" \
       --lambda-maximum \"\${MATSIM_CAMPAIGN_LAMBDA_MAXIMUM:-0.8}\" \
       --lambda-update-rate \"\${MATSIM_CAMPAIGN_LAMBDA_UPDATE_RATE:-0.15}\" \
       --minimum-exploitation-fraction \"\${MATSIM_CAMPAIGN_MIN_EXPLOITATION:-0.2}\" \
@@ -323,15 +379,17 @@ srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
       --reserved-dft-per-formula \"\${MATSIM_CAMPAIGN_RESERVED_DFT_PER_FORMULA:-0}\" \
       --reserved-node-hours-per-formula \"\${MATSIM_CAMPAIGN_RESERVED_NODE_HOURS_PER_FORMULA:-0}\" \
       \${MATSIM_CAMPAIGN_STOPPING_ARGS:-} \
-      --max-iterations \"\${MATSIM_CAMPAIGN_MAX_ITERATIONS:-3}\" \
-      --max-candidates \"\${MATSIM_CAMPAIGN_MAX_CANDIDATES:-3}\" \
+      --max-iterations \"\${MATSIM_CAMPAIGN_MAX_ITERATIONS:-22}\" \
+      --max-candidates \"\${MATSIM_CAMPAIGN_MAX_CANDIDATES:-22}\" \
       --max-dft-calculations \"\${MATSIM_CAMPAIGN_MAX_DFT:-6}\" \
       --max-al-iterations \"\${MATSIM_CAMPAIGN_MAX_AL_ITERATIONS:-3}\" \
       --max-node-hours \"\${MATSIM_CAMPAIGN_MAX_NODE_HOURS:-8}\" \
-      --n-random \"\${MATSIM_CAMPAIGN_RANDOM_SEEDS:-0}\" \
-      --relax-maxiter \"\${MATSIM_CAMPAIGN_RELAX_MAXITER:-100}\" \
+      --n-random \"\${MATSIM_CAMPAIGN_RANDOM_SEEDS:-50}\" \
+      --relax-maxiter \"\${MATSIM_CAMPAIGN_RELAX_MAXITER:-200}\" \
       --degeneracy-tolerance-ev-per-atom \"\${MATSIM_CAMPAIGN_DEGENERACY_TOLERANCE_EV_PER_ATOM:-0.01}\" \
+      --retry-failed --retry-inconclusive \
       $EXECUTION_ARGS_QUOTED \
+      $VALIDATION_ARGS_QUOTED \
       $TRAIN_ARGS_QUOTED \
       $MODEL_ARGS_QUOTED
   " 2>&1 | tee "$OUTPUT/campaign-execute.log"

@@ -56,6 +56,34 @@ def _curated_phases(path: Path) -> dict[str, dict[str, object]]:
     return normalized
 
 
+def _deduplicate_unary_phases(
+    phases: dict[str, dict[str, object]],
+) -> tuple[dict[str, dict[str, object]], list[str]]:
+    """Deduplicate unary structures while preserving curated-first ordering."""
+    from ase.io import read
+    from pymatgen.analysis.structure_matcher import StructureMatcher
+    from pymatgen.core import Composition, Structure
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    matcher = StructureMatcher(primitive_cell=True, attempt_supercell=True)
+    retained: dict[str, dict[str, object]] = {}
+    representatives: dict[str, list[Structure]] = {}
+    duplicates: list[str] = []
+    for phase_id, spec in phases.items():
+        composition = Composition(str(spec["formula"]))
+        if len(composition.elements) != 1:
+            retained[phase_id] = spec
+            continue
+        element = str(composition.elements[0])
+        structure = AseAtomsAdaptor.get_structure(read(str(spec["path"])))
+        if any(matcher.fit(existing, structure) for existing in representatives.get(element, [])):
+            duplicates.append(phase_id)
+            continue
+        representatives.setdefault(element, []).append(structure)
+        retained[phase_id] = spec
+    return retained, duplicates
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", required=True, type=Path)
@@ -67,11 +95,20 @@ def main() -> int:
         help="Formulas for which AFLOW prototype references are generated.",
     )
     parser.add_argument("--max-prototypes-per-formula", type=int, default=1)
+    parser.add_argument(
+        "--expand-unary-polymorphs",
+        action="store_true",
+        help="Add all compatible AFLOW unary prototypes and pyXtal unary candidates.",
+    )
+    parser.add_argument("--unary-random", type=int, default=0)
+    parser.add_argument("--unary-random-seed", type=int, default=20261001)
     parser.add_argument("--curated-manifest", type=Path)
     parser.add_argument("--oxygen-correction-eV-per-atom", type=float, default=0.0)
     args = parser.parse_args()
     if args.max_prototypes_per_formula < 1:
         parser.error("--max-prototypes-per-formula must be positive")
+    if args.unary_random < 0:
+        parser.error("--unary-random must be non-negative")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     structures = {
@@ -109,6 +146,38 @@ def main() -> int:
             "extra_incar": {"MAGMOM": "2*1.0"},
         }
     phases["O2"]["energy_correction_eV_per_atom"] = args.oxygen_correction_eV_per_atom
+
+    if args.expand_unary_polymorphs:
+        unary_root = args.output_dir / "unary_candidates"
+        for element_index, element in enumerate(("Nb", "Ta", "O")):
+            composition = parse_composition(element)
+            if composition is None:  # pragma: no cover - fixed valid symbols
+                raise ValueError(f"could not parse unary element {element!r}")
+            candidates = generate_seeds(
+                composition,
+                str(unary_root / element),
+                n_random=args.unary_random,
+                fmt="extxyz",
+                random_seed=args.unary_random_seed + element_index,
+            )
+            for index, candidate in enumerate(candidates):
+                source_label = "aflow" if candidate.source == "prototype" else "pyxtal"
+                phase_id = f"{element}-{source_label}-{index:04d}"
+                phases[phase_id] = {
+                    "phase_id": phase_id,
+                    "formula": element,
+                    "path": str(Path(candidate.structure_path).resolve()),
+                    "relax_cell": True,
+                    "source": f"{source_label}_unary",
+                    "provenance": {
+                        "candidate_id": candidate.candidate_id or "unknown",
+                        "prototype_id": candidate.prototype_id or "none",
+                        "space_group": str(candidate.space_group or "unknown"),
+                        "random_seed": str(candidate.random_seed or "none"),
+                    },
+                }
+
+    phases, duplicate_unary_phases = _deduplicate_unary_phases(phases)
 
     prototype_root = args.output_dir / "competing_phases"
     missing_formulas: list[str] = []
@@ -163,6 +232,10 @@ def main() -> int:
             "missing_aflow_formulas": missing_formulas,
             "max_prototypes_per_formula": args.max_prototypes_per_formula,
             "oxygen_correction_eV_per_atom": args.oxygen_correction_eV_per_atom,
+            "expand_unary_polymorphs": args.expand_unary_polymorphs,
+            "unary_random": args.unary_random,
+            "unary_random_seed": args.unary_random_seed,
+            "duplicate_unary_phases_removed": duplicate_unary_phases,
         },
     }
     manifest_path = args.output_dir / "reference_structures.json"

@@ -42,6 +42,8 @@ class FormulaRunRecord(BaseModel):
     attempts: int = 0
     output_dir: str | None = None
     failure_reason: str | None = None
+    outcome_class: str | None = None
+    candidate_counts: dict[str, int] = Field(default_factory=dict)
     n_mlip_relaxations: int = 0
     n_dft_calculations: int = 0
     n_active_learning_iterations: int = 0

@@ -12,6 +12,45 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+
+HYDRAGNN_DATASET_HEADS = (
+    "Alexandria",
+    "ANI1x",
+    "MPTrj",
+    "OC2020",
+    "OC2022",
+    "OC25",
+    "ODAC23",
+    "OMat24",
+    "OMol25",
+    "OMol25-neutral",
+    "OMol25-non-neutral",
+    "OPoly2026",
+    "Nabla2DFT",
+    "QCML",
+    "QM7X",
+    "transition1x",
+)
+
+
+def resolve_hydragnn_inference_head(value: str | int | None) -> int | None:
+    """Resolve a HydraGNN dataset name or branch index to the canonical head index."""
+    if value is None:
+        return None
+    if isinstance(value, int) or str(value).strip().isdigit():
+        index = int(value)
+        if 0 <= index < len(HYDRAGNN_DATASET_HEADS):
+            return index
+        raise ValueError(f"HydraGNN inference head index must be in [0, 15], got {index}")
+    normalized = str(value).strip().casefold()
+    by_name = {name.casefold(): index for index, name in enumerate(HYDRAGNN_DATASET_HEADS)}
+    if normalized not in by_name:
+        raise ValueError(
+            f"unknown HydraGNN inference head {value!r}; expected one of "
+            f"{', '.join(HYDRAGNN_DATASET_HEADS)}"
+        )
+    return by_name[normalized]
+
 # --------------------------------------------------------------------------- #
 # Sub-configs                                                                 #
 # --------------------------------------------------------------------------- #
@@ -50,6 +89,13 @@ class HydraGNNConfig(BaseModel):
     spin: float = 0.0
     precision: str | None = None  # "fp32" | "fp64" | "bf16"
     mlp_device: Literal["cuda", "cpu"] = "cuda"
+    inference_head: str | int | None = Field(
+        None,
+        description=(
+            "Optional decoding head selected by canonical dataset name or index 0..15. "
+            "When set, inference bypasses BranchWeightMLP and uses only that head."
+        ),
+    )
     ensemble_paths: list[Path] = Field(
         default_factory=list,
         description=(
@@ -57,6 +103,13 @@ class HydraGNNConfig(BaseModel):
             "non-empty, ensemble disagreement is available as an acquisition."
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_inference_head(self) -> HydraGNNConfig:
+        resolve_hydragnn_inference_head(self.inference_head)
+        if self.inference_head is not None and self.newhead_ft_config is not None:
+            raise ValueError("inference_head cannot be combined with a single new-head model")
+        return self
 
 
 class MCDropoutInjectionConfig(BaseModel):

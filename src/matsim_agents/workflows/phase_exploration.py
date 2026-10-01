@@ -80,7 +80,11 @@ def run_phase_exploration(
             n_random=kwargs.get("n_random", 50),
             random_seed=kwargs.get("random_seed", 0),
         )
-        initial = CompositionExplorationResult(composition=parsed, phase_candidates=candidates)
+        initial = CompositionExplorationResult(
+            composition=parsed,
+            phase_candidates=candidates,
+            outcome_class="usable_minimum" if candidates else "generation_failure",
+        )
     else:
         initial = explore_composition(composition, output_dir=output_dir, **kwargs)
 

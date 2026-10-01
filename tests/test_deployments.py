@@ -3,6 +3,9 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+from ase.build import bulk
+from ase.io import write
+
 
 def test_deployment_assets_are_portable() -> None:
     root = Path(__file__).resolve().parents[1]
@@ -60,6 +63,13 @@ def test_perlmutter_campaign_exposes_adaptive_acquisition_controls() -> None:
         '\\"\\${MATSIM_CAMPAIGN_DEGENERACY_TOLERANCE_EV_PER_ATOM:-0.01}\\"'
         in content
     )
+    assert "--expand-unary-polymorphs" in content
+    assert '--unary-random "${MATSIM_CAMPAIGN_UNARY_RANDOM:-50}"' in content
+    assert (
+        '--surrogate-minimum-unique-unary '
+        '"${MATSIM_CAMPAIGN_MIN_UNIQUE_UNARY:-2}"'
+        in content
+    )
 
 
 def test_perlmutter_campaign_supports_debate_only_and_uma_only_modes() -> None:
@@ -96,6 +106,32 @@ def test_perlmutter_campaign_supports_debate_only_and_uma_only_modes() -> None:
     executor = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(executor)
     assert executor.WorkflowStatus.FAILED == "failed"
+
+
+def test_reference_preparation_deduplicates_unary_polymorphs(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = root / "deployments/perlmutter/jobs/prepare_nb_ta_o_references.py"
+    spec = importlib.util.spec_from_file_location("prepare_nb_ta_o_references", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    bcc = tmp_path / "bcc.extxyz"
+    bcc_copy = tmp_path / "bcc-copy.extxyz"
+    fcc = tmp_path / "fcc.extxyz"
+    write(bcc, bulk("Nb", "bcc", a=3.3))
+    write(bcc_copy, bulk("Nb", "bcc", a=3.3))
+    write(fcc, bulk("Nb", "fcc", a=3.3))
+    phases = {
+        "Nb-bcc": {"formula": "Nb", "path": str(bcc)},
+        "Nb-bcc-copy": {"formula": "Nb", "path": str(bcc_copy)},
+        "Nb-fcc": {"formula": "Nb", "path": str(fcc)},
+    }
+
+    retained, duplicates = module._deduplicate_unary_phases(phases)
+
+    assert list(retained) == ["Nb-bcc", "Nb-fcc"]
+    assert duplicates == ["Nb-bcc-copy"]
 
     def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> None:
         root = Path(__file__).resolve().parents[1]

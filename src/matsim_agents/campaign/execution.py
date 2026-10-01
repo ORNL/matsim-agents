@@ -3,26 +3,36 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
-from ase.io import read as ase_read
+from ase.io import read as ase_read, write as ase_write
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.active_learning.candidates import Candidate
-from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.active_learning.config import (
+    HYDRAGNN_DATASET_HEADS,
+    ALConfig,
+    resolve_hydragnn_inference_head,
+)
 from matsim_agents.active_learning.loop import run_active_learning
 from matsim_agents.active_learning.uncertainty import select_candidates
+from matsim_agents.backends.mlip.relaxation import (
+    RelaxStructureInput,
+    _run as run_mlip_relaxation,
+)
 from matsim_agents.campaign.registry import (
     CandidateSelectionPolicy,
     select_dft_refinement_candidates,
     structure_content_hash,
 )
 from matsim_agents.campaign.state import CampaignState
+from matsim_agents.campaign.surrogate_hull import evaluate_surrogate_hull
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.stability import (
     ElementalReferenceEntry,
@@ -59,15 +69,254 @@ class CampaignFormulaExecutionConfig(BaseModel):
     retraining: CampaignRetrainingConfig | None = None
     dft_refinement: CampaignDFTRefinementConfig | None = None
     model_override: str | None = None
+    validation_configs: list[Path] = Field(default_factory=list)
+    validation_python: Path | None = None
+    validation_pythons: list[Path] = Field(default_factory=list)
+    perturbation_trials: int = Field(0, ge=0)
+    perturbation_scale_A: float = Field(0.05, gt=0)
+    perturbation_seed: int = 0
+    surrogate_reference_structures: Path | None = None
+    surrogate_unary_max_steps: int = Field(200, ge=1)
+    surrogate_unary_fmax_eV_per_A: float = Field(0.02, gt=0)
+    surrogate_unary_maxstep_A: float = Field(0.01, gt=0)
+    surrogate_minimum_unique_unary: int = Field(2, ge=1)
 
     @model_validator(mode="after")
     def _validate_execution_mode(self) -> CampaignFormulaExecutionConfig:
+        missing = [str(path) for path in self.validation_configs if not path.is_file()]
+        if missing:
+            raise ValueError(f"validation config files do not exist: {missing}")
+        if self.validation_python is not None and not self.validation_python.is_file():
+            raise ValueError(f"validation Python does not exist: {self.validation_python}")
+        missing_pythons = [str(path) for path in self.validation_pythons if not path.is_file()]
+        if missing_pythons:
+            raise ValueError(f"validation Python interpreters do not exist: {missing_pythons}")
+        if self.validation_pythons and len(self.validation_pythons) not in {
+            1,
+            len(self.validation_configs),
+        }:
+            raise ValueError(
+                "validation_pythons must contain one shared interpreter or align "
+                "with validation_configs"
+            )
+        if (
+            self.surrogate_reference_structures is not None
+            and not self.surrogate_reference_structures.is_file()
+        ):
+            raise ValueError(
+                "surrogate reference manifest does not exist: "
+                f"{self.surrogate_reference_structures}"
+            )
         if self.execution_mode == "uma_only":
             if self.phase_policy.active_learning or self.phase_policy.retrain_mlip:
                 raise ValueError("uma_only execution disables active learning and retraining")
             if self.retraining is not None or self.dft_refinement is not None:
                 raise ValueError("uma_only execution cannot configure retraining or DFT refinement")
         return self
+
+
+def _model_identifier(cfg: ALConfig) -> str:
+    if cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
+        return f"uma:{cfg.mlip.uma.model_name}:{cfg.mlip.uma.task_name}"
+    if cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
+        return f"mace:{cfg.mlip.mace.family}:{cfg.mlip.mace.model}"
+    if cfg.mlip.hydragnn is not None:
+        identifier = f"hydragnn:{cfg.mlip.hydragnn.logdir}"
+        head_index = resolve_hydragnn_inference_head(cfg.mlip.hydragnn.inference_head)
+        if head_index is not None:
+            identifier += f":head={HYDRAGNN_DATASET_HEADS[head_index]}"
+        return identifier
+    return cfg.mlip.backend
+
+
+def _cross_model_scores(
+    exploration: Any,
+    configs: list[ALConfig],
+    *,
+    config_paths: list[Path | None] | None = None,
+    validation_python: Path | None = None,
+    validation_pythons: list[Path | None] | None = None,
+    reference_manifest: Path | None = None,
+    unary_max_steps: int = 200,
+    unary_fmax_eV_per_A: float = 0.02,
+    unary_maxstep_A: float = 0.01,
+    minimum_unique_unary: int = 2,
+    calculator_factory: Callable[..., Any] = make_mlip_calculator,
+) -> dict[str, Any]:
+    """Score converged structures and compare within-model phase orderings."""
+    structures = [item for item in exploration.relaxations if item.converged]
+    if not structures or not configs:
+        return {"models": {}, "ranking_disagreement": False, "rankings": {}}
+    references: list[tuple[str, str, Path]] = []
+    if reference_manifest is not None:
+        raw_manifest = json.loads(reference_manifest.read_text(encoding="utf-8"))
+        raw_phases = raw_manifest.get("phases", raw_manifest)
+        for phase_id, spec in raw_phases.items():
+            if isinstance(spec, str):
+                references.append((str(phase_id), str(phase_id), Path(spec)))
+            else:
+                references.append(
+                    (
+                        str(spec.get("phase_id", phase_id)),
+                        str(spec.get("formula", phase_id)),
+                        Path(spec["path"]),
+                    )
+                )
+    models: dict[str, Any] = {}
+    rankings: dict[str, list[str]] = {}
+    failures: dict[str, str] = {}
+    paths = config_paths or [None] * len(configs)
+    if len(paths) != len(configs):
+        raise ValueError("config_paths must align with configs")
+    pythons = validation_pythons or [None] * len(configs)
+    if len(pythons) != len(configs):
+        raise ValueError("validation_pythons must align with configs")
+    for index, (cfg, config_path, config_python) in enumerate(
+        zip(configs, paths, pythons, strict=True)
+    ):
+        base_identifier = _model_identifier(cfg)
+        identifier = base_identifier
+        suffix = 2
+        while identifier in models or identifier in failures:
+            identifier = f"{base_identifier}#{suffix}"
+            suffix += 1
+        try:
+            external_python = config_python or validation_python
+            if index > 0 and external_python is not None:
+                if config_path is None:
+                    raise ValueError("external validation requires a config path")
+                completed = subprocess.run(
+                    [
+                        str(external_python),
+                        "-m",
+                        "matsim_agents.campaign.mlip_validation_worker",
+                    ],
+                    input=json.dumps(
+                        {
+                            "config": str(config_path),
+                            "formula": exploration.composition.formula,
+                            "structure_paths": [
+                                item.optimized_structure_path for item in structures
+                            ],
+                            "reference_manifest": (
+                                str(reference_manifest) if reference_manifest else None
+                            ),
+                            "model_identifier": identifier,
+                            "unary_max_steps": unary_max_steps,
+                            "unary_fmax_eV_per_A": unary_fmax_eV_per_A,
+                            "unary_maxstep_A": unary_maxstep_A,
+                            "minimum_unique_unary": minimum_unique_unary,
+                        }
+                    ),
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                )
+                payload = json.loads(completed.stdout.strip().splitlines()[-1])
+                models[identifier] = payload["labels"]
+                rankings[identifier] = payload["ranking"]
+                if payload.get("surrogate_hull") is not None:
+                    models[identifier + ":surrogate_hull"] = payload["surrogate_hull"]
+                continue
+            calculator = calculator_factory(cfg.mlip)
+            labels: list[dict[str, Any]] = []
+            for relaxation in structures:
+                atoms = ase_read(relaxation.optimized_structure_path)
+                atoms.calc = calculator
+                forces = np.asarray(atoms.get_forces(), dtype=float)
+                labels.append(
+                    {
+                        "structure_path": relaxation.optimized_structure_path,
+                        "energy_eV": float(atoms.get_potential_energy()),
+                        "energy_per_atom_eV": float(atoms.get_potential_energy()) / len(atoms),
+                        "max_force_eV_per_A": float(np.linalg.norm(forces, axis=1).max()),
+                    }
+                )
+            models[identifier] = labels
+            rankings[identifier] = [
+                label["structure_path"]
+                for label in sorted(labels, key=lambda item: item["energy_per_atom_eV"])
+            ]
+            if references:
+                coverage = evaluate_surrogate_hull(
+                    reference_manifest,
+                    exploration.composition.formula,
+                    labels,
+                    calculator,
+                    model_identifier=identifier,
+                    unary_max_steps=unary_max_steps,
+                    unary_fmax_eV_per_A=unary_fmax_eV_per_A,
+                    unary_maxstep_A=unary_maxstep_A,
+                    minimum_unique_unary=minimum_unique_unary,
+                )
+                models[identifier + ":surrogate_hull"] = coverage
+                models[identifier] = labels
+        except Exception as exc:  # noqa: BLE001
+            failures[identifier] = repr(exc)
+    complete_rankings = list(rankings.values())
+    return {
+        "models": models,
+        "failures": failures,
+        "rankings": rankings,
+        "ranking_disagreement": bool(
+            len(complete_rankings) > 1
+            and any(ranking != complete_rankings[0] for ranking in complete_rankings[1:])
+        ),
+    }
+
+
+def _perturbation_robustness(
+    exploration: Any,
+    al_cfg: ALConfig,
+    config: CampaignFormulaExecutionConfig,
+    output_root: Path,
+    *,
+    relaxation_runner: Callable[[RelaxStructureInput], RelaxationResult] = run_mlip_relaxation,
+) -> dict[str, Any]:
+    """Rerelax seeded perturbations of the lowest-energy converged minimum."""
+    converged = [item for item in exploration.relaxations if item.converged]
+    if not converged or config.perturbation_trials == 0:
+        return {"trials": [], "robust_fraction": None}
+    reference = min(converged, key=lambda item: item.final_energy_eV / len(ase_read(item.optimized_structure_path)))
+    backend_kwargs = _exploration_kwargs(al_cfg, {})
+    trials: list[dict[str, Any]] = []
+    for index in range(config.perturbation_trials):
+        trial_dir = output_root / f"trial-{index:03d}"
+        trial_dir.mkdir(parents=True, exist_ok=True)
+        perturbed_path = trial_dir / "perturbed.extxyz"
+        atoms = ase_read(reference.optimized_structure_path)
+        rng = np.random.default_rng(config.perturbation_seed + index)
+        atoms.positions += rng.normal(scale=config.perturbation_scale_A, size=atoms.positions.shape)
+        ase_write(perturbed_path, atoms)
+        try:
+            result = relaxation_runner(
+                RelaxStructureInput(
+                    structure_path=str(perturbed_path),
+                    output_dir=str(trial_dir),
+                    maxiter=int(config.exploration_kwargs.get("maxiter", 100)),
+                    fmax=float(config.exploration_kwargs.get("fmax", 0.02)),
+                    **backend_kwargs,
+                )
+            )
+            trials.append(
+                {
+                    "seed": config.perturbation_seed + index,
+                    "converged": result.converged,
+                    "energy_per_atom_eV": result.final_energy_eV / len(atoms),
+                    "max_force_eV_per_A": result.final_max_force_eV_per_A,
+                    "optimized_structure_path": result.optimized_structure_path,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            trials.append(
+                {"seed": config.perturbation_seed + index, "converged": False, "error": repr(exc)}
+            )
+    return {
+        "reference_structure_path": reference.optimized_structure_path,
+        "displacement_scale_A": config.perturbation_scale_A,
+        "trials": trials,
+        "robust_fraction": sum(bool(trial["converged"]) for trial in trials) / len(trials),
+    }
 
 
 class CampaignRetrainingConfig(BaseModel):
@@ -259,6 +508,15 @@ def _exploration_kwargs(cfg: ALConfig, overrides: dict[str, Any]) -> dict[str, A
     elif cfg.mlip.hydragnn is not None:
         values.setdefault("logdir", str(cfg.mlip.hydragnn.logdir))
         values.setdefault("checkpoint", cfg.mlip.hydragnn.checkpoint)
+        values.setdefault("hydragnn_inference_head", cfg.mlip.hydragnn.inference_head)
+        values.setdefault(
+            "hydragnn_branch_mlp_checkpoint",
+            (
+                str(cfg.mlip.hydragnn.hydragnn_branch_mlp_checkpoint)
+                if cfg.mlip.hydragnn.hydragnn_branch_mlp_checkpoint is not None
+                else None
+            ),
+        )
         values.setdefault("mlp_device", cfg.mlip.hydragnn.mlp_device)
         values.setdefault("precision", cfg.mlip.hydragnn.precision)
     return values
@@ -591,6 +849,8 @@ def run_formula_with_active_learning(
     relaxation_runner: Callable[
         [ScientificRelaxationConfig], ScientificRelaxationResult
     ] = run_relaxation,
+    mlip_relaxation_runner: Callable[[RelaxStructureInput], RelaxationResult] = run_mlip_relaxation,
+    calculator_factory: Callable[..., Any] = make_mlip_calculator,
 ) -> PhaseExplorationWorkflowResult:
     """Explore and label one formula using a fresh copy of the AL template."""
 
@@ -701,6 +961,41 @@ def run_formula_with_active_learning(
     phase_seconds = time.monotonic() - phase_started
     exploration = result.after_retraining or result.initial
     candidate_uncertainty = _score_relaxed_candidate_uncertainty(exploration, al_cfg)
+    validation_configs = [
+        al_cfg,
+        *(ALConfig.from_yaml(path) for path in config.validation_configs),
+    ]
+    cross_model = _cross_model_scores(
+        exploration,
+        validation_configs,
+        config_paths=[None, *config.validation_configs],
+        validation_python=config.validation_python,
+        validation_pythons=(
+            [
+                None,
+                *(
+                    config.validation_pythons * len(config.validation_configs)
+                    if len(config.validation_pythons) == 1
+                    else config.validation_pythons
+                ),
+            ]
+            if config.validation_pythons
+            else None
+        ),
+        reference_manifest=config.surrogate_reference_structures,
+        unary_max_steps=config.surrogate_unary_max_steps,
+        unary_fmax_eV_per_A=config.surrogate_unary_fmax_eV_per_A,
+        unary_maxstep_A=config.surrogate_unary_maxstep_A,
+        minimum_unique_unary=config.surrogate_minimum_unique_unary,
+        calculator_factory=calculator_factory,
+    )
+    robustness = _perturbation_robustness(
+        exploration,
+        al_cfg,
+        config,
+        formula_root / "robustness",
+        relaxation_runner=mlip_relaxation_runner,
+    )
     if config.execution_mode == "uma_only":
         candidate_by_path = {
             candidate.structure_path: candidate for candidate in exploration.phase_candidates
@@ -741,6 +1036,8 @@ def run_formula_with_active_learning(
             "model_promoted": False,
             "candidate_uncertainty": candidate_uncertainty,
             "mlip_labels": labels,
+            "cross_model_validation": cross_model,
+            "perturbation_robustness": robustness,
         }
         return result
     if result.active_learning_result is not None:

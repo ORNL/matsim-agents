@@ -264,6 +264,19 @@ method-identified elemental and competing-phase reference set and reports
 formation energy, energy above hull, and decomposition. Residual forces are a
 convergence filter, not a thermodynamic ranking term.
 
+MLIP surrogate hulls perform a separate unary-reference search for every
+model. Each target element starts from curated structures plus all compatible
+AFLOW prototypes and, by campaign default, 50 pyXtal structures. Initial and
+relaxed duplicates are identified with `StructureMatcher`; every relaxation
+outcome remains in `unary_reference_search.json`, while only unique converged
+polymorphs enter the phase diagram. The lowest corrected energy per atom for
+each model defines that model's elemental endpoint. A missing converged unary
+endpoint makes the hull provisional and suppresses formation/hull energies.
+Isolated atoms are not hull endpoints; they are appropriate only for optional
+cohesive or atomization-energy diagnostics. Competing compound references are
+currently model-scored at their manifest geometries, so these results remain
+explicitly labeled `mlip_proxy` rather than DFT thermodynamics.
+
 Use this table to choose the right entry point quickly.
 
 | Goal | Recommended entry point | Required inputs | Typical outputs |
@@ -1159,6 +1172,7 @@ Common options (all commands that touch HydraGNN):
 |---|---|
 | `--logdir PATH` | HydraGNN logdir with `config.json` and checkpoint. |
 | `--hydragnn-branch-mlp-checkpoint PATH` | BranchWeightMLP `.pt` file. |
+| `--hydragnn-inference-head NAME_OR_INDEX` | Use one decoder head directly, bypassing BranchWeightMLP and fused inference. |
 | `--checkpoint NAME` | HydraGNN checkpoint filename or absolute path. |
 | `--mlp-device {cuda,cpu}` | Device for the auxiliary MLP. |
 | `--precision {fp32,fp64,bf16}` | HydraGNN precision override. |
@@ -1166,6 +1180,24 @@ Common options (all commands that touch HydraGNN):
 | `--llm-provider {ollama,vllm,openai,anthropic,huggingface}` | Chat backend. |
 | `--llm-model NAME` | Provider-specific model identifier. |
 | `--llm-base-url URL` | Override server URL (Ollama / vLLM). |
+
+HydraGNN uses fused 16-head inference by default, which requires
+`--hydragnn-branch-mlp-checkpoint`. To pin one head for MLIP inference, pass a
+case-insensitive dataset name or its index, for example
+`--hydragnn-inference-head OMat24` or set `mlip.inference_head: OMat24` in an
+active-learning YAML. Pinned mode invokes only that decoder, does not require
+the branch MLP, and does not report branch-weight uncertainty.
+
+| Index | Dataset | Index | Dataset |
+|---:|---|---:|---|
+| 0 | Alexandria | 8 | OMol25 |
+| 1 | ANI1x | 9 | OMol25-neutral |
+| 2 | MPTrj | 10 | OMol25-non-neutral |
+| 3 | OC2020 | 11 | OPoly2026 |
+| 4 | OC2022 | 12 | Nabla2DFT |
+| 5 | OC25 | 13 | QCML |
+| 6 | ODAC23 | 14 | QM7X |
+| 7 | OMat24 | 15 | transition1x |
 
 `chat`-specific:
 

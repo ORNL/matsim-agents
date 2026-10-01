@@ -8,7 +8,7 @@ single call.
 from __future__ import annotations
 
 import os
-from typing import Callable
+from typing import Callable, Literal
 
 from pydantic import BaseModel, Field
 
@@ -27,12 +27,29 @@ class CompositionExplorationResult(BaseModel):
     relaxations: list[RelaxationResult] = Field(default_factory=list)
     stability: StabilityReport | None = None
     failures: list[str] = Field(default_factory=list)
+    ranking_failure: str | None = None
+    outcome_class: Literal[
+        "generation_failure",
+        "relaxation_non_convergence",
+        "usable_minimum",
+    ] = "generation_failure"
+
+    @property
+    def candidate_counts(self) -> dict[str, int]:
+        return {
+            "generated": len(self.phase_candidates),
+            "attempted": len(self.relaxations) + len(self.failures),
+            "completed": len(self.relaxations),
+            "converged": sum(result.converged for result in self.relaxations),
+            "failed": len(self.failures),
+        }
 
 
 def explore_composition(
     composition: str | Composition,
     logdir: str | None = None,
     hydragnn_branch_mlp_checkpoint: str | None = None,
+    hydragnn_inference_head: str | int | None = None,
     *,
     output_dir: str,
     mlip_backend: str = "hydragnn",
@@ -107,6 +124,7 @@ def explore_composition(
                     mlip_backend=mlip_backend,
                     logdir=logdir,
                     hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
+                    hydragnn_inference_head=hydragnn_inference_head,
                     checkpoint=checkpoint,
                     uma_model_name=uma_model_name,
                     uma_task=uma_task,
@@ -133,13 +151,24 @@ def explore_composition(
             failures.append(f"{tag}: {exc!s}")
 
     report: StabilityReport | None = None
+    ranking_failure: str | None = None
     if relaxations:
-        report = score_stability(
-            composition.formula,
-            relaxations,
-            degeneracy_tol_eV_per_atom=degeneracy_tol_eV_per_atom,
-            candidates=candidates,
-        )
+        try:
+            report = score_stability(
+                composition.formula,
+                relaxations,
+                degeneracy_tol_eV_per_atom=degeneracy_tol_eV_per_atom,
+                candidates=candidates,
+            )
+        except ValueError as exc:
+            ranking_failure = str(exc)
+
+    if not candidates:
+        outcome_class = "generation_failure"
+    elif report is None:
+        outcome_class = "relaxation_non_convergence"
+    else:
+        outcome_class = "usable_minimum"
 
     return CompositionExplorationResult(
         composition=composition,
@@ -147,4 +176,6 @@ def explore_composition(
         relaxations=relaxations,
         stability=report,
         failures=failures,
+        ranking_failure=ranking_failure,
+        outcome_class=outcome_class,
     )

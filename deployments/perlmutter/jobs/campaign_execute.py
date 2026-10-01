@@ -99,6 +99,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-node-hours", type=float, default=8.0)
     parser.add_argument("--n-random", type=int, default=0)
     parser.add_argument("--relax-maxiter", type=int, default=100)
+    parser.add_argument(
+        "--validation-config",
+        action="append",
+        type=Path,
+        default=[],
+        help="Additional AL config whose MLIP rescoring provides cross-model validation.",
+    )
+    parser.add_argument(
+        "--validation-python",
+        action="append",
+        default=[],
+        type=Path,
+        help=(
+            "Independent Python interpreter for the corresponding --validation-config; "
+            "repeat once per config, or provide once to use it for all configs."
+        ),
+    )
+    parser.add_argument("--perturbation-trials", type=int, default=0)
+    parser.add_argument("--perturbation-scale-A", type=float, default=0.05)
+    parser.add_argument("--perturbation-seed", type=int, default=0)
+    parser.add_argument("--surrogate-reference-structures", type=Path)
+    parser.add_argument("--surrogate-unary-max-steps", type=int, default=200)
+    parser.add_argument("--surrogate-unary-fmax", type=float, default=0.02)
+    parser.add_argument("--surrogate-unary-maxstep", type=float, default=0.01)
+    parser.add_argument("--surrogate-minimum-unique-unary", type=int, default=2)
     parser.add_argument("--degeneracy-tolerance-ev-per-atom", type=float, default=0.01)
     parser.add_argument(
         "--dft-reference-structures",
@@ -129,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--promotion-max-relative-regression", type=float, default=0.05)
     parser.add_argument("--promotion-min-evaluated-frames", type=int, default=1)
     parser.add_argument("--retry-failed", action="store_true")
+    parser.add_argument("--retry-inconclusive", action="store_true")
     args = parser.parse_args(argv)
     if args.degeneracy_tolerance_ev_per_atom <= 0:
         parser.error("--degeneracy-tolerance-ev-per-atom must be positive")
@@ -289,6 +315,16 @@ def main(argv: list[str] | None = None) -> int:
                 "degeneracy_tol_eV_per_atom": args.degeneracy_tolerance_ev_per_atom,
             },
             compute_nodes=1,
+            validation_configs=args.validation_config,
+            validation_pythons=args.validation_python,
+            perturbation_trials=args.perturbation_trials,
+            perturbation_scale_A=args.perturbation_scale_A,
+            perturbation_seed=args.perturbation_seed,
+            surrogate_reference_structures=args.surrogate_reference_structures,
+            surrogate_unary_max_steps=args.surrogate_unary_max_steps,
+            surrogate_unary_fmax_eV_per_A=args.surrogate_unary_fmax,
+            surrogate_unary_maxstep_A=args.surrogate_unary_maxstep,
+            surrogate_minimum_unique_unary=args.surrogate_minimum_unique_unary,
             retraining=(
                 CampaignRetrainingConfig(
                     train_script=args.train_script,
@@ -329,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
             formulas_per_iteration=args.formulas_per_iteration,
             max_iterations=args.max_iterations,
             retry_failed=args.retry_failed,
+            retry_inconclusive=args.retry_inconclusive,
             reserved_dft_calculations_per_formula=args.reserved_dft_per_formula,
             reserved_node_hours_per_formula=args.reserved_node_hours_per_formula,
             no_new_hull_vertex_iterations=args.no_new_hull_vertex_iterations,
