@@ -13,7 +13,14 @@ from matsim_agents.active_learning.evaluate import (
 )
 
 
-def _metrics(*, energy_mae: float, force_mae: float, model_path: str) -> EvalMetrics:
+def _metrics(
+    *,
+    energy_mae: float,
+    force_mae: float,
+    model_path: str,
+    energy_frames: int = 10,
+    force_frames: int = 10,
+) -> EvalMetrics:
     return EvalMetrics(
         backend="uma",
         model_path=model_path,
@@ -21,6 +28,8 @@ def _metrics(*, energy_mae: float, force_mae: float, model_path: str) -> EvalMet
         test_set="held-out.extxyz",
         n_frames_total=10,
         n_frames_evaluated=10,
+        n_energy_frames_evaluated=energy_frames,
+        n_force_frames_evaluated=force_frames,
         n_atoms_total=80,
         energy_mae_eV=0.5,
         energy_rmse_eV=0.6,
@@ -74,6 +83,24 @@ def test_promotion_gate_rejects_inaccurate_or_regressing_candidate(tmp_path: Pat
     assert decision.approved is False
     assert any("exceeds limit" in reason for reason in decision.reasons)
     assert any("incumbent regression limit" in reason for reason in decision.reasons)
+
+
+@pytest.mark.parametrize("label", ["energy", "force"])
+def test_promotion_gate_requires_enough_frames_for_each_metric(tmp_path: Path, label: str) -> None:
+    counts = {f"{label}_frames": 1}
+    decision = assess_promotion(
+        _metrics(
+            energy_mae=0.04,
+            force_mae=0.08,
+            model_path="candidate",
+            **counts,
+        ),
+        _metrics(energy_mae=0.05, force_mae=0.1, model_path="incumbent"),
+        _trainer(tmp_path),
+    )
+
+    assert decision.approved is False
+    assert any(f"1 {label}-labelled frames" in reason for reason in decision.reasons)
 
 
 @pytest.mark.parametrize("reference_kind", [None, "training", "validation"])

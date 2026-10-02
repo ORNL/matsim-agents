@@ -158,6 +158,8 @@ def run_scientific_debate(
                     "Distinguish evidence from speculation."
                 )
             )
+            if cfg.single_call and cfg.final_response_instruction:
+                instruction += f"\n\nRequired response format:\n{cfg.final_response_instruction}"
             response = models[participant.name].invoke(
                 [
                     SystemMessage(content=instruction),

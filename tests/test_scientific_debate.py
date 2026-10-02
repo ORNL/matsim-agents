@@ -45,6 +45,24 @@ def test_single_call_mode_invokes_one_model_exactly_once(tmp_path):
     assert result.verdicts[0].response == result.turns[0].response
 
 
+def test_single_call_mode_includes_final_response_instruction(tmp_path):
+    model = _Model("baseline")
+    run_scientific_debate(
+        ScientificDebateConfig(
+            hypothesis="Propose candidate Nb-Ta-O formulas.",
+            participants=[DebateParticipant(name="baseline", provider="vllm", model="baseline")],
+            rounds=1,
+            single_call=True,
+            final_response_instruction='Return JSON with a "formulas" array.',
+            output_root=str(tmp_path),
+        ),
+        model_factory=lambda **kwargs: model,
+    )
+
+    assert len(model.prompts) == 1
+    assert 'Return JSON with a "formulas" array.' in model.system_prompts[0]
+
+
 def test_single_call_mode_rejects_multiple_models_or_rounds():
     participant = DebateParticipant(name="baseline", provider="vllm", model="baseline")
     with pytest.raises(ValueError, match="exactly one participant and one round"):

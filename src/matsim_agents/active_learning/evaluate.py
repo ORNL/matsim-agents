@@ -110,6 +110,8 @@ class EvalMetrics:
     test_set: str
     n_frames_total: int
     n_frames_evaluated: int
+    n_energy_frames_evaluated: int
+    n_force_frames_evaluated: int
     n_atoms_total: int
 
     # Energy (per structure).
@@ -152,11 +154,16 @@ def assess_promotion(
 ) -> PromotionDecision:
     """Apply absolute accuracy and incumbent-regression promotion gates."""
     reasons: list[str] = []
-    if candidate.n_frames_evaluated < trainer.promotion_min_evaluated_frames:
-        reasons.append(
-            f"candidate evaluated {candidate.n_frames_evaluated} frames; "
-            f"minimum is {trainer.promotion_min_evaluated_frames}"
-        )
+    minimum = trainer.promotion_min_evaluated_frames
+    for model_name, metrics in (("candidate", candidate), ("incumbent", incumbent)):
+        for label, count in (
+            ("energy", metrics.n_energy_frames_evaluated),
+            ("force", metrics.n_force_frames_evaluated),
+        ):
+            if count < minimum:
+                reasons.append(
+                    f"{model_name} evaluated {count} {label}-labelled frames; minimum is {minimum}"
+                )
     metrics = (
         (
             "energy_mae_eV_per_atom_shifted",
@@ -376,6 +383,8 @@ def evaluate_frames(
         test_set=test_set_label,
         n_frames_total=len(frames),
         n_frames_evaluated=n_eval,
+        n_energy_frames_evaluated=len(e_ref_tot),
+        n_force_frames_evaluated=len(f_ref_all),
         n_atoms_total=n_atoms_total,
         energy_mae_eV=_mae(de_tot),
         energy_rmse_eV=_rmse(de_tot),
