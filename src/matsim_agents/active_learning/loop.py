@@ -155,7 +155,11 @@ class IterationState:
     selected_candidate_ids: list[str] = field(default_factory=list)
     candidate_uncertainty: dict[str, float] = field(default_factory=dict)
     dataset_path: str | None = None
+    validation_dataset_path: str | None = None
+    n_training_frames: int = 0
+    n_validation_frames: int = 0
     candidate_model_path: str | None = None
+    model_comparison: dict[str, Any] | None = None
     model_promoted: bool = False
     promotion_validation: dict[str, Any] | None = None
     new_logdir: str | None = None
@@ -173,6 +177,26 @@ class IterationState:
 
 def _iter_dir(root: Path, i: int) -> Path:
     return root / f"iteration_{i:04d}"
+
+
+def _split_training_validation_frames(
+    frames: list[Any],
+    *,
+    validation_fraction: float,
+    seed: int,
+) -> tuple[list[Any], list[Any]]:
+    """Deterministically reserve labelled frames before model fitting."""
+    if validation_fraction <= 0.0:
+        return frames, []
+    n_validation = max(1, int(round(len(frames) * validation_fraction)))
+    if len(frames) - n_validation < 2:
+        raise ValueError("validation split must leave at least two DFT-labelled training frames")
+    validation_indices = set(
+        np.random.default_rng(seed).permutation(len(frames))[:n_validation].tolist()
+    )
+    training = [frame for index, frame in enumerate(frames) if index not in validation_indices]
+    validation = [frame for index, frame in enumerate(frames) if index in validation_indices]
+    return training, validation
 
 
 def _scan_resume(root: Path) -> tuple[int, Path | None]:
@@ -223,6 +247,7 @@ def run_active_learning(cfg: ALConfig) -> None:
     dataset_path = root / (
         "dataset.extxyz" if cfg.loop.dataset_format == "extxyz" else "dataset.db"
     )
+    validation_dataset_path = root / "validation.extxyz"
 
     # Resolve MD seed structures once per run. For ``kind='prompt'`` this
     # invokes the LLM exactly once and caches the resulting JSON under
@@ -373,13 +398,26 @@ def run_active_learning(cfg: ALConfig) -> None:
                 existing_frames=existing_frames,
                 expected_atomic_numbers=expected_atomic_numbers,
             )
+            training_frames, validation_frames = _split_training_validation_frames(
+                frames,
+                validation_fraction=cfg.trainer.validation_fraction,
+                seed=cfg.trainer.validation_split_seed + i,
+            )
             labelled_elements = existing_elements | {
                 symbol for frame in frames for symbol in frame.atoms.get_chemical_symbols()
             }
             method_signature = _dft_method_signature(cfg, labelled_elements)
-            n_appended = append_frames_to_extxyz(frames, dataset_path)
+            n_appended = append_frames_to_extxyz(training_frames, dataset_path)
+            n_validation_appended = append_frames_to_extxyz(
+                validation_frames, validation_dataset_path
+            )
             state.dataset_path = str(dataset_path)
+            state.n_training_frames = n_appended
+            state.n_validation_frames = n_validation_appended
+            if n_validation_appended:
+                state.validation_dataset_path = str(validation_dataset_path)
             if dataset_path.exists():
+                validation.accepted = len(training_frames)
                 write_dataset_manifest(
                     dataset_path,
                     dft_backend=backend.name,
@@ -389,7 +427,12 @@ def run_active_learning(cfg: ALConfig) -> None:
                     method_signature=method_signature,
                 )
             state.timings_sec["append_dataset"] = time.time() - t0
-            log.info("Iter %d: appended %d labelled frames to %s", i, n_appended, dataset_path)
+            log.info(
+                "Iter %d: appended %d training and %d validation frames",
+                i,
+                n_appended,
+                n_validation_appended,
+            )
 
             # --- 6. (Optional) retrain the surrogate --------------------------
             t0 = time.time()
@@ -432,27 +475,40 @@ def run_active_learning(cfg: ALConfig) -> None:
                     n_appended,
                     dataset_path,
                 )
-            if cfg.trainer.promote_model and state.candidate_model_path is not None:
+            compare_candidate = (
+                cfg.trainer.compare_after_training or cfg.trainer.promote_model
+            ) and state.candidate_model_path is not None
+            if compare_candidate:
                 try:
+                    evaluation_cfg = cfg.model_copy(deep=True)
+                    if n_validation_appended:
+                        evaluation_cfg.trainer.validation_set = validation_dataset_path
+                        evaluation_cfg.trainer.validation_fraction = 0.0
                     decision = evaluate_promotion_candidate(
-                        cfg,
+                        evaluation_cfg,
                         state.candidate_model_path,
                         iteration=i,
                         training_set=dataset_path,
                     )
-                    state.promotion_validation = asdict(decision)
+                    state.model_comparison = asdict(decision)
                 except Exception as exc:  # noqa: BLE001
-                    state.promotion_validation = {
+                    state.model_comparison = {
                         "approved": False,
-                        "reasons": [f"promotion validation failed: {exc}"],
+                        "reasons": [f"model comparison failed: {exc}"],
                         "candidate_metrics": {},
                         "incumbent_metrics": {},
                     }
-                    log.exception("Iteration %d candidate promotion validation failed", i)
-                if state.promotion_validation["approved"]:
-                    state.new_logdir = state.candidate_model_path
-                    state.model_promoted = True
-                    _apply_model_override(cfg, state.candidate_model_path)
+                    log.exception("Iteration %d candidate model comparison failed", i)
+                if cfg.trainer.promote_model:
+                    state.promotion_validation = state.model_comparison
+            if (
+                cfg.trainer.promote_model
+                and state.promotion_validation is not None
+                and state.promotion_validation["approved"]
+            ):
+                state.new_logdir = state.candidate_model_path
+                state.model_promoted = True
+                _apply_model_override(cfg, state.candidate_model_path)
             state.timings_sec["retrain"] = time.time() - t0
 
             state.status = "complete"

@@ -562,6 +562,17 @@ class TrainerConfig(BaseModel):
         None,
         description="Optional independent frames used to fit elemental energy references.",
     )
+    validation_fraction: float = Field(
+        0.0,
+        ge=0.0,
+        lt=1.0,
+        description="Fraction of newly labelled frames reserved from training for validation.",
+    )
+    validation_split_seed: int = 0
+    compare_after_training: bool = Field(
+        False,
+        description="Compare incumbent and candidate models on held-out validation frames.",
+    )
     promotion_max_energy_mae_eV_per_atom: float = Field(0.1, gt=0)
     promotion_max_force_mae_eV_per_A: float = Field(0.2, gt=0)
     promotion_max_relative_regression: float = Field(0.05, ge=0)
@@ -599,8 +610,24 @@ class TrainerConfig(BaseModel):
                 "trainer.promote_model=True requires trainer.promotion_approved=True "
                 "after candidate validation."
             )
-        if self.promote_model and self.validation_set is None:
-            raise ValueError("trainer.promote_model=True requires trainer.validation_set")
+        if self.promote_model and self.validation_set is None and self.validation_fraction <= 0.0:
+            raise ValueError(
+                "trainer.promote_model=True requires trainer.validation_set or "
+                "trainer.validation_fraction > 0"
+            )
+        if self.validation_set is not None and self.validation_fraction > 0.0:
+            raise ValueError(
+                "trainer.validation_set and trainer.validation_fraction are mutually exclusive"
+            )
+        if (
+            self.compare_after_training
+            and self.validation_set is None
+            and self.validation_fraction <= 0.0
+        ):
+            raise ValueError(
+                "trainer.compare_after_training=True requires trainer.validation_set or "
+                "trainer.validation_fraction > 0"
+            )
         return self
 
 

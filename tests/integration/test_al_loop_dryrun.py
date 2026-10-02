@@ -18,7 +18,7 @@ After one iteration we assert that:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -141,7 +141,7 @@ def _make_cfg(tmp_path: Path) -> ALConfig:
 def _make_candidate(idx: int) -> Candidate:
     atoms = Atoms(
         symbols=["Si", "Si"],
-        positions=[[0.0, 0.0, 0.0], [1.357, 1.357, 1.357]],
+        positions=[[0.0, 0.0, 0.0], [1.357 + 0.01 * idx, 1.357, 1.357]],
         cell=[5.43, 5.43, 5.43],
         pbc=True,
     )
@@ -278,6 +278,47 @@ def test_promotion_decision_controls_model_activation(
     expected_model = trained_model if approved else incumbent
     assert cfg.mlip.hydragnn.logdir == expected_model
     assert cfg.mlip.hydragnn.checkpoint == (None if approved else "incumbent.pk")
+
+
+def test_holdout_split_compares_candidate_without_promotion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _make_cfg(tmp_path)
+    cfg.acquisition.n_select = 3
+    cfg.trainer = TrainerConfig(
+        enabled=True,
+        train_script=cfg.trainer.train_script,
+        validation_fraction=0.2,
+        validation_split_seed=7,
+        compare_after_training=True,
+    )
+    trained_model = tmp_path / "candidate-model"
+    trained_model.mkdir()
+    decision = PromotionDecision(
+        approved=True,
+        reasons=[],
+        candidate_metrics={"force_mae_eV_per_A": 0.05},
+        incumbent_metrics={"force_mae_eV_per_A": 0.1},
+    )
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    _patch_runtime(
+        loop_mod,
+        monkeypatch,
+        trained_model=trained_model,
+        promotion_decision=decision,
+    )
+    loop_mod.run_active_learning(cfg)
+
+    import json
+
+    state = json.loads((cfg.loop.out_dir / "iteration_0000" / "state.json").read_text())
+    assert state["n_training_frames"] == 2
+    assert state["n_validation_frames"] == 1
+    assert state["model_comparison"] == asdict(decision)
+    assert state["promotion_validation"] is None
+    assert state["model_promoted"] is False
 
 
 def test_hydragnn_candidate_override_discovers_checkpoint_in_new_logdir(tmp_path: Path) -> None:
