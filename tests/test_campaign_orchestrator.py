@@ -302,6 +302,65 @@ def test_adaptive_acquisition_reserves_branches_updates_lambda_and_persists(tmp_
     assert CampaignState.load(result.state_path).acquisition == result.campaign.acquisition
 
 
+def test_adaptive_single_item_batches_eventually_reserve_exploration():
+    campaign = _campaign()
+    policy = CampaignAcquisitionPolicy(
+        enabled=True,
+        minimum_exploitation_fraction=0.2,
+        minimum_exploration_fraction=0.2,
+    )
+
+    for iteration in range(5):
+        select_formula_batch(
+            eligible=list(campaign.formulas),
+            batch_size=1,
+            iteration=iteration,
+            policy=policy,
+            state=campaign.acquisition,
+        )
+
+    branches = [
+        record.scores[record.selected_formulas[0]].assigned_branch
+        for record in campaign.acquisition.selection_history
+    ]
+    assert "exploitation" in branches
+    assert "exploration" in branches
+
+
+def test_registry_ingestion_uses_mlip_provenance(tmp_path, monkeypatch):
+    observed = {}
+
+    def capture_ingestion(*args, **kwargs):
+        observed.update(kwargs)
+        return []
+
+    monkeypatch.setattr(
+        "matsim_agents.campaign.orchestrator.ingest_exploration_result",
+        capture_ingestion,
+    )
+
+    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+        result = _result(formula, output_dir)
+        assert result.active_learning_result is not None
+        result.active_learning_result.update(
+            {
+                "mlip_backend": "mace",
+                "model_identifier": "mace:checkpoint:/models/promoted.model",
+                "dft_refinement": {"backend": "qe"},
+            }
+        )
+        return result
+
+    run_campaign(
+        _campaign(max_candidates=1),
+        output_dir=tmp_path,
+        formula_runner=runner,
+    )
+
+    assert observed["backend"] == "mace"
+    assert observed["model_identifier"] == "mace:checkpoint:/models/promoted.model"
+
+
 def test_campaign_does_not_admit_formula_beyond_reserved_budget(tmp_path):
     campaign = _campaign()
     campaign.budget.max_dft_calculations = 3

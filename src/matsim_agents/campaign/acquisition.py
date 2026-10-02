@@ -163,10 +163,22 @@ def select_formula_batch(
             for formula in selected:
                 scores[formula].assigned_branch = "exploration"
         else:
-            n_exploit = min(limit, int(limit * policy.minimum_exploitation_fraction + 0.999999))
+            prior_branches = [
+                record.scores[formula].assigned_branch
+                for record in state.selection_history
+                for formula in record.selected_formulas
+            ]
+            prior_total = len(prior_branches)
+            cumulative_total = prior_total + limit
+            required_exploit = int(cumulative_total * policy.minimum_exploitation_fraction + 1e-12)
+            required_explore = int(cumulative_total * policy.minimum_exploration_fraction + 1e-12)
+            n_exploit = min(
+                limit,
+                max(0, required_exploit - prior_branches.count("exploitation")),
+            )
             n_explore = min(
                 limit - n_exploit,
-                int(limit * policy.minimum_exploration_fraction + 0.999999),
+                max(0, required_explore - prior_branches.count("exploration")),
             )
             selected = exploit_order[:n_exploit]
             for formula in selected:

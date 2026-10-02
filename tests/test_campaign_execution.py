@@ -15,7 +15,9 @@ from matsim_agents.campaign.execution import (
     CampaignRetrainingConfig,
     ReferenceStructureSpec,
     _cross_model_scores,
+    _model_identifier,
     _perturbation_robustness,
+    _relaxation_energy_per_atom,
     _score_relaxed_candidate_uncertainty,
     latest_promoted_model,
     run_formula_with_active_learning,
@@ -1363,6 +1365,58 @@ def test_retraining_rejects_unapproved_promotion(tmp_path):
     train_script.touch()
     with pytest.raises(ValueError, match="promotion requires explicit approval"):
         CampaignRetrainingConfig(train_script=train_script, promote_model=True)
+
+
+def test_dft_refinement_rejects_missing_reference_structure(tmp_path):
+    with pytest.raises(ValueError, match="reference structures do not exist"):
+        CampaignDFTRefinementConfig(
+            method_signature="qe-test-v1",
+            reference_structures={"Nb": tmp_path / "missing.extxyz"},
+        )
+
+
+def test_hydragnn_model_identifier_includes_checkpoint(tmp_path):
+    def config(checkpoint):
+        return SimpleNamespace(
+            mlip=SimpleNamespace(
+                backend="hydragnn",
+                uma=None,
+                mace=None,
+                hydragnn=SimpleNamespace(
+                    logdir=tmp_path / "model",
+                    checkpoint=checkpoint,
+                    inference_head=None,
+                ),
+            )
+        )
+
+    assert _model_identifier(config("best.pt")) != _model_identifier(config("latest.pt"))
+    assert "checkpoint=auto/latest" in _model_identifier(config(None))
+
+
+def test_relaxation_energy_ranking_normalizes_cell_size(tmp_path):
+    small_path = tmp_path / "small.extxyz"
+    large_path = tmp_path / "large.extxyz"
+    write(small_path, Atoms("NbO", positions=[[0, 0, 0], [1, 0, 0]]))
+    write(
+        large_path,
+        Atoms("Nb2O2", positions=[[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+    )
+    small = RelaxationResult(
+        structure_path=str(small_path),
+        optimized_structure_path=str(small_path),
+        trajectory_path="",
+        log_csv_path="",
+        final_energy_eV=-6.0,
+        final_max_force_eV_per_A=0.0,
+        num_steps=1,
+        converged=True,
+    )
+    large = small.model_copy(
+        update={"optimized_structure_path": str(large_path), "final_energy_eV": -10.0}
+    )
+
+    assert sorted([large, small], key=_relaxation_energy_per_atom) == [small, large]
 
 
 def test_latest_promoted_model_recovers_checkpoint_from_state(tmp_path):

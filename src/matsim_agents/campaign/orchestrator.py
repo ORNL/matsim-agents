@@ -395,7 +395,7 @@ def run_campaign(
                     campaign.candidate_registry,
                     exploration,
                     iteration=campaign.iteration,
-                    backend=record.evidence.get("dft_refinement", {}).get("backend"),
+                    backend=record.evidence.get("mlip_backend"),
                     model_identifier=record.evidence.get("model_identifier"),
                     model_checkpoint_hash=record.evidence.get("model_checkpoint_hash"),
                     uncertainty_by_candidate=uncertainty_by_candidate,

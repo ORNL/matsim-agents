@@ -125,6 +125,7 @@ def _model_identifier(cfg: ALConfig) -> str:
         return f"mace:{cfg.mlip.mace.family}:{cfg.mlip.mace.model}"
     if cfg.mlip.hydragnn is not None:
         identifier = f"hydragnn:{cfg.mlip.hydragnn.logdir}"
+        identifier += f":checkpoint={cfg.mlip.hydragnn.checkpoint or 'auto/latest'}"
         head_index = resolve_hydragnn_inference_head(cfg.mlip.hydragnn.inference_head)
         if head_index is not None:
             identifier += f":head={HYDRAGNN_DATASET_HEADS[head_index]}"
@@ -153,6 +154,10 @@ def _promoted_model_path(result: PhaseExplorationWorkflowResult) -> str | None:
         or overrides.get("logdir")
     )
     return str(promoted) if promoted else None
+
+
+def _relaxation_energy_per_atom(relaxation: RelaxationResult) -> float:
+    return relaxation.final_energy_eV / len(ase_read(relaxation.optimized_structure_path))
 
 
 def _cross_model_scores(
@@ -409,6 +414,25 @@ class CampaignDFTRefinementConfig(BaseModel):
         default_factory=CandidateSelectionPolicy
     )
 
+    @model_validator(mode="after")
+    def _validate_references(self) -> CampaignDFTRefinementConfig:
+        missing = [str(path) for path in self.reference_structures.values() if not path.is_file()]
+        if missing:
+            raise ValueError(f"reference structures do not exist: {missing}")
+        unknown_controls = set(self.reference_relax_cell) - set(self.reference_structures)
+        unknown_settings = set(self.reference_settings) - set(self.reference_structures)
+        if unknown_controls or unknown_settings:
+            raise ValueError(
+                "reference controls lack structures for "
+                f"{sorted(unknown_controls | unknown_settings)}"
+            )
+        if (
+            self.reference_energies is not None
+            and self.reference_energies.method_signature != self.method_signature
+        ):
+            raise ValueError("reference energies and DFT refinement must share method_signature")
+        return self
+
 
 def _score_relaxed_candidate_uncertainty(
     exploration: Any,
@@ -453,25 +477,6 @@ def _score_relaxed_candidate_uncertainty(
         for candidate, score in zip(candidates, scores, strict=True)
         if np.isfinite(score)
     }
-
-    @model_validator(mode="after")
-    def _validate_references(self) -> CampaignDFTRefinementConfig:
-        missing = [str(path) for path in self.reference_structures.values() if not path.is_file()]
-        if missing:
-            raise ValueError(f"reference structures do not exist: {missing}")
-        unknown_controls = set(self.reference_relax_cell) - set(self.reference_structures)
-        unknown_settings = set(self.reference_settings) - set(self.reference_structures)
-        if unknown_controls or unknown_settings:
-            raise ValueError(
-                "reference controls lack structures for "
-                f"{sorted(unknown_controls | unknown_settings)}"
-            )
-        if (
-            self.reference_energies is not None
-            and self.reference_energies.method_signature != self.method_signature
-        ):
-            raise ValueError("reference energies and DFT refinement must share method_signature")
-        return self
 
 
 def _validate_dft_inputs(formula: str, cfg: ALConfig) -> None:
@@ -997,6 +1002,10 @@ def run_formula_with_active_learning(
     promoted_model = _promoted_model_path(result)
     if promoted_model is not None:
         _apply_model_override(effective_al_cfg, promoted_model)
+    execution_evidence = result.active_learning_result or {}
+    execution_evidence["mlip_backend"] = effective_al_cfg.mlip.backend
+    execution_evidence["model_identifier"] = _model_identifier(effective_al_cfg)
+    result.active_learning_result = execution_evidence
     candidate_uncertainty = _score_relaxed_candidate_uncertainty(exploration, effective_al_cfg)
     validation_configs = [
         effective_al_cfg,
@@ -1095,7 +1104,7 @@ def run_formula_with_active_learning(
             ),
         )
     else:
-        candidates.sort(key=lambda relaxation: relaxation.final_energy_eV)
+        candidates.sort(key=_relaxation_energy_per_atom)
         selected = candidates[: refinement.max_candidates]
         candidate_scores = {}
     if not selected:
