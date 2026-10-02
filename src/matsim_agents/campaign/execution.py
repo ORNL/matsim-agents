@@ -120,16 +120,50 @@ class CampaignFormulaExecutionConfig(BaseModel):
 
 def _model_identifier(cfg: ALConfig) -> str:
     if cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
-        return f"uma:{cfg.mlip.uma.model_name}:{cfg.mlip.uma.task_name}"
+        uma = cfg.mlip.uma
+        settings = {
+            "charge": uma.charge,
+            "precision": uma.precision,
+            "spin": uma.spin,
+        }
+        return (
+            f"uma:{uma.model_name}:{uma.task_name}:settings="
+            f"{json.dumps(settings, sort_keys=True, separators=(',', ':'))}"
+        )
     if cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
-        return f"mace:{cfg.mlip.mace.family}:{cfg.mlip.mace.model}"
+        mace = cfg.mlip.mace
+        settings = {
+            "dispersion": mace.dispersion,
+            "precision": mace.precision,
+        }
+        return (
+            f"mace:{mace.family}:{mace.model}:settings="
+            f"{json.dumps(settings, sort_keys=True, separators=(',', ':'))}"
+        )
     if cfg.mlip.hydragnn is not None:
-        identifier = f"hydragnn:{cfg.mlip.hydragnn.logdir}"
-        identifier += f":checkpoint={cfg.mlip.hydragnn.checkpoint or 'auto/latest'}"
-        head_index = resolve_hydragnn_inference_head(cfg.mlip.hydragnn.inference_head)
+        hydragnn = cfg.mlip.hydragnn
+        identifier = f"hydragnn:{hydragnn.logdir}"
+        identifier += f":checkpoint={hydragnn.checkpoint or 'auto/latest'}"
+        head_index = resolve_hydragnn_inference_head(hydragnn.inference_head)
         if head_index is not None:
             identifier += f":head={HYDRAGNN_DATASET_HEADS[head_index]}"
-        return identifier
+        settings = {
+            "branch_mlp_checkpoint": (
+                str(hydragnn.hydragnn_branch_mlp_checkpoint)
+                if hydragnn.hydragnn_branch_mlp_checkpoint is not None
+                else None
+            ),
+            "charge": hydragnn.charge,
+            "max_neighbours": hydragnn.max_neighbours,
+            "newhead_ft_config": (
+                str(hydragnn.newhead_ft_config) if hydragnn.newhead_ft_config is not None else None
+            ),
+            "precision": hydragnn.precision,
+            "radius": hydragnn.radius,
+            "spin": hydragnn.spin,
+        }
+        serialized_settings = json.dumps(settings, sort_keys=True, separators=(",", ":"))
+        return f"{identifier}:settings={serialized_settings}"
     return cfg.mlip.backend
 
 

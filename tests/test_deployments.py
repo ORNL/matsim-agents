@@ -42,6 +42,20 @@ def test_perlmutter_multinode_server_extends_raylet_startup_wait() -> None:
     assert "RAY_raylet_start_wait_time_s=${RAY_raylet_start_wait_time_s:-300}" in content
 
 
+def test_vasp_campaign_preserves_explicit_method_signature() -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = (
+        root
+        / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-vasp-perlmutter.sh"
+    )
+    content = script.read_text(encoding="utf-8")
+
+    assert (
+        'MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE="${MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE:-'
+        "vasp-6.6.1-pbe64-encut520-kspacing0.25-o2-triplet-v1}" in content
+    )
+
+
 def test_perlmutter_campaign_exposes_adaptive_acquisition_controls() -> None:
     root = Path(__file__).resolve().parents[1]
     script = (

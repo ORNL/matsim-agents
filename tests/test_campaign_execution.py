@@ -9,6 +9,12 @@ import pytest
 from ase import Atoms
 from ase.io import write
 
+from matsim_agents.active_learning.config import (
+    HydraGNNConfig,
+    MACEConfig,
+    MLIPConfig,
+    UMAConfig,
+)
 from matsim_agents.campaign.execution import (
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
@@ -1410,12 +1416,47 @@ def test_hydragnn_model_identifier_includes_checkpoint(tmp_path):
                     logdir=tmp_path / "model",
                     checkpoint=checkpoint,
                     inference_head=None,
+                    hydragnn_branch_mlp_checkpoint=None,
+                    newhead_ft_config=None,
+                    radius=None,
+                    max_neighbours=None,
+                    charge=0.0,
+                    spin=0.0,
+                    precision=None,
                 ),
             )
         )
 
     assert _model_identifier(config("best.pt")) != _model_identifier(config("latest.pt"))
     assert "checkpoint=auto/latest" in _model_identifier(config(None))
+
+
+def test_model_identifier_includes_calculator_settings(tmp_path):
+    base = SimpleNamespace(
+        mlip=MLIPConfig(
+            backend="uma",
+            uma=UMAConfig(model_name="uma-s-1p1", task_name="omat"),
+        )
+    )
+
+    changed = SimpleNamespace(mlip=base.mlip.model_copy(deep=True))
+    changed.mlip.uma.precision = "fp64"
+    assert _model_identifier(base) != _model_identifier(changed)
+
+    base.mlip.backend = "mace"
+    base.mlip.mace = MACEConfig(family="mace_mp", model="medium")
+    changed = SimpleNamespace(mlip=base.mlip.model_copy(deep=True))
+    changed.mlip.mace.dispersion = True
+    assert _model_identifier(base) != _model_identifier(changed)
+
+    base.mlip.backend = "hydragnn"
+    base.mlip.hydragnn = HydraGNNConfig(
+        logdir=tmp_path / "hydragnn",
+        checkpoint="best.pt",
+    )
+    changed = SimpleNamespace(mlip=base.mlip.model_copy(deep=True))
+    changed.mlip.hydragnn.radius = 6.0
+    assert _model_identifier(base) != _model_identifier(changed)
 
 
 def test_relaxation_energy_ranking_normalizes_cell_size(tmp_path):
