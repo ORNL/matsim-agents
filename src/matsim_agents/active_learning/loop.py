@@ -61,6 +61,8 @@ from matsim_agents.active_learning.trainer import (
     retrain_uma,
 )
 from matsim_agents.active_learning.uncertainty import select_candidates
+from matsim_agents.active_learning.vasp_io import resolve_potcar_paths
+from matsim_agents.backends.dft.qe_relax import resolve_pseudopotentials
 
 log = logging.getLogger(__name__)
 
@@ -79,7 +81,7 @@ def _path_identity(path: Path | None) -> dict[str, Any] | None:
     return {"name": path.name, "missing": True}
 
 
-def _scientific_dft_payload(cfg: ALConfig) -> dict[str, Any]:
+def _scientific_dft_payload(cfg: ALConfig, elements: set[str]) -> dict[str, Any]:
     if cfg.dft.backend == "vasp":
         assert cfg.dft.vasp is not None
         block = cfg.dft.vasp
@@ -87,14 +89,28 @@ def _scientific_dft_payload(cfg: ALConfig) -> dict[str, Any]:
             "backend": "vasp",
             "incar_template": _path_identity(block.incar_template),
             "kpoints_template": _path_identity(block.kpoints_template),
-            "potcar_dir": _path_identity(block.potcar_dir),
+            "potcars": {
+                element: _path_identity(path)
+                for element, path in zip(
+                    sorted(elements),
+                    resolve_potcar_paths(sorted(elements), block.potcar_dir),
+                    strict=True,
+                )
+            },
             "extra_incar": block.extra_incar,
         }
     assert cfg.dft.qe is not None
     block = cfg.dft.qe
+    pseudopotentials = block.pseudopotentials or resolve_pseudopotentials(
+        sorted(elements), str(block.pseudo_dir)
+    )
     return {
         "backend": "qe",
-        "pseudo_dir": _path_identity(block.pseudo_dir),
+        "pseudopotential_files": {
+            element: _path_identity(block.pseudo_dir / filename)
+            for element, filename in sorted(pseudopotentials.items())
+            if element in elements
+        },
         "pw_template": _path_identity(block.pw_template),
         "ecutwfc_ry": block.ecutwfc_ry,
         "ecutrho_ry": block.ecutrho_ry,
@@ -110,9 +126,9 @@ def _scientific_dft_payload(cfg: ALConfig) -> dict[str, Any]:
     }
 
 
-def _dft_method_signature(cfg: ALConfig) -> str:
+def _dft_method_signature(cfg: ALConfig, elements: set[str]) -> str:
     payload = json.dumps(
-        _scientific_dft_payload(cfg),
+        _scientific_dft_payload(cfg, elements),
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
@@ -167,7 +183,7 @@ def _scan_resume(root: Path) -> tuple[int, Path | None]:
     """
     if not root.exists():
         return 0, None
-    completed: list[tuple[int, Path]] = []
+    completed: list[tuple[int, Path | None]] = []
     for d in sorted(root.glob("iteration_*")):
         sf = d / "state.json"
         if not sf.exists():
@@ -178,7 +194,8 @@ def _scan_resume(root: Path) -> tuple[int, Path | None]:
         try:
             data = json.loads(sf.read_text())
             if data.get("status") == "complete":
-                completed.append((int(data["iteration"]), Path(data.get("new_logdir") or "")))
+                new_logdir = data.get("new_logdir")
+                completed.append((int(data["iteration"]), Path(new_logdir) if new_logdir else None))
             else:
                 log.warning("Removing failed/partial iteration dir %s", d)
                 shutil.rmtree(d, ignore_errors=True)
@@ -187,8 +204,10 @@ def _scan_resume(root: Path) -> tuple[int, Path | None]:
             shutil.rmtree(d, ignore_errors=True)
     if not completed:
         return 0, None
-    last_i, last_logdir = max(completed, key=lambda t: t[0])
-    return last_i + 1, last_logdir if str(last_logdir) else None
+    last_i = max(iteration for iteration, _ in completed)
+    promoted = [entry for entry in completed if entry[1] is not None]
+    last_logdir = max(promoted, key=lambda entry: entry[0])[1] if promoted else None
+    return last_i + 1, last_logdir
 
 
 # --------------------------------------------------------------------------- #
@@ -223,7 +242,7 @@ def run_active_learning(cfg: ALConfig) -> None:
                 and resumed_logdir is not None
                 and resumed_logdir.exists()
             ):
-                cfg.mlip.hydragnn.logdir = resumed_logdir
+                _apply_model_override(cfg, str(resumed_logdir))
 
     for i in range(start_iter, cfg.loop.n_iterations):
         it_dir = _iter_dir(root, i)
@@ -329,20 +348,23 @@ def run_active_learning(cfg: ALConfig) -> None:
             existing_frames = []
             manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
             parent_dataset_id = None
-            method_signature = _dft_method_signature(cfg)
             if dataset_path.exists():
                 from ase.io import read as ase_read
 
                 existing_frames = list(ase_read(dataset_path, index=":"))
+            existing_elements = {
+                symbol for frame in existing_frames for symbol in frame.get_chemical_symbols()
+            }
             if manifest_path.exists():
                 previous_manifest = DatasetManifest.model_validate_json(
                     manifest_path.read_text(encoding="utf-8")
                 )
                 if previous_manifest.dft_backend != backend.name:
                     raise ValueError("cannot append labels from a different DFT backend")
+                existing_signature = _dft_method_signature(cfg, existing_elements)
                 if (
                     previous_manifest.method_signature is not None
-                    and previous_manifest.method_signature != method_signature
+                    and previous_manifest.method_signature != existing_signature
                 ):
                     raise ValueError("cannot append labels with a different DFT method signature")
                 parent_dataset_id = previous_manifest.dataset_id
@@ -356,6 +378,10 @@ def run_active_learning(cfg: ALConfig) -> None:
                 existing_frames=existing_frames,
                 expected_atomic_numbers=expected_atomic_numbers,
             )
+            labelled_elements = existing_elements | {
+                symbol for frame in frames for symbol in frame.atoms.get_chemical_symbols()
+            }
+            method_signature = _dft_method_signature(cfg, labelled_elements)
             n_appended = append_frames_to_extxyz(frames, dataset_path)
             state.dataset_path = str(dataset_path)
             if dataset_path.exists():

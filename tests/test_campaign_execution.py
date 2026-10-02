@@ -1302,6 +1302,25 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path, monkeypatc
     assert observed["post_promotion_model"] == str(checkpoint)
 
 
+def test_campaign_hydragnn_override_discovers_checkpoint_in_promoted_logdir(tmp_path):
+    import matsim_agents.campaign.execution as execution
+
+    promoted = tmp_path / "promoted-model"
+    cfg = SimpleNamespace(
+        mlip=SimpleNamespace(
+            backend="hydragnn",
+            uma=None,
+            mace=None,
+            hydragnn=SimpleNamespace(logdir=tmp_path / "incumbent", checkpoint="incumbent.pk"),
+        )
+    )
+
+    execution._apply_model_override(cfg, str(promoted))
+
+    assert cfg.mlip.hydragnn.logdir == promoted
+    assert cfg.mlip.hydragnn.checkpoint is None
+
+
 def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path):
     config_path = tmp_path / "al.yaml"
     config_path.write_text(

@@ -30,6 +30,7 @@ Example::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 from dataclasses import asdict, dataclass, field
@@ -42,6 +43,31 @@ from ase.io import read as ase_read
 from matsim_agents.active_learning.config import ALConfig, MLIPConfig, TrainerConfig
 
 log = logging.getLogger(__name__)
+
+
+def _structure_identity(atoms: Atoms) -> str:
+    """Hash chemistry and geometry independently of atom ordering and translation."""
+    numbers = np.asarray(atoms.numbers, dtype=int)
+    pbc = np.asarray(atoms.pbc, dtype=bool)
+    scaled = np.asarray(atoms.get_scaled_positions(wrap=False))
+    scaled[:, pbc] = np.mod(scaled[:, pbc], 1.0)
+    metric = np.asarray(atoms.cell) @ np.asarray(atoms.cell).T
+    origins = scaled if len(scaled) else np.zeros((1, 3))
+    representations: list[str] = []
+    for origin in origins:
+        shifted = scaled - origin
+        shifted[:, pbc] = np.mod(shifted[:, pbc], 1.0)
+        sites = sorted(
+            (int(number), *(round(float(value), 8) for value in position))
+            for number, position in zip(numbers, shifted, strict=True)
+        )
+        payload = {
+            "sites": sites,
+            "metric": np.round(metric, decimals=8).tolist(),
+            "pbc": pbc.tolist(),
+        }
+        representations.append(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    return hashlib.sha256(min(representations).encode("utf-8")).hexdigest()
 
 
 # --------------------------------------------------------------------------- #
@@ -414,6 +440,17 @@ def evaluate_promotion_candidate(
                 "trainer.validation_reference_set must differ from trainer.validation_set"
             )
     validation_frames = list(ase_read(validation_set, index=":"))
+    if training_path.is_file():
+        training_frames = list(ase_read(training_path, index=":"))
+        training_identities = {_structure_identity(frame) for frame in training_frames}
+        overlap = sum(
+            _structure_identity(frame) in training_identities for frame in validation_frames
+        )
+        if overlap:
+            raise ValueError(
+                "trainer.validation_set must be held out from the training set; "
+                f"found {overlap} overlapping geometries"
+            )
     if reference_path is not None:
         reference_frames = list(ase_read(reference_path, index=":"))
     elif training_set.is_file():

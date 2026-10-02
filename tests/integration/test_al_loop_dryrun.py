@@ -95,6 +95,9 @@ def _make_cfg(tmp_path: Path) -> ALConfig:
     incar.write_text("ENCUT = 520\n")
     potcar_dir = tmp_path / "potcars"
     potcar_dir.mkdir()
+    si_potcar_dir = potcar_dir / "Si"
+    si_potcar_dir.mkdir()
+    (si_potcar_dir / "POTCAR").write_text("Si test potential")
     train = tmp_path / "train.py"
     train.write_text("# stub\n")
     logdir = tmp_path / "logdir"
@@ -284,3 +287,26 @@ def test_hydragnn_candidate_override_discovers_checkpoint_in_new_logdir(tmp_path
 
     assert cfg.mlip.hydragnn.logdir == candidate
     assert cfg.mlip.hydragnn.checkpoint is None
+
+
+def test_resume_retains_last_promoted_logdir_after_rejected_candidate(tmp_path: Path) -> None:
+    import json
+
+    from matsim_agents.active_learning.loop import _scan_resume
+
+    promoted = tmp_path / "promoted-model"
+    promoted.mkdir()
+    for iteration, new_logdir in ((0, str(promoted)), (1, None)):
+        iteration_dir = tmp_path / f"iteration_{iteration:04d}"
+        iteration_dir.mkdir()
+        (iteration_dir / "state.json").write_text(
+            json.dumps(
+                {
+                    "iteration": iteration,
+                    "status": "complete",
+                    "new_logdir": new_logdir,
+                }
+            )
+        )
+
+    assert _scan_resume(tmp_path) == (2, promoted)

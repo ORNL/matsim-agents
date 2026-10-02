@@ -297,7 +297,7 @@ def recommend_settings(atoms, pseudo_dir: str, **overrides) -> QESettings:
         max_idx = int(np.argmax(cell_lengths))
         kpts = tuple(1 if i == max_idx else kpts[i] for i in range(3))
 
-    pseudos = _autodetect_pseudos(symbols, pseudo_dir)
+    pseudos = resolve_pseudopotentials(symbols, pseudo_dir)
 
     base = QESettings(
         pseudo_dir=pseudo_dir,
@@ -313,7 +313,7 @@ def recommend_settings(atoms, pseudo_dir: str, **overrides) -> QESettings:
     return base
 
 
-def _autodetect_pseudos(symbols: list[str], pseudo_dir: str) -> dict[str, str]:
+def resolve_pseudopotentials(symbols: list[str], pseudo_dir: str) -> dict[str, str]:
     """Pick a pseudopotential file per element by glob-matching ``pseudo_dir``.
 
     Looks for files starting with ``<Symbol>.`` or ``<Symbol>_`` (case-

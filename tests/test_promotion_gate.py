@@ -2,6 +2,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from ase import Atoms
+from ase.io import write
 
 from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.evaluate import (
@@ -93,6 +95,30 @@ def test_promotion_requires_distinct_held_out_paths(
     )
 
     with pytest.raises(ValueError, match="held out|must differ"):
+        evaluate_promotion_candidate(
+            cfg,
+            "candidate.pt",
+            iteration=1,
+            training_set=training_set,
+        )
+
+
+def test_promotion_rejects_training_geometry_copied_to_validation(tmp_path: Path) -> None:
+    training_set = tmp_path / "training.extxyz"
+    validation_set = tmp_path / "held-out.extxyz"
+    training_frame = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.75]], cell=[5, 5, 5], pbc=True)
+    validation_frame = training_frame[[1, 0]]
+    validation_frame.translate([1.0, 1.0, 1.0])
+    write(training_set, training_frame)
+    write(validation_set, validation_frame)
+    cfg = SimpleNamespace(
+        trainer=SimpleNamespace(
+            validation_set=validation_set,
+            validation_reference_set=None,
+        )
+    )
+
+    with pytest.raises(ValueError, match="overlapping geometries"):
         evaluate_promotion_candidate(
             cfg,
             "candidate.pt",

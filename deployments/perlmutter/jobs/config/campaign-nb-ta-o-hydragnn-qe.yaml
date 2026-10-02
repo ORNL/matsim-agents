@@ -4,7 +4,7 @@ mlip:
     logdir: ${PROJECT_ROOT:?export PROJECT_ROOT}/HydraGNN/examples/multidataset_hpo_sc26/multidataset_hpo-BEST6-fp64
     checkpoint: multidataset_hpo-BEST6-fp64_epoch_97.pk
     inference_head: ${MATSIM_HYDRAGNN_INFERENCE_HEAD:-OMat24}
-    device: cuda
+    mlp_device: cuda
     precision: fp64
 
 md:

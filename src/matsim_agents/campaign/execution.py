@@ -142,6 +142,7 @@ def _apply_model_override(cfg: ALConfig, model_path: str) -> None:
         cfg.mlip.mace.model = model_path
     elif cfg.mlip.hydragnn is not None:
         cfg.mlip.hydragnn.logdir = Path(model_path)
+        cfg.mlip.hydragnn.checkpoint = None
 
 
 def _promoted_model_path(result: PhaseExplorationWorkflowResult) -> str | None:
