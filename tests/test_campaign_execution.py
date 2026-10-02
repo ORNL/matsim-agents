@@ -240,7 +240,12 @@ def test_surrogate_hull_uses_relaxed_model_specific_unary_endpoints(tmp_path):
     write(ta_bcc, bulk("Ta", "bcc", a=3.0))
     write(
         oxygen,
-        Atoms("O2", positions=[[0, 0, 0], [1.2, 0, 0]], cell=[12.0] * 3, pbc=True),
+        Atoms(
+            "O4",
+            positions=[[0, 0, 0], [1.2, 0, 0], [3.0, 0, 0], [4.2, 0, 0]],
+            cell=[12.0] * 3,
+            pbc=True,
+        ),
     )
     write(
         target,

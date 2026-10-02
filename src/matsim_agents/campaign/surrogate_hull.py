@@ -119,13 +119,20 @@ def evaluate_surrogate_hull(
 
     entries = []
     for phase in unary_search.phases:
-        if not phase.converged or phase.duplicate_of is not None or phase.total_energy_eV is None:
+        if (
+            not phase.converged
+            or phase.duplicate_of is not None
+            or phase.corrected_energy_per_atom_eV is None
+        ):
             continue
-        composition = Composition(phase.formula)
-        corrected_total = (
-            phase.total_energy_eV + phase.energy_correction_eV_per_atom * composition.num_atoms
+        composition = Composition(phase.element)
+        entries.append(
+            ComputedEntry(
+                composition,
+                phase.corrected_energy_per_atom_eV * composition.num_atoms,
+                entry_id=phase.phase_id,
+            )
         )
-        entries.append(ComputedEntry(composition, corrected_total, entry_id=phase.phase_id))
 
     for spec in specs:
         declared_composition = Composition(str(spec["formula"]))
