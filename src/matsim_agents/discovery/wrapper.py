@@ -19,6 +19,9 @@ from matsim_agents.orchestration.state import RelaxationResult
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run as _run_relaxation
 
 
+_RANKING_FORCE_TOL_EV_PER_A = 0.05
+
+
 class CompositionExplorationResult(BaseModel):
     """Aggregated output of :func:`explore_composition`."""
 
@@ -165,6 +168,7 @@ def explore_composition(
             report = score_stability(
                 composition.formula,
                 relaxations,
+                force_tol_eV_per_A=_RANKING_FORCE_TOL_EV_PER_A,
                 degeneracy_tol_eV_per_atom=degeneracy_tol_eV_per_atom,
                 candidates=candidates,
             )
@@ -173,7 +177,10 @@ def explore_composition(
 
     if not candidates:
         outcome_class = "generation_failure"
-    elif ranking_failure is not None and any(result.converged for result in relaxations):
+    elif ranking_failure is not None and any(
+        result.converged and result.final_max_force_eV_per_A <= _RANKING_FORCE_TOL_EV_PER_A
+        for result in relaxations
+    ):
         outcome_class = "ranking_failure"
     elif report is None:
         outcome_class = "relaxation_non_convergence"

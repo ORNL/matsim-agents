@@ -188,3 +188,36 @@ def test_exploration_reports_ranking_failure_after_convergence(
 
     assert result.outcome_class == "ranking_failure"
     assert result.ranking_failure == "ranking failed"
+
+
+def test_exploration_reports_non_convergence_when_residual_force_is_ineligible(
+    tmp_path, monkeypatch, fake_relaxation_result
+):
+    seed = tmp_path / "seed.extxyz"
+    seed.touch()
+    candidate = PhaseCandidate(
+        formula="Si",
+        source="prototype",
+        structure_path=str(seed),
+        prototype_id="A_cI2_229_a",
+    )
+    monkeypatch.setattr(
+        "matsim_agents.discovery.wrapper.generate_seeds", lambda *args, **kwargs: [candidate]
+    )
+    monkeypatch.setattr(
+        "matsim_agents.discovery.wrapper.score_stability",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            ValueError("no converged candidates satisfy the force tolerance for ranking")
+        ),
+    )
+    fake_relaxation_result.converged = True
+    fake_relaxation_result.final_max_force_eV_per_A = 0.06
+
+    result = explore_composition(
+        "Si",
+        output_dir=str(tmp_path),
+        mlip_backend="mace",
+        relax_fn=lambda request: fake_relaxation_result,
+    )
+
+    assert result.outcome_class == "relaxation_non_convergence"

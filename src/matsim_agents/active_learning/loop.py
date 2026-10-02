@@ -236,12 +236,7 @@ def run_active_learning(cfg: ALConfig) -> None:
         start_iter, resumed_logdir = _scan_resume(root)
         if start_iter > 0:
             log.info("Resuming AL loop at iteration %d (logdir=%s)", start_iter, resumed_logdir)
-            if (
-                cfg.mlip.backend == "hydragnn"
-                and cfg.mlip.hydragnn is not None
-                and resumed_logdir is not None
-                and resumed_logdir.exists()
-            ):
+            if resumed_logdir is not None and resumed_logdir.exists():
                 _apply_model_override(cfg, str(resumed_logdir))
 
     for i in range(start_iter, cfg.loop.n_iterations):

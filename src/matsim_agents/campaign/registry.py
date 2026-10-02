@@ -169,6 +169,14 @@ def _assign_relaxed_families(registry: CandidateRegistry, candidate_ids: list[st
 
     matcher = StructureMatcher(primitive_cell=True, attempt_supercell=True)
     representatives: list[tuple[str, Structure]] = []
+    for family_id, family_members in sorted(registry.relaxed_families.items()):
+        for candidate_id in family_members:
+            record = registry.candidates.get(candidate_id)
+            if record is not None and record.optimized_structure_path is not None:
+                representatives.append(
+                    (family_id, Structure.from_file(record.optimized_structure_path))
+                )
+                break
     for candidate_id in sorted(candidate_ids):
         record = registry.candidates[candidate_id]
         if record.optimized_structure_path is None:

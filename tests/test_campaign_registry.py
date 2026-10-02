@@ -162,8 +162,10 @@ def test_registry_soap_species_include_cross_composition_references(tmp_path):
 def test_registry_namespaces_retried_candidate_ids(tmp_path):
     seed = tmp_path / "seed.vasp"
     relaxed = tmp_path / "relaxed.vasp"
+    retried_relaxed = tmp_path / "retried-relaxed.vasp"
     _write_structure(seed, displacement=0.02)
     _write_structure(relaxed)
+    _write_structure(retried_relaxed, displacement=0.0001)
     composition = parse_composition("NbO2")
     assert composition is not None
     candidate = PhaseCandidate(
@@ -190,12 +192,18 @@ def test_registry_namespaces_retried_candidate_ids(tmp_path):
     registry = CandidateRegistry()
 
     first = ingest_exploration_result(registry, exploration, iteration=1)
+    relaxation.optimized_structure_path = str(retried_relaxed)
     second = ingest_exploration_result(registry, exploration, iteration=2)
 
     assert first == ["NbO2-P0000"]
     assert second == ["NbO2-P0000-iter0002"]
     assert set(registry.candidates) == {"NbO2-P0000", "NbO2-P0000-iter0002"}
     assert set(registry.evaluations) == set(registry.candidates)
+    assert len(registry.relaxed_families) == 1
+    assert (
+        registry.candidates[first[0]].relaxed_family_id
+        == registry.candidates[second[0]].relaxed_family_id
+    )
 
 
 def test_structure_hash_and_soap_are_translation_invariant(tmp_path):

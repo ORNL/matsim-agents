@@ -33,9 +33,12 @@ from matsim_agents.active_learning.config import (
     DFTConfig,
     HydraGNNConfig,
     LoopConfig,
+    MACEConfig,
     MDConfig,
+    MLIPConfig,
     SeedSourceConfig,
     TrainerConfig,
+    UMAConfig,
     VASPConfig,
 )
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
@@ -310,3 +313,44 @@ def test_resume_retains_last_promoted_logdir_after_rejected_candidate(tmp_path: 
         )
 
     assert _scan_resume(tmp_path) == (2, promoted)
+
+
+@pytest.mark.parametrize("backend", ["uma", "mace"])
+def test_resume_applies_last_promoted_model_for_all_backends(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
+) -> None:
+    import json
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    promoted = tmp_path / ("promoted.model" if backend == "mace" else "promoted-uma")
+    if backend == "mace":
+        promoted.touch()
+        cfg.mlip = MLIPConfig(backend="mace", mace=MACEConfig())
+    else:
+        promoted.mkdir()
+        cfg.mlip = MLIPConfig(backend="uma", uma=UMAConfig())
+    cfg.loop.resume = True
+    iteration_dir = cfg.loop.out_dir / "iteration_0000"
+    iteration_dir.mkdir()
+    (iteration_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "iteration": 0,
+                "status": "complete",
+                "new_logdir": str(promoted),
+            }
+        )
+    )
+    monkeypatch.setattr(loop_mod, "resolve_seed_structures", lambda *args: [])
+
+    loop_mod.run_active_learning(cfg)
+
+    if backend == "mace":
+        assert cfg.mlip.mace is not None
+        assert cfg.mlip.mace.family == "checkpoint"
+        assert cfg.mlip.mace.model == str(promoted)
+    else:
+        assert cfg.mlip.uma is not None
+        assert cfg.mlip.uma.model_name == str(promoted)
