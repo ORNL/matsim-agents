@@ -792,6 +792,44 @@ def test_uma_only_execution_rejects_non_uma_backend(tmp_path, monkeypatch):
         )
 
 
+def test_dft_ranking_after_promotion_requires_post_training_reexploration(tmp_path):
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    train_script = tmp_path / "train.py"
+    train_script.touch()
+    validation_set = tmp_path / "validation.extxyz"
+    validation_set.touch()
+
+    with pytest.raises(ValueError, match="requires phase_policy.reevaluate_after_retraining"):
+        run_formula_with_active_learning(
+            "NbO2",
+            str(tmp_path / "formula"),
+            config=CampaignFormulaExecutionConfig(
+                active_learning_config=config_path,
+                phase_policy=PhaseExplorationPolicy(
+                    active_learning=True,
+                    retrain_mlip=True,
+                    promote_model=True,
+                    dft_approved=True,
+                    retraining_approved=True,
+                    promotion_approved=True,
+                ),
+                retraining=CampaignRetrainingConfig(
+                    train_script=train_script,
+                    promote_model=True,
+                    promotion_approved=True,
+                    validation_set=validation_set,
+                ),
+                dft_refinement=CampaignDFTRefinementConfig(
+                    method_signature="qe-test-v1",
+                ),
+            ),
+            phase_runner=lambda *args, **kwargs: pytest.fail(
+                "campaign ran without post-promotion reevaluation"
+            ),
+        )
+
+
 def _vasp_config_yaml(tmp_path) -> str:
     vasp_bin = tmp_path / "vasp_std"
     wrapper = tmp_path / "vasp-wrapper.sh"
@@ -952,20 +990,70 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
     def phase_runner(formula, **kwargs):
         composition = parse_composition(formula)
         assert composition is not None
+        policy = kwargs["policy"]
+        active_learning_result = {"n_dft_calculations": 1, "node_hours": 0.0}
+        if policy.active_learning:
+            active_learning_result = kwargs["active_learning_runner"](
+                formula, kwargs["output_dir"], policy.retrain_mlip
+            )
+        initial = CompositionExplorationResult(
+            composition=composition,
+            phase_candidates=[
+                PhaseCandidate(formula="NbO2", structure_path=str(structures["NbO2"]))
+            ],
+            relaxations=[mlip_relaxation],
+        )
+        after_retraining = (
+            initial
+            if policy.reevaluate_after_retraining and active_learning_result["model_promoted"]
+            else None
+        )
         return PhaseExplorationWorkflowResult(
             composition=formula,
-            initial=CompositionExplorationResult(
-                composition=composition,
-                phase_candidates=[
-                    PhaseCandidate(formula="NbO2", structure_path=str(structures["NbO2"]))
-                ],
-                relaxations=[mlip_relaxation],
+            initial=initial,
+            after_retraining=after_retraining,
+            active_learning_result=active_learning_result,
+            model_promoted=bool(active_learning_result.get("model_promoted")),
+        )
+
+    def al_runner(cfg):
+        dataset_path = cfg.loop.out_dir / "dataset.extxyz"
+        dataset_path.parent.mkdir(parents=True, exist_ok=True)
+        dataset_path.write_text("single-point DFT training labels\n", encoding="utf-8")
+        dataset_path.with_suffix(".extxyz.manifest.json").write_text(
+            json.dumps(
+                {
+                    "dataset_id": "training-dataset-v1",
+                    "method_signature": "qe-training-v1",
+                    "dft_backend": "qe",
+                    "validation": {"accepted": 1},
+                }
             ),
-            active_learning_result={"n_dft_calculations": 1, "node_hours": 0.0},
+            encoding="utf-8",
+        )
+        iteration_dir = cfg.loop.out_dir / "iteration_0000"
+        iteration_dir.mkdir()
+        (iteration_dir / "state.json").write_text(
+            json.dumps(
+                {
+                    "status": "complete",
+                    "n_dft_converged": 1,
+                    "n_dft_failed": 0,
+                    "timings_sec": {"total": 1.0},
+                    "candidate_uncertainty": {},
+                    "model_promoted": True,
+                    "new_logdir": str(tmp_path / "promoted-uma"),
+                }
+            ),
+            encoding="utf-8",
         )
 
     energies = {"Nb": -10.0, "O2": -8.0, "NbO2": -20.0, "Nb2O4": -42.0}
     observed_settings = []
+    train_script = tmp_path / "train.py"
+    train_script.touch()
+    promotion_validation_set = tmp_path / "promotion-validation.extxyz"
+    promotion_validation_set.touch()
 
     def relaxation_runner(cfg):
         assert cfg.mode == RelaxationMode.DFT
@@ -1046,9 +1134,24 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
         str(tmp_path / "formula"),
         config=CampaignFormulaExecutionConfig(
             active_learning_config=config_path,
-            phase_policy=PhaseExplorationPolicy(active_learning=False, dft_approved=True),
+            phase_policy=PhaseExplorationPolicy(
+                active_learning=True,
+                retrain_mlip=True,
+                promote_model=True,
+                reevaluate_after_retraining=True,
+                dft_approved=True,
+                retraining_approved=True,
+                promotion_approved=True,
+            ),
+            retraining=CampaignRetrainingConfig(
+                train_script=train_script,
+                promote_model=True,
+                promotion_approved=True,
+                validation_set=promotion_validation_set,
+            ),
             dft_refinement=refinement,
         ),
+        al_runner=al_runner,
         phase_runner=phase_runner,
         relaxation_runner=relaxation_runner,
     )
@@ -1062,6 +1165,29 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
     assert result.active_learning_result["n_dft_calculations"] == 5
     assert result.active_learning_result["dft_refinement"]["reference_calculations"] == 3
     assert sum(settings["kpts"] == (4, 4, 4) for settings in observed_settings) == 3
+    independent_ranking = result.active_learning_result["independent_dft_ranking"]
+    assert independent_ranking["training_dataset_unchanged"] is True
+    assert (
+        independent_ranking["training_dataset_sha256_before"]
+        == independent_ranking["training_dataset_sha256_after"]
+    )
+    assert independent_ranking["method_signature"] == "qe-test-v1"
+    assert str(tmp_path / "promoted-uma") in independent_ranking["model_identifier"]
+    stage_manifest = json.loads(
+        Path(result.active_learning_result["campaign_stages_path"]).read_text(encoding="utf-8")
+    )
+    assert [stage["name"] for stage in stage_manifest["stages"]] == [
+        "initial_mlip_exploration",
+        "active_learning_labels_and_training",
+        "post_training_mlip_exploration",
+        "independent_dft_ranking",
+    ]
+    assert [stage["status"] for stage in stage_manifest["stages"]] == [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+    ]
 
     resumed = run_formula_with_active_learning(
         "NbO2",

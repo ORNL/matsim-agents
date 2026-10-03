@@ -143,6 +143,33 @@ and duplicate geometry. Dataset manifests preserve hashes, backend identity,
 energy-reference metadata, and validation outcomes. VASP and QE energies must
 not be mixed without an explicit, recorded reference transformation.
 
+## Combined MLIP training and independent DFT ranking
+
+A formula campaign can run both DFT tasks in a deliberate order:
+
+1. Explore/rank structures with the incumbent MLIP.
+2. Acquire single-point DFT labels through active learning and optionally train
+   a candidate MLIP from that labelled dataset.
+3. If a candidate is promoted, rerun MLIP exploration with the promoted model
+   before selecting structures for final DFT refinement.
+4. DFT-relax those structures and compatible competing-phase references, then
+   recompute the convex-hull ranking.
+
+The final refinement stage is an independent ranking check: it records its
+candidate and reference inputs, relaxed structures, energies, method signature,
+reference-set ID, and the model identifier that selected the candidates. It
+does not append its calculations to the active-learning training dataset. The
+workflow hashes that dataset before and after refinement and fails if it
+changes. Each formula writes an ordered `campaign_stages.json` record so
+completed, skipped, blocked, and interrupted stages are visible. When model
+promotion and final DFT refinement are both configured, post-promotion MLIP
+reevaluation is required.
+
+DFT labels collected before final ranking may train the candidate MLIP; the
+DFT-refinement results remain separate. If those final results are later used
+for another training round, that must be a new dataset/model version and needs
+a new independent final-ranking check.
+
 ## Phase exploration
 
 `PhaseExplorationPolicy` controls four independent behaviors:

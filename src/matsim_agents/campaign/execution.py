@@ -6,6 +6,7 @@ import json
 import subprocess
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -21,6 +22,7 @@ from matsim_agents.active_learning.config import (
     ALConfig,
     resolve_hydragnn_inference_head,
 )
+from matsim_agents.active_learning.dataset_governance import sha256_file
 from matsim_agents.active_learning.loop import run_active_learning
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.mlip.relaxation import (
@@ -117,6 +119,37 @@ class CampaignFormulaExecutionConfig(BaseModel):
             if self.retraining is not None or self.dft_refinement is not None:
                 raise ValueError("uma_only execution cannot configure retraining or DFT refinement")
         return self
+
+
+def _write_campaign_stages(path: Path, formula: str, stages: dict[str, dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": 1,
+        "formula": formula,
+        "stages": list(stages.values()),
+    }
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def _set_campaign_stage(
+    path: Path,
+    formula: str,
+    stages: dict[str, dict[str, Any]],
+    name: str,
+    status: str,
+    **evidence: Any,
+) -> None:
+    record = stages.setdefault(name, {"name": name})
+    now = datetime.now(UTC).isoformat()
+    record["status"] = status
+    if status == "in_progress":
+        record["started_at_utc"] = now
+    if status in {"completed", "failed", "skipped", "blocked"}:
+        record["completed_at_utc"] = now
+    record.update(evidence)
+    _write_campaign_stages(path, formula, stages)
 
 
 def _model_identifier(cfg: ALConfig) -> str:
@@ -993,6 +1026,15 @@ def run_formula_with_active_learning(
     else:
         al_cfg.trainer.enabled = False
         al_cfg.trainer.promote_model = False
+    if (
+        config.dft_refinement is not None
+        and al_cfg.trainer.promote_model
+        and not config.phase_policy.reevaluate_after_retraining
+    ):
+        raise ValueError(
+            "DFT refinement after model promotion requires "
+            "phase_policy.reevaluate_after_retraining=True"
+        )
 
     if config.max_dft_calculations is not None:
         refinement_reserve = 0
@@ -1009,6 +1051,29 @@ def run_formula_with_active_learning(
 
     formula_root = Path(output_dir)
     al_root = formula_root / "active_learning"
+    stage_manifest_path = formula_root / "campaign_stages.json"
+    stages: dict[str, dict[str, Any]] = {}
+    for stage_name in (
+        "initial_mlip_exploration",
+        "active_learning_labels_and_training",
+        "post_training_mlip_exploration",
+        "independent_dft_ranking",
+    ):
+        stages[stage_name] = {"name": stage_name, "status": "pending"}
+    if not config.phase_policy.active_learning:
+        stages["active_learning_labels_and_training"]["status"] = "skipped"
+        stages["active_learning_labels_and_training"]["reason"] = (
+            "active learning is disabled by the phase policy"
+        )
+    if not config.phase_policy.reevaluate_after_retraining:
+        stages["post_training_mlip_exploration"]["status"] = "skipped"
+        stages["post_training_mlip_exploration"]["reason"] = (
+            "post-training reevaluation is disabled"
+        )
+    if config.dft_refinement is None:
+        stages["independent_dft_ranking"]["status"] = "skipped"
+        stages["independent_dft_ranking"]["reason"] = "DFT refinement is not configured"
+    _write_campaign_stages(stage_manifest_path, formula, stages)
     al_cfg.md.seed_source.kind = "compositions"
     al_cfg.md.seed_source.paths = []
     al_cfg.md.seed_source.prompt = None
@@ -1024,7 +1089,35 @@ def run_formula_with_active_learning(
             raise ValueError(f"phase runner requested {composition!r}, expected {formula!r}")
         if retrain != al_cfg.trainer.enabled:
             raise ValueError("phase retraining policy and AL trainer configuration disagree")
-        al_runner(al_cfg)
+        _set_campaign_stage(
+            stage_manifest_path,
+            formula,
+            stages,
+            "initial_mlip_exploration",
+            "completed",
+            output_dir=str(Path(phase_output_dir) / formula),
+        )
+        _set_campaign_stage(
+            stage_manifest_path,
+            formula,
+            stages,
+            "active_learning_labels_and_training",
+            "in_progress",
+            training_enabled=al_cfg.trainer.enabled,
+            promotion_requested=al_cfg.trainer.promote_model,
+        )
+        try:
+            al_runner(al_cfg)
+        except Exception as exc:
+            _set_campaign_stage(
+                stage_manifest_path,
+                formula,
+                stages,
+                "active_learning_labels_and_training",
+                "failed",
+                failure_reason=f"{type(exc).__name__}: {exc}",
+            )
+            raise
         states = _iteration_states(
             al_root,
             allow_empty=al_cfg.loop.max_dft_calculations == 0,
@@ -1033,6 +1126,39 @@ def run_formula_with_active_learning(
             float(state.get("timings_sec", {}).get("total", 0.0)) for state in states
         )
         promoted = [state for state in states if state.get("model_promoted")]
+        dataset_path = al_root / (
+            "dataset.extxyz" if al_cfg.loop.dataset_format == "extxyz" else "dataset.db"
+        )
+        manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
+        training_data = None
+        if dataset_path.is_file():
+            training_data = {
+                "path": str(dataset_path.resolve()),
+                "sha256": sha256_file(dataset_path),
+                "manifest_path": (
+                    str(manifest_path.resolve()) if manifest_path.is_file() else None
+                ),
+            }
+            if manifest_path.is_file():
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                training_data.update(
+                    {
+                        "dataset_id": manifest.get("dataset_id"),
+                        "method_signature": manifest.get("method_signature"),
+                        "dft_backend": manifest.get("dft_backend"),
+                        "accepted_frames_in_last_append": manifest.get("validation", {}).get(
+                            "accepted"
+                        ),
+                    }
+                )
+        validation_dataset_path = al_root / "validation.extxyz"
+        if validation_dataset_path.is_file():
+            result_validation_data = {
+                "path": str(validation_dataset_path.resolve()),
+                "sha256": sha256_file(validation_dataset_path),
+            }
+        else:
+            result_validation_data = None
         candidate_uncertainty = {
             str(candidate_id): float(score)
             for state in states
@@ -1047,6 +1173,8 @@ def run_formula_with_active_learning(
             "n_active_learning_iterations": len(states),
             "node_hours": total_seconds * config.compute_nodes / 3600.0,
             "model_promoted": bool(promoted),
+            "training_data": training_data,
+            "held_out_validation_data": result_validation_data,
             "md_candidate_uncertainty": candidate_uncertainty,
             "iteration_states": states,
             "phase_output_dir": phase_output_dir,
@@ -1063,6 +1191,20 @@ def run_formula_with_active_learning(
                     }
                 else:
                     result["exploration_kwargs"] = {"logdir": latest_model}
+        _set_campaign_stage(
+            stage_manifest_path,
+            formula,
+            stages,
+            "active_learning_labels_and_training",
+            "completed",
+            training_enabled=al_cfg.trainer.enabled,
+            model_promoted=bool(promoted),
+            training_data=training_data,
+            held_out_validation_data=result_validation_data,
+            n_dft_calculations=result["n_dft_calculations"],
+            n_active_learning_iterations=result["n_active_learning_iterations"],
+            candidate_model_path=(str(promoted[-1].get("new_logdir")) if promoted else None),
+        )
         return result
 
     phase_started = time.monotonic()
@@ -1072,13 +1214,37 @@ def run_formula_with_active_learning(
             "promotion_approved": al_cfg.trainer.promotion_approved,
         }
     )
-    result = phase_runner(
+    _set_campaign_stage(
+        stage_manifest_path,
         formula,
-        policy=phase_policy,
-        output_dir=str(formula_root / "phase_exploration"),
-        exploration_kwargs=_exploration_kwargs(al_cfg, config.exploration_kwargs),
-        active_learning_runner=active_learning_runner,
+        stages,
+        "initial_mlip_exploration",
+        "in_progress",
+        model_identifier=_model_identifier(al_cfg),
     )
+    try:
+        result = phase_runner(
+            formula,
+            policy=phase_policy,
+            output_dir=str(formula_root / "phase_exploration"),
+            exploration_kwargs=_exploration_kwargs(al_cfg, config.exploration_kwargs),
+            active_learning_runner=active_learning_runner,
+        )
+    except Exception as exc:
+        stage_name = (
+            "active_learning_labels_and_training"
+            if stages["active_learning_labels_and_training"]["status"] == "in_progress"
+            else "initial_mlip_exploration"
+        )
+        _set_campaign_stage(
+            stage_manifest_path,
+            formula,
+            stages,
+            stage_name,
+            "failed",
+            failure_reason=f"{type(exc).__name__}: {exc}",
+        )
+        raise
     phase_seconds = time.monotonic() - phase_started
     exploration = result.after_retraining or result.initial
     effective_al_cfg = al_cfg.model_copy(deep=True)
@@ -1088,7 +1254,30 @@ def run_formula_with_active_learning(
     execution_evidence = result.active_learning_result or {}
     execution_evidence["mlip_backend"] = effective_al_cfg.mlip.backend
     execution_evidence["model_identifier"] = _model_identifier(effective_al_cfg)
+    execution_evidence["campaign_stages_path"] = str(stage_manifest_path)
     result.active_learning_result = execution_evidence
+    if stages["initial_mlip_exploration"]["status"] == "in_progress":
+        _set_campaign_stage(
+            stage_manifest_path,
+            formula,
+            stages,
+            "initial_mlip_exploration",
+            "completed",
+            model_identifier=_model_identifier(al_cfg),
+            candidate_count=len(result.initial.phase_candidates),
+            relaxation_count=len(result.initial.relaxations),
+        )
+    if result.after_retraining is not None:
+        _set_campaign_stage(
+            stage_manifest_path,
+            formula,
+            stages,
+            "post_training_mlip_exploration",
+            "completed",
+            model_identifier=_model_identifier(effective_al_cfg),
+            candidate_count=len(result.after_retraining.phase_candidates),
+            relaxation_count=len(result.after_retraining.relaxations),
+        )
     candidate_uncertainty = _score_relaxed_candidate_uncertainty(exploration, effective_al_cfg)
     validation_configs = [
         effective_al_cfg,
@@ -1167,6 +1356,7 @@ def run_formula_with_active_learning(
             "mlip_labels": labels,
             "cross_model_validation": cross_model,
             "perturbation_robustness": robustness,
+            "campaign_stages_path": str(stage_manifest_path),
         }
         return result
     if result.active_learning_result is not None:
@@ -1175,7 +1365,24 @@ def run_formula_with_active_learning(
     if refinement is None:
         return result
     if not config.phase_policy.dft_approved:
+        _set_campaign_stage(
+            stage_manifest_path,
+            formula,
+            stages,
+            "independent_dft_ranking",
+            "blocked",
+            reason="explicit DFT approval was not provided",
+        )
         raise PermissionError("campaign DFT refinement requires explicit DFT approval")
+    _set_campaign_stage(
+        stage_manifest_path,
+        formula,
+        stages,
+        "independent_dft_ranking",
+        "in_progress",
+        model_identifier=_model_identifier(effective_al_cfg),
+        training_data=execution_evidence.get("training_data"),
+    )
     candidates = [relaxation for relaxation in exploration.relaxations if relaxation.converged]
     if refinement.candidate_acquisition.enabled:
         selected, candidate_scores = select_dft_refinement_candidates(
@@ -1191,8 +1398,50 @@ def run_formula_with_active_learning(
         selected = candidates[: refinement.max_candidates]
         candidate_scores = {}
     if not selected:
+        _set_campaign_stage(
+            stage_manifest_path,
+            formula,
+            stages,
+            "independent_dft_ranking",
+            "failed",
+            failure_reason="DFT refinement requires at least one converged MLIP relaxation",
+        )
         raise RuntimeError("DFT refinement requires at least one converged MLIP relaxation")
 
+    training_data = execution_evidence.get("training_data")
+    training_data_hash_before = (
+        sha256_file(training_data["path"])
+        if training_data is not None and Path(training_data["path"]).is_file()
+        else None
+    )
+    if training_data is not None and training_data_hash_before is None:
+        raise FileNotFoundError(
+            f"active-learning training dataset is missing: {training_data['path']}"
+        )
+    candidate_inputs = [
+        {
+            "structure_path": candidate.optimized_structure_path,
+            "structure_sha256": structure_content_hash(candidate.optimized_structure_path),
+        }
+        for candidate in selected
+    ]
+    reference_inputs = [
+        {
+            "structure_path": str(path),
+            "structure_sha256": structure_content_hash(path),
+            "phase_id": phase_id,
+        }
+        for phase_id, path in refinement.reference_structures.items()
+    ]
+    reference_inputs.extend(
+        {
+            "structure_path": str(spec.structure_path),
+            "structure_sha256": structure_content_hash(spec.structure_path),
+            "phase_id": spec.phase_id,
+            "source": spec.source,
+        }
+        for spec in refinement.reference_phases
+    )
     references, reference_calculations, reference_seconds = _generate_reference_energies(
         al_cfg,
         refinement,
@@ -1219,6 +1468,16 @@ def run_formula_with_active_learning(
         )
         refinement_seconds += time.monotonic() - started
         refined.append(_converged_dft_relaxation(candidate, relaxation_result))
+    training_data_hash_after = (
+        sha256_file(training_data["path"])
+        if training_data is not None and Path(training_data["path"]).is_file()
+        else None
+    )
+    if training_data_hash_before != training_data_hash_after:
+        raise RuntimeError("independent DFT ranking modified the active-learning training dataset")
+    training_dataset_unchanged = (
+        training_data_hash_before == training_data_hash_after if training_data is not None else None
+    )
     exploration.stability = score_stability(
         formula,
         refined,
@@ -1251,7 +1510,47 @@ def run_formula_with_active_learning(
             key: value.model_dump(mode="json") for key, value in candidate_scores.items()
         },
     }
+    evidence["independent_dft_ranking"] = {
+        "model_identifier": _model_identifier(effective_al_cfg),
+        "training_dataset_path": training_data.get("path") if training_data else None,
+        "training_dataset_sha256_before": training_data_hash_before,
+        "training_dataset_sha256_after": training_data_hash_after,
+        "training_dataset_unchanged": training_dataset_unchanged,
+        "independence_contract": (
+            "final DFT refinement is stored separately and is not appended to the "
+            "active-learning training dataset"
+        ),
+        "candidate_inputs": candidate_inputs,
+        "reference_inputs": reference_inputs,
+        "candidate_results": [
+            {
+                "source_structure_path": candidate.optimized_structure_path,
+                "dft_structure_path": dft_result.optimized_structure_path,
+                "dft_structure_sha256": structure_content_hash(dft_result.optimized_structure_path),
+                "total_energy_eV": dft_result.final_energy_eV,
+                "residual_force_eV_per_A": dft_result.final_max_force_eV_per_A,
+            }
+            for candidate, dft_result in zip(selected, refined, strict=True)
+        ],
+        "reference_set_id": references.identifier,
+        "method_signature": refinement.method_signature,
+        "ranking_report": (
+            exploration.stability.model_dump(mode="json")
+            if exploration.stability is not None
+            else None
+        ),
+    }
     result.active_learning_result = evidence
+    _set_campaign_stage(
+        stage_manifest_path,
+        formula,
+        stages,
+        "independent_dft_ranking",
+        "completed",
+        **evidence["independent_dft_ranking"],
+        reference_calculations=reference_calculations,
+        candidate_calculations=len(refined),
+    )
     return result
 
 
