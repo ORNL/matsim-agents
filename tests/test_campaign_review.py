@@ -4,6 +4,7 @@ import json
 
 from matsim_agents.campaign.review import (
     CampaignDebateReviewConfig,
+    _deactivation_block_reason,
     _parse_verdict,
     _review_evidence,
     run_campaign_debate_review,
@@ -87,6 +88,24 @@ def test_campaign_review_requires_cross_model_agreement(tmp_path):
         FormulaRunRecord(formula="NbO", status=WorkflowStatus.COMPLETE),
         FormulaRunRecord(formula="NbO2", status=WorkflowStatus.COMPLETE),
     ]
+    ranked_phase = PhaseStability(
+        structure_path="NbO-seed.vasp",
+        optimized_structure_path="NbO-relaxed.vasp",
+        final_energy_eV=-10.0,
+        energy_per_atom_eV=-5.0,
+        energy_above_hull_eV_per_atom=0.2,
+        delta_e_above_min_eV_per_atom=0.0,
+        final_max_force_eV_per_A=0.01,
+        converged=True,
+        dynamically_stable_proxy=True,
+    )
+    campaign.stability_reports["NbO"] = StabilityReport(
+        formula="NbO",
+        ground_state=ranked_phase,
+        ranking=[ranked_phase],
+        chemically_stable_proxy=False,
+        summary="Ranked above the hull.",
+    )
     participants = [
         DebateParticipant(name="model-a", provider="vllm", model="a"),
         DebateParticipant(name="model-b", provider="vllm", model="b"),
@@ -240,6 +259,21 @@ def test_campaign_review_cannot_deactivate_converged_result_without_hull_evidenc
 
     assert decision.deactivate_formulas == []
     assert sum("rejected Nb2O3 deactivation" in note for note in decision.notes) == 2
+
+
+def test_missing_stability_report_blocks_deactivation() -> None:
+    campaign = CampaignState(
+        campaign_id="missing-evidence-test",
+        element_set=["Nb", "O"],
+        formula_policy=FormulaGenerationPolicy(elements=["Nb", "O"], require_charge_balance=False),
+    )
+
+    reason = _deactivation_block_reason(
+        campaign,
+        FormulaRunRecord(formula="NbO", status=WorkflowStatus.FAILED),
+    )
+
+    assert reason == "authoritative numerical evidence has no stability report"
 
 
 def test_parse_verdict_accepts_json_after_reasoning() -> None:

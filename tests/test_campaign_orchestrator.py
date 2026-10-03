@@ -390,6 +390,23 @@ def test_campaign_does_not_admit_formula_beyond_reserved_budget(tmp_path):
     assert result.campaign.status == WorkflowStatus.PARTIAL
 
 
+def test_campaign_passes_remaining_dft_allowance_to_formula_runner(tmp_path):
+    campaign = _campaign(max_candidates=1)
+    campaign.budget.max_dft_calculations = 3
+    allowances: list[int] = []
+
+    def runner(formula: str, output_dir: str, dft_allowance: int) -> PhaseExplorationWorkflowResult:
+        allowances.append(dft_allowance)
+        result = _result(formula, output_dir)
+        result.active_learning_result = {"n_dft_calculations": dft_allowance}
+        return result
+
+    result = run_campaign(campaign, output_dir=tmp_path, formula_runner=runner)
+
+    assert allowances == [3]
+    assert result.campaign.formula_runs["NbO2"].n_dft_calculations == 3
+
+
 def test_pure_acquisition_mode_records_forced_branch():
     campaign = _campaign()
     campaign.acquisition.formula_metrics["NbO"] = FormulaAcquisitionMetrics(

@@ -63,7 +63,7 @@ class CampaignRunResult(BaseModel):
     stop_reason: str
 
 
-FormulaRunner = Callable[[str, str], PhaseExplorationWorkflowResult]
+FormulaRunner = Callable[..., PhaseExplorationWorkflowResult]
 ReviewRunner = Callable[[CampaignState, list[FormulaRunRecord]], CampaignReviewDecision]
 
 
@@ -360,15 +360,31 @@ def run_campaign(
             campaign.formula_runs[formula] = record
             campaign.save(state_path)
             try:
-                result = formula_runner(formula, str(formula_dir))
+                dft_allowance = None
+                if campaign.budget.max_dft_calculations is not None:
+                    used_dft = sum(
+                        item.n_dft_calculations for item in campaign.formula_runs.values()
+                    )
+                    dft_allowance = max(0, campaign.budget.max_dft_calculations - used_dft)
+                result = (
+                    formula_runner(formula, str(formula_dir), dft_allowance)
+                    if dft_allowance is not None
+                    else formula_runner(formula, str(formula_dir))
+                )
                 exploration = result.after_retraining or result.initial
                 record.n_mlip_relaxations += len(exploration.relaxations)
                 record.outcome_class = exploration.outcome_class
                 record.candidate_counts = exploration.candidate_counts
                 al_result = result.active_learning_result or {}
-                record.n_dft_calculations += int(
+                formula_dft = int(
                     al_result.get("n_dft_calculations", al_result.get("n_dft_converged", 0))
                 )
+                if dft_allowance is not None and formula_dft > dft_allowance:
+                    raise RuntimeError(
+                        f"formula used {formula_dft} DFT calculations with allowance "
+                        f"{dft_allowance}"
+                    )
+                record.n_dft_calculations += formula_dft
                 record.n_active_learning_iterations += int(
                     al_result.get("n_active_learning_iterations", al_result.get("n_iterations", 0))
                 )

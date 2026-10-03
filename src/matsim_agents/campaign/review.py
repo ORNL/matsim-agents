@@ -201,10 +201,10 @@ def _deactivation_block_reason(
 ) -> str | None:
     report = campaign.stability_reports.get(record.formula)
     if report is None:
-        return None
+        return "authoritative numerical evidence has no stability report"
     ground_state = report.ground_state
     if not ground_state.converged or not ground_state.eligible_for_ranking:
-        return None
+        return "authoritative numerical evidence has no converged, ranking-eligible ground state"
     if any(entry.energy_above_hull_eV_per_atom is not None for entry in report.ranking):
         return None
     return (

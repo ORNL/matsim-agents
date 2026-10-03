@@ -76,8 +76,13 @@ def unary_cache_directory(
     reference_manifest: Path, model_identifier: str, settings: dict[str, Any]
 ) -> Path:
     """Return a stable cache directory keyed by manifest, model, and controls."""
+    structure_digests = {
+        str(spec["phase_id"]): hashlib.sha256(Path(spec["path"]).read_bytes()).hexdigest()
+        for spec in load_reference_phase_specs(reference_manifest)
+    }
     payload = {
         "manifest_sha256": hashlib.sha256(reference_manifest.read_bytes()).hexdigest(),
+        "structure_sha256": structure_digests,
         "model_identifier": model_identifier,
         "settings": settings,
     }

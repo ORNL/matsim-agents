@@ -639,6 +639,9 @@ class LoopConfig(BaseModel):
     """Top-level loop control."""
 
     n_iterations: int = 10
+    max_dft_calculations: int | None = Field(
+        None, ge=0, description="Hard cap on DFT labels across all loop iterations."
+    )
     out_dir: Path = Field(..., description="Root directory for all AL artefacts.")
     dataset_format: Literal["ase_db", "extxyz"] = "extxyz"
     resume: bool = True

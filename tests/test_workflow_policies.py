@@ -215,6 +215,24 @@ def test_label_validation_checks_existing_dataset_and_element_scope():
     assert "outside the campaign element set" in summary.rejection_reasons[0]
 
 
+def test_label_validation_rejects_reordered_translated_periodic_duplicate():
+    existing_atoms = Atoms(
+        "NbO",
+        scaled_positions=[[0.1, 0.2, 0.3], [0.6, 0.7, 0.8]],
+        cell=[4.0, 4.0, 4.0],
+        pbc=True,
+    )
+    duplicate_atoms = existing_atoms[[1, 0]]
+    duplicate_atoms.translate([4.5, -3.5, 0.5])
+    existing = LabelledFrame(existing_atoms, -3.0, np.zeros((2, 3)), None, "existing", 0, "qe")
+    duplicate = LabelledFrame(duplicate_atoms, -3.0, np.zeros((2, 3)), None, "duplicate", 1, "qe")
+
+    accepted, summary = validate_labelled_frames([duplicate], existing_frames=[existing])
+
+    assert accepted == []
+    assert summary.duplicate == 1
+
+
 def test_convex_hull_claim_requires_reference_energies(tmp_path):
     structure = tmp_path / "H.xyz"
     atoms = Atoms("H", positions=[[0.0, 0.0, 0.0]])

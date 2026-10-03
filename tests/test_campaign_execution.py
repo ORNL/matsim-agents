@@ -34,7 +34,7 @@ from matsim_agents.campaign.surrogate_hull import (
     reference_coverage,
     surrogate_hull_coverage,
 )
-from matsim_agents.campaign.unary_references import relax_unary_references
+from matsim_agents.campaign.unary_references import relax_unary_references, unary_cache_directory
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.formula import FormulaGenerationPolicy
 from matsim_agents.discovery.seeds import PhaseCandidate
@@ -175,6 +175,22 @@ def test_unary_reference_search_relaxes_and_selects_each_model_endpoint(tmp_path
         relax_cell=False,
     )
     assert cached == result
+
+
+def test_unary_cache_key_includes_structure_contents(tmp_path):
+    structure = tmp_path / "Nb.extxyz"
+    write(structure, Atoms("Nb", positions=[[0.0, 0.0, 0.0]]))
+    manifest = tmp_path / "references.json"
+    manifest.write_text(
+        json.dumps({"phases": {"Nb": {"formula": "Nb", "path": str(structure)}}}),
+        encoding="utf-8",
+    )
+    settings = {"max_steps": 10}
+
+    original = unary_cache_directory(manifest, "test:model", settings)
+    write(structure, Atoms("Nb", positions=[[0.1, 0.0, 0.0]]))
+
+    assert unary_cache_directory(manifest, "test:model", settings) != original
 
 
 def test_surrogate_hull_stops_when_target_element_is_absent_from_manifest(tmp_path):
@@ -1186,6 +1202,7 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
         config=CampaignFormulaExecutionConfig(
             active_learning_config=config_path,
             phase_policy=PhaseExplorationPolicy(active_learning=False, dft_approved=True),
+            exploration_kwargs={"degeneracy_tol_eV_per_atom": 0.025},
             dft_refinement=CampaignDFTRefinementConfig(
                 method_signature="vasp-pbe-test-v1",
                 reference_energies=ReferenceEnergySet(
@@ -1215,6 +1232,7 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
     assert dft.settings["extra_incar"]["LMAXMIX"] == "4"
     assert "IBRION" not in dft.settings["extra_incar"]
     assert result.initial.stability.ranking_mode == "convex_hull_ranking"
+    assert result.initial.stability.degeneracy_tolerance_eV_per_atom == 0.025
     assert result.active_learning_result["dft_refinement"]["candidate_calculations"] == 1
 
 

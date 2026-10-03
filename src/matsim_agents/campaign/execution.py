@@ -83,6 +83,7 @@ class CampaignFormulaExecutionConfig(BaseModel):
     surrogate_unary_fmax_eV_per_A: float = Field(0.02, gt=0)
     surrogate_unary_maxstep_A: float = Field(0.01, gt=0)
     surrogate_minimum_unique_unary: int = Field(2, ge=1)
+    max_dft_calculations: int | None = Field(None, ge=0)
 
     @model_validator(mode="after")
     def _validate_execution_mode(self) -> CampaignFormulaExecutionConfig:
@@ -909,6 +910,37 @@ def _generate_reference_energies(
     return references, calculations, elapsed_seconds
 
 
+def _pending_reference_calculation_count(refinement: CampaignDFTRefinementConfig) -> int:
+    references = refinement.reference_energies
+    elemental = references.elemental_energies_eV_per_atom if references is not None else {}
+    competing = references.competing_phases if references is not None else {}
+    phase_ids = (
+        {entry.phase_id for entry in references.phase_entries} if references is not None else set()
+    )
+    legacy_specs = [
+        ReferenceStructureSpec(
+            phase_id=formula,
+            formula=formula,
+            structure_path=path,
+            source="legacy_manifest",
+        )
+        for formula, path in refinement.reference_structures.items()
+    ]
+    pending = 0
+    for spec in [*legacy_specs, *refinement.reference_phases]:
+        composition = parse_composition(spec.formula)
+        if composition is None:
+            raise ValueError(f"Could not parse reference formula {spec.formula!r}")
+        if len(composition.elements) == 1:
+            if next(iter(composition.elements)) not in elemental:
+                pending += 1
+        elif spec.phase_id not in phase_ids and not (
+            spec.source == "legacy_manifest" and spec.formula in competing
+        ):
+            pending += 1
+    return pending
+
+
 def run_formula_with_active_learning(
     formula: str,
     output_dir: str,
@@ -961,6 +993,19 @@ def run_formula_with_active_learning(
     else:
         al_cfg.trainer.enabled = False
         al_cfg.trainer.promote_model = False
+
+    if config.max_dft_calculations is not None:
+        refinement_reserve = 0
+        if config.dft_refinement is not None:
+            refinement_reserve = (
+                _pending_reference_calculation_count(config.dft_refinement)
+                + config.dft_refinement.max_candidates
+            )
+        if refinement_reserve > config.max_dft_calculations:
+            raise ValueError(
+                "remaining DFT allowance is below required reference and refinement reserve"
+            )
+        al_cfg.loop.max_dft_calculations = config.max_dft_calculations - refinement_reserve
 
     formula_root = Path(output_dir)
     al_root = formula_root / "active_learning"
@@ -1175,6 +1220,9 @@ def run_formula_with_active_learning(
         formula,
         refined,
         force_tol_eV_per_A=refinement.force_tolerance_eV_per_A,
+        degeneracy_tol_eV_per_atom=float(
+            config.exploration_kwargs.get("degeneracy_tol_eV_per_atom", 0.01)
+        ),
         candidates=exploration.phase_candidates,
         ranking_mode=RankingMode.CONVEX_HULL,
         reference_energies=references,
@@ -1206,9 +1254,12 @@ def run_formula_with_active_learning(
 
 def make_formula_runner(
     config: CampaignFormulaExecutionConfig,
-) -> Callable[[str, str], PhaseExplorationWorkflowResult]:
-    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
-        result = run_formula_with_active_learning(formula, output_dir, config=config)
+) -> Callable[[str, str, int | None], PhaseExplorationWorkflowResult]:
+    def runner(
+        formula: str, output_dir: str, dft_allowance: int | None = None
+    ) -> PhaseExplorationWorkflowResult:
+        effective_config = config.model_copy(update={"max_dft_calculations": dft_allowance})
+        result = run_formula_with_active_learning(formula, output_dir, config=effective_config)
         if result.model_promoted and result.active_learning_result:
             promoted = _promoted_model_path(result)
             if promoted:

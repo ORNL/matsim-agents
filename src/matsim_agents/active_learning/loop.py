@@ -264,7 +264,21 @@ def run_active_learning(cfg: ALConfig) -> None:
             if resumed_logdir is not None and resumed_logdir.exists():
                 _apply_model_override(cfg, str(resumed_logdir))
 
+    completed_dft = 0
+    if cfg.loop.resume:
+        for state_path in root.glob("iteration_*/state.json"):
+            state_data = json.loads(state_path.read_text(encoding="utf-8"))
+            if state_data.get("status") == "complete":
+                completed_dft += int(state_data.get("n_dft_converged", 0)) + int(
+                    state_data.get("n_dft_failed", 0)
+                )
     for i in range(start_iter, cfg.loop.n_iterations):
+        if (
+            cfg.loop.max_dft_calculations is not None
+            and completed_dft >= cfg.loop.max_dft_calculations
+        ):
+            log.info("DFT calculation cap reached; ending loop.")
+            break
         it_dir = _iter_dir(root, i)
         it_dir.mkdir(parents=True, exist_ok=True)
         state = IterationState(iteration=i)
@@ -303,6 +317,9 @@ def run_active_learning(cfg: ALConfig) -> None:
                 ensemble_calculators=ensemble_calcs or None,
                 seed=42 + i,
             )
+            if cfg.loop.max_dft_calculations is not None:
+                remaining_dft = cfg.loop.max_dft_calculations - completed_dft
+                selected = selected[:remaining_dft]
             state.n_selected = len(selected)
             state.selected_candidate_ids = [candidate.candidate_id for candidate in selected]
             selected_ids = set(state.selected_candidate_ids)
@@ -348,6 +365,7 @@ def run_active_learning(cfg: ALConfig) -> None:
             n_ok = sum(1 for r in results if r.converged)
             state.n_dft_converged = n_ok
             state.n_dft_failed = len(results) - n_ok
+            completed_dft += len(results)
             state.timings_sec["dft"] = time.time() - t0
             log.info(
                 "Iter %d: %s converged=%d failed=%d",

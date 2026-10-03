@@ -233,6 +233,24 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert any(dft_dir.iterdir()), "DFT working directories were not created"
 
 
+def test_dft_calculation_cap_truncates_selected_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.max_dft_calculations = 1
+    import matsim_agents.active_learning.loop as loop_mod
+
+    _patch_runtime(loop_mod, monkeypatch)
+    loop_mod.run_active_learning(cfg)
+
+    import json
+
+    state = json.loads((cfg.loop.out_dir / "iteration_0000" / "state.json").read_text())
+    assert state["n_selected"] == 1
+    assert state["n_dft_converged"] == 1
+    assert state["n_dft_failed"] == 0
+
+
 @pytest.mark.parametrize("approved", [True, False])
 def test_promotion_decision_controls_model_activation(
     tmp_path: Path,

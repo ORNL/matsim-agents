@@ -40,16 +40,31 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def _geometry_key(atoms: Any) -> str:
+def structure_identity(atoms: Any) -> str:
+    """Hash chemistry and geometry independently of atom ordering and translation."""
     import numpy as np
 
-    key_data = {
-        "numbers": atoms.numbers.tolist(),
-        "positions": np.round(np.asarray(atoms.positions), decimals=8).tolist(),
-        "cell": np.round(np.asarray(atoms.cell), decimals=8).tolist(),
-        "pbc": np.asarray(atoms.pbc, dtype=bool).tolist(),
-    }
-    return hashlib.sha256(json.dumps(key_data, sort_keys=True).encode()).hexdigest()
+    numbers = np.asarray(atoms.numbers, dtype=int)
+    pbc = np.asarray(atoms.pbc, dtype=bool)
+    scaled = np.asarray(atoms.get_scaled_positions(wrap=False))
+    scaled[:, pbc] = np.mod(scaled[:, pbc], 1.0)
+    metric = np.asarray(atoms.cell) @ np.asarray(atoms.cell).T
+    origins = scaled if len(scaled) else np.zeros((1, 3))
+    representations: list[str] = []
+    for origin in origins:
+        shifted = scaled - origin
+        shifted[:, pbc] = np.mod(shifted[:, pbc], 1.0)
+        sites = sorted(
+            (int(number), *(round(float(value), 8) for value in position))
+            for number, position in zip(numbers, shifted, strict=True)
+        )
+        payload = {
+            "sites": sites,
+            "metric": np.round(metric, decimals=8).tolist(),
+            "pbc": pbc.tolist(),
+        }
+        representations.append(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    return hashlib.sha256(min(representations).encode("utf-8")).hexdigest()
 
 
 def validate_labelled_frames(
@@ -64,7 +79,9 @@ def validate_labelled_frames(
 
     accepted: list[Any] = []
     summary = DatasetValidationSummary()
-    seen = {_geometry_key(getattr(existing, "atoms", existing)) for existing in existing_frames}
+    seen = {
+        structure_identity(getattr(existing, "atoms", existing)) for existing in existing_frames
+    }
     for index, frame in enumerate(frames):
         try:
             atoms = getattr(frame, "atoms", frame)
@@ -89,7 +106,7 @@ def validate_labelled_frames(
                 or not np.isfinite(positions).all()
             ):
                 raise ValueError("energy, forces, and positions must be finite")
-            key = _geometry_key(atoms)
+            key = structure_identity(atoms)
             if key in seen:
                 summary.duplicate += 1
                 continue
@@ -133,6 +150,7 @@ __all__ = [
     "DatasetManifest",
     "DatasetValidationSummary",
     "sha256_file",
+    "structure_identity",
     "validate_labelled_frames",
     "write_dataset_manifest",
 ]
