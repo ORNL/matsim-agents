@@ -110,3 +110,23 @@ def test_paired_metric_differences_match_seed_and_protocol():
     assert comparison.mean_difference == pytest.approx(0.125)
     assert comparison.confidence_interval == pytest.approx((0.05, 0.2))
     assert comparison.favorable
+
+
+def test_paired_metric_differences_reject_duplicate_observation_cells():
+    digest = _protocol().digest()
+    observation = BenchmarkObservation(
+        protocol_digest=digest,
+        arm=BenchmarkArm.RANDOM,
+        random_seed=101,
+        metrics={"near_hull_per_dft": 0.1},
+        dft_calculations_attempted=60,
+        node_hours_consumed=100.0,
+        completed=True,
+    )
+    with pytest.raises(ValueError, match="duplicate benchmark observation"):
+        paired_metric_differences(
+            [observation, observation.model_copy(deep=True)],
+            treatment=BenchmarkArm.ADAPTIVE,
+            control=BenchmarkArm.RANDOM,
+            metric="near_hull_per_dft",
+        )

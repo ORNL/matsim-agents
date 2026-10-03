@@ -139,10 +139,18 @@ def paired_metric_differences(
     metric: str,
 ) -> list[float]:
     """Return treatment-minus-control values matched by protocol and seed."""
+    indexed: dict[tuple[str, int, BenchmarkArm], BenchmarkObservation] = {}
+    for item in observations:
+        key = (item.protocol_digest, item.random_seed, item.arm)
+        if key in indexed:
+            raise ValueError(
+                "duplicate benchmark observation for "
+                f"protocol_digest={item.protocol_digest!r}, "
+                f"random_seed={item.random_seed}, arm={item.arm.value!r}"
+            )
+        indexed[key] = item
     indexed = {
-        (item.protocol_digest, item.random_seed, item.arm): item
-        for item in observations
-        if item.completed and metric in item.metrics
+        key: item for key, item in indexed.items() if item.completed and metric in item.metrics
     }
     pairs: list[float] = []
     keys = sorted({(item.protocol_digest, item.random_seed) for item in observations})

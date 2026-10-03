@@ -605,6 +605,12 @@ class TrainerConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check_train_script(self) -> TrainerConfig:
+        for field_name in ("validation_set", "validation_reference_set"):
+            validation_path = getattr(self, field_name)
+            if validation_path is not None and not validation_path.is_file():
+                raise ValueError(
+                    f"trainer.{field_name} must be an existing file: {validation_path}"
+                )
         if self.enabled and self.train_script is None:
             raise ValueError("trainer.enabled=True requires trainer.train_script.")
         if self.promote_model and not self.enabled:

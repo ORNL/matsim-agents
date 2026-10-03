@@ -44,6 +44,15 @@ def test_model_promotion_requires_held_out_validation(tmp_path):
         )
 
 
+def test_external_validation_paths_must_exist_before_training(tmp_path):
+    with pytest.raises(ValueError, match="trainer.validation_set must be an existing file"):
+        TrainerConfig(validation_set=tmp_path / "missing.extxyz")
+    with pytest.raises(
+        ValueError, match="trainer.validation_reference_set must be an existing file"
+    ):
+        TrainerConfig(validation_reference_set=tmp_path / "missing-references.extxyz")
+
+
 def test_phase_reevaluation_requires_retraining():
     with pytest.raises(ValueError, match="requires retrain_mlip"):
         PhaseExplorationPolicy(reevaluate_after_retraining=True)
