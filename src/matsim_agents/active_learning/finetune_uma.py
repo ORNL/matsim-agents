@@ -129,9 +129,9 @@ def load_trainable_uma(base_model: str, task_name: str, device: str):
     from fairchem.core import FAIRChemCalculator, pretrained_mlip
 
     ckpt = _resolve_base_checkpoint(base_model)
-    # 'default' inference settings avoid torch.compile so autograd graphs are
-    # clean for the double-backprop of the conservative force head.
-    pu = pretrained_mlip.load_predict_unit(ckpt, device=device, inference_settings="default")
+    # Fairchem's traineval profile keeps MOLE unmerged and avoids torch.compile,
+    # preserving the autograd graph needed by the conservative force head.
+    pu = pretrained_mlip.load_predict_unit(ckpt, device=device, inference_settings="traineval")
     calc = FAIRChemCalculator(pu, task_name=task_name)
     model = pu.model.module  # trainable HydraModel
     return pu, calc, model
