@@ -1,12 +1,11 @@
 """
-MACE-MP-0 baseline calculator following the Matsim-Agents competition interface.
+MACE foundation-model calculator following the Matsim-Agents competition interface.
 
 Install:
     pip install mace-torch
 
-The `from_checkpoint` argument can be:
-    - "small", "medium", "large"  (downloads from MACE-MP release)
-    - A local path to a .model file
+``family`` selects any loader included in mace-torch 0.3.16. ``checkpoint_path``
+is that family's model alias, URL, or local ``.model`` path.
 """
 from __future__ import annotations
 
@@ -18,30 +17,62 @@ from ase.calculators.calculator import Calculator, all_changes
 
 
 class AtomisticCalculator(Calculator):
-    """MACE-MP-0 universal MLFF wrapped as the competition AtomisticCalculator."""
+    """MACE foundation MLFF wrapped as the competition AtomisticCalculator."""
 
     implemented_properties: ClassVar[list[str]] = ["energy", "forces"]
 
-    def __init__(self, model_size: str = "medium", device: str = "cpu", **kwargs):
+    def __init__(
+        self,
+        model: str = "medium",
+        family: str = "mace_mp",
+        device: str = "cpu",
+        **kwargs,
+    ):
         super().__init__(**kwargs)
-        from mace.calculators import mace_mp
-        self._inner = mace_mp(
-            model=model_size,
-            dispersion=False,
-            default_dtype="float32",
-            device=device,
+        from mace.calculators import (
+            MACECalculator,
+            mace_anicc,
+            mace_mp,
+            mace_off,
+            mace_omol,
+            mace_polar,
         )
 
+        common = {"device": device, "default_dtype": "float32"}
+        if family == "checkpoint":
+            self._inner = MACECalculator(model_paths=[model], **common)
+        elif family == "mace_mp":
+            self._inner = mace_mp(model=model, dispersion=False, **common)
+        elif family == "mace_off":
+            self._inner = mace_off(model=model, **common)
+        elif family == "mace_omol":
+            self._inner = mace_omol(model=model, **common)
+        elif family == "mace_polar":
+            self._inner = mace_polar(model=model, **common)
+        elif family == "mace_anicc":
+            self._inner = mace_anicc(
+                model_path=None if model == "default" else model,
+                device=device,
+            )
+        else:
+            raise ValueError(f"Unsupported MACE family: {family!r}")
+
     @classmethod
-    def from_checkpoint(cls, checkpoint_path: str, device: str = "cpu") -> "AtomisticCalculator":
+    def from_checkpoint(
+        cls,
+        checkpoint_path: str,
+        device: str = "cpu",
+        family: str = "mace_mp",
+    ) -> AtomisticCalculator:
         """
-        Load MACE-MP-0.
+        Load a MACE foundation model or local checkpoint.
 
         Args:
-            checkpoint_path: "small" | "medium" | "large" or path to a .model file.
+            checkpoint_path: Family-specific alias, URL, or local model path.
             device: "cpu", "cuda", "xpu", etc.
+            family: Native MACE loader family or ``checkpoint``.
         """
-        return cls(model_size=checkpoint_path, device=device)
+        return cls(model=checkpoint_path, family=family, device=device)
 
     def calculate(
         self,

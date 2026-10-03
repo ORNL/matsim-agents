@@ -12,6 +12,45 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+HYDRAGNN_DATASET_HEADS = (
+    "Alexandria",
+    "ANI1x",
+    "MPTrj",
+    "OC2020",
+    "OC2022",
+    "OC25",
+    "ODAC23",
+    "OMat24",
+    "OMol25",
+    "OMol25-neutral",
+    "OMol25-non-neutral",
+    "OPoly2026",
+    "Nabla2DFT",
+    "QCML",
+    "QM7X",
+    "transition1x",
+)
+
+
+def resolve_hydragnn_inference_head(value: str | int | None) -> int | None:
+    """Resolve a HydraGNN dataset name or branch index to the canonical head index."""
+    if value is None:
+        return None
+    if isinstance(value, int) or str(value).strip().isdigit():
+        index = int(value)
+        if 0 <= index < len(HYDRAGNN_DATASET_HEADS):
+            return index
+        raise ValueError(f"HydraGNN inference head index must be in [0, 15], got {index}")
+    normalized = str(value).strip().casefold()
+    by_name = {name.casefold(): index for index, name in enumerate(HYDRAGNN_DATASET_HEADS)}
+    if normalized not in by_name:
+        raise ValueError(
+            f"unknown HydraGNN inference head {value!r}; expected one of "
+            f"{', '.join(HYDRAGNN_DATASET_HEADS)}"
+        )
+    return by_name[normalized]
+
+
 # --------------------------------------------------------------------------- #
 # Sub-configs                                                                 #
 # --------------------------------------------------------------------------- #
@@ -50,6 +89,13 @@ class HydraGNNConfig(BaseModel):
     spin: float = 0.0
     precision: str | None = None  # "fp32" | "fp64" | "bf16"
     mlp_device: Literal["cuda", "cpu"] = "cuda"
+    inference_head: str | int | None = Field(
+        None,
+        description=(
+            "Optional decoding head selected by canonical dataset name or index 0..15. "
+            "When set, inference bypasses BranchWeightMLP and uses only that head."
+        ),
+    )
     ensemble_paths: list[Path] = Field(
         default_factory=list,
         description=(
@@ -57,6 +103,13 @@ class HydraGNNConfig(BaseModel):
             "non-empty, ensemble disagreement is available as an acquisition."
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_inference_head(self) -> HydraGNNConfig:
+        resolve_hydragnn_inference_head(self.inference_head)
+        if self.inference_head is not None and self.newhead_ft_config is not None:
+            raise ValueError("inference_head cannot be combined with a single new-head model")
+        return self
 
 
 class MCDropoutInjectionConfig(BaseModel):
@@ -119,25 +172,31 @@ class UMAConfig(BaseModel):
     )
 
 
+MACEFamily = Literal[
+    "mace_mp",
+    "mace_off",
+    "mace_omol",
+    "mace_polar",
+    "mace_anicc",
+    "checkpoint",
+]
+
+
 class MACEConfig(BaseModel):
     """Inputs to load a MACE MLIP as an ASE calculator.
 
-    Supports the foundation models shipped with ``mace-torch`` -- ``mace_mp``
-    (Materials Project, inorganic) and ``mace_off`` (organic molecules) -- as
-    well as a local fine-tuned ``.model`` checkpoint. ``model`` selects the
-    size/variant (``small`` | ``medium`` | ``large``, or a release tag/URL) so
-    multiple MACE versions are benchmarkable behind the same backend, matching
-    the Frontier HydraGNN-vs-MACE-vs-UMA comparison pipeline.
+    Supports every foundation-model loader shipped by mace-torch 0.3.16, plus
+    local fine-tuned ``.model`` checkpoints. Materials variants such as MPA,
+    OMAT, MATPES, and MH are selected as ``mace_mp`` model aliases.
     """
 
     model_config = ConfigDict(populate_by_name=True)
 
-    family: Literal["mace_mp", "mace_off", "checkpoint"] = Field(
+    family: MACEFamily = Field(
         "mace_mp",
         description=(
-            "Which MACE model family to load: 'mace_mp' (Materials Project, "
-            "inorganic), 'mace_off' (organic molecules), or 'checkpoint' (a local "
-            ".model file given by `model`)."
+            "MACE calculator family: mace_mp, mace_off, mace_omol, mace_polar, "
+            "mace_anicc, or checkpoint."
         ),
     )
     model: str = Field(
@@ -153,9 +212,7 @@ class MACEConfig(BaseModel):
         None,
         description="Calculator dtype -> MACE default_dtype (fp64 recommended for relaxation).",
     )
-    dispersion: bool = Field(
-        False, description="Add DFT-D3 dispersion correction (mace_mp / mace_off only)."
-    )
+    dispersion: bool = Field(False, description="Add DFT-D3 dispersion correction (mace_mp only).")
     ensemble_models: list[str] = Field(
         default_factory=list,
         description=(
@@ -169,6 +226,20 @@ class MACEConfig(BaseModel):
             "Test-time dropout injection for MC-Dropout acquisition (MACE has no native dropout)."
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_family_options(self) -> MACEConfig:
+        if self.model == "medium":
+            self.model = {
+                "mace_omol": "extra_large",
+                "mace_polar": "polar-1-m",
+                "mace_anicc": "default",
+            }.get(self.family, self.model)
+        if self.family == "checkpoint" and not Path(self.model).is_file():
+            raise ValueError("MACE checkpoint family requires model to be an existing file")
+        if self.dispersion and self.family != "mace_mp":
+            raise ValueError("MACE dispersion is supported only for family='mace_mp'")
+        return self
 
 
 class MLIPConfig(BaseModel):
@@ -483,6 +554,33 @@ class TrainerConfig(BaseModel):
             "Explicit human/policy approval after reviewing candidate validation metrics."
         ),
     )
+    validation_set: Path | None = Field(
+        None,
+        description="Held-out DFT-labelled extxyz required for automatic model promotion.",
+    )
+    validation_reference_set: Path | None = Field(
+        None,
+        description=(
+            "Optional independent frames used to fit elemental energy references. "
+            "For cross-composition validation, their compositions must span every "
+            "evaluated composition direction."
+        ),
+    )
+    validation_fraction: float = Field(
+        0.0,
+        ge=0.0,
+        lt=1.0,
+        description="Fraction of newly labelled frames reserved from training for validation.",
+    )
+    validation_split_seed: int = 0
+    compare_after_training: bool = Field(
+        False,
+        description="Compare incumbent and candidate models on held-out validation frames.",
+    )
+    promotion_max_energy_mae_eV_per_atom: float = Field(0.1, gt=0)
+    promotion_max_force_mae_eV_per_A: float = Field(0.2, gt=0)
+    promotion_max_relative_regression: float = Field(0.05, ge=0)
+    promotion_min_evaluated_frames: int = Field(1, ge=1)
     train_script: Path | None = Field(
         None,
         description=(
@@ -507,6 +605,12 @@ class TrainerConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check_train_script(self) -> TrainerConfig:
+        for field_name in ("validation_set", "validation_reference_set"):
+            validation_path = getattr(self, field_name)
+            if validation_path is not None and not validation_path.is_file():
+                raise ValueError(
+                    f"trainer.{field_name} must be an existing file: {validation_path}"
+                )
         if self.enabled and self.train_script is None:
             raise ValueError("trainer.enabled=True requires trainer.train_script.")
         if self.promote_model and not self.enabled:
@@ -516,6 +620,24 @@ class TrainerConfig(BaseModel):
                 "trainer.promote_model=True requires trainer.promotion_approved=True "
                 "after candidate validation."
             )
+        if self.promote_model and self.validation_set is None and self.validation_fraction <= 0.0:
+            raise ValueError(
+                "trainer.promote_model=True requires trainer.validation_set or "
+                "trainer.validation_fraction > 0"
+            )
+        if self.validation_set is not None and self.validation_fraction > 0.0:
+            raise ValueError(
+                "trainer.validation_set and trainer.validation_fraction are mutually exclusive"
+            )
+        if (
+            self.compare_after_training
+            and self.validation_set is None
+            and self.validation_fraction <= 0.0
+        ):
+            raise ValueError(
+                "trainer.compare_after_training=True requires trainer.validation_set or "
+                "trainer.validation_fraction > 0"
+            )
         return self
 
 
@@ -523,6 +645,9 @@ class LoopConfig(BaseModel):
     """Top-level loop control."""
 
     n_iterations: int = 10
+    max_dft_calculations: int | None = Field(
+        None, ge=0, description="Hard cap on DFT labels across all loop iterations."
+    )
     out_dir: Path = Field(..., description="Root directory for all AL artefacts.")
     dataset_format: Literal["ase_db", "extxyz"] = "extxyz"
     resume: bool = True

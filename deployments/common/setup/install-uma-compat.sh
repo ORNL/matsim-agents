@@ -33,6 +33,7 @@ PYTHON="${UMA_VENV_PATH}/bin/python"
     "${MATSIM_DIR}[${UMA_MATSIM_EXTRAS}]"
 "${PYTHON}" -m pip check
 "${PYTHON}" - <<'PY'
+import dscribe
 import fairchem
 import numpy
 import scipy
@@ -42,6 +43,7 @@ import matsim_agents  # noqa: F401
 
 assert tuple(map(int, torch.__version__.split("+")[0].split(".")[:2])) < (2, 14)
 print("verified", "torch", torch.__version__, "numpy", numpy.__version__,
-      "scipy", scipy.__version__, "fairchem", getattr(fairchem, "__version__", "unknown"))
+    "scipy", scipy.__version__, "fairchem", getattr(fairchem, "__version__", "unknown"),
+    "dscribe", getattr(dscribe, "__version__", "unknown"))
 PY
 log "Complete. Activate UMA workflows with: source ${UMA_VENV_PATH}/bin/activate"

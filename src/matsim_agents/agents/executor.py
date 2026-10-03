@@ -42,13 +42,18 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
         "HYDRAGNN_BRANCH_MLP_CHECKPOINT",
     )
     checkpoint = _cfg_or_env(cfg, "checkpoint", "MATSIM_HYDRAGNN_CHECKPOINT")
+    hydragnn_inference_head = _cfg_or_env(
+        cfg,
+        "hydragnn_inference_head",
+        "MATSIM_HYDRAGNN_INFERENCE_HEAD",
+    )
 
     if mlip_backend == "hydragnn":
         if not logdir:
             raise ValueError(
                 "Missing HydraGNN logdir. Provide via run config or set MATSIM_HYDRAGNN_LOGDIR."
             )
-        if not hydragnn_branch_mlp_checkpoint:
+        if not hydragnn_branch_mlp_checkpoint and hydragnn_inference_head is None:
             raise ValueError(
                 "Missing BranchWeightMLP checkpoint. Provide via run config or set "
                 "HYDRAGNN_BRANCH_MLP_CHECKPOINT."
@@ -65,6 +70,7 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
         mlip_backend=mlip_backend,
         logdir=logdir,
         hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
+        hydragnn_inference_head=hydragnn_inference_head,
         checkpoint=checkpoint,
         uma_model_name=str(
             cfg.get("uma_model_name") or os.environ.get("MATSIM_UMA_MODEL_NAME") or "uma-s-1p1"

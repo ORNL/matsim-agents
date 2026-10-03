@@ -9,21 +9,28 @@ from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.discovery.wrapper import CompositionExplorationResult, explore_composition
-from matsim_agents.execution.contracts import ComputeBudget
+from matsim_agents.execution.contracts import ApprovalPolicy, ComputeBudget
 
 
 class PhaseExplorationPolicy(BaseModel):
     relax_structures: bool = True
     active_learning: bool = False
     retrain_mlip: bool = False
+    promote_model: bool = False
     reevaluate_after_retraining: bool = False
     ranking_mode: str = "relative_phase_ranking"
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
+    approvals: ApprovalPolicy = Field(default_factory=ApprovalPolicy)
+    dft_approved: bool = False
+    retraining_approved: bool = False
+    promotion_approved: bool = False
 
     @model_validator(mode="after")
     def _consistent_options(self) -> PhaseExplorationPolicy:
         if self.retrain_mlip and not self.active_learning:
             raise ValueError("retrain_mlip requires active_learning")
+        if self.promote_model and not self.retrain_mlip:
+            raise ValueError("promote_model requires retrain_mlip")
         if self.reevaluate_after_retraining and not self.retrain_mlip:
             raise ValueError("reevaluate_after_retraining requires retrain_mlip")
         return self
@@ -52,10 +59,22 @@ def run_phase_exploration(
     keeps the workflow independent of facility-specific launch mechanics.
     """
 
+    if policy.active_learning and policy.approvals.before_dft and not policy.dft_approved:
+        raise PermissionError("active learning requires explicit DFT approval")
+    if (
+        policy.retrain_mlip
+        and policy.approvals.before_retraining
+        and not policy.retraining_approved
+    ):
+        raise PermissionError("MLIP retraining requires explicit approval")
+    if (
+        policy.promote_model
+        and policy.approvals.before_model_promotion
+        and not policy.promotion_approved
+    ):
+        raise PermissionError("model promotion requires explicit approval")
+
     kwargs = dict(exploration_kwargs or {})
-    n_random = int(kwargs.get("n_random", 50))
-    if policy.budget.max_candidates is not None:
-        kwargs["n_random"] = min(n_random, policy.budget.max_candidates)
     if not policy.relax_structures:
         # Seed-only exploration is explicit and uses a runner that records no
         # fake relaxation result. The existing wrapper still owns generation.
@@ -71,7 +90,11 @@ def run_phase_exploration(
             n_random=kwargs.get("n_random", 50),
             random_seed=kwargs.get("random_seed", 0),
         )
-        initial = CompositionExplorationResult(composition=parsed, phase_candidates=candidates)
+        initial = CompositionExplorationResult(
+            composition=parsed,
+            phase_candidates=candidates,
+            outcome_class="seed_only" if candidates else "generation_failure",
+        )
     else:
         initial = explore_composition(composition, output_dir=output_dir, **kwargs)
 
@@ -83,6 +106,10 @@ def run_phase_exploration(
             raise ValueError("active_learning=True requires active_learning_runner")
         al_result = active_learning_runner(composition, output_dir, policy.retrain_mlip)
         promoted = bool(al_result.get("model_promoted", False))
+        if promoted and not policy.promote_model:
+            raise RuntimeError("active learning promoted a model without promotion being requested")
+        if promoted and policy.approvals.before_model_promotion and not policy.promotion_approved:
+            raise PermissionError("model promotion requires explicit approval")
         if policy.reevaluate_after_retraining:
             if not promoted:
                 raise RuntimeError("cannot reevaluate: active learning did not promote a model")

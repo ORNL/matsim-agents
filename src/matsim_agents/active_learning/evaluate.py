@@ -39,7 +39,8 @@ import numpy as np
 from ase import Atoms
 from ase.io import read as ase_read
 
-from matsim_agents.active_learning.config import ALConfig, MLIPConfig
+from matsim_agents.active_learning.config import ALConfig, MLIPConfig, TrainerConfig
+from matsim_agents.active_learning.dataset_governance import structure_identity
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +85,8 @@ class EvalMetrics:
     test_set: str
     n_frames_total: int
     n_frames_evaluated: int
+    n_energy_frames_evaluated: int
+    n_force_frames_evaluated: int
     n_atoms_total: int
 
     # Energy (per structure).
@@ -107,6 +110,72 @@ class EvalMetrics:
     force_rmse_eV_per_A: float
 
     failures: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PromotionDecision:
+    """Auditable held-out comparison between a candidate and incumbent model."""
+
+    approved: bool
+    reasons: list[str]
+    candidate_metrics: dict[str, object]
+    incumbent_metrics: dict[str, object]
+
+
+def assess_promotion(
+    candidate: EvalMetrics,
+    incumbent: EvalMetrics,
+    trainer: TrainerConfig,
+) -> PromotionDecision:
+    """Apply absolute accuracy and incumbent-regression promotion gates."""
+    reasons: list[str] = []
+    minimum = trainer.promotion_min_evaluated_frames
+    for model_name, metrics in (("candidate", candidate), ("incumbent", incumbent)):
+        for label, count in (
+            ("energy", metrics.n_energy_frames_evaluated),
+            ("force", metrics.n_force_frames_evaluated),
+        ):
+            if count < minimum:
+                reasons.append(
+                    f"{model_name} evaluated {count} {label}-labelled frames; minimum is {minimum}"
+                )
+    metrics = (
+        (
+            "energy_mae_eV_per_atom_shifted",
+            candidate.energy_mae_eV_per_atom_shifted,
+            incumbent.energy_mae_eV_per_atom_shifted,
+            trainer.promotion_max_energy_mae_eV_per_atom,
+        ),
+        (
+            "force_mae_eV_per_A",
+            candidate.force_mae_eV_per_A,
+            incumbent.force_mae_eV_per_A,
+            trainer.promotion_max_force_mae_eV_per_A,
+        ),
+    )
+    for name, candidate_value, incumbent_value, absolute_limit in metrics:
+        if not np.isfinite(candidate_value):
+            reasons.append(f"candidate {name} is not finite")
+            continue
+        if candidate_value > absolute_limit:
+            reasons.append(
+                f"candidate {name}={candidate_value:.6g} exceeds limit {absolute_limit:.6g}"
+            )
+        if not np.isfinite(incumbent_value):
+            reasons.append(f"incumbent {name} is not finite")
+            continue
+        regression_limit = incumbent_value * (1.0 + trainer.promotion_max_relative_regression)
+        if candidate_value > regression_limit + 1e-12:
+            reasons.append(
+                f"candidate {name}={candidate_value:.6g} exceeds incumbent regression "
+                f"limit {regression_limit:.6g}"
+            )
+    return PromotionDecision(
+        approved=not reasons,
+        reasons=reasons,
+        candidate_metrics=asdict(candidate),
+        incumbent_metrics=asdict(incumbent),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -152,6 +221,22 @@ def _composition_matrix(numbers: list[np.ndarray], zs: list[int]) -> np.ndarray:
     return comp
 
 
+def _validate_shift_reference_coverage(
+    evaluation_compositions: np.ndarray,
+    reference_compositions: np.ndarray,
+) -> None:
+    """Require reference compositions to span every evaluated composition direction."""
+    reference_rank = int(np.linalg.matrix_rank(reference_compositions))
+    combined_rank = int(
+        np.linalg.matrix_rank(np.vstack((reference_compositions, evaluation_compositions)))
+    )
+    if combined_rank > reference_rank:
+        raise ValueError(
+            "shift-reference compositions do not span all evaluated composition directions; "
+            "add DFT-labelled reference frames with linearly independent compositions"
+        )
+
+
 def evaluate_frames(
     mlip_cfg: MLIPConfig,
     frames: list[Atoms],
@@ -169,10 +254,10 @@ def evaluate_frames(
 
     ``ref_frames`` (optional): an *independent* set of frames (typically the
     training partition) on which the per-element linear energy reference is fit.
-    The fitted per-element coefficients are then applied to ``frames`` (the
-    held-out test set). This removes the reference-fit leakage that occurs when
-    the shift is fit on the same test frames it is evaluated on. When ``None``,
-    the reference is fit on ``frames`` itself (legacy behaviour).
+    Its compositions must span every composition direction in ``frames``. The
+    fitted coefficients are then applied to ``frames`` (the held-out test set).
+    Fixed-composition evaluation may omit this set and use the legacy constant
+    in-sample shift; cross-composition evaluation may not.
     """
     from matsim_agents.active_learning.calculator import make_mlip_calculator
 
@@ -243,9 +328,9 @@ def evaluate_frames(
         # Fit the per-element linear reference on an independent set of frames
         # (``ref_frames``, e.g. the training partition) when provided, so the
         # shift applied to the held-out test set is NOT fit on the test set
-        # itself. Fall back to the legacy in-sample fit when ``ref_frames`` is
-        # None. The Z-column ordering spans the union of test and ref elements.
-        if ref_frames is not None:
+        # itself. The Z-column ordering spans the union of test and ref elements.
+        independent_reference = ref_frames is not None
+        if independent_reference:
             de_tot_ref, numbers_ref = _predict_energy_diffs(calc, ref_frames)
         else:
             de_tot_ref, numbers_ref = de_tot, e_numbers
@@ -255,10 +340,16 @@ def evaluate_frames(
         )
         comp = _composition_matrix(e_numbers, zs)
         comp_ref = _composition_matrix(numbers_ref, zs)
-        if de_tot_ref.size and comp_ref.shape[0] >= 1:
-            coef, *_ = np.linalg.lstsq(comp_ref, de_tot_ref, rcond=None)
-        else:  # degenerate ref set -> fall back to in-sample fit
-            coef, *_ = np.linalg.lstsq(comp, de_tot, rcond=None)
+        evaluation_rank = int(np.linalg.matrix_rank(comp))
+        if not independent_reference and evaluation_rank > 1:
+            raise ValueError(
+                "cross-composition shifted-energy evaluation requires independent ref_frames"
+            )
+        if independent_reference:
+            if not de_tot_ref.size:
+                raise ValueError("shift-reference set contains no usable energy-labelled frames")
+            _validate_shift_reference_coverage(comp, comp_ref)
+        coef, *_ = np.linalg.lstsq(comp_ref, de_tot_ref, rcond=None)
         n_arr = np.asarray(e_natoms, dtype=float)
         de_pa_shifted = (de_tot - comp @ coef) / n_arr
     else:
@@ -289,6 +380,8 @@ def evaluate_frames(
         test_set=test_set_label,
         n_frames_total=len(frames),
         n_frames_evaluated=n_eval,
+        n_energy_frames_evaluated=len(e_ref_tot),
+        n_force_frames_evaluated=len(f_ref_all),
         n_atoms_total=n_atoms_total,
         energy_mae_eV=_mae(de_tot),
         energy_rmse_eV=_rmse(de_tot),
@@ -316,10 +409,82 @@ def _apply_model_override(cfg: ALConfig, model_path: str | None) -> None:
         return
     if cfg.mlip.backend == "hydragnn" and cfg.mlip.hydragnn is not None:
         cfg.mlip.hydragnn.logdir = Path(model_path)
+        cfg.mlip.hydragnn.checkpoint = None
     elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None:
         cfg.mlip.uma.model_name = model_path
+    elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
+        cfg.mlip.mace.family = "checkpoint"
+        cfg.mlip.mace.model = model_path
     else:  # pragma: no cover — guarded by MLIPConfig validator
         raise ValueError(f"Cannot apply model override for backend {cfg.mlip.backend!r}")
+
+
+def evaluate_promotion_candidate(
+    cfg: ALConfig,
+    candidate_model_path: str,
+    *,
+    iteration: int,
+    training_set: Path,
+) -> PromotionDecision:
+    """Evaluate incumbent and candidate models on the configured held-out set."""
+    validation_set = cfg.trainer.validation_set
+    if validation_set is None:
+        raise ValueError("model promotion requires trainer.validation_set")
+    training_path = Path(training_set).resolve()
+    validation_path = Path(validation_set).resolve()
+    if validation_path == training_path:
+        raise ValueError("trainer.validation_set must be held out from the training set")
+    reference_path = cfg.trainer.validation_reference_set
+    if reference_path is not None:
+        resolved_reference = Path(reference_path).resolve()
+        if resolved_reference == training_path:
+            raise ValueError(
+                "trainer.validation_reference_set must be held out from the training set"
+            )
+        if resolved_reference == validation_path:
+            raise ValueError(
+                "trainer.validation_reference_set must differ from trainer.validation_set"
+            )
+    validation_frames = list(ase_read(validation_set, index=":"))
+    if training_path.is_file():
+        training_frames = list(ase_read(training_path, index=":"))
+        training_identities = {structure_identity(frame) for frame in training_frames}
+        overlap = sum(
+            structure_identity(frame) in training_identities for frame in validation_frames
+        )
+        if overlap:
+            raise ValueError(
+                "trainer.validation_set must be held out from the training set; "
+                f"found {overlap} overlapping geometries"
+            )
+    if reference_path is not None:
+        reference_frames = list(ase_read(reference_path, index=":"))
+    elif training_set.is_file():
+        reference_frames = list(ase_read(training_set, index=":"))
+    else:
+        reference_frames = None
+
+    incumbent_cfg = cfg.mlip.model_copy(deep=True)
+    candidate_cfg = cfg.mlip.model_copy(deep=True)
+    candidate_wrapper = cfg.model_copy(deep=True)
+    candidate_wrapper.mlip = candidate_cfg
+    _apply_model_override(candidate_wrapper, candidate_model_path)
+    incumbent_metrics, _ = evaluate_frames(
+        incumbent_cfg,
+        validation_frames,
+        iteration=iteration,
+        test_set_label=str(validation_set),
+        ref_frames=reference_frames,
+    )
+    candidate_metrics, _ = evaluate_frames(
+        candidate_cfg,
+        validation_frames,
+        iteration=iteration,
+        model_path=candidate_model_path,
+        test_set_label=str(validation_set),
+        ref_frames=reference_frames,
+    )
+    return assess_promotion(candidate_metrics, incumbent_metrics, cfg.trainer)
 
 
 def _subsample(parity: dict[str, np.ndarray], max_points: int) -> dict[str, np.ndarray]:

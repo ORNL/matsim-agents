@@ -1,0 +1,514 @@
+"""Resumable orchestration for multi-formula discovery campaigns."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+
+from pydantic import BaseModel, Field
+
+from matsim_agents.campaign.acquisition import (
+    CampaignAcquisitionPolicy,
+    select_formula_batch,
+    update_adaptive_lambda,
+)
+from matsim_agents.campaign.registry import formula_acquisition_metrics, ingest_exploration_result
+from matsim_agents.campaign.state import CampaignReviewRecord, CampaignState, FormulaRunRecord
+from matsim_agents.discovery.formula import enumerate_formulas
+from matsim_agents.discovery.formula_merge import (
+    LLMFormulaProposal,
+    extract_llm_formula_proposals,
+    merge_formulas,
+)
+from matsim_agents.discovery.stability import ReferenceEnergySet
+from matsim_agents.execution.contracts import WorkflowStatus
+from matsim_agents.workflows.debate import ScientificDebateResult
+from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
+
+
+class CampaignRunPolicy(BaseModel):
+    """Control limits and failure behavior for a campaign run."""
+
+    formulas_per_iteration: int = Field(1, ge=1)
+    max_iterations: int | None = Field(None, ge=1)
+    continue_on_failure: bool = True
+    retry_failed: bool = False
+    retry_inconclusive: bool = False
+    reserved_dft_calculations_per_formula: int = Field(0, ge=0)
+    reserved_node_hours_per_formula: float = Field(0.0, ge=0.0)
+    no_new_hull_vertex_iterations: int | None = Field(None, ge=1)
+    hull_energy_change_eV_per_atom: float | None = Field(None, ge=0.0)
+    minimum_formula_coverage: float | None = Field(None, ge=0.0, le=1.0)
+    require_low_uncertainty_near_hull: bool = False
+    low_uncertainty_threshold: float = Field(0.1, ge=0.0, le=1.0)
+    acquisition: CampaignAcquisitionPolicy = Field(default_factory=CampaignAcquisitionPolicy)
+
+
+class CampaignReviewDecision(BaseModel):
+    """Validated campaign changes returned by an evidence-review stage."""
+
+    debate_run_id: str | None = None
+    deactivate_formulas: list[str] = Field(default_factory=list)
+    reactivate_formulas: list[str] = Field(default_factory=list)
+    formula_proposals: list[LLMFormulaProposal] = Field(default_factory=list)
+    hypothesis_revisions: list[dict[str, str | list[str]]] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class CampaignRunResult(BaseModel):
+    campaign: CampaignState
+    state_path: str
+    formulas_completed: list[str] = Field(default_factory=list)
+    formulas_failed: list[str] = Field(default_factory=list)
+    stop_reason: str
+
+
+FormulaRunner = Callable[..., PhaseExplorationWorkflowResult]
+ReviewRunner = Callable[[CampaignState, list[FormulaRunRecord]], CampaignReviewDecision]
+
+
+def run_formula_discovery_stage(
+    campaign: CampaignState,
+    debate_result: ScientificDebateResult,
+) -> CampaignState:
+    """Merge deterministic and LLM-proposed formulas into ``campaign`` in place."""
+    deterministic = enumerate_formulas(campaign.formula_policy)
+    llm_proposals = extract_llm_formula_proposals(debate_result.verdicts, campaign.formula_policy)
+    merged = merge_formulas(
+        deterministic, llm_proposals, campaign.formula_policy, iteration=campaign.iteration
+    )
+    campaign.upsert_formulas(merged)
+    campaign.debate_run_ids.append(debate_result.run_id)
+    campaign.iteration += 1
+    return campaign
+
+
+def _formula_priority(campaign: CampaignState, formula: str) -> tuple[int, int, str]:
+    candidate = campaign.formulas[formula]
+    return (
+        0 if candidate.llm_contributors else 1,
+        sum(candidate.elements.values()),
+        formula,
+    )
+
+
+def _record_has_usable_minimum(campaign: CampaignState, record: FormulaRunRecord) -> bool:
+    if record.outcome_class == "usable_minimum" or record.formula in campaign.stability_reports:
+        return True
+    labels = record.evidence.get("mlip_labels", [])
+    return isinstance(labels, list) and any(
+        isinstance(label, dict) and bool(label.get("converged")) for label in labels
+    )
+
+
+def _eligible_formulas(
+    campaign: CampaignState,
+    *,
+    retry_failed: bool,
+    retry_inconclusive: bool = False,
+) -> list[str]:
+    eligible: list[str] = []
+    for candidate in campaign.active_formulas():
+        record = campaign.formula_runs.get(candidate.reduced_formula)
+        if (
+            record is None
+            or record.status in {WorkflowStatus.PLANNED, WorkflowStatus.RUNNING}
+            or (retry_failed and record.status == WorkflowStatus.FAILED)
+            or (
+                retry_inconclusive
+                and record.status == WorkflowStatus.COMPLETE
+                and not _record_has_usable_minimum(campaign, record)
+            )
+        ):
+            eligible.append(candidate.reduced_formula)
+    return sorted(eligible, key=lambda formula: _formula_priority(campaign, formula))
+
+
+def _budget_stop_reason(campaign: CampaignState) -> str | None:
+    completed_or_failed = sum(
+        record.status in {WorkflowStatus.COMPLETE, WorkflowStatus.FAILED}
+        for record in campaign.formula_runs.values()
+    )
+    if (
+        campaign.budget.max_candidates is not None
+        and completed_or_failed >= campaign.budget.max_candidates
+    ):
+        return "max_candidates budget reached"
+
+    relaxations = sum(record.n_mlip_relaxations for record in campaign.formula_runs.values())
+    if (
+        campaign.budget.max_mlip_relaxations is not None
+        and relaxations >= campaign.budget.max_mlip_relaxations
+    ):
+        return "max_mlip_relaxations budget reached"
+
+    dft_calculations = sum(record.n_dft_calculations for record in campaign.formula_runs.values())
+    if (
+        campaign.budget.max_dft_calculations is not None
+        and dft_calculations >= campaign.budget.max_dft_calculations
+    ):
+        return "max_dft_calculations budget reached"
+
+    al_iterations = sum(
+        record.n_active_learning_iterations for record in campaign.formula_runs.values()
+    )
+    if (
+        campaign.budget.max_active_learning_iterations is not None
+        and al_iterations >= campaign.budget.max_active_learning_iterations
+    ):
+        return "max_active_learning_iterations budget reached"
+
+    node_hours = sum(record.node_hours for record in campaign.formula_runs.values())
+    if campaign.budget.max_node_hours is not None and node_hours >= campaign.budget.max_node_hours:
+        return "max_node_hours budget reached"
+    return None
+
+
+def _admissible_batch_size(
+    campaign: CampaignState,
+    policy: CampaignRunPolicy,
+    requested: int,
+) -> int:
+    """Limit a batch to work that fits conservative per-formula reservations."""
+    admitted = requested
+    if campaign.budget.max_dft_calculations is not None:
+        used = sum(record.n_dft_calculations for record in campaign.formula_runs.values())
+        remaining = max(0, campaign.budget.max_dft_calculations - used)
+        if policy.reserved_dft_calculations_per_formula:
+            admitted = min(admitted, remaining // policy.reserved_dft_calculations_per_formula)
+    if campaign.budget.max_node_hours is not None:
+        used = sum(record.node_hours for record in campaign.formula_runs.values())
+        remaining = max(0.0, campaign.budget.max_node_hours - used)
+        if policy.reserved_node_hours_per_formula:
+            admitted = min(admitted, int(remaining // policy.reserved_node_hours_per_formula))
+    return admitted
+
+
+def _scientific_stop_reason(
+    campaign: CampaignState,
+    policy: CampaignRunPolicy,
+) -> str | None:
+    if policy.minimum_formula_coverage is not None:
+        active = {candidate.reduced_formula for candidate in campaign.active_formulas()}
+        completed = {
+            formula
+            for formula, record in campaign.formula_runs.items()
+            if record.status == WorkflowStatus.COMPLETE and formula in active
+        }
+        coverage = len(completed) / len(active) if active else 1.0
+        if coverage >= policy.minimum_formula_coverage:
+            return "minimum formula coverage reached"
+
+    stale = policy.no_new_hull_vertex_iterations
+    if (
+        stale is not None
+        and len(campaign.hull_history) >= stale
+        and all(not state.new_hull_vertices for state in campaign.hull_history[-stale:])
+    ):
+        return "no new hull vertex threshold reached"
+
+    tolerance = policy.hull_energy_change_eV_per_atom
+    if tolerance is not None and len(campaign.hull_history) >= 2:
+        previous, current = campaign.hull_history[-2:]
+        common = set(previous.energy_above_hull_eV_per_atom) & set(
+            current.energy_above_hull_eV_per_atom
+        )
+        if (
+            common
+            and max(
+                abs(
+                    current.energy_above_hull_eV_per_atom[formula]
+                    - previous.energy_above_hull_eV_per_atom[formula]
+                )
+                for formula in common
+            )
+            <= tolerance
+        ):
+            if not policy.require_low_uncertainty_near_hull:
+                return "hull energy change tolerance reached"
+            near_hull = set(current.hull_vertices) | set(current.near_hull_phases)
+            if near_hull and all(
+                campaign.acquisition.formula_metrics.get(formula) is not None
+                and campaign.acquisition.formula_metrics[formula].mlip_uncertainty
+                <= policy.low_uncertainty_threshold
+                for formula in near_hull
+            ):
+                return "hull and near-hull uncertainty converged"
+    return None
+
+
+def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> None:
+    unknown = (set(decision.deactivate_formulas) | set(decision.reactivate_formulas)) - set(
+        campaign.formulas
+    )
+    if unknown:
+        raise ValueError(f"review references unknown formulas: {sorted(unknown)}")
+    for formula in decision.deactivate_formulas:
+        campaign.formulas[formula].active = False
+        campaign.formulas[formula].rejection_reason = "deactivated by campaign evidence review"
+    for formula in decision.reactivate_formulas:
+        campaign.formulas[formula].active = True
+        campaign.formulas[formula].rejection_reason = None
+    if decision.debate_run_id and decision.debate_run_id not in campaign.debate_run_ids:
+        campaign.debate_run_ids.append(decision.debate_run_id)
+    if decision.formula_proposals:
+        merged = merge_formulas(
+            list(campaign.formulas.values()),
+            decision.formula_proposals,
+            campaign.formula_policy,
+            iteration=campaign.iteration,
+        )
+        campaign.upsert_formulas(merged)
+    campaign.review_history.append(
+        CampaignReviewRecord(
+            iteration=campaign.iteration,
+            debate_run_id=decision.debate_run_id,
+            deactivate_formulas=decision.deactivate_formulas,
+            reactivate_formulas=decision.reactivate_formulas,
+            notes=decision.notes,
+            metadata={"hypothesis_revisions": decision.hypothesis_revisions},
+        )
+    )
+
+
+def run_campaign(
+    campaign: CampaignState,
+    *,
+    output_dir: str | Path,
+    formula_runner: FormulaRunner,
+    policy: CampaignRunPolicy | None = None,
+    review_runner: ReviewRunner | None = None,
+    final_review_runner: ReviewRunner | None = None,
+    resume: bool = True,
+) -> CampaignRunResult:
+    """Run active formulas through phase exploration with durable checkpoints."""
+
+    policy = policy or CampaignRunPolicy()
+    root = Path(output_dir)
+    state_path = root / "campaign_state.json"
+    if resume and state_path.exists():
+        saved = CampaignState.load(state_path)
+        if saved.campaign_id != campaign.campaign_id:
+            raise ValueError(
+                f"saved campaign_id {saved.campaign_id!r} does not match {campaign.campaign_id!r}"
+            )
+        campaign = saved
+
+    root.mkdir(parents=True, exist_ok=True)
+    campaign.status = WorkflowStatus.RUNNING
+    campaign.save(state_path)
+    completed: list[str] = []
+    failed: list[str] = []
+    iterations_run = 0
+    stop_reason = "no active unprocessed formulas remain"
+
+    while True:
+        budget_reason = _budget_stop_reason(campaign)
+        if budget_reason:
+            stop_reason = budget_reason
+            break
+        scientific_reason = _scientific_stop_reason(campaign, policy)
+        if scientific_reason:
+            stop_reason = scientific_reason
+            break
+        if policy.max_iterations is not None and iterations_run >= policy.max_iterations:
+            stop_reason = "iteration limit reached"
+            break
+
+        eligible = _eligible_formulas(
+            campaign,
+            retry_failed=policy.retry_failed,
+            retry_inconclusive=policy.retry_inconclusive,
+        )
+        if not eligible:
+            break
+        batch_size = _admissible_batch_size(
+            campaign,
+            policy,
+            min(policy.formulas_per_iteration, len(eligible)),
+        )
+        if batch_size == 0:
+            stop_reason = "remaining budget is below per-formula reservation"
+            break
+        selection = None
+        if policy.acquisition.enabled:
+            selection = select_formula_batch(
+                eligible=eligible,
+                batch_size=batch_size,
+                iteration=campaign.iteration,
+                policy=policy.acquisition,
+                state=campaign.acquisition,
+            )
+            batch = selection.selected_formulas
+        else:
+            batch = eligible[:batch_size]
+        iteration_records: list[FormulaRunRecord] = []
+        for formula in batch:
+            budget_reason = _budget_stop_reason(campaign)
+            if budget_reason:
+                stop_reason = budget_reason
+                break
+            formula_dir = root / "formulas" / formula
+            record = campaign.formula_runs.get(formula) or FormulaRunRecord(formula=formula)
+            record.status = WorkflowStatus.RUNNING
+            record.iteration = campaign.iteration
+            record.attempts += 1
+            record.output_dir = str(formula_dir)
+            record.failure_reason = None
+            if selection is not None:
+                record.acquisition_branch = selection.scores[formula].assigned_branch
+            campaign.formula_runs[formula] = record
+            campaign.save(state_path)
+            try:
+                dft_allowance = None
+                if campaign.budget.max_dft_calculations is not None:
+                    used_dft = sum(
+                        item.n_dft_calculations for item in campaign.formula_runs.values()
+                    )
+                    dft_allowance = max(0, campaign.budget.max_dft_calculations - used_dft)
+                result = (
+                    formula_runner(formula, str(formula_dir), dft_allowance)
+                    if dft_allowance is not None
+                    else formula_runner(formula, str(formula_dir))
+                )
+                exploration = result.after_retraining or result.initial
+                record.n_mlip_relaxations += len(exploration.relaxations)
+                record.outcome_class = exploration.outcome_class
+                record.candidate_counts = exploration.candidate_counts
+                al_result = result.active_learning_result or {}
+                formula_dft = int(
+                    al_result.get("n_dft_calculations", al_result.get("n_dft_converged", 0))
+                )
+                if dft_allowance is not None and formula_dft > dft_allowance:
+                    raise RuntimeError(
+                        f"formula used {formula_dft} DFT calculations with allowance "
+                        f"{dft_allowance}"
+                    )
+                record.n_dft_calculations += formula_dft
+                record.n_active_learning_iterations += int(
+                    al_result.get("n_active_learning_iterations", al_result.get("n_iterations", 0))
+                )
+                record.node_hours += float(al_result.get("node_hours", 0.0))
+                record.model_promoted = result.model_promoted
+                record.evidence = {
+                    key: value for key, value in al_result.items() if key != "exploration_kwargs"
+                }
+                record.evidence["candidate_counts"] = record.candidate_counts
+                record.evidence["outcome_class"] = record.outcome_class
+                record.evidence["relaxation_failures"] = list(exploration.failures)
+                record.evidence["ranking_failure"] = exploration.ranking_failure
+                prior_families = set(campaign.candidate_registry.relaxed_families)
+                novelty_references = [
+                    candidate.optimized_structure_path
+                    for candidate in campaign.candidate_registry.candidates.values()
+                    if candidate.optimized_structure_path is not None
+                ]
+                uncertainty_by_candidate = {
+                    str(key): float(value)
+                    for key, value in record.evidence.get("candidate_uncertainty", {}).items()
+                }
+                ingest_exploration_result(
+                    campaign.candidate_registry,
+                    exploration,
+                    iteration=campaign.iteration,
+                    backend=record.evidence.get("mlip_backend"),
+                    model_identifier=record.evidence.get("model_identifier"),
+                    model_checkpoint_hash=record.evidence.get("model_checkpoint_hash"),
+                    uncertainty_by_candidate=uncertainty_by_candidate,
+                    novelty_reference_paths=novelty_references,
+                )
+                reference_payload = record.evidence.get("dft_refinement", {}).get(
+                    "reference_energy_set"
+                )
+                if reference_payload is not None:
+                    campaign.reference_energies = ReferenceEnergySet.model_validate(
+                        reference_payload
+                    )
+                if exploration.stability is not None:
+                    campaign.record_stability(exploration.stability)
+                candidate = campaign.formulas[formula]
+                disagreement_count = len(candidate.model_disagreements)
+                panel_evidence_count = len(candidate.llm_contributors) + disagreement_count
+                disagreement = (
+                    disagreement_count / panel_evidence_count if panel_evidence_count else 0.0
+                )
+                hull_energy = None
+                if exploration.stability is not None:
+                    hull_energy = exploration.stability.ground_state.energy_above_hull_eV_per_atom
+                campaign.acquisition.formula_metrics[formula] = formula_acquisition_metrics(
+                    campaign.candidate_registry,
+                    formula,
+                    energy_above_hull_eV_per_atom=hull_energy,
+                    llm_disagreement=disagreement,
+                )
+                new_families = set(campaign.candidate_registry.relaxed_families) - prior_families
+                near_hull = hull_energy is not None and hull_energy <= 0.05
+                dft_verified_family = bool(new_families and record.n_dft_calculations)
+                record.evidence.setdefault(
+                    "useful_outcome",
+                    bool(near_hull or dft_verified_family or record.model_promoted),
+                )
+                record.status = WorkflowStatus.COMPLETE
+                completed.append(formula)
+            except Exception as exc:  # noqa: BLE001
+                record.status = WorkflowStatus.FAILED
+                record.failure_reason = repr(exc)
+                failed.append(formula)
+                if not policy.continue_on_failure:
+                    campaign.status = WorkflowStatus.FAILED
+                    campaign.save(state_path)
+                    raise
+            finally:
+                campaign.formula_runs[formula] = record
+                campaign.save(state_path)
+            iteration_records.append(record)
+
+        if policy.acquisition.enabled and policy.acquisition.mode == "adaptive":
+            for record in iteration_records:
+                useful = bool(record.evidence.get("useful_outcome", False))
+                if record.acquisition_branch == "exploitation":
+                    campaign.acquisition.exploitation_attempts += 1
+                    campaign.acquisition.exploitation_useful += int(useful)
+                elif record.acquisition_branch == "exploration":
+                    campaign.acquisition.exploration_attempts += 1
+                    campaign.acquisition.exploration_useful += int(useful)
+            update_adaptive_lambda(campaign.acquisition, policy.acquisition)
+
+        if review_runner is not None and iteration_records:
+            try:
+                _apply_review(campaign, review_runner(campaign, iteration_records))
+            except Exception:
+                campaign.status = WorkflowStatus.FAILED
+                campaign.save(state_path)
+                raise
+        campaign.iteration += 1
+        iterations_run += 1
+        campaign.save(state_path)
+        if budget_reason:
+            break
+
+    remaining = _eligible_formulas(
+        campaign,
+        retry_failed=policy.retry_failed,
+        retry_inconclusive=False,
+    )
+    has_failures = any(
+        record.status == WorkflowStatus.FAILED for record in campaign.formula_runs.values()
+    )
+    campaign.status = (
+        WorkflowStatus.PARTIAL if remaining or has_failures else WorkflowStatus.COMPLETE
+    )
+    if final_review_runner is not None and campaign.formula_runs:
+        final_records = sorted(
+            campaign.formula_runs.values(),
+            key=lambda record: (record.iteration, record.formula),
+        )
+        _apply_review(campaign, final_review_runner(campaign, final_records))
+    campaign.save(state_path)
+    return CampaignRunResult(
+        campaign=campaign,
+        state_path=str(state_path),
+        formulas_completed=completed,
+        formulas_failed=failed,
+        stop_reason=stop_reason,
+    )

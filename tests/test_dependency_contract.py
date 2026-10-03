@@ -29,6 +29,7 @@ def test_hydragnn_main_dependency_contract() -> None:
     assert not any(
         dep.startswith("torchaudio") for dep in project["optional-dependencies"]["hydragnn"]
     )
+    assert "dscribe>=2.1" in project["dependencies"]
     assert "fairchem-core>=2.20" in project["optional-dependencies"]["uma"]
     assert project["optional-dependencies"]["mace"] == ["mace-torch==0.3.16"]
 

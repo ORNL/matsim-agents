@@ -5,14 +5,14 @@
 `matsim-agents` orchestrates large language models, machine-learned
 interatomic potentials, and ASE-based atomistic workflows into a single
 agentic loop. The user states a research objective in natural language;
-agents plan, run HydraGNN-driven simulations, score chemical and
+agents plan, run MLIP-driven simulations, score chemical and
 dynamical stability, and report the findings — with optional human
 review at every gate.
 
-The framework is **backend-agnostic**: HydraGNN is the default MLFF
-backend, but the relaxation tool, crystal-phase generator, and stability
-scorer are written so other potentials (MACE, NequIP, Orb, ...) can be
-plugged in via the same interfaces.
+The framework is **backend-agnostic**: HydraGNN, UMA, and the open MACE
+foundation-model families are selectable MLIP backends. The relaxation tool,
+crystal-phase generator, and stability scorer use shared interfaces so further
+potentials can be added without changing orchestration logic.
 
 ---
 
@@ -68,12 +68,13 @@ Reusable standalone workflow graphics:
                 ┌───────────────────────▼──────────────────────┐
                 │              Discovery wrapper               │
                 │   composition parsing → phase enumeration    │
-                │   → relaxation (HydraGNN+ASE) → stability    │
+                │   → relaxation (selected MLIP+ASE) → stability│
                 └───────────────────────┬──────────────────────┘
                                         │
                 ┌───────────────────────▼──────────────────────┐
                 │             Atomistic backends               │
-                │   HydraGNN (fused MLFF + BranchWeightMLP)    │
+                │   HydraGNN (fused or selected decoder head)  │
+                │   UMA + open MACE foundation-model families │
                 │   ASE (FIRE / BFGS / BFGSLineSearch)         │
                 │   pymatgen (AFLOW prototype encyclopedia)    │
                 │   pyXtal (random symmetry-aware search)      │
@@ -82,36 +83,67 @@ Reusable standalone workflow graphics:
 
 ```mermaid
 flowchart TD
-    U[User objective or chat dialogue]
-    U --> R[run graph]
-    U --> C[chat REPL]
-    U --> S[supervisor graph]
+    U[User objective or dialogue] --> G{Choose interaction mode}
 
-    subgraph RPATH[Core run path]
-      RP[planner] --> RE[executor]
-      RE --> RU[uq_gate]
-      RU -->|high confidence| RA[analyst]
-      RU -->|low confidence + policy enabled| AL[active learning loop]
-      AL --> RA
+    subgraph MODES[User-facing modes]
+      direction LR
+      O[Objective<br/>run] --> OP[Plan and execute]
+      P[Composition<br/>supervisor-run] --> PP[Prepare and explore]
+      I[Interactive<br/>chat] --> IP[Detect and confirm]
     end
 
-    subgraph SPATH[Supervisor path]
-      SP[prepare] --> SX[explore]
-      SX --> SU[evaluate_uq]
-      SU -->|low confidence + policy enabled| AL
-      SU -->|otherwise| SS[summarize]
+    G --> O
+    G --> P
+    G --> I
+
+    OP --> X
+    PP --> X
+    IP --> X
+
+    subgraph SCIENCE[Shared scientific capabilities]
+      X[Phase search and MLIP relaxation<br/>HydraGNN, UMA, or MACE]
+      Q[Evaluate uncertainty]
+      AL[Active learning loop]
+      E[Results and auditable evidence]
+
+      X --> Q
+      Q -->|low confidence + policy enabled| AL
+      Q -->|sufficient confidence| E
+      AL --> E
     end
 
-    subgraph CPATH[Chat path]
-      CC[composition detection / optional relax] --> CU[uq policy]
-      CU -->|low confidence + policy enabled| AL
+    E --> R{Return to invoking mode}
+
+    subgraph OUTPUTS[Mode-specific presentation]
+      direction LR
+      OA[Analyst report]
+      PS[Composition summary]
+      IR[Chat response]
     end
+
+    R --> OA
+    R --> PS
+    R --> IR
+
+    classDef entry fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.5px
+    classDef mode fill:#eff6ff,stroke:#2563eb,color:#172554
+    classDef science fill:#ecfdf5,stroke:#059669,color:#052e16
+    classDef decision fill:#fff7ed,stroke:#ea580c,color:#431407
+    classDef output fill:#faf5ff,stroke:#9333ea,color:#3b0764
+    class U entry
+    class G,R decision
+    class O,OP,P,PP,I,IP mode
+    class X,Q,AL,E science
+    class OA,PS,IR output
 ```
 
 ### Capabilities
 
 - **Multi-agent orchestration** with LangGraph: typed shared state, checkpointed steps, conditional routing, human-in-the-loop gates.
 - **Hypothesis-generation chat** with any local LLM (Qwen 2.5 via Ollama by default).
+- **LLM-only chat** (`matsim-agents chat --llm-only`) that requires no MLIP
+  configuration or atomistic environment and disables `/relax`, `/al`, and
+  automatic composition exploration.
 - **Optional multi-LLM hypothesis debate in chat**: a proposer model drafts a
   hypothesis response, a critic model challenges weak assumptions and missing
   tests, and the proposer revises for one or more rounds (`--llm-peer-review`,
@@ -121,9 +153,14 @@ flowchart TD
 - **Discovery-to-active-learning escalation policy**: when branch-weight UQ indicates low confidence, discovery can hand off to AL automatically from the same run.
 - **Structured handoff audit artifacts**: JSONL records of UQ metrics, thresholds, trigger rationale, and action (`not_triggered`, `triggered_dry_run`, `triggered_run`).
 - **Selectable surrogate backend for geometry relaxation**:
-  - **HydraGNN** fused MLFF + branch-weight MLP stack (default).
+  - **HydraGNN** fused MLFF + branch-weight MLP stack (default), or one
+    explicitly selected decoder head for dataset-specific inference.
   - **UMA** (Universal Models for Atoms) via fairchem (`--mlip-backend uma`).
-  - Note: branch-weight UQ is specific to HydraGNN; UMA relaxations do not emit branch-weight metrics.
+  - **MACE** open foundation-model families and user checkpoints
+    (`--mlip-backend mace`), isolated from UMA in multi-model validation.
+  - Note: branch-weight UQ is specific to fused HydraGNN inference. Pinned-head
+    HydraGNN supports MC-dropout UQ but does not report branch weights; UMA and
+    MACE relaxations do not emit branch-weight metrics.
 - **Unified crystal-phase seed generation** (`matsim_agents.discovery.seeds`)
   combining two complementary sources into one ranked candidate list:
   - **AFLOW prototype decoration** — every entry of the
@@ -263,6 +300,19 @@ exploration. `convex_hull_ranking` additionally requires a compatible,
 method-identified elemental and competing-phase reference set and reports
 formation energy, energy above hull, and decomposition. Residual forces are a
 convergence filter, not a thermodynamic ranking term.
+
+MLIP surrogate hulls perform a separate unary-reference search for every
+model. Each target element starts from curated structures plus all compatible
+AFLOW prototypes and, by campaign default, 50 pyXtal structures. Initial and
+relaxed duplicates are identified with `StructureMatcher`; every relaxation
+outcome remains in `unary_reference_search.json`, while only unique converged
+polymorphs enter the phase diagram. The lowest corrected energy per atom for
+each model defines that model's elemental endpoint. A missing converged unary
+endpoint makes the hull provisional and suppresses formation/hull energies.
+Isolated atoms are not hull endpoints; they are appropriate only for optional
+cohesive or atomization-energy diagnostics. Competing compound references are
+currently model-scored at their manifest geometries, so these results remain
+explicitly labeled `mlip_proxy` rather than DFT thermodynamics.
 
 Use this table to choose the right entry point quickly.
 
@@ -1159,6 +1209,7 @@ Common options (all commands that touch HydraGNN):
 |---|---|
 | `--logdir PATH` | HydraGNN logdir with `config.json` and checkpoint. |
 | `--hydragnn-branch-mlp-checkpoint PATH` | BranchWeightMLP `.pt` file. |
+| `--hydragnn-inference-head NAME_OR_INDEX` | Use one decoder head directly, bypassing BranchWeightMLP and fused inference. |
 | `--checkpoint NAME` | HydraGNN checkpoint filename or absolute path. |
 | `--mlp-device {cuda,cpu}` | Device for the auxiliary MLP. |
 | `--precision {fp32,fp64,bf16}` | HydraGNN precision override. |
@@ -1166,6 +1217,24 @@ Common options (all commands that touch HydraGNN):
 | `--llm-provider {ollama,vllm,openai,anthropic,huggingface}` | Chat backend. |
 | `--llm-model NAME` | Provider-specific model identifier. |
 | `--llm-base-url URL` | Override server URL (Ollama / vLLM). |
+
+HydraGNN uses fused 16-head inference by default, which requires
+`--hydragnn-branch-mlp-checkpoint`. To pin one head for MLIP inference, pass a
+case-insensitive dataset name or its index, for example
+`--hydragnn-inference-head OMat24` or set `mlip.hydragnn.inference_head: OMat24` in an
+active-learning YAML. Pinned mode invokes only that decoder, does not require
+the branch MLP, and does not report branch-weight uncertainty.
+
+| Index | Dataset | Index | Dataset |
+|---:|---|---:|---|
+| 0 | Alexandria | 8 | OMol25 |
+| 1 | ANI1x | 9 | OMol25-neutral |
+| 2 | MPTrj | 10 | OMol25-non-neutral |
+| 3 | OC2020 | 11 | OPoly2026 |
+| 4 | OC2022 | 12 | Nabla2DFT |
+| 5 | OC25 | 13 | QCML |
+| 6 | ODAC23 | 14 | QM7X |
+| 7 | OMat24 | 15 | transition1x |
 
 `chat`-specific:
 

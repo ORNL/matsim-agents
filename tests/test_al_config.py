@@ -18,6 +18,7 @@ from textwrap import dedent
 import pytest
 
 from matsim_agents.active_learning import ALConfig
+from matsim_agents.active_learning.loop import _dft_method_signature
 
 
 def _write(tmp_path: Path, name: str, body: str) -> Path:
@@ -287,6 +288,68 @@ def test_ensemble_strategy_requires_ensemble_paths(
 
     with pytest.raises(ValueError, match=r"ensemble"):
         ALConfig.from_yaml(cfg_path)
+
+
+def test_dft_method_signature_excludes_operational_settings(
+    tmp_path: Path,
+    required_paths: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
+    cfg_path = _write(tmp_path, "al.yaml", body)
+    for key, value in required_paths.items():
+        if key != "seed_path":
+            monkeypatch.setenv(key, value)
+    cfg = ALConfig.from_yaml(cfg_path)
+    potcar_dir = Path(required_paths["POTCAR_DIR"])
+    for element in ("Nb", "O"):
+        element_dir = potcar_dir / element
+        element_dir.mkdir()
+        (element_dir / "POTCAR").write_text(element)
+    operational_change = cfg.model_copy(deep=True)
+    assert operational_change.dft.vasp is not None
+    operational_change.dft.vasp.vasp_wrapper = tmp_path / "relocated-wrapper.sh"
+    operational_change.dft.vasp.timeout_sec = 99
+    operational_change.dft.vasp.ranks_per_node = 2
+    operational_change.dft.max_concurrent_jobs = 3
+
+    elements = {"Nb", "O"}
+    assert _dft_method_signature(operational_change, elements) == _dft_method_signature(
+        cfg, elements
+    )
+
+    scientific_change = cfg.model_copy(deep=True)
+    assert scientific_change.dft.vasp is not None
+    scientific_change.dft.vasp.extra_incar["ENCUT"] = "700"
+
+    assert _dft_method_signature(scientific_change, elements) != _dft_method_signature(
+        cfg, elements
+    )
+
+
+def test_dft_method_signature_hashes_only_selected_potcars(
+    tmp_path: Path,
+    required_paths: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
+    cfg_path = _write(tmp_path, "al.yaml", body)
+    for key, value in required_paths.items():
+        if key != "seed_path":
+            monkeypatch.setenv(key, value)
+    cfg = ALConfig.from_yaml(cfg_path)
+    potcar_dir = Path(required_paths["POTCAR_DIR"])
+    for element in ("Nb", "O", "Ta"):
+        element_dir = potcar_dir / element
+        element_dir.mkdir()
+        (element_dir / "POTCAR").write_text(element)
+
+    original = _dft_method_signature(cfg, {"Nb", "O"})
+    (potcar_dir / "Ta" / "POTCAR").write_text("changed unrelated potential")
+    assert _dft_method_signature(cfg, {"Nb", "O"}) == original
+
+    (potcar_dir / "Nb" / "POTCAR").write_text("changed selected potential")
+    assert _dft_method_signature(cfg, {"Nb", "O"}) != original
 
 
 # --------------------------------------------------------------------------- #

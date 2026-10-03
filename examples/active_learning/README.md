@@ -56,7 +56,7 @@ Each iteration of the loop performs four steps:
 
 ```mermaid
 flowchart LR
-  S[Seed structures] --> MD[1. Cheap MD<br/>HydraGNN/UMA surrogate]
+  S[Seed structures] --> MD[1. Cheap MD<br/>HydraGNN/UMA/MACE surrogate]
   MD --> UQ[2. Score uncertainty<br/>ensemble / MC-dropout]
   UQ --> SEL[Select top-K<br/>+ diversity filter]
   SEL --> DFT[3. Single-point DFT<br/>VASP/QE · frozen ions]
@@ -77,6 +77,12 @@ trainer:
 These are three different actions: DFT labeling grows the dataset, retraining
 produces a candidate model, and promotion authorizes that candidate for future
 sampling. See [Scientific workflow contracts](../../docs/scientific-workflows.md).
+
+For held-out validation, `trainer.validation_fraction` deterministically reserves
+a portion of each iteration's newly labelled frames before training. If using
+`trainer.validation_set` or `trainer.validation_reference_set` instead, create
+the referenced file before starting the workflow; configuration loading checks
+that external validation files already exist.
 
 ## How this relates to other workflows
 

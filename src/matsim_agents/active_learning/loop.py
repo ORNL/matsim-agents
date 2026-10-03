@@ -27,6 +27,7 @@ Usage (Python)
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import shutil
@@ -41,11 +42,16 @@ from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_c
 from matsim_agents.active_learning.candidates import sample_md_candidates
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dataset_governance import (
+    DatasetManifest,
     validate_labelled_frames,
     write_dataset_manifest,
 )
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
 from matsim_agents.active_learning.dft_runner import run_dft_batch
+from matsim_agents.active_learning.evaluate import (
+    _apply_model_override,
+    evaluate_promotion_candidate,
+)
 from matsim_agents.active_learning.seeds import resolve_seed_structures
 from matsim_agents.active_learning.trainer import (
     append_frames_to_extxyz,
@@ -55,8 +61,78 @@ from matsim_agents.active_learning.trainer import (
     retrain_uma,
 )
 from matsim_agents.active_learning.uncertainty import select_candidates
+from matsim_agents.active_learning.vasp_io import resolve_potcar_paths
+from matsim_agents.backends.dft.qe_relax import resolve_pseudopotentials
 
 log = logging.getLogger(__name__)
+
+
+def _path_identity(path: Path | None) -> dict[str, Any] | None:
+    if path is None:
+        return None
+    if path.is_file():
+        return {"name": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    if path.is_dir():
+        digest = hashlib.sha256()
+        for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
+            digest.update(str(item.relative_to(path)).encode("utf-8"))
+            digest.update(hashlib.sha256(item.read_bytes()).digest())
+        return {"name": path.name, "sha256": digest.hexdigest()}
+    return {"name": path.name, "missing": True}
+
+
+def _scientific_dft_payload(cfg: ALConfig, elements: set[str]) -> dict[str, Any]:
+    if cfg.dft.backend == "vasp":
+        assert cfg.dft.vasp is not None
+        block = cfg.dft.vasp
+        return {
+            "backend": "vasp",
+            "incar_template": _path_identity(block.incar_template),
+            "kpoints_template": _path_identity(block.kpoints_template),
+            "potcars": {
+                element: _path_identity(path)
+                for element, path in zip(
+                    sorted(elements),
+                    resolve_potcar_paths(sorted(elements), block.potcar_dir),
+                    strict=True,
+                )
+            },
+            "extra_incar": block.extra_incar,
+        }
+    assert cfg.dft.qe is not None
+    block = cfg.dft.qe
+    pseudopotentials = block.pseudopotentials or resolve_pseudopotentials(
+        sorted(elements), str(block.pseudo_dir)
+    )
+    return {
+        "backend": "qe",
+        "pseudopotential_files": {
+            element: _path_identity(block.pseudo_dir / filename)
+            for element, filename in sorted(pseudopotentials.items())
+            if element in elements
+        },
+        "pw_template": _path_identity(block.pw_template),
+        "ecutwfc_ry": block.ecutwfc_ry,
+        "ecutrho_ry": block.ecutrho_ry,
+        "kpts": block.kpts,
+        "koffset": block.koffset,
+        "occupations": block.occupations,
+        "smearing": block.smearing,
+        "degauss_ry": block.degauss_ry,
+        "pseudopotentials": block.pseudopotentials,
+        "extra_control": block.extra_control,
+        "extra_system": block.extra_system,
+        "extra_electrons": block.extra_electrons,
+    }
+
+
+def _dft_method_signature(cfg: ALConfig, elements: set[str]) -> str:
+    payload = json.dumps(
+        _scientific_dft_payload(cfg, elements),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"{cfg.dft.backend}-{hashlib.sha256(payload).hexdigest()[:16]}"
 
 
 # --------------------------------------------------------------------------- #
@@ -76,9 +152,16 @@ class IterationState:
     score_min: float | None = None
     score_max: float | None = None
     score_mean: float | None = None
+    selected_candidate_ids: list[str] = field(default_factory=list)
+    candidate_uncertainty: dict[str, float] = field(default_factory=dict)
     dataset_path: str | None = None
+    validation_dataset_path: str | None = None
+    n_training_frames: int = 0
+    n_validation_frames: int = 0
     candidate_model_path: str | None = None
+    model_comparison: dict[str, Any] | None = None
     model_promoted: bool = False
+    promotion_validation: dict[str, Any] | None = None
     new_logdir: str | None = None
     timings_sec: dict[str, float] = field(default_factory=dict)
     notes: str | None = None
@@ -96,6 +179,26 @@ def _iter_dir(root: Path, i: int) -> Path:
     return root / f"iteration_{i:04d}"
 
 
+def _split_training_validation_frames(
+    frames: list[Any],
+    *,
+    validation_fraction: float,
+    seed: int,
+) -> tuple[list[Any], list[Any]]:
+    """Deterministically reserve labelled frames before model fitting."""
+    if validation_fraction <= 0.0:
+        return frames, []
+    n_validation = max(1, int(round(len(frames) * validation_fraction)))
+    if len(frames) - n_validation < 2:
+        raise ValueError("validation split must leave at least two DFT-labelled training frames")
+    validation_indices = set(
+        np.random.default_rng(seed).permutation(len(frames))[:n_validation].tolist()
+    )
+    training = [frame for index, frame in enumerate(frames) if index not in validation_indices]
+    validation = [frame for index, frame in enumerate(frames) if index in validation_indices]
+    return training, validation
+
+
 def _scan_resume(root: Path) -> tuple[int, Path | None]:
     """Return (start_iteration, current_logdir_or_None) based on existing state.
 
@@ -104,7 +207,7 @@ def _scan_resume(root: Path) -> tuple[int, Path | None]:
     """
     if not root.exists():
         return 0, None
-    completed: list[tuple[int, Path]] = []
+    completed: list[tuple[int, Path | None]] = []
     for d in sorted(root.glob("iteration_*")):
         sf = d / "state.json"
         if not sf.exists():
@@ -115,7 +218,8 @@ def _scan_resume(root: Path) -> tuple[int, Path | None]:
         try:
             data = json.loads(sf.read_text())
             if data.get("status") == "complete":
-                completed.append((int(data["iteration"]), Path(data.get("new_logdir") or "")))
+                new_logdir = data.get("new_logdir")
+                completed.append((int(data["iteration"]), Path(new_logdir) if new_logdir else None))
             else:
                 log.warning("Removing failed/partial iteration dir %s", d)
                 shutil.rmtree(d, ignore_errors=True)
@@ -124,8 +228,10 @@ def _scan_resume(root: Path) -> tuple[int, Path | None]:
             shutil.rmtree(d, ignore_errors=True)
     if not completed:
         return 0, None
-    last_i, last_logdir = max(completed, key=lambda t: t[0])
-    return last_i + 1, last_logdir if str(last_logdir) else None
+    last_i = max(iteration for iteration, _ in completed)
+    promoted = [entry for entry in completed if entry[1] is not None]
+    last_logdir = max(promoted, key=lambda entry: entry[0])[1] if promoted else None
+    return last_i + 1, last_logdir
 
 
 # --------------------------------------------------------------------------- #
@@ -141,6 +247,7 @@ def run_active_learning(cfg: ALConfig) -> None:
     dataset_path = root / (
         "dataset.extxyz" if cfg.loop.dataset_format == "extxyz" else "dataset.db"
     )
+    validation_dataset_path = root / "validation.extxyz"
 
     # Resolve MD seed structures once per run. For ``kind='prompt'`` this
     # invokes the LLM exactly once and caches the resulting JSON under
@@ -154,15 +261,24 @@ def run_active_learning(cfg: ALConfig) -> None:
         start_iter, resumed_logdir = _scan_resume(root)
         if start_iter > 0:
             log.info("Resuming AL loop at iteration %d (logdir=%s)", start_iter, resumed_logdir)
-            if (
-                cfg.mlip.backend == "hydragnn"
-                and cfg.mlip.hydragnn is not None
-                and resumed_logdir is not None
-                and resumed_logdir.exists()
-            ):
-                cfg.mlip.hydragnn.logdir = resumed_logdir
+            if resumed_logdir is not None and resumed_logdir.exists():
+                _apply_model_override(cfg, str(resumed_logdir))
 
+    completed_dft = 0
+    if cfg.loop.resume:
+        for state_path in root.glob("iteration_*/state.json"):
+            state_data = json.loads(state_path.read_text(encoding="utf-8"))
+            if state_data.get("status") == "complete":
+                completed_dft += int(state_data.get("n_dft_converged", 0)) + int(
+                    state_data.get("n_dft_failed", 0)
+                )
     for i in range(start_iter, cfg.loop.n_iterations):
+        if (
+            cfg.loop.max_dft_calculations is not None
+            and completed_dft >= cfg.loop.max_dft_calculations
+        ):
+            log.info("DFT calculation cap reached; ending loop.")
+            break
         it_dir = _iter_dir(root, i)
         it_dir.mkdir(parents=True, exist_ok=True)
         state = IterationState(iteration=i)
@@ -201,7 +317,17 @@ def run_active_learning(cfg: ALConfig) -> None:
                 ensemble_calculators=ensemble_calcs or None,
                 seed=42 + i,
             )
+            if cfg.loop.max_dft_calculations is not None:
+                remaining_dft = cfg.loop.max_dft_calculations - completed_dft
+                selected = selected[:remaining_dft]
             state.n_selected = len(selected)
+            state.selected_candidate_ids = [candidate.candidate_id for candidate in selected]
+            selected_ids = set(state.selected_candidate_ids)
+            state.candidate_uncertainty = {
+                candidate.candidate_id: float(score)
+                for candidate, score in zip(candidates, scores, strict=True)
+                if candidate.candidate_id in selected_ids and np.isfinite(score)
+            }
             finite_scores = scores[np.isfinite(scores)]
             if finite_scores.size:
                 state.score_min = float(np.min(finite_scores))
@@ -239,6 +365,7 @@ def run_active_learning(cfg: ALConfig) -> None:
             n_ok = sum(1 for r in results if r.converged)
             state.n_dft_converged = n_ok
             state.n_dft_failed = len(results) - n_ok
+            completed_dft += len(results)
             state.timings_sec["dft"] = time.time() - t0
             log.info(
                 "Iter %d: %s converged=%d failed=%d",
@@ -256,18 +383,74 @@ def run_active_learning(cfg: ALConfig) -> None:
             # --- 5. Append to dataset -----------------------------------------
             t0 = time.time()
             frames = dft_results_to_frames(results, iteration=i)
-            frames, validation = validate_labelled_frames(frames)
-            n_appended = append_frames_to_extxyz(frames, dataset_path)
-            state.dataset_path = str(dataset_path)
+            existing_frames = []
+            manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
+            parent_dataset_id = None
             if dataset_path.exists():
+                from ase.io import read as ase_read
+
+                existing_frames = list(ase_read(dataset_path, index=":"))
+            existing_elements = {
+                symbol for frame in existing_frames for symbol in frame.get_chemical_symbols()
+            }
+            if manifest_path.exists():
+                previous_manifest = DatasetManifest.model_validate_json(
+                    manifest_path.read_text(encoding="utf-8")
+                )
+                if previous_manifest.dft_backend != backend.name:
+                    raise ValueError("cannot append labels from a different DFT backend")
+                existing_signature = _dft_method_signature(cfg, existing_elements)
+                if (
+                    previous_manifest.method_signature is not None
+                    and previous_manifest.method_signature != existing_signature
+                ):
+                    raise ValueError("cannot append labels with a different DFT method signature")
+                parent_dataset_id = previous_manifest.dataset_id
+            expected_atomic_numbers = {
+                int(number)
+                for candidate in selected
+                for number in candidate.atoms.get_atomic_numbers()
+            }
+            frames, validation = validate_labelled_frames(
+                frames,
+                existing_frames=existing_frames,
+                expected_atomic_numbers=expected_atomic_numbers,
+            )
+            training_frames, validation_frames = _split_training_validation_frames(
+                frames,
+                validation_fraction=cfg.trainer.validation_fraction,
+                seed=cfg.trainer.validation_split_seed + i,
+            )
+            labelled_elements = existing_elements | {
+                symbol for frame in frames for symbol in frame.atoms.get_chemical_symbols()
+            }
+            method_signature = _dft_method_signature(cfg, labelled_elements)
+            n_appended = append_frames_to_extxyz(training_frames, dataset_path)
+            n_validation_appended = append_frames_to_extxyz(
+                validation_frames, validation_dataset_path
+            )
+            state.dataset_path = str(dataset_path)
+            state.n_training_frames = n_appended
+            state.n_validation_frames = n_validation_appended
+            if n_validation_appended:
+                state.validation_dataset_path = str(validation_dataset_path)
+            if dataset_path.exists():
+                validation.accepted = len(training_frames)
                 write_dataset_manifest(
                     dataset_path,
                     dft_backend=backend.name,
                     energy_reference=f"{backend.name}:native_total_energy",
                     validation=validation,
+                    parent_dataset_id=parent_dataset_id,
+                    method_signature=method_signature,
                 )
             state.timings_sec["append_dataset"] = time.time() - t0
-            log.info("Iter %d: appended %d labelled frames to %s", i, n_appended, dataset_path)
+            log.info(
+                "Iter %d: appended %d training and %d validation frames",
+                i,
+                n_appended,
+                n_validation_appended,
+            )
 
             # --- 6. (Optional) retrain the surrogate --------------------------
             t0 = time.time()
@@ -284,12 +467,6 @@ def run_active_learning(cfg: ALConfig) -> None:
                     out_logdir=it_dir / "model",
                 )
                 state.candidate_model_path = str(new_logdir)
-                if cfg.trainer.promote_model:
-                    state.new_logdir = str(new_logdir)
-                    state.model_promoted = True
-                    # Promotion is explicit: only an accepted candidate becomes
-                    # the surrogate used by the next iteration.
-                    cfg.mlip.hydragnn.logdir = new_logdir
             elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None and cfg.trainer.enabled:
                 new_model = retrain_uma(
                     cfg.trainer,
@@ -299,10 +476,6 @@ def run_active_learning(cfg: ALConfig) -> None:
                     out_model_dir=it_dir / "model",
                 )
                 state.candidate_model_path = str(new_model)
-                if cfg.trainer.promote_model:
-                    state.new_logdir = str(new_model)
-                    state.model_promoted = True
-                    cfg.mlip.uma.model_name = str(new_model)
             elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None and cfg.trainer.enabled:
                 new_model = retrain_mace(
                     cfg.trainer,
@@ -312,11 +485,6 @@ def run_active_learning(cfg: ALConfig) -> None:
                     out_model_dir=it_dir / "model",
                 )
                 state.candidate_model_path = str(new_model)
-                if cfg.trainer.promote_model:
-                    state.new_logdir = str(new_model)
-                    state.model_promoted = True
-                    cfg.mlip.mace.family = "checkpoint"
-                    cfg.mlip.mace.model = str(new_model)
             else:
                 # Frozen foundation model / disabled trainer: keep accumulating labels.
                 log.info(
@@ -325,6 +493,40 @@ def run_active_learning(cfg: ALConfig) -> None:
                     n_appended,
                     dataset_path,
                 )
+            compare_candidate = (
+                cfg.trainer.compare_after_training or cfg.trainer.promote_model
+            ) and state.candidate_model_path is not None
+            if compare_candidate:
+                try:
+                    evaluation_cfg = cfg.model_copy(deep=True)
+                    if n_validation_appended:
+                        evaluation_cfg.trainer.validation_set = validation_dataset_path
+                        evaluation_cfg.trainer.validation_fraction = 0.0
+                    decision = evaluate_promotion_candidate(
+                        evaluation_cfg,
+                        state.candidate_model_path,
+                        iteration=i,
+                        training_set=dataset_path,
+                    )
+                    state.model_comparison = asdict(decision)
+                except Exception as exc:  # noqa: BLE001
+                    state.model_comparison = {
+                        "approved": False,
+                        "reasons": [f"model comparison failed: {exc}"],
+                        "candidate_metrics": {},
+                        "incumbent_metrics": {},
+                    }
+                    log.exception("Iteration %d candidate model comparison failed", i)
+                if cfg.trainer.promote_model:
+                    state.promotion_validation = state.model_comparison
+            if (
+                cfg.trainer.promote_model
+                and state.promotion_validation is not None
+                and state.promotion_validation["approved"]
+            ):
+                state.new_logdir = state.candidate_model_path
+                state.model_promoted = True
+                _apply_model_override(cfg, state.candidate_model_path)
             state.timings_sec["retrain"] = time.time() - t0
 
             state.status = "complete"

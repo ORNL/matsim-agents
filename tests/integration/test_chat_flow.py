@@ -131,6 +131,51 @@ class TestAutoConfirm:
         mock_explore.assert_not_called()
 
 
+class TestLLMOnly:
+    def test_config_does_not_require_mlip_inputs(self):
+        cfg = DiscoveryChatConfig(llm_only=True)
+
+        assert cfg.llm_only is True
+        assert cfg.trigger_active_learning_on_high_uq is False
+
+    def test_formulas_do_not_trigger_atomistic_tools(self, monkeypatch):
+        cfg = DiscoveryChatConfig(llm_only=True, auto_confirm=True)
+        session, mock_explore = _make_session(
+            cfg,
+            responses=["Li2MnO3 is a useful candidate."],
+            monkeypatch=monkeypatch,
+        )
+
+        response = chat_once(session, "Compare LiCoO2 and Li2MnO3")
+
+        assert "Li2MnO3" in response
+        mock_explore.assert_not_called()
+        assert session.seen_compositions == set()
+
+    @pytest.mark.parametrize(
+        ("command", "expected"),
+        [
+            ("/relax candidate.cif", "relaxation is unavailable"),
+            ("/al Li2MnO3", "Active learning is unavailable"),
+        ],
+    )
+    def test_atomistic_commands_are_rejected(self, command, expected, monkeypatch):
+        import matsim_agents.chat as chat_mod
+
+        cfg = DiscoveryChatConfig(llm_only=True)
+        session = DiscoveryChatSession(config=cfg)
+        relax = MagicMock()
+        active_learning = MagicMock()
+        monkeypatch.setattr(chat_mod, "_run_single_structure_relaxation", relax)
+        monkeypatch.setattr(chat_mod, "_run_active_learning_for_formula", active_learning)
+
+        response = chat_once(session, command)
+
+        assert expected in response
+        relax.assert_not_called()
+        active_learning.assert_not_called()
+
+
 # ── error resilience ──────────────────────────────────────────────────────────
 
 

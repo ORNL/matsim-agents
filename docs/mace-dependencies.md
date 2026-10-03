@@ -53,6 +53,32 @@ still pass the on-machine qualification suite. Aurora is especially provisional:
 the compatibility setup preserves its XPU PyTorch stack and repairs h5py, but
 upstream MACE does not advertise Intel XPU as a supported accelerator.
 
+The workflow exposes every foundation loader included in `mace-torch==0.3.16`:
+
+| Family | Intended domain | Named models |
+| --- | --- | --- |
+| `mace_mp` | periodic materials | MP, MPA, OMAT, MATPES, and MH aliases |
+| `mace_off` | organic molecules | OFF23 small, medium, large |
+| `mace_omol` | organic molecules | OMOL-0 extra large |
+| `mace_polar` | polarizable systems | Polar-1 small, medium, large |
+| `mace_anicc` | H/C/N/O molecules | ANI-CC |
+| `checkpoint` | checkpoint-dependent | local `.model` file |
+
+These families are not interchangeable scientific approximations. In
+particular, molecular models must not be treated as general bulk-crystal
+potentials. MACE-MP and ANI-CC are declared MIT by the installed package;
+MACE-OFF and MACE-OMOL are distributed under the non-commercial Academic
+Software License. Check the upstream release terms for MPA, OMAT, MATPES, MH,
+and Polar before use or redistribution.
+
+Perlmutter compute nodes cannot fetch missing weights. Prefetch each selected
+family/model from a networked login node before submitting work:
+
+```bash
+bash deployments/perlmutter/download/download-mace-perlmutter.sh \
+	mace_mp medium-omat-0
+```
+
 Before collapsing these environments in a future release, check upstream
 MACE's published metadata again. They may be combined only after MACE removes
 or widens its exact e3nn pin and MACE inference/training passes against the same

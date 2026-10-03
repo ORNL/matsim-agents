@@ -1,0 +1,59 @@
+mlip:
+  backend: uma
+  uma:
+    model_name: uma-s-1p1
+    task_name: omat
+    device: cuda
+
+md:
+  seed_source:
+    kind: compositions
+    compositions: [NbO2]
+    max_phases_per_composition: 3
+    n_random: 0
+  timestep_fs: 1.0
+  n_steps: 40
+  temperature_K: 300.0
+  thermostat: langevin
+  friction_inv_ps: 0.2
+  sample_every: 10
+  max_force_threshold_eV_per_A: 40.0
+  max_displacement_A: 3.0
+  random_seed: 42
+
+acquisition:
+  strategy: random
+  n_select: 2
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: qe
+  max_concurrent_jobs: 1
+  qe:
+    pw_bin: ${PROJECT_ROOT:?export PROJECT_ROOT}/external/quantum-espresso/install-gpu/bin/pw.x
+    pw_wrapper: ${PROJECT_ROOT:?export PROJECT_ROOT}/deployments/perlmutter/launchers/_qe-step-perlmutter.sh
+    pseudo_dir: ${PROJECT_ROOT:?export PROJECT_ROOT}/external/quantum-espresso/src/pseudo
+    pseudopotentials:
+      Nb: Nb.pbe-spn-kjpaw_psl.1.0.0.UPF
+      Ta: Ta.pbe-spfn-kjpaw_psl.1.0.0.UPF
+      O: O.pbe-rrkjus.UPF
+    kpts: [4, 4, 4]
+    koffset: [0, 0, 0]
+    occupations: smearing
+    smearing: gaussian
+    degauss_ry: 0.007
+    nodes_per_job: 1
+    ranks_per_node: 4
+    threads_per_rank: 16
+    timeout_sec: 3600
+
+trainer:
+  enabled: false
+
+loop:
+  n_iterations: 1
+  out_dir: /overridden/by/campaign
+  dataset_format: extxyz
+  resume: true
+  fail_fast: true

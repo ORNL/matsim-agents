@@ -8,7 +8,7 @@ single call.
 from __future__ import annotations
 
 import os
-from typing import Callable
+from typing import Callable, Literal
 
 from pydantic import BaseModel, Field
 
@@ -19,6 +19,9 @@ from matsim_agents.orchestration.state import RelaxationResult
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run as _run_relaxation
 
 
+_RANKING_FORCE_TOL_EV_PER_A = 0.05
+
+
 class CompositionExplorationResult(BaseModel):
     """Aggregated output of :func:`explore_composition`."""
 
@@ -27,22 +30,45 @@ class CompositionExplorationResult(BaseModel):
     relaxations: list[RelaxationResult] = Field(default_factory=list)
     stability: StabilityReport | None = None
     failures: list[str] = Field(default_factory=list)
+    ranking_failure: str | None = None
+    outcome_class: Literal[
+        "generation_failure",
+        "relaxation_non_convergence",
+        "ranking_failure",
+        "seed_only",
+        "usable_minimum",
+    ] = "generation_failure"
+
+    @property
+    def candidate_counts(self) -> dict[str, int]:
+        return {
+            "generated": len(self.phase_candidates),
+            "attempted": len(self.relaxations) + len(self.failures),
+            "completed": len(self.relaxations),
+            "converged": sum(result.converged for result in self.relaxations),
+            "failed": len(self.failures),
+        }
 
 
 def explore_composition(
     composition: str | Composition,
     logdir: str | None = None,
     hydragnn_branch_mlp_checkpoint: str | None = None,
+    hydragnn_inference_head: str | int | None = None,
     *,
     output_dir: str,
     mlip_backend: str = "hydragnn",
     uma_model_name: str = "uma-s-1p1",
     uma_task: str = "omat",
+    mace_family: str = "mace_mp",
+    mace_model: str = "medium",
+    mace_dispersion: bool = False,
     checkpoint: str | None = None,
     optimizer: str = "FIRE",
     maxiter: int = 200,
     maxstep: float = 1e-2,
     fmax: float = 0.02,
+    degeneracy_tol_eV_per_atom: float = 0.01,
     relative_increase_threshold: float = 0.05,
     mlp_device: str = "cuda",
     precision: str | None = None,
@@ -106,9 +132,13 @@ def explore_composition(
                     mlip_backend=mlip_backend,
                     logdir=logdir,
                     hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
+                    hydragnn_inference_head=hydragnn_inference_head,
                     checkpoint=checkpoint,
                     uma_model_name=uma_model_name,
                     uma_task=uma_task,
+                    mace_family=mace_family,
+                    mace_model=mace_model,
+                    mace_dispersion=mace_dispersion,
                     optimizer=optimizer,
                     maxiter=maxiter,
                     maxstep=maxstep,
@@ -132,12 +162,30 @@ def explore_composition(
             failures.append(f"{tag}: {exc!s}")
 
     report: StabilityReport | None = None
+    ranking_failure: str | None = None
     if relaxations:
-        report = score_stability(
-            composition.formula,
-            relaxations,
-            candidates=candidates,
-        )
+        try:
+            report = score_stability(
+                composition.formula,
+                relaxations,
+                force_tol_eV_per_A=_RANKING_FORCE_TOL_EV_PER_A,
+                degeneracy_tol_eV_per_atom=degeneracy_tol_eV_per_atom,
+                candidates=candidates,
+            )
+        except ValueError as exc:
+            ranking_failure = str(exc)
+
+    if not candidates:
+        outcome_class = "generation_failure"
+    elif ranking_failure is not None and any(
+        result.converged and result.final_max_force_eV_per_A <= _RANKING_FORCE_TOL_EV_PER_A
+        for result in relaxations
+    ):
+        outcome_class = "ranking_failure"
+    elif report is None:
+        outcome_class = "relaxation_non_convergence"
+    else:
+        outcome_class = "usable_minimum"
 
     return CompositionExplorationResult(
         composition=composition,
@@ -145,4 +193,6 @@ def explore_composition(
         relaxations=relaxations,
         stability=report,
         failures=failures,
+        ranking_failure=ranking_failure,
+        outcome_class=outcome_class,
     )
