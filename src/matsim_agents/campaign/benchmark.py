@@ -57,6 +57,8 @@ class BenchmarkProtocol(BaseModel):
     def _validate_design(self) -> BenchmarkProtocol:
         if len(self.random_seeds) != len(set(self.random_seeds)):
             raise ValueError("benchmark random_seeds must be unique")
+        if len(self.arms) < 2:
+            raise ValueError("paired benchmark requires at least two arms")
         if len(self.arms) != len(set(self.arms)):
             raise ValueError("benchmark arms must be unique")
         if not any(

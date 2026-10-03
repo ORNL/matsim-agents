@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 from ase import Atoms
 from ase.io import write
 
@@ -112,6 +113,47 @@ def test_registry_retains_lineage_when_seeds_collapse_to_one_family(tmp_path):
     )
     assert len(selected) == 1
     assert set(scores) == {"NbO2-P0000", "NbO2-R0000"}
+
+
+def test_registry_derives_atom_count_when_candidate_metadata_is_missing(tmp_path):
+    structure = tmp_path / "candidate.vasp"
+    _write_structure(structure)
+    composition = parse_composition("NbO2")
+    assert composition is not None
+    candidate = PhaseCandidate(formula="NbO2", structure_path=str(structure))
+    relaxation = RelaxationResult(
+        structure_path=str(structure),
+        optimized_structure_path=str(structure),
+        trajectory_path="",
+        log_csv_path="",
+        final_energy_eV=-30.0,
+        final_max_force_eV_per_A=0.01,
+        num_steps=5,
+        converged=True,
+    )
+    registry = CandidateRegistry()
+
+    candidate_ids = ingest_exploration_result(
+        registry,
+        CompositionExplorationResult(
+            composition=composition,
+            phase_candidates=[candidate],
+            relaxations=[relaxation],
+        ),
+        iteration=0,
+    )
+
+    assert registry.evaluations[candidate_ids[0]].energy_per_atom_eV == -10.0
+    _, scores = select_dft_refinement_candidates(
+        CompositionExplorationResult(
+            composition=composition,
+            phase_candidates=[candidate],
+            relaxations=[relaxation],
+        ),
+        max_candidates=1,
+        policy=CandidateSelectionPolicy(enabled=True),
+    )
+    assert np.isfinite(scores[candidate_ids[0]].exploitation_score)
 
 
 def test_registry_soap_species_include_cross_composition_references(tmp_path):

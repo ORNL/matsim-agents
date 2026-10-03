@@ -21,6 +21,7 @@ from matsim_agents.campaign.execution import (
     CampaignRetrainingConfig,
     ReferenceStructureSpec,
     _cross_model_scores,
+    _exploration_kwargs,
     _iteration_states,
     _model_identifier,
     _perturbation_robustness,
@@ -1464,11 +1465,12 @@ def test_campaign_hydragnn_override_discovers_checkpoint_in_promoted_logdir(tmp_
 
     promoted = tmp_path / "promoted-model"
     cfg = SimpleNamespace(
-        mlip=SimpleNamespace(
+        mlip=MLIPConfig(
             backend="hydragnn",
-            uma=None,
-            mace=None,
-            hydragnn=SimpleNamespace(logdir=tmp_path / "incumbent", checkpoint="incumbent.pk"),
+            hydragnn=HydraGNNConfig(
+                logdir=tmp_path / "incumbent",
+                checkpoint="incumbent.pk",
+            ),
         )
     )
 
@@ -1476,6 +1478,24 @@ def test_campaign_hydragnn_override_discovers_checkpoint_in_promoted_logdir(tmp_
 
     assert cfg.mlip.hydragnn.logdir == promoted
     assert cfg.mlip.hydragnn.checkpoint is None
+    assert _exploration_kwargs(cfg, {})["checkpoint"] is None
+
+
+def test_promoted_mace_checkpoint_disables_incompatible_dispersion(tmp_path):
+    cfg = SimpleNamespace(
+        mlip=MLIPConfig(
+            backend="mace",
+            mace=MACEConfig(family="mace_mp", model="medium", dispersion=True),
+        )
+    )
+
+    import matsim_agents.campaign.execution as execution
+
+    execution._apply_model_override(cfg, str(tmp_path / "promoted.model"))
+
+    assert cfg.mlip.mace.family == "checkpoint"
+    assert cfg.mlip.mace.dispersion is False
+    assert _exploration_kwargs(cfg, {})["mace_dispersion"] is False
 
 
 def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path):
@@ -1538,7 +1558,11 @@ def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path
         phase_runner=phase_runner,
     )
 
-    assert observed == {"mace_family": "checkpoint", "mace_model": str(checkpoint)}
+    assert observed == {
+        "mace_family": "checkpoint",
+        "mace_model": str(checkpoint),
+        "mace_dispersion": False,
+    }
 
 
 def test_retraining_rejects_unapproved_promotion(tmp_path):

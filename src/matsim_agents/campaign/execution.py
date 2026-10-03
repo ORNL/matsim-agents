@@ -208,6 +208,7 @@ def _apply_model_override(cfg: ALConfig, model_path: str) -> None:
     elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None:
         cfg.mlip.mace.family = "checkpoint"
         cfg.mlip.mace.model = model_path
+        cfg.mlip.mace.dispersion = False
     elif cfg.mlip.hydragnn is not None:
         cfg.mlip.hydragnn.logdir = Path(model_path)
         cfg.mlip.hydragnn.checkpoint = None
@@ -1188,9 +1189,13 @@ def run_formula_with_active_learning(
                     result["exploration_kwargs"] = {
                         "mace_family": "checkpoint",
                         "mace_model": latest_model,
+                        "mace_dispersion": False,
                     }
                 else:
-                    result["exploration_kwargs"] = {"logdir": latest_model}
+                    result["exploration_kwargs"] = {
+                        "logdir": latest_model,
+                        "checkpoint": None,
+                    }
         _set_campaign_stage(
             stage_manifest_path,
             formula,

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from ase.io import read as ase_read
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.campaign.acquisition import FormulaAcquisitionMetrics
@@ -234,7 +235,11 @@ def ingest_exploration_result(
             ),
         )
         registry.candidates[candidate_id] = record
-        atom_count = candidate.num_atoms or 0
+        atom_count = candidate.num_atoms or (
+            len(ase_read(optimized_path or candidate.structure_path))
+            if relaxation is not None
+            else 0
+        )
         registry.evaluations[candidate_id] = CandidateEvaluationRecord(
             candidate_id=candidate_id,
             backend=backend,

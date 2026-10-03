@@ -59,6 +59,11 @@ def test_benchmark_requires_independent_replicates_and_hard_budget():
     with pytest.raises(ValueError, match="hard DFT or node-hour budget"):
         BenchmarkProtocol.model_validate(values)
 
+    values = _protocol().model_dump()
+    values["arms"] = [BenchmarkArm.RANDOM]
+    with pytest.raises(ValueError, match="at least two arms"):
+        BenchmarkProtocol.model_validate(values)
+
 
 def test_paired_metric_differences_match_seed_and_protocol():
     digest = _protocol().digest()
