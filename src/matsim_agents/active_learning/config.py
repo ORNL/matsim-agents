@@ -560,7 +560,11 @@ class TrainerConfig(BaseModel):
     )
     validation_reference_set: Path | None = Field(
         None,
-        description="Optional independent frames used to fit elemental energy references.",
+        description=(
+            "Optional independent frames used to fit elemental energy references. "
+            "For cross-composition validation, their compositions must span every "
+            "evaluated composition direction."
+        ),
     )
     validation_fraction: float = Field(
         0.0,

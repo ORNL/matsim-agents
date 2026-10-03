@@ -246,6 +246,22 @@ def _composition_matrix(numbers: list[np.ndarray], zs: list[int]) -> np.ndarray:
     return comp
 
 
+def _validate_shift_reference_coverage(
+    evaluation_compositions: np.ndarray,
+    reference_compositions: np.ndarray,
+) -> None:
+    """Require reference compositions to span every evaluated composition direction."""
+    reference_rank = int(np.linalg.matrix_rank(reference_compositions))
+    combined_rank = int(
+        np.linalg.matrix_rank(np.vstack((reference_compositions, evaluation_compositions)))
+    )
+    if combined_rank > reference_rank:
+        raise ValueError(
+            "shift-reference compositions do not span all evaluated composition directions; "
+            "add DFT-labelled reference frames with linearly independent compositions"
+        )
+
+
 def evaluate_frames(
     mlip_cfg: MLIPConfig,
     frames: list[Atoms],
@@ -263,10 +279,10 @@ def evaluate_frames(
 
     ``ref_frames`` (optional): an *independent* set of frames (typically the
     training partition) on which the per-element linear energy reference is fit.
-    The fitted per-element coefficients are then applied to ``frames`` (the
-    held-out test set). This removes the reference-fit leakage that occurs when
-    the shift is fit on the same test frames it is evaluated on. When ``None``,
-    the reference is fit on ``frames`` itself (legacy behaviour).
+    Its compositions must span every composition direction in ``frames``. The
+    fitted coefficients are then applied to ``frames`` (the held-out test set).
+    Fixed-composition evaluation may omit this set and use the legacy constant
+    in-sample shift; cross-composition evaluation may not.
     """
     from matsim_agents.active_learning.calculator import make_mlip_calculator
 
@@ -337,9 +353,9 @@ def evaluate_frames(
         # Fit the per-element linear reference on an independent set of frames
         # (``ref_frames``, e.g. the training partition) when provided, so the
         # shift applied to the held-out test set is NOT fit on the test set
-        # itself. Fall back to the legacy in-sample fit when ``ref_frames`` is
-        # None. The Z-column ordering spans the union of test and ref elements.
-        if ref_frames is not None:
+        # itself. The Z-column ordering spans the union of test and ref elements.
+        independent_reference = ref_frames is not None
+        if independent_reference:
             de_tot_ref, numbers_ref = _predict_energy_diffs(calc, ref_frames)
         else:
             de_tot_ref, numbers_ref = de_tot, e_numbers
@@ -349,10 +365,16 @@ def evaluate_frames(
         )
         comp = _composition_matrix(e_numbers, zs)
         comp_ref = _composition_matrix(numbers_ref, zs)
-        if de_tot_ref.size and comp_ref.shape[0] >= 1:
-            coef, *_ = np.linalg.lstsq(comp_ref, de_tot_ref, rcond=None)
-        else:  # degenerate ref set -> fall back to in-sample fit
-            coef, *_ = np.linalg.lstsq(comp, de_tot, rcond=None)
+        evaluation_rank = int(np.linalg.matrix_rank(comp))
+        if not independent_reference and evaluation_rank > 1:
+            raise ValueError(
+                "cross-composition shifted-energy evaluation requires independent ref_frames"
+            )
+        if independent_reference:
+            if not de_tot_ref.size:
+                raise ValueError("shift-reference set contains no usable energy-labelled frames")
+            _validate_shift_reference_coverage(comp, comp_ref)
+        coef, *_ = np.linalg.lstsq(comp_ref, de_tot_ref, rcond=None)
         n_arr = np.asarray(e_natoms, dtype=float)
         de_pa_shifted = (de_tot - comp @ coef) / n_arr
     else:

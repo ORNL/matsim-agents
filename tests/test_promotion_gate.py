@@ -1,14 +1,18 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from ase import Atoms
+from ase.calculators.calculator import Calculator, all_changes
 from ase.io import write
 
-from matsim_agents.active_learning.config import TrainerConfig
+from matsim_agents.active_learning.config import MLIPConfig, TrainerConfig, UMAConfig
 from matsim_agents.active_learning.evaluate import (
     EvalMetrics,
+    _validate_shift_reference_coverage,
     assess_promotion,
+    evaluate_frames,
     evaluate_promotion_candidate,
 )
 
@@ -59,6 +63,54 @@ def _trainer(tmp_path: Path) -> TrainerConfig:
         promotion_max_relative_regression=0.05,
         promotion_min_evaluated_frames=5,
     )
+
+
+def test_shift_reference_accepts_mixed_compositions_that_span_evaluation() -> None:
+    evaluation = [[1, 1, 1], [2, 0, 1], [0, 2, 1]]
+    mixed_references = [[1, 0, 1], [0, 1, 1], [1, 1, 1]]
+
+    _validate_shift_reference_coverage(
+        np.asarray(evaluation, dtype=float),
+        np.asarray(mixed_references, dtype=float),
+    )
+
+
+def test_shift_reference_rejects_unspanned_composition_direction() -> None:
+    evaluation = [[1, 1, 1], [2, 0, 1]]
+    deficient_references = [[1, 0, 1], [2, 0, 2]]
+
+    with pytest.raises(ValueError, match="do not span"):
+        _validate_shift_reference_coverage(
+            np.asarray(evaluation, dtype=float),
+            np.asarray(deficient_references, dtype=float),
+        )
+
+
+def test_cross_composition_shift_requires_independent_references(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CompositionCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            self.results["energy"] = float(np.sum(atoms.numbers))
+            self.results["forces"] = np.zeros((len(atoms), 3))
+
+    monkeypatch.setattr(
+        "matsim_agents.active_learning.calculator.make_mlip_calculator",
+        lambda _cfg: CompositionCalculator(),
+    )
+    frames = [
+        Atoms("NbTaO", positions=np.zeros((3, 3)), info={"energy": 0.0}),
+        Atoms("Nb2O", positions=np.zeros((3, 3)), info={"energy": 0.0}),
+    ]
+    mlip = MLIPConfig(backend="uma", uma=UMAConfig())
+
+    with pytest.raises(ValueError, match="requires independent ref_frames"):
+        evaluate_frames(mlip, frames)
+
+    evaluate_frames(mlip, [frames[0], frames[0].copy()])
 
 
 def test_promotion_gate_accepts_accurate_non_regressing_candidate(tmp_path: Path) -> None:

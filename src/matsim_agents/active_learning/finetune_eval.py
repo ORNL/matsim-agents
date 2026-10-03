@@ -324,9 +324,9 @@ def run_campaign(
         n_iters,
     )
 
-    # Leakage-free re-score mode: fit the per-element reference on TRAIN and
-    # write to a distinct ``_trainref`` suffix so originals are preserved.
-    _ref = train_frames if eval_only else None
+    # Fit the per-element reference on TRAIN for both fresh and resumed runs.
+    # Cross-composition test sets cannot define their own leakage-free shift.
+    _ref = train_frames
     _suf = "_trainref" if eval_only else ""
 
     if backend == "uma":
