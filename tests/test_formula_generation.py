@@ -21,6 +21,11 @@ def _nb_ta_o_policy(**overrides) -> FormulaGenerationPolicy:
     return FormulaGenerationPolicy(**defaults)
 
 
+def test_policy_rejects_minimum_species_above_element_count() -> None:
+    with pytest.raises(ValueError, match="minimum_species must not exceed"):
+        FormulaGenerationPolicy(elements=["Nb", "O"], minimum_species=3)
+
+
 def test_enumerate_formulas_includes_known_charge_balanced_binaries():
     # Canonical formulas follow the repo's strict alphabetical Hill order
     # (e.g. Ta2O5 -> "O5Ta2"), matching matsim_agents.discovery.composition.

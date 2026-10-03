@@ -12,10 +12,16 @@
 set -euo pipefail
 
 REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
-export MATSIM_VASP_BIN="${MATSIM_VASP_BIN:-$REPO/external/vasp6/src/vasp.6.6.1/bin/vasp_std}"
-export MATSIM_VASP_POTCAR_DIR="${MATSIM_VASP_POTCAR_DIR:-$REPO/external/vasp6/potcar/potpaw_PBE.64}"
+DEFAULT_VASP_BIN="$REPO/external/vasp6/src/vasp.6.6.1/bin/vasp_std"
+DEFAULT_VASP_POTCAR_DIR="$REPO/external/vasp6/potcar/potpaw_PBE.64"
+export MATSIM_VASP_BIN="${MATSIM_VASP_BIN:-$DEFAULT_VASP_BIN}"
+export MATSIM_VASP_POTCAR_DIR="${MATSIM_VASP_POTCAR_DIR:-$DEFAULT_VASP_POTCAR_DIR}"
 export MATSIM_CAMPAIGN_AL_CONFIG="$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-vasp.yaml"
 export MATSIM_CAMPAIGN_REFERENCE_BACKEND=vasp
+if [[ ( "$MATSIM_VASP_BIN" != "$DEFAULT_VASP_BIN" || "$MATSIM_VASP_POTCAR_DIR" != "$DEFAULT_VASP_POTCAR_DIR" ) && -z "${MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE:-}" ]]; then
+  echo "ERROR: custom VASP binary or POTCAR directory requires MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE" >&2
+  exit 2
+fi
 export MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE="${MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE:-vasp-6.6.1-pbe64-encut520-kspacing0.25-o2-triplet-v1}"
 export MATSIM_CAMPAIGN_RUN_TAG=campaign-formula-e2e-all-vasp
 

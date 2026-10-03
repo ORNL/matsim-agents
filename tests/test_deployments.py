@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 from pathlib import Path
 
 from ase.build import bulk
@@ -54,6 +56,35 @@ def test_vasp_campaign_preserves_explicit_method_signature() -> None:
         'MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE="${MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE:-'
         "vasp-6.6.1-pbe64-encut520-kspacing0.25-o2-triplet-v1}" in content
     )
+    assert '"$MATSIM_VASP_BIN" != "$DEFAULT_VASP_BIN"' in content
+    assert '"$MATSIM_VASP_POTCAR_DIR" != "$DEFAULT_VASP_POTCAR_DIR"' in content
+    assert "custom VASP binary or POTCAR directory requires" in content
+
+
+def test_vasp_campaign_requires_signature_for_custom_inputs(tmp_path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = (
+        root
+        / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-vasp-perlmutter.sh"
+    )
+    environment = os.environ.copy()
+    environment.update(
+        PROJECT_ROOT=str(tmp_path),
+        MATSIM_VASP_BIN=str(tmp_path / "custom-vasp"),
+        MATSIM_VASP_POTCAR_DIR=str(tmp_path / "custom-potcars"),
+    )
+    environment.pop("MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE", None)
+
+    result = subprocess.run(
+        ["bash", str(script)],
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "custom VASP binary or POTCAR directory requires" in result.stderr
 
 
 def test_perlmutter_campaign_exposes_adaptive_acquisition_controls() -> None:

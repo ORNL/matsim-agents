@@ -56,6 +56,8 @@ class FormulaGenerationPolicy(BaseModel):
             )
         if self.maximum_species < self.minimum_species:
             raise ValueError("maximum_species must be >= minimum_species")
+        if self.minimum_species > len(self.elements):
+            raise ValueError("minimum_species must not exceed the number of declared elements")
         if self.maximum_coefficient < self.minimum_coefficient:
             raise ValueError("maximum_coefficient must be >= minimum_coefficient")
         return self

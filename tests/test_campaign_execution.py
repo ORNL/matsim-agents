@@ -21,6 +21,7 @@ from matsim_agents.campaign.execution import (
     CampaignRetrainingConfig,
     ReferenceStructureSpec,
     _cross_model_scores,
+    _iteration_states,
     _model_identifier,
     _perturbation_robustness,
     _relaxation_energy_per_atom,
@@ -191,6 +192,12 @@ def test_unary_cache_key_includes_structure_contents(tmp_path):
     write(structure, Atoms("Nb", positions=[[0.1, 0.0, 0.0]]))
 
     assert unary_cache_directory(manifest, "test:model", settings) != original
+
+
+def test_iteration_states_allows_zero_cap_noop(tmp_path):
+    assert _iteration_states(tmp_path, allow_empty=True) == []
+    with pytest.raises(RuntimeError, match="produced no iteration state"):
+        _iteration_states(tmp_path)
 
 
 def test_surrogate_hull_stops_when_target_element_is_absent_from_manifest(tmp_path):

@@ -549,14 +549,14 @@ def _validate_dft_inputs(formula: str, cfg: ALConfig) -> None:
         raise FileNotFoundError(f"QE pseudopotential files do not exist: {missing_files}")
 
 
-def _iteration_states(root: Path) -> list[dict[str, Any]]:
+def _iteration_states(root: Path, *, allow_empty: bool = False) -> list[dict[str, Any]]:
     states: list[dict[str, Any]] = []
     for state_path in sorted(root.glob("iteration_*/state.json")):
         state = json.loads(state_path.read_text(encoding="utf-8"))
         if state.get("status") != "complete":
             raise RuntimeError(f"active-learning iteration did not complete: {state_path}")
         states.append(state)
-    if not states:
+    if not states and not allow_empty:
         raise RuntimeError(f"active-learning run produced no iteration state under {root}")
     return states
 
@@ -1025,7 +1025,10 @@ def run_formula_with_active_learning(
         if retrain != al_cfg.trainer.enabled:
             raise ValueError("phase retraining policy and AL trainer configuration disagree")
         al_runner(al_cfg)
-        states = _iteration_states(al_root)
+        states = _iteration_states(
+            al_root,
+            allow_empty=al_cfg.loop.max_dft_calculations == 0,
+        )
         total_seconds = sum(
             float(state.get("timings_sec", {}).get("total", 0.0)) for state in states
         )
