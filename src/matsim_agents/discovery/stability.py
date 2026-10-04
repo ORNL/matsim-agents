@@ -130,6 +130,7 @@ class ReferenceEnergySet(BaseModel):
     backend: str | None = None
     elemental_energies_eV_per_atom: dict[str, float]
     elemental_entries: dict[str, ElementalReferenceEntry] = Field(default_factory=dict)
+    elemental_reference_candidates: list[ElementalReferenceEntry] = Field(default_factory=list)
     competing_phases: dict[str, float] = Field(
         default_factory=dict,
         description="Formation energies in eV/atom keyed by composition formula.",
@@ -173,6 +174,17 @@ class ReferenceEnergySet(BaseModel):
                 )
             if self.elemental_energies_eV_per_atom.get(element) != entry.energy_eV_per_atom:
                 raise ValueError(f"elemental energy for {element!r} does not match its typed entry")
+        for entry in self.elemental_reference_candidates:
+            if entry.method_signature != self.method_signature:
+                raise ValueError(
+                    f"elemental reference candidate {entry.phase_id!r} uses method signature "
+                    f"{entry.method_signature!r}, expected {self.method_signature!r}"
+                )
+            if self.backend is not None and entry.backend not in {None, self.backend}:
+                raise ValueError(
+                    f"elemental reference candidate {entry.phase_id!r} uses backend "
+                    f"{entry.backend!r}, expected {self.backend!r}"
+                )
         return self
 
     def competing_phase_records(self) -> list[tuple[str, str, float]]:

@@ -829,14 +829,19 @@ def _generate_reference_energies(
     if len(phase_ids) != len(set(phase_ids)):
         raise ValueError("reference structure phase IDs must be unique")
     existing_phase_ids = {entry.phase_id for entry in references.phase_entries}
+    known_elemental_reference_ids = {
+        entry.phase_id for entry in references.elemental_reference_candidates
+    }
+    known_elemental_reference_ids.update(
+        entry.phase_id for entry in references.elemental_entries.values()
+    )
     pending: list[tuple[ReferenceStructureSpec, Any]] = []
     for spec in specs:
         composition = parse_composition(spec.formula)
         if composition is None:
             raise ValueError(f"Could not parse reference formula {spec.formula!r}")
         if len(composition.elements) == 1:
-            element = next(iter(composition.elements))
-            if element in references.elemental_energies_eV_per_atom:
+            if spec.phase_id in known_elemental_reference_ids:
                 continue
         elif spec.phase_id in existing_phase_ids or (
             spec.source == "legacy_manifest" and spec.formula in references.competing_phases
@@ -887,8 +892,7 @@ def _generate_reference_energies(
         if len(composition.elements) == 1:
             element = next(iter(composition.elements))
             corrected_energy = energy_per_atom + spec.energy_correction_eV_per_atom
-            references.elemental_energies_eV_per_atom[element] = corrected_energy
-            references.elemental_entries[element] = ElementalReferenceEntry(
+            entry = ElementalReferenceEntry(
                 element=element,
                 phase_id=spec.phase_id,
                 reference_formula=spec.formula,
@@ -902,6 +906,11 @@ def _generate_reference_energies(
                 provenance=spec.provenance,
                 corrections={"energy_correction_eV_per_atom": spec.energy_correction_eV_per_atom},
             )
+            references.elemental_reference_candidates.append(entry)
+            current_energy = references.elemental_energies_eV_per_atom.get(element)
+            if current_energy is None or corrected_energy < current_energy:
+                references.elemental_energies_eV_per_atom[element] = corrected_energy
+                references.elemental_entries[element] = entry
             continue
         cell_composition = PymatgenComposition(atoms.get_chemical_formula())
         declared_composition = PymatgenComposition(spec.formula)

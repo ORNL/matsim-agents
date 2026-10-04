@@ -390,6 +390,10 @@ def run_active_learning(cfg: ALConfig) -> None:
                 from ase.io import read as ase_read
 
                 existing_frames = list(ase_read(dataset_path, index=":"))
+            if validation_dataset_path.exists():
+                from ase.io import read as ase_read
+
+                existing_frames.extend(ase_read(validation_dataset_path, index=":"))
             existing_elements = {
                 symbol for frame in existing_frames for symbol in frame.get_chemical_symbols()
             }

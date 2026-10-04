@@ -969,6 +969,7 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
     structures = {}
     for formula, symbols in {
         "Nb": ["Nb"],
+        "Nb_alt": ["Nb"],
         "O2": ["O", "O"],
         "NbO2": ["Nb", "O", "O"],
         "Nb2O4": ["Nb", "Nb", "O", "O", "O", "O"],
@@ -1049,7 +1050,13 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
             encoding="utf-8",
         )
 
-    energies = {"Nb": -10.0, "O2": -8.0, "NbO2": -20.0, "Nb2O4": -42.0}
+    energies = {
+        "Nb": -10.0,
+        "Nb_alt": -9.0,
+        "O2": -8.0,
+        "NbO2": -20.0,
+        "Nb2O4": -42.0,
+    }
     observed_settings = []
     train_script = tmp_path / "train.py"
     train_script.touch()
@@ -1106,7 +1113,12 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
                 phase_id="NbO2-reference",
                 formula="NbO2",
                 structure_path=structures["Nb2O4"],
-            )
+            ),
+            ReferenceStructureSpec(
+                phase_id="Nb-polymorph-high-energy",
+                formula="Nb",
+                structure_path=structures["Nb_alt"],
+            ),
         ],
         reference_relax_cell={"O2": False},
         reference_settings={
@@ -1163,9 +1175,14 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
     assert report.reference_set_id == refinement.reference_energies.identifier
     assert report.ground_state.formation_energy_eV_per_atom == pytest.approx(-2 / 3)
     assert refinement.reference_energies.phase_entries[0].formation_energy_eV_per_atom == -1.0
-    assert result.active_learning_result["n_dft_calculations"] == 5
-    assert result.active_learning_result["dft_refinement"]["reference_calculations"] == 3
-    assert sum(settings["kpts"] == (4, 4, 4) for settings in observed_settings) == 3
+    assert result.active_learning_result["n_dft_calculations"] == 6
+    assert result.active_learning_result["dft_refinement"]["reference_calculations"] == 4
+    assert sum(settings["kpts"] == (4, 4, 4) for settings in observed_settings) == 4
+    assert refinement.reference_energies.elemental_entries["Nb"].phase_id == "Nb"
+    assert refinement.reference_energies.elemental_energies_eV_per_atom["Nb"] == -10.0
+    assert {
+        entry.phase_id for entry in refinement.reference_energies.elemental_reference_candidates
+    } >= {"Nb", "Nb-polymorph-high-energy"}
     independent_ranking = result.active_learning_result["independent_dft_ranking"]
     assert independent_ranking["training_dataset_unchanged"] is True
     assert (
@@ -1202,7 +1219,7 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
         relaxation_runner=relaxation_runner,
     )
     assert resumed.active_learning_result["dft_refinement"]["reference_calculations"] == 0
-    assert len(observed_settings) == 5
+    assert len(observed_settings) == 6
 
 
 def test_formula_execution_rejects_missing_pseudopotential_mapping(tmp_path):

@@ -25,6 +25,7 @@ from typing import Any
 import numpy as np
 import pytest
 from ase import Atoms
+from ase.io import read as ase_read
 
 from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import (
@@ -41,6 +42,7 @@ from matsim_agents.active_learning.config import (
     UMAConfig,
     VASPConfig,
 )
+from matsim_agents.active_learning.dataset_governance import structure_identity
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
 from matsim_agents.active_learning.evaluate import PromotionDecision, _apply_model_override
 
@@ -249,6 +251,63 @@ def test_dft_calculation_cap_truncates_selected_batch(
     assert state["n_selected"] == 1
     assert state["n_dft_converged"] == 1
     assert state["n_dft_failed"] == 0
+
+
+def test_held_out_frames_are_excluded_from_later_training_iterations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.n_iterations = 2
+    cfg.acquisition.n_select = 4
+    cfg.trainer.validation_fraction = 0.25
+    cfg.trainer.validation_split_seed = 2
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    _patch_runtime(loop_mod, monkeypatch)
+    calls = 0
+    held_out_id = None
+
+    def sample_candidates(md_cfg, calc, out_dir, seed_paths=None):
+        nonlocal calls, held_out_id
+        calls += 1
+        if calls == 1:
+            return [_make_candidate(index) for index in range(3)]
+
+        validation_path = Path(out_dir).parent.parent / "validation.extxyz"
+        held_out_atoms = ase_read(validation_path, index=0)
+        held_out_id = structure_identity(held_out_atoms)
+        replay = Candidate(
+            candidate_id="held-out-replay",
+            atoms=held_out_atoms,
+            seed_path="/dummy.vasp",
+            md_step=10,
+        )
+        return [replay, _make_candidate(10), _make_candidate(11), _make_candidate(12)]
+
+    monkeypatch.setattr(loop_mod, "sample_md_candidates", sample_candidates)
+
+    loop_mod.run_active_learning(cfg)
+
+    dataset = ase_read(cfg.loop.out_dir / "dataset.extxyz", index=":")
+    validation = ase_read(cfg.loop.out_dir / "validation.extxyz", index=":")
+    validation_ids = {structure_identity(atoms) for atoms in validation}
+    training_ids = {structure_identity(atoms) for atoms in dataset}
+
+    assert calls == 2
+    assert len(validation) == 2
+    assert len(dataset) == 4
+    assert held_out_id is not None
+    assert held_out_id in validation_ids
+    assert held_out_id not in training_ids
+    assert validation_ids.isdisjoint(training_ids)
+    states = [
+        __import__("json").loads(
+            (cfg.loop.out_dir / f"iteration_{index:04d}" / "state.json").read_text()
+        )
+        for index in range(2)
+    ]
+    assert states[1]["n_training_frames"] + states[1]["n_validation_frames"] == 3
 
 
 @pytest.mark.parametrize("approved", [True, False])
