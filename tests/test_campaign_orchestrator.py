@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from matsim_agents.campaign.acquisition import (
     CampaignAcquisitionPolicy,
     FormulaAcquisitionMetrics,
@@ -437,6 +440,71 @@ def test_campaign_passes_remaining_dft_allowance_to_formula_runner(tmp_path):
 
     assert allowances == [3]
     assert result.campaign.formula_runs["NbO2"].n_dft_calculations == 3
+
+
+def test_failed_formula_recovers_durable_resource_and_stage_evidence(tmp_path):
+    campaign = _campaign()
+    campaign.budget.max_dft_calculations = 3
+    calls: list[str] = []
+    iteration_state = {
+        "iteration": 0,
+        "status": "failed",
+        "n_dft_converged": 1,
+        "n_dft_failed": 1,
+        "timings_sec": {"total": 1800.0},
+    }
+
+    def runner(formula: str, output_dir: str, dft_allowance: int) -> PhaseExplorationWorkflowResult:
+        calls.append(formula)
+        formula_dir = Path(output_dir)
+        al_root = formula_dir / "active_learning"
+        iteration_dir = al_root / "iteration_0000"
+        iteration_dir.mkdir(parents=True)
+        (iteration_dir / "state.json").write_text(json.dumps(iteration_state))
+        (formula_dir / "campaign_stages.json").write_text(
+            json.dumps(
+                {
+                    "formula": formula,
+                    "stages": [
+                        {
+                            "name": "active_learning_labels_and_training",
+                            "status": "failed",
+                            "n_dft_calculations": 2,
+                            "n_active_learning_iterations": 1,
+                            "node_hours": 0.5,
+                            "iteration_states": [iteration_state],
+                        },
+                        {
+                            "name": "independent_dft_ranking",
+                            "status": "in_progress",
+                            "dft_attempts": 1,
+                            "dft_node_hours": 0.25,
+                        },
+                    ],
+                }
+            )
+        )
+        raise RuntimeError("DFT refinement failed after completed labels")
+
+    result = run_campaign(
+        campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(continue_on_failure=True),
+    )
+
+    record = result.campaign.formula_runs["NbO2"]
+    assert calls == ["NbO2"]
+    assert record.status == WorkflowStatus.FAILED
+    assert record.n_dft_calculations == 3
+    assert record.node_hours == 0.75
+    assert record.n_active_learning_iterations == 1
+    assert (
+        record.evidence["partial_campaign_stages"]["independent_dft_ranking"]["dft_attempts"] == 1
+    )
+    assert record.evidence["iteration_states"] == [iteration_state]
+    assert "DFT refinement failed" in record.failure_reason
+    assert result.campaign.budget.max_dft_calculations == 3
 
 
 def test_pure_acquisition_mode_records_forced_branch():

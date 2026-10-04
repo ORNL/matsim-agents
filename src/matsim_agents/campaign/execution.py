@@ -595,6 +595,14 @@ def _iteration_states(root: Path, *, allow_empty: bool = False) -> list[dict[str
     return states
 
 
+def _durable_iteration_states(root: Path) -> list[dict[str, Any]]:
+    """Read all persisted iteration states, including a failed final iteration."""
+    return [
+        json.loads(state_path.read_text(encoding="utf-8"))
+        for state_path in sorted(root.glob("iteration_*/state.json"))
+    ]
+
+
 def _exploration_kwargs(cfg: ALConfig, overrides: dict[str, Any]) -> dict[str, Any]:
     values = dict(overrides)
     values.setdefault("mlip_backend", cfg.mlip.backend)
@@ -1119,6 +1127,14 @@ def run_formula_with_active_learning(
         try:
             al_runner(al_cfg)
         except Exception as exc:
+            partial_states = _durable_iteration_states(al_root)
+            partial_dft = sum(
+                int(state.get("n_dft_converged", 0)) + int(state.get("n_dft_failed", 0))
+                for state in partial_states
+            )
+            partial_seconds = sum(
+                float(state.get("timings_sec", {}).get("total", 0.0)) for state in partial_states
+            )
             _set_campaign_stage(
                 stage_manifest_path,
                 formula,
@@ -1126,6 +1142,10 @@ def run_formula_with_active_learning(
                 "active_learning_labels_and_training",
                 "failed",
                 failure_reason=f"{type(exc).__name__}: {exc}",
+                n_dft_calculations=partial_dft,
+                n_active_learning_iterations=len(partial_states),
+                node_hours=partial_seconds * config.compute_nodes / 3600.0,
+                iteration_states=partial_states,
             )
             raise
         states = _iteration_states(
@@ -1217,6 +1237,7 @@ def run_formula_with_active_learning(
             held_out_validation_data=result_validation_data,
             n_dft_calculations=result["n_dft_calculations"],
             n_active_learning_iterations=result["n_active_learning_iterations"],
+            node_hours=result["node_hours"],
             candidate_model_path=(str(promoted[-1].get("new_logdir")) if promoted else None),
         )
         return result
@@ -1397,6 +1418,28 @@ def run_formula_with_active_learning(
         model_identifier=_model_identifier(effective_al_cfg),
         training_data=execution_evidence.get("training_data"),
     )
+    dft_progress = {"attempts": 0, "elapsed_seconds": 0.0}
+
+    def tracked_dft_relaxation_runner(
+        dft_config: ScientificRelaxationConfig,
+    ) -> ScientificRelaxationResult:
+        dft_progress["attempts"] += 1
+        started = time.monotonic()
+        try:
+            return relaxation_runner(dft_config)
+        finally:
+            dft_progress["elapsed_seconds"] += time.monotonic() - started
+            _set_campaign_stage(
+                stage_manifest_path,
+                formula,
+                stages,
+                "independent_dft_ranking",
+                "in_progress",
+                dft_attempts=dft_progress["attempts"],
+                dft_elapsed_seconds=dft_progress["elapsed_seconds"],
+                dft_node_hours=(dft_progress["elapsed_seconds"] * config.compute_nodes / 3600.0),
+            )
+
     candidates = [relaxation for relaxation in exploration.relaxations if relaxation.converged]
     if refinement.candidate_acquisition.enabled:
         selected, candidate_scores = select_dft_refinement_candidates(
@@ -1460,7 +1503,7 @@ def run_formula_with_active_learning(
         al_cfg,
         refinement,
         formula_root / "dft_refinement",
-        relaxation_runner,
+        tracked_dft_relaxation_runner,
     )
     composition = parse_composition(formula)
     assert composition is not None
@@ -1472,7 +1515,7 @@ def run_formula_with_active_learning(
     refinement_seconds = 0.0
     for index, candidate in enumerate(selected):
         started = time.monotonic()
-        relaxation_result = relaxation_runner(
+        relaxation_result = tracked_dft_relaxation_runner(
             _dft_relaxation_config(
                 candidate.optimized_structure_path,
                 formula_root / "dft_refinement" / "candidates" / f"candidate-{index:03d}",

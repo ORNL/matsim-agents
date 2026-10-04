@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -65,6 +67,55 @@ class CampaignRunResult(BaseModel):
 
 FormulaRunner = Callable[..., PhaseExplorationWorkflowResult]
 ReviewRunner = Callable[[CampaignState, list[FormulaRunRecord]], CampaignReviewDecision]
+
+
+def _recover_partial_formula_evidence(formula_dir: Path) -> dict[str, Any]:
+    """Recover resource usage and persisted stage evidence after runner failure."""
+    stage_path = formula_dir / "campaign_stages.json"
+    stages: dict[str, dict[str, Any]] = {}
+    if stage_path.is_file():
+        payload = json.loads(stage_path.read_text(encoding="utf-8"))
+        stages = {
+            str(stage["name"]): stage
+            for stage in payload.get("stages", [])
+            if isinstance(stage, dict) and stage.get("name")
+        }
+
+    al_root = formula_dir / "active_learning"
+    iteration_states = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted(al_root.glob("iteration_*/state.json"))
+    ]
+    al_stage = stages.get("active_learning_labels_and_training", {})
+    dft_stage = stages.get("independent_dft_ranking", {})
+    al_dft = int(
+        al_stage.get(
+            "n_dft_calculations",
+            sum(
+                int(state.get("n_dft_converged", 0)) + int(state.get("n_dft_failed", 0))
+                for state in iteration_states
+            ),
+        )
+    )
+    al_node_hours = float(
+        al_stage.get(
+            "node_hours",
+            sum(float(state.get("timings_sec", {}).get("total", 0.0)) for state in iteration_states)
+            / 3600.0,
+        )
+    )
+    refinement_dft = int(dft_stage.get("dft_attempts", 0))
+    refinement_node_hours = float(dft_stage.get("dft_node_hours", 0.0))
+    return {
+        "stages": stages,
+        "iteration_states": iteration_states,
+        "active_learning_dft_calculations": al_dft,
+        "active_learning_node_hours": al_node_hours,
+        "refinement_dft_attempts": refinement_dft,
+        "refinement_node_hours": refinement_node_hours,
+        "n_dft_calculations": al_dft + refinement_dft,
+        "node_hours": al_node_hours + refinement_node_hours,
+    }
 
 
 def run_formula_discovery_stage(
@@ -405,6 +456,16 @@ def run_campaign(
                 record.evidence = {
                     key: value for key, value in al_result.items() if key != "exploration_kwargs"
                 }
+                durable_progress = _recover_partial_formula_evidence(formula_dir)
+                record.evidence["accounted_active_learning_dft_calculations"] = durable_progress[
+                    "active_learning_dft_calculations"
+                ]
+                record.evidence["accounted_active_learning_node_hours"] = durable_progress[
+                    "active_learning_node_hours"
+                ]
+                record.evidence["accounted_refinement_dft_attempts"] = durable_progress[
+                    "refinement_dft_attempts"
+                ]
                 record.evidence["candidate_counts"] = record.candidate_counts
                 record.evidence["outcome_class"] = record.outcome_class
                 record.evidence["relaxation_failures"] = list(exploration.failures)
@@ -463,6 +524,44 @@ def run_campaign(
                 record.status = WorkflowStatus.COMPLETE
                 completed.append(formula)
             except Exception as exc:  # noqa: BLE001
+                partial = _recover_partial_formula_evidence(formula_dir)
+                previous_al_dft = int(
+                    record.evidence.get("accounted_active_learning_dft_calculations", 0)
+                )
+                previous_al_node_hours = float(
+                    record.evidence.get("accounted_active_learning_node_hours", 0.0)
+                )
+                additional_al_dft = max(
+                    0,
+                    partial["active_learning_dft_calculations"] - previous_al_dft,
+                )
+                additional_al_node_hours = max(
+                    0.0,
+                    partial["active_learning_node_hours"] - previous_al_node_hours,
+                )
+                record.n_dft_calculations += additional_al_dft + partial["refinement_dft_attempts"]
+                record.node_hours += additional_al_node_hours + partial["refinement_node_hours"]
+                record.n_active_learning_iterations = max(
+                    record.n_active_learning_iterations,
+                    len(partial["iteration_states"]),
+                )
+                record.evidence.update(
+                    {
+                        "partial_campaign_stages": partial["stages"],
+                        "iteration_states": partial["iteration_states"],
+                        "accounted_active_learning_dft_calculations": partial[
+                            "active_learning_dft_calculations"
+                        ],
+                        "accounted_active_learning_node_hours": partial[
+                            "active_learning_node_hours"
+                        ],
+                        "accounted_refinement_dft_attempts": (
+                            int(record.evidence.get("accounted_refinement_dft_attempts", 0))
+                            + partial["refinement_dft_attempts"]
+                        ),
+                        "partial_progress": partial,
+                    }
+                )
                 record.status = WorkflowStatus.FAILED
                 record.failure_reason = repr(exc)
                 failed.append(formula)
