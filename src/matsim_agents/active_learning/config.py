@@ -239,6 +239,8 @@ class MACEConfig(BaseModel):
             raise ValueError("MACE checkpoint family requires model to be an existing file")
         if self.dispersion and self.family != "mace_mp":
             raise ValueError("MACE dispersion is supported only for family='mace_mp'")
+        if self.family == "mace_anicc" and self.precision == "fp32":
+            raise ValueError("MACE ANI-CC loader does not support precision='fp32'")
         return self
 
 

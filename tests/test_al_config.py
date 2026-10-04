@@ -18,6 +18,7 @@ from textwrap import dedent
 import pytest
 
 from matsim_agents.active_learning import ALConfig
+from matsim_agents.active_learning.config import DFTConfig, QEBackendConfig
 from matsim_agents.active_learning.loop import _dft_method_signature
 
 
@@ -350,6 +351,46 @@ def test_dft_method_signature_hashes_only_selected_potcars(
 
     (potcar_dir / "Nb" / "POTCAR").write_text("changed selected potential")
     assert _dft_method_signature(cfg, {"Nb", "O"}) != original
+
+
+def test_dft_method_signature_includes_backend_executable_identity(
+    tmp_path: Path,
+    required_paths: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
+    cfg_path = _write(tmp_path, "al.yaml", body)
+    for key, value in required_paths.items():
+        if key != "seed_path":
+            monkeypatch.setenv(key, value)
+    cfg = ALConfig.from_yaml(cfg_path)
+    potcar_dir = Path(required_paths["POTCAR_DIR"])
+    for element in ("Nb", "O"):
+        element_dir = potcar_dir / element
+        element_dir.mkdir()
+        (element_dir / "POTCAR").write_text(element)
+
+    vasp_signature = _dft_method_signature(cfg, {"Nb", "O"})
+    Path(required_paths["VASP_BIN"]).write_text("#!/bin/bash\n# different build\n")
+    assert _dft_method_signature(cfg, {"Nb", "O"}) != vasp_signature
+
+    qe_executable = tmp_path / "pw.x"
+    qe_executable.write_text("QE build one")
+    pseudo_dir = tmp_path / "qe-pseudo"
+    pseudo_dir.mkdir()
+    for element in ("Nb", "O"):
+        (pseudo_dir / f"{element}.upf").write_text(element)
+    qe = QEBackendConfig(
+        pw_bin=qe_executable,
+        pw_wrapper=Path(required_paths["VASP_WRAPPER"]),
+        pseudo_dir=pseudo_dir,
+        pseudopotentials={"Nb": "Nb.upf", "O": "O.upf"},
+    )
+    qe_cfg = cfg.model_copy(update={"dft": DFTConfig(backend="qe", qe=qe)})
+
+    qe_signature = _dft_method_signature(qe_cfg, {"Nb", "O"})
+    qe_executable.write_text("QE build two")
+    assert _dft_method_signature(qe_cfg, {"Nb", "O"}) != qe_signature
 
 
 # --------------------------------------------------------------------------- #

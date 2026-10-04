@@ -49,6 +49,7 @@ class FormulaRunRecord(BaseModel):
     n_active_learning_iterations: int = 0
     node_hours: float = 0.0
     model_promoted: bool = False
+    promotion_sequence: int | None = None
     acquisition_branch: str | None = None
     evidence: dict[str, Any] = Field(default_factory=dict)
 

@@ -71,7 +71,11 @@ def _path_identity(path: Path | None) -> dict[str, Any] | None:
     if path is None:
         return None
     if path.is_file():
-        return {"name": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return {"name": path.name, "sha256": digest.hexdigest()}
     if path.is_dir():
         digest = hashlib.sha256()
         for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
@@ -87,6 +91,7 @@ def _scientific_dft_payload(cfg: ALConfig, elements: set[str]) -> dict[str, Any]
         block = cfg.dft.vasp
         return {
             "backend": "vasp",
+            "executable": _path_identity(block.vasp_bin),
             "incar_template": _path_identity(block.incar_template),
             "kpoints_template": _path_identity(block.kpoints_template),
             "potcars": {
@@ -106,6 +111,7 @@ def _scientific_dft_payload(cfg: ALConfig, elements: set[str]) -> dict[str, Any]
     )
     return {
         "backend": "qe",
+        "executable": _path_identity(block.pw_bin),
         "pseudopotential_files": {
             element: _path_identity(block.pseudo_dir / filename)
             for element, filename in sorted(pseudopotentials.items())

@@ -390,6 +390,18 @@ def run_campaign(
                 )
                 record.node_hours += float(al_result.get("node_hours", 0.0))
                 record.model_promoted = result.model_promoted
+                if result.model_promoted:
+                    record.promotion_sequence = (
+                        max(
+                            (
+                                item.promotion_sequence
+                                for item in campaign.formula_runs.values()
+                                if item.promotion_sequence is not None
+                            ),
+                            default=-1,
+                        )
+                        + 1
+                    )
                 record.evidence = {
                     key: value for key, value in al_result.items() if key != "exploration_kwargs"
                 }

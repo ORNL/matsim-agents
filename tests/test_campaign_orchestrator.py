@@ -5,6 +5,7 @@ from matsim_agents.campaign.acquisition import (
     FormulaAcquisitionMetrics,
     select_formula_batch,
 )
+from matsim_agents.campaign.execution import latest_promoted_model
 from matsim_agents.campaign.orchestrator import (
     CampaignReviewDecision,
     CampaignRunPolicy,
@@ -153,6 +154,37 @@ def test_campaign_resume_retries_interrupted_running_formula(tmp_path):
 
     assert calls == ["NbO2"]
     assert result.campaign.formula_runs["NbO2"].attempts == 2
+
+
+def test_latest_promotion_uses_persisted_execution_order(tmp_path):
+    campaign = _campaign()
+    campaign.formula_runs = {
+        "NbO": FormulaRunRecord(formula="NbO", status=WorkflowStatus.PLANNED),
+        "NbO2": FormulaRunRecord(formula="NbO2", status=WorkflowStatus.PLANNED),
+    }
+    checkpoints = {"NbO2": "promoted-first.pt", "NbO": "promoted-last.pt"}
+
+    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+        result = _result(formula, output_dir)
+        result.model_promoted = True
+        result.active_learning_result["iteration_states"] = [
+            {"model_promoted": True, "new_logdir": checkpoints[formula]}
+        ]
+        return result
+
+    result = run_campaign(
+        campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(formulas_per_iteration=2, max_iterations=1),
+        resume=False,
+    )
+
+    assert result.campaign.formula_runs["NbO2"].promotion_sequence == 0
+    assert result.campaign.formula_runs["NbO"].promotion_sequence == 1
+    assert latest_promoted_model(result.campaign) == "promoted-last.pt"
+    persisted = CampaignState.load(result.state_path)
+    assert latest_promoted_model(persisted) == "promoted-last.pt"
 
 
 def test_campaign_retry_inconclusive_skips_usable_completed_formula(tmp_path):

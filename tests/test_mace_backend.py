@@ -68,6 +68,8 @@ def test_mace_family_defaults_and_validation():
     assert MACEConfig(family="mace_anicc").model == "default"
     with pytest.raises(ValueError, match="dispersion is supported only"):
         MACEConfig(family="mace_off", dispersion=True)
+    with pytest.raises(ValueError, match="ANI-CC loader does not support precision='fp32'"):
+        MACEConfig(family="mace_anicc", precision="fp32")
 
 
 def test_campaign_forwards_mace_selection():

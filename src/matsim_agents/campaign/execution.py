@@ -1588,12 +1588,18 @@ def make_formula_runner(
 def latest_promoted_model(campaign: CampaignState) -> str | None:
     """Return the newest promoted checkpoint recorded in durable campaign evidence."""
 
-    records = sorted(
-        campaign.formula_runs.values(),
-        key=lambda record: (record.iteration, record.attempts),
+    ordered_records = sorted(
+        enumerate(campaign.formula_runs.values()),
+        key=lambda item: (
+            item[1].promotion_sequence is not None,
+            item[1].promotion_sequence if item[1].promotion_sequence is not None else -1,
+            item[1].iteration,
+            item[1].attempts,
+            item[0],
+        ),
         reverse=True,
     )
-    for record in records:
+    for _, record in ordered_records:
         if not record.model_promoted:
             continue
         for state in reversed(record.evidence.get("iteration_states", [])):
