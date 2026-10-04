@@ -397,12 +397,22 @@ def run_active_learning(cfg: ALConfig) -> None:
             existing_elements = {
                 symbol for frame in existing_frames for symbol in frame.get_chemical_symbols()
             }
+            if existing_frames and not manifest_path.exists():
+                raise ValueError(
+                    "cannot append to a non-empty dataset without a manifest containing "
+                    "its DFT method signature; migrate the dataset explicitly first"
+                )
             if manifest_path.exists():
                 previous_manifest = DatasetManifest.model_validate_json(
                     manifest_path.read_text(encoding="utf-8")
                 )
                 if previous_manifest.dft_backend != backend.name:
                     raise ValueError("cannot append labels from a different DFT backend")
+                if existing_frames and previous_manifest.method_signature is None:
+                    raise ValueError(
+                        "cannot append to a non-empty dataset without a DFT method signature; "
+                        "migrate the dataset explicitly first"
+                    )
                 existing_signature = _dft_method_signature(cfg, existing_elements)
                 if (
                     previous_manifest.method_signature is not None

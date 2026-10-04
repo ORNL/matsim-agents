@@ -18,6 +18,7 @@ After one iteration we assert that:
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 from ase.io import read as ase_read
+from ase.io import write as ase_write
 
 from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import (
@@ -42,7 +44,11 @@ from matsim_agents.active_learning.config import (
     UMAConfig,
     VASPConfig,
 )
-from matsim_agents.active_learning.dataset_governance import structure_identity
+from matsim_agents.active_learning.dataset_governance import (
+    DatasetValidationSummary,
+    structure_identity,
+    write_dataset_manifest,
+)
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
 from matsim_agents.active_learning.evaluate import PromotionDecision, _apply_model_override
 
@@ -251,6 +257,34 @@ def test_dft_calculation_cap_truncates_selected_batch(
     assert state["n_selected"] == 1
     assert state["n_dft_converged"] == 1
     assert state["n_dft_failed"] == 0
+
+
+def test_nonempty_unsigned_dataset_cannot_be_appended(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _make_cfg(tmp_path)
+    dataset_path = cfg.loop.out_dir / "dataset.extxyz"
+    atoms = _make_candidate(0).atoms
+    atoms.info["energy"] = -1.0
+    atoms.new_array("forces", np.zeros((len(atoms), 3)))
+    ase_write(dataset_path, atoms, format="extxyz")
+    manifest_path = write_dataset_manifest(
+        dataset_path,
+        dft_backend="vasp",
+        energy_reference="vasp:native_total_energy",
+        validation=DatasetValidationSummary(accepted=1),
+    )
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    _patch_runtime(loop_mod, monkeypatch)
+
+    with pytest.raises(ValueError, match="non-empty dataset without a DFT method signature"):
+        loop_mod.run_active_learning(cfg)
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["method_signature"] is None
+    assert len(ase_read(dataset_path, index=":")) == 1
 
 
 def test_held_out_frames_are_excluded_from_later_training_iterations(
