@@ -12,6 +12,9 @@ from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
+from ase import Atoms
+
+from matsim_agents.active_learning.finetune_mace import MACE_MODELS
 
 ROOT = Path(__file__).resolve().parents[1]
 CODEBENCH = ROOT / "benchmarks" / "codabench"
@@ -62,6 +65,68 @@ def test_codabench_mace_catalog_matches_workflow() -> None:
     assert all(family == "mace_mp" for _name, family, _model in materials)
     assert len(all_models) == 22
     assert not {"mace_mh_0", "mace_mh_1"} & expected.keys()
+
+
+@pytest.mark.parametrize("variant", sorted(MACE_MODELS))
+def test_codabench_mace_variants_select_load_and_predict(monkeypatch, variant) -> None:
+    runner = _load("codabench_variant_runner", CODEBENCH / "run_baselines.py")
+    family = MACE_MODELS[variant]["family"]
+    model = MACE_MODELS[variant]["model"]
+    selections = runner.selected_mace_models(
+        Namespace(
+            mace_variant=variant,
+            mace_family=None,
+            mace_model=None,
+            legacy_mace_size=None,
+        )
+    )
+    assert selections == [(variant, family, model)]
+
+    calls = []
+    atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.7]])
+
+    class FakeCalculator:
+        def calculate(self, atoms, properties, system_changes):
+            self.results = {
+                "energy": -2.0,
+                "forces": np.zeros((len(atoms), 3)),
+                "stress": np.zeros(6),
+            }
+
+    def loader(name):
+        def load(**kwargs):
+            calls.append((name, kwargs))
+            return FakeCalculator()
+
+        return load
+
+    calculators = ModuleType("mace.calculators")
+    calculators.MACECalculator = loader("checkpoint")
+    for name in ("mace_mp", "mace_off", "mace_omol", "mace_polar", "mace_anicc"):
+        setattr(calculators, name, loader(name))
+    mace_module = ModuleType("mace")
+    mace_module.calculators = calculators
+    monkeypatch.setitem(sys.modules, "mace", mace_module)
+    monkeypatch.setitem(sys.modules, "mace.calculators", calculators)
+    adapter = runner.load_baseline_class("mace_mp0")
+    calculator = adapter.from_checkpoint(model, device="cpu", family=family)
+    expected_kwargs = (
+        {"model_path": None, "device": "cpu"}
+        if family == "mace_anicc"
+        else {"model": model, "device": "cpu", "default_dtype": "float32"}
+    )
+    if family == "mace_mp":
+        expected_kwargs["dispersion"] = False
+    assert calls == [(family, expected_kwargs)]
+    predictions = calculator.predict_many([atoms, atoms.copy()])
+    assert len(predictions) == 2
+    for prediction in predictions:
+        assert prediction["energy"] == -2.0
+        assert prediction["forces"].shape == (2, 3)
+        assert prediction["forces"].dtype == np.float32
+        assert np.isfinite(prediction["forces"]).all()
+    assert predictions[0]["forces"] is not predictions[1]["forces"]
+    assert calculator.results["stress"].shape == (6,)
 
 
 def test_codabench_mace_adapter_dispatches_native_families(monkeypatch) -> None:
