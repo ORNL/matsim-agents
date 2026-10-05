@@ -84,6 +84,44 @@ contribution ID to every model turn.
 licensed VASP binary, POTCAR library, QE pseudopotentials, or a particular MLIP
 checkpoint is installed at a site.
 
+### Bounded Perlmutter numerical qualification
+
+`deployments/perlmutter/jobs/job-qualify-real-models-perlmutter.sh` runs
+`qualify_real_models.py` inside an allocated GPU node. It uses the repository's
+isolated UMA, MACE, and HydraGNN environments and local model/DFT assets.
+Set `PROJECT_ROOT`, `QUALIFICATION_ROOT`, and `QUALIFICATION_STAGE`.
+`QUALIFICATION_SOURCE_ROOT` can point to a frozen source snapshot so queued jobs
+do not execute subsequent checkout edits.
+
+- `bootstrap`, with `QUALIFICATION_DFT_BACKEND=qe` or `vasp`, computes a real
+  Si elemental reference, exercises a one-attempt UMA candidate relaxation
+  budget, and collects two DFT labels. Training must defer with one permanent
+  training frame and one permanent held-out frame.
+- `resume` collects two more two-label batches using reproducible, distinct MD
+  seeds. It requires all six labels to accumulate without moving old partition
+  members, real UMA training to complete, and finite incumbent/candidate
+  held-out metrics. It depends on its matching bootstrap.
+- `mace` uses the accumulated QE-labelled data to exercise a two-checkpoint
+  force-disagreement ensemble, one-epoch fine-tuning, candidate reload, and
+  held-out comparison. It depends on the QE resume stage.
+- `hydragnn` independently exercises the explicit BEST6 epoch-97 checkpoint's
+  pinned OMat24 head in fp64 and bf16, requiring finite energies and forces.
+
+Keep QE and VASP output roots separate: labels and elemental references are
+method-specific and must not be pooled. Each backend performs at most seven
+DFT single-points (one elemental reference plus six AL labels). Training is
+one epoch per eligible iteration, and individual DFT calls time out after
+30 minutes. Specify Slurm walltimes/account/queue at submission.
+When a QoS submission-count limit prevents a separate resume job, the matching
+bootstrap and resume can run sequentially inside one allocation, with resume
+launched only after bootstrap succeeds.
+
+Only successful stages write `<stage>-verified.json`; submission or scheduler
+completion alone does not qualify the assertions. A documented promotion
+rejection is valid gate evidence, not a failure of this software-path test.
+This tiny Si protocol is not a convergence study, an accuracy certification,
+a full multi-LLM campaign, or a multi-component phase-hull validation.
+
 ## Structure relaxation
 
 `ScientificRelaxationConfig` supports three modes:
