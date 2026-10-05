@@ -22,7 +22,10 @@ from matsim_agents.discovery.formula_merge import (
     extract_llm_formula_proposals,
     merge_formulas,
 )
-from matsim_agents.discovery.stability import ReferenceEnergySet
+from matsim_agents.discovery.stability import (
+    ReferenceEnergySet,
+    recalibrate_hull_reports,
+)
 from matsim_agents.execution.contracts import WorkflowStatus
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
@@ -67,6 +70,69 @@ class CampaignRunResult(BaseModel):
 
 FormulaRunner = Callable[..., PhaseExplorationWorkflowResult]
 ReviewRunner = Callable[[CampaignState, list[FormulaRunRecord]], CampaignReviewDecision]
+
+
+def _merge_reference_energy_sets(
+    existing: ReferenceEnergySet | None,
+    incoming: ReferenceEnergySet,
+) -> ReferenceEnergySet:
+    """Merge formula-local DFT references with the campaign's accumulated phases."""
+    if existing is None:
+        return incoming
+    if (
+        existing.identifier != incoming.identifier
+        or existing.method_signature != incoming.method_signature
+        or existing.backend != incoming.backend
+    ):
+        raise ValueError("campaign formula runs produced incompatible DFT reference sets")
+    merged = existing.model_copy(deep=True)
+
+    for element, energy in incoming.elemental_energies_eV_per_atom.items():
+        previous = merged.elemental_energies_eV_per_atom.get(element)
+        if previous is not None and previous != energy:
+            raise ValueError(f"incompatible elemental reference energy for {element}")
+        merged.elemental_energies_eV_per_atom[element] = energy
+    for element, entry in incoming.elemental_entries.items():
+        previous = merged.elemental_entries.get(element)
+        if previous is not None and previous != entry:
+            raise ValueError(f"incompatible elemental reference entry for {element}")
+        merged.elemental_entries[element] = entry
+
+    candidates = {entry.phase_id: entry for entry in merged.elemental_reference_candidates}
+    for entry in incoming.elemental_reference_candidates:
+        previous = candidates.get(entry.phase_id)
+        if previous is not None and previous != entry:
+            raise ValueError(f"incompatible unary reference candidate {entry.phase_id!r}")
+        candidates[entry.phase_id] = entry
+    merged.elemental_reference_candidates = list(candidates.values())
+
+    phases = {entry.phase_id: entry for entry in merged.phase_entries}
+    for entry in incoming.phase_entries:
+        previous = phases.get(entry.phase_id)
+        if previous is not None and previous != entry:
+            raise ValueError(f"incompatible competing-phase reference {entry.phase_id!r}")
+        phases[entry.phase_id] = entry
+    merged.phase_entries = list(phases.values())
+
+    for formula, energy in incoming.competing_phases.items():
+        previous = merged.competing_phases.get(formula)
+        if previous is None:
+            merged.competing_phases[formula] = energy
+        else:
+            merged.competing_phases[formula] = min(previous, energy)
+    merged.completeness_policy.required_formulas = sorted(
+        set(merged.completeness_policy.required_formulas)
+        | set(incoming.completeness_policy.required_formulas)
+    )
+    merged.completeness_policy.require_binary_subsystems = (
+        merged.completeness_policy.require_binary_subsystems
+        or incoming.completeness_policy.require_binary_subsystems
+    )
+    merged.completeness_policy.require_ternary_competitor = (
+        merged.completeness_policy.require_ternary_competitor
+        or incoming.completeness_policy.require_ternary_competitor
+    )
+    return merged
 
 
 def _recover_partial_formula_evidence(formula_dir: Path) -> dict[str, Any]:
@@ -406,6 +472,8 @@ def run_campaign(
             record.attempts += 1
             record.output_dir = str(formula_dir)
             record.failure_reason = None
+            record.evidence["accounted_refinement_stage_attempts"] = 0
+            record.evidence["accounted_refinement_stage_node_hours"] = 0.0
             if selection is not None:
                 record.acquisition_branch = selection.scores[formula].assigned_branch
             campaign.formula_runs[formula] = record
@@ -430,16 +498,99 @@ def run_campaign(
                 formula_dft = int(
                     al_result.get("n_dft_calculations", al_result.get("n_dft_converged", 0))
                 )
-                if dft_allowance is not None and formula_dft > dft_allowance:
+                prior_evidence = record.evidence
+                previous_al_dft = int(
+                    prior_evidence.get("accounted_active_learning_dft_calculations", 0)
+                )
+                previous_al_node_hours = float(
+                    prior_evidence.get("accounted_active_learning_node_hours", 0.0)
+                )
+                previous_al_iterations = int(
+                    prior_evidence.get("accounted_active_learning_iterations", 0)
+                )
+                previous_refinement_dft = int(
+                    prior_evidence.get("accounted_refinement_dft_attempts", 0)
+                )
+                previous_dft_total = max(
+                    record.n_dft_calculations,
+                    int(prior_evidence.get("accounted_total_dft_calculations", 0)),
+                )
+                previous_node_hours = max(
+                    record.node_hours,
+                    float(prior_evidence.get("accounted_total_node_hours", 0.0)),
+                )
+                durable_progress = _recover_partial_formula_evidence(formula_dir)
+                refinement_result = al_result.get("dft_refinement", {})
+                if not isinstance(refinement_result, dict):
+                    refinement_result = {}
+                reported_refinement_dft = int(refinement_result.get("reference_calculations", 0))
+                reported_refinement_dft += int(refinement_result.get("candidate_calculations", 0))
+                current_refinement_dft_total = max(
+                    durable_progress["refinement_dft_attempts"],
+                    reported_refinement_dft,
+                )
+                previous_refinement_stage_dft = int(
+                    prior_evidence.get("accounted_refinement_stage_attempts", 0)
+                )
+                current_refinement_dft = max(
+                    0,
+                    current_refinement_dft_total - previous_refinement_stage_dft,
+                )
+                reported_al_dft = max(0, formula_dft - reported_refinement_dft)
+                current_al_dft = max(
+                    durable_progress["active_learning_dft_calculations"],
+                    reported_al_dft,
+                )
+                if (
+                    not durable_progress["active_learning_dft_calculations"]
+                    and not reported_refinement_dft
+                ):
+                    current_al_dft = formula_dft
+
+                reported_total_node_hours = float(al_result.get("node_hours", 0.0))
+                durable_al_node_hours = durable_progress["active_learning_node_hours"]
+                current_refinement_node_hours_total = max(
+                    durable_progress["refinement_node_hours"],
+                    max(0.0, reported_total_node_hours - durable_al_node_hours),
+                )
+                previous_refinement_stage_node_hours = float(
+                    prior_evidence.get("accounted_refinement_stage_node_hours", 0.0)
+                )
+                current_refinement_node_hours = max(
+                    0.0,
+                    current_refinement_node_hours_total - previous_refinement_stage_node_hours,
+                )
+                current_al_node_hours = max(
+                    durable_al_node_hours,
+                    reported_total_node_hours - current_refinement_node_hours,
+                )
+                reported_iterations = int(
+                    al_result.get(
+                        "n_active_learning_iterations",
+                        al_result.get("n_iterations", 0),
+                    )
+                )
+                current_al_iterations = max(
+                    reported_iterations,
+                    len(durable_progress["iteration_states"]),
+                )
+
+                additional_al_dft = max(0, current_al_dft - previous_al_dft)
+                additional_al_node_hours = max(0.0, current_al_node_hours - previous_al_node_hours)
+                additional_al_iterations = max(0, current_al_iterations - previous_al_iterations)
+                attempt_dft = additional_al_dft + current_refinement_dft
+                if dft_allowance is not None and attempt_dft > dft_allowance:
                     raise RuntimeError(
-                        f"formula used {formula_dft} DFT calculations with allowance "
+                        f"formula used {attempt_dft} new DFT calculations with allowance "
                         f"{dft_allowance}"
                     )
-                record.n_dft_calculations += formula_dft
-                record.n_active_learning_iterations += int(
-                    al_result.get("n_active_learning_iterations", al_result.get("n_iterations", 0))
+                record.n_dft_calculations = (
+                    previous_dft_total + additional_al_dft + current_refinement_dft
                 )
-                record.node_hours += float(al_result.get("node_hours", 0.0))
+                record.n_active_learning_iterations += additional_al_iterations
+                record.node_hours = (
+                    previous_node_hours + additional_al_node_hours + current_refinement_node_hours
+                )
                 record.model_promoted = result.model_promoted
                 if result.model_promoted:
                     record.promotion_sequence = (
@@ -456,16 +607,28 @@ def run_campaign(
                 record.evidence = {
                     key: value for key, value in al_result.items() if key != "exploration_kwargs"
                 }
-                durable_progress = _recover_partial_formula_evidence(formula_dir)
-                record.evidence["accounted_active_learning_dft_calculations"] = durable_progress[
-                    "active_learning_dft_calculations"
-                ]
-                record.evidence["accounted_active_learning_node_hours"] = durable_progress[
-                    "active_learning_node_hours"
-                ]
-                record.evidence["accounted_refinement_dft_attempts"] = durable_progress[
-                    "refinement_dft_attempts"
-                ]
+                record.evidence.update(
+                    {
+                        "accounted_active_learning_dft_calculations": max(
+                            previous_al_dft, current_al_dft
+                        ),
+                        "accounted_active_learning_node_hours": max(
+                            previous_al_node_hours, current_al_node_hours
+                        ),
+                        "accounted_active_learning_iterations": max(
+                            previous_al_iterations, current_al_iterations
+                        ),
+                        "accounted_refinement_dft_attempts": (
+                            previous_refinement_dft + current_refinement_dft
+                        ),
+                        "accounted_refinement_stage_attempts": (current_refinement_dft_total),
+                        "accounted_refinement_stage_node_hours": (
+                            current_refinement_node_hours_total
+                        ),
+                        "accounted_total_dft_calculations": record.n_dft_calculations,
+                        "accounted_total_node_hours": record.node_hours,
+                    }
+                )
                 record.evidence["candidate_counts"] = record.candidate_counts
                 record.evidence["outcome_class"] = record.outcome_class
                 record.evidence["relaxation_failures"] = list(exploration.failures)
@@ -493,11 +656,34 @@ def run_campaign(
                 reference_payload = record.evidence.get("dft_refinement", {}).get(
                     "reference_energy_set"
                 )
+                previous_references = campaign.reference_energies
+                incoming_references = None
                 if reference_payload is not None:
-                    campaign.reference_energies = ReferenceEnergySet.model_validate(
-                        reference_payload
+                    incoming_references = ReferenceEnergySet.model_validate(reference_payload)
+                    campaign.reference_energies = _merge_reference_energy_sets(
+                        previous_references,
+                        incoming_references,
                     )
                 if exploration.stability is not None:
+                    report = exploration.stability
+                    references = campaign.reference_energies
+                    if (
+                        references is not None
+                        and report.ranking_mode.value == "convex_hull_ranking"
+                        and report.reference_set_id == references.identifier
+                    ):
+                        if (
+                            previous_references is not None
+                            and incoming_references is not None
+                            and report.formula in previous_references.competing_phases
+                            and report.formula not in incoming_references.competing_phases
+                        ):
+                            references.competing_phases.pop(report.formula, None)
+                        campaign.stability_reports[report.formula] = report
+                        recalibrate_hull_reports(
+                            campaign.stability_reports.values(),
+                            references,
+                        )
                     campaign.record_stability(exploration.stability)
                 candidate = campaign.formulas[formula]
                 disagreement_count = len(candidate.model_disagreements)
@@ -531,6 +717,15 @@ def run_campaign(
                 previous_al_node_hours = float(
                     record.evidence.get("accounted_active_learning_node_hours", 0.0)
                 )
+                previous_al_iterations = int(
+                    record.evidence.get("accounted_active_learning_iterations", 0)
+                )
+                previous_refinement_stage_dft = int(
+                    record.evidence.get("accounted_refinement_stage_attempts", 0)
+                )
+                previous_refinement_stage_node_hours = float(
+                    record.evidence.get("accounted_refinement_stage_node_hours", 0.0)
+                )
                 additional_al_dft = max(
                     0,
                     partial["active_learning_dft_calculations"] - previous_al_dft,
@@ -539,8 +734,16 @@ def run_campaign(
                     0.0,
                     partial["active_learning_node_hours"] - previous_al_node_hours,
                 )
-                record.n_dft_calculations += additional_al_dft + partial["refinement_dft_attempts"]
-                record.node_hours += additional_al_node_hours + partial["refinement_node_hours"]
+                additional_refinement_dft = max(
+                    0,
+                    partial["refinement_dft_attempts"] - previous_refinement_stage_dft,
+                )
+                additional_refinement_node_hours = max(
+                    0.0,
+                    partial["refinement_node_hours"] - previous_refinement_stage_node_hours,
+                )
+                record.n_dft_calculations += additional_al_dft + additional_refinement_dft
+                record.node_hours += additional_al_node_hours + additional_refinement_node_hours
                 record.n_active_learning_iterations = max(
                     record.n_active_learning_iterations,
                     len(partial["iteration_states"]),
@@ -555,10 +758,18 @@ def run_campaign(
                         "accounted_active_learning_node_hours": partial[
                             "active_learning_node_hours"
                         ],
+                        "accounted_active_learning_iterations": max(
+                            previous_al_iterations,
+                            len(partial["iteration_states"]),
+                        ),
                         "accounted_refinement_dft_attempts": (
                             int(record.evidence.get("accounted_refinement_dft_attempts", 0))
-                            + partial["refinement_dft_attempts"]
+                            + additional_refinement_dft
                         ),
+                        "accounted_refinement_stage_attempts": partial["refinement_dft_attempts"],
+                        "accounted_refinement_stage_node_hours": partial["refinement_node_hours"],
+                        "accounted_total_dft_calculations": record.n_dft_calculations,
+                        "accounted_total_node_hours": record.node_hours,
                         "partial_progress": partial,
                     }
                 )

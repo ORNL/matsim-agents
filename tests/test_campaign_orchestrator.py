@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+from ase import Atoms
+from ase.io import write
+
 from matsim_agents.campaign.acquisition import (
     CampaignAcquisitionPolicy,
     FormulaAcquisitionMetrics,
@@ -17,9 +21,15 @@ from matsim_agents.campaign.orchestrator import (
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
-from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
+from matsim_agents.discovery.stability import (
+    RankingMode,
+    ReferenceEnergySet,
+    ReferencePhaseEntry,
+    score_stability,
+)
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.contracts import ComputeBudget, WorkflowStatus
+from matsim_agents.orchestration.state import RelaxationResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
@@ -505,6 +515,144 @@ def test_failed_formula_recovers_durable_resource_and_stage_evidence(tmp_path):
     assert record.evidence["iteration_states"] == [iteration_state]
     assert "DFT refinement failed" in record.failure_reason
     assert result.campaign.budget.max_dft_calculations == 3
+
+
+def test_retry_does_not_double_count_recovered_usage(tmp_path):
+    campaign = _campaign()
+    campaign.budget.max_dft_calculations = 5
+    campaign.formulas["NbO"].active = False
+    campaign.formulas["Nb2O3"].active = False
+    calls = 0
+
+    def runner(formula: str, output_dir: str, dft_allowance: int) -> PhaseExplorationWorkflowResult:
+        nonlocal calls
+        calls += 1
+        formula_dir = Path(output_dir)
+        al_root = formula_dir / "active_learning"
+        iteration_dir = al_root / "iteration_0000"
+        iteration_dir.mkdir(parents=True, exist_ok=True)
+        iteration_state = {
+            "iteration": 0,
+            "status": "failed" if calls == 1 else "complete",
+            "n_dft_converged": 2,
+            "n_dft_failed": 0,
+            "timings_sec": {"total": 1800.0},
+        }
+        (iteration_dir / "state.json").write_text(json.dumps(iteration_state))
+        (formula_dir / "campaign_stages.json").write_text(
+            json.dumps(
+                {
+                    "formula": formula,
+                    "stages": [
+                        {
+                            "name": "active_learning_labels_and_training",
+                            "status": "completed" if calls > 1 else "failed",
+                            "n_dft_calculations": 2,
+                            "n_active_learning_iterations": 1,
+                            "node_hours": 0.5,
+                        },
+                        {
+                            "name": "independent_dft_ranking",
+                            "status": "skipped",
+                            "dft_attempts": 0,
+                            "dft_node_hours": 0.0,
+                        },
+                    ],
+                }
+            )
+        )
+        if calls == 1:
+            raise RuntimeError("interrupted after DFT labels")
+        result = _result(formula, output_dir)
+        result.active_learning_result = {
+            "n_dft_calculations": 2,
+            "n_active_learning_iterations": 1,
+            "node_hours": 0.5,
+            "iteration_states": [iteration_state],
+        }
+        return result
+
+    first = run_campaign(
+        campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(continue_on_failure=True),
+        resume=False,
+    )
+    assert first.campaign.formula_runs["NbO2"].n_dft_calculations == 2
+
+    second = run_campaign(
+        first.campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(retry_failed=True, max_iterations=1),
+        resume=False,
+    )
+    record = second.campaign.formula_runs["NbO2"]
+    assert calls == 2
+    assert record.status == WorkflowStatus.COMPLETE
+    assert record.n_dft_calculations == 2
+    assert record.n_active_learning_iterations == 1
+    assert record.node_hours == pytest.approx(0.5)
+
+
+def test_sequential_formula_refinements_preserve_campaign_hull_vertices(tmp_path):
+    pytest.importorskip("pymatgen")
+    campaign = _campaign()
+    campaign.formulas["NbO2"].llm_contributors = []
+    campaign.formulas["Nb2O3"].active = False
+    references = ReferenceEnergySet(
+        identifier="nb-o-shared-dft",
+        method_signature="qe-pbe-test",
+        backend="qe",
+        elemental_energies_eV_per_atom={"Nb": -10.0, "O": -5.0},
+    )
+    phase_energies = {"NbO": -16.0, "NbO2": -20.3}
+
+    def runner(formula: str, output_dir: str) -> PhaseExplorationWorkflowResult:
+        structure_path = Path(output_dir) / f"{formula}.extxyz"
+        structure_path.parent.mkdir(parents=True, exist_ok=True)
+        symbols = {"NbO": ["Nb", "O"], "NbO2": ["Nb", "O", "O"]}[formula]
+        write(structure_path, Atoms(symbols, positions=[[i, 0, 0] for i in range(len(symbols))]))
+        relaxation = RelaxationResult(
+            structure_path=str(structure_path),
+            optimized_structure_path=str(structure_path),
+            trajectory_path="",
+            log_csv_path="",
+            final_energy_eV=phase_energies[formula],
+            final_max_force_eV_per_A=0.0,
+            num_steps=1,
+            converged=True,
+        )
+        report = score_stability(
+            formula,
+            [relaxation],
+            ranking_mode=RankingMode.CONVEX_HULL,
+            reference_energies=references,
+            method_signature=references.method_signature,
+        )
+        result = _result(formula, output_dir)
+        result.initial.relaxations = [relaxation]
+        result.initial.stability = report
+        result.active_learning_result["dft_refinement"] = {
+            "reference_energy_set": references.model_dump(mode="json")
+        }
+        return result
+
+    result = run_campaign(
+        campaign,
+        output_dir=tmp_path,
+        formula_runner=runner,
+        policy=CampaignRunPolicy(formulas_per_iteration=2, max_iterations=1),
+        resume=False,
+    )
+
+    assert result.formulas_completed == ["NbO", "NbO2"]
+    assert result.campaign.reference_energies is not None
+    assert result.campaign.reference_energies.competing_phases["NbO"] == pytest.approx(-0.5)
+    assert "NbO2" not in result.campaign.reference_energies.competing_phases
+    nb_o2_report = result.campaign.stability_reports["NbO2"]
+    assert nb_o2_report.ground_state.energy_above_hull_eV_per_atom == pytest.approx(0.7 / 3.0)
 
 
 def test_pure_acquisition_mode_records_forced_branch():
