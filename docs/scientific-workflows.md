@@ -172,18 +172,21 @@ a new independent final-ranking check.
 
 ## Phase exploration
 
-`PhaseExplorationPolicy` controls four independent behaviors:
+`PhaseExplorationPolicy` controls relaxation, label collection, training,
+promotion, and post-promotion reevaluation:
 
 ```yaml
 relax_structures: true
 active_learning: false
 retrain_mlip: false
+promote_model: false
 reevaluate_after_retraining: false
 ranking_mode: relative_phase_ranking
 ```
 
-Retraining requires active learning. Re-evaluation requires both retraining and
-successful model promotion. Compute budgets may cap candidates, MLIP
+Retraining requires active learning. Re-evaluation requires `promote_model: true`
+(which requires retraining) at configuration time, and successful model promotion
+at runtime. Compute budgets may cap candidates, MLIP
 relaxations, DFT calculations, AL iterations, and node-hours.
 
 `relative_phase_ranking` compares converged candidates within one exploration.

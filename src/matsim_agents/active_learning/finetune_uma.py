@@ -18,9 +18,9 @@ small AL datasets).
 
 Concretely:
 
-* ``pu = load_predict_unit(ckpt, device, inference_settings="default")`` -- the
-  ``"default"`` settings avoid ``torch.compile`` so the autograd graph is clean
-  for the double-backprop the conservative head needs.
+* ``pu = load_predict_unit(ckpt, device=device, inference_settings="traineval")``
+  -- the ``"traineval"`` profile keeps MOLE unmerged and avoids ``torch.compile``,
+  preserving the autograd graph for the double-backprop the conservative head needs.
 * ``model = pu.model.module`` is the trainable ``HydraModel``.
 * ``model.train()`` is *required* so the force head sets ``create_graph=True``;
   otherwise the energy graph is freed by the internal force autograd and the

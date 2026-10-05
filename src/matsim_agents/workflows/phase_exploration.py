@@ -33,6 +33,8 @@ class PhaseExplorationPolicy(BaseModel):
             raise ValueError("promote_model requires retrain_mlip")
         if self.reevaluate_after_retraining and not self.retrain_mlip:
             raise ValueError("reevaluate_after_retraining requires retrain_mlip")
+        if self.reevaluate_after_retraining and not self.promote_model:
+            raise ValueError("reevaluate_after_retraining requires promote_model")
         return self
 
 

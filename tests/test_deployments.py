@@ -188,3 +188,8 @@ def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> Non
     assert "--promotion-max-energy-mae" in job
     assert "--promotion-max-force-mae" in job
     assert 'parser.error("--promote-model requires --promotion-validation-set")' in executor
+    phase_policy = executor.split("phase_policy = PhaseExplorationPolicy(", 1)[1].split(
+        "formula_runner =", 1
+    )[0]
+    assert "promote_model=args.promote_model" in phase_policy
+    assert "promotion_approved=args.approve_model_promotion" in phase_policy

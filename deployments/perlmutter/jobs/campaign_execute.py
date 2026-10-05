@@ -175,9 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.promote_model and args.promotion_validation_set is None:
         parser.error("--promote-model requires --promotion-validation-set")
     if args.promotion_validation_set is not None and not args.promotion_validation_set.is_file():
-        parser.error(
-            f"promotion validation set does not exist: {args.promotion_validation_set}"
-        )
+        parser.error(f"promotion validation set does not exist: {args.promotion_validation_set}")
     if (
         args.promotion_validation_reference_set is not None
         and not args.promotion_validation_reference_set.is_file()
@@ -294,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
     phase_policy = PhaseExplorationPolicy(
         active_learning=args.execution_mode == "dft",
         retrain_mlip=args.retrain,
+        promote_model=args.promote_model,
         reevaluate_after_retraining=args.promote_model,
         approvals=ApprovalPolicy(
             before_dft=args.execution_mode == "dft",
@@ -302,6 +301,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
         dft_approved=args.approve_dft,
         retraining_approved=args.approve_retraining,
+        promotion_approved=args.approve_model_promotion,
         budget=campaign.budget,
     )
     formula_runner = make_formula_runner(

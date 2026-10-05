@@ -63,6 +63,22 @@ def test_phase_model_promotion_requires_retraining():
         PhaseExplorationPolicy(promote_model=True)
 
 
+def test_phase_reevaluation_requires_requested_promotion():
+    with pytest.raises(ValueError, match="reevaluate_after_retraining requires promote_model"):
+        PhaseExplorationPolicy(
+            active_learning=True,
+            retrain_mlip=True,
+            reevaluate_after_retraining=True,
+        )
+    policy = PhaseExplorationPolicy(
+        active_learning=True,
+        retrain_mlip=True,
+        promote_model=True,
+        reevaluate_after_retraining=True,
+    )
+    assert policy.reevaluate_after_retraining
+
+
 def test_phase_active_learning_requires_dft_approval(tmp_path):
     policy = PhaseExplorationPolicy(active_learning=True)
     with pytest.raises(PermissionError, match="DFT approval"):

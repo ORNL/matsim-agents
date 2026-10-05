@@ -1449,6 +1449,8 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path, monkeypatc
                 active_learning=True,
                 retrain_mlip=True,
                 reevaluate_after_retraining=True,
+                promote_model=True,
+                promotion_approved=True,
                 dft_approved=True,
                 retraining_approved=True,
             ),
