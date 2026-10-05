@@ -338,8 +338,10 @@ Energy evaluation and fine-tune/evaluation require
 elemental references or model energy predictions. Campaign promotion uses
 `--promotion-validation-reference-set` / `trainer.validation_reference_set`
 for this JSON manifest, not for training-partition offset fitting. Perlmutter
-retraining submissions that request model promotion require
-`MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET` before submission.
+retraining submissions that request model promotion or enable
+`trainer.compare_after_training` in the selected AL config require
+`MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET` before submission. The
+all-model launcher checks this before starting model servers.
 Fine-tune/evaluation launchers require `ELEMENTAL_REFERENCE_MANIFEST`, or an
 existing `elemental_references.json` in each dataset's case directory.
 Promotion energy thresholds now apply to
@@ -348,6 +350,10 @@ The deprecated `energy_*_per_atom_shifted` output fields alias formation-energy
 errors and no longer represent a fitted shift. Reassess historical thresholds
 under this new convention. Force comparisons and within-method polymorph/hull
 ranking are unchanged; final DFT ranking results still never enter training.
+
+Nb-Ta-O reference preparation merges curated phases before unary structure
+deduplication, retaining curated entries ahead of equivalent bootstrap,
+AFLOW, or pyXtal candidates so duplicate unary phases are not relaxed twice.
 
 Campaigns use this comparison for held-out incumbent/candidate evaluation and
 promotion only. Active-learning acquisition, force metrics, same-composition

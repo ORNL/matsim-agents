@@ -68,11 +68,29 @@ if [[ "$CAMPAIGN_MODE" == "uma-only" ]]; then
 fi
 
 REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
-if [[ "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" && "${MATSIM_CAMPAIGN_PROMOTE_MODEL:-0}" == "1" ]]; then
-  [[ -f "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" ]] || {
-    echo "ERROR: retraining energy comparison requires MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET (DFT-labelled elemental JSON manifest)" >&2
-    exit 2
-  }
+PYTHON="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}/bin/python3"
+AL_CONFIG="${MATSIM_CAMPAIGN_AL_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-qe.yaml}"
+if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; then
+  "$PYTHON" - "$AL_CONFIG" "${MATSIM_CAMPAIGN_PROMOTE_MODEL:-0}" \
+    "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+config = yaml.safe_load(Path(sys.argv[1]).read_text())
+compares_energy = sys.argv[2] == "1" or config.get("trainer", {}).get(
+    "compare_after_training", False
+)
+if compares_energy and not Path(sys.argv[3]).is_file():
+    print(
+        "ERROR: retraining energy comparison requires "
+        "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET "
+        "(DFT-labelled elemental JSON manifest)",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+PY
 fi
 export PYTHONPATH="${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
 PROJ="$(dirname "$REPO")"
@@ -83,8 +101,6 @@ configure_campaign_run_name "$REPO" "$CAMPAIGN_MODE" "${MATSIM_CAMPAIGN_REFERENC
 CAMPAIGN_RUN_TAG="$MATSIM_CAMPAIGN_RUN_TAG"
 RUN_NAME="${CAMPAIGN_RUN_TAG}--j${SLURM_JOB_ID}"
 OUTPUT="${RUNS_ROOT:-$PROJ/runs}/portability/${RUN_NAME}"
-PYTHON="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}/bin/python3"
-AL_CONFIG="${MATSIM_CAMPAIGN_AL_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-qe.yaml}"
 MACE_MPA_CONFIG="${MATSIM_CAMPAIGN_MACE_MPA_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-mace-mpa-qe.yaml}"
 MACE_OMAT_CONFIG="${MATSIM_CAMPAIGN_MACE_OMAT_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-mace-omat-qe.yaml}"
 MACE_MATPES_CONFIG="${MATSIM_CAMPAIGN_MACE_MATPES_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-mace-matpes-qe.yaml}"

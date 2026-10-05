@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,62 @@ from matsim_agents.active_learning.vasp_io import resolve_potcar_paths
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize(
+    ("retrain", "promote", "compare", "reference_exists", "blocked"),
+    [
+        ("1", "0", True, False, True),
+        ("1", "1", False, False, True),
+        ("1", "0", True, True, False),
+        ("1", "0", False, False, False),
+        ("0", "0", True, False, False),
+    ],
+)
+def test_campaign_reference_preflight_precedes_launch(
+    tmp_path, retrain, promote, compare, reference_exists, blocked
+):
+    repo = tmp_path / "repo"
+    setup = repo / "deployments/perlmutter/setup"
+    setup.mkdir(parents=True)
+    marker = tmp_path / "preflight-passed"
+    (setup / "campaign-naming.sh").write_text('printf passed > "$TEST_PREFLIGHT_MARKER"\nexit 37\n')
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin/python3").symlink_to(sys.executable)
+    config = tmp_path / "al.yaml"
+    config.write_text(f"trainer:\n  compare_after_training: {str(compare).lower()}\n")
+    reference = tmp_path / "elemental.json"
+    if reference_exists:
+        reference.write_text("{}")
+    env = {
+        **os.environ,
+        "PROJECT_ROOT": str(repo),
+        "MATSIM_PERLMUTTER_VENV": str(venv),
+        "MATSIM_CAMPAIGN_MODE": "dft",
+        "MATSIM_CAMPAIGN_RETRAIN": retrain,
+        "MATSIM_CAMPAIGN_PROMOTE_MODEL": promote,
+        "MATSIM_CAMPAIGN_AL_CONFIG": str(config),
+        "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET": str(reference),
+        "TEST_PREFLIGHT_MARKER": str(marker),
+    }
+    result = subprocess.run(
+        [
+            "bash",
+            str(
+                ROOT
+                / "deployments/perlmutter/jobs"
+                / "job-campaign-formula-discovery-all-models-perlmutter.sh"
+            ),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == (2 if blocked else 37), result.stderr
+    assert marker.exists() is not blocked
+    if blocked:
+        assert "retraining energy comparison requires" in result.stderr
 
 
 @pytest.mark.parametrize("layout", ["nested", "symbol", "prefixed", "mixed", "missing"])

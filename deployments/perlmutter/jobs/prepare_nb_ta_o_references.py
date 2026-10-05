@@ -177,8 +177,6 @@ def main() -> int:
                     },
                 }
 
-    phases, duplicate_unary_phases = _deduplicate_unary_phases(phases)
-
     prototype_root = args.output_dir / "competing_phases"
     missing_formulas: list[str] = []
     for formula in args.competing_formulas:
@@ -218,7 +216,9 @@ def main() -> int:
             }
 
     if args.curated_manifest is not None:
-        phases.update(_curated_phases(args.curated_manifest.resolve()))
+        curated = _curated_phases(args.curated_manifest.resolve())
+        phases = {**curated, **{key: spec for key, spec in phases.items() if key not in curated}}
+    phases, duplicate_unary_phases = _deduplicate_unary_phases(phases)
 
     manifest = {
         "schema_version": 2,

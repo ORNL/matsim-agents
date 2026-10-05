@@ -175,6 +175,71 @@ def test_reference_preparation_deduplicates_unary_polymorphs(tmp_path: Path) -> 
     assert duplicates == ["Nb-bcc-copy"]
 
 
+def test_reference_preparation_merges_curated_before_generated_unary_dedup(tmp_path, monkeypatch):
+    import json
+    import sys
+    from types import SimpleNamespace
+
+    root = Path(__file__).resolve().parents[1]
+    script = root / "deployments/perlmutter/jobs/prepare_nb_ta_o_references.py"
+    spec = importlib.util.spec_from_file_location("prepare_curated_references", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    curated_structure = tmp_path / "curated-nb.extxyz"
+    write(curated_structure, bulk("Nb", "bcc", a=3.3))
+    curated_manifest = tmp_path / "curated.json"
+    curated_manifest.write_text(
+        json.dumps(
+            {
+                "phases": {
+                    "curated-Nb": {
+                        "formula": "Nb",
+                        "path": curated_structure.name,
+                        "settings": {"custom": "retained"},
+                    }
+                }
+            }
+        )
+    )
+    monkeypatch.setattr(
+        module,
+        "generate_seeds",
+        lambda composition, *_args, **_kwargs: (
+            [
+                SimpleNamespace(
+                    source="prototype",
+                    structure_path=str(curated_structure),
+                    candidate_id="copy",
+                    prototype_id="bcc",
+                    space_group=229,
+                    random_seed=None,
+                )
+            ]
+            if composition.formula == "Nb"
+            else []
+        ),
+    )
+    output = tmp_path / "output"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(script),
+            "--output-dir",
+            str(output),
+            "--competing-formulas",
+            "--expand-unary-polymorphs",
+            "--curated-manifest",
+            str(curated_manifest),
+        ],
+    )
+    assert module.main() == 0
+    result = json.loads((output / "reference_structures.json").read_text())
+    assert list(result["phases"])[0] == "curated-Nb"
+    assert result["phases"]["curated-Nb"]["settings"] == {"custom": "retained"}
+    assert set(result["generation"]["duplicate_unary_phases_removed"]) == {"Nb", "Nb-aflow-0000"}
+
+
 def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> None:
     root = Path(__file__).resolve().parents[1]
     job = (
