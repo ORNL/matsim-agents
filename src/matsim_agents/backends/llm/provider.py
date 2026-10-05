@@ -167,13 +167,15 @@ def get_chat_model(
         # which talks directly to the openai package — no langchain_openai required.
         url = base_url or os.environ.get("MATSIM_VLLM_BASE_URL", "http://localhost:8000/v1")
         key = api_key or os.environ.get("MATSIM_VLLM_API_KEY", "EMPTY")
-        max_tokens = kwargs.pop(
-            "max_completion_tokens",
-            int(os.environ.get("MATSIM_VLLM_MAX_TOKENS", 4096)),
+        max_tokens = (
+            kwargs.pop("max_completion_tokens")
+            if "max_completion_tokens" in kwargs
+            else int(os.environ.get("MATSIM_VLLM_MAX_TOKENS", 4096))
         )
-        request_timeout = kwargs.pop(
-            "request_timeout",
-            float(os.environ.get("MATSIM_VLLM_TIMEOUT_SECONDS", 3600)),
+        request_timeout = (
+            kwargs.pop("request_timeout")
+            if "request_timeout" in kwargs
+            else float(os.environ.get("MATSIM_VLLM_TIMEOUT_SECONDS", 3600))
         )
         return ChatVLLM(
             model=model,

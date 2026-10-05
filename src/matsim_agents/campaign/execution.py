@@ -800,6 +800,60 @@ def _converged_dft_relaxation(
     )
 
 
+def _rebase_compound_references(
+    references: ReferenceEnergySet, element: str, new_energy: float
+) -> None:
+    """Keep persisted compound energies consistent when a unary endpoint changes."""
+    old_energy = references.elemental_energies_eV_per_atom.get(element)
+
+    def rebased(
+        formula: str, formation_energy: float, raw_energy: float | None, correction: float = 0.0
+    ) -> float:
+        composition = parse_composition(formula)
+        if composition is None:
+            raise ValueError(f"Could not parse persisted reference formula {formula!r}")
+        if element not in composition.elements:
+            return formation_energy
+        if raw_energy is not None:
+            baseline = (
+                sum(
+                    amount
+                    * (
+                        new_energy
+                        if symbol == element
+                        else references.elemental_energies_eV_per_atom[symbol]
+                    )
+                    for symbol, amount in composition.elements.items()
+                )
+                / composition.total_atoms
+            )
+            return raw_energy - baseline + correction
+        if old_energy is None:
+            raise ValueError(
+                f"cannot rebase persisted reference {formula!r} without its old elemental baseline"
+            )
+        # Legacy records have only formation energies; this is the exact baseline change.
+        fraction = composition.elements[element] / composition.total_atoms
+        return formation_energy + fraction * (old_energy - new_energy)
+
+    phase_updates = [
+        rebased(
+            entry.formula,
+            entry.formation_energy_eV_per_atom,
+            entry.energy_per_atom_eV,
+            entry.corrections.get("energy_correction_eV_per_atom", 0.0),
+        )
+        for entry in references.phase_entries
+    ]
+    legacy_updates = {
+        formula: rebased(formula, energy, None)
+        for formula, energy in references.competing_phases.items()
+    }
+    for entry, energy in zip(references.phase_entries, phase_updates, strict=True):
+        entry.formation_energy_eV_per_atom = energy
+    references.competing_phases = legacy_updates
+
+
 def _generate_reference_energies(
     al_cfg: ALConfig,
     refinement: CampaignDFTRefinementConfig,
@@ -926,11 +980,12 @@ def _generate_reference_energies(
                 provenance=spec.provenance,
                 corrections={"energy_correction_eV_per_atom": spec.energy_correction_eV_per_atom},
             )
-            references.elemental_reference_candidates.append(entry)
             current_energy = references.elemental_energies_eV_per_atom.get(element)
             if current_energy is None or corrected_energy < current_energy:
+                _rebase_compound_references(references, element, corrected_energy)
                 references.elemental_energies_eV_per_atom[element] = corrected_energy
                 references.elemental_entries[element] = entry
+            references.elemental_reference_candidates.append(entry)
             continue
         cell_amounts = cell_composition.get_el_amt_dict()
         missing = set(cell_amounts) - set(references.elemental_energies_eV_per_atom)

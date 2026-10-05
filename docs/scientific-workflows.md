@@ -360,6 +360,10 @@ observations. Compare each protocol separately rather than pooling effects
 across different candidate pools, budgets, models, or DFT methods.
 Treatment and control must be distinct arms, and paired metric values and
 their differences must be finite before statistical analysis.
+Paired sign-flip tests enumerate all assignments for up to 16 pairs. Larger
+comparisons sample assignments and report the finite-sample-corrected
+Monte Carlo p-value `(exceedances + 1) / (samples + 1)`, rather than a
+potentially zero raw exceedance fraction.
 
 ## Phase exploration
 

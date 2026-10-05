@@ -58,10 +58,11 @@ class TestGetChatModelInstantiation:
 
         assert result.max_completion_tokens == 4096
 
-    def test_vllm_explicit_completion_tokens_override_environment(self, monkeypatch):
+    @pytest.mark.parametrize("environment", ["4096", "invalid"])
+    def test_vllm_explicit_completion_tokens_override_environment(self, monkeypatch, environment):
         from matsim_agents.llm import get_chat_model
 
-        monkeypatch.setenv("MATSIM_VLLM_MAX_TOKENS", "4096")
+        monkeypatch.setenv("MATSIM_VLLM_MAX_TOKENS", environment)
         result = get_chat_model(
             provider="vllm",
             model="test-model",
@@ -78,10 +79,11 @@ class TestGetChatModelInstantiation:
 
         assert result.request_timeout == 7200
 
-    def test_vllm_explicit_timeout_overrides_environment(self, monkeypatch):
+    @pytest.mark.parametrize("environment", ["7200", "invalid"])
+    def test_vllm_explicit_timeout_overrides_environment(self, monkeypatch, environment):
         from matsim_agents.llm import get_chat_model
 
-        monkeypatch.setenv("MATSIM_VLLM_TIMEOUT_SECONDS", "7200")
+        monkeypatch.setenv("MATSIM_VLLM_TIMEOUT_SECONDS", environment)
         result = get_chat_model(
             provider="vllm",
             model="test-model",
@@ -89,6 +91,14 @@ class TestGetChatModelInstantiation:
         )
 
         assert result.request_timeout == 1800
+
+    @pytest.mark.parametrize("variable", ["MATSIM_VLLM_MAX_TOKENS", "MATSIM_VLLM_TIMEOUT_SECONDS"])
+    def test_invalid_vllm_environment_without_override_raises(self, monkeypatch, variable):
+        from matsim_agents.llm import get_chat_model
+
+        monkeypatch.setenv(variable, "invalid")
+        with pytest.raises(ValueError):
+            get_chat_model(provider="vllm", model="test-model")
 
     def test_vllm_passes_timeout_to_client(self):
         from matsim_agents.llm import ChatVLLM

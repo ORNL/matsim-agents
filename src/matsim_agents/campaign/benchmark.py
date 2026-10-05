@@ -217,10 +217,12 @@ def compare_paired_metric(
                 for signs in product((-1.0, 1.0), repeat=differences.size)
             ]
         )
+        p_value = float(np.mean(np.abs(null_means) >= abs(mean_difference)))
     else:
         signs = rng.choice((-1.0, 1.0), size=(bootstrap_samples, differences.size))
         null_means = np.mean(signs * differences, axis=1)
-    p_value = float(np.mean(np.abs(null_means) >= abs(mean_difference)))
+        exceedances = int(np.count_nonzero(np.abs(null_means) >= abs(mean_difference)))
+        p_value = (exceedances + 1) / (bootstrap_samples + 1)
     favorable_difference = mean_difference if metric.direction == "maximize" else -mean_difference
     threshold = metric.success_threshold or 0.0
     return PairedComparison(

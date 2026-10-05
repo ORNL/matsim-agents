@@ -53,6 +53,14 @@ after filename sanitization. The unary cache key includes the artifact schema
 version so campaign searches do not reuse caches created under the older,
 collision-prone naming convention.
 
+If a resumed DFT reference search finds a lower unary endpoint, persisted
+compound formation energies are rebased before the endpoint is replaced.
+Typed records are recomputed from their stored raw per-atom energies and
+retain their compound corrections. Legacy formation-only records receive the
+exact composition-weighted old-to-new baseline change; they require the old
+elemental baseline to be known. Previously completed compounds need not be
+rerun, and a subsequent resume does not apply the same change twice.
+
 ## Completeness and provisional hulls
 
 Every hull snapshot includes a reference-completeness report. A hull is marked `provisional: true` when it lacks:

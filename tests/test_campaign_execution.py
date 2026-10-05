@@ -42,7 +42,7 @@ from matsim_agents.campaign.unary_references import relax_unary_references, unar
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.formula import FormulaGenerationPolicy
 from matsim_agents.discovery.seeds import PhaseCandidate
-from matsim_agents.discovery.stability import ReferenceEnergySet
+from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.orchestration.state import RelaxationResult
@@ -1346,6 +1346,99 @@ def test_dft_reference_composition_checked_before_hull_admission(
         assert references.elemental_entries == {}
         assert references.elemental_reference_candidates == []
         assert references.phase_entries == []
+
+
+def test_resumed_lower_unary_endpoint_rebases_persisted_compounds(tmp_path):
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"))
+    references = ReferenceEnergySet(
+        identifier="test",
+        method_signature="qe-test",
+        backend="qe",
+        elemental_energies_eV_per_atom={"Nb": -10.0, "O": -4.0},
+        competing_phases={"NbO2": -1.0},
+        phase_entries=[
+            ReferencePhaseEntry(
+                phase_id="compound",
+                formula="Nb2O4",
+                formation_energy_eV_per_atom=-1.0,
+                energy_per_atom_eV=-8.0,
+                total_energy_eV=-48.0,
+                method_signature="qe-test",
+                backend="qe",
+                corrections={"energy_correction_eV_per_atom": 1.0},
+            ),
+            ReferencePhaseEntry(
+                phase_id="legacy-compound",
+                formula="NbO2",
+                formation_energy_eV_per_atom=-1.0,
+                method_signature="qe-test",
+                backend="qe",
+            ),
+        ],
+    )
+    unary_path = tmp_path / "Nb.extxyz"
+    write(unary_path, Atoms("Nb2"))
+    refinement = CampaignDFTRefinementConfig(
+        method_signature="qe-test",
+        reference_energies=references,
+        reference_phases=[
+            ReferenceStructureSpec(
+                phase_id="new-low-Nb",
+                formula="Nb",
+                structure_path=unary_path,
+                energy_correction_eV_per_atom=-1.0,
+            ),
+            ReferenceStructureSpec(
+                phase_id="compound",
+                formula="Nb2O4",
+                structure_path=tmp_path / "not-needed",
+            ),
+        ],
+    )
+    calls = []
+
+    def relax(cfg):
+        calls.append(cfg)
+        return ScientificRelaxationResult(
+            run_id="test",
+            run_directory=str(tmp_path),
+            mode=RelaxationMode.DFT,
+            status=WorkflowStatus.COMPLETE,
+            stages=[
+                RelaxationStageResult(
+                    stage="dft_relaxation",
+                    backend="qe",
+                    evidence_level=EvidenceLevel.CONVERGED_DFT,
+                    input_structure_path=str(unary_path),
+                    optimized_structure_path=str(unary_path),
+                    energy_eV=-24.0,
+                    max_force_eV_per_A=0.001,
+                    converged=True,
+                )
+            ],
+        )
+
+    result, calculations, _ = _generate_reference_energies(
+        ALConfig.from_yaml(config_path), refinement, tmp_path / "dft", relax
+    )
+    assert calculations == 1
+    assert result.elemental_energies_eV_per_atom["Nb"] == -13.0
+    assert all(
+        entry.formation_energy_eV_per_atom == pytest.approx(0.0) for entry in result.phase_entries
+    )
+    assert result.competing_phases["NbO2"] == pytest.approx(0.0)
+    assert result.phase_entries[0].total_energy_eV == -48.0
+    assert result.phase_entries[0].corrections == {"energy_correction_eV_per_atom": 1.0}
+    persisted = ReferenceEnergySet.model_validate_json(result.model_dump_json())
+    refinement.reference_energies = persisted
+    again, calculations, _ = _generate_reference_energies(
+        ALConfig.from_yaml(config_path), refinement, tmp_path / "again", relax
+    )
+    assert calculations == 0
+    assert len(calls) == 1
+    assert again.phase_entries == persisted.phase_entries
+    assert again.competing_phases == persisted.competing_phases
 
 
 def test_formula_execution_rejects_missing_pseudopotential_mapping(tmp_path):

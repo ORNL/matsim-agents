@@ -115,6 +115,32 @@ def test_paired_metric_differences_match_seed_and_protocol():
     assert comparison.mean_difference == pytest.approx(0.125)
     assert comparison.confidence_interval == pytest.approx((0.05, 0.2))
     assert comparison.favorable
+    assert comparison.two_sided_p_value == pytest.approx(0.5)
+
+
+def test_sampled_randomization_p_value_has_finite_sample_correction():
+    observations = [
+        BenchmarkObservation(
+            protocol_digest="test-protocol",
+            arm=arm,
+            random_seed=seed,
+            metrics={"score": value},
+            dft_calculations_attempted=1,
+            node_hours_consumed=1,
+            completed=True,
+        )
+        for seed in range(17)
+        for arm, value in ((BenchmarkArm.RANDOM, 0.0), (BenchmarkArm.ADAPTIVE, 1.0))
+    ]
+    result = compare_paired_metric(
+        observations,
+        treatment=BenchmarkArm.ADAPTIVE,
+        control=BenchmarkArm.RANDOM,
+        metric=BenchmarkMetric(name="score", direction="maximize"),
+        bootstrap_samples=10,
+        random_seed=7,
+    )
+    assert result.two_sided_p_value == pytest.approx(1 / 11)
 
 
 def test_paired_metric_differences_reject_duplicate_observation_cells():
