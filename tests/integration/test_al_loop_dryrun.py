@@ -367,12 +367,47 @@ def test_held_out_frames_are_excluded_from_later_training_iterations(
     assert states[1]["n_training_frames"] + states[1]["n_validation_frames"] == 3
 
 
+@pytest.mark.parametrize("defect", ["missing", "backend", "signature", "hash"])
+def test_promotion_preflights_validation_method_before_campaign_work(
+    tmp_path, monkeypatch, elemental_manifest, dataset_method_sidecar, defect
+):
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    validation_set = tmp_path / "held-out.extxyz"
+    validation_set.touch()
+    reference = _campaign_elemental_manifest(cfg, elemental_manifest)
+    cfg.trainer = TrainerConfig(
+        enabled=True,
+        promote_model=True,
+        promotion_approved=True,
+        train_script=cfg.trainer.train_script,
+        validation_set=validation_set,
+        validation_reference_set=reference,
+    )
+    if defect != "missing":
+        sidecar = dataset_method_sidecar(validation_set, reference)
+        metadata = json.loads(sidecar.read_text())
+        key = {"backend": "dft_backend", "signature": "method_signature", "hash": "sha256"}[defect]
+        metadata[key] = "incorrect"
+        sidecar.write_text(json.dumps(metadata))
+
+    def unexpected_md(*_args, **_kwargs):
+        pytest.fail("invalid validation provenance must fail before campaign work")
+
+    monkeypatch.setattr(loop_mod, "sample_md_candidates", unexpected_md)
+    with pytest.raises(ValueError, match="dataset sidecar|different DFT methods|hash"):
+        loop_mod.run_active_learning(cfg)
+    assert list(cfg.loop.out_dir.iterdir()) == []
+
+
 @pytest.mark.parametrize("approved", [True, False])
 def test_promotion_decision_controls_model_activation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     approved: bool,
     elemental_manifest,
+    dataset_method_sidecar,
 ) -> None:
     cfg = _make_cfg(tmp_path)
     validation_set = tmp_path / "held-out.extxyz"
@@ -385,6 +420,7 @@ def test_promotion_decision_controls_model_activation(
         validation_set=validation_set,
         validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
     )
+    dataset_method_sidecar(validation_set, cfg.trainer.validation_reference_set)
     incumbent = cfg.mlip.hydragnn.logdir
     cfg.mlip.hydragnn.checkpoint = "incumbent.pk"
     trained_model = tmp_path / "candidate-model"

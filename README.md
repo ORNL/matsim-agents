@@ -1230,7 +1230,9 @@ HydraGNN uses fused 16-head inference by default, which requires
 case-insensitive dataset name or its index, for example
 `--hydragnn-inference-head OMat24` or set `mlip.hydragnn.inference_head: OMat24` in an
 active-learning YAML. Pinned mode invokes only that decoder, does not require
-the branch MLP, and does not report branch-weight uncertainty.
+the branch MLP, and does not report branch-weight uncertainty. It preserves
+the loader's precision/autocast context, including `bf16`, during energy and
+force inference.
 
 | Index | Dataset | Index | Dataset |
 |---:|---|---:|---|
@@ -1444,6 +1446,10 @@ The caller must supply converged pure-element DFT calculations; these
 evaluators do not launch them. Campaign comparisons check coverage and the
 DFT method signature before candidate training. Separate DFT protocols require
 separate matching manifests, even when the comparison geometries are identical.
+File-based energy comparisons and promotion require a matching compound
+`*.extxyz.manifest.json` sidecar containing the data hash, DFT backend, and
+method signature; missing metadata is an error. Fine-tune/evaluation propagates
+verified method metadata into newly generated train/test split sidecars.
 See [the manifest schema and compatibility checks](docs/scientific-workflows.md#formation-energy-comparisons-and-campaign-promotion).
 
 Full walkthrough — including templated INCAR / `pw.in` files, in-allocation

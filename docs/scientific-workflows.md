@@ -308,11 +308,16 @@ with full coverage of the elements in the test. The manifest is not a request
 to launch DFT: the caller must supply those calculations and ensure method
 compatibility with the compound dataset. Use a separate manifest for each
 DFT protocol being compared. Baseline errors remain available as diagnostics.
-Where a compound dataset has a `*.extxyz.manifest.json` sidecar, evaluation
-checks its file hash, DFT backend, and method signature against the elemental
-manifest. A missing sidecar emits a warning; it does not certify DFT method
-compatibility. The caller remains responsible for the declared protocol and
-for convergence of the supplied DFT calculations.
+File-based energy evaluation, fine-tune/evaluation, and promotion require a
+`*.extxyz.manifest.json` compound-dataset sidecar. They check its `sha256`,
+`dft_backend`, and `method_signature` against the data and elemental manifest
+before inference. Missing or incompatible metadata is an error, not a warning.
+Campaign promotion checks supplied validation metadata before starting the
+loop. Fine-tune/evaluation writes matching sidecars for newly generated splits;
+eval-only reuse requires existing, hash-matching split sidecars. Legacy data
+must have its actual DFT protocol verified and recorded before comparison;
+do not infer compatibility from the elemental manifest alone. The caller
+remains responsible for convergence of the supplied DFT calculations.
 
 Energy evaluation and fine-tune/evaluation require
 `--elemental-reference-manifest`; force-only evaluation does not require

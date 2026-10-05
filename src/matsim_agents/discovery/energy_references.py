@@ -34,11 +34,14 @@ def validate_dataset_reference_method(
     *,
     reference_backend: str,
     reference_method_signature: str,
+    require_sidecar: bool = False,
 ) -> None:
-    """Check the recorded compound DFT protocol when a dataset sidecar exists."""
+    """Check the compound DFT protocol; strict evaluations require a sidecar."""
     path = Path(dataset_path)
     sidecar = path.with_suffix(path.suffix + ".manifest.json")
     if not sidecar.is_file():
+        if require_sidecar:
+            raise ValueError(f"DFT method compatibility requires a dataset sidecar: {sidecar}")
         log.warning(
             "No DFT method sidecar for %s; the caller must verify elemental/compound "
             "DFT method compatibility",

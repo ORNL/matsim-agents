@@ -206,6 +206,8 @@ def evaluate_frames(
     Energy comparisons require a DFT-labelled pure-element manifest. The model
     evaluates those fixed geometries first, then both methods subtract their
     own elemental baselines. No offsets are fitted to training or test data.
+    When ``test_set_label`` identifies a file, its method sidecar is required
+    for energy comparisons; in-memory callers must establish DFT compatibility.
     ``ref_frames`` is retained only to reject obsolete fitted-offset callers.
     """
     from matsim_agents.active_learning.calculator import make_mlip_calculator
@@ -218,7 +220,7 @@ def evaluate_frames(
     has_energy_labels = any(_reference_energy(frame) is not None for frame in frames)
     if has_energy_labels and elemental_reference_manifest is None:
         raise ValueError("energy evaluation requires a DFT-labelled elemental reference manifest")
-    if test_set_label and elemental_reference_manifest is not None:
+    if has_energy_labels and test_set_label and elemental_reference_manifest is not None:
         manifest, _, _ = load_elemental_reference_manifest(
             elemental_reference_manifest, required_elements=set()
         )
@@ -226,6 +228,7 @@ def evaluate_frames(
             test_set_label,
             reference_backend=manifest["backend"],
             reference_method_signature=manifest["method_signature"],
+            require_sidecar=True,
         )
     calc = make_mlip_calculator(mlip_cfg)
     references = (

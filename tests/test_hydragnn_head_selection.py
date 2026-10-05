@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from contextlib import nullcontext
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -75,11 +76,12 @@ def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
     logdir.mkdir()
     (logdir / "config.json").write_text("{}", encoding="utf-8")
     inference = ModuleType("inference_random_structures")
+    autocast_ctx = nullcontext()
     inference.load_config_and_model = lambda *args: (
         SimpleNamespace(num_branches=16),
         {"NeuralNetwork": {"Architecture": {"radius": 6.0, "max_neighbours": 24}}},
         "cuda",
-        None,
+        autocast_ctx,
         "float64",
     )
     monkeypatch.setitem(sys.modules, "inference_random_structures", inference)
@@ -97,6 +99,7 @@ def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
     assert result.head_index == 7
     assert captured["radius"] == 6.0
     assert captured["max_neighbours"] == 24
+    assert captured["autocast_ctx"] is autocast_ctx
 
 
 def test_selected_head_calculator_exposes_model_for_mc_dropout(monkeypatch):
@@ -110,6 +113,7 @@ def test_selected_head_calculator_exposes_model_for_mc_dropout(monkeypatch):
 
     result = calculator._build_selected_head_calculator(
         model,
+        autocast_ctx=nullcontext(),
         head_index=7,
         radius=6.0,
         max_neighbours=24,
@@ -120,6 +124,65 @@ def test_selected_head_calculator_exposes_model_for_mc_dropout(monkeypatch):
     )
 
     assert result.model is model
+
+
+@pytest.mark.parametrize("precision", ["fp32", "fp64", "bf16"])
+def test_selected_head_calculator_preserves_precision_context(monkeypatch, precision):
+    import torch
+    from ase import Atoms
+
+    import matsim_agents.active_learning.calculator as calculator
+    import matsim_agents.backends.mlip.relaxation as relaxation
+
+    dtype = torch.float64 if precision == "fp64" else torch.float32
+    autocast_ctx = (
+        torch.autocast("cpu", dtype=torch.bfloat16) if precision == "bf16" else nullcontext()
+    )
+    calls = []
+
+    class Graph(SimpleNamespace):
+        def to(self, _device):
+            return self
+
+    def graph(atoms, *_args):
+        return Graph(
+            pos=torch.tensor(atoms.positions, dtype=dtype),
+            cell=None,
+            x=torch.ones((len(atoms), 1), dtype=dtype),
+        )
+
+    def model(data):
+        assert torch.is_autocast_enabled("cpu") == (precision == "bf16")
+        assert data.dataset_name.item() == 7
+        output = data.pos @ torch.eye(3, dtype=dtype)
+        calls.append(output.dtype)
+        return [output.sum().reshape(1, 1)]
+
+    original_grad = torch.autograd.grad
+
+    def grad(*args, **kwargs):
+        assert torch.is_autocast_enabled("cpu") == (precision == "bf16")
+        return original_grad(*args, **kwargs)
+
+    monkeypatch.setattr(relaxation, "_atoms_to_graph", graph)
+    monkeypatch.setattr(torch.autograd, "grad", grad)
+    calc = calculator._build_selected_head_calculator(
+        model,
+        autocast_ctx=autocast_ctx,
+        head_index=7,
+        radius=6.0,
+        max_neighbours=24,
+        param_dtype=dtype,
+        device="cpu",
+        charge=0,
+        spin=0,
+    )
+    atoms = Atoms("H", positions=[[1, 2, 3]], calculator=calc)
+    for expected_energy in (6.0, 9.0):
+        assert atoms.get_potential_energy() == pytest.approx(expected_energy)
+        assert atoms.get_forces().tolist() == [[-1.0, -1.0, -1.0]]
+        atoms.translate([1, 1, 1])
+    assert calls == [torch.bfloat16 if precision == "bf16" else dtype] * 2
 
 
 def test_hydragnn_head_selector_is_exposed_by_public_commands():

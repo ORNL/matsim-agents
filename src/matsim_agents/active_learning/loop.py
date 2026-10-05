@@ -63,7 +63,10 @@ from matsim_agents.active_learning.trainer import (
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.active_learning.vasp_io import resolve_potcar_paths
 from matsim_agents.backends.dft.qe_relax import resolve_pseudopotentials
-from matsim_agents.discovery.energy_references import load_elemental_reference_manifest
+from matsim_agents.discovery.energy_references import (
+    load_elemental_reference_manifest,
+    validate_dataset_reference_method,
+)
 
 log = logging.getLogger(__name__)
 
@@ -253,9 +256,16 @@ def run_active_learning(cfg: ALConfig) -> None:
             raise ValueError(
                 "model comparison requires a DFT-labelled elemental reference manifest"
             )
-        load_elemental_reference_manifest(
+        reference_manifest, _, _ = load_elemental_reference_manifest(
             cfg.trainer.validation_reference_set, required_elements=set()
         )
+        if cfg.trainer.validation_set is not None:
+            validate_dataset_reference_method(
+                cfg.trainer.validation_set,
+                reference_backend=reference_manifest["backend"],
+                reference_method_signature=reference_manifest["method_signature"],
+                require_sidecar=True,
+            )
     root = Path(cfg.loop.out_dir)
     root.mkdir(parents=True, exist_ok=True)
 

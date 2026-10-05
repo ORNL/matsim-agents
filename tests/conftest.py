@@ -44,6 +44,26 @@ def elemental_manifest(tmp_path):
     return create
 
 
+@pytest.fixture
+def dataset_method_sidecar():
+    def create(dataset, reference_manifest):
+        from matsim_agents.active_learning.dataset_governance import (
+            DatasetValidationSummary,
+            write_dataset_manifest,
+        )
+
+        reference = json.loads(reference_manifest.read_text())
+        return write_dataset_manifest(
+            dataset,
+            dft_backend=reference["backend"],
+            method_signature=reference["method_signature"],
+            energy_reference=f"{reference['backend']}:native_total_energy",
+            validation=DatasetValidationSummary(),
+        )
+
+    return create
+
+
 # ── fake LLM helpers ──────────────────────────────────────────────────────────
 
 

@@ -113,6 +113,7 @@ def _build_single_head_calculator(
 def _build_selected_head_calculator(
     model,
     *,
+    autocast_ctx,
     head_index,
     radius,
     max_neighbours,
@@ -147,7 +148,7 @@ def _build_selected_head_calculator(
             data.x = data.x.to(param_dtype)
             data.dataset_name = torch.full((1, 1), head_index, dtype=torch.long, device=device)
             data.pos.requires_grad_(True)
-            with torch.enable_grad():
+            with torch.enable_grad(), autocast_ctx:
                 prediction = model(data)
                 if isinstance(prediction, (list, tuple)):
                     energy = prediction[0]
@@ -195,7 +196,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     if selected_head is not None:
         from inference_random_structures import load_config_and_model
 
-        model, config, device, _autocast_ctx, param_dtype = load_config_and_model(
+        model, config, device, autocast_ctx, param_dtype = load_config_and_model(
             str(logdir), cfg.checkpoint, cfg.precision
         )
         num_branches = int(getattr(model, "num_branches", 1))
@@ -207,6 +208,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         arch = config["NeuralNetwork"]["Architecture"]
         return _build_selected_head_calculator(
             model,
+            autocast_ctx=autocast_ctx,
             head_index=selected_head,
             radius=float(cfg.radius if cfg.radius is not None else arch.get("radius", 5.0)),
             max_neighbours=int(

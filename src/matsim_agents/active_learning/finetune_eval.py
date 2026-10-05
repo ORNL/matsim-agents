@@ -318,6 +318,7 @@ def run_campaign(
         dataset_path,
         reference_backend=manifest["backend"],
         reference_method_signature=manifest["method_signature"],
+        require_sidecar=True,
     )
 
     train_frames, test_frames = _split_dataset(frames, test_fraction, seed)
@@ -331,6 +332,26 @@ def run_campaign(
     else:
         ase_write(str(train_path), train_frames, format="extxyz")
         ase_write(str(test_path), test_frames, format="extxyz")
+        from matsim_agents.active_learning.dataset_governance import (
+            DatasetValidationSummary,
+            write_dataset_manifest,
+        )
+
+        for split_path, split_frames in ((train_path, train_frames), (test_path, test_frames)):
+            write_dataset_manifest(
+                split_path,
+                dft_backend=manifest["backend"],
+                method_signature=manifest["method_signature"],
+                energy_reference=f"{manifest['backend']}:native_total_energy",
+                validation=DatasetValidationSummary(accepted=len(split_frames)),
+            )
+    for split_path in (train_path, test_path):
+        validate_dataset_reference_method(
+            split_path,
+            reference_backend=manifest["backend"],
+            reference_method_signature=manifest["method_signature"],
+            require_sidecar=True,
+        )
     log.info(
         "%s campaign: %d train / %d test frames; N_al_iterations=%d",
         backend,

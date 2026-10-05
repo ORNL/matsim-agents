@@ -99,12 +99,14 @@ def test_formation_reference_normalizes_molecular_atom_count(elemental_manifest)
 
 
 def test_promotion_evaluates_each_models_elemental_baselines(
-    tmp_path, elemental_manifest, monkeypatch
+    tmp_path, elemental_manifest, dataset_method_sidecar, monkeypatch
 ):
     validation = tmp_path / "held-out.extxyz"
     frame = Atoms("NbO2", info={"energy": -23.0})
     frame.arrays["forces"] = np.zeros((3, 3))
     write(validation, frame)
+    reference_manifest = elemental_manifest({"Nb": -10.0, "O": -5.0})
+    dataset_method_sidecar(validation, reference_manifest)
     calculators = []
 
     def build(cfg):
@@ -119,7 +121,7 @@ def test_promotion_evaluates_each_models_elemental_baselines(
         mlip=MLIPConfig(backend="uma", uma=UMAConfig()),
         trainer=TrainerConfig(
             validation_set=validation,
-            validation_reference_set=elemental_manifest({"Nb": -10.0, "O": -5.0}),
+            validation_reference_set=reference_manifest,
         ),
         model_copy=lambda **_kwargs: SimpleNamespace(),
     )
@@ -188,6 +190,104 @@ def test_compound_sidecar_method_validation(tmp_path, defect):
             validate_dataset_reference_method(
                 dataset, reference_backend="qe", reference_method_signature="test-dft"
             )
+
+
+@pytest.mark.parametrize("entrypoint", ["evaluation", "promotion", "finetune"])
+@pytest.mark.parametrize("defect", ["missing", "backend", "signature", "hash"])
+def test_energy_comparison_rejects_unverified_method_before_inference(
+    tmp_path, elemental_manifest, dataset_method_sidecar, monkeypatch, entrypoint, defect
+):
+    from matsim_agents.active_learning import finetune_eval
+
+    dataset = tmp_path / "held-out.extxyz"
+    frames = [Atoms("NbO2", info={"energy": -23.0}) for _ in range(4)]
+    write(dataset, frames)
+    reference = elemental_manifest({"Nb": -10.0, "O": -5.0})
+    if defect != "missing":
+        sidecar = dataset_method_sidecar(dataset, reference)
+        metadata = json.loads(sidecar.read_text())
+        key = {"backend": "dft_backend", "signature": "method_signature", "hash": "sha256"}[defect]
+        metadata[key] = "incorrect"
+        sidecar.write_text(json.dumps(metadata))
+
+    def unexpected_model(_cfg):
+        pytest.fail("invalid DFT provenance must fail before model construction")
+
+    monkeypatch.setattr(
+        "matsim_agents.active_learning.calculator.make_mlip_calculator", unexpected_model
+    )
+    monkeypatch.setattr(finetune_eval, "_enforce_device_visibility", lambda _device: None)
+    mlip = MLIPConfig(backend="uma", uma=UMAConfig())
+    with pytest.raises(ValueError, match="dataset sidecar|different DFT methods|hash"):
+        if entrypoint == "evaluation":
+            evaluate_frames(
+                mlip, frames, test_set_label=str(dataset), elemental_reference_manifest=reference
+            )
+        elif entrypoint == "promotion":
+            cfg = SimpleNamespace(
+                mlip=mlip,
+                trainer=TrainerConfig(validation_set=dataset, validation_reference_set=reference),
+                model_copy=lambda **_kwargs: SimpleNamespace(),
+            )
+            evaluate_promotion_candidate(
+                cfg, "candidate", iteration=1, training_set=tmp_path / "training.extxyz"
+            )
+        else:
+            finetune_eval.run_campaign(
+                dataset,
+                tmp_path / "campaign",
+                backend="uma",
+                device="cpu",
+                elemental_reference_manifest=reference,
+            )
+
+
+@pytest.mark.parametrize("reuse_defect", [None, "missing", "hash"])
+def test_finetune_split_preserves_verified_method(
+    tmp_path, elemental_manifest, dataset_method_sidecar, monkeypatch, reuse_defect
+):
+    from matsim_agents.active_learning import finetune_eval
+
+    dataset = tmp_path / "dataset.extxyz"
+    write(dataset, [Atoms("NbO2", info={"energy": -23.0}) for _ in range(4)])
+    reference = elemental_manifest({"Nb": -10.0, "O": -5.0})
+    dataset_method_sidecar(dataset, reference)
+    output = tmp_path / "campaign"
+    monkeypatch.setattr(finetune_eval, "_enforce_device_visibility", lambda _device: None)
+
+    class StopBeforeTraining(Exception):
+        pass
+
+    def check_split(*_args, **_kwargs):
+        for path in (output / "split/train.extxyz", output / "split/test_set.extxyz"):
+            validate_dataset_reference_method(
+                path,
+                reference_backend="qe",
+                reference_method_signature="synthetic-dft",
+                require_sidecar=True,
+            )
+        raise StopBeforeTraining
+
+    monkeypatch.setattr(finetune_eval, "_run_eval", check_split)
+    kwargs = dict(
+        backend="uma",
+        device="cpu",
+        elemental_reference_manifest=reference,
+    )
+    with pytest.raises(StopBeforeTraining):
+        finetune_eval.run_campaign(dataset, output, **kwargs)
+    if reuse_defect is not None:
+        test_path = output / "split/test_set.extxyz"
+        if reuse_defect == "missing":
+            test_path.with_suffix(".extxyz.manifest.json").unlink()
+        else:
+            with test_path.open("a") as stream:
+                stream.write("\n")
+        with pytest.raises(ValueError, match="dataset sidecar|hash"):
+            finetune_eval.run_campaign(dataset, output, eval_only=True, **kwargs)
+    else:
+        with pytest.raises(StopBeforeTraining):
+            finetune_eval.run_campaign(dataset, output, eval_only=True, **kwargs)
 
 
 @pytest.mark.parametrize(
