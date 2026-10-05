@@ -202,6 +202,46 @@ DFT-refinement results remain separate. If those final results are later used
 for another training round, that must be a new dataset/model version and needs
 a new independent final-ranking check.
 
+### Campaign names and identifiers
+
+The Perlmutter seven-model launcher assigns several distinct names; the output
+directory name is not the campaign ID or the reference-set ID.
+
+| Name | How it is assigned | Bounded-run example |
+| --- | --- | --- |
+| Slurm job name | The launcher's `#SBATCH -J` default is `campaign-formula-e2e-all`; submission can override it with `--job-name`. The bounded submission script uses `nb-ta-o-combined-bounded`. | `nb-ta-o-combined-bounded` |
+| Campaign ID | For fresh discovery, the launcher passes `--campaign-id "nb-ta-o-e2e-all-${SLURM_JOB_ID}"` to the discovery driver. This ID is persisted in the campaign state. | `nb-ta-o-e2e-all-59359342` |
+| Output directory name | `${MATSIM_CAMPAIGN_RUN_TAG}-${SLURM_JOB_ID}`. The tag defaults to `campaign-formula-e2e-all`; the bounded submission script sets it to `nb-ta-o-combined-bounded`. | `nb-ta-o-combined-bounded-59359342` |
+| DFT reference-set ID | When creating a new reference-energy set, the campaign uses `campaign-<DFT-method-signature>`. The signature is supplied through `MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE`. | `campaign-qe-pbe-pslibrary-80-640-k4-o2-triplet-gamma-v1` |
+
+Slurm assigns `SLURM_JOB_ID` when the job is submitted. Outputs are placed under
+`${RUNS_ROOT}/portability/` when `RUNS_ROOT` is set; otherwise the root is
+`runs/` in the parent directory of the checkout. The saved state is
+`<output-directory>/campaign/campaign_state.json`. Slurm stdout and stderr use
+`<Slurm-job-name>-<SlurmJobID>.out` and `.err`, respectively, in the submission
+working directory.
+
+To choose a different output tag for a direct launcher submission, set
+`MATSIM_CAMPAIGN_RUN_TAG`; this does not change the campaign ID or Slurm job
+name. The bounded submission script explicitly sets its tag and job name.
+When `MATSIM_CAMPAIGN_STATE_SOURCE` is supplied, the launcher copies the existing
+state instead of running fresh discovery, preserving its campaign ID even
+though the new output directory has a new Slurm job ID.
+
+The bounded DFT signature spells out the intended setup: `qe` (Quantum
+ESPRESSO), `pbe` (functional), `pslibrary` (pseudopotential family), `80-640`
+(wavefunction/charge-density cutoffs in Ry), `k4` (4x4x4 solid-state mesh), and
+`o2-triplet-gamma` (the molecular oxygen reference), followed by the setup
+version `v1`. This is a manually assigned label, not an automatically generated
+settings digest. Keep it consistent with the actual configuration.
+
+The reference-set ID is also a label, not a content hash or an immutable
+snapshot ID: compatible competing phases may accumulate under the same ID.
+Existing reference sets retain their supplied identifiers. Hull snapshot
+versions distinguish the evolving hull states; method signatures, structure
+hashes, and provenance provide additional compatibility and audit evidence.
+See [Competing-phase reference hulls](./reference-hulls.md).
+
 ## Phase exploration
 
 `PhaseExplorationPolicy` controls relaxation, label collection, training,

@@ -37,6 +37,13 @@ Campaign reference manifests support multiple polymorphs of the same formula:
 
 Each phase is relaxed with the campaign DFT backend. Its registry entry records the phase ID, formula, structure path and hash, total and formation energies, backend, method signature, provenance, and corrections. Entries with incompatible method signatures or backends are rejected.
 
+New campaign-generated reference sets are named `campaign-<DFT-method-signature>`;
+existing sets retain their supplied identifiers. This reference-set ID is a
+label, not a content hash, and is distinct from the campaign ID and run directory
+name. Compatible phases can accumulate under the same reference-set ID. See
+[Campaign names and identifiers](./scientific-workflows.md#campaign-names-and-identifiers)
+for assignment rules, configuration controls, and a concrete Nb-Ta-O example.
+
 For an oxygen reference correction, set `energy_correction_eV_per_atom` on the O2 entry. The correction is applied per oxygen atom to the elemental chemical potential and retained in provenance.
 
 ## Completeness and provisional hulls
