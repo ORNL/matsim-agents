@@ -100,6 +100,49 @@ class TestGetChatModelInstantiation:
         with pytest.raises(ValueError):
             get_chat_model(provider="vllm", model="test-model")
 
+    @pytest.mark.parametrize("source", ["environment", "explicit", "direct"])
+    @pytest.mark.parametrize(
+        ("field", "variable", "value"),
+        [
+            ("max_completion_tokens", "MATSIM_VLLM_MAX_TOKENS", 0),
+            ("max_completion_tokens", "MATSIM_VLLM_MAX_TOKENS", -1),
+            ("max_completion_tokens", "MATSIM_VLLM_MAX_TOKENS", 1.5),
+            ("request_timeout", "MATSIM_VLLM_TIMEOUT_SECONDS", 0),
+            ("request_timeout", "MATSIM_VLLM_TIMEOUT_SECONDS", -1),
+            ("request_timeout", "MATSIM_VLLM_TIMEOUT_SECONDS", float("nan")),
+            ("request_timeout", "MATSIM_VLLM_TIMEOUT_SECONDS", float("inf")),
+        ],
+    )
+    def test_invalid_vllm_limits_fail_during_configuration(
+        self, monkeypatch, source, field, variable, value
+    ):
+        from matsim_agents.llm import ChatVLLM, get_chat_model
+
+        kwargs = {}
+        if source == "environment":
+            monkeypatch.setenv(variable, str(value))
+        else:
+            kwargs[field] = value
+        with pytest.raises(ValueError, match=field):
+            if source == "direct":
+                ChatVLLM(model="test-model", **kwargs)
+            else:
+                get_chat_model(provider="vllm", model="test-model", **kwargs)
+
+    @pytest.mark.parametrize("source", ["environment", "explicit"])
+    def test_vllm_positive_string_limits_parse_uniformly(self, monkeypatch, source):
+        from matsim_agents.llm import get_chat_model
+
+        kwargs = {}
+        if source == "environment":
+            monkeypatch.setenv("MATSIM_VLLM_MAX_TOKENS", "123")
+            monkeypatch.setenv("MATSIM_VLLM_TIMEOUT_SECONDS", "0.5")
+        else:
+            kwargs = {"max_completion_tokens": "123", "request_timeout": "0.5"}
+        model = get_chat_model(provider="vllm", model="test-model", **kwargs)
+        assert model.max_completion_tokens == 123
+        assert model.request_timeout == 0.5
+
     def test_vllm_passes_timeout_to_client(self):
         from matsim_agents.llm import ChatVLLM
 

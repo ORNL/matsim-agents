@@ -533,6 +533,89 @@ def test_hydragnn_candidate_override_discovers_checkpoint_in_new_logdir(tmp_path
     assert cfg.mlip.hydragnn.checkpoint is None
 
 
+@pytest.mark.parametrize("promote", [False, True])
+@pytest.mark.parametrize("resume_defect", [None, "missing", "hash", "signature"])
+def test_fraction_holdout_real_evaluation_and_resume(
+    tmp_path, monkeypatch, elemental_manifest, promote, resume_defect
+):
+    from ase.calculators.calculator import Calculator, all_changes
+
+    import matsim_agents.active_learning.calculator as calculator_mod
+    import matsim_agents.active_learning.loop as loop_mod
+    from matsim_agents.discovery.energy_references import validate_dataset_reference_method
+
+    class ConstantCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            self.results = {"energy": -float(len(atoms)), "forces": np.zeros((len(atoms), 3))}
+
+    cfg = _make_cfg(tmp_path)
+    cfg.acquisition.n_select = 3
+    reference_path = _campaign_elemental_manifest(cfg, elemental_manifest)
+    cfg.trainer = TrainerConfig(
+        enabled=True,
+        train_script=cfg.trainer.train_script,
+        validation_fraction=0.2,
+        compare_after_training=True,
+        promote_model=promote,
+        promotion_approved=promote,
+        validation_reference_set=reference_path,
+        promotion_min_evaluated_frames=1,
+        promotion_max_energy_mae_eV_per_atom=1.0,
+    )
+    trained_model = tmp_path / "candidate-model"
+    trained_model.mkdir()
+    _patch_runtime(loop_mod, monkeypatch, trained_model=trained_model)
+    monkeypatch.setattr(calculator_mod, "make_mlip_calculator", lambda _cfg: ConstantCalculator())
+    reference = json.loads(reference_path.read_text())
+    old_validation_id = None
+    for iteration in range(2):
+        if iteration:
+            cfg.loop.resume = True
+            cfg.loop.n_iterations = iteration + 1
+            monkeypatch.setattr(
+                loop_mod,
+                "sample_md_candidates",
+                lambda *_args, **_kwargs: [_make_candidate(i) for i in range(10, 13)],
+            )
+        loop_mod.run_active_learning(cfg)
+        state = json.loads((cfg.loop.out_dir / f"iteration_{iteration:04d}/state.json").read_text())
+        assert state["model_comparison"]["approved"]
+        assert state["model_promoted"] is promote
+        validation_path = cfg.loop.out_dir / "validation.extxyz"
+        validate_dataset_reference_method(
+            validation_path,
+            reference_backend=reference["backend"],
+            reference_method_signature=reference["method_signature"],
+            require_sidecar=True,
+        )
+        metadata = json.loads(validation_path.with_suffix(".extxyz.manifest.json").read_text())
+        assert metadata["parent_dataset_id"] == old_validation_id
+        if iteration == 1:
+            assert metadata["dataset_id"] != old_validation_id
+        old_validation_id = metadata["dataset_id"]
+        assert len(ase_read(validation_path, index=":")) == iteration + 1
+    if resume_defect is not None:
+        sidecar = validation_path.with_suffix(".extxyz.manifest.json")
+        if resume_defect == "missing":
+            sidecar.unlink()
+        else:
+            metadata = json.loads(sidecar.read_text())
+            key = "sha256" if resume_defect == "hash" else "method_signature"
+            metadata[key] = "incorrect"
+            sidecar.write_text(json.dumps(metadata))
+        original_data = validation_path.read_bytes()
+        cfg.loop.n_iterations = 3
+        with pytest.raises(ValueError, match="dataset sidecar|hash|different DFT methods"):
+            loop_mod.run_active_learning(cfg)
+        assert validation_path.read_bytes() == original_data
+        failed_state = json.loads((cfg.loop.out_dir / "iteration_0002/state.json").read_text())
+        assert failed_state["status"] == "failed"
+        assert failed_state["model_promoted"] is False
+
+
 def test_resume_retains_last_promoted_logdir_after_rejected_candidate(tmp_path: Path) -> None:
     import json
 

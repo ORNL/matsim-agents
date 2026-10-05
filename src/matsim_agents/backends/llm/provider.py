@@ -13,6 +13,8 @@ For vLLM, set the server URL via ``MATSIM_VLLM_BASE_URL`` (default
 ``http://localhost:8000/v1``), request timeout via
 ``MATSIM_VLLM_TIMEOUT_SECONDS`` (default ``3600``), and, if your server requires
 it, ``MATSIM_VLLM_API_KEY`` (default ``"EMPTY"``).
+``MATSIM_VLLM_MAX_TOKENS`` defaults to ``4096``. Token limits must be positive
+integers and timeouts finite positive seconds; explicit arguments take priority.
 
 For Ollama, set ``MATSIM_OLLAMA_BASE_URL`` to point at a non-default host
 (default ``http://localhost:11434``).
@@ -32,6 +34,7 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from pydantic import Field
 
 
 class ChatVLLM(BaseChatModel):
@@ -44,8 +47,8 @@ class ChatVLLM(BaseChatModel):
     base_url: str = "http://localhost:8000/v1"
     api_key: str = "EMPTY"
     temperature: float = 0.0
-    max_completion_tokens: int = 4096
-    request_timeout: float = 3600.0
+    max_completion_tokens: int = Field(default=4096, gt=0)
+    request_timeout: float = Field(default=3600.0, gt=0, allow_inf_nan=False)
 
     @property
     def _llm_type(self) -> str:
@@ -170,12 +173,12 @@ def get_chat_model(
         max_tokens = (
             kwargs.pop("max_completion_tokens")
             if "max_completion_tokens" in kwargs
-            else int(os.environ.get("MATSIM_VLLM_MAX_TOKENS", 4096))
+            else os.environ.get("MATSIM_VLLM_MAX_TOKENS", 4096)
         )
         request_timeout = (
             kwargs.pop("request_timeout")
             if "request_timeout" in kwargs
-            else float(os.environ.get("MATSIM_VLLM_TIMEOUT_SECONDS", 3600))
+            else os.environ.get("MATSIM_VLLM_TIMEOUT_SECONDS", 3600)
         )
         return ChatVLLM(
             model=model,

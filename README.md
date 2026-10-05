@@ -763,6 +763,8 @@ The exact environment-variable contract is:
 | `MATSIM_LLM_PROVIDER` | `ollama`, `vllm`, `openai`, `anthropic`, or `huggingface` | General library default: `ollama`. The portability `--live-llm` path defaults to `vllm` so it can address an HPC model server. |
 | `MATSIM_LLM_MODEL` | Provider-specific model identifier, Ollama tag, or local model path | Used by entry points that expose environment-selected models, including the live portability benchmark. If omitted there, the provider default below is used. |
 | `MATSIM_VLLM_BASE_URL` | Full OpenAI-compatible vLLM API root, normally `http[s]://host:port/v1` | vLLM only; defaults to `http://localhost:8000/v1`. Include `/v1`. |
+| `MATSIM_VLLM_MAX_TOKENS` | Positive integer completion-token limit | vLLM only; defaults to `4096`. |
+| `MATSIM_VLLM_TIMEOUT_SECONDS` | Finite positive request timeout in seconds | vLLM only; defaults to `3600`. |
 
 Provider model defaults implemented by `get_chat_model` are:
 
@@ -779,6 +781,9 @@ running server; it is not necessarily the filesystem directory from which the
 server loaded its weights. `MATSIM_VLLM_API_KEY` defaults to `EMPTY`, which is
 appropriate for an unsecured local server. Set it when the endpoint requires
 authentication. `MATSIM_VLLM_BASE_URL` is ignored by non-vLLM providers.
+Explicit `max_completion_tokens` and `request_timeout` arguments override their
+environment variables without parsing the overridden values. Both sources
+use the same configuration validation; invalid limits fail before any request.
 
 ### Multi-model scientific debate
 

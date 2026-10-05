@@ -314,6 +314,8 @@ File-based energy evaluation, fine-tune/evaluation, and promotion require a
 before inference. Missing or incompatible metadata is an error, not a warning.
 Campaign promotion checks supplied validation metadata before starting the
 loop. Fine-tune/evaluation writes matching sidecars for newly generated splits;
+fraction-based active learning also maintains separate training and held-out
+sidecars on each iteration, checking the held-out hash and method before append.
 eval-only reuse requires existing, hash-matching split sidecars. Legacy data
 must have its actual DFT protocol verified and recorded before comparison;
 do not infer compatibility from the elemental manifest alone. The caller

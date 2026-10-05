@@ -445,6 +445,20 @@ def run_active_learning(cfg: ALConfig) -> None:
                 ):
                     raise ValueError("cannot append labels with a different DFT method signature")
                 parent_dataset_id = previous_manifest.dataset_id
+            validation_parent_dataset_id = None
+            validation_manifest_path = validation_dataset_path.with_suffix(
+                validation_dataset_path.suffix + ".manifest.json"
+            )
+            if validation_dataset_path.exists():
+                validate_dataset_reference_method(
+                    validation_dataset_path,
+                    reference_backend=backend.name,
+                    reference_method_signature=_dft_method_signature(cfg, existing_elements),
+                    require_sidecar=True,
+                )
+                validation_parent_dataset_id = DatasetManifest.model_validate_json(
+                    validation_manifest_path.read_text(encoding="utf-8")
+                ).dataset_id
             expected_atomic_numbers = {
                 int(number)
                 for candidate in selected
@@ -474,13 +488,21 @@ def run_active_learning(cfg: ALConfig) -> None:
             if n_validation_appended:
                 state.validation_dataset_path = str(validation_dataset_path)
             if dataset_path.exists():
-                validation.accepted = len(training_frames)
                 write_dataset_manifest(
                     dataset_path,
                     dft_backend=backend.name,
                     energy_reference=f"{backend.name}:native_total_energy",
-                    validation=validation,
+                    validation=validation.model_copy(update={"accepted": len(training_frames)}),
                     parent_dataset_id=parent_dataset_id,
+                    method_signature=method_signature,
+                )
+            if validation_dataset_path.exists():
+                write_dataset_manifest(
+                    validation_dataset_path,
+                    dft_backend=backend.name,
+                    energy_reference=f"{backend.name}:native_total_energy",
+                    validation=validation.model_copy(update={"accepted": len(validation_frames)}),
+                    parent_dataset_id=validation_parent_dataset_id,
                     method_signature=method_signature,
                 )
             state.timings_sec["append_dataset"] = time.time() - t0
