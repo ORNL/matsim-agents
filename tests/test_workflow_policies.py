@@ -89,6 +89,40 @@ def test_active_learning_defaults_to_label_collection_without_retraining():
     assert trainer.promote_model is False
 
 
+def test_deferred_training_skips_reevaluation_without_claiming_promotion(
+    tmp_path, monkeypatch, caplog
+):
+    initial = CompositionExplorationResult(composition=parse_composition("Si"), phase_candidates=[])
+    calls = []
+    monkeypatch.setattr(
+        "matsim_agents.workflows.phase_exploration.explore_composition",
+        lambda *_args, **_kwargs: calls.append(True) or initial,
+    )
+    policy = PhaseExplorationPolicy(
+        active_learning=True,
+        retrain_mlip=True,
+        promote_model=True,
+        reevaluate_after_retraining=True,
+        dft_approved=True,
+        retraining_approved=True,
+        promotion_approved=True,
+    )
+    result = run_phase_exploration(
+        "Si",
+        policy=policy,
+        output_dir=str(tmp_path),
+        active_learning_runner=lambda *_: {
+            "model_promoted": False,
+            "training_deferred": True,
+        },
+    )
+    assert calls == [True]
+    assert result.initial == initial
+    assert result.after_retraining is None
+    assert not result.model_promoted
+    assert "training deferred" in caplog.text
+
+
 @pytest.mark.parametrize("allowance", [0, 1, 3])
 def test_relaxation_allowance_preserves_generation_and_counts_failures(
     tmp_path, monkeypatch, allowance

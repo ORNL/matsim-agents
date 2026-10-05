@@ -328,7 +328,32 @@ Campaign promotion checks supplied validation metadata before starting the
 loop. Fine-tune/evaluation writes matching sidecars for newly generated splits;
 fraction-based active learning also maintains separate training and held-out
 sidecars on each iteration, checking the held-out hash and method before append.
-eval-only reuse requires existing, hash-matching split sidecars. Legacy data
+Training accumulates within each formula's AL dataset across iterations and
+restarts; this does not pool labels across formulas. `validation_fraction`
+targets the cumulative held-out fraction by assigning only newly accepted
+frames. Existing assignments are permanent: training frames never move to
+validation, held-out frames never enter training, and duplicate labels are
+rejected against both partitions. The target fraction is approximate for
+small batches and cannot retroactively repartition prior data.
+
+Readiness is checked against the cumulative data, not the latest batch.
+Training needs at least two accumulated training frames; energy comparison
+also needs at least `promotion_min_evaluated_frames` energy-labelled and
+force-labelled held-out frames. Valid small batches are saved with
+`training_status: deferred` and explicit `training_deferred_reasons` until
+those requirements are met. Iteration state records both new-frame counts and
+`n_training_frames_total` / `n_validation_frames_total`. No candidate is trained
+or promoted during deferral, and the incumbent remains active. The
+campaign skips post-training reevaluation when training is deferred; this is
+distinct from rejection of an evaluated candidate, which still follows the
+configured promotion-rejection policy. A one-iteration
+run acquiring two fresh labels with a 20% split therefore retains one training
+and one validation frame and defers training; extend the iteration count or
+resume the same formula dataset to accumulate more data. DFT failures and
+duplicate rejection can delay readiness further. These are software minimums,
+not evidence that such a small validation set scientifically qualifies a model.
+
+Eval-only reuse requires existing, hash-matching split sidecars. Legacy data
 must have its actual DFT protocol verified and recorded before comparison;
 do not infer compatibility from the elemental manifest alone. The caller
 remains responsible for convergence of the supplied DFT calculations.

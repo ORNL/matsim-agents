@@ -572,7 +572,10 @@ class TrainerConfig(BaseModel):
         0.0,
         ge=0.0,
         lt=1.0,
-        description="Fraction of newly labelled frames reserved from training for validation.",
+        description=(
+            "Target held-out fraction of cumulative accepted labels within this AL dataset. "
+            "Only new frames are assigned; existing training/validation membership is fixed."
+        ),
     )
     validation_split_seed: int = 0
     compare_after_training: bool = Field(

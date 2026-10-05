@@ -23,7 +23,7 @@ md:
 
 acquisition:
   strategy: random
-  n_select: 2
+  n_select: 2  # Small batches accumulate; fractional validation may defer training.
   diversity_filter: true
   min_uncertainty_eV_per_A: 0.0
 

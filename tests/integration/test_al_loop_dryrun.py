@@ -447,7 +447,11 @@ def test_promotion_decision_controls_model_activation(
 ) -> None:
     cfg = _make_cfg(tmp_path)
     validation_set = tmp_path / "held-out.extxyz"
-    validation_set.touch()
+    from ase.calculators.singlepoint import SinglePointCalculator
+
+    frame = Atoms("Si", positions=[[0, 0, 0]], cell=[6, 6, 6], pbc=True)
+    frame.calc = SinglePointCalculator(frame, energy=-1.234, forces=np.zeros((1, 3)))
+    ase_write(validation_set, frame)
     cfg.trainer = TrainerConfig(
         enabled=True,
         promote_model=True,
@@ -569,10 +573,123 @@ def test_hydragnn_candidate_override_discovers_checkpoint_in_new_logdir(tmp_path
     assert cfg.mlip.hydragnn.checkpoint is None
 
 
+@pytest.mark.parametrize("backend", ["hydragnn", "uma", "mace"])
+@pytest.mark.parametrize("batch_size", [1, 2])
+def test_small_batches_accumulate_fixed_partitions_before_training(
+    tmp_path, monkeypatch, elemental_manifest, backend, batch_size
+):
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    if backend == "uma":
+        cfg.mlip = MLIPConfig(backend="uma", uma=UMAConfig())
+    elif backend == "mace":
+        cfg.mlip = MLIPConfig(backend="mace", mace=MACEConfig())
+    cfg.acquisition.n_select = batch_size
+    cfg.trainer = TrainerConfig(
+        enabled=True,
+        train_script=cfg.trainer.train_script,
+        validation_fraction=0.2,
+        compare_after_training=True,
+        promote_model=True,
+        promotion_approved=True,
+        validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
+    )
+    decision = PromotionDecision(
+        approved=True,
+        reasons=[],
+        candidate_metrics={},
+        incumbent_metrics={},
+    )
+    _patch_runtime(loop_mod, monkeypatch, promotion_decision=decision)
+    trained = tmp_path / "trained"
+    trained.mkdir()
+    training_calls = []
+
+    def train(*_args, dataset_path, iteration, **_kwargs):
+        identities = {structure_identity(frame) for frame in ase_read(dataset_path, index=":")}
+        training_calls.append((iteration, identities))
+        return trained
+
+    monkeypatch.setattr(loop_mod, f"retrain_{backend}", train)
+    previous_train = set()
+    previous_validation = set()
+    for iteration in range(4):
+        cfg.loop.n_iterations = iteration + 1
+        cfg.loop.resume = iteration > 0
+        candidate_start = min(iteration, 2) * 10
+        monkeypatch.setattr(
+            loop_mod,
+            "sample_md_candidates",
+            lambda *_args, start=candidate_start, **_kwargs: [
+                _make_candidate(index) for index in range(start, start + batch_size)
+            ],
+        )
+        loop_mod.run_active_learning(cfg)
+        dataset = cfg.loop.out_dir / "dataset.extxyz"
+        validation = cfg.loop.out_dir / "validation.extxyz"
+        train_ids = (
+            {structure_identity(frame) for frame in ase_read(dataset, index=":")}
+            if dataset.exists()
+            else set()
+        )
+        validation_ids = {structure_identity(frame) for frame in ase_read(validation, index=":")}
+        assert previous_train <= train_ids
+        assert previous_validation <= validation_ids
+        assert train_ids.isdisjoint(validation_ids)
+        assert len(train_ids) + len(validation_ids) == min(iteration + 1, 3) * batch_size
+        state = json.loads((cfg.loop.out_dir / f"iteration_{iteration:04d}/state.json").read_text())
+        assert state["n_training_frames_total"] == len(train_ids)
+        assert state["n_validation_frames_total"] == len(validation_ids)
+        if len(train_ids) < 2:
+            assert state["training_status"] == "deferred"
+            assert state["training_deferred_reasons"]
+            assert state["candidate_model_path"] is None
+            assert state["model_comparison"] is None
+            assert not state["model_promoted"]
+            assert training_calls == []
+        else:
+            assert state["training_status"] == "completed"
+            assert state["model_promoted"]
+            assert training_calls[-1] == (iteration, train_ids)
+        previous_train, previous_validation = train_ids, validation_ids
+
+
+def test_cumulative_split_never_moves_existing_frames():
+    from matsim_agents.active_learning.loop import _split_training_validation_frames
+
+    assert _split_training_validation_frames(
+        [],
+        validation_fraction=0.2,
+        seed=0,
+        existing_training_count=1,
+        existing_validation_count=1,
+    ) == ([], [])
+    training, validation = _split_training_validation_frames(
+        ["new"],
+        validation_fraction=0.2,
+        seed=0,
+        existing_training_count=1,
+        existing_validation_count=1,
+    )
+    assert training == ["new"]
+    assert validation == []
+    training, validation = _split_training_validation_frames(
+        ["new"],
+        validation_fraction=0.9,
+        seed=0,
+        existing_training_count=20,
+        existing_validation_count=0,
+    )
+    assert training == []
+    assert validation == ["new"]
+
+
 @pytest.mark.parametrize("promote", [False, True])
 @pytest.mark.parametrize("resume_defect", [None, "missing", "hash", "signature"])
+@pytest.mark.parametrize("batch_size", [2, 3])
 def test_fraction_holdout_real_evaluation_and_resume(
-    tmp_path, monkeypatch, elemental_manifest, promote, resume_defect
+    tmp_path, monkeypatch, elemental_manifest, promote, resume_defect, batch_size
 ):
     from ase.calculators.calculator import Calculator, all_changes
 
@@ -588,7 +705,7 @@ def test_fraction_holdout_real_evaluation_and_resume(
             self.results = {"energy": -float(len(atoms)), "forces": np.zeros((len(atoms), 3))}
 
     cfg = _make_cfg(tmp_path)
-    cfg.acquisition.n_select = 3
+    cfg.acquisition.n_select = batch_size
     reference_path = _campaign_elemental_manifest(cfg, elemental_manifest)
     cfg.trainer = TrainerConfig(
         enabled=True,
@@ -618,8 +735,13 @@ def test_fraction_holdout_real_evaluation_and_resume(
             )
         loop_mod.run_active_learning(cfg)
         state = json.loads((cfg.loop.out_dir / f"iteration_{iteration:04d}/state.json").read_text())
-        assert state["model_comparison"]["approved"]
-        assert state["model_promoted"] is promote
+        if iteration == 0 and batch_size == 2:
+            assert state["training_status"] == "deferred"
+            assert state["model_comparison"] is None
+            assert not state["model_promoted"]
+        else:
+            assert state["model_comparison"]["approved"]
+            assert state["model_promoted"] is promote
         validation_path = cfg.loop.out_dir / "validation.extxyz"
         validate_dataset_reference_method(
             validation_path,
@@ -630,9 +752,10 @@ def test_fraction_holdout_real_evaluation_and_resume(
         metadata = json.loads(validation_path.with_suffix(".extxyz.manifest.json").read_text())
         assert metadata["parent_dataset_id"] == old_validation_id
         if iteration == 1:
-            assert metadata["dataset_id"] != old_validation_id
+            assert metadata["dataset_id"] == old_validation_id
+            assert state["n_validation_frames"] == 0
         old_validation_id = metadata["dataset_id"]
-        assert len(ase_read(validation_path, index=":")) == iteration + 1
+        assert len(ase_read(validation_path, index=":")) == 1
     if resume_defect is not None:
         sidecar = validation_path.with_suffix(".extxyz.manifest.json")
         if resume_defect == "missing":

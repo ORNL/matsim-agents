@@ -132,10 +132,13 @@ def run_phase_exploration(
         if promoted and policy.approvals.before_model_promotion and not policy.promotion_approved:
             raise PermissionError("model promotion requires explicit approval")
         if policy.reevaluate_after_retraining and not promoted:
-            if not policy.continue_on_promotion_rejection:
+            deferred = bool(al_result.get("training_deferred", False))
+            if not deferred and not policy.continue_on_promotion_rejection:
                 raise RuntimeError("cannot reevaluate: active learning did not promote a model")
             logging.getLogger(__name__).warning(
-                "No model promoted for %s; retaining incumbent MLIP exploration", composition
+                "No model promoted for %s%s; retaining incumbent MLIP exploration",
+                composition,
+                " (training deferred for insufficient cumulative data)" if deferred else "",
             )
         if policy.reevaluate_after_retraining and promoted:
             updated = dict(kwargs)

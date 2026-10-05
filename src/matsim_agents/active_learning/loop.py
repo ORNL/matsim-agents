@@ -43,6 +43,7 @@ from matsim_agents.active_learning.candidates import sample_md_candidates
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dataset_governance import (
     DatasetManifest,
+    structure_identity,
     validate_labelled_frames,
     write_dataset_manifest,
 )
@@ -50,6 +51,8 @@ from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
 from matsim_agents.active_learning.dft_runner import run_dft_batch
 from matsim_agents.active_learning.evaluate import (
     _apply_model_override,
+    _reference_energy,
+    _reference_forces,
     evaluate_promotion_candidate,
 )
 from matsim_agents.active_learning.seeds import resolve_seed_structures
@@ -168,6 +171,10 @@ class IterationState:
     validation_dataset_path: str | None = None
     n_training_frames: int = 0
     n_validation_frames: int = 0
+    n_training_frames_total: int = 0
+    n_validation_frames_total: int = 0
+    training_status: str = "disabled"
+    training_deferred_reasons: list[str] = field(default_factory=list)
     candidate_model_path: str | None = None
     model_comparison: dict[str, Any] | None = None
     model_promoted: bool = False
@@ -194,13 +201,15 @@ def _split_training_validation_frames(
     *,
     validation_fraction: float,
     seed: int,
+    existing_training_count: int = 0,
+    existing_validation_count: int = 0,
 ) -> tuple[list[Any], list[Any]]:
-    """Deterministically reserve labelled frames before model fitting."""
+    """Assign only new frames to meet the cumulative held-out target."""
     if validation_fraction <= 0.0:
         return frames, []
-    n_validation = max(1, int(round(len(frames) * validation_fraction)))
-    if len(frames) - n_validation < 2:
-        raise ValueError("validation split must leave at least two DFT-labelled training frames")
+    total = existing_training_count + existing_validation_count + len(frames)
+    target = max(1, int(round(total * validation_fraction)))
+    n_validation = min(len(frames), max(0, target - existing_validation_count))
     validation_indices = set(
         np.random.default_rng(seed).permutation(len(frames))[:n_validation].tolist()
     )
@@ -411,21 +420,27 @@ def run_active_learning(cfg: ALConfig) -> None:
             # --- 5. Append to dataset -----------------------------------------
             t0 = time.time()
             frames = dft_results_to_frames(results, iteration=i)
-            existing_frames = []
+            existing_training_frames = []
+            existing_validation_frames = []
             manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
             parent_dataset_id = None
             if dataset_path.exists():
                 from ase.io import read as ase_read
 
-                existing_frames = list(ase_read(dataset_path, index=":"))
+                existing_training_frames = list(ase_read(dataset_path, index=":"))
             if validation_dataset_path.exists():
                 from ase.io import read as ase_read
 
-                existing_frames.extend(ase_read(validation_dataset_path, index=":"))
+                existing_validation_frames = list(ase_read(validation_dataset_path, index=":"))
+            existing_frames = existing_training_frames + existing_validation_frames
+            if {structure_identity(frame) for frame in existing_training_frames} & {
+                structure_identity(frame) for frame in existing_validation_frames
+            }:
+                raise ValueError("persisted training and validation datasets overlap")
             existing_elements = {
                 symbol for frame in existing_frames for symbol in frame.get_chemical_symbols()
             }
-            if existing_frames and not manifest_path.exists():
+            if existing_training_frames and not manifest_path.exists():
                 raise ValueError(
                     "cannot append to a non-empty dataset without a manifest containing "
                     "its DFT method signature; migrate the dataset explicitly first"
@@ -447,6 +462,12 @@ def run_active_learning(cfg: ALConfig) -> None:
                     and previous_manifest.method_signature != existing_signature
                 ):
                     raise ValueError("cannot append labels with a different DFT method signature")
+                validate_dataset_reference_method(
+                    dataset_path,
+                    reference_backend=backend.name,
+                    reference_method_signature=existing_signature,
+                    require_sidecar=True,
+                )
                 parent_dataset_id = previous_manifest.dataset_id
             validation_parent_dataset_id = None
             validation_manifest_path = validation_dataset_path.with_suffix(
@@ -476,6 +497,8 @@ def run_active_learning(cfg: ALConfig) -> None:
                 frames,
                 validation_fraction=cfg.trainer.validation_fraction,
                 seed=cfg.trainer.validation_split_seed + i,
+                existing_training_count=len(existing_training_frames),
+                existing_validation_count=len(existing_validation_frames),
             )
             labelled_elements = existing_elements | {
                 symbol for frame in frames for symbol in frame.atoms.get_chemical_symbols()
@@ -488,7 +511,11 @@ def run_active_learning(cfg: ALConfig) -> None:
             state.dataset_path = str(dataset_path)
             state.n_training_frames = n_appended
             state.n_validation_frames = n_validation_appended
-            if n_validation_appended:
+            state.n_training_frames_total = len(existing_training_frames) + n_appended
+            state.n_validation_frames_total = (
+                len(existing_validation_frames) + n_validation_appended
+            )
+            if validation_dataset_path.exists():
                 state.validation_dataset_path = str(validation_dataset_path)
             if dataset_path.exists():
                 write_dataset_manifest(
@@ -534,6 +561,47 @@ def run_active_learning(cfg: ALConfig) -> None:
                         "elemental references and campaign labels use different DFT methods"
                     )
             t0 = time.time()
+            if cfg.trainer.enabled:
+                if state.n_training_frames_total < 2:
+                    state.training_deferred_reasons.append(
+                        f"cumulative training set has {state.n_training_frames_total} frames; "
+                        "at least 2 required"
+                    )
+                if comparison_enabled:
+                    from ase.io import read as ase_read
+
+                    if cfg.trainer.validation_fraction > 0:
+                        held_out_frames = (
+                            list(ase_read(validation_dataset_path, index=":"))
+                            if validation_dataset_path.exists()
+                            else []
+                        )
+                    elif cfg.trainer.validation_set is not None:
+                        held_out_frames = list(ase_read(cfg.trainer.validation_set, index=":"))
+                    else:
+                        raise ValueError("model comparison requires held-out validation data")
+                    for label, reader in (
+                        ("energy", _reference_energy),
+                        ("force", _reference_forces),
+                    ):
+                        count = sum(reader(frame) is not None for frame in held_out_frames)
+                        minimum = cfg.trainer.promotion_min_evaluated_frames
+                        if count < minimum:
+                            state.training_deferred_reasons.append(
+                                f"cumulative validation set has {count} {label}-labelled frames; "
+                                f"at least {minimum} required"
+                            )
+                if state.training_deferred_reasons:
+                    state.training_status = "deferred"
+                    log.warning(
+                        "Iteration %d training/comparison deferred: %s",
+                        i,
+                        "; ".join(state.training_deferred_reasons),
+                    )
+                    state.timings_sec["retrain"] = time.time() - t0
+                    state.status = "complete"
+                    continue
+                state.training_status = "running"
             if (
                 cfg.trainer.enabled
                 and cfg.mlip.backend == "hydragnn"
@@ -577,7 +645,7 @@ def run_active_learning(cfg: ALConfig) -> None:
             if compare_candidate:
                 try:
                     evaluation_cfg = cfg.model_copy(deep=True)
-                    if n_validation_appended:
+                    if cfg.trainer.validation_fraction > 0:
                         evaluation_cfg.trainer.validation_set = validation_dataset_path
                         evaluation_cfg.trainer.validation_fraction = 0.0
                     decision = evaluate_promotion_candidate(
@@ -606,10 +674,14 @@ def run_active_learning(cfg: ALConfig) -> None:
                 state.model_promoted = True
                 _apply_model_override(cfg, state.candidate_model_path)
             state.timings_sec["retrain"] = time.time() - t0
+            if cfg.trainer.enabled:
+                state.training_status = "completed"
 
             state.status = "complete"
         except Exception as exc:  # noqa: BLE001
             state.status = "failed"
+            if state.training_status == "running":
+                state.training_status = "failed"
             state.notes = repr(exc)
             log.exception("Iteration %d failed", i)
             _write_state(it_dir, state)

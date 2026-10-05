@@ -1274,6 +1274,9 @@ def run_formula_with_active_learning(
             "n_active_learning_iterations": len(states),
             "node_hours": total_seconds * config.compute_nodes / 3600.0,
             "model_promoted": bool(promoted),
+            "training_deferred": bool(
+                not promoted and states and states[-1].get("training_status") == "deferred"
+            ),
             "training_data": training_data,
             "held_out_validation_data": result_validation_data,
             "md_candidate_uncertainty": candidate_uncertainty,
@@ -1303,6 +1306,10 @@ def run_formula_with_active_learning(
             "active_learning_labels_and_training",
             "completed",
             training_enabled=al_cfg.trainer.enabled,
+            training_status=(states[-1].get("training_status") if states else None),
+            training_deferred_reasons=(
+                states[-1].get("training_deferred_reasons", []) if states else []
+            ),
             model_promoted=bool(promoted),
             training_data=training_data,
             held_out_validation_data=result_validation_data,
@@ -1391,7 +1398,11 @@ def run_formula_with_active_learning(
             stages,
             "post_training_mlip_exploration",
             "skipped",
-            reason="no model promoted; explicitly retaining incumbent MLIP exploration",
+            reason=(
+                "training deferred for insufficient cumulative data; retaining incumbent"
+                if execution_evidence.get("training_deferred")
+                else "no model promoted; explicitly retaining incumbent MLIP exploration"
+            ),
             model_identifier=_model_identifier(effective_al_cfg),
         )
     candidate_uncertainty = _score_relaxed_candidate_uncertainty(exploration, effective_al_cfg)
