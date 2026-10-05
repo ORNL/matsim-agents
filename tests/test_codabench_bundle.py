@@ -209,7 +209,7 @@ def test_baseline_prediction_failures_raise(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(runner, "STRUCT_ROOT", structures)
     monkeypatch.setattr(runner, "PRED_ROOT", tmp_path / "predictions")
 
-    with pytest.raises(RuntimeError, match="failed for 1 of 1 structures"):
+    with pytest.raises(ValueError, match="elemental reference manifest"):
         runner.run_predictions(SimpleNamespace(), "broken", "cpu")
 
 
@@ -226,7 +226,89 @@ def test_submission_packager_rejects_raw_total_energies(tmp_path) -> None:
         raise AssertionError("raw energies were accepted as formation energies")
 
 
-def test_builds_self_contained_release_bundle(tmp_path, monkeypatch) -> None:
+def test_baseline_predicts_references_before_packaging_formation_energies(
+    tmp_path, monkeypatch, elemental_manifest
+):
+    from ase.calculators.calculator import Calculator, all_changes
+    from ase.io import write
+
+    runner = _load("codabench_formation_runner", CODEBENCH / "run_baselines.py")
+    structures = tmp_path / "structures"
+    structures.mkdir()
+    write(structures / "compound.extxyz", Atoms("NbO2"))
+    metadata = tmp_path / "metadata.csv"
+    _write_csv(
+        metadata,
+        ["structure_id", "file_path"],
+        [{"structure_id": "MATS-0001", "file_path": "compound.extxyz"}],
+    )
+    monkeypatch.setattr(runner, "STRUCT_META", metadata)
+    monkeypatch.setattr(runner, "STRUCT_ROOT", structures)
+    monkeypatch.setattr(runner, "PRED_ROOT", tmp_path / "predictions")
+    calls = []
+
+    class Model(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            symbols = atoms.get_chemical_symbols()
+            calls.append(set(symbols))
+            baseline = sum({"Nb": 100.0, "O": -20.0}[symbol] for symbol in symbols)
+            self.results = {
+                "energy": baseline - (3.0 if len(set(symbols)) > 1 else 0.0),
+                "forces": np.zeros((len(atoms), 3)),
+            }
+
+    runner.run_predictions(
+        Model(),
+        "test",
+        "cpu",
+        elemental_reference_manifest=elemental_manifest({"Nb": -10.0, "O": -5.0}),
+    )
+    assert calls[:2] == [{"Nb"}, {"O"}]
+    predictions = tmp_path / "predictions/test"
+    with (predictions / "formation_energies.csv").open() as handle:
+        rows = list(csv.DictReader(handle))
+    assert float(rows[0]["formation_energy_eV_per_atom"]) == -1.0
+    assert (predictions / "elemental_reference_predictions.json").is_file()
+    evaluator = _load("codabench_formation_evaluator", CODEBENCH / "evaluate.py")
+    monkeypatch.setattr(
+        evaluator,
+        "parse_args",
+        lambda: Namespace(
+            submission=str(tmp_path / "model"),
+            structures=metadata,
+            struct_dir=structures,
+            output=tmp_path / "submitted-predictions",
+            device="cpu",
+            relax=False,
+            elemental_reference_manifest=tmp_path / "elemental-references.json",
+        ),
+    )
+    monkeypatch.setattr(
+        evaluator,
+        "load_calculator_class",
+        lambda _path: SimpleNamespace(
+            __name__="SyntheticModel",
+            from_checkpoint=lambda *_args, **_kwargs: Model(),
+        ),
+    )
+    calls.clear()
+    evaluator.main()
+    assert calls[:2] == [{"Nb"}, {"O"}]
+    with (tmp_path / "submitted-predictions/formation_energies.csv").open() as handle:
+        submitted_rows = list(csv.DictReader(handle))
+    assert submitted_rows[0]["structure_id"] == rows[0]["structure_id"]
+    assert float(submitted_rows[0]["formation_energy_eV_per_atom"]) == -1.0
+    package = _load("codabench_formation_package", CODEBENCH / "package_submission.py")
+    package.package_submission(predictions, tmp_path / "submission")
+    assert (tmp_path / "submission/task1.csv").read_text() == (
+        predictions / "formation_energies.csv"
+    ).read_text()
+
+
+def test_builds_self_contained_release_bundle(tmp_path, monkeypatch, elemental_manifest) -> None:
     validator = _load("validate_bundle", CODEBENCH / "validate_bundle.py")
     monkeypatch.syspath_prepend(str(CODEBENCH))
     builder = _load("codabench_builder", CODEBENCH / "build_bundle.py")
@@ -240,6 +322,12 @@ def test_builds_self_contained_release_bundle(tmp_path, monkeypatch) -> None:
         ["structure_id", "file_path"],
         [{"structure_id": "MATS-0001", "file_path": "MATS-0001.xyz"}],
     )
+    source_manifest = elemental_manifest({"H": -1.0})
+    reference_payload = json.loads(source_manifest.read_text())
+    for spec in reference_payload["references"].values():
+        source = tmp_path / spec["structure_path"]
+        (public / source.name).write_bytes(source.read_bytes())
+    (public / "elemental_references.json").write_text(json.dumps(reference_payload))
 
     reference = tmp_path / "reference"
     for directory in ("forces", "relaxed"):
@@ -248,7 +336,7 @@ def test_builds_self_contained_release_bundle(tmp_path, monkeypatch) -> None:
     (reference / "relaxed" / "MATS-0001.xyz").write_text("1\n\nH 0 0 0\n", encoding="utf-8")
     for name in ("public_ids.txt", "private_ids.txt"):
         (reference / name).write_text("MATS-0001\n", encoding="utf-8")
-    (reference / "elemental_energies.json").write_text("{}\n", encoding="utf-8")
+    (reference / "elemental_energies.json").write_text('{"H": -1.0}\n', encoding="utf-8")
     _write_csv(
         reference / "formation_energies.csv",
         ["structure_id", "formation_energy_eV_per_atom", "n_atoms"],
@@ -263,9 +351,38 @@ def test_builds_self_contained_release_bundle(tmp_path, monkeypatch) -> None:
     output = builder.build_bundle(tmp_path / "competition.zip", public, reference)
     with zipfile.ZipFile(output) as archive:
         names = set(archive.namelist())
+        extracted = tmp_path / "extracted"
+        archive.extractall(extracted)
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import evaluate; "
+            "assert evaluate.predict_elemental_references.__module__ == 'energy_references'",
+        ],
+        cwd=extracted / "starting_kit",
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert validator.validate_bundle(extracted, release=True) == []
+    (extracted / "reference_data/elemental_energies.json").write_text('{"H": -2.0}\n')
+    assert any(
+        "does not match" in error for error in validator.validate_bundle(extracted, release=True)
+    )
+    (extracted / "reference_data/elemental_energies.json").write_text('{"H": -1.0}\n')
+    outside_reference = tmp_path / "elemental-H.extxyz"
+    reference_payload["references"]["H"]["structure_path"] = str(outside_reference)
+    (extracted / "public_data/elemental_references.json").write_text(json.dumps(reference_payload))
+    assert any(
+        "bundled inside public_data" in error
+        for error in validator.validate_bundle(extracted, release=True)
+    )
     assert "competition.yaml" in names
     assert "starting_kit/baselines/hydragnn/model.py" in names
     assert "starting_kit/package_submission.py" in names
+    assert "starting_kit/energy_references.py" in names
+    assert "starting_kit/evaluate.py" in names
     assert "starting_kit/requirements-mace.txt" in names
     assert "starting_kit/requirements-fairchem.txt" in names
     assert "public_data/structures/MATS-0001.xyz" in names

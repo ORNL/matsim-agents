@@ -21,6 +21,7 @@ Example::
     python -m matsim_agents.active_learning.evaluate \\
         --al-config examples/paper_cases/al_zn_formate_uma.yaml \\
         --test-set runs/al-zn-formate/test_set.extxyz \\
+        --elemental-reference-manifest runs/al-zn-formate/elemental_references.json \\
         --model-path runs/al-zn-formate/iter2_model \\
         --iteration 2 \\
         --out-json runs/al-zn-formate/eval/iter2.json \\
@@ -41,6 +42,11 @@ from ase.io import read as ase_read
 
 from matsim_agents.active_learning.config import ALConfig, MLIPConfig, TrainerConfig
 from matsim_agents.active_learning.dataset_governance import structure_identity
+from matsim_agents.discovery.energy_references import (
+    load_elemental_reference_manifest,
+    predict_elemental_references,
+    validate_dataset_reference_method,
+)
 
 log = logging.getLogger(__name__)
 
@@ -95,12 +101,7 @@ class EvalMetrics:
     # Energy (per atom) — the standard size-intensive metric.
     energy_mae_eV_per_atom: float
     energy_rmse_eV_per_atom: float
-    # Energy (per atom) after removing a per-element *linear* reference from the
-    # (pred-ref) energy difference (E_lin = sum_Z n_Z c_Z, fit by least squares).
-    # MLIP backends (esp. UMA) use their own per-element energy zero, so this
-    # composition-dependent shift -- the same linear-reference trick the
-    # fine-tune training applies -- isolates the *relative* error and reduces to
-    # the old constant offset when every frame shares one composition.
+    # Deprecated output aliases for formation-energy errors; no fitted shifts.
     energy_mae_eV_per_atom_shifted: float
     energy_rmse_eV_per_atom_shifted: float
     energy_mean_offset_eV_per_atom: float
@@ -110,6 +111,9 @@ class EvalMetrics:
     force_rmse_eV_per_A: float
 
     failures: list[str] = field(default_factory=list)
+    formation_energy_mae_eV_per_atom: float = float("nan")
+    formation_energy_rmse_eV_per_atom: float = float("nan")
+    elemental_reference_provenance: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -141,9 +145,9 @@ def assess_promotion(
                 )
     metrics = (
         (
-            "energy_mae_eV_per_atom_shifted",
-            candidate.energy_mae_eV_per_atom_shifted,
-            incumbent.energy_mae_eV_per_atom_shifted,
+            "formation_energy_mae_eV_per_atom",
+            candidate.formation_energy_mae_eV_per_atom,
+            incumbent.formation_energy_mae_eV_per_atom,
             trainer.promotion_max_energy_mae_eV_per_atom,
         ),
         (
@@ -183,60 +187,6 @@ def assess_promotion(
 # --------------------------------------------------------------------------- #
 
 
-def _predict_energy_diffs(calc, frames: list[Atoms]) -> tuple[np.ndarray, list[np.ndarray]]:
-    """Predict total energies and return ``(de_tot, numbers)`` for scored frames.
-
-    ``de_tot[i] = E_pred(frame_i) - E_ref(frame_i)`` and ``numbers[i]`` holds the
-    atomic numbers of frame ``i``. Frames without a reference energy (or whose
-    single-point fails) are skipped. Used to fit a per-element linear reference
-    on an *independent* set of frames (e.g. the training partition) so the shift
-    applied to the held-out test set is not fit on the test set itself.
-    """
-    de: list[float] = []
-    numbers: list[np.ndarray] = []
-    for atoms in frames:
-        e_ref = _reference_energy(atoms)
-        if e_ref is None:
-            continue
-        try:
-            probe = atoms.copy()
-            probe.calc = calc
-            e_pred = float(probe.get_potential_energy())
-        except Exception:  # noqa: BLE001 — skip frames that fail to evaluate
-            continue
-        de.append(e_pred - e_ref)
-        numbers.append(np.asarray(atoms.get_atomic_numbers(), dtype=int))
-    return np.asarray(de, dtype=float), numbers
-
-
-def _composition_matrix(numbers: list[np.ndarray], zs: list[int]) -> np.ndarray:
-    """Rows = frames, cols = element counts over the fixed ``zs`` ordering."""
-    col = {z: j for j, z in enumerate(zs)}
-    comp = np.zeros((len(numbers), len(zs)), dtype=float)
-    for i_row, nums in enumerate(numbers):
-        for z in nums.tolist():
-            j = col.get(int(z))
-            if j is not None:
-                comp[i_row, j] += 1.0
-    return comp
-
-
-def _validate_shift_reference_coverage(
-    evaluation_compositions: np.ndarray,
-    reference_compositions: np.ndarray,
-) -> None:
-    """Require reference compositions to span every evaluated composition direction."""
-    reference_rank = int(np.linalg.matrix_rank(reference_compositions))
-    combined_rank = int(
-        np.linalg.matrix_rank(np.vstack((reference_compositions, evaluation_compositions)))
-    )
-    if combined_rank > reference_rank:
-        raise ValueError(
-            "shift-reference compositions do not span all evaluated composition directions; "
-            "add DFT-labelled reference frames with linearly independent compositions"
-        )
-
-
 def evaluate_frames(
     mlip_cfg: MLIPConfig,
     frames: list[Atoms],
@@ -245,6 +195,7 @@ def evaluate_frames(
     model_path: str | None = None,
     test_set_label: str = "",
     ref_frames: list[Atoms] | None = None,
+    elemental_reference_manifest: Path | None = None,
 ) -> tuple[EvalMetrics, dict[str, np.ndarray]]:
     """Run single-points with ``mlip_cfg`` and score them against references.
 
@@ -252,27 +203,53 @@ def evaluate_frames(
     scatter plots: per-atom reference/predicted energies and flattened
     reference/predicted force components.
 
-    ``ref_frames`` (optional): an *independent* set of frames (typically the
-    training partition) on which the per-element linear energy reference is fit.
-    Its compositions must span every composition direction in ``frames``. The
-    fitted coefficients are then applied to ``frames`` (the held-out test set).
-    Fixed-composition evaluation may omit this set and use the legacy constant
-    in-sample shift; cross-composition evaluation may not.
+    Energy comparisons require a DFT-labelled pure-element manifest. The model
+    evaluates those fixed geometries first, then both methods subtract their
+    own elemental baselines. No offsets are fitted to training or test data.
+    ``ref_frames`` is retained only to reject obsolete fitted-offset callers.
     """
     from matsim_agents.active_learning.calculator import make_mlip_calculator
 
+    if ref_frames is not None:
+        raise ValueError(
+            "ref_frames energy-offset fitting is unsupported; "
+            "provide an elemental reference manifest"
+        )
+    has_energy_labels = any(_reference_energy(frame) is not None for frame in frames)
+    if has_energy_labels and elemental_reference_manifest is None:
+        raise ValueError("energy evaluation requires a DFT-labelled elemental reference manifest")
+    if test_set_label and elemental_reference_manifest is not None:
+        manifest, _, _ = load_elemental_reference_manifest(
+            elemental_reference_manifest, required_elements=set()
+        )
+        validate_dataset_reference_method(
+            test_set_label,
+            reference_backend=manifest["backend"],
+            reference_method_signature=manifest["method_signature"],
+        )
     calc = make_mlip_calculator(mlip_cfg)
+    references = (
+        predict_elemental_references(
+            elemental_reference_manifest,
+            calc,
+            required_elements={
+                symbol for frame in frames for symbol in frame.get_chemical_symbols()
+            },
+        )
+        if elemental_reference_manifest is not None
+        else None
+    )
 
     e_ref_pa: list[float] = []
     e_pred_pa: list[float] = []
     e_ref_tot: list[float] = []
     e_pred_tot: list[float] = []
-    e_natoms: list[int] = []
-    e_numbers: list[np.ndarray] = []
     f_ref_all: list[np.ndarray] = []
     f_pred_all: list[np.ndarray] = []
     n_atoms_total = 0
     failures: list[str] = []
+    formation_ref: list[float] = []
+    formation_pred: list[float] = []
 
     for i, atoms in enumerate(frames):
         e_ref = _reference_energy(atoms)
@@ -283,7 +260,7 @@ def evaluate_frames(
         try:
             probe = atoms.copy()
             probe.calc = calc
-            e_pred = float(probe.get_potential_energy())
+            e_pred = float(probe.get_potential_energy()) if e_ref is not None else None
             f_pred = np.asarray(probe.get_forces(), dtype=float)
         except Exception as exc:  # noqa: BLE001 — record and skip bad frames
             failures.append(f"frame {i}: prediction failed: {exc}")
@@ -292,12 +269,14 @@ def evaluate_frames(
         n = len(atoms)
         n_atoms_total += n
         if e_ref is not None:
+            if references is None or e_pred is None:
+                raise ValueError("energy comparison requires elemental references and predictions")
+            formation_ref.append(references.formation_energy(atoms, e_ref, model=False))
+            formation_pred.append(references.formation_energy(atoms, e_pred, model=True))
             e_ref_tot.append(e_ref)
             e_pred_tot.append(e_pred)
             e_ref_pa.append(e_ref / n)
             e_pred_pa.append(e_pred / n)
-            e_natoms.append(n)
-            e_numbers.append(np.asarray(atoms.get_atomic_numbers(), dtype=int))
         if f_ref is not None and f_ref.shape == f_pred.shape:
             f_ref_all.append(f_ref.reshape(-1))
             f_pred_all.append(f_pred.reshape(-1))
@@ -317,43 +296,9 @@ def evaluate_frames(
     de_tot = e_pred_tot_a - e_ref_tot_a
     de_pa = e_pred_pa_a - e_ref_pa_a
     offset_pa = float(np.mean(de_pa)) if de_pa.size else 0.0
-    # Remove a per-element linear reference (E_lin = sum_Z n_Z c_Z) from the
-    # pred-ref total-energy difference, mirroring the reference-energy
-    # subtraction the fine-tune training applies. This generalises the single
-    # constant shift to a composition-dependent offset, so varying-stoichiometry
-    # frames are scored on the shape of the energy surface rather than a
-    # per-element reference mismatch; for a fixed composition it reduces to the
-    # old constant shift. Applied identically to zero-shot and fine-tuned evals.
-    if de_tot.size:
-        # Fit the per-element linear reference on an independent set of frames
-        # (``ref_frames``, e.g. the training partition) when provided, so the
-        # shift applied to the held-out test set is NOT fit on the test set
-        # itself. The Z-column ordering spans the union of test and ref elements.
-        independent_reference = ref_frames is not None
-        if independent_reference:
-            de_tot_ref, numbers_ref = _predict_energy_diffs(calc, ref_frames)
-        else:
-            de_tot_ref, numbers_ref = de_tot, e_numbers
-        zs = sorted(
-            {int(z) for nums in e_numbers for z in nums.tolist()}
-            | {int(z) for nums in numbers_ref for z in nums.tolist()}
-        )
-        comp = _composition_matrix(e_numbers, zs)
-        comp_ref = _composition_matrix(numbers_ref, zs)
-        evaluation_rank = int(np.linalg.matrix_rank(comp))
-        if not independent_reference and evaluation_rank > 1:
-            raise ValueError(
-                "cross-composition shifted-energy evaluation requires independent ref_frames"
-            )
-        if independent_reference:
-            if not de_tot_ref.size:
-                raise ValueError("shift-reference set contains no usable energy-labelled frames")
-            _validate_shift_reference_coverage(comp, comp_ref)
-        coef, *_ = np.linalg.lstsq(comp_ref, de_tot_ref, rcond=None)
-        n_arr = np.asarray(e_natoms, dtype=float)
-        de_pa_shifted = (de_tot - comp @ coef) / n_arr
-    else:
-        de_pa_shifted = de_pa
+    formation_ref_a = np.asarray(formation_ref)
+    formation_pred_a = np.asarray(formation_pred)
+    de_pa_shifted = formation_pred_a - formation_ref_a
 
     if f_ref_all:
         f_ref_a = np.concatenate(f_ref_all)
@@ -393,10 +338,15 @@ def evaluate_frames(
         force_mae_eV_per_A=force_mae,
         force_rmse_eV_per_A=force_rmse,
         failures=failures,
+        formation_energy_mae_eV_per_atom=_mae(de_pa_shifted),
+        formation_energy_rmse_eV_per_atom=_rmse(de_pa_shifted),
+        elemental_reference_provenance=references.provenance if references is not None else {},
     )
     parity = {
         "e_ref_eV_per_atom": e_ref_pa_a,
         "e_pred_eV_per_atom": e_pred_pa_a,
+        "formation_ref_eV_per_atom": formation_ref_a,
+        "formation_pred_eV_per_atom": formation_pred_a,
         "f_ref_eV_per_A": f_ref_a,
         "f_pred_eV_per_A": f_pred_a,
     }
@@ -457,12 +407,15 @@ def evaluate_promotion_candidate(
                 "trainer.validation_set must be held out from the training set; "
                 f"found {overlap} overlapping geometries"
             )
-    if reference_path is not None:
-        reference_frames = list(ase_read(reference_path, index=":"))
-    elif training_set.is_file():
-        reference_frames = list(ase_read(training_set, index=":"))
-    else:
-        reference_frames = None
+    if reference_path is None:
+        raise ValueError("model comparison requires a DFT-labelled elemental reference manifest")
+    manifest, _, _ = load_elemental_reference_manifest(reference_path, required_elements=set())
+    if training_path.is_file():
+        validate_dataset_reference_method(
+            training_path,
+            reference_backend=manifest["backend"],
+            reference_method_signature=manifest["method_signature"],
+        )
 
     incumbent_cfg = cfg.mlip.model_copy(deep=True)
     candidate_cfg = cfg.mlip.model_copy(deep=True)
@@ -474,7 +427,7 @@ def evaluate_promotion_candidate(
         validation_frames,
         iteration=iteration,
         test_set_label=str(validation_set),
-        ref_frames=reference_frames,
+        elemental_reference_manifest=reference_path,
     )
     candidate_metrics, _ = evaluate_frames(
         candidate_cfg,
@@ -482,7 +435,7 @@ def evaluate_promotion_candidate(
         iteration=iteration,
         model_path=candidate_model_path,
         test_set_label=str(validation_set),
-        ref_frames=reference_frames,
+        elemental_reference_manifest=reference_path,
     )
     return assess_promotion(candidate_metrics, incumbent_metrics, cfg.trainer)
 
@@ -505,13 +458,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--al-config", required=True, help="AL config YAML (selects backend).")
     parser.add_argument("--test-set", required=True, help="Held-out DFT extxyz test set.")
     parser.add_argument(
-        "--train-set",
-        default=None,
-        help=(
-            "Optional training-partition extxyz. When given, the per-element "
-            "energy reference is fit on THESE frames and applied to the test "
-            "set, removing the in-sample reference-fit leakage."
-        ),
+        "--elemental-reference-manifest",
+        type=Path,
+        help="Required for energy comparisons; unnecessary for force-only datasets.",
     )
     parser.add_argument("--out-json", required=True, help="Output metrics JSON path.")
     parser.add_argument(
@@ -539,34 +488,23 @@ def main(argv: list[str] | None = None) -> int:
         frames = [frames]
     log.info("Loaded %d test frames from %s", len(frames), args.test_set)
 
-    ref_frames = None
-    if args.train_set:
-        ref_frames = ase_read(args.train_set, index=":")
-        if isinstance(ref_frames, Atoms):
-            ref_frames = [ref_frames]
-        log.info(
-            "Loaded %d train frames from %s (per-element reference fit on train)",
-            len(ref_frames),
-            args.train_set,
-        )
-
     metrics, parity = evaluate_frames(
         cfg.mlip,
         frames,
         iteration=args.iteration,
         model_path=args.model_path,
         test_set_label=str(args.test_set),
-        ref_frames=ref_frames,
+        elemental_reference_manifest=args.elemental_reference_manifest,
     )
 
     out_json = Path(args.out_json)
     out_json.parent.mkdir(parents=True, exist_ok=True)
     out_json.write_text(json.dumps(asdict(metrics), indent=2))
     log.info(
-        "iter=%s  E_MAE=%.4f eV/atom (shifted %.4f)  F_MAE=%.4f eV/A  -> %s",
+        "iter=%s  raw E_MAE=%.4f eV/atom (formation %.4f)  F_MAE=%.4f eV/A  -> %s",
         metrics.iteration,
         metrics.energy_mae_eV_per_atom,
-        metrics.energy_mae_eV_per_atom_shifted,
+        metrics.formation_energy_mae_eV_per_atom,
         metrics.force_mae_eV_per_A,
         out_json,
     )

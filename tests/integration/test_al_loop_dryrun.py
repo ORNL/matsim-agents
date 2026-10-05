@@ -52,6 +52,29 @@ from matsim_agents.active_learning.dataset_governance import (
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
 from matsim_agents.active_learning.evaluate import PromotionDecision, _apply_model_override
 
+
+def _campaign_elemental_manifest(cfg, elemental_manifest):
+    from matsim_agents.active_learning.loop import _dft_method_signature
+
+    path = elemental_manifest({"Si": -1.0})
+    manifest = json.loads(path.read_text())
+    manifest["backend"] = cfg.dft.backend
+    manifest["method_signature"] = _dft_method_signature(cfg, {"Si"})
+    path.write_text(json.dumps(manifest))
+    return path
+
+
+def test_missing_elemental_manifest_fails_before_training(tmp_path):
+    from matsim_agents.active_learning.loop import run_active_learning
+
+    cfg = _make_cfg(tmp_path)
+    cfg.trainer.compare_after_training = True
+    cfg.trainer.validation_fraction = 0.2
+    with pytest.raises(ValueError, match="elemental reference manifest"):
+        run_active_learning(cfg)
+    assert not (Path(cfg.loop.out_dir) / "iteration_0").exists()
+
+
 # --------------------------------------------------------------------------- #
 # Stubs                                                                       #
 # --------------------------------------------------------------------------- #
@@ -349,6 +372,7 @@ def test_promotion_decision_controls_model_activation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     approved: bool,
+    elemental_manifest,
 ) -> None:
     cfg = _make_cfg(tmp_path)
     validation_set = tmp_path / "held-out.extxyz"
@@ -359,6 +383,7 @@ def test_promotion_decision_controls_model_activation(
         promotion_approved=True,
         train_script=cfg.trainer.train_script,
         validation_set=validation_set,
+        validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
     )
     incumbent = cfg.mlip.hydragnn.logdir
     cfg.mlip.hydragnn.checkpoint = "incumbent.pk"
@@ -391,8 +416,12 @@ def test_promotion_decision_controls_model_activation(
     assert cfg.mlip.hydragnn.checkpoint == (None if approved else "incumbent.pk")
 
 
+@pytest.mark.parametrize("reference_defect", [None, "coverage", "backend", "signature"])
 def test_holdout_split_compares_candidate_without_promotion(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    elemental_manifest,
+    reference_defect,
 ) -> None:
     cfg = _make_cfg(tmp_path)
     cfg.acquisition.n_select = 3
@@ -402,6 +431,7 @@ def test_holdout_split_compares_candidate_without_promotion(
         validation_fraction=0.2,
         validation_split_seed=7,
         compare_after_training=True,
+        validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
     )
     trained_model = tmp_path / "candidate-model"
     trained_model.mkdir()
@@ -420,9 +450,32 @@ def test_holdout_split_compares_candidate_without_promotion(
         trained_model=trained_model,
         promotion_decision=decision,
     )
+    if reference_defect is not None:
+        reference_path = cfg.trainer.validation_reference_set
+        manifest = json.loads(reference_path.read_text())
+        if reference_defect == "coverage":
+            manifest["references"] = json.loads(elemental_manifest({"H": -1.0}).read_text())[
+                "references"
+            ]
+        elif reference_defect == "backend":
+            manifest["backend"] = "qe"
+        else:
+            manifest["method_signature"] = "different-dft"
+        reference_path.write_text(json.dumps(manifest))
+        training_calls = []
+        monkeypatch.setattr(
+            loop_mod,
+            "retrain_hydragnn",
+            lambda *_args, **_kwargs: training_calls.append(True),
+        )
+        with pytest.raises(ValueError, match="coverage|different DFT methods"):
+            loop_mod.run_active_learning(cfg)
+        assert training_calls == []
+        state = json.loads((cfg.loop.out_dir / "iteration_0000/state.json").read_text())
+        assert state["status"] == "failed"
+        assert not state["model_promoted"]
+        return
     loop_mod.run_active_learning(cfg)
-
-    import json
 
     state = json.loads((cfg.loop.out_dir / "iteration_0000" / "state.json").read_text())
     assert state["n_training_frames"] == 2

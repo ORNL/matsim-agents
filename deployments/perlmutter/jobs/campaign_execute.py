@@ -209,6 +209,12 @@ def main(argv: list[str] | None = None) -> int:
 
     campaign = CampaignState.load(args.campaign_state)
     al_config = ALConfig.from_yaml(args.al_config)
+    compares_energy = args.promote_model or al_config.trainer.compare_after_training
+    if args.retrain and compares_energy and args.promotion_validation_reference_set is None:
+        parser.error(
+            "--retrain energy comparison requires --promotion-validation-reference-set "
+            "(DFT-labelled elemental JSON manifest)"
+        )
     campaign.budget.max_candidates = args.max_candidates
     campaign.budget.max_dft_calculations = (
         args.max_dft_calculations if args.execution_mode == "dft" else None

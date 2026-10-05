@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -49,6 +50,11 @@ from pathlib import Path
 
 import numpy as np
 from ase.io import read
+
+if (Path(__file__).parent / "energy_references.py").is_file():
+    from energy_references import predict_elemental_references
+else:
+    from matsim_agents.discovery.energy_references import predict_elemental_references
 
 HERE = Path(__file__).parent
 STRUCT_META = HERE / "public_data" / "structures_metadata.csv"
@@ -168,6 +174,7 @@ def parse_args() -> argparse.Namespace:
     )
     # Common
     p.add_argument("--device", default="cpu", help="Compute device: cpu, cuda, xpu.")
+    p.add_argument("--elemental-reference-manifest", required=True, type=Path)
     p.add_argument("--relax", action="store_true", help="Also run ASE LBFGS relaxation.")
     p.add_argument("--fmax", type=float, default=0.05)
     p.add_argument("--steps", type=int, default=500)
@@ -180,7 +187,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def run_predictions(
-    calc, label: str, device: str, relax: bool = False, fmax: float = 0.05, steps: int = 500
+    calc,
+    label: str,
+    device: str,
+    relax: bool = False,
+    fmax: float = 0.05,
+    steps: int = 500,
+    *,
+    elemental_reference_manifest: Path | None = None,
 ) -> None:
     out = PRED_ROOT / label
     forces_dir = out / "forces"
@@ -191,6 +205,17 @@ def run_predictions(
 
     with open(STRUCT_META, newline="") as f:
         structures = list(csv.DictReader(f))
+    if elemental_reference_manifest is None:
+        raise ValueError("predictions require a DFT-labelled elemental reference manifest")
+    required_elements = set()
+    for row in structures:
+        required_elements.update(read(STRUCT_ROOT / row["file_path"]).get_chemical_symbols())
+    references = predict_elemental_references(
+        elemental_reference_manifest, calc, required_elements=required_elements
+    )
+    (out / "elemental_reference_predictions.json").write_text(
+        json.dumps(references.provenance, indent=2), encoding="utf-8"
+    )
 
     energy_file = out / "energies.csv"
     energy_fields = ["structure_id", "energy_eV", "energy_eV_per_atom", "n_atoms"]
@@ -198,9 +223,16 @@ def run_predictions(
     t0 = time.perf_counter()
     n_ok = n_fail = 0
 
-    with open(energy_file, "w", newline="") as ef:
+    with (
+        open(energy_file, "w", newline="") as ef,
+        open(out / "formation_energies.csv", "w", newline="") as ff,
+    ):
         writer = csv.DictWriter(ef, fieldnames=energy_fields)
         writer.writeheader()
+        formation_writer = csv.DictWriter(
+            ff, fieldnames=["structure_id", "formation_energy_eV_per_atom", "n_atoms"]
+        )
+        formation_writer.writeheader()
 
         for row in structures:
             sid = row["structure_id"]
@@ -213,6 +245,7 @@ def run_predictions(
                 atoms.calc = calc
                 energy = atoms.get_potential_energy()
                 forces = atoms.get_forces()
+                formation_energy = references.formation_energy(atoms, energy, model=True)
 
                 writer.writerow(
                     {
@@ -223,6 +256,13 @@ def run_predictions(
                     }
                 )
                 np.save(str(forces_dir / f"{sid}.npy"), forces.astype(np.float32))
+                formation_writer.writerow(
+                    {
+                        "structure_id": sid,
+                        "formation_energy_eV_per_atom": f"{formation_energy:.8f}",
+                        "n_atoms": len(atoms),
+                    }
+                )
 
                 if relax:
                     from ase.io import write as ase_write
@@ -335,6 +375,7 @@ def main() -> None:
                     args.relax,
                     args.fmax,
                     args.steps,
+                    elemental_reference_manifest=args.elemental_reference_manifest,
                 )
             except ImportError:
                 print("  mace-torch not installed. Run: pip install mace-torch")
@@ -352,7 +393,13 @@ def main() -> None:
                 HydraGNN = load_baseline_class("hydragnn")
                 calc_hgnn = HydraGNN.from_checkpoint(args.hydragnn_logdir, device=args.device)
                 run_predictions(
-                    calc_hgnn, "hydragnn", args.device, args.relax, args.fmax, args.steps
+                    calc_hgnn,
+                    "hydragnn",
+                    args.device,
+                    args.relax,
+                    args.fmax,
+                    args.steps,
+                    elemental_reference_manifest=args.elemental_reference_manifest,
                 )
             except Exception:
                 traceback.print_exc()
@@ -366,7 +413,15 @@ def main() -> None:
             calc_uma = UMA.from_checkpoint(
                 args.uma_model, device=args.device, task_name=args.uma_task
             )
-            run_predictions(calc_uma, "uma", args.device, args.relax, args.fmax, args.steps)
+            run_predictions(
+                calc_uma,
+                "uma",
+                args.device,
+                args.relax,
+                args.fmax,
+                args.steps,
+                elemental_reference_manifest=args.elemental_reference_manifest,
+            )
         except ImportError:
             print("  fairchem-core not installed. Run: pip install fairchem-core")
             raise
@@ -384,7 +439,13 @@ def main() -> None:
                 args.allscaip_model, device=args.device, task_name=args.allscaip_task
             )
             run_predictions(
-                calc_allscaip, "allscaip", args.device, args.relax, args.fmax, args.steps
+                calc_allscaip,
+                "allscaip",
+                args.device,
+                args.relax,
+                args.fmax,
+                args.steps,
+                elemental_reference_manifest=args.elemental_reference_manifest,
             )
         except ImportError:
             print("  fairchem-core not installed. Run: pip install fairchem-core")

@@ -563,9 +563,9 @@ class TrainerConfig(BaseModel):
     validation_reference_set: Path | None = Field(
         None,
         description=(
-            "Optional independent frames used to fit elemental energy references. "
-            "For cross-composition validation, their compositions must span every "
-            "evaluated composition direction."
+            "DFT-labelled pure-element JSON manifest required for energy comparison. "
+            "Each model evaluates the same declared geometries before subtracting "
+            "its own elemental energies; complete element coverage is required."
         ),
     )
     validation_fraction: float = Field(
@@ -579,7 +579,9 @@ class TrainerConfig(BaseModel):
         False,
         description="Compare incumbent and candidate models on held-out validation frames.",
     )
-    promotion_max_energy_mae_eV_per_atom: float = Field(0.1, gt=0)
+    promotion_max_energy_mae_eV_per_atom: float = Field(
+        0.1, gt=0, description="Maximum held-out formation-energy MAE for promotion."
+    )
     promotion_max_force_mae_eV_per_A: float = Field(0.2, gt=0)
     promotion_max_relative_regression: float = Field(0.05, ge=0)
     promotion_min_evaluated_frames: int = Field(1, ge=1)

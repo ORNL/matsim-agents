@@ -263,6 +263,94 @@ versions distinguish the evolving hull states; method signatures, structure
 hashes, and provenance provide additional compatibility and audit evidence.
 See [Competing-phase reference hulls](./reference-hulls.md).
 
+## Formation-energy comparisons and campaign promotion
+
+Scientific MLIP-versus-DFT energy comparisons use formation energies, not
+raw energy zeros or offsets fitted to training/test compounds. Every energy
+test must provide DFT calculations for its pure-element reference geometries
+using the same DFT setup as its compound labels. Each MLIP evaluates those
+exact fixed geometries first and subtracts its own elemental energies; DFT
+subtracts its own references. Molecular references such as O2 are normalized
+by their actual atom count. Missing elements, impure references, changed
+geometry hashes, non-finite energies, and missing manifests are errors.
+
+Supply a JSON manifest, with paths relative to the manifest:
+
+```json
+{
+  "backend": "qe",
+  "method_signature": "qe-pbe-reference-protocol-v1",
+  "references": {
+    "Nb": {
+      "structure_path": "Nb.extxyz",
+      "structure_sha256": "<SHA-256 of the fixed geometry file>",
+      "energy_eV": -20.0
+    },
+    "O": {
+      "structure_path": "O2.extxyz",
+      "structure_sha256": "<SHA-256 of the fixed geometry file>",
+      "energy_eV": -10.0
+    }
+  }
+}
+```
+
+The energies above are illustrative total-cell values, not physical reference
+data. Populate them from converged DFT calculations on the declared geometries,
+with full coverage of the elements in the test. The manifest is not a request
+to launch DFT: the caller must supply those calculations and ensure method
+compatibility with the compound dataset. Use a separate manifest for each
+DFT protocol being compared. Baseline errors remain available as diagnostics.
+Where a compound dataset has a `*.extxyz.manifest.json` sidecar, evaluation
+checks its file hash, DFT backend, and method signature against the elemental
+manifest. A missing sidecar emits a warning; it does not certify DFT method
+compatibility. The caller remains responsible for the declared protocol and
+for convergence of the supplied DFT calculations.
+
+Energy evaluation and fine-tune/evaluation require
+`--elemental-reference-manifest`; force-only evaluation does not require
+elemental references or model energy predictions. Campaign promotion uses
+`--promotion-validation-reference-set` / `trainer.validation_reference_set`
+for this JSON manifest, not for training-partition offset fitting. Perlmutter
+retraining submissions that request model promotion require
+`MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET` before submission.
+Fine-tune/evaluation launchers require `ELEMENTAL_REFERENCE_MANIFEST`, or an
+existing `elemental_references.json` in each dataset's case directory.
+Promotion energy thresholds now apply to
+`formation_energy_mae_eV_per_atom`; raw total-energy errors remain diagnostic.
+The deprecated `energy_*_per_atom_shifted` output fields alias formation-energy
+errors and no longer represent a fitted shift. Reassess historical thresholds
+under this new convention. Force comparisons and within-method polymorph/hull
+ranking are unchanged; final DFT ranking results still never enter training.
+
+Campaigns use this comparison for held-out incumbent/candidate evaluation and
+promotion only. Active-learning acquisition, force metrics, same-composition
+polymorph ranking, and method-specific hull construction retain their existing
+semantics. Training without energy comparison does not require elemental
+references. Before training a candidate that will be compared, the active-learning
+loop checks element coverage and requires the reference backend/method signature
+to match the generated compound labels. Use the campaign's recorded DFT method
+signature, not a descriptive label from an unrelated hull protocol.
+
+For method `m`, the formation energy per atom is
+`(E_compound_m - sum_i(n_i * mu_i_m)) / N`, where `mu_i_m` is that method's
+elemental energy per atom on the declared geometry. Different MLIPs and DFT
+protocols retain separate baselines; no cross-method totals are pooled.
+This removes additive elemental energy zeros, not approximation errors.
+If the fixed reference phases are not elemental ground states, describe the
+result as formation energy relative to those declared phases rather than
+claiming a ground-state thermodynamic formation energy.
+
+Pure-element baseline errors remain visible because cancellation can yield
+good formation energies even when individual elemental predictions are poor.
+Formation-energy accuracy does not establish hull stability, force accuracy,
+or accurate same-composition energy differences. Promotion retains force
+and incumbent-regression gates rather than relying on formation energy alone.
+
+For Codabench, the same convention applies to Task 1 and the energy inputs to
+Task 5. See the [participant guide](../benchmarks/codabench/starting_kit/README.md#elemental-reference-manifest)
+for the reference schema, inference commands, outputs, and release requirements.
+
 ## Campaign benchmark comparisons
 
 Campaign benchmark comparisons must contain observations from a single

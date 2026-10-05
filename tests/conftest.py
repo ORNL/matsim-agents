@@ -2,12 +2,47 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
+from ase import Atoms
+from ase.io import write
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from matsim_agents.state import RelaxationResult, TaskSpec
+
+
+@pytest.fixture
+def elemental_manifest(tmp_path):
+    """Synthetic DFT-labelled fixed geometries; not real DFT qualification."""
+
+    def create(energies):
+        references = {}
+        for element, energy_per_atom in energies.items():
+            atoms = Atoms(element + "2")
+            path = tmp_path / f"elemental-{element}.extxyz"
+            write(path, atoms)
+            references[element] = {
+                "structure_path": path.name,
+                "energy_eV": energy_per_atom * len(atoms),
+                "structure_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        manifest = tmp_path / "elemental-references.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "backend": "qe",
+                    "method_signature": "synthetic-dft",
+                    "references": references,
+                }
+            )
+        )
+        return manifest
+
+    return create
+
 
 # ── fake LLM helpers ──────────────────────────────────────────────────────────
 

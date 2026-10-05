@@ -63,6 +63,7 @@ from matsim_agents.active_learning.trainer import (
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.active_learning.vasp_io import resolve_potcar_paths
 from matsim_agents.backends.dft.qe_relax import resolve_pseudopotentials
+from matsim_agents.discovery.energy_references import load_elemental_reference_manifest
 
 log = logging.getLogger(__name__)
 
@@ -247,6 +248,14 @@ def _scan_resume(root: Path) -> tuple[int, Path | None]:
 
 def run_active_learning(cfg: ALConfig) -> None:
     """Run the full AL loop. Idempotent: safe to re-invoke after a job restart."""
+    if cfg.trainer.compare_after_training or cfg.trainer.promote_model:
+        if cfg.trainer.validation_reference_set is None:
+            raise ValueError(
+                "model comparison requires a DFT-labelled elemental reference manifest"
+            )
+        load_elemental_reference_manifest(
+            cfg.trainer.validation_reference_set, required_elements=set()
+        )
     root = Path(cfg.loop.out_dir)
     root.mkdir(parents=True, exist_ok=True)
 
@@ -473,6 +482,22 @@ def run_active_learning(cfg: ALConfig) -> None:
             )
 
             # --- 6. (Optional) retrain the surrogate --------------------------
+            if cfg.trainer.compare_after_training or cfg.trainer.promote_model:
+                if cfg.trainer.validation_reference_set is None:
+                    raise ValueError(
+                        "model comparison requires a DFT-labelled elemental reference manifest"
+                    )
+                reference_manifest, _, _ = load_elemental_reference_manifest(
+                    cfg.trainer.validation_reference_set,
+                    required_elements=labelled_elements,
+                )
+                if (
+                    reference_manifest["backend"] != backend.name
+                    or reference_manifest["method_signature"] != method_signature
+                ):
+                    raise ValueError(
+                        "elemental references and campaign labels use different DFT methods"
+                    )
             t0 = time.time()
             if (
                 cfg.trainer.enabled

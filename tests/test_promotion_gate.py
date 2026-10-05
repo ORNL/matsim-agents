@@ -10,7 +10,6 @@ from ase.io import write
 from matsim_agents.active_learning.config import MLIPConfig, TrainerConfig, UMAConfig
 from matsim_agents.active_learning.evaluate import (
     EvalMetrics,
-    _validate_shift_reference_coverage,
     assess_promotion,
     evaluate_frames,
     evaluate_promotion_candidate,
@@ -41,6 +40,8 @@ def _metrics(
         energy_rmse_eV_per_atom=energy_mae,
         energy_mae_eV_per_atom_shifted=energy_mae,
         energy_rmse_eV_per_atom_shifted=energy_mae,
+        formation_energy_mae_eV_per_atom=energy_mae,
+        formation_energy_rmse_eV_per_atom=energy_mae,
         energy_mean_offset_eV_per_atom=0.0,
         force_mae_eV_per_A=force_mae,
         force_rmse_eV_per_A=force_mae,
@@ -65,29 +66,9 @@ def _trainer(tmp_path: Path) -> TrainerConfig:
     )
 
 
-def test_shift_reference_accepts_mixed_compositions_that_span_evaluation() -> None:
-    evaluation = [[1, 1, 1], [2, 0, 1], [0, 2, 1]]
-    mixed_references = [[1, 0, 1], [0, 1, 1], [1, 1, 1]]
-
-    _validate_shift_reference_coverage(
-        np.asarray(evaluation, dtype=float),
-        np.asarray(mixed_references, dtype=float),
-    )
-
-
-def test_shift_reference_rejects_unspanned_composition_direction() -> None:
-    evaluation = [[1, 1, 1], [2, 0, 1]]
-    deficient_references = [[1, 0, 1], [2, 0, 2]]
-
-    with pytest.raises(ValueError, match="do not span"):
-        _validate_shift_reference_coverage(
-            np.asarray(evaluation, dtype=float),
-            np.asarray(deficient_references, dtype=float),
-        )
-
-
-def test_cross_composition_shift_requires_independent_references(
+def test_cross_composition_comparison_requires_pure_element_references(
     monkeypatch: pytest.MonkeyPatch,
+    elemental_manifest,
 ) -> None:
     class CompositionCalculator(Calculator):
         implemented_properties = ["energy", "forces"]
@@ -107,10 +88,15 @@ def test_cross_composition_shift_requires_independent_references(
     ]
     mlip = MLIPConfig(backend="uma", uma=UMAConfig())
 
-    with pytest.raises(ValueError, match="requires independent ref_frames"):
+    with pytest.raises(ValueError, match="elemental reference manifest"):
         evaluate_frames(mlip, frames)
 
-    evaluate_frames(mlip, [frames[0], frames[0].copy()])
+    metrics, _ = evaluate_frames(
+        mlip,
+        frames,
+        elemental_reference_manifest=elemental_manifest({"Nb": 0.0, "Ta": 0.0, "O": 0.0}),
+    )
+    assert metrics.formation_energy_mae_eV_per_atom == pytest.approx(0.0)
 
 
 def test_promotion_gate_accepts_accurate_non_regressing_candidate(tmp_path: Path) -> None:

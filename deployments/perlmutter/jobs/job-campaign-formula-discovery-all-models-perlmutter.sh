@@ -68,6 +68,12 @@ if [[ "$CAMPAIGN_MODE" == "uma-only" ]]; then
 fi
 
 REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
+if [[ "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" && "${MATSIM_CAMPAIGN_PROMOTE_MODEL:-0}" == "1" ]]; then
+  [[ -f "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" ]] || {
+    echo "ERROR: retraining energy comparison requires MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET (DFT-labelled elemental JSON manifest)" >&2
+    exit 2
+  }
+fi
 export PYTHONPATH="${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
 PROJ="$(dirname "$REPO")"
 MODELS_ROOT="${MODEL_ROOT:-$PROJ/models}"
@@ -269,6 +275,9 @@ if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; th
     --train-script "$REPO/src/matsim_agents/active_learning/finetune_uma.py"
     --train-epochs "${MATSIM_CAMPAIGN_TRAIN_EPOCHS:-5}"
   )
+  if [[ -n "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" ]]; then
+    TRAIN_ARGS+=(--promotion-validation-reference-set "$MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET")
+  fi
   if [[ -n "${MATSIM_CAMPAIGN_TRAIN_LAUNCHER:-}" ]]; then
     TRAIN_ARGS+=(--train-launcher "$MATSIM_CAMPAIGN_TRAIN_LAUNCHER")
   fi
@@ -289,11 +298,6 @@ if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; th
     )
     if [[ "${MATSIM_CAMPAIGN_CONTINUE_ON_PROMOTION_REJECTION:-0}" == "1" ]]; then
       TRAIN_ARGS+=(--continue-on-promotion-rejection)
-    fi
-    if [[ -n "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" ]]; then
-      TRAIN_ARGS+=(
-        --promotion-validation-reference-set "$MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET"
-      )
     fi
   fi
 fi

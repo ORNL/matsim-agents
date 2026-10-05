@@ -135,6 +135,11 @@ for backend in "${BACKEND_LIST[@]}"; do
           echo "[SKIP] ${backend}/${case}: dataset not found (${dataset})" >&2
           continue
         fi
+        reference_manifest="${ELEMENTAL_REFERENCE_MANIFEST:-${RUNS_ROOT}/${case}/elemental_references.json}"
+        if [[ ! -f "${reference_manifest}" ]]; then
+          echo "[ERROR] ${case}: DFT-labelled elemental reference manifest not found (${reference_manifest})" >&2
+          exit 2
+        fi
 
         # Compose a variant tag from the head strategy / MACE size / LoRA/freeze
         # mode so distinct runs never collide in the output tree or job names.
@@ -165,6 +170,7 @@ for backend in "${BACKEND_LIST[@]}"; do
 
         # env passed through to the per-job script
         exports="ALL,BACKEND=${backend},CASE=${case},UMA_TASK=${uma_task}"
+        exports+=",ELEMENTAL_REFERENCE_MANIFEST=${reference_manifest}"
         [[ "${backend}" == "hydragnn" ]] && exports+=",HYDRAGNN_STRATEGY=${strategy}"
         if [[ "${backend}" == "mace" ]]; then
           exports+=",MACE_FAMILY=${MACE_FAMILY},MACE_MODEL=${mace_model}"

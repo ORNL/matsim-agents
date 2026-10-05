@@ -280,6 +280,13 @@ frames are checked for finite energies/forces, correct force shapes, and exact
 duplicate geometries; a SHA-256 dataset manifest records the DFT energy
 reference and validation summary.
 
+Held-out model energy comparisons and promotion use **formation-energy
+errors**, subtracting each method's own elemental energies on the same fixed
+reference geometries. These comparisons require a DFT-labelled elemental JSON
+manifest in `trainer.validation_reference_set`. Force gates remain in place;
+MD acquisition, polymorph ranking, and hull construction are not redefined.
+See [Energy comparison and promotion](#energy-comparison-and-promotion).
+
 #### Consistent multi-node DFT labeling
 
 The DFT batch planner discovers Slurm allocations on Frontier/Perlmutter and
@@ -1385,6 +1392,60 @@ comparable. Every frame written to the dataset is tagged with
 `info["dft_backend"]`; never train one HydraGNN model on a mixed
 VASP+QE dataset without an explicit per-backend energy offset.
 
+### Energy comparison and promotion
+
+For each method `m`, the comparison uses:
+
+```text
+formation_energy_m = (compound_total_m - sum_i(n_i * elemental_energy_per_atom_m[i])) / N
+```
+
+Each MLIP first evaluates the same fixed elemental geometries supplied with
+the test. Its compound totals subtract **its own predictions**, while DFT
+totals subtract **DFT elemental energies**. Do not subtract DFT references
+from raw MLIP totals. O2 and other molecular references are divided by their
+actual atom count. References are not independently relaxed by each model.
+
+Use this for held-out evaluation of incumbent/candidate models and promotion:
+
+```yaml
+trainer:
+  # Add these to an otherwise valid training configuration.
+  compare_after_training: true
+  validation_set: /path/to/held-out.extxyz
+  validation_reference_set: /path/to/elemental_references.json
+  promotion_max_energy_mae_eV_per_atom: 0.1
+```
+
+Promotion still requires its separate approval flags and force/regression
+checks. `promotion_max_energy_mae_eV_per_atom` now limits
+`formation_energy_mae_eV_per_atom`, not compound-fitted energy offsets.
+Recalibrate historical thresholds on real held-out data; the value above is
+an example, not a scientifically qualified recommendation.
+
+For standalone energy evaluation:
+
+```bash
+python -m matsim_agents.active_learning.evaluate \
+  --al-config /path/to/al-config.yaml \
+  --test-set /path/to/held-out.extxyz \
+  --elemental-reference-manifest /path/to/elemental_references.json \
+  --out-json /path/to/metrics.json
+```
+
+Raw energy errors and elemental-baseline errors remain diagnostic outputs,
+alongside force errors. Force-only evaluation needs no elemental manifest.
+Training without model comparison, MD acquisition, within-method
+fixed-composition ranking, and method-specific hull construction are unchanged.
+Formation subtraction does not authorize pooling incompatible DFT methods
+into a training dataset or hull.
+
+The caller must supply converged pure-element DFT calculations; these
+evaluators do not launch them. Campaign comparisons check coverage and the
+DFT method signature before candidate training. Separate DFT protocols require
+separate matching manifests, even when the comparison geometries are identical.
+See [the manifest schema and compatibility checks](docs/scientific-workflows.md#formation-energy-comparisons-and-campaign-promotion).
+
 Full walkthrough — including templated INCAR / `pw.in` files, in-allocation
 launcher details, and per-backend ROCm/MPI gotchas — lives in
 [`examples/active_learning/README.md`](examples/active_learning/README.md).
@@ -1452,15 +1513,17 @@ Four baselines are provided in `benchmarks/codabench/baselines/`:
 | **UMA** (`uma-s-1p2`) | Transformer-based universal model | Meta / fairchem |
 | **AllScAIP** (`allscaip-md-conserving-all-omol`) | Message-passing NN | Meta / OMol25 |
 
-Run any or all baselines:
+Run any or all baselines. Every energy run requires the organizer-supplied
+elemental manifest:
 
 ```bash
 cd benchmarks/codabench
-python run_baselines.py --model mace        # MACE-MP-0
-python run_baselines.py --model hydragnn    # HydraGNN
-python run_baselines.py --model uma         # UMA (requires fairchem-core ≥2.20)
-python run_baselines.py --model allscaip    # AllScAIP (requires fairchem-core ≥2.20)
-python run_baselines.py --model all --relax # dispatches through .venv and .venv-mace
+REF=public_data/elemental_references.json
+python run_baselines.py --model mace --mace-variant materials --elemental-reference-manifest "$REF"
+python run_baselines.py --model hydragnn --hydragnn-logdir /path/to/model --elemental-reference-manifest "$REF"
+python run_baselines.py --model uma --elemental-reference-manifest "$REF"
+python run_baselines.py --model allscaip --elemental-reference-manifest "$REF"
+python run_baselines.py --model all --relax --hydragnn-logdir /path/to/model --elemental-reference-manifest "$REF"
 ```
 
 UMA and AllScAIP require the `fairchem-core` package and the model checkpoints
@@ -1468,13 +1531,49 @@ UMA and AllScAIP require the `fairchem-core` package and the model checkpoints
 accepted before use at <https://huggingface.co/facebook/UMA> and
 <https://huggingface.co/facebook/OMol25>).
 
+### Reference convention and release requirements
+
+Task 1 compares formation energies, not raw total-energy zeros. Both baseline
+and submitted-model runners evaluate the declared pure-element geometries
+first, then subtract each MLIP's own elemental energies. Protected DFT
+formation labels subtract DFT references from the same declared geometries.
+This removes additive elemental offsets, not genuine bonding/method errors.
+Task 5 ranks structures within formula groups; this subtraction does not
+change their within-method ordering or establish convex-hull stability.
+
+Runners retain `energies.csv` and `elemental_reference_predictions.json` for
+diagnostics and write submission-ready `formation_energies.csv`. Force and
+relaxation metrics remain separate; a good formation-energy score does not
+by itself qualify a model's forces, reference-phase accuracy, or hull stability.
+Reference ground-state claims require appropriate elemental ground states;
+otherwise these energies are relative to the explicitly declared phases.
+
+Organizers must provide real, converged elemental DFT calculations, fixed
+geometry files, and `public_data/elemental_references.json` before release.
+Release validation checks full element coverage, geometry hashes, bundled
+reference paths, and agreement with protected per-atom
+`reference_data/elemental_energies.json`. Organizers remain responsible for
+matching the compound-label DFT setup and forming the protected compound
+labels correctly; validation does not independently rerun DFT.
+
+```bash
+python benchmarks/codabench/build_bundle.py \
+  --public-data /path/to/public_data \
+  --reference-data /path/to/protected_reference_data \
+  --output /path/to/competition.zip
+```
+
+The builder validates the assembled release before creating the ZIP.
+Synthetic unit tests and mocked model-catalog tests are software checks, not
+evidence of real MLIP/DFT scientific accuracy or completed competition data.
+
 ### Directory layout
 
 ```
 benchmarks/codabench/
 ├── competition.yaml             # Codabench bundle manifest & leaderboard config
 ├── run_baselines.py             # entry point: --model mace/hydragnn/uma/allscaip/all
-├── evaluate.py                  # local evaluation helper (mirrors the Codabench scorer)
+├── evaluate.py                  # submitted-model inference + reference subtraction
 ├── requirements.txt             # backend-neutral competition dependencies
 ├── requirements-mace.txt        # MACE process dependencies (e3nn 0.4.4)
 ├── requirements-fairchem.txt    # UMA/AllScAIP process dependencies
@@ -1492,11 +1591,12 @@ benchmarks/codabench/
 │   ├── private_ids.txt          # 108 structure IDs in the private partition
 │   ├── create_split.py          # reproducible split generator (SEED=42)
 │   ├── formation_energies.csv   # DFT reference energies (server-side, not public)
-│   ├── elemental_energies.json  # elemental DFT references (published to participants)
+│   ├── elemental_energies.json  # protected per-atom DFT references; must match public manifest
 │   └── forces/                  # per-structure force arrays (server-side, not public)
 ├── public_data/
 │   ├── generate_structures.py   # generates the 159 test structures
 │   ├── structures_metadata.csv  # anonymised MATS-XXXX → class / formula mapping
+│   ├── elemental_references.json # public geometry paths, hashes, DFT total-cell labels
 │   └── structures/              # XYZ files of all test structures
 └── starting_kit/
     ├── README.md                # participant guide (tasks, formats, scoring)
