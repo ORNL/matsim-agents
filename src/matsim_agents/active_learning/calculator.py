@@ -373,6 +373,7 @@ def build_ensemble(cfg: MLIPConfig, *, enable_mc_dropout: bool = False) -> list[
 
     * HydraGNN: primary logdir + each ``ensemble_paths`` logdir.
     * UMA: primary ``model_name`` + each ``ensemble_models`` entry.
+    * MACE: primary model + variants in its family or local checkpoint members.
     """
     if cfg.backend == "hydragnn":
         assert cfg.hydragnn is not None
@@ -386,6 +387,18 @@ def build_ensemble(cfg: MLIPConfig, *, enable_mc_dropout: bool = False) -> list[
         for name in cfg.uma.ensemble_models:
             member = cfg.uma.model_copy(update={"model_name": name})
             calcs.append(build_uma_calculator(member, enable_mc_dropout=enable_mc_dropout))
+        return calcs
+    if cfg.backend == "mace":
+        assert cfg.mace is not None
+        calcs = [build_mace_calculator(cfg.mace, enable_mc_dropout=enable_mc_dropout)]
+        for model in cfg.mace.ensemble_models:
+            values = cfg.mace.model_dump()
+            values["model"] = model
+            if Path(model).is_file():
+                values["family"] = "checkpoint"
+                values["dispersion"] = False
+            member = MACEConfig.model_validate(values)
+            calcs.append(build_mace_calculator(member, enable_mc_dropout=enable_mc_dropout))
         return calcs
     raise ValueError(f"Unknown mlip.backend: {cfg.backend!r}")
 

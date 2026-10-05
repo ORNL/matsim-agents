@@ -41,11 +41,28 @@ def sha256_file(path: str | Path) -> str:
 
 
 def structure_identity(atoms: Any) -> str:
-    """Hash chemistry and geometry independently of atom ordering and translation."""
+    """Hash geometry independent of ordering/translation and molecular rotations."""
     import numpy as np
 
     numbers = np.asarray(atoms.numbers, dtype=int)
     pbc = np.asarray(atoms.pbc, dtype=bool)
+    if not pbc.any():
+        positions = np.asarray(atoms.positions, dtype=float)
+        distances = np.linalg.norm(positions[:, None, :] - positions[None, :, :], axis=2)
+        environments = sorted(
+            (
+                int(number),
+                sorted(
+                    (int(other), round(float(distance), 6))
+                    for other, distance in zip(numbers, row, strict=True)
+                ),
+            )
+            for number, row in zip(numbers, distances, strict=True)
+        )
+        payload = {"environments": environments, "pbc": pbc.tolist()}
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
     scaled = np.asarray(atoms.get_scaled_positions(wrap=False))
     scaled[:, pbc] = np.mod(scaled[:, pbc], 1.0)
     metric = np.asarray(atoms.cell) @ np.asarray(atoms.cell).T

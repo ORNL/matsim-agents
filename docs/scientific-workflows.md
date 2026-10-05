@@ -142,6 +142,13 @@ New DFT frames are checked for finite energy and forces, correct force shape,
 and duplicate geometry. Dataset manifests preserve hashes, backend identity,
 energy-reference metadata, and validation outcomes. VASP and QE energies must
 not be mixed without an explicit, recorded reference transformation.
+For fully non-periodic structures, duplicate/held-out overlap identities use
+species-labelled interatomic-distance environments rounded to six decimal
+places in angstroms. This tolerates coordinate serialization noise and detects
+reordered, translated, or rotated molecular copies independently of an
+unused vacuum cell. Reflections also share this distance identity; it is a
+conservative overlap guard, not a unique identifier for molecular chirality.
+Periodic structures retain their existing cell-metric/translated-site identity.
 
 ## Combined MLIP training and independent DFT ranking
 

@@ -5,10 +5,73 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.active_learning.vasp_io import resolve_potcar_paths
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("layout", ["nested", "symbol", "prefixed", "mixed", "missing"])
+def test_vasp_campaign_preflight_matches_runtime_potcar_layouts(tmp_path, layout):
+    repo = tmp_path / "repo"
+    jobs = repo / "deployments/perlmutter/jobs"
+    jobs.mkdir(parents=True)
+    marker = tmp_path / "launched"
+    (jobs / "job-campaign-formula-discovery-all-models-perlmutter.sh").write_text(
+        '#!/bin/bash\nprintf launched > "$TEST_LAUNCH_MARKER"\n'
+    )
+    binary = tmp_path / "vasp"
+    binary.write_text("#!/bin/bash\nexit 0\n")
+    binary.chmod(0o755)
+    potcars = tmp_path / "potcars"
+    potcars.mkdir()
+    for index, symbol in enumerate(("Nb", "Ta", "O")):
+        kind = ["nested", "symbol", "prefixed"][index] if layout == "mixed" else layout
+        if layout == "missing" and symbol == "O":
+            continue
+        path = (
+            potcars / symbol / "POTCAR"
+            if kind in {"nested", "missing"}
+            else potcars / symbol
+            if kind == "symbol"
+            else potcars / f"POTCAR.{symbol}"
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("synthetic POTCAR")
+    env = {
+        **os.environ,
+        "PROJECT_ROOT": str(repo),
+        "MATSIM_VASP_BIN": str(binary),
+        "MATSIM_VASP_POTCAR_DIR": str(potcars),
+        "MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE": "synthetic-vasp",
+        "TEST_LAUNCH_MARKER": str(marker),
+    }
+    result = subprocess.run(
+        [
+            "bash",
+            str(
+                ROOT
+                / "deployments/perlmutter/jobs"
+                / "job-campaign-formula-discovery-all-models-vasp-perlmutter.sh"
+            ),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if layout == "missing":
+        assert result.returncode == 2
+        assert "missing O POTCAR" in result.stderr
+        assert not marker.exists()
+        with pytest.raises(FileNotFoundError):
+            resolve_potcar_paths(["Nb", "Ta", "O"], potcars)
+    else:
+        assert result.returncode == 0, result.stderr
+        assert marker.read_text() == "launched"
+        assert len(resolve_potcar_paths(["Nb", "Ta", "O"], potcars)) == 3
 
 
 def _fake_cli(tmp_path: Path) -> Path:

@@ -64,6 +64,15 @@ The workflow exposes every foundation loader included in `mace-torch==0.3.16`:
 | `mace_anicc` | H/C/N/O molecules | ANI-CC |
 | `checkpoint` | checkpoint-dependent | local `.model` file |
 
+For active-learning ensemble acquisition, `mlip.mace.ensemble_models` lists
+additional members alongside the primary model. Variant names and URLs use
+the primary foundation family; existing local files load through the
+`checkpoint` family. A checkpoint-family primary requires local checkpoint
+members. Device, precision, and dropout controls are inherited. D3 dispersion
+is retained for `mace_mp` foundation members but disabled for direct checkpoint
+members, whose loader does not implement that option. Missing checkpoint
+members fail explicitly. Run the entire ensemble in the MACE environment.
+
 Multi-head `mh-0` and `mh-1` variants are excluded from the workflow and
 Codabench catalogs until explicit inference-head selection is supported
 through the adapters. The pinned MACE version requires a head for these

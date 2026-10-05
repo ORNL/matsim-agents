@@ -190,3 +190,25 @@ def test_promotion_rejects_training_geometry_copied_to_validation(tmp_path: Path
             iteration=1,
             training_set=training_set,
         )
+
+
+@pytest.mark.parametrize("with_cell", [False, True])
+def test_promotion_rejects_rotated_reordered_translated_molecule(tmp_path, with_cell):
+    training_set = tmp_path / "training.extxyz"
+    validation_set = tmp_path / "validation.extxyz"
+    molecule = Atoms(
+        "OH2",
+        positions=[[0, 0, 0], [0.95, 0, 0], [-0.24, 0.92, 0]],
+        cell=[10, 11, 12] if with_cell else None,
+        pbc=False,
+    )
+    duplicate = molecule[[2, 0, 1]]
+    duplicate.rotate(37, [1, 2, 3])
+    duplicate.translate([5, -2, 7])
+    write(training_set, molecule)
+    write(validation_set, duplicate)
+    cfg = SimpleNamespace(
+        trainer=SimpleNamespace(validation_set=validation_set, validation_reference_set=None)
+    )
+    with pytest.raises(ValueError, match="overlapping geometries"):
+        evaluate_promotion_candidate(cfg, "candidate", iteration=1, training_set=training_set)

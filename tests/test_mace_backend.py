@@ -5,8 +5,8 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from matsim_agents.active_learning.calculator import build_mace_calculator
-from matsim_agents.active_learning.config import MACEConfig
+from matsim_agents.active_learning.calculator import build_ensemble, build_mace_calculator
+from matsim_agents.active_learning.config import MACEConfig, MLIPConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 from matsim_agents.campaign.execution import _exploration_kwargs
 from matsim_agents.discovery.seeds import PhaseCandidate
@@ -33,6 +33,84 @@ def fake_mace(monkeypatch):
     monkeypatch.setitem(sys.modules, "mace", mace)
     monkeypatch.setitem(sys.modules, "mace.calculators", calculators)
     return calls
+
+
+@pytest.mark.parametrize("family", ["mace_mp", "mace_off", "mace_omol", "checkpoint"])
+def test_mace_ensemble_builds_primary_and_family_or_checkpoint_members(
+    tmp_path, monkeypatch, family
+):
+    primary = tmp_path / "primary.model"
+    primary.touch()
+    checkpoint = tmp_path / "member.model"
+    checkpoint.touch()
+    names = [str(checkpoint)] if family == "checkpoint" else ["large", str(checkpoint)]
+    cfg = MLIPConfig(
+        backend="mace",
+        mace=MACEConfig(
+            family=family,
+            model=str(primary) if family == "checkpoint" else "small",
+            device="cpu",
+            precision="fp64",
+            dispersion=family == "mace_mp",
+            ensemble_models=names,
+        ),
+    )
+    calls = []
+
+    def build(member, *, enable_mc_dropout=False):
+        calls.append((member, enable_mc_dropout))
+        return len(calls)
+
+    monkeypatch.setattr("matsim_agents.active_learning.calculator.build_mace_calculator", build)
+    assert build_ensemble(cfg, enable_mc_dropout=True) == list(range(1, len(names) + 2))
+    assert calls[0][0] == cfg.mace
+    assert all(
+        enabled and member.device == "cpu" and member.precision == "fp64"
+        for member, enabled in calls
+    )
+    assert calls[-1][0].family == "checkpoint"
+    assert calls[-1][0].model == str(checkpoint)
+    assert not calls[-1][0].dispersion
+    if family != "checkpoint":
+        assert calls[1][0].family == family
+        assert calls[1][0].model == "large"
+        assert calls[1][0].dispersion == cfg.mace.dispersion
+    assert cfg.mace.family == family
+
+
+def test_mace_checkpoint_ensemble_rejects_missing_member(tmp_path, monkeypatch):
+    primary = tmp_path / "primary.model"
+    primary.touch()
+    cfg = MLIPConfig(
+        backend="mace",
+        mace=MACEConfig(family="checkpoint", model=str(primary), ensemble_models=["missing.model"]),
+    )
+    monkeypatch.setattr(
+        "matsim_agents.active_learning.calculator.build_mace_calculator",
+        lambda *args, **kwargs: object(),
+    )
+    with pytest.raises(ValueError, match="existing file"):
+        build_ensemble(cfg)
+
+
+def test_mace_ensemble_dispatches_actual_adapters(tmp_path, fake_mace):
+    checkpoint = tmp_path / "member.model"
+    checkpoint.touch()
+    cfg = MLIPConfig(
+        backend="mace",
+        mace=MACEConfig(
+            family="mace_mp",
+            model="small",
+            device="cpu",
+            precision="fp64",
+            ensemble_models=[str(checkpoint)],
+        ),
+    )
+    assert len(build_ensemble(cfg)) == 2
+    assert fake_mace["mace_mp"]["model"] == "small"
+    assert fake_mace["checkpoint"]["model_paths"] == [str(checkpoint)]
+    assert fake_mace["checkpoint"]["device"] == "cpu"
+    assert fake_mace["checkpoint"]["default_dtype"] == "float64"
 
 
 @pytest.mark.parametrize(

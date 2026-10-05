@@ -3,7 +3,10 @@ import pytest
 from ase import Atoms
 
 from matsim_agents.active_learning.config import TrainerConfig
-from matsim_agents.active_learning.dataset_governance import validate_labelled_frames
+from matsim_agents.active_learning.dataset_governance import (
+    structure_identity,
+    validate_labelled_frames,
+)
 from matsim_agents.active_learning.trainer import LabelledFrame
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.seeds import PhaseCandidate
@@ -84,6 +87,16 @@ def test_active_learning_defaults_to_label_collection_without_retraining():
     trainer = TrainerConfig()
     assert trainer.enabled is False
     assert trainer.promote_model is False
+
+
+def test_molecular_identity_distinguishes_geometry_and_species():
+    molecule = Atoms("OH2", positions=[[0, 0, 0], [0.95, 0, 0], [-0.24, 0.92, 0]])
+    changed = molecule.copy()
+    changed.positions[1, 0] += 0.05
+    assert structure_identity(molecule) != structure_identity(changed)
+    changed = molecule.copy()
+    changed.numbers[1] = 9
+    assert structure_identity(molecule) != structure_identity(changed)
 
 
 def test_model_promotion_requires_retraining():
