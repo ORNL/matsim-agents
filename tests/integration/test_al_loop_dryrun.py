@@ -634,6 +634,10 @@ def test_small_batches_accumulate_fixed_partitions_before_training(
             else set()
         )
         validation_ids = {structure_identity(frame) for frame in ase_read(validation, index=":")}
+        for path, role in ((dataset, "training_pool"), (validation, "validation")):
+            if path.exists():
+                metadata = json.loads(path.with_suffix(".extxyz.manifest.json").read_text())
+                assert metadata["split_role"] == role
         assert previous_train <= train_ids
         assert previous_validation <= validation_ids
         assert train_ids.isdisjoint(validation_ids)

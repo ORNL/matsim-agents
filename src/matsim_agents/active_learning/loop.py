@@ -534,6 +534,7 @@ def run_active_learning(cfg: ALConfig) -> None:
                     validation=validation.model_copy(update={"accepted": len(validation_frames)}),
                     parent_dataset_id=validation_parent_dataset_id,
                     method_signature=method_signature,
+                    split_role="validation",
                 )
             state.timings_sec["append_dataset"] = time.time() - t0
             log.info(

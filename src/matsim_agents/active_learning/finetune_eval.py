@@ -337,13 +337,17 @@ def run_campaign(
             write_dataset_manifest,
         )
 
-        for split_path, split_frames in ((train_path, train_frames), (test_path, test_frames)):
+        for split_path, split_frames, split_role in (
+            (train_path, train_frames, "training_pool"),
+            (test_path, test_frames, "validation"),
+        ):
             write_dataset_manifest(
                 split_path,
                 dft_backend=manifest["backend"],
                 method_signature=manifest["method_signature"],
                 energy_reference=f"{manifest['backend']}:native_total_energy",
                 validation=DatasetValidationSummary(accepted=len(split_frames)),
+                split_role=split_role,
             )
     for split_path in (train_path, test_path):
         validate_dataset_reference_method(

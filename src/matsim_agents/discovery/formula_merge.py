@@ -26,6 +26,9 @@ def _policy_rejection_reasons(
 ) -> list[str]:
     species_count = len(elements)
     reasons = []
+    undeclared = sorted(set(elements) - set(policy.elements))
+    if undeclared:
+        reasons.append(f"undeclared elements outside formula policy: {', '.join(undeclared)}")
     if not policy.minimum_species <= species_count <= policy.maximum_species:
         reasons.append("species count is outside formula policy bounds")
     if species_count == 2 and not policy.include_binary_endmembers:

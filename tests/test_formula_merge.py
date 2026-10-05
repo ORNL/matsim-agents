@@ -100,3 +100,21 @@ def test_merge_formulas_enforces_non_charge_policy_constraints():
     assert candidate.active is False
     assert "species count" in candidate.rejection_reason
     assert "mixed compositions" in candidate.rejection_reason
+
+
+def test_merge_formulas_rejects_direct_out_of_scope_proposal_without_charge_screen():
+    policy = _policy(require_charge_balance=False)
+    proposals = [
+        LLMFormulaProposal(participant="qwen", formula="Li2O", elements={"Li": 2, "O": 1}),
+        LLMFormulaProposal(participant="gemma", formula="NbO2", elements={"Nb": 1, "O": 2}),
+    ]
+
+    merged = {
+        candidate.reduced_formula: candidate for candidate in merge_formulas([], proposals, policy)
+    }
+
+    assert merged["Li2O"].active is False
+    assert "undeclared elements" in merged["Li2O"].rejection_reason
+    assert "Li" in merged["Li2O"].rejection_reason
+    assert merged["Li2O"].llm_contributors == ["qwen"]
+    assert merged["NbO2"].active is True

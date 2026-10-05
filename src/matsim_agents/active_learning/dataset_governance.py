@@ -144,6 +144,7 @@ def write_dataset_manifest(
     validation: DatasetValidationSummary,
     parent_dataset_id: str | None = None,
     method_signature: str | None = None,
+    split_role: str = "training_pool",
 ) -> Path:
     path = Path(dataset_path)
     digest = sha256_file(path)
@@ -156,6 +157,7 @@ def write_dataset_manifest(
         method_signature=method_signature,
         energy_reference=energy_reference,
         parent_dataset_id=parent_dataset_id,
+        split_role=split_role,
         validation=validation,
     )
     destination = path.with_suffix(path.suffix + ".manifest.json")

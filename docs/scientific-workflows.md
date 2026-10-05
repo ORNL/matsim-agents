@@ -366,6 +366,8 @@ Campaign promotion checks supplied validation metadata before starting the
 loop. Fine-tune/evaluation writes matching sidecars for newly generated splits;
 fraction-based active learning also maintains separate training and held-out
 sidecars on each iteration, checking the held-out hash and method before append.
+New split sidecars explicitly record `split_role: training_pool` for training
+and `split_role: validation` for held-out data, including AL-generated splits.
 Training accumulates within each formula's AL dataset across iterations and
 restarts; this does not pool labels across formulas. `validation_fraction`
 targets the cumulative held-out fraction by assigning only newly accepted
@@ -530,6 +532,10 @@ random suffix, preventing concurrent studies from sharing a directory.
 
 LLM proposals have `hypothesis` evidence. They do not become DFT or
 experimental claims merely because a lower-level workflow was dispatched.
+Formula merging rejects undeclared elements outside the campaign's fixed
+element set even for directly supplied proposals and when charge-balance
+screening is disabled. Rejected proposals remain recorded as inactive
+candidates with their rejection reasons and participant attribution.
 
 ## Approval, evidence, and failure semantics
 

@@ -260,6 +260,10 @@ def test_finetune_split_preserves_verified_method(
 
     def check_split(*_args, **_kwargs):
         for path in (output / "split/train.extxyz", output / "split/test_set.extxyz"):
+            metadata = json.loads(path.with_suffix(".extxyz.manifest.json").read_text())
+            assert metadata["split_role"] == (
+                "training_pool" if path.name == "train.extxyz" else "validation"
+            )
             validate_dataset_reference_method(
                 path,
                 reference_backend="qe",
