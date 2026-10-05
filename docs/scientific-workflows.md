@@ -165,6 +165,38 @@ completed, skipped, blocked, and interrupted stages are visible. When model
 promotion and final DFT refinement are both configured, post-promotion MLIP
 reevaluation is required.
 
+The Perlmutter campaign supports either an external held-out file
+(`MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET`) or a fresh-label holdout
+(`MATSIM_CAMPAIGN_PROMOTION_VALIDATION_FRACTION=0.2`), not both. The latter
+reserves 20% of each AL label batch before training; promotion still requires
+explicit approval and passing the configured energy, force, regression, and
+minimum-frame thresholds. Final DFT ranking calculations are never used for
+this split.
+By default, a requested post-promotion reevaluation stops the formula if no model
+is promoted. `MATSIM_CAMPAIGN_CONTINUE_ON_PROMOTION_REJECTION=1` explicitly allows
+final DFT ranking from the unchanged incumbent exploration instead; the skipped
+post-training stage and failed promotion metrics remain recorded.
+
+Submit the bounded seven-LLM Nb-Ta-O run with:
+
+```bash
+bash deployments/perlmutter/jobs/submit-nb-ta-o-combined-bounded.sh
+```
+
+This requests 16 GPU nodes for six hours on `m5216_g`/premium, with at most
+three formula attempts, three AL iterations, and 64 DFT calculations. Each
+formula selects up to ten MD frames, trains UMA for five epochs with an 80/20
+split, and independently DFT-refines up to two ranked structures plus the
+included elemental/competing references. UMA, three MACE models, and HydraGNN
+provide MLIP screening and proxy-hull cross-checks. QE uses explicitly pinned
+80/640 Ry cutoffs, a 4x4x4 solid-state mesh, and a 0.01 eV/Angstrom relaxation
+force tolerance; molecular O2 uses the separate triplet/Gamma reference setup.
+The hull is bounded by its generated reference coverage, not an exhaustive
+phase diagram. These settings are not yet convergence-tested: final DFT
+ranking is higher-fidelity validation than the MLIP proxy, not a claim of
+publication-grade converged thermodynamic stability. Walltime can interrupt
+the run before all stages complete.
+
 DFT labels collected before final ranking may train the candidate MLIP; the
 DFT-refinement results remain separate. If those final results are later used
 for another training round, that must be a new dataset/model version and needs
@@ -186,7 +218,8 @@ ranking_mode: relative_phase_ranking
 
 Retraining requires active learning. Re-evaluation requires `promote_model: true`
 (which requires retraining) at configuration time, and successful model promotion
-at runtime. Compute budgets may cap candidates, MLIP
+at runtime unless `continue_on_promotion_rejection: true` explicitly retains
+incumbent results without reevaluation. Compute budgets may cap candidates, MLIP
 relaxations, DFT calculations, AL iterations, and node-hours.
 
 `relative_phase_ranking` compares converged candidates within one exploration.

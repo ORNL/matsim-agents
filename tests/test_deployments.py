@@ -183,13 +183,46 @@ def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> Non
         encoding="utf-8"
     )
 
-    assert "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET:?" in job
+    assert "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_FRACTION" in job
     assert "--promotion-validation-set" in job
     assert "--promotion-max-energy-mae" in job
     assert "--promotion-max-force-mae" in job
-    assert 'parser.error("--promote-model requires --promotion-validation-set")' in executor
+    assert "--promotion-validation-fraction" in executor
+    assert "args.promotion_validation_fraction <= 0" in executor
     phase_policy = executor.split("phase_policy = PhaseExplorationPolicy(", 1)[1].split(
         "formula_runner =", 1
     )[0]
     assert "promote_model=args.promote_model" in phase_policy
     assert "promotion_approved=args.approve_model_promotion" in phase_policy
+
+
+def test_bounded_campaign_settings_cover_all_scientific_stages(monkeypatch) -> None:
+    from matsim_agents.active_learning.config import ALConfig
+
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.setenv("PROJECT_ROOT", str(root))
+    config = ALConfig.from_yaml(
+        root / "deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-qe-bounded.yaml"
+    )
+    assert config.acquisition.strategy == "mc_dropout"
+    assert config.acquisition.n_select == 10
+    assert config.trainer.validation_fraction == 0.2
+    assert config.dft.qe.ecutwfc_ry == 80
+    assert config.dft.qe.ecutrho_ry == 640
+    script = (root / "deployments/perlmutter/jobs/submit-nb-ta-o-combined-bounded.sh").read_text()
+    for setting in (
+        "MATSIM_CAMPAIGN_MODE=dft",
+        "MATSIM_CAMPAIGN_MAX_DFT=64",
+        "MATSIM_CAMPAIGN_MAX_CANDIDATES=3",
+        "MATSIM_CAMPAIGN_RETRAIN=1",
+        "MATSIM_CAMPAIGN_PROMOTE_MODEL=1",
+        "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_FRACTION=0.2",
+        "MATSIM_CAMPAIGN_PROMOTION_MIN_EVALUATED_FRAMES=2",
+        "MATSIM_CAMPAIGN_CONTINUE_ON_PROMOTION_REJECTION=1",
+        "MATSIM_CAMPAIGN_DFT_REFINE=1",
+        "MATSIM_CAMPAIGN_DFT_REFINE_CANDIDATES=2",
+        "MATSIM_CAMPAIGN_SURROGATE_HULL=1",
+        "configure_uma_model_artifacts",
+        "-N 16 -t 06:00:00",
+    ):
+        assert setting in script

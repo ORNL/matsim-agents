@@ -959,7 +959,8 @@ def test_formula_execution_rewrites_al_template_and_reports_usage(tmp_path):
     assert result.active_learning_result["iteration_states"][0]["n_dft_converged"] == 2
 
 
-def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path):
+@pytest.mark.parametrize("promoted", [True, False])
+def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path, promoted):
     pytest.importorskip("pymatgen")
     config_path = tmp_path / "al.yaml"
     config_path.write_text(
@@ -1043,8 +1044,8 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
                     "n_dft_failed": 0,
                     "timings_sec": {"total": 1.0},
                     "candidate_uncertainty": {},
-                    "model_promoted": True,
-                    "new_logdir": str(tmp_path / "promoted-uma"),
+                    "model_promoted": promoted,
+                    "new_logdir": str(tmp_path / "promoted-uma") if promoted else None,
                 }
             ),
             encoding="utf-8",
@@ -1152,6 +1153,7 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
                 retrain_mlip=True,
                 promote_model=True,
                 reevaluate_after_retraining=True,
+                continue_on_promotion_rejection=not promoted,
                 dft_approved=True,
                 retraining_approved=True,
                 promotion_approved=True,
@@ -1190,7 +1192,7 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
         == independent_ranking["training_dataset_sha256_after"]
     )
     assert independent_ranking["method_signature"] == "qe-test-v1"
-    assert str(tmp_path / "promoted-uma") in independent_ranking["model_identifier"]
+    assert (str(tmp_path / "promoted-uma") in independent_ranking["model_identifier"]) == promoted
     stage_manifest = json.loads(
         Path(result.active_learning_result["campaign_stages_path"]).read_text(encoding="utf-8")
     )
@@ -1203,9 +1205,11 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path)
     assert [stage["status"] for stage in stage_manifest["stages"]] == [
         "completed",
         "completed",
-        "completed",
+        "completed" if promoted else "skipped",
         "completed",
     ]
+    if not promoted:
+        assert "retaining incumbent" in stage_manifest["stages"][2]["reason"]
 
     resumed = run_formula_with_active_learning(
         "NbO2",
@@ -1387,7 +1391,10 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
     assert result.active_learning_result["dft_refinement"]["candidate_calculations"] == 1
 
 
-def test_formula_execution_applies_retraining_and_promotion(tmp_path, monkeypatch):
+@pytest.mark.parametrize("validation_fraction", [0.0, 0.2])
+def test_formula_execution_applies_retraining_and_promotion(
+    tmp_path, monkeypatch, validation_fraction
+):
     import matsim_agents.campaign.execution as execution
 
     config_path = tmp_path / "al.yaml"
@@ -1459,7 +1466,8 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path, monkeypatc
                 epochs=3,
                 promote_model=True,
                 promotion_approved=True,
-                validation_set=validation_set,
+                validation_set=validation_set if validation_fraction == 0 else None,
+                validation_fraction=validation_fraction,
             ),
         ),
         al_runner=al_runner,
@@ -1469,7 +1477,10 @@ def test_formula_execution_applies_retraining_and_promotion(tmp_path, monkeypatc
     assert observed["trainer"]["enabled"] is True
     assert observed["trainer"]["epochs_per_iter"] == 3
     assert observed["trainer"]["promote_model"] is True
-    assert observed["trainer"]["validation_set"] == validation_set
+    assert observed["trainer"]["validation_set"] == (
+        validation_set if validation_fraction == 0 else None
+    )
+    assert observed["trainer"]["validation_fraction"] == validation_fraction
     assert result.model_promoted is True
     assert result.active_learning_result["exploration_kwargs"] == {
         "uma_model_name": str(checkpoint)
@@ -1589,6 +1600,21 @@ def test_retraining_rejects_unapproved_promotion(tmp_path):
     train_script.touch()
     with pytest.raises(ValueError, match="promotion requires explicit approval"):
         CampaignRetrainingConfig(train_script=train_script, promote_model=True)
+
+
+def test_retraining_requires_held_out_promotion_data(tmp_path):
+    train_script = tmp_path / "train.py"
+    train_script.touch()
+    with pytest.raises(ValueError, match="requires a held-out"):
+        CampaignRetrainingConfig(
+            train_script=train_script, promote_model=True, promotion_approved=True
+        )
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        CampaignRetrainingConfig(
+            train_script=train_script,
+            validation_set=tmp_path / "held-out.extxyz",
+            validation_fraction=0.2,
+        )
 
 
 def test_dft_refinement_rejects_missing_reference_structure(tmp_path):

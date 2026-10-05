@@ -27,6 +27,8 @@
 #   MATSIM_CAMPAIGN_TRAIN_EPOCHS=5         fine-tuning epochs per formula
 #   MATSIM_CAMPAIGN_PROMOTE_MODEL=1        approve promotion and reevaluation
 #   MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET=/path/to/held-out.extxyz
+#   MATSIM_CAMPAIGN_PROMOTION_VALIDATION_FRACTION=0.2  alternative fresh-label split
+#   MATSIM_CAMPAIGN_CONTINUE_ON_PROMOTION_REJECTION=1  retain incumbent if rejected
 # Optional no-DFT validation controls:
 #   MATSIM_CAMPAIGN_STATE_SOURCE=/path/to/campaign_state.json  reuse a prior registry
 #   MATSIM_CAMPAIGN_RANDOM_SEEDS=50         pyXtal structures per formula
@@ -260,16 +262,23 @@ if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; th
     TRAIN_ARGS+=(--train-launcher "$MATSIM_CAMPAIGN_TRAIN_LAUNCHER")
   fi
   if [[ "${MATSIM_CAMPAIGN_PROMOTE_MODEL:-0}" == "1" ]]; then
-    PROMOTION_VALIDATION_SET="${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET:?set MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET to a held-out extxyz before promotion}"
     TRAIN_ARGS+=(
       --promote-model
       --approve-model-promotion
-      --promotion-validation-set "$PROMOTION_VALIDATION_SET"
       --promotion-max-energy-mae "${MATSIM_CAMPAIGN_PROMOTION_MAX_ENERGY_MAE:-0.1}"
       --promotion-max-force-mae "${MATSIM_CAMPAIGN_PROMOTION_MAX_FORCE_MAE:-0.2}"
       --promotion-max-relative-regression "${MATSIM_CAMPAIGN_PROMOTION_MAX_RELATIVE_REGRESSION:-0.05}"
       --promotion-min-evaluated-frames "${MATSIM_CAMPAIGN_PROMOTION_MIN_EVALUATED_FRAMES:-1}"
     )
+    if [[ -n "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET:-}" ]]; then
+      TRAIN_ARGS+=(--promotion-validation-set "$MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET")
+    fi
+    TRAIN_ARGS+=(
+      --promotion-validation-fraction "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_FRACTION:-0}"
+    )
+    if [[ "${MATSIM_CAMPAIGN_CONTINUE_ON_PROMOTION_REJECTION:-0}" == "1" ]]; then
+      TRAIN_ARGS+=(--continue-on-promotion-rejection)
+    fi
     if [[ -n "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" ]]; then
       TRAIN_ARGS+=(
         --promotion-validation-reference-set "$MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET"

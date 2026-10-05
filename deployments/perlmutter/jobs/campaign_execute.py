@@ -147,7 +147,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--train-epochs", type=int, default=5)
     parser.add_argument("--promote-model", action="store_true")
     parser.add_argument("--approve-model-promotion", action="store_true")
+    parser.add_argument("--continue-on-promotion-rejection", action="store_true")
     parser.add_argument("--promotion-validation-set", type=Path)
+    parser.add_argument("--promotion-validation-fraction", type=float, default=0.0)
     parser.add_argument("--promotion-validation-reference-set", type=Path)
     parser.add_argument("--promotion-max-energy-mae", type=float, default=0.1)
     parser.add_argument("--promotion-max-force-mae", type=float, default=0.2)
@@ -172,8 +174,18 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--promote-model requires --retrain")
     if args.promote_model and not args.approve_model_promotion:
         parser.error("--promote-model requires --approve-model-promotion")
-    if args.promote_model and args.promotion_validation_set is None:
-        parser.error("--promote-model requires --promotion-validation-set")
+    if not 0.0 <= args.promotion_validation_fraction < 1.0:
+        parser.error("--promotion-validation-fraction must be in [0, 1)")
+    if args.promotion_validation_set is not None and args.promotion_validation_fraction > 0:
+        parser.error("promotion validation set and fraction are mutually exclusive")
+    if (
+        args.promote_model
+        and args.promotion_validation_set is None
+        and args.promotion_validation_fraction <= 0
+    ):
+        parser.error(
+            "--promote-model requires --promotion-validation-set or --promotion-validation-fraction"
+        )
     if args.promotion_validation_set is not None and not args.promotion_validation_set.is_file():
         parser.error(f"promotion validation set does not exist: {args.promotion_validation_set}")
     if (
@@ -294,6 +306,7 @@ def main(argv: list[str] | None = None) -> int:
         retrain_mlip=args.retrain,
         promote_model=args.promote_model,
         reevaluate_after_retraining=args.promote_model,
+        continue_on_promotion_rejection=args.continue_on_promotion_rejection,
         approvals=ApprovalPolicy(
             before_dft=args.execution_mode == "dft",
             before_retraining=True,
@@ -333,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
                     promote_model=args.promote_model,
                     promotion_approved=args.approve_model_promotion,
                     validation_set=args.promotion_validation_set,
+                    validation_fraction=args.promotion_validation_fraction,
                     validation_reference_set=args.promotion_validation_reference_set,
                     promotion_max_energy_mae_eV_per_atom=args.promotion_max_energy_mae,
                     promotion_max_force_mae_eV_per_A=args.promotion_max_force_mae,

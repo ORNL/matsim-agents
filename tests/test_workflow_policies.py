@@ -90,6 +90,51 @@ def test_phase_active_learning_requires_dft_approval(tmp_path):
         )
 
 
+@pytest.mark.parametrize("continue_on_rejection", [False, True])
+def test_phase_rejected_promotion_retains_incumbent_only_when_requested(
+    tmp_path, monkeypatch, caplog, continue_on_rejection
+):
+    parsed = parse_composition("Si")
+    assert parsed is not None
+    initial = CompositionExplorationResult(composition=parsed, phase_candidates=[])
+    calls = []
+
+    def explore(*args, **kwargs):
+        calls.append(kwargs)
+        return initial
+
+    monkeypatch.setattr("matsim_agents.workflows.phase_exploration.explore_composition", explore)
+    policy = PhaseExplorationPolicy(
+        active_learning=True,
+        retrain_mlip=True,
+        promote_model=True,
+        reevaluate_after_retraining=True,
+        continue_on_promotion_rejection=continue_on_rejection,
+        dft_approved=True,
+        retraining_approved=True,
+        promotion_approved=True,
+    )
+
+    def run():
+        return run_phase_exploration(
+            "Si",
+            policy=policy,
+            output_dir=str(tmp_path),
+            active_learning_runner=lambda *_: {"model_promoted": False},
+        )
+
+    if continue_on_rejection:
+        result = run()
+        assert result.initial == initial
+        assert result.after_retraining is None
+        assert not result.model_promoted
+        assert "retaining incumbent" in caplog.text
+    else:
+        with pytest.raises(RuntimeError, match="did not promote"):
+            run()
+    assert len(calls) == 1
+
+
 def test_phase_retraining_requires_approval(tmp_path):
     policy = PhaseExplorationPolicy(
         active_learning=True,

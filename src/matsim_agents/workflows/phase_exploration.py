@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ class PhaseExplorationPolicy(BaseModel):
     retrain_mlip: bool = False
     promote_model: bool = False
     reevaluate_after_retraining: bool = False
+    continue_on_promotion_rejection: bool = False
     ranking_mode: str = "relative_phase_ranking"
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
     approvals: ApprovalPolicy = Field(default_factory=ApprovalPolicy)
@@ -35,6 +37,8 @@ class PhaseExplorationPolicy(BaseModel):
             raise ValueError("reevaluate_after_retraining requires retrain_mlip")
         if self.reevaluate_after_retraining and not self.promote_model:
             raise ValueError("reevaluate_after_retraining requires promote_model")
+        if self.continue_on_promotion_rejection and not self.promote_model:
+            raise ValueError("continue_on_promotion_rejection requires promote_model")
         return self
 
 
@@ -112,9 +116,13 @@ def run_phase_exploration(
             raise RuntimeError("active learning promoted a model without promotion being requested")
         if promoted and policy.approvals.before_model_promotion and not policy.promotion_approved:
             raise PermissionError("model promotion requires explicit approval")
-        if policy.reevaluate_after_retraining:
-            if not promoted:
+        if policy.reevaluate_after_retraining and not promoted:
+            if not policy.continue_on_promotion_rejection:
                 raise RuntimeError("cannot reevaluate: active learning did not promote a model")
+            logging.getLogger(__name__).warning(
+                "No model promoted for %s; retaining incumbent MLIP exploration", composition
+            )
+        if policy.reevaluate_after_retraining and promoted:
             updated = dict(kwargs)
             updated.update(dict(al_result.get("exploration_kwargs", {})))
             after = explore_composition(

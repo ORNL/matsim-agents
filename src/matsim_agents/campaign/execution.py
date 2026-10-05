@@ -432,6 +432,7 @@ class CampaignRetrainingConfig(BaseModel):
     promote_model: bool = False
     promotion_approved: bool = False
     validation_set: Path | None = None
+    validation_fraction: float = Field(0.0, ge=0.0, lt=1.0)
     validation_reference_set: Path | None = None
     promotion_max_energy_mae_eV_per_atom: float = Field(0.1, gt=0)
     promotion_max_force_mae_eV_per_A: float = Field(0.2, gt=0)
@@ -446,8 +447,12 @@ class CampaignRetrainingConfig(BaseModel):
             raise ValueError(f"training launcher does not exist: {self.train_launcher}")
         if self.promote_model and not self.promotion_approved:
             raise ValueError("model promotion requires explicit approval")
-        if self.promote_model and self.validation_set is None:
-            raise ValueError("model promotion requires a held-out validation_set")
+        if self.validation_set is not None and self.validation_fraction > 0:
+            raise ValueError("validation_set and validation_fraction are mutually exclusive")
+        if self.promote_model and self.validation_set is None and self.validation_fraction <= 0:
+            raise ValueError(
+                "model promotion requires a held-out validation_set or validation_fraction"
+            )
         return self
 
 
@@ -1026,6 +1031,10 @@ def run_formula_with_active_learning(
         al_cfg.trainer.promote_model = config.retraining.promote_model
         al_cfg.trainer.promotion_approved = config.retraining.promotion_approved
         al_cfg.trainer.validation_set = config.retraining.validation_set
+        if config.retraining.validation_set is not None:
+            al_cfg.trainer.validation_fraction = 0.0
+        elif config.retraining.validation_fraction > 0:
+            al_cfg.trainer.validation_fraction = config.retraining.validation_fraction
         al_cfg.trainer.validation_reference_set = config.retraining.validation_reference_set
         al_cfg.trainer.promotion_max_energy_mae_eV_per_atom = (
             config.retraining.promotion_max_energy_mae_eV_per_atom
@@ -1312,6 +1321,16 @@ def run_formula_with_active_learning(
             model_identifier=_model_identifier(effective_al_cfg),
             candidate_count=len(result.after_retraining.phase_candidates),
             relaxation_count=len(result.after_retraining.relaxations),
+        )
+    elif config.phase_policy.reevaluate_after_retraining:
+        _set_campaign_stage(
+            stage_manifest_path,
+            formula,
+            stages,
+            "post_training_mlip_exploration",
+            "skipped",
+            reason="no model promoted; explicitly retaining incumbent MLIP exploration",
+            model_identifier=_model_identifier(effective_al_cfg),
         )
     candidate_uncertainty = _score_relaxed_candidate_uncertainty(exploration, effective_al_cfg)
     validation_configs = [
