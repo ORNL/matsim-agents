@@ -21,6 +21,52 @@ discovery and disjoint DFT node grouping are owned by `execution.allocation`.
 See [Scientific workflow contracts](scientific-workflows.md) for behavior and
 [Run artifacts and restarts](run-artifacts-and-restarts.md) for persistence.
 
+## Orchestration topology
+
+The CLI exposes objective, composition, and interactive modes over shared
+scientific capabilities. Each mode can hand low-confidence work to the same
+active-learning implementation when its UQ policy permits it. The full diagram
+is maintained in [Agentic AI Workflow Diagram](workflows/agentic-ai-workflow.md),
+with a compact variant in
+[Agentic AI Workflow Slides](workflows/agentic-ai-workflow-slides.md).
+
+```mermaid
+flowchart TD
+    U[User objective or dialogue] --> G{Choose interaction mode}
+
+    subgraph MODES[User-facing modes]
+      direction LR
+      O[Objective<br/>run] --> OP[Plan and execute]
+      P[Composition<br/>supervisor-run] --> PP[Prepare and explore]
+      I[Interactive<br/>chat] --> IP[Detect and confirm]
+    end
+
+    G --> O
+    G --> P
+    G --> I
+
+    OP -->|HydraGNN, UMA, or MACE| X
+    PP -->|HydraGNN, UMA, or MACE| X
+    IP -->|HydraGNN or UMA| X
+
+    subgraph SCIENCE[Shared scientific capabilities]
+      X[Phase search and MLIP relaxation]
+      Q[Evaluate uncertainty]
+      AL[Active learning loop]
+      E[Results and auditable evidence]
+
+      X --> Q
+      Q -->|low confidence + policy enabled| AL
+      Q -->|sufficient confidence| E
+      AL --> E
+    end
+
+    E --> R{Return to invoking mode}
+    R --> OA[Analyst report]
+    R --> PS[Composition summary]
+    R --> IR[Chat response]
+```
+
 Machine-specific setup and job scripts live in `deployments/`; research-only
 paper and Codabench artifacts live in `research/`.
 

@@ -43,6 +43,7 @@ dependencies = [
     # encyclopedia is always available; pyxtal adds supplementary random /
     # novel-topology seeds.
     "pyxtal>=0.6",
+    "dscribe>=2.1",
 ]
 
 [project.optional-dependencies]

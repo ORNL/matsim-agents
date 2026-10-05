@@ -3,12 +3,132 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
+import pytest
+
 from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.active_learning.vasp_io import resolve_potcar_paths
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize(
+    ("retrain", "promote", "compare", "reference_exists", "blocked"),
+    [
+        ("1", "0", True, False, True),
+        ("1", "1", False, False, True),
+        ("1", "0", True, True, False),
+        ("1", "0", False, False, False),
+        ("0", "0", True, False, False),
+    ],
+)
+def test_campaign_reference_preflight_precedes_launch(
+    tmp_path, retrain, promote, compare, reference_exists, blocked
+):
+    repo = tmp_path / "repo"
+    setup = repo / "deployments/perlmutter/setup"
+    setup.mkdir(parents=True)
+    marker = tmp_path / "preflight-passed"
+    (setup / "campaign-naming.sh").write_text('printf passed > "$TEST_PREFLIGHT_MARKER"\nexit 37\n')
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin/python3").symlink_to(sys.executable)
+    config = tmp_path / "al.yaml"
+    config.write_text(f"trainer:\n  compare_after_training: {str(compare).lower()}\n")
+    reference = tmp_path / "elemental.json"
+    if reference_exists:
+        reference.write_text("{}")
+    env = {
+        **os.environ,
+        "PROJECT_ROOT": str(repo),
+        "MATSIM_PERLMUTTER_VENV": str(venv),
+        "MATSIM_CAMPAIGN_MODE": "dft",
+        "MATSIM_CAMPAIGN_RETRAIN": retrain,
+        "MATSIM_CAMPAIGN_PROMOTE_MODEL": promote,
+        "MATSIM_CAMPAIGN_AL_CONFIG": str(config),
+        "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET": str(reference),
+        "TEST_PREFLIGHT_MARKER": str(marker),
+    }
+    result = subprocess.run(
+        [
+            "bash",
+            str(
+                ROOT
+                / "deployments/perlmutter/jobs"
+                / "job-campaign-formula-discovery-all-models-perlmutter.sh"
+            ),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == (2 if blocked else 37), result.stderr
+    assert marker.exists() is not blocked
+    if blocked:
+        assert "retraining energy comparison requires" in result.stderr
+
+
+@pytest.mark.parametrize("layout", ["nested", "symbol", "prefixed", "mixed", "missing"])
+def test_vasp_campaign_preflight_matches_runtime_potcar_layouts(tmp_path, layout):
+    repo = tmp_path / "repo"
+    jobs = repo / "deployments/perlmutter/jobs"
+    jobs.mkdir(parents=True)
+    marker = tmp_path / "launched"
+    (jobs / "job-campaign-formula-discovery-all-models-perlmutter.sh").write_text(
+        '#!/bin/bash\nprintf launched > "$TEST_LAUNCH_MARKER"\n'
+    )
+    binary = tmp_path / "vasp"
+    binary.write_text("#!/bin/bash\nexit 0\n")
+    binary.chmod(0o755)
+    potcars = tmp_path / "potcars"
+    potcars.mkdir()
+    for index, symbol in enumerate(("Nb", "Ta", "O")):
+        kind = ["nested", "symbol", "prefixed"][index] if layout == "mixed" else layout
+        if layout == "missing" and symbol == "O":
+            continue
+        path = (
+            potcars / symbol / "POTCAR"
+            if kind in {"nested", "missing"}
+            else potcars / symbol
+            if kind == "symbol"
+            else potcars / f"POTCAR.{symbol}"
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("synthetic POTCAR")
+    env = {
+        **os.environ,
+        "PROJECT_ROOT": str(repo),
+        "MATSIM_VASP_BIN": str(binary),
+        "MATSIM_VASP_POTCAR_DIR": str(potcars),
+        "MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE": "synthetic-vasp",
+        "TEST_LAUNCH_MARKER": str(marker),
+    }
+    result = subprocess.run(
+        [
+            "bash",
+            str(
+                ROOT
+                / "deployments/perlmutter/jobs"
+                / "job-campaign-formula-discovery-all-models-vasp-perlmutter.sh"
+            ),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if layout == "missing":
+        assert result.returncode == 2
+        assert "missing O POTCAR" in result.stderr
+        assert not marker.exists()
+        with pytest.raises(FileNotFoundError):
+            resolve_potcar_paths(["Nb", "Ta", "O"], potcars)
+    else:
+        assert result.returncode == 0, result.stderr
+        assert marker.read_text() == "launched"
+        assert len(resolve_potcar_paths(["Nb", "Ta", "O"], potcars)) == 3
 
 
 def _fake_cli(tmp_path: Path) -> Path:
@@ -71,3 +191,26 @@ def test_shared_active_learning_runner_generates_current_schema(tmp_path: Path) 
     assert cfg.dft.backend == "qe"
     assert cfg.trainer.enabled is False
     assert list(cfg.md.seed_source.paths) == seeds
+
+
+def test_perlmutter_vasp_campaign_config_resolves(tmp_path: Path, monkeypatch) -> None:
+    vasp_bin = tmp_path / "vasp_std"
+    vasp_bin.touch()
+    potcar_dir = tmp_path / "potpaw_PBE.64"
+    potcar_dir.mkdir()
+    monkeypatch.setenv("PROJECT_ROOT", str(ROOT))
+    monkeypatch.setenv("MATSIM_VASP_BIN", str(vasp_bin))
+    monkeypatch.setenv("MATSIM_VASP_POTCAR_DIR", str(potcar_dir))
+
+    cfg = ALConfig.from_yaml(
+        ROOT / "deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-vasp.yaml"
+    )
+
+    assert cfg.dft.backend == "vasp"
+    assert cfg.dft.vasp is not None
+    assert cfg.dft.vasp.vasp_bin == vasp_bin
+    assert cfg.dft.vasp.potcar_dir == potcar_dir
+    assert cfg.dft.vasp.ranks_per_node == 4
+    assert cfg.dft.vasp.timeout_sec == 14400
+    assert cfg.dft.vasp.extra_incar["KSPACING"] == "0.25"
+    assert cfg.dft.vasp.extra_incar["KPAR"] == "4"

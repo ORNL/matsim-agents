@@ -1,0 +1,624 @@
+SINGLE-LLM AND MULTI-LLM NB-TA-O FORMULA-DISCOVERY COMPARISON
+======================================================================
+
+Purpose
+-------
+This report summarizes two completed and directly comparable formula-discovery
+runs. It explains what the single-LLM approach proposed and, for the multi-LLM
+approach, what each model proposed in debate round 1, how it reacted in round 2,
+and what it retained in its final verdict.
+
+The report distinguishes model-generated claims from independent checks. No
+formula discussed below should be interpreted as stable without numerical
+evidence. Several model responses contain oxidation-state, reaction-balance, or
+homologous-series errors; these are identified explicitly.
+
+
+RUNS AND COMMON OBJECTIVE
+======================================================================
+
+Single-LLM run
+  SLURM job: 59061227
+  Mode: single-llm-once
+  Run ID: 2026-09-29T05-35-33Z_8a2f18e2
+  Model: GLM-4.7-Flash (zai-org/GLM-4.7-Flash)
+  Interaction: one call, one stored turn, and the same response reused as the
+    verdict
+  Transcript:
+    /global/cfs/projectdirs/m5216/mlupopa/runs/portability/
+    nb-ta-o-single-llm-once-59061227/
+    2026-09-29T05-35-33Z_8a2f18e2/debate_transcript.json
+
+Multi-LLM run
+  SLURM job: 59078050
+  Mode: debate-only
+  Run ID: 2026-09-29T20-13-17Z_5e5362b9
+  Models: Kimi-K2.5, GLM-4.7, GLM-4.7-Flash,
+    Qwen3-235B-A22B-Instruct-2507, Qwen3-235B-A22B-Thinking-2507,
+    Gemma-4-31B-it, and Gemma-4-26B-A4B-it
+  Interaction: two rounds, seven turns per round, followed by seven independent
+    verdict calls
+  Transcript:
+    /global/cfs/projectdirs/m5216/mlupopa/runs/portability/
+    nb-ta-o-multi-llm-debate-only-rayfix-59078050/
+    2026-09-29T20-13-17Z_5e5362b9/debate_transcript.json
+
+Common objective
+  The models were asked to propose chemically plausible binary and ternary
+  stoichiometric formulas from Nb, Ta, and O; give oxidation-state and
+  structural rationales; identify speculative formulas; propose falsification
+  calculations; distinguish knowledge from inference; and avoid claiming
+  stability without numerical evidence.
+
+
+PART I. SINGLE-LLM APPROACH
+======================================================================
+
+Model: GLM-4.7-Flash
+--------------------
+
+What it attempted to propose
+  Binary formulas considered:
+    Nb2O5, Ta2O5, NbO2, TaO2, NbO, TaO, Nb2O3, and Ta2O3.
+
+  Ternary or solid-solution notation considered:
+    (Nb,Ta)2O5, (Nb,Ta)O2, (Nb,Ta)O, (Nb,Ta)2O3, (Nb,Ta)2O7,
+    (Nb,Ta)O3, and NbTaO4.
+
+  Malformed or unresolved notation:
+    (NbTa)2O5 and repeated variants of (Nb,Ta)2Nb2O5.
+
+Chemical rationale
+  The response treated +5 as the dominant oxidation state for Nb and Ta, then
+  explored +4, +3, and +2 reduced oxides. It tried to motivate mixed-valence
+  phases by analogy with NbO2 and Ta2O5. It mentioned rutile, rock salt or
+  defect rock salt, bixbyite, pyrochlore, perovskite, tantalite, and defect
+  fluorite as possible structural families.
+
+Provisional priorities visible before the response broke down
+  1. Nb/Ta pentoxide solid solutions.
+  2. Dioxide and monoxide solid solutions.
+  3. Reduced sesquioxide candidates.
+  4. NbTaO4, although its oxidation-state and structural classification were
+     not resolved coherently.
+
+Interaction behavior and output quality
+  This was a one-call mode, so there were no peers and no revision round. The
+  response entered a repetitive internal-reasoning loop while trying to balance
+  a mixed oxide reaction, ended mid-sentence, and never delivered the requested
+  final structured answer. The stored verdict is identical to the turn rather
+  than an independent synthesis. It did not produce a usable convex-hull,
+  phonon, chemical-potential, or competing-phase falsification plan.
+
+Important scientific problems
+  - (Nb,Ta)2O7 would require average metal oxidation +7 for O2-, beyond normal
+    Nb/Ta chemistry. The response incorrectly treated Nb2O7 and Ta2O7 as
+    established targets.
+  - NbTaO4 cannot have Nb(+4)/Ta(+5), because +9 does not balance four O2-.
+    A simple neutral assignment is Nb(+4)/Ta(+4).
+  - (Nb,Ta)2O5 is a composition-range notation. The exact 1:1 ternary formula
+    is NbTaO5.
+  - (NbTa)2O5, read literally as Nb2Ta2O5, is not a pentoxide composition and
+    would require unusually low average cation valence.
+  - Pyrochlore, perovskite, tantalite, and rutile labels were transferred too
+    broadly to Nb2O5/Ta2O5 chemistry without stoichiometric justification.
+
+Single-LLM campaign-state outcome
+  The formula-policy merger produced 210 total formulas and retained 15 active
+  formulas. Seven active formulas carried GLM-Flash attribution:
+    Nb2O3, Nb2O5, NbO2, NbO4Ta (NbTaO4), O2Ta (TaO2), O3Ta2 (Ta2O3),
+    and O5Ta2 (Ta2O5).
+
+  The other eight active formulas came from deterministic charge-balanced
+  enumeration rather than this model:
+    Nb2O5Ta, Nb2O6Ta, Nb3O6Ta, NbO3Ta, NbO5Ta, NbO5Ta2,
+    NbO6Ta2, and NbO6Ta3.
+
+Interpretation
+  The single-call approach provided broad brainstorming but failed to complete
+  the required deliverable. Its campaign attribution mostly recovered familiar
+  binary oxides and NbTaO4. It did not provide a reliable, auditable hierarchy
+  of novel ternary candidates or a complete falsification strategy.
+
+
+PART II. MULTI-LLM DEBATE, MODEL BY MODEL AND ROUND BY ROUND
+======================================================================
+
+1. KIMI-K2.5
+----------------------------------------------------------------------
+
+Round 1
+  Proposals:
+    - Binary baselines: M2O5, MO2, and MO for M = Nb or Ta.
+    - Speculative Ta analogues: Ta12O29, TaO, and cluster suboxide Ta6O.
+    - Ordered NbTaO5 with Nb(+5)/Ta(+5).
+    - Ordered rutile-derived NbTaO4 with Nb(+4)/Ta(+4).
+    - Mixed-valence Nb2Ta2O11.
+
+  Structural rationale:
+    Pentoxide block/HTB derivatives, rutile or distorted rutile, rock salt,
+    Wadsley/shear structures, columbite-like or dense monoclinic NbTaO5, and
+    ordered-rutile or trirutile NbTaO4.
+
+  Proposed tests:
+    Formation energies and phonons for binaries; cluster expansion and an
+    order-disorder temperature for NbTaO5; mixing enthalpy for NbTaO4; a
+    ternary convex hull for Nb2Ta2O11; and oxygen-chemical-potential analysis.
+
+  Peer-facing stance:
+    Challenged ideal-solution assumptions, transfer of Nb suboxide chemistry
+    directly to Ta, and stability claims made without calculations.
+
+Round 2
+  Revisions:
+    - Downgraded ordered NbTaO5 because T-Nb2O5 and beta-Ta2O5 have incompatible
+      topologies and configurational entropy may favor disorder.
+    - Replaced Nb2Ta2O11 with Nb2Ta2O9 and Nb8Ta2O25 as proposed shear targets.
+    - Recast NbTaO4 as a high-pressure CaCl2-type or baddeleyite-related target.
+    - Retained (Nb,Ta)O only as an extreme high-pressure possibility.
+
+  New tests:
+    Interface/phase-separation energies for NbTaO5; cluster expansion for shear
+    candidates; pressure-dependent enthalpy near 10 GPa; an equation of state
+    for TaO; and grand-potential phase diagrams at 0, 10, and 20 GPa.
+
+  Debate response:
+    Criticized peers for neglecting entropy, assuming T-Nb2O5 ordering, and
+    treating NbTa11O29 automatically as a distinct line compound rather than a
+    possible limited solid solution.
+
+Final verdict
+  High priority:
+    (Nb,Ta)O2 rutile solid solutions and dilute cross-doping of Nb2O5/Ta2O5.
+
+  Moderate priority:
+    Reduced shear solid solutions, including Nb12-xTaxO29, NbTa11O29, and
+    Nb2Ta2O9; plus high-pressure NbTaO4 if quenchable.
+
+  Low priority:
+    Ambient ordered NbTaO5 and (Nb,Ta)O.
+
+  Excluded:
+    Columbite-type NbTaO5 and ilmenite-type NbTa2O6.
+
+  Audit notes:
+    Nb2Ta2O11 requires average metal oxidation +5.5 and is not viable under the
+    stated assumptions. Nb2Ta2O9 is M4O9, not the n=5 M_nO_(2n-1) member.
+    Nb8Ta2O25 reduces to an M2O5 composition and is not the claimed n=13
+    mixed-valence Magneli formula. Several proposed reactions were unbalanced.
+
+
+2. GLM-4.7
+----------------------------------------------------------------------
+
+Round 1
+  Proposals and filtering:
+    - Accepted M2O5, MO2, and MO as binary baselines.
+    - Deprioritized reduced Ta-rich Ta6O and Ta12O29.
+    - Retained NbTaO5 only as a speculative H-/T-Nb2O5 block derivative;
+      explicitly rejected columbite AB2O6 as a formula mismatch.
+    - Rejected ordered NbTaO4 as an ambient line compound but retained the
+      x = 0.5 composition of a rutile (Nb,Ta)O2 solid solution.
+    - Considered high-pressure baddeleyite NbTaO4.
+    - Rejected Nb2Ta2O11 as a Magneli composition.
+    - Introduced NbTa11O29 as its preferred shear candidate.
+
+  Tests and criteria:
+    Cluster expansion for NbTaO5; ordered-cell versus SQS calculations for
+    NbTaO4; convex hulls, phonons, vacancy energies, oxygen chemical potential,
+    and pressure calculations. It proposed approximate 25 meV/atom ordering or
+    tie-line thresholds, which are screening heuristics rather than proofs.
+
+  Peer interaction:
+    Supported skepticism about Ta suboxides and directly challenged columbite
+    NbTaO5, ordered-rutile NbTaO4, and Nb2Ta2O11.
+
+Round 2
+  Revision:
+    Raised ordered NbTaO5 from entropy-disfavored speculation to a campaign
+    target. It argued that Ta(+5) and Nb(+5) may select different coordination
+    sites in low-symmetry T-Nb2O5 because of 5d/4d bonding differences.
+
+  Retained:
+    Rutile-solid-solution NbTaO4 and shear candidate NbTa11O29.
+
+  Added:
+    Highly speculative Nb3TaO9 as a block homologue. Other brainstormed formulas
+    were considered and deferred or rejected.
+
+  Debate response:
+    Challenged radius-only arguments against ordering and argued that electronic
+    site preferences could matter. It retained disorder as the rutile null
+    hypothesis while broadening low-symmetry and metastable searches.
+
+Final verdict
+  1. High confidence: NbTaO4 only as a rutile solid-solution composition.
+  2. Medium: NbTa11O29 as a reduction-synthesis target.
+  3. Low to medium: ordered T-Nb2O5-derived NbTaO5, especially as a metastable
+     thin-film target.
+  4. Speculative: high-pressure CaCl2-type NbTaO4.
+  5. Excluded: columbite NbTaO5 and Ta-rich suboxides.
+
+  Audit notes:
+    NbTa11O29 has average metal oxidation +4.833, but it is not M_nO_(2n-1):
+    M12O_(2*12-1) is M12O23, not M12O29. If all eleven Ta atoms are +5, Nb must
+    be +3. Nb3TaO9 requires average +4.5 and is M4O9, not M3O7.
+
+
+3. GLM-4.7-FLASH
+----------------------------------------------------------------------
+
+Round 1
+  The opening plan mirrored GLM-4.7: retain speculative block-derived NbTaO5,
+  rutile-solid-solution NbTaO4, and shear NbTa11O29; reject columbite NbTaO5,
+  ordered-rutile NbTaO4, Nb2Ta2O11, and low-valent NbTaO3.
+
+  The response then entered recursive repetition and ended before delivering a
+  complete argument, oxidation table, falsification protocol, or ranked set.
+  Repeated text should not be counted as independent support.
+
+Round 2
+  Again produced a planning document rather than a clean answer. It considered
+  NbO, NbO2, Nb2O5, TaO2, Ta2O5, and high-pressure TaO. It planned to retain
+  ordered T-Nb2O5-derived NbTaO5, rutile-solid-solution NbTaO4, and NbTa11O29.
+  It floated Nb3TaO9, NbTa3O9, Nb5Ta5O16, Nb25TaO63, Nb2TaO7, NbTa2O7, and
+  Nb3TaO7 without developing consistent charge or structural rationales.
+
+  It supported peers' rejection of columbite, ordered rutile, Nb2Ta2O11, and
+  Ta-rich suboxides, while challenging radius-only arguments. The promised
+  site-preference DFT and hull protocol was never assembled into a final answer.
+
+Final verdict
+  Ranked rutile-solid-solution NbTaO4 as "confirmed," called ordered NbTaO5 and
+  NbTa11O29 the strongest discovery targets, and listed Nb3TaO9 and Nb25Ta5O63
+  as speculative. It recommended substitution energies, diffraction searches,
+  convex hulls, and kinetic barriers.
+
+  Audit notes:
+    "Confirmed" is unsupported by this debate. Both rounds were incomplete,
+    and the verdict introduced or strengthened candidates not coherently
+    developed in its own turns. It inherited the incorrect NbTa11O29 Magneli
+    classification and inconsistent formula arithmetic.
+
+
+4. QWEN3-235B-A22B-INSTRUCT-2507
+----------------------------------------------------------------------
+
+Round 1
+  Filtering and proposals:
+    - Used NbO2, TaO2, Nb2O5, Ta2O5, and Nb12O29 as end-member references.
+    - Rejected Ta6O and Ta12O29 as ambient priorities.
+    - Rejected columbite NbTaO5 but retained an ordered Nb2O5-derived block
+      framework as speculative.
+    - Rejected ordered-rutile NbTaO4; retained disordered (Nb,Ta)O2 and a
+      high-pressure baddeleyite NbTaO4 possibility.
+    - Rejected Nb2Ta2O11.
+    - Proposed NbTa11O29 as the main reduced shear target.
+
+  Tests:
+    Cluster expansion, SQS comparisons, ternary convex hulls, pressure-dependent
+    enthalpy, phonons, and oxygen-chemical-potential windows.
+
+  Debate response:
+    Supported skepticism toward Ta reduction and required numerical evidence.
+    Directly challenged columbite NbTaO5, ordered rutile NbTaO4, and
+    Nb2Ta2O11.
+
+Round 2
+  Revision:
+    Reversed its broad skepticism about low-symmetry ordering. It argued that
+    coordination and 4d/5d bonding could order Nb/Ta in NbTaO5 even if ionic
+    radii are similar, while rutile should retain disorder as the null model.
+
+  Retained:
+    T-Nb2O5-derived NbTaO5, rutile-solid-solution NbTaO4, and NbTa11O29.
+
+  Added:
+    Nb3TaO9 and Nb25Ta5O63; recommended screening nominal M6O11 and M7O13 shear
+    members and kinetic persistence.
+
+  Tests:
+    Site-substitution energy spreads, hull distance, phonons, TTB supercells,
+    and AIMD barriers.
+
+Final verdict
+  High confidence:
+    NbTaO4 as a rutile solid solution, not a line compound.
+
+  Moderate:
+    NbTa11O29, Nb2Ta2O9, and Nb8Ta2O25 as shear searches, while expecting
+    limited solubility rather than necessarily distinct compounds.
+
+  Low:
+    Ordered NbTaO5.
+
+  Speculative or rejected:
+    Pressure-driven CaCl2/baddeleyite NbTaO4 remained speculative; columbite
+    NbTaO5 and defect-rock-salt (Nb,Ta)O were rejected.
+
+  Audit notes:
+    Nb3TaO9 requires average +4.5 and is not M3O7. Nb25Ta5O63 has average +4.2
+    and 16.7%, not 20%, Ta on the cation sublattice. The same NbTa11O29 and
+    Nb2Ta2O9 homologous-series errors remain.
+
+
+5. QWEN3-235B-A22B-THINKING-2507
+----------------------------------------------------------------------
+
+Round 1
+  Although its visible response mislabeled the stage, the stored metadata marks
+  it as round 1. It largely paralleled Qwen-Instruct:
+    - Retained speculative block NbTaO5, rutile-solid-solution NbTaO4,
+      NbTa11O29, and high-pressure baddeleyite NbTaO4.
+    - Rejected columbite NbTaO5, ordered-rutile NbTaO4, and Nb2Ta2O11.
+    - Emphasized cluster expansion, SQS, site energies, convex hulls, pressure
+      enthalpy, and diffraction.
+
+  It favored solid solutions and pressure polymorphs over ambient ordered
+  ternaries and countered ordering arguments with configurational entropy.
+
+Round 2
+  Revision:
+    Adopted the electronic-ordering rationale for NbTaO5 and shifted toward
+    oxygen-defect and metastability searches.
+
+  Retained:
+    NbTaO5, rutile-solid-solution NbTaO4, and NbTa11O29.
+
+  Added:
+    Nb6Ta2O15 as a purported Wadsley-Roth phase and NbTa2O6 as a highly
+    speculative ilmenite/wolframite candidate. Its reasoning also considered
+    Nb18Ta2O49 and nonstoichiometric (Nb,Ta)O2.5+/-delta but did not place them
+    in the formal response.
+
+  Debate response:
+    Challenged radius-only ordering arguments, fixed-stoichiometry assumptions,
+    and untested quenchability of pressure phases. Supported rutile disorder and
+    continued screening of NbTa11O29.
+
+Final verdict
+  High confidence:
+    NbTaO4 as a rutile solid solution.
+
+  Medium:
+    NbTa11O29, probably metastable or a limited solid solution.
+
+  Low to medium:
+    Ordered NbTaO5, mainly as a kinetically trapped thin-film target.
+
+  Speculative or excluded:
+    High-pressure CaCl2-type NbTaO4 was deprioritized. Columbite NbTaO5 and
+    Ta-rich suboxides were excluded. Its round-2 Nb6Ta2O15 and NbTa2O6 proposals
+    disappeared from the verdict without explanation.
+
+  Audit notes:
+    Nb6Ta2O15 requires average metal oxidation +3.75, not the claimed value.
+    NbTa2O6 requires average +4, so an all-+5 assignment is impossible. The
+    NbTa11O29 classification remains erroneous.
+
+
+6. GEMMA-4-31B-IT
+----------------------------------------------------------------------
+
+Round 1
+  Proposals and filtering:
+    - Rejected ambient TaO and Ta6O as priorities.
+    - Rejected columbite NbTaO5 but retained speculative ordered H-/B-Nb2O5
+      block structures with Nb(+5)/Ta(+5).
+    - Rejected ordered-rutile NbTaO4; retained it as the x = 0.5 rutile
+      solid-solution composition and considered high-pressure baddeleyite.
+    - Proposed NbTa11O29 as an n=12 shear phase.
+    - Correctly rejected Nb2Ta2O11 because it requires average +5.5.
+
+  Tests:
+    Cluster expansion, ordered versus SQS mixing energies, substitution energies
+    in shear structures, pressure calculations, and phonons.
+
+Round 2
+  Revision:
+    Changed from entropy-dominant skepticism to possible electronic ordering in
+    low-symmetry T-Nb2O5-derived NbTaO5. It argued that Nb and Ta may prefer
+    different 4- to 7-coordinate sites.
+
+  Retained and expanded:
+    NbTaO4 as a solid-solution control, NbTa11O29, broader M6O11/M7O13 shear
+    searches, and metastable or oxygen-nonstoichiometric synthesis routes.
+
+  Added:
+    Highly speculative Nb3TaO9.
+
+Final verdict
+  - High confidence: rutile-solid-solution NbTaO4.
+  - Moderate: NbTa11O29 and Nb2Ta2O9 shear candidates.
+  - Low: ordered NbTaO5.
+  - High campaign interest: generic shear homologues and pressure phases.
+
+  Audit notes:
+    One-Ta substitution into Nb12O29 gives Nb11TaO29, not NbTa11O29. If the
+    latter has eleven Ta(+5), Nb must be +3. Nb3TaO9 is M4O9 with average +4.5,
+    not an all-+5 M3O7 derivative. Nb2Ta2O9 is not the n=5 member.
+
+
+7. GEMMA-4-26B-A4B-IT
+----------------------------------------------------------------------
+
+Round 1
+  Scientifically almost identical to Gemma-31B round 1:
+    - Rejected TaO/Ta6O, columbite NbTaO5, ordered-rutile NbTaO4, and
+      Nb2Ta2O11.
+    - Retained block-derived NbTaO5, rutile-solid-solution NbTaO4,
+      pressure NbTaO4, and NbTa11O29.
+    - Proposed the same cluster-expansion, SQS, substitution, pressure, and
+      phonon checks.
+
+Round 2
+  Byte-for-byte identical to Gemma-31B round 2. It made the same shift toward
+  electronic ordering in T-Nb2O5, retained the same candidates, added the same
+  erroneous Nb3TaO9 proposal, and used the same screening thresholds.
+
+Final verdict
+  The 26B verdict was broader and more cautious than the 31B verdict:
+    - Assumed solid solutions in high-symmetry families, especially rutile.
+    - Prioritized generic low-symmetry shear/block families, defect
+      stabilization, oxygen nonstoichiometry, and kinetic trapping.
+    - Treated ordered NbTaO5 as unresolved.
+    - Recommended site-energy maps, superlattice searches, and grand-potential
+      calculations of Ta solubility.
+
+  Audit notes:
+    It avoided endorsing Nb2Ta2O9 explicitly, but retained NbTa11O29 without
+    correcting the reversed-substitution and charge-distribution problems.
+    Because the two Gemma round-2 responses are identical, they should not be
+    interpreted as fully independent corroboration.
+
+
+PART III. MULTI-LLM CAMPAIGN-STATE OUTCOME
+======================================================================
+
+The formula-policy merger produced 214 formulas and retained 20 active formulas.
+
+LLM-attributed active formulas
+  Nb2O5
+    Contributors: Kimi-K2.5, GLM-4.7, GLM-4.7-Flash
+
+  Nb2O9Ta2 (Nb2Ta2O9)
+    Contributors: Kimi-K2.5, GLM-4.7
+
+  Nb3O9Ta (Nb3TaO9)
+    Contributors: Kimi-K2.5, GLM-4.7, GLM-4.7-Flash
+
+  Nb6O15Ta2 (Nb6Ta2O15)
+    Contributor: Kimi-K2.5
+
+  Nb8O25Ta2 (Nb8Ta2O25)
+    Contributors: Kimi-K2.5, GLM-4.7
+
+  NbO2
+    Contributor: GLM-4.7-Flash
+
+  NbO29Ta11 (NbTa11O29)
+    Contributors: Kimi-K2.5, GLM-4.7, GLM-4.7-Flash
+
+  NbO4Ta (NbTaO4)
+    Contributors: Kimi-K2.5, GLM-4.7, GLM-4.7-Flash
+
+  NbO5Ta (NbTaO5)
+    Contributors: Kimi-K2.5, GLM-4.7, GLM-4.7-Flash
+
+  NbO6Ta2 (NbTa2O6)
+    Contributor: Kimi-K2.5
+
+  O5Ta2 (Ta2O5)
+    Contributors: Kimi-K2.5, GLM-4.7
+
+Deterministic-only active formulas
+  Nb2O3, Nb2O5Ta, Nb2O6Ta, Nb3O6Ta, NbO3Ta, NbO5Ta2, NbO6Ta3,
+  O2Ta (TaO2), and O3Ta2 (Ta2O3).
+
+Important interpretation
+  Admission by the formula-policy parser means only that a formula was extracted
+  and passed the configured policy checks. It is not evidence of stability or
+  even of a correct structural analogy. In particular, several LLM-attributed
+  formulas above passed the policy while their accompanying oxidation-state or
+  homologous-series rationale was wrong.
+
+
+PART IV. CROSS-MODEL CONVERGENCE AND DISAGREEMENT
+======================================================================
+
+Strongest convergence
+  1. NbTaO4 should first be treated as the x = 0.5 composition of a rutile
+     (Nb,Ta)O2 solid solution, not assumed to be a distinct ordered compound.
+  2. Columbite is a poor direct assignment for NbTaO5 because the conventional
+     columbite stoichiometry is AB2O6 rather than ABO5.
+  3. Nb2Ta2O11 is not charge-balanced under ordinary Nb/Ta oxidation states and
+     should be rejected under the stated assumptions.
+  4. Ordered NbTaO5 remains a testable but low-confidence hypothesis. The main
+     question is whether low-symmetry coordination preferences overcome mixing
+     entropy and phase separation.
+  5. Reduced shear/block chemistry deserves exploration, but exact formulas and
+     homologous-series assignments require independent arithmetic checks.
+  6. Pressure phases and low-valent Ta compounds should remain explicitly
+     speculative until enthalpy, dynamics, and recoverability are computed.
+
+Major disagreements or revisions
+  - Several models began by emphasizing entropy and similar ionic radii, then
+    revised toward possible electronic site ordering in T-Nb2O5-derived NbTaO5.
+  - Pressure NbTaO4 moved among baddeleyite and CaCl2-type descriptions without
+    numerical evidence selecting either family.
+  - NbTa11O29 was repeatedly treated as a central shear target, but models did
+    not resolve whether it represents a line compound, limited Ta/Nb solubility,
+    or even the intended substitution direction.
+  - The two Gemma models supplied highly correlated responses, and GLM-Flash
+    supplied incomplete/repetitive responses. Seven endpoints therefore did not
+    yield seven fully independent scientific analyses.
+
+
+PART V. RECOMMENDED INTERPRETATION OF THE TWO APPROACHES
+======================================================================
+
+Single-LLM approach
+  Strengths:
+    Fast, inexpensive, and broad enough to recover familiar binary oxide and
+    solid-solution concepts.
+
+  Weaknesses observed in this run:
+    The single response failed to terminate cleanly, had no peer correction,
+    reused the same text as its verdict, and did not deliver the required
+    falsification plan. Erroneous formulas and family assignments remained
+    unchallenged.
+
+Multi-LLM debate approach
+  Strengths:
+    Produced explicit criticism, round-to-round revisions, confidence tiers,
+    and a much richer computational validation agenda. The panel converged on a
+    defensible null hypothesis for NbTaO4 and rejected several clear formula or
+    prototype mismatches.
+
+  Weaknesses observed in this run:
+    Models copied or strongly echoed one another, repeated the same arithmetic
+    errors, and sometimes converted speculative statements into apparent
+    consensus. Debate improves scrutiny but does not replace deterministic
+    charge-balance, stoichiometry, reaction-balance, or structure-family checks.
+
+Best scientifically defensible campaign sequence from the collected text
+  1. Establish binary and solid-solution controls:
+       Nb2O5, Ta2O5, NbO2, TaO2, and selected (Nb,Ta)O2 and pentoxide mixtures.
+
+  2. Test ordered NbTaO5 against disorder and phase separation:
+       enumerate low-symmetry sites, compare ordered cells with SQS/cluster
+       expansion, calculate the ternary hull, and evaluate finite-temperature
+       configurational effects.
+
+  3. Rebuild the reduced shear candidate list deterministically:
+       generate valid M_nO_(2n-1) and Wadsley-Roth compositions first, then
+       substitute Nb/Ta while enforcing charge balance. Do not inherit the
+       transcript's n-index assignments without correction.
+
+  4. Treat pressure NbTaO4 and low-valent Ta oxides as separate hypotheses:
+       compute pressure-dependent enthalpies, phonons, decomposition paths, and
+       reverse barriers before discussing recoverability.
+
+  5. Require every LLM proposal to pass deterministic prechecks:
+       canonical formula parsing, oxidation-state feasibility, balanced
+       reactions, prototype stoichiometry compatibility, and duplicate-family
+       detection before MLIP or DFT resources are allocated.
+
+
+FINAL COMPARISON
+======================================================================
+
+The single model mainly supplied an incomplete inventory. The debate panel
+supplied a scientific process: proposals were challenged, revised, ranked, and
+paired with calculations that could reject them. Its most robust conclusion was
+not a novel stable compound, but a better ordering of hypotheses:
+
+  - First: rutile and pentoxide solid-solution controls.
+  - Second: corrected reduced shear/block candidates.
+  - Third: ordered NbTaO5 as a low-confidence, falsifiable hypothesis.
+  - Fourth: high-pressure NbTaO4 and low-valent Ta chemistry.
+
+The multi-LLM process was therefore more useful than the single-call output, but
+its consensus is not validation. The repeated formula arithmetic errors show why
+the LLM layer must remain upstream of deterministic chemistry checks and
+MLIP/DFT calculations.

@@ -34,11 +34,15 @@
 # Required env:
 #   BACKEND   hydragnn | uma | mace
 #   CASE      dataset case dir under $RUNS_ROOT (contains dataset.extxyz)
+#   ELEMENTAL_REFERENCE_MANIFEST  DFT-labelled pure-element JSON manifest
+#                                 (default $RUNS_ROOT/$CASE/elemental_references.json;
+#                                  this file must exist)
 # Optional env (with defaults):
 #   UMA_TASK      omat | omol | oc20 | odac | omc   (uma only; default omat)
 #   UMA_LORA      1 = LoRA fine-tune of UMA backbone scalar linears (default 0)
-#   MACE_FAMILY   mace_mp | mace_off | checkpoint   (mace only; default mace_mp)
-#   MACE_MODEL    small | medium | large | tag/URL | .model path
+#   MACE_FAMILY   mace_mp | mace_off | mace_omol | mace_polar | mace_anicc |
+#                 checkpoint                           (mace only; default mace_mp)
+#   MACE_MODEL    family alias | URL | .model path
 #                                                   (mace only; default medium)
 #   MACE_MODEL_ID curated MACE_MODELS id (overrides MACE_FAMILY/MACE_MODEL)
 #   MACE_LORA     1 = native mace_run_train LoRA fine-tune (default 0)
@@ -74,6 +78,11 @@ BACKEND="${BACKEND:?set BACKEND=hydragnn|uma|mace}"
 CASE="${CASE:?set CASE=<dataset case dir under RUNS_ROOT>}"
 DATASET="${DATASET:-${RUNS_ROOT}/${CASE}/dataset.extxyz}"
 [[ ! -f "${DATASET}" ]] && { echo "ERROR: dataset not found: ${DATASET}" >&2; exit 2; }
+ELEMENTAL_REFERENCE_MANIFEST="${ELEMENTAL_REFERENCE_MANIFEST:-${RUNS_ROOT}/${CASE}/elemental_references.json}"
+[[ ! -f "${ELEMENTAL_REFERENCE_MANIFEST}" ]] && {
+  echo "ERROR: DFT-labelled elemental reference manifest not found: ${ELEMENTAL_REFERENCE_MANIFEST}" >&2
+  exit 2
+}
 
 # ── knobs ────────────────────────────────────────────────────────────────────
 UMA_TASK="${UMA_TASK:-omat}"
@@ -213,8 +222,8 @@ fi
 [[ -n "${DEVICE:-}" ]] && EXTRA_ARGS+=(--device "${DEVICE}")
 
 # Leakage-free RE-SCORE mode: skip training, reuse the existing split +
-# fine-tuned checkpoint, and re-score both endpoints with the per-element energy
-# reference fit on the TRAIN partition (writes eval/iter*_trainref.json).
+# fine-tuned checkpoint, and re-score both endpoints using fixed elemental
+# reference geometries (writes eval/iter*_formation.json).
 [[ "${RESCORE:-0}" == "1" ]] && EXTRA_ARGS+=(--eval-only)
 
 echo "=========================================="
@@ -224,6 +233,7 @@ echo "Job ID:     ${SLURM_JOB_ID:-N/A}"
 echo "Backend:    ${BACKEND}"
 echo "Case:       ${CASE}"
 echo "Dataset:    ${DATASET}"
+echo "References: ${ELEMENTAL_REFERENCE_MANIFEST}"
 echo "Strategy:   ${HYDRAGNN_STRATEGY}   (hydragnn only)"
 echo "Head:       ${HYDRAGNN_HEAD:-<random>}   (hydragnn new-head only)"
 echo "Task (UMA): ${UMA_TASK}   (uma LoRA: ${UMA_LORA:-0})"
@@ -238,6 +248,7 @@ cd "${REPO}"
 python -m matsim_agents.active_learning.finetune_eval \
   --backend "${BACKEND}" \
   --dataset "${DATASET}" \
+  --elemental-reference-manifest "${ELEMENTAL_REFERENCE_MANIFEST}" \
   --output-dir "${OUT_DIR}" \
   --epochs "${EPOCHS}" \
   --batch-size "${BATCH_SIZE}" \

@@ -41,7 +41,13 @@ class ValidationRecord(BaseModel):
 
 
 class ComputeBudget(BaseModel):
-    """Hard workflow limits; ``None`` means that the user set no limit."""
+    """Workflow budgets; enforcement boundaries depend on the resource.
+
+    MLIP limits count candidate relaxation attempts (including failures and
+    post-promotion reevaluation), not generation, MD, or reference qualification.
+    Node-hour thresholds are checked between formula runs.
+    ``None`` means that the user set no limit.
+    """
 
     max_candidates: int | None = Field(None, ge=1)
     max_mlip_relaxations: int | None = Field(None, ge=1)

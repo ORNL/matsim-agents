@@ -20,10 +20,12 @@ from pathlib import Path
 from typing import Any
 
 from matsim_agents.active_learning.config import (
+    HYDRAGNN_DATASET_HEADS,
     HydraGNNConfig,
     MACEConfig,
     MLIPConfig,
     UMAConfig,
+    resolve_hydragnn_inference_head,
 )
 from matsim_agents.backends.mlip.uma_artifacts import (
     load_uma_predict_unit_from_bundle,
@@ -84,6 +86,7 @@ def _build_single_head_calculator(
 
         def __init__(self):
             super().__init__()
+            self.model = model
             self.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
         def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
@@ -107,6 +110,60 @@ def _build_single_head_calculator(
     return SingleHeadHydraGNNCalculator()
 
 
+def _build_selected_head_calculator(
+    model,
+    *,
+    autocast_ctx,
+    head_index,
+    radius,
+    max_neighbours,
+    param_dtype,
+    device,
+    charge,
+    spin,
+):
+    """ASE calculator pinned to one decoding head of a multi-branch HydraGNN."""
+    import torch
+    from ase.calculators.calculator import Calculator, all_changes
+
+    from matsim_agents.backends.mlip.relaxation import _atoms_to_graph
+
+    class SelectedHeadHydraGNNCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def __init__(self):
+            super().__init__()
+            self.model = model
+            self.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+            self.inference_head_index = head_index
+            self.inference_head_name = HYDRAGNN_DATASET_HEADS[head_index]
+            self.last_branch_weights = None
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            data = _atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours).to(device)
+            data.pos = data.pos.to(param_dtype)
+            if hasattr(data, "cell") and data.cell is not None:
+                data.cell = data.cell.to(param_dtype)
+            data.x = data.x.to(param_dtype)
+            data.dataset_name = torch.full((1, 1), head_index, dtype=torch.long, device=device)
+            data.pos.requires_grad_(True)
+            with torch.enable_grad(), autocast_ctx:
+                prediction = model(data)
+                if isinstance(prediction, (list, tuple)):
+                    energy = prediction[0]
+                elif isinstance(prediction, dict) and "graph" in prediction:
+                    energy = prediction["graph"][0]
+                else:
+                    energy = prediction
+                energy = energy.squeeze(-1).sum()
+                forces = -torch.autograd.grad(energy, data.pos)[0]
+            self.results["energy"] = float(energy.detach())
+            self.results["forces"] = forces.detach().cpu().numpy()
+
+    return SelectedHeadHydraGNNCalculator()
+
+
 def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path | None = None):
     """Build a ready-to-use ASE calculator from a HydraGNN logdir.
 
@@ -116,12 +173,6 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     # Heavy imports kept inside the function so this module stays cheap to import.
     import json
     import sys
-
-    import torch
-
-    from matsim_agents.backends.mlip.relaxation import (
-        _build_calculator,  # type: ignore[attr-defined]
-    )
 
     logdir = Path(logdir_override) if logdir_override is not None else cfg.logdir
     config_path = logdir / "config.json"
@@ -140,6 +191,42 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     for _d in _example_dirs:
         if (_d / "inference_fused.py").is_file() and str(_d) not in sys.path:
             sys.path.insert(0, str(_d))
+
+    selected_head = resolve_hydragnn_inference_head(cfg.inference_head)
+    if selected_head is not None:
+        from inference_random_structures import load_config_and_model
+
+        model, config, device, autocast_ctx, param_dtype = load_config_and_model(
+            str(logdir), cfg.checkpoint, cfg.precision
+        )
+        num_branches = int(getattr(model, "num_branches", 1))
+        if selected_head >= num_branches:
+            raise ValueError(
+                f"HydraGNN head {selected_head} ({HYDRAGNN_DATASET_HEADS[selected_head]}) "
+                f"is unavailable in a model with {num_branches} branches"
+            )
+        arch = config["NeuralNetwork"]["Architecture"]
+        return _build_selected_head_calculator(
+            model,
+            autocast_ctx=autocast_ctx,
+            head_index=selected_head,
+            radius=float(cfg.radius if cfg.radius is not None else arch.get("radius", 5.0)),
+            max_neighbours=int(
+                cfg.max_neighbours
+                if cfg.max_neighbours is not None
+                else arch.get("max_neighbours", 20)
+            ),
+            param_dtype=param_dtype,
+            device=device,
+            charge=cfg.charge,
+            spin=cfg.spin,
+        )
+
+    import torch
+
+    from matsim_agents.backends.mlip.relaxation import (
+        _build_calculator,  # type: ignore[attr-defined]
+    )
 
     # --- new-head (single-branch) fine-tune models -----------------------------
     # When ``newhead_ft_config`` is set, the checkpoint was produced by
@@ -288,6 +375,7 @@ def build_ensemble(cfg: MLIPConfig, *, enable_mc_dropout: bool = False) -> list[
 
     * HydraGNN: primary logdir + each ``ensemble_paths`` logdir.
     * UMA: primary ``model_name`` + each ``ensemble_models`` entry.
+    * MACE: primary model + variants in its family or local checkpoint members.
     """
     if cfg.backend == "hydragnn":
         assert cfg.hydragnn is not None
@@ -301,6 +389,18 @@ def build_ensemble(cfg: MLIPConfig, *, enable_mc_dropout: bool = False) -> list[
         for name in cfg.uma.ensemble_models:
             member = cfg.uma.model_copy(update={"model_name": name})
             calcs.append(build_uma_calculator(member, enable_mc_dropout=enable_mc_dropout))
+        return calcs
+    if cfg.backend == "mace":
+        assert cfg.mace is not None
+        calcs = [build_mace_calculator(cfg.mace, enable_mc_dropout=enable_mc_dropout)]
+        for model in cfg.mace.ensemble_models:
+            values = cfg.mace.model_dump()
+            values["model"] = model
+            if Path(model).is_file():
+                values["family"] = "checkpoint"
+                values["dispersion"] = False
+            member = MACEConfig.model_validate(values)
+            calcs.append(build_mace_calculator(member, enable_mc_dropout=enable_mc_dropout))
         return calcs
     raise ValueError(f"Unknown mlip.backend: {cfg.backend!r}")
 
@@ -439,18 +539,22 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
 def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
     """Build an ASE calculator backed by a MACE MLIP.
 
-    Loads a foundation model by variant (``mace_mp`` / ``mace_off`` with
-    ``cfg.model`` in ``{small, medium, large}`` or a release tag/URL), or a local
-    fine-tuned ``.model`` checkpoint when ``cfg.family == 'checkpoint'``. This
-    lets multiple MACE versions be benchmarked behind ``mlip.backend: mace``,
-    mirroring the Frontier HydraGNN-vs-MACE-vs-UMA comparison pipeline.
+    Loads any foundation family exposed by mace-torch 0.3.16, or a local
+    fine-tuned ``.model`` checkpoint when ``cfg.family == 'checkpoint'``.
 
     When ``enable_mc_dropout`` and ``cfg.dropout.enabled`` are both True, dropout
     is injected into the underlying torch model so MC-Dropout acquisition yields
     non-zero variance. The dropout is dormant for ordinary energy/force calls.
     """
     try:
-        from mace.calculators import MACECalculator, mace_mp, mace_off
+        from mace.calculators import (
+            MACECalculator,
+            mace_anicc,
+            mace_mp,
+            mace_off,
+            mace_omol,
+            mace_polar,
+        )
     except ImportError as exc:  # pragma: no cover - depends on optional dep
         raise ImportError(
             "The MACE backend requires the 'mace-torch' package. Install it with the "
@@ -470,7 +574,16 @@ def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
         calc = MACECalculator(model_paths=[str(ckpt)], device=cfg.device, default_dtype=dtype)
     elif cfg.family == "mace_off":
         calc = mace_off(model=cfg.model, device=cfg.device, default_dtype=dtype)
-    else:  # mace_mp
+    elif cfg.family == "mace_omol":
+        calc = mace_omol(model=cfg.model, device=cfg.device, default_dtype=dtype)
+    elif cfg.family == "mace_polar":
+        calc = mace_polar(model=cfg.model, device=cfg.device, default_dtype=dtype)
+    elif cfg.family == "mace_anicc":
+        calc = mace_anicc(
+            model_path=None if cfg.model == "default" else cfg.model,
+            device=cfg.device,
+        )
+    else:
         calc = mace_mp(
             model=cfg.model,
             device=cfg.device,

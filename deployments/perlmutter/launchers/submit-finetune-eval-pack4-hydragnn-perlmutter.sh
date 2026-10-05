@@ -55,6 +55,11 @@ for case in "${CASE_LIST[@]}"; do
     echo "[SKIP] ${case}: dataset not found (${dataset})" >&2
     continue
   fi
+  reference_manifest="${ELEMENTAL_REFERENCE_MANIFEST:-${RUNS_ROOT}/${case}/elemental_references.json}"
+  if [[ ! -f "${reference_manifest}" ]]; then
+    echo "[ERROR] ${case}: DFT-labelled elemental reference manifest not found (${reference_manifest})" >&2
+    exit 2
+  fi
   # Build the ';'-separated SPECS: one campaign per strategy, all same case.
   specs=""
   IFS=',' read -ra STRAT_LIST <<<"${STRATEGIES}"
@@ -65,10 +70,10 @@ for case in "${CASE_LIST[@]}"; do
 
   jobname="fte-pack4-hg-${case}"
   if [[ -n "${DRY_RUN:-}" ]]; then
-    echo "BACKEND=hydragnn SPECS='${specs}' sbatch -q ${QOS} -J ${jobname} ${JOB}"
+    echo "ELEMENTAL_REFERENCE_MANIFEST='${reference_manifest}' BACKEND=hydragnn SPECS='${specs}' sbatch -q ${QOS} -J ${jobname} ${JOB}"
     continue
   fi
-  if JID=$(BACKEND=hydragnn SPECS="${specs}" \
+  if JID=$(ELEMENTAL_REFERENCE_MANIFEST="${reference_manifest}" BACKEND=hydragnn SPECS="${specs}" \
              sbatch --parsable -q "${QOS}" -J "${jobname}" "${JOB}"); then
     echo "[submitted] ${JID}  ${jobname}  (${QOS}; strategies: ${STRATEGIES})"
     nsub=$((nsub + 1))

@@ -156,6 +156,9 @@ def score_mc_dropout(
         per_pass = []
         for _ in range(passes):
             _enable_dropout(calculator.model)
+            reset = getattr(calculator, "reset", None)
+            if callable(reset):
+                reset()
             per_pass.append(_forces_from(calculator, cand.atoms))
         stack = np.stack(per_pass, axis=0)
         out[i] = float(np.sqrt(np.mean(stack.std(axis=0) ** 2)))

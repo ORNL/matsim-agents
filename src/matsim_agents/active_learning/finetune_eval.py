@@ -191,7 +191,7 @@ def _run_eval(
     test_label: str,
     eval_dir: Path,
     max_parity_points: int,
-    ref_frames: list[Atoms] | None = None,
+    elemental_reference_manifest: Path | None = None,
     out_suffix: str = "",
 ) -> dict:
     metrics, parity = evaluate_frames(
@@ -200,7 +200,7 @@ def _run_eval(
         iteration=iteration,
         model_path=model_path,
         test_set_label=test_label,
-        ref_frames=ref_frames,
+        elemental_reference_manifest=elemental_reference_manifest,
     )
     eval_dir.mkdir(parents=True, exist_ok=True)
     out_json = eval_dir / f"iter{iteration}{out_suffix}.json"
@@ -210,11 +210,11 @@ def _run_eval(
         **_subsample(parity, max_parity_points),
     )
     log.info(
-        "iter%d %s: E_MAE=%.4f (shift %.4f) eV/atom  F_MAE=%.4f eV/A",
+        "iter%d %s: raw_E_MAE=%.4f (formation %.4f) eV/atom  F_MAE=%.4f eV/A",
         iteration,
         mlip_cfg.backend,
         metrics.energy_mae_eV_per_atom,
-        metrics.energy_mae_eV_per_atom_shifted,
+        metrics.formation_energy_mae_eV_per_atom,
         metrics.force_mae_eV_per_A,
     )
     return asdict(metrics)
@@ -230,6 +230,7 @@ def run_campaign(
     output_dir: str | Path,
     *,
     backend: str,
+    elemental_reference_manifest: str | Path,
     # UMA
     uma_base_model: str = "uma-s-1p1",
     uma_task_name: str = "omat",
@@ -244,7 +245,7 @@ def run_campaign(
     uma_lora: bool = False,
     uma_lora_r: int = 8,
     uma_lora_alpha: float = 16.0,
-    # MACE (all versions: family in {mace_mp, mace_off, checkpoint}; model in
+    # MACE (all installed foundation families; model is an alias, URL, or path).
     # {small, medium, large}/tag/URL/path, or a MACE_MODELS id). Fine-tuning is
     # delegated to mace_run_train (reference recipe), with optional native LoRA.
     mace_family: str = "mace_mp",
@@ -284,9 +285,9 @@ def run_campaign(
 
     When ``eval_only`` is True, the training step is skipped: the existing
     deterministic train/test split and the already-fine-tuned checkpoint under
-    ``ft/`` are reused, and both endpoints are *re-scored* with the per-element
-    energy reference fit on the TRAIN partition (leakage-free), writing
-    ``eval/iter*_trainref.json``. The original ``iter*.json`` files are left
+    ``ft/`` are reused, and both endpoints are re-scored using fixed DFT-labelled
+    elemental geometries, writing ``eval/iter*_formation.json``.
+    The original ``iter*.json`` files are left
     untouched.
     """
     # Apply the GPU-visibility policy *before* any torch/HydraGNN import happens
@@ -304,6 +305,21 @@ def run_campaign(
     frames = [raw] if isinstance(raw, Atoms) else list(raw)
     if len(frames) < 4:
         raise ValueError(f"Need >=4 frames for a split; got {len(frames)}.")
+    from matsim_agents.discovery.energy_references import (
+        load_elemental_reference_manifest,
+        validate_dataset_reference_method,
+    )
+
+    manifest, _, _ = load_elemental_reference_manifest(
+        elemental_reference_manifest,
+        required_elements={symbol for frame in frames for symbol in frame.get_chemical_symbols()},
+    )
+    validate_dataset_reference_method(
+        dataset_path,
+        reference_backend=manifest["backend"],
+        reference_method_signature=manifest["method_signature"],
+        require_sidecar=True,
+    )
 
     train_frames, test_frames = _split_dataset(frames, test_fraction, seed)
     n_iters = _num_al_iterations(frames)
@@ -316,6 +332,30 @@ def run_campaign(
     else:
         ase_write(str(train_path), train_frames, format="extxyz")
         ase_write(str(test_path), test_frames, format="extxyz")
+        from matsim_agents.active_learning.dataset_governance import (
+            DatasetValidationSummary,
+            write_dataset_manifest,
+        )
+
+        for split_path, split_frames, split_role in (
+            (train_path, train_frames, "training_pool"),
+            (test_path, test_frames, "validation"),
+        ):
+            write_dataset_manifest(
+                split_path,
+                dft_backend=manifest["backend"],
+                method_signature=manifest["method_signature"],
+                energy_reference=f"{manifest['backend']}:native_total_energy",
+                validation=DatasetValidationSummary(accepted=len(split_frames)),
+                split_role=split_role,
+            )
+    for split_path in (train_path, test_path):
+        validate_dataset_reference_method(
+            split_path,
+            reference_backend=manifest["backend"],
+            reference_method_signature=manifest["method_signature"],
+            require_sidecar=True,
+        )
     log.info(
         "%s campaign: %d train / %d test frames; N_al_iterations=%d",
         backend,
@@ -324,10 +364,8 @@ def run_campaign(
         n_iters,
     )
 
-    # Leakage-free re-score mode: fit the per-element reference on TRAIN and
-    # write to a distinct ``_trainref`` suffix so originals are preserved.
-    _ref = train_frames if eval_only else None
-    _suf = "_trainref" if eval_only else ""
+    reference_manifest = Path(elemental_reference_manifest)
+    _suf = "_formation" if eval_only else ""
 
     if backend == "uma":
         base_cfg = _uma_cfg(uma_base_model, uma_task_name, dev)
@@ -339,7 +377,7 @@ def run_campaign(
             test_label=str(test_path),
             eval_dir=eval_dir,
             max_parity_points=max_parity_points,
-            ref_frames=_ref,
+            elemental_reference_manifest=reference_manifest,
             out_suffix=_suf,
         )
         if eval_only:
@@ -390,7 +428,7 @@ def run_campaign(
             test_label=str(test_path),
             eval_dir=eval_dir,
             max_parity_points=max_parity_points,
-            ref_frames=_ref,
+            elemental_reference_manifest=reference_manifest,
             out_suffix=_suf,
         )
         if eval_only:
@@ -439,7 +477,7 @@ def run_campaign(
             test_label=str(test_path),
             eval_dir=eval_dir,
             max_parity_points=max_parity_points,
-            ref_frames=_ref,
+            elemental_reference_manifest=reference_manifest,
             out_suffix=_suf,
         )
         from matsim_agents.active_learning.finetune_hydragnn import finetune_hydragnn
@@ -516,7 +554,7 @@ def run_campaign(
         test_label=str(test_path),
         eval_dir=eval_dir,
         max_parity_points=max_parity_points,
-        ref_frames=_ref,
+        elemental_reference_manifest=reference_manifest,
         out_suffix=_suf,
     )
     log.info("Campaign complete -> %s (eval: iter0 vs iter%d)", output_dir, n_iters)
@@ -560,6 +598,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--backend", required=True, choices=["hydragnn", "uma", "mace"])
     parser.add_argument("--dataset", required=True, help="AL-collected extxyz dataset.")
+    parser.add_argument("--elemental-reference-manifest", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, help="Campaign output directory.")
     # UMA
     parser.add_argument("--uma-base-model", default="uma-s-1p1")
@@ -602,8 +641,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--mace-family",
         default="mace_mp",
-        choices=["mace_mp", "mace_off", "checkpoint"],
-        help="MACE family: mace_mp (inorganic), mace_off (organic), or checkpoint (local .model).",
+        choices=[
+            "mace_mp",
+            "mace_off",
+            "mace_omol",
+            "mace_polar",
+            "mace_anicc",
+            "checkpoint",
+        ],
+        help="MACE foundation-loader family or checkpoint (local .model).",
     )
     parser.add_argument(
         "--mace-model",
@@ -686,8 +732,8 @@ def main(argv: list[str] | None = None) -> int:
         "--eval-only",
         action="store_true",
         help="Skip training: reuse the existing split + fine-tuned checkpoint and "
-        "re-score both endpoints with the per-element reference fit on the TRAIN "
-        "partition (leakage-free), writing eval/iter*_trainref.json.",
+        "re-score both endpoints using fixed elemental references, "
+        "writing eval/iter*_formation.json.",
     )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -698,6 +744,7 @@ def main(argv: list[str] | None = None) -> int:
         args.dataset,
         args.output_dir,
         backend=args.backend,
+        elemental_reference_manifest=args.elemental_reference_manifest,
         uma_base_model=args.uma_base_model,
         uma_task_name=args.uma_task_name,
         uma_epochs=args.uma_epochs,

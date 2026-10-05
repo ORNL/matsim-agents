@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -165,7 +166,7 @@ def retrain_hydragnn(
             "(no srun, no module swap). For multi-node training set train_launcher."
         )
         argv = [
-            "python",
+            sys.executable,
             str(trainer_cfg.train_script),
             "--dataset",
             str(dataset_path),
@@ -232,7 +233,7 @@ def retrain_uma(
             "(no srun, no module swap). For multi-node training set train_launcher."
         )
         argv = [
-            "python",
+            sys.executable,
             str(trainer_cfg.train_script),
             "--dataset",
             str(dataset_path),
@@ -253,7 +254,15 @@ def retrain_uma(
     if proc.returncode != 0:
         raise RuntimeError(f"UMA fine-tune failed with exit {proc.returncode}; see {log_path}")
 
-    return out_model_dir
+    from matsim_agents.active_learning.calculator import _resolve_finetuned_uma_checkpoint
+
+    checkpoint = _resolve_finetuned_uma_checkpoint(str(out_model_dir))
+    if checkpoint is None:
+        raise RuntimeError(
+            "UMA fine-tune exited successfully but did not produce an inference_ckpt.pt "
+            f"under {out_model_dir}; see {log_path}"
+        )
+    return checkpoint
 
 
 def retrain_mace(

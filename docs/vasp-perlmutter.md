@@ -6,6 +6,12 @@ runtime problem that had to be solved to get GPU VASP running **both** as a
 standalone relaxation and as the DFT-labelling step inside the active-learning
 (AL) loop.
 
+The all-model VASP campaign preflight accepts the same per-element POTCAR
+layouts as the runtime resolver: `<potcar_dir>/<Element>/POTCAR`,
+`<potcar_dir>/<Element>` as a file, or `<potcar_dir>/POTCAR.<Element>`.
+Layouts may be mixed across elements; the Nb-Ta-O launcher requires coverage
+for Nb, Ta, and O before starting the campaign.
+
 If VASP "runs" but the AL loop produces **0 labelled frames**, or a job
 finishes suspiciously fast, jump straight to [Troubleshooting](#troubleshooting)
 — every failure mode observed in practice is catalogued there with its symptom,

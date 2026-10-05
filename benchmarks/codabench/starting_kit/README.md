@@ -43,18 +43,20 @@ Predict the DFT formation energy per atom (eV/atom) for each structure.
 
 $$\Delta H_f / N = E_{\text{compound}} / N - \sum_i x_i \cdot E_{\text{ref}}[i]$$
 
-The elemental reference energies $E_{\text{ref}}[i]$ (from DFT ground-state
-solids / molecules, same PBE settings) are published in
-`reference_data/elemental_energies.json`.  Use these same references when
-converting your ML total energies to formation energies.
+The reference geometries (declared elemental solids / molecules) and DFT
+total-cell labels are published in `public_data/elemental_references.json`.
+Evaluate these same fixed geometries with your model, then use its own
+per-atom elemental predictions as $E_{\text{ref}}[i]$ when converting ML totals
+to formation energies. The protected DFT labels subtract the corresponding
+DFT elemental values using the same DFT setup as the compounds.
 
 > **Units & normalisation (read carefully).** All energies are reported **per
 > atom** (eV/atom), i.e. the total cell energy divided by $N$, the number of
 > atoms in that structure. This makes the metric intensive and comparable
 > across structures of very different size — submit per-atom values, not total
-> eV. The elemental-reference convention above is **fixed**; the scorer uses
-> exactly these references, so you must use them too or your formation energies
-> will be offset. Forces (Task 2) are likewise per-component in eV/Å.
+> eV. The elemental-reference geometry convention above is **fixed**; subtract
+> each method's own predictions on those geometries, not another method's
+> numerical energy zeros. Forces (Task 2) are likewise per-component in eV/Å.
 
 File: `task1.csv`
 ```
@@ -191,10 +193,12 @@ exhaustive probing.
 > first-principles calculation) on the released geometries is not allowed. The
 > scorer automatically screens every submission for accuracy that is physically
 > implausible for an ML potential (per-structure errors below DFT noise floors).
-> Note that the exact reference DFT protocol (pseudopotentials, k-mesh, INCAR,
-> elemental references) is **not** published, so independently-run DFT will not
-> match the reference anyway. Flagged submissions are reviewed and may be
-> disqualified.
+> The organizer-provided pure-element DFT labels are an explicit exception:
+> they define the reference convention, not compound predictions. Use your
+> model's own predictions on those reference geometries when forming its
+> energies. Compound DFT labels remain protected; an elemental manifest does
+> not authorize participants to replace ML predictions with compound DFT.
+> Flagged submissions are reviewed and may be disqualified.
 
 ---
 
@@ -204,7 +208,7 @@ Four baselines are provided in `baselines/`:
 
 | Baseline | Architecture | Tasks | Notes |
 |----------|-------------|-------|-------|
-| **MACE-MP-0** | Equivariant GNN (MACE) | 1–3, 5 | Universal MLIP, no extra auth needed |
+| **MACE foundations** | Equivariant GNN (MACE) | 1–3, 5 | MP, MPA, OMAT, and MATPES crystal models; no extra auth needed |
 | **HydraGNN** | Multi-headed graph NN | 1–3, 5 | ORNL model |
 | **UMA** (`uma-s-1p2`) | Transformer-based universal model | 1–3, 5 | Requires `fairchem-core ≥2.20` and HF model card acceptance |
 | **AllScAIP** (`allscaip-md-conserving-all-omol`) | Message-passing NN (OMol102M) | 1–3, 5 | Requires `fairchem-core ≥2.20` and HF model card acceptance |
@@ -212,12 +216,25 @@ Four baselines are provided in `baselines/`:
 Run with:
 
 ```bash
-python run_baselines.py --model mace        # MACE-MP-0
-python run_baselines.py --model hydragnn    # HydraGNN
-python run_baselines.py --model uma         # UMA
-python run_baselines.py --model allscaip    # AllScAIP
-python run_baselines.py --model all --relax # dispatches MACE to its compatibility env
+REF=public_data/elemental_references.json
+python run_baselines.py --model mace --mace-variant mace_omat_medium --elemental-reference-manifest "$REF"
+python run_baselines.py --model mace --mace-variant materials --elemental-reference-manifest "$REF"  # 14 crystal models
+python run_baselines.py --model hydragnn --elemental-reference-manifest "$REF"  # also provide --hydragnn-logdir
+python run_baselines.py --model uma --elemental-reference-manifest "$REF"
+python run_baselines.py --model allscaip --elemental-reference-manifest "$REF"
+python run_baselines.py --model all --relax --elemental-reference-manifest "$REF"
 ```
+
+`--mace-variant` accepts every MACE model exposed by the workflow. Use
+`materials` for the Codabench bulk-crystal matrix (MP, MPA, OMAT, and
+MATPES), or `all` to include all 22 catalog variants. The latter also includes
+OFF, OMOL, Polar, and ANI-CC molecular models; those are selectable for explicit
+diagnostics but are not general-purpose bulk-crystal potentials. MACE-OFF and
+MACE-OMOL use the non-commercial Academic Software License; verify each model's
+upstream terms before publishing or redistributing results.
+
+MACE-MH (`mh-0` and `mh-1`) variants are excluded until explicit inference-head
+selection is supported through the adapters.
 
 Install backend dependencies separately: `requirements-mace.txt` in the MACE
 environment and `requirements-fairchem.txt` in the HydraGNN/FairChem
@@ -225,14 +242,18 @@ environment. Aggregate runs use `.venv-mace/bin/python` and `.venv/bin/python`
 by default; set `MATSIM_MACE_PYTHON` and `MATSIM_BASE_PYTHON` when the
 environments live elsewhere.
 
-`run_baselines.py` writes raw model totals and numerical artifacts beneath
-`predictions/<model>/`. Raw total energies are not formation energies. After
-applying the published elemental-reference convention into a file containing
-`structure_id,formation_energy_eV_per_atom`, create a submission with:
+`run_baselines.py` and `evaluate.py` first predict energies of the fixed
+pure-element structures in `--elemental-reference-manifest`, then subtract
+the model's own reference energies from compound totals. They write
+`formation_energies.csv`, raw-energy diagnostics, and
+`elemental_reference_predictions.json` beneath their prediction directory.
+The manifest supplies the same geometries and their DFT total-cell energies,
+with structure hashes, DFT backend, and method signature. All test elements
+must be covered. Models must not relax or replace these reference geometries.
+Create a submission with:
 
 ```bash
-python package_submission.py predictions/<model> submission/ \
-  --formation-energies path/to/formation_energies.csv
+python package_submission.py predictions/<model> submission/
 ```
 
 The packager refuses to label a raw `energy_eV` file as Task 1 or Task 5.
@@ -247,7 +268,86 @@ To use UMA or AllScAIP, accept the model-card licenses on HuggingFace first:
 - UMA: <https://huggingface.co/facebook/UMA>
 - AllScAIP (OMol25): <https://huggingface.co/facebook/OMol25>
 
-> **Note on elemental references**: participants must apply the same DFT
-> elemental reference energies as the competition (provided in
-> `reference_data/elemental_energies.json`) to convert ML total energies to
-> formation energies before submission.
+> **Note on elemental references**: use the same declared reference
+> geometries as the competition, but subtract each model's own predictions
+> on those geometries from its compound predictions. DFT reference formation
+> energies subtract DFT elemental values. Do not subtract DFT energies from
+> raw MLIP totals. Organizers must provide converged pure-element DFT
+> calculations and `public_data/elemental_references.json` before release.
+
+## Elemental reference manifest
+
+Each test must cover all its elements, using one fixed geometry per declared
+elemental reference. Paths resolve relative to the JSON manifest:
+
+```json
+{
+  "backend": "qe",
+  "method_signature": "declared-dft-protocol",
+  "references": {
+    "Nb": {
+      "structure_path": "elemental_structures/Nb.extxyz",
+      "structure_sha256": "<SHA-256 of the geometry file>",
+      "energy_eV": -20.0
+    },
+    "O": {
+      "structure_path": "elemental_structures/O2.extxyz",
+      "structure_sha256": "<SHA-256 of the geometry file>",
+      "energy_eV": -10.0
+    }
+  }
+}
+```
+
+These numbers are illustrative, not physical DFT data. `energy_eV` is the
+DFT **total-cell** energy; the runner divides by the reference atom count,
+including two for O2. A reference keyed by `"O"` must contain only oxygen.
+Missing coverage, impure geometries, hash mismatches, non-finite labels, and
+multiple geometries per reference are errors. The runner consumes existing
+DFT labels; it does not launch their calculations.
+
+For a custom submitted calculator:
+
+```bash
+python evaluate.py \
+  --submission /path/to/model_submission \
+  --structures public_data/structures_metadata.csv \
+  --struct-dir public_data/structures \
+  --elemental-reference-manifest public_data/elemental_references.json \
+  --output predictions/custom
+python package_submission.py predictions/custom submission/
+```
+
+Each method subtracts its own reference predictions. Elemental-baseline errors
+and raw totals are retained in the prediction directory for audit, while the
+scorer consumes the packaged formation energies. Preserve these diagnostics
+with your experiment results; the packager does not add them as leaderboard
+tasks. The scorer does not independently verify your reference calculations.
+
+Formation subtraction removes additive energy-zero differences, not bonding
+errors or differences between approximation theories. Identical fixed
+geometries prevent model-dependent reference relaxation from confounding
+comparison. If these are not the appropriate elemental ground states, report
+energies relative to the declared phases, not ground-state formation energies.
+Good formation-energy accuracy does not imply accurate forces or hull stability.
+Task 5's same-formula ordering is unchanged by this subtraction.
+
+### Organizer release checklist
+
+- Supply converged pure-element DFT calculations for all test elements,
+  using the compound-label DFT setup, with declared bulk/molecular phases.
+- Publish their fixed geometries, geometry hashes, total-cell DFT energies,
+  backend, and method signature in `public_data/elemental_references.json`.
+  Reference paths must be relative and remain inside the bundled public data.
+- Form protected compound formation labels by subtracting the matching DFT
+  elemental values, normalized per atom. Protected
+  `reference_data/elemental_energies.json` must contain the same per-atom values.
+- Use separate matching manifests for different DFT protocols; do not pool
+  incompatible raw energies. Matching elemental numbers alone does not verify
+  compound-label convergence or method provenance.
+- Build the release with the repository's `build_bundle.py`; it validates
+  coverage, hashes, reference packaging, and protected/public elemental
+  agreement before creating the competition ZIP.
+- Qualify real checkpoint inference and DFT data separately. Synthetic
+  reference tests and mocked model adapters validate software, not scientific
+  accuracy.

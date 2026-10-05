@@ -95,12 +95,11 @@ def write_kpoints_auto(out_path: str | Path, kspacing_per_A: float = 0.3) -> str
     return out_path
 
 
-def concat_potcar(
+def resolve_potcar_paths(
     symbols_in_poscar_order: list[str],
     potcar_dir: str | Path,
-    out_path: str | Path,
-) -> str:
-    """Concatenate per-element POTCAR files in the order they appear in POSCAR.
+) -> list[Path]:
+    """Resolve per-element POTCAR files in the order they appear in POSCAR.
 
     Looks for ``potcar_dir/<Symbol>/POTCAR`` first, then ``potcar_dir/<Symbol>``,
     then ``potcar_dir/POTCAR.<Symbol>``. Raises ``FileNotFoundError`` if any
@@ -108,7 +107,6 @@ def concat_potcar(
     silently produces a wrong calculation.
     """
     potcar_dir = Path(potcar_dir)
-    out_path = os.path.abspath(str(out_path))
     if not potcar_dir.is_dir():
         raise FileNotFoundError(f"potcar_dir not a directory: {potcar_dir}")
 
@@ -142,7 +140,7 @@ def concat_potcar(
         "Ce": ["Ce"],
     }
 
-    pieces: list[bytes] = []
+    paths: list[Path] = []
     for sym in seen:
         # Build candidate list: plain element first, then preferred variants,
         # then legacy flat-file conventions.
@@ -160,7 +158,20 @@ def concat_potcar(
                 f"No POTCAR found for element {sym!r}. Tried: "
                 + ", ".join(str(c) for c in candidates)
             )
-        pieces.append(match.read_bytes())
+        paths.append(match)
+
+    return paths
+
+
+def concat_potcar(
+    symbols_in_poscar_order: list[str],
+    potcar_dir: str | Path,
+    out_path: str | Path,
+) -> str:
+    """Concatenate per-element POTCAR files in the order they appear in POSCAR."""
+    out_path = os.path.abspath(str(out_path))
+    paths = resolve_potcar_paths(symbols_in_poscar_order, potcar_dir)
+    pieces = [path.read_bytes() for path in paths]
 
     Path(out_path).write_bytes(b"".join(pieces))
     return out_path

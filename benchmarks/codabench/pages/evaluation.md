@@ -19,9 +19,16 @@ The scorer reads your submission from `res/` and the reference labels from
 
 - **Energies are per atom** (eV/atom) — total cell energy divided by the
   number of atoms `N`. Submit per-atom values, not total eV.
-- The **elemental-reference convention is fixed** and published in
-  `reference_data/elemental_energies.json`. The scorer uses exactly these
-  references; you must use them too, or your formation energies will be offset.
+- The **elemental-reference geometries are fixed** and published through
+  `public_data/elemental_references.json`, with converged DFT total energies.
+  Evaluate these pure-element geometries with your model before the compounds
+  and subtract your model's own elemental predictions. The DFT formation
+  labels subtract the corresponding DFT energies. Do not mix DFT elemental
+  energies with raw MLIP totals. The scorer compares supplied formation energies;
+  it does not fit offsets or perform this subtraction on your behalf.
+  Reference energies are normalized by the actual reference atom count,
+  including molecules. Baseline/raw errors remain runner diagnostics, not
+  additional leaderboard tasks.
 - **Forces** are per component, in eV/Å.
 
 ## Metrics
@@ -36,6 +43,13 @@ The scorer reads your submission from `res/` and the reference labels from
 
 Per-task scores are normalised and combined into `overall_score ∈ [0, 1]`
 (see the **Overview** tab for weights).
+
+Subtracting a common elemental baseline within a formula group does not change
+Task 5's within-method ranking. Neither Task 1 nor Task 5 establishes convex-hull
+stability. Formation energies are relative to the declared elemental phases;
+ground-state formation-energy claims require appropriate ground-state references.
+Separate DFT setups require separate matching reference conventions, not a
+mixture of raw total energies.
 
 ## Public / private leaderboard split
 
@@ -57,7 +71,8 @@ This is an **ML-potential** benchmark. Submitting values obtained by running
 DFT (or any first-principles calculation) on the released geometries is **not
 allowed**. Every submission is automatically screened for accuracy that is
 physically implausible for an ML potential (per-structure errors below DFT
-noise floors). The exact reference DFT protocol (pseudopotentials, k-mesh,
-INCAR settings, elemental references) is **not** published, so independently
-run DFT will not match the reference anyway. Flagged submissions are reviewed
-and may be disqualified.
+noise floors). Organizer-supplied pure-element DFT labels are provided to
+define the reference convention, not as compound predictions. Compound DFT
+labels remain protected. Participants must subtract their own MLIP elemental
+predictions, and may not replace ML compound predictions with DFT results.
+Flagged submissions are reviewed and may be disqualified.

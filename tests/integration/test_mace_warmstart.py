@@ -17,7 +17,7 @@ without Quantum ESPRESSO or a MACE foundation model::
 
 Optional::
 
-    MATSIM_MACE_FAMILY         # mace_mp|mace_off|checkpoint  (default: mace_mp)
+    MATSIM_MACE_FAMILY         # native MACE loader family (default: mace_mp)
     MATSIM_MACE_PRECISION      # fp32|fp64  (default: fp64)
     MATSIM_QE_TIMEOUT_SEC      # per-pw.x-run timeout (default: 3600)
     MATSIM_QE_MLP_DEVICE       # cuda|cpu  (default: cuda)

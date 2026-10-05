@@ -120,6 +120,7 @@ export VLLM_DO_NOT_TRACK=1
 export VLLM_USE_FLASHINFER_SAMPLER=0
 export RAY_USAGE_STATS_ENABLED=0
 export RAY_DISABLE_IMPORT_WARNING=1
+export RAY_raylet_start_wait_time_s=${RAY_raylet_start_wait_time_s:-300}
 # Large multi-node models can take well over vLLM's 600s default to load
 # weights from CFS and stand up their engine core processes.
 export VLLM_ENGINE_READY_TIMEOUT_S=${VLLM_ENGINE_READY_TIMEOUT_S:-2400}

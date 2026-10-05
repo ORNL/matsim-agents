@@ -46,12 +46,17 @@ def build_bundle(output: Path, public_data: Path, reference_data: Path) -> Path:
         for rel in (
             "baselines",
             "run_baselines.py",
+            "evaluate.py",
             "package_submission.py",
             "requirements.txt",
             "requirements-mace.txt",
             "requirements-fairchem.txt",
         ):
             _copy(HERE / rel, stage / "starting_kit" / rel)
+        _copy(
+            HERE.parents[1] / "src/matsim_agents/discovery/energy_references.py",
+            stage / "starting_kit/energy_references.py",
+        )
 
         errors = validate_bundle(stage, release=True)
         if errors:

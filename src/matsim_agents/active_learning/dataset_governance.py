@@ -25,6 +25,7 @@ class DatasetManifest(BaseModel):
     path: str
     sha256: str
     dft_backend: str
+    method_signature: str | None = None
     energy_reference: str
     parent_dataset_id: str | None = None
     split_role: str = "training_pool"
@@ -39,14 +40,65 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def validate_labelled_frames(frames: Iterable[Any]) -> tuple[list[Any], DatasetValidationSummary]:
+def structure_identity(atoms: Any) -> str:
+    """Hash geometry independent of ordering/translation and molecular rotations."""
+    import numpy as np
+
+    numbers = np.asarray(atoms.numbers, dtype=int)
+    pbc = np.asarray(atoms.pbc, dtype=bool)
+    if not pbc.any():
+        positions = np.asarray(atoms.positions, dtype=float)
+        distances = np.linalg.norm(positions[:, None, :] - positions[None, :, :], axis=2)
+        environments = sorted(
+            (
+                int(number),
+                sorted(
+                    (int(other), round(float(distance), 6))
+                    for other, distance in zip(numbers, row, strict=True)
+                ),
+            )
+            for number, row in zip(numbers, distances, strict=True)
+        )
+        payload = {"environments": environments, "pbc": pbc.tolist()}
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    scaled = np.asarray(atoms.get_scaled_positions(wrap=False))
+    scaled[:, pbc] = np.mod(scaled[:, pbc], 1.0)
+    metric = np.asarray(atoms.cell) @ np.asarray(atoms.cell).T
+    origins = scaled if len(scaled) else np.zeros((1, 3))
+    representations: list[str] = []
+    for origin in origins:
+        shifted = scaled - origin
+        shifted[:, pbc] = np.mod(shifted[:, pbc], 1.0)
+        sites = sorted(
+            (int(number), *(round(float(value), 8) for value in position))
+            for number, position in zip(numbers, shifted, strict=True)
+        )
+        payload = {
+            "sites": sites,
+            "metric": np.round(metric, decimals=8).tolist(),
+            "pbc": pbc.tolist(),
+        }
+        representations.append(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    return hashlib.sha256(min(representations).encode("utf-8")).hexdigest()
+
+
+def validate_labelled_frames(
+    frames: Iterable[Any],
+    *,
+    existing_frames: Iterable[Any] = (),
+    expected_atomic_numbers: set[int] | None = None,
+) -> tuple[list[Any], DatasetValidationSummary]:
     """Reject malformed/non-finite labels and exact duplicate geometries."""
 
     import numpy as np
 
     accepted: list[Any] = []
     summary = DatasetValidationSummary()
-    seen: set[str] = set()
+    seen = {
+        structure_identity(getattr(existing, "atoms", existing)) for existing in existing_frames
+    }
     for index, frame in enumerate(frames):
         try:
             atoms = getattr(frame, "atoms", frame)
@@ -54,6 +106,13 @@ def validate_labelled_frames(frames: Iterable[Any]) -> tuple[list[Any], DatasetV
             raw_forces = getattr(frame, "forces_eV_per_A", atoms.arrays.get("forces"))
             forces = np.asarray(raw_forces, dtype=float)
             positions = np.asarray(atoms.positions, dtype=float)
+            numbers = np.asarray(atoms.numbers, dtype=int)
+            if np.any(numbers <= 0):
+                raise ValueError("atomic numbers must be positive")
+            if expected_atomic_numbers is not None and not set(numbers).issubset(
+                expected_atomic_numbers
+            ):
+                raise ValueError("frame contains an atomic number outside the campaign element set")
             if forces.shape != positions.shape:
                 raise ValueError(
                     f"forces shape {forces.shape} != positions shape {positions.shape}"
@@ -64,13 +123,7 @@ def validate_labelled_frames(frames: Iterable[Any]) -> tuple[list[Any], DatasetV
                 or not np.isfinite(positions).all()
             ):
                 raise ValueError("energy, forces, and positions must be finite")
-            key_data = {
-                "numbers": atoms.numbers.tolist(),
-                "positions": np.round(positions, decimals=8).tolist(),
-                "cell": np.round(np.asarray(atoms.cell), decimals=8).tolist(),
-                "pbc": np.asarray(atoms.pbc, dtype=bool).tolist(),
-            }
-            key = hashlib.sha256(json.dumps(key_data, sort_keys=True).encode()).hexdigest()
+            key = structure_identity(atoms)
             if key in seen:
                 summary.duplicate += 1
                 continue
@@ -90,6 +143,8 @@ def write_dataset_manifest(
     energy_reference: str,
     validation: DatasetValidationSummary,
     parent_dataset_id: str | None = None,
+    method_signature: str | None = None,
+    split_role: str = "training_pool",
 ) -> Path:
     path = Path(dataset_path)
     digest = sha256_file(path)
@@ -99,8 +154,10 @@ def write_dataset_manifest(
         path=str(path.resolve()),
         sha256=digest,
         dft_backend=dft_backend,
+        method_signature=method_signature,
         energy_reference=energy_reference,
         parent_dataset_id=parent_dataset_id,
+        split_role=split_role,
         validation=validation,
     )
     destination = path.with_suffix(path.suffix + ".manifest.json")
@@ -112,6 +169,7 @@ __all__ = [
     "DatasetManifest",
     "DatasetValidationSummary",
     "sha256_file",
+    "structure_identity",
     "validate_labelled_frames",
     "write_dataset_manifest",
 ]

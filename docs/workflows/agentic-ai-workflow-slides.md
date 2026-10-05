@@ -4,27 +4,35 @@ Compact, left-to-right variant optimized for slide decks.
 
 ```mermaid
 flowchart LR
-    U[User objective or chat dialogue]
+    U[User] --> G{Mode}
+    G --> O[Objective]
+    G --> P[Composition]
+    G --> I[Interactive]
 
-    U --> R0[run]
-    R0 --> R1[planner]
-    R1 --> R2[executor]
-    R2 --> R3[uq_gate]
-    R3 -->|high confidence| R4[analyst]
-    R3 -->|low confidence + policy| AL[active learning loop]
-    AL --> R4
+    O --> X[Scientific execution]
+    P --> X
+    I --> X
 
-    U --> S0[supervisor-run]
-    S0 --> S1[prepare]
-    S1 --> S2[explore]
-    S2 --> S3[evaluate_uq]
-    S3 -->|low confidence + policy| AL
-    S3 -->|otherwise| S4[summarize]
+    X --> Q[UQ policy adapters]
+    Q -->|low confidence| AL[Active learning]
+    Q -->|otherwise| E[Evidence]
+    AL --> E
 
-    U --> C0[chat]
-    C0 --> C1[composition detection or /relax]
-    C1 --> C2[uq policy]
-    C2 -->|low confidence + policy| AL
+    E --> R{Return}
+    R --> OA[Analyst]
+    R --> PS[Summary]
+    R --> IR[Chat]
+
+    classDef entry fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.5px
+    classDef mode fill:#eff6ff,stroke:#2563eb,color:#172554
+    classDef science fill:#ecfdf5,stroke:#059669,color:#052e16
+    classDef decision fill:#fff7ed,stroke:#ea580c,color:#431407
+    classDef output fill:#faf5ff,stroke:#9333ea,color:#3b0764
+    class U entry
+    class G,R decision
+    class O,P,I mode
+    class X,Q,AL,E science
+    class OA,PS,IR output
 ```
 
 ## Slide Notes

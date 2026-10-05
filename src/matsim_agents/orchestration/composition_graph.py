@@ -32,6 +32,7 @@ class SupervisorConfig(BaseModel):
     mlip_backend: str = "hydragnn"
     logdir: str | None = None
     hydragnn_branch_mlp_checkpoint: str | None = None
+    hydragnn_inference_head: str | int | None = None
     output_dir: str = "./outputs"
     checkpoint: str | None = None
     mlp_device: str = "cuda"
@@ -131,6 +132,7 @@ def _explore_node(state: SupervisorState) -> dict:
         mlip_backend=cfg.mlip_backend,
         logdir=cfg.logdir,
         hydragnn_branch_mlp_checkpoint=cfg.hydragnn_branch_mlp_checkpoint,
+        hydragnn_inference_head=cfg.hydragnn_inference_head,
         uma_model_name=cfg.uma_model_name,
         uma_task=cfg.uma_task,
         checkpoint=cfg.checkpoint,
