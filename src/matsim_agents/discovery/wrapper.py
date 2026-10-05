@@ -7,6 +7,7 @@ single call.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Callable, Literal
 
@@ -20,6 +21,7 @@ from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run as 
 
 
 _RANKING_FORCE_TOL_EV_PER_A = 0.05
+log = logging.getLogger(__name__)
 
 
 class CompositionExplorationResult(BaseModel):
@@ -30,6 +32,7 @@ class CompositionExplorationResult(BaseModel):
     relaxations: list[RelaxationResult] = Field(default_factory=list)
     stability: StabilityReport | None = None
     failures: list[str] = Field(default_factory=list)
+    callback_failures: list[str] = Field(default_factory=list)
     ranking_failure: str | None = None
     outcome_class: Literal[
         "generation_failure",
@@ -98,6 +101,8 @@ def explore_composition(
         Seed for the pyXtal RNG (reproducibility).
     on_phase_start, on_phase_done:
         Optional callbacks for live progress reporting (e.g. in the chat REPL).
+        Completion callback errors are logged and recorded separately from
+        relaxation failures; successful relaxation results remain eligible.
     relax_fn:
         Override the relaxation backend (used by tests / stub mode).
     """
@@ -121,6 +126,7 @@ def explore_composition(
 
     relaxations: list[RelaxationResult] = []
     failures: list[str] = []
+    callback_failures: list[str] = []
 
     for cand in candidates:
         if on_phase_start is not None:
@@ -151,8 +157,6 @@ def explore_composition(
                 )
             )
             relaxations.append(result)
-            if on_phase_done is not None:
-                on_phase_done(cand, result)
         except Exception as exc:  # pragma: no cover - depends on HydraGNN env
             tag = "seed"
             if cand.prototype_id:
@@ -160,6 +164,13 @@ def explore_composition(
             elif cand.source == "random" and cand.space_group is not None:
                 tag = f"pyxtal_sg{int(cand.space_group):03d}"
             failures.append(f"{tag}: {exc!s}")
+            continue
+        if on_phase_done is not None:
+            try:
+                on_phase_done(cand, result)
+            except Exception as exc:
+                callback_failures.append(f"{cand.structure_path}: {exc!s}")
+                log.exception("Completion callback failed for %s", cand.structure_path)
 
     report: StabilityReport | None = None
     ranking_failure: str | None = None
@@ -193,6 +204,7 @@ def explore_composition(
         relaxations=relaxations,
         stability=report,
         failures=failures,
+        callback_failures=callback_failures,
         ranking_failure=ranking_failure,
         outcome_class=outcome_class,
     )

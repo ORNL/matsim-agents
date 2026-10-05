@@ -6,12 +6,78 @@ from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.dataset_governance import validate_labelled_frames
 from matsim_agents.active_learning.trainer import LabelledFrame
 from matsim_agents.discovery.composition import parse_composition
+from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.discovery.stability import RankingMode, score_stability
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.contracts import ComputeBudget
 from matsim_agents.orchestration.state import RelaxationResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationPolicy, run_phase_exploration
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
+
+
+def test_completion_callback_failure_does_not_double_count_candidates(
+    tmp_path, monkeypatch, caplog
+):
+    from matsim_agents.discovery.wrapper import explore_composition
+
+    candidates = [
+        PhaseCandidate(
+            formula="Si",
+            structure_path=str(tmp_path / f"seed-{index}.extxyz"),
+            prototype_id=f"phase-{index}",
+        )
+        for index in range(3)
+    ]
+    monkeypatch.setattr(
+        "matsim_agents.discovery.wrapper.generate_seeds", lambda *_args, **_kwargs: candidates
+    )
+    ranked = []
+    monkeypatch.setattr(
+        "matsim_agents.discovery.wrapper.score_stability",
+        lambda _formula, results, **_kwargs: ranked.extend(results),
+    )
+    completed = []
+
+    def relax(request):
+        if request.structure_path == candidates[2].structure_path:
+            raise RuntimeError("relaxation failed")
+        return RelaxationResult(
+            structure_path=request.structure_path,
+            optimized_structure_path=request.structure_path,
+            trajectory_path="",
+            log_csv_path="",
+            final_energy_eV=-1.0,
+            final_max_force_eV_per_A=0.0,
+            num_steps=0,
+            converged=True,
+        )
+
+    def callback(candidate, result):
+        completed.append(candidate)
+        if candidate == candidates[0]:
+            raise RuntimeError("progress callback failed")
+
+    result = explore_composition(
+        "Si",
+        output_dir=str(tmp_path),
+        mlip_backend="uma",
+        relax_fn=relax,
+        on_phase_done=callback,
+    )
+    assert result.candidate_counts == {
+        "generated": 3,
+        "attempted": 3,
+        "completed": 2,
+        "converged": 2,
+        "failed": 1,
+    }
+    assert completed == candidates[:2]
+    assert ranked == result.relaxations
+    assert "relaxation failed" in result.failures[0]
+    assert len(result.callback_failures) == 1
+    assert "progress callback failed" in result.callback_failures[0]
+    assert "Completion callback failed" in caplog.text
+    assert len(result.model_dump()["callback_failures"]) == 1
 
 
 def test_active_learning_defaults_to_label_collection_without_retraining():

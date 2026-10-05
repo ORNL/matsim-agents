@@ -391,6 +391,10 @@ interruptible per-operation quotas. In particular, a non-DFT formula exploration
 can exceed either limit before it returns. Use bounded exploration settings
 and scheduler wall-time limits; do not interpret these aggregate limits as
 hard intra-formula execution caps.
+Completion progress-callback errors are logged and stored in exploration
+`callback_failures`, separately from relaxation `failures`. They do not
+invalidate a successful relaxation or add an extra attempted/failed candidate
+to the audit counts; the exploration continues with later candidates.
 
 The AL callback receives `(composition, output_dir, retrain, promote_model,
 promotion_approved)`. It must honor the promotion request and approval before
