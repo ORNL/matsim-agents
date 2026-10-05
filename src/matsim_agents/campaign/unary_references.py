@@ -81,6 +81,7 @@ def unary_cache_directory(
         for spec in load_reference_phase_specs(reference_manifest)
     }
     payload = {
+        "artifact_schema_version": 2,
         "manifest_sha256": hashlib.sha256(reference_manifest.read_bytes()).hexdigest(),
         "structure_sha256": structure_digests,
         "model_identifier": model_identifier,
@@ -129,6 +130,9 @@ def relax_unary_references(
         element = elements[0]
         generated_counts[element] += 1
         phase_id = str(spec.get("phase_id", spec["formula"]))
+        artifact_name = (
+            f"{_safe_name(phase_id)}-{hashlib.sha256(phase_id.encode('utf-8')).hexdigest()}"
+        )
         source = str(spec.get("source", "manifest"))
         provenance = {
             str(key): str(value) for key, value in dict(spec.get("provenance", {})).items()
@@ -156,14 +160,14 @@ def relax_unary_references(
                 optimizable = ExpCellFilter(atoms)
             optimizer = FIRE(
                 optimizable,
-                logfile=str(output_dir / f"{_safe_name(phase_id)}.log"),
+                logfile=str(output_dir / f"{artifact_name}.log"),
                 maxstep=maxstep_A,
             )
             converged = bool(optimizer.run(fmax=fmax_eV_per_A, steps=max_steps))
             forces = np.asarray(optimizable.get_forces(), dtype=float)
             max_force = float(np.linalg.norm(forces, axis=1).max())
             energy = float(atoms.get_potential_energy())
-            optimized_path = output_dir / f"{_safe_name(phase_id)}.extxyz"
+            optimized_path = output_dir / f"{artifact_name}.extxyz"
             write(optimized_path, atoms)
             record.optimized_structure_path = str(optimized_path.resolve())
             record.converged = converged

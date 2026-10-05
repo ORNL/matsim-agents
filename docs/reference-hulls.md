@@ -46,6 +46,13 @@ for assignment rules, configuration controls, and a concrete Nb-Ta-O example.
 
 For an oxygen reference correction, set `energy_correction_eV_per_atom` on the O2 entry. The correction is applied per oxygen atom to the elemental chemical potential and retained in provenance.
 
+MLIP unary-reference relaxation artifacts use a sanitized phase ID plus its
+SHA-256 digest for both log and optimized-geometry filenames. Distinct IDs
+such as `Nb/A` and `Nb-A` therefore cannot overwrite each other's artifacts
+after filename sanitization. The unary cache key includes the artifact schema
+version so campaign searches do not reuse caches created under the older,
+collision-prone naming convention.
+
 ## Completeness and provisional hulls
 
 Every hull snapshot includes a reference-completeness report. A hull is marked `provisional: true` when it lacks:

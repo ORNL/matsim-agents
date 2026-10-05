@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from ase import Atoms
-from ase.io import write
+from ase.io import read, write
 
 from matsim_agents.active_learning.config import (
     ALConfig,
@@ -195,6 +195,46 @@ def test_unary_cache_key_includes_structure_contents(tmp_path):
     write(structure, Atoms("Nb", positions=[[0.1, 0.0, 0.0]]))
 
     assert unary_cache_directory(manifest, "test:model", settings) != original
+
+
+def test_unary_phase_ids_with_colliding_safe_names_preserve_distinct_artifacts(tmp_path):
+    from ase.build import bulk
+    from ase.calculators.calculator import Calculator, all_changes
+
+    class VolumeCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            self.results = {
+                "energy": float(atoms.get_volume()),
+                "forces": np.zeros((len(atoms), 3)),
+            }
+
+    phases = []
+    for index, (phase_id, crystal) in enumerate((("Nb/A", "bcc"), ("Nb-A", "fcc"))):
+        path = tmp_path / f"input-{index}.extxyz"
+        write(path, bulk("Nb", crystal, a=3.0))
+        phases.append({"phase_id": phase_id, "formula": "Nb", "path": str(path)})
+    output = tmp_path / "relaxed"
+    result = relax_unary_references(
+        phases,
+        {"Nb"},
+        VolumeCalculator(),
+        model_identifier="test:model",
+        output_dir=output,
+        relax_cell=False,
+    )
+    paths = [Path(phase.optimized_structure_path) for phase in result.phases]
+    assert len(set(paths)) == 2
+    assert len(list(output.glob("*.log"))) == 2
+    assert result.unique_converged_counts == {"Nb": 2}
+    assert result.selected_endpoints == {"Nb": "Nb-A"}
+    for phase, path in zip(result.phases, paths, strict=True):
+        atoms = read(path)
+        assert atoms.get_volume() == pytest.approx(phase.total_energy_eV)
+        assert phase.duplicate_of is None
+        assert path.with_suffix(".log").is_file()
 
 
 def test_iteration_states_allows_zero_cap_noop(tmp_path):
