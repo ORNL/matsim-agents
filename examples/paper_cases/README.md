@@ -12,6 +12,12 @@ Every system has **two entry points**:
   acquisition → DFT labeling → retrain loop.
 
 All paths use `$PROJ_ROOT` = repo root and `$RUNS_ROOT` = scratch directory.
+Promotion-enabled AL cases also require
+`ELEMENTAL_REFERENCE_MANIFEST=/path/to/elemental_references.json`. Supply real
+pure-element DFT labels and fixed geometries for the case's elements, matching
+its DFT setup. This manifest supplies formation-energy baselines in addition
+to, not instead of, the held-out compound split. See the
+[AL validation requirements](../active_learning/README.md).
 
 ## How these cases map to repo workflows
 

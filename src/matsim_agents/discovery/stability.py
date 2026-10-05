@@ -25,9 +25,10 @@ before any stability claim is published.
 from __future__ import annotations
 
 from enum import StrEnum
+from itertools import combinations
 from typing import Iterable, Sequence
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.orchestration.state import RelaxationResult
@@ -38,6 +39,7 @@ class PhaseStability(BaseModel):
 
     structure_path: str
     optimized_structure_path: str
+    composition: dict[str, float] | None = None
     final_energy_eV: float
     energy_per_atom_eV: float
     delta_e_above_min_eV_per_atom: float
@@ -67,16 +69,178 @@ class RankingMode(StrEnum):
     CONVEX_HULL = "convex_hull_ranking"
 
 
+class ReferencePhaseEntry(BaseModel):
+    """One method-compatible competing polymorph with auditable provenance."""
+
+    phase_id: str = Field(min_length=1)
+    formula: str = Field(min_length=1)
+    formation_energy_eV_per_atom: float = Field(allow_inf_nan=False)
+    method_signature: str = Field(min_length=1)
+    backend: str | None = None
+    structure_path: str | None = None
+    structure_hash: str | None = None
+    total_energy_eV: float | None = Field(None, allow_inf_nan=False)
+    energy_per_atom_eV: float | None = Field(None, allow_inf_nan=False)
+    source: str = "user_supplied"
+    provenance: dict[str, str] = Field(default_factory=dict)
+    corrections: dict[str, float] = Field(default_factory=dict)
+
+
+class ElementalReferenceEntry(BaseModel):
+    """Selected elemental chemical potential and its computational provenance."""
+
+    element: str = Field(min_length=1)
+    phase_id: str = Field(min_length=1)
+    reference_formula: str = Field(min_length=1)
+    energy_eV_per_atom: float = Field(allow_inf_nan=False)
+    method_signature: str = Field(min_length=1)
+    backend: str | None = None
+    structure_path: str | None = None
+    structure_hash: str | None = None
+    total_energy_eV: float | None = Field(None, allow_inf_nan=False)
+    source: str = "user_supplied"
+    provenance: dict[str, str] = Field(default_factory=dict)
+    corrections: dict[str, float] = Field(default_factory=dict)
+
+
+class ReferenceCompletenessPolicy(BaseModel):
+    """Minimum chemical coverage required before treating a hull as complete."""
+
+    required_formulas: list[str] = Field(default_factory=list)
+    require_binary_subsystems: bool = True
+    require_ternary_competitor: bool = False
+
+
+class ReferenceCompletenessReport(BaseModel):
+    """Auditable explanation of whether a reference hull is provisional."""
+
+    target_elements: list[str]
+    missing_elemental_references: list[str] = Field(default_factory=list)
+    missing_required_formulas: list[str] = Field(default_factory=list)
+    missing_binary_subsystems: list[str] = Field(default_factory=list)
+    missing_ternary_competitor: bool = False
+    provisional: bool
+
+
 class ReferenceEnergySet(BaseModel):
     """Compatible elemental/competing-phase references for hull analysis."""
 
     identifier: str
     method_signature: str
+    backend: str | None = None
     elemental_energies_eV_per_atom: dict[str, float]
+    elemental_entries: dict[str, ElementalReferenceEntry] = Field(default_factory=dict)
+    elemental_reference_candidates: list[ElementalReferenceEntry] = Field(default_factory=list)
     competing_phases: dict[str, float] = Field(
         default_factory=dict,
         description="Formation energies in eV/atom keyed by composition formula.",
     )
+    phase_entries: list[ReferencePhaseEntry] = Field(default_factory=list)
+    completeness_policy: ReferenceCompletenessPolicy = Field(
+        default_factory=ReferenceCompletenessPolicy
+    )
+
+    @model_validator(mode="after")
+    def _validate_phase_entries(self) -> ReferenceEnergySet:
+        phase_ids = [entry.phase_id for entry in self.phase_entries]
+        if len(phase_ids) != len(set(phase_ids)):
+            raise ValueError("reference phase IDs must be unique")
+        for entry in self.phase_entries:
+            if entry.method_signature != self.method_signature:
+                raise ValueError(
+                    f"reference phase {entry.phase_id!r} uses method signature "
+                    f"{entry.method_signature!r}, expected {self.method_signature!r}"
+                )
+            if self.backend is not None and entry.backend not in {None, self.backend}:
+                raise ValueError(
+                    f"reference phase {entry.phase_id!r} uses backend {entry.backend!r}, "
+                    f"expected {self.backend!r}"
+                )
+        for element, entry in self.elemental_entries.items():
+            if entry.element != element:
+                raise ValueError(
+                    f"elemental reference key {element!r} does not match entry element "
+                    f"{entry.element!r}"
+                )
+            if entry.method_signature != self.method_signature:
+                raise ValueError(
+                    f"elemental reference {entry.phase_id!r} uses method signature "
+                    f"{entry.method_signature!r}, expected {self.method_signature!r}"
+                )
+            if self.backend is not None and entry.backend not in {None, self.backend}:
+                raise ValueError(
+                    f"elemental reference {entry.phase_id!r} uses backend {entry.backend!r}, "
+                    f"expected {self.backend!r}"
+                )
+            if self.elemental_energies_eV_per_atom.get(element) != entry.energy_eV_per_atom:
+                raise ValueError(f"elemental energy for {element!r} does not match its typed entry")
+        for entry in self.elemental_reference_candidates:
+            if entry.method_signature != self.method_signature:
+                raise ValueError(
+                    f"elemental reference candidate {entry.phase_id!r} uses method signature "
+                    f"{entry.method_signature!r}, expected {self.method_signature!r}"
+                )
+            if self.backend is not None and entry.backend not in {None, self.backend}:
+                raise ValueError(
+                    f"elemental reference candidate {entry.phase_id!r} uses backend "
+                    f"{entry.backend!r}, expected {self.backend!r}"
+                )
+        return self
+
+    def competing_phase_records(self) -> list[tuple[str, str, float]]:
+        """Return ``(phase_id, formula, formation_energy)`` for all references."""
+        records = [
+            (entry.phase_id, entry.formula, entry.formation_energy_eV_per_atom)
+            for entry in self.phase_entries
+        ]
+        records.extend(
+            (f"legacy:{formula}", formula, energy)
+            for formula, energy in self.competing_phases.items()
+        )
+        return records
+
+    def audit_completeness(self, target_elements: Iterable[str]) -> ReferenceCompletenessReport:
+        """Check elemental, required-formula, and chemical-subsystem coverage."""
+        from pymatgen.core import Composition as PMGComposition
+
+        elements = sorted(set(target_elements))
+        missing_elements = sorted(set(elements) - set(self.elemental_energies_eV_per_atom))
+        formulas = {
+            PMGComposition(formula).reduced_formula
+            for _phase_id, formula, _energy in self.competing_phase_records()
+        }
+        required = {
+            PMGComposition(formula).reduced_formula
+            for formula in self.completeness_policy.required_formulas
+        }
+        missing_required = sorted(required - formulas)
+        covered_element_sets = {
+            frozenset(PMGComposition(formula).as_dict())
+            for _phase_id, formula, _energy in self.competing_phase_records()
+        }
+        missing_binary = []
+        if self.completeness_policy.require_binary_subsystems:
+            missing_binary = [
+                "-".join(pair)
+                for pair in combinations(elements, 2)
+                if frozenset(pair) not in covered_element_sets
+            ]
+        missing_ternary = bool(
+            self.completeness_policy.require_ternary_competitor
+            and len(elements) >= 3
+            and frozenset(elements) not in covered_element_sets
+        )
+        provisional = bool(
+            missing_elements or missing_required or missing_binary or missing_ternary
+        )
+        return ReferenceCompletenessReport(
+            target_elements=elements,
+            missing_elemental_references=missing_elements,
+            missing_required_formulas=missing_required,
+            missing_binary_subsystems=missing_binary,
+            missing_ternary_competitor=missing_ternary,
+            provisional=provisional,
+        )
 
 
 class StabilityReport(BaseModel):
@@ -93,12 +257,97 @@ class StabilityReport(BaseModel):
     summary: str
     ranking_mode: RankingMode = RankingMode.RELATIVE
     reference_set_id: str | None = None
+    degeneracy_tolerance_eV_per_atom: float = 0.01
+    degeneracy_reference_structure_path: str | None = None
+    near_degenerate_structure_paths: list[str] = Field(default_factory=list)
 
 
-def _atoms_count_from_path(path: str) -> int:
+def recalibrate_hull_reports(
+    reports: Iterable[StabilityReport],
+    reference_energies: ReferenceEnergySet,
+) -> None:
+    """Recompute stored phase-diagram results against one reference set."""
+    try:
+        from pymatgen.analysis.phase_diagram import PhaseDiagram
+        from pymatgen.core import Composition as PMGComposition
+        from pymatgen.entries.computed_entries import ComputedEntry
+    except ImportError as exc:  # pragma: no cover - dependency error is environment-specific
+        raise RuntimeError("convex-hull ranking requires pymatgen") from exc
+
+    compatible_reports = [
+        report
+        for report in reports
+        if report.ranking_mode == RankingMode.CONVEX_HULL
+        and report.reference_set_id == reference_energies.identifier
+    ]
+    entries = [
+        ComputedEntry(element, energy)
+        for element, energy in reference_energies.elemental_energies_eV_per_atom.items()
+    ]
+    for phase_id, phase_formula, formation_per_atom in reference_energies.competing_phase_records():
+        composition = PMGComposition(phase_formula)
+        reference_total = sum(
+            amount * reference_energies.elemental_energies_eV_per_atom[element]
+            for element, amount in composition.as_dict().items()
+        )
+        entries.append(
+            ComputedEntry(
+                composition,
+                reference_total + formation_per_atom * composition.num_atoms,
+                entry_id=None if phase_id.startswith("legacy:") else phase_id,
+            )
+        )
+
+    candidate_entries: list[tuple[StabilityReport, PhaseStability, object]] = []
+    for report in compatible_reports:
+        for index, phase in enumerate(report.ranking):
+            composition = PMGComposition(
+                phase.composition or _composition_from_path(phase.optimized_structure_path)
+            )
+            if (
+                composition.reduced_composition
+                != PMGComposition(report.formula).reduced_composition
+            ):
+                raise ValueError(
+                    f"optimized composition {composition.formula} does not match "
+                    f"reported formula {report.formula}"
+                )
+            entry = ComputedEntry(
+                composition,
+                phase.final_energy_eV,
+                entry_id=f"campaign-{report.formula}-{index}",
+            )
+            entries.append(entry)
+            candidate_entries.append((report, phase, entry))
+
+    if not candidate_entries:
+        return
+    diagram = PhaseDiagram(entries)
+    for _report, phase, entry in candidate_entries:
+        decomposition, energy_above_hull = diagram.get_decomp_and_e_above_hull(entry)
+        phase.formation_energy_eV_per_atom = diagram.get_form_energy_per_atom(entry)
+        phase.energy_above_hull_eV_per_atom = float(energy_above_hull)
+        phase.decomposition = {
+            str(product.entry_id or product.composition.reduced_formula): float(fraction)
+            for product, fraction in decomposition.items()
+        }
+    for report in compatible_reports:
+        report.ranking.sort(
+            key=lambda phase: (
+                phase.energy_above_hull_eV_per_atom
+                if phase.energy_above_hull_eV_per_atom is not None
+                else float("inf")
+            )
+        )
+        report.ground_state = report.ranking[0]
+
+
+def _composition_from_path(path: str) -> dict[str, float]:
+    from collections import Counter
+
     from ase.io import read
 
-    return len(read(path))
+    return {element: float(amount) for element, amount in Counter(read(path).symbols).items()}
 
 
 def score_stability(
@@ -136,13 +385,15 @@ def score_stability(
 
     items: list[PhaseStability] = []
     for r in relaxations:
-        n_atoms = _atoms_count_from_path(r.optimized_structure_path)
+        composition = _composition_from_path(r.optimized_structure_path)
+        n_atoms = int(sum(composition.values()))
         e_per_atom = r.final_energy_eV / max(n_atoms, 1)
         cand = cand_by_path.get(r.structure_path)
         items.append(
             PhaseStability(
                 structure_path=r.structure_path,
                 optimized_structure_path=r.optimized_structure_path,
+                composition=composition,
                 final_energy_eV=r.final_energy_eV,
                 energy_per_atom_eV=e_per_atom,
                 delta_e_above_min_eV_per_atom=0.0,  # filled in below
@@ -196,16 +447,36 @@ def score_stability(
             ComputedEntry(element, energy)
             for element, energy in reference_energies.elemental_energies_eV_per_atom.items()
         ]
-        for phase_formula, formation_per_atom in reference_energies.competing_phases.items():
+        for (
+            phase_id,
+            phase_formula,
+            formation_per_atom,
+        ) in reference_energies.competing_phase_records():
             comp = PMGComposition(phase_formula)
             ref_total = sum(
                 amount * reference_energies.elemental_energies_eV_per_atom[element]
                 for element, amount in comp.as_dict().items()
             )
-            entries.append(ComputedEntry(comp, ref_total + formation_per_atom * comp.num_atoms))
+            entries.append(
+                ComputedEntry(
+                    comp,
+                    ref_total + formation_per_atom * comp.num_atoms,
+                    entry_id=None if phase_id.startswith("legacy:") else phase_id,
+                )
+            )
         candidate_entries = []
         for index, item in enumerate(ranking):
-            entry = ComputedEntry(target_comp, item.final_energy_eV, entry_id=f"candidate-{index}")
+            candidate_comp = PMGComposition(item.composition)
+            if candidate_comp.reduced_composition != target_comp.reduced_composition:
+                raise ValueError(
+                    f"optimized composition {candidate_comp.formula} does not match "
+                    f"target formula {formula}"
+                )
+            entry = ComputedEntry(
+                candidate_comp,
+                item.final_energy_eV,
+                entry_id=f"candidate-{index}",
+            )
             entries.append(entry)
             candidate_entries.append((item, entry))
         diagram = PhaseDiagram(entries)
@@ -214,7 +485,7 @@ def score_stability(
             item.formation_energy_eV_per_atom = diagram.get_form_energy_per_atom(entry)
             item.energy_above_hull_eV_per_atom = float(e_hull)
             item.decomposition = {
-                phase.composition.reduced_formula: float(fraction)
+                str(phase.entry_id or phase.composition.reduced_formula): float(fraction)
                 for phase, fraction in decomposition.items()
             }
         ranking = sorted(
@@ -226,9 +497,13 @@ def score_stability(
             ),
         )
     ground = ranking[0]
-
+    degeneracy_reference = min(eligible, key=lambda item: item.energy_per_atom_eV)
     near_degenerate = [
-        it for it in ranking[1:] if it.delta_e_above_min_eV_per_atom < degeneracy_tol_eV_per_atom
+        item
+        for item in eligible
+        if item is not degeneracy_reference
+        and item.energy_per_atom_eV - degeneracy_reference.energy_per_atom_eV
+        < degeneracy_tol_eV_per_atom
     ]
     chem_stable = ground.dynamically_stable_proxy and not near_degenerate
 
@@ -255,9 +530,14 @@ def score_stability(
             "any stability claim can be published."
         )
     if near_degenerate:
+        tolerance_meV_per_atom = degeneracy_tol_eV_per_atom * 1000.0
         summary_lines.append(
-            f"WARNING: {len(near_degenerate)} other phase(s) within "
-            f"{degeneracy_tol_eV_per_atom:.3f} eV/atom; ground-state assignment is uncertain."
+            "**Energetically near-degenerate polymorphs within "
+            f"{tolerance_meV_per_atom:g} meV/atom**: {len(near_degenerate)} other phase(s) "
+            "fall within this energy window relative to the lowest-energy eligible "
+            f"polymorph, {degeneracy_reference.optimized_structure_path} "
+            f"(E/atom = {degeneracy_reference.energy_per_atom_eV:.6f} eV). "
+            "Ground-state assignment is uncertain."
         )
     summary_lines.append(f"Chemical-stability proxy: {'PASS' if chem_stable else 'INCONCLUSIVE'}.")
 
@@ -269,4 +549,7 @@ def score_stability(
         summary="\n".join(summary_lines),
         ranking_mode=ranking_mode,
         reference_set_id=(reference_energies.identifier if reference_energies else None),
+        degeneracy_tolerance_eV_per_atom=degeneracy_tol_eV_per_atom,
+        degeneracy_reference_structure_path=degeneracy_reference.optimized_structure_path,
+        near_degenerate_structure_paths=[item.optimized_structure_path for item in near_degenerate],
     )

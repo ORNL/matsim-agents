@@ -16,8 +16,11 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
+import yaml
 
 from matsim_agents.active_learning import ALConfig
+from matsim_agents.active_learning.config import DFTConfig, QEBackendConfig
+from matsim_agents.active_learning.loop import _dft_method_signature
 
 
 def _write(tmp_path: Path, name: str, body: str) -> Path:
@@ -134,6 +137,44 @@ def test_from_yaml_minimal_round_trip(
     assert cfg.md.seed_source.kind == "paths"
     assert len(cfg.md.seed_source.paths) == 1
     assert cfg.loop.n_iterations == 1
+
+
+PROMOTION_EXAMPLES = [
+    path
+    for directory in ("active_learning", "paper_cases")
+    for path in sorted(
+        (Path(__file__).resolve().parents[1] / "examples" / directory).glob("*.yaml")
+    )
+    if yaml.safe_load(path.read_text()).get("trainer", {}).get("promote_model")
+]
+
+
+@pytest.mark.parametrize("example", PROMOTION_EXAMPLES, ids=lambda path: path.name)
+def test_promotion_examples_require_elemental_manifest(
+    example, tmp_path, required_paths, monkeypatch, elemental_manifest
+):
+    trainer = yaml.safe_load(example.read_text())["trainer"]
+    assert trainer["validation_reference_set"] == (
+        "${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}"
+    )
+    assert trainer.get("validation_fraction", 0) > 0 or trainer.get("validation_set")
+    trainer["train_script"] = required_paths["TRAIN_SCRIPT"]
+    trainer.pop("train_launcher", None)
+    body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
+    config_path = _write(
+        tmp_path, "promotion.yaml", body + yaml.safe_dump({"trainer": trainer}, width=1000)
+    )
+    for name, value in required_paths.items():
+        if name != "seed_path":
+            monkeypatch.setenv(name, value)
+    monkeypatch.delenv("ELEMENTAL_REFERENCE_MANIFEST", raising=False)
+    with pytest.raises(ValueError, match="provide DFT-labelled elemental JSON manifest"):
+        ALConfig.from_yaml(config_path)
+    manifest = elemental_manifest({"Si": -1.0})
+    monkeypatch.setenv("ELEMENTAL_REFERENCE_MANIFEST", str(manifest))
+    cfg = ALConfig.from_yaml(config_path)
+    assert cfg.trainer.validation_reference_set == manifest
+    assert cfg.trainer.promote_model
 
 
 # --------------------------------------------------------------------------- #
@@ -287,6 +328,108 @@ def test_ensemble_strategy_requires_ensemble_paths(
 
     with pytest.raises(ValueError, match=r"ensemble"):
         ALConfig.from_yaml(cfg_path)
+
+
+def test_dft_method_signature_excludes_operational_settings(
+    tmp_path: Path,
+    required_paths: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
+    cfg_path = _write(tmp_path, "al.yaml", body)
+    for key, value in required_paths.items():
+        if key != "seed_path":
+            monkeypatch.setenv(key, value)
+    cfg = ALConfig.from_yaml(cfg_path)
+    potcar_dir = Path(required_paths["POTCAR_DIR"])
+    for element in ("Nb", "O"):
+        element_dir = potcar_dir / element
+        element_dir.mkdir()
+        (element_dir / "POTCAR").write_text(element)
+    operational_change = cfg.model_copy(deep=True)
+    assert operational_change.dft.vasp is not None
+    operational_change.dft.vasp.vasp_wrapper = tmp_path / "relocated-wrapper.sh"
+    operational_change.dft.vasp.timeout_sec = 99
+    operational_change.dft.vasp.ranks_per_node = 2
+    operational_change.dft.max_concurrent_jobs = 3
+
+    elements = {"Nb", "O"}
+    assert _dft_method_signature(operational_change, elements) == _dft_method_signature(
+        cfg, elements
+    )
+
+    scientific_change = cfg.model_copy(deep=True)
+    assert scientific_change.dft.vasp is not None
+    scientific_change.dft.vasp.extra_incar["ENCUT"] = "700"
+
+    assert _dft_method_signature(scientific_change, elements) != _dft_method_signature(
+        cfg, elements
+    )
+
+
+def test_dft_method_signature_hashes_only_selected_potcars(
+    tmp_path: Path,
+    required_paths: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
+    cfg_path = _write(tmp_path, "al.yaml", body)
+    for key, value in required_paths.items():
+        if key != "seed_path":
+            monkeypatch.setenv(key, value)
+    cfg = ALConfig.from_yaml(cfg_path)
+    potcar_dir = Path(required_paths["POTCAR_DIR"])
+    for element in ("Nb", "O", "Ta"):
+        element_dir = potcar_dir / element
+        element_dir.mkdir()
+        (element_dir / "POTCAR").write_text(element)
+
+    original = _dft_method_signature(cfg, {"Nb", "O"})
+    (potcar_dir / "Ta" / "POTCAR").write_text("changed unrelated potential")
+    assert _dft_method_signature(cfg, {"Nb", "O"}) == original
+
+    (potcar_dir / "Nb" / "POTCAR").write_text("changed selected potential")
+    assert _dft_method_signature(cfg, {"Nb", "O"}) != original
+
+
+def test_dft_method_signature_includes_backend_executable_identity(
+    tmp_path: Path,
+    required_paths: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
+    cfg_path = _write(tmp_path, "al.yaml", body)
+    for key, value in required_paths.items():
+        if key != "seed_path":
+            monkeypatch.setenv(key, value)
+    cfg = ALConfig.from_yaml(cfg_path)
+    potcar_dir = Path(required_paths["POTCAR_DIR"])
+    for element in ("Nb", "O"):
+        element_dir = potcar_dir / element
+        element_dir.mkdir()
+        (element_dir / "POTCAR").write_text(element)
+
+    vasp_signature = _dft_method_signature(cfg, {"Nb", "O"})
+    Path(required_paths["VASP_BIN"]).write_text("#!/bin/bash\n# different build\n")
+    assert _dft_method_signature(cfg, {"Nb", "O"}) != vasp_signature
+
+    qe_executable = tmp_path / "pw.x"
+    qe_executable.write_text("QE build one")
+    pseudo_dir = tmp_path / "qe-pseudo"
+    pseudo_dir.mkdir()
+    for element in ("Nb", "O"):
+        (pseudo_dir / f"{element}.upf").write_text(element)
+    qe = QEBackendConfig(
+        pw_bin=qe_executable,
+        pw_wrapper=Path(required_paths["VASP_WRAPPER"]),
+        pseudo_dir=pseudo_dir,
+        pseudopotentials={"Nb": "Nb.upf", "O": "O.upf"},
+    )
+    qe_cfg = cfg.model_copy(update={"dft": DFTConfig(backend="qe", qe=qe)})
+
+    qe_signature = _dft_method_signature(qe_cfg, {"Nb", "O"})
+    qe_executable.write_text("QE build two")
+    assert _dft_method_signature(qe_cfg, {"Nb", "O"}) != qe_signature
 
 
 # --------------------------------------------------------------------------- #

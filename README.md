@@ -5,14 +5,14 @@
 `matsim-agents` orchestrates large language models, machine-learned
 interatomic potentials, and ASE-based atomistic workflows into a single
 agentic loop. The user states a research objective in natural language;
-agents plan, run HydraGNN-driven simulations, score chemical and
+agents plan, run MLIP-driven simulations, score chemical and
 dynamical stability, and report the findings — with optional human
 review at every gate.
 
-The framework is **backend-agnostic**: HydraGNN is the default MLFF
-backend, but the relaxation tool, crystal-phase generator, and stability
-scorer are written so other potentials (MACE, NequIP, Orb, ...) can be
-plugged in via the same interfaces.
+The framework is **backend-agnostic**: HydraGNN, UMA, and the open MACE
+foundation-model families are selectable MLIP backends. The relaxation tool,
+crystal-phase generator, and stability scorer use shared interfaces so further
+potentials can be added without changing orchestration logic.
 
 ---
 
@@ -68,12 +68,13 @@ Reusable standalone workflow graphics:
                 ┌───────────────────────▼──────────────────────┐
                 │              Discovery wrapper               │
                 │   composition parsing → phase enumeration    │
-                │   → relaxation (HydraGNN+ASE) → stability    │
+                │   → relaxation (selected MLIP+ASE) → stability│
                 └───────────────────────┬──────────────────────┘
                                         │
                 ┌───────────────────────▼──────────────────────┐
                 │             Atomistic backends               │
-                │   HydraGNN (fused MLFF + BranchWeightMLP)    │
+                │   HydraGNN (fused or selected decoder head)  │
+                │   UMA + open MACE foundation-model families │
                 │   ASE (FIRE / BFGS / BFGSLineSearch)         │
                 │   pymatgen (AFLOW prototype encyclopedia)    │
                 │   pyXtal (random symmetry-aware search)      │
@@ -82,36 +83,68 @@ Reusable standalone workflow graphics:
 
 ```mermaid
 flowchart TD
-    U[User objective or chat dialogue]
-    U --> R[run graph]
-    U --> C[chat REPL]
-    U --> S[supervisor graph]
+    U[User objective or dialogue] --> G{Choose interaction mode}
 
-    subgraph RPATH[Core run path]
-      RP[planner] --> RE[executor]
-      RE --> RU[uq_gate]
-      RU -->|high confidence| RA[analyst]
-      RU -->|low confidence + policy enabled| AL[active learning loop]
-      AL --> RA
+    subgraph MODES[User-facing modes]
+      direction LR
+      O[Objective<br/>run] --> OP[Plan and execute]
+      P[Composition<br/>supervisor-run] --> PP[Prepare and explore]
+      I[Interactive<br/>chat] --> IP[Detect and confirm]
     end
 
-    subgraph SPATH[Supervisor path]
-      SP[prepare] --> SX[explore]
-      SX --> SU[evaluate_uq]
-      SU -->|low confidence + policy enabled| AL
-      SU -->|otherwise| SS[summarize]
+    G --> O
+    G --> P
+    G --> I
+
+    OP --> X
+    PP --> X
+    IP --> X
+
+    subgraph SCIENCE[Shared scientific capabilities]
+      X[Phase search and MLIP relaxation<br/>HydraGNN, UMA, or MACE]
+      Q[Evaluate uncertainty]
+      AL[Active learning loop]
+      E[Results and auditable evidence]
+
+      X --> Q
+      Q -->|low confidence + policy enabled| AL
+      Q -->|sufficient confidence| E
+      AL --> E
     end
 
-    subgraph CPATH[Chat path]
-      CC[composition detection / optional relax] --> CU[uq policy]
-      CU -->|low confidence + policy enabled| AL
+    E --> R{Return to invoking mode}
+
+    subgraph OUTPUTS[Mode-specific presentation]
+      direction LR
+      OA[Analyst report]
+      PS[Composition summary]
+      IR[Chat response]
     end
+
+    R --> OA
+    R --> PS
+    R --> IR
+
+    classDef entry fill:#f8fafc,stroke:#475569,color:#0f172a,stroke-width:1.5px
+    classDef mode fill:#eff6ff,stroke:#2563eb,color:#172554
+    classDef science fill:#ecfdf5,stroke:#059669,color:#052e16
+    classDef decision fill:#fff7ed,stroke:#ea580c,color:#431407
+    classDef output fill:#faf5ff,stroke:#9333ea,color:#3b0764
+    class U entry
+    class G,R decision
+    class O,OP,P,PP,I,IP mode
+    class X,Q,AL,E science
+    class OA,PS,IR output
 ```
 
 ### Capabilities
 
 - **Multi-agent orchestration** with LangGraph: typed shared state, checkpointed steps, conditional routing, human-in-the-loop gates.
 - **Hypothesis-generation chat** with any local LLM (Qwen 2.5 via Ollama by default).
+- **LLM-only chat** (`matsim-agents chat --llm-only`) that requires no MLIP
+  configuration or atomistic environment and disables `/relax`, `/al`, and
+  automatic composition exploration. The system prompt explicitly declares
+  those capability limits, even with custom prompts and after `/clear`.
 - **Optional multi-LLM hypothesis debate in chat**: a proposer model drafts a
   hypothesis response, a critic model challenges weak assumptions and missing
   tests, and the proposer revises for one or more rounds (`--llm-peer-review`,
@@ -121,9 +154,14 @@ flowchart TD
 - **Discovery-to-active-learning escalation policy**: when branch-weight UQ indicates low confidence, discovery can hand off to AL automatically from the same run.
 - **Structured handoff audit artifacts**: JSONL records of UQ metrics, thresholds, trigger rationale, and action (`not_triggered`, `triggered_dry_run`, `triggered_run`).
 - **Selectable surrogate backend for geometry relaxation**:
-  - **HydraGNN** fused MLFF + branch-weight MLP stack (default).
+  - **HydraGNN** fused MLFF + branch-weight MLP stack (default), or one
+    explicitly selected decoder head for dataset-specific inference.
   - **UMA** (Universal Models for Atoms) via fairchem (`--mlip-backend uma`).
-  - Note: branch-weight UQ is specific to HydraGNN; UMA relaxations do not emit branch-weight metrics.
+  - **MACE** open foundation-model families and user checkpoints
+    (`--mlip-backend mace`), isolated from UMA in multi-model validation.
+  - Note: branch-weight UQ is specific to fused HydraGNN inference. Pinned-head
+    HydraGNN supports MC-dropout UQ but does not report branch weights; UMA and
+    MACE relaxations do not emit branch-weight metrics.
 - **Unified crystal-phase seed generation** (`matsim_agents.discovery.seeds`)
   combining two complementary sources into one ranked candidate list:
   - **AFLOW prototype decoration** — every entry of the
@@ -243,6 +281,13 @@ frames are checked for finite energies/forces, correct force shapes, and exact
 duplicate geometries; a SHA-256 dataset manifest records the DFT energy
 reference and validation summary.
 
+Held-out model energy comparisons and promotion use **formation-energy
+errors**, subtracting each method's own elemental energies on the same fixed
+reference geometries. These comparisons require a DFT-labelled elemental JSON
+manifest in `trainer.validation_reference_set`. Force gates remain in place;
+MD acquisition, polymorph ranking, and hull construction are not redefined.
+See [Energy comparison and promotion](#energy-comparison-and-promotion).
+
 #### Consistent multi-node DFT labeling
 
 The DFT batch planner discovers Slurm allocations on Frontier/Perlmutter and
@@ -263,6 +308,19 @@ exploration. `convex_hull_ranking` additionally requires a compatible,
 method-identified elemental and competing-phase reference set and reports
 formation energy, energy above hull, and decomposition. Residual forces are a
 convergence filter, not a thermodynamic ranking term.
+
+MLIP surrogate hulls perform a separate unary-reference search for every
+model. Each target element starts from curated structures plus all compatible
+AFLOW prototypes and, by campaign default, 50 pyXtal structures. Initial and
+relaxed duplicates are identified with `StructureMatcher`; every relaxation
+outcome remains in `unary_reference_search.json`, while only unique converged
+polymorphs enter the phase diagram. The lowest corrected energy per atom for
+each model defines that model's elemental endpoint. A missing converged unary
+endpoint makes the hull provisional and suppresses formation/hull energies.
+Isolated atoms are not hull endpoints; they are appropriate only for optional
+cohesive or atomization-energy diagnostics. Competing compound references are
+currently model-scored at their manifest geometries, so these results remain
+explicitly labeled `mlip_proxy` rather than DFT thermodynamics.
 
 Use this table to choose the right entry point quickly.
 
@@ -706,6 +764,8 @@ The exact environment-variable contract is:
 | `MATSIM_LLM_PROVIDER` | `ollama`, `vllm`, `openai`, `anthropic`, or `huggingface` | General library default: `ollama`. The portability `--live-llm` path defaults to `vllm` so it can address an HPC model server. |
 | `MATSIM_LLM_MODEL` | Provider-specific model identifier, Ollama tag, or local model path | Used by entry points that expose environment-selected models, including the live portability benchmark. If omitted there, the provider default below is used. |
 | `MATSIM_VLLM_BASE_URL` | Full OpenAI-compatible vLLM API root, normally `http[s]://host:port/v1` | vLLM only; defaults to `http://localhost:8000/v1`. Include `/v1`. |
+| `MATSIM_VLLM_MAX_TOKENS` | Positive integer completion-token limit | vLLM only; defaults to `4096`. |
+| `MATSIM_VLLM_TIMEOUT_SECONDS` | Finite positive request timeout in seconds | vLLM only; defaults to `3600`. |
 
 Provider model defaults implemented by `get_chat_model` are:
 
@@ -722,6 +782,9 @@ running server; it is not necessarily the filesystem directory from which the
 server loaded its weights. `MATSIM_VLLM_API_KEY` defaults to `EMPTY`, which is
 appropriate for an unsecured local server. Set it when the endpoint requires
 authentication. `MATSIM_VLLM_BASE_URL` is ignored by non-vLLM providers.
+Explicit `max_completion_tokens` and `request_timeout` arguments override their
+environment variables without parsing the overridden values. Both sources
+use the same configuration validation; invalid limits fail before any request.
 
 ### Multi-model scientific debate
 
@@ -1159,6 +1222,7 @@ Common options (all commands that touch HydraGNN):
 |---|---|
 | `--logdir PATH` | HydraGNN logdir with `config.json` and checkpoint. |
 | `--hydragnn-branch-mlp-checkpoint PATH` | BranchWeightMLP `.pt` file. |
+| `--hydragnn-inference-head NAME_OR_INDEX` | Use one decoder head directly, bypassing BranchWeightMLP and fused inference. |
 | `--checkpoint NAME` | HydraGNN checkpoint filename or absolute path. |
 | `--mlp-device {cuda,cpu}` | Device for the auxiliary MLP. |
 | `--precision {fp32,fp64,bf16}` | HydraGNN precision override. |
@@ -1166,6 +1230,26 @@ Common options (all commands that touch HydraGNN):
 | `--llm-provider {ollama,vllm,openai,anthropic,huggingface}` | Chat backend. |
 | `--llm-model NAME` | Provider-specific model identifier. |
 | `--llm-base-url URL` | Override server URL (Ollama / vLLM). |
+
+HydraGNN uses fused 16-head inference by default, which requires
+`--hydragnn-branch-mlp-checkpoint`. To pin one head for MLIP inference, pass a
+case-insensitive dataset name or its index, for example
+`--hydragnn-inference-head OMat24` or set `mlip.hydragnn.inference_head: OMat24` in an
+active-learning YAML. Pinned mode invokes only that decoder, does not require
+the branch MLP, and does not report branch-weight uncertainty. It preserves
+the loader's precision/autocast context, including `bf16`, during energy and
+force inference.
+
+| Index | Dataset | Index | Dataset |
+|---:|---|---:|---|
+| 0 | Alexandria | 8 | OMol25 |
+| 1 | ANI1x | 9 | OMol25-neutral |
+| 2 | MPTrj | 10 | OMol25-non-neutral |
+| 3 | OC2020 | 11 | OPoly2026 |
+| 4 | OC2022 | 12 | Nabla2DFT |
+| 5 | OC25 | 13 | QCML |
+| 6 | ODAC23 | 14 | QM7X |
+| 7 | OMat24 | 15 | transition1x |
 
 `chat`-specific:
 
@@ -1316,6 +1400,69 @@ comparable. Every frame written to the dataset is tagged with
 `info["dft_backend"]`; never train one HydraGNN model on a mixed
 VASP+QE dataset without an explicit per-backend energy offset.
 
+### Energy comparison and promotion
+
+For each method `m`, the comparison uses:
+
+```text
+formation_energy_m = (compound_total_m - sum_i(n_i * elemental_energy_per_atom_m[i])) / N
+```
+
+Each MLIP first evaluates the same fixed elemental geometries supplied with
+the test. Its compound totals subtract **its own predictions**, while DFT
+totals subtract **DFT elemental energies**. Do not subtract DFT references
+from raw MLIP totals. O2 and other molecular references are divided by their
+actual atom count. References are not independently relaxed by each model.
+
+Use this for held-out evaluation of incumbent/candidate models and promotion:
+
+```yaml
+trainer:
+  # Add these to an otherwise valid training configuration.
+  compare_after_training: true
+  validation_set: /path/to/held-out.extxyz
+  validation_reference_set: /path/to/elemental_references.json
+  promotion_max_energy_mae_eV_per_atom: 0.1
+```
+
+Promotion still requires its separate approval flags and force/regression
+checks. `promotion_max_energy_mae_eV_per_atom` now limits
+`formation_energy_mae_eV_per_atom`, not compound-fitted energy offsets.
+Recalibrate historical thresholds on real held-out data; the value above is
+an example, not a scientifically qualified recommendation.
+
+For standalone energy evaluation:
+
+```bash
+python -m matsim_agents.active_learning.evaluate \
+  --al-config /path/to/al-config.yaml \
+  --test-set /path/to/held-out.extxyz \
+  --elemental-reference-manifest /path/to/elemental_references.json \
+  --out-json /path/to/metrics.json
+```
+
+Raw energy errors and elemental-baseline errors remain diagnostic outputs,
+alongside force errors. Force-only evaluation needs no elemental manifest.
+Training without model comparison, MD acquisition, within-method
+fixed-composition ranking, and method-specific hull construction are unchanged.
+Formation subtraction does not authorize pooling incompatible DFT methods
+into a training dataset or hull.
+
+The caller must supply converged pure-element DFT calculations; these
+evaluators do not launch them. Campaign comparisons check coverage and the
+DFT method signature before candidate training. Separate DFT protocols require
+separate matching manifests, even when the comparison geometries are identical.
+File-based energy comparisons and promotion require a matching compound
+`*.extxyz.manifest.json` sidecar containing the data hash, DFT backend, and
+method signature; missing metadata is an error. Fine-tune/evaluation propagates
+verified method metadata into newly generated train/test split sidecars.
+Campaign AL training accumulates within each formula's dataset across iterations
+and restarts. Existing train/held-out assignments never change. Small batches
+are retained, with training and promotion explicitly deferred until the
+cumulative training and validation partitions meet their minimum sizes;
+there is no automatic pooling across formulas or increase in DFT selection.
+See [the manifest schema and compatibility checks](docs/scientific-workflows.md#formation-energy-comparisons-and-campaign-promotion).
+
 Full walkthrough — including templated INCAR / `pw.in` files, in-allocation
 launcher details, and per-backend ROCm/MPI gotchas — lives in
 [`examples/active_learning/README.md`](examples/active_learning/README.md).
@@ -1383,15 +1530,17 @@ Four baselines are provided in `benchmarks/codabench/baselines/`:
 | **UMA** (`uma-s-1p2`) | Transformer-based universal model | Meta / fairchem |
 | **AllScAIP** (`allscaip-md-conserving-all-omol`) | Message-passing NN | Meta / OMol25 |
 
-Run any or all baselines:
+Run any or all baselines. Every energy run requires the organizer-supplied
+elemental manifest:
 
 ```bash
 cd benchmarks/codabench
-python run_baselines.py --model mace        # MACE-MP-0
-python run_baselines.py --model hydragnn    # HydraGNN
-python run_baselines.py --model uma         # UMA (requires fairchem-core ≥2.20)
-python run_baselines.py --model allscaip    # AllScAIP (requires fairchem-core ≥2.20)
-python run_baselines.py --model all --relax # dispatches through .venv and .venv-mace
+REF=public_data/elemental_references.json
+python run_baselines.py --model mace --mace-variant materials --elemental-reference-manifest "$REF"
+python run_baselines.py --model hydragnn --hydragnn-logdir /path/to/model --elemental-reference-manifest "$REF"
+python run_baselines.py --model uma --elemental-reference-manifest "$REF"
+python run_baselines.py --model allscaip --elemental-reference-manifest "$REF"
+python run_baselines.py --model all --relax --hydragnn-logdir /path/to/model --elemental-reference-manifest "$REF"
 ```
 
 UMA and AllScAIP require the `fairchem-core` package and the model checkpoints
@@ -1399,13 +1548,49 @@ UMA and AllScAIP require the `fairchem-core` package and the model checkpoints
 accepted before use at <https://huggingface.co/facebook/UMA> and
 <https://huggingface.co/facebook/OMol25>).
 
+### Reference convention and release requirements
+
+Task 1 compares formation energies, not raw total-energy zeros. Both baseline
+and submitted-model runners evaluate the declared pure-element geometries
+first, then subtract each MLIP's own elemental energies. Protected DFT
+formation labels subtract DFT references from the same declared geometries.
+This removes additive elemental offsets, not genuine bonding/method errors.
+Task 5 ranks structures within formula groups; this subtraction does not
+change their within-method ordering or establish convex-hull stability.
+
+Runners retain `energies.csv` and `elemental_reference_predictions.json` for
+diagnostics and write submission-ready `formation_energies.csv`. Force and
+relaxation metrics remain separate; a good formation-energy score does not
+by itself qualify a model's forces, reference-phase accuracy, or hull stability.
+Reference ground-state claims require appropriate elemental ground states;
+otherwise these energies are relative to the explicitly declared phases.
+
+Organizers must provide real, converged elemental DFT calculations, fixed
+geometry files, and `public_data/elemental_references.json` before release.
+Release validation checks full element coverage, geometry hashes, bundled
+reference paths, and agreement with protected per-atom
+`reference_data/elemental_energies.json`. Organizers remain responsible for
+matching the compound-label DFT setup and forming the protected compound
+labels correctly; validation does not independently rerun DFT.
+
+```bash
+python benchmarks/codabench/build_bundle.py \
+  --public-data /path/to/public_data \
+  --reference-data /path/to/protected_reference_data \
+  --output /path/to/competition.zip
+```
+
+The builder validates the assembled release before creating the ZIP.
+Synthetic unit tests and mocked model-catalog tests are software checks, not
+evidence of real MLIP/DFT scientific accuracy or completed competition data.
+
 ### Directory layout
 
 ```
 benchmarks/codabench/
 ├── competition.yaml             # Codabench bundle manifest & leaderboard config
 ├── run_baselines.py             # entry point: --model mace/hydragnn/uma/allscaip/all
-├── evaluate.py                  # local evaluation helper (mirrors the Codabench scorer)
+├── evaluate.py                  # submitted-model inference + reference subtraction
 ├── requirements.txt             # backend-neutral competition dependencies
 ├── requirements-mace.txt        # MACE process dependencies (e3nn 0.4.4)
 ├── requirements-fairchem.txt    # UMA/AllScAIP process dependencies
@@ -1423,11 +1608,12 @@ benchmarks/codabench/
 │   ├── private_ids.txt          # 108 structure IDs in the private partition
 │   ├── create_split.py          # reproducible split generator (SEED=42)
 │   ├── formation_energies.csv   # DFT reference energies (server-side, not public)
-│   ├── elemental_energies.json  # elemental DFT references (published to participants)
+│   ├── elemental_energies.json  # protected per-atom DFT references; must match public manifest
 │   └── forces/                  # per-structure force arrays (server-side, not public)
 ├── public_data/
 │   ├── generate_structures.py   # generates the 159 test structures
 │   ├── structures_metadata.csv  # anonymised MATS-XXXX → class / formula mapping
+│   ├── elemental_references.json # public geometry paths, hashes, DFT total-cell labels
 │   └── structures/              # XYZ files of all test structures
 └── starting_kit/
     ├── README.md                # participant guide (tasks, formats, scoring)

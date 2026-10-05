@@ -11,8 +11,9 @@
 #   $1  train_script   (ignored; HydraGNN-specific, kept for launcher symmetry)
 #   $2  dataset_path   (extxyz with accumulated DFT labels)
 #   $3  out_model_dir  (writes mace_finetuned.model here)
-#   $4  family         (mace_mp | mace_off | checkpoint)
-#   $5  base_model     (small | medium | large | tag/URL | .model path)
+#   $4  family         (mace_mp | mace_off | mace_omol | mace_polar |
+#                       mace_anicc | checkpoint)
+#   $5  base_model     (family alias, URL, or .model path)
 #   $6  epochs
 #   $7  nodes          (ignored; single-GPU fine-tune)
 #   $8  ranks_per_node (ignored)

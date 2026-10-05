@@ -117,6 +117,12 @@ additional wrappers needed.
 ## Notes
 
 - Units: **energy in eV**, **forces in eV/Å**, consistent with ASE conventions.
+- Energy tests require `--elemental-reference-manifest`: the harness evaluates
+  its fixed pure-element geometries first, then subtracts your model's own
+  elemental energies before comparing formation energies with DFT. Your
+  calculator must support every declared test element, including molecular
+  references where specified. DFT reference energies must not be substituted
+  for your model's elemental predictions.
 - Structures are passed as `ase.Atoms` objects with periodic boundary conditions set.
 - You may optionally include `'stress'` (Voigt 6-component, eV/Å³) in `implemented_properties`
   and `self.results` for future task extensions.

@@ -131,6 +131,71 @@ class TestAutoConfirm:
         mock_explore.assert_not_called()
 
 
+class TestLLMOnly:
+    @pytest.mark.parametrize("custom_prompt", [None, "Custom: offer structure relaxation."])
+    def test_prompt_matches_session_capabilities_after_clear(self, monkeypatch, custom_prompt):
+        from matsim_agents.chat import (
+            ATOMISTIC_EXPLORATION_GUIDANCE,
+            LLM_ONLY_MODE_INSTRUCTION,
+        )
+
+        kwargs = {"system_prompt": custom_prompt} if custom_prompt else {}
+        cfg = DiscoveryChatConfig(llm_only=True, **kwargs)
+        session, _ = _make_session(cfg, responses=["Hypothesis."], monkeypatch=monkeypatch)
+        chat_once(session, "Discuss materials")
+        initial_prompt = session.messages[0].content
+        assert LLM_ONLY_MODE_INSTRUCTION in initial_prompt
+        if custom_prompt:
+            assert initial_prompt.startswith(custom_prompt)
+        else:
+            assert ATOMISTIC_EXPLORATION_GUIDANCE not in initial_prompt
+        chat_once(session, "/clear")
+        assert session.messages[0].content == initial_prompt
+
+    def test_config_does_not_require_mlip_inputs(self):
+        cfg = DiscoveryChatConfig(llm_only=True)
+
+        assert cfg.llm_only is True
+        assert cfg.trigger_active_learning_on_high_uq is False
+
+    def test_formulas_do_not_trigger_atomistic_tools(self, monkeypatch):
+        cfg = DiscoveryChatConfig(llm_only=True, auto_confirm=True)
+        session, mock_explore = _make_session(
+            cfg,
+            responses=["Li2MnO3 is a useful candidate."],
+            monkeypatch=monkeypatch,
+        )
+
+        response = chat_once(session, "Compare LiCoO2 and Li2MnO3")
+
+        assert "Li2MnO3" in response
+        mock_explore.assert_not_called()
+        assert session.seen_compositions == set()
+
+    @pytest.mark.parametrize(
+        ("command", "expected"),
+        [
+            ("/relax candidate.cif", "relaxation is unavailable"),
+            ("/al Li2MnO3", "Active learning is unavailable"),
+        ],
+    )
+    def test_atomistic_commands_are_rejected(self, command, expected, monkeypatch):
+        import matsim_agents.chat as chat_mod
+
+        cfg = DiscoveryChatConfig(llm_only=True)
+        session = DiscoveryChatSession(config=cfg)
+        relax = MagicMock()
+        active_learning = MagicMock()
+        monkeypatch.setattr(chat_mod, "_run_single_structure_relaxation", relax)
+        monkeypatch.setattr(chat_mod, "_run_active_learning_for_formula", active_learning)
+
+        response = chat_once(session, command)
+
+        assert expected in response
+        relax.assert_not_called()
+        active_learning.assert_not_called()
+
+
 # ── error resilience ──────────────────────────────────────────────────────────
 
 

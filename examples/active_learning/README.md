@@ -56,7 +56,7 @@ Each iteration of the loop performs four steps:
 
 ```mermaid
 flowchart LR
-  S[Seed structures] --> MD[1. Cheap MD<br/>HydraGNN/UMA surrogate]
+  S[Seed structures] --> MD[1. Cheap MD<br/>HydraGNN/UMA/MACE surrogate]
   MD --> UQ[2. Score uncertainty<br/>ensemble / MC-dropout]
   UQ --> SEL[Select top-K<br/>+ diversity filter]
   SEL --> DFT[3. Single-point DFT<br/>VASP/QE · frozen ions]
@@ -77,6 +77,30 @@ trainer:
 These are three different actions: DFT labeling grows the dataset, retraining
 produces a candidate model, and promotion authorizes that candidate for future
 sampling. See [Scientific workflow contracts](../../docs/scientific-workflows.md).
+
+Promotion and held-out energy comparison require two separate inputs:
+
+- `trainer.validation_fraction` deterministically reserves newly labelled compound
+  frames before training, or `trainer.validation_set` names an existing held-out
+  compound extxyz file. These two options are mutually exclusive.
+- `trainer.validation_reference_set` names a mandatory DFT-labelled pure-element
+  JSON manifest. It is not an alternative to compound validation data.
+
+The promotion-enabled examples require the manifest path through
+`ELEMENTAL_REFERENCE_MANIFEST`; create the manifest and its geometry files
+before loading the config:
+
+```bash
+export ELEMENTAL_REFERENCE_MANIFEST=/path/to/elemental_references.json
+```
+
+Supply a manifest for the selected case's elements and DFT setup, not a shared
+set of arbitrary energy constants. Each MLIP predicts those fixed geometries
+and subtracts its own elemental values. Configuration loading checks file
+existence; execution checks geometry hashes, coverage, and DFT method
+compatibility. These inputs are existing DFT calculations, not requests to run
+DFT automatically. See the
+[manifest schema and promotion contract](../../docs/scientific-workflows.md#formation-energy-comparisons-and-campaign-promotion).
 
 ## How this relates to other workflows
 

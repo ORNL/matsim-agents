@@ -218,7 +218,7 @@ def test_inject_inference_dropout_makes_mc_dropout_nonzero() -> None:
     """A model trained without dropout yields ZERO MC-Dropout variance until
     test-time dropout is injected; afterwards the variance is strictly positive.
     """
-    torch = pytest.importorskip("torch")
+    import torch
     import torch.nn as nn
 
     from matsim_agents.active_learning.uncertainty import (
@@ -277,8 +277,33 @@ def test_inject_inference_dropout_makes_mc_dropout_nonzero() -> None:
     assert np.allclose(forces_1, forces_2)
 
 
+def test_mc_dropout_resets_ase_calculator_between_passes() -> None:
+    import torch.nn as nn
+    from ase.calculators.calculator import Calculator, all_changes
+
+    from matsim_agents.active_learning.uncertainty import score_mc_dropout
+
+    class CachedCalculator(Calculator):
+        implemented_properties = ["forces"]
+
+        def __init__(self):
+            super().__init__()
+            self.model = nn.Sequential(nn.Dropout(p=0.5))
+            self.calls = 0
+
+        def calculate(self, atoms=None, properties=("forces",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            self.calls += 1
+            self.results["forces"] = np.full((len(atoms), 3), float(self.calls))
+
+    calculator = CachedCalculator()
+    scores = score_mc_dropout([_make_candidate(idx=0, n_atoms=2)], calculator, passes=4, p=0.5)
+
+    assert calculator.calls == 4
+    assert scores[0] > 0.0
+
+
 def test_inject_inference_dropout_is_idempotent() -> None:
-    pytest.importorskip("torch")
     import torch.nn as nn
 
     from matsim_agents.active_learning.uncertainty import inject_inference_dropout

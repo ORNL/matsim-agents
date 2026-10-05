@@ -110,6 +110,17 @@ def _opt_hydragnn_branch_mlp_checkpoint():
     )
 
 
+def _opt_hydragnn_inference_head():
+    return typer.Option(
+        None,
+        "--hydragnn-inference-head",
+        help=(
+            "Use only one HydraGNN decoding head by dataset name "
+            "(for example OMat24) or index 0..15; bypasses BranchWeightMLP."
+        ),
+    )
+
+
 def _opt_uma_model_name():
     return typer.Option(
         "uma-s-1p1",
@@ -192,6 +203,7 @@ def _build_run_config(
     mlip_backend: str,
     logdir: Path | None,
     hydragnn_branch_mlp_checkpoint: Path | None,
+    hydragnn_inference_head: str | None,
     uma_model_name: str,
     uma_task: str,
     checkpoint: str | None,
@@ -213,6 +225,7 @@ def _build_run_config(
             "mlip_backend": mlip_backend,
             "logdir": _path_or_none(logdir),
             "hydragnn_branch_mlp_checkpoint": _path_or_none(hydragnn_branch_mlp_checkpoint),
+            "hydragnn_inference_head": hydragnn_inference_head,
             "uma_model_name": uma_model_name,
             "uma_task": uma_task,
             "checkpoint": checkpoint,
@@ -237,6 +250,7 @@ def run(
     mlip_backend: str = _opt_mlip_backend(),
     logdir: Path | None = _opt_logdir(),
     hydragnn_branch_mlp_checkpoint: Path | None = _opt_hydragnn_branch_mlp_checkpoint(),
+    hydragnn_inference_head: str | None = _opt_hydragnn_inference_head(),
     uma_model_name: str = _opt_uma_model_name(),
     uma_task: str = _opt_uma_task(),
     checkpoint: str | None = _opt_checkpoint("HydraGNN checkpoint filename or absolute path."),
@@ -293,6 +307,7 @@ def run(
         mlip_backend=mlip_backend,
         logdir=logdir,
         hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
+        hydragnn_inference_head=hydragnn_inference_head,
         uma_model_name=uma_model_name,
         uma_task=uma_task,
         checkpoint=checkpoint,
@@ -331,9 +346,15 @@ def plan(objective: str):
 
 @app.command()
 def chat(
+    llm_only: bool = typer.Option(
+        False,
+        "--llm-only/--with-mlip",
+        help="Run conversational LLMs only, without MLIP validation or atomistic tools.",
+    ),
     mlip_backend: str = _opt_mlip_backend(),
     logdir: Path | None = _opt_logdir(),
     hydragnn_branch_mlp_checkpoint: Path | None = _opt_hydragnn_branch_mlp_checkpoint(),
+    hydragnn_inference_head: str | None = _opt_hydragnn_inference_head(),
     uma_model_name: str = _opt_uma_model_name(),
     uma_task: str = _opt_uma_task(),
     output_dir: Path = typer.Option(
@@ -448,9 +469,11 @@ def chat(
     panel_base_urls = [s.strip() for s in (critic_panel_base_urls or "").split(",") if s.strip()]
 
     cfg = DiscoveryChatConfig(
+        llm_only=llm_only,
         mlip_backend=mlip_backend,
         logdir=_path_or_none(logdir),
         hydragnn_branch_mlp_checkpoint=_path_or_none(hydragnn_branch_mlp_checkpoint),
+        hydragnn_inference_head=hydragnn_inference_head,
         uma_model_name=uma_model_name,
         uma_task=uma_task,
         output_dir=str(output_dir),
@@ -497,6 +520,7 @@ def supervisor_run(
     mlip_backend: str = _opt_mlip_backend(),
     logdir: Path | None = _opt_logdir(),
     hydragnn_branch_mlp_checkpoint: Path | None = _opt_hydragnn_branch_mlp_checkpoint(),
+    hydragnn_inference_head: str | None = _opt_hydragnn_inference_head(),
     uma_model_name: str = _opt_uma_model_name(),
     uma_task: str = _opt_uma_task(),
     output_dir: Path = typer.Option(Path("./outputs"), help="Root directory for artifacts."),
@@ -549,6 +573,7 @@ def supervisor_run(
         mlip_backend=mlip_backend,
         logdir=_path_or_none(logdir),
         hydragnn_branch_mlp_checkpoint=_path_or_none(hydragnn_branch_mlp_checkpoint),
+        hydragnn_inference_head=hydragnn_inference_head,
         uma_model_name=uma_model_name,
         uma_task=uma_task,
         output_dir=str(output_dir),

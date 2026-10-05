@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-run_baselines.py — Run MACE-MP-0, HydraGNN, UMA, and AllScAIP over all test
+run_baselines.py — Run MACE, HydraGNN, UMA, and AllScAIP over all test
 structures and write predictions/ directories. These serve as leaderboard seeds
 and pipeline-validation baselines.
 
 Usage
 -----
-# MACE-MP-0 only:
-    python run_baselines.py --model mace --mace-size medium --device cpu
+# One MACE model or all bulk-material MACE models:
+    python run_baselines.py --model mace --mace-variant mace_omat_medium --device cpu
+    python run_baselines.py --model mace --mace-variant materials --device cuda
 
 # HydraGNN only:
     python run_baselines.py --model hydragnn --hydragnn-logdir /path/to/logdir
@@ -19,16 +20,16 @@ Usage
     python run_baselines.py --model allscaip --allscaip-model facebook/AllScAIP --device cuda
 
 # MACE + HydraGNN only:
-    python run_baselines.py --model both --mace-size medium \\
+    python run_baselines.py --model both --mace-variant mace_mp_medium \\
                             --hydragnn-logdir /path/to/logdir
 
 # All four models (MACE is dispatched to .venv-mace; the others to .venv):
-    python run_baselines.py --model all --mace-size medium \\
+    python run_baselines.py --model all --mace-variant mace_mp_medium \\
                             --hydragnn-logdir /path/to/logdir --device cuda
 
 Outputs
 -------
-    predictions/mace_mp0/       — energies.csv + forces/
+    predictions/mace_<variant>/ — energies.csv + forces/
     predictions/hydragnn/       — energies.csv + forces/
     predictions/uma/            — energies.csv + forces/
     predictions/allscaip/       — energies.csv + forces/
@@ -39,6 +40,7 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -49,10 +51,43 @@ from pathlib import Path
 import numpy as np
 from ase.io import read
 
+if (Path(__file__).parent / "energy_references.py").is_file():
+    from energy_references import predict_elemental_references
+else:
+    from matsim_agents.discovery.energy_references import predict_elemental_references
+
 HERE = Path(__file__).parent
 STRUCT_META = HERE / "public_data" / "structures_metadata.csv"
 STRUCT_ROOT = HERE / "public_data" / "structures"
 PRED_ROOT = HERE / "predictions"
+
+MACE_MODELS: dict[str, tuple[str, str]] = {
+    "mace_mp_small": ("mace_mp", "small"),
+    "mace_mp_medium": ("mace_mp", "medium"),
+    "mace_mp_large": ("mace_mp", "large"),
+    "mace_mp_small_0b": ("mace_mp", "small-0b"),
+    "mace_mp_medium_0b": ("mace_mp", "medium-0b"),
+    "mace_mp_small_0b2": ("mace_mp", "small-0b2"),
+    "mace_mp_medium_0b2": ("mace_mp", "medium-0b2"),
+    "mace_mp_large_0b2": ("mace_mp", "large-0b2"),
+    "mace_mp_medium_0b3": ("mace_mp", "medium-0b3"),
+    "mace_mpa_medium": ("mace_mp", "medium-mpa-0"),
+    "mace_omat_small": ("mace_mp", "small-omat-0"),
+    "mace_omat_medium": ("mace_mp", "medium-omat-0"),
+    "mace_matpes_pbe": ("mace_mp", "mace-matpes-pbe-0"),
+    "mace_matpes_r2scan": ("mace_mp", "mace-matpes-r2scan-0"),
+    "mace_off_small": ("mace_off", "small"),
+    "mace_off_medium": ("mace_off", "medium"),
+    "mace_off_large": ("mace_off", "large"),
+    "mace_omol_extra_large": ("mace_omol", "extra_large"),
+    "mace_polar_small": ("mace_polar", "polar-1-s"),
+    "mace_polar_medium": ("mace_polar", "polar-1-m"),
+    "mace_polar_large": ("mace_polar", "polar-1-l"),
+    "mace_anicc": ("mace_anicc", "default"),
+}
+MACE_MATERIAL_MODELS = tuple(
+    name for name, (family, _model) in MACE_MODELS.items() if family == "mace_mp"
+)
 
 
 def load_baseline_class(name: str):
@@ -84,10 +119,31 @@ def parse_args() -> argparse.Namespace:
     )
     # MACE
     p.add_argument(
-        "--mace-size",
-        default="medium",
-        help="MACE-MP-0 size: small | medium | large (or path to .model).",
+        "--mace-variant",
+        default="mace_mp_medium",
+        choices=[*MACE_MODELS, "materials", "all"],
+        help=(
+            "Curated MACE model id, 'materials' for all bulk-material models, "
+            "or 'all' for every installed family."
+        ),
     )
+    p.add_argument(
+        "--mace-family",
+        choices=[
+            "mace_mp",
+            "mace_off",
+            "mace_omol",
+            "mace_polar",
+            "mace_anicc",
+            "checkpoint",
+        ],
+        help="Override the curated variant with a native MACE loader family.",
+    )
+    p.add_argument(
+        "--mace-model",
+        help="Model alias, URL, or local path used with --mace-family.",
+    )
+    p.add_argument("--mace-size", dest="legacy_mace_size", help=argparse.SUPPRESS)
     # HydraGNN
     p.add_argument(
         "--hydragnn-logdir",
@@ -118,6 +174,7 @@ def parse_args() -> argparse.Namespace:
     )
     # Common
     p.add_argument("--device", default="cpu", help="Compute device: cpu, cuda, xpu.")
+    p.add_argument("--elemental-reference-manifest", required=True, type=Path)
     p.add_argument("--relax", action="store_true", help="Also run ASE LBFGS relaxation.")
     p.add_argument("--fmax", type=float, default=0.05)
     p.add_argument("--steps", type=int, default=500)
@@ -130,7 +187,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def run_predictions(
-    calc, label: str, device: str, relax: bool = False, fmax: float = 0.05, steps: int = 500
+    calc,
+    label: str,
+    device: str,
+    relax: bool = False,
+    fmax: float = 0.05,
+    steps: int = 500,
+    *,
+    elemental_reference_manifest: Path | None = None,
 ) -> None:
     out = PRED_ROOT / label
     forces_dir = out / "forces"
@@ -141,6 +205,17 @@ def run_predictions(
 
     with open(STRUCT_META, newline="") as f:
         structures = list(csv.DictReader(f))
+    if elemental_reference_manifest is None:
+        raise ValueError("predictions require a DFT-labelled elemental reference manifest")
+    required_elements = set()
+    for row in structures:
+        required_elements.update(read(STRUCT_ROOT / row["file_path"]).get_chemical_symbols())
+    references = predict_elemental_references(
+        elemental_reference_manifest, calc, required_elements=required_elements
+    )
+    (out / "elemental_reference_predictions.json").write_text(
+        json.dumps(references.provenance, indent=2), encoding="utf-8"
+    )
 
     energy_file = out / "energies.csv"
     energy_fields = ["structure_id", "energy_eV", "energy_eV_per_atom", "n_atoms"]
@@ -148,9 +223,16 @@ def run_predictions(
     t0 = time.perf_counter()
     n_ok = n_fail = 0
 
-    with open(energy_file, "w", newline="") as ef:
+    with (
+        open(energy_file, "w", newline="") as ef,
+        open(out / "formation_energies.csv", "w", newline="") as ff,
+    ):
         writer = csv.DictWriter(ef, fieldnames=energy_fields)
         writer.writeheader()
+        formation_writer = csv.DictWriter(
+            ff, fieldnames=["structure_id", "formation_energy_eV_per_atom", "n_atoms"]
+        )
+        formation_writer.writeheader()
 
         for row in structures:
             sid = row["structure_id"]
@@ -163,6 +245,7 @@ def run_predictions(
                 atoms.calc = calc
                 energy = atoms.get_potential_energy()
                 forces = atoms.get_forces()
+                formation_energy = references.formation_energy(atoms, energy, model=True)
 
                 writer.writerow(
                     {
@@ -173,6 +256,13 @@ def run_predictions(
                     }
                 )
                 np.save(str(forces_dir / f"{sid}.npy"), forces.astype(np.float32))
+                formation_writer.writerow(
+                    {
+                        "structure_id": sid,
+                        "formation_energy_eV_per_atom": f"{formation_energy:.8f}",
+                        "n_atoms": len(atoms),
+                    }
+                )
 
                 if relax:
                     from ase.io import write as ase_write
@@ -196,6 +286,8 @@ def run_predictions(
     elapsed = time.perf_counter() - t0
     print(f"[{label}] Done: {n_ok} OK, {n_fail} failed  ({elapsed:.1f}s)")
     print(f"  → {out}/")
+    if n_fail:
+        raise RuntimeError(f"{label} failed for {n_fail} of {len(structures)} structures")
 
 
 def _dispatch_aggregate(model: str) -> None:
@@ -229,6 +321,26 @@ def _dispatch_aggregate(model: str) -> None:
         subprocess.run([str(python), str(Path(__file__).resolve()), *child_args], check=True)
 
 
+def selected_mace_models(args: argparse.Namespace) -> list[tuple[str, str, str]]:
+    """Return ``(output_label, family, model)`` selections for this invocation."""
+    if args.mace_family or args.mace_model:
+        if not args.mace_family or not args.mace_model:
+            raise SystemExit("--mace-family and --mace-model must be supplied together")
+        safe_model = "".join(
+            character if character.isalnum() else "_" for character in args.mace_model
+        ).strip("_")
+        return [(f"mace_{args.mace_family}_{safe_model}", args.mace_family, args.mace_model)]
+    if args.legacy_mace_size:
+        return [("mace_mp0", "mace_mp", args.legacy_mace_size)]
+    if args.mace_variant == "materials":
+        names = MACE_MATERIAL_MODELS
+    elif args.mace_variant == "all":
+        names = tuple(MACE_MODELS)
+    else:
+        names = (args.mace_variant,)
+    return [(name, *MACE_MODELS[name]) for name in names]
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -247,27 +359,51 @@ def main() -> None:
     run_allscaip = args.model == "allscaip"
 
     if run_mace:
-        print(f"\n=== MACE-MP-0 ({args.mace_size}) ===")
-        try:
-            MACE = load_baseline_class("mace_mp0")
-            calc_mace = MACE.from_checkpoint(args.mace_size, device=args.device)
-            run_predictions(calc_mace, "mace_mp0", args.device, args.relax, args.fmax, args.steps)
-        except ImportError:
-            print("  mace-torch not installed. Run: pip install mace-torch")
+        for label, family, mace_model in selected_mace_models(args):
+            print(f"\n=== MACE ({family}:{mace_model}) ===")
+            try:
+                MACE = load_baseline_class("mace_mp0")
+                calc_mace = MACE.from_checkpoint(
+                    mace_model,
+                    device=args.device,
+                    family=family,
+                )
+                run_predictions(
+                    calc_mace,
+                    label,
+                    args.device,
+                    args.relax,
+                    args.fmax,
+                    args.steps,
+                    elemental_reference_manifest=args.elemental_reference_manifest,
+                )
+            except ImportError:
+                print("  mace-torch not installed. Run: pip install mace-torch")
+                raise
+            except Exception:
+                traceback.print_exc()
+                raise
 
     if run_hydragnn:
         if not args.hydragnn_logdir:
-            print("\n[HydraGNN] --hydragnn-logdir required. Skipping.")
+            raise ValueError("HydraGNN requires --hydragnn-logdir")
         else:
             print(f"\n=== HydraGNN ({args.hydragnn_logdir}) ===")
             try:
                 HydraGNN = load_baseline_class("hydragnn")
                 calc_hgnn = HydraGNN.from_checkpoint(args.hydragnn_logdir, device=args.device)
                 run_predictions(
-                    calc_hgnn, "hydragnn", args.device, args.relax, args.fmax, args.steps
+                    calc_hgnn,
+                    "hydragnn",
+                    args.device,
+                    args.relax,
+                    args.fmax,
+                    args.steps,
+                    elemental_reference_manifest=args.elemental_reference_manifest,
                 )
             except Exception:
                 traceback.print_exc()
+                raise
 
     if run_uma:
         print(f"\n=== UMA ({args.uma_model}, task={args.uma_task}) ===")
@@ -277,11 +413,21 @@ def main() -> None:
             calc_uma = UMA.from_checkpoint(
                 args.uma_model, device=args.device, task_name=args.uma_task
             )
-            run_predictions(calc_uma, "uma", args.device, args.relax, args.fmax, args.steps)
+            run_predictions(
+                calc_uma,
+                "uma",
+                args.device,
+                args.relax,
+                args.fmax,
+                args.steps,
+                elemental_reference_manifest=args.elemental_reference_manifest,
+            )
         except ImportError:
             print("  fairchem-core not installed. Run: pip install fairchem-core")
+            raise
         except Exception:
             traceback.print_exc()
+            raise
 
     if run_allscaip:
         print(f"\n=== AllScAIP ({args.allscaip_model}, task={args.allscaip_task}) ===")
@@ -293,12 +439,20 @@ def main() -> None:
                 args.allscaip_model, device=args.device, task_name=args.allscaip_task
             )
             run_predictions(
-                calc_allscaip, "allscaip", args.device, args.relax, args.fmax, args.steps
+                calc_allscaip,
+                "allscaip",
+                args.device,
+                args.relax,
+                args.fmax,
+                args.steps,
+                elemental_reference_manifest=args.elemental_reference_manifest,
             )
         except ImportError:
             print("  fairchem-core not installed. Run: pip install fairchem-core")
+            raise
         except Exception:
             traceback.print_exc()
+            raise
 
     print("\nAll baselines complete.")
     print("Next: populate reference_data/ with DFT labels, then run score.py.")

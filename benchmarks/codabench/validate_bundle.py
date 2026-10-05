@@ -5,10 +5,15 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import yaml
+from ase.io import read
+
+from matsim_agents.discovery.energy_references import load_elemental_reference_manifest
 
 REQUIRED_STATIC = (
     "competition.yaml",
@@ -22,7 +27,7 @@ REQUIRED_STATIC = (
     "starting_kit/README.md",
     "starting_kit/MODEL_INTERFACE.md",
 )
-REQUIRED_PUBLIC = ("structures_metadata.csv", "structures")
+REQUIRED_PUBLIC = ("structures_metadata.csv", "structures", "elemental_references.json")
 REQUIRED_REFERENCE = (
     "formation_energies.csv",
     "forces",
@@ -81,6 +86,7 @@ def validate_bundle(root: Path, *, release: bool) -> list[str]:
 
         metadata = root / "public_data" / "structures_metadata.csv"
         if metadata.is_file():
+            elements = set()
             with metadata.open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
             for row in rows:
@@ -89,6 +95,44 @@ def validate_bundle(root: Path, *, release: bool) -> list[str]:
                     errors.append(
                         f"missing public structure for {row.get('structure_id')}: {rel!r}"
                     )
+                else:
+                    elements.update(
+                        read(root / "public_data/structures" / rel).get_chemical_symbols()
+                    )
+            reference_manifest = root / "public_data/elemental_references.json"
+            if reference_manifest.is_file():
+                try:
+                    manifest, _, prepared = load_elemental_reference_manifest(
+                        reference_manifest, required_elements=elements
+                    )
+                    public_root = (root / "public_data").resolve()
+                    for element, spec in manifest["references"].items():
+                        geometry_path = Path(spec["structure_path"])
+                        if geometry_path.is_absolute() or not (
+                            public_root / geometry_path
+                        ).resolve().is_relative_to(public_root):
+                            errors.append(
+                                f"elemental reference {element} must be bundled inside public_data"
+                            )
+                    elemental_labels_path = root / "reference_data/elemental_energies.json"
+                    if elemental_labels_path.is_file():
+                        elemental_labels = json.loads(elemental_labels_path.read_text())
+                        if not isinstance(elemental_labels, dict):
+                            raise ValueError("protected elemental energies must be a JSON object")
+                        for element, atoms, energy, _ in prepared:
+                            label = elemental_labels.get(element)
+                            if (
+                                isinstance(label, bool)
+                                or not isinstance(label, (int, float))
+                                or not np.isfinite(label)
+                                or not np.isclose(label, energy / len(atoms), rtol=0, atol=1e-10)
+                            ):
+                                errors.append(
+                                    f"protected elemental energy for {element} does not match "
+                                    "the public DFT reference"
+                                )
+                except (ValueError, KeyError, OSError) as exc:
+                    errors.append(f"invalid public elemental reference manifest: {exc}")
     return errors
 
 

@@ -25,6 +25,7 @@ Usage
         --submission   <path to unzipped submission dir>  \\
         --structures   public_data/structures_metadata.csv \\
         --struct-dir   public_data/structures/ \\
+        --elemental-reference-manifest public_data/elemental_references.json \\
         --output       predictions/ \\
         [--relax]      # also run ASE relaxation for Tasks 3 & 4 \\
         [--device cpu|cuda|xpu] \\
@@ -35,6 +36,7 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib.util
+import json
 import os
 import sys
 import time
@@ -45,6 +47,10 @@ import numpy as np
 from ase.io import read, write
 from ase.optimize import LBFGS
 
+if (Path(__file__).parent / "energy_references.py").is_file():
+    from energy_references import predict_elemental_references
+else:
+    from matsim_agents.discovery.energy_references import predict_elemental_references
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -54,6 +60,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Evaluate a submitted AtomisticCalculator.")
     p.add_argument("--submission",  required=True,
                    help="Path to the unzipped submission directory (must contain model.py).")
+    p.add_argument("--elemental-reference-manifest", required=True, type=Path)
     p.add_argument("--structures",  default="public_data/structures_metadata.csv",
                    help="Path to structures_metadata.csv.")
     p.add_argument("--struct-dir",  default="public_data/structures/",
@@ -130,12 +137,21 @@ def main() -> None:
     print(f"Loading calculator from {checkpoint} on device={args.device} ...")
     calc = CalcClass.from_checkpoint(checkpoint, device=args.device)
     print(f"  Calculator: {CalcClass.__name__}")
+    required_elements = set()
+    for row in structures:
+        required_elements.update(read(struct_root / row["file_path"]).get_chemical_symbols())
+    references = predict_elemental_references(
+        args.elemental_reference_manifest, calc, required_elements=required_elements
+    )
 
     # --- prepare output dirs ---
     out = Path(args.output)
     forces_dir = out / "forces"
     relaxed_dir = out / "relaxed"
     forces_dir.mkdir(parents=True, exist_ok=True)
+    (out / "elemental_reference_predictions.json").write_text(
+        json.dumps(references.provenance, indent=2), encoding="utf-8"
+    )
     if args.relax:
         relaxed_dir.mkdir(parents=True, exist_ok=True)
 
@@ -145,9 +161,15 @@ def main() -> None:
     t0 = time.perf_counter()
     n_ok, n_fail = 0, 0
 
-    with open(energy_file, "w", newline="") as ef:
+    with open(energy_file, "w", newline="") as ef, open(
+        out / "formation_energies.csv", "w", newline=""
+    ) as ff:
         energy_writer = csv.DictWriter(ef, fieldnames=energy_fields)
         energy_writer.writeheader()
+        formation_writer = csv.DictWriter(
+            ff, fieldnames=["structure_id", "formation_energy_eV_per_atom", "n_atoms"]
+        )
+        formation_writer.writeheader()
 
         for row in structures:
             sid  = row["structure_id"]
@@ -167,6 +189,13 @@ def main() -> None:
                 forces = atoms.get_forces()
 
                 write_energy_row(energy_writer, sid, energy, len(atoms))
+                formation_writer.writerow({
+                    "structure_id": sid,
+                    "formation_energy_eV_per_atom": references.formation_energy(
+                        atoms, energy, model=True
+                    ),
+                    "n_atoms": len(atoms),
+                })
                 np.save(str(forces_dir / f"{sid}.npy"), forces.astype(np.float32))
 
                 # --- optional relaxation ---

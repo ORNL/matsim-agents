@@ -7,9 +7,9 @@ The public data provides the **test geometries** you must run your model on:
 ```
 public_data/
   structures_metadata.csv   # structure_id,file_path
-  MATS-XXXX.xyz             # one geometry per test structure
-reference_data/
-  elemental_energies.json   # fixed DFT elemental references (for formation energies)
+  structures/MATS-XXXX.xyz  # one geometry per test structure
+  elemental_references.json # fixed pure-element geometry paths, hashes, DFT energies
+  elemental_structures/     # declared bulk phases / molecules (for example O2)
 ```
 
 Each structure is identified only by an opaque `MATS-XXXX` key. The mapping to
@@ -24,9 +24,17 @@ elements); only the *identity/provenance* of each structure is anonymised.
 
 ## Reference labels
 
-Ground-truth DFT labels (energies, forces, relaxed geometries) are held
+Ground-truth compound DFT labels (energies, forces, relaxed geometries) are held
 **server-side** and are never distributed. They are used only by the scoring
 program to evaluate your submission.
+
+Pure-element DFT calculations are provided publicly for each test's reference
+convention, together with their fixed geometries. Run your model on these
+geometries first; subtract its own elemental energies from its compound
+predictions. The protected DFT formation energies subtract the DFT elemental
+energies from the manifest. Geometry hashes bind the declared DFT labels to the
+reference inputs; organizers remain responsible for convergence and matching
+the DFT method to the compound dataset.
 
 ## Material classes (aggregate scope, not per-structure)
 

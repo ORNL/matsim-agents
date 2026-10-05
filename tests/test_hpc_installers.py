@@ -55,7 +55,9 @@ def test_mace_runtime_paths_use_matsim_owned_compatibility_environment() -> None
         assert "e3nn 0.6.x" not in text, script
 
     common = ROOT / "deployments/common/setup/install-mace-compat.sh"
+    text = common.read_text(encoding="utf-8")
     assert common.stat().st_mode & 0o111
+    assert "import dscribe" in text
     subprocess.run(["bash", "-n", str(common)], check=True)
 
 
@@ -65,6 +67,7 @@ def test_uma_uses_matsim_owned_compatibility_environment() -> None:
     assert common.stat().st_mode & 0o111
     assert 'UMA_VENV_PATH="${UMA_VENV_PATH:-${MATSIM_DIR}/.venv-uma}"' in text
     assert '"${MATSIM_DIR}[${UMA_MATSIM_EXTRAS}]"' in text
+    assert "import dscribe" in text
     assert "from fairchem.core import FAIRChemCalculator, pretrained_mlip" in text
     subprocess.run(["bash", "-n", str(common)], check=True)
 
