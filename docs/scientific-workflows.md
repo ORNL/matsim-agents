@@ -384,6 +384,13 @@ Retraining requires active learning. Re-evaluation requires `promote_model: true
 at runtime unless `continue_on_promotion_rejection: true` explicitly retains
 incumbent results without reevaluation. Compute budgets may cap candidates, MLIP
 relaxations, DFT calculations, AL iterations, and node-hours.
+Candidate-count limits stop between formula attempts. The campaign orchestrator
+passes a remaining DFT allowance to formula runners, but MLIP-relaxation and
+node-hour limits are checked between formula runs rather than enforced as
+interruptible per-operation quotas. In particular, a non-DFT formula exploration
+can exceed either limit before it returns. Use bounded exploration settings
+and scheduler wall-time limits; do not interpret these aggregate limits as
+hard intra-formula execution caps.
 
 The AL callback receives `(composition, output_dir, retrain, promote_model,
 promotion_approved)`. It must honor the promotion request and approval before

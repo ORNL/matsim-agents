@@ -16,6 +16,7 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
+import yaml
 
 from matsim_agents.active_learning import ALConfig
 from matsim_agents.active_learning.config import DFTConfig, QEBackendConfig
@@ -136,6 +137,44 @@ def test_from_yaml_minimal_round_trip(
     assert cfg.md.seed_source.kind == "paths"
     assert len(cfg.md.seed_source.paths) == 1
     assert cfg.loop.n_iterations == 1
+
+
+PROMOTION_EXAMPLES = [
+    path
+    for directory in ("active_learning", "paper_cases")
+    for path in sorted(
+        (Path(__file__).resolve().parents[1] / "examples" / directory).glob("*.yaml")
+    )
+    if yaml.safe_load(path.read_text()).get("trainer", {}).get("promote_model")
+]
+
+
+@pytest.mark.parametrize("example", PROMOTION_EXAMPLES, ids=lambda path: path.name)
+def test_promotion_examples_require_elemental_manifest(
+    example, tmp_path, required_paths, monkeypatch, elemental_manifest
+):
+    trainer = yaml.safe_load(example.read_text())["trainer"]
+    assert trainer["validation_reference_set"] == (
+        "${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}"
+    )
+    assert trainer.get("validation_fraction", 0) > 0 or trainer.get("validation_set")
+    trainer["train_script"] = required_paths["TRAIN_SCRIPT"]
+    trainer.pop("train_launcher", None)
+    body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
+    config_path = _write(
+        tmp_path, "promotion.yaml", body + yaml.safe_dump({"trainer": trainer}, width=1000)
+    )
+    for name, value in required_paths.items():
+        if name != "seed_path":
+            monkeypatch.setenv(name, value)
+    monkeypatch.delenv("ELEMENTAL_REFERENCE_MANIFEST", raising=False)
+    with pytest.raises(ValueError, match="provide DFT-labelled elemental JSON manifest"):
+        ALConfig.from_yaml(config_path)
+    manifest = elemental_manifest({"Si": -1.0})
+    monkeypatch.setenv("ELEMENTAL_REFERENCE_MANIFEST", str(manifest))
+    cfg = ALConfig.from_yaml(config_path)
+    assert cfg.trainer.validation_reference_set == manifest
+    assert cfg.trainer.promote_model
 
 
 # --------------------------------------------------------------------------- #
