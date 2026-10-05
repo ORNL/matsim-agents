@@ -143,7 +143,8 @@ flowchart TD
 - **Hypothesis-generation chat** with any local LLM (Qwen 2.5 via Ollama by default).
 - **LLM-only chat** (`matsim-agents chat --llm-only`) that requires no MLIP
   configuration or atomistic environment and disables `/relax`, `/al`, and
-  automatic composition exploration.
+  automatic composition exploration. The system prompt explicitly declares
+  those capability limits, even with custom prompts and after `/clear`.
 - **Optional multi-LLM hypothesis debate in chat**: a proposer model drafts a
   hypothesis response, a critic model challenges weak assumptions and missing
   tests, and the proposer revises for one or more rounds (`--llm-peer-review`,

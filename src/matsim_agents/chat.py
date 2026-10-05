@@ -31,7 +31,18 @@ from matsim_agents.discovery import (
     extract_compositions,
 )
 
-DEFAULT_SYSTEM_PROMPT = """You are a materials-discovery research partner.
+ATOMISTIC_EXPLORATION_GUIDANCE = """The system will offer the user the option
+    to run a surrogate-driven atomistic exploration of crystal phases for
+    that composition to test chemical and dynamical stability claims."""
+
+LLM_ONLY_MODE_INSTRUCTION = """Session capability restriction: this is LLM-only mode.
+Atomistic exploration, structure relaxation, and active-learning tools are
+unavailable in this session. This restriction overrides any tool instructions
+above. Do not offer to run those tools or imply that calculations were performed.
+Discuss hypotheses and suggest external calculations instead; the user must
+restart chat with --with-mlip to enable atomistic tools."""
+
+DEFAULT_SYSTEM_PROMPT = f"""You are a materials-discovery research partner.
 Your role is to help the user generate, critique, and refine hypotheses for
 new functional materials (battery cathodes, photovoltaics, catalysts,
 2D materials, ...).
@@ -42,9 +53,7 @@ Guidelines:
 * Justify each proposal with physics/chemistry reasoning: ionic radii,
   oxidation states, expected band gap, magnetic ordering, etc.
 * When you propose a new composition, write the formula clearly so it can
-    be picked up by the system. The system will offer the user the option
-    to run a surrogate-driven atomistic exploration of crystal phases for
-    that composition to test chemical and dynamical stability claims.
+    be picked up by the system. {ATOMISTIC_EXPLORATION_GUIDANCE}
 * Cite established materials when comparing.
 """
 
@@ -593,12 +602,17 @@ def chat_once(
 ) -> str:
     """Send one user turn, get the assistant reply, and run discovery hooks."""
     cfg = session.config
+    system_prompt = cfg.system_prompt
+    if cfg.llm_only:
+        if system_prompt == DEFAULT_SYSTEM_PROMPT:
+            system_prompt = system_prompt.replace(ATOMISTIC_EXPLORATION_GUIDANCE, "")
+        system_prompt = f"{system_prompt.rstrip()}\n\n{LLM_ONLY_MODE_INSTRUCTION}"
     if not session.messages:
-        session.messages.append(SystemMessage(content=cfg.system_prompt))
+        session.messages.append(SystemMessage(content=system_prompt))
 
     # Direct command: /clear resets the conversation and discovery state.
     if _is_clear_command(user_text):
-        session.messages = [SystemMessage(content=cfg.system_prompt)]
+        session.messages = [SystemMessage(content=system_prompt)]
         session.seen_compositions.clear()
         session.explorations.clear()
         assistant_text = "Conversation history and discovery state cleared."

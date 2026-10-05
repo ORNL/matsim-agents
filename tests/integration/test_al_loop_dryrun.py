@@ -68,11 +68,47 @@ def test_missing_elemental_manifest_fails_before_training(tmp_path):
     from matsim_agents.active_learning.loop import run_active_learning
 
     cfg = _make_cfg(tmp_path)
+    cfg.trainer.enabled = True
     cfg.trainer.compare_after_training = True
     cfg.trainer.validation_fraction = 0.2
     with pytest.raises(ValueError, match="elemental reference manifest"):
         run_active_learning(cfg)
     assert not (Path(cfg.loop.out_dir) / "iteration_0").exists()
+
+
+@pytest.mark.parametrize("manifest_kind", ["missing", "invalid"])
+def test_disabled_trainer_ignores_comparison_preflight(tmp_path, monkeypatch, manifest_kind):
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.trainer.compare_after_training = True
+    cfg.trainer.validation_fraction = 0.2
+    cfg.acquisition.n_select = 3
+    if manifest_kind == "invalid":
+        reference = tmp_path / "invalid.json"
+        reference.write_text("{}")
+        cfg.trainer.validation_reference_set = reference
+        validation = tmp_path / "held-out.extxyz"
+        validation.touch()
+        cfg.trainer.validation_set = validation
+
+    _patch_runtime(loop_mod, monkeypatch)
+
+    def unexpected_comparison(*_args, **_kwargs):
+        pytest.fail("disabled training must not train or compare a candidate")
+
+    monkeypatch.setattr(loop_mod, "retrain_hydragnn", unexpected_comparison)
+    monkeypatch.setattr(loop_mod, "evaluate_promotion_candidate", unexpected_comparison)
+    incumbent = cfg.mlip.hydragnn.logdir
+    loop_mod.run_active_learning(cfg)
+    state = json.loads((cfg.loop.out_dir / "iteration_0000/state.json").read_text())
+    assert state["status"] == "complete"
+    assert state["n_training_frames"] == 2
+    assert state["n_validation_frames"] == 1
+    assert state["candidate_model_path"] is None
+    assert state["model_comparison"] is None
+    assert not state["model_promoted"]
+    assert cfg.mlip.hydragnn.logdir == incumbent
 
 
 # --------------------------------------------------------------------------- #

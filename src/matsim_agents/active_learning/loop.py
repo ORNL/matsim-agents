@@ -251,7 +251,10 @@ def _scan_resume(root: Path) -> tuple[int, Path | None]:
 
 def run_active_learning(cfg: ALConfig) -> None:
     """Run the full AL loop. Idempotent: safe to re-invoke after a job restart."""
-    if cfg.trainer.compare_after_training or cfg.trainer.promote_model:
+    comparison_enabled = cfg.trainer.enabled and (
+        cfg.trainer.compare_after_training or cfg.trainer.promote_model
+    )
+    if comparison_enabled:
         if cfg.trainer.validation_reference_set is None:
             raise ValueError(
                 "model comparison requires a DFT-labelled elemental reference manifest"
@@ -514,7 +517,7 @@ def run_active_learning(cfg: ALConfig) -> None:
             )
 
             # --- 6. (Optional) retrain the surrogate --------------------------
-            if cfg.trainer.compare_after_training or cfg.trainer.promote_model:
+            if comparison_enabled:
                 if cfg.trainer.validation_reference_set is None:
                     raise ValueError(
                         "model comparison requires a DFT-labelled elemental reference manifest"
@@ -570,9 +573,7 @@ def run_active_learning(cfg: ALConfig) -> None:
                     n_appended,
                     dataset_path,
                 )
-            compare_candidate = (
-                cfg.trainer.compare_after_training or cfg.trainer.promote_model
-            ) and state.candidate_model_path is not None
+            compare_candidate = comparison_enabled and state.candidate_model_path is not None
             if compare_candidate:
                 try:
                     evaluation_cfg = cfg.model_copy(deep=True)

@@ -137,6 +137,9 @@ trainer:
 This is not a frozen or incomplete form of active learning. It is a valid data
 acquisition workflow whose output can be reviewed and trained offline. Enabling
 training does not silently replace the deployed model.
+With `trainer.enabled: false`, comparison/promotion flags are inactive and
+elemental-reference or held-out comparison metadata is not required. Labels
+and dataset provenance are still validated and recorded for offline training.
 
 New DFT frames are checked for finite energy and forces, correct force shape,
 and duplicate geometry. Dataset manifests preserve hashes, backend identity,

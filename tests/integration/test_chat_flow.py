@@ -132,6 +132,26 @@ class TestAutoConfirm:
 
 
 class TestLLMOnly:
+    @pytest.mark.parametrize("custom_prompt", [None, "Custom: offer structure relaxation."])
+    def test_prompt_matches_session_capabilities_after_clear(self, monkeypatch, custom_prompt):
+        from matsim_agents.chat import (
+            ATOMISTIC_EXPLORATION_GUIDANCE,
+            LLM_ONLY_MODE_INSTRUCTION,
+        )
+
+        kwargs = {"system_prompt": custom_prompt} if custom_prompt else {}
+        cfg = DiscoveryChatConfig(llm_only=True, **kwargs)
+        session, _ = _make_session(cfg, responses=["Hypothesis."], monkeypatch=monkeypatch)
+        chat_once(session, "Discuss materials")
+        initial_prompt = session.messages[0].content
+        assert LLM_ONLY_MODE_INSTRUCTION in initial_prompt
+        if custom_prompt:
+            assert initial_prompt.startswith(custom_prompt)
+        else:
+            assert ATOMISTIC_EXPLORATION_GUIDANCE not in initial_prompt
+        chat_once(session, "/clear")
+        assert session.messages[0].content == initial_prompt
+
     def test_config_does_not_require_mlip_inputs(self):
         cfg = DiscoveryChatConfig(llm_only=True)
 
