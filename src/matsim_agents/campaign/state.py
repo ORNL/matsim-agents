@@ -170,7 +170,11 @@ class CampaignState(BaseModel):
         uncompetitive: list[str] = []
         for formula, report in self.stability_reports.items():
             energy = report.ground_state.energy_above_hull_eV_per_atom
-            if report.ranking_mode != RankingMode.CONVEX_HULL or energy is None:
+            if (
+                report.ranking_mode != RankingMode.CONVEX_HULL
+                or report.reference_set_id != self.reference_energies.identifier
+                or energy is None
+            ):
                 continue
             energies[formula] = energy
             decompositions[formula] = dict(report.ground_state.decomposition)

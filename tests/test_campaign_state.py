@@ -199,6 +199,43 @@ def test_record_stability_recalibrates_prior_reports_when_hull_changes():
     assert campaign.current_hull.uncompetitive_formulas == ["NbO"]
 
 
+@pytest.mark.parametrize(
+    "reference_set_id", ["different-dft-method", "different-calibration", None]
+)
+@pytest.mark.parametrize("energy_above_hull", [0.0, 0.02, 0.2])
+def test_hull_snapshot_excludes_incompatible_reports(reference_set_id, energy_above_hull):
+    campaign = _campaign()
+    campaign.reference_energies.elemental_energies_eV_per_atom = {
+        "Nb": 0.0,
+        "Ta": 0.0,
+        "O": 0.0,
+    }
+    incompatible = _hull_report("NbO", -2.0, -1.0)
+    incompatible.reference_set_id = reference_set_id
+    incompatible.ground_state.energy_above_hull_eV_per_atom = energy_above_hull
+    incompatible.ground_state.decomposition = {"Nb": 0.5, "O": 0.5}
+    campaign.record_stability(incompatible)
+    assert campaign.current_hull is None
+    assert "NbO" not in campaign.reference_energies.competing_phases
+
+    compatible = _hull_report("Nb2O", -4.8, -1.6)
+    compatible.reference_set_id = campaign.reference_energies.identifier
+    campaign.record_stability(compatible)
+
+    assert campaign.stability_reports["NbO"] is incompatible
+    assert incompatible.ground_state.energy_above_hull_eV_per_atom == energy_above_hull
+    assert campaign.current_hull is not None
+    assert campaign.current_hull.reference_set_id == campaign.reference_energies.identifier
+    assert set(campaign.current_hull.energy_above_hull_eV_per_atom) == {"Nb2O"}
+    assert set(campaign.current_hull.decomposition_products) == {"Nb2O"}
+    assert set(campaign.current_hull.hull_vertices) == {"Nb2O"}
+    assert campaign.current_hull.new_hull_vertices == ["Nb2O"]
+    assert campaign.current_hull.removed_hull_vertices == []
+    assert campaign.current_hull.near_hull_phases == {}
+    assert campaign.current_hull.uncompetitive_formulas == []
+    assert campaign.hull_history == [campaign.current_hull]
+
+
 def test_campaign_requires_matching_unique_element_set():
     with pytest.raises(ValidationError, match="element_set must match"):
         CampaignState(

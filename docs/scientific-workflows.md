@@ -234,6 +234,9 @@ method-compatible elemental and competing-phase references. Residual forces
 filter unconverged structures; they are not added to formation energies.
 Relaxed DFT references, including unary endpoints, must match the declared
 reduced composition before their energies enter the hull.
+Campaign hull snapshots include only convex-hull reports matching the active
+reference-set identifier. Incompatible reports remain stored for provenance,
+but do not enter snapshot energies, vertices, or decomposition products.
 
 ## Agentic investigation
 
