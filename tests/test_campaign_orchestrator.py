@@ -452,6 +452,31 @@ def test_campaign_passes_remaining_dft_allowance_to_formula_runner(tmp_path):
     assert result.campaign.formula_runs["NbO2"].n_dft_calculations == 3
 
 
+@pytest.mark.parametrize("crash", [False, True])
+def test_campaign_mlip_attempt_budget_is_durable_and_shared(tmp_path, crash):
+    campaign = _campaign()
+    campaign.budget.max_mlip_relaxations = 1
+    calls = []
+
+    def runner(formula, output_dir, dft_allowance, *, mlip_allowance, on_mlip_relaxation_attempt):
+        calls.append(mlip_allowance)
+        on_mlip_relaxation_attempt()
+        persisted = CampaignState.load(tmp_path / "campaign_state.json")
+        assert sum(item.n_mlip_relaxations for item in persisted.formula_runs.values()) == 1
+        if crash:
+            raise RuntimeError("failed after a launched attempt")
+        result = _result(formula, output_dir)
+        result.initial.failures = ["failed candidate"]
+        result.initial.relaxation_budget_exhausted = True
+        result.initial.unrelaxed_candidate_paths = ["seed-not-relaxed"]
+        return result
+
+    result = run_campaign(campaign, output_dir=tmp_path, formula_runner=runner)
+    assert calls == [1]
+    assert sum(item.n_mlip_relaxations for item in result.campaign.formula_runs.values()) == 1
+    assert "max_mlip_relaxations" in result.stop_reason
+
+
 def test_failed_formula_recovers_durable_resource_and_stage_evidence(tmp_path):
     campaign = _campaign()
     campaign.budget.max_dft_calculations = 3

@@ -485,13 +485,52 @@ def run_campaign(
                         item.n_dft_calculations for item in campaign.formula_runs.values()
                     )
                     dft_allowance = max(0, campaign.budget.max_dft_calculations - used_dft)
+                mlip_allowance = None
+                mlip_attempts = 0
+                if campaign.budget.max_mlip_relaxations is not None:
+                    used_mlip = sum(
+                        item.n_mlip_relaxations for item in campaign.formula_runs.values()
+                    )
+                    mlip_allowance = max(0, campaign.budget.max_mlip_relaxations - used_mlip)
+
+                def record_mlip_attempt(
+                    allowance: int | None = mlip_allowance,
+                    attempt_record: FormulaRunRecord = record,
+                ) -> None:
+                    nonlocal mlip_attempts
+                    if allowance is not None and mlip_attempts >= allowance:
+                        raise RuntimeError("candidate MLIP relaxation allowance exhausted")
+                    mlip_attempts += 1
+                    attempt_record.n_mlip_relaxations += 1
+                    campaign.save(state_path)
+
                 result = (
-                    formula_runner(formula, str(formula_dir), dft_allowance)
-                    if dft_allowance is not None
-                    else formula_runner(formula, str(formula_dir))
+                    formula_runner(
+                        formula,
+                        str(formula_dir),
+                        dft_allowance,
+                        mlip_allowance=mlip_allowance,
+                        on_mlip_relaxation_attempt=record_mlip_attempt,
+                    )
+                    if mlip_allowance is not None
+                    else (
+                        formula_runner(formula, str(formula_dir), dft_allowance)
+                        if dft_allowance is not None
+                        else formula_runner(formula, str(formula_dir))
+                    )
                 )
                 exploration = result.after_retraining or result.initial
-                record.n_mlip_relaxations += len(exploration.relaxations)
+                attempt_count = result.initial.candidate_counts["attempted"] + (
+                    result.after_retraining.candidate_counts["attempted"]
+                    if result.after_retraining is not None
+                    else 0
+                )
+                if mlip_allowance is None:
+                    record.n_mlip_relaxations += attempt_count
+                elif attempt_count != mlip_attempts:
+                    raise RuntimeError(
+                        "budgeted formula runner must record every candidate relaxation attempt"
+                    )
                 record.outcome_class = exploration.outcome_class
                 record.candidate_counts = exploration.candidate_counts
                 al_result = result.active_learning_result or {}
@@ -630,6 +669,23 @@ def run_campaign(
                     }
                 )
                 record.evidence["candidate_counts"] = record.candidate_counts
+                record.evidence["candidate_relaxation_budget"] = {
+                    "scope": "candidate_structure_attempts",
+                    "allowance": mlip_allowance,
+                    "attempted": attempt_count,
+                    "initial_exhausted": result.initial.relaxation_budget_exhausted,
+                    "initial_unrelaxed": result.initial.unrelaxed_candidate_paths,
+                    "reevaluation_exhausted": (
+                        result.after_retraining.relaxation_budget_exhausted
+                        if result.after_retraining is not None
+                        else False
+                    ),
+                    "reevaluation_unrelaxed": (
+                        result.after_retraining.unrelaxed_candidate_paths
+                        if result.after_retraining is not None
+                        else []
+                    ),
+                }
                 record.evidence["outcome_class"] = record.outcome_class
                 record.evidence["relaxation_failures"] = list(exploration.failures)
                 record.evidence["ranking_failure"] = exploration.ranking_failure

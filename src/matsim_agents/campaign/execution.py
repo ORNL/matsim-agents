@@ -1694,11 +1694,29 @@ def run_formula_with_active_learning(
 
 def make_formula_runner(
     config: CampaignFormulaExecutionConfig,
-) -> Callable[[str, str, int | None], PhaseExplorationWorkflowResult]:
+) -> Callable[..., PhaseExplorationWorkflowResult]:
     def runner(
-        formula: str, output_dir: str, dft_allowance: int | None = None
+        formula: str,
+        output_dir: str,
+        dft_allowance: int | None = None,
+        *,
+        mlip_allowance: int | None = None,
+        on_mlip_relaxation_attempt: Callable[[], None] | None = None,
     ) -> PhaseExplorationWorkflowResult:
-        effective_config = config.model_copy(update={"max_dft_calculations": dft_allowance})
+        exploration_kwargs = dict(config.exploration_kwargs)
+        if mlip_allowance is not None:
+            prior_limit = exploration_kwargs.get("max_relaxations")
+            exploration_kwargs["max_relaxations"] = (
+                min(prior_limit, mlip_allowance) if prior_limit is not None else mlip_allowance
+            )
+        if on_mlip_relaxation_attempt is not None:
+            exploration_kwargs["on_relaxation_attempt"] = on_mlip_relaxation_attempt
+        effective_config = config.model_copy(
+            update={
+                "max_dft_calculations": dft_allowance,
+                "exploration_kwargs": exploration_kwargs,
+            }
+        )
         result = run_formula_with_active_learning(formula, output_dir, config=effective_config)
         if result.model_promoted and result.active_learning_result:
             promoted = _promoted_model_path(result)

@@ -89,6 +89,82 @@ def test_active_learning_defaults_to_label_collection_without_retraining():
     assert trainer.promote_model is False
 
 
+@pytest.mark.parametrize("allowance", [0, 1, 3])
+def test_relaxation_allowance_preserves_generation_and_counts_failures(
+    tmp_path, monkeypatch, allowance
+):
+    from matsim_agents.discovery.wrapper import explore_composition
+
+    candidates = [
+        PhaseCandidate(formula="Si", structure_path=str(tmp_path / f"seed-{index}"))
+        for index in range(5)
+    ]
+    generation = []
+    attempts = []
+    monkeypatch.setattr(
+        "matsim_agents.discovery.wrapper.generate_seeds",
+        lambda *_args, **kwargs: generation.append(kwargs["n_random"]) or candidates,
+    )
+
+    def fail(request):
+        attempts.append(request.structure_path)
+        raise RuntimeError("test failure consumes an attempt")
+
+    result = explore_composition(
+        "Si",
+        output_dir=str(tmp_path),
+        mlip_backend="uma",
+        n_random=50,
+        max_relaxations=allowance,
+        relax_fn=fail,
+    )
+    assert generation == [50]
+    assert len(result.phase_candidates) == 5
+    assert len(attempts) == allowance
+    assert result.candidate_counts["attempted"] == allowance
+    assert result.relaxation_budget_exhausted
+    assert result.unrelaxed_candidate_paths == [
+        item.structure_path for item in candidates[allowance:]
+    ]
+
+
+def test_phase_budget_shared_with_reevaluation(tmp_path, monkeypatch):
+    parsed = parse_composition("Si")
+    calls = []
+
+    def explore(*_args, **kwargs):
+        calls.append(kwargs)
+        return CompositionExplorationResult(
+            composition=parsed,
+            phase_candidates=[],
+            failures=["failed attempt"] if len(calls) == 1 else [],
+        )
+
+    monkeypatch.setattr("matsim_agents.workflows.phase_exploration.explore_composition", explore)
+    policy = PhaseExplorationPolicy(
+        active_learning=True,
+        retrain_mlip=True,
+        promote_model=True,
+        reevaluate_after_retraining=True,
+        dft_approved=True,
+        retraining_approved=True,
+        promotion_approved=True,
+        budget=ComputeBudget(max_mlip_relaxations=1),
+    )
+    run_phase_exploration(
+        "Si",
+        policy=policy,
+        output_dir=str(tmp_path),
+        exploration_kwargs={"n_random": 50},
+        active_learning_runner=lambda *_: {
+            "model_promoted": True,
+            "exploration_kwargs": {"max_relaxations": 100},
+        },
+    )
+    assert [call["max_relaxations"] for call in calls] == [1, 0]
+    assert [call["n_random"] for call in calls] == [50, 50]
+
+
 def test_molecular_identity_distinguishes_geometry_and_species():
     molecule = Atoms("OH2", positions=[[0, 0, 0], [0.95, 0, 0], [-0.24, 0.92, 0]])
     changed = molecule.copy()

@@ -82,6 +82,14 @@ def run_phase_exploration(
         raise PermissionError("model promotion requires explicit approval")
 
     kwargs = dict(exploration_kwargs or {})
+    limits = [
+        limit
+        for limit in (policy.budget.max_mlip_relaxations, kwargs.get("max_relaxations"))
+        if limit is not None
+    ]
+    relaxation_allowance = min(limits) if limits else None
+    if relaxation_allowance is not None:
+        kwargs["max_relaxations"] = relaxation_allowance
     if not policy.relax_structures:
         # Seed-only exploration is explicit and uses a runner that records no
         # fake relaxation result. The existing wrapper still owns generation.
@@ -132,6 +140,12 @@ def run_phase_exploration(
         if policy.reevaluate_after_retraining and promoted:
             updated = dict(kwargs)
             updated.update(dict(al_result.get("exploration_kwargs", {})))
+            if relaxation_allowance is not None:
+                updated["max_relaxations"] = max(
+                    0, relaxation_allowance - initial.candidate_counts["attempted"]
+                )
+            if "on_relaxation_attempt" in kwargs:
+                updated["on_relaxation_attempt"] = kwargs["on_relaxation_attempt"]
             after = explore_composition(
                 composition,
                 output_dir=str(Path(output_dir) / "after_retraining"),

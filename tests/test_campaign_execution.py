@@ -30,6 +30,7 @@ from matsim_agents.campaign.execution import (
     _relaxation_energy_per_atom,
     _score_relaxed_candidate_uncertainty,
     latest_promoted_model,
+    make_formula_runner,
     run_formula_with_active_learning,
 )
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
@@ -55,6 +56,38 @@ from matsim_agents.workflows.relaxation import (
     RelaxationStageResult,
     ScientificRelaxationResult,
 )
+
+
+def test_formula_runner_wires_remaining_mlip_allowance_without_changing_seeds(
+    tmp_path, monkeypatch
+):
+    config = CampaignFormulaExecutionConfig(
+        active_learning_config=tmp_path / "unused.yaml",
+        phase_policy=PhaseExplorationPolicy(),
+        exploration_kwargs={"n_random": 50, "max_relaxations": 10},
+    )
+    captured = []
+
+    def callback():
+        pass
+
+    def run(formula, output_dir, *, config):
+        captured.append(config)
+        return PhaseExplorationWorkflowResult(
+            composition=formula,
+            initial=CompositionExplorationResult(
+                composition=parse_composition(formula), phase_candidates=[]
+            ),
+        )
+
+    monkeypatch.setattr("matsim_agents.campaign.execution.run_formula_with_active_learning", run)
+    make_formula_runner(config)(
+        "NbO", str(tmp_path), mlip_allowance=1, on_mlip_relaxation_attempt=callback
+    )
+    assert captured[0].exploration_kwargs["max_relaxations"] == 1
+    assert captured[0].exploration_kwargs["n_random"] == 50
+    assert captured[0].exploration_kwargs["on_relaxation_attempt"] is callback
+    assert config.exploration_kwargs == {"n_random": 50, "max_relaxations": 10}
 
 
 def _config_yaml(tmp_path, pseudopotentials: str) -> str:

@@ -417,12 +417,25 @@ at runtime unless `continue_on_promotion_rejection: true` explicitly retains
 incumbent results without reevaluation. Compute budgets may cap candidates, MLIP
 relaxations, DFT calculations, AL iterations, and node-hours.
 Candidate-count limits stop between formula attempts. The campaign orchestrator
-passes a remaining DFT allowance to formula runners, but MLIP-relaxation and
-node-hour limits are checked between formula runs rather than enforced as
-interruptible per-operation quotas. In particular, a non-DFT formula exploration
-can exceed either limit before it returns. Use bounded exploration settings
-and scheduler wall-time limits; do not interpret these aggregate limits as
-hard intra-formula execution caps.
+passes remaining DFT and candidate-MLIP relaxation allowances to formula runners.
+`n_random` remains the requested random-seed count per composition, in addition
+to prototype seeds; it is never silently lowered to fit a relaxation budget.
+`max_mlip_relaxations` caps candidate relaxation attempts across formulas,
+including failures and both initial and post-promotion exploration. Each
+budgeted attempt is checkpointed before launch, so interrupted attempts remain
+charged on restart. Custom budgeted formula runners must honor `mlip_allowance`
+and call `on_mlip_relaxation_attempt` before each attempt.
+Generated seeds beyond the allowance remain recorded in
+`unrelaxed_candidate_paths`, with `relaxation_budget_exhausted: true`; rankings
+cover only the attempted subset, not the full generated search space.
+This budget does not count optimizer steps, MD sampling, perturbation robustness
+trials, or model-specific unary reference qualification. Those separate stages
+retain their own configuration controls. Node-hour limits remain between-formula
+stopping thresholds rather than interruptible hard caps; use scheduler wall-time
+limits for allocation control. Historical campaign `n_mlip_relaxations` counts
+recorded successful selected-stage results, whereas new attempts count both
+exploration stages and failures; old missing attempt counts cannot be recovered
+from that field alone.
 Completion progress-callback errors are logged and stored in exploration
 `callback_failures`, separately from relaxation `failures`. They do not
 invalidate a successful relaxation or add an extra attempted/failed candidate

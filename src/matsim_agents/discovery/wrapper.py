@@ -33,6 +33,8 @@ class CompositionExplorationResult(BaseModel):
     stability: StabilityReport | None = None
     failures: list[str] = Field(default_factory=list)
     callback_failures: list[str] = Field(default_factory=list)
+    relaxation_budget_exhausted: bool = False
+    unrelaxed_candidate_paths: list[str] = Field(default_factory=list)
     ranking_failure: str | None = None
     outcome_class: Literal[
         "generation_failure",
@@ -78,6 +80,8 @@ def explore_composition(
     mlp_precision: str | None = None,
     n_random: int = 50,
     random_seed: int = 0,
+    max_relaxations: int | None = None,
+    on_relaxation_attempt: Callable[[], None] | None = None,
     on_phase_start: Callable[[PhaseCandidate], None] | None = None,
     on_phase_done: Callable[[PhaseCandidate, RelaxationResult], None] | None = None,
     relax_fn: Callable[[RelaxStructureInput], RelaxationResult] | None = None,
@@ -99,6 +103,9 @@ def explore_composition(
         applicable AFLOW prototype decoration). ``0`` disables.
     random_seed:
         Seed for the pyXtal RNG (reproducibility).
+    max_relaxations:
+        Cap on candidate relaxation attempts, including failures. Generation
+        is unchanged; unrelaxed candidates are recorded explicitly.
     on_phase_start, on_phase_done:
         Optional callbacks for live progress reporting (e.g. in the chat REPL).
         Completion callback errors are logged and recorded separately from
@@ -106,6 +113,8 @@ def explore_composition(
     relax_fn:
         Override the relaxation backend (used by tests / stub mode).
     """
+    if max_relaxations is not None and max_relaxations < 0:
+        raise ValueError("max_relaxations must be non-negative")
     if isinstance(composition, str):
         parsed = parse_composition(composition)
         if parsed is None:
@@ -127,10 +136,21 @@ def explore_composition(
     relaxations: list[RelaxationResult] = []
     failures: list[str] = []
     callback_failures: list[str] = []
+    unrelaxed_candidate_paths: list[str] = []
 
-    for cand in candidates:
+    for index, cand in enumerate(candidates):
+        if max_relaxations is not None and index >= max_relaxations:
+            unrelaxed_candidate_paths = [item.structure_path for item in candidates[index:]]
+            log.warning(
+                "Candidate relaxation budget exhausted for %s; %d seeds remain unrelaxed",
+                composition.formula,
+                len(unrelaxed_candidate_paths),
+            )
+            break
         if on_phase_start is not None:
             on_phase_start(cand)
+        if on_relaxation_attempt is not None:
+            on_relaxation_attempt()
         try:
             result = relax(
                 RelaxStructureInput(
@@ -205,6 +225,8 @@ def explore_composition(
         stability=report,
         failures=failures,
         callback_failures=callback_failures,
+        relaxation_budget_exhausted=bool(unrelaxed_candidate_paths),
+        unrelaxed_candidate_paths=unrelaxed_candidate_paths,
         ranking_failure=ranking_failure,
         outcome_class=outcome_class,
     )
