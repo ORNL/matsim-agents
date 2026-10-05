@@ -270,6 +270,8 @@ pre-registered protocol digest. Both paired differences and statistical
 comparisons reject mixed digests, including incomplete or metric-missing
 observations. Compare each protocol separately rather than pooling effects
 across different candidate pools, budgets, models, or DFT methods.
+Treatment and control must be distinct arms, and paired metric values and
+their differences must be finite before statistical analysis.
 
 ## Phase exploration
 

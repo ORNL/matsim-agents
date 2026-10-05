@@ -116,8 +116,6 @@ MACE_MODELS: dict[str, dict[str, str]] = {
         "model": "mace-matpes-r2scan-0",
         "label": "MACE-MATPES r2SCAN",
     },
-    "mace_mh_0": {"family": "mace_mp", "model": "mh-0", "label": "MACE-MH-0"},
-    "mace_mh_1": {"family": "mace_mp", "model": "mh-1", "label": "MACE-MH-1"},
     "mace_off_small": {"family": "mace_off", "model": "small", "label": "MACE-OFF23 small"},
     "mace_off_medium": {"family": "mace_off", "model": "medium", "label": "MACE-OFF23 medium"},
     "mace_off_large": {"family": "mace_off", "model": "large", "label": "MACE-OFF23 large"},

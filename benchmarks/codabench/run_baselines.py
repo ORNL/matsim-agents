@@ -70,8 +70,6 @@ MACE_MODELS: dict[str, tuple[str, str]] = {
     "mace_omat_medium": ("mace_mp", "medium-omat-0"),
     "mace_matpes_pbe": ("mace_mp", "mace-matpes-pbe-0"),
     "mace_matpes_r2scan": ("mace_mp", "mace-matpes-r2scan-0"),
-    "mace_mh_0": ("mace_mp", "mh-0"),
-    "mace_mh_1": ("mace_mp", "mh-1"),
     "mace_off_small": ("mace_off", "small"),
     "mace_off_medium": ("mace_off", "medium"),
     "mace_off_large": ("mace_off", "large"),

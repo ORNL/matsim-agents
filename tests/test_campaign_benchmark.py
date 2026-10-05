@@ -179,3 +179,60 @@ def test_paired_comparison_rejects_mixed_protocols(second_completed, second_has_
         control=BenchmarkArm.RANDOM,
         metric="near_hull_per_dft",
     ) == pytest.approx([0.2, 0.2])
+
+
+@pytest.mark.parametrize(
+    ("treatment_value", "control_value"),
+    [
+        (float("nan"), 0.1),
+        (0.1, float("nan")),
+        (float("inf"), 0.1),
+        (0.1, float("-inf")),
+        (1e308, -1e308),
+    ],
+)
+def test_paired_comparison_rejects_nonfinite_metrics(treatment_value, control_value):
+    observations = [
+        BenchmarkObservation(
+            protocol_digest="protocol",
+            arm=arm,
+            random_seed=seed,
+            metrics={"near_hull_per_dft": value},
+            dft_calculations_attempted=1,
+            node_hours_consumed=1.0,
+            completed=True,
+        )
+        for seed in (101, 202)
+        for arm, value in (
+            (BenchmarkArm.ADAPTIVE, treatment_value),
+            (BenchmarkArm.RANDOM, control_value),
+        )
+    ]
+    with pytest.raises(ValueError, match="requires finite values"):
+        paired_metric_differences(
+            observations,
+            treatment=BenchmarkArm.ADAPTIVE,
+            control=BenchmarkArm.RANDOM,
+            metric="near_hull_per_dft",
+        )
+    with pytest.raises(ValueError, match="requires finite values"):
+        compare_paired_metric(
+            observations,
+            treatment=BenchmarkArm.ADAPTIVE,
+            control=BenchmarkArm.RANDOM,
+            metric=_protocol().metrics[0],
+        )
+
+
+def test_paired_comparison_rejects_identical_arms():
+    with pytest.raises(ValueError, match="distinct treatment and control"):
+        paired_metric_differences(
+            [], treatment=BenchmarkArm.RANDOM, control=BenchmarkArm.RANDOM, metric="metric"
+        )
+    with pytest.raises(ValueError, match="distinct treatment and control"):
+        compare_paired_metric(
+            [],
+            treatment=BenchmarkArm.RANDOM,
+            control=BenchmarkArm.RANDOM,
+            metric=_protocol().metrics[0],
+        )

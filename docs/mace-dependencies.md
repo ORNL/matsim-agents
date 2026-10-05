@@ -57,12 +57,17 @@ The workflow exposes every foundation loader included in `mace-torch==0.3.16`:
 
 | Family | Intended domain | Named models |
 | --- | --- | --- |
-| `mace_mp` | periodic materials | MP, MPA, OMAT, MATPES, and MH aliases |
+| `mace_mp` | periodic materials | MP, MPA, OMAT, and MATPES aliases |
 | `mace_off` | organic molecules | OFF23 small, medium, large |
 | `mace_omol` | organic molecules | OMOL-0 extra large |
 | `mace_polar` | polarizable systems | Polar-1 small, medium, large |
 | `mace_anicc` | H/C/N/O molecules | ANI-CC |
 | `checkpoint` | checkpoint-dependent | local `.model` file |
+
+Multi-head `mh-0` and `mh-1` variants are excluded from the workflow and
+Codabench catalogs until explicit inference-head selection is supported
+through the adapters. The pinned MACE version requires a head for these
+checkpoints; advertising them without that control would fail at startup.
 
 These families are not interchangeable scientific approximations. In
 particular, molecular models must not be treated as general bulk-crystal

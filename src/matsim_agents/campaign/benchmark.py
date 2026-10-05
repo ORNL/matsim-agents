@@ -141,6 +141,8 @@ def paired_metric_differences(
     metric: str,
 ) -> list[float]:
     """Return seed-paired effects within exactly one protocol."""
+    if treatment == control:
+        raise ValueError("paired comparison requires distinct treatment and control arms")
     if len({item.protocol_digest for item in observations}) > 1:
         raise ValueError(
             "paired comparison requires a single protocol digest; compare each protocol separately"
@@ -164,7 +166,17 @@ def paired_metric_differences(
         treatment_item = indexed.get((digest, seed, treatment))
         control_item = indexed.get((digest, seed, control))
         if treatment_item is not None and control_item is not None:
-            pairs.append(treatment_item.metrics[metric] - control_item.metrics[metric])
+            treatment_value = treatment_item.metrics[metric]
+            control_value = control_item.metrics[metric]
+            difference = treatment_value - control_value
+            if not all(
+                np.isfinite(value) for value in (treatment_value, control_value, difference)
+            ):
+                raise ValueError(
+                    f"paired metric {metric!r} requires finite values and differences "
+                    f"for protocol_digest={digest!r}, random_seed={seed}"
+                )
+            pairs.append(difference)
     return pairs
 
 

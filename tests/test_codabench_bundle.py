@@ -58,9 +58,10 @@ def test_codabench_mace_catalog_matches_workflow() -> None:
     materials = runner.selected_mace_models(Namespace(**common, mace_variant="materials"))
     all_models = runner.selected_mace_models(Namespace(**common, mace_variant="all"))
 
-    assert len(materials) == 16
+    assert len(materials) == 14
     assert all(family == "mace_mp" for _name, family, _model in materials)
-    assert len(all_models) == 24
+    assert len(all_models) == 22
+    assert not {"mace_mh_0", "mace_mh_1"} & expected.keys()
 
 
 def test_codabench_mace_adapter_dispatches_native_families(monkeypatch) -> None:
