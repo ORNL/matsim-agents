@@ -135,3 +135,47 @@ def test_paired_metric_differences_reject_duplicate_observation_cells():
             control=BenchmarkArm.RANDOM,
             metric="near_hull_per_dft",
         )
+
+
+@pytest.mark.parametrize("second_completed", [True, False])
+@pytest.mark.parametrize("second_has_metric", [True, False])
+def test_paired_comparison_rejects_mixed_protocols(second_completed, second_has_metric):
+    observations = [
+        BenchmarkObservation(
+            protocol_digest=digest,
+            arm=arm,
+            random_seed=seed,
+            metrics={"near_hull_per_dft": value},
+            dft_calculations_attempted=60,
+            node_hours_consumed=100.0,
+            completed=True,
+        )
+        for digest in ("protocol-one", "protocol-two")
+        for seed in (101, 202)
+        for arm, value in ((BenchmarkArm.RANDOM, 0.1), (BenchmarkArm.ADAPTIVE, 0.3))
+    ]
+    for observation in observations:
+        if observation.protocol_digest == "protocol-two":
+            observation.completed = second_completed
+            if not second_has_metric:
+                observation.metrics = {}
+    with pytest.raises(ValueError, match="single protocol digest"):
+        paired_metric_differences(
+            observations,
+            treatment=BenchmarkArm.ADAPTIVE,
+            control=BenchmarkArm.RANDOM,
+            metric="near_hull_per_dft",
+        )
+    with pytest.raises(ValueError, match="single protocol digest"):
+        compare_paired_metric(
+            observations,
+            treatment=BenchmarkArm.ADAPTIVE,
+            control=BenchmarkArm.RANDOM,
+            metric=_protocol().metrics[0],
+        )
+    assert paired_metric_differences(
+        [item for item in observations if item.protocol_digest == "protocol-one"],
+        treatment=BenchmarkArm.ADAPTIVE,
+        control=BenchmarkArm.RANDOM,
+        metric="near_hull_per_dft",
+    ) == pytest.approx([0.2, 0.2])

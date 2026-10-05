@@ -23,7 +23,6 @@ if [[ ( "$MATSIM_VASP_BIN" != "$DEFAULT_VASP_BIN" || "$MATSIM_VASP_POTCAR_DIR" !
   exit 2
 fi
 export MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE="${MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE:-vasp-6.6.1-pbe64-encut520-kspacing0.25-o2-triplet-v1}"
-export MATSIM_CAMPAIGN_RUN_TAG=campaign-formula-e2e-all-vasp
 
 [[ -x "$MATSIM_VASP_BIN" ]] || {
   echo "ERROR: VASP binary is not executable: $MATSIM_VASP_BIN" >&2

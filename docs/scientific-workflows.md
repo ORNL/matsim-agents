@@ -211,7 +211,7 @@ directory name is not the campaign ID or the reference-set ID.
 | --- | --- | --- |
 | Slurm job name | The launcher's `#SBATCH -J` default is `campaign-formula-e2e-all`; submission can override it with `--job-name`. The bounded submission script uses `nb-ta-o-combined-bounded`. | `nb-ta-o-combined-bounded` |
 | Campaign ID | For fresh discovery, the launcher passes `--campaign-id "nb-ta-o-e2e-all-${SLURM_JOB_ID}"` to the discovery driver. This ID is persisted in the campaign state. | `nb-ta-o-e2e-all-59359342` |
-| Output directory name | `${MATSIM_CAMPAIGN_RUN_TAG}-${SLURM_JOB_ID}`. The tag defaults to `campaign-formula-e2e-all`; the bounded submission script sets it to `nb-ta-o-combined-bounded`. | `nb-ta-o-combined-bounded-59359342` |
+| Output directory name | `nb-ta-o--<workflow>--<short-git-sha>--j<SlurmJobID>`, generated automatically. | `nb-ta-o--7llm-uma-al-qe-hull--c848c79--j59359342` (illustrative) |
 | DFT reference-set ID | When creating a new reference-energy set, the campaign uses `campaign-<DFT-method-signature>`. The signature is supplied through `MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE`. | `campaign-qe-pbe-pslibrary-80-640-k4-o2-triplet-gamma-v1` |
 
 Slurm assigns `SLURM_JOB_ID` when the job is submitted. Outputs are placed under
@@ -221,12 +221,33 @@ Slurm assigns `SLURM_JOB_ID` when the job is submitted. Outputs are placed under
 `<Slurm-job-name>-<SlurmJobID>.out` and `.err`, respectively, in the submission
 working directory.
 
-To choose a different output tag for a direct launcher submission, set
-`MATSIM_CAMPAIGN_RUN_TAG`; this does not change the campaign ID or Slurm job
-name. The bounded submission script explicitly sets its tag and job name.
+The directory convention is mandatory for new launches: the naming helper
+generates `MATSIM_CAMPAIGN_RUN_TAG`, replacing any inherited custom tag.
+There is no legacy naming mode. The bounded submission script captures the
+Git revision at submission; direct launcher submissions capture it at job
+startup unless submission revision metadata was explicitly exported.
+The Slurm job name and persisted campaign ID remain separate identifiers.
 When `MATSIM_CAMPAIGN_STATE_SOURCE` is supplied, the launcher copies the existing
 state instead of running fresh discovery, preserving its campaign ID even
 though the new output directory has a new Slurm job ID.
+
+The default workflow label `7llm-uma-al-qe-hull` denotes seven-model debate,
+UMA active learning, and QE hull refinement. VASP replaces `qe` with `vasp`;
+disabled refinement omits `-hull`. MLIP-only runs use `7llm-uma-screen`,
+debate-only runs use `7llm-debate`, and single-call runs use `1llm-debate`.
+Other screening MLIPs and detailed budgets remain in configuration rather
+than lengthening the directory name.
+
+The revision component uses `git rev-parse --short=7` on the captured commit
+(Git can lengthen it to disambiguate). `run_identity.txt` records the full
+source revision and dirty status, plus the runtime revision and dirty status.
+Dirty status includes untracked files. This records provenance but does not
+freeze the checkout: queued jobs can execute later edits, so compare source
+and runtime identities when auditing results.
+
+Historical artifacts are not renamed. Previously submitted job `59359342`
+used `nb-ta-o-combined-bounded-59359342`; the descriptive example above
+illustrates the new convention, not a renamed historical run.
 
 The bounded DFT signature spells out the intended setup: `qe` (Quantum
 ESPRESSO), `pbe` (functional), `pslibrary` (pseudopotential family), `80-640`
@@ -241,6 +262,14 @@ Existing reference sets retain their supplied identifiers. Hull snapshot
 versions distinguish the evolving hull states; method signatures, structure
 hashes, and provenance provide additional compatibility and audit evidence.
 See [Competing-phase reference hulls](./reference-hulls.md).
+
+## Campaign benchmark comparisons
+
+Campaign benchmark comparisons must contain observations from a single
+pre-registered protocol digest. Both paired differences and statistical
+comparisons reject mixed digests, including incomplete or metric-missing
+observations. Compare each protocol separately rather than pooling effects
+across different candidate pools, budgets, models, or DFT methods.
 
 ## Phase exploration
 

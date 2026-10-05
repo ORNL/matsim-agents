@@ -140,7 +140,11 @@ def paired_metric_differences(
     control: BenchmarkArm,
     metric: str,
 ) -> list[float]:
-    """Return treatment-minus-control values matched by protocol and seed."""
+    """Return seed-paired effects within exactly one protocol."""
+    if len({item.protocol_digest for item in observations}) > 1:
+        raise ValueError(
+            "paired comparison requires a single protocol digest; compare each protocol separately"
+        )
     indexed: dict[tuple[str, int, BenchmarkArm], BenchmarkObservation] = {}
     for item in observations:
         key = (item.protocol_digest, item.random_seed, item.arm)

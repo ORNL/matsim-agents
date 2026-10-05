@@ -6,7 +6,6 @@ export PROJECT_ROOT="$REPO"
 source "$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
 configure_uma_model_artifacts "$REPO"
 export MATSIM_CAMPAIGN_MODE=dft
-export MATSIM_CAMPAIGN_RUN_TAG=nb-ta-o-combined-bounded
 export MATSIM_CAMPAIGN_AL_CONFIG="$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-qe-bounded.yaml"
 export MATSIM_CAMPAIGN_MAX_ITERATIONS=3 MATSIM_CAMPAIGN_MAX_CANDIDATES=3
 export MATSIM_CAMPAIGN_MAX_DFT=64 MATSIM_CAMPAIGN_MAX_AL_ITERATIONS=3
@@ -22,6 +21,9 @@ export MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE=qe-pbe-pslibrary-80-640-k4-o2-triple
 export MATSIM_CAMPAIGN_RANDOM_SEEDS=20 MATSIM_CAMPAIGN_UNARY_RANDOM=10
 export MATSIM_CAMPAIGN_REFERENCE_PROTOTYPES=1 MATSIM_CAMPAIGN_SURROGATE_HULL=1
 export MATSIM_CAMPAIGN_PERTURBATION_TRIALS=3
+source "$REPO/deployments/perlmutter/setup/campaign-naming.sh"
+unset MATSIM_CAMPAIGN_SOURCE_REVISION MATSIM_CAMPAIGN_SOURCE_DIRTY
+configure_campaign_run_name "$REPO" "$MATSIM_CAMPAIGN_MODE" qe
 cd "$REPO"
 sbatch -A m5216_g -q premium -N 16 -t 06:00:00 \
   --export=ALL --job-name=nb-ta-o-combined-bounded \

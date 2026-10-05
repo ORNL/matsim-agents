@@ -72,8 +72,11 @@ export PYTHONPATH="${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
 PROJ="$(dirname "$REPO")"
 MODELS_ROOT="${MODEL_ROOT:-$PROJ/models}"
 SERVER="$REPO/deployments/perlmutter/jobs/job-serve-multinode-perlmutter.sh"
-CAMPAIGN_RUN_TAG="${MATSIM_CAMPAIGN_RUN_TAG:-campaign-formula-e2e-all}"
-OUTPUT="${RUNS_ROOT:-$PROJ/runs}/portability/${CAMPAIGN_RUN_TAG}-${SLURM_JOB_ID}"
+source "$REPO/deployments/perlmutter/setup/campaign-naming.sh"
+configure_campaign_run_name "$REPO" "$CAMPAIGN_MODE" "${MATSIM_CAMPAIGN_REFERENCE_BACKEND:-qe}"
+CAMPAIGN_RUN_TAG="$MATSIM_CAMPAIGN_RUN_TAG"
+RUN_NAME="${CAMPAIGN_RUN_TAG}--j${SLURM_JOB_ID}"
+OUTPUT="${RUNS_ROOT:-$PROJ/runs}/portability/${RUN_NAME}"
 PYTHON="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}/bin/python3"
 AL_CONFIG="${MATSIM_CAMPAIGN_AL_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-qe.yaml}"
 MACE_MPA_CONFIG="${MATSIM_CAMPAIGN_MACE_MPA_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-mace-mpa-qe.yaml}"
@@ -120,6 +123,14 @@ if [[ "$CAMPAIGN_MODE" == "single-llm-once" ]]; then
 fi
 
 mkdir -p "$OUTPUT/servers"
+RUNTIME_REVISION="$(git -C "$REPO" rev-parse HEAD)"
+RUNTIME_STATUS="$(git -C "$REPO" status --porcelain)"
+RUNTIME_DIRTY=0
+[[ -z "$RUNTIME_STATUS" ]] || RUNTIME_DIRTY=1
+printf 'source_revision=%s\nsource_dirty=%s\nruntime_revision=%s\nruntime_dirty=%s\nrun_name=%s\n' \
+  "$MATSIM_CAMPAIGN_SOURCE_REVISION" \
+  "${MATSIM_CAMPAIGN_SOURCE_DIRTY:?source dirty status must accompany source revision}" \
+  "$RUNTIME_REVISION" "$RUNTIME_DIRTY" "$RUN_NAME" > "$OUTPUT/run_identity.txt"
 mapfile -t ALL_NODES < <(scontrol show hostnames "$SLURM_JOB_NODELIST")
 EXPECTED_NODES=16
 [[ "$CAMPAIGN_MODE" == "debate-only" ]] && EXPECTED_NODES=15

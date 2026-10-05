@@ -5,6 +5,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
 from ase.build import bulk
 from ase.io import write
 
@@ -226,3 +227,102 @@ def test_bounded_campaign_settings_cover_all_scientific_stages(monkeypatch) -> N
         "-N 16 -t 06:00:00",
     ):
         assert setting in script
+
+
+@pytest.mark.parametrize(
+    ("mode", "backend", "refine", "workflow"),
+    [
+        ("dft", "qe", "1", "7llm-uma-al-qe-hull"),
+        ("dft", "vasp", "1", "7llm-uma-al-vasp-hull"),
+        ("dft", "qe", "0", "7llm-uma-al-qe"),
+        ("uma-only", "qe", "0", "7llm-uma-screen"),
+        ("debate-only", "qe", "0", "7llm-debate"),
+        ("single-llm-once", "qe", "0", "1llm-debate"),
+    ],
+)
+def test_campaign_descriptive_run_naming(tmp_path, mode, backend, refine, workflow):
+    root = Path(__file__).resolve().parents[1]
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "test",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    sha = subprocess.check_output(
+        ["git", "-C", str(tmp_path), "rev-parse", "--short=7", "HEAD"], text=True
+    ).strip()
+    env = dict(os.environ)
+    for key in list(env):
+        if key.startswith("MATSIM_CAMPAIGN_") or key.startswith("GIT_"):
+            del env[key]
+    env["MATSIM_CAMPAIGN_DFT_REFINE"] = refine
+    env["MATSIM_CAMPAIGN_RUN_TAG"] = "obsolete-custom-tag"
+    command = (
+        'source "$1"; configure_campaign_run_name "$2" "$3" "$4"; '
+        'printf "%s--j12345|%s" "$MATSIM_CAMPAIGN_RUN_TAG" '
+        '"$MATSIM_CAMPAIGN_SOURCE_DIRTY"'
+    )
+    args = [
+        "bash",
+        "-eu",
+        "-c",
+        command,
+        "test",
+        str(root / "deployments/perlmutter/setup/campaign-naming.sh"),
+        str(tmp_path),
+        mode,
+        backend,
+    ]
+    assert subprocess.check_output(args, env=env, text=True) == (
+        f"nb-ta-o--{workflow}--{sha}--j12345|0"
+    )
+    (tmp_path / "untracked.txt").touch()
+    assert subprocess.check_output(args, env=env, text=True).endswith("--j12345|1")
+
+    env["MATSIM_CAMPAIGN_SOURCE_REVISION"] = subprocess.check_output(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"], text=True
+    ).strip()
+    env["MATSIM_CAMPAIGN_SOURCE_DIRTY"] = "0"
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "later",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    assert subprocess.check_output(args, env=env, text=True) == (
+        f"nb-ta-o--{workflow}--{sha}--j12345|0"
+    )
+
+
+def test_campaign_launcher_uses_new_names_without_legacy_branch():
+    root = Path(__file__).resolve().parents[1]
+    job = (
+        root / "deployments/perlmutter/jobs/job-campaign-formula-discovery-all-models-perlmutter.sh"
+    ).read_text()
+    assert 'RUN_NAME="${CAMPAIGN_RUN_TAG}--j${SLURM_JOB_ID}"' in job
+    assert "MATSIM_CAMPAIGN_RUN_NAMING" not in job
+    assert 'source "$REPO/deployments/perlmutter/setup/campaign-naming.sh"' in job
+    assert '>"$OUTPUT/run_identity.txt"' in job.replace(" > ", ">")
