@@ -150,6 +150,15 @@ unused vacuum cell. Reflections also share this distance identity; it is a
 conservative overlap guard, not a unique identifier for molecular chirality.
 Periodic structures retain their existing cell-metric/translated-site identity.
 
+The full-suite CI job installs CPU-only PyTorch pinned to the HydraGNN
+dependency contract. Pinned-head precision/autocast and uncertainty/dropout
+regressions are mandatory CPU tests, not skipped when PyTorch is missing.
+For local full-suite validation, install PyTorch before running
+`bash scripts/check.sh test` or `bash scripts/check.sh coverage`.
+Real VASP/QE warm-start tests still require their facility executables, model
+artifacts, and configured environment variables; CPU PyTorch alone does not
+enable those scientific runs.
+
 ## Combined MLIP training and independent DFT ranking
 
 A formula campaign can run both DFT tasks in a deliberate order:

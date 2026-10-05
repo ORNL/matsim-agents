@@ -3,6 +3,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -38,6 +40,27 @@ def test_ci_python_matrix_matches_supported_range() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert 'python-version: ["3.11", "3.12", "3.13", "3.14"]' in workflow
     assert '"3.10"' not in workflow
+
+
+def test_full_ci_installs_cpu_torch_before_regression_suite() -> None:
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    torch_pin = next(
+        dep
+        for dep in config["project"]["optional-dependencies"]["hydragnn"]
+        if dep.startswith("torch==")
+    )
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["full"]["steps"]
+    install_index = next(
+        index for index, step in enumerate(steps) if f'"{torch_pin}+cpu"' in step.get("run", "")
+    )
+    assert "--index-url https://download.pytorch.org/whl/cpu" in steps[install_index]["run"]
+    test_index = next(
+        index
+        for index, step in enumerate(steps)
+        if "bash scripts/check.sh coverage" in step.get("run", "")
+    )
+    assert install_index < test_index
 
 
 def test_mace_and_hydragnn_e3nn_contracts_are_explicitly_isolated() -> None:

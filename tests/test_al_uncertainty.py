@@ -218,7 +218,7 @@ def test_inject_inference_dropout_makes_mc_dropout_nonzero() -> None:
     """A model trained without dropout yields ZERO MC-Dropout variance until
     test-time dropout is injected; afterwards the variance is strictly positive.
     """
-    torch = pytest.importorskip("torch")
+    import torch
     import torch.nn as nn
 
     from matsim_agents.active_learning.uncertainty import (
@@ -278,7 +278,6 @@ def test_inject_inference_dropout_makes_mc_dropout_nonzero() -> None:
 
 
 def test_mc_dropout_resets_ase_calculator_between_passes() -> None:
-    pytest.importorskip("torch")
     import torch.nn as nn
     from ase.calculators.calculator import Calculator, all_changes
 
@@ -305,7 +304,6 @@ def test_mc_dropout_resets_ase_calculator_between_passes() -> None:
 
 
 def test_inject_inference_dropout_is_idempotent() -> None:
-    pytest.importorskip("torch")
     import torch.nn as nn
 
     from matsim_agents.active_learning.uncertainty import inject_inference_dropout
