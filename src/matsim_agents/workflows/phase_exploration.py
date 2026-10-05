@@ -56,13 +56,14 @@ def run_phase_exploration(
     policy: PhaseExplorationPolicy,
     output_dir: str,
     exploration_kwargs: dict[str, Any] | None = None,
-    active_learning_runner: Callable[[str, str, bool], dict[str, Any]] | None = None,
+    active_learning_runner: Callable[[str, str, bool, bool, bool], dict[str, Any]] | None = None,
 ) -> PhaseExplorationWorkflowResult:
     """Run exploration, optional AL, and optional post-promotion reevaluation.
 
-    The AL callback receives ``(composition, output_dir, retrain)`` and must
-    return a mapping containing ``model_promoted`` plus any provenance.  This
-    keeps the workflow independent of facility-specific launch mechanics.
+    The AL callback receives ``(composition, output_dir, retrain, promote_model,
+    promotion_approved)`` and must apply those controls before training or
+    promotion. It returns a mapping containing ``model_promoted`` plus any
+    provenance, keeping this workflow independent of facility-specific launch mechanics.
     """
 
     if policy.active_learning and policy.approvals.before_dft and not policy.dft_approved:
@@ -110,7 +111,13 @@ def run_phase_exploration(
     if policy.active_learning:
         if active_learning_runner is None:
             raise ValueError("active_learning=True requires active_learning_runner")
-        al_result = active_learning_runner(composition, output_dir, policy.retrain_mlip)
+        al_result = active_learning_runner(
+            composition,
+            output_dir,
+            policy.retrain_mlip,
+            policy.promote_model,
+            policy.promotion_approved,
+        )
         promoted = bool(al_result.get("model_promoted", False))
         if promoted and not policy.promote_model:
             raise RuntimeError("active learning promoted a model without promotion being requested")

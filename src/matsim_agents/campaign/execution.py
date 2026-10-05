@@ -901,6 +901,13 @@ def _generate_reference_energies(
         from pymatgen.core import Composition as PymatgenComposition
 
         atoms = read(relaxed.optimized_structure_path)
+        cell_composition = PymatgenComposition(atoms.get_chemical_formula())
+        declared_composition = PymatgenComposition(spec.formula)
+        if cell_composition.reduced_composition != declared_composition.reduced_composition:
+            raise ValueError(
+                f"relaxed reference composition {cell_composition.formula} does not match "
+                f"declared formula {spec.formula}"
+            )
         energy_per_atom = relaxed.final_energy_eV / len(atoms)
         if len(composition.elements) == 1:
             element = next(iter(composition.elements))
@@ -925,13 +932,6 @@ def _generate_reference_energies(
                 references.elemental_energies_eV_per_atom[element] = corrected_energy
                 references.elemental_entries[element] = entry
             continue
-        cell_composition = PymatgenComposition(atoms.get_chemical_formula())
-        declared_composition = PymatgenComposition(spec.formula)
-        if cell_composition.reduced_composition != declared_composition.reduced_composition:
-            raise ValueError(
-                f"relaxed reference composition {cell_composition.formula} does not match "
-                f"declared formula {spec.formula}"
-            )
         cell_amounts = cell_composition.get_el_amt_dict()
         missing = set(cell_amounts) - set(references.elemental_energies_eV_per_atom)
         if missing:
@@ -1111,11 +1111,18 @@ def run_formula_with_active_learning(
         composition: str,
         phase_output_dir: str,
         retrain: bool,
+        promote_model: bool,
+        promotion_approved: bool,
     ) -> dict[str, Any]:
         if composition != formula:
             raise ValueError(f"phase runner requested {composition!r}, expected {formula!r}")
         if retrain != al_cfg.trainer.enabled:
             raise ValueError("phase retraining policy and AL trainer configuration disagree")
+        if (
+            promote_model != al_cfg.trainer.promote_model
+            or promotion_approved != al_cfg.trainer.promotion_approved
+        ):
+            raise ValueError("phase promotion policy and AL trainer configuration disagree")
         _set_campaign_stage(
             stage_manifest_path,
             formula,

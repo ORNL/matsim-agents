@@ -222,10 +222,18 @@ at runtime unless `continue_on_promotion_rejection: true` explicitly retains
 incumbent results without reevaluation. Compute budgets may cap candidates, MLIP
 relaxations, DFT calculations, AL iterations, and node-hours.
 
+The AL callback receives `(composition, output_dir, retrain, promote_model,
+promotion_approved)`. It must honor the promotion request and approval before
+any model-changing side effects; the campaign adapter rejects mismatched controls
+before invoking AL. A post-call guard additionally rejects unauthorized promotion
+reported by the callback.
+
 `relative_phase_ranking` compares converged candidates within one exploration.
 It is not a convex-hull claim. `convex_hull_ranking` additionally requires
 method-compatible elemental and competing-phase references. Residual forces
 filter unconverged structures; they are not added to formation energies.
+Relaxed DFT references, including unary endpoints, must match the declared
+reduced composition before their energies enter the hull.
 
 ## Agentic investigation
 

@@ -185,6 +185,40 @@ def test_phase_model_promotion_requires_approval(tmp_path, monkeypatch):
     assert called is False
 
 
+@pytest.mark.parametrize("controls", [(False, False), (False, True), (True, True)])
+def test_phase_passes_promotion_controls_before_al(tmp_path, monkeypatch, controls):
+    parsed = parse_composition("Si")
+    assert parsed is not None
+    monkeypatch.setattr(
+        "matsim_agents.workflows.phase_exploration.explore_composition",
+        lambda *args, **kwargs: CompositionExplorationResult(
+            composition=parsed, phase_candidates=[]
+        ),
+    )
+    promote_model, promotion_approved = controls
+    calls = []
+
+    def active_learning_runner(composition, output_dir, retrain, promote, approved):
+        calls.append((composition, output_dir, retrain, promote, approved))
+        return {"model_promoted": False}
+
+    result = run_phase_exploration(
+        "Si",
+        policy=PhaseExplorationPolicy(
+            active_learning=True,
+            retrain_mlip=True,
+            promote_model=promote_model,
+            promotion_approved=promotion_approved,
+            dft_approved=True,
+            retraining_approved=True,
+        ),
+        output_dir=str(tmp_path),
+        active_learning_runner=active_learning_runner,
+    )
+    assert calls == [("Si", str(tmp_path), True, *controls)]
+    assert not result.model_promoted
+
+
 def test_seed_only_phase_is_not_a_usable_minimum(tmp_path, monkeypatch):
     parsed = parse_composition("Si")
     assert parsed is not None

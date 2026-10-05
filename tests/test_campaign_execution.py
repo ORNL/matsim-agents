@@ -10,6 +10,7 @@ from ase import Atoms
 from ase.io import write
 
 from matsim_agents.active_learning.config import (
+    ALConfig,
     HydraGNNConfig,
     MACEConfig,
     MLIPConfig,
@@ -22,6 +23,7 @@ from matsim_agents.campaign.execution import (
     ReferenceStructureSpec,
     _cross_model_scores,
     _exploration_kwargs,
+    _generate_reference_energies,
     _iteration_states,
     _model_identifier,
     _perturbation_robustness,
@@ -932,7 +934,9 @@ def test_formula_execution_rewrites_al_template_and_reports_usage(tmp_path):
         assert policy.active_learning
         assert exploration_kwargs["mlip_backend"] == "uma"
         assert exploration_kwargs["uma_model_name"] == "uma-s-1p1"
-        al_result = active_learning_runner(formula, output_dir, False)
+        al_result = active_learning_runner(
+            formula, output_dir, False, policy.promote_model, policy.promotion_approved
+        )
         return _empty_result(formula, al_result)
 
     result = run_formula_with_active_learning(
@@ -997,7 +1001,11 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
         active_learning_result = {"n_dft_calculations": 1, "node_hours": 0.0}
         if policy.active_learning:
             active_learning_result = kwargs["active_learning_runner"](
-                formula, kwargs["output_dir"], policy.retrain_mlip
+                formula,
+                kwargs["output_dir"],
+                policy.retrain_mlip,
+                policy.promote_model,
+                policy.promotion_approved,
             )
         initial = CompositionExplorationResult(
             composition=composition,
@@ -1226,6 +1234,80 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
     assert len(observed_settings) == 6
 
 
+@pytest.mark.parametrize(
+    ("declared_formula", "relaxed_symbols", "matches"),
+    [
+        ("Nb", "Ta", False),
+        ("Nb", "NbO", False),
+        ("Nb", "Nb2", True),
+        ("O2", "O4", True),
+        ("NbO2", "NbO", False),
+    ],
+)
+def test_dft_reference_composition_checked_before_hull_admission(
+    tmp_path, declared_formula, relaxed_symbols, matches
+):
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"))
+    path = tmp_path / "reference.extxyz"
+    atoms = Atoms(relaxed_symbols)
+    write(path, atoms)
+    references = ReferenceEnergySet(
+        identifier="test",
+        method_signature="qe-test",
+        backend="qe",
+        elemental_energies_eV_per_atom={},
+    )
+    refinement = CampaignDFTRefinementConfig(
+        method_signature="qe-test",
+        reference_energies=references,
+        reference_phases=[
+            ReferenceStructureSpec(
+                phase_id="test-phase", formula=declared_formula, structure_path=path
+            )
+        ],
+    )
+
+    def relax(_cfg):
+        return ScientificRelaxationResult(
+            run_id="test",
+            run_directory=str(tmp_path),
+            mode=RelaxationMode.DFT,
+            status=WorkflowStatus.COMPLETE,
+            stages=[
+                RelaxationStageResult(
+                    stage="dft_relaxation",
+                    backend="qe",
+                    evidence_level=EvidenceLevel.CONVERGED_DFT,
+                    input_structure_path=str(path),
+                    optimized_structure_path=str(path),
+                    energy_eV=-2.0 * len(atoms),
+                    max_force_eV_per_A=0.001,
+                    converged=True,
+                )
+            ],
+        )
+
+    def generate():
+        return _generate_reference_energies(
+            ALConfig.from_yaml(config_path), refinement, tmp_path / "dft", relax
+        )
+
+    if matches:
+        result, calculations, _ = generate()
+        element = atoms.get_chemical_symbols()[0]
+        assert result.elemental_energies_eV_per_atom == {element: -2.0}
+        assert result.elemental_entries[element].reference_formula == declared_formula
+        assert calculations == 1
+    else:
+        with pytest.raises(ValueError, match="does not match declared formula"):
+            generate()
+        assert references.elemental_energies_eV_per_atom == {}
+        assert references.elemental_entries == {}
+        assert references.elemental_reference_candidates == []
+        assert references.phase_entries == []
+
+
 def test_formula_execution_rejects_missing_pseudopotential_mapping(tmp_path):
     config_path = tmp_path / "al.yaml"
     config_path.write_text(
@@ -1438,7 +1520,9 @@ def test_formula_execution_applies_retraining_and_promotion(
         exploration_kwargs,
         active_learning_runner,
     ):
-        al_result = active_learning_runner(formula, output_dir, True)
+        al_result = active_learning_runner(
+            formula, output_dir, True, policy.promote_model, policy.promotion_approved
+        )
         return _empty_result(formula, al_result)
 
     def capture_cross_model(_exploration, configs, **_kwargs):
@@ -1558,7 +1642,9 @@ def test_mace_promotion_uses_checkpoint_for_post_retraining_exploration(tmp_path
     def phase_runner(formula, *, policy, output_dir, exploration_kwargs, active_learning_runner):
         assert policy.promote_model is True
         assert policy.promotion_approved is True
-        result = active_learning_runner(formula, output_dir, True)
+        result = active_learning_runner(
+            formula, output_dir, True, policy.promote_model, policy.promotion_approved
+        )
         observed.update(result["exploration_kwargs"])
         return _empty_result(formula, result)
 
@@ -1600,6 +1686,44 @@ def test_retraining_rejects_unapproved_promotion(tmp_path):
     train_script.touch()
     with pytest.raises(ValueError, match="promotion requires explicit approval"):
         CampaignRetrainingConfig(train_script=train_script, promote_model=True)
+
+
+@pytest.mark.parametrize("controls", [(False, True), (True, False)])
+def test_campaign_callback_rejects_promotion_control_mismatch_before_al(tmp_path, controls):
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"))
+    train_script = tmp_path / "train.py"
+    train_script.touch()
+    calls = []
+
+    def phase_runner(formula, *, output_dir, active_learning_runner, **_kwargs):
+        return active_learning_runner(formula, output_dir, True, *controls)
+
+    with pytest.raises(ValueError, match="phase promotion policy"):
+        run_formula_with_active_learning(
+            "NbO2",
+            str(tmp_path / "formula"),
+            config=CampaignFormulaExecutionConfig(
+                active_learning_config=config_path,
+                phase_policy=PhaseExplorationPolicy(
+                    active_learning=True,
+                    retrain_mlip=True,
+                    promote_model=True,
+                    dft_approved=True,
+                    retraining_approved=True,
+                    promotion_approved=True,
+                ),
+                retraining=CampaignRetrainingConfig(
+                    train_script=train_script,
+                    promote_model=True,
+                    promotion_approved=True,
+                    validation_fraction=0.2,
+                ),
+            ),
+            al_runner=lambda cfg: calls.append(cfg),
+            phase_runner=phase_runner,
+        )
+    assert calls == []
 
 
 def test_retraining_requires_held_out_promotion_data(tmp_path):
