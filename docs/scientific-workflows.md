@@ -322,6 +322,49 @@ See [Competing-phase reference hulls](./reference-hulls.md).
 
 ## Formation-energy comparisons and campaign promotion
 
+### HydraGNN training references: planned change, not yet implemented
+
+The current routed and new-head HydraGNN fine-tuners fit composition-linear
+offsets from mixture training data. Those offsets are not physical elemental
+reference energies; a single-formula dataset cannot uniquely identify the
+individual elemental coefficients. The existing evaluation reference manifest
+does not yet supply formation-energy targets to these trainers.
+
+The agreed replacement workflow will:
+
+- Require an approved list of pure-element reference phases covering all
+  training species, independently of comparison or promotion being enabled.
+- Reuse verified compatible DFT calculations or, with DFT approval, calculate
+  missing references before training. References must declare their structures,
+  magnetic states, DFT method, and any corrections. Molecular references such
+  as triplet O2 must be explicitly declared rather than treated as bulk crystals.
+- Select the lowest DFT energy per atom among the declared compatible phases
+  for each element under a zero-pressure energy protocol. This is the lowest
+  among tested phases, not a claim of a global ground-state search. Other
+  pressure or temperature conditions need an explicit corresponding protocol.
+- Preserve raw DFT totals and derive total-cell formation-energy labels as
+  `E_formation = E_DFT - sum(N_element * e_element_reference)`. Forces remain
+  unchanged. Actual cell atom counts must be used, including supercells.
+- Apply one reference set to all polymorphs and compatible formulas; do not
+  independently zero each polymorph. Keep elemental reference selection fixed
+  within a training snapshot and record its provenance.
+- Remove mixture-fitted offsets from both HydraGNN trainers and record the new
+  declared DFT formation-energy convention in each fine-tuned checkpoint.
+  Adapting to this convention does not assert that the pretrained head used it.
+- Make checkpoint reload, materials ranking, evaluation, and hull analysis
+  honor that convention. Reconstruct DFT-reference total energies only where
+  needed, and prevent a second elemental subtraction from formation outputs.
+
+This change is HydraGNN-specific: UMA and MACE energy conventions must be
+verified separately rather than transformed automatically. Per-formula
+cumulative collection and permanent train/held-out membership remain unchanged.
+Validation must cover multiple polymorphs, cell multiplicity, reference reuse,
+missing or incompatible references, approval gates, unchanged forces, and
+checkpoint reload without double referencing. No runtime implementation or
+real-model qualification of this planned workflow is claimed here.
+
+### Current promotion and evaluation behavior
+
 Promotion requires both held-out formation-energy MAE (eV/atom) and
 force-component MAE (eV/Å) to meet their absolute limits and not worsen relative
 to the incumbent, apart from an absolute `1e-12` numerical tolerance in each
