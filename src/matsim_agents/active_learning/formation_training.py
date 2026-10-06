@@ -151,7 +151,11 @@ def prepare_formation_training_dataset(
             "energy_eV": energy,
         }
     (output / "elemental-references.json").write_text(
-        json.dumps({**manifest, "references": snapshot_references}, indent=2, allow_nan=False)
+        json.dumps(
+            {**json.loads(reference_bytes), **manifest, "references": snapshot_references},
+            indent=2,
+            allow_nan=False,
+        )
         + "\n"
     )
     return target

@@ -352,8 +352,92 @@ and already-transformed input are rejected.
 This command does not launch DFT, select elemental phases, or train a model.
 Do not feed its output to the current HydraGNN trainers yet: they still fit
 mixture offsets and would apply a second transformation. Automatic approved
-reference calculation/selection, trainer wiring, and inference conventions
-remain pending.
+reference calculation/selection is now available as a separate prerequisite
+below. Trainer wiring and inference conventions remain pending.
+
+#### Approved elemental DFT prerequisite
+
+`matsim_agents.active_learning.elemental_dft` calculates or reuses fixed-geometry
+single-points for an approved phase list. The caller supplies already prepared
+reference geometries: this stage does **not** relax them, find magnetic ground
+states, apply fitted corrections, or prove an elemental ground state. It selects
+the lowest DFT energy per atom among the declared geometries at zero pressure.
+Use a separate workflow to establish converged reference structures first.
+
+The phase-plan YAML has this schema (paths are relative to the plan file):
+
+```yaml
+protocol: fixed_geometry_zero_pressure
+phases:
+  - phase_id: nb-bcc
+    element: Nb
+    structure_path: references/Nb-bcc.extxyz
+    kind: bulk
+    magnetic_state: nonmagnetic
+  - phase_id: ta-bcc
+    element: Ta
+    structure_path: references/Ta-bcc.extxyz
+    kind: bulk
+    magnetic_state: nonmagnetic
+  - phase_id: oxygen-triplet
+    element: O
+    structure_path: references/O2-vacuum.extxyz
+    kind: molecule
+    magnetic_state: triplet
+    qe_magnetic_settings:
+      nspin: 2
+      tot_magnetization: 2
+    kpts: [1, 1, 1]
+```
+
+The example is a declaration format, not supplied physical reference data or a
+convergence recipe. Molecular cells need adequate vacuum. For VASP, replace
+QE overrides with `vasp_magnetic_settings: {ISPIN: "2", NUPDOWN: "2"}` and
+declare k-point settings in the shared VASP configuration instead of phase
+`kpts`. Magnetic-state text documents intent; the actual DFT spin controls must
+be supplied explicitly in the shared configuration or allowed phase overrides.
+Wrong-backend overrides are errors.
+
+Supply a standalone YAML `DFTConfig` block (the contents of AL `dft`, not a
+whole AL configuration), with absolute executable, wrapper, pseudopotential,
+and template paths. Generated QE inputs must explicitly pin both cutoffs,
+k-points, and occupations to avoid composition-dependent automatic defaults.
+QE templates cannot be combined with magnetic overrides because those overrides
+would be ignored. Phase overrides are restricted to declared spin controls and
+QE reference k-point sampling; they cannot change the functional or potentials.
+The common compound method signature and each reference's actual method
+signature are both recorded, including the explicit state/sampling exceptions.
+
+```bash
+python -m matsim_agents.active_learning.elemental_dft \
+  --phase-plan /path/to/approved-phases.yaml \
+  --dft-config /path/to/dft-block.yaml \
+  --elements Nb Ta O \
+  --cache-dir /path/to/shared-reference-cache \
+  --output-dir /path/to/new-reference-snapshot \
+  --approve-reference-phases --approve-dft \
+  --max-dft-calculations 3
+```
+
+Run on allocated compute resources with the backend's wrapper/environment,
+not a login node. Phase-list approval is always required. Without
+`--approve-dft`, all phases must already have valid compatible cached results.
+The calculation cap counts missing unique calculations and fails before
+launching if the full requested reference set exceeds it. Cache identities
+include geometry, method/executable/potential/template hashes, and declared
+phase controls; per-entry file locks serialize shared-cache calculations.
+Malformed cache entries fail explicitly rather than silently recalculating.
+Only converged, finite, successful single-points are cached; failures expose
+their work directories. This stage's DFT calls are currently separate from AL
+label budgets and must be budgeted with its own cap.
+
+The output directory must be new. Its `elemental-references.json` is compatible
+with the formation-label preparation command and includes all tested phases,
+selected phases, calculation locations, actual reference method signatures,
+and geometry hashes. Selected geometries are copied into the snapshot.
+Formation-label snapshots retain this selection audit. Cache reuse does not
+change an already-created reference/training snapshot or choose new endpoints
+silently. QE and VASP caches remain method-separated.
 
 The agreed replacement workflow will:
 
@@ -385,9 +469,10 @@ verified separately rather than transformed automatically. Per-formula
 cumulative collection and permanent train/held-out membership remain unchanged.
 Validation must cover multiple polymorphs, cell multiplicity, reference reuse,
 missing or incompatible references, approval gates, unchanged forces, and
-checkpoint reload without double referencing. Only the preparation layer is
-implemented at present; no end-to-end training or real-model qualification of
-this workflow is claimed here.
+checkpoint reload without double referencing. Only the preparation layer
+and the approved fixed-geometry reference prerequisite are implemented at
+present; no end-to-end training or real-model qualification of this workflow is
+claimed here.
 
 ### Current promotion and evaluation behavior
 
