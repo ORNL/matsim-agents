@@ -744,8 +744,10 @@ def test_fraction_holdout_real_evaluation_and_resume(
             assert state["model_comparison"] is None
             assert not state["model_promoted"]
         else:
-            assert state["model_comparison"]["approved"]
-            assert state["model_promoted"] is promote
+            assert not state["model_comparison"]["approved"]
+            assert any("must improve" in reason for reason in state["model_comparison"]["reasons"])
+            assert not state["model_promoted"]
+            assert state["new_logdir"] is None
         validation_path = cfg.loop.out_dir / "validation.extxyz"
         validate_dataset_reference_method(
             validation_path,

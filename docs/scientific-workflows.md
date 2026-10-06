@@ -226,7 +226,7 @@ The Perlmutter campaign supports either an external held-out file
 (`MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET`) or a fresh-label holdout
 (`MATSIM_CAMPAIGN_PROMOTION_VALIDATION_FRACTION=0.2`), not both. The latter
 reserves 20% of each AL label batch before training; promotion still requires
-explicit approval and passing the configured energy, force, regression, and
+explicit approval and passing the configured energy, force, improvement, and
 minimum-frame thresholds. Final DFT ranking calculations are never used for
 this split.
 By default, a requested post-promotion reevaluation stops the formula if no model
@@ -321,6 +321,38 @@ hashes, and provenance provide additional compatibility and audit evidence.
 See [Competing-phase reference hulls](./reference-hulls.md).
 
 ## Formation-energy comparisons and campaign promotion
+
+Promotion requires both held-out formation-energy MAE (eV/atom) and
+force-component MAE (eV/Å) to meet their absolute limits and not worsen relative
+to the incumbent, apart from an absolute `1e-12` numerical tolerance in each
+metric's units. At least one must also improve by
+`promotion_min_relative_improvement` (default `0.05`, meaning a 5% relative
+MAE reduction). Improvement in one metric cannot compensate for regression
+in the other. Equal performance, two worse metrics, or improvements below the
+configured threshold retain the incumbent, with explicit rejection reasons.
+Finite, nonnegative MAEs and the existing minimum evaluated-frame counts are
+still required.
+
+Configure the threshold in AL `trainer` or campaign `retraining` YAML:
+
+```yaml
+promotion_min_relative_improvement: 0.05
+```
+
+The Perlmutter CLI exposes `--promotion-min-relative-improvement`; the campaign
+launcher uses `MATSIM_CAMPAIGN_PROMOTION_MIN_RELATIVE_IMPROVEMENT` (default
+`0.05`). Values must be finite and between zero and one. Zero still requires a
+strict reduction larger than the numerical tolerance. An exact-zero incumbent
+MAE cannot improve, but the other metric may qualify. This threshold is a policy
+choice, not statistical significance or broad scientific qualification.
+
+Migration: `promotion_max_relative_regression` now defaults to zero and accepts
+only zero. Explicit positive legacy values fail configuration rather than
+silently allowing degraded candidates. Likewise,
+`--promotion-max-relative-regression` and
+`MATSIM_CAMPAIGN_PROMOTION_MAX_RELATIVE_REGRESSION` accept only zero.
+Training, cumulative collection, and permanent held-out partitions are unchanged;
+rejected candidates do not replace the incumbent.
 
 Scientific MLIP-versus-DFT energy comparisons use formation energies, not
 raw energy zeros or offsets fitted to training/test compounds. Every energy
