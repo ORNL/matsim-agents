@@ -322,13 +322,38 @@ See [Competing-phase reference hulls](./reference-hulls.md).
 
 ## Formation-energy comparisons and campaign promotion
 
-### HydraGNN training references: planned change, not yet implemented
+### HydraGNN training references: implementation in progress
 
 The current routed and new-head HydraGNN fine-tuners fit composition-linear
 offsets from mixture training data. Those offsets are not physical elemental
 reference energies; a single-formula dataset cannot uniquely identify the
 individual elemental coefficients. The existing evaluation reference manifest
 does not yet supply formation-energy targets to these trainers.
+
+The shared formation-label preparation layer is implemented. Given a verified
+native-total-energy dataset sidecar and compatible elemental DFT manifest, run:
+
+```bash
+python -m matsim_agents.active_learning.formation_training \
+  --dataset /path/to/raw-dft.extxyz \
+  --elemental-reference-manifest /path/to/elemental-references.json \
+  --output-dir /path/to/new-formation-snapshot
+```
+
+The output directory must not already exist. It contains `formation.extxyz`,
+a method/hash/split-role sidecar, `energy-convention.json`, and a self-contained
+copy of the elemental-reference geometries and manifest. Energy labels are
+total-cell formation energies; forces, available stress, and geometries are
+preserved. Each frame also records its original DFT total and elemental baseline
+so total energy can be reconstructed. Raw input data and partition membership
+are unchanged. Missing references/forces, incompatible methods, invalid labels,
+and already-transformed input are rejected.
+
+This command does not launch DFT, select elemental phases, or train a model.
+Do not feed its output to the current HydraGNN trainers yet: they still fit
+mixture offsets and would apply a second transformation. Automatic approved
+reference calculation/selection, trainer wiring, and inference conventions
+remain pending.
 
 The agreed replacement workflow will:
 
@@ -360,8 +385,9 @@ verified separately rather than transformed automatically. Per-formula
 cumulative collection and permanent train/held-out membership remain unchanged.
 Validation must cover multiple polymorphs, cell multiplicity, reference reuse,
 missing or incompatible references, approval gates, unchanged forces, and
-checkpoint reload without double referencing. No runtime implementation or
-real-model qualification of this planned workflow is claimed here.
+checkpoint reload without double referencing. Only the preparation layer is
+implemented at present; no end-to-end training or real-model qualification of
+this workflow is claimed here.
 
 ### Current promotion and evaluation behavior
 
