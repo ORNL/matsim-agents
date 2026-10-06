@@ -586,7 +586,22 @@ class TrainerConfig(BaseModel):
         0.1, gt=0, description="Maximum held-out formation-energy MAE for promotion."
     )
     promotion_max_force_mae_eV_per_A: float = Field(0.2, gt=0)
-    promotion_max_relative_regression: float = Field(0.05, ge=0)
+    promotion_max_relative_regression: float = Field(
+        0.0,
+        ge=0,
+        le=0,
+        description="Compatibility field; must be zero. Promotion forbids MAE regression.",
+    )
+    promotion_min_relative_improvement: float = Field(
+        0.05,
+        ge=0,
+        le=1,
+        description=(
+            "Minimum relative MAE reduction in formation energy or forces for promotion; "
+            "neither metric may regress. Zero still requires improvement beyond "
+            "numerical tolerance."
+        ),
+    )
     promotion_min_evaluated_frames: int = Field(1, ge=1)
     train_script: Path | None = Field(
         None,

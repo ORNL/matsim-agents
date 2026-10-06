@@ -61,7 +61,7 @@ def _trainer(tmp_path: Path) -> TrainerConfig:
         validation_set=validation_set,
         promotion_max_energy_mae_eV_per_atom=0.1,
         promotion_max_force_mae_eV_per_A=0.2,
-        promotion_max_relative_regression=0.05,
+        promotion_max_relative_regression=0.0,
         promotion_min_evaluated_frames=5,
     )
 
@@ -121,6 +121,101 @@ def test_promotion_gate_rejects_inaccurate_or_regressing_candidate(tmp_path: Pat
     assert decision.approved is False
     assert any("exceeds limit" in reason for reason in decision.reasons)
     assert any("incumbent regression limit" in reason for reason in decision.reasons)
+
+
+@pytest.mark.parametrize(
+    "energy,force,approved",
+    [
+        (0.052, 0.104, False),
+        (0.05, 0.1, False),
+        (0.049, 0.098, False),
+        (0.0475, 0.1, True),
+        (0.05, 0.095, True),
+        (0.04, 0.1001, False),
+        (0.0501, 0.08, False),
+    ],
+)
+def test_promotion_requires_five_percent_improvement_without_tradeoffs(
+    tmp_path, energy, force, approved
+):
+    decision = assess_promotion(
+        _metrics(energy_mae=energy, force_mae=force, model_path="candidate"),
+        _metrics(energy_mae=0.05, force_mae=0.1, model_path="incumbent"),
+        _trainer(tmp_path),
+    )
+    assert decision.approved is approved
+    if energy >= 0.049 and force >= 0.098:
+        assert any("must improve" in reason for reason in decision.reasons)
+
+
+@pytest.mark.parametrize("threshold,approved", [(0.01, True), (0.03, False), (0.0, True)])
+def test_promotion_improvement_threshold_is_configurable(tmp_path, threshold, approved):
+    trainer = _trainer(tmp_path)
+    trainer.promotion_min_relative_improvement = threshold
+    decision = assess_promotion(
+        _metrics(energy_mae=0.049, force_mae=0.1, model_path="candidate"),
+        _metrics(energy_mae=0.05, force_mae=0.1, model_path="incumbent"),
+        trainer,
+    )
+    assert decision.approved is approved
+
+
+@pytest.mark.parametrize("energy,force", [(0.0, 0.0), (0.05, 0.1), (0.05 - 5e-13, 0.1)])
+def test_zero_threshold_still_requires_improvement_beyond_noise(tmp_path, energy, force):
+    trainer = _trainer(tmp_path)
+    trainer.promotion_min_relative_improvement = 0.0
+    incumbent_energy, incumbent_force = (0.0, 0.0) if energy == 0 else (0.05, 0.1)
+    decision = assess_promotion(
+        _metrics(energy_mae=energy, force_mae=force, model_path="candidate"),
+        _metrics(energy_mae=incumbent_energy, force_mae=incumbent_force, model_path="incumbent"),
+        trainer,
+    )
+    assert not decision.approved
+
+
+def test_perfect_energy_can_retain_zero_while_forces_improve(tmp_path):
+    decision = assess_promotion(
+        _metrics(energy_mae=0.0, force_mae=0.095, model_path="candidate"),
+        _metrics(energy_mae=0.0, force_mae=0.1, model_path="incumbent"),
+        _trainer(tmp_path),
+    )
+    assert decision.approved
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -0.01])
+@pytest.mark.parametrize("role", ["candidate", "incumbent"])
+def test_invalid_mae_prevents_promotion(tmp_path, value, role):
+    metrics = {
+        "candidate": _metrics(energy_mae=0.04, force_mae=0.08, model_path="candidate"),
+        "incumbent": _metrics(energy_mae=0.05, force_mae=0.1, model_path="incumbent"),
+    }
+    metrics[role].formation_energy_mae_eV_per_atom = value
+    decision = assess_promotion(metrics["candidate"], metrics["incumbent"], _trainer(tmp_path))
+    assert not decision.approved
+    assert any(f"{role} formation_energy" in reason for reason in decision.reasons)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("promotion_min_relative_improvement", -0.01),
+        ("promotion_min_relative_improvement", 1.01),
+        ("promotion_min_relative_improvement", float("nan")),
+        ("promotion_min_relative_improvement", float("inf")),
+        ("promotion_max_relative_regression", 0.05),
+    ],
+)
+@pytest.mark.parametrize("config_kind", ["trainer", "campaign"])
+def test_promotion_policy_rejects_invalid_thresholds(tmp_path, field, value, config_kind):
+    from pydantic import ValidationError
+
+    from matsim_agents.campaign.execution import CampaignRetrainingConfig
+
+    config_type = TrainerConfig if config_kind == "trainer" else CampaignRetrainingConfig
+    script = tmp_path / "train.py"
+    script.touch()
+    with pytest.raises(ValidationError):
+        config_type(train_script=script, **{field: value})
 
 
 @pytest.mark.parametrize("label", ["energy", "force"])
