@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+from ase import Atoms
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
 
@@ -171,6 +172,40 @@ def main() -> None:
         args.dataset, args.elemental_reference_manifest, args.output_dir
     )
     print(target)
+
+
+def prepare_hydragnn_training_frames(
+    dataset_path: str | Path,
+    output_dir: Path,
+    elemental_reference_manifest: str | Path | None,
+) -> list[Atoms]:
+    """Validate references and prepare physical targets before model construction."""
+    if elemental_reference_manifest is None:
+        raise ValueError("HydraGNN fine-tuning requires an elemental_reference_manifest")
+    target = prepare_formation_training_dataset(
+        dataset_path, elemental_reference_manifest, output_dir / "training-reference"
+    )
+    return list(read(target, index=":"))
+
+
+def save_hydragnn_energy_convention(
+    output_dir: Path, checkpoint: Path, *, inference_metadata: dict | None = None
+) -> None:
+    """Bind the training convention to the exact inference artifact."""
+    source = output_dir / "training-reference" / "energy-convention.json"
+    metadata = json.loads(source.read_text())
+    metadata["checkpoint"] = checkpoint.name
+    metadata["checkpoint_sha256"] = sha256_file(checkpoint)
+    metadata["inference_artifact_sha256"] = {
+        name: sha256_file(output_dir / name)
+        for name in ("config.json", "newhead.json", "routing.json")
+        if (output_dir / name).exists()
+    }
+    if inference_metadata is not None:
+        metadata.update(inference_metadata)
+    (output_dir / "energy-convention.json").write_text(
+        json.dumps(metadata, indent=2, allow_nan=False) + "\n"
+    )
 
 
 if __name__ == "__main__":

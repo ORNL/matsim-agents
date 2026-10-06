@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from copy import deepcopy
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -96,7 +97,12 @@ class RelaxStructureInput(BaseModel):
         if self.mlip_backend == "hydragnn":
             if not self.logdir:
                 raise ValueError("mlip_backend='hydragnn' requires logdir.")
-            if not self.hydragnn_branch_mlp_checkpoint and self.hydragnn_inference_head is None:
+            has_declared_checkpoint = (Path(self.logdir) / "energy-convention.json").is_file()
+            if (
+                not self.hydragnn_branch_mlp_checkpoint
+                and self.hydragnn_inference_head is None
+                and not has_declared_checkpoint
+            ):
                 raise ValueError("mlip_backend='hydragnn' requires hydragnn_branch_mlp_checkpoint.")
         return self
 
@@ -345,7 +351,8 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
     )
 
     if args.mlip_backend == "hydragnn":
-        if args.hydragnn_inference_head is not None:
+        declared_checkpoint = Path(args.logdir) / "energy-convention.json"
+        if args.hydragnn_inference_head is not None or declared_checkpoint.exists():
             from matsim_agents.active_learning.calculator import build_hydragnn_calculator
             from matsim_agents.active_learning.config import HydraGNNConfig
 
@@ -361,11 +368,15 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                     spin=args.spin,
                 )
             )
-            num_branches = 1
+            num_branches = (
+                1
+                if args.hydragnn_inference_head is not None
+                else int(getattr(calculator.model, "num_branches", 1))
+            )
             uq_note = (
-                "HydraGNN inference pinned to "
-                f"{calculator.inference_head_name} head ({calculator.inference_head_index}); "
-                "branch-weight UQ disabled"
+                "HydraGNN single-head inference; branch-weight UQ disabled"
+                if num_branches == 1
+                else None
             )
         else:
             from inference_fused import load_fused_stack

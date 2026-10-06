@@ -7,11 +7,12 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from ase import Atoms
+from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
 from pydantic import ValidationError
 
 from matsim_agents.active_learning import elemental_dft
-from matsim_agents.active_learning.config import DFTConfig
+from matsim_agents.active_learning.config import DFTConfig, TrainerConfig
 from matsim_agents.active_learning.dft_backend import DFTResult
 from matsim_agents.active_learning.dft_protocol import dft_method_signature
 from matsim_agents.active_learning.elemental_dft import (
@@ -20,6 +21,7 @@ from matsim_agents.active_learning.elemental_dft import (
     prepare_elemental_references,
 )
 from matsim_agents.active_learning.formation_training import prepare_formation_training_dataset
+from matsim_agents.active_learning.hydragnn_references import resolve_training_references
 
 
 @pytest.fixture
@@ -113,6 +115,83 @@ def _prepare(setup, name="snapshot", **kwargs):
         phases_approved=True,
         **kwargs,
     )
+
+
+@pytest.mark.parametrize("changed", [None, "plan", "geometry", "method"])
+def test_al_automatic_training_references_are_approved_bounded_and_frozen(
+    setup_references, dataset_method_sidecar, changed
+):
+    setup = setup_references
+    plan_path = setup.tmp / "phases.yaml"
+    plan_path.write_text(setup.plan.model_dump_json())
+    atoms = Atoms("SiO2", positions=np.zeros((3, 3)))
+    atoms.calc = SinglePointCalculator(atoms, energy=-20, forces=np.zeros((3, 3)))
+    dataset = setup.tmp / "train.extxyz"
+    write(dataset, [atoms, atoms])
+    expected = _prepare(setup, dft_approved=True)
+    dataset_method_sidecar(dataset, expected)
+    cfg = TrainerConfig(
+        enabled=True,
+        train_script=setup.tmp / "train.py",
+        compare_after_training=False,
+        promote_model=False,
+        hydragnn_training_references={
+            "phase_plan": plan_path,
+            "cache_dir": setup.cache,
+            "phases_approved": True,
+            "dft_approved": False,
+            "max_dft_calculations": 0,
+        },
+    )
+    root = setup.tmp / "al-references"
+    selected = resolve_training_references(cfg, dataset, dft_config=setup.dft, reference_root=root)
+    assert selected == root / "elemental-references.json"
+    assert len(setup.calls) == 3
+    if changed == "plan":
+        plan_path.write_text(plan_path.read_text() + "\n")
+    elif changed == "geometry":
+        geometry = setup.plan.phases[0].structure_path
+        updated = read(geometry)
+        updated.positions[0, 0] += 0.1
+        write(geometry, updated)
+    elif changed == "method":
+        setup.dft.qe.ecutwfc_ry += 10
+    if changed:
+        with pytest.raises(ValueError, match="inputs changed"):
+            resolve_training_references(cfg, dataset, dft_config=setup.dft, reference_root=root)
+    else:
+        assert (
+            resolve_training_references(cfg, dataset, dft_config=setup.dft, reference_root=root)
+            == selected
+        )
+    assert len(setup.calls) == 3
+
+
+def test_al_reference_method_mismatch_fails_before_any_dft(
+    setup_references, elemental_manifest, dataset_method_sidecar
+):
+    setup = setup_references
+    phase_plan = setup.tmp / "phases.yaml"
+    phase_plan.write_text(setup.plan.model_dump_json())
+    dataset = setup.tmp / "train.extxyz"
+    atoms = Atoms("SiO2", positions=np.zeros((3, 3)))
+    atoms.calc = SinglePointCalculator(atoms, energy=-20, forces=np.zeros((3, 3)))
+    write(dataset, [atoms, atoms])
+    dataset_method_sidecar(dataset, elemental_manifest({"Si": -5, "O": -6}))
+    cfg = TrainerConfig(
+        hydragnn_training_references={
+            "phase_plan": phase_plan,
+            "cache_dir": setup.cache,
+            "phases_approved": True,
+            "dft_approved": True,
+            "max_dft_calculations": 3,
+        }
+    )
+    with pytest.raises(ValueError, match="different DFT methods"):
+        resolve_training_references(
+            cfg, dataset, dft_config=setup.dft, reference_root=setup.tmp / "al-references"
+        )
+    assert setup.calls == []
 
 
 def test_selects_energy_per_atom_and_reuses_without_dft_approval(setup_references):

@@ -549,6 +549,8 @@ def run_active_learning(cfg: ALConfig) -> None:
                     dataset_path=dataset_path,
                     iteration=i,
                     out_logdir=it_dir / "model",
+                    dft_config=cfg.dft,
+                    reference_root=root / "elemental-training-reference",
                 )
                 state.candidate_model_path = str(new_logdir)
             elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None and cfg.trainer.enabled:

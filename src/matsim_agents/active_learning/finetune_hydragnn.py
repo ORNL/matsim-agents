@@ -41,7 +41,6 @@ from pathlib import Path
 
 import numpy as np
 from ase import Atoms
-from ase.io import read as ase_read
 
 from matsim_agents.active_learning.branch_routing import (
     BRANCH_DATASETS,
@@ -50,6 +49,7 @@ from matsim_agents.active_learning.branch_routing import (
     load_branch_mlp,
 )
 from matsim_agents.active_learning.cost import CostReport, count_parameters, track_cost
+from matsim_agents.active_learning.dataset_governance import sha256_file
 
 log = logging.getLogger(__name__)
 
@@ -140,37 +140,6 @@ def _atoms_to_data(atoms: Atoms, add_edges_pbc, dtype, charge: float, spin: floa
 # --------------------------------------------------------------------------- #
 
 
-def _fit_reference_energies(graphs) -> dict[int, float]:
-    """Least-squares per-element linear reference energies ``e_ref[Z]``.
-
-    Solves ``E_total_i approx sum_Z n_{i,Z} * e_ref[Z]`` over ``graphs`` (each
-    carrying a TOTAL DFT energy in eV). Subtracting the per-structure reference
-    sum from the DFT total leaves a small formation-scale target that matches
-    the formation energy HydraGNN's head predicts, which keeps the fine-tune
-    from regressing the large raw-energy offset. Fit on the train split only to
-    avoid leakage.
-    """
-    zs = sorted({int(z) for g in graphs for z in g.atomic_numbers.tolist()})
-    col = {z: j for j, z in enumerate(zs)}
-    a = np.zeros((len(graphs), len(zs)), dtype=np.float64)
-    b = np.zeros(len(graphs), dtype=np.float64)
-    for i, g in enumerate(graphs):
-        for z in g.atomic_numbers.tolist():
-            a[i, col[int(z)]] += 1.0
-        b[i] = float(g.energy.item())
-    coef, *_ = np.linalg.lstsq(a, b, rcond=None)
-    return {z: float(coef[col[z]]) for z in zs}
-
-
-def _attach_reference_energies(graphs, e_ref_map: dict[int, float], dtype) -> None:
-    """Attach the per-structure reference sum (TOTAL eV) as ``g.e_ref`` in place."""
-    import torch
-
-    for g in graphs:
-        ref = sum(e_ref_map.get(int(z), 0.0) for z in g.atomic_numbers.tolist())
-        g.e_ref = torch.tensor([ref], dtype=dtype)
-
-
 def _reshape_composition(data, num_graphs: int):
     """Return composition as ``[num_graphs, 118]`` (mirrors inference_fused)."""
     comp = data.chemical_composition
@@ -253,6 +222,7 @@ def finetune_hydragnn(
     device: str | None = None,
     checkpoint_name: str = "ft_model.pk",
     run: bool = True,
+    elemental_reference_manifest: str | Path | None = None,
 ) -> Path:
     """Fine-tune the routed HydraGNN head(s) on ``dataset_path``.
 
@@ -260,10 +230,32 @@ def finetune_hydragnn(
     With ``run=False`` the pipeline is built and a single forward/loss step is
     executed (dry-run validation) but no optimisation/epoch loop runs.
     """
-    root, example_dir = _resolve_hydragnn_paths(hydragnn_root)
+    from matsim_agents.active_learning.formation_training import (
+        prepare_hydragnn_training_frames,
+        save_hydragnn_energy_convention,
+    )
+
     output_dir = Path(output_dir).expanduser().resolve()
+    frames = prepare_hydragnn_training_frames(
+        dataset_path, output_dir, elemental_reference_manifest
+    )
+    root, example_dir = _resolve_hydragnn_paths(hydragnn_root)
     output_dir.mkdir(parents=True, exist_ok=True)
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
+    previous_convention = gfm_logdir / "energy-convention.json"
+    if previous_convention.exists():
+        from ase.calculators.calculator import Calculator
+
+        from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+
+        restore_hydragnn_total_energy(Calculator(), gfm_logdir, gfm_checkpoint)
+        previous = json.loads(previous_convention.read_text())
+        if "branch_mlp_checkpoint" not in previous:
+            raise ValueError("Routed fine-tuning cannot resume a single-head checkpoint")
+        branch_mlp_path = gfm_logdir / previous["branch_mlp_checkpoint"]
+        if sha256_file(branch_mlp_path) != previous["branch_mlp_sha256"]:
+            raise ValueError("HydraGNN routing MLP differs from training artifact")
+        gfm_checkpoint = gfm_checkpoint or previous["checkpoint"]
 
     import torch
     from hydragnn.models.create import create_model_config
@@ -287,12 +279,6 @@ def finetune_hydragnn(
     max_neighbours = int(arch["max_neighbours"])
     e_w = float(energy_weight if energy_weight is not None else arch.get("energy_weight", 1.0))
     f_w = float(force_weight if force_weight is not None else arch.get("force_weight", 1.0))
-
-    # --- read dataset ---
-    raw = ase_read(str(dataset_path), index=":")
-    frames = [raw] if isinstance(raw, Atoms) else list(raw)
-    if not frames:
-        raise ValueError(f"No frames read from {dataset_path}")
 
     # --- routing ---
     if routed_branches is None:
@@ -337,15 +323,6 @@ def finetune_hydragnn(
         raise ValueError(f"Only {len(graphs)} usable frames (need >=2 with energy+forces).")
     train_graphs, val_graphs = _split(graphs, val_fraction, seed)
     log.info("Graphs: %d train / %d val", len(train_graphs), len(val_graphs))
-
-    e_ref_map = _fit_reference_energies(train_graphs)
-    _attach_reference_energies(train_graphs, e_ref_map, param_dtype)
-    _attach_reference_energies(val_graphs, e_ref_map, param_dtype)
-    log.info(
-        "Fitted per-element reference energies (%d elements): %s",
-        len(e_ref_map),
-        {int(k): round(v, 3) for k, v in e_ref_map.items()},
-    )
 
     branch_mlp = load_branch_mlp(branch_mlp_path).to(device=dev, dtype=param_dtype)
     routed_t = torch.tensor(routed, dtype=torch.long, device=dev)
@@ -429,6 +406,8 @@ def finetune_hydragnn(
     # --- save logdir ---
     ckpt_out = output_dir / checkpoint_name
     torch.save({"model_state_dict": model.state_dict()}, ckpt_out)
+    mlp_snapshot = output_dir / "branch-mlp.pt"
+    shutil.copyfile(branch_mlp_path, mlp_snapshot)
     shutil.copyfile(config_path, output_dir / "config.json")
     report.write(output_dir / "cost.json")
     (output_dir / "routing.json").write_text(
@@ -438,10 +417,19 @@ def finetune_hydragnn(
                 "routed_datasets": [BRANCH_DATASETS[b] for b in routed],
                 "mean_branch_weights": mean_w.tolist(),
                 "checkpoint": checkpoint_name,
-                "reference_energies": {str(k): v for k, v in e_ref_map.items()},
+                "energy_convention": "dft:declared_elemental_formation_energy",
             },
             indent=2,
         )
+    )
+    save_hydragnn_energy_convention(
+        output_dir,
+        ckpt_out,
+        inference_metadata={
+            "routed_branches": routed,
+            "branch_mlp_checkpoint": mlp_snapshot.name,
+            "branch_mlp_sha256": sha256_file(mlp_snapshot),
+        },
     )
     log.info(
         "HydraGNN fine-tune complete -> %s (%.1fs, %.4f GPU-h)",
@@ -490,18 +478,9 @@ def _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype):
         create_graph=True,
     )[0]
 
-    # HydraGNN predicts a TOTAL formation energy (eV) while the DFT labels are
-    # TOTAL energies (eV) on the raw reference. Subtract the per-structure linear
-    # reference sum so the target is formation-scale and matches the head's
-    # output, then normalise the loss to eV/atom (divide by node_counts).
+    # Labels already contain total-cell formation energies; normalize only.
     e_target = batch.energy.view(num_graphs)
-    e_ref = (
-        batch.e_ref.view(num_graphs)
-        if hasattr(batch, "e_ref") and batch.e_ref is not None
-        else torch.zeros_like(e_target)
-    )
-    e_form_target = e_target - e_ref
-    e_loss = F.mse_loss(weighted_energy / node_counts, e_form_target / node_counts)
+    e_loss = F.mse_loss(weighted_energy / node_counts, e_target / node_counts)
     f_loss = F.mse_loss(forces_pred, batch.forces)
     return e_w * e_loss + f_w * f_loss
 
@@ -530,6 +509,7 @@ def _split(graphs, val_fraction, seed):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--dataset", required=True, help="AL-collected extxyz dataset.")
+    parser.add_argument("--elemental-reference-manifest", required=True)
     parser.add_argument("--output-dir", required=True, help="Output logdir.")
     parser.add_argument("--gfm-logdir", required=True, help="GFM dir (config.json + .pk).")
     parser.add_argument("--branch-mlp", required=True, help="mlp_branch_weights.pt path.")
@@ -583,6 +563,7 @@ def main(argv: list[str] | None = None) -> int:
         device=args.device,
         checkpoint_name=args.checkpoint_name,
         run=not args.dry_run,
+        elemental_reference_manifest=args.elemental_reference_manifest,
     )
     return 0
 

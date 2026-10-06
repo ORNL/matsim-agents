@@ -178,6 +178,30 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     config_path = logdir / "config.json"
     if not config_path.is_file():
         raise FileNotFoundError(f"HydraGNN config.json not found in {logdir}")
+    from ase.calculators.calculator import Calculator
+
+    from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+
+    restore_hydragnn_total_energy(Calculator(), logdir, cfg.checkpoint)
+    convention_path = logdir / "energy-convention.json"
+    if convention_path.exists():
+        cfg = cfg.model_copy(deep=True)
+        convention = json.loads(convention_path.read_text())
+        if cfg.checkpoint is None:
+            cfg.checkpoint = convention["checkpoint"]
+        if (logdir / "newhead.json").exists():
+            cfg.newhead_ft_config = logdir / "newhead.json"
+            cfg.inference_head = None
+        if "branch_mlp_checkpoint" in convention:
+            from matsim_agents.active_learning.dataset_governance import sha256_file
+
+            cfg.hydragnn_branch_mlp_checkpoint = logdir / convention["branch_mlp_checkpoint"]
+            cfg.newhead_ft_config = None
+            if sha256_file(cfg.hydragnn_branch_mlp_checkpoint) != convention["branch_mlp_sha256"]:
+                raise ValueError("HydraGNN routing MLP differs from training artifact")
+            selected = resolve_hydragnn_inference_head(cfg.inference_head)
+            if selected is not None and selected not in convention["routed_branches"]:
+                raise ValueError("Selected HydraGNN head was not trained in this energy convention")
 
     # ``inference_fused`` lives in the HydraGNN example dir alongside the GFM
     # logdir (``.../multidataset_hpo_sc26/<gfm_logdir>``). Make the eval path
@@ -206,7 +230,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
                 f"is unavailable in a model with {num_branches} branches"
             )
         arch = config["NeuralNetwork"]["Architecture"]
-        return _build_selected_head_calculator(
+        calculator = _build_selected_head_calculator(
             model,
             autocast_ctx=autocast_ctx,
             head_index=selected_head,
@@ -221,6 +245,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
             charge=cfg.charge,
             spin=cfg.spin,
         )
+        return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
 
     import torch
 
@@ -296,9 +321,9 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
                 (k[len("module.") :] if k.startswith("module.") else k): v
                 for k, v in state_dict.items()
             }
-            model.load_state_dict(state_dict, strict=False)
+            model.load_state_dict(state_dict, strict=True)
         model.to(device).eval()
-        return _build_single_head_calculator(
+        calculator = _build_single_head_calculator(
             model=model,
             radius=radius,
             max_neighbours=max_neighbours,
@@ -307,6 +332,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
             charge=cfg.charge,
             spin=cfg.spin,
         )
+        return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
 
     # --- normal (multi-branch fused-stack) path --------------------------------
     # Delegate to the authoritative fused-stack loader shipped alongside the
@@ -345,6 +371,27 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         cfg.mlp_device,
     )
 
+    if convention_path.exists() and "routed_branches" in convention:
+        routed = convention["routed_branches"]
+        if not routed or any(
+            type(head) is not int or not 0 <= head < num_branches for head in routed
+        ):
+            raise ValueError("Invalid HydraGNN trained branch selection")
+        original_mlp = mlp
+
+        class RoutedMLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.original = original_mlp
+
+            def forward(self, composition):
+                logits = self.original(composition)
+                mask = torch.ones(num_branches, dtype=torch.bool, device=logits.device)
+                mask[routed] = False
+                return logits.masked_fill(mask, -torch.inf)
+
+        mlp = RoutedMLP()
+
     arch = config["NeuralNetwork"]["Architecture"]
     radius = float(cfg.radius) if cfg.radius is not None else float(arch.get("radius", 5.0))
     max_neighbours = (
@@ -353,7 +400,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         else int(arch.get("max_neighbours", 20))
     )
 
-    return _build_calculator(
+    calculator = _build_calculator(
         model=model,
         mlp=mlp,
         radius=radius,
@@ -368,6 +415,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         charge=cfg.charge,
         spin=cfg.spin,
     )
+    return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
 
 
 def build_ensemble(cfg: MLIPConfig, *, enable_mc_dropout: bool = False) -> list[Any]:

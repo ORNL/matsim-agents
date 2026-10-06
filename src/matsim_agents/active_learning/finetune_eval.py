@@ -493,6 +493,7 @@ def run_campaign(
                 ft_logdir = finetune_hydragnn(
                     train_path,
                     ft_dir,
+                    elemental_reference_manifest=reference_manifest,
                     gfm_logdir=gfm_logdir,
                     branch_mlp_path=branch_mlp_path,
                     gfm_checkpoint=base_ckpt,
@@ -524,6 +525,7 @@ def run_campaign(
                 ft_logdir = finetune_hydragnn_newhead(
                     train_path,
                     ft_dir,
+                    elemental_reference_manifest=reference_manifest,
                     gfm_logdir=gfm_logdir,
                     strategy=hydragnn_strategy,
                     head=hydragnn_head,

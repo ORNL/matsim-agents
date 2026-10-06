@@ -322,13 +322,12 @@ See [Competing-phase reference hulls](./reference-hulls.md).
 
 ## Formation-energy comparisons and campaign promotion
 
-### HydraGNN training references: implementation in progress
+### HydraGNN training references
 
-The current routed and new-head HydraGNN fine-tuners fit composition-linear
-offsets from mixture training data. Those offsets are not physical elemental
-reference energies; a single-formula dataset cannot uniquely identify the
-individual elemental coefficients. The existing evaluation reference manifest
-does not yet supply formation-energy targets to these trainers.
+Both routed and new-head fine-tuners now require verified elemental DFT
+references and train on physical formation energies plus unchanged forces.
+Mixture-fitted composition offsets have been removed: a single-formula dataset
+cannot uniquely identify physical elemental coefficients.
 
 The shared formation-label preparation layer is implemented. Given a verified
 native-total-energy dataset sidecar and compatible elemental DFT manifest, run:
@@ -350,10 +349,58 @@ are unchanged. Missing references/forces, incompatible methods, invalid labels,
 and already-transformed input are rejected.
 
 This command does not launch DFT, select elemental phases, or train a model.
-Do not feed its output to the current HydraGNN trainers yet: they still fit
-mixture offsets and would apply a second transformation. Automatic approved
-reference calculation/selection is now available as a separate prerequisite
-below. Trainer wiring and inference conventions remain pending.
+The fine-tuners accept the **raw total-energy** dataset and the required
+`--elemental-reference-manifest` argument; they create their own immutable
+`training-reference/` snapshot before building graphs. Do not pass an already
+converted dataset: double conversion is rejected. The standalone comparison
+driver forwards its existing elemental manifest to both fine-tuners.
+
+AL training requires references even with comparison and promotion disabled.
+Configure a verified manifest explicitly:
+
+```yaml
+trainer:
+  hydragnn_training_references:
+    manifest: /path/to/elemental-references.json
+```
+
+Alternatively use the approved fixed-geometry prerequisite automatically:
+
+```yaml
+trainer:
+  hydragnn_training_references:
+    phase_plan: /path/to/approved-phases.yaml
+    cache_dir: /path/to/elemental-dft-cache
+    phases_approved: true
+    dft_approved: true
+    max_dft_calculations: 4
+```
+
+The reference calculation cap is **separate** from the compound-label cap.
+Uncached calculations require explicit DFT approval; fully cached references
+can be reused with `dft_approved: false` and a zero cap. The existing
+`validation_reference_set` can supply training references when no explicit
+training reference source is configured. AL freezes the selected reference
+snapshot under its output directory and rejects changed reference inputs or
+DFT protocols on subsequent iterations/restarts; use a new dataset for changes.
+
+Saved checkpoints bind `energy-convention.json` to the checkpoint hash,
+inference configuration, and verified training snapshot. Neural outputs are
+total-cell formation energies. ASE-facing calculators add the recorded
+elemental baseline **exactly once**, returning DFT-reference total energies;
+existing evaluation subtracts its own model elemental references once.
+Forces/stress and dropout access are preserved. New-head checkpoints are
+auto-detected, and routed checkpoints retain their trained-head restriction
+and frozen routing MLP. Unsupported elements, incompatible/tampered artifacts,
+and ambiguous legacy fitted-offset checkpoints fail explicitly; unmarked
+foundation checkpoints retain their previous behavior.
+
+Custom trainer scripts retain `--logdir`/`--resume_from`, but must now accept
+`--elemental-reference-manifest` and emit the same verified checkpoint contract.
+Launchers receive the manifest as positional argument eight, then optional
+checkpoint and branch-MLP arguments. Built-in scripts use
+`--output-dir`/`--gfm-logdir`; they are single-process trainers, so configure
+one node/one rank when using a launcher. Multi-rank training is not implemented.
 
 #### Approved elemental DFT prerequisite
 
@@ -439,7 +486,7 @@ Formation-label snapshots retain this selection audit. Cache reuse does not
 change an already-created reference/training snapshot or choose new endpoints
 silently. QE and VASP caches remain method-separated.
 
-The agreed replacement workflow will:
+The implemented replacement workflow:
 
 - Require an approved list of pure-element reference phases covering all
   training species, independently of comparison or promotion being enabled.
@@ -469,10 +516,9 @@ verified separately rather than transformed automatically. Per-formula
 cumulative collection and permanent train/held-out membership remain unchanged.
 Validation must cover multiple polymorphs, cell multiplicity, reference reuse,
 missing or incompatible references, approval gates, unchanged forces, and
-checkpoint reload without double referencing. Only the preparation layer
-and the approved fixed-geometry reference prerequisite are implemented at
-present; no end-to-end training or real-model qualification of this workflow is
-claimed here.
+checkpoint reload without double referencing. CPU contract tests cover the
+reference/training/inference wiring; end-to-end real GPU model and DFT
+qualification of this new workflow remains pending.
 
 ### Current promotion and evaluation behavior
 
