@@ -131,7 +131,7 @@ def assess_promotion(
     incumbent: EvalMetrics,
     trainer: TrainerConfig,
 ) -> PromotionDecision:
-    """Apply absolute accuracy and incumbent-regression promotion gates."""
+    """Require absolute accuracy, no regression, and a meaningful MAE improvement."""
     reasons: list[str] = []
     minimum = trainer.promotion_min_evaluated_frames
     for model_name, metrics in (("candidate", candidate), ("incumbent", incumbent)):
@@ -157,23 +157,38 @@ def assess_promotion(
             trainer.promotion_max_force_mae_eV_per_A,
         ),
     )
+    improved_metrics = []
     for name, candidate_value, incumbent_value, absolute_limit in metrics:
-        if not np.isfinite(candidate_value):
-            reasons.append(f"candidate {name} is not finite")
+        if not np.isfinite(candidate_value) or candidate_value < 0:
+            reasons.append(f"candidate {name} is not finite or is negative")
             continue
         if candidate_value > absolute_limit:
             reasons.append(
                 f"candidate {name}={candidate_value:.6g} exceeds limit {absolute_limit:.6g}"
             )
-        if not np.isfinite(incumbent_value):
-            reasons.append(f"incumbent {name} is not finite")
+        if not np.isfinite(incumbent_value) or incumbent_value < 0:
+            reasons.append(f"incumbent {name} is not finite or is negative")
             continue
-        regression_limit = incumbent_value * (1.0 + trainer.promotion_max_relative_regression)
+        regression_limit = incumbent_value
         if candidate_value > regression_limit + 1e-12:
             reasons.append(
                 f"candidate {name}={candidate_value:.6g} exceeds incumbent regression "
                 f"limit {regression_limit:.6g}"
             )
+        # An exact-zero incumbent cannot improve; numerical noise is not a benefit.
+        if incumbent_value > 0 and incumbent_value - candidate_value > 1e-12:
+            relative_improvement = (incumbent_value - candidate_value) / incumbent_value
+            threshold = trainer.promotion_min_relative_improvement
+            if relative_improvement >= threshold or np.isclose(
+                relative_improvement, threshold, rtol=1e-12, atol=0.0
+            ):
+                improved_metrics.append(name)
+    if not improved_metrics:
+        reasons.append(
+            "candidate must improve formation-energy or force MAE by at least "
+            f"{trainer.promotion_min_relative_improvement:.6g} relative to incumbent "
+            "and beyond numerical tolerance"
+        )
     return PromotionDecision(
         approved=not reasons,
         reasons=reasons,

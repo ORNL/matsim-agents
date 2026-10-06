@@ -436,7 +436,18 @@ class CampaignRetrainingConfig(BaseModel):
     validation_reference_set: Path | None = None
     promotion_max_energy_mae_eV_per_atom: float = Field(0.1, gt=0)
     promotion_max_force_mae_eV_per_A: float = Field(0.2, gt=0)
-    promotion_max_relative_regression: float = Field(0.05, ge=0)
+    promotion_max_relative_regression: float = Field(
+        0.0,
+        ge=0,
+        le=0,
+        description="Compatibility field; must be zero. Promotion forbids MAE regression.",
+    )
+    promotion_min_relative_improvement: float = Field(
+        0.05,
+        ge=0,
+        le=1,
+        description="Minimum relative MAE reduction in either metric; neither may regress.",
+    )
     promotion_min_evaluated_frames: int = Field(1, ge=1)
 
     @model_validator(mode="after")
@@ -1099,6 +1110,9 @@ def run_formula_with_active_learning(
         )
         al_cfg.trainer.promotion_max_relative_regression = (
             config.retraining.promotion_max_relative_regression
+        )
+        al_cfg.trainer.promotion_min_relative_improvement = (
+            config.retraining.promotion_min_relative_improvement
         )
         al_cfg.trainer.promotion_min_evaluated_frames = (
             config.retraining.promotion_min_evaluated_frames

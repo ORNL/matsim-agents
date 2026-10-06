@@ -153,7 +153,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--promotion-validation-reference-set", type=Path)
     parser.add_argument("--promotion-max-energy-mae", type=float, default=0.1)
     parser.add_argument("--promotion-max-force-mae", type=float, default=0.2)
-    parser.add_argument("--promotion-max-relative-regression", type=float, default=0.05)
+    parser.add_argument(
+        "--promotion-max-relative-regression",
+        type=float,
+        choices=[0.0],
+        default=0.0,
+        help="Compatibility option; only zero is accepted. Promotion forbids MAE regression.",
+    )
+    parser.add_argument(
+        "--promotion-min-relative-improvement",
+        type=float,
+        default=0.05,
+        help="Required relative MAE reduction in at least one metric (default: 0.05 = 5%%).",
+    )
     parser.add_argument("--promotion-min-evaluated-frames", type=int, default=1)
     parser.add_argument("--retry-failed", action="store_true")
     parser.add_argument("--retry-inconclusive", action="store_true")
@@ -357,6 +369,7 @@ def main(argv: list[str] | None = None) -> int:
                     promotion_max_energy_mae_eV_per_atom=args.promotion_max_energy_mae,
                     promotion_max_force_mae_eV_per_A=args.promotion_max_force_mae,
                     promotion_max_relative_regression=args.promotion_max_relative_regression,
+                    promotion_min_relative_improvement=args.promotion_min_relative_improvement,
                     promotion_min_evaluated_frames=args.promotion_min_evaluated_frames,
                 )
                 if args.retrain

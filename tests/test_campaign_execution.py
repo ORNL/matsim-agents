@@ -1714,6 +1714,7 @@ def test_formula_execution_applies_retraining_and_promotion(
             retraining=CampaignRetrainingConfig(
                 train_script=train_script,
                 epochs=3,
+                promotion_min_relative_improvement=0.1,
                 promote_model=True,
                 promotion_approved=True,
                 validation_set=validation_set if validation_fraction == 0 else None,
@@ -1726,6 +1727,8 @@ def test_formula_execution_applies_retraining_and_promotion(
 
     assert observed["trainer"]["enabled"] is True
     assert observed["trainer"]["epochs_per_iter"] == 3
+    assert observed["trainer"]["promotion_max_relative_regression"] == 0.0
+    assert observed["trainer"]["promotion_min_relative_improvement"] == 0.1
     assert observed["trainer"]["promote_model"] is True
     assert observed["trainer"]["validation_set"] == (
         validation_set if validation_fraction == 0 else None

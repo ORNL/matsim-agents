@@ -303,7 +303,8 @@ if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; th
       --approve-model-promotion
       --promotion-max-energy-mae "${MATSIM_CAMPAIGN_PROMOTION_MAX_ENERGY_MAE:-0.1}"
       --promotion-max-force-mae "${MATSIM_CAMPAIGN_PROMOTION_MAX_FORCE_MAE:-0.2}"
-      --promotion-max-relative-regression "${MATSIM_CAMPAIGN_PROMOTION_MAX_RELATIVE_REGRESSION:-0.05}"
+      --promotion-max-relative-regression "${MATSIM_CAMPAIGN_PROMOTION_MAX_RELATIVE_REGRESSION:-0}"
+      --promotion-min-relative-improvement "${MATSIM_CAMPAIGN_PROMOTION_MIN_RELATIVE_IMPROVEMENT:-0.05}"
       --promotion-min-evaluated-frames "${MATSIM_CAMPAIGN_PROMOTION_MIN_EVALUATED_FRAMES:-1}"
     )
     if [[ -n "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET:-}" ]]; then
