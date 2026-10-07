@@ -50,6 +50,7 @@ from matsim_agents.active_learning.branch_routing import (
 )
 from matsim_agents.active_learning.cost import CostReport, count_parameters, track_cost
 from matsim_agents.active_learning.dataset_governance import sha256_file
+from matsim_agents.active_learning.hydragnn_precision import hydragnn_autocast
 
 log = logging.getLogger(__name__)
 
@@ -271,7 +272,7 @@ def finetune_hydragnn(
         hcfg = json.load(fh)
     arch = hcfg["NeuralNetwork"]["Architecture"]
     precision_str = hcfg["NeuralNetwork"]["Training"].get("precision", "fp32")
-    precision, param_dtype, _ = resolve_precision(precision_str)
+    precision, param_dtype, autocast_dtype = resolve_precision(precision_str)
     torch.set_default_dtype(param_dtype)
 
     dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -358,7 +359,16 @@ def finetune_hydragnn(
         # Dry-run: single forward/loss step on one small batch to validate wiring.
         loader = DataLoader(train_graphs, batch_size=min(batch_size, len(train_graphs)))
         batch = next(iter(loader)).to(dev)
-        loss = _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype)
+        loss = _batch_loss(
+            model,
+            branch_mlp,
+            batch,
+            routed_t,
+            e_w,
+            f_w,
+            param_dtype,
+            autocast_dtype=autocast_dtype,
+        )
         log.info("Dry-run forward OK; loss=%.6f", float(loss.detach()))
         return output_dir
 
@@ -377,7 +387,16 @@ def finetune_hydragnn(
             for batch in train_loader:
                 batch = batch.to(dev)
                 optimizer.zero_grad(set_to_none=True)
-                loss = _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype)
+                loss = _batch_loss(
+                    model,
+                    branch_mlp,
+                    batch,
+                    routed_t,
+                    e_w,
+                    f_w,
+                    param_dtype,
+                    autocast_dtype=autocast_dtype,
+                )
                 loss.backward()
                 optimizer.step()
                 running += float(loss.detach()) * batch.num_graphs
@@ -388,7 +407,16 @@ def finetune_hydragnn(
                 vrun = 0.0
                 for batch in val_loader:
                     batch = batch.to(dev)
-                    vloss = _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype)
+                    vloss = _batch_loss(
+                        model,
+                        branch_mlp,
+                        batch,
+                        routed_t,
+                        e_w,
+                        f_w,
+                        param_dtype,
+                        autocast_dtype=autocast_dtype,
+                    )
                     vrun += float(vloss.detach()) * batch.num_graphs
                 selection_mse = vrun / max(len(val_graphs), 1)
                 val_msg = f" val={selection_mse:.6f}"
@@ -440,7 +468,12 @@ def finetune_hydragnn(
     return output_dir
 
 
-def _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype):
+def _batch_loss(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype, *, autocast_dtype=None):
+    with hydragnn_autocast(batch.pos.device, autocast_dtype):
+        return _batch_loss_impl(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype)
+
+
+def _batch_loss_impl(model, branch_mlp, batch, routed_t, e_w, f_w, param_dtype):
     """Weighted-average energy+force MSE over the routed branch heads."""
     import torch
     import torch.nn.functional as F

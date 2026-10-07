@@ -299,7 +299,18 @@ def _target_scales(train_graphs) -> tuple[float, float]:
 # --------------------------------------------------------------------------- #
 
 
-def _batch_loss_single_head(model, batch, e_w, f_w, *, f_scale=1.0, e_scale=1.0):
+def _batch_loss_single_head(
+    model, batch, e_w, f_w, *, f_scale=1.0, e_scale=1.0, autocast_dtype=None
+):
+    from matsim_agents.active_learning.hydragnn_precision import hydragnn_autocast
+
+    with hydragnn_autocast(batch.pos.device, autocast_dtype):
+        return _batch_loss_single_head_impl(
+            model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale
+        )
+
+
+def _batch_loss_single_head_impl(model, batch, e_w, f_w, *, f_scale=1.0, e_scale=1.0):
     """Energy (per-atom) + force MSE for the single ``branch-0`` head.
 
     ``f_scale``/``e_scale`` normalise the residuals to ``O(1)`` so the objective
@@ -429,7 +440,7 @@ def finetune_hydragnn_newhead(
         hcfg = json.load(fh)
     arch = hcfg["NeuralNetwork"]["Architecture"]
     precision_str = hcfg["NeuralNetwork"]["Training"].get("precision", "fp32")
-    _, param_dtype, _ = resolve_precision(precision_str)
+    _, param_dtype, autocast_dtype = resolve_precision(precision_str)
     torch.set_default_dtype(param_dtype)
 
     dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -574,7 +585,15 @@ def finetune_hydragnn_newhead(
     if not run:
         loader = DataLoader(train_graphs, batch_size=min(batch_size, len(train_graphs)))
         batch = next(iter(loader)).to(dev)
-        loss = _batch_loss_single_head(model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale)
+        loss = _batch_loss_single_head(
+            model,
+            batch,
+            e_w,
+            f_w,
+            f_scale=f_scale,
+            e_scale=e_scale,
+            autocast_dtype=autocast_dtype,
+        )
         log.info("Dry-run forward OK; loss=%.6f", float(loss.detach()))
         return output_dir
 
@@ -611,7 +630,13 @@ def finetune_hydragnn_newhead(
                 batch = batch.to(dev)
                 optimizer.zero_grad(set_to_none=True)
                 loss = _batch_loss_single_head(
-                    model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale
+                    model,
+                    batch,
+                    e_w,
+                    f_w,
+                    f_scale=f_scale,
+                    e_scale=e_scale,
+                    autocast_dtype=autocast_dtype,
                 )
                 loss.backward()
                 if grad_clip and grad_clip > 0:
@@ -630,7 +655,13 @@ def finetune_hydragnn_newhead(
                 for batch in val_loader:
                     batch = batch.to(dev)
                     vloss = _batch_loss_single_head(
-                        model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale
+                        model,
+                        batch,
+                        e_w,
+                        f_w,
+                        f_scale=f_scale,
+                        e_scale=e_scale,
+                        autocast_dtype=autocast_dtype,
                     )
                     vrun += float(vloss.detach()) * batch.num_graphs
                 selection_mse = vrun / max(len(val_graphs), 1)

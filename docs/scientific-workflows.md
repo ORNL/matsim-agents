@@ -395,6 +395,11 @@ and frozen routing MLP. Unsupported elements, incompatible/tampered artifacts,
 and ambiguous legacy fitted-offset checkpoints fail explicitly; unmarked
 foundation checkpoints retain their previous behavior.
 
+Both fine-tuners honor the training configuration's resolved autocast dtype
+for dry-run, optimization, and validation losses. BF16 keeps FP32 master
+parameters and uses autocast for compute; single-head checkpoint inference
+also honors that setting. FP32/FP64 paths do not enable autocast.
+
 Custom trainer scripts retain `--logdir`/`--resume_from`, but must now accept
 `--elemental-reference-manifest` and emit the same verified checkpoint contract.
 Launchers receive the manifest as positional argument eight, then optional

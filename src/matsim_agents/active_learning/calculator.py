@@ -69,6 +69,7 @@ def _build_single_head_calculator(
     device,
     charge,
     spin,
+    autocast_dtype=None,
 ):
     """ASE calculator for a single-branch (``num_branches==1``) HydraGNN model.
 
@@ -79,6 +80,7 @@ def _build_single_head_calculator(
     import torch
     from ase.calculators.calculator import Calculator, all_changes
 
+    from matsim_agents.active_learning.hydragnn_precision import hydragnn_autocast
     from matsim_agents.backends.mlip.relaxation import _atoms_to_graph  # type: ignore[attr-defined]
 
     class SingleHeadHydraGNNCalculator(Calculator):
@@ -99,7 +101,7 @@ def _build_single_head_calculator(
                 data.cell = data.cell.to(param_dtype)
             data.x = data.x.to(param_dtype)
             data.pos.requires_grad_(True)
-            with torch.enable_grad():
+            with torch.enable_grad(), hydragnn_autocast(device, autocast_dtype):
                 pred = model(data)
                 energy = pred[0] if isinstance(pred, (list, tuple)) else pred
                 energy = energy.squeeze(-1).sum()
@@ -293,7 +295,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
             if cfg.precision is not None
             else hcfg["NeuralNetwork"]["Training"].get("precision", "fp32")
         )
-        _, param_dtype, _ = resolve_precision(precision_str)
+        _, param_dtype, autocast_dtype = resolve_precision(precision_str)
         torch.set_default_dtype(param_dtype)
 
         model = create_model_config(
@@ -331,6 +333,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
             device=device,
             charge=cfg.charge,
             spin=cfg.spin,
+            autocast_dtype=autocast_dtype,
         )
         return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
 
