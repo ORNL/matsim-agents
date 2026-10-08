@@ -305,7 +305,9 @@ def finetune_hydragnn(
     state_dict = {
         (k[len("module.") :] if k.startswith("module.") else k): v for k, v in state_dict.items()
     }
-    model.load_state_dict(state_dict, strict=False)
+    from matsim_agents.active_learning.hydragnn_checkpoint import load_hydragnn_state_dict
+
+    load_hydragnn_state_dict(model, state_dict, strict=False)
     model.eval()  # no BN/dropout in the heads; keeps frozen backbone stats fixed
     _apply_freezing(model, set(routed), unfreeze_backbone=unfreeze_backbone)
     trainable_params, total_params = count_parameters(model)

@@ -254,16 +254,21 @@ def test_unmarked_foundation_retains_existing_behavior(tmp_path):
 
 
 def test_selected_head_factory_restores_total_energy(tmp_path, training_inputs, monkeypatch):
+    import torch
+
     import matsim_agents.active_learning.calculator as factory
 
     model = _checkpoint(tmp_path, training_inputs)
+    loaded_model = torch.nn.Linear(1, 1)
+    loaded_model.num_branches = 16
+    monkeypatch.setattr(torch, "load", lambda *a, **kw: loaded_model.state_dict())
     inference = ModuleType("inference_random_structures")
     selected = []
 
     def load(logdir, checkpoint, precision):
         selected.append(checkpoint)
         return (
-            SimpleNamespace(num_branches=16),
+            loaded_model,
             {"NeuralNetwork": {"Architecture": {"radius": 5, "max_neighbours": 20}}},
             "cpu",
             nullcontext(),
@@ -293,6 +298,7 @@ def test_fused_and_auto_newhead_reload_restore_totals(
     model_dir = _checkpoint(tmp_path, training_inputs)
     captured = {}
     model = torch.nn.Linear(1, 1)
+    monkeypatch.setattr(torch, "load", lambda *a, **kw: model.state_dict())
     if newhead:
         config = {
             "NeuralNetwork": {
@@ -309,7 +315,6 @@ def test_fused_and_auto_newhead_reload_restore_totals(
         monkeypatch.setitem(sys.modules, "hydragnn.models.create", create)
         monkeypatch.setitem(sys.modules, "hydragnn.train.train_validate_test", precision)
         monkeypatch.setattr(trainer, "apply_newhead_surgery", lambda m, *_args, **kw: m)
-        monkeypatch.setattr(torch, "load", lambda *a, **kw: model.state_dict())
         monkeypatch.setattr(
             factory, "_build_single_head_calculator", lambda **kw: FormationCalculator()
         )

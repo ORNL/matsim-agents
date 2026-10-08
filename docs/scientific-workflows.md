@@ -395,6 +395,11 @@ and frozen routing MLP. Unsupported elements, incompatible/tampered artifacts,
 and ambiguous legacy fitted-offset checkpoints fail explicitly; unmarked
 foundation checkpoints retain their previous behavior.
 
+Checkpoint reconstruction materializes HydraGNN's lazy graph-conditioning
+projectors from saved weight shapes before loading weights. Single-head resume
+and inference use strict loading; declared routed/selected-head inference reloads
+strictly after the upstream loader so lazy backbone weights cannot be dropped.
+
 Both fine-tuners honor the training configuration's resolved autocast dtype
 for dry-run, optimization, and validation losses. BF16 keeps FP32 master
 parameters and uses autocast for compute; single-head checkpoint inference

@@ -56,6 +56,7 @@ from matsim_agents.active_learning.finetune_hydragnn import (
     _resolve_hydragnn_paths,
     _split,
 )
+from matsim_agents.active_learning.hydragnn_checkpoint import load_hydragnn_state_dict
 
 log = logging.getLogger(__name__)
 
@@ -254,7 +255,7 @@ def apply_pretrained_head_surgery(
 
 def _resume_single_head_model(model, state_dict, ft_config, *, ft_repo, freeze_mode):
     model = apply_newhead_surgery(model, ft_config, ft_repo=ft_repo, freeze=False)
-    model.load_state_dict(state_dict, strict=True)
+    load_hydragnn_state_dict(model, state_dict)
     if freeze_mode != "none":
         model = load_update_model(ft_repo).apply_freeze_mode(
             model, {"NeuralNetwork": {"Training": {"freeze_mode": freeze_mode}}}
@@ -474,7 +475,7 @@ def finetune_hydragnn_newhead(
             for k, v in state_dict.items()
         }
         if resume_metadata is None:
-            model.load_state_dict(state_dict, strict=False)
+            load_hydragnn_state_dict(model, state_dict, strict=False)
         log.info("Loaded pretrained backbone from %s", ckpt_path.name)
     else:
         log.info("strategy=scratch: skipping pretrained checkpoint load")

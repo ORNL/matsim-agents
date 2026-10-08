@@ -225,6 +225,12 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         model, config, device, autocast_ctx, param_dtype = load_config_and_model(
             str(logdir), cfg.checkpoint, cfg.precision
         )
+        if convention_path.exists():
+            from matsim_agents.active_learning.hydragnn_checkpoint import (
+                restore_hydragnn_checkpoint,
+            )
+
+            restore_hydragnn_checkpoint(model, logdir / cfg.checkpoint, device=device)
         num_branches = int(getattr(model, "num_branches", 1))
         if selected_head >= num_branches:
             raise ValueError(
@@ -323,7 +329,9 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
                 (k[len("module.") :] if k.startswith("module.") else k): v
                 for k, v in state_dict.items()
             }
-            model.load_state_dict(state_dict, strict=True)
+            from matsim_agents.active_learning.hydragnn_checkpoint import load_hydragnn_state_dict
+
+            load_hydragnn_state_dict(model, state_dict)
         model.to(device).eval()
         calculator = _build_single_head_calculator(
             model=model,
@@ -373,6 +381,11 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         cfg.precision,
         cfg.mlp_device,
     )
+
+    if convention_path.exists():
+        from matsim_agents.active_learning.hydragnn_checkpoint import restore_hydragnn_checkpoint
+
+        restore_hydragnn_checkpoint(model, logdir / cfg.checkpoint, device=device)
 
     if convention_path.exists() and "routed_branches" in convention:
         routed = convention["routed_branches"]
