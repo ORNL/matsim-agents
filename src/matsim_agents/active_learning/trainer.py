@@ -24,6 +24,7 @@ from ase.io import read as ase_read
 from ase.io import write as ase_write
 
 from matsim_agents.active_learning.config import (
+    DFTConfig,
     HydraGNNConfig,
     MACEConfig,
     TrainerConfig,
@@ -130,6 +131,9 @@ def retrain_hydragnn(
     dataset_path: str | Path,
     iteration: int,
     out_logdir: str | Path,
+    *,
+    dft_config: DFTConfig | None = None,
+    reference_root: Path | None = None,
 ) -> Path:
     """Spawn the HydraGNN training script as a child process.
 
@@ -142,12 +146,30 @@ def retrain_hydragnn(
         log.info("trainer.enabled=False; skipping retrain at iteration %d", iteration)
         return Path(hydragnn_cfg.logdir)
 
+    from matsim_agents.active_learning.hydragnn_references import resolve_training_references
+
+    reference_manifest = resolve_training_references(
+        trainer_cfg,
+        dataset_path,
+        dft_config=dft_config,
+        reference_root=reference_root or out_logdir.parent / "elemental-training-reference",
+    )
     out_logdir.mkdir(parents=True, exist_ok=True)
 
     # The convention we follow: the launcher script accepts these positional
     # args: <train_script> <dataset_path> <out_logdir> <resume_logdir> <epochs>
     # and is responsible for srun/module setup. If no launcher is given we
     # fall back to a plain `python train_script ...` invocation in-process.
+    built_in = Path(str(trainer_cfg.train_script)).stem in {
+        "finetune_hydragnn",
+        "finetune_hydragnn_newhead",
+    }
+    if (
+        built_in
+        and trainer_cfg.train_launcher is not None
+        and trainer_cfg.nodes_for_train * trainer_cfg.ranks_per_node != 1
+    ):
+        raise ValueError("Built-in HydraGNN fine-tuners require exactly one process")
     if trainer_cfg.train_launcher is not None:
         argv = [
             "bash",
@@ -159,6 +181,9 @@ def retrain_hydragnn(
             str(trainer_cfg.epochs_per_iter),
             str(trainer_cfg.nodes_for_train),
             str(trainer_cfg.ranks_per_node),
+            str(reference_manifest),
+            hydragnn_cfg.checkpoint or "",
+            str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint or ""),
         ]
     else:
         log.warning(
@@ -170,13 +195,22 @@ def retrain_hydragnn(
             str(trainer_cfg.train_script),
             "--dataset",
             str(dataset_path),
-            "--logdir",
+            "--output-dir" if built_in else "--logdir",
             str(out_logdir),
-            "--resume_from",
+            "--gfm-logdir" if built_in else "--resume_from",
             str(hydragnn_cfg.logdir),
             "--epochs",
             str(trainer_cfg.epochs_per_iter),
+            "--elemental-reference-manifest",
+            str(reference_manifest),
         ]
+        script_name = Path(str(trainer_cfg.train_script)).stem
+        if script_name == "finetune_hydragnn":
+            if hydragnn_cfg.hydragnn_branch_mlp_checkpoint is None:
+                raise ValueError("Routed HydraGNN training requires a branch MLP checkpoint")
+            argv.extend(["--branch-mlp", str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint)])
+        if built_in and hydragnn_cfg.checkpoint is not None:
+            argv.extend(["--gfm-checkpoint", hydragnn_cfg.checkpoint])
 
     log.info("Launching retrain: %s", " ".join(argv))
     log_path = out_logdir / "train.log"
@@ -184,6 +218,16 @@ def retrain_hydragnn(
         proc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, check=False)
     if proc.returncode != 0:
         raise RuntimeError(f"HydraGNN retrain failed with exit {proc.returncode}; see {log_path}")
+
+    if not (out_logdir / "energy-convention.json").is_file():
+        raise RuntimeError(f"HydraGNN trainer produced no energy-convention.json; see {log_path}")
+    if not (out_logdir / "config.json").is_file():
+        raise RuntimeError(f"HydraGNN trainer produced no config.json; see {log_path}")
+    from ase.calculators.calculator import Calculator
+
+    from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+
+    restore_hydragnn_total_energy(Calculator(), out_logdir)
 
     return out_logdir
 

@@ -247,7 +247,7 @@ def _patch_runtime(
     monkeypatch.setattr(
         loop_mod,
         "retrain_hydragnn",
-        lambda tcfg, hcfg, dataset_path, iteration, out_logdir: trained_model or hcfg.logdir,
+        lambda tcfg, hcfg, dataset_path, iteration, out_logdir, **kw: trained_model or hcfg.logdir,
     )
     if promotion_decision is not None:
         monkeypatch.setattr(

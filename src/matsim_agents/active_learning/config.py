@@ -531,6 +531,28 @@ class DFTConfig(BaseModel):
         return self
 
 
+class HydraGNNTrainingReferences(BaseModel):
+    """Verified manifest or approved fixed-geometry elemental calculation plan."""
+
+    manifest: Path | None = None
+    phase_plan: Path | None = None
+    cache_dir: Path | None = None
+    phases_approved: bool = False
+    dft_approved: bool = False
+    max_dft_calculations: int = Field(0, ge=0)
+
+    @model_validator(mode="after")
+    def _reference_source(self) -> HydraGNNTrainingReferences:
+        if (self.manifest is None) == (self.phase_plan is None):
+            raise ValueError("Specify exactly one HydraGNN reference manifest or phase_plan")
+        source = self.manifest if self.manifest is not None else self.phase_plan
+        if source is None or not source.is_file():
+            raise ValueError(f"HydraGNN reference input does not exist: {source}")
+        if self.phase_plan is not None and (self.cache_dir is None or not self.phases_approved):
+            raise ValueError("HydraGNN phase_plan requires cache_dir and phases_approved")
+        return self
+
+
 class TrainerConfig(BaseModel):
     """How to retrain the MLIP at the end of each AL iteration.
 
@@ -568,6 +590,7 @@ class TrainerConfig(BaseModel):
             "its own elemental energies; complete element coverage is required."
         ),
     )
+    hydragnn_training_references: HydraGNNTrainingReferences | None = None
     validation_fraction: float = Field(
         0.0,
         ge=0.0,
