@@ -547,3 +547,19 @@ def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_i
     convention_file.write_text(json.dumps(convention_data))
     with pytest.raises(ValueError, match="requires verified routing.json"):
         restore_hydragnn_total_energy(FormationCalculator(), model)
+
+    # Mismatch 4: branch_mlp_checkpoint missing or not declared
+    routing_json = model / "routing.json"
+    routing_json.write_text(json.dumps({"routed_branches": [7]}))
+    convention_data["inference_artifact_sha256"]["routing.json"] = sha256_file(routing_json)
+    convention_data.pop("branch_mlp_checkpoint", None)
+    convention_file.write_text(json.dumps(convention_data))
+    with pytest.raises(ValueError, match="requires verified branch MLP checkpoint"):
+        restore_hydragnn_total_energy(FormationCalculator(), model)
+
+    # Mismatch 5: branch MLP file tampered on disk
+    convention_data["branch_mlp_checkpoint"] = branch_mlp.name
+    convention_file.write_text(json.dumps(convention_data))
+    branch_mlp.write_text("tampered-routing-mlp")
+    with pytest.raises(ValueError, match="routing MLP differs from training artifact"):
+        restore_hydragnn_total_energy(FormationCalculator(), model)

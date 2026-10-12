@@ -90,6 +90,22 @@ def restore_hydragnn_total_energy(calculator, logdir: Path, checkpoint: str | No
             raise ValueError(
                 "HydraGNN checkpoint routed branches do not match verified routing.json"
             )
+        branch_mlp_name = metadata.get("branch_mlp_checkpoint")
+        branch_mlp_digest = metadata.get("branch_mlp_sha256")
+        if (
+            not isinstance(branch_mlp_name, str)
+            or not branch_mlp_name.strip()
+            or not isinstance(branch_mlp_digest, str)
+            or not branch_mlp_digest.strip()
+        ):
+            raise ValueError("HydraGNN routed checkpoint requires verified branch MLP checkpoint")
+        mlp_path = logdir / branch_mlp_name
+        if (
+            Path(branch_mlp_name).name != branch_mlp_name
+            or not mlp_path.is_file()
+            or sha256_file(mlp_path) != branch_mlp_digest
+        ):
+            raise ValueError("HydraGNN routing MLP differs from training artifact")
     if any(metadata.get(key) != value for key, value in snapshot_metadata.items()):
         raise ValueError("HydraGNN checkpoint convention differs from training provenance")
     _, _, references = load_elemental_reference_manifest(
