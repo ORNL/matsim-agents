@@ -122,27 +122,43 @@ def _phase_config(dft: DFTConfig, phase: ElementalPhaseSpec) -> DFTConfig:
         assert cfg.qe is not None
         if phase.vasp_magnetic_settings:
             raise ValueError(f"{phase.phase_id}: VASP overrides supplied for QE")
-        if phase.geometry_status == "requires_relaxation" and cfg.qe.pw_template is not None:
+        forbidden_always = {"calculation", "prefix", "outdir", "pseudo_dir"}
+        conflicting_always = forbidden_always.intersection(
+            key.lower() for key in cfg.qe.extra_control
+        )
+        if conflicting_always:
             raise ValueError(
-                f"{phase.phase_id}: QE template-based inputs cannot be safely converted "
-                "to a relaxation; use generated QE inputs or attest the geometry as verified"
+                f"{phase.phase_id}: QE control overrides conflict with {sorted(conflicting_always)}"
             )
-        protected = {"calculation", "forc_conv_thr", "nstep", "pseudo_dir"}
-        conflicting = protected.intersection(key.lower() for key in cfg.qe.extra_control)
-        if phase.geometry_status == "requires_relaxation" and conflicting:
-            raise ValueError(
-                f"{phase.phase_id}: QE relaxation control overrides conflict with "
-                f"{sorted(conflicting)}"
-            )
-        if phase.geometry_status == "requires_relaxation" and _relaxes_cell(phase):
-            pressure = next(
-                (value for key, value in cfg.qe.extra_control.items() if key.lower() == "press"),
-                0,
-            )
-            if not _is_zero_pressure(pressure):
+        if phase.geometry_status == "requires_relaxation":
+            if cfg.qe.pw_template is not None:
                 raise ValueError(
-                    f"{phase.phase_id}: elemental cell relaxation requires zero external pressure"
+                    f"{phase.phase_id}: QE template-based inputs cannot be safely converted "
+                    "to a relaxation; use generated QE inputs or attest the geometry as verified"
                 )
+            relaxation_only = {"forc_conv_thr", "nstep"}
+            conflicting_relax = relaxation_only.intersection(
+                key.lower() for key in cfg.qe.extra_control
+            )
+            if conflicting_relax:
+                raise ValueError(
+                    f"{phase.phase_id}: QE relaxation control overrides conflict with "
+                    f"{sorted(conflicting_relax)}"
+                )
+            if _relaxes_cell(phase):
+                pressure = next(
+                    (
+                        value
+                        for key, value in cfg.qe.extra_control.items()
+                        if key.lower() == "press"
+                    ),
+                    0,
+                )
+                if not _is_zero_pressure(pressure):
+                    raise ValueError(
+                        f"{phase.phase_id}: elemental cell relaxation requires "
+                        "zero external pressure"
+                    )
         if cfg.qe.pw_template is not None and phase.qe_magnetic_settings:
             raise ValueError("QE template ignores magnetic overrides; use generated inputs")
         if cfg.qe.pw_template is None and any(

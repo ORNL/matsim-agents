@@ -225,9 +225,11 @@ def retrain_hydragnn(
         raise RuntimeError(f"HydraGNN trainer produced no config.json; see {log_path}")
     from ase.calculators.calculator import Calculator
 
+    from matsim_agents.active_learning.calculator import build_hydragnn_calculator
     from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
 
     restore_hydragnn_total_energy(Calculator(), out_logdir)
+    build_hydragnn_calculator(hydragnn_cfg.model_copy(update={"logdir": out_logdir}, deep=True))
 
     return out_logdir
 

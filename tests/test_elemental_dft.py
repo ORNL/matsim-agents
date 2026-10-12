@@ -655,6 +655,19 @@ def test_rejects_ignored_or_unpinned_qe_overrides(setup_references):
     assert not setup.calls
 
 
+@pytest.mark.parametrize("status", ["verified_converged", "requires_relaxation"])
+@pytest.mark.parametrize("forbidden_key", ["calculation", "prefix", "outdir", "pseudo_dir"])
+def test_qe_unconditionally_rejects_forbidden_control_overrides(
+    setup_references, status, forbidden_key
+):
+    setup = setup_references
+    phase = setup.plan.phases[0].model_copy(deep=True)
+    phase.geometry_status = status
+    setup.dft.qe.extra_control = {forbidden_key: "forbidden_value"}
+    with pytest.raises(ValueError, match="control overrides conflict with"):
+        elemental_dft._phase_config(setup.dft, phase)
+
+
 def test_al_additive_reference_extension_across_iterations(
     setup_references, dataset_method_sidecar
 ):

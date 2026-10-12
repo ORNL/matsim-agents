@@ -473,6 +473,8 @@ def test_frozen_reference_manifest_cannot_be_relabelled(tmp_path, training_input
 def test_retrain_hook_forwards_references_and_verifies_output(
     tmp_path, training_inputs, monkeypatch, built_in
 ):
+    import matsim_agents.active_learning.calculator as factory
+
     dataset, manifest = training_inputs
     output = _checkpoint(tmp_path, training_inputs)
     script = tmp_path / ("finetune_hydragnn.py" if built_in else "custom.py")
@@ -485,6 +487,20 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr("matsim_agents.active_learning.trainer.subprocess.run", run)
+    built_calculators = []
+
+    def mock_build_hydragnn_calculator(cfg, logdir_override=None):
+        built_calculators.append(cfg)
+        logdir = cfg.logdir if logdir_override is None else logdir_override
+        # Ensure that checkpoint loading / verification fails if checkpoint is corrupt/broken
+        ckpt_name = cfg.checkpoint or "ft_model.pk"
+        ckpt_file = logdir / ckpt_name
+        if ckpt_file.read_text() == "broken":
+            raise ValueError(f"Corrupt checkpoint in {logdir}")
+        return FormationCalculator()
+
+    monkeypatch.setattr(factory, "build_hydragnn_calculator", mock_build_hydragnn_calculator)
+
     result = retrain_hydragnn(
         config,
         HydraGNNConfig(logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt"),
@@ -493,6 +509,8 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         output,
     )
     assert result == output
+    assert len(built_calculators) == 1
+    assert built_calculators[0].logdir == output
     assert "--elemental-reference-manifest" in argv
     assert ("--output-dir" if built_in else "--logdir") in argv
     assert ("--gfm-logdir" if built_in else "--resume_from") in argv
