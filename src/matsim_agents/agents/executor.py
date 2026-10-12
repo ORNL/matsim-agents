@@ -11,6 +11,7 @@ import os
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 
+from matsim_agents.active_learning.hydragnn_energy import has_declared_hydragnn_checkpoint
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 from matsim_agents.orchestration.state import MatSimState
 
@@ -53,7 +54,11 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
             raise ValueError(
                 "Missing HydraGNN logdir. Provide via run config or set MATSIM_HYDRAGNN_LOGDIR."
             )
-        if not hydragnn_branch_mlp_checkpoint and hydragnn_inference_head is None:
+        if (
+            not hydragnn_branch_mlp_checkpoint
+            and hydragnn_inference_head is None
+            and not has_declared_hydragnn_checkpoint(logdir)
+        ):
             raise ValueError(
                 "Missing BranchWeightMLP checkpoint. Provide via run config or set "
                 "HYDRAGNN_BRANCH_MLP_CHECKPOINT."

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import hashlib
+import io
 import json
 import logging
 import os
@@ -403,7 +404,11 @@ def prepare_elemental_references(
             if phase.geometry_status == "requires_relaxation"
             else None
         )
-        relaxed_bytes = geometry_bytes
+        serialized = io.StringIO()
+        snapshot_atoms = atoms.copy()
+        snapshot_atoms.calc = None
+        write(serialized, snapshot_atoms, format="extxyz")
+        relaxed_bytes = serialized.getvalue().encode()
         relaxation = None
         if relax_key is not None:
             relax_entry = cache_dir / "relaxations" / relax_key
@@ -446,7 +451,7 @@ def prepare_elemental_references(
             atoms_for_static = atoms
         static_digest = hashlib.sha256(relaxed_bytes).hexdigest()
         static_identity = {
-            "schema_version": 2,
+            "schema_version": 3,
             "geometry_sha256": static_digest,
             "method_signature": signature,
             "phase": {
@@ -624,7 +629,7 @@ def prepare_elemental_references(
                     atoms_for_static = relaxed_atoms
             static_digest = hashlib.sha256(relaxed_bytes).hexdigest()
             static_identity = {
-                "schema_version": 2,
+                "schema_version": 3,
                 "geometry_sha256": static_digest,
                 "method_signature": signature,
                 "phase": {

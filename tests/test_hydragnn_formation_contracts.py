@@ -361,6 +361,7 @@ def test_fused_and_auto_newhead_reload_restore_totals(
         )
         assert Atoms("NbO2", calculator=calculator).get_potential_energy() == pytest.approx(-23)
         if not newhead:
+            assert calculator.active_branch_count == 1
             weights = torch.softmax(captured["mlp"](torch.zeros((1, 118))), dim=-1)
             assert weights[0, 7].item() == pytest.approx(1)
             assert weights.sum().item() == pytest.approx(1)

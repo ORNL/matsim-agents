@@ -25,6 +25,11 @@ class HydraGNNEnergyConvention(BaseModel):
     elemental_energies_eV_per_atom: dict[str, float] = Field(min_length=1)
 
 
+def has_declared_hydragnn_checkpoint(logdir: str | Path) -> bool:
+    """Recognize declared artifacts; calculator loading still verifies their contents."""
+    return (Path(logdir) / "energy-convention.json").is_file()
+
+
 def restore_hydragnn_total_energy(calculator, logdir: Path, checkpoint: str | None = None):
     """Leave unmarked foundation models unchanged; verify and restore marked ones."""
     path = logdir / "energy-convention.json"

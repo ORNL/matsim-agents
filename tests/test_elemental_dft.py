@@ -278,6 +278,36 @@ def test_selects_energy_per_atom_and_reuses_without_dft_approval(setup_reference
     assert json.loads(reused.read_text())["selection"]["dft_attempts"] == 0
 
 
+@pytest.mark.parametrize("format_name,filename", [("cif", "Si.cif"), ("vasp", "POSCAR")])
+def test_trusted_reference_formats_are_serialized_as_extxyz(
+    setup_references, format_name, filename
+):
+    setup = setup_references
+    phase = setup.plan.phases[1]
+    original = read(phase.structure_path)
+    original.positions[:, 0] = np.arange(len(original), dtype=float) * 0.17
+    phase.structure_path = setup.tmp / filename
+    write(phase.structure_path, original, format=format_name)
+    source_digest = elemental_dft.sha256_file(phase.structure_path)
+
+    manifest = _prepare(setup, dft_approved=True)
+    selected = json.loads(manifest.read_text())["references"]["Si"]
+    geometry = manifest.parent / selected["structure_path"]
+    snapshot = read(geometry, format="extxyz")
+    assert snapshot.get_chemical_symbols() == original.get_chemical_symbols()
+    np.testing.assert_allclose(snapshot.positions, original.positions)
+    np.testing.assert_allclose(snapshot.cell.array, original.cell.array)
+    assert selected["input_geometry_sha256"] == source_digest
+    assert selected["structure_sha256"] == elemental_dft.sha256_file(geometry)
+    assert selected["structure_sha256"] != source_digest
+    reused = _prepare(setup, "reuse", dft_approved=False, max_dft_calculations=0)
+    assert (
+        json.loads(reused.read_text())["references"]
+        == json.loads(manifest.read_text())["references"]
+    )
+    assert len(setup.calls) == 3
+
+
 def test_reference_manifest_feeds_formation_preparation(setup_references):
     from ase.calculators.singlepoint import SinglePointCalculator
 

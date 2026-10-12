@@ -431,6 +431,11 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         charge=cfg.charge,
         spin=cfg.spin,
     )
+    calculator.active_branch_count = (
+        len(set(convention["routed_branches"]))
+        if convention_path.exists() and "routed_branches" in convention
+        else num_branches
+    )
     return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
 
 

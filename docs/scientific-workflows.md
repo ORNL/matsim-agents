@@ -414,6 +414,12 @@ one node/one rank when using a launcher. Multi-rank training is not implemented.
 
 #### Approved elemental DFT prerequisite
 
+Declared HydraGNN checkpoints with bundled routing artifacts can be used by
+direct relaxation, chat, and the LangGraph executor without an external
+BranchWeightMLP path. Artifact integrity is still verified when loading the
+calculator. Branch-weight confidence is unavailable when fewer than two trained
+branches are active; relaxation reports no `top_branch_weight` in that case.
+
 `matsim_agents.active_learning.elemental_dft` calculates or reuses reference
 energies for an approved phase list. Every phase explicitly declares whether its
 input geometry is already verified as converged or requires relaxation. The
@@ -515,6 +521,9 @@ with the formation-label preparation command and includes all tested phases,
 selected phases, calculation locations, actual reference method signatures,
 and both source and final geometry hashes, plus relaxation provenance.
 Selected final geometries are copied into the snapshot.
+All input formats supported by ASE, including CIF and POSCAR, are serialized
+as extxyz before caching the single point. The source hash remains separate
+from the hash of the serialized geometry used by the cache and snapshot.
 Formation-label snapshots retain this selection audit. Cache reuse does not
 change an already-created reference/training snapshot or choose new endpoints
 silently. QE and VASP caches remain method-separated.
