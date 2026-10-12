@@ -532,7 +532,7 @@ class DFTConfig(BaseModel):
 
 
 class HydraGNNTrainingReferences(BaseModel):
-    """Verified manifest or approved fixed-geometry elemental calculation plan."""
+    """Verified manifest or approved elemental reference calculation plan."""
 
     manifest: Path | None = None
     phase_plan: Path | None = None

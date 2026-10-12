@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -66,6 +67,7 @@ def setup_references(tmp_path, monkeypatch):
                 element="Si" if name.startswith("si") else "O",
                 structure_path=path,
                 kind=kind,
+                geometry_status="verified_converged",
                 magnetic_state="nonmagnetic" if kind == "bulk" else "triplet",
                 qe_magnetic_settings={} if kind == "bulk" else {"nspin": 2, "tot_magnetization": 2},
                 kpts=None if kind == "bulk" else (1, 1, 1),
@@ -165,6 +167,65 @@ def test_al_automatic_training_references_are_approved_bounded_and_frozen(
             == selected
         )
     assert len(setup.calls) == 3
+
+
+def test_unverified_phase_relaxes_then_runs_static_and_caches_geometry(
+    setup_references, monkeypatch
+):
+    setup = setup_references
+    phase = setup.plan.phases[0]
+    phase.geometry_status = "requires_relaxation"
+    relax_calls = []
+
+    def fake_relax(phase, cfg, atoms, work_dir):
+        relaxed = atoms.copy()
+        relaxed.positions[0, 0] += 0.05
+        relax_calls.append((phase, cfg, atoms.copy(), work_dir))
+        return relaxed, 0.01, 4
+
+    monkeypatch.setattr(elemental_dft, "_run_reference_relaxation", fake_relax)
+    with pytest.raises(ValueError, match="needs 4 DFT calculations"):
+        _prepare(setup, dft_approved=True, max_dft_calculations=3)
+    assert not setup.calls
+    assert not relax_calls
+
+    manifest = _prepare(setup, dft_approved=True, max_dft_calculations=4)
+    assert len(relax_calls) == 1
+    assert len(setup.calls) == 3
+    relaxed_atoms = next(spec.atoms for _, spec in setup.calls if spec.job_id == phase.phase_id)
+    assert relaxed_atoms.positions[0, 0] == pytest.approx(0.05)
+    payload = json.loads(manifest.read_text())
+    entry = next(
+        item
+        for item in payload["selection"]["phases"]
+        if item["phase"]["phase_id"] == phase.phase_id
+    )
+    assert entry["geometry_status"] == "requires_relaxation"
+    assert entry["relaxation"]["converged"] is True
+    assert entry["relaxation"]["ionic_steps"] == 4
+    assert entry["calculation"]["geometry_sha256"] != entry["input_geometry_sha256"]
+    assert payload["selection"]["dft_attempts"] == 4
+
+    reused = _prepare(setup, "reuse", dft_approved=False, max_dft_calculations=0)
+    assert len(relax_calls) == 1
+    assert len(setup.calls) == 3
+    assert json.loads(reused.read_text())["selection"]["dft_attempts"] == 0
+
+
+def test_unconverged_reference_relaxation_never_creates_reference_result(
+    setup_references, monkeypatch
+):
+    setup = setup_references
+    setup.plan.phases[0].geometry_status = "requires_relaxation"
+
+    def failed_relax(*args):
+        raise RuntimeError("test relaxation did not converge")
+
+    monkeypatch.setattr(elemental_dft, "_run_reference_relaxation", failed_relax)
+    with pytest.raises(RuntimeError, match="did not converge"):
+        _prepare(setup, dft_approved=True, max_dft_calculations=4)
+    assert not (setup.tmp / "snapshot").exists()
+    assert not list((setup.cache / "relaxations").rglob("result.json"))
 
 
 def test_al_reference_method_mismatch_fails_before_any_dft(
@@ -282,6 +343,108 @@ def test_qe_molecular_settings_reach_generated_input(setup_references):
     assert "1 1 1" in text
 
 
+def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monkeypatch):
+    from matsim_agents.backends.dft import qe_relax
+
+    setup = setup_references
+    phase = setup.plan.phases[-1]
+    phase.geometry_status = "requires_relaxation"
+    cfg = elemental_dft._phase_config(setup.dft, phase)
+    atoms = read(phase.structure_path)
+
+    def fake_run(argv, **kwargs):
+        input_text = " ".join(Path(argv[4]).read_text().lower().split())
+        assert "calculation = 'relax'" in input_text
+        assert "ecutwfc = 5.00000000d+01" in input_text
+        assert "nspin = 2" in input_text
+        assert "tot_magnetization = 2" in input_text
+        assert "1 1 1 0 0 0" in input_text
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(elemental_dft.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        qe_relax,
+        "parse_pw_stdout",
+        lambda *args, **kwargs: SimpleNamespace(
+            converged=True,
+            return_code=0,
+            final_max_force_ry_au=0.0002,
+            final_energy_ev=-12.0,
+            bfgs_steps=5,
+        ),
+    )
+    monkeypatch.setattr(elemental_dft, "read", lambda *args, **kwargs: atoms.copy())
+    relaxed, force, steps = elemental_dft._run_reference_relaxation(
+        phase, cfg, atoms, setup.tmp / "qe-relax"
+    )
+    assert relaxed.get_chemical_symbols() == atoms.get_chemical_symbols()
+    assert force == pytest.approx(0.0002 * 25.711043)
+    assert steps == 5
+
+
+def test_vasp_relaxation_keeps_method_and_overrides(setup_references, monkeypatch):
+    setup = setup_references
+    template = setup.tmp / "INCAR"
+    template.write_text("ENCUT = 520\nKSPACING = 0.2\n")
+    potcar_dir = setup.tmp / "potcars"
+    (potcar_dir / "O").mkdir(parents=True)
+    (potcar_dir / "O" / "POTCAR").write_text("synthetic potential")
+    dft = DFTConfig.model_validate(
+        {
+            "backend": "vasp",
+            "vasp": {
+                "vasp_bin": setup.tmp / "vasp",
+                "vasp_wrapper": setup.tmp / "wrapper",
+                "incar_template": template,
+                "potcar_dir": potcar_dir,
+            },
+        }
+    )
+    phase = setup.plan.phases[-1].model_copy(
+        update={
+            "geometry_status": "requires_relaxation",
+            "qe_magnetic_settings": {},
+            "kpts": None,
+            "vasp_magnetic_settings": {"ISPIN": "2", "NUPDOWN": "2"},
+        },
+        deep=True,
+    )
+    cfg = elemental_dft._phase_config(dft, phase)
+    atoms = read(phase.structure_path)
+    from matsim_agents.backends.dft import vasp_relax
+
+    def fake_run(argv, **kwargs):
+        incar = (Path(kwargs["cwd"]) / "INCAR").read_text()
+        assert "ENCUT = 520" in incar
+        assert "ISPIN = 2" in incar
+        assert "NUPDOWN = 2" in incar
+        assert "IBRION = 2" in incar
+        assert "ISIF = 2" in incar
+        assert "NSW = 200" in incar
+        assert "EDIFFG = -0.02" in incar
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(elemental_dft.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        vasp_relax,
+        "parse_relax_outputs",
+        lambda *args, **kwargs: SimpleNamespace(
+            converged=True,
+            return_code=0,
+            final_atoms=atoms.copy(),
+            final_energy_eV=-12.0,
+            final_max_force_eV_per_A=0.01,
+            n_ionic_steps=6,
+        ),
+    )
+    relaxed, force, steps = elemental_dft._run_reference_relaxation(
+        phase, cfg, atoms, setup.tmp / "vasp-relax"
+    )
+    assert relaxed.get_chemical_symbols() == atoms.get_chemical_symbols()
+    assert force == pytest.approx(0.01)
+    assert steps == 6
+
+
 def test_fixed_reference_snapshot_never_overwrites_selection(setup_references):
     setup = setup_references
     manifest = _prepare(setup, dft_approved=True)
@@ -332,6 +495,7 @@ def test_invalid_phase_preflight_launches_nothing(setup_references, defect):
                 element="Zz",
                 structure_path=path,
                 kind="bulk",
+                geometry_status="verified_converged",
                 magnetic_state="nonmagnetic",
             )
         return
@@ -377,7 +541,7 @@ def test_failed_dft_never_becomes_a_cached_reference(setup_references, defect):
     setup.results.append(mutate)
     with pytest.raises((RuntimeError, ValueError)):
         _prepare(setup, dft_approved=True)
-    assert not list(setup.cache.glob("*/result.json"))
+    assert not list(setup.cache.rglob("calculations/*/result.json"))
     assert not (setup.tmp / "snapshot").exists()
 
 
@@ -385,7 +549,7 @@ def test_failed_dft_never_becomes_a_cached_reference(setup_references, defect):
 def test_corrupt_cache_fails_explicitly(setup_references, corruption):
     setup = setup_references
     _prepare(setup, dft_approved=True)
-    record = next(setup.cache.glob("*/result.json"))
+    record = next((setup.cache / "calculations").glob("*/result.json"))
     if corruption == "geometry":
         (record.parent / "geometry.extxyz").write_text("corrupt")
     else:

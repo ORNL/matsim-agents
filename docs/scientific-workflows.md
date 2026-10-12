@@ -364,7 +364,7 @@ trainer:
     manifest: /path/to/elemental-references.json
 ```
 
-Alternatively use the approved fixed-geometry prerequisite automatically:
+Alternatively use an approved elemental-reference phase plan automatically:
 
 ```yaml
 trainer:
@@ -414,40 +414,56 @@ one node/one rank when using a launcher. Multi-rank training is not implemented.
 
 #### Approved elemental DFT prerequisite
 
-`matsim_agents.active_learning.elemental_dft` calculates or reuses fixed-geometry
-single-points for an approved phase list. The caller supplies already prepared
-reference geometries: this stage does **not** relax them, find magnetic ground
-states, apply fitted corrections, or prove an elemental ground state. It selects
-the lowest DFT energy per atom among the declared geometries at zero pressure.
-Use a separate workflow to establish converged reference structures first.
+`matsim_agents.active_learning.elemental_dft` calculates or reuses reference
+energies for an approved phase list. Every phase explicitly declares whether its
+input geometry is already verified as converged or requires relaxation. The
+verified path remains a fixed-geometry single point; the other path performs a
+DFT relaxation, requires the requested force threshold to be met, then performs
+a production-protocol single point on the relaxed geometry. It does not search
+for additional structures or magnetic states, apply fitted corrections, or
+prove an elemental ground state: selection is the lowest energy per atom among
+the declared phases at zero pressure.
 
 The phase-plan YAML has this schema (paths are relative to the plan file):
 
 ```yaml
-protocol: fixed_geometry_zero_pressure
+protocol: declared_phases_zero_pressure_v2
 phases:
   - phase_id: nb-bcc
     element: Nb
     structure_path: references/Nb-bcc.extxyz
     kind: bulk
+    geometry_status: requires_relaxation
     magnetic_state: nonmagnetic
+    relaxation_force_tolerance_eV_per_A: 0.02
+    relaxation_max_steps: 200
   - phase_id: ta-bcc
     element: Ta
     structure_path: references/Ta-bcc.extxyz
     kind: bulk
+    geometry_status: verified_converged
     magnetic_state: nonmagnetic
   - phase_id: oxygen-triplet
     element: O
     structure_path: references/O2-vacuum.extxyz
     kind: molecule
+    geometry_status: requires_relaxation
     magnetic_state: triplet
+    relaxation_force_tolerance_eV_per_A: 0.02
+    relaxation_max_steps: 200
     qe_magnetic_settings:
       nspin: 2
       tot_magnetization: 2
     kpts: [1, 1, 1]
 ```
 
-The example is a declaration format, not supplied physical reference data or a
+`geometry_status` is required: use `verified_converged` only when convergence
+has been independently established and attested; otherwise use
+`requires_relaxation`. Bulk relaxation defaults to relaxing atoms and cell
+(`vc-relax`/VASP `ISIF=3`); set `relax_cell: false` to retain the input cell.
+Molecules always retain their cell and vacuum while relaxing atomic positions.
+The force tolerance and ionic-step limit are explicit per phase. The example is
+a declaration format, not supplied physical reference data or a general
 convergence recipe. Molecular cells need adequate vacuum. For VASP, replace
 QE overrides with `vasp_magnetic_settings: {ISPIN: "2", NUPDOWN: "2"}` and
 declare k-point settings in the shared VASP configuration instead of phase
@@ -462,6 +478,9 @@ k-points, and occupations to avoid composition-dependent automatic defaults.
 QE templates cannot be combined with magnetic overrides because those overrides
 would be ignored. Phase overrides are restricted to declared spin controls and
 QE reference k-point sampling; they cannot change the functional or potentials.
+Unverified QE geometries require generated QE inputs; template-based QE inputs
+cannot be safely transformed into relaxations and are rejected before DFT work.
+Trusted geometries can continue to use the fixed-geometry path with templates.
 The common compound method signature and each reference's actual method
 signature are both recorded, including the explicit state/sampling exceptions.
 
@@ -473,25 +492,29 @@ python -m matsim_agents.active_learning.elemental_dft \
   --cache-dir /path/to/shared-reference-cache \
   --output-dir /path/to/new-reference-snapshot \
   --approve-reference-phases --approve-dft \
-  --max-dft-calculations 3
+  --max-dft-calculations 5
 ```
 
 Run on allocated compute resources with the backend's wrapper/environment,
 not a login node. Phase-list approval is always required. Without
 `--approve-dft`, all phases must already have valid compatible cached results.
-The calculation cap counts missing unique calculations and fails before
-launching if the full requested reference set exceeds it. Cache identities
-include geometry, method/executable/potential/template hashes, and declared
-phase controls; per-entry file locks serialize shared-cache calculations.
-Malformed cache entries fail explicitly rather than silently recalculating.
-Only converged, finite, successful single-points are cached; failures expose
-their work directories. This stage's DFT calls are currently separate from AL
-label budgets and must be budgeted with its own cap.
+The calculation cap counts missing unique DFT invocations and fails before
+launching if the full requested reference set exceeds it. An uncached phase
+requiring relaxation normally costs two invocations: the relaxation and its
+final single point; a verified geometry costs one. Cache identities include
+the input/relaxed geometry, method/executable/potential/template hashes, and
+declared phase and relaxation controls; per-entry file locks serialize shared
+cache calculations. Malformed cache entries fail explicitly rather than
+silently recalculating. Only force-converged relaxations and successful finite
+single-points are cached; failures expose their work directories. This stage's
+DFT calls are separate from AL label budgets and must be budgeted with its own
+cap.
 
 The output directory must be new. Its `elemental-references.json` is compatible
 with the formation-label preparation command and includes all tested phases,
 selected phases, calculation locations, actual reference method signatures,
-and geometry hashes. Selected geometries are copied into the snapshot.
+and both source and final geometry hashes, plus relaxation provenance.
+Selected final geometries are copied into the snapshot.
 Formation-label snapshots retain this selection audit. Cache reuse does not
 change an already-created reference/training snapshot or choose new endpoints
 silently. QE and VASP caches remain method-separated.
