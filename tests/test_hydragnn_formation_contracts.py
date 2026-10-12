@@ -344,6 +344,7 @@ def test_fused_and_auto_newhead_reload_restore_totals(
         monkeypatch.setattr(relaxation, "_build_calculator", build)
         branch_mlp = model_dir / "branch-mlp.pt"
         branch_mlp.write_text("routing-checkpoint")
+        (model_dir / "routing.json").write_text(json.dumps({"routed_branches": [7]}))
         from matsim_agents.active_learning.dataset_governance import sha256_file
 
         save_hydragnn_energy_convention(
@@ -504,3 +505,45 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             0,
             output,
         )
+
+
+def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_inputs):
+    from matsim_agents.active_learning.dataset_governance import sha256_file
+
+    model = _checkpoint(tmp_path, training_inputs)
+    branch_mlp = model / "branch-mlp.pt"
+    branch_mlp.write_text("routing-checkpoint")
+    (model / "routing.json").write_text(json.dumps({"routed_branches": [7]}))
+    save_hydragnn_energy_convention(
+        model,
+        model / "ft_model.pk",
+        inference_metadata={
+            "routed_branches": [7],
+            "branch_mlp_checkpoint": branch_mlp.name,
+            "branch_mlp_sha256": sha256_file(branch_mlp),
+        },
+    )
+
+    # Valid checkpoint succeeds
+    restore_hydragnn_total_energy(FormationCalculator(), model)
+
+    # Mismatch 1: energy-convention.json has tampered routed_branches
+    convention_file = model / "energy-convention.json"
+    convention_data = json.loads(convention_file.read_text())
+    convention_data["routed_branches"] = [8]
+    convention_file.write_text(json.dumps(convention_data))
+    with pytest.raises(ValueError, match="routed branches do not match"):
+        restore_hydragnn_total_energy(FormationCalculator(), model)
+
+    # Mismatch 2: routing.json deleted from disk while in artifact hash
+    convention_data["routed_branches"] = [7]
+    convention_file.write_text(json.dumps(convention_data))
+    (model / "routing.json").unlink()
+    with pytest.raises(ValueError, match="inference artifact hash mismatch: routing.json"):
+        restore_hydragnn_total_energy(FormationCalculator(), model)
+
+    # Mismatch 3: routing.json omitted from artifact hash when routed_branches is declared
+    convention_data["inference_artifact_sha256"].pop("routing.json", None)
+    convention_file.write_text(json.dumps(convention_data))
+    with pytest.raises(ValueError, match="requires verified routing.json"):
+        restore_hydragnn_total_energy(FormationCalculator(), model)

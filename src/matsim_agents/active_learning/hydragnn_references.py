@@ -161,14 +161,35 @@ def resolve_training_references(
                         geom_file = f"{elem}.extxyz"
                         shutil.copy2(temp_output / geom_file, reference_root / geom_file)
                         existing_manifest["references"][elem] = new_manifest["references"][elem]
-                    existing_manifest.setdefault("selection", {}).setdefault("phases", []).extend(
-                        new_manifest.get("selection", {}).get("phases", [])
+                    existing_selection = existing_manifest.setdefault("selection", {})
+                    new_selection = new_manifest.get("selection", {})
+                    if "initial_approval" not in existing_selection:
+                        existing_selection["initial_approval"] = {
+                            "phases_approved": existing_selection.get("phases_approved", False),
+                            "dft_approved": existing_selection.get("dft_approved", False),
+                            "dft_attempts": existing_selection.get("dft_attempts", 0),
+                        }
+                    existing_selection.setdefault("extensions", []).append(
+                        {
+                            "elements": sorted(new_elements),
+                            "phases_approved": new_selection.get("phases_approved", False),
+                            "dft_approved": new_selection.get("dft_approved", False),
+                            "dft_attempts": new_selection.get("dft_attempts", 0),
+                        }
                     )
-                    existing_manifest["selection"]["dft_attempts"] = existing_manifest[
-                        "selection"
-                    ].get("dft_attempts", 0) + new_manifest.get("selection", {}).get(
+                    existing_selection.setdefault("phases", []).extend(
+                        new_selection.get("phases", [])
+                    )
+                    existing_selection["phases_approved"] = bool(
+                        existing_selection.get("phases_approved")
+                        and new_selection.get("phases_approved")
+                    )
+                    existing_selection["dft_approved"] = bool(
+                        existing_selection.get("dft_approved") or new_selection.get("dft_approved")
+                    )
+                    existing_selection["dft_attempts"] = existing_selection.get(
                         "dft_attempts", 0
-                    )
+                    ) + new_selection.get("dft_attempts", 0)
                     existing_manifest["method_signature"] = target_compound_signature
                     source.write_text(json.dumps(existing_manifest, indent=2) + "\n")
                     new_identity = _phase_plan_identity(

@@ -667,11 +667,57 @@ def test_al_additive_reference_extension_across_iterations(
     si_atoms.calc = SinglePointCalculator(si_atoms, energy=-10, forces=np.zeros((2, 3)))
     iter1_dataset = setup.tmp / "train_iter1.extxyz"
     write(iter1_dataset, [si_atoms])
-    # Prepare expected Si reference for sidecar
+    # Iteration 1: AL dataset only has Si. Pre-cache Si calculations and run with dft_approved=False
     expected_si = _prepare(setup, "expected_si", dft_approved=True, required_elements={"Si"})
     dataset_method_sidecar(iter1_dataset, expected_si)
 
-    cfg = TrainerConfig(
+    cfg1 = TrainerConfig(
+        enabled=True,
+        train_script=setup.tmp / "train.py",
+        compare_after_training=False,
+        promote_model=False,
+        hydragnn_training_references={
+            "phase_plan": plan_path,
+            "cache_dir": setup.cache,
+            "phases_approved": True,
+            "dft_approved": False,
+            "max_dft_calculations": 0,
+        },
+    )
+    root = setup.tmp / "al-references"
+    res1 = resolve_training_references(
+        cfg1, iter1_dataset, dft_config=setup.dft, reference_root=root
+    )
+    assert res1 == root / "elemental-references.json"
+    manifest1 = json.loads(res1.read_text())
+    assert set(manifest1["references"].keys()) == {"Si"}
+    assert manifest1["method_signature"] == dft_method_signature(setup.dft, {"Si"})
+    assert manifest1["selection"]["dft_approved"] is False
+    assert manifest1["selection"]["dft_attempts"] == 0
+    assert (root / "Si.extxyz").exists()
+    assert not (root / "O.extxyz").exists()
+    calls_after_iter1 = len(setup.calls)
+
+    # Iteration 2: AL dataset now has Si and O (newly labelled species O)
+    # Run with dft_approved=True to calculate newly introduced species O
+    from matsim_agents.active_learning.dataset_governance import (
+        DatasetValidationSummary,
+        write_dataset_manifest,
+    )
+
+    sio2_atoms = Atoms("SiO2", positions=np.zeros((3, 3)))
+    sio2_atoms.calc = SinglePointCalculator(sio2_atoms, energy=-20, forces=np.zeros((3, 3)))
+    iter2_dataset = setup.tmp / "train_iter2.extxyz"
+    write(iter2_dataset, [si_atoms, sio2_atoms])
+    write_dataset_manifest(
+        iter2_dataset,
+        dft_backend=setup.dft.backend,
+        method_signature=dft_method_signature(setup.dft, {"Si", "O"}),
+        energy_reference=f"{setup.dft.backend}:native_total_energy",
+        validation=DatasetValidationSummary(),
+    )
+
+    cfg2 = TrainerConfig(
         enabled=True,
         train_script=setup.tmp / "train.py",
         compare_after_training=False,
@@ -684,28 +730,9 @@ def test_al_additive_reference_extension_across_iterations(
             "max_dft_calculations": 5,
         },
     )
-    root = setup.tmp / "al-references"
-    res1 = resolve_training_references(
-        cfg, iter1_dataset, dft_config=setup.dft, reference_root=root
-    )
-    assert res1 == root / "elemental-references.json"
-    manifest1 = json.loads(res1.read_text())
-    assert set(manifest1["references"].keys()) == {"Si"}
-    assert manifest1["method_signature"] == dft_method_signature(setup.dft, {"Si"})
-    assert (root / "Si.extxyz").exists()
-    assert not (root / "O.extxyz").exists()
-    calls_after_iter1 = len(setup.calls)
-
-    # Iteration 2: AL dataset now has Si and O (newly labelled species O)
-    sio2_atoms = Atoms("SiO2", positions=np.zeros((3, 3)))
-    sio2_atoms.calc = SinglePointCalculator(sio2_atoms, energy=-20, forces=np.zeros((3, 3)))
-    iter2_dataset = setup.tmp / "train_iter2.extxyz"
-    write(iter2_dataset, [si_atoms, sio2_atoms])
-    expected_sio2 = _prepare(setup, "expected_sio2", dft_approved=True)
-    dataset_method_sidecar(iter2_dataset, expected_sio2)
 
     res2 = resolve_training_references(
-        cfg, iter2_dataset, dft_config=setup.dft, reference_root=root
+        cfg2, iter2_dataset, dft_config=setup.dft, reference_root=root
     )
     assert res2 == root / "elemental-references.json"
     manifest2 = json.loads(res2.read_text())
@@ -717,9 +744,20 @@ def test_al_additive_reference_extension_across_iterations(
     assert len(setup.calls) > calls_after_iter1
     calls_after_iter2 = len(setup.calls)
 
+    # Verify extension approval provenance and updated aggregate audit
+    selection2 = manifest2["selection"]
+    assert selection2["initial_approval"]["dft_approved"] is False
+    assert selection2["initial_approval"]["dft_attempts"] == 0
+    assert len(selection2["extensions"]) == 1
+    assert selection2["extensions"][0]["elements"] == ["O"]
+    assert selection2["extensions"][0]["dft_approved"] is True
+    assert selection2["extensions"][0]["dft_attempts"] > 0
+    assert selection2["dft_approved"] is True
+    assert selection2["dft_attempts"] == selection2["extensions"][0]["dft_attempts"]
+
     # Iteration 3: same elements, no new DFT calls needed
     res3 = resolve_training_references(
-        cfg, iter2_dataset, dft_config=setup.dft, reference_root=root
+        cfg2, iter2_dataset, dft_config=setup.dft, reference_root=root
     )
     assert res3 == root / "elemental-references.json"
     assert len(setup.calls) == calls_after_iter2
@@ -727,4 +765,4 @@ def test_al_additive_reference_extension_across_iterations(
     # Verification: changing DFT method for existing element raises error
     setup.dft.qe.ecutwfc_ry += 10
     with pytest.raises(ValueError, match="inputs changed"):
-        resolve_training_references(cfg, iter2_dataset, dft_config=setup.dft, reference_root=root)
+        resolve_training_references(cfg2, iter2_dataset, dft_config=setup.dft, reference_root=root)

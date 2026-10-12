@@ -67,8 +67,29 @@ def restore_hydragnn_total_energy(calculator, logdir: Path, checkpoint: str | No
     snapshot_metadata = json.loads((snapshot_dir / "energy-convention.json").read_text())
     metadata = json.loads(path.read_text())
     for name, digest in metadata["inference_artifact_sha256"].items():
-        if Path(name).name != name or sha256_file(logdir / name) != digest:
+        artifact_path = logdir / name
+        if (
+            Path(name).name != name
+            or not artifact_path.is_file()
+            or sha256_file(artifact_path) != digest
+        ):
             raise ValueError(f"HydraGNN inference artifact hash mismatch: {name}")
+    routing_artifact = logdir / "routing.json"
+    if (
+        "routed_branches" in metadata
+        or "routing.json" in metadata.get("inference_artifact_sha256", {})
+        or routing_artifact.exists()
+    ):
+        if (
+            "routing.json" not in metadata.get("inference_artifact_sha256", {})
+            or not routing_artifact.exists()
+        ):
+            raise ValueError("HydraGNN routed checkpoint requires verified routing.json")
+        routing_metadata = json.loads(routing_artifact.read_text())
+        if metadata.get("routed_branches") != routing_metadata.get("routed_branches"):
+            raise ValueError(
+                "HydraGNN checkpoint routed branches do not match verified routing.json"
+            )
     if any(metadata.get(key) != value for key, value in snapshot_metadata.items()):
         raise ValueError("HydraGNN checkpoint convention differs from training provenance")
     _, _, references = load_elemental_reference_manifest(
