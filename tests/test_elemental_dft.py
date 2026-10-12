@@ -108,10 +108,11 @@ def setup_references(tmp_path, monkeypatch):
 
 
 def _prepare(setup, name="snapshot", **kwargs):
+    required = kwargs.pop("required_elements", {"Si", "O"})
     return prepare_elemental_references(
         setup.plan,
         setup.dft,
-        required_elements={"Si", "O"},
+        required_elements=required,
         cache_dir=setup.cache,
         output_dir=setup.tmp / name,
         phases_approved=True,
@@ -652,3 +653,78 @@ def test_rejects_ignored_or_unpinned_qe_overrides(setup_references):
     with pytest.raises(ValueError, match="must pin"):
         _prepare(setup, dft_approved=True)
     assert not setup.calls
+
+
+def test_al_additive_reference_extension_across_iterations(
+    setup_references, dataset_method_sidecar
+):
+    setup = setup_references
+    plan_path = setup.tmp / "phases.yaml"
+    plan_path.write_text(setup.plan.model_dump_json())
+
+    # Iteration 1: AL dataset only has Si
+    si_atoms = Atoms("Si2", positions=np.zeros((2, 3)))
+    si_atoms.calc = SinglePointCalculator(si_atoms, energy=-10, forces=np.zeros((2, 3)))
+    iter1_dataset = setup.tmp / "train_iter1.extxyz"
+    write(iter1_dataset, [si_atoms])
+    # Prepare expected Si reference for sidecar
+    expected_si = _prepare(setup, "expected_si", dft_approved=True, required_elements={"Si"})
+    dataset_method_sidecar(iter1_dataset, expected_si)
+
+    cfg = TrainerConfig(
+        enabled=True,
+        train_script=setup.tmp / "train.py",
+        compare_after_training=False,
+        promote_model=False,
+        hydragnn_training_references={
+            "phase_plan": plan_path,
+            "cache_dir": setup.cache,
+            "phases_approved": True,
+            "dft_approved": True,
+            "max_dft_calculations": 5,
+        },
+    )
+    root = setup.tmp / "al-references"
+    res1 = resolve_training_references(
+        cfg, iter1_dataset, dft_config=setup.dft, reference_root=root
+    )
+    assert res1 == root / "elemental-references.json"
+    manifest1 = json.loads(res1.read_text())
+    assert set(manifest1["references"].keys()) == {"Si"}
+    assert manifest1["method_signature"] == dft_method_signature(setup.dft, {"Si"})
+    assert (root / "Si.extxyz").exists()
+    assert not (root / "O.extxyz").exists()
+    calls_after_iter1 = len(setup.calls)
+
+    # Iteration 2: AL dataset now has Si and O (newly labelled species O)
+    sio2_atoms = Atoms("SiO2", positions=np.zeros((3, 3)))
+    sio2_atoms.calc = SinglePointCalculator(sio2_atoms, energy=-20, forces=np.zeros((3, 3)))
+    iter2_dataset = setup.tmp / "train_iter2.extxyz"
+    write(iter2_dataset, [si_atoms, sio2_atoms])
+    expected_sio2 = _prepare(setup, "expected_sio2", dft_approved=True)
+    dataset_method_sidecar(iter2_dataset, expected_sio2)
+
+    res2 = resolve_training_references(
+        cfg, iter2_dataset, dft_config=setup.dft, reference_root=root
+    )
+    assert res2 == root / "elemental-references.json"
+    manifest2 = json.loads(res2.read_text())
+    assert set(manifest2["references"].keys()) == {"Si", "O"}
+    assert manifest2["method_signature"] == dft_method_signature(setup.dft, {"Si", "O"})
+    assert manifest2["references"]["Si"] == manifest1["references"]["Si"]
+    assert (root / "Si.extxyz").exists()
+    assert (root / "O.extxyz").exists()
+    assert len(setup.calls) > calls_after_iter1
+    calls_after_iter2 = len(setup.calls)
+
+    # Iteration 3: same elements, no new DFT calls needed
+    res3 = resolve_training_references(
+        cfg, iter2_dataset, dft_config=setup.dft, reference_root=root
+    )
+    assert res3 == root / "elemental-references.json"
+    assert len(setup.calls) == calls_after_iter2
+
+    # Verification: changing DFT method for existing element raises error
+    setup.dft.qe.ecutwfc_ry += 10
+    with pytest.raises(ValueError, match="inputs changed"):
+        resolve_training_references(cfg, iter2_dataset, dft_config=setup.dft, reference_root=root)

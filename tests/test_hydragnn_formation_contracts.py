@@ -389,6 +389,62 @@ def test_training_reference_is_frozen_independently_of_comparison(tmp_path, trai
         resolve_training_references(config, dataset, dft_config=None, reference_root=root)
 
 
+def test_training_reference_manifest_additive_extension_across_iterations(
+    tmp_path, elemental_manifest, dataset_method_sidecar
+):
+    manifest = elemental_manifest({"Nb": -10, "O": -5, "Ti": -7})
+
+    # Iteration 1: dataset only has Nb
+    nb_atoms = Atoms("Nb2", positions=np.zeros((2, 3)))
+    nb_atoms.calc = SinglePointCalculator(nb_atoms, energy=-20, forces=np.zeros((2, 3)))
+    dataset1 = tmp_path / "train1.extxyz"
+    write(dataset1, [nb_atoms])
+    dataset_method_sidecar(dataset1, manifest)
+
+    config = TrainerConfig(
+        enabled=True,
+        train_script=tmp_path / "train.py",
+        compare_after_training=False,
+        promote_model=False,
+        hydragnn_training_references={"manifest": manifest},
+    )
+    root = tmp_path / "frozen"
+    res1 = resolve_training_references(config, dataset1, dft_config=None, reference_root=root)
+    assert res1 == root / "elemental-references.json"
+    data1 = json.loads(res1.read_text())
+    assert set(data1["references"].keys()) == {"Nb"}
+    assert (root / "Nb.extxyz").exists()
+    assert not (root / "O.extxyz").exists()
+
+    # Iteration 2: dataset adds O (newly labelled species)
+    o_atoms = Atoms("NbO2", positions=np.zeros((3, 3)))
+    o_atoms.calc = SinglePointCalculator(o_atoms, energy=-23, forces=np.zeros((3, 3)))
+    dataset2 = tmp_path / "train2.extxyz"
+    write(dataset2, [nb_atoms, o_atoms])
+    dataset_method_sidecar(dataset2, manifest)
+
+    res2 = resolve_training_references(config, dataset2, dft_config=None, reference_root=root)
+    assert res2 == root / "elemental-references.json"
+    data2 = json.loads(res2.read_text())
+    assert set(data2["references"].keys()) == {"Nb", "O"}
+    assert data2["references"]["Nb"] == data1["references"]["Nb"]
+    assert (root / "Nb.extxyz").exists()
+    assert (root / "O.extxyz").exists()
+
+    # Iteration 3: dataset has Nb and O (no new species), reuses frozen snapshot
+    res3 = resolve_training_references(config, dataset2, dft_config=None, reference_root=root)
+    assert res3 == root / "elemental-references.json"
+
+    # Iteration 4: dataset adds an element not present in source manifest -> coverage error
+    bad_atoms = Atoms("NbFe", positions=np.zeros((2, 3)))
+    bad_atoms.calc = SinglePointCalculator(bad_atoms, energy=-15, forces=np.zeros((2, 3)))
+    dataset4 = tmp_path / "train4.extxyz"
+    write(dataset4, [bad_atoms])
+    dataset_method_sidecar(dataset4, manifest)
+    with pytest.raises(ValueError, match="lacks coverage"):
+        resolve_training_references(config, dataset4, dft_config=None, reference_root=root)
+
+
 def test_training_without_comparison_still_requires_references(tmp_path, training_inputs):
     dataset, _ = training_inputs
     with pytest.raises(ValueError, match="even when"):

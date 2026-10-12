@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
 from pathlib import Path
 
 from ase.io import read, write
@@ -18,6 +20,58 @@ from matsim_agents.discovery.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,
 )
+
+
+def _phase_plan_identity(
+    plan_path: Path,
+    plan: ElementalReferencePlan,
+    dft_config: DFTConfig,
+    elements: set[str],
+) -> dict:
+    return {
+        "plan_sha256": sha256_file(plan_path),
+        "geometry_sha256": {
+            phase.phase_id: sha256_file(phase.structure_path) for phase in plan.phases
+        },
+        "base_method_signature": dft_method_signature(dft_config, set()),
+        "element_method_signatures": {
+            elem: dft_method_signature(dft_config, {elem}) for elem in sorted(elements)
+        },
+        "compound_method_signature": dft_method_signature(dft_config, elements),
+    }
+
+
+def _verify_phase_plan_identity(
+    recorded_inputs: dict,
+    plan_path: Path,
+    plan: ElementalReferencePlan,
+    dft_config: DFTConfig,
+    existing_elements: set[str],
+) -> None:
+    if recorded_inputs.get("plan_sha256") != sha256_file(plan_path):
+        raise ValueError("HydraGNN training reference inputs changed; use a new AL dataset")
+    recorded_geometries = recorded_inputs.get("geometry_sha256", {})
+    current_geometries = {
+        phase.phase_id: sha256_file(phase.structure_path) for phase in plan.phases
+    }
+    if any(
+        recorded_geometries.get(pid) != current_geometries.get(pid) for pid in recorded_geometries
+    ):
+        raise ValueError("HydraGNN training reference inputs changed; use a new AL dataset")
+    if "base_method_signature" in recorded_inputs and recorded_inputs[
+        "base_method_signature"
+    ] != dft_method_signature(dft_config, set()):
+        raise ValueError("HydraGNN training reference inputs changed; use a new AL dataset")
+    if "element_method_signatures" in recorded_inputs:
+        for elem in existing_elements:
+            if recorded_inputs["element_method_signatures"].get(elem) != dft_method_signature(
+                dft_config, {elem}
+            ):
+                raise ValueError("HydraGNN training reference inputs changed; use a new AL dataset")
+    elif recorded_inputs.get("compound_method_signature") != dft_method_signature(
+        dft_config, existing_elements
+    ):
+        raise ValueError("HydraGNN training reference inputs changed; use a new AL dataset")
 
 
 def _verify_frozen_inputs(identity_path: Path, identity: dict, manifest: Path) -> None:
@@ -63,18 +117,66 @@ def resolve_training_references(
         if dft_config is None or config.cache_dir is None:
             raise ValueError("Automatic HydraGNN references require DFTConfig and cache_dir")
         plan = ElementalReferencePlan.from_yaml(config.phase_plan)
-        identity = {
-            "plan_sha256": sha256_file(config.phase_plan),
-            "geometry_sha256": {
-                phase.phase_id: sha256_file(phase.structure_path) for phase in plan.phases
-            },
-            "compound_method_signature": dft_method_signature(dft_config, elements),
-        }
         source = reference_root / "elemental-references.json"
         identity_path = reference_root / "training-reference-inputs.json"
         if reference_root.exists():
-            _verify_frozen_inputs(identity_path, identity, source)
+            recorded = json.loads(identity_path.read_text())
+            if recorded.get("snapshot_manifest_sha256") != sha256_file(source):
+                raise ValueError("Frozen HydraGNN training reference manifest hash mismatch")
+            existing_manifest = json.loads(source.read_text())
+            existing_elements = set(existing_manifest.get("references", {}).keys())
+            _verify_phase_plan_identity(
+                recorded.get("inputs", {}),
+                config.phase_plan,
+                plan,
+                dft_config,
+                existing_elements,
+            )
+            new_elements = elements - existing_elements
+            if new_elements:
+                all_elements = existing_elements | new_elements
+                target_compound_signature = dft_method_signature(dft_config, all_elements)
+                validate_dataset_reference_method(
+                    dataset,
+                    reference_backend=dft_config.backend,
+                    reference_method_signature=target_compound_signature,
+                    require_sidecar=True,
+                )
+                with tempfile.TemporaryDirectory(prefix="ext-references-") as temp_dir:
+                    temp_output = Path(temp_dir) / "snapshot"
+                    prepare_elemental_references(
+                        plan,
+                        dft_config,
+                        required_elements=new_elements,
+                        cache_dir=config.cache_dir,
+                        output_dir=temp_output,
+                        phases_approved=config.phases_approved,
+                        dft_approved=config.dft_approved,
+                        max_dft_calculations=config.max_dft_calculations,
+                    )
+                    new_manifest = json.loads(
+                        (temp_output / "elemental-references.json").read_text()
+                    )
+                    for elem in new_elements:
+                        geom_file = f"{elem}.extxyz"
+                        shutil.copy2(temp_output / geom_file, reference_root / geom_file)
+                        existing_manifest["references"][elem] = new_manifest["references"][elem]
+                    existing_manifest.setdefault("selection", {}).setdefault("phases", []).extend(
+                        new_manifest.get("selection", {}).get("phases", [])
+                    )
+                    existing_manifest["selection"]["dft_attempts"] = existing_manifest[
+                        "selection"
+                    ].get("dft_attempts", 0) + new_manifest.get("selection", {}).get(
+                        "dft_attempts", 0
+                    )
+                    existing_manifest["method_signature"] = target_compound_signature
+                    source.write_text(json.dumps(existing_manifest, indent=2) + "\n")
+                    new_identity = _phase_plan_identity(
+                        config.phase_plan, plan, dft_config, all_elements
+                    )
+                    _save_frozen_inputs(identity_path, new_identity, source)
         else:
+            identity = _phase_plan_identity(config.phase_plan, plan, dft_config, elements)
             validate_dataset_reference_method(
                 dataset,
                 reference_backend=dft_config.backend,
@@ -92,11 +194,71 @@ def resolve_training_references(
                 max_dft_calculations=config.max_dft_calculations,
             )
             _save_frozen_inputs(identity_path, identity, source)
-    if source is None:
-        raise ValueError(
-            "HydraGNN training requires hydragnn_training_references or validation_reference_set "
-            "even when model comparison/promotion is disabled"
-        )
+    else:
+        if source is None:
+            raise ValueError(
+                "HydraGNN training requires hydragnn_training_references or "
+                "validation_reference_set even when model comparison/promotion is disabled"
+            )
+        identity = {"manifest_sha256": sha256_file(source)}
+        identity_path = reference_root / "training-reference-inputs.json"
+        frozen = reference_root / "elemental-references.json"
+        if reference_root.exists():
+            _verify_frozen_inputs(identity_path, identity, frozen)
+            existing_frozen_manifest = json.loads(frozen.read_text())
+            existing_elements = set(existing_frozen_manifest.get("references", {}).keys())
+            new_elements = elements - existing_elements
+            if new_elements:
+                manifest, _, references = load_elemental_reference_manifest(
+                    source, required_elements=elements
+                )
+                validate_dataset_reference_method(
+                    dataset,
+                    reference_backend=manifest["backend"],
+                    reference_method_signature=manifest["method_signature"],
+                    require_sidecar=True,
+                )
+                copied = dict(existing_frozen_manifest.get("references", {}))
+                for element, atoms, energy, _ in references:
+                    if element in new_elements:
+                        geometry = reference_root / f"{element}.extxyz"
+                        write(geometry, atoms)
+                        copied[element] = {
+                            "structure_path": geometry.name,
+                            "structure_sha256": sha256_file(geometry),
+                            "energy_eV": energy,
+                        }
+                source_manifest = json.loads(source.read_text())
+                frozen.write_text(
+                    json.dumps({**source_manifest, "references": copied}, indent=2) + "\n"
+                )
+                _save_frozen_inputs(identity_path, identity, frozen)
+        else:
+            manifest, source_bytes, references = load_elemental_reference_manifest(
+                source, required_elements=elements
+            )
+            validate_dataset_reference_method(
+                dataset,
+                reference_backend=manifest["backend"],
+                reference_method_signature=manifest["method_signature"],
+                require_sidecar=True,
+            )
+            reference_root.mkdir(parents=True)
+            copied = {}
+            for element, atoms, energy, _ in references:
+                if element in elements:
+                    geometry = reference_root / f"{element}.extxyz"
+                    write(geometry, atoms)
+                    copied[element] = {
+                        "structure_path": geometry.name,
+                        "structure_sha256": sha256_file(geometry),
+                        "energy_eV": energy,
+                    }
+            frozen.write_text(
+                json.dumps({**json.loads(source_bytes), "references": copied}, indent=2) + "\n"
+            )
+            _save_frozen_inputs(identity_path, identity, frozen)
+        source = frozen
     manifest, _, _ = load_elemental_reference_manifest(source, required_elements=elements)
     validate_dataset_reference_method(
         dataset,
@@ -104,30 +266,4 @@ def resolve_training_references(
         reference_method_signature=manifest["method_signature"],
         require_sidecar=True,
     )
-    if config is None or config.phase_plan is None:
-        identity = {"manifest_sha256": sha256_file(source)}
-        identity_path = reference_root / "training-reference-inputs.json"
-        frozen = reference_root / "elemental-references.json"
-        if reference_root.exists():
-            _verify_frozen_inputs(identity_path, identity, frozen)
-            load_elemental_reference_manifest(frozen, required_elements=elements)
-        else:
-            _, source_bytes, references = load_elemental_reference_manifest(
-                source, required_elements=elements
-            )
-            reference_root.mkdir(parents=True)
-            copied = {}
-            for element, atoms, energy, _ in references:
-                geometry = reference_root / f"{element}.extxyz"
-                write(geometry, atoms)
-                copied[element] = {
-                    "structure_path": geometry.name,
-                    "structure_sha256": sha256_file(geometry),
-                    "energy_eV": energy,
-                }
-            frozen.write_text(
-                json.dumps({**json.loads(source_bytes), "references": copied}, indent=2) + "\n"
-            )
-            _save_frozen_inputs(identity_path, identity, frozen)
-        source = frozen
     return source
