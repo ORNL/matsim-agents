@@ -99,6 +99,7 @@ def test_aurora_runs_perlmutter_style_phases_without_switching_checkout(tmp_path
         HYDRAGNN_REF="", FRAMEWORKS_MODULE="frameworks/test", RUN_MODEL_TESTS="1",
         VENV_PATH=str(matsim / ".venv"), INSTALL_ROOT=str(matsim / ".hpc-build/aurora"),
         RECREATE_ENV="0", RECREATE_MACE_ENV="1", RECREATE_UMA_ENV="0", INSTALL_VLLM="1",
+        REUSE_HYDRAGNN_DEPENDENCIES="0",
         HYDRAGNN_INSTALLER=str(hydra_installer),
     )
     installer = ROOT / "deployments/aurora/setup/install.sh"
