@@ -385,7 +385,8 @@ snapshot under its output directory and rejects changed reference inputs or
 DFT protocols on subsequent iterations/restarts; use a new dataset for changes.
 
 Saved checkpoints bind `energy-convention.json` to the checkpoint hash,
-inference configuration, and verified training snapshot. Neural outputs are
+inference configuration, the exact bundled elemental-reference manifest, and
+the verified training snapshot. Neural outputs are
 total-cell formation energies. ASE-facing calculators add the recorded
 elemental baseline **exactly once**, returning DFT-reference total energies;
 existing evaluation subtracts its own model elemental references once.

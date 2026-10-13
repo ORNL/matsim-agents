@@ -189,7 +189,8 @@ def test_checkpoint_reconstructs_totals_and_preserves_forces_and_stress(
 
 
 @pytest.mark.parametrize(
-    "defect", ["checkpoint", "selected_checkpoint", "metadata", "geometry", "data"]
+    "defect",
+    ["checkpoint", "selected_checkpoint", "metadata", "geometry", "data", "reference_manifest"],
 )
 def test_checkpoint_rejects_mismatches(tmp_path, training_inputs, defect):
     model = _checkpoint(tmp_path, training_inputs)
@@ -209,9 +210,17 @@ def test_checkpoint_rejects_mismatches(tmp_path, training_inputs, defect):
         atoms = read(path)
         atoms.positions[0, 0] += 0.1
         write(path, atoms)
+    elif defect == "reference_manifest":
+        path = model / "training-reference/elemental-references.json"
+        references = json.loads(path.read_text())
+        references["method_signature"] = "tampered"
+        path.write_text(json.dumps(references))
     else:
         (model / "training-reference/formation.extxyz").write_text("tampered")
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="reference manifest hash mismatch" if defect == "reference_manifest" else None,
+    ):
         restore_hydragnn_total_energy(FormationCalculator(), model, selected)
 
 
@@ -503,7 +512,11 @@ def test_retrain_hook_forwards_references_and_verifies_output(
 
     result = retrain_hydragnn(
         config,
-        HydraGNNConfig(logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt"),
+        HydraGNNConfig(
+            logdir=tmp_path,
+            checkpoint="incumbent-custom.pk",
+            mlp_checkpoint=tmp_path / "mlp.pt",
+        ),
         dataset,
         0,
         output,
@@ -511,6 +524,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
     assert result == output
     assert len(built_calculators) == 1
     assert built_calculators[0].logdir == output
+    assert built_calculators[0].checkpoint is None
     assert "--elemental-reference-manifest" in argv
     assert ("--output-dir" if built_in else "--logdir") in argv
     assert ("--gfm-logdir" if built_in else "--resume_from") in argv
@@ -518,7 +532,11 @@ def test_retrain_hook_forwards_references_and_verifies_output(
     with pytest.raises(ValueError, match="checkpoint"):
         retrain_hydragnn(
             config,
-            HydraGNNConfig(logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt"),
+            HydraGNNConfig(
+                logdir=tmp_path,
+                checkpoint="incumbent-custom.pk",
+                mlp_checkpoint=tmp_path / "mlp.pt",
+            ),
             dataset,
             0,
             output,

@@ -229,7 +229,10 @@ def retrain_hydragnn(
     from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
 
     restore_hydragnn_total_energy(Calculator(), out_logdir)
-    build_hydragnn_calculator(hydragnn_cfg.model_copy(update={"logdir": out_logdir}, deep=True))
+    candidate_cfg = hydragnn_cfg.model_copy(
+        update={"logdir": out_logdir, "checkpoint": None}, deep=True
+    )
+    build_hydragnn_calculator(candidate_cfg)
 
     return out_logdir
 

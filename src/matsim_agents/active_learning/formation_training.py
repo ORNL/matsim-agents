@@ -196,6 +196,9 @@ def save_hydragnn_energy_convention(
     metadata = json.loads(source.read_text())
     metadata["checkpoint"] = checkpoint.name
     metadata["checkpoint_sha256"] = sha256_file(checkpoint)
+    metadata["training_reference_manifest_sha256"] = sha256_file(
+        output_dir / "training-reference" / "elemental-references.json"
+    )
     metadata["inference_artifact_sha256"] = {
         name: sha256_file(output_dir / name)
         for name in ("config.json", "newhead.json", "routing.json")
