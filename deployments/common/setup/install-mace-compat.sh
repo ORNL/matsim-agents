@@ -53,6 +53,11 @@ if [[ "${FACILITY}" == "aurora" ]]; then
 fi
 "${PYTHON}" -m pip install -c "${CONSTRAINTS}" "e3nn==${E3NN_VERSION}"
 "${PYTHON}" -m pip install -c "${CONSTRAINTS}" "mace-torch==${MACE_TORCH_VERSION}"
+if [[ "${FACILITY}" == "aurora" ]]; then
+    log "Guarding the optional CUDA/HIP-only OpenEquivariance import in MACE"
+    "${PYTHON}" "${MATSIM_DIR}/deployments/common/setup/guard_mace_optional_backends.py" \
+        --site "${MACE_SITE}"
+fi
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed "hatchling>=1.21"
 # --no-build-isolation: avoids pip's PEP 517 isolated build env, which needs
 # network/TLS to fetch hatchling; it is pre-installed above instead.

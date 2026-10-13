@@ -300,8 +300,53 @@ def test_mace_runtime_paths_use_matsim_owned_compatibility_environment() -> None
     assert "import dscribe" in text
     assert '--system-site-packages "${MACE_VENV_PATH}"' in text
     assert "MACE replaced Aurora framework Torch" in text
+    assert "guard_mace_optional_backends.py" in text
     assert "except Exception" not in text
     subprocess.run(["bash", "-n", str(common)], check=True)
+
+
+def test_mace_optional_backend_guard_preserves_supported_backends(tmp_path, monkeypatch):
+    import builtins
+    import sys
+    from types import SimpleNamespace
+
+    import pytest
+
+    helper = ROOT / "deployments/common/setup/guard_mace_optional_backends.py"
+    spec = importlib.util.spec_from_file_location("guard_mace_optional_backends", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    path = tmp_path / "wrapper_ops.py"
+    backend = SimpleNamespace()
+    monkeypatch.setitem(sys.modules, "openequivariance", backend)
+    for alias in ("oeq", "_oeq"):
+        path.write_text(
+            f"import torch\ntry:\n    import openequivariance as {alias}\n"
+            "    OEQ_AVAILABLE = True\nexcept ImportError:\n    OEQ_AVAILABLE = False\n"
+        )
+        assert module.guard_openequivariance(path)
+        original = path.read_text()
+        assert not module.guard_openequivariance(path)
+        assert path.read_text() == original
+        for cuda, hip in ((None, None), ("13.0", None), (None, "7.2")):
+            monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(
+                version=SimpleNamespace(cuda=cuda, hip=hip)
+            ))
+            namespace = {}
+            exec(compile(path.read_text(), str(path), "exec"), namespace)
+            assert namespace["OEQ_AVAILABLE"] is bool(cuda or hip)
+            if cuda or hip:
+                assert namespace[alias] is backend
+    original_import = builtins.__import__
+
+    def failed_optional_import(name, *args, **kwargs):
+        if name == "openequivariance":
+            raise RuntimeError("Unexpected accelerator failure")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", failed_optional_import)
+    with pytest.raises(RuntimeError, match="Unexpected accelerator failure"):
+        exec(compile(path.read_text(), str(path), "exec"), {})
 
 
 def test_uma_uses_matsim_owned_compatibility_environment() -> None:

@@ -186,6 +186,19 @@ authentication; never put tokens in source files or logs.
 > and applies the site-specific h5py repair. XPU execution still requires an
 > on-node inference qualification.
 
+The Aurora MACE installer adds a backend guard to the optional OpenEquivariance
+imports in `.venv-mace` only. MACE 0.3.16 otherwise imports inherited
+OpenEquivariance even when acceleration is disabled; that package asserts that
+Torch has CUDA or HIP and crashes on the XPU build. The guard treats it as
+unavailable when both `torch.version.cuda` and `torch.version.hip` are absent,
+allowing MACE's existing e3nn fallback. CUDA/HIP builds retain the optional
+import, and unrelated import/runtime failures are not suppressed. Neither the
+base environment nor OpenEquivariance itself is modified.
+
+MACE 0.3.16's calculator imports and a real e3nn tensor-product CPU smoke test
+passed with this guard on October 13, 2026. This does not qualify checkpoint
+inference, scientific accuracy, or Intel XPU execution.
+
 Default environment path created by this flow:
 
 ```bash
