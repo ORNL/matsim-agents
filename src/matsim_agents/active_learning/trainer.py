@@ -135,7 +135,7 @@ def retrain_hydragnn(
     dft_config: DFTConfig | None = None,
     reference_root: Path | None = None,
 ) -> Path:
-    """Spawn the HydraGNN training script as a child process.
+    """Spawn a formation-aware HydraGNN fine-tuner as a child process.
 
     Returns the path to the new logdir (which becomes the ``HydraGNNConfig.logdir``
     for the next iteration). If ``trainer_cfg.enabled`` is False, returns the
@@ -160,7 +160,8 @@ def retrain_hydragnn(
     # args: <train_script> <dataset_path> <out_logdir> <resume_logdir> <epochs>
     # and is responsible for srun/module setup. If no launcher is given we
     # fall back to a plain `python train_script ...` invocation in-process.
-    built_in = Path(str(trainer_cfg.train_script)).stem in {
+    train_script = Path(str(trainer_cfg.train_script))
+    built_in = train_script.stem in {
         "finetune_hydragnn",
         "finetune_hydragnn_newhead",
     }
@@ -174,7 +175,7 @@ def retrain_hydragnn(
         argv = [
             "bash",
             str(trainer_cfg.train_launcher),
-            str(trainer_cfg.train_script),
+            str(train_script),
             str(dataset_path),
             str(out_logdir),
             str(hydragnn_cfg.logdir),  # resume from current logdir
@@ -192,7 +193,7 @@ def retrain_hydragnn(
         )
         argv = [
             sys.executable,
-            str(trainer_cfg.train_script),
+            str(train_script),
             "--dataset",
             str(dataset_path),
             "--output-dir" if built_in else "--logdir",

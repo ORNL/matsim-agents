@@ -355,6 +355,12 @@ The fine-tuners accept the **raw total-energy** dataset and the required
 converted dataset: double conversion is rejected. The standalone comparison
 driver forwards its existing elemental manifest to both fine-tuners.
 
+The shipped AL YAMLs use `finetune_hydragnn_newhead.py` and one process for
+formation-aware retraining. Configurations that train with a branch-weighting
+MLP should select `finetune_hydragnn.py` instead and provide that MLP checkpoint.
+HydraGNN's `examples/mptrj/train.py` is a pretraining entry point, not an AL
+fine-tuner, and is not used by these configurations.
+
 AL training requires references even with comparison and promotion disabled.
 Configure a verified manifest explicitly:
 

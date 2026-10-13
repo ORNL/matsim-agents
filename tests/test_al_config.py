@@ -177,6 +177,32 @@ def test_promotion_examples_require_elemental_manifest(
     assert cfg.trainer.promote_model
 
 
+def test_hydragnn_al_examples_use_native_single_process_finetuner():
+    examples = [
+        path
+        for directory in ("active_learning", "paper_cases")
+        for path in sorted(
+            (Path(__file__).resolve().parents[1] / "examples" / directory).glob("*.yaml")
+        )
+        if yaml.safe_load(path.read_text()).get("trainer", {}).get("train_script")
+    ]
+
+    assert examples
+    repo_root = Path(__file__).resolve().parents[1]
+    for example in examples:
+        config = yaml.safe_load(example.read_text())
+        trainer = config["trainer"]
+        assert trainer["train_script"] == (
+            "${PROJ_ROOT}/src/matsim_agents/active_learning/"
+            "finetune_hydragnn_newhead.py"
+        ), example
+        assert trainer["nodes_for_train"] == 1, example
+        assert trainer["ranks_per_node"] == 1, example
+        launcher = config.get("vars", {}).get("TRAIN_LAUNCHER", trainer["train_launcher"])
+        launcher_path = Path(launcher.replace("${PROJ_ROOT}", str(repo_root)))
+        assert launcher_path.is_file(), example
+
+
 # --------------------------------------------------------------------------- #
 # Variable substitution                                                       #
 # --------------------------------------------------------------------------- #
