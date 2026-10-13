@@ -303,7 +303,7 @@ def test_trusted_reference_formats_are_serialized_as_extxyz(
     setup = setup_references
     phase = setup.plan.phases[1]
     original = read(phase.structure_path)
-    original.positions[:, 0] = np.arange(len(original), dtype=float) * 0.17
+    original.positions[:, 0] = np.arange(len(original), dtype=float) * 0.17 + 0.123456789
     phase.structure_path = setup.tmp / filename
     write(phase.structure_path, original, format=format_name)
     source_digest = elemental_dft.sha256_file(phase.structure_path)
@@ -312,9 +312,13 @@ def test_trusted_reference_formats_are_serialized_as_extxyz(
     selected = json.loads(manifest.read_text())["references"]["Si"]
     geometry = manifest.parent / selected["structure_path"]
     snapshot = read(geometry, format="extxyz")
+    calculated_atoms = next(spec.atoms for _, spec in setup.calls if spec.job_id == phase.phase_id)
     assert snapshot.get_chemical_symbols() == original.get_chemical_symbols()
     np.testing.assert_allclose(snapshot.positions, original.positions)
     np.testing.assert_allclose(snapshot.cell.array, original.cell.array)
+    np.testing.assert_array_equal(calculated_atoms.positions, snapshot.positions)
+    np.testing.assert_array_equal(calculated_atoms.cell.array, snapshot.cell.array)
+    np.testing.assert_array_equal(calculated_atoms.pbc, snapshot.pbc)
     assert selected["input_geometry_sha256"] == source_digest
     assert selected["structure_sha256"] == elemental_dft.sha256_file(geometry)
     assert selected["structure_sha256"] != source_digest

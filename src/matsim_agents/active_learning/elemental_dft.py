@@ -484,6 +484,7 @@ def prepare_elemental_references(
                 atoms_for_static = atoms
         else:
             atoms_for_static = atoms
+        atoms_for_static = read(io.StringIO(relaxed_bytes.decode("utf-8")), format="extxyz")
         static_digest = hashlib.sha256(relaxed_bytes).hexdigest()
         static_identity = {
             "schema_version": 3,
