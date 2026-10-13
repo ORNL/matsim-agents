@@ -70,7 +70,10 @@ def restore_hydragnn_total_energy(calculator, logdir: Path, checkpoint: str | No
     reference_manifest_path = snapshot_dir / "elemental-references.json"
     if sha256_file(reference_manifest_path) != convention.training_reference_manifest_sha256:
         raise ValueError("HydraGNN training reference manifest hash mismatch")
-    for name, digest in metadata["inference_artifact_sha256"].items():
+    artifact_hashes = metadata.get("inference_artifact_sha256")
+    if not isinstance(artifact_hashes, dict) or "config.json" not in artifact_hashes:
+        raise ValueError("HydraGNN checkpoint requires a verified config.json")
+    for name, digest in artifact_hashes.items():
         artifact_path = logdir / name
         if (
             Path(name).name != name

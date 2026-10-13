@@ -563,9 +563,17 @@ def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_i
     # Valid checkpoint succeeds
     restore_hydragnn_total_energy(FormationCalculator(), model)
 
-    # Mismatch 1: energy-convention.json has tampered routed_branches
+    # The inference configuration hash is mandatory, not merely an optional map entry.
     convention_file = model / "energy-convention.json"
     convention_data = json.loads(convention_file.read_text())
+    convention_data["inference_artifact_sha256"].pop("config.json")
+    convention_file.write_text(json.dumps(convention_data))
+    with pytest.raises(ValueError, match="requires a verified config.json"):
+        restore_hydragnn_total_energy(FormationCalculator(), model)
+
+    # Mismatch 1: energy-convention.json has tampered routed_branches
+    convention_data = json.loads(convention_file.read_text())
+    convention_data["inference_artifact_sha256"]["config.json"] = sha256_file(model / "config.json")
     convention_data["routed_branches"] = [8]
     convention_file.write_text(json.dumps(convention_data))
     with pytest.raises(ValueError, match="routed branches do not match"):
