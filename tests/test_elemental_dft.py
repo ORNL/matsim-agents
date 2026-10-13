@@ -1,6 +1,8 @@
 """Synthetic elemental DFT orchestration contracts; no external calculations."""
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -669,6 +671,49 @@ def test_post_lock_relaxation_cache_is_fully_validated(
         _prepare(setup, dft_approved=True, max_dft_calculations=4)
     assert inserted
     assert all(spec.job_id != phase.phase_id for _, spec in setup.calls)
+
+
+def test_concurrent_reference_preflight_waits_for_locked_relaxation_cache(
+    setup_references, monkeypatch
+):
+    setup = setup_references
+    phase = setup.plan.phases[0]
+    phase.geometry_status = "requires_relaxation"
+    relaxation_started = threading.Event()
+    allow_relaxation_to_finish = threading.Event()
+    second_preflight_waiting = threading.Event()
+    original_flock = elemental_dft.fcntl.flock
+    thread_label = threading.local()
+
+    def fake_relax(_phase, _cfg, atoms, _work_dir):
+        relaxation_started.set()
+        assert allow_relaxation_to_finish.wait(timeout=10)
+        return atoms.copy(), 0.01, 4
+
+    def observe_lock(lock_file, operation):
+        if (
+            getattr(thread_label, "value", None) == "second"
+            and Path(lock_file.name).parent.parent.name == "relaxations"
+        ):
+            second_preflight_waiting.set()
+        return original_flock(lock_file, operation)
+
+    monkeypatch.setattr(elemental_dft, "_run_reference_relaxation", fake_relax)
+    monkeypatch.setattr(elemental_dft.fcntl, "flock", observe_lock)
+
+    def prepare(label, name):
+        thread_label.value = label
+        return _prepare(setup, name, dft_approved=True, max_dft_calculations=4)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(prepare, "first", "snapshot-first")
+        assert relaxation_started.wait(timeout=10)
+        second = pool.submit(prepare, "second", "snapshot-second")
+        assert second_preflight_waiting.wait(timeout=10)
+        assert not second.done()
+        allow_relaxation_to_finish.set()
+        assert first.result(timeout=10).is_file()
+        assert second.result(timeout=10).is_file()
 
 
 def test_plan_resolves_relative_paths_and_rejects_duplicate_ids(setup_references):

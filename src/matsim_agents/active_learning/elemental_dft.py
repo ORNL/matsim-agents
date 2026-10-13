@@ -464,23 +464,30 @@ def prepare_elemental_references(
         relaxation = None
         if relax_key is not None:
             relax_entry = cache_dir / "relaxations" / relax_key
-            result_path = relax_entry / "result.json"
-            geometry_path = relax_entry / "geometry.extxyz"
-            if result_path.exists() or geometry_path.exists():
-                if not result_path.is_file() or not geometry_path.is_file():
-                    raise ValueError(f"{phase.phase_id}: incomplete cached elemental relaxation")
-                relaxation = CachedElementalRelaxation.model_validate_json(result_path.read_text())
-                relaxed_bytes = geometry_path.read_bytes()
-                atoms_for_static = _validate_cached_relaxation(
-                    phase,
-                    atoms,
-                    relaxation,
-                    relax_key=relax_key,
-                    input_digest=input_digest,
-                    method_signature=signature,
-                    geometry_path=geometry_path,
-                )
-            else:
+            if relax_entry.exists():
+                with (relax_entry / "calculation.lock").open("a") as lock:
+                    fcntl.flock(lock, fcntl.LOCK_EX)
+                    result_path = relax_entry / "result.json"
+                    geometry_path = relax_entry / "geometry.extxyz"
+                    if result_path.exists() or geometry_path.exists():
+                        if not result_path.is_file() or not geometry_path.is_file():
+                            raise ValueError(
+                                f"{phase.phase_id}: incomplete cached elemental relaxation"
+                            )
+                        relaxation = CachedElementalRelaxation.model_validate_json(
+                            result_path.read_text()
+                        )
+                        relaxed_bytes = geometry_path.read_bytes()
+                        atoms_for_static = _validate_cached_relaxation(
+                            phase,
+                            atoms,
+                            relaxation,
+                            relax_key=relax_key,
+                            input_digest=input_digest,
+                            method_signature=signature,
+                            geometry_path=geometry_path,
+                        )
+            if relaxation is None:
                 atoms_for_static = atoms
         else:
             atoms_for_static = atoms
@@ -505,22 +512,29 @@ def prepare_elemental_references(
         ).hexdigest()
         if relax_key is None or relaxation is not None:
             static_entry = cache_dir / "calculations" / static_key
-            static_result_path = static_entry / "result.json"
-            static_geometry_path = static_entry / "geometry.extxyz"
-            if static_result_path.exists() or static_geometry_path.exists():
-                if not static_result_path.is_file() or not static_geometry_path.is_file():
-                    raise ValueError(f"{phase.phase_id}: incomplete cached elemental calculation")
-                cached = CachedElementalCalculation.model_validate_json(
-                    static_result_path.read_text()
-                )
-                if (
-                    cached.cache_key != static_key
-                    or cached.geometry_sha256 != static_digest
-                    or cached.method_signature != signature
-                    or cached.n_atoms != len(atoms_for_static)
-                    or sha256_file(static_geometry_path) != static_digest
-                ):
-                    raise ValueError(f"{phase.phase_id}: invalid cached elemental calculation")
+            if static_entry.exists():
+                with (static_entry / "calculation.lock").open("a") as lock:
+                    fcntl.flock(lock, fcntl.LOCK_EX)
+                    static_result_path = static_entry / "result.json"
+                    static_geometry_path = static_entry / "geometry.extxyz"
+                    if static_result_path.exists() or static_geometry_path.exists():
+                        if not static_result_path.is_file() or not static_geometry_path.is_file():
+                            raise ValueError(
+                                f"{phase.phase_id}: incomplete cached elemental calculation"
+                            )
+                        cached = CachedElementalCalculation.model_validate_json(
+                            static_result_path.read_text()
+                        )
+                        if (
+                            cached.cache_key != static_key
+                            or cached.geometry_sha256 != static_digest
+                            or cached.method_signature != signature
+                            or cached.n_atoms != len(atoms_for_static)
+                            or sha256_file(static_geometry_path) != static_digest
+                        ):
+                            raise ValueError(
+                                f"{phase.phase_id}: invalid cached elemental calculation"
+                            )
         prepared.append(
             (
                 phase,
