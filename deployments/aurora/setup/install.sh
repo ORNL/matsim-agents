@@ -167,7 +167,10 @@ fi
 
 if [[ "${RUN_MODEL_TESTS}" == "1" ]]; then
     log "Running the complete Matsim-Agents test suite"
-    "${PYTHON}" -m pytest "${MATSIM_DIR}/tests"
+    (
+        cd "${MATSIM_DIR}"
+        "${PYTHON}" -m pytest "${MATSIM_DIR}/tests"
+    )
 fi
 
 log "Complete. Activate with: module load ${FRAMEWORKS_MODULE} && source ${VENV_PATH}/bin/activate"

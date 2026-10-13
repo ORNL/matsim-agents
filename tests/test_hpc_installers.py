@@ -56,6 +56,8 @@ def test_aurora_runs_perlmutter_style_phases_without_switching_checkout(tmp_path
     python = fake_bin / "python3"
     python.write_text(
         '#!/bin/bash\nprintf "python %s\\n" "$*" >> "$INSTALL_LOG"\n'
+        'if [[ "$*" == "-m pytest "* ]]; then '
+        'printf "pytest-cwd %s\\n" "$PWD" >> "$INSTALL_LOG"; fi\n'
         'if [[ "$*" == "-m pip check" ]]; then exit 1; fi\n'
         'if [[ "$*" == *check-runtime-dependencies.py* ]]; then '
         'exit "${RUNTIME_CHECK_EXIT:-0}"; fi\n'
@@ -115,6 +117,7 @@ def test_aurora_runs_perlmutter_style_phases_without_switching_checkout(tmp_path
     mace_step = commands.index(f"compat mace {matsim / '.venv'} 1 aurora")
     vllm_step = commands.index("vllm-xpu")
     test_step = commands.index(f"python -m pytest {matsim / 'tests'}")
+    assert f"pytest-cwd {matsim}" in commands
     assert hydra_step < wheel_step < uma_step < mace_step < vllm_step < test_step
     environment["RUNTIME_CHECK_EXIT"] = "9"
     failed = subprocess.run(["bash", str(installer)], env=environment, capture_output=True)

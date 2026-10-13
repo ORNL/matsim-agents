@@ -46,7 +46,8 @@ RECREATE_ENV=1 RUN_MODEL_TESTS=1 bash deployments/aurora/setup/install.sh
 ```
 
 `RUN_MODEL_TESTS=1` enables both compatibility environments, checks their model
-imports, and runs the Matsim-Agents suite in the base environment. It does not
+imports, and runs the Matsim-Agents suite in the base environment from the
+repository root, making source-only benchmark and diagnostic modules importable. It does not
 download model weights or qualify XPU inference; gated-model and hardware
 tests still require their own prerequisites.
 
