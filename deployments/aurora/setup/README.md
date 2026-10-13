@@ -157,6 +157,28 @@ RECREATE_ENV=1 bash deployments/aurora/setup/install.sh
 > verifies its calculator API. FairChem does not currently document Intel XPU support, so a
 > successful import is not evidence of accelerated UMA inference on Aurora.
 
+### Experimental FairChem Compatibility
+
+Aurora's Torch `2.13.0a0+gitcf30153` does not satisfy upstream FairChem's stable
+`torch~=2.13.0` metadata. The UMA installer downloads FairChem 2.23.0 and creates
+an Aurora-only wheel with a `1aurora` build tag. Only its Torch requirement is
+changed to the exact framework version; model code and all other dependencies
+remain unchanged and pip resolves them normally. `AURORA_FAIRCHEM_VERSION`
+can select a 2.22/2.23 release; other Torch profiles are rejected.
+
+The upstream wheel, patched wheel, and JSON provenance with SHA-256 hashes are
+retained under `.hpc-build/aurora/fairchem/<version>/`. This override is
+experimental, not an upstream claim of XPU support. The installer verifies the
+runtime dependency tree, imports, and the framework Torch path.
+
+On October 13, 2026, FairChem 2.23.0 passed those checks with the framework Torch
+above. UMA `uma-s-1p1` also loaded and evaluated a two-atom diamond silicon cell
+on CPU, producing finite energy and finite `(2, 3)` forces. This smoke test does
+not establish scientific accuracy, training compatibility, or Intel XPU
+execution. XPU qualification still requires a compute-node test. Checkpoint
+access may require accepting the upstream model license and Hugging Face
+authentication; never put tokens in source files or logs.
+
 > **MACE:** use `INSTALL_MACE=1 bash deployments/aurora/setup/install.sh`.
 > Upstream MACE requires `e3nn==0.4.4`, so the installer creates
 > `$MATSIM_DIR/.venv-mace` rather than changing HydraGNN's `e3nn==0.5.1` in

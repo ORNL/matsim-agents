@@ -242,6 +242,52 @@ def test_deployment_scripts_do_not_reference_hydragnn_owned_environment() -> Non
     assert "perlmutter|aurora)" in generic
 
 
+def test_aurora_fairchem_wheel_changes_only_torch_dependency(tmp_path):
+    import hashlib
+    import json
+    from email.parser import BytesParser
+
+    import pytest
+    from wheel.wheelfile import WheelFile
+
+    helper = ROOT / "deployments/aurora/setup/prepare_fairchem_wheel.py"
+    spec = importlib.util.spec_from_file_location("prepare_fairchem_wheel", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    source = tmp_path / "fairchem_core-2.23.0-py3-none-any.whl"
+    metadata_path = "fairchem_core-2.23.0.dist-info/METADATA"
+    with WheelFile(source, "w") as wheel:
+        wheel.writestr("fairchem/core/__init__.py", b"original_code = True\n")
+        wheel.writestr(metadata_path, (
+            b"Metadata-Version: 2.1\nName: fairchem-core\nVersion: 2.23.0\n"
+            b"Requires-Dist: torch~=2.13.0\nRequires-Dist: e3nn>=0.6\n"
+            b"Requires-Dist: torch-sim-atomistic>=0.6.0; "
+            b"(python_version >= '3.12') and extra == 'torchsim'\n\n"
+        ))
+    original = source.read_bytes()
+    target = module.prepare_wheel(source, tmp_path / "patched", "2.13.0a0+git123")
+    assert "-1aurora-" in target.name
+    assert source.read_bytes() == original
+    with WheelFile(target) as wheel:
+        metadata = BytesParser().parsebytes(wheel.read(metadata_path))
+        assert metadata.get_all("Requires-Dist") == [
+            "torch==2.13.0a0+git123", "e3nn>=0.6",
+            "torch-sim-atomistic>=0.6.0; (python_version >= '3.12') and extra == 'torchsim'",
+        ]
+        for requirement in metadata.get_all("Requires-Dist"):
+            Requirement(requirement)
+        assert wheel.read("fairchem/core/__init__.py") == b"original_code = True\n"
+        for entry in wheel.namelist():
+            wheel.read(entry)
+    manifest = json.loads(target.with_suffix(".json").read_text())
+    assert manifest["upstream_sha256"] == hashlib.sha256(original).hexdigest()
+    assert manifest["experimental"] is True
+    with pytest.raises(ValueError, match="Torch 2.13"):
+        module.prepare_wheel(source, tmp_path / "unsupported", "2.14.0")
+    with pytest.raises(ValueError, match="upstream wheel"):
+        module.prepare_wheel(target, tmp_path / "repatched", "2.13.0a0+git123")
+
+
 def test_mace_runtime_paths_use_matsim_owned_compatibility_environment() -> None:
     for script in (ROOT / "deployments").rglob("*.sh"):
         text = script.read_text(encoding="utf-8")
@@ -269,6 +315,10 @@ def test_uma_uses_matsim_owned_compatibility_environment() -> None:
     assert '--system-site-packages "${UMA_VENV_PATH}"' in text
     assert 'export PIP_CONSTRAINT="${CONSTRAINTS}"' in text
     assert "UMA replaced Aurora framework Torch" in text
+    assert 'AURORA_FAIRCHEM_VERSION="${AURORA_FAIRCHEM_VERSION:-2.23.0}"' in text
+    assert "prepare_fairchem_wheel.py" in text
+    assert '"${FAIRCHEM_ARGS[@]}"' in text
+    assert "Experimental FairChem override" in text
     subprocess.run(["bash", "-n", str(common)], check=True)
 
 
