@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import os
+import importlib.util
 import re
 import subprocess
+import tomllib
 from pathlib import Path
+
+from packaging.requirements import Requirement
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -11,6 +16,101 @@ INSTALLERS = {
     "aurora": "scripts/hpc/alcf/aurora/installation/install.sh",
     "perlmutter": "scripts/hpc/nersc/perlmutter/installation/install.sh",
 }
+
+
+def test_hydragnn_extra_accepts_supported_torch_and_aurora_prereleases() -> None:
+    with (ROOT / "pyproject.toml").open("rb") as stream:
+        extras = tomllib.load(stream)["project"]["optional-dependencies"]["hydragnn"]
+    requirements = {requirement.name: requirement for requirement in map(Requirement, extras)}
+    for version in ("2.13.0a0+gitcf30153", "2.13.0", "2.14.0"):
+        assert version in requirements["torch"].specifier
+    for version in ("2.12.0", "2.15.0"):
+        assert version not in requirements["torch"].specifier
+    for version in ("0.28.0a0", "0.28.0", "0.29.0"):
+        assert version in requirements["torchvision"].specifier
+
+
+def test_aurora_detached_runner_records_exit_status(tmp_path) -> None:
+    runner = ROOT / "deployments/aurora/setup/run-install-tests.sh"
+    local_runner = tmp_path / "run-install-tests.sh"
+    local_runner.write_text(runner.read_text())
+    environment = os.environ.copy()
+    environment.update(MATSIM_DIR=str(ROOT), RUN_DIR=str(tmp_path / "logs"))
+    installer = tmp_path / "install.sh"
+    for exit_code in (0, 7):
+        installer.write_text(
+            '#!/bin/bash\n[[ "$RUN_MODEL_TESTS" == "1" ]] || exit 8\n'
+            f'exit {exit_code}\n'
+        )
+        result = subprocess.run(["bash", str(local_runner)], env=environment, capture_output=True)
+        assert result.returncode == exit_code
+        status = (tmp_path / "logs/status.txt").read_text()
+        assert status.startswith("SUCCEEDED" if exit_code == 0 else "FAILED")
+        assert f"exit_code={exit_code}" in status
+
+
+def test_aurora_runs_perlmutter_style_phases_without_switching_checkout(tmp_path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    log = tmp_path / "commands.log"
+    python = fake_bin / "python3"
+    python.write_text('#!/bin/bash\nprintf "python %s\\n" "$*" >> "$INSTALL_LOG"\n')
+    python.chmod(0o755)
+    git = fake_bin / "git"
+    git.write_text('#!/bin/bash\nprintf "git %s\\n" "$*" >> "$INSTALL_LOG"\n'
+                   'if [[ "$*" == *rev-parse* ]]; then echo 81d5b88; fi\n')
+    git.chmod(0o755)
+    startup = tmp_path / "bash-env"
+    startup.write_text('module() { printf "module %s\\n" "$*" >> "$INSTALL_LOG"; }\n')
+    matsim = tmp_path / "matsim-agents"
+    matsim.mkdir()
+    (matsim / "pyproject.toml").touch()
+    hydra = tmp_path / "HydraGNN"
+    (hydra / ".git").mkdir(parents=True)
+    hydra_installer = hydra / INSTALLERS["aurora"]
+    hydra_installer.parent.mkdir(parents=True)
+    hydra_installer.write_text(
+        '#!/bin/bash\nprintf "hydra %s %s %s\\n" "$INSTALL_ROOT" "$VENV_PATH" '
+        '"$HYDRAGNN_SRC" >> "$INSTALL_LOG"\n'
+        'mkdir -p "$VENV_PATH/bin"\ncp "$FAKE_PYTHON" "$VENV_PATH/bin/python"\n'
+    )
+    for backend in ("uma", "mace"):
+        helper = matsim / f"deployments/common/setup/install-{backend}-compat.sh"
+        helper.parent.mkdir(parents=True, exist_ok=True)
+        helper.write_text(
+            '#!/bin/bash\nprintf "compat %s %s %s %s\\n" '
+            f'"{backend}" "$BASE_VENV" "${{RECREATE_{backend.upper()}_ENV}}" '
+            '"${FACILITY:-}" >> "$INSTALL_LOG"\n'
+        )
+    vllm = matsim / "deployments/aurora/setup/install-vllm-xpu-aurora.sh"
+    vllm.parent.mkdir(parents=True)
+    vllm.write_text('#!/bin/bash\necho vllm-xpu >> "$INSTALL_LOG"\n')
+    environment = os.environ.copy()
+    environment.update(
+        PATH=f"{fake_bin}:/usr/bin:/bin", BASH_ENV=str(startup), INSTALL_LOG=str(log),
+        FAKE_PYTHON=str(python), MATSIM_DIR=str(matsim), HYDRAGNN_DIR=str(hydra),
+        HYDRAGNN_REF="", FRAMEWORKS_MODULE="frameworks/test", RUN_MODEL_TESTS="1",
+        VENV_PATH=str(matsim / ".venv"), INSTALL_ROOT=str(matsim / ".hpc-build/aurora"),
+        RECREATE_ENV="0", RECREATE_MACE_ENV="1", RECREATE_UMA_ENV="0", INSTALL_VLLM="1",
+        HYDRAGNN_INSTALLER=str(hydra_installer),
+    )
+    installer = ROOT / "deployments/aurora/setup/install.sh"
+    subprocess.run(["bash", str(installer)], env=environment, check=True, capture_output=True)
+    commands = log.read_text().splitlines()
+    assert "module load frameworks/test" in commands
+    assert not any("switch" in command or "merge" in command for command in commands)
+    assert not any(command.startswith(f"git -C {hydra} fetch") for command in commands)
+    hydra_step = next(index for index, command in enumerate(commands) if command.startswith("hydra "))
+    wheel_step = next(index for index, command in enumerate(commands) if "--no-build-isolation" in command)
+    uma_step = commands.index(f"compat uma {matsim / '.venv'} 0 ")
+    mace_step = commands.index(f"compat mace {matsim / '.venv'} 1 aurora")
+    vllm_step = commands.index("vllm-xpu")
+    test_step = commands.index(f"python -m pytest {matsim / 'tests'}")
+    assert hydra_step < wheel_step < uma_step < mace_step < vllm_step < test_step
+    hydra_installer.unlink()
+    failed = subprocess.run(["bash", str(installer)], env=environment, capture_output=True, text=True)
+    assert failed.returncode != 0
+    assert "selected checkout will not be switched automatically" in failed.stderr
 
 
 def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
@@ -33,6 +133,34 @@ def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
         assert "pip check" in text
         assert "installation_DOE_supercomputers/hydragnn_installation" not in text
         subprocess.run(["bash", "-n", str(installer)], check=True)
+
+
+def test_aurora_stages_selected_code_with_upstream_dependencies(tmp_path) -> None:
+    helper = ROOT / "deployments/aurora/setup/prepare_hydragnn_source.py"
+    spec = importlib.util.spec_from_file_location("prepare_hydragnn_source", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    code, dependencies = tmp_path / "code", tmp_path / "upstream"
+    code.mkdir()
+    dependencies.mkdir()
+    subprocess.run(["git", "init", str(code)], check=True, capture_output=True)
+    (code / "model.py").write_text("selected_branch = True\n")
+    (code / "requirements-torch.txt").write_text("torch==2.8.0\n")
+    subprocess.run(["git", "-C", str(code), "add", "."], check=True)
+    (dependencies / "requirements-base.txt").write_text("numpy==2.4.6\nscipy==1.17.1\n")
+    (dependencies / "requirements-pyg.txt").write_text("torch_geometric==2.8.0\n")
+    (dependencies / "requirements-torch.txt").write_text("torch==2.13.0\ntorchvision==0.28.0\n")
+    stage = module.prepare_source(code, dependencies, tmp_path / "build", "2.13.0a0+git123")
+    assert (stage / "model.py").read_bytes() == (code / "model.py").read_bytes()
+    assert (stage / "requirements-base.txt").read_bytes() == (dependencies / "requirements-base.txt").read_bytes()
+    assert "torch==2.13.0a0+git123" in (stage / "requirements-torch.txt").read_text()
+    assert (code / "requirements-torch.txt").read_text() == "torch==2.8.0\n"
+    try:
+        module.prepare_source(code, dependencies, code / "build", "2.13.0")
+    except ValueError as error:
+        assert "outside the selected" in str(error)
+    else:
+        raise AssertionError("staging inside selected checkout was accepted")
 
 
 def test_deployment_scripts_do_not_reference_hydragnn_owned_environment() -> None:

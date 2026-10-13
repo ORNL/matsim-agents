@@ -9,9 +9,66 @@ The single full-install entry point is:
 bash deployments/aurora/setup/install.sh
 ```
 
-It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current Aurora installer,
-then installs and verifies matsim-agents in that environment.
+It preserves an existing HydraGNN checkout unless `HYDRAGNN_REF` is explicitly
+set, runs HydraGNN's current Aurora installer, then installs and verifies
+matsim-agents wheels in that environment.
 `install_matsim_aurora.sh` is only a compatibility alias.
+
+The phases follow the Perlmutter installer: HydraGNN dependencies, project
+wheels in `.venv`, then optional isolated UMA and MACE environments. Aurora
+loads `FRAMEWORKS_MODULE` (default `frameworks`) in the parent shell first so
+PyTorch and every child installer inherit the Intel runtime libraries.
+
+The HydraGNN extra accepts PyTorch 2.13 and 2.14, including Aurora's 2.13 XPU
+pre-release, with the corresponding torchvision 0.28/0.29 series. A historical
+exact pin in a feature branch's requirements is not evidence that its model
+code cannot run on those versions. The wrapper stages the selected code with
+requirements from the latest ORNL/HydraGNN main, under `.hpc-build/aurora`,
+without modifying the selected checkout. The staged Torch requirement is pinned
+to the framework-provided build, including its XPU version suffix. NumPy, SciPy,
+PyG and the remaining requirements come from upstream, not the feature branch.
+
+```bash
+RECREATE_ENV=1 RUN_MODEL_TESTS=1 bash deployments/aurora/setup/install.sh
+```
+
+`RUN_MODEL_TESTS=1` enables both compatibility environments, checks their model
+imports, and runs the Matsim-Agents suite in the base environment. It does not
+download model weights or qualify XPU inference; gated-model and hardware
+tests still require their own prerequisites.
+
+To keep installation and tests running after logout:
+
+```bash
+RUN_DIR="$PWD/.hpc-build/aurora/runs/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$RUN_DIR"
+nohup setsid env RUN_DIR="$RUN_DIR" \
+  bash deployments/aurora/setup/run-install-tests.sh \
+  < /dev/null > "$RUN_DIR/install.log" 2>&1 &
+disown
+```
+
+The runner enables model tests and writes `status.txt` with `RUNNING`,
+`SUCCEEDED`, or `FAILED` and the final exit code. `install.log` captures all
+installation and test output; `tests.xml` is generated when pytest runs.
+Inspect progress with `tail -f "$RUN_DIR/install.log"` and
+`cat "$RUN_DIR/status.txt"`. A detached login-node process survives shell logout,
+but not a node reboot or a site process limit.
+
+`RECREATE_MACE_ENV` and `RECREATE_UMA_ENV` independently control compatibility
+environment recreation; both inherit `RECREATE_ENV` by default. This allows
+rebuilding one model environment without replacing the base environment.
+`INSTALL_VLLM=1` verifies Aurora's framework-provided vLLM-XPU stack rather than
+installing Perlmutter's CUDA vLLM environment.
+
+The canonical installer and upstream requirements are fetched into a separate
+checkout at `.hpc-build/aurora/installer-source`. Its default source is
+`https://github.com/ORNL/HydraGNN.git`, branch `main`. The wrapper logs the exact
+dependency revision and refreshes that checkout on subsequent installs.
+`HYDRAGNN_INSTALLER_REPO`, `HYDRAGNN_INSTALLER_REF`, and `HYDRAGNN_INSTALLER_DIR`
+can pin an audited dependency revision or change its location. An explicit
+`HYDRAGNN_INSTALLER` overrides the installer script, not the dependency profile.
+The selected feature branch is never switched implicitly.
 
 ## Model Download Safety Policy
 
