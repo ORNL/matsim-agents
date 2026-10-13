@@ -68,6 +68,10 @@ def prepare_formation_training_dataset(
     for index, atoms in enumerate(frames):
         if not len(atoms):
             raise ValueError(f"Training frame {index} is empty")
+        if atoms.info.get("energy_convention") == FORMATION_ENERGY_REFERENCE:
+            raise ValueError(
+                f"Training frame {index} is already marked as a formation-energy label"
+            )
         if atoms.info.get("dft_backend", metadata.dft_backend) != metadata.dft_backend:
             raise ValueError(f"Training frame {index} has incompatible DFT backend")
         total_energy = (

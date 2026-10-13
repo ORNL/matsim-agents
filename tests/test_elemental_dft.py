@@ -594,6 +594,62 @@ def test_corrupt_cache_fails_explicitly(setup_references, corruption):
     assert len(setup.calls) == 3
 
 
+@pytest.mark.parametrize(
+    "defect,error",
+    [
+        ("convergence", "invalid cached elemental relaxation"),
+        ("force", "invalid cached elemental relaxation"),
+        ("atom_count", "invalid cached elemental relaxation"),
+        ("geometry", "invalid cached relaxed geometry"),
+    ],
+)
+def test_post_lock_relaxation_cache_is_fully_validated(
+    setup_references, monkeypatch, defect, error
+):
+    setup = setup_references
+    phase = setup.plan.phases[0]
+    phase.geometry_status = "requires_relaxation"
+    phase_atoms = read(phase.structure_path)
+    original_flock = elemental_dft.fcntl.flock
+    inserted = False
+
+    def insert_racing_cache(lock_file, operation):
+        nonlocal inserted
+        lock_path = Path(lock_file.name)
+        if not inserted and lock_path.parent.parent.name == "relaxations":
+            inserted = True
+            relaxed_atoms = phase_atoms.copy()
+            if defect == "geometry":
+                relaxed_atoms.set_chemical_symbols(["O"] * len(relaxed_atoms))
+            if defect == "force":
+                max_force = phase.relaxation_force_tolerance_eV_per_A + 0.1
+            else:
+                max_force = phase.relaxation_force_tolerance_eV_per_A
+            geometry_path = lock_path.parent / "geometry.extxyz"
+            write(geometry_path, relaxed_atoms, format="extxyz")
+            payload = {
+                "cache_key": lock_path.parent.name,
+                "input_geometry_sha256": elemental_dft.sha256_file(phase.structure_path),
+                "relaxed_geometry_sha256": elemental_dft.sha256_file(geometry_path),
+                "method_signature": elemental_dft.dft_method_signature(
+                    elemental_dft._phase_config(setup.dft, phase), {phase.element}
+                ),
+                "n_atoms": len(relaxed_atoms) + (1 if defect == "atom_count" else 0),
+                "converged": defect != "convergence",
+                "final_max_force_eV_per_A": max_force,
+                "ionic_steps": 1,
+                "work_dir": str(lock_path.parent),
+            }
+            (lock_path.parent / "result.json").write_text(json.dumps(payload))
+        return original_flock(lock_file, operation)
+
+    monkeypatch.setattr(elemental_dft.fcntl, "flock", insert_racing_cache)
+    with pytest.raises(ValueError, match=error):
+        _prepare(setup, dft_approved=True, max_dft_calculations=4)
+    assert inserted
+    assert all(spec.job_id != phase.phase_id for _, spec in setup.calls)
+
+
 def test_plan_resolves_relative_paths_and_rejects_duplicate_ids(setup_references):
     setup = setup_references
     payload = setup.plan.model_dump(mode="json")

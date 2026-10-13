@@ -17,6 +17,7 @@ from typing import Literal
 
 import numpy as np
 import yaml
+from ase import Atoms
 from ase.data import atomic_numbers
 from ase.io import read, write
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -114,6 +115,41 @@ class CachedElementalRelaxation(BaseModel):
     final_max_force_eV_per_A: float = Field(ge=0, allow_inf_nan=False)
     ionic_steps: int = Field(gt=0)
     work_dir: str
+
+
+def _validate_cached_relaxation(
+    phase: ElementalPhaseSpec,
+    input_atoms: Atoms,
+    relaxation: CachedElementalRelaxation,
+    *,
+    relax_key: str,
+    input_digest: str,
+    method_signature: str,
+    geometry_path: Path,
+) -> Atoms:
+    if (
+        relaxation.cache_key != relax_key
+        or relaxation.input_geometry_sha256 != input_digest
+        or relaxation.method_signature != method_signature
+        or relaxation.n_atoms != len(input_atoms)
+        or not relaxation.converged
+        or relaxation.final_max_force_eV_per_A > phase.relaxation_force_tolerance_eV_per_A
+        or sha256_file(geometry_path) != relaxation.relaxed_geometry_sha256
+    ):
+        raise ValueError(f"{phase.phase_id}: invalid cached elemental relaxation")
+    relaxed_atoms = read(geometry_path)
+    if (
+        relaxed_atoms.get_chemical_symbols() != input_atoms.get_chemical_symbols()
+        or not np.isfinite(relaxed_atoms.positions).all()
+        or not np.isfinite(relaxed_atoms.cell.array).all()
+        or (phase.kind == "bulk" and not relaxed_atoms.pbc.all())
+        or (
+            phase.kind == "molecule"
+            and not np.allclose(relaxed_atoms.cell.array, input_atoms.cell.array, atol=1e-8, rtol=0)
+        )
+    ):
+        raise ValueError(f"{phase.phase_id}: invalid cached relaxed geometry")
+    return relaxed_atoms
 
 
 def _phase_config(dft: DFTConfig, phase: ElementalPhaseSpec) -> DFTConfig:
@@ -435,32 +471,15 @@ def prepare_elemental_references(
                     raise ValueError(f"{phase.phase_id}: incomplete cached elemental relaxation")
                 relaxation = CachedElementalRelaxation.model_validate_json(result_path.read_text())
                 relaxed_bytes = geometry_path.read_bytes()
-                if (
-                    relaxation.cache_key != relax_key
-                    or relaxation.input_geometry_sha256 != input_digest
-                    or relaxation.method_signature != signature
-                    or relaxation.n_atoms != len(atoms)
-                    or not relaxation.converged
-                    or relaxation.final_max_force_eV_per_A
-                    > phase.relaxation_force_tolerance_eV_per_A
-                    or sha256_file(geometry_path) != relaxation.relaxed_geometry_sha256
-                ):
-                    raise ValueError(f"{phase.phase_id}: invalid cached elemental relaxation")
-                relaxed_atoms = read(geometry_path)
-                if (
-                    relaxed_atoms.get_chemical_symbols() != atoms.get_chemical_symbols()
-                    or not np.isfinite(relaxed_atoms.positions).all()
-                    or not np.isfinite(relaxed_atoms.cell.array).all()
-                    or (phase.kind == "bulk" and not relaxed_atoms.pbc.all())
-                    or (
-                        phase.kind == "molecule"
-                        and not np.allclose(
-                            relaxed_atoms.cell.array, atoms.cell.array, atol=1e-8, rtol=0
-                        )
-                    )
-                ):
-                    raise ValueError(f"{phase.phase_id}: invalid cached relaxed geometry")
-                atoms_for_static = relaxed_atoms
+                atoms_for_static = _validate_cached_relaxation(
+                    phase,
+                    atoms,
+                    relaxation,
+                    relax_key=relax_key,
+                    input_digest=input_digest,
+                    method_signature=signature,
+                    geometry_path=geometry_path,
+                )
             else:
                 atoms_for_static = atoms
         else:
@@ -584,14 +603,15 @@ def prepare_elemental_references(
                         relax_result_path.read_text()
                     )
                     relaxed_bytes = relax_geometry_path.read_bytes()
-                    atoms_for_static = read(relax_geometry_path)
-                    if (
-                        relaxation.cache_key != relax_key
-                        or relaxation.input_geometry_sha256 != input_digest
-                        or relaxation.method_signature != signature
-                        or sha256_file(relax_geometry_path) != relaxation.relaxed_geometry_sha256
-                    ):
-                        raise ValueError(f"{phase.phase_id}: invalid cached elemental relaxation")
+                    atoms_for_static = _validate_cached_relaxation(
+                        phase,
+                        atoms,
+                        relaxation,
+                        relax_key=relax_key,
+                        input_digest=input_digest,
+                        method_signature=signature,
+                        geometry_path=relax_geometry_path,
+                    )
                     log.info(
                         "Reusing relaxed elemental geometry %s (%s)", phase.phase_id, relax_key
                     )

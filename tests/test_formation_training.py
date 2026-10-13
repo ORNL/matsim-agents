@@ -109,6 +109,18 @@ def test_rejects_double_conversion(tmp_path, elemental_manifest, dataset_method_
         prepare_formation_training_dataset(formed, reference, tmp_path / "second")
 
 
+def test_rejects_formation_marked_frames_with_native_sidecar(
+    tmp_path, elemental_manifest, dataset_method_sidecar
+):
+    dataset, reference = _dataset(tmp_path, elemental_manifest, dataset_method_sidecar)
+    formed = prepare_formation_training_dataset(dataset, reference, tmp_path / "first")
+    repacked = tmp_path / "repacked.extxyz"
+    write(repacked, read(formed, index=":"), format="extxyz")
+    dataset_method_sidecar(repacked, reference)
+    with pytest.raises(ValueError, match="already marked as a formation-energy label"):
+        prepare_formation_training_dataset(repacked, reference, tmp_path / "second")
+
+
 @pytest.mark.parametrize("defect", ["missing_element", "geometry_hash", "nonfinite_reference"])
 def test_rejects_invalid_elemental_references(
     tmp_path, elemental_manifest, dataset_method_sidecar, defect
