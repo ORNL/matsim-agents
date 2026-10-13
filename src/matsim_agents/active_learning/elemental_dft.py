@@ -632,6 +632,7 @@ def prepare_elemental_references(
                         relaxed_atoms.get_chemical_symbols() != atoms.get_chemical_symbols()
                         or not np.isfinite(relaxed_atoms.positions).all()
                         or not np.isfinite(relaxed_atoms.cell.array).all()
+                        or (phase.kind == "bulk" and not relaxed_atoms.pbc.all())
                     ):
                         raise RuntimeError(
                             f"{phase.phase_id}: relaxation returned invalid final geometry"

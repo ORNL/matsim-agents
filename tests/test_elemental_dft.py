@@ -229,6 +229,23 @@ def test_unconverged_reference_relaxation_never_creates_reference_result(
     assert not list((setup.cache / "relaxations").rglob("result.json"))
 
 
+def test_bulk_relaxation_rejects_nonperiodic_final_geometry(setup_references, monkeypatch):
+    setup = setup_references
+    phase = setup.plan.phases[0]
+    phase.geometry_status = "requires_relaxation"
+
+    def fake_relax(_phase, _cfg, atoms, _work_dir):
+        relaxed = atoms.copy()
+        relaxed.pbc = False
+        return relaxed, 0.01, 4
+
+    monkeypatch.setattr(elemental_dft, "_run_reference_relaxation", fake_relax)
+    with pytest.raises(RuntimeError, match="invalid final geometry"):
+        _prepare(setup, dft_approved=True, max_dft_calculations=4)
+    assert all(spec.job_id != phase.phase_id for _, spec in setup.calls)
+    assert not list((setup.cache / "relaxations").rglob("result.json"))
+
+
 def test_al_reference_method_mismatch_fails_before_any_dft(
     setup_references, elemental_manifest, dataset_method_sidecar
 ):
