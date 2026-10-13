@@ -3,8 +3,8 @@
 ## Overview
 
 This competition benchmarks machine-learning interatomic potentials (MLIPs) and
-AI-accelerated DFT workflows on **159 atomistic test structures** spanning
-11 material classes:
+AI-accelerated DFT workflows on **121 completed atomistic test structures**.
+The original dataset was designed across 11 material classes:
 
 | Class | Examples |
 |---|---|
@@ -162,15 +162,15 @@ Tasks with no submission are excluded from the average (not penalised).
 
 ## Leaderboard — public / private split
 
-The 159 test structures are divided into two partitions:
+The 121 completed test structures are divided into two partitions:
 
 | Partition | Structures | Purpose |
 |-----------|-----------|---------|
-| **Public (~30 %)** | 51 structures | Visible on the leaderboard *during* the competition |
-| **Private (~70 %)** | 108 structures | Used for the **final ranking** at competition close |
+| **Public (~30 %)** | 37 structures | Visible on the leaderboard *during* the competition |
+| **Private (~70 %)** | 84 structures | Used for the **final ranking** at competition close |
 
-The split is deterministic: SEED=42, stratified by chemical formula so every
-formula has at least one structure in each partition.
+The split is deterministic: SEED=42, stratified by chemical formula. Singleton
+formula groups are private-only; larger groups have structures in both partitions.
 
 **What you see during the competition**: all leaderboard columns report metrics
 on the public partition only (prefixed `public_` in the scores file).  The
@@ -178,7 +178,7 @@ private partition scores are computed at every submission but are hidden until
 the competition closes.
 
 **Final ranking**: at close, the organizers reconfigure the leaderboard to show
-`private_*` metrics, which are scored on the 108 held-out structures you could
+`private_*` metrics, which are scored on the 84 held-out structures you could
 not probe during the competition.
 
 **Submission rate limit**: 3 submissions per day.  This is enforced by

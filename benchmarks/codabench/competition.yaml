@@ -62,10 +62,11 @@ solutions: []
 # from public_* to private_* when the competition closes.
 #
 # The split is deterministic and reproducible: see reference_data/create_split.py
-# (SEED=42, PUBLIC_FRACTION=0.30, stratified by formula group). Participants
-# cannot recover private labels because (1) private_ids.txt lives server-side in
-# reference_data/, (2) the submission rate is limited, and (3) the private
-# partition is never scored until the competition ends.
+# (SEED=42, PUBLIC_FRACTION=0.30, stratified by formula group). For the current
+# reduced benchmark built from the 121 completed DFT labels, the split is
+# 37 public / 84 private. Participants cannot recover private labels because
+# (1) private_ids.txt lives server-side in reference_data/, (2) the submission
+# rate is limited, and (3) private scores are hidden until the competition ends.
 #
 # NOTE: edit `start`/`end` to your actual schedule before launch.
 phases:

@@ -1477,11 +1477,12 @@ The `benchmarks/codabench/` directory contains a fully self-contained
 
 ### What is tested
 
-159 atomistic test structures spanning 11 material classes — 2D monolayers,
-intermetallics, BCC/FCC high-entropy alloys, catalysis slabs, critical
-minerals, high-entropy ceramics, MAX phases, nuclear oxides, perovskites,
-thermoelectrics — each available in ideal, vacancy, antisite, and interstitial
-variants. Tasks cover:
+121 completed atomistic test structures from a dataset originally designed
+across 11 material classes — 2D
+monolayers, intermetallics, BCC/FCC high-entropy alloys, catalysis slabs,
+critical minerals, high-entropy ceramics, MAX phases, nuclear oxides,
+perovskites, thermoelectrics — each available in ideal, vacancy, antisite,
+and interstitial variants. Tasks cover:
 
 | # | Task | Metric |
 |---|------|--------|
@@ -1497,16 +1498,17 @@ submission are excluded (not penalised).
 ### Leaderboard — public / private split
 
 To prevent participants from reverse-engineering the reference labels by
-repeatedly probing the leaderboard, the 159 test structures are split into
+repeatedly probing the leaderboard, the 121 completed structures are split into
 two partitions:
 
 | Partition | Size | When visible |
 |-----------|------|-------------|
-| **Public** | 51 structures (~30 %) | Always — during the competition |
-| **Private** | 108 structures (~70 %) | Only at competition close (final ranking) |
+| **Public** | 37 structures (~30 %) | Always — during the competition |
+| **Private** | 84 structures (~70 %) | Only at competition close (final ranking) |
 
 The split is deterministic and reproducible (SEED=42, stratified by chemical
-formula so every formula has ≥ 1 structure in each partition). The
+formula within the published benchmark metadata). Singleton groups remain
+private-only; larger groups have structures in both partitions. The
 `reference_data/public_ids.txt` and `reference_data/private_ids.txt` files
 record which structure IDs belong to each partition.
 
@@ -1604,15 +1606,14 @@ benchmarks/codabench/
 ├── scoring_program/
 │   └── score.py                 # Codabench scorer (public + private partitions)
 ├── reference_data/
-│   ├── public_ids.txt           # 51 structure IDs in the public partition
-│   ├── private_ids.txt          # 108 structure IDs in the private partition
+│   ├── public_ids.txt           # 37 structure IDs in the public partition
+│   ├── private_ids.txt          # 84 structure IDs in the private partition
 │   ├── create_split.py          # reproducible split generator (SEED=42)
 │   ├── formation_energies.csv   # DFT reference energies (server-side, not public)
 │   ├── elemental_energies.json  # protected per-atom DFT references; must match public manifest
 │   └── forces/                  # per-structure force arrays (server-side, not public)
 ├── public_data/
-│   ├── generate_structures.py   # generates the 159 test structures
-│   ├── structures_metadata.csv  # anonymised MATS-XXXX → class / formula mapping
+│   ├── structures_metadata.csv  # opaque MATS-XXXX IDs and geometry file paths
 │   ├── elemental_references.json # public geometry paths, hashes, DFT total-cell labels
 │   └── structures/              # XYZ files of all test structures
 └── starting_kit/
