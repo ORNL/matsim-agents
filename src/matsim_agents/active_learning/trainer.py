@@ -146,6 +146,18 @@ def retrain_hydragnn(
         log.info("trainer.enabled=False; skipping retrain at iteration %d", iteration)
         return Path(hydragnn_cfg.logdir)
 
+    train_script = Path(str(trainer_cfg.train_script))
+    built_in = train_script.stem in {
+        "finetune_hydragnn",
+        "finetune_hydragnn_newhead",
+    }
+    if (
+        built_in
+        and trainer_cfg.train_launcher is not None
+        and trainer_cfg.nodes_for_train * trainer_cfg.ranks_per_node != 1
+    ):
+        raise ValueError("Built-in HydraGNN fine-tuners require exactly one process")
+
     from matsim_agents.active_learning.hydragnn_references import resolve_training_references
 
     reference_manifest = resolve_training_references(
@@ -160,17 +172,6 @@ def retrain_hydragnn(
     # args: <train_script> <dataset_path> <out_logdir> <resume_logdir> <epochs>
     # and is responsible for srun/module setup. If no launcher is given we
     # fall back to a plain `python train_script ...` invocation in-process.
-    train_script = Path(str(trainer_cfg.train_script))
-    built_in = train_script.stem in {
-        "finetune_hydragnn",
-        "finetune_hydragnn_newhead",
-    }
-    if (
-        built_in
-        and trainer_cfg.train_launcher is not None
-        and trainer_cfg.nodes_for_train * trainer_cfg.ranks_per_node != 1
-    ):
-        raise ValueError("Built-in HydraGNN fine-tuners require exactly one process")
     if trainer_cfg.train_launcher is not None:
         argv = [
             "bash",

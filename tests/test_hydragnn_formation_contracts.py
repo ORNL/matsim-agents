@@ -543,6 +543,38 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         )
 
 
+def test_retrain_rejects_multirank_builtin_before_resolving_references(
+    tmp_path, training_inputs, monkeypatch
+):
+    import matsim_agents.active_learning.hydragnn_references as references
+
+    dataset, manifest = training_inputs
+    script = tmp_path / "finetune_hydragnn_newhead.py"
+    script.touch()
+    config = TrainerConfig(
+        enabled=True,
+        train_script=script,
+        train_launcher=tmp_path / "launcher.sh",
+        nodes_for_train=2,
+        ranks_per_node=1,
+        validation_reference_set=manifest,
+    )
+
+    def unexpected_reference_resolution(*args, **kwargs):
+        pytest.fail("references must not be resolved before process-count validation")
+
+    monkeypatch.setattr(references, "resolve_training_references", unexpected_reference_resolution)
+
+    with pytest.raises(ValueError, match="require exactly one process"):
+        retrain_hydragnn(
+            config,
+            HydraGNNConfig(logdir=tmp_path),
+            dataset,
+            0,
+            tmp_path / "output",
+        )
+
+
 def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_inputs):
     from matsim_agents.active_learning.dataset_governance import sha256_file
 
