@@ -15,6 +15,7 @@ UMA_VENV_PATH="${UMA_VENV_PATH:-${MATSIM_DIR}/.venv-uma}"
 INSTALL_MACE="${INSTALL_MACE:-0}"
 MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"
 RECREATE_ENV="${RECREATE_ENV:-0}"
+REUSE_HYDRAGNN_DEPENDENCIES="${REUSE_HYDRAGNN_DEPENDENCIES:-0}"
 RECREATE_MACE_ENV="${RECREATE_MACE_ENV:-${RECREATE_ENV}}"
 RECREATE_UMA_ENV="${RECREATE_UMA_ENV:-${RECREATE_MACE_ENV}}"
 INSTALL_VLLM="${INSTALL_VLLM:-0}"
@@ -121,8 +122,16 @@ TORCH_VERSION="$("${FRAMEWORKS_PYTHON}" -c 'import torch; print(torch.__version_
 HYDRAGNN_PACKAGE_SRC="$("${FRAMEWORKS_PYTHON}" "${SCRIPT_DIR}/prepare_hydragnn_source.py" \
     --code "${HYDRAGNN_DIR}" --dependencies "${HYDRAGNN_INSTALLER_DIR}" \
     --output-root "${INSTALL_ROOT}" --torch-version "${TORCH_VERSION}")"
-INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" RECREATE_ENV="${RECREATE_ENV}" \
-HYDRAGNN_SRC="${HYDRAGNN_PACKAGE_SRC}" bash "${HYDRAGNN_INSTALLER}"
+if [[ "${REUSE_HYDRAGNN_DEPENDENCIES}" == "1" ]]; then
+    [[ "${RECREATE_ENV}" != "1" && -x "${VENV_PATH}/bin/python" ]] \
+        || die "Dependency reuse requires an existing environment and RECREATE_ENV=0"
+    log "Reusing installed HydraGNN dependencies; validating compiled PyG imports"
+    "${VENV_PATH}/bin/python" -c \
+        "import torch, torch_geometric, torch_scatter, torch_sparse, torch_cluster, torch_spline_conv"
+else
+    INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" RECREATE_ENV="${RECREATE_ENV}" \
+    HYDRAGNN_SRC="${HYDRAGNN_PACKAGE_SRC}" bash "${HYDRAGNN_INSTALLER}"
+fi
 
 PYTHON="${VENV_PATH}/bin/python"
 [[ -x "${PYTHON}" ]] || die "HydraGNN did not create ${VENV_PATH}"
@@ -131,7 +140,9 @@ log "Installing HydraGNN and matsim-agents wheels into the same environment"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed --no-deps --force-reinstall "${HYDRAGNN_PACKAGE_SRC}"
 "${PYTHON}" -m pip install --no-build-isolation --upgrade-strategy only-if-needed "${MATSIM_DIR}[${MATSIM_EXTRAS}]"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed hf_transfer
-"${PYTHON}" -m pip check
+"${PYTHON}" -m pip check || log "Full pip check reported conflicts; checking selected runtime dependencies next"
+"${PYTHON}" "${MATSIM_DIR}/deployments/common/setup/check-runtime-dependencies.py" \
+    "matsim-agents[${MATSIM_EXTRAS}]" hydragnn
 "${PYTHON}" -c "import hydragnn, matsim_agents, torch; print('verified', torch.__version__)"
 if [[ "${RUN_MODEL_TESTS}" == "1" ]]; then
     INSTALL_UMA=1
@@ -140,7 +151,7 @@ fi
 if [[ "${INSTALL_UMA}" == "1" ]]; then
     log "Installing UMA in its Torch-compatible matsim-owned environment"
     MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" UMA_VENV_PATH="${UMA_VENV_PATH}" \
-        RECREATE_UMA_ENV="${RECREATE_UMA_ENV}" \
+        FACILITY=aurora RECREATE_UMA_ENV="${RECREATE_UMA_ENV}" \
         bash "${MATSIM_DIR}/deployments/common/setup/install-uma-compat.sh"
 fi
 if [[ "${INSTALL_MACE}" == "1" ]]; then

@@ -27,6 +27,19 @@ requirements from the latest ORNL/HydraGNN main, under `.hpc-build/aurora`,
 without modifying the selected checkout. The staged Torch requirement is pinned
 to the framework-provided build, including its XPU version suffix. NumPy, SciPy,
 PyG and the remaining requirements come from upstream, not the feature branch.
+Missing package initializers are added only to the staged copy so setuptools
+includes the selected branch's utility modules in the wheel.
+
+The full `pip check` is reported but is not fatal, matching Perlmutter: Aurora's
+shared framework can contain unrelated dependency conflicts. A separate fatal
+audit checks the complete dependency tree of the selected Matsim extras and
+HydraGNN, followed by fatal import checks. UMA and MACE preserve the framework
+Torch/torchvision builds with exact constraints and verify Torch's source path.
+
+After a completed HydraGNN dependency build, set
+`REUSE_HYDRAGNN_DEPENDENCIES=1` to resume without rebuilding its native libraries.
+This requires an existing environment, `RECREATE_ENV=0`, working compiled PyG
+imports, and the same subsequent dependency and import checks.
 
 ```bash
 RECREATE_ENV=1 RUN_MODEL_TESTS=1 bash deployments/aurora/setup/install.sh

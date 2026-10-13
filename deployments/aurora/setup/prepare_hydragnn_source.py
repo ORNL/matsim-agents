@@ -37,6 +37,12 @@ def prepare_source(code: Path, dependencies: Path, output_root: Path, torch_vers
                 target = stage / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)
+        package_root = stage / "hydragnn"
+        for source in package_root.rglob("*.py"):
+            directory = source.parent
+            while directory == package_root or package_root in directory.parents:
+                (directory / "__init__.py").touch(exist_ok=True)
+                directory = directory.parent
         for source in dependencies.glob("requirements*.txt"):
             shutil.copy2(source, stage / source.name)
         requirement_path = stage / "requirements-torch.txt"

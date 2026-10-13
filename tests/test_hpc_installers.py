@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import importlib.util
+import os
 import re
 import subprocess
 import tomllib
@@ -54,7 +54,12 @@ def test_aurora_runs_perlmutter_style_phases_without_switching_checkout(tmp_path
     fake_bin.mkdir()
     log = tmp_path / "commands.log"
     python = fake_bin / "python3"
-    python.write_text('#!/bin/bash\nprintf "python %s\\n" "$*" >> "$INSTALL_LOG"\n')
+    python.write_text(
+        '#!/bin/bash\nprintf "python %s\\n" "$*" >> "$INSTALL_LOG"\n'
+        'if [[ "$*" == "-m pip check" ]]; then exit 1; fi\n'
+        'if [[ "$*" == *check-runtime-dependencies.py* ]]; then '
+        'exit "${RUNTIME_CHECK_EXIT:-0}"; fi\n'
+    )
     python.chmod(0o755)
     git = fake_bin / "git"
     git.write_text('#!/bin/bash\nprintf "git %s\\n" "$*" >> "$INSTALL_LOG"\n'
@@ -100,15 +105,31 @@ def test_aurora_runs_perlmutter_style_phases_without_switching_checkout(tmp_path
     assert "module load frameworks/test" in commands
     assert not any("switch" in command or "merge" in command for command in commands)
     assert not any(command.startswith(f"git -C {hydra} fetch") for command in commands)
-    hydra_step = next(index for index, command in enumerate(commands) if command.startswith("hydra "))
-    wheel_step = next(index for index, command in enumerate(commands) if "--no-build-isolation" in command)
-    uma_step = commands.index(f"compat uma {matsim / '.venv'} 0 ")
+    hydra_step = next(
+        index for index, command in enumerate(commands) if command.startswith("hydra ")
+    )
+    wheel_step = next(
+        index for index, command in enumerate(commands) if "--no-build-isolation" in command
+    )
+    uma_step = commands.index(f"compat uma {matsim / '.venv'} 0 aurora")
     mace_step = commands.index(f"compat mace {matsim / '.venv'} 1 aurora")
     vllm_step = commands.index("vllm-xpu")
     test_step = commands.index(f"python -m pytest {matsim / 'tests'}")
     assert hydra_step < wheel_step < uma_step < mace_step < vllm_step < test_step
+    environment["RUNTIME_CHECK_EXIT"] = "9"
+    failed = subprocess.run(["bash", str(installer)], env=environment, capture_output=True)
+    assert failed.returncode == 9
+    environment.pop("RUNTIME_CHECK_EXIT")
+    log.write_text("")
+    environment["REUSE_HYDRAGNN_DEPENDENCIES"] = "1"
+    subprocess.run(["bash", str(installer)], env=environment, check=True, capture_output=True)
+    assert not any(command.startswith("hydra ") for command in log.read_text().splitlines())
+    assert "torch_spline_conv" in log.read_text()
+    environment.pop("REUSE_HYDRAGNN_DEPENDENCIES")
     hydra_installer.unlink()
-    failed = subprocess.run(["bash", str(installer)], env=environment, capture_output=True, text=True)
+    failed = subprocess.run(
+        ["bash", str(installer)], env=environment, capture_output=True, text=True
+    )
     assert failed.returncode != 0
     assert "selected checkout will not be switched automatically" in failed.stderr
 
@@ -135,6 +156,39 @@ def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
         subprocess.run(["bash", "-n", str(installer)], check=True)
 
 
+def test_runtime_dependency_audit_checks_selected_extras_and_transitive_requirements(monkeypatch):
+    from types import SimpleNamespace
+
+    helper = ROOT / "deployments/common/setup/check-runtime-dependencies.py"
+    spec = importlib.util.spec_from_file_location("runtime_dependencies", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    packages = {
+        "runtime": SimpleNamespace(version="1.0", requires=[
+            'torch>=2.13.0.dev0; extra == "model"',
+            'missing-package; extra == "unused"',
+            'missing-platform; sys_platform == "never"',
+        ]),
+        "torch": SimpleNamespace(version="2.13.0a0+git123", requires=["numpy>=2"]),
+        "numpy": SimpleNamespace(version="2.4.6", requires=[]),
+    }
+
+    def installed(name):
+        if name not in packages:
+            raise module.PackageNotFoundError(name)
+        return packages[name]
+
+    monkeypatch.setattr(module, "distribution", installed)
+    assert module.check_dependencies(["runtime[model]"]) == []
+    packages["numpy"].version = "1.26.4"
+    assert module.check_dependencies(["runtime[model]"]) == [
+        "numpy>=2 is required, installed 1.26.4"
+    ]
+    assert module.check_dependencies(["runtime[unused]"]) == [
+        "Missing runtime dependency: missing-package; extra == \"unused\""
+    ]
+
+
 def test_aurora_stages_selected_code_with_upstream_dependencies(tmp_path) -> None:
     helper = ROOT / "deployments/aurora/setup/prepare_hydragnn_source.py"
     spec = importlib.util.spec_from_file_location("prepare_hydragnn_source", helper)
@@ -146,15 +200,27 @@ def test_aurora_stages_selected_code_with_upstream_dependencies(tmp_path) -> Non
     subprocess.run(["git", "init", str(code)], check=True, capture_output=True)
     (code / "model.py").write_text("selected_branch = True\n")
     (code / "requirements-torch.txt").write_text("torch==2.8.0\n")
+    utilities = code / "hydragnn/utils/distributed"
+    utilities.mkdir(parents=True)
+    (utilities / "__init__.py").write_text("selected_utility = True\n")
     subprocess.run(["git", "-C", str(code), "add", "."], check=True)
     (dependencies / "requirements-base.txt").write_text("numpy==2.4.6\nscipy==1.17.1\n")
     (dependencies / "requirements-pyg.txt").write_text("torch_geometric==2.8.0\n")
     (dependencies / "requirements-torch.txt").write_text("torch==2.13.0\ntorchvision==0.28.0\n")
     stage = module.prepare_source(code, dependencies, tmp_path / "build", "2.13.0a0+git123")
     assert (stage / "model.py").read_bytes() == (code / "model.py").read_bytes()
-    assert (stage / "requirements-base.txt").read_bytes() == (dependencies / "requirements-base.txt").read_bytes()
+    assert (stage / "requirements-base.txt").read_bytes() == (
+        dependencies / "requirements-base.txt"
+    ).read_bytes()
     assert "torch==2.13.0a0+git123" in (stage / "requirements-torch.txt").read_text()
     assert (code / "requirements-torch.txt").read_text() == "torch==2.8.0\n"
+    from setuptools import find_packages
+
+    assert "hydragnn.utils.distributed" in find_packages(where=str(stage))
+    assert (stage / "hydragnn/utils/distributed/__init__.py").read_bytes() == (
+        utilities / "__init__.py"
+    ).read_bytes()
+    assert not (code / "hydragnn/utils/__init__.py").exists()
     try:
         module.prepare_source(code, dependencies, code / "build", "2.13.0")
     except ValueError as error:
@@ -186,6 +252,9 @@ def test_mace_runtime_paths_use_matsim_owned_compatibility_environment() -> None
     text = common.read_text(encoding="utf-8")
     assert common.stat().st_mode & 0o111
     assert "import dscribe" in text
+    assert '--system-site-packages "${MACE_VENV_PATH}"' in text
+    assert "MACE replaced Aurora framework Torch" in text
+    assert "except Exception" not in text
     subprocess.run(["bash", "-n", str(common)], check=True)
 
 
@@ -197,6 +266,9 @@ def test_uma_uses_matsim_owned_compatibility_environment() -> None:
     assert '"${MATSIM_DIR}[${UMA_MATSIM_EXTRAS}]"' in text
     assert "import dscribe" in text
     assert "from fairchem.core import FAIRChemCalculator, pretrained_mlip" in text
+    assert '--system-site-packages "${UMA_VENV_PATH}"' in text
+    assert 'export PIP_CONSTRAINT="${CONSTRAINTS}"' in text
+    assert "UMA replaced Aurora framework Torch" in text
     subprocess.run(["bash", "-n", str(common)], check=True)
 
 
