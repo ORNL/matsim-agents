@@ -529,6 +529,12 @@ def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monke
     phase.geometry_status = "requires_relaxation"
     cfg = elemental_dft._phase_config(setup.dft, phase)
     atoms = read(phase.structure_path)
+    final_atoms = atoms.copy()
+    final_atoms.calc = SinglePointCalculator(
+        final_atoms,
+        energy=-12.0,
+        forces=np.tile([0.015, 0.0, 0.0], (len(final_atoms), 1)),
+    )
 
     def fake_run(argv, **kwargs):
         input_text = " ".join(Path(argv[4]).read_text().lower().split())
@@ -546,17 +552,17 @@ def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monke
         lambda *args, **kwargs: SimpleNamespace(
             converged=True,
             return_code=0,
-            final_max_force_ry_au=0.0002,
+            final_max_force_ry_au=0.0212 / 25.711043,
             final_energy_ev=-12.0,
             bfgs_steps=5,
         ),
     )
-    monkeypatch.setattr(elemental_dft, "read", lambda *args, **kwargs: atoms.copy())
+    monkeypatch.setattr(elemental_dft, "read", lambda *args, **kwargs: final_atoms)
     relaxed, force, steps, stress = elemental_dft._run_reference_relaxation(
         phase, cfg, atoms, setup.tmp / "qe-relax"
     )
     assert relaxed.get_chemical_symbols() == atoms.get_chemical_symbols()
-    assert force == pytest.approx(0.0002 * 25.711043)
+    assert force == pytest.approx(0.015)
     assert steps == 5
     assert stress is None
 

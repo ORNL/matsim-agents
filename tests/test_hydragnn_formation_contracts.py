@@ -3,6 +3,7 @@
 import json
 import sys
 from contextlib import nullcontext
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import numpy as np
@@ -48,6 +49,18 @@ def _checkpoint(tmp_path, training_inputs):
     (model / "config.json").write_text("{}")
     save_hydragnn_energy_convention(model, checkpoint)
     return model
+
+
+def _bind_output_to_reference_manifest(output, reference_manifest):
+    from matsim_agents.active_learning.dataset_governance import sha256_file
+
+    for path in (
+        output / "energy-convention.json",
+        output / "training-reference" / "energy-convention.json",
+    ):
+        metadata = json.loads(path.read_text())
+        metadata["source_elemental_manifest_sha256"] = sha256_file(reference_manifest)
+        path.write_text(json.dumps(metadata))
 
 
 class FormationCalculator(Calculator):
@@ -537,6 +550,11 @@ def test_retrain_hook_forwards_references_and_verifies_output(
 
     def run(args, **kw):
         argv.extend(args)
+        if launcher:
+            reference_manifest = Path(args[9])
+        else:
+            reference_manifest = Path(args[args.index("--elemental-reference-manifest") + 1])
+        _bind_output_to_reference_manifest(output, reference_manifest)
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr("matsim_agents.active_learning.trainer.subprocess.run", run)
@@ -647,6 +665,9 @@ def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
     )
 
     def run(*args, **kw):
+        argv = args[0]
+        reference_manifest = Path(argv[argv.index("--elemental-reference-manifest") + 1])
+        _bind_output_to_reference_manifest(output, reference_manifest)
         if defect == "changed_during_training":
             with dataset.open("a") as stream:
                 stream.write("\n")
@@ -659,6 +680,33 @@ def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
 
     monkeypatch.setattr(factory, "build_hydragnn_calculator", unexpected_model_load)
     with pytest.raises(ValueError, match="does not match the requested training dataset"):
+        retrain_hydragnn(config, HydraGNNConfig(logdir=tmp_path), dataset, 1, output)
+
+
+def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
+    tmp_path, training_inputs, elemental_manifest, monkeypatch
+):
+    import matsim_agents.active_learning.calculator as factory
+
+    dataset, _ = training_inputs
+    output = _checkpoint(tmp_path, training_inputs)
+    different_manifest = elemental_manifest({"Nb": -9, "O": -5})
+    config = TrainerConfig(
+        enabled=True,
+        train_script=tmp_path / "custom.py",
+        validation_reference_set=different_manifest,
+    )
+    monkeypatch.setattr(
+        "matsim_agents.active_learning.trainer.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0),
+    )
+    monkeypatch.setattr(
+        factory,
+        "build_hydragnn_calculator",
+        lambda *args, **kwargs: pytest.fail("mismatched reference bundle must be rejected"),
+    )
+
+    with pytest.raises(ValueError, match="requested elemental reference manifest"):
         retrain_hydragnn(config, HydraGNNConfig(logdir=tmp_path), dataset, 1, output)
 
 

@@ -337,27 +337,34 @@ def _run_reference_relaxation(
             raise RuntimeError(f"{phase.phase_id}: QE relaxation timed out in {work_dir}") from exc
         if not result.converged or result.return_code != 0:
             raise RuntimeError(f"{phase.phase_id}: QE relaxation did not converge; see {work_dir}")
-        if (
-            result.final_max_force_ry_au is None
-            or not np.isfinite(result.final_max_force_ry_au)
-            or result.final_max_force_ry_au * 25.711043 > phase.relaxation_force_tolerance_eV_per_A
-        ):
-            raise RuntimeError(
-                f"{phase.phase_id}: QE relaxation did not meet its force threshold; see {work_dir}"
-            )
         try:
             relaxed = read(log_path, index=-1, format="espresso-out")
         except (OSError, ValueError, IndexError) as exc:
             raise RuntimeError(
                 f"{phase.phase_id}: QE relaxation has no readable final geometry; see {work_dir}"
             ) from exc
+        try:
+            final_forces = np.asarray(relaxed.get_forces(apply_constraint=False), dtype=float)
+        except (RuntimeError, ValueError) as exc:
+            raise RuntimeError(
+                f"{phase.phase_id}: QE relaxation has no readable final forces; see {work_dir}"
+            ) from exc
+        if final_forces.shape != (len(relaxed), 3) or not np.isfinite(final_forces).all():
+            raise RuntimeError(
+                f"{phase.phase_id}: QE relaxation has invalid final forces; see {work_dir}"
+            )
+        final_max_force = float(np.linalg.norm(final_forces, axis=1).max())
         if not np.isfinite(result.final_energy_ev):
             raise RuntimeError(f"{phase.phase_id}: QE relaxation energy is nonfinite")
+        if final_max_force > phase.relaxation_force_tolerance_eV_per_A:
+            raise RuntimeError(
+                f"{phase.phase_id}: QE relaxation did not meet its force threshold; see {work_dir}"
+            )
         stress = _relaxation_stress(relaxed) if do_cell else None
         _validate_relaxation_stress(phase, stress)
         return (
             relaxed,
-            float(result.final_max_force_ry_au * 25.711043),
+            final_max_force,
             result.bfgs_steps,
             stress,
         )

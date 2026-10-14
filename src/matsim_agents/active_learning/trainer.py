@@ -252,6 +252,10 @@ def retrain_hydragnn(
         or sha256_file(Path(dataset_path)) != dataset_sha256
     ):
         raise ValueError("HydraGNN trainer output does not match the requested training dataset")
+    if metadata.get("source_elemental_manifest_sha256") != sha256_file(reference_manifest):
+        raise ValueError(
+            "HydraGNN trainer output does not match the requested elemental reference manifest"
+        )
     candidate_cfg = hydragnn_cfg.model_copy(
         update={"logdir": out_logdir, "checkpoint": None}, deep=True
     )
