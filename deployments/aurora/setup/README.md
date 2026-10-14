@@ -84,6 +84,31 @@ can pin an audited dependency revision or change its location. An explicit
 `HYDRAGNN_INSTALLER` overrides the installer script, not the dependency profile.
 The selected feature branch is never switched implicitly.
 
+## Single-Node XPU Qualification
+
+From the repository root, submit a bounded checkpoint-inference job:
+
+```bash
+qsub -A <active-allocation> -v PROJECT_ROOT="$PWD" \
+  deployments/aurora/jobs/job-qualify-mlip-xpu-aurora.sh
+```
+
+The job uses one node and one XPU tile, launching each model through `mpiexec`
+in its own environment. It loads the framework runtime modules directly rather
+than activating conda. Each backend has an eight-minute limit and independent
+logs/results under `.hpc-build/aurora/qualification/<job-id>/`. A pass requires
+working XPU arithmetic, model parameters resident on XPU, and finite energy and
+forces for perturbed two-atom silicon. CPU fallback is a failure. This smoke
+test does not establish scientific accuracy or production scaling.
+
+Prepare checkpoint caches on a login node before submission; compute nodes run
+offline. The defaults are the local HydraGNN BEST6 logdir/BranchWeightMLP,
+UMA `uma-s-1p1`, and MACE-MP `small`. `MATSIM_HYDRAGNN_LOGDIR`,
+`HYDRAGNN_BRANCH_MLP_CHECKPOINT`, `MATSIM_UMA_MODEL_NAME`, `MATSIM_MACE_MODEL`,
+and `QUALIFICATION_RUN_DIR` override inputs/output. The model configuration
+accepts explicit `xpu` devices; actual support is determined by this test, not
+by configuration acceptance alone.
+
 ## Model Download Safety Policy
 
 See the canonical cross-platform policy in `docs/model-download-safety.md`.

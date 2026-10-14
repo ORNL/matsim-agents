@@ -193,6 +193,28 @@ def test_runtime_dependency_audit_checks_selected_extras_and_transitive_requirem
     ]
 
 
+def test_aurora_xpu_qualification_rejects_invalid_predictions():
+    import pytest
+
+    helper = ROOT / "deployments/aurora/jobs/qualify_mlip_xpu.py"
+    spec = importlib.util.spec_from_file_location("qualify_mlip_xpu", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.validate_predictions(-1.0, [[0.0, 0.0, 0.0]], 1)
+    for energy, forces in (
+        (float("nan"), [[0.0, 0.0, 0.0]]),
+        (-1.0, [[float("inf"), 0.0, 0.0]]),
+        (-1.0, [[0.0, 0.0]]),
+        (-1.0, []),
+    ):
+        with pytest.raises(ValueError):
+            module.validate_predictions(energy, forces, 1)
+    job = ROOT / "deployments/aurora/jobs/job-qualify-mlip-xpu-aurora.sh"
+    subprocess.run(["bash", "-n", str(job)], check=True)
+    assert "mpiexec -n 1 --ppn 1" in job.read_text()
+    assert "export HF_HUB_OFFLINE=1" in job.read_text()
+
+
 def test_aurora_stages_selected_code_with_upstream_dependencies(tmp_path) -> None:
     helper = ROOT / "deployments/aurora/setup/prepare_hydragnn_source.py"
     spec = importlib.util.spec_from_file_location("prepare_hydragnn_source", helper)

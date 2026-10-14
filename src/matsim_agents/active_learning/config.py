@@ -88,7 +88,7 @@ class HydraGNNConfig(BaseModel):
     charge: float = 0.0
     spin: float = 0.0
     precision: str | None = None  # "fp32" | "fp64" | "bf16"
-    mlp_device: Literal["cuda", "cpu"] = "cuda"
+    mlp_device: Literal["cuda", "cpu", "xpu"] = "cuda"
     inference_head: str | int | None = Field(
         None,
         description=(
@@ -155,7 +155,7 @@ class UMAConfig(BaseModel):
         "omat",
         description="UMA task head (omat = inorganic bulk materials; omol = molecules/MOFs).",
     )
-    device: Literal["cuda", "cpu"] = "cuda"
+    device: Literal["cuda", "cpu", "xpu"] = "cuda"
     precision: Literal["fp32", "fp64", "bf16"] | None = None
     charge: float = 0.0
     spin: float = 0.0
@@ -207,7 +207,7 @@ class MACEConfig(BaseModel):
             "when family='checkpoint'."
         ),
     )
-    device: Literal["cuda", "cpu"] = "cuda"
+    device: Literal["cuda", "cpu", "xpu"] = "cuda"
     precision: Literal["fp32", "fp64"] | None = Field(
         None,
         description="Calculator dtype -> MACE default_dtype (fp64 recommended for relaxation).",

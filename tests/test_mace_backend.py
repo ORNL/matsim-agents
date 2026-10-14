@@ -6,7 +6,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from matsim_agents.active_learning.calculator import build_ensemble, build_mace_calculator
-from matsim_agents.active_learning.config import MACEConfig, MLIPConfig
+from matsim_agents.active_learning.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 from matsim_agents.campaign.execution import _exploration_kwargs
 from matsim_agents.discovery.seeds import PhaseCandidate
@@ -148,6 +148,12 @@ def test_mace_family_defaults_and_validation():
         MACEConfig(family="mace_off", dispersion=True)
     with pytest.raises(ValueError, match="ANI-CC loader does not support precision='fp32'"):
         MACEConfig(family="mace_anicc", precision="fp32")
+
+
+def test_model_configs_accept_explicit_aurora_xpu_device(tmp_path):
+    assert HydraGNNConfig(logdir=tmp_path, mlp_device="xpu").mlp_device == "xpu"
+    assert UMAConfig(device="xpu").device == "xpu"
+    assert MACEConfig(device="xpu").device == "xpu"
 
 
 def test_campaign_forwards_mace_selection():
