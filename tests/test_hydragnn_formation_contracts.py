@@ -399,6 +399,39 @@ def test_training_reference_is_frozen_independently_of_comparison(tmp_path, trai
         resolve_training_references(config, dataset, dft_config=None, reference_root=root)
 
 
+def test_manifest_freeze_includes_label_scope_and_filters_superset(
+    tmp_path, elemental_manifest, dataset_method_sidecar
+):
+    manifest = elemental_manifest({"Nb": -10, "O": -5, "Ti": -7})
+    atoms = Atoms("Nb2", positions=np.zeros((2, 3)))
+    atoms.calc = SinglePointCalculator(atoms, energy=-20, forces=np.zeros((2, 3)))
+    dataset = tmp_path / "training.extxyz"
+    write(dataset, atoms)
+    dataset_method_sidecar(
+        dataset,
+        manifest,
+        method_signature_elements={"Nb", "O"},
+    )
+    config = TrainerConfig(
+        enabled=True,
+        train_script=tmp_path / "train.py",
+        compare_after_training=False,
+        promote_model=False,
+        hydragnn_training_references={"manifest": manifest},
+    )
+
+    frozen = resolve_training_references(
+        config, dataset, dft_config=None, reference_root=tmp_path / "frozen"
+    )
+    frozen_manifest = json.loads(frozen.read_text())
+    assert set(frozen_manifest["references"]) == {"Nb", "O"}
+    assert set(
+        predict_elemental_references(
+            frozen, FormationCalculator(), required_elements={"Nb", "O"}
+        ).dft_eV_per_atom
+    ) == {"Nb", "O"}
+
+
 def test_training_reference_manifest_additive_extension_across_iterations(
     tmp_path, elemental_manifest, dataset_method_sidecar
 ):

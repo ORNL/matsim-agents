@@ -112,13 +112,8 @@ def resolve_training_references(
     if not training_elements:
         raise ValueError("HydraGNN training dataset is empty")
     config = trainer.hydragnn_training_references
-    if config is not None and config.phase_plan is not None:
-        recorded_scope = dataset_metadata.method_signature_elements
-        if recorded_scope is None:
-            raise ValueError(
-                "HydraGNN phase-plan references require the dataset manifest to record "
-                "method_signature_elements"
-            )
+    recorded_scope = dataset_metadata.method_signature_elements
+    if recorded_scope is not None:
         signature_elements = set(recorded_scope)
         if len(signature_elements) != len(recorded_scope) or not signature_elements:
             raise ValueError("Dataset manifest has an invalid method-signature element scope")
@@ -131,6 +126,11 @@ def resolve_training_references(
         elements = signature_elements
     else:
         elements = training_elements
+    if config is not None and config.phase_plan is not None and recorded_scope is None:
+        raise ValueError(
+            "HydraGNN phase-plan references require the dataset manifest to record "
+            "method_signature_elements"
+        )
     source = config.manifest if config is not None else trainer.validation_reference_set
     if config is not None and config.phase_plan is not None:
         if dft_config is None or config.cache_dir is None:
