@@ -193,8 +193,7 @@ def test_hydragnn_al_examples_use_native_single_process_finetuner():
         config = yaml.safe_load(example.read_text())
         trainer = config["trainer"]
         assert trainer["train_script"] == (
-            "${PROJ_ROOT}/src/matsim_agents/active_learning/"
-            "finetune_hydragnn_newhead.py"
+            "${PROJ_ROOT}/src/matsim_agents/active_learning/finetune_hydragnn_newhead.py"
         ), example
         assert trainer["nodes_for_train"] == 1, example
         assert trainer["ranks_per_node"] == 1, example
