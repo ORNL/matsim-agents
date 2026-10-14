@@ -460,6 +460,7 @@ def run_active_learning(cfg: ALConfig) -> None:
                     validation=validation.model_copy(update={"accepted": len(training_frames)}),
                     parent_dataset_id=parent_dataset_id,
                     method_signature=method_signature,
+                    method_signature_elements=labelled_elements,
                 )
             if validation_dataset_path.exists():
                 write_dataset_manifest(
@@ -469,6 +470,7 @@ def run_active_learning(cfg: ALConfig) -> None:
                     validation=validation.model_copy(update={"accepted": len(validation_frames)}),
                     parent_dataset_id=validation_parent_dataset_id,
                     method_signature=method_signature,
+                    method_signature_elements=labelled_elements,
                     split_role="validation",
                 )
             state.timings_sec["append_dataset"] = time.time() - t0

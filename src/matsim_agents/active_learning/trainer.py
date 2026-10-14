@@ -12,6 +12,7 @@ falls back to invoking the script directly with Python for single-process use.
 
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 import sys
@@ -158,6 +159,7 @@ def retrain_hydragnn(
     ):
         raise ValueError("Built-in HydraGNN fine-tuners require exactly one process")
 
+    from matsim_agents.active_learning.dataset_governance import sha256_file
     from matsim_agents.active_learning.hydragnn_references import resolve_training_references
 
     reference_manifest = resolve_training_references(
@@ -166,12 +168,13 @@ def retrain_hydragnn(
         dft_config=dft_config,
         reference_root=reference_root or out_logdir.parent / "elemental-training-reference",
     )
+    dataset_sha256 = sha256_file(Path(dataset_path))
     out_logdir.mkdir(parents=True, exist_ok=True)
 
-    # The convention we follow: the launcher script accepts these positional
-    # args: <train_script> <dataset_path> <out_logdir> <resume_logdir> <epochs>
-    # and is responsible for srun/module setup. If no launcher is given we
-    # fall back to a plain `python train_script ...` invocation in-process.
+    # Launchers receive script, dataset, output, resume, epochs, nodes, ranks,
+    # references, checkpoint and branch MLP. Built-ins additionally receive
+    # ft_repo, charge and spin; custom launcher positional arguments stay unchanged.
+    # Without a launcher, invoke the script directly with Python.
     if trainer_cfg.train_launcher is not None:
         argv = [
             "bash",
@@ -187,6 +190,14 @@ def retrain_hydragnn(
             hydragnn_cfg.checkpoint or "",
             str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint or ""),
         ]
+        if built_in:
+            argv.extend(
+                [
+                    str(hydragnn_cfg.ft_repo or ""),
+                    str(hydragnn_cfg.charge),
+                    str(hydragnn_cfg.spin),
+                ]
+            )
     else:
         log.warning(
             "trainer.train_launcher not set; running training in-process "
@@ -213,6 +224,10 @@ def retrain_hydragnn(
             argv.extend(["--branch-mlp", str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint)])
         if built_in and hydragnn_cfg.checkpoint is not None:
             argv.extend(["--gfm-checkpoint", hydragnn_cfg.checkpoint])
+        if built_in:
+            argv.extend(["--charge", str(hydragnn_cfg.charge), "--spin", str(hydragnn_cfg.spin)])
+        if script_name == "finetune_hydragnn_newhead" and hydragnn_cfg.ft_repo is not None:
+            argv.extend(["--ft-repo", str(hydragnn_cfg.ft_repo)])
 
     log.info("Launching retrain: %s", " ".join(argv))
     log_path = out_logdir / "train.log"
@@ -231,6 +246,12 @@ def retrain_hydragnn(
     from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
 
     restore_hydragnn_total_energy(Calculator(), out_logdir)
+    metadata = json.loads((out_logdir / "energy-convention.json").read_text())
+    if (
+        metadata.get("source_dataset_sha256") != dataset_sha256
+        or sha256_file(Path(dataset_path)) != dataset_sha256
+    ):
+        raise ValueError("HydraGNN trainer output does not match the requested training dataset")
     candidate_cfg = hydragnn_cfg.model_copy(
         update={"logdir": out_logdir, "checkpoint": None}, deep=True
     )

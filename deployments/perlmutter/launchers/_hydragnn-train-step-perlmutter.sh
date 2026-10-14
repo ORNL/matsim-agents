@@ -9,6 +9,7 @@
 # Arguments:
 #   <train_script> <dataset> <out_logdir> <resume_logdir> <epochs>
 #   <nodes> <ranks_per_node> <elemental_manifest> [checkpoint] [branch_mlp]
+#   [ft_repo] [charge] [spin]
 # =============================================================================
 
 set -euo pipefail
@@ -40,6 +41,10 @@ SCRIPT_NAME="$(basename "${TRAIN_SCRIPT}")"
 EXTRA_ARGS=()
 if [[ -n "${9:-}" ]]; then
   EXTRA_ARGS+=(--gfm-checkpoint "${9}")
+fi
+EXTRA_ARGS+=(--charge "${12:-0.0}" --spin "${13:-0.0}")
+if [[ "${SCRIPT_NAME}" == "finetune_hydragnn_newhead.py" && -n "${11:-}" ]]; then
+  EXTRA_ARGS+=(--ft-repo "${11}")
 fi
 if [[ "${SCRIPT_NAME}" == "finetune_hydragnn.py" ]]; then
   BRANCH_MLP="${10:-${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-}}"

@@ -108,10 +108,29 @@ def resolve_training_references(
     if sha256_file(dataset) != dataset_metadata.sha256:
         raise ValueError("DFT dataset manifest hash does not match the training data")
     frames = list(read(dataset, index=":"))
-    elements = {symbol for atoms in frames for symbol in atoms.get_chemical_symbols()}
-    if not elements:
+    training_elements = {symbol for atoms in frames for symbol in atoms.get_chemical_symbols()}
+    if not training_elements:
         raise ValueError("HydraGNN training dataset is empty")
     config = trainer.hydragnn_training_references
+    if config is not None and config.phase_plan is not None:
+        recorded_scope = dataset_metadata.method_signature_elements
+        if recorded_scope is None:
+            raise ValueError(
+                "HydraGNN phase-plan references require the dataset manifest to record "
+                "method_signature_elements"
+            )
+        signature_elements = set(recorded_scope)
+        if len(signature_elements) != len(recorded_scope) or not signature_elements:
+            raise ValueError("Dataset manifest has an invalid method-signature element scope")
+        uncovered_elements = training_elements - signature_elements
+        if uncovered_elements:
+            raise ValueError(
+                "Dataset manifest method-signature element scope does not cover training "
+                f"elements: {sorted(uncovered_elements)}"
+            )
+        elements = signature_elements
+    else:
+        elements = training_elements
     source = config.manifest if config is not None else trainer.validation_reference_set
     if config is not None and config.phase_plan is not None:
         if dft_config is None or config.cache_dir is None:

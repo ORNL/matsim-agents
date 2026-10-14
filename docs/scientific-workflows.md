@@ -354,12 +354,16 @@ The fine-tuners accept the **raw total-energy** dataset and the required
 `training-reference/` snapshot before building graphs. Do not pass an already
 converted dataset: double conversion is rejected. The standalone comparison
 driver forwards its existing elemental manifest to both fine-tuners.
+Force labels are read without applying ASE constraints, so constrained atoms
+retain their raw DFT forces in both the snapshot and fine-tuning targets.
 
 The shipped AL YAMLs use `finetune_hydragnn_newhead.py` and one process for
 formation-aware retraining. Configurations that train with a branch-weighting
 MLP should select `finetune_hydragnn.py` instead and provide that MLP checkpoint.
 HydraGNN's `examples/mptrj/train.py` is a pretraining entry point, not an AL
 fine-tuner, and is not used by these configurations.
+AL forwards the configured charge/spin conditioning to both built-in trainers
+and `hydragnn.ft_repo` to the new-head trainer, including through HPC launchers.
 
 AL training requires references even with comparison and promotion disabled.
 Configure a verified manifest explicitly:
@@ -389,10 +393,16 @@ can be reused with `dft_approved: false` and a zero cap. The existing
 training reference source is configured. AL freezes the selected reference
 snapshot under its output directory and rejects changed reference inputs or
 DFT protocols on subsequent iterations/restarts; use a new dataset for changes.
+Dataset method metadata records the label-stage element scope, including
+held-out species, so reference preparation uses the same potential set as
+labeling rather than only the training split's elements. Relative reference
+cache paths are resolved before launching relaxation or single-point jobs.
 
 Saved checkpoints bind `energy-convention.json` to the checkpoint hash,
 inference configuration, the exact bundled elemental-reference manifest, and
-the verified training snapshot. Neural outputs are
+the verified training snapshot. AL also checks that the emitted bundle's source
+dataset hash matches the requested dataset before accepting the candidate.
+Neural outputs are
 total-cell formation energies. ASE-facing calculators add the recorded
 elemental baseline **exactly once**, returning DFT-reference total energies;
 existing evaluation subtracts its own model elemental references once.

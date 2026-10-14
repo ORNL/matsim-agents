@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 from ase.calculators.singlepoint import SinglePointCalculator
+from ase.constraints import FixAtoms
 from ase.io import read, write
 
 from matsim_agents.active_learning.formation_training import (
@@ -107,6 +108,29 @@ def test_rejects_double_conversion(tmp_path, elemental_manifest, dataset_method_
     formed = prepare_formation_training_dataset(dataset, reference, tmp_path / "first")
     with pytest.raises(ValueError, match="native DFT total"):
         prepare_formation_training_dataset(formed, reference, tmp_path / "second")
+
+
+def test_constrained_frames_preserve_raw_force_labels(
+    tmp_path, elemental_manifest, dataset_method_sidecar
+):
+    from matsim_agents.active_learning.finetune_hydragnn import _reference_forces
+
+    dataset, reference = _dataset(tmp_path, elemental_manifest, dataset_method_sidecar)
+    atoms = read(dataset)
+    atoms.set_constraint(FixAtoms(indices=[0]))
+    raw_forces = atoms.get_forces(apply_constraint=False)
+    write(dataset, atoms)
+    dataset_method_sidecar(dataset, reference)
+    original = dataset.read_bytes()
+
+    target = prepare_formation_training_dataset(dataset, reference, tmp_path / "snapshot")
+    formed = read(target)
+
+    np.testing.assert_array_equal(formed.get_forces(apply_constraint=False), raw_forces)
+    np.testing.assert_array_equal(formed.constraints[0].get_indices(), [0])
+    np.testing.assert_array_equal(formed.get_forces()[0], np.zeros(3))
+    np.testing.assert_array_equal(_reference_forces(formed), raw_forces)
+    assert dataset.read_bytes() == original
 
 
 def test_rejects_formation_marked_frames_with_native_sidecar(

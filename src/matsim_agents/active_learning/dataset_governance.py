@@ -26,6 +26,7 @@ class DatasetManifest(BaseModel):
     sha256: str
     dft_backend: str
     method_signature: str | None = None
+    method_signature_elements: list[str] | None = None
     energy_reference: str
     parent_dataset_id: str | None = None
     split_role: str = "training_pool"
@@ -144,6 +145,7 @@ def write_dataset_manifest(
     validation: DatasetValidationSummary,
     parent_dataset_id: str | None = None,
     method_signature: str | None = None,
+    method_signature_elements: set[str] | None = None,
     split_role: str = "training_pool",
 ) -> Path:
     path = Path(dataset_path)
@@ -155,6 +157,9 @@ def write_dataset_manifest(
         sha256=digest,
         dft_backend=dft_backend,
         method_signature=method_signature,
+        method_signature_elements=(
+            sorted(method_signature_elements) if method_signature_elements is not None else None
+        ),
         energy_reference=energy_reference,
         parent_dataset_id=parent_dataset_id,
         split_role=split_role,

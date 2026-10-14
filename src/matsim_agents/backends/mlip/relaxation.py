@@ -384,6 +384,12 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 else None
             )
         else:
+            from ase.calculators.calculator import Calculator
+
+            from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+
+            restore_hydragnn_total_energy(Calculator(), Path(args.logdir), args.checkpoint)
+
             from inference_fused import load_fused_stack
 
             (

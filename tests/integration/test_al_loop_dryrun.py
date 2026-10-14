@@ -300,6 +300,44 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert any(dft_dir.iterdir()), "DFT working directories were not created"
 
 
+def test_loop_records_cumulative_label_scope_for_training_and_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = _make_cfg(tmp_path)
+    cfg.trainer.validation_fraction = 0.5
+    oxygen_potcar_dir = cfg.dft.vasp.potcar_dir / "O"
+    oxygen_potcar_dir.mkdir()
+    (oxygen_potcar_dir / "POTCAR").write_text("O test potential")
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    _patch_runtime(loop_mod, monkeypatch)
+    oxygen = Candidate(
+        candidate_id="oxygen",
+        atoms=Atoms("O2", positions=[[0.0, 0.0, 0.0], [1.2, 0.0, 0.0]]),
+        seed_path="/dummy.vasp",
+        md_step=1,
+    )
+    monkeypatch.setattr(
+        loop_mod,
+        "sample_md_candidates",
+        lambda *_args, **_kwargs: [_make_candidate(0), oxygen],
+    )
+
+    loop_mod.run_active_learning(cfg)
+
+    dataset = Path(cfg.loop.out_dir) / "dataset.extxyz"
+    validation = Path(cfg.loop.out_dir) / "validation.extxyz"
+    training_elements = {
+        symbol for frame in ase_read(dataset, index=":") for symbol in frame.get_chemical_symbols()
+    }
+    expected_scope = {"Si", "O"}
+    assert training_elements < expected_scope
+    for path in (dataset, validation):
+        manifest = json.loads(path.with_suffix(".extxyz.manifest.json").read_text())
+        assert manifest["method_signature_elements"] == sorted(expected_scope)
+
+
 def test_dft_calculation_cap_truncates_selected_batch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

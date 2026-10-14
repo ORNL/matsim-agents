@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from contextlib import nullcontext
 from types import ModuleType, SimpleNamespace
@@ -153,6 +154,42 @@ def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active
     else:
         assert result.top_branch_weight == pytest.approx(1)
         assert result.notes is None
+
+
+@pytest.mark.parametrize("metadata_name", ["routing.json", "newhead.json", None])
+def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
+    tmp_path, monkeypatch, metadata_name
+):
+    import matsim_agents.backends.mlip.relaxation as relaxation
+
+    logdir = tmp_path / "model"
+    logdir.mkdir()
+    if metadata_name is not None:
+        (logdir / metadata_name).write_text(json.dumps({"reference_energies": {"Si": -1}}))
+    inference = ModuleType("inference_fused")
+    loaded = []
+
+    def load(*args):
+        loaded.append(args)
+        raise RuntimeError("foundation loader reached")
+
+    inference.load_fused_stack = load
+    monkeypatch.setitem(sys.modules, "inference_fused", inference)
+    request = RelaxStructureInput(
+        structure_path=str(tmp_path / "structure.extxyz"),
+        output_dir=str(tmp_path / "output"),
+        logdir=str(logdir),
+        hydragnn_branch_mlp_checkpoint=str(tmp_path / "mlp.pt"),
+    )
+
+    if metadata_name is None:
+        with pytest.raises(RuntimeError, match="foundation loader reached"):
+            relaxation._run(request)
+        assert len(loaded) == 1
+    else:
+        with pytest.raises(ValueError, match="lacks verified energy convention"):
+            relaxation._run(request)
+        assert not loaded
 
 
 def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):

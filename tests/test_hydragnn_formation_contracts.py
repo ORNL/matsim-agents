@@ -478,17 +478,28 @@ def test_frozen_reference_manifest_cannot_be_relabelled(tmp_path, training_input
         resolve_training_references(cfg, dataset, dft_config=None, reference_root=root)
 
 
-@pytest.mark.parametrize("built_in", [False, True])
+@pytest.mark.parametrize("launcher", [False, True])
+@pytest.mark.parametrize(
+    "script_name", ["custom", "finetune_hydragnn", "finetune_hydragnn_newhead"]
+)
 def test_retrain_hook_forwards_references_and_verifies_output(
-    tmp_path, training_inputs, monkeypatch, built_in
+    tmp_path, training_inputs, monkeypatch, script_name, launcher
 ):
     import matsim_agents.active_learning.calculator as factory
 
     dataset, manifest = training_inputs
     output = _checkpoint(tmp_path, training_inputs)
-    script = tmp_path / ("finetune_hydragnn.py" if built_in else "custom.py")
+    built_in = script_name != "custom"
+    script = tmp_path / f"{script_name}.py"
     script.touch()
-    config = TrainerConfig(enabled=True, train_script=script, validation_reference_set=manifest)
+    config = TrainerConfig(
+        enabled=True,
+        train_script=script,
+        train_launcher=tmp_path / "launcher.sh" if launcher else None,
+        nodes_for_train=1,
+        ranks_per_node=1,
+        validation_reference_set=manifest,
+    )
     argv = []
 
     def run(args, **kw):
@@ -516,6 +527,9 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             logdir=tmp_path,
             checkpoint="incumbent-custom.pk",
             mlp_checkpoint=tmp_path / "mlp.pt",
+            ft_repo=tmp_path / "fine tuning repo",
+            charge=-2.5,
+            spin=3.0,
         ),
         dataset,
         0,
@@ -525,9 +539,35 @@ def test_retrain_hook_forwards_references_and_verifies_output(
     assert len(built_calculators) == 1
     assert built_calculators[0].logdir == output
     assert built_calculators[0].checkpoint is None
-    assert "--elemental-reference-manifest" in argv
-    assert ("--output-dir" if built_in else "--logdir") in argv
-    assert ("--gfm-logdir" if built_in else "--resume_from") in argv
+    if launcher:
+        assert argv[0:3] == ["bash", str(config.train_launcher), str(script)]
+        assert argv[3:10] == [
+            str(dataset),
+            str(output),
+            str(tmp_path),
+            str(config.epochs_per_iter),
+            str(config.nodes_for_train),
+            str(config.ranks_per_node),
+            str(output.parent / "elemental-training-reference/elemental-references.json"),
+        ]
+        assert argv[10:12] == ["incumbent-custom.pk", str(tmp_path / "mlp.pt")]
+        assert argv[12:] == (
+            [str(tmp_path / "fine tuning repo"), "-2.5", "3.0"] if built_in else []
+        )
+    else:
+        assert "--elemental-reference-manifest" in argv
+        assert ("--output-dir" if built_in else "--logdir") in argv
+        assert ("--gfm-logdir" if built_in else "--resume_from") in argv
+        if built_in:
+            assert argv[argv.index("--charge") + 1] == "-2.5"
+            assert argv[argv.index("--spin") + 1] == "3.0"
+        else:
+            assert "--charge" not in argv
+            assert "--spin" not in argv
+        if script_name == "finetune_hydragnn_newhead":
+            assert argv[argv.index("--ft-repo") + 1] == str(tmp_path / "fine tuning repo")
+        else:
+            assert "--ft-repo" not in argv
     (output / "ft_model.pk").write_text("broken")
     with pytest.raises(ValueError, match="checkpoint"):
         retrain_hydragnn(
@@ -541,6 +581,52 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             0,
             output,
         )
+
+
+@pytest.mark.parametrize("defect", ["replay", "missing_digest", "changed_during_training"])
+def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
+    tmp_path, training_inputs, dataset_method_sidecar, monkeypatch, defect
+):
+    import matsim_agents.active_learning.calculator as factory
+
+    old_dataset, manifest = training_inputs
+    output = _checkpoint(tmp_path, training_inputs)
+    dataset = old_dataset
+    if defect == "replay":
+        # The old bundle is internally valid, but the cumulative AL dataset has grown.
+        dataset = tmp_path / "cumulative.extxyz"
+        frames = read(old_dataset, index=":")
+        write(dataset, [*frames, frames[0]])
+        dataset_method_sidecar(dataset, manifest)
+    elif defect == "missing_digest":
+        for path in (
+            output / "energy-convention.json",
+            output / "training-reference/energy-convention.json",
+        ):
+            metadata = json.loads(path.read_text())
+            metadata.pop("source_dataset_sha256")
+            path.write_text(json.dumps(metadata))
+    restore_hydragnn_total_energy(FormationCalculator(), output)
+    config = TrainerConfig(
+        enabled=True,
+        train_script=tmp_path / "custom.py",
+        validation_reference_set=manifest,
+    )
+
+    def run(*args, **kw):
+        if defect == "changed_during_training":
+            with dataset.open("a") as stream:
+                stream.write("\n")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("matsim_agents.active_learning.trainer.subprocess.run", run)
+
+    def unexpected_model_load(*args, **kwargs):
+        pytest.fail("replayed bundle must be rejected before model loading")
+
+    monkeypatch.setattr(factory, "build_hydragnn_calculator", unexpected_model_load)
+    with pytest.raises(ValueError, match="does not match the requested training dataset"):
+        retrain_hydragnn(config, HydraGNNConfig(logdir=tmp_path), dataset, 1, output)
 
 
 def test_retrain_rejects_multirank_builtin_before_resolving_references(

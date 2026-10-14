@@ -135,7 +135,7 @@ def test_al_automatic_training_references_are_approved_bounded_and_frozen(
     dataset = setup.tmp / "train.extxyz"
     write(dataset, [atoms, atoms])
     expected = _prepare(setup, dft_approved=True)
-    dataset_method_sidecar(dataset, expected)
+    dataset_method_sidecar(dataset, expected, method_signature_elements={"Si", "O"})
     cfg = TrainerConfig(
         enabled=True,
         train_script=setup.tmp / "train.py",
@@ -171,6 +171,82 @@ def test_al_automatic_training_references_are_approved_bounded_and_frozen(
             == selected
         )
     assert len(setup.calls) == 3
+
+
+def test_phase_plan_references_use_recorded_scope_beyond_training_elements(
+    setup_references, dataset_method_sidecar
+):
+    setup = setup_references
+    plan_path = setup.tmp / "phases.yaml"
+    plan_path.write_text(setup.plan.model_dump_json())
+
+    si_atoms = Atoms("Si2", positions=np.zeros((2, 3)))
+    si_atoms.calc = SinglePointCalculator(si_atoms, energy=-10, forces=np.zeros((2, 3)))
+    dataset = setup.tmp / "train-si-only.extxyz"
+    write(dataset, [si_atoms])
+    expected = _prepare(setup, dft_approved=True, required_elements={"Si", "O"})
+    dataset_method_sidecar(dataset, expected, method_signature_elements={"Si", "O"})
+
+    cfg = TrainerConfig(
+        enabled=True,
+        train_script=setup.tmp / "train.py",
+        compare_after_training=False,
+        promote_model=False,
+        hydragnn_training_references={
+            "phase_plan": plan_path,
+            "cache_dir": setup.cache,
+            "phases_approved": True,
+            "dft_approved": False,
+            "max_dft_calculations": 0,
+        },
+    )
+    root = setup.tmp / "al-references"
+
+    selected = resolve_training_references(cfg, dataset, dft_config=setup.dft, reference_root=root)
+
+    manifest = json.loads(selected.read_text())
+    assert set(manifest["references"]) == {"Si", "O"}
+    assert manifest["method_signature"] == dft_method_signature(setup.dft, {"Si", "O"})
+    assert len(setup.calls) == 3
+
+
+@pytest.mark.parametrize(
+    "method_signature_elements,error",
+    [
+        (None, "require the dataset manifest to record"),
+        ({"O"}, "does not cover training elements"),
+    ],
+)
+def test_phase_plan_references_reject_missing_or_incomplete_scope(
+    setup_references, dataset_method_sidecar, method_signature_elements, error
+):
+    setup = setup_references
+    plan_path = setup.tmp / "phases.yaml"
+    plan_path.write_text(setup.plan.model_dump_json())
+    si_atoms = Atoms("Si2", positions=np.zeros((2, 3)))
+    si_atoms.calc = SinglePointCalculator(si_atoms, energy=-10, forces=np.zeros((2, 3)))
+    dataset = setup.tmp / "train-si-only.extxyz"
+    write(dataset, [si_atoms])
+    expected = _prepare(setup, dft_approved=True, required_elements={"Si"})
+    dataset_method_sidecar(
+        dataset,
+        expected,
+        method_signature_elements=method_signature_elements,
+    )
+    cfg = TrainerConfig(
+        enabled=True,
+        train_script=setup.tmp / "train.py",
+        hydragnn_training_references={
+            "phase_plan": plan_path,
+            "cache_dir": setup.cache,
+            "phases_approved": True,
+        },
+    )
+
+    with pytest.raises(ValueError, match=error):
+        resolve_training_references(
+            cfg, dataset, dft_config=setup.dft, reference_root=setup.tmp / "al-references"
+        )
 
 
 def test_unverified_phase_relaxes_then_runs_static_and_caches_geometry(
@@ -215,6 +291,39 @@ def test_unverified_phase_relaxes_then_runs_static_and_caches_geometry(
     assert len(relax_calls) == 1
     assert len(setup.calls) == 3
     assert json.loads(reused.read_text())["selection"]["dft_attempts"] == 0
+
+
+@pytest.mark.parametrize("requires_relaxation", [False, True])
+def test_relative_cache_uses_absolute_static_and_relaxation_work_dirs(
+    setup_references, monkeypatch, requires_relaxation
+):
+    setup = setup_references
+    monkeypatch.chdir(setup.tmp)
+    setup.cache = Path("relative-cache")
+    phase = setup.plan.phases[0]
+    if requires_relaxation:
+        phase.geometry_status = "requires_relaxation"
+
+        def fake_relax(_phase, _cfg, atoms, work_dir):
+            path = Path(work_dir)
+            assert path.is_absolute()
+            assert path.is_relative_to((setup.tmp / "relative-cache").resolve())
+            return atoms.copy(), 0.01, 4, np.zeros(6)
+
+        monkeypatch.setattr(elemental_dft, "_run_reference_relaxation", fake_relax)
+
+    _prepare(
+        setup,
+        dft_approved=True,
+        max_dft_calculations=4 if requires_relaxation else 3,
+    )
+
+    static_work_dirs = [Path(spec.work_dir) for _, spec in setup.calls]
+    assert len(static_work_dirs) == 3
+    assert all(path.is_absolute() for path in static_work_dirs)
+    assert all(
+        path.is_relative_to((setup.tmp / "relative-cache").resolve()) for path in static_work_dirs
+    )
 
 
 def test_unconverged_reference_relaxation_never_creates_reference_result(
@@ -269,7 +378,11 @@ def test_al_reference_method_mismatch_fails_before_any_dft(
     atoms = Atoms("SiO2", positions=np.zeros((3, 3)))
     atoms.calc = SinglePointCalculator(atoms, energy=-20, forces=np.zeros((3, 3)))
     write(dataset, [atoms, atoms])
-    dataset_method_sidecar(dataset, elemental_manifest({"Si": -5, "O": -6}))
+    dataset_method_sidecar(
+        dataset,
+        elemental_manifest({"Si": -5, "O": -6}),
+        method_signature_elements={"Si", "O"},
+    )
     cfg = TrainerConfig(
         hydragnn_training_references={
             "phase_plan": phase_plan,
@@ -884,7 +997,7 @@ def test_al_additive_reference_extension_across_iterations(
     write(iter1_dataset, [si_atoms])
     # Iteration 1: AL dataset only has Si. Pre-cache Si calculations and run with dft_approved=False
     expected_si = _prepare(setup, "expected_si", dft_approved=True, required_elements={"Si"})
-    dataset_method_sidecar(iter1_dataset, expected_si)
+    dataset_method_sidecar(iter1_dataset, expected_si, method_signature_elements={"Si"})
 
     cfg1 = TrainerConfig(
         enabled=True,
@@ -928,6 +1041,7 @@ def test_al_additive_reference_extension_across_iterations(
         iter2_dataset,
         dft_backend=setup.dft.backend,
         method_signature=dft_method_signature(setup.dft, {"Si", "O"}),
+        method_signature_elements={"Si", "O"},
         energy_reference=f"{setup.dft.backend}:native_total_energy",
         validation=DatasetValidationSummary(),
     )

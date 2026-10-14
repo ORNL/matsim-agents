@@ -82,7 +82,7 @@ def prepare_formation_training_dataset(
         forces = (
             np.asarray(atoms.arrays["forces"], dtype=float)
             if "forces" in atoms.arrays
-            else np.asarray(atoms.get_forces(), dtype=float)
+            else np.asarray(atoms.get_forces(apply_constraint=False), dtype=float)
         )
         if not np.isfinite(total_energy):
             raise ValueError(f"Training frame {index} has nonfinite DFT energy")
@@ -122,6 +122,11 @@ def prepare_formation_training_dataset(
         target,
         dft_backend=metadata.dft_backend,
         method_signature=metadata.method_signature,
+        method_signature_elements=(
+            set(metadata.method_signature_elements)
+            if metadata.method_signature_elements is not None
+            else None
+        ),
         energy_reference=FORMATION_ENERGY_REFERENCE,
         validation=DatasetValidationSummary(accepted=len(converted)),
         parent_dataset_id=metadata.dataset_id,

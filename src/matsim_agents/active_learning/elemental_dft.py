@@ -485,6 +485,7 @@ def prepare_elemental_references(
         raise ValueError(f"Elemental reference snapshot already exists: {output_dir}")
     if max_dft_calculations is not None and max_dft_calculations < 0:
         raise ValueError("Reference DFT calculation cap must be nonnegative")
+    cache_dir = Path(cache_dir).expanduser().resolve()
     compound_signature = dft_method_signature(dft, required_elements)
 
     prepared = []

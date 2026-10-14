@@ -100,7 +100,7 @@ def _reference_forces(atoms: Atoms) -> np.ndarray | None:
     if "forces" in atoms.arrays:
         return np.asarray(atoms.arrays["forces"], dtype=float)
     try:
-        return np.asarray(atoms.get_forces(), dtype=float)
+        return np.asarray(atoms.get_forces(apply_constraint=False), dtype=float)
     except Exception:  # noqa: BLE001
         return None
 
