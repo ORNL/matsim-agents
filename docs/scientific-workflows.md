@@ -440,7 +440,7 @@ the declared phases at zero pressure.
 The phase-plan YAML has this schema (paths are relative to the plan file):
 
 ```yaml
-protocol: declared_phases_zero_pressure_v2
+protocol: declared_phases_zero_pressure_v3
 phases:
   - phase_id: nb-bcc
     element: Nb
@@ -449,6 +449,7 @@ phases:
     geometry_status: requires_relaxation
     magnetic_state: nonmagnetic
     relaxation_force_tolerance_eV_per_A: 0.02
+    relaxation_stress_tolerance_eV_per_A3: 0.01
     relaxation_max_steps: 200
   - phase_id: ta-bcc
     element: Ta
@@ -474,6 +475,10 @@ phases:
 has been independently established and attested; otherwise use
 `requires_relaxation`. Bulk relaxation defaults to relaxing atoms and cell
 (`vc-relax`/VASP `ISIF=3`); set `relax_cell: false` to retain the input cell.
+Bulk cell relaxation requires an explicit `relaxation_stress_tolerance_eV_per_A3`.
+The maximum absolute final stress component must be within this threshold; VASP
+and QE stress are checked in eV/Å³ and the measured stress is retained in the
+relaxation cache record. The tolerance participates in the cache identity.
 Molecules always retain their cell and vacuum while relaxing atomic positions.
 The force tolerance and ionic-step limit are explicit per phase. The example is
 a declaration format, not supplied physical reference data or a general

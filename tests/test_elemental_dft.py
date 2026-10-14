@@ -71,6 +71,7 @@ def setup_references(tmp_path, monkeypatch):
                 kind=kind,
                 geometry_status="verified_converged",
                 magnetic_state="nonmagnetic" if kind == "bulk" else "triplet",
+                relaxation_stress_tolerance_eV_per_A3=0.01,
                 qe_magnetic_settings={} if kind == "bulk" else {"nspin": 2, "tot_magnetization": 2},
                 kpts=None if kind == "bulk" else (1, 1, 1),
             )
@@ -184,7 +185,7 @@ def test_unverified_phase_relaxes_then_runs_static_and_caches_geometry(
         relaxed = atoms.copy()
         relaxed.positions[0, 0] += 0.05
         relax_calls.append((phase, cfg, atoms.copy(), work_dir))
-        return relaxed, 0.01, 4
+        return relaxed, 0.01, 4, np.zeros(6)
 
     monkeypatch.setattr(elemental_dft, "_run_reference_relaxation", fake_relax)
     with pytest.raises(ValueError, match="needs 4 DFT calculations"):
@@ -206,6 +207,7 @@ def test_unverified_phase_relaxes_then_runs_static_and_caches_geometry(
     assert entry["geometry_status"] == "requires_relaxation"
     assert entry["relaxation"]["converged"] is True
     assert entry["relaxation"]["ionic_steps"] == 4
+    assert entry["relaxation"]["final_stress_eV_per_A3"] == [0.0] * 6
     assert entry["calculation"]["geometry_sha256"] != entry["input_geometry_sha256"]
     assert payload["selection"]["dft_attempts"] == 4
 
@@ -239,13 +241,22 @@ def test_bulk_relaxation_rejects_nonperiodic_final_geometry(setup_references, mo
     def fake_relax(_phase, _cfg, atoms, _work_dir):
         relaxed = atoms.copy()
         relaxed.pbc = False
-        return relaxed, 0.01, 4
+        return relaxed, 0.01, 4, np.zeros(6)
 
     monkeypatch.setattr(elemental_dft, "_run_reference_relaxation", fake_relax)
     with pytest.raises(RuntimeError, match="invalid final geometry"):
         _prepare(setup, dft_approved=True, max_dft_calculations=4)
     assert all(spec.job_id != phase.phase_id for _, spec in setup.calls)
     assert not list((setup.cache / "relaxations").rglob("result.json"))
+
+
+def test_bulk_cell_relaxation_requires_explicit_stress_tolerance(setup_references):
+    phase = setup_references.plan.phases[0].model_dump()
+    phase["geometry_status"] = "requires_relaxation"
+    phase.pop("relaxation_stress_tolerance_eV_per_A3")
+
+    with pytest.raises(ValidationError, match="requires an explicit"):
+        ElementalPhaseSpec.model_validate(phase)
 
 
 def test_al_reference_method_mismatch_fails_before_any_dft(
@@ -428,15 +439,68 @@ def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monke
         ),
     )
     monkeypatch.setattr(elemental_dft, "read", lambda *args, **kwargs: atoms.copy())
-    relaxed, force, steps = elemental_dft._run_reference_relaxation(
+    relaxed, force, steps, stress = elemental_dft._run_reference_relaxation(
         phase, cfg, atoms, setup.tmp / "qe-relax"
     )
     assert relaxed.get_chemical_symbols() == atoms.get_chemical_symbols()
     assert force == pytest.approx(0.0002 * 25.711043)
     assert steps == 5
+    assert stress is None
 
 
-def test_vasp_relaxation_keeps_method_and_overrides(setup_references, monkeypatch):
+@pytest.mark.parametrize(("stress_component", "accepted"), [(0.005, True), (0.02, False)])
+def test_qe_cell_relaxation_checks_bulk_stress_tolerance(
+    setup_references, monkeypatch, stress_component, accepted
+):
+    from matsim_agents.backends.dft import qe_relax
+
+    setup = setup_references
+    phase = setup.plan.phases[0].model_copy(
+        update={"geometry_status": "requires_relaxation"}, deep=True
+    )
+    atoms = read(phase.structure_path)
+    final_atoms = atoms.copy()
+    final_atoms.calc = SinglePointCalculator(
+        final_atoms,
+        energy=-10.0,
+        forces=np.zeros((len(final_atoms), 3)),
+        stress=np.full(6, stress_component),
+    )
+    monkeypatch.setattr(
+        qe_relax,
+        "parse_pw_stdout",
+        lambda *args, **kwargs: SimpleNamespace(
+            converged=True,
+            return_code=0,
+            final_max_force_ry_au=0.0002,
+            final_energy_ev=-10.0,
+            bfgs_steps=5,
+        ),
+    )
+    monkeypatch.setattr(
+        elemental_dft.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0),
+    )
+    monkeypatch.setattr(elemental_dft, "read", lambda *args, **kwargs: final_atoms)
+
+    if accepted:
+        relaxed, _, _, stress = elemental_dft._run_reference_relaxation(
+            phase, setup.dft, atoms, setup.tmp / "qe-cell-relax"
+        )
+        assert relaxed.get_chemical_symbols() == atoms.get_chemical_symbols()
+        assert stress.tolist() == pytest.approx([stress_component] * 6)
+    else:
+        with pytest.raises(RuntimeError, match="stress threshold"):
+            elemental_dft._run_reference_relaxation(
+                phase, setup.dft, atoms, setup.tmp / "qe-cell-relax"
+            )
+
+
+@pytest.mark.parametrize(("stress_component", "accepted"), [(0.005, True), (0.02, False)])
+def test_vasp_relaxation_checks_bulk_stress_tolerance(
+    setup_references, monkeypatch, stress_component, accepted
+):
     setup = setup_references
     template = setup.tmp / "INCAR"
     template.write_text("ENCUT = 520\nKSPACING = 0.2\n")
@@ -454,15 +518,18 @@ def test_vasp_relaxation_keeps_method_and_overrides(setup_references, monkeypatc
             },
         }
     )
-    phase = setup.plan.phases[-1].model_copy(
+    phase = setup.plan.phases[0].model_copy(
         update={
             "geometry_status": "requires_relaxation",
             "qe_magnetic_settings": {},
             "kpts": None,
             "vasp_magnetic_settings": {"ISPIN": "2", "NUPDOWN": "2"},
+            "relaxation_stress_tolerance_eV_per_A3": 0.01,
         },
         deep=True,
     )
+    (potcar_dir / "Si").mkdir(parents=True)
+    (potcar_dir / "Si" / "POTCAR").write_text("synthetic potential")
     cfg = elemental_dft._phase_config(dft, phase)
     atoms = read(phase.structure_path)
     from matsim_agents.backends.dft import vasp_relax
@@ -473,7 +540,7 @@ def test_vasp_relaxation_keeps_method_and_overrides(setup_references, monkeypatc
         assert "ISPIN = 2" in incar
         assert "NUPDOWN = 2" in incar
         assert "IBRION = 2" in incar
-        assert "ISIF = 2" in incar
+        assert "ISIF = 3" in incar
         assert "NSW = 200" in incar
         assert "EDIFFG = -0.02" in incar
         return SimpleNamespace(returncode=0)
@@ -488,15 +555,22 @@ def test_vasp_relaxation_keeps_method_and_overrides(setup_references, monkeypatc
             final_atoms=atoms.copy(),
             final_energy_eV=-12.0,
             final_max_force_eV_per_A=0.01,
+            final_stress_eV_per_A3=np.full(6, stress_component),
             n_ionic_steps=6,
         ),
     )
-    relaxed, force, steps = elemental_dft._run_reference_relaxation(
-        phase, cfg, atoms, setup.tmp / "vasp-relax"
-    )
+    if accepted:
+        relaxed, force, steps, stress = elemental_dft._run_reference_relaxation(
+            phase, cfg, atoms, setup.tmp / "vasp-relax"
+        )
+    else:
+        with pytest.raises(RuntimeError, match="stress threshold"):
+            elemental_dft._run_reference_relaxation(phase, cfg, atoms, setup.tmp / "vasp-relax")
+        return
     assert relaxed.get_chemical_symbols() == atoms.get_chemical_symbols()
     assert force == pytest.approx(0.01)
     assert steps == 6
+    assert stress.tolist() == pytest.approx([stress_component] * 6)
 
 
 def test_fixed_reference_snapshot_never_overwrites_selection(setup_references):
@@ -622,6 +696,8 @@ def test_corrupt_cache_fails_explicitly(setup_references, corruption):
     [
         ("convergence", "invalid cached elemental relaxation"),
         ("force", "invalid cached elemental relaxation"),
+        ("missing_stress", "invalid cached elemental relaxation"),
+        ("stress", "invalid cached elemental relaxation"),
         ("atom_count", "invalid cached elemental relaxation"),
         ("geometry", "invalid cached relaxed geometry"),
     ],
@@ -648,6 +724,7 @@ def test_post_lock_relaxation_cache_is_fully_validated(
                 max_force = phase.relaxation_force_tolerance_eV_per_A + 0.1
             else:
                 max_force = phase.relaxation_force_tolerance_eV_per_A
+            max_stress = 0.02 if defect == "stress" else 0.005
             geometry_path = lock_path.parent / "geometry.extxyz"
             write(geometry_path, relaxed_atoms, format="extxyz")
             payload = {
@@ -660,6 +737,9 @@ def test_post_lock_relaxation_cache_is_fully_validated(
                 "n_atoms": len(relaxed_atoms) + (1 if defect == "atom_count" else 0),
                 "converged": defect != "convergence",
                 "final_max_force_eV_per_A": max_force,
+                "final_stress_eV_per_A3": (
+                    None if defect == "missing_stress" else [max_stress] * 6
+                ),
                 "ionic_steps": 1,
                 "work_dir": str(lock_path.parent),
             }
@@ -688,7 +768,7 @@ def test_concurrent_reference_preflight_waits_for_locked_relaxation_cache(
     def fake_relax(_phase, _cfg, atoms, _work_dir):
         relaxation_started.set()
         assert allow_relaxation_to_finish.wait(timeout=10)
-        return atoms.copy(), 0.01, 4
+        return atoms.copy(), 0.01, 4, np.zeros(6)
 
     def observe_lock(lock_file, operation):
         if (

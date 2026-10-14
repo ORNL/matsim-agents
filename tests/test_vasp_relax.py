@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 from ase.build import bulk
+from ase.calculators.singlepoint import SinglePointCalculator
 
 from matsim_agents.tools.vasp_relax import (
     VASPSettings,
@@ -170,3 +172,22 @@ def test_parse_relax_outputs_outcar_only(tmp_path: Path) -> None:
     # No vasprun.xml → no energies, so converged stays False (need final_energy).
     assert res.final_energy_eV is None
     assert res.converged is False
+
+
+def test_parse_relax_outputs_extracts_final_stress(tmp_path: Path, monkeypatch) -> None:
+    atoms = bulk("Si")
+    stress = np.arange(6, dtype=float) / 100
+    atoms.calc = SinglePointCalculator(
+        atoms,
+        energy=-1.0,
+        forces=np.zeros((len(atoms), 3)),
+        stress=stress,
+    )
+    vasprun = tmp_path / "vasprun.xml"
+    vasprun.write_text("<vasprun />")
+    monkeypatch.setattr("ase.io.read", lambda *args, **kwargs: [atoms])
+
+    result = parse_relax_outputs(tmp_path)
+
+    assert result.final_stress_eV_per_A3 == pytest.approx(stress)
+    assert result.to_dict()["final_stress_eV_per_A3"] == pytest.approx(stress.tolist())

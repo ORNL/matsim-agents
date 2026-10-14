@@ -43,6 +43,9 @@ class ElementalPhaseSpec(BaseModel):
     magnetic_state: str = Field(min_length=1)
     relax_cell: bool | None = None
     relaxation_force_tolerance_eV_per_A: float = Field(default=0.02, gt=0)
+    relaxation_stress_tolerance_eV_per_A3: float | None = Field(
+        default=None, gt=0, allow_inf_nan=False
+    )
     relaxation_max_steps: int = Field(default=200, gt=0)
     qe_magnetic_settings: dict[str, int | float] = Field(default_factory=dict)
     vasp_magnetic_settings: dict[str, str] = Field(default_factory=dict)
@@ -66,6 +69,15 @@ class ElementalPhaseSpec(BaseModel):
             raise ValueError("Molecular reference relaxation must preserve its vacuum cell")
         if not np.isfinite(self.relaxation_force_tolerance_eV_per_A):
             raise ValueError("Reference relaxation force tolerance must be finite")
+        if (
+            self.kind == "bulk"
+            and self.geometry_status == "requires_relaxation"
+            and self.relax_cell is not False
+            and self.relaxation_stress_tolerance_eV_per_A3 is None
+        ):
+            raise ValueError(
+                "Bulk cell relaxation requires an explicit relaxation_stress_tolerance_eV_per_A3"
+            )
         if not self.magnetic_state.strip():
             raise ValueError("An explicit magnetic state is required")
         return self
@@ -76,7 +88,7 @@ class ElementalReferencePlan(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     phases: list[ElementalPhaseSpec] = Field(min_length=1)
-    protocol: Literal["declared_phases_zero_pressure_v2"] = "declared_phases_zero_pressure_v2"
+    protocol: Literal["declared_phases_zero_pressure_v3"] = "declared_phases_zero_pressure_v3"
 
     @model_validator(mode="after")
     def _unique_phase_ids(self) -> ElementalReferencePlan:
@@ -113,6 +125,7 @@ class CachedElementalRelaxation(BaseModel):
     n_atoms: int = Field(gt=0)
     converged: bool
     final_max_force_eV_per_A: float = Field(ge=0, allow_inf_nan=False)
+    final_stress_eV_per_A3: list[float] | None = None
     ionic_steps: int = Field(gt=0)
     work_dir: str
 
@@ -127,6 +140,8 @@ def _validate_cached_relaxation(
     method_signature: str,
     geometry_path: Path,
 ) -> Atoms:
+    stress_max = _max_abs_stress(relaxation.final_stress_eV_per_A3)
+    stress_tolerance = phase.relaxation_stress_tolerance_eV_per_A3
     if (
         relaxation.cache_key != relax_key
         or relaxation.input_geometry_sha256 != input_digest
@@ -134,6 +149,10 @@ def _validate_cached_relaxation(
         or relaxation.n_atoms != len(input_atoms)
         or not relaxation.converged
         or relaxation.final_max_force_eV_per_A > phase.relaxation_force_tolerance_eV_per_A
+        or (
+            _relaxes_cell(phase)
+            and (stress_tolerance is None or stress_max is None or stress_max > stress_tolerance)
+        )
         or sha256_file(geometry_path) != relaxation.relaxed_geometry_sha256
     ):
         raise ValueError(f"{phase.phase_id}: invalid cached elemental relaxation")
@@ -243,7 +262,7 @@ def _is_zero_pressure(value: object) -> bool:
 
 def _relaxation_key(phase: ElementalPhaseSpec, input_digest: str, method_signature: str) -> str:
     identity = {
-        "schema_version": 1,
+        "schema_version": 2,
         "input_geometry_sha256": input_digest,
         "method_signature": method_signature,
         "phase": phase.model_dump(
@@ -257,7 +276,7 @@ def _relaxation_key(phase: ElementalPhaseSpec, input_digest: str, method_signatu
 
 def _run_reference_relaxation(
     phase: ElementalPhaseSpec, cfg: DFTConfig, atoms, work_dir: Path
-) -> tuple[object, float, int]:
+) -> tuple[object, float, int, np.ndarray | None]:
     """Relax positions (and optionally a bulk cell) using the reference DFT method."""
     work_dir.mkdir(parents=True)
     if cfg.backend == "qe":
@@ -334,7 +353,14 @@ def _run_reference_relaxation(
             ) from exc
         if not np.isfinite(result.final_energy_ev):
             raise RuntimeError(f"{phase.phase_id}: QE relaxation energy is nonfinite")
-        return relaxed, float(result.final_max_force_ry_au * 25.711043), result.bfgs_steps
+        stress = _relaxation_stress(relaxed) if do_cell else None
+        _validate_relaxation_stress(phase, stress)
+        return (
+            relaxed,
+            float(result.final_max_force_ry_au * 25.711043),
+            result.bfgs_steps,
+            stress,
+        )
 
     from matsim_agents.active_learning.vasp_io import prepare_vasp_workdir
     from matsim_agents.backends.dft.vasp_relax import parse_relax_outputs
@@ -396,7 +422,37 @@ def _run_reference_relaxation(
             f"{phase.phase_id}: VASP relaxation did not converge to its force threshold; "
             f"see {work_dir}"
         )
-    return result.final_atoms, result.final_max_force_eV_per_A, result.n_ionic_steps
+    stress = result.final_stress_eV_per_A3 if do_cell else None
+    _validate_relaxation_stress(phase, stress)
+    return result.final_atoms, result.final_max_force_eV_per_A, result.n_ionic_steps, stress
+
+
+def _relaxation_stress(atoms: Atoms) -> np.ndarray | None:
+    """Return ASE stress in eV/Å³ from a parsed final relaxation frame."""
+    if atoms.calc is None or "stress" not in atoms.calc.results:
+        return None
+    return np.asarray(atoms.calc.results["stress"], dtype=np.float64)
+
+
+def _max_abs_stress(stress: list[float] | np.ndarray | None) -> float | None:
+    if stress is None:
+        return None
+    values = np.asarray(stress, dtype=np.float64)
+    if values.size not in {6, 9} or not np.isfinite(values).all():
+        return None
+    return float(np.max(np.abs(values)))
+
+
+def _validate_relaxation_stress(phase: ElementalPhaseSpec, stress: np.ndarray | None) -> None:
+    if not _relaxes_cell(phase):
+        return
+    tolerance = phase.relaxation_stress_tolerance_eV_per_A3
+    maximum = _max_abs_stress(stress)
+    if tolerance is None or maximum is None or maximum > tolerance:
+        raise RuntimeError(
+            f"{phase.phase_id}: cell relaxation did not meet its stress threshold "
+            f"({maximum} eV/Å³; tolerance {tolerance} eV/Å³)"
+        )
 
 
 def prepare_elemental_references(
@@ -640,9 +696,12 @@ def prepare_elemental_references(
                     dft_attempts += 1
                     work_dir = relax_entry / f"relax-{uuid.uuid4().hex}"
                     log.info("Relaxing elemental reference %s (%s)", phase.phase_id, relax_key)
-                    relaxed_atoms, final_force, ionic_steps = _run_reference_relaxation(
-                        phase, cfg, atoms, work_dir
-                    )
+                    (
+                        relaxed_atoms,
+                        final_force,
+                        ionic_steps,
+                        final_stress,
+                    ) = _run_reference_relaxation(phase, cfg, atoms, work_dir)
                     if (
                         relaxed_atoms.get_chemical_symbols() != atoms.get_chemical_symbols()
                         or not np.isfinite(relaxed_atoms.positions).all()
@@ -672,6 +731,9 @@ def prepare_elemental_references(
                         n_atoms=len(atoms),
                         converged=True,
                         final_max_force_eV_per_A=final_force,
+                        final_stress_eV_per_A3=(
+                            None if final_stress is None else final_stress.reshape(-1).tolist()
+                        ),
                         ionic_steps=ionic_steps,
                         work_dir=str(work_dir),
                     )
