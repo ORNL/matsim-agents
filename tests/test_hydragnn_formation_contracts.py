@@ -237,6 +237,19 @@ def test_checkpoint_rejects_mismatches(tmp_path, training_inputs, defect):
         restore_hydragnn_total_energy(FormationCalculator(), model, selected)
 
 
+def test_checkpoint_requires_hash_for_existing_newhead_metadata(tmp_path, training_inputs):
+    model = _checkpoint(tmp_path, training_inputs)
+    (model / "newhead.json").write_text(json.dumps({"ft_config": {"activation": "relu"}}))
+    save_hydragnn_energy_convention(model, model / "ft_model.pk")
+    convention = model / "energy-convention.json"
+    metadata = json.loads(convention.read_text())
+    metadata["inference_artifact_sha256"].pop("newhead.json")
+    convention.write_text(json.dumps(metadata))
+
+    with pytest.raises(ValueError, match="requires verified newhead.json"):
+        restore_hydragnn_total_energy(FormationCalculator(), model)
+
+
 def test_missing_elements_and_double_wrapping_fail(tmp_path, training_inputs):
     model = _checkpoint(tmp_path, training_inputs)
     calculator = restore_hydragnn_total_energy(FormationCalculator(), model)
@@ -579,6 +592,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             checkpoint="incumbent-custom.pk",
             mlp_checkpoint=tmp_path / "mlp.pt",
             ft_repo=tmp_path / "fine tuning repo",
+            hydragnn_root=tmp_path / "HydraGNN source",
             charge=-2.5,
             spin=3.0,
         ),
@@ -603,7 +617,14 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         ]
         assert argv[10:12] == ["incumbent-custom.pk", str(tmp_path / "mlp.pt")]
         assert argv[12:] == (
-            [str(tmp_path / "fine tuning repo"), "-2.5", "3.0"] if built_in else []
+            [
+                str(tmp_path / "fine tuning repo"),
+                "-2.5",
+                "3.0",
+                str(tmp_path / "HydraGNN source"),
+            ]
+            if built_in
+            else []
         )
     else:
         assert "--elemental-reference-manifest" in argv
@@ -612,6 +633,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         if built_in:
             assert argv[argv.index("--charge") + 1] == "-2.5"
             assert argv[argv.index("--spin") + 1] == "3.0"
+            assert argv[argv.index("--hydragnn-root") + 1] == str(tmp_path / "HydraGNN source")
         else:
             assert "--charge" not in argv
             assert "--spin" not in argv

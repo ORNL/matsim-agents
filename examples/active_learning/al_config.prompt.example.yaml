@@ -36,6 +36,7 @@ vars:
 # ---------------------------------------------------------------------------
 
 hydragnn:
+  hydragnn_root: ${HYDRAGNN_DIR}
   logdir: ${INITIAL_LOGDIR}
   checkpoint: best_model.pt
   mlp_checkpoint: null

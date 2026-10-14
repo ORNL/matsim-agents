@@ -8,7 +8,7 @@
 #   bash _hydragnn-train-step-frontier.sh \
 #        <train_script> <dataset_path> <out_logdir> <resume_logdir> \
 #        <epochs> <nodes_for_train> <ranks_per_node> <elemental_manifest> \
-#        [checkpoint] [branch_mlp] [ft_repo] [charge] [spin]
+#        [checkpoint] [branch_mlp] [ft_repo] [charge] [spin] [hydragnn_root]
 #
 # Runs the built-in CLI or the legacy custom --logdir/--resume_from CLI,
 # always passing --elemental-reference-manifest.
@@ -50,6 +50,9 @@ if [[ "${SCRIPT_NAME}" == "finetune_hydragnn.py" || "${SCRIPT_NAME}" == "finetun
   EXTRA_ARGS+=(--charge "${12:-0.0}" --spin "${13:-0.0}")
   if [[ "${SCRIPT_NAME}" == "finetune_hydragnn_newhead.py" && -n "${11:-}" ]]; then
     EXTRA_ARGS+=(--ft-repo "${11}")
+  fi
+  if [[ -n "${14:-}" ]]; then
+    EXTRA_ARGS+=(--hydragnn-root "${14}")
   fi
 fi
 if [[ "${SCRIPT_NAME}" == "finetune_hydragnn.py" ]]; then

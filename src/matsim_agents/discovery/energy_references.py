@@ -164,6 +164,8 @@ def predict_elemental_references(
     model_references = {}
     records = {}
     for element, atoms, dft_energy, digest in prepared:
+        if element not in required_elements:
+            continue
         probe = atoms.copy()
         probe.calc = calculator
         model_energy = float(probe.get_potential_energy())

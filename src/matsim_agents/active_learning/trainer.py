@@ -196,6 +196,7 @@ def retrain_hydragnn(
                     str(hydragnn_cfg.ft_repo or ""),
                     str(hydragnn_cfg.charge),
                     str(hydragnn_cfg.spin),
+                    str(hydragnn_cfg.hydragnn_root or ""),
                 ]
             )
     else:
@@ -226,6 +227,8 @@ def retrain_hydragnn(
             argv.extend(["--gfm-checkpoint", hydragnn_cfg.checkpoint])
         if built_in:
             argv.extend(["--charge", str(hydragnn_cfg.charge), "--spin", str(hydragnn_cfg.spin)])
+            if hydragnn_cfg.hydragnn_root is not None:
+                argv.extend(["--hydragnn-root", str(hydragnn_cfg.hydragnn_root)])
         if script_name == "finetune_hydragnn_newhead" and hydragnn_cfg.ft_repo is not None:
             argv.extend(["--ft-repo", str(hydragnn_cfg.ft_repo)])
 

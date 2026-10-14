@@ -39,6 +39,7 @@ mlip:
   # Frontier's venv is HydraGNN/ROCm; UMA (fairchem) is not installed there.
   backend: ${MLIP_BACKEND:-hydragnn}
   hydragnn:
+    hydragnn_root: ${HYDRAGNN_DIR}
     logdir:         ${INITIAL_LOGDIR}
     checkpoint:     best_model.pt
     mlp_checkpoint: null

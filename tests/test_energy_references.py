@@ -65,6 +65,24 @@ def test_formation_comparison_removes_only_elemental_offsets(elemental_manifest,
     ] == pytest.approx(110.0)
 
 
+def test_evaluation_only_probes_required_elements_from_superset_manifest(
+    elemental_manifest, monkeypatch
+):
+    manifest = elemental_manifest({"Nb": -10.0, "O": -5.0, "Ti": -7.0})
+    calculator = OffsetCalculator()
+    monkeypatch.setattr(
+        "matsim_agents.active_learning.calculator.make_mlip_calculator",
+        lambda _cfg: calculator,
+    )
+    metrics, _ = evaluate_frames(
+        MLIPConfig(backend="uma", uma=UMAConfig()),
+        [Atoms("NbO2", info={"energy": -23.0})],
+        elemental_reference_manifest=manifest,
+    )
+    assert calculator.calls == [{"Nb"}, {"O"}, {"Nb", "O"}]
+    assert set(metrics.elemental_reference_provenance["references"]) == {"Nb", "O"}
+
+
 @pytest.mark.parametrize("defect", ["coverage", "hash", "mixed", "nonfinite", "backend"])
 def test_invalid_elemental_references_fail_before_model_predictions(elemental_manifest, defect):
     manifest = elemental_manifest({"Nb": -10.0, "O": -5.0})

@@ -81,6 +81,9 @@ def restore_hydragnn_total_energy(calculator, logdir: Path, checkpoint: str | No
             or sha256_file(artifact_path) != digest
         ):
             raise ValueError(f"HydraGNN inference artifact hash mismatch: {name}")
+    newhead_artifact = logdir / "newhead.json"
+    if newhead_artifact.exists() and "newhead.json" not in artifact_hashes:
+        raise ValueError("HydraGNN single-head checkpoint requires verified newhead.json")
     routing_artifact = logdir / "routing.json"
     if (
         "routed_branches" in metadata

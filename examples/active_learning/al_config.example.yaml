@@ -46,6 +46,7 @@ vars:
 # ---------------------------------------------------------------------------
 
 hydragnn:
+  hydragnn_root: ${HYDRAGNN_DIR}
   logdir: ${INITIAL_LOGDIR}
   checkpoint: best_model.pt           # filename inside logdir, OR absolute path
   mlp_checkpoint: null                 # set if your model uses BranchWeightMLP

@@ -48,7 +48,14 @@ def test_launcher_executes_expected_cli(tmp_path, platform, configured, script_n
         str(branch_mlp),
     ]
     if configured:
-        args.extend([str(tmp_path / "fine tuning repo"), "-2.5", "3.0"])
+        args.extend(
+            [
+                str(tmp_path / "fine tuning repo"),
+                "-2.5",
+                "3.0",
+                str(tmp_path / "HydraGNN source"),
+            ]
+        )
     proc = subprocess.run(
         args,
         env={
@@ -93,6 +100,8 @@ def test_launcher_executes_expected_cli(tmp_path, platform, configured, script_n
         )
     if script_name == "finetune_hydragnn_newhead" and configured:
         expected.extend(["--ft-repo", str(tmp_path / "fine tuning repo")])
+    if built_in and configured:
+        expected.extend(["--hydragnn-root", str(tmp_path / "HydraGNN source")])
     if script_name == "finetune_hydragnn":
         expected.extend(["--branch-mlp", str(branch_mlp)])
     assert actual == expected

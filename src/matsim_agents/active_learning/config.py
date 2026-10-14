@@ -63,6 +63,10 @@ class HydraGNNConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     logdir: Path = Field(..., description="HydraGNN logdir with config.json + checkpoint.")
+    hydragnn_root: Path | None = Field(
+        None,
+        description="HydraGNN source checkout used by built-in fine-tuners.",
+    )
     checkpoint: str | None = Field(None, description="Specific checkpoint filename or path.")
     hydragnn_branch_mlp_checkpoint: Path | None = Field(
         None,

@@ -42,6 +42,7 @@ mlip:
   # MLIP_BACKEND=uma only on a node where fairchem-core is available.
   backend: ${MLIP_BACKEND:-hydragnn}
   hydragnn:
+    hydragnn_root: ${HYDRAGNN_DIR}
     logdir:         ${INITIAL_LOGDIR}
     checkpoint:     best_model.pt
     mlp_checkpoint: null
