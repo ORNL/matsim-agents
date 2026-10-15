@@ -15,8 +15,9 @@
 # as a fallback when the facility module is missing or fails a smoke test.
 # See VASP_FACILITY_MODULE / VASP_SKIP_FACILITY_MODULE below.
 #
-# Toolchain mirrors the matsim-agents Python venv module stack:
-#   cpe/24.07  rocm/6.2.0  amd-mixed/6.2.0
+# Toolchain matches the facility vasp/6.6.1-gpu module's own stack (empirically
+# verified to load cleanly and match its performance):
+#   cpe/25.09  cce/20.0.2  rocm/6.4.2  amd-mixed/6.4.2
 # with these additions required for VASP GPU compilation:
 #   PrgEnv-cray + cce ............... Cray Fortran compiler + OpenMP offload
 #   craype-accel-amd-gfx90a ......... routes ftn/cc to gfx90a device code
@@ -48,8 +49,8 @@
 #   NCORES            Parallel make jobs         (default: nproc or 16 on login)
 #   CLEAN_BUILD       1=wipe build dirs first    (default: 0)
 #   VASP_TARGET       all|std|gam|ncl            (default: all)
-#   ROCM_MODULE       ROCm module to load        (default: rocm/6.2.0)
-#   AMD_MIXED_MODULE  amd-mixed module to load   (default: amd-mixed/6.2.0)
+#   ROCM_MODULE       ROCm module to load        (default: rocm/6.4.2)
+#   AMD_MIXED_MODULE  amd-mixed module to load   (default: amd-mixed/6.4.2)
 #   VASP_HDF5_ROOT    Path to HDF5 install       (optional; enables -DVASP_HDF5)
 #
 # If OLCF's vasp/6.6.1-gpu module is present and passes a smoke test, this
@@ -58,19 +59,13 @@
 # the manual PrgEnv-cray/rocm/6.2.0 stack below). Set
 # VASP_SKIP_FACILITY_MODULE=1 to always build from source regardless.
 #
-# NOTE on ROCm version: the GPU device link runs cce's llvm-link + lld (LLVM 18
-# for cce 18.x) over ROCm's device bitcode (amdgcn/bitcode/*.bc).  Two
-# constraints pin the ROCm version:
-#   1. The bitcode must be produced by LLVM <= 18, else llvm-link fails with
-#      "Invalid attribute group entry (Producer 'LLVM20' Reader 'LLVM 18')".
-#      -> rules out ROCm 6.4+ (LLVM 19) and 7.x (LLVM 20).
-#   2. The device libs must use the NON-overloaded llvm.amdgcn.readfirstlane
-#      intrinsic; ROCm 6.2.4+ backported the typed .i32 form (an LLVM-19
-#      feature) into their 18.0.0git fork, which cce 18's lld cannot lower
-#      ("undefined symbol: llvm.amdgcn.readfirstlane.i32").
-#      -> rules out ROCm 6.2.4 and 6.3.1.
-# rocm/6.2.0 is the newest ROCm satisfying BOTH (LLVM 18 bitcode + old
-# intrinsic).  rocm/6.1.3 (LLVM 17) is a fallback.
+# NOTE on ROCm/cce version: previously pinned to cce 18.x + rocm/6.2.0 because
+# cce 18's llvm-link/lld could not consume ROCm's device bitcode above LLVM 18
+# ("Invalid attribute group entry" / undefined readfirstlane.i32 errors). We
+# now build with cce/20.0.2 + rocm/6.4.2 (LLVM 19/20-generation), which matches
+# the facility vasp/6.6.1-gpu module's own toolchain exactly and was verified
+# via a live `module load` test to load without errors on this system, so the
+# bitcode-version mismatch no longer applies.
 # =============================================================================
 
 set -euo pipefail
@@ -99,8 +94,8 @@ VASP_TARGET="${VASP_TARGET:-all}"
 # compiled individually via the O-group rules (in .depend order), which lets the
 # workarounds -- including vdw_nl -> -hnoomp -- take effect.
 VASP_MODS="${VASP_MODS:-0}"
-ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.0}"
-AMD_MIXED_MODULE="${AMD_MIXED_MODULE:-amd-mixed/6.2.0}"
+ROCM_MODULE="${ROCM_MODULE:-rocm/6.4.2}"
+AMD_MIXED_MODULE="${AMD_MIXED_MODULE:-amd-mixed/6.4.2}"
 # Tracked next to this script (external/ is gitignored, so the recipe lives here).
 MAKEFILE_INCLUDE="${MAKEFILE_INCLUDE:-${SCRIPT_DIR}/makefile.include.frontier-gpu}"
 
@@ -244,19 +239,19 @@ log "  → ${VASP_ROOT}/makefile.include"
 # Module stack keeps the same cpe/ROCm versions as the matsim-agents Python
 # venv (cpe/24.07, rocm/7.1.1, amd-mixed/7.1.1).  The only differences from
 # the Python venv stack are:
-#   • PrgEnv-cray replaces PrgEnv-gnu  (needed for ftn + OpenMP offload)
-#   • cce is loaded explicitly         (Cray Fortran 18.x; the only cce with
-#                                       working gfx90a offload on this system --
-#                                       cce >=19 lacks libopenacc.pc for craype)
+#   • PrgEnv-cray replaces PrgEnv-gnu  (needed for ftn + OpenMP target offload)
+#   • cce is loaded explicitly at 20.0.2 (matches the facility vasp/6.6.1-gpu
+#                                       module's own toolchain; empirically
+#                                       verified to load cleanly on this system)
 #   • craype-accel-amd-gfx90a added    (routes compilation to gfx90a device)
 #   • cray-fftw added                  (FFTW3 headers/libs for VASP)
 #   • miniforge3 not needed for compile
 #
 init_modules
 module reset
-module load cpe/24.07
+module load cpe/25.09
 module load PrgEnv-cray                 # Cray Fortran (ftn) + OpenMP target offload
-module load cce                         # cce 18.x (only version with working gfx90a offload)
+module load cce/20.0.2                  # matches facility vasp/6.6.1-gpu toolchain
 module load craype-accel-amd-gfx90a    # enables gfx90a OpenMP offload device code
 module load "${ROCM_MODULE}"            # rocBLAS, rocFFT, rocSOLVER, RCCL, hipcc
 module load "${AMD_MIXED_MODULE}"       # AMD mixed stack (matches Python venv)
