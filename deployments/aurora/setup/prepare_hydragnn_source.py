@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import tempfile
@@ -45,6 +46,20 @@ def prepare_source(code: Path, dependencies: Path, output_root: Path, torch_vers
                 directory = directory.parent
         for source in dependencies.glob("requirements*.txt"):
             shutil.copy2(source, stage / source.name)
+        installer_path = Path("scripts/hpc/alcf/aurora/installation/install.sh")
+        installer = dependencies / installer_path
+        if installer.is_file():
+            text, replacements = re.subn(
+                r'(?m)^([ \t]*)module load frameworks[ \t]*$',
+                r'\1module load "${FRAMEWORKS_MODULE:-frameworks}"',
+                installer.read_text(),
+            )
+            if replacements != 1 and 'module load "${FRAMEWORKS_MODULE:-frameworks}"' not in text:
+                raise ValueError("Unknown upstream Aurora framework module selection")
+            target = stage / installer_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(installer, target)
+            target.write_text(text)
         requirement_path = stage / "requirements-torch.txt"
         requirements = []
         for line in requirement_path.read_text().splitlines():

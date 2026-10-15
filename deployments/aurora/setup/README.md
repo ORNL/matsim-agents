@@ -69,8 +69,15 @@ Inspect progress with `tail -f "$RUN_DIR/install.log"` and
 `cat "$RUN_DIR/status.txt"`. A detached login-node process survives shell logout,
 but not a node reboot or a site process limit.
 
+`FRAMEWORKS_MODULE` is passed to the staged canonical HydraGNN installer as
+well as loaded by the parent. Before installing project wheels, the resulting
+environment must match the captured framework Python, Torch version, and Torch
+package path. The upstream dependency checkout is not edited.
+
 `RECREATE_MACE_ENV` and `RECREATE_UMA_ENV` independently control compatibility
-environment recreation; both inherit `RECREATE_ENV` by default. This allows
+environment recreation; both default to `0` (reuse), following Perlmutter's
+opt-in compatibility-environment lifecycle. `RECREATE_ENV=1` rebuilds only the
+base environment; it does not request deletion of UMA or MACE. This allows
 rebuilding one model environment without replacing the base environment.
 `INSTALL_VLLM=1` verifies Aurora's framework-provided vLLM-XPU stack rather than
 installing Perlmutter's CUDA vLLM environment.

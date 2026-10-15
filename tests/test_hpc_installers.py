@@ -7,6 +7,7 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+import pytest
 from packaging.requirements import Requirement
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -160,6 +161,87 @@ def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
         subprocess.run(["bash", "-n", str(installer)], check=True)
 
 
+@pytest.mark.parametrize("base,mace,uma,expected", [
+    ("0", "1", None, "0"), ("1", "0", None, "0"), ("1", "1", "0", "0"),
+    ("0", "0", "1", "1"), ("1", "1", "1", "1"),
+])
+def test_aurora_recreate_uma_defaults_independently(base, mace, uma, expected):
+    installer = (ROOT / "deployments/aurora/setup/install.sh").read_text()
+    assignments = "\n".join(
+        line for line in installer.splitlines() if line.startswith("RECREATE_")
+    )
+    environment = os.environ.copy()
+    environment.update(RECREATE_ENV=base, RECREATE_MACE_ENV=mace)
+    environment.pop("RECREATE_UMA_ENV", None)
+    if uma is not None:
+        environment["RECREATE_UMA_ENV"] = uma
+    result = subprocess.run(
+        ["bash"], input=assignments + '\nprintf "%s" "$RECREATE_UMA_ENV"\n',
+        env=environment, text=True, capture_output=True, check=True,
+    )
+    assert result.stdout == expected
+
+
+@pytest.mark.parametrize("base", ["0", "1"])
+def test_aurora_compatibility_recreation_is_opt_in_like_perlmutter(base):
+    aurora = (ROOT / "deployments/aurora/setup/install.sh").read_text()
+    perlmutter = (ROOT / "deployments/perlmutter/setup/install.sh").read_text()
+    for backend in ("UMA", "MACE"):
+        assignment = f'RECREATE_{backend}_ENV="${{RECREATE_{backend}_ENV:-0}}"'
+        assert assignment in aurora
+    assert 'RECREATE_MACE_ENV="${RECREATE_MACE_ENV:-0}"' in perlmutter
+    assignments = "\n".join(
+        line for line in aurora.splitlines() if line.startswith("RECREATE_")
+    )
+    environment = os.environ.copy()
+    environment["RECREATE_ENV"] = base
+    for backend in ("UMA", "MACE"):
+        environment.pop(f"RECREATE_{backend}_ENV", None)
+    result = subprocess.run(
+        ["bash"], env=environment, text=True, capture_output=True, check=True,
+        input=assignments + '\nprintf "%s %s" "$RECREATE_UMA_ENV" "$RECREATE_MACE_ENV"\n',
+    )
+    assert result.stdout == "0 0"
+
+
+@pytest.mark.parametrize("ref", ["main", "feature/test", "v-test", "commit"])
+def test_aurora_selected_refs_work_on_first_install_and_rerun(tmp_path, ref):
+    origin = tmp_path / "origin"
+    subprocess.run(["git", "init", "-b", "main", str(origin)], check=True, capture_output=True)
+    subprocess.run([
+        "git", "-C", str(origin), "-c", "user.name=Test", "-c", "user.email=test@example.com",
+        "commit", "--allow-empty", "-m", "initial",
+    ], check=True, capture_output=True)
+    for command in (("branch", "feature/test"), ("tag", "v-test")):
+        subprocess.run(["git", "-C", str(origin), *command], check=True, capture_output=True)
+    revision = subprocess.check_output(
+        ["git", "-C", str(origin), "rev-parse", "HEAD"], text=True
+    ).strip()
+    selected = revision if ref == "commit" else ref
+    checkout = tmp_path / "selected"
+    installer = (ROOT / "deployments/aurora/setup/install.sh").read_text()
+    start = installer.index('if [[ ! -d "${HYDRAGNN_DIR}/.git" ]]')
+    end = installer.index('[[ "$(realpath -m "${HYDRAGNN_INSTALLER_DIR}")"')
+    script = 'set -euo pipefail\nlog() { :; }\ndie() { exit 1; }\n' + installer[start:end]
+    environment = os.environ.copy()
+    environment.update(HYDRAGNN_DIR=str(checkout), HYDRAGNN_REPO=str(origin), HYDRAGNN_REF=selected)
+    for _attempt in range(2):
+        subprocess.run(
+            ["bash"], input=script, text=True, env=environment, check=True, capture_output=True
+        )
+        assert subprocess.check_output(
+            ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True
+        ).strip() == revision
+        branch = subprocess.run(
+            ["git", "-C", str(checkout), "symbolic-ref", "--short", "HEAD"],
+            text=True, capture_output=True,
+        )
+        if ref in ("main", "feature/test"):
+            assert branch.returncode == 0 and branch.stdout.strip() == ref
+        else:
+            assert branch.returncode != 0
+
+
 def test_runtime_dependency_audit_checks_selected_extras_and_transitive_requirements(monkeypatch):
     from types import SimpleNamespace
 
@@ -222,6 +304,35 @@ def test_aurora_xpu_qualification_rejects_invalid_predictions(tmp_path):
     assert "export HF_HUB_OFFLINE=1" in job.read_text()
 
 
+def test_aurora_fused_residency_requires_xpu_gnn_and_mlp(monkeypatch):
+    from types import SimpleNamespace
+
+    import pytest
+
+    import matsim_agents.active_learning.calculator as calculator
+
+    helper = ROOT / "deployments/aurora/jobs/qualify_mlip_xpu.py"
+    spec = importlib.util.spec_from_file_location("qualify_mlip_xpu", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(
+        calculator, "_find_torch_module",
+        lambda root: root if hasattr(root, "parameters") else None,
+    )
+
+    def model(device):
+        return SimpleNamespace(parameters=lambda: [SimpleNamespace(device=device)])
+
+    fused = SimpleNamespace(model=model("xpu:0"), mlp=model("cpu"))
+    with pytest.raises(RuntimeError, match="not exclusively resident"):
+        module.verify_model_residency(fused, "hydragnn")
+    fused.mlp = None
+    with pytest.raises(RuntimeError, match="requires both GNN and MLP"):
+        module.verify_model_residency(fused, "hydragnn")
+    fused.mlp = model("xpu:0")
+    assert module.verify_model_residency(fused, "hydragnn") == ["xpu:0"]
+
+
 def test_aurora_stages_selected_code_with_upstream_dependencies(tmp_path) -> None:
     helper = ROOT / "deployments/aurora/setup/prepare_hydragnn_source.py"
     spec = importlib.util.spec_from_file_location("prepare_hydragnn_source", helper)
@@ -240,6 +351,9 @@ def test_aurora_stages_selected_code_with_upstream_dependencies(tmp_path) -> Non
     (dependencies / "requirements-base.txt").write_text("numpy==2.4.6\nscipy==1.17.1\n")
     (dependencies / "requirements-pyg.txt").write_text("torch_geometric==2.8.0\n")
     (dependencies / "requirements-torch.txt").write_text("torch==2.13.0\ntorchvision==0.28.0\n")
+    upstream_installer = dependencies / INSTALLERS["aurora"]
+    upstream_installer.parent.mkdir(parents=True)
+    upstream_installer.write_text('module reset\nmodule load frameworks\nmodule list\n')
     stage = module.prepare_source(code, dependencies, tmp_path / "build", "2.13.0a0+git123")
     assert (stage / "model.py").read_bytes() == (code / "model.py").read_bytes()
     assert (stage / "requirements-base.txt").read_bytes() == (
@@ -254,12 +368,48 @@ def test_aurora_stages_selected_code_with_upstream_dependencies(tmp_path) -> Non
         utilities / "__init__.py"
     ).read_bytes()
     assert not (code / "hydragnn/utils/__init__.py").exists()
+    staged_installer = stage / INSTALLERS["aurora"]
+    assert 'module load "${FRAMEWORKS_MODULE:-frameworks}"' in staged_installer.read_text()
+    assert upstream_installer.read_text() == 'module reset\nmodule load frameworks\nmodule list\n'
+    environment = os.environ.copy()
+    environment["FRAMEWORKS_MODULE"] = "frameworks/test"
+    result = subprocess.run(
+        ["bash"], env=environment, text=True, capture_output=True, check=True,
+        input='module() { printf "%s\\n" "$*"; }\n' + staged_installer.read_text(),
+    )
+    assert "load frameworks/test" in result.stdout
     try:
         module.prepare_source(code, dependencies, code / "build", "2.13.0")
     except ValueError as error:
         assert "outside the selected" in str(error)
     else:
         raise AssertionError("staging inside selected checkout was accepted")
+
+
+@pytest.mark.parametrize("mismatch", [None, "interpreter", "version", "path"])
+def test_aurora_checks_child_runtime_before_installing_wheels(monkeypatch, tmp_path, mismatch):
+    import sys
+    from types import SimpleNamespace
+
+    torch = SimpleNamespace(__version__="2.13.0a0+git123", __file__=str(tmp_path / "torch.py"))
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    arguments = ["-", sys._base_executable, torch.__version__, torch.__file__]
+    if mismatch == "interpreter":
+        arguments[1] = str(tmp_path / "different-python")
+    elif mismatch == "version":
+        arguments[2] = "2.13.0"
+    elif mismatch == "path":
+        arguments[3] = str(tmp_path / "different-torch.py")
+    monkeypatch.setattr(sys, "argv", arguments)
+    installer = (ROOT / "deployments/aurora/setup/install.sh").read_text()
+    start = installer.index('"${PYTHON}" - "${FRAMEWORKS_PYTHON}" "${TORCH_VERSION}"')
+    fragment = installer[start:].split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
+    assert start < installer.index('log "Installing HydraGNN and matsim-agents wheels')
+    if mismatch:
+        with pytest.raises(SystemExit, match="framework"):
+            exec(fragment, {})
+    else:
+        exec(fragment, {})
 
 
 def test_deployment_scripts_do_not_reference_hydragnn_owned_environment() -> None:

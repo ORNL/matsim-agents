@@ -57,7 +57,7 @@ class RelaxStructureInput(BaseModel):
     spin: float = 0.0
     precision: str | None = None
     mlp_precision: str | None = None
-    mlp_device: Literal["cuda", "cpu"] = "cuda"
+    mlp_device: Literal["cuda", "cpu", "xpu"] = "cuda"
     uma_model_name: str = Field(
         "uma-s-1p1",
         description="UMA pretrained model name/checkpoint when mlip_backend='uma'.",
@@ -128,6 +128,40 @@ def _atoms_to_graph(atoms, graph_attr, radius: float, max_neighbours: int):
     return add_edges_pbc(data)
 
 
+def _load_fused_stack(logdir, checkpoint, mlp_checkpoint, precision, mlp_precision, mlp_device):
+    """Load upstream models while enforcing explicit XPU co-location."""
+    from inference_fused import load_fused_stack
+
+    if mlp_device == "xpu":
+        import torch
+
+        if not torch.xpu.is_available():
+            raise RuntimeError("XPU unavailable; HydraGNN CPU fallback is forbidden")
+    stack = load_fused_stack(
+        logdir, checkpoint, mlp_checkpoint, precision, mlp_precision, mlp_device
+    )
+    if mlp_device != "xpu":
+        return stack
+    from contextlib import nullcontext
+
+    (
+        model, mlp, config, device, autocast_ctx, param_dtype, num_branches,
+        _mlp_device, _mlp_autocast_ctx, _unified, gnn_prec, mlp_prec,
+    ) = stack
+    if device.type != "xpu":
+        raise RuntimeError(f"HydraGNN GNN is on {device}, but XPU was requested")
+    mlp = mlp.to(device=device)
+    unified = mlp_prec == gnn_prec
+    mlp_autocast_ctx = (
+        torch.autocast("xpu", dtype=torch.bfloat16)
+        if not unified and mlp_prec == "bf16" else nullcontext()
+    )
+    return (
+        model, mlp, config, device, autocast_ctx, param_dtype, num_branches,
+        device, mlp_autocast_ctx, unified, gnn_prec, mlp_prec,
+    )
+
+
 def _build_calculator(
     model,
     mlp,
@@ -155,6 +189,7 @@ def _build_calculator(
         def __init__(self):
             super().__init__()
             self.model = model  # expose for score_mc_dropout (uncertainty.py)
+            self.mlp = mlp
             self.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
             self.last_branch_weights = None
 
@@ -368,8 +403,6 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 "branch-weight UQ disabled"
             )
         else:
-            from inference_fused import load_fused_stack
-
             (
                 model,
                 mlp,
@@ -383,7 +416,7 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 unified_mlp_gnn_stack,
                 _gnn_prec,
                 _mlp_prec,
-            ) = load_fused_stack(
+            ) = _load_fused_stack(
                 args.logdir,
                 args.checkpoint,
                 args.hydragnn_branch_mlp_checkpoint,

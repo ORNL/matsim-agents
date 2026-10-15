@@ -16,8 +16,8 @@ INSTALL_MACE="${INSTALL_MACE:-0}"
 MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"
 RECREATE_ENV="${RECREATE_ENV:-0}"
 REUSE_HYDRAGNN_DEPENDENCIES="${REUSE_HYDRAGNN_DEPENDENCIES:-0}"
-RECREATE_MACE_ENV="${RECREATE_MACE_ENV:-${RECREATE_ENV}}"
-RECREATE_UMA_ENV="${RECREATE_UMA_ENV:-${RECREATE_MACE_ENV}}"
+RECREATE_MACE_ENV="${RECREATE_MACE_ENV:-0}"
+RECREATE_UMA_ENV="${RECREATE_UMA_ENV:-0}"
 INSTALL_VLLM="${INSTALL_VLLM:-0}"
 RUN_MODEL_TESTS="${RUN_MODEL_TESTS:-0}"
 FRAMEWORKS_MODULE="${FRAMEWORKS_MODULE:-frameworks}"
@@ -71,14 +71,23 @@ PY
 
 if [[ ! -d "${HYDRAGNN_DIR}/.git" ]]; then
     log "Cloning HydraGNN ${HYDRAGNN_REF:-main} into ${HYDRAGNN_DIR}"
-    git clone --branch "${HYDRAGNN_REF:-main}" "${HYDRAGNN_REPO}" "${HYDRAGNN_DIR}"
-elif [[ -n "${HYDRAGNN_REF}" ]]; then
+    git clone "${HYDRAGNN_REPO}" "${HYDRAGNN_DIR}"
+fi
+if [[ -n "${HYDRAGNN_REF}" ]]; then
     git -C "${HYDRAGNN_DIR}" diff --quiet && git -C "${HYDRAGNN_DIR}" diff --cached --quiet \
         || die "HydraGNN checkout has local changes: ${HYDRAGNN_DIR}"
     log "Updating HydraGNN checkout to ${HYDRAGNN_REF}"
     git -C "${HYDRAGNN_DIR}" fetch "${HYDRAGNN_REPO}" "${HYDRAGNN_REF}"
-    git -C "${HYDRAGNN_DIR}" switch "${HYDRAGNN_REF}"
-    git -C "${HYDRAGNN_DIR}" merge --ff-only FETCH_HEAD
+    if git ls-remote --exit-code --heads "${HYDRAGNN_REPO}" "refs/heads/${HYDRAGNN_REF}" >/dev/null; then
+        if git -C "${HYDRAGNN_DIR}" show-ref --verify --quiet "refs/heads/${HYDRAGNN_REF}"; then
+            git -C "${HYDRAGNN_DIR}" switch "${HYDRAGNN_REF}"
+        else
+            git -C "${HYDRAGNN_DIR}" switch -c "${HYDRAGNN_REF}" FETCH_HEAD
+        fi
+        git -C "${HYDRAGNN_DIR}" merge --ff-only FETCH_HEAD
+    else
+        git -C "${HYDRAGNN_DIR}" checkout --detach FETCH_HEAD
+    fi
 else
     log "Preserving HydraGNN checkout $(git -C "${HYDRAGNN_DIR}" rev-parse --short HEAD)"
 fi
@@ -119,6 +128,7 @@ fi
 
 log "Installing HydraGNN and its XPU/PyG/MPI dependencies first"
 TORCH_VERSION="$("${FRAMEWORKS_PYTHON}" -c 'import torch; print(torch.__version__)')"
+FRAMEWORKS_TORCH_FILE="$("${FRAMEWORKS_PYTHON}" -c 'import torch; print(torch.__file__)')"
 HYDRAGNN_PACKAGE_SRC="$("${FRAMEWORKS_PYTHON}" "${SCRIPT_DIR}/prepare_hydragnn_source.py" \
     --code "${HYDRAGNN_DIR}" --dependencies "${HYDRAGNN_INSTALLER_DIR}" \
     --output-root "${INSTALL_ROOT}" --torch-version "${TORCH_VERSION}")"
@@ -129,12 +139,29 @@ if [[ "${REUSE_HYDRAGNN_DEPENDENCIES}" == "1" ]]; then
     "${VENV_PATH}/bin/python" -c \
         "import torch, torch_geometric, torch_scatter, torch_sparse, torch_cluster, torch_spline_conv"
 else
+    if [[ "${HYDRAGNN_INSTALLER}" == "${HYDRAGNN_INSTALLER_DIR}/scripts/hpc/alcf/aurora/installation/install.sh" ]]; then
+        HYDRAGNN_INSTALLER="${HYDRAGNN_PACKAGE_SRC}/scripts/hpc/alcf/aurora/installation/install.sh"
+    fi
     INSTALL_ROOT="${INSTALL_ROOT}" VENV_PATH="${VENV_PATH}" RECREATE_ENV="${RECREATE_ENV}" \
-    HYDRAGNN_SRC="${HYDRAGNN_PACKAGE_SRC}" bash "${HYDRAGNN_INSTALLER}"
+    FRAMEWORKS_MODULE="${FRAMEWORKS_MODULE}" HYDRAGNN_SRC="${HYDRAGNN_PACKAGE_SRC}" \
+        bash "${HYDRAGNN_INSTALLER}"
 fi
 
 PYTHON="${VENV_PATH}/bin/python"
 [[ -x "${PYTHON}" ]] || die "HydraGNN did not create ${VENV_PATH}"
+"${PYTHON}" - "${FRAMEWORKS_PYTHON}" "${TORCH_VERSION}" "${FRAMEWORKS_TORCH_FILE}" <<'PY'
+import pathlib
+import sys
+
+import torch
+
+if pathlib.Path(sys._base_executable).resolve() != pathlib.Path(sys.argv[1]).resolve():
+    raise SystemExit("HydraGNN installer used a different framework Python")
+if torch.__version__ != sys.argv[2]:
+    raise SystemExit("HydraGNN installer changed the framework Torch version")
+if pathlib.Path(torch.__file__).resolve() != pathlib.Path(sys.argv[3]).resolve():
+    raise SystemExit("HydraGNN installer replaced the framework Torch package")
+PY
 log "Installing HydraGNN and matsim-agents wheels into the same environment"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed "hatchling>=1.21"
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed --no-deps --force-reinstall "${HYDRAGNN_PACKAGE_SRC}"

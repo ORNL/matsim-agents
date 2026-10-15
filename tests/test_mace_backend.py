@@ -150,10 +150,20 @@ def test_mace_family_defaults_and_validation():
         MACEConfig(family="mace_anicc", precision="fp32")
 
 
-def test_model_configs_accept_explicit_aurora_xpu_device(tmp_path):
-    assert HydraGNNConfig(logdir=tmp_path, mlp_device="xpu").mlp_device == "xpu"
-    assert UMAConfig(device="xpu").device == "xpu"
-    assert MACEConfig(device="xpu").device == "xpu"
+@pytest.mark.parametrize("backend", ["hydragnn", "uma", "mace"])
+def test_model_configs_forward_xpu_through_relaxation_schema(tmp_path, backend):
+    models = {
+        "hydragnn": HydraGNNConfig(
+            logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt", mlp_device="xpu"
+        ),
+        "uma": UMAConfig(device="xpu"),
+        "mace": MACEConfig(device="xpu"),
+    }
+    cfg = SimpleNamespace(mlip=SimpleNamespace(backend=backend, **{backend: models[backend]}))
+    values = _exploration_kwargs(cfg, {})
+    request = RelaxStructureInput(structure_path="structure.cif", **values)
+    assert request.mlp_device == "xpu"
+    assert request.mlip_backend == backend
 
 
 def test_campaign_forwards_mace_selection():

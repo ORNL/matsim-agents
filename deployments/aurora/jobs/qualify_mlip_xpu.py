@@ -22,6 +22,32 @@ def validate_predictions(energy: float, forces: list[list[float]], atom_count: i
         raise ValueError("Nonfinite model forces")
 
 
+def verify_model_residency(calculator, backend: str) -> list[str]:
+    from matsim_agents.active_learning.calculator import _find_torch_module
+
+    if backend == "hydragnn":
+        roots = [getattr(calculator, name, None) for name in ("model", "mlp")]
+        if any(_find_torch_module(root) is None for root in roots):
+            raise RuntimeError("Fused HydraGNN qualification requires both GNN and MLP models")
+    else:
+        roots = [calculator, getattr(calculator, "predictor", None)]
+        roots.extend(getattr(calculator, "models", []) or [])
+    modules = {}
+    for root in roots:
+        model = _find_torch_module(root)
+        if model is not None:
+            modules[id(model)] = model
+    devices = set()
+    for model in modules.values():
+        model_devices = {str(parameter.device) for parameter in model.parameters()}
+        if not model_devices or any(not device.startswith("xpu:") for device in model_devices):
+            raise RuntimeError(f"Model is not exclusively resident on XPU: {sorted(model_devices)}")
+        devices.update(model_devices)
+    if not devices:
+        raise RuntimeError("No model parameters available for XPU residency verification")
+    return sorted(devices)
+
+
 class Progress:
     def __init__(self, output: Path, backend: str):
         self.path = output.with_suffix(".progress.json")
@@ -51,7 +77,6 @@ def qualify(args, progress: Progress) -> dict:
 
     progress.stage("import_matsim_calculators")
     from matsim_agents.active_learning.calculator import (
-        _find_torch_module,
         build_hydragnn_calculator,
         build_mace_calculator,
         build_uma_calculator,
@@ -98,19 +123,7 @@ def qualify(args, progress: Progress) -> dict:
     progress.stage("synchronize_xpu")
     torch.xpu.synchronize()
     progress.stage("verify_model_residency")
-    roots = [calculator, getattr(calculator, "predictor", None)]
-    roots.extend(getattr(calculator, "models", []) or [])
-    roots.append(getattr(calculator, "mlp", None))
-    modules = {}
-    for root in roots:
-        model = _find_torch_module(root)
-        if model is not None:
-            modules[id(model)] = model
-    devices = {
-        str(parameter.device) for model in modules.values() for parameter in model.parameters()
-    }
-    if not devices or any(not device.startswith("xpu") for device in devices):
-        raise RuntimeError(f"Model is not exclusively resident on XPU: {sorted(devices)}")
+    devices = verify_model_residency(calculator, args.backend)
     progress.stage("validate_predictions")
     validate_predictions(energy, forces, len(atoms))
     return {
