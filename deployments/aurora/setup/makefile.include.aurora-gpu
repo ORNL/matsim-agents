@@ -1,0 +1,75 @@
+# Aurora (Intel Data Center GPU Max / PVC) build of VASP 6.6.1
+# Based on arch/makefile.include.oneapi_omp_off with Aurora-specific changes:
+#   - MPI entry points use Aurora's MPICH wrappers (mpifort / mpicc) which
+#     already wrap ifx/icx, instead of Intel MPI's mpiifort -fc=ifx
+#   - MKLROOT pinned to the Aurora oneAPI MKL install
+#   - Retains OpenMP offload to Intel PVC and Level Zero linkage
+
+# Default precompiler options
+CPP_OPTIONS = -DHOST=\"LinuxIFC\" \
+              -DMPI -DMPI_BLOCK=8000 -Duse_collective \
+              -DscaLAPACK \
+              -DCACHE_SIZE=4000 \
+              -Davoidalloc \
+              -Dvasp6 \
+              -Dtbdyn \
+              -Dfock_dblbuf \
+              -D_OPENMP \
+              -DINTELMKL
+
+CPP         = fpp -f_com=no -free -w0  $*$(FUFFIX) $*$(SUFFIX) $(CPP_OPTIONS)
+
+FC          = mpifort -fiopenmp
+FCL         = mpifort
+FREE        = -free -names lowercase
+
+FFLAGS      = -assume byterecl -w
+
+OFLAG       = -O2
+OFLAG_IN    = $(OFLAG)
+DEBUG       = -O0
+
+# For what used to be vasp.5.lib
+CPP_LIB     = $(CPP)
+FC_LIB      = $(FC)
+CC_LIB      = icx
+CFLAGS_LIB  = -O
+FFLAGS_LIB  = -O1
+FREE_LIB    = $(FREE)
+
+OBJECTS_LIB = linpack_double.o
+
+# For the parser library
+CXX_PARS    = icpx
+LLIBS       = -lstdc++
+
+LIB        += oneapi
+LLIB       += -Loneapi -lZeInterface
+
+# OMP offloading
+CPP_OPTIONS+= -DOMP_OFFLOAD
+# this enables offloading plus AoT compiling of target device code
+FFLAGS     += -fopenmp-targets=spir64_gen -Xs "-device pvc"
+
+
+# Workarounds for problems with fpp and ifx
+FFLAGS     += -switch no-use-host-usm-for-implicit-reduction-map
+IFX_BUILD_DATE = $(shell ifx --version | grep ifx | awk '{print $$4}')
+CPP_OPTIONS+= -D__INTEL_COMPILER_BUILD_DATE=$(IFX_BUILD_DATE)
+
+##
+## Customize as of this point! Of course you may change the preceding
+## part of this file as well if you like, but it should rarely be
+## necessary ...
+##
+
+# When compiling on the target machine itself, change this to the
+# relevant target when cross-compiling for another architecture
+VASP_TARGET_CPU ?= -xHOST
+FFLAGS     += $(VASP_TARGET_CPU)
+
+# Intel MKL (FFTW, BLAS, LAPACK, and scaLAPACK)
+FCL        += -qmkl -fiopenmp -fopenmp-targets=spir64_gen -Xs "-device pvc" -fopenmp-device-code-split=per_kernel -fopenmp-max-parallel-link-jobs=8 -lze_loader
+MKLROOT    ?= /opt/aurora/26.26.0/oneapi/mkl/latest
+LLIBS      += -L$(MKLROOT)/lib/intel64 -lmkl_scalapack_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_sycl
+INCS        =-I$(MKLROOT)/include -I$(MKLROOT)/include/fftw

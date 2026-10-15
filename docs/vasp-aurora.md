@@ -1,21 +1,23 @@
 # VASP on Aurora (Intel Data Center GPU Max / PVC)
 
-This page records which VASP 6.6.0 makefile was used for the Aurora build in
-this repository without committing the proprietary VASP source tree.
+This page records the VASP 6.6.1 build configuration and helper for Aurora.
 
 ## Repository policy
 
-- The VASP source tree under `external/vasp6/src/vasp.6.6.0/` is gitignored.
-- The original archive `external/vasp6/src/vasp.6.6.0.tgz` is gitignored.
-- Only build notes, provenance, and non-proprietary configuration summaries are
-  committed.
+- The VASP source tree under `external/vasp6/src/vasp.6.6.1/` is gitignored.
+- The original archive `external/vasp6/src/vasp.6.6.1.tgz` is gitignored.
+- The build helper and `deployments/aurora/setup/makefile.include.aurora-gpu`
+  are tracked alongside the other platform build configurations.
+- Source distributions, pseudopotentials, and generated binaries are not committed.
 
 ## Makefile provenance
 
-- VASP version: `6.6.0`
+- VASP version: `6.6.1`
 - Upstream template selected: `arch/makefile.include.oneapi_omp_off`
+- Tracked build configuration:
+  `deployments/aurora/setup/makefile.include.aurora-gpu`
 - Local working file used for the Aurora build:
-  `external/vasp6/src/vasp.6.6.0/makefile.include`
+  `external/vasp6/src/vasp.6.6.1/makefile.include`
 - Aurora build script:
   `deployments/aurora/setup/build-vasp-gpu-aurora.sh`
 
@@ -24,15 +26,13 @@ template and was then adjusted locally for Aurora's module stack and Intel PVC
 GPUs.
 
 The script builds the three standard executables in one invocation by running
-the VASP targets `std`, `gam`, and `ncl` sequentially.
+the VASP targets `std`, `gam`, and `ncl` sequentially. It installs the tracked
+configuration as the working `makefile.include` before invoking make, replacing
+any existing working configuration. Set `MAKEFILE_INCLUDE` to use another recipe.
 
-## Aurora-specific changes applied
+## Aurora build configuration
 
-The committed record here is intentionally descriptive rather than a verbatim
-copy of the proprietary makefile.
-
-- Switched the Fortran and C MPI entry points to Aurora's wrappers:
-  `mpifort` and `mpicc`
+- Uses Aurora's `mpifort` MPI wrapper for Fortran compilation and linkage
 - Kept Intel compilers for non-wrapper C/C++ compilation where needed:
   `icx` and `icpx`
 - Retained OpenMP offload for Intel GPUs with PVC device targeting
@@ -40,6 +40,12 @@ copy of the proprietary makefile.
 - Kept Intel MKL for BLAS, LAPACK, FFT, and ScaLAPACK linkage
 - Used host-specific CPU tuning for the build host via `-xHOST`
 - Preserved the `OMP_OFFLOAD` preprocessor path required by the GPU build
+
+The helper resets the module environment and loads
+`oneapi/release/2026.1.0` and `intel_gpu_umd_aicoe`, rather than the Python
+frameworks module. Override these with `ONEAPI_MODULE` and `GPU_UMD_MODULE`.
+The module-provided `MKLROOT` takes precedence over the recipe's legacy fallback;
+the current toolchain supplies `/opt/aurora/26.181.0/oneapi/mkl/latest`.
 
 ## Build command
 
@@ -56,31 +62,28 @@ NCORES=32 bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
 CLEAN_BUILD=1 bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
 VASP_TARGET=gam bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
 PREFIX=build-aurora bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
+MAKEFILE_INCLUDE=/path/to/makefile.include bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
 ```
 
-## Validated build state
+## Build targets
 
-The Aurora tuning above was used for the successful GPU-enabled build of:
-
-- `bin/vasp_std`
-
-The scripted default build target produces all three executables:
+The default build requests all three executables:
 
 - `bin/vasp_std`
 - `bin/vasp_gam`
 - `bin/vasp_ncl`
 
-If additional VASP targets are built later, extend this page with the date,
-target name, and any makefile deltas beyond the base Aurora configuration.
+Use `VASP_TARGET=std`, `gam`, or `ncl` to select a single target. Compilation
+success does not by itself validate a VASP calculation or GPU runtime behavior.
 
 ## Rebuild checklist
 
 When reproducing the Aurora build, confirm these points before compiling:
 
-1. Start from `arch/makefile.include.oneapi_omp_off` in the VASP 6.6.0 source.
-2. Re-apply the Aurora wrapper/compiler adjustments summarized above.
-3. Keep the edited file only as the local
-   `external/vasp6/src/vasp.6.6.0/makefile.include` working copy.
+1. Provide your licensed VASP 6.6.1 source tree, or override `VASP_ROOT`.
+2. Review the tracked Aurora recipe or select a custom `MAKEFILE_INCLUDE`.
+3. Run the helper with the desired target and parallelism; it installs the recipe
+  as `external/vasp6/src/vasp.6.6.1/makefile.include` by default.
 4. Do not commit the VASP source tree, generated objects, or the vendor tarball.
 
 ## Related repository docs

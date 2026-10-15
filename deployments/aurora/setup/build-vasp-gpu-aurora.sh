@@ -2,14 +2,17 @@
 # =============================================================================
 # build-vasp-gpu-aurora.sh
 #
-# Build VASP 6.6.0 on Aurora using the locally prepared Intel GPU offload
+# Build VASP 6.6.1 on Aurora using the tracked Intel GPU offload
 # makefile.include.
 #
 # Usage:
 #   bash deployments/aurora/setup/build-vasp-gpu-aurora.sh
 #
 # Optional overrides:
-#   VASP_ROOT=/path/to/vasp.6.6.0
+#   VASP_ROOT=/path/to/vasp.6.6.1
+#   MAKEFILE_INCLUDE=/path/to/makefile.include
+#   ONEAPI_MODULE=oneapi/release/2026.1.0
+#   GPU_UMD_MODULE=intel_gpu_umd_aicoe
 #   PREFIX=build
 #   NCORES=32
 #   CLEAN_BUILD=0
@@ -27,7 +30,10 @@ if [[ ! -f "${REPO}/pyproject.toml" ]]; then
     exit 1
 fi
 
-VASP_ROOT="${VASP_ROOT:-${REPO}/external/vasp6/src/vasp.6.6.0}"
+VASP_ROOT="${VASP_ROOT:-${REPO}/external/vasp6/src/vasp.6.6.1}"
+MAKEFILE_INCLUDE="${MAKEFILE_INCLUDE:-${SCRIPT_DIR}/makefile.include.aurora-gpu}"
+ONEAPI_MODULE="${ONEAPI_MODULE:-oneapi/release/2026.1.0}"
+GPU_UMD_MODULE="${GPU_UMD_MODULE:-intel_gpu_umd_aicoe}"
 PREFIX="${PREFIX:-build}"
 CLEAN_BUILD="${CLEAN_BUILD:-0}"
 VASP_TARGET="${VASP_TARGET:-all}"
@@ -67,7 +73,7 @@ init_modules() {
 load_aurora_modules() {
     init_modules
     module reset
-    module load frameworks
+    module load "${ONEAPI_MODULE}" "${GPU_UMD_MODULE}"
 }
 
 ensure_file() {
@@ -87,7 +93,7 @@ log "=========================================="
 
 ensure_file "${VASP_ROOT}"
 ensure_file "${VASP_ROOT}/makefile"
-ensure_file "${VASP_ROOT}/makefile.include"
+ensure_file "${MAKEFILE_INCLUDE}"
 
 load_aurora_modules
 
@@ -107,6 +113,11 @@ case "${VASP_TARGET}" in
         die "VASP_TARGET must be one of: all, std, gam, ncl"
         ;;
 esac
+
+log "Installing makefile.include from ${MAKEFILE_INCLUDE}"
+if [[ ! "${MAKEFILE_INCLUDE}" -ef "${VASP_ROOT}/makefile.include" ]]; then
+    cp "${MAKEFILE_INCLUDE}" "${VASP_ROOT}/makefile.include"
+fi
 
 if [[ "${CLEAN_BUILD}" == "1" ]]; then
     log "Removing previous build directories under ${VASP_ROOT}/${PREFIX}"

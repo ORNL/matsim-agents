@@ -323,16 +323,20 @@ Run `pw.x` with the Aurora launcher after building:
 bash deployments/aurora/launchers/run-pw-gpu-aurora.sh path/to/pw.in
 ```
 
-### VASP 6.6.0 on Aurora
+### VASP 6.6.1 on Aurora
 
 The repository does not commit VASP source because it is proprietary, but it
-does track the build provenance for the Aurora GPU build.
+does track the build helper and makefile configuration for the Aurora GPU build.
 
 - Provenance note: `docs/vasp-aurora.md`
 - Build script: `deployments/aurora/setup/build-vasp-gpu-aurora.sh`
+- Tracked recipe: `deployments/aurora/setup/makefile.include.aurora-gpu`
 - Upstream template used: `arch/makefile.include.oneapi_omp_off`
-- Local working file during the build: `external/vasp6/src/vasp.6.6.0/makefile.include`
+- Local working file during the build: `external/vasp6/src/vasp.6.6.1/makefile.include`
 
 This keeps the exact makefile lineage discoverable without checking any VASP
-source or vendor archive into git. The default script target builds
-`vasp_std`, `vasp_gam`, and `vasp_ncl` in one invocation.
+source or vendor archive into git. The helper installs the tracked recipe before
+building; `MAKEFILE_INCLUDE` selects a custom recipe. It loads
+`ONEAPI_MODULE` (default `oneapi/release/2026.1.0`) and `GPU_UMD_MODULE`
+(default `intel_gpu_umd_aicoe`). The default target builds `vasp_std`, `vasp_gam`,
+and `vasp_ncl` in one invocation.

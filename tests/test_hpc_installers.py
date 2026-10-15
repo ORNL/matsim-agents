@@ -19,6 +19,71 @@ INSTALLERS = {
 }
 
 
+@pytest.mark.parametrize("custom", [False, True])
+def test_aurora_vasp_build_installs_makefile_and_loads_modules(tmp_path, custom) -> None:
+    repo = tmp_path / "matsim-agents"
+    setup = repo / "deployments/aurora/setup"
+    setup.mkdir(parents=True)
+    (repo / "pyproject.toml").touch()
+    helper = setup / "build-vasp-gpu-aurora.sh"
+    helper.write_text((ROOT / "deployments/aurora/setup" / helper.name).read_text())
+    recipe = setup / "makefile.include.aurora-gpu"
+    recipe.write_bytes((ROOT / "deployments/aurora/setup" / recipe.name).read_bytes())
+    vasp = tmp_path / "custom-vasp" if custom else repo / "external/vasp6/src/vasp.6.6.1"
+    vasp.mkdir(parents=True)
+    (vasp / "makefile").touch()
+    (vasp / "makefile.include").write_text("stale configuration\n")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    make = fake_bin / "make"
+    make.write_text('#!/bin/bash\nprintf "make %s\\n" "$*" >> "$BUILD_LOG"\n')
+    make.chmod(0o755)
+    startup = tmp_path / "bash-env"
+    startup.write_text('module() { printf "module %s\\n" "$*" >> "$BUILD_LOG"; }\n')
+    log = tmp_path / "commands.log"
+    environment = os.environ.copy()
+    for name in ("VASP_ROOT", "MAKEFILE_INCLUDE", "ONEAPI_MODULE", "GPU_UMD_MODULE", "VASP_TARGET"):
+        environment.pop(name, None)
+    environment.update(
+        PATH=f"{fake_bin}:{environment['PATH']}",
+        BASH_ENV=str(startup),
+        BUILD_LOG=str(log),
+        NCORES="2",
+        PREFIX="build-test",
+        CLEAN_BUILD="0",
+    )
+    if custom:
+        recipe = tmp_path / "custom.include"
+        recipe.write_text("FC = custom-wrapper\n")
+        environment.update(
+            VASP_ROOT=str(vasp),
+            MAKEFILE_INCLUDE=str(recipe),
+            ONEAPI_MODULE="oneapi/test",
+            GPU_UMD_MODULE="umd/test",
+            VASP_TARGET="gam",
+        )
+    result = subprocess.run(["bash", str(helper)], env=environment, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (vasp / "makefile.include").read_bytes() == recipe.read_bytes()
+    commands = log.read_text().splitlines()
+    modules = "oneapi/test umd/test" if custom else "oneapi/release/2026.1.0 intel_gpu_umd_aicoe"
+    assert f"module load {modules}" in commands
+    targets = ["gam"] if custom else ["std", "gam", "ncl"]
+    assert [line for line in commands if line.startswith("make ")] == [
+        f"make PREFIX=build-test DEPS=1 MODS=1 -j2 {target}" for target in targets
+    ]
+    if custom:
+        environment["MAKEFILE_INCLUDE"] = str(vasp / "makefile.include")
+        same_file = subprocess.run(["bash", str(helper)], env=environment, capture_output=True)
+        assert same_file.returncode == 0
+    environment["MAKEFILE_INCLUDE"] = str(tmp_path / "missing.include")
+    before = log.read_text()
+    missing = subprocess.run(["bash", str(helper)], env=environment, capture_output=True)
+    assert missing.returncode != 0
+    assert b"Required path not found" in missing.stderr
+    assert log.read_text() == before
+
+
 def test_hydragnn_extra_accepts_supported_torch_and_aurora_prereleases() -> None:
     with (ROOT / "pyproject.toml").open("rb") as stream:
         extras = tomllib.load(stream)["project"]["optional-dependencies"]["hydragnn"]
