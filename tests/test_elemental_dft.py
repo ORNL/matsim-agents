@@ -494,6 +494,26 @@ def test_reference_calculation_cap_is_preflighted(setup_references):
     assert len(setup.calls) == 3
 
 
+@pytest.mark.parametrize("change", ["wrapper", "environment"])
+def test_reference_cache_includes_execution_identity(setup_references, monkeypatch, change):
+    setup = setup_references
+    wrapper = setup.dft.qe.pw_wrapper
+    wrapper.write_text('ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.4}"\n')
+    monkeypatch.delenv("ROCM_MODULE", raising=False)
+    method_signature = dft_method_signature(setup.dft, {"Si", "O"})
+    _prepare(setup, "first", dft_approved=True)
+    assert len(setup.calls) == 3
+
+    if change == "wrapper":
+        wrapper.write_text('ROCM_MODULE="${ROCM_MODULE:-rocm/6.2.5}"\n')
+    else:
+        monkeypatch.setenv("ROCM_MODULE", "rocm/6.3.0")
+
+    assert dft_method_signature(setup.dft, {"Si", "O"}) == method_signature
+    _prepare(setup, "second", dft_approved=True)
+    assert len(setup.calls) == 6
+
+
 def test_duplicate_geometry_aliases_share_one_calculation(setup_references):
     setup = setup_references
     duplicate = setup.plan.phases[0].model_copy(deep=True)
@@ -853,6 +873,9 @@ def test_post_lock_relaxation_cache_is_fully_validated(
                 "method_signature": elemental_dft.dft_method_signature(
                     elemental_dft._phase_config(setup.dft, phase), {phase.element}
                 ),
+                "execution_signature": elemental_dft.dft_execution_signature(
+                    elemental_dft._phase_config(setup.dft, phase)
+                ),
                 "n_atoms": len(relaxed_atoms) + (1 if defect == "atom_count" else 0),
                 "converged": defect != "convergence",
                 "final_max_force_eV_per_A": max_force,
@@ -964,6 +987,45 @@ def test_vasp_overrides_are_explicit(setup_references):
     assert dft.vasp.extra_incar == {}
 
 
+@pytest.mark.parametrize(
+    ("template_text", "rejects"),
+    [
+        ("ENCUT = 520; PSTRESS = 10\n", True),
+        ("PSTRESS = 0; ENCUT = 520\n", False),
+    ],
+)
+def test_vasp_template_parses_semicolon_separated_pressure(
+    setup_references, template_text, rejects
+):
+    setup = setup_references
+    template = setup.tmp / "INCAR"
+    template.write_text(template_text)
+    dft = DFTConfig.model_validate(
+        {
+            "backend": "vasp",
+            "vasp": {
+                "vasp_bin": setup.tmp / "vasp",
+                "vasp_wrapper": setup.tmp / "wrapper",
+                "incar_template": template,
+                "potcar_dir": setup.tmp / "potcar",
+            },
+        }
+    )
+    phase = setup.plan.phases[0].model_copy(
+        update={
+            "geometry_status": "requires_relaxation",
+            "qe_magnetic_settings": {},
+            "kpts": None,
+        },
+        deep=True,
+    )
+    if rejects:
+        with pytest.raises(ValueError, match="nonzero PSTRESS"):
+            elemental_dft._phase_config(dft, phase)
+    else:
+        elemental_dft._phase_config(dft, phase)
+
+
 def test_rejects_ignored_or_unpinned_qe_overrides(setup_references):
     setup = setup_references
     setup.dft.qe.pw_template = setup.tmp / "pw.template"
@@ -990,7 +1052,7 @@ def test_qe_unconditionally_rejects_forbidden_control_overrides(
 
 
 def test_al_additive_reference_extension_across_iterations(
-    setup_references, dataset_method_sidecar
+    setup_references, dataset_method_sidecar, monkeypatch
 ):
     setup = setup_references
     plan_path = setup.tmp / "phases.yaml"
@@ -1066,9 +1128,24 @@ def test_al_additive_reference_extension_across_iterations(
         },
     )
 
+    original_replace = Path.replace
+    interrupted = False
+
+    def interrupt_activation(path, target):
+        nonlocal interrupted
+        if not interrupted and path.name.startswith(f".{root.name}.next-"):
+            interrupted = True
+            raise RuntimeError("simulated publication interruption")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", interrupt_activation)
+    with pytest.raises(RuntimeError, match="simulated publication interruption"):
+        resolve_training_references(cfg2, iter2_dataset, dft_config=setup.dft, reference_root=root)
+    monkeypatch.setattr(Path, "replace", original_replace)
     res2 = resolve_training_references(
         cfg2, iter2_dataset, dft_config=setup.dft, reference_root=root
     )
+    assert interrupted
     assert res2 == root / "elemental-references.json"
     manifest2 = json.loads(res2.read_text())
     assert set(manifest2["references"].keys()) == {"Si", "O"}

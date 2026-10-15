@@ -25,7 +25,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from matsim_agents.active_learning.config import DFTConfig
 from matsim_agents.active_learning.dataset_governance import sha256_file
 from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
-from matsim_agents.active_learning.dft_protocol import dft_method_signature
+from matsim_agents.active_learning.dft_protocol import (
+    dft_execution_signature,
+    dft_method_signature,
+)
 from matsim_agents.discovery.energy_references import load_elemental_reference_manifest
 
 log = logging.getLogger(__name__)
@@ -111,6 +114,7 @@ class CachedElementalCalculation(BaseModel):
     cache_key: str
     geometry_sha256: str
     method_signature: str
+    execution_signature: str
     n_atoms: int = Field(gt=0)
     energy_eV: float = Field(allow_inf_nan=False)
     work_dir: str
@@ -122,6 +126,7 @@ class CachedElementalRelaxation(BaseModel):
     input_geometry_sha256: str
     relaxed_geometry_sha256: str
     method_signature: str
+    execution_signature: str
     n_atoms: int = Field(gt=0)
     converged: bool
     final_max_force_eV_per_A: float = Field(ge=0, allow_inf_nan=False)
@@ -138,6 +143,7 @@ def _validate_cached_relaxation(
     relax_key: str,
     input_digest: str,
     method_signature: str,
+    execution_signature: str,
     geometry_path: Path,
 ) -> Atoms:
     stress_max = _max_abs_stress(relaxation.final_stress_eV_per_A3)
@@ -146,6 +152,7 @@ def _validate_cached_relaxation(
         relaxation.cache_key != relax_key
         or relaxation.input_geometry_sha256 != input_digest
         or relaxation.method_signature != method_signature
+        or relaxation.execution_signature != execution_signature
         or relaxation.n_atoms != len(input_atoms)
         or not relaxation.converged
         or relaxation.final_max_force_eV_per_A > phase.relaxation_force_tolerance_eV_per_A
@@ -241,10 +248,14 @@ def _phase_config(dft: DFTConfig, phase: ElementalPhaseSpec) -> DFTConfig:
                     f"{phase.phase_id}: elemental cell relaxation requires zero external pressure"
                 )
             template = cfg.vasp.incar_template.read_text()
-            for match in re.finditer(r"(?im)^\s*PSTRESS\s*=\s*([^#!\n]+)", template):
-                pressure_text = match.group(1).split("#", 1)[0].split("!", 1)[0].strip()
-                if not _is_zero_pressure(pressure_text):
-                    raise ValueError(f"{phase.phase_id}: VASP INCAR template sets nonzero PSTRESS")
+            for line in template.splitlines():
+                uncommented = re.split(r"[#!]", line, maxsplit=1)[0]
+                for assignment in uncommented.split(";"):
+                    match = re.match(r"^\s*PSTRESS\s*=\s*(.*?)\s*$", assignment, re.I)
+                    if match is not None and not _is_zero_pressure(match.group(1)):
+                        raise ValueError(
+                            f"{phase.phase_id}: VASP INCAR template sets nonzero PSTRESS"
+                        )
     return cfg
 
 
@@ -260,11 +271,17 @@ def _is_zero_pressure(value: object) -> bool:
     return np.isfinite(pressure) and abs(pressure) <= 1e-12
 
 
-def _relaxation_key(phase: ElementalPhaseSpec, input_digest: str, method_signature: str) -> str:
+def _relaxation_key(
+    phase: ElementalPhaseSpec,
+    input_digest: str,
+    method_signature: str,
+    execution_signature: str,
+) -> str:
     identity = {
-        "schema_version": 2,
+        "schema_version": 3,
         "input_geometry_sha256": input_digest,
         "method_signature": method_signature,
+        "execution_signature": execution_signature,
         "phase": phase.model_dump(
             mode="json",
             exclude={"structure_path", "phase_id", "geometry_status"},
@@ -514,9 +531,10 @@ def prepare_elemental_references(
             raise ValueError(f"{phase.phase_id}: bulk reference must be periodic")
         cfg = _phase_config(dft, phase)
         signature = dft_method_signature(cfg, {phase.element})
+        execution_signature = dft_execution_signature(cfg)
         input_digest = hashlib.sha256(geometry_bytes).hexdigest()
         relax_key = (
-            _relaxation_key(phase, input_digest, signature)
+            _relaxation_key(phase, input_digest, signature, execution_signature)
             if phase.geometry_status == "requires_relaxation"
             else None
         )
@@ -549,6 +567,7 @@ def prepare_elemental_references(
                             relax_key=relax_key,
                             input_digest=input_digest,
                             method_signature=signature,
+                            execution_signature=execution_signature,
                             geometry_path=geometry_path,
                         )
             if relaxation is None:
@@ -558,9 +577,10 @@ def prepare_elemental_references(
         atoms_for_static = read(io.StringIO(relaxed_bytes.decode("utf-8")), format="extxyz")
         static_digest = hashlib.sha256(relaxed_bytes).hexdigest()
         static_identity = {
-            "schema_version": 3,
+            "schema_version": 4,
             "geometry_sha256": static_digest,
             "method_signature": signature,
+            "execution_signature": execution_signature,
             "phase": {
                 "element": phase.element,
                 "kind": phase.kind,
@@ -593,6 +613,7 @@ def prepare_elemental_references(
                             cached.cache_key != static_key
                             or cached.geometry_sha256 != static_digest
                             or cached.method_signature != signature
+                            or cached.execution_signature != execution_signature
                             or cached.n_atoms != len(atoms_for_static)
                             or sha256_file(static_geometry_path) != static_digest
                         ):
@@ -606,6 +627,7 @@ def prepare_elemental_references(
                 geometry_bytes,
                 cfg,
                 signature,
+                execution_signature,
                 input_digest,
                 relax_key,
                 relaxation,
@@ -618,28 +640,15 @@ def prepare_elemental_references(
 
     # Preflight every phase before any DFT work, including the full approval gate.
     missing_relaxations = {
-        relax_key: phase.phase_id
-        for phase, _, _, _, _, _, relax_key, relaxation, *_ in prepared
-        if relax_key is not None and relaxation is None
+        record[7]: record[0].phase_id
+        for record in prepared
+        if record[7] is not None and record[8] is None
     }
     missing_static_keys = {
-        static_key: phase.phase_id
-        for (
-            phase,
-            _,
-            _,
-            _,
-            _,
-            _,
-            relax_key,
-            relaxation,
-            _,
-            _,
-            _,
-            static_key,
-        ) in prepared
-        if (relax_key is None or relaxation is not None)
-        and not (cache_dir / "calculations" / static_key / "result.json").is_file()
+        record[12]: record[0].phase_id
+        for record in prepared
+        if (record[7] is None or record[8] is not None)
+        and not (cache_dir / "calculations" / record[12] / "result.json").is_file()
     }
     calculation_count = len(missing_static_keys) + 2 * len(missing_relaxations)
     if not dft_approved and calculation_count:
@@ -661,6 +670,7 @@ def prepare_elemental_references(
         _geometry_bytes,
         cfg,
         signature,
+        execution_signature,
         input_digest,
         relax_key,
         cached_relaxation,
@@ -689,6 +699,7 @@ def prepare_elemental_references(
                         relax_key=relax_key,
                         input_digest=input_digest,
                         method_signature=signature,
+                        execution_signature=execution_signature,
                         geometry_path=relax_geometry_path,
                     )
                     log.info(
@@ -736,6 +747,7 @@ def prepare_elemental_references(
                         input_geometry_sha256=input_digest,
                         relaxed_geometry_sha256=relaxed_digest,
                         method_signature=signature,
+                        execution_signature=execution_signature,
                         n_atoms=len(atoms),
                         converged=True,
                         final_max_force_eV_per_A=final_force,
@@ -751,9 +763,10 @@ def prepare_elemental_references(
                     atoms_for_static = relaxed_atoms
             static_digest = hashlib.sha256(relaxed_bytes).hexdigest()
             static_identity = {
-                "schema_version": 3,
+                "schema_version": 4,
                 "geometry_sha256": static_digest,
                 "method_signature": signature,
+                "execution_signature": execution_signature,
                 "phase": {
                     "element": phase.element,
                     "kind": phase.kind,
@@ -779,6 +792,7 @@ def prepare_elemental_references(
                     record.cache_key != static_key
                     or record.geometry_sha256 != static_digest
                     or record.method_signature != signature
+                    or record.execution_signature != execution_signature
                     or record.n_atoms != len(atoms_for_static)
                     or sha256_file(entry / "geometry.extxyz") != static_digest
                 ):
@@ -829,6 +843,7 @@ def prepare_elemental_references(
                     cache_key=static_key,
                     geometry_sha256=static_digest,
                     method_signature=signature,
+                    execution_signature=execution_signature,
                     n_atoms=len(atoms_for_static),
                     energy_eV=result.energy_eV,
                     work_dir=str(work_dir),

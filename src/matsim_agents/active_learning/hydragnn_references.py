@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import shutil
 import tempfile
+import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from ase.io import read, write
@@ -92,7 +95,114 @@ def _save_frozen_inputs(identity_path: Path, identity: dict, manifest: Path) -> 
     )
 
 
+def _path_exists(path: Path) -> bool:
+    return path.exists() or path.is_symlink()
+
+
+def _remove_snapshot(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink(missing_ok=True)
+    elif path.exists():
+        shutil.rmtree(path)
+
+
+def _remove_previous_snapshot(path: Path, reference_root: Path) -> None:
+    target = path.resolve(strict=False) if path.is_symlink() else None
+    _remove_snapshot(path)
+    if (
+        target is not None
+        and target.parent == reference_root.parent.resolve()
+        and target.name.startswith(f".{reference_root.name}.generation-")
+    ):
+        _remove_snapshot(target)
+
+
+def _remove_transient_links(reference_root: Path) -> None:
+    for link in reference_root.parent.glob(f".{reference_root.name}.next-*"):
+        if link.is_symlink():
+            link.unlink()
+
+
+@contextmanager
+def _staged_reference_snapshot(reference_root: Path, *, copy_existing: bool):
+    reference_root.parent.mkdir(parents=True, exist_ok=True)
+    workspace = Path(
+        tempfile.mkdtemp(prefix=f".{reference_root.name}.staging-", dir=reference_root.parent)
+    )
+    snapshot = workspace / "snapshot"
+    if copy_existing:
+        shutil.copytree(reference_root, snapshot)
+    try:
+        yield snapshot
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
+def _recover_reference_publication(reference_root: Path) -> None:
+    marker = reference_root.parent / f".{reference_root.name}.publication.json"
+    if not marker.is_file():
+        return
+    publication = json.loads(marker.read_text())
+    if any(
+        not isinstance(publication.get(key), str) or Path(publication[key]).name != publication[key]
+        for key in ("generation", "backup")
+    ):
+        raise RuntimeError("Invalid HydraGNN reference publication marker")
+    generation = reference_root.parent / publication["generation"]
+    backup = reference_root.parent / publication["backup"]
+    if not generation.is_dir():
+        if _path_exists(backup) and not _path_exists(reference_root):
+            backup.replace(reference_root)
+        marker.unlink()
+        raise RuntimeError("Incomplete HydraGNN reference publication could not be recovered")
+    if reference_root.is_symlink() and reference_root.resolve() == generation.resolve():
+        _remove_previous_snapshot(backup, reference_root)
+        _remove_transient_links(reference_root)
+        marker.unlink()
+        return
+    if _path_exists(reference_root) and not _path_exists(backup):
+        reference_root.replace(backup)
+    next_link = reference_root.parent / f".{reference_root.name}.next-{uuid.uuid4().hex}"
+    next_link.symlink_to(generation.name, target_is_directory=True)
+    next_link.replace(reference_root)
+    _remove_previous_snapshot(backup, reference_root)
+    _remove_transient_links(reference_root)
+    marker.unlink()
+
+
+def _publish_reference_snapshot(reference_root: Path, staged_snapshot: Path) -> None:
+    generation = reference_root.parent / f".{reference_root.name}.generation-{uuid.uuid4().hex}"
+    backup = reference_root.parent / f".{reference_root.name}.previous-{uuid.uuid4().hex}"
+    staged_snapshot.replace(generation)
+    marker = reference_root.parent / f".{reference_root.name}.publication.json"
+    marker_tmp = marker.with_suffix(".tmp")
+    marker_tmp.write_text(json.dumps({"generation": generation.name, "backup": backup.name}) + "\n")
+    marker_tmp.replace(marker)
+    _recover_reference_publication(reference_root)
+
+
 def resolve_training_references(
+    trainer: TrainerConfig,
+    dataset: str | Path,
+    *,
+    dft_config: DFTConfig | None,
+    reference_root: Path,
+) -> Path:
+    reference_root = Path(reference_root)
+    reference_root.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = reference_root.parent / f".{reference_root.name}.lock"
+    with lock_path.open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        _recover_reference_publication(reference_root)
+        return _resolve_training_references_unlocked(
+            trainer,
+            dataset,
+            dft_config=dft_config,
+            reference_root=reference_root,
+        )
+
+
+def _resolve_training_references_unlocked(
     trainer: TrainerConfig,
     dataset: str | Path,
     *,
@@ -176,45 +286,55 @@ def resolve_training_references(
                     new_manifest = json.loads(
                         (temp_output / "elemental-references.json").read_text()
                     )
-                    for elem in new_elements:
-                        geom_file = f"{elem}.extxyz"
-                        shutil.copy2(temp_output / geom_file, reference_root / geom_file)
-                        existing_manifest["references"][elem] = new_manifest["references"][elem]
-                    existing_selection = existing_manifest.setdefault("selection", {})
-                    new_selection = new_manifest.get("selection", {})
-                    if "initial_approval" not in existing_selection:
-                        existing_selection["initial_approval"] = {
-                            "phases_approved": existing_selection.get("phases_approved", False),
-                            "dft_approved": existing_selection.get("dft_approved", False),
-                            "dft_attempts": existing_selection.get("dft_attempts", 0),
-                        }
-                    existing_selection.setdefault("extensions", []).append(
-                        {
-                            "elements": sorted(new_elements),
-                            "phases_approved": new_selection.get("phases_approved", False),
-                            "dft_approved": new_selection.get("dft_approved", False),
-                            "dft_attempts": new_selection.get("dft_attempts", 0),
-                        }
-                    )
-                    existing_selection.setdefault("phases", []).extend(
-                        new_selection.get("phases", [])
-                    )
-                    existing_selection["phases_approved"] = bool(
-                        existing_selection.get("phases_approved")
-                        and new_selection.get("phases_approved")
-                    )
-                    existing_selection["dft_approved"] = bool(
-                        existing_selection.get("dft_approved") or new_selection.get("dft_approved")
-                    )
-                    existing_selection["dft_attempts"] = existing_selection.get(
-                        "dft_attempts", 0
-                    ) + new_selection.get("dft_attempts", 0)
-                    existing_manifest["method_signature"] = target_compound_signature
-                    source.write_text(json.dumps(existing_manifest, indent=2) + "\n")
-                    new_identity = _phase_plan_identity(
-                        config.phase_plan, plan, dft_config, all_elements
-                    )
-                    _save_frozen_inputs(identity_path, new_identity, source)
+                    with _staged_reference_snapshot(reference_root, copy_existing=True) as staged:
+                        for elem in new_elements:
+                            geom_file = f"{elem}.extxyz"
+                            shutil.copy2(temp_output / geom_file, staged / geom_file)
+                            existing_manifest["references"][elem] = new_manifest["references"][elem]
+                        existing_selection = existing_manifest.setdefault("selection", {})
+                        new_selection = new_manifest.get("selection", {})
+                        if "initial_approval" not in existing_selection:
+                            existing_selection["initial_approval"] = {
+                                "phases_approved": existing_selection.get("phases_approved", False),
+                                "dft_approved": existing_selection.get("dft_approved", False),
+                                "dft_attempts": existing_selection.get("dft_attempts", 0),
+                            }
+                        existing_selection.setdefault("extensions", []).append(
+                            {
+                                "elements": sorted(new_elements),
+                                "phases_approved": new_selection.get("phases_approved", False),
+                                "dft_approved": new_selection.get("dft_approved", False),
+                                "dft_attempts": new_selection.get("dft_attempts", 0),
+                            }
+                        )
+                        existing_selection.setdefault("phases", []).extend(
+                            new_selection.get("phases", [])
+                        )
+                        existing_selection["phases_approved"] = bool(
+                            existing_selection.get("phases_approved")
+                            and new_selection.get("phases_approved")
+                        )
+                        existing_selection["dft_approved"] = bool(
+                            existing_selection.get("dft_approved")
+                            or new_selection.get("dft_approved")
+                        )
+                        existing_selection["dft_attempts"] = existing_selection.get(
+                            "dft_attempts", 0
+                        ) + new_selection.get("dft_attempts", 0)
+                        existing_manifest["method_signature"] = target_compound_signature
+                        staged_source = staged / "elemental-references.json"
+                        staged_source.write_text(json.dumps(existing_manifest, indent=2) + "\n")
+                        new_identity = _phase_plan_identity(
+                            config.phase_plan, plan, dft_config, all_elements
+                        )
+                        _save_frozen_inputs(
+                            staged / "training-reference-inputs.json",
+                            new_identity,
+                            staged_source,
+                        )
+                        _publish_reference_snapshot(reference_root, staged)
+                    source = reference_root / "elemental-references.json"
+                    identity_path = reference_root / "training-reference-inputs.json"
         else:
             identity = _phase_plan_identity(config.phase_plan, plan, dft_config, elements)
             validate_dataset_reference_method(
@@ -223,17 +343,22 @@ def resolve_training_references(
                 reference_method_signature=identity["compound_method_signature"],
                 require_sidecar=True,
             )
-            source = prepare_elemental_references(
-                plan,
-                dft_config,
-                required_elements=elements,
-                cache_dir=config.cache_dir,
-                output_dir=reference_root,
-                phases_approved=config.phases_approved,
-                dft_approved=config.dft_approved,
-                max_dft_calculations=config.max_dft_calculations,
-            )
-            _save_frozen_inputs(identity_path, identity, source)
+            with _staged_reference_snapshot(reference_root, copy_existing=False) as staged:
+                staged_source = prepare_elemental_references(
+                    plan,
+                    dft_config,
+                    required_elements=elements,
+                    cache_dir=config.cache_dir,
+                    output_dir=staged,
+                    phases_approved=config.phases_approved,
+                    dft_approved=config.dft_approved,
+                    max_dft_calculations=config.max_dft_calculations,
+                )
+                _save_frozen_inputs(
+                    staged / "training-reference-inputs.json", identity, staged_source
+                )
+                _publish_reference_snapshot(reference_root, staged)
+            source = reference_root / "elemental-references.json"
     else:
         if source is None:
             raise ValueError(
@@ -258,21 +383,28 @@ def resolve_training_references(
                     reference_method_signature=manifest["method_signature"],
                     require_sidecar=True,
                 )
-                copied = dict(existing_frozen_manifest.get("references", {}))
-                for element, atoms, energy, _ in references:
-                    if element in new_elements:
-                        geometry = reference_root / f"{element}.extxyz"
-                        write(geometry, atoms)
-                        copied[element] = {
-                            "structure_path": geometry.name,
-                            "structure_sha256": sha256_file(geometry),
-                            "energy_eV": energy,
-                        }
-                source_manifest = json.loads(source.read_text())
-                frozen.write_text(
-                    json.dumps({**source_manifest, "references": copied}, indent=2) + "\n"
-                )
-                _save_frozen_inputs(identity_path, identity, frozen)
+                with _staged_reference_snapshot(reference_root, copy_existing=True) as staged:
+                    copied = dict(existing_frozen_manifest.get("references", {}))
+                    for element, atoms, energy, _ in references:
+                        if element in new_elements:
+                            geometry = staged / f"{element}.extxyz"
+                            write(geometry, atoms)
+                            copied[element] = {
+                                "structure_path": geometry.name,
+                                "structure_sha256": sha256_file(geometry),
+                                "energy_eV": energy,
+                            }
+                    source_manifest = json.loads(source.read_text())
+                    staged_frozen = staged / "elemental-references.json"
+                    staged_frozen.write_text(
+                        json.dumps({**source_manifest, "references": copied}, indent=2) + "\n"
+                    )
+                    _save_frozen_inputs(
+                        staged / "training-reference-inputs.json", identity, staged_frozen
+                    )
+                    _publish_reference_snapshot(reference_root, staged)
+                frozen = reference_root / "elemental-references.json"
+                identity_path = reference_root / "training-reference-inputs.json"
         else:
             manifest, source_bytes, references = load_elemental_reference_manifest(
                 source, required_elements=elements
@@ -283,21 +415,28 @@ def resolve_training_references(
                 reference_method_signature=manifest["method_signature"],
                 require_sidecar=True,
             )
-            reference_root.mkdir(parents=True)
-            copied = {}
-            for element, atoms, energy, _ in references:
-                if element in elements:
-                    geometry = reference_root / f"{element}.extxyz"
-                    write(geometry, atoms)
-                    copied[element] = {
-                        "structure_path": geometry.name,
-                        "structure_sha256": sha256_file(geometry),
-                        "energy_eV": energy,
-                    }
-            frozen.write_text(
-                json.dumps({**json.loads(source_bytes), "references": copied}, indent=2) + "\n"
-            )
-            _save_frozen_inputs(identity_path, identity, frozen)
+            with _staged_reference_snapshot(reference_root, copy_existing=False) as staged:
+                staged.mkdir()
+                copied = {}
+                for element, atoms, energy, _ in references:
+                    if element in elements:
+                        geometry = staged / f"{element}.extxyz"
+                        write(geometry, atoms)
+                        copied[element] = {
+                            "structure_path": geometry.name,
+                            "structure_sha256": sha256_file(geometry),
+                            "energy_eV": energy,
+                        }
+                staged_frozen = staged / "elemental-references.json"
+                staged_frozen.write_text(
+                    json.dumps({**json.loads(source_bytes), "references": copied}, indent=2) + "\n"
+                )
+                _save_frozen_inputs(
+                    staged / "training-reference-inputs.json", identity, staged_frozen
+                )
+                _publish_reference_snapshot(reference_root, staged)
+            frozen = reference_root / "elemental-references.json"
+            identity_path = reference_root / "training-reference-inputs.json"
         source = frozen
     manifest, _, _ = load_elemental_reference_manifest(source, required_elements=elements)
     validate_dataset_reference_method(

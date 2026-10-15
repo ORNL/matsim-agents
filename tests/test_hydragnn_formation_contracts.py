@@ -459,7 +459,7 @@ def test_manifest_freeze_includes_label_scope_and_filters_superset(
 
 
 def test_training_reference_manifest_additive_extension_across_iterations(
-    tmp_path, elemental_manifest, dataset_method_sidecar
+    tmp_path, elemental_manifest, dataset_method_sidecar, monkeypatch
 ):
     manifest = elemental_manifest({"Nb": -10, "O": -5, "Ti": -7})
 
@@ -492,7 +492,22 @@ def test_training_reference_manifest_additive_extension_across_iterations(
     write(dataset2, [nb_atoms, o_atoms])
     dataset_method_sidecar(dataset2, manifest)
 
+    original_replace = Path.replace
+    interrupted = False
+
+    def interrupt_activation(path, target):
+        nonlocal interrupted
+        if not interrupted and path.name.startswith(f".{root.name}.next-"):
+            interrupted = True
+            raise RuntimeError("simulated publication interruption")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", interrupt_activation)
+    with pytest.raises(RuntimeError, match="simulated publication interruption"):
+        resolve_training_references(config, dataset2, dft_config=None, reference_root=root)
+    monkeypatch.setattr(Path, "replace", original_replace)
     res2 = resolve_training_references(config, dataset2, dft_config=None, reference_root=root)
+    assert interrupted
     assert res2 == root / "elemental-references.json"
     data2 = json.loads(res2.read_text())
     assert set(data2["references"].keys()) == {"Nb", "O"}

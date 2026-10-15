@@ -12,8 +12,16 @@ class LazyConditioning(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.backbone = torch.nn.Linear(2, 2)
+        self.graph_conditioner = None
         self.graph_concat_projector = None
         self.graph_pool_projector = None
+
+    def _ensure_graph_conditioner(self, attrs, device):
+        self.graph_conditioner = torch.nn.Sequential(
+            torch.nn.Linear(attrs, 3),
+            torch.nn.SiLU(),
+            torch.nn.Linear(3, 4),
+        ).to(device=device)
 
     def _ensure_graph_concat_projector(self, attrs, channels, device, dtype):
         self.graph_concat_projector = torch.nn.Linear(channels + attrs, channels).to(
@@ -47,6 +55,23 @@ def test_restores_lazy_conditioning_exactly(dtype, wrapped, projector):
         torch.testing.assert_close(rebuilt.state_dict()[key], expected, rtol=0, atol=0)
     with pytest.raises(RuntimeError, match="Missing key"):
         load_hydragnn_state_dict(rebuilt, {})
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_restores_lazy_film_conditioner_exactly(dtype, wrapped):
+    trained = LazyConditioning().to(dtype=dtype)
+    trained._ensure_graph_conditioner(2, "cpu")
+    trained.graph_conditioner.to(dtype=dtype)
+    rebuilt = LazyConditioning().to(dtype=dtype)
+    if wrapped:
+        trained = torch.nn.ModuleDict({"model": trained})
+        rebuilt = torch.nn.ModuleDict({"model": rebuilt})
+    state = trained.state_dict()
+    load_hydragnn_state_dict(rebuilt, state)
+    assert state.keys() == rebuilt.state_dict().keys()
+    for key, expected in state.items():
+        torch.testing.assert_close(rebuilt.state_dict()[key], expected, rtol=0, atol=0)
 
 
 def test_rejects_invalid_projector_shape():

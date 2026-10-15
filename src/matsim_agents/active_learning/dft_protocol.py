@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -82,3 +84,29 @@ def dft_method_signature(cfg: DFTConfig, elements: set[str]) -> str:
         scientific_dft_payload(cfg, elements), sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     return f"{cfg.backend}-{hashlib.sha256(payload).hexdigest()[:16]}"
+
+
+def dft_execution_signature(cfg: DFTConfig) -> str:
+    """Identify the launcher and resolved settings without changing the scientific method."""
+    block = cfg.vasp if cfg.backend == "vasp" else cfg.qe
+    assert block is not None
+    wrapper = block.vasp_wrapper if cfg.backend == "vasp" else block.pw_wrapper
+    resolved_defaults = {}
+    if wrapper.is_file():
+        text = wrapper.read_text()
+        for name, default in re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]*)\}", text):
+            if name == "MATSIM_DFT_ASSIGNED_NODES":
+                continue
+            resolved_defaults[name] = os.environ.get(name) or default
+    payload = {
+        "schema_version": 1,
+        "backend": cfg.backend,
+        "wrapper": path_identity(wrapper),
+        "nodes_per_job": block.nodes_per_job,
+        "ranks_per_node": block.ranks_per_node,
+        "threads_per_rank": block.threads_per_rank,
+        "timeout_sec": block.timeout_sec,
+        "resolved_wrapper_defaults": resolved_defaults,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()

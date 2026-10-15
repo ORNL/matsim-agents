@@ -18,6 +18,16 @@ def restore_hydragnn_checkpoint(model, checkpoint_path, *, device):
 def load_hydragnn_state_dict(model, state_dict: Mapping, *, strict=True):
     for prefix, module in model.named_modules():
         prefix = f"{prefix}." if prefix else ""
+        conditioner_key = f"{prefix}graph_conditioner.0.weight"
+        if conditioner_key in state_dict:
+            ensure = getattr(module, "_ensure_graph_conditioner", None)
+            if ensure is not None:
+                weight = state_dict[conditioner_key]
+                if weight.ndim != 2 or weight.shape[1] < 1:
+                    raise ValueError(f"Invalid HydraGNN graph conditioner shape: {conditioner_key}")
+                parameter = next(module.parameters())
+                ensure(weight.shape[1], parameter.device)
+                module.graph_conditioner.to(device=parameter.device, dtype=parameter.dtype)
         for name, weight_name in (
             ("graph_concat_projector", "weight"),
             ("graph_pool_projector", "0.weight"),
