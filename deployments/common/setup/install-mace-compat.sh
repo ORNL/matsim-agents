@@ -24,7 +24,11 @@ if [[ "${RECREATE_MACE_ENV}" == "1" && -d "${MACE_VENV_PATH}" ]]; then
 fi
 if [[ ! -x "${MACE_VENV_PATH}/bin/python" ]]; then
     log "Creating ${MACE_VENV_PATH} from ${BASE_VENV}"
-    "${BASE_VENV}/bin/python" -m venv "${MACE_VENV_PATH}"
+    if [[ "${FACILITY}" == "aurora" ]]; then
+        "${BASE_VENV}/bin/python" -m venv --system-site-packages "${MACE_VENV_PATH}"
+    else
+        "${BASE_VENV}/bin/python" -m venv "${MACE_VENV_PATH}"
+    fi
 fi
 
 PYTHON="${MACE_VENV_PATH}/bin/python"
@@ -37,13 +41,9 @@ printf '%s\n' "${BASE_SITE}" >"${MACE_SITE}/matsim-base-venv.pth"
 CONSTRAINTS="$(mktemp)"
 trap 'rm -f -- "${CONSTRAINTS}"' EXIT
 "${BASE_VENV}/bin/python" - >"${CONSTRAINTS}" <<'PY'
-import importlib
+from importlib.metadata import version
 for name in ("torch", "torchvision", "numpy", "scipy"):
-    try:
-        module = importlib.import_module(name)
-        print(f"{name}=={module.__version__}")
-    except Exception:
-        pass
+    print(f"{name}=={version(name)}")
 PY
 
 "${PYTHON}" -m pip install --upgrade pip
@@ -53,6 +53,11 @@ if [[ "${FACILITY}" == "aurora" ]]; then
 fi
 "${PYTHON}" -m pip install -c "${CONSTRAINTS}" "e3nn==${E3NN_VERSION}"
 "${PYTHON}" -m pip install -c "${CONSTRAINTS}" "mace-torch==${MACE_TORCH_VERSION}"
+if [[ "${FACILITY}" == "aurora" ]]; then
+    log "Guarding the optional CUDA/HIP-only OpenEquivariance import in MACE"
+    "${PYTHON}" "${MATSIM_DIR}/deployments/common/setup/guard_mace_optional_backends.py" \
+        --site "${MACE_SITE}"
+fi
 "${PYTHON}" -m pip install --upgrade-strategy only-if-needed "hatchling>=1.21"
 # --no-build-isolation: avoids pip's PEP 517 isolated build env, which needs
 # network/TLS to fetch hatchling; it is pre-installed above instead.
@@ -70,6 +75,18 @@ if ! grep -qF "${MARKER}" "${ACTIVATE}"; then
 fi
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 
+if [[ "${FACILITY}" == "aurora" ]]; then
+    "${PYTHON}" "${MATSIM_DIR}/deployments/common/setup/check-runtime-dependencies.py" \
+        matsim-agents mace-torch
+    EXPECTED_TORCH="$("${BASE_VENV}/bin/python" -c 'import torch; print(torch.__file__)')"
+    "${PYTHON}" - "${EXPECTED_TORCH}" <<'PY'
+import pathlib
+import sys
+import torch
+if pathlib.Path(torch.__file__).resolve() != pathlib.Path(sys.argv[1]).resolve():
+    raise SystemExit("MACE replaced Aurora framework Torch; rerun with RECREATE_MACE_ENV=1")
+PY
+fi
 "${PYTHON}" - <<'PY'
 import dscribe
 import e3nn

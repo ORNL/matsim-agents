@@ -6,7 +6,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from matsim_agents.active_learning.calculator import build_ensemble, build_mace_calculator
-from matsim_agents.active_learning.config import MACEConfig, MLIPConfig
+from matsim_agents.active_learning.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
 from matsim_agents.campaign.execution import _exploration_kwargs
 from matsim_agents.discovery.seeds import PhaseCandidate
@@ -148,6 +148,22 @@ def test_mace_family_defaults_and_validation():
         MACEConfig(family="mace_off", dispersion=True)
     with pytest.raises(ValueError, match="ANI-CC loader does not support precision='fp32'"):
         MACEConfig(family="mace_anicc", precision="fp32")
+
+
+@pytest.mark.parametrize("backend", ["hydragnn", "uma", "mace"])
+def test_model_configs_forward_xpu_through_relaxation_schema(tmp_path, backend):
+    models = {
+        "hydragnn": HydraGNNConfig(
+            logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt", mlp_device="xpu"
+        ),
+        "uma": UMAConfig(device="xpu"),
+        "mace": MACEConfig(device="xpu"),
+    }
+    cfg = SimpleNamespace(mlip=SimpleNamespace(backend=backend, **{backend: models[backend]}))
+    values = _exploration_kwargs(cfg, {})
+    request = RelaxStructureInput(structure_path="structure.cif", **values)
+    assert request.mlp_device == "xpu"
+    assert request.mlip_backend == backend
 
 
 def test_campaign_forwards_mace_selection():

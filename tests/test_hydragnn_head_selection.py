@@ -317,3 +317,88 @@ def test_hydragnn_head_selector_is_exposed_by_public_commands():
             option for parameter in command.params for option in getattr(parameter, "opts", ())
         }
         assert "--hydragnn-inference-head" in option_names
+
+
+@pytest.mark.parametrize("mlp_precision", ["fp32", "bf16"])
+def test_fused_xpu_builder_moves_and_exposes_mlp(tmp_path, monkeypatch, mlp_precision):
+    import torch
+
+    from matsim_agents.backends.mlip.relaxation import _load_fused_stack
+
+    (tmp_path / "config.json").write_text("{}")
+    device = torch.device("xpu:0")
+    model = SimpleNamespace()
+    moves = []
+    mlp = SimpleNamespace(to=lambda **kwargs: moves.append(kwargs) or mlp)
+    config = {"NeuralNetwork": {"Architecture": {}}}
+    inference = ModuleType("inference_fused")
+    inference.load_fused_stack = lambda *args: (
+        model,
+        mlp,
+        config,
+        device,
+        nullcontext(),
+        torch.float32,
+        16,
+        torch.device("cpu"),
+        nullcontext(),
+        False,
+        "fp32",
+        mlp_precision,
+    )
+    inference.run_fused_inference = lambda *args, **kwargs: None
+    monkeypatch.setitem(sys.modules, "inference_fused", inference)
+    monkeypatch.setattr(torch.xpu, "is_available", lambda: True)
+    contexts = []
+    monkeypatch.setattr(
+        torch, "autocast", lambda *args, **kwargs: contexts.append((args, kwargs)) or nullcontext()
+    )
+    stack = _load_fused_stack(tmp_path, None, "mlp.pt", "fp32", mlp_precision, "xpu")
+    assert stack[7] == device
+    assert stack[9] is (mlp_precision == "fp32")
+    assert bool(contexts) is (mlp_precision == "bf16")
+    if contexts:
+        assert contexts == [(("xpu",), {"dtype": torch.bfloat16})]
+    result = build_hydragnn_calculator(
+        HydraGNNConfig(logdir=tmp_path, mlp_checkpoint=tmp_path / "mlp.pt", mlp_device="xpu")
+    )
+    assert result.model is model and result.mlp is mlp
+    assert moves == [{"device": device}, {"device": device}]
+
+
+def test_fused_xpu_loader_rejects_unavailable_xpu_and_cpu_gnn(monkeypatch):
+    import torch
+
+    from matsim_agents.backends.mlip.relaxation import _load_fused_stack
+
+    inference = ModuleType("inference_fused")
+    calls = []
+    inference.load_fused_stack = lambda *args: (
+        calls.append(args)
+        or (
+            None,
+            None,
+            {},
+            torch.device("cpu"),
+            None,
+            None,
+            16,
+            torch.device("cpu"),
+            None,
+            False,
+            "fp32",
+            "fp32",
+        )
+    )
+    monkeypatch.setitem(sys.modules, "inference_fused", inference)
+    monkeypatch.setattr(torch.xpu, "is_available", lambda: False)
+    with pytest.raises(RuntimeError, match="CPU fallback is forbidden"):
+        _load_fused_stack("model", None, "mlp.pt", None, None, "xpu")
+    assert not calls
+    monkeypatch.setattr(torch.xpu, "is_available", lambda: True)
+    with pytest.raises(RuntimeError, match="but XPU was requested"):
+        _load_fused_stack("model", None, "mlp.pt", None, None, "xpu")
+    for device in ("cpu", "cuda"):
+        stack = _load_fused_stack("model", None, "mlp.pt", None, None, device)
+        assert stack[3].type == "cpu"
+        assert calls[-1][-1] == device

@@ -259,6 +259,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
 
     from matsim_agents.backends.mlip.relaxation import (
         _build_calculator,  # type: ignore[attr-defined]
+        _load_fused_stack,
     )
 
     # --- new-head (single-branch) fine-tune models -----------------------------
@@ -352,8 +353,6 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     # dtypes/device/autocast contexts. Reimplementing this here previously drifted
     # from the proven path (wrong model-build API, unstripped DDP "module." keys,
     # int radius that vesin rejects, and a raw state-dict passed as the MLP).
-    from inference_fused import load_fused_stack  # provided alongside the HydraGNN example
-
     mlp_checkpoint = (
         str(cfg.hydragnn_branch_mlp_checkpoint)
         if cfg.hydragnn_branch_mlp_checkpoint is not None
@@ -373,7 +372,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         unified_mlp_gnn_stack,
         _gnn_prec,
         _mlp_prec,
-    ) = load_fused_stack(
+    ) = _load_fused_stack(
         str(logdir),
         cfg.checkpoint,
         mlp_checkpoint,

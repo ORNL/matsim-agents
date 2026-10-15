@@ -2,8 +2,9 @@
 """
 create_split.py — Generate the public/private test-set split for the competition.
 
-Stratified by formula: every formula group has at least one structure in each
-partition.  This prevents participants from reconstructing DFT labels by
+Stratified by formula within the published benchmark metadata. Singleton groups
+remain private; larger groups have at least one structure in each partition.
+This prevents participants from reconstructing DFT labels by
 memorising a per-formula baseline and ensures Task 5 (phase stability) is
 scorable in both partitions.
 
@@ -78,6 +79,16 @@ def main() -> None:
     # The public-facing structure id is the opaque MATS key (`anon_id`); fall
     # back to `structure_id` if running against a table that lacks it.
     id_col = "anon_id" if rows and "anon_id" in rows[0] else "structure_id"
+
+    benchmark_metadata = HERE.parent / "public_data" / "structures_metadata.csv"
+    with benchmark_metadata.open(newline="") as stream:
+        benchmark_rows = list(csv.DictReader(stream))
+    benchmark_ids = {row["structure_id"] for row in benchmark_rows}
+    if not benchmark_ids or len(benchmark_ids) != len(benchmark_rows):
+        raise SystemExit("Benchmark metadata must contain unique, nonempty structure IDs")
+    rows = [row for row in rows if row[id_col] in benchmark_ids]
+    if len(rows) != len(benchmark_ids) or {row[id_col] for row in rows} != benchmark_ids:
+        raise SystemExit("Private metadata must cover every benchmark ID exactly once")
 
     # Drop excluded (HEC placeholder-X) structures before stratifying.
     n_before = len(rows)

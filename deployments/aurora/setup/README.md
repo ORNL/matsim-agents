@@ -9,9 +9,119 @@ The single full-install entry point is:
 bash deployments/aurora/setup/install.sh
 ```
 
-It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current Aurora installer,
-then installs and verifies matsim-agents in that environment.
+It preserves an existing HydraGNN checkout unless `HYDRAGNN_REF` is explicitly
+set, runs HydraGNN's current Aurora installer, then installs and verifies
+matsim-agents wheels in that environment.
 `install_matsim_aurora.sh` is only a compatibility alias.
+
+The phases follow the Perlmutter installer: HydraGNN dependencies, project
+wheels in `.venv`, then optional isolated UMA and MACE environments. Aurora
+loads `FRAMEWORKS_MODULE` (default `frameworks`) in the parent shell first so
+PyTorch and every child installer inherit the Intel runtime libraries.
+
+The HydraGNN extra accepts PyTorch 2.13 and 2.14, including Aurora's 2.13 XPU
+pre-release, with the corresponding torchvision 0.28/0.29 series. A historical
+exact pin in a feature branch's requirements is not evidence that its model
+code cannot run on those versions. The wrapper stages the selected code with
+requirements from the latest ORNL/HydraGNN main, under `.hpc-build/aurora`,
+without modifying the selected checkout. The staged Torch requirement is pinned
+to the framework-provided build, including its XPU version suffix. NumPy, SciPy,
+PyG and the remaining requirements come from upstream, not the feature branch.
+Missing package initializers are added only to the staged copy so setuptools
+includes the selected branch's utility modules in the wheel.
+
+The full `pip check` is reported but is not fatal, matching Perlmutter: Aurora's
+shared framework can contain unrelated dependency conflicts. A separate fatal
+audit checks the complete dependency tree of the selected Matsim extras and
+HydraGNN, followed by fatal import checks. UMA and MACE preserve the framework
+Torch/torchvision builds with exact constraints and verify Torch's source path.
+
+After a completed HydraGNN dependency build, set
+`REUSE_HYDRAGNN_DEPENDENCIES=1` to resume without rebuilding its native libraries.
+This requires an existing environment, `RECREATE_ENV=0`, working compiled PyG
+imports, and the same subsequent dependency and import checks.
+
+```bash
+RECREATE_ENV=1 RUN_MODEL_TESTS=1 bash deployments/aurora/setup/install.sh
+```
+
+`RUN_MODEL_TESTS=1` enables both compatibility environments, checks their model
+imports, and runs the Matsim-Agents suite in the base environment from the
+repository root, making source-only benchmark and diagnostic modules importable. It does not
+download model weights or qualify XPU inference; gated-model and hardware
+tests still require their own prerequisites.
+
+To keep installation and tests running after logout:
+
+```bash
+RUN_DIR="$PWD/.hpc-build/aurora/runs/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$RUN_DIR"
+nohup setsid env RUN_DIR="$RUN_DIR" \
+  bash deployments/aurora/setup/run-install-tests.sh \
+  < /dev/null > "$RUN_DIR/install.log" 2>&1 &
+disown
+```
+
+The runner enables model tests and writes `status.txt` with `RUNNING`,
+`SUCCEEDED`, or `FAILED` and the final exit code. `install.log` captures all
+installation and test output; `tests.xml` is generated when pytest runs.
+Inspect progress with `tail -f "$RUN_DIR/install.log"` and
+`cat "$RUN_DIR/status.txt"`. A detached login-node process survives shell logout,
+but not a node reboot or a site process limit.
+
+`FRAMEWORKS_MODULE` is passed to the staged canonical HydraGNN installer as
+well as loaded by the parent. Before installing project wheels, the resulting
+environment must match the captured framework Python, Torch version, and Torch
+package path. The upstream dependency checkout is not edited.
+
+`RECREATE_MACE_ENV` and `RECREATE_UMA_ENV` independently control compatibility
+environment recreation; both default to `0` (reuse), following Perlmutter's
+opt-in compatibility-environment lifecycle. `RECREATE_ENV=1` rebuilds only the
+base environment; it does not request deletion of UMA or MACE. This allows
+rebuilding one model environment without replacing the base environment.
+`INSTALL_VLLM=1` verifies Aurora's framework-provided vLLM-XPU stack rather than
+installing Perlmutter's CUDA vLLM environment.
+
+The canonical installer and upstream requirements are fetched into a separate
+checkout at `.hpc-build/aurora/installer-source`. Its default source is
+`https://github.com/ORNL/HydraGNN.git`, branch `main`. The wrapper logs the exact
+dependency revision and refreshes that checkout on subsequent installs.
+`HYDRAGNN_INSTALLER_REPO`, `HYDRAGNN_INSTALLER_REF`, and `HYDRAGNN_INSTALLER_DIR`
+can pin an audited dependency revision or change its location. An explicit
+`HYDRAGNN_INSTALLER` overrides the installer script, not the dependency profile.
+The selected feature branch is never switched implicitly.
+
+## Single-Node XPU Qualification
+
+From the repository root, submit a bounded checkpoint-inference job:
+
+```bash
+qsub -A <active-allocation> -v PROJECT_ROOT="$PWD" \
+  deployments/aurora/jobs/job-qualify-mlip-xpu-aurora.sh
+```
+
+The job uses one node and one XPU tile, launching each model through `mpiexec`
+in its own environment. It loads the framework runtime modules directly rather
+than activating conda. Each backend has an eight-minute limit and independent
+logs/results under `.hpc-build/aurora/qualification/<job-id>/`. A pass requires
+working XPU arithmetic, model parameters resident on XPU, and finite energy and
+forces for perturbed two-atom silicon. CPU fallback is a failure. This smoke
+test does not establish scientific accuracy or production scaling.
+
+Prepare checkpoint caches on a login node before submission; compute nodes run
+offline. The defaults are the local HydraGNN BEST6 logdir/BranchWeightMLP,
+UMA `uma-s-1p1`, and MACE-MP `small`. `MATSIM_HYDRAGNN_LOGDIR`,
+`HYDRAGNN_BRANCH_MLP_CHECKPOINT`, `MATSIM_UMA_MODEL_NAME`, `MATSIM_MACE_MODEL`,
+and `QUALIFICATION_RUN_DIR` override inputs/output. The model configuration
+accepts explicit `xpu` devices; actual support is determined by this test, not
+by configuration acceptance alone.
+
+Each model writes a timed `.progress.json` before imports, XPU setup, checkpoint
+loading, energy/force prediction, synchronization, and residency checks. Logs
+include Python stack dumps every 90 seconds and on termination. Launcher
+timeouts also produce result JSON, including the last recorded stage; the
+eight-minute limit has a 30-second forced-cleanup grace period. UMA residency
+is checked after prediction because FairChem initializes device placement lazily.
 
 ## Model Download Safety Policy
 
@@ -87,12 +197,57 @@ RECREATE_ENV=1 bash deployments/aurora/setup/install.sh
 > verifies its calculator API. FairChem does not currently document Intel XPU support, so a
 > successful import is not evidence of accelerated UMA inference on Aurora.
 
+### Experimental FairChem Compatibility
+
+Aurora's Torch `2.13.0a0+gitcf30153` does not satisfy upstream FairChem's stable
+`torch~=2.13.0` metadata. The UMA installer downloads FairChem 2.23.0 and creates
+an Aurora-only wheel with an explicit compatibility build tag. Its Torch
+requirement is changed to the exact framework version. The installer additionally enables
+an experimental FairChem 2.23.0 XPU device-initialization adapter, identified by
+the `2auroraxpu` wheel build tag. Other FairChem versions are rejected for this
+adapter. All other dependencies are resolved normally; after resolution, only
+the selected FairChem wheel is force-reinstalled to replace any same-version
+older compatibility build.
+
+For an explicit XPU request, the adapter requires a visible XPU, selects that
+device instead of rejecting it, and uses general uncompiled inference with
+TF32 and MOLE merging disabled. It does not modify model weights or tensor
+operations, and it does not permit CPU fallback. CPU/CUDA setup is unchanged.
+This is an XPU compatibility experiment, not evidence that checkpoint inference
+has passed on Intel hardware.
+
+The upstream wheel, patched wheel, and JSON provenance with SHA-256 hashes are
+retained under `.hpc-build/aurora/fairchem/<version>/`. This override is
+experimental, not an upstream claim of XPU support. The installer verifies the
+runtime dependency tree, imports, and the framework Torch path.
+
+On October 13, 2026, FairChem 2.23.0 passed those checks with the framework Torch
+above. UMA `uma-s-1p1` also loaded and evaluated a two-atom diamond silicon cell
+on CPU, producing finite energy and finite `(2, 3)` forces. This smoke test does
+not establish scientific accuracy, training compatibility, or Intel XPU
+execution. XPU qualification still requires a compute-node test. Checkpoint
+access may require accepting the upstream model license and Hugging Face
+authentication; never put tokens in source files or logs.
+
 > **MACE:** use `INSTALL_MACE=1 bash deployments/aurora/setup/install.sh`.
 > Upstream MACE requires `e3nn==0.4.4`, so the installer creates
 > `$MATSIM_DIR/.venv-mace` rather than changing HydraGNN's `e3nn==0.5.1` in
 > `.venv`. The compatibility environment inherits the Aurora PyTorch/XPU stack
 > and applies the site-specific h5py repair. XPU execution still requires an
 > on-node inference qualification.
+
+The Aurora MACE installer adds a backend guard to the optional OpenEquivariance
+imports in `.venv-mace` only. MACE 0.3.16 otherwise imports inherited
+OpenEquivariance even when acceleration is disabled; that package asserts that
+Torch has CUDA or HIP and crashes on the XPU build. The guard treats it as
+unavailable when both `torch.version.cuda` and `torch.version.hip` are absent,
+allowing MACE's existing e3nn fallback. CUDA/HIP builds retain the optional
+import, and unrelated import/runtime failures are not suppressed. Neither the
+base environment nor OpenEquivariance itself is modified.
+
+MACE 0.3.16's calculator imports and a real e3nn tensor-product CPU smoke test
+passed with this guard on October 13, 2026. This does not qualify checkpoint
+inference, scientific accuracy, or Intel XPU execution.
 
 Default environment path created by this flow:
 
@@ -168,16 +323,20 @@ Run `pw.x` with the Aurora launcher after building:
 bash deployments/aurora/launchers/run-pw-gpu-aurora.sh path/to/pw.in
 ```
 
-### VASP 6.6.0 on Aurora
+### VASP 6.6.1 on Aurora
 
 The repository does not commit VASP source because it is proprietary, but it
-does track the build provenance for the Aurora GPU build.
+does track the build helper and makefile configuration for the Aurora GPU build.
 
 - Provenance note: `docs/vasp-aurora.md`
 - Build script: `deployments/aurora/setup/build-vasp-gpu-aurora.sh`
+- Tracked recipe: `deployments/aurora/setup/makefile.include.aurora-gpu`
 - Upstream template used: `arch/makefile.include.oneapi_omp_off`
-- Local working file during the build: `external/vasp6/src/vasp.6.6.0/makefile.include`
+- Local working file during the build: `external/vasp6/src/vasp.6.6.1/makefile.include`
 
 This keeps the exact makefile lineage discoverable without checking any VASP
-source or vendor archive into git. The default script target builds
-`vasp_std`, `vasp_gam`, and `vasp_ncl` in one invocation.
+source or vendor archive into git. The helper installs the tracked recipe before
+building; `MAKEFILE_INCLUDE` selects a custom recipe. It loads
+`ONEAPI_MODULE` (default `oneapi/release/2026.1.0`) and `GPU_UMD_MODULE`
+(default `intel_gpu_umd_aicoe`). The default target builds `vasp_std`, `vasp_gam`,
+and `vasp_ncl` in one invocation.

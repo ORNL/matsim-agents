@@ -31,8 +31,8 @@ Task names (task_name argument)
     odac        — metal-organic frameworks
 
 The competition dataset spans multiple domains.  "omat" is a reasonable default
-for the bulk/slab/2D/alloy majority of the 159 structures; switch to "omol" for
-molecular entries or "oc20" for adsorbate-on-surface entries.
+for the bulk/slab/2D/alloy majority of the 121 completed structures; switch to
+"omol" for molecular entries or "oc20" for adsorbate-on-surface entries.
 
 Reference
 ---------
