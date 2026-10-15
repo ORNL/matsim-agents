@@ -325,9 +325,11 @@ def run_campaign(
     )
     from matsim_agents.active_learning.dataset_governance import DatasetManifest
 
-    source_metadata = DatasetManifest.model_validate_json(
+    source_metadata = json.loads(
         dataset_path.with_suffix(dataset_path.suffix + ".manifest.json").read_text()
     )
+    if backend == "hydragnn":
+        source_metadata = DatasetManifest.model_validate(source_metadata).model_dump()
 
     train_frames, test_frames = _split_dataset(frames, test_fraction, seed)
     n_iters = _num_al_iterations(frames)
@@ -351,16 +353,18 @@ def run_campaign(
         ):
             write_dataset_manifest(
                 split_path,
-                dft_backend=source_metadata.dft_backend,
-                method_signature=source_metadata.method_signature,
+                dft_backend=source_metadata["dft_backend"],
+                method_signature=source_metadata.get("method_signature"),
                 method_signature_elements=(
-                    set(source_metadata.method_signature_elements)
-                    if source_metadata.method_signature_elements is not None
+                    set(source_metadata["method_signature_elements"])
+                    if source_metadata.get("method_signature_elements") is not None
                     else None
                 ),
-                base_method_signature=source_metadata.base_method_signature,
-                element_method_signatures=source_metadata.element_method_signatures,
-                energy_reference=source_metadata.energy_reference,
+                base_method_signature=source_metadata.get("base_method_signature"),
+                element_method_signatures=source_metadata.get("element_method_signatures"),
+                energy_reference=source_metadata.get(
+                    "energy_reference", f"{source_metadata['dft_backend']}:native_total_energy"
+                ),
                 validation=DatasetValidationSummary(accepted=len(split_frames)),
                 split_role=split_role,
             )

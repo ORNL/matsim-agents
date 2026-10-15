@@ -422,6 +422,18 @@ def test_selects_energy_per_atom_and_reuses_without_dft_approval(setup_reference
     assert json.loads(reused.read_text())["selection"]["dft_attempts"] == 0
 
 
+def test_qe_phase_kpoints_complete_shared_protocol(setup_references):
+    setup = setup_references
+    setup.dft.qe.kpts = None
+    phase = setup.plan.phases[-1]
+    assert phase.kpts == (1, 1, 1)
+
+    resolved = elemental_dft._phase_config(setup.dft, phase)
+
+    assert resolved.qe.kpts == (1, 1, 1)
+    assert setup.dft.qe.kpts is None
+
+
 @pytest.mark.parametrize("format_name,filename", [("cif", "Si.cif"), ("vasp", "POSCAR")])
 def test_trusted_reference_formats_are_serialized_as_extxyz(
     setup_references, format_name, filename

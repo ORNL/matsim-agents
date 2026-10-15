@@ -223,14 +223,14 @@ def _phase_config(dft: DFTConfig, phase: ElementalPhaseSpec) -> DFTConfig:
                     )
         if cfg.qe.pw_template is not None and phase.qe_magnetic_settings:
             raise ValueError("QE template ignores magnetic overrides; use generated inputs")
+        cfg.qe.extra_system.update(phase.qe_magnetic_settings)
+        if phase.kpts is not None:
+            cfg.qe.kpts = phase.kpts
         if cfg.qe.pw_template is None and any(
             value is None
             for value in (cfg.qe.ecutwfc_ry, cfg.qe.ecutrho_ry, cfg.qe.kpts, cfg.qe.occupations)
         ):
             raise ValueError("Reference QE protocol must pin cutoffs, k-points, and occupations")
-        cfg.qe.extra_system.update(phase.qe_magnetic_settings)
-        if phase.kpts is not None:
-            cfg.qe.kpts = phase.kpts
     else:
         assert cfg.vasp is not None
         if phase.qe_magnetic_settings:

@@ -334,6 +334,51 @@ def test_finetune_split_preserves_verified_method(
             finetune_eval.run_campaign(dataset, output, eval_only=True, **kwargs)
 
 
+@pytest.mark.parametrize("backend", ["uma", "mace"])
+def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
+    tmp_path, elemental_manifest, monkeypatch, backend
+):
+    from matsim_agents.active_learning import finetune_eval
+
+    dataset = tmp_path / "dataset.extxyz"
+    write(dataset, [Atoms("NbO2", info={"energy": -23.0}) for _ in range(4)])
+    reference = elemental_manifest({"Nb": -10.0, "O": -5.0})
+    dataset.with_suffix(".extxyz.manifest.json").write_text(
+        json.dumps(
+            {
+                "sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
+                "dft_backend": "qe",
+                "method_signature": "synthetic-dft",
+            }
+        )
+    )
+    output = tmp_path / "campaign"
+    monkeypatch.setattr(finetune_eval, "_enforce_device_visibility", lambda _device: None)
+
+    class StopBeforeTraining(Exception):
+        pass
+
+    def check_split(*_args, **_kwargs):
+        for path in (output / "split/train.extxyz", output / "split/test_set.extxyz"):
+            validate_dataset_reference_method(
+                path,
+                reference_backend="qe",
+                reference_method_signature="synthetic-dft",
+                require_sidecar=True,
+            )
+        raise StopBeforeTraining
+
+    monkeypatch.setattr(finetune_eval, "_run_eval", check_split)
+    with pytest.raises(StopBeforeTraining):
+        finetune_eval.run_campaign(
+            dataset,
+            output,
+            backend=backend,
+            device="cpu",
+            elemental_reference_manifest=reference,
+        )
+
+
 @pytest.mark.parametrize(
     "payload",
     [
