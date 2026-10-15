@@ -318,7 +318,9 @@ def _run_reference_relaxation(
             kpts=qe.kpts,
             koffset=qe.koffset or (0, 0, 0),
             nstep=phase.relaxation_max_steps,
-            forc_conv_thr_ry_au=phase.relaxation_force_tolerance_eV_per_A / 25.711043,
+            forc_conv_thr_ry_au=(
+                phase.relaxation_force_tolerance_eV_per_A / (25.711043 * np.sqrt(3))
+            ),
             pseudopotentials=qe.pseudopotentials,
             extra_control=dict(qe.extra_control),
             extra_system=dict(qe.extra_system),
@@ -902,6 +904,11 @@ def prepare_elemental_references(
             {
                 "backend": dft.backend,
                 "method_signature": compound_signature,
+                "base_method_signature": dft_method_signature(dft, set()),
+                "element_method_signatures": {
+                    element: dft_method_signature(dft, {element})
+                    for element in sorted(required_elements)
+                },
                 "references": selected,
                 "selection": {
                     "protocol": plan.protocol,

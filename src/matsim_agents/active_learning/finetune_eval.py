@@ -318,7 +318,14 @@ def run_campaign(
         dataset_path,
         reference_backend=manifest["backend"],
         reference_method_signature=manifest["method_signature"],
+        reference_base_method_signature=manifest.get("base_method_signature"),
+        reference_element_method_signatures=manifest.get("element_method_signatures"),
         require_sidecar=True,
+    )
+    from matsim_agents.active_learning.dataset_governance import DatasetManifest
+
+    source_metadata = DatasetManifest.model_validate_json(
+        dataset_path.with_suffix(dataset_path.suffix + ".manifest.json").read_text()
     )
 
     train_frames, test_frames = _split_dataset(frames, test_fraction, seed)
@@ -343,9 +350,16 @@ def run_campaign(
         ):
             write_dataset_manifest(
                 split_path,
-                dft_backend=manifest["backend"],
-                method_signature=manifest["method_signature"],
-                energy_reference=f"{manifest['backend']}:native_total_energy",
+                dft_backend=source_metadata.dft_backend,
+                method_signature=source_metadata.method_signature,
+                method_signature_elements=(
+                    set(source_metadata.method_signature_elements)
+                    if source_metadata.method_signature_elements is not None
+                    else None
+                ),
+                base_method_signature=source_metadata.base_method_signature,
+                element_method_signatures=source_metadata.element_method_signatures,
+                energy_reference=source_metadata.energy_reference,
                 validation=DatasetValidationSummary(accepted=len(split_frames)),
                 split_role=split_role,
             )
@@ -354,6 +368,8 @@ def run_campaign(
             split_path,
             reference_backend=manifest["backend"],
             reference_method_signature=manifest["method_signature"],
+            reference_base_method_signature=manifest.get("base_method_signature"),
+            reference_element_method_signatures=manifest.get("element_method_signatures"),
             require_sidecar=True,
         )
     log.info(

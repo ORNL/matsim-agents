@@ -211,6 +211,10 @@ def run_active_learning(cfg: ALConfig) -> None:
                 cfg.trainer.validation_set,
                 reference_backend=reference_manifest["backend"],
                 reference_method_signature=reference_manifest["method_signature"],
+                reference_base_method_signature=reference_manifest.get("base_method_signature"),
+                reference_element_method_signatures=reference_manifest.get(
+                    "element_method_signatures"
+                ),
                 require_sidecar=True,
             )
     root = Path(cfg.loop.out_dir)
@@ -461,6 +465,11 @@ def run_active_learning(cfg: ALConfig) -> None:
                     parent_dataset_id=parent_dataset_id,
                     method_signature=method_signature,
                     method_signature_elements=labelled_elements,
+                    base_method_signature=_dft_method_signature(cfg, set()),
+                    element_method_signatures={
+                        element: _dft_method_signature(cfg, {element})
+                        for element in sorted(labelled_elements)
+                    },
                 )
             if validation_dataset_path.exists():
                 write_dataset_manifest(
@@ -471,6 +480,11 @@ def run_active_learning(cfg: ALConfig) -> None:
                     parent_dataset_id=validation_parent_dataset_id,
                     method_signature=method_signature,
                     method_signature_elements=labelled_elements,
+                    base_method_signature=_dft_method_signature(cfg, set()),
+                    element_method_signatures={
+                        element: _dft_method_signature(cfg, {element})
+                        for element in sorted(labelled_elements)
+                    },
                     split_role="validation",
                 )
             state.timings_sec["append_dataset"] = time.time() - t0
@@ -491,9 +505,20 @@ def run_active_learning(cfg: ALConfig) -> None:
                     cfg.trainer.validation_reference_set,
                     required_elements=labelled_elements,
                 )
-                if (
-                    reference_manifest["backend"] != backend.name
-                    or reference_manifest["method_signature"] != method_signature
+                reference_element_signatures = reference_manifest.get("element_method_signatures")
+                scoped_method_matches = (
+                    reference_manifest.get("base_method_signature")
+                    == _dft_method_signature(cfg, set())
+                    and reference_element_signatures is not None
+                    and all(
+                        reference_element_signatures.get(element)
+                        == _dft_method_signature(cfg, {element})
+                        for element in labelled_elements
+                    )
+                )
+                if reference_manifest["backend"] != backend.name or (
+                    not scoped_method_matches
+                    and reference_manifest["method_signature"] != method_signature
                 ):
                     raise ValueError(
                         "elemental references and campaign labels use different DFT methods"

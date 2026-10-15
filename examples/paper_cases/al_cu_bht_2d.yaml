@@ -42,6 +42,7 @@ mlip:
   backend: ${MLIP_BACKEND:-hydragnn}
   hydragnn:
     logdir:         ${INITIAL_LOGDIR}
+    hydragnn_root:  ${HYDRAGNN_DIR}
     checkpoint:     best_model.pt
     mlp_checkpoint: null
     precision:  fp32

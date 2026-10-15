@@ -555,6 +555,12 @@ def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monke
         energy=-12.0,
         forces=np.tile([0.015, 0.0, 0.0], (len(final_atoms), 1)),
     )
+    observed = {}
+    original_recommend_settings = qe_relax.recommend_settings
+
+    def capture_settings(*args, **kwargs):
+        observed.update(kwargs)
+        return original_recommend_settings(*args, **kwargs)
 
     def fake_run(argv, **kwargs):
         input_text = " ".join(Path(argv[4]).read_text().lower().split())
@@ -566,6 +572,7 @@ def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monke
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(elemental_dft.subprocess, "run", fake_run)
+    monkeypatch.setattr(qe_relax, "recommend_settings", capture_settings)
     monkeypatch.setattr(
         qe_relax,
         "parse_pw_stdout",
@@ -585,6 +592,9 @@ def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monke
     assert force == pytest.approx(0.015)
     assert steps == 5
     assert stress is None
+    assert observed["forc_conv_thr_ry_au"] == pytest.approx(
+        phase.relaxation_force_tolerance_eV_per_A / (25.711043 * np.sqrt(3))
+    )
 
 
 @pytest.mark.parametrize(("stress_component", "accepted"), [(0.005, True), (0.02, False)])
@@ -1178,3 +1188,57 @@ def test_al_additive_reference_extension_across_iterations(
     setup.dft.qe.ecutwfc_ry += 10
     with pytest.raises(ValueError, match="inputs changed"):
         resolve_training_references(cfg2, iter2_dataset, dft_config=setup.dft, reference_root=root)
+
+
+def test_manifest_reference_extension_accepts_expanded_real_method_scope(setup_references):
+    from matsim_agents.active_learning.dataset_governance import (
+        DatasetValidationSummary,
+        write_dataset_manifest,
+    )
+
+    setup = setup_references
+    source = _prepare(setup, "source", dft_approved=True)
+    config = TrainerConfig(
+        enabled=True,
+        train_script=setup.tmp / "train.py",
+        hydragnn_training_references={"manifest": source},
+    )
+    root = setup.tmp / "manifest-references"
+    si_atoms = Atoms("Si2", positions=np.zeros((2, 3)))
+    si_atoms.calc = SinglePointCalculator(si_atoms, energy=-10, forces=np.zeros((2, 3)))
+    iter1 = setup.tmp / "manifest-iter1.extxyz"
+    write(iter1, [si_atoms])
+    write_dataset_manifest(
+        iter1,
+        dft_backend="qe",
+        method_signature=dft_method_signature(setup.dft, {"Si"}),
+        method_signature_elements={"Si"},
+        base_method_signature=dft_method_signature(setup.dft, set()),
+        element_method_signatures={"Si": dft_method_signature(setup.dft, {"Si"})},
+        energy_reference="qe:native_total_energy",
+        validation=DatasetValidationSummary(),
+    )
+    first = resolve_training_references(config, iter1, dft_config=None, reference_root=root)
+    first_manifest = json.loads(first.read_text())
+    assert set(first_manifest["references"]) == {"Si"}
+
+    sio_atoms = Atoms("SiO2", positions=np.zeros((3, 3)))
+    sio_atoms.calc = SinglePointCalculator(sio_atoms, energy=-20, forces=np.zeros((3, 3)))
+    iter2 = setup.tmp / "manifest-iter2.extxyz"
+    write(iter2, [si_atoms, sio_atoms])
+    write_dataset_manifest(
+        iter2,
+        dft_backend="qe",
+        method_signature=dft_method_signature(setup.dft, {"Si", "O"}),
+        method_signature_elements={"Si", "O"},
+        base_method_signature=dft_method_signature(setup.dft, set()),
+        element_method_signatures={
+            element: dft_method_signature(setup.dft, {element}) for element in ("Si", "O")
+        },
+        energy_reference="qe:native_total_energy",
+        validation=DatasetValidationSummary(),
+    )
+    second = resolve_training_references(config, iter2, dft_config=None, reference_root=root)
+    second_manifest = json.loads(second.read_text())
+    assert set(second_manifest["references"]) == {"Si", "O"}
+    assert second_manifest["references"]["Si"] == first_manifest["references"]["Si"]

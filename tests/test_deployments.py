@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 from ase.build import bulk
 from ase.io import write
 
@@ -18,6 +19,23 @@ def test_deployment_assets_are_portable() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.validate() == []
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "al_zn_formate.yaml",
+        "al_phosphorene.yaml",
+        "al_lifepo4.yaml",
+        "al_hea_fcc_cantor.yaml",
+        "al_hea_bcc.yaml",
+        "al_cu_bht_2d.yaml",
+    ],
+)
+def test_perlmutter_hydragnn_examples_pass_declared_checkout(case) -> None:
+    root = Path(__file__).resolve().parents[1]
+    config = yaml.safe_load((root / "examples/paper_cases" / case).read_text())
+    assert config["mlip"]["hydragnn"]["hydragnn_root"] == "${HYDRAGNN_DIR}"
 
 
 def test_perlmutter_campaign_imports_current_checkout() -> None:

@@ -286,11 +286,20 @@ def _resolve_training_references_unlocked(
                     new_manifest = json.loads(
                         (temp_output / "elemental-references.json").read_text()
                     )
+                    if existing_manifest.get("base_method_signature") != new_manifest.get(
+                        "base_method_signature"
+                    ):
+                        raise ValueError(
+                            "HydraGNN training reference inputs changed; use a new AL dataset"
+                        )
                     with _staged_reference_snapshot(reference_root, copy_existing=True) as staged:
                         for elem in new_elements:
                             geom_file = f"{elem}.extxyz"
                             shutil.copy2(temp_output / geom_file, staged / geom_file)
                             existing_manifest["references"][elem] = new_manifest["references"][elem]
+                            existing_manifest.setdefault("element_method_signatures", {})[elem] = (
+                                new_manifest["element_method_signatures"][elem]
+                            )
                         existing_selection = existing_manifest.setdefault("selection", {})
                         new_selection = new_manifest.get("selection", {})
                         if "initial_approval" not in existing_selection:
@@ -381,6 +390,8 @@ def _resolve_training_references_unlocked(
                     dataset,
                     reference_backend=manifest["backend"],
                     reference_method_signature=manifest["method_signature"],
+                    reference_base_method_signature=manifest.get("base_method_signature"),
+                    reference_element_method_signatures=manifest.get("element_method_signatures"),
                     require_sidecar=True,
                 )
                 with _staged_reference_snapshot(reference_root, copy_existing=True) as staged:
@@ -413,6 +424,8 @@ def _resolve_training_references_unlocked(
                 dataset,
                 reference_backend=manifest["backend"],
                 reference_method_signature=manifest["method_signature"],
+                reference_base_method_signature=manifest.get("base_method_signature"),
+                reference_element_method_signatures=manifest.get("element_method_signatures"),
                 require_sidecar=True,
             )
             with _staged_reference_snapshot(reference_root, copy_existing=False) as staged:
@@ -443,6 +456,8 @@ def _resolve_training_references_unlocked(
         dataset,
         reference_backend=manifest["backend"],
         reference_method_signature=manifest["method_signature"],
+        reference_base_method_signature=manifest.get("base_method_signature"),
+        reference_element_method_signatures=manifest.get("element_method_signatures"),
         require_sidecar=True,
     )
     return source

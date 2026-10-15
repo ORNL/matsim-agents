@@ -7,7 +7,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 import numpy as np
 from ase import Atoms
@@ -26,6 +26,8 @@ class ElementalReferenceSpec(TypedDict):
 class ElementalReferenceManifest(TypedDict):
     backend: str
     method_signature: str
+    base_method_signature: NotRequired[str]
+    element_method_signatures: NotRequired[dict[str, str]]
     references: dict[str, ElementalReferenceSpec]
 
 
@@ -34,6 +36,8 @@ def validate_dataset_reference_method(
     *,
     reference_backend: str,
     reference_method_signature: str,
+    reference_base_method_signature: str | None = None,
+    reference_element_method_signatures: dict[str, str] | None = None,
     require_sidecar: bool = False,
 ) -> None:
     """Check the compound DFT protocol; strict evaluations require a sidecar."""
@@ -53,9 +57,27 @@ def validate_dataset_reference_method(
         raise ValueError("DFT dataset manifest must be a JSON object")
     if metadata.get("sha256") != hashlib.sha256(path.read_bytes()).hexdigest():
         raise ValueError("DFT dataset manifest hash does not match the compound data")
+    components_match = False
+    scope = metadata.get("method_signature_elements")
+    dataset_elements = metadata.get("element_method_signatures")
     if (
-        metadata.get("dft_backend") != reference_backend
-        or metadata.get("method_signature") != reference_method_signature
+        reference_base_method_signature is not None
+        and reference_element_method_signatures is not None
+        and isinstance(scope, list)
+        and scope
+        and len(scope) == len(set(scope))
+        and isinstance(dataset_elements, dict)
+    ):
+        components_match = metadata.get(
+            "base_method_signature"
+        ) == reference_base_method_signature and all(
+            isinstance(element, str)
+            and isinstance(reference_element_method_signatures.get(element), str)
+            and dataset_elements.get(element) == reference_element_method_signatures.get(element)
+            for element in scope
+        )
+    if metadata.get("dft_backend") != reference_backend or (
+        not components_match and metadata.get("method_signature") != reference_method_signature
     ):
         raise ValueError("elemental references and compound labels use different DFT methods")
 
@@ -103,6 +125,22 @@ def load_elemental_reference_manifest(
     specs = manifest.get("references")
     if not isinstance(specs, dict) or not specs:
         raise ValueError("elemental reference manifest requires a nonempty references object")
+    base_signature = manifest.get("base_method_signature")
+    element_signatures = manifest.get("element_method_signatures")
+    if (base_signature is None) != (element_signatures is None) or (
+        base_signature is not None
+        and (
+            not isinstance(base_signature, str)
+            or not base_signature.strip()
+            or not isinstance(element_signatures, dict)
+            or any(
+                not isinstance(element_signatures.get(element), str)
+                or not element_signatures[element].strip()
+                for element in specs
+            )
+        )
+    ):
+        raise ValueError("elemental reference manifest has invalid scoped method signatures")
     missing = required_elements - specs.keys()
     if missing:
         raise ValueError(f"elemental reference manifest lacks coverage for {sorted(missing)}")
@@ -138,15 +176,17 @@ def load_elemental_reference_manifest(
             "structure_sha256": digest,
         }
         prepared.append((element, atoms, dft_energy, digest))
-    return (
-        {
-            "backend": backend,
-            "method_signature": signature,
-            "references": validated_specs,
-        },
-        payload,
-        prepared,
-    )
+    validated_manifest: ElementalReferenceManifest = {
+        "backend": backend,
+        "method_signature": signature,
+        "references": validated_specs,
+    }
+    if base_signature is not None and isinstance(element_signatures, dict):
+        validated_manifest["base_method_signature"] = base_signature
+        validated_manifest["element_method_signatures"] = {
+            element: element_signatures[element] for element in validated_specs
+        }
+    return validated_manifest, payload, prepared
 
 
 def predict_elemental_references(
