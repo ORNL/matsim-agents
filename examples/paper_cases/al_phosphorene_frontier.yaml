@@ -29,6 +29,7 @@ vars:
   PROJ_ROOT:    ${PROJ_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents}
   RUNS_ROOT:    ${RUNS_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/runs}
   HYDRAGNN_DIR: ${HYDRAGNN_DIR:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN}
+  HYDRAGNN_FT_REPO: ${HYDRAGNN_FT_REPO:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN_GFM_FineTuning4Materials}
   RUN_TAG:      phosphorene-2d-frontier-al-001
 
   SEED_XYZ:   ${PROJ_ROOT}/examples/paper_cases/seeds/phosphorene_black_P.extxyz
@@ -44,6 +45,7 @@ mlip:
   backend: ${MLIP_BACKEND:-hydragnn}
   hydragnn:
     hydragnn_root: ${HYDRAGNN_DIR}
+    ft_repo: ${HYDRAGNN_FT_REPO}
     logdir:         ${INITIAL_LOGDIR}
     checkpoint:     best_model.pt
     mlp_checkpoint: null

@@ -38,6 +38,24 @@ def test_perlmutter_hydragnn_examples_pass_declared_checkout(case) -> None:
     assert config["mlip"]["hydragnn"]["hydragnn_root"] == "${HYDRAGNN_DIR}"
 
 
+@pytest.mark.parametrize(
+    "case",
+    [
+        "examples/active_learning/al_config.example.yaml",
+        "examples/active_learning/al_config.prompt.example.yaml",
+        "examples/paper_cases/al_hea_bcc_frontier.yaml",
+        "examples/paper_cases/al_lifepo4_frontier.yaml",
+        "examples/paper_cases/al_phosphorene_frontier.yaml",
+    ],
+)
+def test_frontier_newhead_examples_pass_finetuning_checkout(case) -> None:
+    root = Path(__file__).resolve().parents[1]
+    config = yaml.safe_load((root / case).read_text())
+    hydragnn = config.get("mlip", {}).get("hydragnn", config.get("hydragnn"))
+    assert hydragnn["ft_repo"] == "${HYDRAGNN_FT_REPO}"
+    assert "/lustre/orion/" in config["vars"]["HYDRAGNN_FT_REPO"]
+
+
 def test_perlmutter_campaign_imports_current_checkout() -> None:
     root = Path(__file__).resolve().parents[1]
     script = (

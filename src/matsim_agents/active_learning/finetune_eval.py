@@ -294,6 +294,7 @@ def run_campaign(
     # downstream, so an explicit CPU request is actually honoured.
     _enforce_device_visibility(device)
 
+    dataset_path = Path(dataset_path).expanduser().resolve()
     output_dir = Path(output_dir).expanduser().resolve()
     (output_dir / "split").mkdir(parents=True, exist_ok=True)
     eval_dir = output_dir / "eval"

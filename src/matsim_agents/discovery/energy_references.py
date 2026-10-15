@@ -68,13 +68,18 @@ def validate_dataset_reference_method(
         and len(scope) == len(set(scope))
         and isinstance(dataset_elements, dict)
     ):
-        components_match = metadata.get(
-            "base_method_signature"
-        ) == reference_base_method_signature and all(
-            isinstance(element, str)
-            and isinstance(reference_element_method_signatures.get(element), str)
-            and dataset_elements.get(element) == reference_element_method_signatures.get(element)
-            for element in scope
+        frames = read(path, index=":")
+        actual_elements = {symbol for atoms in frames for symbol in atoms.get_chemical_symbols()}
+        components_match = (
+            metadata.get("base_method_signature") == reference_base_method_signature
+            and actual_elements.issubset(set(scope))
+            and all(
+                isinstance(element, str)
+                and isinstance(reference_element_method_signatures.get(element), str)
+                and dataset_elements.get(element)
+                == reference_element_method_signatures.get(element)
+                for element in scope
+            )
         )
     if metadata.get("dft_backend") != reference_backend or (
         not components_match and metadata.get("method_signature") != reference_method_signature

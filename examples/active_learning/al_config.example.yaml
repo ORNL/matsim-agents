@@ -28,6 +28,8 @@ vars:
   PROJ_ROOT:    /lustre/orion/mat746/proj-shared/matsim-agents
   RUNS_ROOT:    /lustre/orion/mat746/proj-shared/runs
   HYDRAGNN_DIR: /lustre/orion/mat746/proj-shared/HydraGNN
+  # Override with the local checkout containing hydragnn_finetune/load_model.py.
+  HYDRAGNN_FT_REPO: /lustre/orion/mat746/proj-shared/HydraGNN_GFM_FineTuning4Materials
 
   # Per-run identifier (lets you run many AL campaigns side by side).
   RUN_TAG: al-run-001
@@ -47,6 +49,7 @@ vars:
 
 hydragnn:
   hydragnn_root: ${HYDRAGNN_DIR}
+  ft_repo: ${HYDRAGNN_FT_REPO}
   logdir: ${INITIAL_LOGDIR}
   checkpoint: best_model.pt           # filename inside logdir, OR absolute path
   mlp_checkpoint: null                 # set if your model uses BranchWeightMLP

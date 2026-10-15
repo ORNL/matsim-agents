@@ -210,6 +210,28 @@ def test_compound_sidecar_method_validation(tmp_path, defect):
             )
 
 
+def test_component_method_validation_rejects_omitted_dataset_species(tmp_path):
+    dataset = tmp_path / "compound.extxyz"
+    write(dataset, Atoms("NbO2", info={"energy": -23.0}))
+    metadata = {
+        "dft_backend": "qe",
+        "method_signature": "wrong-compound-signature",
+        "method_signature_elements": ["Nb"],
+        "base_method_signature": "base-dft",
+        "element_method_signatures": {"Nb": "nb-dft"},
+        "sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
+    }
+    dataset.with_suffix(".extxyz.manifest.json").write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match="different DFT methods"):
+        validate_dataset_reference_method(
+            dataset,
+            reference_backend="qe",
+            reference_method_signature="reference-compound-signature",
+            reference_base_method_signature="base-dft",
+            reference_element_method_signatures={"Nb": "nb-dft", "O": "o-dft"},
+        )
+
+
 @pytest.mark.parametrize("entrypoint", ["evaluation", "promotion", "finetune"])
 @pytest.mark.parametrize("defect", ["missing", "backend", "signature", "hash"])
 def test_energy_comparison_rejects_unverified_method_before_inference(
@@ -297,7 +319,7 @@ def test_finetune_split_preserves_verified_method(
         elemental_reference_manifest=reference,
     )
     with pytest.raises(StopBeforeTraining):
-        finetune_eval.run_campaign(dataset, output, **kwargs)
+        finetune_eval.run_campaign(str(dataset), output, **kwargs)
     if reuse_defect is not None:
         test_path = output / "split/test_set.extxyz"
         if reuse_defect == "missing":
