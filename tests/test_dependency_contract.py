@@ -65,7 +65,8 @@ def test_full_ci_installs_cpu_torch_before_regression_suite() -> None:
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     steps = workflow["jobs"]["full"]["steps"]
     install_index = next(
-        index for index, step in enumerate(steps)
+        index
+        for index, step in enumerate(steps)
         if "https://download.pytorch.org/whl/cpu" in shlex.split(step.get("run", ""))
     )
     tokens = shlex.split(steps[install_index]["run"])

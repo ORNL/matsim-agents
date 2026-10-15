@@ -41,16 +41,21 @@ def test_split_uses_published_scope_and_keeps_singletons_private(tmp_path) -> No
     _write_csv(
         tmp_path / "public_data" / "structures_metadata.csv",
         ["structure_id", "file_path"],
-        [{"structure_id": identity, "file_path": f"{identity}.xyz"}
-         for identity in ("MATS-0001", "MATS-0002", "MATS-0003")],
+        [
+            {"structure_id": identity, "file_path": f"{identity}.xyz"}
+            for identity in ("MATS-0001", "MATS-0002", "MATS-0003")
+        ],
     )
     private_metadata = tmp_path / "private.csv"
     _write_csv(
-        private_metadata, ["anon_id", "formula"],
-        [{"anon_id": "MATS-0001", "formula": "H"},
-         {"anon_id": "MATS-0002", "formula": "H"},
-         {"anon_id": "MATS-0003", "formula": "O"},
-         {"anon_id": "MATS-0004", "formula": "H"}],
+        private_metadata,
+        ["anon_id", "formula"],
+        [
+            {"anon_id": "MATS-0001", "formula": "H"},
+            {"anon_id": "MATS-0002", "formula": "H"},
+            {"anon_id": "MATS-0003", "formula": "O"},
+            {"anon_id": "MATS-0004", "formula": "H"},
+        ],
     )
     reference = tmp_path / "reference_data"
     reference.mkdir()
@@ -69,8 +74,7 @@ def test_split_uses_published_scope_and_keeps_singletons_private(tmp_path) -> No
     original = public_file.read_bytes(), private_file.read_bytes()
     subprocess.run(command, env=environment, check=True, capture_output=True)
     assert original == (public_file.read_bytes(), private_file.read_bytes())
-    _write_csv(private_metadata, ["anon_id", "formula"],
-               [{"anon_id": "MATS-0001", "formula": "H"}])
+    _write_csv(private_metadata, ["anon_id", "formula"], [{"anon_id": "MATS-0001", "formula": "H"}])
     failed = subprocess.run(command, env=environment, capture_output=True, text=True)
     assert failed.returncode != 0
     assert "cover every benchmark ID" in failed.stderr

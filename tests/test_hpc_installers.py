@@ -40,8 +40,7 @@ def test_aurora_detached_runner_records_exit_status(tmp_path) -> None:
     installer = tmp_path / "install.sh"
     for exit_code in (0, 7):
         installer.write_text(
-            '#!/bin/bash\n[[ "$RUN_MODEL_TESTS" == "1" ]] || exit 8\n'
-            f'exit {exit_code}\n'
+            f'#!/bin/bash\n[[ "$RUN_MODEL_TESTS" == "1" ]] || exit 8\nexit {exit_code}\n'
         )
         result = subprocess.run(["bash", str(local_runner)], env=environment, capture_output=True)
         assert result.returncode == exit_code
@@ -65,8 +64,10 @@ def test_aurora_runs_perlmutter_style_phases_without_switching_checkout(tmp_path
     )
     python.chmod(0o755)
     git = fake_bin / "git"
-    git.write_text('#!/bin/bash\nprintf "git %s\\n" "$*" >> "$INSTALL_LOG"\n'
-                   'if [[ "$*" == *rev-parse* ]]; then echo 81d5b88; fi\n')
+    git.write_text(
+        '#!/bin/bash\nprintf "git %s\\n" "$*" >> "$INSTALL_LOG"\n'
+        'if [[ "$*" == *rev-parse* ]]; then echo 81d5b88; fi\n'
+    )
     git.chmod(0o755)
     startup = tmp_path / "bash-env"
     startup.write_text('module() { printf "module %s\\n" "$*" >> "$INSTALL_LOG"; }\n')
@@ -95,11 +96,21 @@ def test_aurora_runs_perlmutter_style_phases_without_switching_checkout(tmp_path
     vllm.write_text('#!/bin/bash\necho vllm-xpu >> "$INSTALL_LOG"\n')
     environment = os.environ.copy()
     environment.update(
-        PATH=f"{fake_bin}:/usr/bin:/bin", BASH_ENV=str(startup), INSTALL_LOG=str(log),
-        FAKE_PYTHON=str(python), MATSIM_DIR=str(matsim), HYDRAGNN_DIR=str(hydra),
-        HYDRAGNN_REF="", FRAMEWORKS_MODULE="frameworks/test", RUN_MODEL_TESTS="1",
-        VENV_PATH=str(matsim / ".venv"), INSTALL_ROOT=str(matsim / ".hpc-build/aurora"),
-        RECREATE_ENV="0", RECREATE_MACE_ENV="1", RECREATE_UMA_ENV="0", INSTALL_VLLM="1",
+        PATH=f"{fake_bin}:/usr/bin:/bin",
+        BASH_ENV=str(startup),
+        INSTALL_LOG=str(log),
+        FAKE_PYTHON=str(python),
+        MATSIM_DIR=str(matsim),
+        HYDRAGNN_DIR=str(hydra),
+        HYDRAGNN_REF="",
+        FRAMEWORKS_MODULE="frameworks/test",
+        RUN_MODEL_TESTS="1",
+        VENV_PATH=str(matsim / ".venv"),
+        INSTALL_ROOT=str(matsim / ".hpc-build/aurora"),
+        RECREATE_ENV="0",
+        RECREATE_MACE_ENV="1",
+        RECREATE_UMA_ENV="0",
+        INSTALL_VLLM="1",
         REUSE_HYDRAGNN_DEPENDENCIES="0",
         HYDRAGNN_INSTALLER=str(hydra_installer),
     )
@@ -161,23 +172,31 @@ def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
         subprocess.run(["bash", "-n", str(installer)], check=True)
 
 
-@pytest.mark.parametrize("base,mace,uma,expected", [
-    ("0", "1", None, "0"), ("1", "0", None, "0"), ("1", "1", "0", "0"),
-    ("0", "0", "1", "1"), ("1", "1", "1", "1"),
-])
+@pytest.mark.parametrize(
+    "base,mace,uma,expected",
+    [
+        ("0", "1", None, "0"),
+        ("1", "0", None, "0"),
+        ("1", "1", "0", "0"),
+        ("0", "0", "1", "1"),
+        ("1", "1", "1", "1"),
+    ],
+)
 def test_aurora_recreate_uma_defaults_independently(base, mace, uma, expected):
     installer = (ROOT / "deployments/aurora/setup/install.sh").read_text()
-    assignments = "\n".join(
-        line for line in installer.splitlines() if line.startswith("RECREATE_")
-    )
+    assignments = "\n".join(line for line in installer.splitlines() if line.startswith("RECREATE_"))
     environment = os.environ.copy()
     environment.update(RECREATE_ENV=base, RECREATE_MACE_ENV=mace)
     environment.pop("RECREATE_UMA_ENV", None)
     if uma is not None:
         environment["RECREATE_UMA_ENV"] = uma
     result = subprocess.run(
-        ["bash"], input=assignments + '\nprintf "%s" "$RECREATE_UMA_ENV"\n',
-        env=environment, text=True, capture_output=True, check=True,
+        ["bash"],
+        input=assignments + '\nprintf "%s" "$RECREATE_UMA_ENV"\n',
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=True,
     )
     assert result.stdout == expected
 
@@ -190,15 +209,17 @@ def test_aurora_compatibility_recreation_is_opt_in_like_perlmutter(base):
         assignment = f'RECREATE_{backend}_ENV="${{RECREATE_{backend}_ENV:-0}}"'
         assert assignment in aurora
     assert 'RECREATE_MACE_ENV="${RECREATE_MACE_ENV:-0}"' in perlmutter
-    assignments = "\n".join(
-        line for line in aurora.splitlines() if line.startswith("RECREATE_")
-    )
+    assignments = "\n".join(line for line in aurora.splitlines() if line.startswith("RECREATE_"))
     environment = os.environ.copy()
     environment["RECREATE_ENV"] = base
     for backend in ("UMA", "MACE"):
         environment.pop(f"RECREATE_{backend}_ENV", None)
     result = subprocess.run(
-        ["bash"], env=environment, text=True, capture_output=True, check=True,
+        ["bash"],
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=True,
         input=assignments + '\nprintf "%s %s" "$RECREATE_UMA_ENV" "$RECREATE_MACE_ENV"\n',
     )
     assert result.stdout == "0 0"
@@ -209,10 +230,23 @@ def test_aurora_compatibility_recreation_is_opt_in_like_perlmutter(base):
 def test_aurora_refs_work_on_first_install_and_rerun(tmp_path, ref, checkout_kind):
     origin = tmp_path / "origin"
     subprocess.run(["git", "init", "-b", "main", str(origin)], check=True, capture_output=True)
-    subprocess.run([
-        "git", "-C", str(origin), "-c", "user.name=Test", "-c", "user.email=test@example.com",
-        "commit", "--allow-empty", "-m", "initial",
-    ], check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(origin),
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "initial",
+        ],
+        check=True,
+        capture_output=True,
+    )
     for command in (("branch", "feature/test"), ("tag", "v-test")):
         subprocess.run(["git", "-C", str(origin), *command], check=True, capture_output=True)
     revision = subprocess.check_output(
@@ -229,21 +263,29 @@ def test_aurora_refs_work_on_first_install_and_rerun(tmp_path, ref, checkout_kin
         prefix = "HYDRAGNN_INSTALLER"
         start = installer.index('if [[ ! -d "${HYDRAGNN_INSTALLER_DIR}/.git" ]]')
         end = installer.index('log "Upstream dependency revision')
-    script = 'set -euo pipefail\nlog() { :; }\ndie() { exit 1; }\n' + installer[start:end]
+    script = "set -euo pipefail\nlog() { :; }\ndie() { exit 1; }\n" + installer[start:end]
     environment = os.environ.copy()
-    environment.update({
-        f"{prefix}_DIR": str(checkout), f"{prefix}_REPO": str(origin), f"{prefix}_REF": selected,
-    })
+    environment.update(
+        {
+            f"{prefix}_DIR": str(checkout),
+            f"{prefix}_REPO": str(origin),
+            f"{prefix}_REF": selected,
+        }
+    )
     for _attempt in range(2):
         subprocess.run(
             ["bash"], input=script, text=True, env=environment, check=True, capture_output=True
         )
-        assert subprocess.check_output(
-            ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True
-        ).strip() == revision
+        assert (
+            subprocess.check_output(
+                ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True
+            ).strip()
+            == revision
+        )
         branch = subprocess.run(
             ["git", "-C", str(checkout), "symbolic-ref", "--short", "HEAD"],
-            text=True, capture_output=True,
+            text=True,
+            capture_output=True,
         )
         if checkout_kind == "selected" and ref in ("main", "feature/test"):
             assert branch.returncode == 0 and branch.stdout.strip() == ref
@@ -254,12 +296,26 @@ def test_aurora_refs_work_on_first_install_and_rerun(tmp_path, ref, checkout_kin
         subprocess.run(["git", "clone", str(origin), str(fork)], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(fork), "switch", "-c", "audited-fork-only"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
-        subprocess.run([
-            "git", "-C", str(fork), "-c", "user.name=Test", "-c", "user.email=test@example.com",
-            "commit", "--allow-empty", "-m", "audited fork",
-        ], check=True, capture_output=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(fork),
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "audited fork",
+            ],
+            check=True,
+            capture_output=True,
+        )
         expected = subprocess.check_output(
             ["git", "-C", str(fork), "rev-parse", "HEAD"], text=True
         ).strip()
@@ -269,9 +325,12 @@ def test_aurora_refs_work_on_first_install_and_rerun(tmp_path, ref, checkout_kin
         subprocess.run(
             ["bash"], input=script, text=True, env=environment, check=True, capture_output=True
         )
-        assert subprocess.check_output(
-            ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True
-        ).strip() == expected
+        assert (
+            subprocess.check_output(
+                ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True
+            ).strip()
+            == expected
+        )
         assert subprocess.check_output(
             ["git", "-C", str(checkout), "remote", "get-url", "origin"], text=True
         ).strip() == str(origin)
@@ -285,11 +344,14 @@ def test_runtime_dependency_audit_checks_selected_extras_and_transitive_requirem
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     packages = {
-        "runtime": SimpleNamespace(version="1.0", requires=[
-            'torch>=2.13.0.dev0; extra == "model"',
-            'missing-package; extra == "unused"',
-            'missing-platform; sys_platform == "never"',
-        ]),
+        "runtime": SimpleNamespace(
+            version="1.0",
+            requires=[
+                'torch>=2.13.0.dev0; extra == "model"',
+                'missing-package; extra == "unused"',
+                'missing-platform; sys_platform == "never"',
+            ],
+        ),
         "torch": SimpleNamespace(version="2.13.0a0+git123", requires=["numpy>=2"]),
         "numpy": SimpleNamespace(version="2.4.6", requires=[]),
     }
@@ -306,7 +368,7 @@ def test_runtime_dependency_audit_checks_selected_extras_and_transitive_requirem
         "numpy>=2 is required, installed 1.26.4"
     ]
     assert module.check_dependencies(["runtime[unused]"]) == [
-        "Missing runtime dependency: missing-package; extra == \"unused\""
+        'Missing runtime dependency: missing-package; extra == "unused"'
     ]
 
 
@@ -351,7 +413,8 @@ def test_aurora_fused_residency_requires_xpu_gnn_and_mlp(monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(
-        calculator, "_find_torch_module",
+        calculator,
+        "_find_torch_module",
         lambda root: root if hasattr(root, "parameters") else None,
     )
 
@@ -388,7 +451,7 @@ def test_aurora_stages_selected_code_with_upstream_dependencies(tmp_path) -> Non
     (dependencies / "requirements-torch.txt").write_text("torch==2.13.0\ntorchvision==0.28.0\n")
     upstream_installer = dependencies / INSTALLERS["aurora"]
     upstream_installer.parent.mkdir(parents=True)
-    upstream_installer.write_text('module reset\nmodule load frameworks\nmodule list\n')
+    upstream_installer.write_text("module reset\nmodule load frameworks\nmodule list\n")
     stage = module.prepare_source(code, dependencies, tmp_path / "build", "2.13.0a0+git123")
     assert (stage / "model.py").read_bytes() == (code / "model.py").read_bytes()
     assert (stage / "requirements-base.txt").read_bytes() == (
@@ -405,11 +468,15 @@ def test_aurora_stages_selected_code_with_upstream_dependencies(tmp_path) -> Non
     assert not (code / "hydragnn/utils/__init__.py").exists()
     staged_installer = stage / INSTALLERS["aurora"]
     assert 'module load "${FRAMEWORKS_MODULE:-frameworks}"' in staged_installer.read_text()
-    assert upstream_installer.read_text() == 'module reset\nmodule load frameworks\nmodule list\n'
+    assert upstream_installer.read_text() == "module reset\nmodule load frameworks\nmodule list\n"
     environment = os.environ.copy()
     environment["FRAMEWORKS_MODULE"] = "frameworks/test"
     result = subprocess.run(
-        ["bash"], env=environment, text=True, capture_output=True, check=True,
+        ["bash"],
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=True,
         input='module() { printf "%s\\n" "$*"; }\n' + staged_installer.read_text(),
     )
     assert "load frameworks/test" in result.stdout
@@ -476,12 +543,15 @@ def test_aurora_fairchem_wheel_changes_only_torch_dependency(tmp_path):
     metadata_path = "fairchem_core-2.23.0.dist-info/METADATA"
     with WheelFile(source, "w") as wheel:
         wheel.writestr("fairchem/core/__init__.py", b"original_code = True\n")
-        wheel.writestr(metadata_path, (
-            b"Metadata-Version: 2.1\nName: fairchem-core\nVersion: 2.23.0\n"
-            b"Requires-Dist: torch~=2.13.0\nRequires-Dist: e3nn>=0.6\n"
-            b"Requires-Dist: torch-sim-atomistic>=0.6.0; "
-            b"(python_version >= '3.12') and extra == 'torchsim'\n\n"
-        ))
+        wheel.writestr(
+            metadata_path,
+            (
+                b"Metadata-Version: 2.1\nName: fairchem-core\nVersion: 2.23.0\n"
+                b"Requires-Dist: torch~=2.13.0\nRequires-Dist: e3nn>=0.6\n"
+                b"Requires-Dist: torch-sim-atomistic>=0.6.0; "
+                b"(python_version >= '3.12') and extra == 'torchsim'\n\n"
+            ),
+        )
     original = source.read_bytes()
     target = module.prepare_wheel(source, tmp_path / "patched", "2.13.0a0+git123")
     assert "-1aurora-" in target.name
@@ -489,7 +559,8 @@ def test_aurora_fairchem_wheel_changes_only_torch_dependency(tmp_path):
     with WheelFile(target) as wheel:
         metadata = BytesParser().parsebytes(wheel.read(metadata_path))
         assert metadata.get_all("Requires-Dist") == [
-            "torch==2.13.0a0+git123", "e3nn>=0.6",
+            "torch==2.13.0a0+git123",
+            "e3nn>=0.6",
             "torch-sim-atomistic>=0.6.0; (python_version >= '3.12') and extra == 'torchsim'",
         ]
         for requirement in metadata.get_all("Requires-Dist"):
@@ -515,7 +586,7 @@ def test_fairchem_xpu_adapter_requires_xpu_and_preserves_cpu_cuda():
     spec = importlib.util.spec_from_file_location("fairchem_xpu_adapter", helper)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    source = '''class MLIPPredictUnit:
+    source = """class MLIPPredictUnit:
     def __init__(self, device):
         self.inference_settings = settings()
         self._load_model()
@@ -525,7 +596,7 @@ def test_fairchem_xpu_adapter_requires_xpu_and_preserves_cpu_cuda():
     def _setup_device(self, device):
         assert device in ["cpu", "cuda"]
         self.device = device
-'''
+"""
     available = [True]
     namespace = {
         "torch": SimpleNamespace(
@@ -593,9 +664,9 @@ def test_mace_optional_backend_guard_preserves_supported_backends(tmp_path, monk
         assert not module.guard_openequivariance(path)
         assert path.read_text() == original
         for cuda, hip in ((None, None), ("13.0", None), (None, "7.2")):
-            monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(
-                version=SimpleNamespace(cuda=cuda, hip=hip)
-            ))
+            monkeypatch.setitem(
+                sys.modules, "torch", SimpleNamespace(version=SimpleNamespace(cuda=cuda, hip=hip))
+            )
             namespace = {}
             exec(compile(path.read_text(), str(path), "exec"), namespace)
             assert namespace["OEQ_AVAILABLE"] is bool(cuda or hip)

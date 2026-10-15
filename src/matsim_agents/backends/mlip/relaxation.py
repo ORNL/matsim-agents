@@ -145,8 +145,18 @@ def _load_fused_stack(logdir, checkpoint, mlp_checkpoint, precision, mlp_precisi
     from contextlib import nullcontext
 
     (
-        model, mlp, config, device, autocast_ctx, param_dtype, num_branches,
-        _mlp_device, _mlp_autocast_ctx, _unified, gnn_prec, mlp_prec,
+        model,
+        mlp,
+        config,
+        device,
+        autocast_ctx,
+        param_dtype,
+        num_branches,
+        _mlp_device,
+        _mlp_autocast_ctx,
+        _unified,
+        gnn_prec,
+        mlp_prec,
     ) = stack
     if device.type != "xpu":
         raise RuntimeError(f"HydraGNN GNN is on {device}, but XPU was requested")
@@ -154,11 +164,22 @@ def _load_fused_stack(logdir, checkpoint, mlp_checkpoint, precision, mlp_precisi
     unified = mlp_prec == gnn_prec
     mlp_autocast_ctx = (
         torch.autocast("xpu", dtype=torch.bfloat16)
-        if not unified and mlp_prec == "bf16" else nullcontext()
+        if not unified and mlp_prec == "bf16"
+        else nullcontext()
     )
     return (
-        model, mlp, config, device, autocast_ctx, param_dtype, num_branches,
-        device, mlp_autocast_ctx, unified, gnn_prec, mlp_prec,
+        model,
+        mlp,
+        config,
+        device,
+        autocast_ctx,
+        param_dtype,
+        num_branches,
+        device,
+        mlp_autocast_ctx,
+        unified,
+        gnn_prec,
+        mlp_prec,
     )
 
 

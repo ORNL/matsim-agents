@@ -210,8 +210,18 @@ def test_fused_xpu_builder_moves_and_exposes_mlp(tmp_path, monkeypatch, mlp_prec
     config = {"NeuralNetwork": {"Architecture": {}}}
     inference = ModuleType("inference_fused")
     inference.load_fused_stack = lambda *args: (
-        model, mlp, config, device, nullcontext(), torch.float32, 16,
-        torch.device("cpu"), nullcontext(), False, "fp32", mlp_precision,
+        model,
+        mlp,
+        config,
+        device,
+        nullcontext(),
+        torch.float32,
+        16,
+        torch.device("cpu"),
+        nullcontext(),
+        False,
+        "fp32",
+        mlp_precision,
     )
     inference.run_fused_inference = lambda *args, **kwargs: None
     monkeypatch.setitem(sys.modules, "inference_fused", inference)
@@ -240,9 +250,22 @@ def test_fused_xpu_loader_rejects_unavailable_xpu_and_cpu_gnn(monkeypatch):
 
     inference = ModuleType("inference_fused")
     calls = []
-    inference.load_fused_stack = lambda *args: calls.append(args) or (
-        None, None, {}, torch.device("cpu"), None, None, 16,
-        torch.device("cpu"), None, False, "fp32", "fp32",
+    inference.load_fused_stack = lambda *args: (
+        calls.append(args)
+        or (
+            None,
+            None,
+            {},
+            torch.device("cpu"),
+            None,
+            None,
+            16,
+            torch.device("cpu"),
+            None,
+            False,
+            "fp32",
+            "fp32",
+        )
     )
     monkeypatch.setitem(sys.modules, "inference_fused", inference)
     monkeypatch.setattr(torch.xpu, "is_available", lambda: False)
