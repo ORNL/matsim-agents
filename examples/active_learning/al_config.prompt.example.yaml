@@ -20,6 +20,8 @@ vars:
   PROJ_ROOT:    /lustre/orion/mat746/proj-shared/matsim-agents
   RUNS_ROOT:    /lustre/orion/mat746/proj-shared/runs
   HYDRAGNN_DIR: /lustre/orion/mat746/proj-shared/HydraGNN
+  # Override with the local checkout containing hydragnn_finetune/load_model.py.
+  HYDRAGNN_FT_REPO: /lustre/orion/mat746/proj-shared/HydraGNN_GFM_FineTuning4Materials
   RUN_TAG:      al-run-prompt-001
 
   # Prefers OLCF's facility VASP module; falls back to a from-source build
@@ -36,6 +38,8 @@ vars:
 # ---------------------------------------------------------------------------
 
 hydragnn:
+  hydragnn_root: ${HYDRAGNN_DIR}
+  ft_repo: ${HYDRAGNN_FT_REPO}
   logdir: ${INITIAL_LOGDIR}
   checkpoint: best_model.pt
   mlp_checkpoint: null
@@ -101,11 +105,11 @@ trainer:
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
   validation_split_seed: 42
-  train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
+  train_script:   ${PROJ_ROOT}/src/matsim_agents/active_learning/finetune_hydragnn_newhead.py
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5
-  nodes_for_train: 8
-  ranks_per_node: 8
+  nodes_for_train: 1
+  ranks_per_node: 1
 
 loop:
   n_iterations: 10

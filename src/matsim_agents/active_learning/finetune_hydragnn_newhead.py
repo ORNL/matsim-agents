@@ -48,8 +48,6 @@ import shutil
 from pathlib import Path
 
 import numpy as np
-from ase import Atoms
-from ase.io import read as ase_read
 
 from matsim_agents.active_learning.cost import CostReport, count_parameters, track_cost
 from matsim_agents.active_learning.finetune_hydragnn import (
@@ -58,6 +56,7 @@ from matsim_agents.active_learning.finetune_hydragnn import (
     _resolve_hydragnn_paths,
     _split,
 )
+from matsim_agents.active_learning.hydragnn_checkpoint import load_hydragnn_state_dict
 
 log = logging.getLogger(__name__)
 
@@ -254,43 +253,22 @@ def apply_pretrained_head_surgery(
     return model
 
 
+def _resume_single_head_model(model, state_dict, ft_config, *, ft_repo, freeze_mode):
+    model = apply_newhead_surgery(model, ft_config, ft_repo=ft_repo, freeze=False)
+    load_hydragnn_state_dict(model, state_dict)
+    if freeze_mode != "none":
+        model = load_update_model(ft_repo).apply_freeze_mode(
+            model, {"NeuralNetwork": {"Training": {"freeze_mode": freeze_mode}}}
+        )
+    return model
+
+
 # --------------------------------------------------------------------------- #
-# Per-element linear reference energies                                        #
+# Training-label scales                                                       #
 # --------------------------------------------------------------------------- #
 
 
-def _fit_reference_energies(graphs) -> dict[int, float]:
-    """Least-squares per-element linear reference energies ``e_ref[Z]``.
-
-    Solves ``E_total_i approx sum_Z n_{i,Z} * e_ref[Z]`` over ``graphs`` (each
-    carrying a TOTAL DFT energy in eV). Subtracting the per-structure reference
-    sum from the DFT total leaves a small formation-scale target that matches
-    the formation energy HydraGNN's head predicts, which is what keeps the
-    fine-tune from collapsing onto the large raw-energy offset. Fit on the train
-    split only to avoid leakage.
-    """
-    zs = sorted({int(z) for g in graphs for z in g.atomic_numbers.tolist()})
-    col = {z: j for j, z in enumerate(zs)}
-    a = np.zeros((len(graphs), len(zs)), dtype=np.float64)
-    b = np.zeros(len(graphs), dtype=np.float64)
-    for i, g in enumerate(graphs):
-        for z in g.atomic_numbers.tolist():
-            a[i, col[int(z)]] += 1.0
-        b[i] = float(g.energy.item())
-    coef, *_ = np.linalg.lstsq(a, b, rcond=None)
-    return {z: float(coef[col[z]]) for z in zs}
-
-
-def _attach_reference_energies(graphs, e_ref_map: dict[int, float], dtype) -> None:
-    """Attach the per-structure reference sum (TOTAL eV) as ``g.e_ref`` in place."""
-    import torch
-
-    for g in graphs:
-        ref = sum(e_ref_map.get(int(z), 0.0) for z in g.atomic_numbers.tolist())
-        g.e_ref = torch.tensor([ref], dtype=dtype)
-
-
-def _target_scales(train_graphs, e_ref_map: dict[int, float]) -> tuple[float, float]:
+def _target_scales(train_graphs) -> tuple[float, float]:
     """RMS force scale and per-atom formation-energy scale over the train split.
 
     Dividing the force and energy residuals by these scales makes the training
@@ -300,7 +278,6 @@ def _target_scales(train_graphs, e_ref_map: dict[int, float]) -> tuple[float, fl
     collapsing the new head into a constant predictor. Scales are floored so a
     single-composition or near-equilibrium split cannot amplify noise.
     """
-    import numpy as np
 
     sq = 0.0
     n = 0
@@ -310,8 +287,7 @@ def _target_scales(train_graphs, e_ref_map: dict[int, float]) -> tuple[float, fl
         sq += float((f.double() ** 2).sum())
         n += f.numel()
         na = int(g.atomic_numbers.numel())
-        ref = sum(e_ref_map.get(int(z), 0.0) for z in g.atomic_numbers.tolist())
-        peratom.append((float(g.energy.item()) - ref) / max(na, 1))
+        peratom.append(float(g.energy.item()) / max(na, 1))
     f_scale = (sq / max(n, 1)) ** 0.5
     f_scale = f_scale if f_scale > 1e-6 else 1.0
     e_scale = float(np.std(peratom)) if len(peratom) > 1 else 0.0
@@ -324,7 +300,18 @@ def _target_scales(train_graphs, e_ref_map: dict[int, float]) -> tuple[float, fl
 # --------------------------------------------------------------------------- #
 
 
-def _batch_loss_single_head(model, batch, e_w, f_w, *, f_scale=1.0, e_scale=1.0):
+def _batch_loss_single_head(
+    model, batch, e_w, f_w, *, f_scale=1.0, e_scale=1.0, autocast_dtype=None
+):
+    from matsim_agents.active_learning.hydragnn_precision import hydragnn_autocast
+
+    with hydragnn_autocast(batch.pos.device, autocast_dtype):
+        return _batch_loss_single_head_impl(
+            model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale
+        )
+
+
+def _batch_loss_single_head_impl(model, batch, e_w, f_w, *, f_scale=1.0, e_scale=1.0):
     """Energy (per-atom) + force MSE for the single ``branch-0`` head.
 
     ``f_scale``/``e_scale`` normalise the residuals to ``O(1)`` so the objective
@@ -348,19 +335,9 @@ def _batch_loss_single_head(model, batch, e_w, f_w, *, f_scale=1.0, e_scale=1.0)
         create_graph=True,
     )[0]
 
-    # HydraGNN predicts a TOTAL formation energy (eV); the DFT labels are TOTAL
-    # energies (eV) on the raw reference. Subtract the per-structure linear
-    # reference sum so the target is formation-scale and matches the head's
-    # output, then normalise the loss to eV/atom (divide by node_counts) and by
-    # the dataset scales so forces and energy contribute on the same footing.
+    # Labels already contain total-cell formation energies; normalize only.
     e_target = batch.energy.view(num_graphs)
-    e_ref = (
-        batch.e_ref.view(num_graphs)
-        if hasattr(batch, "e_ref") and batch.e_ref is not None
-        else torch.zeros_like(e_target)
-    )
-    e_form_target = e_target - e_ref
-    e_loss = F.mse_loss((energy / node_counts) / e_scale, (e_form_target / node_counts) / e_scale)
+    e_loss = F.mse_loss((energy / node_counts) / e_scale, (e_target / node_counts) / e_scale)
     f_loss = F.mse_loss(forces_pred / f_scale, batch.forces / f_scale)
     return e_w * e_loss + f_w * f_loss
 
@@ -396,6 +373,7 @@ def finetune_hydragnn_newhead(
     device: str | None = None,
     checkpoint_name: str = "ft_model.pk",
     run: bool = True,
+    elemental_reference_manifest: str | Path | None = None,
 ) -> Path:
     """Drop all 16 heads, grow one new ``branch-0`` head, and fine-tune it.
 
@@ -419,10 +397,35 @@ def finetune_hydragnn_newhead(
             f"strategy={strategy!r} does not load pretrained weights"
         )
 
-    root, example_dir = _resolve_hydragnn_paths(hydragnn_root)
+    from matsim_agents.active_learning.formation_training import (
+        prepare_hydragnn_training_frames,
+        save_hydragnn_energy_convention,
+    )
+
     output_dir = Path(output_dir).expanduser().resolve()
+    frames = prepare_hydragnn_training_frames(
+        dataset_path, output_dir, elemental_reference_manifest
+    )
+    root, example_dir = _resolve_hydragnn_paths(hydragnn_root)
     output_dir.mkdir(parents=True, exist_ok=True)
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
+    resume_metadata = None
+    if load_pretrained and (gfm_logdir / "newhead.json").exists():
+        from ase.calculators.calculator import Calculator
+
+        from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+
+        restore_hydragnn_total_energy(Calculator(), gfm_logdir, gfm_checkpoint)
+        previous = json.loads((gfm_logdir / "energy-convention.json").read_text())
+        gfm_checkpoint = gfm_checkpoint or previous["checkpoint"]
+        resume_metadata = json.loads((gfm_logdir / "newhead.json").read_text())
+        if head_arch is not None or (
+            head_index is not None and head_index != resume_metadata["head_index"]
+        ):
+            raise ValueError(
+                "Resuming a single-head checkpoint cannot replace its head architecture"
+            )
+        head_index = resume_metadata["head_index"]
 
     import torch
     from hydragnn.models.create import create_model_config
@@ -438,7 +441,7 @@ def finetune_hydragnn_newhead(
         hcfg = json.load(fh)
     arch = hcfg["NeuralNetwork"]["Architecture"]
     precision_str = hcfg["NeuralNetwork"]["Training"].get("precision", "fp32")
-    _, param_dtype, _ = resolve_precision(precision_str)
+    _, param_dtype, autocast_dtype = resolve_precision(precision_str)
     torch.set_default_dtype(param_dtype)
 
     dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -456,8 +459,6 @@ def finetune_hydragnn_newhead(
     f_w = float(force_weight if force_weight is not None else _w_default)
 
     # --- read dataset ---
-    raw = ase_read(str(dataset_path), index=":")
-    frames = [raw] if isinstance(raw, Atoms) else list(raw)
     if not frames:
         raise ValueError(f"No frames read from {dataset_path}")
 
@@ -473,7 +474,8 @@ def finetune_hydragnn_newhead(
             (k[len("module.") :] if k.startswith("module.") else k): v
             for k, v in state_dict.items()
         }
-        model.load_state_dict(state_dict, strict=False)
+        if resume_metadata is None:
+            load_hydragnn_state_dict(model, state_dict, strict=False)
         log.info("Loaded pretrained backbone from %s", ckpt_path.name)
     else:
         log.info("strategy=scratch: skipping pretrained checkpoint load")
@@ -484,7 +486,13 @@ def finetune_hydragnn_newhead(
     # shape and loads the fine-tuned checkpoint over it regardless of how the
     # head was initialised here (fresh-random vs. kept-pretrained).
     ft_config = build_newhead_ft_config(hcfg, freeze_mode=freeze_mode, head_arch=head_arch)
-    if head_index is not None:
+    if resume_metadata is not None:
+        ft_config = resume_metadata["ft_config"]
+        model = _resume_single_head_model(
+            model, state_dict, ft_config, ft_repo=ft_repo, freeze_mode=freeze_mode
+        )
+        log.info("Resumed fine-tuned backbone and single head without reinitializing readout")
+    elif head_index is not None:
         # Keep the SELECTED pretrained readout (its trained weights) and re-key
         # it as branch-0, instead of growing a random head that must bootstrap
         # force learning from scratch.
@@ -530,20 +538,9 @@ def finetune_hydragnn_newhead(
     train_graphs, val_graphs = _split(graphs, val_fraction, seed)
     log.info("Graphs: %d train / %d val", len(train_graphs), len(val_graphs))
 
-    # Fit per-element linear reference energies on the TRAIN split and subtract
-    # them so the head regresses formation-scale energies (see loss docstring).
-    e_ref_map = _fit_reference_energies(train_graphs)
-    _attach_reference_energies(train_graphs, e_ref_map, param_dtype)
-    _attach_reference_energies(val_graphs, e_ref_map, param_dtype)
-    log.info(
-        "Fitted per-element reference energies (%d elements): %s",
-        len(e_ref_map),
-        {int(k): round(v, 3) for k, v in e_ref_map.items()},
-    )
-
     # Force/energy normalisation scales (train split only); 1.0 disables it.
     if normalize:
-        f_scale, e_scale = _target_scales(train_graphs, e_ref_map)
+        f_scale, e_scale = _target_scales(train_graphs)
     else:
         f_scale, e_scale = 1.0, 1.0
     log.info(
@@ -589,7 +586,15 @@ def finetune_hydragnn_newhead(
     if not run:
         loader = DataLoader(train_graphs, batch_size=min(batch_size, len(train_graphs)))
         batch = next(iter(loader)).to(dev)
-        loss = _batch_loss_single_head(model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale)
+        loss = _batch_loss_single_head(
+            model,
+            batch,
+            e_w,
+            f_w,
+            f_scale=f_scale,
+            e_scale=e_scale,
+            autocast_dtype=autocast_dtype,
+        )
         log.info("Dry-run forward OK; loss=%.6f", float(loss.detach()))
         return output_dir
 
@@ -626,7 +631,13 @@ def finetune_hydragnn_newhead(
                 batch = batch.to(dev)
                 optimizer.zero_grad(set_to_none=True)
                 loss = _batch_loss_single_head(
-                    model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale
+                    model,
+                    batch,
+                    e_w,
+                    f_w,
+                    f_scale=f_scale,
+                    e_scale=e_scale,
+                    autocast_dtype=autocast_dtype,
                 )
                 loss.backward()
                 if grad_clip and grad_clip > 0:
@@ -645,7 +656,13 @@ def finetune_hydragnn_newhead(
                 for batch in val_loader:
                     batch = batch.to(dev)
                     vloss = _batch_loss_single_head(
-                        model, batch, e_w, f_w, f_scale=f_scale, e_scale=e_scale
+                        model,
+                        batch,
+                        e_w,
+                        f_w,
+                        f_scale=f_scale,
+                        e_scale=e_scale,
+                        autocast_dtype=autocast_dtype,
                     )
                     vrun += float(vloss.detach()) * batch.num_graphs
                 selection_mse = vrun / max(len(val_graphs), 1)
@@ -679,11 +696,12 @@ def finetune_hydragnn_newhead(
                 "normalize": normalize,
                 "f_scale": f_scale,
                 "e_scale": e_scale,
-                "reference_energies": {str(k): v for k, v in e_ref_map.items()},
+                "energy_convention": "dft:declared_elemental_formation_energy",
             },
             indent=2,
         )
     )
+    save_hydragnn_energy_convention(output_dir, ckpt_out)
     report.write(output_dir / "cost.json")
     log.info(
         "New-head fine-tune complete [%s] -> %s (%.1fs, %.4f GPU-h)",
@@ -698,6 +716,7 @@ def finetune_hydragnn_newhead(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--dataset", required=True, help="AL-collected extxyz dataset.")
+    parser.add_argument("--elemental-reference-manifest", required=True)
     parser.add_argument("--output-dir", required=True, help="Output logdir.")
     parser.add_argument("--gfm-logdir", required=True, help="GFM dir (config.json + .pk).")
     parser.add_argument("--strategy", default="unfrozen", choices=list(STRATEGIES))
@@ -761,6 +780,7 @@ def main(argv: list[str] | None = None) -> int:
         device=args.device,
         checkpoint_name=args.checkpoint_name,
         run=not args.dry_run,
+        elemental_reference_manifest=args.elemental_reference_manifest,
     )
     return 0
 

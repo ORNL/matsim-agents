@@ -20,6 +20,7 @@
 
 vars:
   PROJ_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/matsim-agents
+  TRAIN_LAUNCHER: ${PROJ_ROOT}/deployments/perlmutter/launchers/_hydragnn-train-step-perlmutter.sh
   RUNS_ROOT:    /global/cfs/projectdirs/m5216/mlupopa/runs
   HYDRAGNN_DIR: /global/cfs/projectdirs/m5216/mlupopa/matsim-agents/HydraGNN
   RUN_TAG:      hea-bcc-al-001
@@ -36,6 +37,7 @@ mlip:
   backend: ${MLIP_BACKEND:-hydragnn}
   hydragnn:
     logdir:         ${INITIAL_LOGDIR}
+    hydragnn_root:  ${HYDRAGNN_DIR}
     checkpoint:     best_model.pt
     mlp_checkpoint: null
     charge: 0.0
@@ -124,11 +126,11 @@ trainer:
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
   validation_split_seed: 42
-  train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
-  train_launcher: ${TRAIN_LAUNCHER:-/global/cfs/projectdirs/m5216/mlupopa/matsim-agents/deployments/perlmutter/launchers/_hydragnn-train-step-perlmutter.sh}
+  train_script:   ${PROJ_ROOT}/src/matsim_agents/active_learning/finetune_hydragnn_newhead.py
+  train_launcher: ${TRAIN_LAUNCHER}
   epochs_per_iter: 5
-  nodes_for_train: 4
-  ranks_per_node:  4
+  nodes_for_train: 1
+  ranks_per_node:  1
 
 loop:
   n_iterations: 12

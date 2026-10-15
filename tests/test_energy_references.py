@@ -65,6 +65,24 @@ def test_formation_comparison_removes_only_elemental_offsets(elemental_manifest,
     ] == pytest.approx(110.0)
 
 
+def test_evaluation_only_probes_required_elements_from_superset_manifest(
+    elemental_manifest, monkeypatch
+):
+    manifest = elemental_manifest({"Nb": -10.0, "O": -5.0, "Ti": -7.0})
+    calculator = OffsetCalculator()
+    monkeypatch.setattr(
+        "matsim_agents.active_learning.calculator.make_mlip_calculator",
+        lambda _cfg: calculator,
+    )
+    metrics, _ = evaluate_frames(
+        MLIPConfig(backend="uma", uma=UMAConfig()),
+        [Atoms("NbO2", info={"energy": -23.0})],
+        elemental_reference_manifest=manifest,
+    )
+    assert calculator.calls == [{"Nb"}, {"O"}, {"Nb", "O"}]
+    assert set(metrics.elemental_reference_provenance["references"]) == {"Nb", "O"}
+
+
 @pytest.mark.parametrize("defect", ["coverage", "hash", "mixed", "nonfinite", "backend"])
 def test_invalid_elemental_references_fail_before_model_predictions(elemental_manifest, defect):
     manifest = elemental_manifest({"Nb": -10.0, "O": -5.0})
@@ -192,6 +210,28 @@ def test_compound_sidecar_method_validation(tmp_path, defect):
             )
 
 
+def test_component_method_validation_rejects_omitted_dataset_species(tmp_path):
+    dataset = tmp_path / "compound.extxyz"
+    write(dataset, Atoms("NbO2", info={"energy": -23.0}))
+    metadata = {
+        "dft_backend": "qe",
+        "method_signature": "wrong-compound-signature",
+        "method_signature_elements": ["Nb"],
+        "base_method_signature": "base-dft",
+        "element_method_signatures": {"Nb": "nb-dft"},
+        "sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
+    }
+    dataset.with_suffix(".extxyz.manifest.json").write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match="different DFT methods"):
+        validate_dataset_reference_method(
+            dataset,
+            reference_backend="qe",
+            reference_method_signature="reference-compound-signature",
+            reference_base_method_signature="base-dft",
+            reference_element_method_signatures={"Nb": "nb-dft", "O": "o-dft"},
+        )
+
+
 @pytest.mark.parametrize("entrypoint", ["evaluation", "promotion", "finetune"])
 @pytest.mark.parametrize("defect", ["missing", "backend", "signature", "hash"])
 def test_energy_comparison_rejects_unverified_method_before_inference(
@@ -279,7 +319,7 @@ def test_finetune_split_preserves_verified_method(
         elemental_reference_manifest=reference,
     )
     with pytest.raises(StopBeforeTraining):
-        finetune_eval.run_campaign(dataset, output, **kwargs)
+        finetune_eval.run_campaign(str(dataset), output, **kwargs)
     if reuse_defect is not None:
         test_path = output / "split/test_set.extxyz"
         if reuse_defect == "missing":
@@ -292,6 +332,51 @@ def test_finetune_split_preserves_verified_method(
     else:
         with pytest.raises(StopBeforeTraining):
             finetune_eval.run_campaign(dataset, output, eval_only=True, **kwargs)
+
+
+@pytest.mark.parametrize("backend", ["uma", "mace"])
+def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
+    tmp_path, elemental_manifest, monkeypatch, backend
+):
+    from matsim_agents.active_learning import finetune_eval
+
+    dataset = tmp_path / "dataset.extxyz"
+    write(dataset, [Atoms("NbO2", info={"energy": -23.0}) for _ in range(4)])
+    reference = elemental_manifest({"Nb": -10.0, "O": -5.0})
+    dataset.with_suffix(".extxyz.manifest.json").write_text(
+        json.dumps(
+            {
+                "sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
+                "dft_backend": "qe",
+                "method_signature": "synthetic-dft",
+            }
+        )
+    )
+    output = tmp_path / "campaign"
+    monkeypatch.setattr(finetune_eval, "_enforce_device_visibility", lambda _device: None)
+
+    class StopBeforeTraining(Exception):
+        pass
+
+    def check_split(*_args, **_kwargs):
+        for path in (output / "split/train.extxyz", output / "split/test_set.extxyz"):
+            validate_dataset_reference_method(
+                path,
+                reference_backend="qe",
+                reference_method_signature="synthetic-dft",
+                require_sidecar=True,
+            )
+        raise StopBeforeTraining
+
+    monkeypatch.setattr(finetune_eval, "_run_eval", check_split)
+    with pytest.raises(StopBeforeTraining):
+        finetune_eval.run_campaign(
+            dataset,
+            output,
+            backend=backend,
+            device="cpu",
+            elemental_reference_manifest=reference,
+        )
 
 
 @pytest.mark.parametrize(

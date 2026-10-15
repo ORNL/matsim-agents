@@ -294,6 +294,7 @@ def run_campaign(
     # downstream, so an explicit CPU request is actually honoured.
     _enforce_device_visibility(device)
 
+    dataset_path = Path(dataset_path).expanduser().resolve()
     output_dir = Path(output_dir).expanduser().resolve()
     (output_dir / "split").mkdir(parents=True, exist_ok=True)
     eval_dir = output_dir / "eval"
@@ -318,8 +319,17 @@ def run_campaign(
         dataset_path,
         reference_backend=manifest["backend"],
         reference_method_signature=manifest["method_signature"],
+        reference_base_method_signature=manifest.get("base_method_signature"),
+        reference_element_method_signatures=manifest.get("element_method_signatures"),
         require_sidecar=True,
     )
+    from matsim_agents.active_learning.dataset_governance import DatasetManifest
+
+    source_metadata = json.loads(
+        dataset_path.with_suffix(dataset_path.suffix + ".manifest.json").read_text()
+    )
+    if backend == "hydragnn":
+        source_metadata = DatasetManifest.model_validate(source_metadata).model_dump()
 
     train_frames, test_frames = _split_dataset(frames, test_fraction, seed)
     n_iters = _num_al_iterations(frames)
@@ -343,9 +353,18 @@ def run_campaign(
         ):
             write_dataset_manifest(
                 split_path,
-                dft_backend=manifest["backend"],
-                method_signature=manifest["method_signature"],
-                energy_reference=f"{manifest['backend']}:native_total_energy",
+                dft_backend=source_metadata["dft_backend"],
+                method_signature=source_metadata.get("method_signature"),
+                method_signature_elements=(
+                    set(source_metadata["method_signature_elements"])
+                    if source_metadata.get("method_signature_elements") is not None
+                    else None
+                ),
+                base_method_signature=source_metadata.get("base_method_signature"),
+                element_method_signatures=source_metadata.get("element_method_signatures"),
+                energy_reference=source_metadata.get(
+                    "energy_reference", f"{source_metadata['dft_backend']}:native_total_energy"
+                ),
                 validation=DatasetValidationSummary(accepted=len(split_frames)),
                 split_role=split_role,
             )
@@ -354,6 +373,8 @@ def run_campaign(
             split_path,
             reference_backend=manifest["backend"],
             reference_method_signature=manifest["method_signature"],
+            reference_base_method_signature=manifest.get("base_method_signature"),
+            reference_element_method_signatures=manifest.get("element_method_signatures"),
             require_sidecar=True,
         )
     log.info(
@@ -493,6 +514,7 @@ def run_campaign(
                 ft_logdir = finetune_hydragnn(
                     train_path,
                     ft_dir,
+                    elemental_reference_manifest=reference_manifest,
                     gfm_logdir=gfm_logdir,
                     branch_mlp_path=branch_mlp_path,
                     gfm_checkpoint=base_ckpt,
@@ -524,6 +546,7 @@ def run_campaign(
                 ft_logdir = finetune_hydragnn_newhead(
                     train_path,
                     ft_dir,
+                    elemental_reference_manifest=reference_manifest,
                     gfm_logdir=gfm_logdir,
                     strategy=hydragnn_strategy,
                     head=hydragnn_head,
