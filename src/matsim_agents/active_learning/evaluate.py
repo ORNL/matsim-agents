@@ -243,6 +243,8 @@ def evaluate_frames(
             test_set_label,
             reference_backend=manifest["backend"],
             reference_method_signature=manifest["method_signature"],
+            reference_base_method_signature=manifest.get("base_method_signature"),
+            reference_element_method_signatures=manifest.get("element_method_signatures"),
             require_sidecar=True,
         )
     calc = make_mlip_calculator(mlip_cfg)
@@ -433,6 +435,8 @@ def evaluate_promotion_candidate(
             training_path,
             reference_backend=manifest["backend"],
             reference_method_signature=manifest["method_signature"],
+            reference_base_method_signature=manifest.get("base_method_signature"),
+            reference_element_method_signatures=manifest.get("element_method_signatures"),
         )
 
     incumbent_cfg = cfg.mlip.model_copy(deep=True)

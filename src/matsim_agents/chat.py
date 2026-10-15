@@ -21,6 +21,7 @@ from typing import Callable
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
+from matsim_agents.active_learning.hydragnn_energy import has_declared_hydragnn_checkpoint
 from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
 from matsim_agents.backends.mlip.relaxation import _run as _run_relaxation
@@ -124,7 +125,11 @@ class DiscoveryChatConfig:
                     "mlip_backend='hydragnn' requires 'logdir' "
                     "(HydraGNN logdir containing config.json + checkpoint)."
                 )
-            if not self.hydragnn_branch_mlp_checkpoint and self.hydragnn_inference_head is None:
+            if (
+                not self.hydragnn_branch_mlp_checkpoint
+                and self.hydragnn_inference_head is None
+                and not has_declared_hydragnn_checkpoint(self.logdir)
+            ):
                 raise ValueError(
                     "mlip_backend='hydragnn' requires 'hydragnn_branch_mlp_checkpoint' "
                     "(BranchWeightMLP .pt checkpoint)."

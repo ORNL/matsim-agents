@@ -102,6 +102,11 @@ compatibility. These inputs are existing DFT calculations, not requests to run
 DFT automatically. See the
 [manifest schema and promotion contract](../../docs/scientific-workflows.md#formation-energy-comparisons-and-campaign-promotion).
 
+For built-in HydraGNN fine-tuning, set `hydragnn.hydragnn_root` to the HydraGNN
+source checkout (the Frontier examples use `${HYDRAGNN_DIR}`). The training
+launcher forwards this path to the fine-tuner so it does not rely on a
+machine-specific default checkout location.
+
 ## How this relates to other workflows
 
 The repository now exposes several connected workflows. This README documents

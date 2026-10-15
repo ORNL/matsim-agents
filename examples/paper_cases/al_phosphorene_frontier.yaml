@@ -29,6 +29,7 @@ vars:
   PROJ_ROOT:    ${PROJ_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/matsim-agents}
   RUNS_ROOT:    ${RUNS_ROOT:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/runs}
   HYDRAGNN_DIR: ${HYDRAGNN_DIR:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN}
+  HYDRAGNN_FT_REPO: ${HYDRAGNN_FT_REPO:-/lustre/orion/lrn070/proj-shared/mlupopa/matstim-folder/HydraGNN_GFM_FineTuning4Materials}
   RUN_TAG:      phosphorene-2d-frontier-al-001
 
   SEED_XYZ:   ${PROJ_ROOT}/examples/paper_cases/seeds/phosphorene_black_P.extxyz
@@ -43,6 +44,8 @@ mlip:
   # Frontier's venv is HydraGNN/ROCm; UMA (fairchem) is not installed there.
   backend: ${MLIP_BACKEND:-hydragnn}
   hydragnn:
+    hydragnn_root: ${HYDRAGNN_DIR}
+    ft_repo: ${HYDRAGNN_FT_REPO}
     logdir:         ${INITIAL_LOGDIR}
     checkpoint:     best_model.pt
     mlp_checkpoint: null
@@ -121,11 +124,11 @@ trainer:
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
   validation_split_seed: 42
-  train_script:   ${HYDRAGNN_DIR}/examples/mptrj/train.py
+  train_script:   ${PROJ_ROOT}/src/matsim_agents/active_learning/finetune_hydragnn_newhead.py
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5
-  nodes_for_train: 4
-  ranks_per_node:  8
+  nodes_for_train: 1
+  ranks_per_node:  1
 
 loop:
   n_iterations: 8

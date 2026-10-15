@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from copy import deepcopy
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -96,7 +97,16 @@ class RelaxStructureInput(BaseModel):
         if self.mlip_backend == "hydragnn":
             if not self.logdir:
                 raise ValueError("mlip_backend='hydragnn' requires logdir.")
-            if not self.hydragnn_branch_mlp_checkpoint and self.hydragnn_inference_head is None:
+            from matsim_agents.active_learning.hydragnn_energy import (
+                has_declared_hydragnn_checkpoint,
+            )
+
+            has_declared_checkpoint = has_declared_hydragnn_checkpoint(self.logdir)
+            if (
+                not self.hydragnn_branch_mlp_checkpoint
+                and self.hydragnn_inference_head is None
+                and not has_declared_checkpoint
+            ):
                 raise ValueError("mlip_backend='hydragnn' requires hydragnn_branch_mlp_checkpoint.")
         return self
 
@@ -401,7 +411,8 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
     )
 
     if args.mlip_backend == "hydragnn":
-        if args.hydragnn_inference_head is not None:
+        declared_checkpoint = Path(args.logdir) / "energy-convention.json"
+        if args.hydragnn_inference_head is not None or declared_checkpoint.exists():
             from matsim_agents.active_learning.calculator import build_hydragnn_calculator
             from matsim_agents.active_learning.config import HydraGNNConfig
 
@@ -417,13 +428,24 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                     spin=args.spin,
                 )
             )
-            num_branches = 1
+            num_branches = (
+                1
+                if args.hydragnn_inference_head is not None
+                else int(getattr(calculator.model, "num_branches", 1))
+            )
+            active_branches = int(getattr(calculator, "active_branch_count", num_branches))
             uq_note = (
-                "HydraGNN inference pinned to "
-                f"{calculator.inference_head_name} head ({calculator.inference_head_index}); "
-                "branch-weight UQ disabled"
+                "HydraGNN has fewer than two active branches; branch-weight UQ disabled"
+                if active_branches < 2
+                else None
             )
         else:
+            from ase.calculators.calculator import Calculator
+
+            from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+
+            restore_hydragnn_total_energy(Calculator(), Path(args.logdir), args.checkpoint)
+
             (
                 model,
                 mlp,
@@ -445,6 +467,7 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 args.mlp_precision,
                 args.mlp_device,
             )
+            active_branches = num_branches
 
             arch = config["NeuralNetwork"]["Architecture"]
             radius = float(arch.get("radius", 5.0))
@@ -479,6 +502,7 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
             enable_mc_dropout=False,
         )
         num_branches = 0
+        active_branches = 0
         uq_note = "branch-weight UQ unavailable for UMA backend"
     else:
         from matsim_agents.active_learning.calculator import build_mace_calculator
@@ -495,6 +519,7 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
             enable_mc_dropout=False,
         )
         num_branches = 0
+        active_branches = 0
         uq_note = "branch-weight UQ unavailable for MACE backend"
 
     atoms = read(structure_path)
@@ -561,7 +586,11 @@ def _run(args: RelaxStructureInput) -> RelaxationResult:
                 max_force = float(np.sqrt((opt_forces**2).sum(axis=1).max()))
                 weights = getattr(calculator, "last_branch_weights", None)
                 top_branch = int(np.argmax(weights)) if weights is not None else -1
-                top_weight = float(weights[top_branch]) if weights is not None else float("nan")
+                top_weight = (
+                    float(weights[top_branch])
+                    if weights is not None and active_branches >= 2
+                    else float("nan")
+                )
 
                 traj_writer.write()
 

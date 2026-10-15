@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from contextlib import nullcontext
 from types import ModuleType, SimpleNamespace
@@ -67,6 +68,128 @@ def test_pinned_head_does_not_require_branch_weight_mlp(tmp_path):
     assert resolve_hydragnn_inference_head(config.inference_head) == 7
     assert request.hydragnn_branch_mlp_checkpoint is None
     assert chat.hydragnn_branch_mlp_checkpoint is None
+
+
+@pytest.mark.parametrize("declared", [False, True])
+def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
+    tmp_path, monkeypatch, declared
+):
+    from matsim_agents.agents import executor
+    from matsim_agents.orchestration.state import MatSimState, TaskSpec
+
+    logdir = tmp_path / "model"
+    logdir.mkdir()
+    if declared:
+        (logdir / "energy-convention.json").write_text("{}")
+    for env in ("HYDRAGNN_BRANCH_MLP_CHECKPOINT", "MATSIM_HYDRAGNN_INFERENCE_HEAD"):
+        monkeypatch.delenv(env, raising=False)
+    captured = []
+
+    def run(args):
+        captured.append(args)
+        return SimpleNamespace(
+            structure_path=args.structure_path,
+            final_energy_eV=-1,
+            final_max_force_eV_per_A=0,
+            num_steps=1,
+        )
+
+    monkeypatch.setattr(executor, "_run", run)
+    state = MatSimState(pending_tasks=[TaskSpec(structure_path="structure.extxyz")])
+    if declared:
+        chat = DiscoveryChatConfig(logdir=str(logdir))
+        request = RelaxStructureInput(structure_path="structure.extxyz", logdir=str(logdir))
+        result = executor.executor_node(
+            state, {"configurable": {"mlip_backend": "hydragnn", "logdir": str(logdir)}}
+        )
+        assert chat.hydragnn_branch_mlp_checkpoint is None
+        assert request.hydragnn_branch_mlp_checkpoint is None
+        assert captured[0].hydragnn_branch_mlp_checkpoint is None
+        assert len(result["results"]) == 1
+    else:
+        with pytest.raises(ValueError, match="BranchWeightMLP"):
+            DiscoveryChatConfig(logdir=str(logdir))
+        with pytest.raises(ValueError, match="hydragnn_branch_mlp_checkpoint"):
+            RelaxStructureInput(structure_path="structure.extxyz", logdir=str(logdir))
+        with pytest.raises(ValueError, match="BranchWeightMLP"):
+            executor.executor_node(
+                state, {"configurable": {"mlip_backend": "hydragnn", "logdir": str(logdir)}}
+            )
+        assert not captured
+
+
+@pytest.mark.parametrize("active_branches", [1, 2])
+def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active_branches):
+    import numpy as np
+    from ase import Atoms
+    from ase.calculators.calculator import Calculator, all_changes
+    from ase.io import write
+
+    import matsim_agents.active_learning.calculator as factory
+    import matsim_agents.backends.mlip.relaxation as relaxation
+
+    class RoutedCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+        model = SimpleNamespace(num_branches=16)
+        active_branch_count = active_branches
+        last_branch_weights = np.array([1.0] + [0.0] * 15)
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            self.results = {"energy": -1.0, "forces": np.zeros((len(atoms), 3))}
+
+    logdir = tmp_path / "model"
+    logdir.mkdir()
+    (logdir / "energy-convention.json").write_text("{}")
+    structure = tmp_path / "structure.extxyz"
+    write(structure, Atoms("Si", cell=[5, 5, 5], pbc=True))
+    monkeypatch.setattr(factory, "build_hydragnn_calculator", lambda cfg: RoutedCalculator())
+    result = relaxation._run(
+        RelaxStructureInput(structure_path=str(structure), logdir=str(logdir), maxiter=1)
+    )
+    assert result.top_branch == 0
+    if active_branches == 1:
+        assert result.top_branch_weight is None
+        assert "branch-weight UQ disabled" in result.notes
+    else:
+        assert result.top_branch_weight == pytest.approx(1)
+        assert result.notes is None
+
+
+@pytest.mark.parametrize("metadata_name", ["routing.json", "newhead.json", None])
+def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
+    tmp_path, monkeypatch, metadata_name
+):
+    import matsim_agents.backends.mlip.relaxation as relaxation
+
+    logdir = tmp_path / "model"
+    logdir.mkdir()
+    if metadata_name is not None:
+        (logdir / metadata_name).write_text(json.dumps({"reference_energies": {"Si": -1}}))
+    inference = ModuleType("inference_fused")
+    loaded = []
+
+    def load(*args):
+        loaded.append(args)
+        raise RuntimeError("foundation loader reached")
+
+    inference.load_fused_stack = load
+    monkeypatch.setitem(sys.modules, "inference_fused", inference)
+    request = RelaxStructureInput(
+        structure_path=str(tmp_path / "structure.extxyz"),
+        output_dir=str(tmp_path / "output"),
+        logdir=str(logdir),
+        hydragnn_branch_mlp_checkpoint=str(tmp_path / "mlp.pt"),
+    )
+
+    if metadata_name is None:
+        with pytest.raises(RuntimeError, match="foundation loader reached"):
+            relaxation._run(request)
+        assert len(loaded) == 1
+    else:
+        with pytest.raises(ValueError, match="lacks verified energy convention"):
+            relaxation._run(request)
+        assert not loaded
 
 
 def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):

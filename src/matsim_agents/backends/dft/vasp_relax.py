@@ -306,6 +306,7 @@ class VASPRelaxResult:
     energies_eV: list[float]  # one per ionic step
     final_energy_eV: float | None
     final_max_force_eV_per_A: float | None
+    final_stress_eV_per_A3: Any | None
     final_atoms: Any | None  # ASE Atoms or None
     wall_time_sec: float | None
 
@@ -320,6 +321,11 @@ class VASPRelaxResult:
             "energies_eV": list(self.energies_eV),
             "final_energy_eV": self.final_energy_eV,
             "final_max_force_eV_per_A": self.final_max_force_eV_per_A,
+            "final_stress_eV_per_A3": (
+                None
+                if self.final_stress_eV_per_A3 is None
+                else self.final_stress_eV_per_A3.tolist()
+            ),
             "wall_time_sec": self.wall_time_sec,
         }
 
@@ -348,6 +354,7 @@ def parse_relax_outputs(work_dir: str | Path, return_code: int = 0) -> VASPRelax
     scf_per_step: list[int] = []
     final_atoms: Any | None = None
     final_force: float | None = None
+    final_stress: Any | None = None
 
     # ---- vasprun.xml: full trajectory ---------------------------------------
     if os.path.isfile(vasprun) and os.path.getsize(vasprun) > 0:
@@ -365,6 +372,8 @@ def parse_relax_outputs(work_dir: str | Path, return_code: int = 0) -> VASPRelax
                 if final_atoms.calc is not None and "forces" in final_atoms.calc.results:
                     f = np.asarray(final_atoms.calc.results["forces"], dtype=np.float64)
                     final_force = float(np.linalg.norm(f, axis=1).max())
+                if final_atoms.calc is not None and "stress" in final_atoms.calc.results:
+                    final_stress = np.asarray(final_atoms.calc.results["stress"], dtype=np.float64)
         except Exception:  # noqa: BLE001 — many possible XML errors
             pass
 
@@ -420,6 +429,7 @@ def parse_relax_outputs(work_dir: str | Path, return_code: int = 0) -> VASPRelax
         energies_eV=energies,
         final_energy_eV=final_energy,
         final_max_force_eV_per_A=final_force,
+        final_stress_eV_per_A3=final_stress,
         final_atoms=final_atoms,
         wall_time_sec=wall_sec,
     )
