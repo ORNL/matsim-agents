@@ -127,28 +127,29 @@ endif
 CRAYFTNVER=$(shell crayftn --version 2>/dev/null | grep "Version" | sed -n 's/.*Version \([0-9]\+\)\..*/\1/p')
 CPP_OPTIONS += -D__DCRAYFTN_VERSION=$(CRAYFTNVER)
 
-### special cray workarounds cce v19.0.0, remove for cce20
+### special cray workarounds cce v19.0.0, removed now that we build with cce/20.0.2.
+### (kept here, commented out, in case a regression forces a downgrade back to cce 18.x/19.x)
  # error Unsupported OpenMP construct Calls -- _cray_dv_broadcast : W_G%CPTWFP=0
- OBJECTS_O2 += rot.o
+ # OBJECTS_O2 += rot.o
  # fexcg has to be higher optimization level for kernel not too spill
- OBJECTS_O2 += fexcg.o mbj.o ldalib.o ggalib.o mggalib.o
+ # OBJECTS_O2 += fexcg.o mbj.o ldalib.o ggalib.o mggalib.o
  # error: unexpected type in TYPE_DEREF l818 (copyin_wavefun1_array)
- OBJECTS_O1 += openmp.o
+ # OBJECTS_O1 += openmp.o
  # error: unexpected type in TYPE_DEREF l724 (twoelectron4o_acc)
- OBJECTS_O1 += twoelectron4o.o
+ # OBJECTS_O1 += twoelectron4o.o
  # error: unexpected type in TYPE_DEREF l377 (calculate_local_field_fock)
- OBJECTS_O1 += local_field.o
+ # OBJECTS_O1 += local_field.o
  # for the next problem we use OBJECTS_O3 to remove omp
- FFLAGS_3 += -hnoomp
+ # FFLAGS_3 += -hnoomp
  # error: Found inner_ref/inner_def object without Fortran internal procedure  l5515
- OBJECTS_O3 += bse.o
+ # OBJECTS_O3 += bse.o
  # error: Found inner_ref/inner_def object without Fortran internal procedure l1644
- OBJECTS_O3 += GG_base.o
+ # OBJECTS_O3 += GG_base.o
  # cce 18.x: ERROR Unsupported OpenMP construct Calls -- split_cmplx_atomic_add_from_cmplx
  # (only reached when building with MODS=0 so this per-file -hnoomp rule applies)
- OBJECTS_O3 += vdw_nl.o
+ # OBJECTS_O3 += vdw_nl.o
  # MLFF problems with ISTART=2
- OBJECTS_O1 += ml_ff_math.o ml_ff_ff2.o
+ # OBJECTS_O1 += ml_ff_math.o ml_ff_ff2.o
  # cce 18.x: optcg (code generator) aborts with SIGABRT at -O2; drop to -O1
- OBJECTS_O1 += finite_diff.o
+ # OBJECTS_O1 += finite_diff.o
 #################
