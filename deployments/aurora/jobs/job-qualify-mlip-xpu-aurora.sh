@@ -37,7 +37,7 @@ for backend in hydragnn uma mace; do
         uma) python="${REPO}/.venv-uma/bin/python" ;;
         mace) python="${REPO}/.venv-mace/bin/python" ;;
     esac
-    if timeout 480 mpiexec -n 1 --ppn 1 "${python}" \
+    if timeout --kill-after=30 480 mpiexec -n 1 --ppn 1 "${python}" \
         "${REPO}/deployments/aurora/jobs/qualify_mlip_xpu.py" \
         --backend "${backend}" --output "${RUN_DIR}/${backend}.json" \
         --hydragnn-logdir "${MATSIM_HYDRAGNN_LOGDIR:-${HYDRA_EXAMPLE}/multidataset_hpo-BEST6-fp64}" \
@@ -46,6 +46,25 @@ for backend in hydragnn uma mace; do
         --mace-model "${MATSIM_MACE_MODEL:-small}" >"${RUN_DIR}/${backend}.log" 2>&1; then
         printf '%s PASSED\n' "${backend}"
     else
+        launcher_status=$?
+        "${python}" -I -S - "${RUN_DIR}/${backend}.json" "${backend}" "${launcher_status}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+result = json.loads(path.read_text()) if path.exists() else {"backend": sys.argv[2]}
+progress_path = path.with_suffix(".progress.json")
+if progress_path.exists():
+    result["progress"] = json.loads(progress_path.read_text())
+result["launcher_exit_code"] = int(sys.argv[3])
+if result["launcher_exit_code"] in (124, 137):
+    result["inference_status"] = result.get("status", "INCOMPLETE")
+    result["status"] = "TIMED_OUT"
+else:
+    result["status"] = "FAILED"
+path.write_text(json.dumps(result, indent=2) + "\n")
+PY
         printf '%s FAILED; inspect %s\n' "${backend}" "${RUN_DIR}/${backend}.log"
         failed=1
     fi

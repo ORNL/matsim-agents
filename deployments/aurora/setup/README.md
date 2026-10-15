@@ -109,6 +109,13 @@ and `QUALIFICATION_RUN_DIR` override inputs/output. The model configuration
 accepts explicit `xpu` devices; actual support is determined by this test, not
 by configuration acceptance alone.
 
+Each model writes a timed `.progress.json` before imports, XPU setup, checkpoint
+loading, energy/force prediction, synchronization, and residency checks. Logs
+include Python stack dumps every 90 seconds and on termination. Launcher
+timeouts also produce result JSON, including the last recorded stage; the
+eight-minute limit has a 30-second forced-cleanup grace period. UMA residency
+is checked after prediction because FairChem initializes device placement lazily.
+
 ## Model Download Safety Policy
 
 See the canonical cross-platform policy in `docs/model-download-safety.md`.
@@ -187,10 +194,20 @@ RECREATE_ENV=1 bash deployments/aurora/setup/install.sh
 
 Aurora's Torch `2.13.0a0+gitcf30153` does not satisfy upstream FairChem's stable
 `torch~=2.13.0` metadata. The UMA installer downloads FairChem 2.23.0 and creates
-an Aurora-only wheel with a `1aurora` build tag. Only its Torch requirement is
-changed to the exact framework version; model code and all other dependencies
-remain unchanged and pip resolves them normally. `AURORA_FAIRCHEM_VERSION`
-can select a 2.22/2.23 release; other Torch profiles are rejected.
+an Aurora-only wheel with an explicit compatibility build tag. Its Torch
+requirement is changed to the exact framework version. The installer additionally enables
+an experimental FairChem 2.23.0 XPU device-initialization adapter, identified by
+the `2auroraxpu` wheel build tag. Other FairChem versions are rejected for this
+adapter. All other dependencies are resolved normally; after resolution, only
+the selected FairChem wheel is force-reinstalled to replace any same-version
+older compatibility build.
+
+For an explicit XPU request, the adapter requires a visible XPU, selects that
+device instead of rejecting it, and uses general uncompiled inference with
+TF32 and MOLE merging disabled. It does not modify model weights or tensor
+operations, and it does not permit CPU fallback. CPU/CUDA setup is unchanged.
+This is an XPU compatibility experiment, not evidence that checkpoint inference
+has passed on Intel hardware.
 
 The upstream wheel, patched wheel, and JSON provenance with SHA-256 hashes are
 retained under `.hpc-build/aurora/fairchem/<version>/`. This override is

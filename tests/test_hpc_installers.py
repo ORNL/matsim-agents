@@ -193,13 +193,20 @@ def test_runtime_dependency_audit_checks_selected_extras_and_transitive_requirem
     ]
 
 
-def test_aurora_xpu_qualification_rejects_invalid_predictions():
+def test_aurora_xpu_qualification_rejects_invalid_predictions(tmp_path):
+    import json
+
     import pytest
 
     helper = ROOT / "deployments/aurora/jobs/qualify_mlip_xpu.py"
     spec = importlib.util.spec_from_file_location("qualify_mlip_xpu", helper)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    progress = module.Progress(tmp_path / "uma.json", "uma")
+    progress.stage("predict_energy")
+    record = json.loads((tmp_path / "uma.progress.json").read_text())
+    assert record["stage"] == "predict_energy" and record["backend"] == "uma"
+    assert record["elapsed_seconds"] >= 0
     module.validate_predictions(-1.0, [[0.0, 0.0, 0.0]], 1)
     for energy, forces in (
         (float("nan"), [[0.0, 0.0, 0.0]]),
@@ -314,6 +321,52 @@ def test_aurora_fairchem_wheel_changes_only_torch_dependency(tmp_path):
         module.prepare_wheel(target, tmp_path / "repatched", "2.13.0a0+git123")
 
 
+def test_fairchem_xpu_adapter_requires_xpu_and_preserves_cpu_cuda():
+    from types import SimpleNamespace
+
+    import pytest
+
+    helper = ROOT / "deployments/aurora/setup/prepare_fairchem_wheel.py"
+    spec = importlib.util.spec_from_file_location("fairchem_xpu_adapter", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    source = '''class MLIPPredictUnit:
+    def __init__(self, device):
+        self.inference_settings = settings()
+        self._load_model()
+        self._setup_device(device)
+    def _load_model(self):
+        self.loaded_mode = self.inference_settings.execution_mode
+    def _setup_device(self, device):
+        assert device in ["cpu", "cuda"]
+        self.device = device
+'''
+    available = [True]
+    namespace = {
+        "torch": SimpleNamespace(
+            device=lambda value: SimpleNamespace(type=value.split(":")[0]),
+            xpu=SimpleNamespace(is_available=lambda: available[0]),
+        ),
+        "ExecutionMode": SimpleNamespace(GENERAL="general"),
+        "settings": lambda: SimpleNamespace(
+            compile=True, tf32=True, merge_mole=True, execution_mode="default"
+        ),
+    }
+    exec(module.adapt_xpu_source(source), namespace)
+    predictor = namespace["MLIPPredictUnit"]
+    for device in ("cpu", "cuda"):
+        instance = predictor(device)
+        assert instance.device == device and instance.loaded_mode == "default"
+    instance = predictor("xpu")
+    assert instance.device.type == "xpu" and instance.loaded_mode == "general"
+    assert not instance.inference_settings.compile
+    assert not instance.inference_settings.tf32
+    assert not instance.inference_settings.merge_mole
+    available[0] = False
+    with pytest.raises(RuntimeError, match="CPU fallback is forbidden"):
+        predictor("xpu")
+
+
 def test_mace_runtime_paths_use_matsim_owned_compatibility_environment() -> None:
     for script in (ROOT / "deployments").rglob("*.sh"):
         text = script.read_text(encoding="utf-8")
@@ -389,6 +442,7 @@ def test_uma_uses_matsim_owned_compatibility_environment() -> None:
     assert 'AURORA_FAIRCHEM_VERSION="${AURORA_FAIRCHEM_VERSION:-2.23.0}"' in text
     assert "prepare_fairchem_wheel.py" in text
     assert '"${FAIRCHEM_ARGS[@]}"' in text
+    assert '--torch-version "${TORCH_VERSION}" --enable-xpu' in text
     assert "Experimental FairChem override" in text
     subprocess.run(["bash", "-n", str(common)], check=True)
 

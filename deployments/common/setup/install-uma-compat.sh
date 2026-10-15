@@ -59,7 +59,7 @@ if [[ "${FACILITY}" == "aurora" ]]; then
     TORCH_VERSION="$("${BASE_VENV}/bin/python" -c 'from importlib.metadata import version; print(version("torch"))')"
     COMPAT_WHEEL="$("${PYTHON}" "${MATSIM_DIR}/deployments/aurora/setup/prepare_fairchem_wheel.py" \
         --wheel "${UPSTREAM_WHEELS[0]}" --output "${WHEEL_ROOT}/patched" \
-        --torch-version "${TORCH_VERSION}")"
+        --torch-version "${TORCH_VERSION}" --enable-xpu)"
     log "Experimental FairChem override: ${COMPAT_WHEEL}; provenance: ${COMPAT_WHEEL%.whl}.json"
     FAIRCHEM_ARGS=("${COMPAT_WHEEL}")
 fi
@@ -68,6 +68,7 @@ fi
 "${PYTHON}" -m pip install --no-build-isolation --upgrade-strategy only-if-needed \
     "${MATSIM_DIR}[${UMA_MATSIM_EXTRAS}]" "${FAIRCHEM_ARGS[@]}"
 if [[ "${FACILITY}" == "aurora" ]]; then
+    "${PYTHON}" -m pip install --force-reinstall --no-deps "${COMPAT_WHEEL}"
     "${PYTHON}" -m pip check || log "Full pip check reported inherited conflicts; checking UMA runtime next"
     "${PYTHON}" "${MATSIM_DIR}/deployments/common/setup/check-runtime-dependencies.py" \
         "matsim-agents[${UMA_MATSIM_EXTRAS}]"
