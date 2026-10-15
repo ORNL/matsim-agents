@@ -205,7 +205,8 @@ def test_aurora_compatibility_recreation_is_opt_in_like_perlmutter(base):
 
 
 @pytest.mark.parametrize("ref", ["main", "feature/test", "v-test", "commit"])
-def test_aurora_selected_refs_work_on_first_install_and_rerun(tmp_path, ref):
+@pytest.mark.parametrize("checkout_kind", ["selected", "dependencies"])
+def test_aurora_refs_work_on_first_install_and_rerun(tmp_path, ref, checkout_kind):
     origin = tmp_path / "origin"
     subprocess.run(["git", "init", "-b", "main", str(origin)], check=True, capture_output=True)
     subprocess.run([
@@ -218,13 +219,21 @@ def test_aurora_selected_refs_work_on_first_install_and_rerun(tmp_path, ref):
         ["git", "-C", str(origin), "rev-parse", "HEAD"], text=True
     ).strip()
     selected = revision if ref == "commit" else ref
-    checkout = tmp_path / "selected"
+    checkout = tmp_path / "checkout"
     installer = (ROOT / "deployments/aurora/setup/install.sh").read_text()
-    start = installer.index('if [[ ! -d "${HYDRAGNN_DIR}/.git" ]]')
-    end = installer.index('[[ "$(realpath -m "${HYDRAGNN_INSTALLER_DIR}")"')
+    if checkout_kind == "selected":
+        prefix = "HYDRAGNN"
+        start = installer.index('if [[ ! -d "${HYDRAGNN_DIR}/.git" ]]')
+        end = installer.index('[[ "$(realpath -m "${HYDRAGNN_INSTALLER_DIR}")"')
+    else:
+        prefix = "HYDRAGNN_INSTALLER"
+        start = installer.index('if [[ ! -d "${HYDRAGNN_INSTALLER_DIR}/.git" ]]')
+        end = installer.index('log "Upstream dependency revision')
     script = 'set -euo pipefail\nlog() { :; }\ndie() { exit 1; }\n' + installer[start:end]
     environment = os.environ.copy()
-    environment.update(HYDRAGNN_DIR=str(checkout), HYDRAGNN_REPO=str(origin), HYDRAGNN_REF=selected)
+    environment.update({
+        f"{prefix}_DIR": str(checkout), f"{prefix}_REPO": str(origin), f"{prefix}_REF": selected,
+    })
     for _attempt in range(2):
         subprocess.run(
             ["bash"], input=script, text=True, env=environment, check=True, capture_output=True
@@ -236,10 +245,36 @@ def test_aurora_selected_refs_work_on_first_install_and_rerun(tmp_path, ref):
             ["git", "-C", str(checkout), "symbolic-ref", "--short", "HEAD"],
             text=True, capture_output=True,
         )
-        if ref in ("main", "feature/test"):
+        if checkout_kind == "selected" and ref in ("main", "feature/test"):
             assert branch.returncode == 0 and branch.stdout.strip() == ref
         else:
             assert branch.returncode != 0
+    if checkout_kind == "dependencies" and ref == "commit":
+        fork = tmp_path / "fork"
+        subprocess.run(["git", "clone", str(origin), str(fork)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(fork), "switch", "-c", "audited-fork-only"],
+            check=True, capture_output=True,
+        )
+        subprocess.run([
+            "git", "-C", str(fork), "-c", "user.name=Test", "-c", "user.email=test@example.com",
+            "commit", "--allow-empty", "-m", "audited fork",
+        ], check=True, capture_output=True)
+        expected = subprocess.check_output(
+            ["git", "-C", str(fork), "rev-parse", "HEAD"], text=True
+        ).strip()
+        environment.update(
+            HYDRAGNN_INSTALLER_REPO=str(fork), HYDRAGNN_INSTALLER_REF="audited-fork-only"
+        )
+        subprocess.run(
+            ["bash"], input=script, text=True, env=environment, check=True, capture_output=True
+        )
+        assert subprocess.check_output(
+            ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True
+        ).strip() == expected
+        assert subprocess.check_output(
+            ["git", "-C", str(checkout), "remote", "get-url", "origin"], text=True
+        ).strip() == str(origin)
 
 
 def test_runtime_dependency_audit_checks_selected_extras_and_transitive_requirements(monkeypatch):

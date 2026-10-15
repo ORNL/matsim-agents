@@ -96,15 +96,16 @@ fi
     || die "Dependency source directory must not be the selected HydraGNN checkout"
 if [[ ! -d "${HYDRAGNN_INSTALLER_DIR}/.git" ]]; then
     log "Fetching upstream dependencies ${HYDRAGNN_INSTALLER_REF} into ${HYDRAGNN_INSTALLER_DIR}"
-    git clone --depth 1 --branch "${HYDRAGNN_INSTALLER_REF}" \
+    git clone --depth 1 --no-checkout \
         "${HYDRAGNN_INSTALLER_REPO}" "${HYDRAGNN_INSTALLER_DIR}"
 else
     git -C "${HYDRAGNN_INSTALLER_DIR}" diff --quiet \
         && git -C "${HYDRAGNN_INSTALLER_DIR}" diff --cached --quiet \
         || die "Upstream dependency checkout has local changes: ${HYDRAGNN_INSTALLER_DIR}"
-    git -C "${HYDRAGNN_INSTALLER_DIR}" fetch --depth 1 origin "${HYDRAGNN_INSTALLER_REF}"
-    git -C "${HYDRAGNN_INSTALLER_DIR}" checkout --detach FETCH_HEAD
 fi
+git -C "${HYDRAGNN_INSTALLER_DIR}" fetch --depth 1 \
+    "${HYDRAGNN_INSTALLER_REPO}" "${HYDRAGNN_INSTALLER_REF}"
+git -C "${HYDRAGNN_INSTALLER_DIR}" checkout --detach FETCH_HEAD
 log "Upstream dependency revision $(git -C "${HYDRAGNN_INSTALLER_DIR}" rev-parse HEAD)"
 HYDRAGNN_INSTALLER="${HYDRAGNN_INSTALLER:-${HYDRAGNN_INSTALLER_DIR}/scripts/hpc/alcf/aurora/installation/install.sh}"
 [[ -f "${HYDRAGNN_INSTALLER}" ]] || die \
