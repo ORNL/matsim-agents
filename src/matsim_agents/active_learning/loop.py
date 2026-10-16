@@ -193,8 +193,8 @@ def _scan_resume(root: Path) -> tuple[int, Path | None]:
 # --------------------------------------------------------------------------- #
 
 
-def run_active_learning(cfg: ALConfig) -> None:
-    """Run the full AL loop. Idempotent: safe to re-invoke after a job restart."""
+def _validate_comparison_inputs(cfg: ALConfig) -> bool:
+    """Return whether candidate comparison is enabled, validating its inputs up front."""
     comparison_enabled = cfg.trainer.enabled and (
         cfg.trainer.compare_after_training or cfg.trainer.promote_model
     )
@@ -217,6 +217,410 @@ def run_active_learning(cfg: ALConfig) -> None:
                 ),
                 require_sidecar=True,
             )
+    return comparison_enabled
+
+
+def _completed_dft_count(cfg: ALConfig, root: Path) -> int:
+    """DFT calculations already spent by completed iterations when resuming."""
+    completed_dft = 0
+    if cfg.loop.resume:
+        for state_path in root.glob("iteration_*/state.json"):
+            state_data = json.loads(state_path.read_text(encoding="utf-8"))
+            if state_data.get("status") == "complete":
+                completed_dft += int(state_data.get("n_dft_converged", 0)) + int(
+                    state_data.get("n_dft_failed", 0)
+                )
+    return completed_dft
+
+
+def _select_for_labelling(
+    cfg: ALConfig,
+    candidates: list,
+    primary_calc: Any,
+    ensemble_calcs: list,
+    i: int,
+    completed_dft: int,
+    state: IterationState,
+) -> list:
+    """Score MD candidates and pick those to label within the remaining DFT budget."""
+    t0 = time.time()
+    selected, scores = select_candidates(
+        candidates,
+        cfg.acquisition,
+        primary_calculator=primary_calc,
+        ensemble_calculators=ensemble_calcs or None,
+        seed=42 + i,
+    )
+    if cfg.loop.max_dft_calculations is not None:
+        remaining_dft = cfg.loop.max_dft_calculations - completed_dft
+        selected = selected[:remaining_dft]
+    state.n_selected = len(selected)
+    state.selected_candidate_ids = [candidate.candidate_id for candidate in selected]
+    selected_ids = set(state.selected_candidate_ids)
+    state.candidate_uncertainty = {
+        candidate.candidate_id: float(score)
+        for candidate, score in zip(candidates, scores, strict=True)
+        if candidate.candidate_id in selected_ids and np.isfinite(score)
+    }
+    finite_scores = scores[np.isfinite(scores)]
+    if finite_scores.size:
+        state.score_min = float(np.min(finite_scores))
+        state.score_max = float(np.max(finite_scores))
+        state.score_mean = float(np.mean(finite_scores))
+    state.timings_sec["acquisition"] = time.time() - t0
+    log.info(
+        "Iter %d: selected %d/%d candidates (score min/mean/max = %s/%s/%s)",
+        i,
+        len(selected),
+        len(candidates),
+        state.score_min,
+        state.score_mean,
+        state.score_max,
+    )
+    return selected
+
+
+def _label_with_dft(
+    cfg: ALConfig, selected: list, it_dir: Path, i: int, state: IterationState
+) -> tuple[list, Any]:
+    """Run single-point DFT for the selected candidates and record outcome counts."""
+    t0 = time.time()
+    backend = make_backend(cfg.dft)
+    state.dft_backend = backend.name
+    dft_dir = it_dir / "dft"
+    specs = [
+        DFTJobSpec(
+            job_id=cand.candidate_id,
+            atoms=cand.atoms,
+            work_dir=str(dft_dir / cand.candidate_id),
+        )
+        for cand in selected
+    ]
+    results = run_dft_batch(
+        specs,
+        backend,
+        max_workers=cfg.dft.max_concurrent_jobs,
+    )
+    n_ok = sum(1 for r in results if r.converged)
+    state.n_dft_converged = n_ok
+    state.n_dft_failed = len(results) - n_ok
+    state.timings_sec["dft"] = time.time() - t0
+    log.info(
+        "Iter %d: %s converged=%d failed=%d",
+        i,
+        backend.name.upper(),
+        n_ok,
+        len(results) - n_ok,
+    )
+
+    if cfg.loop.fail_fast and state.n_dft_failed:
+        raise RuntimeError(f"{state.n_dft_failed} {backend.name} jobs failed and fail_fast=True")
+    return results, backend
+
+
+def _append_labelled_frames(
+    cfg: ALConfig,
+    results: list,
+    selected: list,
+    i: int,
+    dataset_path: Path,
+    validation_dataset_path: Path,
+    backend: Any,
+    state: IterationState,
+) -> tuple[set[str], str, int]:
+    """Validate new labels against the persisted datasets, split, append, and write manifests."""
+    t0 = time.time()
+    frames = dft_results_to_frames(results, iteration=i)
+    existing_training_frames = []
+    existing_validation_frames = []
+    manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
+    parent_dataset_id = None
+    if dataset_path.exists():
+        from ase.io import read as ase_read
+
+        existing_training_frames = list(ase_read(dataset_path, index=":"))
+    if validation_dataset_path.exists():
+        from ase.io import read as ase_read
+
+        existing_validation_frames = list(ase_read(validation_dataset_path, index=":"))
+    existing_frames = existing_training_frames + existing_validation_frames
+    if {structure_identity(frame) for frame in existing_training_frames} & {
+        structure_identity(frame) for frame in existing_validation_frames
+    }:
+        raise ValueError("persisted training and validation datasets overlap")
+    existing_elements = {
+        symbol for frame in existing_frames for symbol in frame.get_chemical_symbols()
+    }
+    if existing_training_frames and not manifest_path.exists():
+        raise ValueError(
+            "cannot append to a non-empty dataset without a manifest containing "
+            "its DFT method signature; migrate the dataset explicitly first"
+        )
+    if manifest_path.exists():
+        previous_manifest = DatasetManifest.model_validate_json(
+            manifest_path.read_text(encoding="utf-8")
+        )
+        if previous_manifest.dft_backend != backend.name:
+            raise ValueError("cannot append labels from a different DFT backend")
+        if existing_frames and previous_manifest.method_signature is None:
+            raise ValueError(
+                "cannot append to a non-empty dataset without a DFT method signature; "
+                "migrate the dataset explicitly first"
+            )
+        existing_signature = _dft_method_signature(cfg, existing_elements)
+        if (
+            previous_manifest.method_signature is not None
+            and previous_manifest.method_signature != existing_signature
+        ):
+            raise ValueError("cannot append labels with a different DFT method signature")
+        validate_dataset_reference_method(
+            dataset_path,
+            reference_backend=backend.name,
+            reference_method_signature=existing_signature,
+            require_sidecar=True,
+        )
+        parent_dataset_id = previous_manifest.dataset_id
+    validation_parent_dataset_id = None
+    validation_manifest_path = validation_dataset_path.with_suffix(
+        validation_dataset_path.suffix + ".manifest.json"
+    )
+    if validation_dataset_path.exists():
+        validate_dataset_reference_method(
+            validation_dataset_path,
+            reference_backend=backend.name,
+            reference_method_signature=_dft_method_signature(cfg, existing_elements),
+            require_sidecar=True,
+        )
+        validation_parent_dataset_id = DatasetManifest.model_validate_json(
+            validation_manifest_path.read_text(encoding="utf-8")
+        ).dataset_id
+    expected_atomic_numbers = {
+        int(number) for candidate in selected for number in candidate.atoms.get_atomic_numbers()
+    }
+    frames, validation = validate_labelled_frames(
+        frames,
+        existing_frames=existing_frames,
+        expected_atomic_numbers=expected_atomic_numbers,
+    )
+    training_frames, validation_frames = _split_training_validation_frames(
+        frames,
+        validation_fraction=cfg.trainer.validation_fraction,
+        seed=cfg.trainer.validation_split_seed + i,
+        existing_training_count=len(existing_training_frames),
+        existing_validation_count=len(existing_validation_frames),
+    )
+    labelled_elements = existing_elements | {
+        symbol for frame in frames for symbol in frame.atoms.get_chemical_symbols()
+    }
+    method_signature = _dft_method_signature(cfg, labelled_elements)
+    n_appended = append_frames_to_extxyz(training_frames, dataset_path)
+    n_validation_appended = append_frames_to_extxyz(validation_frames, validation_dataset_path)
+    state.dataset_path = str(dataset_path)
+    state.n_training_frames = n_appended
+    state.n_validation_frames = n_validation_appended
+    state.n_training_frames_total = len(existing_training_frames) + n_appended
+    state.n_validation_frames_total = len(existing_validation_frames) + n_validation_appended
+    if validation_dataset_path.exists():
+        state.validation_dataset_path = str(validation_dataset_path)
+    if dataset_path.exists():
+        write_dataset_manifest(
+            dataset_path,
+            dft_backend=backend.name,
+            energy_reference=f"{backend.name}:native_total_energy",
+            validation=validation.model_copy(update={"accepted": len(training_frames)}),
+            parent_dataset_id=parent_dataset_id,
+            method_signature=method_signature,
+            method_signature_elements=labelled_elements,
+            base_method_signature=_dft_method_signature(cfg, set()),
+            element_method_signatures={
+                element: _dft_method_signature(cfg, {element})
+                for element in sorted(labelled_elements)
+            },
+        )
+    if validation_dataset_path.exists():
+        write_dataset_manifest(
+            validation_dataset_path,
+            dft_backend=backend.name,
+            energy_reference=f"{backend.name}:native_total_energy",
+            validation=validation.model_copy(update={"accepted": len(validation_frames)}),
+            parent_dataset_id=validation_parent_dataset_id,
+            method_signature=method_signature,
+            method_signature_elements=labelled_elements,
+            base_method_signature=_dft_method_signature(cfg, set()),
+            element_method_signatures={
+                element: _dft_method_signature(cfg, {element})
+                for element in sorted(labelled_elements)
+            },
+            split_role="validation",
+        )
+    state.timings_sec["append_dataset"] = time.time() - t0
+    log.info(
+        "Iter %d: appended %d training and %d validation frames",
+        i,
+        n_appended,
+        n_validation_appended,
+    )
+    return labelled_elements, method_signature, n_appended
+
+
+def _check_reference_method(
+    cfg: ALConfig, labelled_elements: set[str], backend: Any, method_signature: str
+) -> None:
+    """Require elemental references computed with the same DFT method as the labels."""
+    if cfg.trainer.validation_reference_set is None:
+        raise ValueError("model comparison requires a DFT-labelled elemental reference manifest")
+    reference_manifest, _, _ = load_elemental_reference_manifest(
+        cfg.trainer.validation_reference_set,
+        required_elements=labelled_elements,
+    )
+    reference_element_signatures = reference_manifest.get("element_method_signatures")
+    scoped_method_matches = (
+        reference_manifest.get("base_method_signature") == _dft_method_signature(cfg, set())
+        and reference_element_signatures is not None
+        and all(
+            reference_element_signatures.get(element) == _dft_method_signature(cfg, {element})
+            for element in labelled_elements
+        )
+    )
+    if reference_manifest["backend"] != backend.name or (
+        not scoped_method_matches and reference_manifest["method_signature"] != method_signature
+    ):
+        raise ValueError("elemental references and campaign labels use different DFT methods")
+
+
+def _collect_training_deferrals(
+    cfg: ALConfig,
+    state: IterationState,
+    validation_dataset_path: Path,
+    comparison_enabled: bool,
+) -> None:
+    """Record why training/comparison must wait for more cumulative data."""
+    if state.n_training_frames_total < 2:
+        state.training_deferred_reasons.append(
+            f"cumulative training set has {state.n_training_frames_total} frames; "
+            "at least 2 required"
+        )
+    if comparison_enabled:
+        from ase.io import read as ase_read
+
+        if cfg.trainer.validation_fraction > 0:
+            held_out_frames = (
+                list(ase_read(validation_dataset_path, index=":"))
+                if validation_dataset_path.exists()
+                else []
+            )
+        elif cfg.trainer.validation_set is not None:
+            held_out_frames = list(ase_read(cfg.trainer.validation_set, index=":"))
+        else:
+            raise ValueError("model comparison requires held-out validation data")
+        for label, reader in (
+            ("energy", _reference_energy),
+            ("force", _reference_forces),
+        ):
+            count = sum(reader(frame) is not None for frame in held_out_frames)
+            minimum = cfg.trainer.promotion_min_evaluated_frames
+            if count < minimum:
+                state.training_deferred_reasons.append(
+                    f"cumulative validation set has {count} {label}-labelled frames; "
+                    f"at least {minimum} required"
+                )
+
+
+def _retrain_candidate(
+    cfg: ALConfig,
+    dataset_path: Path,
+    i: int,
+    it_dir: Path,
+    root: Path,
+    state: IterationState,
+    n_appended: int,
+) -> None:
+    """Fine-tune a candidate model for the configured backend, if training is enabled."""
+    if cfg.trainer.enabled and cfg.mlip.backend == "hydragnn" and cfg.mlip.hydragnn is not None:
+        new_logdir = retrain_hydragnn(
+            cfg.trainer,
+            cfg.mlip.hydragnn,
+            dataset_path=dataset_path,
+            iteration=i,
+            out_logdir=it_dir / "model",
+            dft_config=cfg.dft,
+            reference_root=root / "elemental-training-reference",
+        )
+        state.candidate_model_path = str(new_logdir)
+    elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None and cfg.trainer.enabled:
+        new_model = retrain_uma(
+            cfg.trainer,
+            cfg.mlip.uma,
+            dataset_path=dataset_path,
+            iteration=i,
+            out_model_dir=it_dir / "model",
+        )
+        state.candidate_model_path = str(new_model)
+    elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None and cfg.trainer.enabled:
+        new_model = retrain_mace(
+            cfg.trainer,
+            cfg.mlip.mace,
+            dataset_path=dataset_path,
+            iteration=i,
+            out_model_dir=it_dir / "model",
+        )
+        state.candidate_model_path = str(new_model)
+    else:
+        # Frozen foundation model / disabled trainer: keep accumulating labels.
+        log.info(
+            "Skipping retraining for backend=%s; %d labelled frames accumulated in %s.",
+            cfg.mlip.backend,
+            n_appended,
+            dataset_path,
+        )
+
+
+def _compare_and_promote(
+    cfg: ALConfig,
+    state: IterationState,
+    i: int,
+    dataset_path: Path,
+    validation_dataset_path: Path,
+    comparison_enabled: bool,
+) -> None:
+    """Compare the candidate against the incumbent and promote it when approved."""
+    compare_candidate = comparison_enabled and state.candidate_model_path is not None
+    if compare_candidate:
+        try:
+            evaluation_cfg = cfg.model_copy(deep=True)
+            if cfg.trainer.validation_fraction > 0:
+                evaluation_cfg.trainer.validation_set = validation_dataset_path
+                evaluation_cfg.trainer.validation_fraction = 0.0
+            decision = evaluate_promotion_candidate(
+                evaluation_cfg,
+                state.candidate_model_path,
+                iteration=i,
+                training_set=dataset_path,
+            )
+            state.model_comparison = asdict(decision)
+        except Exception as exc:  # noqa: BLE001
+            state.model_comparison = {
+                "approved": False,
+                "reasons": [f"model comparison failed: {exc}"],
+                "candidate_metrics": {},
+                "incumbent_metrics": {},
+            }
+            log.exception("Iteration %d candidate model comparison failed", i)
+        if cfg.trainer.promote_model:
+            state.promotion_validation = state.model_comparison
+    if (
+        cfg.trainer.promote_model
+        and state.promotion_validation is not None
+        and state.promotion_validation["approved"]
+    ):
+        state.new_logdir = state.candidate_model_path
+        state.model_promoted = True
+        _apply_model_override(cfg, state.candidate_model_path)
+
+
+def run_active_learning(cfg: ALConfig) -> None:
+    """Run the full AL loop. Idempotent: safe to re-invoke after a job restart."""
+    comparison_enabled = _validate_comparison_inputs(cfg)
     root = Path(cfg.loop.out_dir)
     root.mkdir(parents=True, exist_ok=True)
 
@@ -240,14 +644,7 @@ def run_active_learning(cfg: ALConfig) -> None:
             if resumed_logdir is not None and resumed_logdir.exists():
                 _apply_model_override(cfg, str(resumed_logdir))
 
-    completed_dft = 0
-    if cfg.loop.resume:
-        for state_path in root.glob("iteration_*/state.json"):
-            state_data = json.loads(state_path.read_text(encoding="utf-8"))
-            if state_data.get("status") == "complete":
-                completed_dft += int(state_data.get("n_dft_converged", 0)) + int(
-                    state_data.get("n_dft_failed", 0)
-                )
+    completed_dft = _completed_dft_count(cfg, root)
     for i in range(start_iter, cfg.loop.n_iterations):
         if (
             cfg.loop.max_dft_calculations is not None
@@ -285,275 +682,32 @@ def run_active_learning(cfg: ALConfig) -> None:
                 break
 
             # --- 3. Score & select --------------------------------------------
-            t0 = time.time()
-            selected, scores = select_candidates(
-                candidates,
-                cfg.acquisition,
-                primary_calculator=primary_calc,
-                ensemble_calculators=ensemble_calcs or None,
-                seed=42 + i,
-            )
-            if cfg.loop.max_dft_calculations is not None:
-                remaining_dft = cfg.loop.max_dft_calculations - completed_dft
-                selected = selected[:remaining_dft]
-            state.n_selected = len(selected)
-            state.selected_candidate_ids = [candidate.candidate_id for candidate in selected]
-            selected_ids = set(state.selected_candidate_ids)
-            state.candidate_uncertainty = {
-                candidate.candidate_id: float(score)
-                for candidate, score in zip(candidates, scores, strict=True)
-                if candidate.candidate_id in selected_ids and np.isfinite(score)
-            }
-            finite_scores = scores[np.isfinite(scores)]
-            if finite_scores.size:
-                state.score_min = float(np.min(finite_scores))
-                state.score_max = float(np.max(finite_scores))
-                state.score_mean = float(np.mean(finite_scores))
-            state.timings_sec["acquisition"] = time.time() - t0
-            log.info(
-                "Iter %d: selected %d/%d candidates (score min/mean/max = %s/%s/%s)",
-                i,
-                len(selected),
-                len(candidates),
-                state.score_min,
-                state.score_mean,
-                state.score_max,
+            selected = _select_for_labelling(
+                cfg, candidates, primary_calc, ensemble_calcs, i, completed_dft, state
             )
 
             # --- 4. DFT labelling (VASP or QE) --------------------------------
-            t0 = time.time()
-            backend = make_backend(cfg.dft)
-            state.dft_backend = backend.name
-            dft_dir = it_dir / "dft"
-            specs = [
-                DFTJobSpec(
-                    job_id=cand.candidate_id,
-                    atoms=cand.atoms,
-                    work_dir=str(dft_dir / cand.candidate_id),
-                )
-                for cand in selected
-            ]
-            results = run_dft_batch(
-                specs,
-                backend,
-                max_workers=cfg.dft.max_concurrent_jobs,
-            )
-            n_ok = sum(1 for r in results if r.converged)
-            state.n_dft_converged = n_ok
-            state.n_dft_failed = len(results) - n_ok
+            results, backend = _label_with_dft(cfg, selected, it_dir, i, state)
             completed_dft += len(results)
-            state.timings_sec["dft"] = time.time() - t0
-            log.info(
-                "Iter %d: %s converged=%d failed=%d",
-                i,
-                backend.name.upper(),
-                n_ok,
-                len(results) - n_ok,
-            )
-
-            if cfg.loop.fail_fast and state.n_dft_failed:
-                raise RuntimeError(
-                    f"{state.n_dft_failed} {backend.name} jobs failed and fail_fast=True"
-                )
 
             # --- 5. Append to dataset -----------------------------------------
-            t0 = time.time()
-            frames = dft_results_to_frames(results, iteration=i)
-            existing_training_frames = []
-            existing_validation_frames = []
-            manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
-            parent_dataset_id = None
-            if dataset_path.exists():
-                from ase.io import read as ase_read
-
-                existing_training_frames = list(ase_read(dataset_path, index=":"))
-            if validation_dataset_path.exists():
-                from ase.io import read as ase_read
-
-                existing_validation_frames = list(ase_read(validation_dataset_path, index=":"))
-            existing_frames = existing_training_frames + existing_validation_frames
-            if {structure_identity(frame) for frame in existing_training_frames} & {
-                structure_identity(frame) for frame in existing_validation_frames
-            }:
-                raise ValueError("persisted training and validation datasets overlap")
-            existing_elements = {
-                symbol for frame in existing_frames for symbol in frame.get_chemical_symbols()
-            }
-            if existing_training_frames and not manifest_path.exists():
-                raise ValueError(
-                    "cannot append to a non-empty dataset without a manifest containing "
-                    "its DFT method signature; migrate the dataset explicitly first"
-                )
-            if manifest_path.exists():
-                previous_manifest = DatasetManifest.model_validate_json(
-                    manifest_path.read_text(encoding="utf-8")
-                )
-                if previous_manifest.dft_backend != backend.name:
-                    raise ValueError("cannot append labels from a different DFT backend")
-                if existing_frames and previous_manifest.method_signature is None:
-                    raise ValueError(
-                        "cannot append to a non-empty dataset without a DFT method signature; "
-                        "migrate the dataset explicitly first"
-                    )
-                existing_signature = _dft_method_signature(cfg, existing_elements)
-                if (
-                    previous_manifest.method_signature is not None
-                    and previous_manifest.method_signature != existing_signature
-                ):
-                    raise ValueError("cannot append labels with a different DFT method signature")
-                validate_dataset_reference_method(
-                    dataset_path,
-                    reference_backend=backend.name,
-                    reference_method_signature=existing_signature,
-                    require_sidecar=True,
-                )
-                parent_dataset_id = previous_manifest.dataset_id
-            validation_parent_dataset_id = None
-            validation_manifest_path = validation_dataset_path.with_suffix(
-                validation_dataset_path.suffix + ".manifest.json"
-            )
-            if validation_dataset_path.exists():
-                validate_dataset_reference_method(
-                    validation_dataset_path,
-                    reference_backend=backend.name,
-                    reference_method_signature=_dft_method_signature(cfg, existing_elements),
-                    require_sidecar=True,
-                )
-                validation_parent_dataset_id = DatasetManifest.model_validate_json(
-                    validation_manifest_path.read_text(encoding="utf-8")
-                ).dataset_id
-            expected_atomic_numbers = {
-                int(number)
-                for candidate in selected
-                for number in candidate.atoms.get_atomic_numbers()
-            }
-            frames, validation = validate_labelled_frames(
-                frames,
-                existing_frames=existing_frames,
-                expected_atomic_numbers=expected_atomic_numbers,
-            )
-            training_frames, validation_frames = _split_training_validation_frames(
-                frames,
-                validation_fraction=cfg.trainer.validation_fraction,
-                seed=cfg.trainer.validation_split_seed + i,
-                existing_training_count=len(existing_training_frames),
-                existing_validation_count=len(existing_validation_frames),
-            )
-            labelled_elements = existing_elements | {
-                symbol for frame in frames for symbol in frame.atoms.get_chemical_symbols()
-            }
-            method_signature = _dft_method_signature(cfg, labelled_elements)
-            n_appended = append_frames_to_extxyz(training_frames, dataset_path)
-            n_validation_appended = append_frames_to_extxyz(
-                validation_frames, validation_dataset_path
-            )
-            state.dataset_path = str(dataset_path)
-            state.n_training_frames = n_appended
-            state.n_validation_frames = n_validation_appended
-            state.n_training_frames_total = len(existing_training_frames) + n_appended
-            state.n_validation_frames_total = (
-                len(existing_validation_frames) + n_validation_appended
-            )
-            if validation_dataset_path.exists():
-                state.validation_dataset_path = str(validation_dataset_path)
-            if dataset_path.exists():
-                write_dataset_manifest(
-                    dataset_path,
-                    dft_backend=backend.name,
-                    energy_reference=f"{backend.name}:native_total_energy",
-                    validation=validation.model_copy(update={"accepted": len(training_frames)}),
-                    parent_dataset_id=parent_dataset_id,
-                    method_signature=method_signature,
-                    method_signature_elements=labelled_elements,
-                    base_method_signature=_dft_method_signature(cfg, set()),
-                    element_method_signatures={
-                        element: _dft_method_signature(cfg, {element})
-                        for element in sorted(labelled_elements)
-                    },
-                )
-            if validation_dataset_path.exists():
-                write_dataset_manifest(
-                    validation_dataset_path,
-                    dft_backend=backend.name,
-                    energy_reference=f"{backend.name}:native_total_energy",
-                    validation=validation.model_copy(update={"accepted": len(validation_frames)}),
-                    parent_dataset_id=validation_parent_dataset_id,
-                    method_signature=method_signature,
-                    method_signature_elements=labelled_elements,
-                    base_method_signature=_dft_method_signature(cfg, set()),
-                    element_method_signatures={
-                        element: _dft_method_signature(cfg, {element})
-                        for element in sorted(labelled_elements)
-                    },
-                    split_role="validation",
-                )
-            state.timings_sec["append_dataset"] = time.time() - t0
-            log.info(
-                "Iter %d: appended %d training and %d validation frames",
+            labelled_elements, method_signature, n_appended = _append_labelled_frames(
+                cfg,
+                results,
+                selected,
                 i,
-                n_appended,
-                n_validation_appended,
+                dataset_path,
+                validation_dataset_path,
+                backend,
+                state,
             )
 
             # --- 6. (Optional) retrain the surrogate --------------------------
             if comparison_enabled:
-                if cfg.trainer.validation_reference_set is None:
-                    raise ValueError(
-                        "model comparison requires a DFT-labelled elemental reference manifest"
-                    )
-                reference_manifest, _, _ = load_elemental_reference_manifest(
-                    cfg.trainer.validation_reference_set,
-                    required_elements=labelled_elements,
-                )
-                reference_element_signatures = reference_manifest.get("element_method_signatures")
-                scoped_method_matches = (
-                    reference_manifest.get("base_method_signature")
-                    == _dft_method_signature(cfg, set())
-                    and reference_element_signatures is not None
-                    and all(
-                        reference_element_signatures.get(element)
-                        == _dft_method_signature(cfg, {element})
-                        for element in labelled_elements
-                    )
-                )
-                if reference_manifest["backend"] != backend.name or (
-                    not scoped_method_matches
-                    and reference_manifest["method_signature"] != method_signature
-                ):
-                    raise ValueError(
-                        "elemental references and campaign labels use different DFT methods"
-                    )
+                _check_reference_method(cfg, labelled_elements, backend, method_signature)
             t0 = time.time()
             if cfg.trainer.enabled:
-                if state.n_training_frames_total < 2:
-                    state.training_deferred_reasons.append(
-                        f"cumulative training set has {state.n_training_frames_total} frames; "
-                        "at least 2 required"
-                    )
-                if comparison_enabled:
-                    from ase.io import read as ase_read
-
-                    if cfg.trainer.validation_fraction > 0:
-                        held_out_frames = (
-                            list(ase_read(validation_dataset_path, index=":"))
-                            if validation_dataset_path.exists()
-                            else []
-                        )
-                    elif cfg.trainer.validation_set is not None:
-                        held_out_frames = list(ase_read(cfg.trainer.validation_set, index=":"))
-                    else:
-                        raise ValueError("model comparison requires held-out validation data")
-                    for label, reader in (
-                        ("energy", _reference_energy),
-                        ("force", _reference_forces),
-                    ):
-                        count = sum(reader(frame) is not None for frame in held_out_frames)
-                        minimum = cfg.trainer.promotion_min_evaluated_frames
-                        if count < minimum:
-                            state.training_deferred_reasons.append(
-                                f"cumulative validation set has {count} {label}-labelled frames; "
-                                f"at least {minimum} required"
-                            )
+                _collect_training_deferrals(cfg, state, validation_dataset_path, comparison_enabled)
                 if state.training_deferred_reasons:
                     state.training_status = "deferred"
                     log.warning(
@@ -565,79 +719,10 @@ def run_active_learning(cfg: ALConfig) -> None:
                     state.status = "complete"
                     continue
                 state.training_status = "running"
-            if (
-                cfg.trainer.enabled
-                and cfg.mlip.backend == "hydragnn"
-                and cfg.mlip.hydragnn is not None
-            ):
-                new_logdir = retrain_hydragnn(
-                    cfg.trainer,
-                    cfg.mlip.hydragnn,
-                    dataset_path=dataset_path,
-                    iteration=i,
-                    out_logdir=it_dir / "model",
-                    dft_config=cfg.dft,
-                    reference_root=root / "elemental-training-reference",
-                )
-                state.candidate_model_path = str(new_logdir)
-            elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None and cfg.trainer.enabled:
-                new_model = retrain_uma(
-                    cfg.trainer,
-                    cfg.mlip.uma,
-                    dataset_path=dataset_path,
-                    iteration=i,
-                    out_model_dir=it_dir / "model",
-                )
-                state.candidate_model_path = str(new_model)
-            elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None and cfg.trainer.enabled:
-                new_model = retrain_mace(
-                    cfg.trainer,
-                    cfg.mlip.mace,
-                    dataset_path=dataset_path,
-                    iteration=i,
-                    out_model_dir=it_dir / "model",
-                )
-                state.candidate_model_path = str(new_model)
-            else:
-                # Frozen foundation model / disabled trainer: keep accumulating labels.
-                log.info(
-                    "Skipping retraining for backend=%s; %d labelled frames accumulated in %s.",
-                    cfg.mlip.backend,
-                    n_appended,
-                    dataset_path,
-                )
-            compare_candidate = comparison_enabled and state.candidate_model_path is not None
-            if compare_candidate:
-                try:
-                    evaluation_cfg = cfg.model_copy(deep=True)
-                    if cfg.trainer.validation_fraction > 0:
-                        evaluation_cfg.trainer.validation_set = validation_dataset_path
-                        evaluation_cfg.trainer.validation_fraction = 0.0
-                    decision = evaluate_promotion_candidate(
-                        evaluation_cfg,
-                        state.candidate_model_path,
-                        iteration=i,
-                        training_set=dataset_path,
-                    )
-                    state.model_comparison = asdict(decision)
-                except Exception as exc:  # noqa: BLE001
-                    state.model_comparison = {
-                        "approved": False,
-                        "reasons": [f"model comparison failed: {exc}"],
-                        "candidate_metrics": {},
-                        "incumbent_metrics": {},
-                    }
-                    log.exception("Iteration %d candidate model comparison failed", i)
-                if cfg.trainer.promote_model:
-                    state.promotion_validation = state.model_comparison
-            if (
-                cfg.trainer.promote_model
-                and state.promotion_validation is not None
-                and state.promotion_validation["approved"]
-            ):
-                state.new_logdir = state.candidate_model_path
-                state.model_promoted = True
-                _apply_model_override(cfg, state.candidate_model_path)
+            _retrain_candidate(cfg, dataset_path, i, it_dir, root, state, n_appended)
+            _compare_and_promote(
+                cfg, state, i, dataset_path, validation_dataset_path, comparison_enabled
+            )
             state.timings_sec["retrain"] = time.time() - t0
             if cfg.trainer.enabled:
                 state.training_status = "completed"
