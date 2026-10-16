@@ -54,7 +54,7 @@ def build_bundle(output: Path, public_data: Path, reference_data: Path) -> Path:
         ):
             _copy(HERE / rel, stage / "starting_kit" / rel)
         _copy(
-            HERE.parents[1] / "src/matsim_agents/discovery/energy_references.py",
+            HERE.parents[1] / "src/matsim_agents/datasets/energy_references.py",
             stage / "starting_kit/energy_references.py",
         )
 

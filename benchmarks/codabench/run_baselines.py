@@ -54,7 +54,7 @@ from ase.io import read
 if (Path(__file__).parent / "energy_references.py").is_file():
     from energy_references import predict_elemental_references
 else:
-    from matsim_agents.discovery.energy_references import predict_elemental_references
+    from matsim_agents.datasets.energy_references import predict_elemental_references
 
 HERE = Path(__file__).parent
 STRUCT_META = HERE / "public_data" / "structures_metadata.csv"

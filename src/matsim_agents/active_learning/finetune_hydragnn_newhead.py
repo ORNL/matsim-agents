@@ -397,7 +397,7 @@ def finetune_hydragnn_newhead(
             f"strategy={strategy!r} does not load pretrained weights"
         )
 
-    from matsim_agents.active_learning.formation_training import (
+    from matsim_agents.datasets.formation_training import (
         prepare_hydragnn_training_frames,
         save_hydragnn_energy_convention,
     )

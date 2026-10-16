@@ -22,10 +22,10 @@ from matsim_agents.active_learning.elemental_dft import (
     ElementalReferencePlan,
     prepare_elemental_references,
 )
-from matsim_agents.active_learning.formation_training import prepare_formation_training_dataset
 from matsim_agents.active_learning.hydragnn_references import resolve_training_references
 from matsim_agents.backends.dft.base import DFTResult
 from matsim_agents.backends.dft.config import DFTConfig
+from matsim_agents.datasets.formation_training import prepare_formation_training_dataset
 
 
 @pytest.fixture
@@ -472,7 +472,7 @@ def test_trusted_reference_formats_are_serialized_as_extxyz(
 def test_reference_manifest_feeds_formation_preparation(setup_references):
     from ase.calculators.singlepoint import SinglePointCalculator
 
-    from matsim_agents.active_learning.dataset_governance import (
+    from matsim_agents.datasets.governance import (
         DatasetValidationSummary,
         write_dataset_manifest,
     )
@@ -1119,7 +1119,7 @@ def test_al_additive_reference_extension_across_iterations(
 
     # Iteration 2: AL dataset now has Si and O (newly labelled species O)
     # Run with dft_approved=True to calculate newly introduced species O
-    from matsim_agents.active_learning.dataset_governance import (
+    from matsim_agents.datasets.governance import (
         DatasetValidationSummary,
         write_dataset_manifest,
     )
@@ -1204,7 +1204,7 @@ def test_al_additive_reference_extension_across_iterations(
 
 
 def test_manifest_reference_extension_accepts_expanded_real_method_scope(setup_references):
-    from matsim_agents.active_learning.dataset_governance import (
+    from matsim_agents.datasets.governance import (
         DatasetValidationSummary,
         write_dataset_manifest,
     )

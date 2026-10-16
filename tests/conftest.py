@@ -48,7 +48,7 @@ def elemental_manifest(tmp_path):
 @pytest.fixture
 def dataset_method_sidecar():
     def create(dataset, reference_manifest, *, method_signature_elements=None):
-        from matsim_agents.active_learning.dataset_governance import (
+        from matsim_agents.datasets.governance import (
             DatasetValidationSummary,
             write_dataset_manifest,
         )

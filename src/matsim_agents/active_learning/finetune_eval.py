@@ -306,7 +306,7 @@ def run_campaign(
     frames = [raw] if isinstance(raw, Atoms) else list(raw)
     if len(frames) < 4:
         raise ValueError(f"Need >=4 frames for a split; got {len(frames)}.")
-    from matsim_agents.discovery.energy_references import (
+    from matsim_agents.datasets.energy_references import (
         load_elemental_reference_manifest,
         validate_dataset_reference_method,
     )
@@ -323,7 +323,7 @@ def run_campaign(
         reference_element_method_signatures=manifest.get("element_method_signatures"),
         require_sidecar=True,
     )
-    from matsim_agents.active_learning.dataset_governance import DatasetManifest
+    from matsim_agents.datasets.governance import DatasetManifest
 
     source_metadata = json.loads(
         dataset_path.with_suffix(dataset_path.suffix + ".manifest.json").read_text()
@@ -342,7 +342,7 @@ def run_campaign(
     else:
         ase_write(str(train_path), train_frames, format="extxyz")
         ase_write(str(test_path), test_frames, format="extxyz")
-        from matsim_agents.active_learning.dataset_governance import (
+        from matsim_agents.datasets.governance import (
             DatasetValidationSummary,
             write_dataset_manifest,
         )

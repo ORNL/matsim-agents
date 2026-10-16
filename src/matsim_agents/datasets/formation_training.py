@@ -12,15 +12,15 @@ from ase import Atoms
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
 
-from matsim_agents.active_learning.dataset_governance import (
+from matsim_agents.datasets.energy_references import (
+    load_elemental_reference_manifest,
+    validate_dataset_reference_method,
+)
+from matsim_agents.datasets.governance import (
     DatasetManifest,
     DatasetValidationSummary,
     sha256_file,
     write_dataset_manifest,
-)
-from matsim_agents.discovery.energy_references import (
-    load_elemental_reference_manifest,
-    validate_dataset_reference_method,
 )
 
 FORMATION_ENERGY_REFERENCE = "dft:declared_elemental_formation_energy"

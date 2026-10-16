@@ -333,7 +333,7 @@ The shared formation-label preparation layer is implemented. Given a verified
 native-total-energy dataset sidecar and compatible elemental DFT manifest, run:
 
 ```bash
-python -m matsim_agents.active_learning.formation_training \
+python -m matsim_agents.datasets.formation_training \
   --dataset /path/to/raw-dft.extxyz \
   --elemental-reference-manifest /path/to/elemental-references.json \
   --output-dir /path/to/new-formation-snapshot

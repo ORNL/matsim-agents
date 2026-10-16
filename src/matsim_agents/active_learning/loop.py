@@ -40,12 +40,6 @@ import numpy as np
 from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.active_learning.candidates import sample_md_candidates
 from matsim_agents.active_learning.config import ALConfig
-from matsim_agents.active_learning.dataset_governance import (
-    DatasetManifest,
-    structure_identity,
-    validate_labelled_frames,
-    write_dataset_manifest,
-)
 from matsim_agents.active_learning.dft_protocol import (
     dft_method_signature,
     scientific_dft_payload,
@@ -67,9 +61,15 @@ from matsim_agents.active_learning.trainer import (
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.backends.dft.runner import run_dft_batch
-from matsim_agents.discovery.energy_references import (
+from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,
+)
+from matsim_agents.datasets.governance import (
+    DatasetManifest,
+    structure_identity,
+    validate_labelled_frames,
+    write_dataset_manifest,
 )
 
 log = logging.getLogger(__name__)

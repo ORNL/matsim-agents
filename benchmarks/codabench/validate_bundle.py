@@ -13,7 +13,7 @@ import numpy as np
 import yaml
 from ase.io import read
 
-from matsim_agents.discovery.energy_references import load_elemental_reference_manifest
+from matsim_agents.datasets.energy_references import load_elemental_reference_manifest
 
 REQUIRED_STATIC = (
     "competition.yaml",

@@ -10,9 +10,9 @@ import numpy as np
 from ase.calculators.calculator import Calculator, all_changes
 from pydantic import BaseModel, Field
 
-from matsim_agents.active_learning.dataset_governance import sha256_file
-from matsim_agents.active_learning.formation_training import FORMATION_ENERGY_REFERENCE
-from matsim_agents.discovery.energy_references import load_elemental_reference_manifest
+from matsim_agents.datasets.energy_references import load_elemental_reference_manifest
+from matsim_agents.datasets.formation_training import FORMATION_ENERGY_REFERENCE
+from matsim_agents.datasets.governance import sha256_file
 
 
 class HydraGNNEnergyConvention(BaseModel):

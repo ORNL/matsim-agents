@@ -22,7 +22,6 @@ from matsim_agents.active_learning.config import (
     ALConfig,
     resolve_hydragnn_inference_head,
 )
-from matsim_agents.active_learning.dataset_governance import sha256_file
 from matsim_agents.active_learning.loop import run_active_learning
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
@@ -34,6 +33,7 @@ from matsim_agents.campaign.registry import (
 )
 from matsim_agents.campaign.state import CampaignState
 from matsim_agents.campaign.surrogate_hull import evaluate_surrogate_hull
+from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.stability import (
     ElementalReferenceEntry,

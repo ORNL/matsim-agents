@@ -195,7 +195,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
             cfg.newhead_ft_config = logdir / "newhead.json"
             cfg.inference_head = None
         if "branch_mlp_checkpoint" in convention:
-            from matsim_agents.active_learning.dataset_governance import sha256_file
+            from matsim_agents.datasets.governance import sha256_file
 
             cfg.hydragnn_branch_mlp_checkpoint = logdir / convention["branch_mlp_checkpoint"]
             cfg.newhead_ft_config = None

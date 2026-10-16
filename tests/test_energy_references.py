@@ -10,7 +10,7 @@ from ase.io import write
 
 from matsim_agents.active_learning.config import MLIPConfig, TrainerConfig, UMAConfig
 from matsim_agents.active_learning.evaluate import evaluate_frames, evaluate_promotion_candidate
-from matsim_agents.discovery.energy_references import (
+from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     predict_elemental_references,
     validate_dataset_reference_method,

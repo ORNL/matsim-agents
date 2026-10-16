@@ -9,11 +9,11 @@ from ase.calculators.singlepoint import SinglePointCalculator
 from ase.constraints import FixAtoms
 from ase.io import read, write
 
-from matsim_agents.active_learning.formation_training import (
+from matsim_agents.datasets.energy_references import load_elemental_reference_manifest
+from matsim_agents.datasets.formation_training import (
     FORMATION_ENERGY_REFERENCE,
     prepare_formation_training_dataset,
 )
-from matsim_agents.discovery.energy_references import load_elemental_reference_manifest
 
 
 def _dataset(tmp_path, elemental_manifest, dataset_method_sidecar, *, role="training_pool"):

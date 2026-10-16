@@ -49,8 +49,8 @@ from matsim_agents.active_learning.branch_routing import (
     load_branch_mlp,
 )
 from matsim_agents.active_learning.cost import CostReport, count_parameters, track_cost
-from matsim_agents.active_learning.dataset_governance import sha256_file
 from matsim_agents.active_learning.hydragnn_precision import hydragnn_autocast
+from matsim_agents.datasets.governance import sha256_file
 
 log = logging.getLogger(__name__)
 
@@ -231,7 +231,7 @@ def finetune_hydragnn(
     With ``run=False`` the pipeline is built and a single forward/loss step is
     executed (dry-run validation) but no optimisation/epoch loop runs.
     """
-    from matsim_agents.active_learning.formation_training import (
+    from matsim_agents.datasets.formation_training import (
         prepare_hydragnn_training_frames,
         save_hydragnn_energy_convention,
     )

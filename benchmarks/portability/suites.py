@@ -62,7 +62,7 @@ def active_learning_contract(output: Path) -> dict[str, Any]:
     import numpy as np
     from ase import Atoms
 
-    from matsim_agents.active_learning.dataset_governance import (
+    from matsim_agents.datasets.governance import (
         validate_labelled_frames,
         write_dataset_manifest,
     )

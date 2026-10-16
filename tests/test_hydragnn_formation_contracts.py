@@ -14,14 +14,14 @@ from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
 
 from matsim_agents.active_learning.config import HydraGNNConfig, TrainerConfig
-from matsim_agents.active_learning.formation_training import (
-    prepare_hydragnn_training_frames,
-    save_hydragnn_energy_convention,
-)
 from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
 from matsim_agents.active_learning.hydragnn_references import resolve_training_references
 from matsim_agents.active_learning.trainer import retrain_hydragnn
-from matsim_agents.discovery.energy_references import predict_elemental_references
+from matsim_agents.datasets.energy_references import predict_elemental_references
+from matsim_agents.datasets.formation_training import (
+    prepare_hydragnn_training_frames,
+    save_hydragnn_energy_convention,
+)
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def _checkpoint(tmp_path, training_inputs):
 
 
 def _bind_output_to_reference_manifest(output, reference_manifest):
-    from matsim_agents.active_learning.dataset_governance import sha256_file
+    from matsim_agents.datasets.governance import sha256_file
 
     for path in (
         output / "energy-convention.json",
@@ -380,7 +380,7 @@ def test_fused_and_auto_newhead_reload_restore_totals(
         branch_mlp = model_dir / "branch-mlp.pt"
         branch_mlp.write_text("routing-checkpoint")
         (model_dir / "routing.json").write_text(json.dumps({"routed_branches": [7]}))
-        from matsim_agents.active_learning.dataset_governance import sha256_file
+        from matsim_agents.datasets.governance import sha256_file
 
         save_hydragnn_energy_convention(
             model_dir,
@@ -780,7 +780,7 @@ def test_retrain_rejects_multirank_builtin_before_resolving_references(
 
 
 def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_inputs):
-    from matsim_agents.active_learning.dataset_governance import sha256_file
+    from matsim_agents.datasets.governance import sha256_file
 
     model = _checkpoint(tmp_path, training_inputs)
     branch_mlp = model / "branch-mlp.pt"

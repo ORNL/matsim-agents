@@ -159,8 +159,8 @@ def retrain_hydragnn(
     ):
         raise ValueError("Built-in HydraGNN fine-tuners require exactly one process")
 
-    from matsim_agents.active_learning.dataset_governance import sha256_file
     from matsim_agents.active_learning.hydragnn_references import resolve_training_references
+    from matsim_agents.datasets.governance import sha256_file
 
     reference_manifest = resolve_training_references(
         trainer_cfg,
