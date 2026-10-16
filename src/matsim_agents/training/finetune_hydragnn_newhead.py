@@ -43,7 +43,9 @@ import copy
 import json
 import logging
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -305,6 +307,241 @@ def _batch_loss_single_head_impl(model, batch, e_w, f_w, *, f_scale=1.0, e_scale
     return e_w * e_loss + f_w * f_loss
 
 
+@dataclass(frozen=True)
+class _LossSpec:
+    """Loss weights, normalisation scales, and autocast dtype for one fine-tune run."""
+
+    e_w: float
+    f_w: float
+    f_scale: float
+    e_scale: float
+    autocast_dtype: Any
+
+    def __call__(self, model, batch):
+        return _batch_loss_single_head(
+            model,
+            batch,
+            self.e_w,
+            self.f_w,
+            f_scale=self.f_scale,
+            e_scale=self.e_scale,
+            autocast_dtype=self.autocast_dtype,
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Fine-tune stages                                                            #
+# --------------------------------------------------------------------------- #
+
+
+def _load_resume_metadata(
+    gfm_logdir: Path,
+    gfm_checkpoint: str | None,
+    *,
+    head_arch: dict | None,
+    head_index: int | None,
+) -> tuple[dict, str | None, int]:
+    """Verify a previous single-head run and return its metadata, checkpoint, and head."""
+    from ase.calculators.calculator import Calculator
+
+    from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
+
+    restore_hydragnn_total_energy(Calculator(), gfm_logdir, gfm_checkpoint)
+    previous = json.loads((gfm_logdir / "energy-convention.json").read_text())
+    gfm_checkpoint = gfm_checkpoint or previous["checkpoint"]
+    resume_metadata = json.loads((gfm_logdir / "newhead.json").read_text())
+    if head_arch is not None or (
+        head_index is not None and head_index != resume_metadata["head_index"]
+    ):
+        raise ValueError("Resuming a single-head checkpoint cannot replace its head architecture")
+    return resume_metadata, gfm_checkpoint, resume_metadata["head_index"]
+
+
+def _loss_weights(
+    arch: dict, normalize: bool, energy_weight: float | None, force_weight: float | None
+) -> tuple[float, float]:
+    # With the normalised loss the residuals are already O(1), so forces and
+    # energy are balanced at unit weight; the raw config force_weight (~95) is
+    # only appropriate for the un-normalised eV^2 objective.
+    _w_default = 1.0 if normalize else arch.get("force_weight", 1.0)
+    e_w = float(
+        energy_weight
+        if energy_weight is not None
+        else (1.0 if normalize else arch.get("energy_weight", 1.0))
+    )
+    f_w = float(force_weight if force_weight is not None else _w_default)
+    return e_w, f_w
+
+
+def _build_single_head_model(
+    hcfg: dict,
+    *,
+    param_dtype: Any,
+    dev: Any,
+    load_pretrained: bool,
+    gfm_logdir: Path,
+    gfm_checkpoint: str | None,
+    resume_metadata: dict | None,
+    freeze_mode: str,
+    head_arch: dict | None,
+    head_index: int | None,
+    ft_repo: str | Path | None,
+) -> tuple[Any, dict]:
+    """Build the GFM, load its backbone, and reduce the decoder to one ``branch-0`` head."""
+    import torch
+    from hydragnn.models.create import create_model_config
+
+    model = create_model_config(config=hcfg["NeuralNetwork"], verbosity=0)
+    torch.set_default_dtype(param_dtype)
+    model = model.to(dtype=param_dtype, device=dev)
+    if load_pretrained:
+        ckpt_path = _find_gfm_checkpoint(gfm_logdir, gfm_checkpoint)
+        state = torch.load(ckpt_path, map_location=dev)
+        state_dict = state.get("model_state_dict", state)
+        state_dict = {
+            (k[len("module.") :] if k.startswith("module.") else k): v
+            for k, v in state_dict.items()
+        }
+        if resume_metadata is None:
+            load_hydragnn_state_dict(model, state_dict, strict=False)
+        log.info("Loaded pretrained backbone from %s", ckpt_path.name)
+    else:
+        log.info("strategy=scratch: skipping pretrained checkpoint load")
+
+    # The recorded ``ft_config`` always describes a single branch-0 head with the
+    # GFM's head architecture, so the eval/calculator path rebuilds a matching
+    # shape and loads the fine-tuned checkpoint over it regardless of how the
+    # head was initialised here (fresh-random vs. kept-pretrained).
+    ft_config = build_newhead_ft_config(hcfg, freeze_mode=freeze_mode, head_arch=head_arch)
+    if resume_metadata is not None:
+        ft_config = resume_metadata["ft_config"]
+        model = _resume_single_head_model(
+            model, state_dict, ft_config, ft_repo=ft_repo, freeze_mode=freeze_mode
+        )
+        log.info("Resumed fine-tuned backbone and single head without reinitializing readout")
+    elif head_index is not None:
+        # Keep the SELECTED pretrained readout (its trained weights) and re-key
+        # it as branch-0, instead of growing a random head that must bootstrap
+        # force learning from scratch.
+        model = apply_pretrained_head_surgery(
+            model, head_index, ft_repo=ft_repo, freeze_mode=freeze_mode
+        )
+        log.info(
+            "Kept pretrained head branch-%d (%s) as branch-0",
+            head_index,
+            GFM_HEAD_DATASETS[head_index],
+        )
+    else:
+        model = apply_newhead_surgery(
+            model, ft_config, ft_repo=ft_repo, freeze=(freeze_mode != "none")
+        )
+    # update_architecture builds new Linear layers with the default dtype; make
+    # sure the whole model (backbone + new head) is on the training precision.
+    torch.set_default_dtype(param_dtype)
+    model = model.to(dtype=param_dtype, device=dev)
+    return model, ft_config
+
+
+def _warmup_cosine_scheduler(optimizer, steps_per_epoch: int, epochs: int, warmup_frac: float):
+    """Linear warmup then cosine decay over the full training run.
+
+    A schedule (plus gradient clipping) lets us use a larger effective step
+    without the constant-predictor collapse that a flat high LR caused.
+    """
+    import math
+
+    import torch
+
+    steps_per_epoch = max(steps_per_epoch, 1)
+    total_steps = max(steps_per_epoch * int(epochs), 1)
+    warmup_steps = max(int(total_steps * float(warmup_frac)), 1)
+
+    def _lr_lambda(step: int) -> float:
+        if step < warmup_steps:
+            return (step + 1) / warmup_steps
+        prog = (step - warmup_steps) / max(total_steps - warmup_steps, 1)
+        return 0.5 * (1.0 + math.cos(math.pi * min(prog, 1.0)))
+
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda)
+
+
+def _train_keep_best(
+    model,
+    train_loader,
+    val_loader,
+    optimizer,
+    scheduler,
+    loss_spec: _LossSpec,
+    *,
+    dev: Any,
+    epochs: int,
+    grad_clip: float,
+    backbone_trainable: bool,
+    n_train: int,
+    n_val: int,
+) -> None:
+    """Train for ``epochs`` and restore the weights with the lowest validation loss.
+
+    On these small AL datasets the loss overfits well before the last epoch, so
+    the best-validation checkpoint is kept rather than the final one.
+    """
+    import torch
+
+    best_val = float("inf")
+    best_state = None
+    best_epoch = 0
+    for epoch in range(epochs):
+        model.train() if backbone_trainable else model.eval()
+        running = 0.0
+        for batch in train_loader:
+            batch = batch.to(dev)
+            optimizer.zero_grad(set_to_none=True)
+            loss = loss_spec(model, batch)
+            loss.backward()
+            if grad_clip and grad_clip > 0:
+                torch.nn.utils.clip_grad_norm_(
+                    [p for p in model.parameters() if p.requires_grad], grad_clip
+                )
+            optimizer.step()
+            scheduler.step()
+            running += float(loss.detach()) * batch.num_graphs
+        train_mse = running / max(n_train, 1)
+        val_msg = ""
+        selection_mse = train_mse
+        if val_loader is not None:
+            model.eval()
+            vrun = 0.0
+            for batch in val_loader:
+                batch = batch.to(dev)
+                vloss = loss_spec(model, batch)
+                vrun += float(vloss.detach()) * batch.num_graphs
+            selection_mse = vrun / max(n_val, 1)
+            val_msg = f" val={selection_mse:.6f}"
+        log.info("Epoch %d/%d: train=%.6f%s", epoch + 1, epochs, train_mse, val_msg)
+        if selection_mse < best_val:
+            best_val = selection_mse
+            best_epoch = epoch + 1
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        log.info("Best epoch %d/%d: val=%.6f (restored for save)", best_epoch, epochs, best_val)
+
+
+def _save_single_head_logdir(
+    model, output_dir: Path, *, config_path: Path, checkpoint_name: str, metadata: dict
+) -> Path:
+    """Write the checkpoint, the ORIGINAL GFM config, and ``newhead.json``."""
+    import torch
+
+    ckpt_out = output_dir / checkpoint_name
+    torch.save({"model_state_dict": model.state_dict()}, ckpt_out)
+    # The original GFM config lets eval rebuild the backbone and re-apply surgery.
+    shutil.copyfile(config_path, output_dir / "config.json")
+    (output_dir / "newhead.json").write_text(json.dumps(metadata, indent=2))
+    return ckpt_out
+
+
 # --------------------------------------------------------------------------- #
 # Public entry point                                                          #
 # --------------------------------------------------------------------------- #
@@ -374,24 +611,11 @@ def finetune_hydragnn_newhead(
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
     resume_metadata = None
     if load_pretrained and (gfm_logdir / "newhead.json").exists():
-        from ase.calculators.calculator import Calculator
-
-        from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
-
-        restore_hydragnn_total_energy(Calculator(), gfm_logdir, gfm_checkpoint)
-        previous = json.loads((gfm_logdir / "energy-convention.json").read_text())
-        gfm_checkpoint = gfm_checkpoint or previous["checkpoint"]
-        resume_metadata = json.loads((gfm_logdir / "newhead.json").read_text())
-        if head_arch is not None or (
-            head_index is not None and head_index != resume_metadata["head_index"]
-        ):
-            raise ValueError(
-                "Resuming a single-head checkpoint cannot replace its head architecture"
-            )
-        head_index = resume_metadata["head_index"]
+        resume_metadata, gfm_checkpoint, head_index = _load_resume_metadata(
+            gfm_logdir, gfm_checkpoint, head_arch=head_arch, head_index=head_index
+        )
 
     import torch
-    from hydragnn.models.create import create_model_config
     from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
     from hydragnn.train.train_validate_test import resolve_precision
     from torch_geometric.loader import DataLoader
@@ -410,71 +634,25 @@ def finetune_hydragnn_newhead(
     dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
     radius = float(arch["radius"])
     max_neighbours = int(arch["max_neighbours"])
-    # With the normalised loss the residuals are already O(1), so forces and
-    # energy are balanced at unit weight; the raw config force_weight (~95) is
-    # only appropriate for the un-normalised eV^2 objective.
-    _w_default = 1.0 if normalize else arch.get("force_weight", 1.0)
-    e_w = float(
-        energy_weight
-        if energy_weight is not None
-        else (1.0 if normalize else arch.get("energy_weight", 1.0))
-    )
-    f_w = float(force_weight if force_weight is not None else _w_default)
+    e_w, f_w = _loss_weights(arch, normalize, energy_weight, force_weight)
 
     # --- read dataset ---
     if not frames:
         raise ValueError(f"No frames read from {dataset_path}")
 
-    # --- build model (+ optionally load pretrained backbone) ---
-    model = create_model_config(config=hcfg["NeuralNetwork"], verbosity=0)
-    torch.set_default_dtype(param_dtype)
-    model = model.to(dtype=param_dtype, device=dev)
-    if load_pretrained:
-        ckpt_path = _find_gfm_checkpoint(gfm_logdir, gfm_checkpoint)
-        state = torch.load(ckpt_path, map_location=dev)
-        state_dict = state.get("model_state_dict", state)
-        state_dict = {
-            (k[len("module.") :] if k.startswith("module.") else k): v
-            for k, v in state_dict.items()
-        }
-        if resume_metadata is None:
-            load_hydragnn_state_dict(model, state_dict, strict=False)
-        log.info("Loaded pretrained backbone from %s", ckpt_path.name)
-    else:
-        log.info("strategy=scratch: skipping pretrained checkpoint load")
-
-    # --- head surgery: keep ONE branch-0 head (+ optional freeze) ---
-    # The recorded ``ft_config`` always describes a single branch-0 head with the
-    # GFM's head architecture, so the eval/calculator path rebuilds a matching
-    # shape and loads the fine-tuned checkpoint over it regardless of how the
-    # head was initialised here (fresh-random vs. kept-pretrained).
-    ft_config = build_newhead_ft_config(hcfg, freeze_mode=freeze_mode, head_arch=head_arch)
-    if resume_metadata is not None:
-        ft_config = resume_metadata["ft_config"]
-        model = _resume_single_head_model(
-            model, state_dict, ft_config, ft_repo=ft_repo, freeze_mode=freeze_mode
-        )
-        log.info("Resumed fine-tuned backbone and single head without reinitializing readout")
-    elif head_index is not None:
-        # Keep the SELECTED pretrained readout (its trained weights) and re-key
-        # it as branch-0, instead of growing a random head that must bootstrap
-        # force learning from scratch.
-        model = apply_pretrained_head_surgery(
-            model, head_index, ft_repo=ft_repo, freeze_mode=freeze_mode
-        )
-        log.info(
-            "Kept pretrained head branch-%d (%s) as branch-0",
-            head_index,
-            GFM_HEAD_DATASETS[head_index],
-        )
-    else:
-        model = apply_newhead_surgery(
-            model, ft_config, ft_repo=ft_repo, freeze=(freeze_mode != "none")
-        )
-    # update_architecture builds new Linear layers with the default dtype; make
-    # sure the whole model (backbone + new head) is on the training precision.
-    torch.set_default_dtype(param_dtype)
-    model = model.to(dtype=param_dtype, device=dev)
+    model, ft_config = _build_single_head_model(
+        hcfg,
+        param_dtype=param_dtype,
+        dev=dev,
+        load_pretrained=load_pretrained,
+        gfm_logdir=gfm_logdir,
+        gfm_checkpoint=gfm_checkpoint,
+        resume_metadata=resume_metadata,
+        freeze_mode=freeze_mode,
+        head_arch=head_arch,
+        head_index=head_index,
+        ft_repo=ft_repo,
+    )
     # When the backbone is trainable (unfrozen/scratch) it must run in train()
     # mode so its norm layers update; a frozen backbone stays in eval() to keep
     # its pretrained running stats fixed. Running a trainable backbone in eval()
@@ -546,123 +724,51 @@ def finetune_hydragnn_newhead(
         },
     )
 
+    loss_spec = _LossSpec(e_w, f_w, f_scale, e_scale, autocast_dtype)
     if not run:
         loader = DataLoader(train_graphs, batch_size=min(batch_size, len(train_graphs)))
         batch = next(iter(loader)).to(dev)
-        loss = _batch_loss_single_head(
-            model,
-            batch,
-            e_w,
-            f_w,
-            f_scale=f_scale,
-            e_scale=e_scale,
-            autocast_dtype=autocast_dtype,
-        )
+        loss = loss_spec(model, batch)
         log.info("Dry-run forward OK; loss=%.6f", float(loss.detach()))
         return output_dir
 
     train_loader = DataLoader(train_graphs, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_graphs, batch_size=batch_size) if val_graphs else None
-
-    # Linear warmup then cosine decay over the full training run. A schedule
-    # (plus gradient clipping below) lets us use a larger effective step without
-    # the constant-predictor collapse that a flat high LR caused.
-    import math
-
-    steps_per_epoch = max(len(train_loader), 1)
-    total_steps = max(steps_per_epoch * int(epochs), 1)
-    warmup_steps = max(int(total_steps * float(warmup_frac)), 1)
-
-    def _lr_lambda(step: int) -> float:
-        if step < warmup_steps:
-            return (step + 1) / warmup_steps
-        prog = (step - warmup_steps) / max(total_steps - warmup_steps, 1)
-        return 0.5 * (1.0 + math.cos(math.pi * min(prog, 1.0)))
-
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda)
-
-    # Keep the checkpoint with the lowest validation loss, not the final epoch:
-    # on these small AL datasets the loss overfits well before the last epoch.
-    best_val = float("inf")
-    best_state = None
-    best_epoch = 0
+    scheduler = _warmup_cosine_scheduler(optimizer, len(train_loader), epochs, warmup_frac)
     with track_cost(report):
-        for epoch in range(epochs):
-            model.train() if backbone_trainable else model.eval()
-            running = 0.0
-            for batch in train_loader:
-                batch = batch.to(dev)
-                optimizer.zero_grad(set_to_none=True)
-                loss = _batch_loss_single_head(
-                    model,
-                    batch,
-                    e_w,
-                    f_w,
-                    f_scale=f_scale,
-                    e_scale=e_scale,
-                    autocast_dtype=autocast_dtype,
-                )
-                loss.backward()
-                if grad_clip and grad_clip > 0:
-                    torch.nn.utils.clip_grad_norm_(
-                        [p for p in model.parameters() if p.requires_grad], grad_clip
-                    )
-                optimizer.step()
-                scheduler.step()
-                running += float(loss.detach()) * batch.num_graphs
-            train_mse = running / max(len(train_graphs), 1)
-            val_msg = ""
-            selection_mse = train_mse
-            if val_loader is not None:
-                model.eval()
-                vrun = 0.0
-                for batch in val_loader:
-                    batch = batch.to(dev)
-                    vloss = _batch_loss_single_head(
-                        model,
-                        batch,
-                        e_w,
-                        f_w,
-                        f_scale=f_scale,
-                        e_scale=e_scale,
-                        autocast_dtype=autocast_dtype,
-                    )
-                    vrun += float(vloss.detach()) * batch.num_graphs
-                selection_mse = vrun / max(len(val_graphs), 1)
-                val_msg = f" val={selection_mse:.6f}"
-            log.info("Epoch %d/%d: train=%.6f%s", epoch + 1, epochs, train_mse, val_msg)
-            if selection_mse < best_val:
-                best_val = selection_mse
-                best_epoch = epoch + 1
-                best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
-
-    # Restore the best-validation weights before saving.
-    if best_state is not None:
-        model.load_state_dict(best_state)
-        log.info("Best epoch %d/%d: val=%.6f (restored for save)", best_epoch, epochs, best_val)
-
-    # --- save logdir ---
-    ckpt_out = output_dir / checkpoint_name
-    torch.save({"model_state_dict": model.state_dict()}, ckpt_out)
-    # Save the ORIGINAL GFM config so eval can rebuild backbone + re-apply surgery.
-    shutil.copyfile(config_path, output_dir / "config.json")
-    (output_dir / "newhead.json").write_text(
-        json.dumps(
-            {
-                "strategy": strategy,
-                "head": (GFM_HEAD_DATASETS[head_index] if head_index is not None else None),
-                "head_index": head_index,
-                "freeze_mode": freeze_mode,
-                "load_pretrained": load_pretrained,
-                "checkpoint": checkpoint_name,
-                "ft_config": ft_config,
-                "normalize": normalize,
-                "f_scale": f_scale,
-                "e_scale": e_scale,
-                "energy_convention": "dft:declared_elemental_formation_energy",
-            },
-            indent=2,
+        _train_keep_best(
+            model,
+            train_loader,
+            val_loader,
+            optimizer,
+            scheduler,
+            loss_spec,
+            dev=dev,
+            epochs=epochs,
+            grad_clip=grad_clip,
+            backbone_trainable=backbone_trainable,
+            n_train=len(train_graphs),
+            n_val=len(val_graphs),
         )
+
+    ckpt_out = _save_single_head_logdir(
+        model,
+        output_dir,
+        config_path=config_path,
+        checkpoint_name=checkpoint_name,
+        metadata={
+            "strategy": strategy,
+            "head": (GFM_HEAD_DATASETS[head_index] if head_index is not None else None),
+            "head_index": head_index,
+            "freeze_mode": freeze_mode,
+            "load_pretrained": load_pretrained,
+            "checkpoint": checkpoint_name,
+            "ft_config": ft_config,
+            "normalize": normalize,
+            "f_scale": f_scale,
+            "e_scale": e_scale,
+            "energy_convention": "dft:declared_elemental_formation_energy",
+        },
     )
     save_hydragnn_energy_convention(output_dir, ckpt_out)
     report.write(output_dir / "cost.json")
