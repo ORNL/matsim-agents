@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("platform", ["frontier", "perlmutter"])
+@pytest.mark.parametrize("platform", ["frontier", "perlmutter", "aurora"])
 @pytest.mark.parametrize("configured", [False, True])
 @pytest.mark.parametrize(
     "script_name", ["finetune_hydragnn", "finetune_hydragnn_newhead", "custom"]
@@ -23,9 +23,12 @@ def test_launcher_executes_expected_cli(tmp_path, platform, configured, script_n
         "with open(os.environ['CAPTURE_ARGS'], 'w') as output:\n"
         "    json.dump(sys.argv[1:], output)\n"
     )
-    srun = tmp_path / "srun"
-    srun.write_text('#!/bin/bash\nset -eu\nwhile [[ "$1" != python ]]; do shift; done\nexec "$@"\n')
-    srun.chmod(0o755)
+    for scheduler in ("srun", "mpiexec"):
+        stub = tmp_path / scheduler
+        stub.write_text(
+            '#!/bin/bash\nset -eu\nwhile [[ "$1" != python ]]; do shift; done\nexec "$@"\n'
+        )
+        stub.chmod(0o755)
     (tmp_path / "python").symlink_to(sys.executable)
     manifest = tmp_path / "elemental references.json"
     manifest.write_text("{}")
@@ -86,6 +89,8 @@ def test_launcher_executes_expected_cli(tmp_path, platform, configured, script_n
         "--elemental-reference-manifest",
         str(manifest),
     ]
+    if platform == "aurora":
+        expected.extend(["--device", "xpu"])
     expected.extend(
         [
             "--gfm-checkpoint",
@@ -103,3 +108,22 @@ def test_launcher_executes_expected_cli(tmp_path, platform, configured, script_n
     if script_name == "finetune_hydragnn":
         expected.extend(["--branch-mlp", str(branch_mlp)])
     assert actual == expected
+
+
+@pytest.mark.parametrize(
+    ("cuda", "xpu", "expected"),
+    [(True, True, "cuda"), (False, True, "xpu"), (False, False, "cpu"), (False, None, "cpu")],
+)
+def test_default_torch_device_prefers_cuda_then_xpu(monkeypatch, cuda, xpu, expected):
+    from types import SimpleNamespace
+
+    import torch
+
+    from matsim_agents.backends.mlip.devices import default_torch_device
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: cuda)
+    if xpu is None:
+        monkeypatch.delattr(torch, "xpu", raising=False)
+    else:
+        monkeypatch.setattr(torch, "xpu", SimpleNamespace(is_available=lambda: xpu), raising=False)
+    assert default_torch_device() == expected

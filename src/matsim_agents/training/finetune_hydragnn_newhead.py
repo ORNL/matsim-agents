@@ -49,6 +49,7 @@ from typing import Any
 
 import numpy as np
 
+from matsim_agents.backends.mlip.devices import ACCELERATOR_TYPES, default_torch_device
 from matsim_agents.backends.mlip.hydragnn_checkpoint import load_hydragnn_state_dict
 from matsim_agents.backends.mlip.hydragnn_newhead import (
     apply_newhead_surgery,
@@ -563,7 +564,7 @@ def finetune_hydragnn_newhead(
     _, param_dtype, autocast_dtype = resolve_precision(precision_str)
     torch.set_default_dtype(param_dtype)
 
-    dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    dev = torch.device(device or default_torch_device())
     radius = float(arch["radius"])
     max_neighbours = int(arch["max_neighbours"])
     e_w, f_w = _loss_weights(arch, normalize, energy_weight, force_weight)
@@ -627,7 +628,7 @@ def finetune_hydragnn_newhead(
     )
 
     optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr)
-    num_gpus = 1 if dev.type == "cuda" else 0
+    num_gpus = 1 if dev.type in ACCELERATOR_TYPES else 0
     report = CostReport(
         model_backend="hydragnn",
         dataset_label=Path(dataset_path).parent.name or Path(dataset_path).stem,

@@ -27,6 +27,7 @@ from matsim_agents.backends.mlip.config import (
     UMAConfig,
     resolve_hydragnn_inference_head,
 )
+from matsim_agents.backends.mlip.devices import default_torch_device
 from matsim_agents.backends.mlip.uma_artifacts import (
     load_uma_predict_unit_from_bundle,
     resolve_uma_artifact_bundle,
@@ -294,7 +295,7 @@ def _newhead_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path):
         if cfg.max_neighbours is not None
         else hcfg["NeuralNetwork"]["Architecture"]["max_neighbours"]
     )
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(default_torch_device())
 
     # The model precision is dictated by the training config (the fp64 GFM
     # must be run in fp64) so keep every tensor on the same dtype.

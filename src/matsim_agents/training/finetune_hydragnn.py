@@ -43,6 +43,7 @@ from typing import Any
 import numpy as np
 from ase import Atoms
 
+from matsim_agents.backends.mlip.devices import ACCELERATOR_TYPES, default_torch_device
 from matsim_agents.backends.mlip.hydragnn_precision import hydragnn_autocast
 from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.training.branch_routing import (
@@ -352,7 +353,7 @@ def finetune_hydragnn(
     precision, param_dtype, autocast_dtype = resolve_precision(precision_str)
     torch.set_default_dtype(param_dtype)
 
-    dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    dev = torch.device(device or default_torch_device())
     radius = float(arch["radius"])
     max_neighbours = int(arch["max_neighbours"])
     e_w = float(energy_weight if energy_weight is not None else arch.get("energy_weight", 1.0))
@@ -404,7 +405,7 @@ def finetune_hydragnn(
 
     optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr)
 
-    num_gpus = 1 if dev.type == "cuda" else 0
+    num_gpus = 1 if dev.type in ACCELERATOR_TYPES else 0
     report = CostReport(
         model_backend="hydragnn",
         dataset_label=Path(dataset_path).parent.name or Path(dataset_path).stem,
