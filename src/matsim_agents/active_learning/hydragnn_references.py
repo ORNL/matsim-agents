@@ -203,14 +203,13 @@ def resolve_training_references(
         )
 
 
-def _resolve_training_references_unlocked(
-    trainer: TrainerConfig,
-    dataset: str | Path,
-    *,
-    dft_config: DFTConfig | None,
-    reference_root: Path,
-) -> Path:
-    dataset = Path(dataset)
+def _training_element_scope(dataset: Path) -> tuple[set[str], bool]:
+    """Elements the training references must cover, and whether the manifest records them.
+
+    The scope is the dataset manifest's recorded ``method_signature_elements``
+    when present (it must cover every element in the frames), otherwise the
+    elements found in the frames.
+    """
     dataset_metadata = DatasetManifest.model_validate_json(
         dataset.with_suffix(dataset.suffix + ".manifest.json").read_text()
     )
@@ -222,237 +221,22 @@ def _resolve_training_references_unlocked(
     training_elements = {symbol for atoms in frames for symbol in atoms.get_chemical_symbols()}
     if not training_elements:
         raise ValueError("HydraGNN training dataset is empty")
-    config = trainer.hydragnn_training_references
     recorded_scope = dataset_metadata.method_signature_elements
-    if recorded_scope is not None:
-        signature_elements = set(recorded_scope)
-        if len(signature_elements) != len(recorded_scope) or not signature_elements:
-            raise ValueError("Dataset manifest has an invalid method-signature element scope")
-        uncovered_elements = training_elements - signature_elements
-        if uncovered_elements:
-            raise ValueError(
-                "Dataset manifest method-signature element scope does not cover training "
-                f"elements: {sorted(uncovered_elements)}"
-            )
-        elements = signature_elements
-    else:
-        elements = training_elements
-    if config is not None and config.phase_plan is not None and recorded_scope is None:
+    if recorded_scope is None:
+        return training_elements, False
+    signature_elements = set(recorded_scope)
+    if len(signature_elements) != len(recorded_scope) or not signature_elements:
+        raise ValueError("Dataset manifest has an invalid method-signature element scope")
+    uncovered_elements = training_elements - signature_elements
+    if uncovered_elements:
         raise ValueError(
-            "HydraGNN phase-plan references require the dataset manifest to record "
-            "method_signature_elements"
+            "Dataset manifest method-signature element scope does not cover training "
+            f"elements: {sorted(uncovered_elements)}"
         )
-    source = config.manifest if config is not None else trainer.validation_reference_set
-    if config is not None and config.phase_plan is not None:
-        if dft_config is None or config.cache_dir is None:
-            raise ValueError("Automatic HydraGNN references require DFTConfig and cache_dir")
-        plan = ElementalReferencePlan.from_yaml(config.phase_plan)
-        source = reference_root / "elemental-references.json"
-        identity_path = reference_root / "training-reference-inputs.json"
-        if reference_root.exists():
-            recorded = json.loads(identity_path.read_text())
-            if recorded.get("snapshot_manifest_sha256") != sha256_file(source):
-                raise ValueError("Frozen HydraGNN training reference manifest hash mismatch")
-            existing_manifest = json.loads(source.read_text())
-            existing_elements = set(existing_manifest.get("references", {}).keys())
-            _verify_phase_plan_identity(
-                recorded.get("inputs", {}),
-                config.phase_plan,
-                plan,
-                dft_config,
-                existing_elements,
-            )
-            new_elements = elements - existing_elements
-            if new_elements:
-                all_elements = existing_elements | new_elements
-                target_compound_signature = dft_method_signature(dft_config, all_elements)
-                validate_dataset_reference_method(
-                    dataset,
-                    reference_backend=dft_config.backend,
-                    reference_method_signature=target_compound_signature,
-                    require_sidecar=True,
-                )
-                with tempfile.TemporaryDirectory(prefix="ext-references-") as temp_dir:
-                    temp_output = Path(temp_dir) / "snapshot"
-                    prepare_elemental_references(
-                        plan,
-                        dft_config,
-                        required_elements=new_elements,
-                        cache_dir=config.cache_dir,
-                        output_dir=temp_output,
-                        phases_approved=config.phases_approved,
-                        dft_approved=config.dft_approved,
-                        max_dft_calculations=config.max_dft_calculations,
-                    )
-                    new_manifest = json.loads(
-                        (temp_output / "elemental-references.json").read_text()
-                    )
-                    if existing_manifest.get("base_method_signature") != new_manifest.get(
-                        "base_method_signature"
-                    ):
-                        raise ValueError(
-                            "HydraGNN training reference inputs changed; use a new AL dataset"
-                        )
-                    with _staged_reference_snapshot(reference_root, copy_existing=True) as staged:
-                        for elem in new_elements:
-                            geom_file = f"{elem}.extxyz"
-                            shutil.copy2(temp_output / geom_file, staged / geom_file)
-                            existing_manifest["references"][elem] = new_manifest["references"][elem]
-                            existing_manifest.setdefault("element_method_signatures", {})[elem] = (
-                                new_manifest["element_method_signatures"][elem]
-                            )
-                        existing_selection = existing_manifest.setdefault("selection", {})
-                        new_selection = new_manifest.get("selection", {})
-                        if "initial_approval" not in existing_selection:
-                            existing_selection["initial_approval"] = {
-                                "phases_approved": existing_selection.get("phases_approved", False),
-                                "dft_approved": existing_selection.get("dft_approved", False),
-                                "dft_attempts": existing_selection.get("dft_attempts", 0),
-                            }
-                        existing_selection.setdefault("extensions", []).append(
-                            {
-                                "elements": sorted(new_elements),
-                                "phases_approved": new_selection.get("phases_approved", False),
-                                "dft_approved": new_selection.get("dft_approved", False),
-                                "dft_attempts": new_selection.get("dft_attempts", 0),
-                            }
-                        )
-                        existing_selection.setdefault("phases", []).extend(
-                            new_selection.get("phases", [])
-                        )
-                        existing_selection["phases_approved"] = bool(
-                            existing_selection.get("phases_approved")
-                            and new_selection.get("phases_approved")
-                        )
-                        existing_selection["dft_approved"] = bool(
-                            existing_selection.get("dft_approved")
-                            or new_selection.get("dft_approved")
-                        )
-                        existing_selection["dft_attempts"] = existing_selection.get(
-                            "dft_attempts", 0
-                        ) + new_selection.get("dft_attempts", 0)
-                        existing_manifest["method_signature"] = target_compound_signature
-                        staged_source = staged / "elemental-references.json"
-                        staged_source.write_text(json.dumps(existing_manifest, indent=2) + "\n")
-                        new_identity = _phase_plan_identity(
-                            config.phase_plan, plan, dft_config, all_elements
-                        )
-                        _save_frozen_inputs(
-                            staged / "training-reference-inputs.json",
-                            new_identity,
-                            staged_source,
-                        )
-                        _publish_reference_snapshot(reference_root, staged)
-                    source = reference_root / "elemental-references.json"
-                    identity_path = reference_root / "training-reference-inputs.json"
-        else:
-            identity = _phase_plan_identity(config.phase_plan, plan, dft_config, elements)
-            validate_dataset_reference_method(
-                dataset,
-                reference_backend=dft_config.backend,
-                reference_method_signature=identity["compound_method_signature"],
-                require_sidecar=True,
-            )
-            with _staged_reference_snapshot(reference_root, copy_existing=False) as staged:
-                staged_source = prepare_elemental_references(
-                    plan,
-                    dft_config,
-                    required_elements=elements,
-                    cache_dir=config.cache_dir,
-                    output_dir=staged,
-                    phases_approved=config.phases_approved,
-                    dft_approved=config.dft_approved,
-                    max_dft_calculations=config.max_dft_calculations,
-                )
-                _save_frozen_inputs(
-                    staged / "training-reference-inputs.json", identity, staged_source
-                )
-                _publish_reference_snapshot(reference_root, staged)
-            source = reference_root / "elemental-references.json"
-    else:
-        if source is None:
-            raise ValueError(
-                "HydraGNN training requires hydragnn_training_references or "
-                "validation_reference_set even when model comparison/promotion is disabled"
-            )
-        identity = {"manifest_sha256": sha256_file(source)}
-        identity_path = reference_root / "training-reference-inputs.json"
-        frozen = reference_root / "elemental-references.json"
-        if reference_root.exists():
-            _verify_frozen_inputs(identity_path, identity, frozen)
-            existing_frozen_manifest = json.loads(frozen.read_text())
-            existing_elements = set(existing_frozen_manifest.get("references", {}).keys())
-            new_elements = elements - existing_elements
-            if new_elements:
-                manifest, _, references = load_elemental_reference_manifest(
-                    source, required_elements=elements
-                )
-                validate_dataset_reference_method(
-                    dataset,
-                    reference_backend=manifest["backend"],
-                    reference_method_signature=manifest["method_signature"],
-                    reference_base_method_signature=manifest.get("base_method_signature"),
-                    reference_element_method_signatures=manifest.get("element_method_signatures"),
-                    require_sidecar=True,
-                )
-                with _staged_reference_snapshot(reference_root, copy_existing=True) as staged:
-                    copied = dict(existing_frozen_manifest.get("references", {}))
-                    for element, atoms, energy, _ in references:
-                        if element in new_elements:
-                            geometry = staged / f"{element}.extxyz"
-                            write(geometry, atoms)
-                            copied[element] = {
-                                "structure_path": geometry.name,
-                                "structure_sha256": sha256_file(geometry),
-                                "energy_eV": energy,
-                            }
-                    source_manifest = json.loads(source.read_text())
-                    staged_frozen = staged / "elemental-references.json"
-                    staged_frozen.write_text(
-                        json.dumps({**source_manifest, "references": copied}, indent=2) + "\n"
-                    )
-                    _save_frozen_inputs(
-                        staged / "training-reference-inputs.json", identity, staged_frozen
-                    )
-                    _publish_reference_snapshot(reference_root, staged)
-                frozen = reference_root / "elemental-references.json"
-                identity_path = reference_root / "training-reference-inputs.json"
-        else:
-            manifest, source_bytes, references = load_elemental_reference_manifest(
-                source, required_elements=elements
-            )
-            validate_dataset_reference_method(
-                dataset,
-                reference_backend=manifest["backend"],
-                reference_method_signature=manifest["method_signature"],
-                reference_base_method_signature=manifest.get("base_method_signature"),
-                reference_element_method_signatures=manifest.get("element_method_signatures"),
-                require_sidecar=True,
-            )
-            with _staged_reference_snapshot(reference_root, copy_existing=False) as staged:
-                staged.mkdir()
-                copied = {}
-                for element, atoms, energy, _ in references:
-                    if element in elements:
-                        geometry = staged / f"{element}.extxyz"
-                        write(geometry, atoms)
-                        copied[element] = {
-                            "structure_path": geometry.name,
-                            "structure_sha256": sha256_file(geometry),
-                            "energy_eV": energy,
-                        }
-                staged_frozen = staged / "elemental-references.json"
-                staged_frozen.write_text(
-                    json.dumps({**json.loads(source_bytes), "references": copied}, indent=2) + "\n"
-                )
-                _save_frozen_inputs(
-                    staged / "training-reference-inputs.json", identity, staged_frozen
-                )
-                _publish_reference_snapshot(reference_root, staged)
-            frozen = reference_root / "elemental-references.json"
-            identity_path = reference_root / "training-reference-inputs.json"
-        source = frozen
-    manifest, _, _ = load_elemental_reference_manifest(source, required_elements=elements)
+    return signature_elements, True
+
+
+def _validate_against_manifest(dataset: Path, manifest: dict) -> None:
     validate_dataset_reference_method(
         dataset,
         reference_backend=manifest["backend"],
@@ -461,4 +245,221 @@ def _resolve_training_references_unlocked(
         reference_element_method_signatures=manifest.get("element_method_signatures"),
         require_sidecar=True,
     )
+
+
+def _merge_extension_selection(
+    existing_selection: dict, new_selection: dict, new_elements: set[str]
+) -> None:
+    """Record an extension's approvals and DFT attempts in the frozen manifest's audit."""
+    if "initial_approval" not in existing_selection:
+        existing_selection["initial_approval"] = {
+            "phases_approved": existing_selection.get("phases_approved", False),
+            "dft_approved": existing_selection.get("dft_approved", False),
+            "dft_attempts": existing_selection.get("dft_attempts", 0),
+        }
+    existing_selection.setdefault("extensions", []).append(
+        {
+            "elements": sorted(new_elements),
+            "phases_approved": new_selection.get("phases_approved", False),
+            "dft_approved": new_selection.get("dft_approved", False),
+            "dft_attempts": new_selection.get("dft_attempts", 0),
+        }
+    )
+    existing_selection.setdefault("phases", []).extend(new_selection.get("phases", []))
+    existing_selection["phases_approved"] = bool(
+        existing_selection.get("phases_approved") and new_selection.get("phases_approved")
+    )
+    existing_selection["dft_approved"] = bool(
+        existing_selection.get("dft_approved") or new_selection.get("dft_approved")
+    )
+    existing_selection["dft_attempts"] = existing_selection.get(
+        "dft_attempts", 0
+    ) + new_selection.get("dft_attempts", 0)
+
+
+def _prepare_plan_references(config, plan, dft_config: DFTConfig, elements, output_dir: Path):
+    return prepare_elemental_references(
+        plan,
+        dft_config,
+        required_elements=elements,
+        cache_dir=config.cache_dir,
+        output_dir=output_dir,
+        phases_approved=config.phases_approved,
+        dft_approved=config.dft_approved,
+        max_dft_calculations=config.max_dft_calculations,
+    )
+
+
+def _extend_planned_references(
+    config, plan, dft_config: DFTConfig, dataset: Path, elements: set[str], reference_root: Path
+) -> None:
+    """Add DFT references for elements missing from an existing frozen phase-plan snapshot."""
+    source = reference_root / "elemental-references.json"
+    recorded = json.loads((reference_root / "training-reference-inputs.json").read_text())
+    if recorded.get("snapshot_manifest_sha256") != sha256_file(source):
+        raise ValueError("Frozen HydraGNN training reference manifest hash mismatch")
+    existing_manifest = json.loads(source.read_text())
+    existing_elements = set(existing_manifest.get("references", {}).keys())
+    _verify_phase_plan_identity(
+        recorded.get("inputs", {}),
+        config.phase_plan,
+        plan,
+        dft_config,
+        existing_elements,
+    )
+    new_elements = elements - existing_elements
+    if not new_elements:
+        return
+    all_elements = existing_elements | new_elements
+    target_compound_signature = dft_method_signature(dft_config, all_elements)
+    validate_dataset_reference_method(
+        dataset,
+        reference_backend=dft_config.backend,
+        reference_method_signature=target_compound_signature,
+        require_sidecar=True,
+    )
+    with tempfile.TemporaryDirectory(prefix="ext-references-") as temp_dir:
+        temp_output = Path(temp_dir) / "snapshot"
+        _prepare_plan_references(config, plan, dft_config, new_elements, temp_output)
+        new_manifest = json.loads((temp_output / "elemental-references.json").read_text())
+        if existing_manifest.get("base_method_signature") != new_manifest.get(
+            "base_method_signature"
+        ):
+            raise ValueError("HydraGNN training reference inputs changed; use a new AL dataset")
+        with _staged_reference_snapshot(reference_root, copy_existing=True) as staged:
+            for elem in new_elements:
+                geom_file = f"{elem}.extxyz"
+                shutil.copy2(temp_output / geom_file, staged / geom_file)
+                existing_manifest["references"][elem] = new_manifest["references"][elem]
+                existing_manifest.setdefault("element_method_signatures", {})[elem] = new_manifest[
+                    "element_method_signatures"
+                ][elem]
+            _merge_extension_selection(
+                existing_manifest.setdefault("selection", {}),
+                new_manifest.get("selection", {}),
+                new_elements,
+            )
+            existing_manifest["method_signature"] = target_compound_signature
+            staged_source = staged / "elemental-references.json"
+            staged_source.write_text(json.dumps(existing_manifest, indent=2) + "\n")
+            new_identity = _phase_plan_identity(config.phase_plan, plan, dft_config, all_elements)
+            _save_frozen_inputs(
+                staged / "training-reference-inputs.json",
+                new_identity,
+                staged_source,
+            )
+            _publish_reference_snapshot(reference_root, staged)
+
+
+def _create_planned_references(
+    config, plan, dft_config: DFTConfig, dataset: Path, elements: set[str], reference_root: Path
+) -> None:
+    """Compute and freeze DFT references for every element from the approved phase plan."""
+    identity = _phase_plan_identity(config.phase_plan, plan, dft_config, elements)
+    validate_dataset_reference_method(
+        dataset,
+        reference_backend=dft_config.backend,
+        reference_method_signature=identity["compound_method_signature"],
+        require_sidecar=True,
+    )
+    with _staged_reference_snapshot(reference_root, copy_existing=False) as staged:
+        staged_source = _prepare_plan_references(config, plan, dft_config, elements, staged)
+        _save_frozen_inputs(staged / "training-reference-inputs.json", identity, staged_source)
+        _publish_reference_snapshot(reference_root, staged)
+
+
+def _copy_reference_geometries(references, elements: set[str], staged: Path) -> dict:
+    """Write each selected reference geometry into the snapshot and describe it."""
+    copied = {}
+    for element, atoms, energy, _ in references:
+        if element in elements:
+            geometry = staged / f"{element}.extxyz"
+            write(geometry, atoms)
+            copied[element] = {
+                "structure_path": geometry.name,
+                "structure_sha256": sha256_file(geometry),
+                "energy_eV": energy,
+            }
+    return copied
+
+
+def _freeze_declared_references(
+    source: Path, dataset: Path, elements: set[str], reference_root: Path
+) -> None:
+    """Freeze (or extend) a snapshot of the required elements from a declared manifest."""
+    identity = {"manifest_sha256": sha256_file(source)}
+    identity_path = reference_root / "training-reference-inputs.json"
+    frozen = reference_root / "elemental-references.json"
+    if reference_root.exists():
+        _verify_frozen_inputs(identity_path, identity, frozen)
+        existing_frozen_manifest = json.loads(frozen.read_text())
+        existing_elements = set(existing_frozen_manifest.get("references", {}).keys())
+        new_elements = elements - existing_elements
+        if not new_elements:
+            return
+        manifest, _, references = load_elemental_reference_manifest(
+            source, required_elements=elements
+        )
+        _validate_against_manifest(dataset, manifest)
+        with _staged_reference_snapshot(reference_root, copy_existing=True) as staged:
+            copied = dict(existing_frozen_manifest.get("references", {}))
+            copied.update(_copy_reference_geometries(references, new_elements, staged))
+            source_manifest = json.loads(source.read_text())
+            staged_frozen = staged / "elemental-references.json"
+            staged_frozen.write_text(
+                json.dumps({**source_manifest, "references": copied}, indent=2) + "\n"
+            )
+            _save_frozen_inputs(staged / "training-reference-inputs.json", identity, staged_frozen)
+            _publish_reference_snapshot(reference_root, staged)
+        return
+
+    manifest, source_bytes, references = load_elemental_reference_manifest(
+        source, required_elements=elements
+    )
+    _validate_against_manifest(dataset, manifest)
+    with _staged_reference_snapshot(reference_root, copy_existing=False) as staged:
+        staged.mkdir()
+        copied = _copy_reference_geometries(references, elements, staged)
+        staged_frozen = staged / "elemental-references.json"
+        staged_frozen.write_text(
+            json.dumps({**json.loads(source_bytes), "references": copied}, indent=2) + "\n"
+        )
+        _save_frozen_inputs(staged / "training-reference-inputs.json", identity, staged_frozen)
+        _publish_reference_snapshot(reference_root, staged)
+
+
+def _resolve_training_references_unlocked(
+    trainer: TrainerConfig,
+    dataset: str | Path,
+    *,
+    dft_config: DFTConfig | None,
+    reference_root: Path,
+) -> Path:
+    dataset = Path(dataset)
+    elements, scope_recorded = _training_element_scope(dataset)
+    config = trainer.hydragnn_training_references
+    if config is not None and config.phase_plan is not None:
+        if not scope_recorded:
+            raise ValueError(
+                "HydraGNN phase-plan references require the dataset manifest to record "
+                "method_signature_elements"
+            )
+        if dft_config is None or config.cache_dir is None:
+            raise ValueError("Automatic HydraGNN references require DFTConfig and cache_dir")
+        plan = ElementalReferencePlan.from_yaml(config.phase_plan)
+        if reference_root.exists():
+            _extend_planned_references(config, plan, dft_config, dataset, elements, reference_root)
+        else:
+            _create_planned_references(config, plan, dft_config, dataset, elements, reference_root)
+    else:
+        source = config.manifest if config is not None else trainer.validation_reference_set
+        if source is None:
+            raise ValueError(
+                "HydraGNN training requires hydragnn_training_references or "
+                "validation_reference_set even when model comparison/promotion is disabled"
+            )
+        _freeze_declared_references(source, dataset, elements, reference_root)
+    source = reference_root / "elemental-references.json"
+    manifest, _, _ = load_elemental_reference_manifest(source, required_elements=elements)
+    _validate_against_manifest(dataset, manifest)
     return source
