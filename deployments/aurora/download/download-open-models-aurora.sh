@@ -42,10 +42,8 @@ JOB_TAG="${PBS_JOBID:-manual}"
 RUN_DIR="$PROJ/runs/download-open-models-aurora-${JOB_TAG}"
 mkdir -p "$RUN_DIR" "$MODEL_ROOT"
 
-if command -v module >/dev/null 2>&1; then
-  module reset
-  module load frameworks
-fi
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+load_aurora_frameworks_modules
 
 if [[ ! -d "$VENV" ]]; then
   echo "ERROR: Aurora matsim environment not found: $VENV" >&2

@@ -65,10 +65,8 @@ OUTPUT_DIR="${RUN_DIR}/outputs"
 mkdir -p "${RUN_DIR}" "${OUTPUT_DIR}"
 
 # ── modules + venv ──────────────────────────────────────────────────────────
-if command -v module >/dev/null 2>&1; then
-    module reset
-    module load frameworks
-fi
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+load_aurora_frameworks_modules
 # shellcheck disable=SC1091
 [[ -f "${VENV_PATH}/bin/activate" ]] && source "${VENV_PATH}/bin/activate"
 

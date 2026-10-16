@@ -20,7 +20,8 @@ finish() {
 trap finish EXIT
 printf 'RUNNING started=%s host=%s job=%s\n' "$(date -Is)" "$(hostname)" "${PBS_JOBID:-local}" \
     >"${RUN_DIR}/status.txt"
-module load pti-gpu oneapi/release/2026.1.0 intel_gpu_umd_aicoe hdf5
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+load_aurora_xpu_modules
 export PYTHONPATH="${REPO}/src:${REPO}:${PYTHONPATH:-}"
 export HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-$(dirname "${REPO}")/HydraGNN}"
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1

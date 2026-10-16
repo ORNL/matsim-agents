@@ -85,10 +85,8 @@ TILES_PER_NODE=12   # 6 PVC GPUs × 2 tiles
 SERVE_TP_SIZE="${SERVE_TP_SIZE:-$(( NNODES * TILES_PER_NODE ))}"
 
 # ── Modules ─────────────────────────────────────────────────────────────
-if command -v module >/dev/null 2>&1; then
-  module reset
-  module load frameworks
-fi
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+load_aurora_frameworks_modules
 if [[ -f "$VENV_PATH/bin/activate" ]]; then
   # shellcheck disable=SC1091
   source "$VENV_PATH/bin/activate"

@@ -26,7 +26,8 @@ if [[ "${QUALIFICATION}" == "compute" ]]; then
   done
 fi
 
-module load frameworks
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+load_aurora_frameworks_modules
 [[ -f "${VENV_PATH}/bin/activate" ]] && source "${VENV_PATH}/bin/activate"
 
 PYTHON="${VENV_PATH}/bin/python3"

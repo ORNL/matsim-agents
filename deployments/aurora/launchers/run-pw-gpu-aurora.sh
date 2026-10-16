@@ -51,10 +51,8 @@ if ! command -v module >/dev/null 2>&1; then
   fi
 fi
 
-if command -v module >/dev/null 2>&1; then
-  module reset
-  module load frameworks
-fi
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+load_aurora_frameworks_modules
 
 # MPICH + Intel GPU run-time defaults used on Aurora stacks.
 export MPICH_GPU_SUPPORT_ENABLED="${MPICH_GPU_SUPPORT_ENABLED:-1}"
