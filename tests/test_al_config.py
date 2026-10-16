@@ -6,8 +6,8 @@ Covers:
   the inline `vars:` block, env-overrides-vars precedence, and
   iterative resolution of nested references.
 * Validators: `dft.backend` requires the matching sub-block;
-  `acquisition.strategy='ensemble'` requires `hydragnn.ensemble_paths`.
-* Legacy YAML compatibility (top-level `vasp:` and `md.seed_structures:`).
+  `acquisition.strategy='ensemble'` requires `mlip.hydragnn.ensemble_paths`.
+* The removed top-level `hydragnn:`/`vasp:` and `md.seed_structures:` layout is rejected.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from textwrap import dedent
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from matsim_agents.active_learning import ALConfig
 from matsim_agents.active_learning.loop import _dft_method_signature
@@ -45,11 +46,15 @@ def _minimal_yaml(
     """
     ensemble = ""
     if ensemble_paths:
-        ensemble = "  ensemble_paths:\n" + ensemble_paths
+        ensemble = "    ensemble_paths:\n" + "".join(
+            f"  {line}\n" for line in ensemble_paths.splitlines()
+        )
 
     return (
-        "hydragnn:\n"
-        "  logdir: ${LOGDIR}\n"
+        "mlip:\n"
+        "  backend: hydragnn\n"
+        "  hydragnn:\n"
+        "    logdir: ${LOGDIR}\n"
         f"{ensemble}"
         "md:\n"
         "  seed_source:\n"
@@ -458,25 +463,22 @@ def test_dft_method_signature_includes_backend_executable_identity(
 
 
 # --------------------------------------------------------------------------- #
-# Backward-compat shims                                                       #
+# Removed pre-multi-backend layout                                            #
 # --------------------------------------------------------------------------- #
 
 
-def test_legacy_top_level_vasp_block_promoted(
+def test_top_level_hydragnn_vasp_and_seed_structures_are_rejected(
     tmp_path: Path,
     required_paths: dict[str, str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Older YAMLs with top-level `vasp:` (no `dft:`) must keep working."""
+    """The old top-level `hydragnn:`/`vasp:` and `md.seed_structures` layout is rejected."""
     body = dedent(
         """\
         hydragnn:
           logdir: {LOGDIR}
         md:
-          seed_source:
-            kind: paths
-            paths:
-              - {seed_path}
+          seed_structures:
+            - {seed_path}
         acquisition:
           strategy: random
           n_select: 4
@@ -495,45 +497,7 @@ def test_legacy_top_level_vasp_block_promoted(
     ).format(**required_paths)
     cfg_path = _write(tmp_path, "al.yaml", body)
 
-    cfg = ALConfig.from_yaml(cfg_path)
-    assert cfg.dft.backend == "vasp"
-    assert cfg.dft.vasp is not None
-    assert str(cfg.dft.vasp.vasp_bin) == required_paths["VASP_BIN"]
-
-
-def test_legacy_seed_structures_promoted(
-    tmp_path: Path,
-    required_paths: dict[str, str],
-) -> None:
-    """`md.seed_structures: [...]` must be promoted to seed_source.kind=paths."""
-    body = dedent(
-        """\
-        hydragnn:
-          logdir: {LOGDIR}
-        md:
-          seed_structures:
-            - {seed_path}
-        acquisition:
-          strategy: random
-          n_select: 4
-        dft:
-          backend: vasp
-          vasp:
-            vasp_bin: {VASP_BIN}
-            vasp_wrapper: {VASP_WRAPPER}
-            incar_template: {INCAR}
-            potcar_dir: {POTCAR_DIR}
-        trainer:
-          enabled: false
-          train_script: {TRAIN_SCRIPT}
-        loop:
-          n_iterations: 1
-          out_dir: {OUT_DIR}
-        """
-    ).format(**required_paths)
-    cfg_path = _write(tmp_path, "al.yaml", body)
-
-    cfg = ALConfig.from_yaml(cfg_path)
-    assert cfg.md.seed_source.kind == "paths"
-    assert len(cfg.md.seed_source.paths) == 1
-    assert str(cfg.md.seed_source.paths[0]) == required_paths["seed_path"]
+    with pytest.raises(ValidationError) as excinfo:
+        ALConfig.from_yaml(cfg_path)
+    missing = {error["loc"] for error in excinfo.value.errors() if error["type"] == "missing"}
+    assert {("mlip",), ("dft",), ("md", "seed_source")} <= missing

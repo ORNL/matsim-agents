@@ -363,7 +363,7 @@ MLP should select `finetune_hydragnn.py` instead and provide that MLP checkpoint
 HydraGNN's `examples/mptrj/train.py` is a pretraining entry point, not an AL
 fine-tuner, and is not used by these configurations.
 AL forwards the configured charge/spin conditioning to both built-in trainers
-and `hydragnn.ft_repo` to the new-head trainer, including through HPC launchers.
+and `mlip.hydragnn.ft_repo` to the new-head trainer, including through HPC launchers.
 
 AL training requires references even with comparison and promotion disabled.
 Configure a verified manifest explicitly:

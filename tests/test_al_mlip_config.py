@@ -34,10 +34,12 @@ def _base_blocks(tmp_path) -> dict:
     }
 
 
-def test_legacy_hydragnn_block_is_promoted_to_mlp(tmp_path) -> None:
-    """A top-level ``hydragnn:`` block (old schema) must become mlp.backend=hydragnn."""
+def test_hydragnn_backend_parses(tmp_path) -> None:
     data = _base_blocks(tmp_path)
-    data["hydragnn"] = {"logdir": str(tmp_path / "logdir"), "checkpoint": "best_model.pt"}
+    data["mlip"] = {
+        "backend": "hydragnn",
+        "hydragnn": {"logdir": str(tmp_path / "logdir"), "checkpoint": "best_model.pt"},
+    }
     cfg = ALConfig.model_validate(data)
     assert cfg.mlip.backend == "hydragnn"
     assert cfg.mlip.hydragnn is not None

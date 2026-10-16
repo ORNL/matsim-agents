@@ -102,7 +102,7 @@ compatibility. These inputs are existing DFT calculations, not requests to run
 DFT automatically. See the
 [manifest schema and promotion contract](../../docs/scientific-workflows.md#formation-energy-comparisons-and-campaign-promotion).
 
-For built-in HydraGNN fine-tuning, set `hydragnn.hydragnn_root` to the HydraGNN
+For built-in HydraGNN fine-tuning, set `mlip.hydragnn.hydragnn_root` to the HydraGNN
 source checkout (the Frontier examples use `${HYDRAGNN_DIR}`). The training
 launcher forwards this path to the fine-tuner so it does not rely on a
 machine-specific default checkout location.
@@ -200,7 +200,7 @@ in the parsed `ALConfig`.
    ```
 
 2. Edit `al_config.example.yaml`:
-   - Point `hydragnn.logdir` at a trained HydraGNN logdir.
+   - Point `mlip.hydragnn.logdir` at a trained HydraGNN logdir.
    - Choose a seed source under `md.seed_source` — see *Seed sources* below.
    - Choose `dft.backend: vasp` (and fill `dft.vasp.*`) **or** `dft.backend: qe`
      (and fill `dft.qe.*`).

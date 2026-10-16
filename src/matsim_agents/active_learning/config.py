@@ -8,7 +8,7 @@ a top-level field so the YAML is self-documenting and trivially diffable.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -20,9 +20,7 @@ class MDConfig(BaseModel):
     """Parameters for the HydraGNN-driven MD sampler.
 
     The list of starting structures is supplied via :class:`SeedSourceConfig`
-    (``seed_source``). For backward compatibility, ``seed_structures`` may
-    still be set as a top-level list of paths; the ``ALConfig`` root
-    validator promotes it to ``seed_source.kind='paths'``.
+    (``seed_source``).
     """
 
     seed_source: SeedSourceConfig = Field(
@@ -328,30 +326,6 @@ class ALConfig(BaseModel):
     dft: DFTConfig
     trainer: TrainerConfig
     loop: LoopConfig
-
-    @model_validator(mode="before")
-    @classmethod
-    def _accept_legacy_vasp_block(cls, data: Any) -> Any:
-        """Accept the pre-multi-backend YAML schema.
-
-        * Top-level ``hydragnn:`` (no ``mlip:``) → ``mlip: {backend: hydragnn,
-          hydragnn: ...}`` so existing single-surrogate configs keep working.
-        * Top-level ``vasp:`` (no ``dft:``) → ``dft: {backend: vasp, vasp: ...}``.
-        * ``md.seed_structures: [...]`` → ``md.seed_source: {kind: paths, ...}``.
-        """
-        if not isinstance(data, dict):
-            return data
-        data = dict(data)  # don't mutate the caller's dict
-        if "hydragnn" in data and "mlip" not in data:
-            data["mlip"] = {"backend": "hydragnn", "hydragnn": data.pop("hydragnn")}
-        if "vasp" in data and "dft" not in data:
-            data["dft"] = {"backend": "vasp", "vasp": data.pop("vasp")}
-        md = data.get("md")
-        if isinstance(md, dict) and "seed_source" not in md and "seed_structures" in md:
-            md = dict(md)
-            md["seed_source"] = {"kind": "paths", "paths": md.pop("seed_structures")}
-            data["md"] = md
-        return data
 
     @model_validator(mode="after")
     def _check_ensemble_for_strategy(self) -> ALConfig:

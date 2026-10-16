@@ -37,17 +37,19 @@ vars:
 
 # ---------------------------------------------------------------------------
 
-hydragnn:
-  hydragnn_root: ${HYDRAGNN_DIR}
-  ft_repo: ${HYDRAGNN_FT_REPO}
-  logdir: ${INITIAL_LOGDIR}
-  checkpoint: best_model.pt
-  mlp_checkpoint: null
-  charge: 0.0
-  spin: 0.0
-  precision: fp32
-  mlp_device: cuda
-  ensemble_paths: []
+mlip:
+  backend: hydragnn
+  hydragnn:
+    hydragnn_root: ${HYDRAGNN_DIR}
+    ft_repo: ${HYDRAGNN_FT_REPO}
+    logdir: ${INITIAL_LOGDIR}
+    checkpoint: best_model.pt
+    mlp_checkpoint: null
+    charge: 0.0
+    spin: 0.0
+    precision: fp32
+    mlp_device: cuda
+    ensemble_paths: []
 
 md:
   # LLM-driven seed source.

@@ -255,9 +255,6 @@ class MLIPConfig(BaseModel):
         MLIP_BACKEND=uma matsim-agents al run <cfg>   # frozen UMA foundation model
         matsim-agents al run <cfg>                   # HydraGNN (default)
 
-    For backward compatibility, a legacy top-level ``hydragnn:`` block (no
-    ``mlip:`` block) is promoted to ``mlip: {backend: hydragnn, hydragnn: ...}``
-    by the :class:`ALConfig` root validator.
     """
 
     backend: Literal["hydragnn", "uma", "mace"] = "hydragnn"

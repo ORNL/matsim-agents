@@ -96,8 +96,6 @@ class DFTConfig(BaseModel):
     """Selects which DFT backend labels candidate structures.
 
     Exactly one of ``vasp`` / ``qe`` must be populated, matching ``backend``.
-    The :class:`ALConfig` root validator also accepts a legacy top-level
-    ``vasp:`` block (without a ``dft:`` block) for backward compatibility.
     """
 
     backend: Literal["vasp", "qe"] = "vasp"

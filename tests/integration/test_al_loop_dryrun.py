@@ -172,7 +172,7 @@ def _make_cfg(tmp_path: Path) -> ALConfig:
     out_dir.mkdir()
 
     return ALConfig(
-        hydragnn=HydraGNNConfig(logdir=logdir),
+        mlip=MLIPConfig(backend="hydragnn", hydragnn=HydraGNNConfig(logdir=logdir)),
         md=MDConfig(
             seed_source=SeedSourceConfig(kind="paths", paths=[seed]),
             n_steps=1,

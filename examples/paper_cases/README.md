@@ -294,6 +294,6 @@ are staged under `$POTCAR_DIR` as bare-symbol subdirectories.
 |---------|---------------------|
 | `n_random > 0` (pyXtal seeds) | Nothing extra (pyxtal is a core dependency, installed by default) |
 | `acquisition.strategy: mc_dropout` | Nothing extra (works with a single checkpoint) |
-| `acquisition.strategy: ensemble` / `ensemble_then_dropout` | ≥2 entries in `hydragnn.ensemble_paths` |
+| `acquisition.strategy: ensemble` / `ensemble_then_dropout` | ≥2 entries in `mlip.hydragnn.ensemble_paths` |
 | VASP DFT backend | Perlmutter VASP GPU build at `external/vasp6/` + licensed POTCARs at `$POTCAR_DIR` |
 | 2D slabs (phosphorene, Cu-BHT) | Handled via `KSPACING` (auto single k-point along vacuum); no special flag |
