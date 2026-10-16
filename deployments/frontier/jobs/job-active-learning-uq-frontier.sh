@@ -17,7 +17,6 @@
 # Override:
 #   MATSIM_STRUCTURES="a.vasp b.vasp" MATSIM_N_SELECT=4 \
 #     sbatch deployments/frontier/jobs/job-active-learning-uq-frontier.sh
-# Backward-compatible alias: MATSIM_AL_STRUCTURES
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -37,7 +36,7 @@ DEFAULT_STRUCTURES=(
   "$REPO/tests/integration/data/MgO.vasp"
   "$REPO/tests/integration/data/NaCl.vasp"
 )
-STRUCTURE_LIST="${MATSIM_STRUCTURES:-${MATSIM_AL_STRUCTURES:-}}"
+STRUCTURE_LIST="${MATSIM_STRUCTURES:-}"
 if [[ -n "${STRUCTURE_LIST}" ]]; then
   # shellcheck disable=SC2206
   STRUCTURES=( ${STRUCTURE_LIST} )

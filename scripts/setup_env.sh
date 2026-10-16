@@ -60,12 +60,7 @@ die()  { printf '\033[1;31m[setup]\033[0m %s\n' "$*" >&2; exit 1; }
 # and the matsim-owned environment. Delegate before the workstation path can
 # clone HydraGNN or alter its requirements.
 case "${PLATFORM}" in
-    frontier|frontier-rocm71|frontier-rocm64)
-        [[ "${PLATFORM}" == "frontier" ]] || \
-            warn "${PLATFORM} is a legacy name; using Frontier's current installer."
-        FACILITY="frontier"
-        ;;
-    perlmutter|aurora)
+    frontier|perlmutter|aurora)
         FACILITY="${PLATFORM}"
         ;;
     workstation)

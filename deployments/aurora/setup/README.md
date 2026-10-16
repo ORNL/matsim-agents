@@ -12,7 +12,6 @@ bash deployments/aurora/setup/install.sh
 It preserves an existing HydraGNN checkout unless `HYDRAGNN_REF` is explicitly
 set, runs HydraGNN's current Aurora installer, then installs and verifies
 matsim-agents wheels in that environment.
-`install_matsim_aurora.sh` is only a compatibility alias.
 
 The phases follow the Perlmutter installer: HydraGNN dependencies, project
 wheels in `.venv`, then optional isolated UMA and MACE environments. Aurora

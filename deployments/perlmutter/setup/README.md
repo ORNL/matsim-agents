@@ -12,7 +12,6 @@ bash deployments/perlmutter/setup/install.sh
 
 It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current Perlmutter installer,
 then installs and verifies matsim-agents in that environment.
-`install_matsim_perlmutter.sh` is only a compatibility alias.
 
 ## Model Download Safety Policy
 
