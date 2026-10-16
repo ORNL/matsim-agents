@@ -655,8 +655,8 @@ def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
         )
     except ImportError as exc:  # pragma: no cover - depends on optional dep
         raise ImportError(
-            "The MACE backend requires the 'mace-torch' package. Install it with the "
-            "per-platform build script (scripts/setup/<machine>/build-mace-venv-*.sh) "
+            "The MACE backend requires the 'mace-torch' package. Install it with "
+            "INSTALL_MACE=1 deployments/<facility>/setup/install.sh (into .venv-mace) "
             "or `pip install mace-torch`, then set mlip.backend: mace."
         ) from exc
 

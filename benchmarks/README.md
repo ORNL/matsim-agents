@@ -37,8 +37,8 @@ INSTALL_UMA=1 INSTALL_MACE=1 bash deployments/aurora/setup/install.sh
 
 UMA remains in `.venv`. MACE runs from `.venv-mace` because the current
 upstream package pins `e3nn==0.4.4`, conflicting with HydraGNN's exact
-`e3nn==0.5.1` pin. The older Codabench MACE helper remains only as a forwarding
-compatibility entry point and no longer modifies the active HydraGNN environment.
+`e3nn==0.5.1` pin. Install it with `INSTALL_MACE=1` and the facility's
+`deployments/<facility>/setup/install.sh`.
 
 Codabench dependencies follow the same boundary: `requirements.txt` is
 backend-neutral, `requirements-mace.txt` belongs in `.venv-mace`, and

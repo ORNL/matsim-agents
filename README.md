@@ -1596,7 +1596,6 @@ benchmarks/codabench/
 ├── requirements.txt             # backend-neutral competition dependencies
 ├── requirements-mace.txt        # MACE process dependencies (e3nn 0.4.4)
 ├── requirements-fairchem.txt    # UMA/AllScAIP process dependencies
-├── install_mace_aurora.sh       # MACE-MP-0 install helper for Aurora (XPU)
 ├── fix_h5py_system_conflict_aurora.sh  # h5py/HDF5 conflict workaround (Aurora)
 ├── baselines/
 │   ├── mace_mp0/model.py        # MACE-MP-0 baseline

@@ -642,16 +642,13 @@ def main() -> None:
     # competition closes — preventing participants from reverse-engineering
     # the hidden labels via repeated leaderboard queries.
     public_ids_file = ref_dir / "public_ids.txt"
-    if public_ids_file.is_file():
-        public_ids   = set(public_ids_file.read_text().split())
-        public_sids  = [s for s in all_sids if s     in public_ids]
-        private_sids = [s for s in all_sids if s not in public_ids]
-        partitions   = [("public_", public_sids), ("private_", private_sids)]
-        print(f"Split: {len(public_sids)} public, {len(private_sids)} private structures")
-    else:
-        # No split file: score everything without prefix (backward-compatible)
-        partitions = [("", all_sids)]
-        print("No public_ids.txt — scoring all structures (no partition prefix)")
+    if not public_ids_file.is_file():
+        sys.exit(f"Missing reference split file: {public_ids_file}")
+    public_ids   = set(public_ids_file.read_text().split())
+    public_sids  = [s for s in all_sids if s     in public_ids]
+    private_sids = [s for s in all_sids if s not in public_ids]
+    partitions   = [("public_", public_sids), ("private_", private_sids)]
+    print(f"Split: {len(public_sids)} public, {len(private_sids)} private structures")
 
     for prefix, sids in partitions:
         if not sids:

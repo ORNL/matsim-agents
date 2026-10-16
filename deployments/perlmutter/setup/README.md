@@ -403,8 +403,6 @@ and nothing about `.venv`, `.venv-uma`, or `.venv-mace` needs to change.
 
 ```bash
 INSTALL_VLLM=1 bash deployments/perlmutter/setup/install.sh
-# or standalone:
-bash deployments/perlmutter/setup/build-vllm-venv-perlmutter.sh
 ```
 
 This creates `$MATSIM_DIR/venv_vllm` and installs/import-checks `vllm` there.
