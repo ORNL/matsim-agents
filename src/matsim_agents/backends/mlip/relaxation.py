@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from copy import deepcopy
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, NamedTuple
 
 import numpy as np
 from langchain_core.tools import tool
@@ -390,11 +390,14 @@ class _NumericalStressCalculator:
         return stress
 
 
-def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
-    """Relax one structure with the selected MLIP backend and ASE optimizer."""
-    from ase.io import read, write
-    from ase.io.trajectory import Trajectory
+class _RelaxPaths(NamedTuple):
+    structure: str
+    trajectory: str
+    log_csv: str
+    optimized: str
 
+
+def _relaxation_paths(args: RelaxStructureInput) -> _RelaxPaths:
     structure_path = os.path.abspath(args.structure_path)
     out_dir = (
         os.path.abspath(args.output_dir) if args.output_dir else os.path.dirname(structure_path)
@@ -402,94 +405,119 @@ def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
     os.makedirs(out_dir, exist_ok=True)
 
     stem, ext = os.path.splitext(os.path.basename(structure_path))
-    trajectory_path = os.path.join(out_dir, f"{stem}_optimization.traj")
-    log_csv_path = os.path.join(out_dir, f"{stem}_optimization.csv")
-    optimized_path = os.path.join(
-        out_dir,
-        f"{stem}_optimized_structure"
-        f"{'_from_initial_randomly_perturbed_structure' if args.random_displacement else ''}{ext}",
+    return _RelaxPaths(
+        structure=structure_path,
+        trajectory=os.path.join(out_dir, f"{stem}_optimization.traj"),
+        log_csv=os.path.join(out_dir, f"{stem}_optimization.csv"),
+        optimized=os.path.join(
+            out_dir,
+            f"{stem}_optimized_structure"
+            f"{'_from_initial_randomly_perturbed_structure' if args.random_displacement else ''}"
+            f"{ext}",
+        ),
     )
 
+
+class _RelaxCalculator(NamedTuple):
+    calculator: Any
+    num_branches: int
+    active_branches: int
+    uq_note: str | None
+
+
+def _declared_hydragnn_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
+    """HydraGNN with a declared energy convention or an explicitly selected head."""
+    from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
+    from matsim_agents.backends.mlip.config import HydraGNNConfig
+
+    calculator = build_hydragnn_calculator(
+        HydraGNNConfig(
+            logdir=args.logdir,
+            checkpoint=args.checkpoint,
+            hydragnn_branch_mlp_checkpoint=args.hydragnn_branch_mlp_checkpoint,
+            inference_head=args.hydragnn_inference_head,
+            precision=args.precision,
+            mlp_device=args.mlp_device,
+            charge=args.charge,
+            spin=args.spin,
+        )
+    )
+    num_branches = (
+        1
+        if args.hydragnn_inference_head is not None
+        else int(getattr(calculator.model, "num_branches", 1))
+    )
+    active_branches = int(getattr(calculator, "active_branch_count", num_branches))
+    uq_note = (
+        "HydraGNN has fewer than two active branches; branch-weight UQ disabled"
+        if active_branches < 2
+        else None
+    )
+    return _RelaxCalculator(calculator, num_branches, active_branches, uq_note)
+
+
+def _fused_hydragnn_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
+    """Pretrained multi-branch HydraGNN weighted by its BranchWeightMLP."""
+    from ase.calculators.calculator import Calculator
+
+    from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
+
+    restore_hydragnn_total_energy(Calculator(), Path(args.logdir), args.checkpoint)
+
+    (
+        model,
+        mlp,
+        config,
+        device,
+        autocast_ctx,
+        param_dtype,
+        num_branches,
+        mlp_device,
+        mlp_autocast_ctx,
+        unified_mlp_gnn_stack,
+        _gnn_prec,
+        _mlp_prec,
+    ) = _load_fused_stack(
+        args.logdir,
+        args.checkpoint,
+        args.hydragnn_branch_mlp_checkpoint,
+        args.precision,
+        args.mlp_precision,
+        args.mlp_device,
+    )
+    active_branches = num_branches
+
+    arch = config["NeuralNetwork"]["Architecture"]
+    radius = float(arch.get("radius", 5.0))
+    max_neighbours = int(arch.get("max_neighbours", 20))
+
+    calculator = _build_calculator(
+        model,
+        mlp,
+        radius,
+        max_neighbours,
+        param_dtype,
+        autocast_ctx,
+        device,
+        num_branches,
+        mlp_device,
+        mlp_autocast_ctx,
+        unified_mlp_gnn_stack,
+        args.charge,
+        args.spin,
+    )
+    uq_note = None
+    return _RelaxCalculator(calculator, num_branches, active_branches, uq_note)
+
+
+def _relaxation_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
+    """Build the selected MLIP calculator and describe its branch-weight UQ support."""
     if args.mlip_backend == "hydragnn":
         declared_checkpoint = Path(args.logdir) / "energy-convention.json"
         if args.hydragnn_inference_head is not None or declared_checkpoint.exists():
-            from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
-            from matsim_agents.backends.mlip.config import HydraGNNConfig
-
-            calculator = build_hydragnn_calculator(
-                HydraGNNConfig(
-                    logdir=args.logdir,
-                    checkpoint=args.checkpoint,
-                    hydragnn_branch_mlp_checkpoint=args.hydragnn_branch_mlp_checkpoint,
-                    inference_head=args.hydragnn_inference_head,
-                    precision=args.precision,
-                    mlp_device=args.mlp_device,
-                    charge=args.charge,
-                    spin=args.spin,
-                )
-            )
-            num_branches = (
-                1
-                if args.hydragnn_inference_head is not None
-                else int(getattr(calculator.model, "num_branches", 1))
-            )
-            active_branches = int(getattr(calculator, "active_branch_count", num_branches))
-            uq_note = (
-                "HydraGNN has fewer than two active branches; branch-weight UQ disabled"
-                if active_branches < 2
-                else None
-            )
-        else:
-            from ase.calculators.calculator import Calculator
-
-            from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
-
-            restore_hydragnn_total_energy(Calculator(), Path(args.logdir), args.checkpoint)
-
-            (
-                model,
-                mlp,
-                config,
-                device,
-                autocast_ctx,
-                param_dtype,
-                num_branches,
-                mlp_device,
-                mlp_autocast_ctx,
-                unified_mlp_gnn_stack,
-                _gnn_prec,
-                _mlp_prec,
-            ) = _load_fused_stack(
-                args.logdir,
-                args.checkpoint,
-                args.hydragnn_branch_mlp_checkpoint,
-                args.precision,
-                args.mlp_precision,
-                args.mlp_device,
-            )
-            active_branches = num_branches
-
-            arch = config["NeuralNetwork"]["Architecture"]
-            radius = float(arch.get("radius", 5.0))
-            max_neighbours = int(arch.get("max_neighbours", 20))
-
-            calculator = _build_calculator(
-                model,
-                mlp,
-                radius,
-                max_neighbours,
-                param_dtype,
-                autocast_ctx,
-                device,
-                num_branches,
-                mlp_device,
-                mlp_autocast_ctx,
-                unified_mlp_gnn_stack,
-                args.charge,
-                args.spin,
-            )
-            uq_note = None
-    elif args.mlip_backend == "uma":
+            return _declared_hydragnn_calculator(args)
+        return _fused_hydragnn_calculator(args)
+    if args.mlip_backend == "uma":
         from matsim_agents.backends.mlip.calculator import build_uma_calculator
         from matsim_agents.backends.mlip.config import UMAConfig
 
@@ -504,61 +532,54 @@ def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
         num_branches = 0
         active_branches = 0
         uq_note = "branch-weight UQ unavailable for UMA backend"
-    else:
-        from matsim_agents.backends.mlip.calculator import build_mace_calculator
-        from matsim_agents.backends.mlip.config import MACEConfig
+        return _RelaxCalculator(calculator, num_branches, active_branches, uq_note)
+    from matsim_agents.backends.mlip.calculator import build_mace_calculator
+    from matsim_agents.backends.mlip.config import MACEConfig
 
-        calculator = build_mace_calculator(
-            MACEConfig(
-                family=args.mace_family,
-                model=args.mace_model,
-                device=args.mlp_device,
-                precision=args.precision,
-                dispersion=args.mace_dispersion,
-            ),
-            enable_mc_dropout=False,
-        )
-        num_branches = 0
-        active_branches = 0
-        uq_note = "branch-weight UQ unavailable for MACE backend"
+    calculator = build_mace_calculator(
+        MACEConfig(
+            family=args.mace_family,
+            model=args.mace_model,
+            device=args.mlp_device,
+            precision=args.precision,
+            dispersion=args.mace_dispersion,
+        ),
+        enable_mc_dropout=False,
+    )
+    num_branches = 0
+    active_branches = 0
+    uq_note = "branch-weight UQ unavailable for MACE backend"
+    return _RelaxCalculator(calculator, num_branches, active_branches, uq_note)
 
-    atoms = read(structure_path)
-    atoms.calc = calculator
 
-    if args.random_displacement:
-        rng = np.random.default_rng(args.seed)
-        atoms.set_positions(
-            atoms.get_positions()
-            + rng.uniform(
-                -args.random_displacement_scale,
-                args.random_displacement_scale,
-                size=atoms.get_positions().shape,
-            )
-        )
+class _OptimizationOutcome(NamedTuple):
+    energy: float
+    max_force: float
+    top_branch: int
+    top_weight: float
+    converged: bool
+    steps_taken: int
 
-    atoms.get_potential_energy()
-    atoms.get_forces()
-    traj_writer = Trajectory(trajectory_path, mode="w", atoms=atoms)
-    traj_writer.write()
 
-    cell_relax_active = False
-    if args.relax_cell:
-        from ase.constraints import ExpCellFilter
+def _optimize_with_log(
+    args: RelaxStructureInput,
+    atoms,
+    optimizable,
+    optimizer,
+    calculator,
+    traj_writer,
+    *,
+    log_csv_path: str,
+    num_branches: int,
+    active_branches: int,
+    cell_relax_active: bool,
+) -> _OptimizationOutcome:
+    """Step the optimizer, logging per-step energy, force, and branch weights to CSV.
 
-        # Wrap with numerical stress unconditionally when relax_cell=True;
-        # _NumericalStressCalculator.calculate() will try the inner calc first
-        # and only use FD for stress (which the inner calc won't provide).
-        # This also patches implemented_properties on the inner calc so ASE's
-        # property cache doesn't raise before reaching our wrapper.
-        calculator = _NumericalStressCalculator(calculator)
-        atoms.calc = calculator
-        optimizable = ExpCellFilter(atoms)
-        cell_relax_active = True
-    else:
-        optimizable = atoms
-
-    optimizer = _build_optimizer(args.optimizer, optimizable, args.maxstep)
-
+    Stops at convergence, after ``maxiter`` steps, or when the maximum force grows
+    by more than ``relative_increase_threshold`` in one step (positions are then
+    rolled back unless the cell is relaxing).
+    """
     csv_header = ["step", "energy_eV", "max_force_eV_per_A", "top_branch", "top_weight"] + [
         f"w_branch_{i}" for i in range(int(num_branches))
     ]
@@ -627,19 +648,79 @@ def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
         finally:
             traj_writer.close()
 
-    write(optimized_path, atoms)
+    return _OptimizationOutcome(energy, max_force, top_branch, top_weight, converged, steps_taken)
+
+
+def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
+    """Relax one structure with the selected MLIP backend and ASE optimizer."""
+    from ase.io import read, write
+    from ase.io.trajectory import Trajectory
+
+    paths = _relaxation_paths(args)
+    calculator, num_branches, active_branches, uq_note = _relaxation_calculator(args)
+
+    atoms = read(paths.structure)
+    atoms.calc = calculator
+
+    if args.random_displacement:
+        rng = np.random.default_rng(args.seed)
+        atoms.set_positions(
+            atoms.get_positions()
+            + rng.uniform(
+                -args.random_displacement_scale,
+                args.random_displacement_scale,
+                size=atoms.get_positions().shape,
+            )
+        )
+
+    atoms.get_potential_energy()
+    atoms.get_forces()
+    traj_writer = Trajectory(paths.trajectory, mode="w", atoms=atoms)
+    traj_writer.write()
+
+    cell_relax_active = False
+    if args.relax_cell:
+        from ase.constraints import ExpCellFilter
+
+        # Wrap with numerical stress unconditionally when relax_cell=True;
+        # _NumericalStressCalculator.calculate() will try the inner calc first
+        # and only use FD for stress (which the inner calc won't provide).
+        # This also patches implemented_properties on the inner calc so ASE's
+        # property cache doesn't raise before reaching our wrapper.
+        calculator = _NumericalStressCalculator(calculator)
+        atoms.calc = calculator
+        optimizable = ExpCellFilter(atoms)
+        cell_relax_active = True
+    else:
+        optimizable = atoms
+
+    optimizer = _build_optimizer(args.optimizer, optimizable, args.maxstep)
+    outcome = _optimize_with_log(
+        args,
+        atoms,
+        optimizable,
+        optimizer,
+        calculator,
+        traj_writer,
+        log_csv_path=paths.log_csv,
+        num_branches=num_branches,
+        active_branches=active_branches,
+        cell_relax_active=cell_relax_active,
+    )
+
+    write(paths.optimized, atoms)
 
     return RelaxationResult(
-        structure_path=structure_path,
-        optimized_structure_path=optimized_path,
-        trajectory_path=trajectory_path,
-        log_csv_path=log_csv_path,
-        final_energy_eV=float(energy),
-        final_max_force_eV_per_A=float(max_force),
-        num_steps=steps_taken,
-        converged=converged,
-        top_branch=top_branch if top_branch >= 0 else None,
-        top_branch_weight=top_weight if np.isfinite(top_weight) else None,
+        structure_path=paths.structure,
+        optimized_structure_path=paths.optimized,
+        trajectory_path=paths.trajectory,
+        log_csv_path=paths.log_csv,
+        final_energy_eV=float(outcome.energy),
+        final_max_force_eV_per_A=float(outcome.max_force),
+        num_steps=outcome.steps_taken,
+        converged=outcome.converged,
+        top_branch=outcome.top_branch if outcome.top_branch >= 0 else None,
+        top_branch_weight=outcome.top_weight if np.isfinite(outcome.top_weight) else None,
         notes=uq_note,
     )
 
