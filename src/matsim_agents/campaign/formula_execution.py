@@ -1163,6 +1163,145 @@ def _prepare_al_template(
     return al_cfg
 
 
+def _summarize_active_learning(
+    al_root: Path, al_cfg: ALConfig, compute_nodes: int, phase_output_dir: str
+) -> dict[str, Any]:
+    """Collect durable AL iteration evidence after a successful loop run."""
+    states = _iteration_states(
+        al_root,
+        allow_empty=al_cfg.loop.max_dft_calculations == 0,
+    )
+    total_seconds = sum(float(state.get("timings_sec", {}).get("total", 0.0)) for state in states)
+    promoted = [state for state in states if state.get("model_promoted")]
+    dataset_path = al_root / (
+        "dataset.extxyz" if al_cfg.loop.dataset_format == "extxyz" else "dataset.db"
+    )
+    manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
+    training_data = None
+    if dataset_path.is_file():
+        training_data = {
+            "path": str(dataset_path.resolve()),
+            "sha256": sha256_file(dataset_path),
+            "manifest_path": (str(manifest_path.resolve()) if manifest_path.is_file() else None),
+        }
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            training_data.update(
+                {
+                    "dataset_id": manifest.get("dataset_id"),
+                    "method_signature": manifest.get("method_signature"),
+                    "dft_backend": manifest.get("dft_backend"),
+                    "accepted_frames_in_last_append": manifest.get("validation", {}).get(
+                        "accepted"
+                    ),
+                }
+            )
+    validation_dataset_path = al_root / "validation.extxyz"
+    if validation_dataset_path.is_file():
+        result_validation_data = {
+            "path": str(validation_dataset_path.resolve()),
+            "sha256": sha256_file(validation_dataset_path),
+        }
+    else:
+        result_validation_data = None
+    candidate_uncertainty = {
+        str(candidate_id): float(score)
+        for state in states
+        for candidate_id, score in state.get("candidate_uncertainty", {}).items()
+    }
+    result: dict[str, Any] = {
+        "n_dft_calculations": sum(
+            int(state.get("n_dft_converged", 0)) + int(state.get("n_dft_failed", 0))
+            for state in states
+        ),
+        "n_dft_converged": sum(int(state.get("n_dft_converged", 0)) for state in states),
+        "n_active_learning_iterations": len(states),
+        "node_hours": total_seconds * compute_nodes / 3600.0,
+        "model_promoted": bool(promoted),
+        "training_deferred": bool(
+            not promoted and states and states[-1].get("training_status") == "deferred"
+        ),
+        "training_data": training_data,
+        "held_out_validation_data": result_validation_data,
+        "md_candidate_uncertainty": candidate_uncertainty,
+        "iteration_states": states,
+        "phase_output_dir": phase_output_dir,
+    }
+    if promoted:
+        latest_model = promoted[-1].get("new_logdir")
+        if latest_model:
+            if al_cfg.mlip.backend == "uma":
+                result["exploration_kwargs"] = {"uma_model_name": latest_model}
+            elif al_cfg.mlip.backend == "mace":
+                result["exploration_kwargs"] = {
+                    "mace_family": "checkpoint",
+                    "mace_model": latest_model,
+                    "mace_dispersion": False,
+                }
+            else:
+                result["exploration_kwargs"] = {
+                    "logdir": latest_model,
+                    "checkpoint": None,
+                }
+    return result
+
+
+def _uma_only_evidence(
+    exploration: Any,
+    al_cfg: ALConfig,
+    candidate_uncertainty: dict[str, float],
+    cross_model: Any,
+    robustness: Any,
+    *,
+    node_hours: float,
+    stage_manifest_path: Path,
+) -> dict[str, Any]:
+    """Evidence record for UMA-only execution: MLIP labels without DFT."""
+    candidate_by_path = {
+        candidate.structure_path: candidate for candidate in exploration.phase_candidates
+    }
+    labels = []
+    for relaxation in exploration.relaxations:
+        candidate = candidate_by_path.get(relaxation.structure_path)
+        atom_count = candidate.num_atoms if candidate is not None else None
+        labels.append(
+            {
+                "candidate_id": candidate.candidate_id if candidate is not None else None,
+                "structure_path": relaxation.structure_path,
+                "optimized_structure_path": relaxation.optimized_structure_path,
+                "converged": relaxation.converged,
+                "final_energy_eV": relaxation.final_energy_eV,
+                "energy_per_atom_eV": (
+                    relaxation.final_energy_eV / atom_count if atom_count else None
+                ),
+                "residual_force_eV_per_A": relaxation.final_max_force_eV_per_A,
+                "uncertainty": (
+                    candidate_uncertainty.get(candidate.candidate_id)
+                    if candidate is not None and candidate.candidate_id is not None
+                    else None
+                ),
+            }
+        )
+    model_identifier = None
+    if al_cfg.mlip.uma is not None:
+        model_identifier = al_cfg.mlip.uma.model_name
+    return {
+        "execution_mode": "uma_only",
+        "evidence_level": "mlip_prediction",
+        "backend": "uma",
+        "model_identifier": model_identifier,
+        "n_dft_calculations": 0,
+        "n_active_learning_iterations": 0,
+        "node_hours": node_hours,
+        "model_promoted": False,
+        "candidate_uncertainty": candidate_uncertainty,
+        "mlip_labels": labels,
+        "cross_model_validation": cross_model,
+        "perturbation_robustness": robustness,
+        "campaign_stages_path": str(stage_manifest_path),
+    }
+
+
 def run_formula_with_active_learning(
     formula: str,
     output_dir: str,
@@ -1232,86 +1371,9 @@ def run_formula_with_active_learning(
                 iteration_states=partial_states,
             )
             raise
-        states = _iteration_states(
-            al_root,
-            allow_empty=al_cfg.loop.max_dft_calculations == 0,
-        )
-        total_seconds = sum(
-            float(state.get("timings_sec", {}).get("total", 0.0)) for state in states
-        )
+        result = _summarize_active_learning(al_root, al_cfg, config.compute_nodes, phase_output_dir)
+        states = result["iteration_states"]
         promoted = [state for state in states if state.get("model_promoted")]
-        dataset_path = al_root / (
-            "dataset.extxyz" if al_cfg.loop.dataset_format == "extxyz" else "dataset.db"
-        )
-        manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
-        training_data = None
-        if dataset_path.is_file():
-            training_data = {
-                "path": str(dataset_path.resolve()),
-                "sha256": sha256_file(dataset_path),
-                "manifest_path": (
-                    str(manifest_path.resolve()) if manifest_path.is_file() else None
-                ),
-            }
-            if manifest_path.is_file():
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-                training_data.update(
-                    {
-                        "dataset_id": manifest.get("dataset_id"),
-                        "method_signature": manifest.get("method_signature"),
-                        "dft_backend": manifest.get("dft_backend"),
-                        "accepted_frames_in_last_append": manifest.get("validation", {}).get(
-                            "accepted"
-                        ),
-                    }
-                )
-        validation_dataset_path = al_root / "validation.extxyz"
-        if validation_dataset_path.is_file():
-            result_validation_data = {
-                "path": str(validation_dataset_path.resolve()),
-                "sha256": sha256_file(validation_dataset_path),
-            }
-        else:
-            result_validation_data = None
-        candidate_uncertainty = {
-            str(candidate_id): float(score)
-            for state in states
-            for candidate_id, score in state.get("candidate_uncertainty", {}).items()
-        }
-        result: dict[str, Any] = {
-            "n_dft_calculations": sum(
-                int(state.get("n_dft_converged", 0)) + int(state.get("n_dft_failed", 0))
-                for state in states
-            ),
-            "n_dft_converged": sum(int(state.get("n_dft_converged", 0)) for state in states),
-            "n_active_learning_iterations": len(states),
-            "node_hours": total_seconds * config.compute_nodes / 3600.0,
-            "model_promoted": bool(promoted),
-            "training_deferred": bool(
-                not promoted and states and states[-1].get("training_status") == "deferred"
-            ),
-            "training_data": training_data,
-            "held_out_validation_data": result_validation_data,
-            "md_candidate_uncertainty": candidate_uncertainty,
-            "iteration_states": states,
-            "phase_output_dir": phase_output_dir,
-        }
-        if promoted:
-            latest_model = promoted[-1].get("new_logdir")
-            if latest_model:
-                if al_cfg.mlip.backend == "uma":
-                    result["exploration_kwargs"] = {"uma_model_name": latest_model}
-                elif al_cfg.mlip.backend == "mace":
-                    result["exploration_kwargs"] = {
-                        "mace_family": "checkpoint",
-                        "mace_model": latest_model,
-                        "mace_dispersion": False,
-                    }
-                else:
-                    result["exploration_kwargs"] = {
-                        "logdir": latest_model,
-                        "checkpoint": None,
-                    }
         tracker.set(
             "active_learning_labels_and_training",
             "completed",
@@ -1321,8 +1383,8 @@ def run_formula_with_active_learning(
                 states[-1].get("training_deferred_reasons", []) if states else []
             ),
             model_promoted=bool(promoted),
-            training_data=training_data,
-            held_out_validation_data=result_validation_data,
+            training_data=result["training_data"],
+            held_out_validation_data=result["held_out_validation_data"],
             n_dft_calculations=result["n_dft_calculations"],
             n_active_learning_iterations=result["n_active_learning_iterations"],
             node_hours=result["node_hours"],
@@ -1437,52 +1499,46 @@ def run_formula_with_active_learning(
         relaxation_runner=mlip_relaxation_runner,
     )
     if config.execution_mode == "uma_only":
-        candidate_by_path = {
-            candidate.structure_path: candidate for candidate in exploration.phase_candidates
-        }
-        labels = []
-        for relaxation in exploration.relaxations:
-            candidate = candidate_by_path.get(relaxation.structure_path)
-            atom_count = candidate.num_atoms if candidate is not None else None
-            labels.append(
-                {
-                    "candidate_id": candidate.candidate_id if candidate is not None else None,
-                    "structure_path": relaxation.structure_path,
-                    "optimized_structure_path": relaxation.optimized_structure_path,
-                    "converged": relaxation.converged,
-                    "final_energy_eV": relaxation.final_energy_eV,
-                    "energy_per_atom_eV": (
-                        relaxation.final_energy_eV / atom_count if atom_count else None
-                    ),
-                    "residual_force_eV_per_A": relaxation.final_max_force_eV_per_A,
-                    "uncertainty": (
-                        candidate_uncertainty.get(candidate.candidate_id)
-                        if candidate is not None and candidate.candidate_id is not None
-                        else None
-                    ),
-                }
-            )
-        model_identifier = None
-        if al_cfg.mlip.uma is not None:
-            model_identifier = al_cfg.mlip.uma.model_name
-        result.active_learning_result = {
-            "execution_mode": "uma_only",
-            "evidence_level": "mlip_prediction",
-            "backend": "uma",
-            "model_identifier": model_identifier,
-            "n_dft_calculations": 0,
-            "n_active_learning_iterations": 0,
-            "node_hours": phase_seconds * config.compute_nodes / 3600.0,
-            "model_promoted": False,
-            "candidate_uncertainty": candidate_uncertainty,
-            "mlip_labels": labels,
-            "cross_model_validation": cross_model,
-            "perturbation_robustness": robustness,
-            "campaign_stages_path": str(stage_manifest_path),
-        }
+        result.active_learning_result = _uma_only_evidence(
+            exploration,
+            al_cfg,
+            candidate_uncertainty,
+            cross_model,
+            robustness,
+            node_hours=phase_seconds * config.compute_nodes / 3600.0,
+            stage_manifest_path=stage_manifest_path,
+        )
         return result
     if result.active_learning_result is not None:
         result.active_learning_result["candidate_uncertainty"] = candidate_uncertainty
+    return _run_independent_dft_ranking(
+        formula,
+        formula_root,
+        config,
+        al_cfg=al_cfg,
+        effective_al_cfg=effective_al_cfg,
+        result=result,
+        exploration=exploration,
+        execution_evidence=execution_evidence,
+        tracker=tracker,
+        relaxation_runner=relaxation_runner,
+    )
+
+
+def _run_independent_dft_ranking(
+    formula: str,
+    formula_root: Path,
+    config: CampaignFormulaExecutionConfig,
+    *,
+    al_cfg: ALConfig,
+    effective_al_cfg: ALConfig,
+    result: PhaseExplorationWorkflowResult,
+    exploration: Any,
+    execution_evidence: dict[str, Any],
+    tracker: _StageTracker,
+    relaxation_runner: Callable[[ScientificRelaxationConfig], ScientificRelaxationResult],
+) -> PhaseExplorationWorkflowResult:
+    """Rank MLIP candidates with DFT, kept independent of the AL training dataset."""
     refinement = config.dft_refinement
     if refinement is None:
         return result
