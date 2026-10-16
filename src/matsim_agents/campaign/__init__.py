@@ -26,7 +26,7 @@ from matsim_agents.campaign.benchmark import (
     compare_paired_metric,
     paired_metric_differences,
 )
-from matsim_agents.campaign.execution import (
+from matsim_agents.campaign.formula_execution import (
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,

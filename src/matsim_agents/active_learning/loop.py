@@ -49,7 +49,7 @@ from matsim_agents.active_learning.evaluate import (
     _reference_forces,
     evaluate_promotion_candidate,
 )
-from matsim_agents.active_learning.seeds import resolve_seed_structures
+from matsim_agents.active_learning.seed_sources import resolve_seed_structures
 from matsim_agents.active_learning.trainer import (
     append_frames_to_extxyz,
     dft_results_to_frames,

@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
 
 from matsim_agents.active_learning.config import ALConfig  # noqa: E402
 from matsim_agents.campaign.acquisition import CampaignAcquisitionPolicy  # noqa: E402
-from matsim_agents.campaign.execution import (  # noqa: E402
+from matsim_agents.campaign.formula_execution import (  # noqa: E402
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,

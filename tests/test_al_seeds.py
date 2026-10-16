@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from matsim_agents.active_learning.config import LLMSeedConfig, SeedSourceConfig
-from matsim_agents.active_learning.seeds import resolve_seed_structures
+from matsim_agents.active_learning.seed_sources import resolve_seed_structures
 
 
 def _write_dummy_structure(p: Path) -> None:

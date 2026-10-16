@@ -13,7 +13,7 @@ from matsim_agents.campaign.acquisition import (
     FormulaAcquisitionMetrics,
     select_formula_batch,
 )
-from matsim_agents.campaign.execution import latest_promoted_model
+from matsim_agents.campaign.formula_execution import latest_promoted_model
 from matsim_agents.campaign.orchestrator import (
     CampaignReviewDecision,
     CampaignRunPolicy,

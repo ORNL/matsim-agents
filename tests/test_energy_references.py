@@ -274,7 +274,7 @@ def test_energy_comparison_rejects_unverified_method_before_inference(
                 cfg, "candidate", iteration=1, training_set=tmp_path / "training.extxyz"
             )
         else:
-            finetune_eval.run_campaign(
+            finetune_eval.run_finetune_endpoints(
                 dataset,
                 tmp_path / "campaign",
                 backend="uma",
@@ -320,7 +320,7 @@ def test_finetune_split_preserves_verified_method(
         elemental_reference_manifest=reference,
     )
     with pytest.raises(StopBeforeTraining):
-        finetune_eval.run_campaign(str(dataset), output, **kwargs)
+        finetune_eval.run_finetune_endpoints(str(dataset), output, **kwargs)
     if reuse_defect is not None:
         test_path = output / "split/test_set.extxyz"
         if reuse_defect == "missing":
@@ -329,10 +329,10 @@ def test_finetune_split_preserves_verified_method(
             with test_path.open("a") as stream:
                 stream.write("\n")
         with pytest.raises(ValueError, match="dataset sidecar|hash"):
-            finetune_eval.run_campaign(dataset, output, eval_only=True, **kwargs)
+            finetune_eval.run_finetune_endpoints(dataset, output, eval_only=True, **kwargs)
     else:
         with pytest.raises(StopBeforeTraining):
-            finetune_eval.run_campaign(dataset, output, eval_only=True, **kwargs)
+            finetune_eval.run_finetune_endpoints(dataset, output, eval_only=True, **kwargs)
 
 
 @pytest.mark.parametrize("backend", ["uma", "mace"])
@@ -371,7 +371,7 @@ def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
 
     monkeypatch.setattr(finetune_eval, "_run_eval", check_split)
     with pytest.raises(StopBeforeTraining):
-        finetune_eval.run_campaign(
+        finetune_eval.run_finetune_endpoints(
             dataset,
             output,
             backend=backend,
@@ -421,7 +421,7 @@ def test_finetune_campaign_checks_reference_coverage_before_training(
     write(dataset, [Atoms("NbO2", info={"energy": -23.0}) for _ in range(4)])
     monkeypatch.setattr(finetune_eval, "_enforce_device_visibility", lambda _device: None)
     with pytest.raises(ValueError, match="coverage"):
-        finetune_eval.run_campaign(
+        finetune_eval.run_finetune_endpoints(
             dataset,
             tmp_path / "campaign",
             backend="uma",

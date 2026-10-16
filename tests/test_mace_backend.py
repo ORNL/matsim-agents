@@ -8,7 +8,7 @@ import pytest
 from matsim_agents.backends.mlip.calculator import build_ensemble, build_mace_calculator
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
-from matsim_agents.campaign.execution import _exploration_kwargs
+from matsim_agents.campaign.formula_execution import _exploration_kwargs
 from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.discovery.wrapper import explore_composition
 

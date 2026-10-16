@@ -225,7 +225,7 @@ def _run_eval(
 # --------------------------------------------------------------------------- #
 
 
-def run_campaign(
+def run_finetune_endpoints(
     dataset_path: str | Path,
     output_dir: str | Path,
     *,
@@ -763,7 +763,7 @@ def main(argv: list[str] | None = None) -> int:
     # Set GPU visibility from the requested device before torch is imported.
     _enforce_device_visibility(args.device)
 
-    run_campaign(
+    run_finetune_endpoints(
         args.dataset,
         args.output_dir,
         backend=args.backend,

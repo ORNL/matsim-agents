@@ -210,7 +210,7 @@ def test_invalid_mae_prevents_promotion(tmp_path, value, role):
 def test_promotion_policy_rejects_invalid_thresholds(tmp_path, field, value, config_kind):
     from pydantic import ValidationError
 
-    from matsim_agents.campaign.execution import CampaignRetrainingConfig
+    from matsim_agents.campaign.formula_execution import CampaignRetrainingConfig
 
     config_type = TrainerConfig if config_kind == "trainer" else CampaignRetrainingConfig
     script = tmp_path / "train.py"
