@@ -392,7 +392,7 @@ def retrain_mace(
         argv = [
             sys.executable,
             "-m",
-            "matsim_agents.active_learning.finetune_mace",
+            "matsim_agents.training.finetune_mace",
             "--dataset",
             str(dataset_path),
             "--output-dir",

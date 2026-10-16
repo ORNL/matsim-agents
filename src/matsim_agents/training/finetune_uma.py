@@ -45,7 +45,7 @@ import numpy as np
 from ase import Atoms
 from ase.io import read as ase_read
 
-from matsim_agents.active_learning.cost import CostReport, GpuMemorySampler, track_cost
+from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
 
 log = logging.getLogger(__name__)
 

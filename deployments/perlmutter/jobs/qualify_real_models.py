@@ -99,7 +99,7 @@ def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
             "dft": dft,
             "trainer": {
                 "enabled": True,
-                "train_script": str(source / "src/matsim_agents/active_learning/finetune_uma.py"),
+                "train_script": str(source / "src/matsim_agents/training/finetune_uma.py"),
                 "epochs_per_iter": 1,
                 "nodes_for_train": 1,
                 "ranks_per_node": 1,
@@ -254,7 +254,7 @@ def mace(repo: Path, root: Path) -> dict:
         energies.append(energy)
     require(len(energies) == 2, "MACE ensemble member missing")
     cfg.trainer.train_script = (
-        Path(__file__).resolve().parents[3] / "src/matsim_agents/active_learning/finetune_mace.py"
+        Path(__file__).resolve().parents[3] / "src/matsim_agents/training/finetune_mace.py"
     )
     cfg.trainer.validation_fraction = 0
     cfg.trainer.validation_set = root / "al/validation.extxyz"

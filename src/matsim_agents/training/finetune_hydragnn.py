@@ -4,7 +4,7 @@ Per the project decision (option "a"): keep the shared backbone
 (``graph_convs`` + ``graph_shared``) **and** the composition-conditioned
 branch-weighting MLP **frozen**, and fine-tune only the branch head(s) that the
 branch-MLP actually routes this dataset's chemistry to (see
-:mod:`matsim_agents.active_learning.branch_routing`). This adapts the expert
+:mod:`matsim_agents.training.branch_routing`). This adapts the expert
 readout the model uses at inference while preserving the foundation model's
 general representations -- appropriate for the small AL datasets and avoiding
 catastrophic forgetting.
@@ -42,15 +42,15 @@ from pathlib import Path
 import numpy as np
 from ase import Atoms
 
-from matsim_agents.active_learning.branch_routing import (
+from matsim_agents.backends.mlip.hydragnn_precision import hydragnn_autocast
+from matsim_agents.datasets.governance import sha256_file
+from matsim_agents.training.branch_routing import (
     BRANCH_DATASETS,
     branch_weights_for_frames,
     composition_vector,
     load_branch_mlp,
 )
-from matsim_agents.active_learning.cost import CostReport, count_parameters, track_cost
-from matsim_agents.backends.mlip.hydragnn_precision import hydragnn_autocast
-from matsim_agents.datasets.governance import sha256_file
+from matsim_agents.training.cost import CostReport, count_parameters, track_cost
 
 log = logging.getLogger(__name__)
 

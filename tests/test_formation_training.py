@@ -113,7 +113,7 @@ def test_rejects_double_conversion(tmp_path, elemental_manifest, dataset_method_
 def test_constrained_frames_preserve_raw_force_labels(
     tmp_path, elemental_manifest, dataset_method_sidecar
 ):
-    from matsim_agents.active_learning.finetune_hydragnn import _reference_forces
+    from matsim_agents.training.finetune_hydragnn import _reference_forces
 
     dataset, reference = _dataset(tmp_path, elemental_manifest, dataset_method_sidecar)
     atoms = read(dataset)

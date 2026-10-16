@@ -9,6 +9,7 @@ individual experiments or machines.
 | `orchestration.agents` | Planner, executor, and analyst nodes wired by the objective graph |
 | `discovery` | Composition parsing, structure generation, and stability analysis |
 | `active_learning` | Candidate acquisition, uncertainty evaluation, labeling, and adaptation loops |
+| `training` | Standalone UMA, MACE, and HydraGNN fine-tuning programs and their cost tracking |
 | `campaign` | Multi-formula campaign planning, per-formula execution, registry, and review |
 | `backends.llm` | Configuration-selected language-model providers |
 | `backends.mlip` | MLIP configuration, calculator factories, HydraGNN checkpoint/energy loading, MC dropout, and relaxation |
@@ -36,7 +37,7 @@ enforced by `tests/test_package_boundaries.py`.
 | 6 | `chat` |
 | 5 | `orchestration`, `campaign` |
 | 4 | `active_learning`, `workflows` |
-| 3 | `discovery` |
+| 3 | `discovery`, `training` |
 | 2 | `backends.llm`, `backends.dft`, `backends.mlip` |
 | 1 | `execution`, `datasets` |
 

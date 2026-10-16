@@ -51,8 +51,8 @@ from pathlib import Path
 
 import numpy as np
 
-from matsim_agents.active_learning.cost import CostReport, GpuMemorySampler, track_cost
-from matsim_agents.active_learning.finetune_uma import (
+from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
+from matsim_agents.training.finetune_uma import (
     _load_labeled_frames,
     _reference_energy,
     _reference_forces,

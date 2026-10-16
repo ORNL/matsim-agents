@@ -288,7 +288,7 @@ if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; th
   TRAIN_ARGS=(
     --retrain
     --approve-retraining
-    --train-script "$REPO/src/matsim_agents/active_learning/finetune_uma.py"
+    --train-script "$REPO/src/matsim_agents/training/finetune_uma.py"
     --train-epochs "${MATSIM_CAMPAIGN_TRAIN_EPOCHS:-5}"
   )
   if [[ -n "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" ]]; then

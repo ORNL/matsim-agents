@@ -1,7 +1,7 @@
 """Alternative HydraGNN fine-tune: drop all 16 branch heads, grow ONE new head.
 
 This is the second HydraGNN fine-tuning option (the first being the routed-head
-fine-tune in :mod:`matsim_agents.active_learning.finetune_hydragnn`). Instead of
+fine-tune in :mod:`matsim_agents.training.finetune_hydragnn`). Instead of
 keeping the multi-branch decoder and adapting the routed head(s), we discard the
 entire 16-branch decoder and create a single fresh ``branch-0`` head on top of
 the pretrained backbone, then train it (with the backbone either trainable or
@@ -47,17 +47,17 @@ from pathlib import Path
 
 import numpy as np
 
-from matsim_agents.active_learning.cost import CostReport, count_parameters, track_cost
-from matsim_agents.active_learning.finetune_hydragnn import (
-    _atoms_to_data,
-    _find_gfm_checkpoint,
-    _resolve_hydragnn_paths,
-    _split,
-)
 from matsim_agents.backends.mlip.hydragnn_checkpoint import load_hydragnn_state_dict
 from matsim_agents.backends.mlip.hydragnn_newhead import (
     apply_newhead_surgery,
     load_update_model,
+)
+from matsim_agents.training.cost import CostReport, count_parameters, track_cost
+from matsim_agents.training.finetune_hydragnn import (
+    _atoms_to_data,
+    _find_gfm_checkpoint,
+    _resolve_hydragnn_paths,
+    _split,
 )
 
 log = logging.getLogger(__name__)

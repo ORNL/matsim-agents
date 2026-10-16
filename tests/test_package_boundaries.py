@@ -24,7 +24,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "matsim_agents"
 LAYERS: list[set[str]] = [
     {"execution", "datasets"},
     {"backends.llm", "backends.dft", "backends.mlip"},
-    {"discovery"},
+    {"discovery", "training"},
     {"active_learning", "workflows"},
     {"orchestration", "campaign"},
     {"chat"},

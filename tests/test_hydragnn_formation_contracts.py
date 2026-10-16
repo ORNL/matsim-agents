@@ -87,7 +87,7 @@ class FormationCalculator(Calculator):
 def test_trainers_reject_missing_references_before_model_import(tmp_path, trainer_name):
     from importlib import import_module
 
-    module = import_module(f"matsim_agents.active_learning.{trainer_name}")
+    module = import_module(f"matsim_agents.training.{trainer_name}")
     kwargs = {"gfm_logdir": tmp_path / "missing-foundation"}
     if trainer_name == "finetune_hydragnn":
         kwargs["branch_mlp_path"] = tmp_path / "missing-mlp"
@@ -102,7 +102,7 @@ def test_both_trainers_prepare_physical_labels_before_graphs(
 ):
     from importlib import import_module
 
-    module = import_module(f"matsim_agents.active_learning.{trainer_name}")
+    module = import_module(f"matsim_agents.training.{trainer_name}")
     dataset, manifest = training_inputs
     model = tmp_path / "output"
 
@@ -125,8 +125,8 @@ def test_both_trainers_prepare_physical_labels_before_graphs(
 def test_losses_use_physical_energy_without_second_subtraction(routed):
     import torch
 
-    from matsim_agents.active_learning.finetune_hydragnn import _batch_loss
-    from matsim_agents.active_learning.finetune_hydragnn_newhead import _batch_loss_single_head
+    from matsim_agents.training.finetune_hydragnn import _batch_loss
+    from matsim_agents.training.finetune_hydragnn_newhead import _batch_loss_single_head
 
     batch = SimpleNamespace(
         num_graphs=1,
@@ -165,7 +165,7 @@ def test_losses_use_physical_energy_without_second_subtraction(routed):
 def test_single_head_resume_loads_readout_after_surgery(monkeypatch):
     import torch
 
-    import matsim_agents.active_learning.finetune_hydragnn_newhead as trainer
+    import matsim_agents.training.finetune_hydragnn_newhead as trainer
 
     trained = torch.nn.Linear(1, 1)
     with torch.no_grad():

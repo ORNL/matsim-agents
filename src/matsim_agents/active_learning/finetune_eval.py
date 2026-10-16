@@ -406,7 +406,7 @@ def run_campaign(
             if not ckpt.exists():
                 raise FileNotFoundError(f"eval-only: missing UMA checkpoint {ckpt}")
         else:
-            from matsim_agents.active_learning.finetune_uma import finetune_uma
+            from matsim_agents.training.finetune_uma import finetune_uma
 
             ckpt = finetune_uma(
                 train_path,
@@ -432,7 +432,7 @@ def run_campaign(
         # A MACE_MODELS id (if given) selects the family/variant for the
         # baseline eval too, so "before" and "after" use the same foundation.
         if mace_model_id is not None:
-            from matsim_agents.active_learning.finetune_mace import MACE_MODELS
+            from matsim_agents.training.finetune_mace import MACE_MODELS
 
             if mace_model_id not in MACE_MODELS:
                 raise ValueError(
@@ -457,7 +457,7 @@ def run_campaign(
             if not ckpt.exists():
                 raise FileNotFoundError(f"eval-only: missing MACE checkpoint {ckpt}")
         else:
-            from matsim_agents.active_learning.finetune_mace import finetune_mace
+            from matsim_agents.training.finetune_mace import finetune_mace
 
             ckpt = finetune_mace(
                 train_path,
@@ -501,7 +501,7 @@ def run_campaign(
             elemental_reference_manifest=reference_manifest,
             out_suffix=_suf,
         )
-        from matsim_agents.active_learning.finetune_hydragnn import finetune_hydragnn
+        from matsim_agents.training.finetune_hydragnn import finetune_hydragnn
 
         if hydragnn_strategy == "routed":
             if eval_only:
@@ -531,7 +531,7 @@ def run_campaign(
                 )
             after_cfg = _hydragnn_cfg(ft_logdir, "ft_model.pk", branch_mlp_path, dev)
         else:
-            from matsim_agents.active_learning.finetune_hydragnn_newhead import (
+            from matsim_agents.training.finetune_hydragnn_newhead import (
                 finetune_hydragnn_newhead,
             )
 

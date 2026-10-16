@@ -124,7 +124,7 @@ trainer:
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
   validation_split_seed: 42
-  train_script:   ${PROJ_ROOT}/src/matsim_agents/active_learning/finetune_hydragnn_newhead.py
+  train_script:   ${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py
   train_launcher: ${TRAIN_LAUNCHER}
   epochs_per_iter: 5
   nodes_for_train: 1
