@@ -1,6 +1,7 @@
 """Regression tests for the package layout.
 
 Each test asserts one structural property of the package layout:
+  - Imports only point to lower layers (see ``LAYERS`` and docs/architecture.md).
   - Each of the five stable interfaces is importable from its declared location.
   - Concrete implementations satisfy their Protocol at runtime.
   - Removed legacy import paths stay removed.
@@ -8,9 +9,81 @@ Each test asserts one structural property of the package layout:
 
 from __future__ import annotations
 
+import ast
 import importlib
+from pathlib import Path
 
 import pytest
+
+# ── Layering ──────────────────────────────────────────────────────────────── #
+
+PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "matsim_agents"
+
+# Lowest layer first. A unit may import only from units in strictly lower
+# layers (or from itself); units in the same layer must not import each other.
+LAYERS: list[set[str]] = [
+    {"execution", "datasets"},
+    {"backends.llm", "backends.dft", "backends.mlip"},
+    {"discovery"},
+    {"active_learning", "workflows"},
+    {"orchestration", "campaign"},
+    {"chat"},
+    {"cli"},
+]
+LAYER_OF = {unit: index for index, units in enumerate(LAYERS) for unit in units}
+
+
+def _unit(module: str) -> str | None:
+    parts = module.split(".")[1:]
+    if not parts:
+        return None
+    if parts[0] == "backends":
+        return ".".join(parts[:2]) if len(parts) > 1 else "backends"
+    return parts[0]
+
+
+def _layer_violations() -> list[str]:
+    violations = []
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        rel = path.relative_to(PACKAGE_ROOT.parent)
+        module = ".".join(rel.with_suffix("").parts).removesuffix(".__init__")
+        source = _unit(module)
+        if source not in LAYER_OF:
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                targets = [node.module]
+            elif isinstance(node, ast.Import):
+                targets = [alias.name for alias in node.names]
+            else:
+                continue
+            for target in targets:
+                if not target.startswith("matsim_agents."):
+                    continue
+                dest = _unit(target)
+                if dest == source or dest is None:
+                    continue
+                if dest not in LAYER_OF or LAYER_OF[dest] >= LAYER_OF[source]:
+                    violations.append(f"{rel}:{node.lineno}: {source} -> {dest}")
+    return violations
+
+
+def test_every_package_is_assigned_a_layer() -> None:
+    units = {
+        _unit(
+            "matsim_agents."
+            + ".".join(p.relative_to(PACKAGE_ROOT).with_suffix("").parts).removesuffix(".__init__")
+        )
+        for p in PACKAGE_ROOT.rglob("*.py")
+        if p.parent != PACKAGE_ROOT
+    }
+    units |= {p.stem for p in PACKAGE_ROOT.glob("*.py") if p.stem != "__init__"}
+    assert units - set(LAYER_OF) - {"backends"} == set()
+
+
+def test_imports_only_point_to_lower_layers() -> None:
+    assert _layer_violations() == []
+
 
 # ── Removed legacy paths ──────────────────────────────────────────────────── #
 

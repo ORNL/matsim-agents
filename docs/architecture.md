@@ -24,6 +24,26 @@ discovery and disjoint DFT node grouping are owned by `execution.allocation`.
 See [Scientific workflow contracts](scientific-workflows.md) for behavior and
 [Run artifacts and restarts](run-artifacts-and-restarts.md) for persistence.
 
+## Import layers
+
+Packages are layered; a package may import only from strictly lower layers.
+Packages on the same layer are independent of each other. The order is
+enforced by `tests/test_package_boundaries.py`.
+
+| Layer | Packages |
+| --- | --- |
+| 7 | `cli` |
+| 6 | `chat` |
+| 5 | `orchestration`, `campaign` |
+| 4 | `active_learning`, `workflows` |
+| 3 | `discovery` |
+| 2 | `backends.llm`, `backends.dft`, `backends.mlip` |
+| 1 | `execution`, `datasets` |
+
+When new code needs something from a higher layer, move the shared piece down
+(usually into `datasets`, `execution`, or the relevant `backends` package)
+instead of adding an upward import.
+
 ## Orchestration topology
 
 The CLI exposes objective, composition, and interactive modes over shared
