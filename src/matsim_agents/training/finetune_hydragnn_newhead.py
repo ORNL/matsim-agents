@@ -57,10 +57,11 @@ from matsim_agents.backends.mlip.hydragnn_newhead import (
 from matsim_agents.training.cost import CostReport, count_parameters, track_cost
 from matsim_agents.training.finetune_hydragnn import (
     _atoms_to_data,
-    _find_gfm_checkpoint,
     _resolve_hydragnn_paths,
     _split,
+    load_gfm_state_dict,
 )
+from matsim_agents.training.train_loop import train_keep_best
 
 log = logging.getLogger(__name__)
 
@@ -395,13 +396,7 @@ def _build_single_head_model(
     torch.set_default_dtype(param_dtype)
     model = model.to(dtype=param_dtype, device=dev)
     if load_pretrained:
-        ckpt_path = _find_gfm_checkpoint(gfm_logdir, gfm_checkpoint)
-        state = torch.load(ckpt_path, map_location=dev)
-        state_dict = state.get("model_state_dict", state)
-        state_dict = {
-            (k[len("module.") :] if k.startswith("module.") else k): v
-            for k, v in state_dict.items()
-        }
+        ckpt_path, state_dict = load_gfm_state_dict(gfm_logdir, gfm_checkpoint, dev)
         if resume_metadata is None:
             load_hydragnn_state_dict(model, state_dict, strict=False)
         log.info("Loaded pretrained backbone from %s", ckpt_path.name)
@@ -463,69 +458,6 @@ def _warmup_cosine_scheduler(optimizer, steps_per_epoch: int, epochs: int, warmu
         return 0.5 * (1.0 + math.cos(math.pi * min(prog, 1.0)))
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda)
-
-
-def _train_keep_best(
-    model,
-    train_loader,
-    val_loader,
-    optimizer,
-    scheduler,
-    loss_spec: _LossSpec,
-    *,
-    dev: Any,
-    epochs: int,
-    grad_clip: float,
-    backbone_trainable: bool,
-    n_train: int,
-    n_val: int,
-) -> None:
-    """Train for ``epochs`` and restore the weights with the lowest validation loss.
-
-    On these small AL datasets the loss overfits well before the last epoch, so
-    the best-validation checkpoint is kept rather than the final one.
-    """
-    import torch
-
-    best_val = float("inf")
-    best_state = None
-    best_epoch = 0
-    for epoch in range(epochs):
-        model.train() if backbone_trainable else model.eval()
-        running = 0.0
-        for batch in train_loader:
-            batch = batch.to(dev)
-            optimizer.zero_grad(set_to_none=True)
-            loss = loss_spec(model, batch)
-            loss.backward()
-            if grad_clip and grad_clip > 0:
-                torch.nn.utils.clip_grad_norm_(
-                    [p for p in model.parameters() if p.requires_grad], grad_clip
-                )
-            optimizer.step()
-            scheduler.step()
-            running += float(loss.detach()) * batch.num_graphs
-        train_mse = running / max(n_train, 1)
-        val_msg = ""
-        selection_mse = train_mse
-        if val_loader is not None:
-            model.eval()
-            vrun = 0.0
-            for batch in val_loader:
-                batch = batch.to(dev)
-                vloss = loss_spec(model, batch)
-                vrun += float(vloss.detach()) * batch.num_graphs
-            selection_mse = vrun / max(n_val, 1)
-            val_msg = f" val={selection_mse:.6f}"
-        log.info("Epoch %d/%d: train=%.6f%s", epoch + 1, epochs, train_mse, val_msg)
-        if selection_mse < best_val:
-            best_val = selection_mse
-            best_epoch = epoch + 1
-            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
-
-    if best_state is not None:
-        model.load_state_dict(best_state)
-        log.info("Best epoch %d/%d: val=%.6f (restored for save)", best_epoch, epochs, best_val)
 
 
 def _save_single_head_logdir(
@@ -736,19 +668,19 @@ def finetune_hydragnn_newhead(
     val_loader = DataLoader(val_graphs, batch_size=batch_size) if val_graphs else None
     scheduler = _warmup_cosine_scheduler(optimizer, len(train_loader), epochs, warmup_frac)
     with track_cost(report):
-        _train_keep_best(
+        train_keep_best(
             model,
             train_loader,
             val_loader,
             optimizer,
-            scheduler,
             loss_spec,
             dev=dev,
             epochs=epochs,
-            grad_clip=grad_clip,
-            backbone_trainable=backbone_trainable,
             n_train=len(train_graphs),
             n_val=len(val_graphs),
+            train_mode=backbone_trainable,
+            scheduler=scheduler,
+            grad_clip=grad_clip,
         )
 
     ckpt_out = _save_single_head_logdir(

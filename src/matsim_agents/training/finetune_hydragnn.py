@@ -38,6 +38,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from ase import Atoms
@@ -51,6 +52,7 @@ from matsim_agents.training.branch_routing import (
     load_branch_mlp,
 )
 from matsim_agents.training.cost import CostReport, count_parameters, track_cost
+from matsim_agents.training.train_loop import train_keep_best
 
 log = logging.getLogger(__name__)
 
@@ -200,6 +202,94 @@ def _select_routed_branches(
 # --------------------------------------------------------------------------- #
 
 
+def load_gfm_state_dict(gfm_logdir: Path, checkpoint: str | None, dev: Any) -> tuple[Path, dict]:
+    """Load a GFM checkpoint's state dict with any DDP ``module.`` prefixes stripped."""
+    import torch
+
+    ckpt_path = _find_gfm_checkpoint(gfm_logdir, checkpoint)
+    state = torch.load(ckpt_path, map_location=dev)
+    state_dict = state.get("model_state_dict", state)
+    state_dict = {
+        (k[len("module.") :] if k.startswith("module.") else k): v for k, v in state_dict.items()
+    }
+    return ckpt_path, state_dict
+
+
+def _verify_routed_resume(gfm_logdir: Path, gfm_checkpoint: str | None) -> tuple[Path, str]:
+    """Verify a previous routed run and return its routing MLP and checkpoint."""
+    from ase.calculators.calculator import Calculator
+
+    from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
+
+    restore_hydragnn_total_energy(Calculator(), gfm_logdir, gfm_checkpoint)
+    previous = json.loads((gfm_logdir / "energy-convention.json").read_text())
+    if "branch_mlp_checkpoint" not in previous:
+        raise ValueError("Routed fine-tuning cannot resume a single-head checkpoint")
+    branch_mlp_path = gfm_logdir / previous["branch_mlp_checkpoint"]
+    if sha256_file(branch_mlp_path) != previous["branch_mlp_sha256"]:
+        raise ValueError("HydraGNN routing MLP differs from training artifact")
+    return branch_mlp_path, gfm_checkpoint or previous["checkpoint"]
+
+
+def _build_routed_model(
+    hcfg: dict,
+    *,
+    param_dtype: Any,
+    dev: Any,
+    gfm_logdir: Path,
+    gfm_checkpoint: str | None,
+    routed: list[int],
+    unfreeze_backbone: bool,
+):
+    """Build the GFM, load its weights, and leave only the routed heads trainable."""
+    import torch
+    from hydragnn.models.create import create_model_config
+
+    from matsim_agents.backends.mlip.hydragnn_checkpoint import load_hydragnn_state_dict
+
+    model = create_model_config(config=hcfg["NeuralNetwork"], verbosity=0)
+    torch.set_default_dtype(param_dtype)
+    model = model.to(dtype=param_dtype, device=dev)
+    _, state_dict = load_gfm_state_dict(gfm_logdir, gfm_checkpoint, dev)
+    load_hydragnn_state_dict(model, state_dict, strict=False)
+    model.eval()  # no BN/dropout in the heads; keeps frozen backbone stats fixed
+    _apply_freezing(model, set(routed), unfreeze_backbone=unfreeze_backbone)
+    return model
+
+
+def _save_routed_logdir(
+    model,
+    output_dir: Path,
+    *,
+    config_path: Path,
+    branch_mlp_path: Path,
+    checkpoint_name: str,
+    routed: list[int],
+    mean_w: np.ndarray,
+) -> tuple[Path, Path]:
+    """Write the checkpoint, routing MLP snapshot, GFM config, and ``routing.json``."""
+    import torch
+
+    ckpt_out = output_dir / checkpoint_name
+    torch.save({"model_state_dict": model.state_dict()}, ckpt_out)
+    mlp_snapshot = output_dir / "branch-mlp.pt"
+    shutil.copyfile(branch_mlp_path, mlp_snapshot)
+    shutil.copyfile(config_path, output_dir / "config.json")
+    (output_dir / "routing.json").write_text(
+        json.dumps(
+            {
+                "routed_branches": routed,
+                "routed_datasets": [BRANCH_DATASETS[b] for b in routed],
+                "mean_branch_weights": mean_w.tolist(),
+                "checkpoint": checkpoint_name,
+                "energy_convention": "dft:declared_elemental_formation_energy",
+            },
+            indent=2,
+        )
+    )
+    return ckpt_out, mlp_snapshot
+
+
 def finetune_hydragnn(
     dataset_path: str | Path,
     output_dir: str | Path,
@@ -243,23 +333,10 @@ def finetune_hydragnn(
     root, example_dir = _resolve_hydragnn_paths(hydragnn_root)
     output_dir.mkdir(parents=True, exist_ok=True)
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
-    previous_convention = gfm_logdir / "energy-convention.json"
-    if previous_convention.exists():
-        from ase.calculators.calculator import Calculator
-
-        from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
-
-        restore_hydragnn_total_energy(Calculator(), gfm_logdir, gfm_checkpoint)
-        previous = json.loads(previous_convention.read_text())
-        if "branch_mlp_checkpoint" not in previous:
-            raise ValueError("Routed fine-tuning cannot resume a single-head checkpoint")
-        branch_mlp_path = gfm_logdir / previous["branch_mlp_checkpoint"]
-        if sha256_file(branch_mlp_path) != previous["branch_mlp_sha256"]:
-            raise ValueError("HydraGNN routing MLP differs from training artifact")
-        gfm_checkpoint = gfm_checkpoint or previous["checkpoint"]
+    if (gfm_logdir / "energy-convention.json").exists():
+        branch_mlp_path, gfm_checkpoint = _verify_routed_resume(gfm_logdir, gfm_checkpoint)
 
     import torch
-    from hydragnn.models.create import create_model_config
     from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
     from hydragnn.train.train_validate_test import resolve_precision
     from torch_geometric.loader import DataLoader
@@ -296,20 +373,15 @@ def finetune_hydragnn(
     )
 
     # --- build + load model ---
-    model = create_model_config(config=hcfg["NeuralNetwork"], verbosity=0)
-    torch.set_default_dtype(param_dtype)
-    model = model.to(dtype=param_dtype, device=dev)
-    ckpt_path = _find_gfm_checkpoint(gfm_logdir, gfm_checkpoint)
-    state = torch.load(ckpt_path, map_location=dev)
-    state_dict = state.get("model_state_dict", state)
-    state_dict = {
-        (k[len("module.") :] if k.startswith("module.") else k): v for k, v in state_dict.items()
-    }
-    from matsim_agents.backends.mlip.hydragnn_checkpoint import load_hydragnn_state_dict
-
-    load_hydragnn_state_dict(model, state_dict, strict=False)
-    model.eval()  # no BN/dropout in the heads; keeps frozen backbone stats fixed
-    _apply_freezing(model, set(routed), unfreeze_backbone=unfreeze_backbone)
+    model = _build_routed_model(
+        hcfg,
+        param_dtype=param_dtype,
+        dev=dev,
+        gfm_logdir=gfm_logdir,
+        gfm_checkpoint=gfm_checkpoint,
+        routed=routed,
+        unfreeze_backbone=unfreeze_backbone,
+    )
     trainable_params, total_params = count_parameters(model)
     log.info(
         "HydraGNN fine-tune: %d / %d params trainable (%.3f%%)",
@@ -357,11 +429,8 @@ def finetune_hydragnn(
         },
     )
 
-    if not run:
-        # Dry-run: single forward/loss step on one small batch to validate wiring.
-        loader = DataLoader(train_graphs, batch_size=min(batch_size, len(train_graphs)))
-        batch = next(iter(loader)).to(dev)
-        loss = _batch_loss(
+    def loss_fn(model, batch):
+        return _batch_loss(
             model,
             branch_mlp,
             batch,
@@ -371,87 +440,42 @@ def finetune_hydragnn(
             param_dtype,
             autocast_dtype=autocast_dtype,
         )
+
+    if not run:
+        # Dry-run: single forward/loss step on one small batch to validate wiring.
+        loader = DataLoader(train_graphs, batch_size=min(batch_size, len(train_graphs)))
+        batch = next(iter(loader)).to(dev)
+        loss = loss_fn(model, batch)
         log.info("Dry-run forward OK; loss=%.6f", float(loss.detach()))
         return output_dir
 
     train_loader = DataLoader(train_graphs, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_graphs, batch_size=batch_size) if val_graphs else None
-
-    # Keep the checkpoint with the lowest validation loss, not the final epoch:
-    # on these small AL datasets the loss overfits well before the last epoch.
-    best_val = float("inf")
-    best_state = None
-    best_epoch = 0
     with track_cost(report):
-        for epoch in range(epochs):
-            model.eval()
-            running = 0.0
-            for batch in train_loader:
-                batch = batch.to(dev)
-                optimizer.zero_grad(set_to_none=True)
-                loss = _batch_loss(
-                    model,
-                    branch_mlp,
-                    batch,
-                    routed_t,
-                    e_w,
-                    f_w,
-                    param_dtype,
-                    autocast_dtype=autocast_dtype,
-                )
-                loss.backward()
-                optimizer.step()
-                running += float(loss.detach()) * batch.num_graphs
-            train_mse = running / max(len(train_graphs), 1)
-            val_msg = ""
-            selection_mse = train_mse
-            if val_loader is not None:
-                vrun = 0.0
-                for batch in val_loader:
-                    batch = batch.to(dev)
-                    vloss = _batch_loss(
-                        model,
-                        branch_mlp,
-                        batch,
-                        routed_t,
-                        e_w,
-                        f_w,
-                        param_dtype,
-                        autocast_dtype=autocast_dtype,
-                    )
-                    vrun += float(vloss.detach()) * batch.num_graphs
-                selection_mse = vrun / max(len(val_graphs), 1)
-                val_msg = f" val={selection_mse:.6f}"
-            log.info("Epoch %d/%d: train=%.6f%s", epoch + 1, epochs, train_mse, val_msg)
-            if selection_mse < best_val:
-                best_val = selection_mse
-                best_epoch = epoch + 1
-                best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
-
-    # Restore the best-validation weights before saving.
-    if best_state is not None:
-        model.load_state_dict(best_state)
-        log.info("Best epoch %d/%d: val=%.6f (restored for save)", best_epoch, epochs, best_val)
-
-    # --- save logdir ---
-    ckpt_out = output_dir / checkpoint_name
-    torch.save({"model_state_dict": model.state_dict()}, ckpt_out)
-    mlp_snapshot = output_dir / "branch-mlp.pt"
-    shutil.copyfile(branch_mlp_path, mlp_snapshot)
-    shutil.copyfile(config_path, output_dir / "config.json")
-    report.write(output_dir / "cost.json")
-    (output_dir / "routing.json").write_text(
-        json.dumps(
-            {
-                "routed_branches": routed,
-                "routed_datasets": [BRANCH_DATASETS[b] for b in routed],
-                "mean_branch_weights": mean_w.tolist(),
-                "checkpoint": checkpoint_name,
-                "energy_convention": "dft:declared_elemental_formation_energy",
-            },
-            indent=2,
+        # The routed heads have no BN/dropout; eval() keeps frozen backbone stats fixed.
+        train_keep_best(
+            model,
+            train_loader,
+            val_loader,
+            optimizer,
+            loss_fn,
+            dev=dev,
+            epochs=epochs,
+            n_train=len(train_graphs),
+            n_val=len(val_graphs),
+            train_mode=False,
         )
+
+    ckpt_out, mlp_snapshot = _save_routed_logdir(
+        model,
+        output_dir,
+        config_path=config_path,
+        branch_mlp_path=branch_mlp_path,
+        checkpoint_name=checkpoint_name,
+        routed=routed,
+        mean_w=mean_w,
     )
+    report.write(output_dir / "cost.json")
     save_hydragnn_energy_convention(
         output_dir,
         ckpt_out,
