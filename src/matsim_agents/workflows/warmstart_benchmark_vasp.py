@@ -1,6 +1,6 @@
 """Warm-start benchmark (VASP): HydraGNN pre-relax then compare DFT step counts.
 
-Sibling of :mod:`matsim_agents.tools.warmstart_benchmark_qe`. For a given
+Sibling of :mod:`matsim_agents.workflows.warmstart_benchmark_qe`. For a given
 input crystal we run::
 
     1. HydraGNN structure optimisation     (cheap, ML-driven)

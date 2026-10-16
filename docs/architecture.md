@@ -6,13 +6,15 @@ individual experiments or machines.
 | Package | Responsibility |
 | --- | --- |
 | `orchestration` | Typed workflow state, objective/composition graphs, and explicit policies |
+| `agents` | Planner, executor, and analyst nodes used by the objective graph |
 | `discovery` | Composition parsing, structure generation, and stability analysis |
 | `active_learning` | Candidate acquisition, uncertainty evaluation, labeling, and adaptation loops |
+| `campaign` | Multi-formula campaign planning, per-formula execution, registry, and review |
 | `backends.llm` | Configuration-selected language-model providers |
 | `backends.mlip` | MLIP calculators, relaxation, and exploration interfaces |
 | `backends.dft` | Quantum ESPRESSO and VASP interfaces |
 | `execution` | Scheduler-neutral resources, launch contracts, and provenance |
-| `workflows` | Composable relaxation, phase-exploration, and investigation policies/results |
+| `workflows` | Composable relaxation, phase-exploration, investigation, and MLIP→DFT warm-start benchmark workflows |
 
 The workflow layer uses `execution.contracts` for evidence, validation,
 approval, compute-budget, provenance, status, and result envelopes. Scientific
@@ -95,6 +97,6 @@ replacement backend interfaces.
 
 Each module has exactly one import path. The former aliases
 (`matsim_agents.graph`, `matsim_agents.state`, `matsim_agents.llm`,
-`matsim_agents.supervisor`, `matsim_agents.tools.{relaxation,qe_relax,vasp_relax}`,
+`matsim_agents.supervisor`, the `matsim_agents.tools` package,
 and `matsim_agents.active_learning.backends`) have been removed; import from the
 canonical packages listed above.

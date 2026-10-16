@@ -102,7 +102,7 @@ Two paths are exposed:
   invokes when `dft.backend: vasp` is set in the AL config.
 - **Standalone DFT relaxations** (`scf` / `relax` / `vc-relax` /
   `vc-relax-shape`): driven by [`src/matsim_agents/backends/dft/vasp_relax.py`](../src/matsim_agents/backends/dft/vasp_relax.py),
-  the symmetric pair to `tools/qe_relax.py`. It writes a self-contained
+  the symmetric pair to `backends/dft/qe_relax.py`. It writes a self-contained
   INCAR (no template required for the common case), composition-aware
   `ENCUT/ISMEAR/SIGMA/KSPACING`, and parses `vasprun.xml`+`OUTCAR` for the
   full per-ionic-step trajectory. Set `MATSIM_VASP_LAUNCHER` to point at a

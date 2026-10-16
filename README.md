@@ -1694,7 +1694,7 @@ options of the upstream HydraGNN ASE script
 For cases where the user wants a *real* DFT relaxation rather than the
 cheap HydraGNN one (e.g. validating a discovered structure, refining a
 final candidate), two drivers ship under `src/matsim_agents/backends/dft/`
-with matching APIs (also importable via the `matsim_agents.tools` compat aliases):
+with matching APIs:
 
 | Module | Backend | Calculation modes | Composition-aware defaults |
 |---|---|---|---|
@@ -1738,8 +1738,8 @@ that the integration tests consume:
 
 | Module | Backend | CLI |
 |---|---|---|
-| [`warmstart_benchmark_qe.py`](src/matsim_agents/tools/warmstart_benchmark_qe.py)     | Quantum ESPRESSO `pw.x` | `python -m matsim_agents.tools.warmstart_benchmark_qe …`   |
-| [`warmstart_benchmark_vasp.py`](src/matsim_agents/tools/warmstart_benchmark_vasp.py) | VASP `vasp_std`         | `python -m matsim_agents.tools.warmstart_benchmark_vasp …` |
+| [`warmstart_benchmark_qe.py`](src/matsim_agents/workflows/warmstart_benchmark_qe.py)     | Quantum ESPRESSO `pw.x` | `python -m matsim_agents.workflows.warmstart_benchmark_qe …`   |
+| [`warmstart_benchmark_vasp.py`](src/matsim_agents/workflows/warmstart_benchmark_vasp.py) | VASP `vasp_std`         | `python -m matsim_agents.workflows.warmstart_benchmark_vasp …` |
 
 Each driver runs (1) HydraGNN ASE relaxation, (2) DFT relaxation from the
 *original* coordinates (cold), (3) DFT relaxation from the

@@ -15,7 +15,7 @@ The HydraGNN step is delegated to the existing tool
 not importable the warm-start phase is skipped and only the cold run is
 performed, with a ``warm`` block left as ``None``).
 
-For the VASP equivalent see :mod:`matsim_agents.tools.warmstart_benchmark_vasp`.
+For the VASP equivalent see :mod:`matsim_agents.workflows.warmstart_benchmark_vasp`.
 """
 
 from __future__ import annotations
