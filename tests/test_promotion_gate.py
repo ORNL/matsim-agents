@@ -39,8 +39,6 @@ def _metrics(
         energy_rmse_eV=0.6,
         energy_mae_eV_per_atom=energy_mae,
         energy_rmse_eV_per_atom=energy_mae,
-        energy_mae_eV_per_atom_shifted=energy_mae,
-        energy_rmse_eV_per_atom_shifted=energy_mae,
         formation_energy_mae_eV_per_atom=energy_mae,
         formation_energy_rmse_eV_per_atom=energy_mae,
         energy_mean_offset_eV_per_atom=0.0,

@@ -71,7 +71,7 @@ def _fmt_metrics(d: dict | None) -> str | None:
     if not d:
         return None
     fmae = d.get("force_mae_eV_per_A")
-    emae = d.get("energy_mae_eV_per_atom_shifted")
+    emae = d.get("formation_energy_mae_eV_per_atom")
     if fmae is None and emae is None:
         return None
     parts = []

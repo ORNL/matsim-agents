@@ -58,7 +58,7 @@ def test_formation_comparison_removes_only_elemental_offsets(elemental_manifest,
     assert calculator.calls[:2] == [{"Nb"}, {"O"}]
     assert metrics.energy_mae_eV_per_atom > 20.0
     assert metrics.formation_energy_mae_eV_per_atom == pytest.approx(0.2)
-    assert metrics.energy_mae_eV_per_atom_shifted == pytest.approx(0.2)
+    assert not hasattr(metrics, "energy_mae_eV_per_atom_shifted")
     assert parity["formation_ref_eV_per_atom"] == pytest.approx([-1.0, -1.0])
     assert parity["formation_pred_eV_per_atom"] == pytest.approx([-0.8, -0.8])
     assert metrics.elemental_reference_provenance["references"]["Nb"][

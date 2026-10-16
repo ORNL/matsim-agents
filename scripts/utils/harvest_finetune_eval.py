@@ -3,8 +3,8 @@
 
 Scans ``<runs>/finetune-eval/<variant>/<case>/eval/iter*.json`` (written by
 ``matsim_agents.active_learning.finetune_eval``) and emits, for every method
-row of ``tab:finetune``, the held-out force MAE (eV/A) and reference-shifted
-per-atom energy MAE (meV/atom) across the five paper cases.
+row of ``tab:finetune``, the held-out force MAE (eV/A) and per-atom
+formation-energy MAE (meV/atom) across the five paper cases.
 
 For each run the *before* endpoint is ``iter0.json`` and the *after* endpoint is
 the highest-numbered ``iter<N>.json``. HydraGNN's zero-shot baseline row is the
@@ -108,7 +108,7 @@ def harvest(runs_root: Path, *, trainref: bool = False) -> list[tuple[str, list[
         for case in CASES:
             m = _read_endpoint(fte / variant / case / "eval", endpoint, trainref=trainref)
             f = m.get("force_mae_eV_per_A") if m else None
-            e = m.get("energy_mae_eV_per_atom_shifted") if m else None
+            e = m.get("formation_energy_mae_eV_per_atom") if m else None
             force_cells.append(_fmt(f, 1.0, 2))
             energy_cells.append(_fmt(e, 1000.0, 0))  # eV/atom -> meV/atom
         out.append((label, force_cells, energy_cells))

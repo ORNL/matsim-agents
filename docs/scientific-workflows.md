@@ -707,9 +707,9 @@ Fine-tune/evaluation launchers require `ELEMENTAL_REFERENCE_MANIFEST`, or an
 existing `elemental_references.json` in each dataset's case directory.
 Promotion energy thresholds now apply to
 `formation_energy_mae_eV_per_atom`; raw total-energy errors remain diagnostic.
-The deprecated `energy_*_per_atom_shifted` output fields alias formation-energy
-errors and no longer represent a fitted shift. Reassess historical thresholds
-under this new convention. Force comparisons and within-method polymorph/hull
+Evaluation outputs no longer contain `energy_*_per_atom_shifted` fields; use
+`formation_energy_*_per_atom`. Reassess historical thresholds under this
+convention. Force comparisons and within-method polymorph/hull
 ranking are unchanged; final DFT ranking results still never enter training.
 
 Nb-Ta-O reference preparation merges curated phases before unary structure

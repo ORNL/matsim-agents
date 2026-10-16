@@ -102,9 +102,6 @@ class EvalMetrics:
     # Energy (per atom) — the standard size-intensive metric.
     energy_mae_eV_per_atom: float
     energy_rmse_eV_per_atom: float
-    # Deprecated output aliases for formation-energy errors; no fitted shifts.
-    energy_mae_eV_per_atom_shifted: float
-    energy_rmse_eV_per_atom_shifted: float
     energy_mean_offset_eV_per_atom: float
 
     # Forces (per component, offset-invariant — the robust headline metric).
@@ -319,7 +316,7 @@ def evaluate_frames(
     offset_pa = float(np.mean(de_pa)) if de_pa.size else 0.0
     formation_ref_a = np.asarray(formation_ref)
     formation_pred_a = np.asarray(formation_pred)
-    de_pa_shifted = formation_pred_a - formation_ref_a
+    de_pa_formation = formation_pred_a - formation_ref_a
 
     if f_ref_all:
         f_ref_a = np.concatenate(f_ref_all)
@@ -353,14 +350,12 @@ def evaluate_frames(
         energy_rmse_eV=_rmse(de_tot),
         energy_mae_eV_per_atom=_mae(de_pa),
         energy_rmse_eV_per_atom=_rmse(de_pa),
-        energy_mae_eV_per_atom_shifted=_mae(de_pa_shifted),
-        energy_rmse_eV_per_atom_shifted=_rmse(de_pa_shifted),
         energy_mean_offset_eV_per_atom=offset_pa,
         force_mae_eV_per_A=force_mae,
         force_rmse_eV_per_A=force_rmse,
         failures=failures,
-        formation_energy_mae_eV_per_atom=_mae(de_pa_shifted),
-        formation_energy_rmse_eV_per_atom=_rmse(de_pa_shifted),
+        formation_energy_mae_eV_per_atom=_mae(de_pa_formation),
+        formation_energy_rmse_eV_per_atom=_rmse(de_pa_formation),
         elemental_reference_provenance=references.provenance if references is not None else {},
     )
     parity = {
