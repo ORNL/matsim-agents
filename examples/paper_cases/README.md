@@ -113,6 +113,9 @@ matsim-agents supervisor-run LiFePO4 \
 > `deployments/perlmutter/jobs/job-active-learning-paper-cases-perlmutter.sh`
 > (select the system with `CASE=<name>`), or wrap `matsim-agents al run
 > <config>` in your own `sbatch` script / interactive `salloc` GPU node.
+> Frontier and Aurora use the `al_<case>_frontier.yaml` / `al_<case>_aurora.yaml`
+> variants through `job-active-learning-paper-cases-frontier.sh` and
+> `job-active-learning-paper-cases-aurora.sh` (`qsub -v CASE=<name> ...`).
 >
 > **Multi-node DFT:** the AL driver runs VASP single-points concurrently, up to
 > `SLURM_JOB_NUM_NODES / nodes_per_job` at once. The job script defaults to
