@@ -9,21 +9,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 
-
-class RelaxationResult(BaseModel):
-    """Outcome of a single atomistic structure relaxation."""
-
-    structure_path: str
-    optimized_structure_path: str
-    trajectory_path: str
-    log_csv_path: str
-    final_energy_eV: float
-    final_max_force_eV_per_A: float
-    num_steps: int
-    converged: bool
-    top_branch: int | None = None
-    top_branch_weight: float | None = None
-    notes: str | None = None
+from matsim_agents.backends.mlip.results import RelaxationResult
 
 
 class TaskSpec(BaseModel):

@@ -30,8 +30,8 @@ from typing import Iterable, Sequence
 
 from pydantic import BaseModel, Field, model_validator
 
+from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.seeds import PhaseCandidate
-from matsim_agents.orchestration.state import RelaxationResult
 
 
 class PhaseStability(BaseModel):

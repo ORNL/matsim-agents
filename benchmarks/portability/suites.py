@@ -20,7 +20,7 @@ from unittest.mock import patch
 def relaxation_contract(structure: Path, output: Path) -> dict[str, Any]:
     """Exercise the complete relaxation workflow with a deterministic backend."""
 
-    from matsim_agents.orchestration.state import RelaxationResult
+    from matsim_agents.backends.mlip.results import RelaxationResult
     from matsim_agents.workflows.relaxation import ScientificRelaxationConfig, run_relaxation
 
     def fake_runner(args):

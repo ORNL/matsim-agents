@@ -16,6 +16,7 @@ from matsim_agents.active_learning.config import (
     MLIPConfig,
     UMAConfig,
 )
+from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.campaign.execution import (
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
@@ -46,7 +47,6 @@ from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
-from matsim_agents.orchestration.state import RelaxationResult
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,

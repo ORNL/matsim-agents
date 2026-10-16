@@ -23,6 +23,7 @@ import pytest
         "matsim_agents.state",
         "matsim_agents.supervisor",
         "matsim_agents.tools",
+        "matsim_agents.agents",
         "matsim_agents.active_learning.backends",
         "matsim_agents.active_learning.vasp_runner",
     ],

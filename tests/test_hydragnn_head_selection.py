@@ -74,7 +74,7 @@ def test_pinned_head_does_not_require_branch_weight_mlp(tmp_path):
 def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
     tmp_path, monkeypatch, declared
 ):
-    from matsim_agents.agents import executor
+    from matsim_agents.orchestration.agents import executor
     from matsim_agents.orchestration.state import MatSimState, TaskSpec
 
     logdir = tmp_path / "model"

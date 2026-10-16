@@ -15,6 +15,7 @@ from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
+from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.execution.contracts import (
     ApprovalPolicy,
     EvidenceLevel,
@@ -23,7 +24,6 @@ from matsim_agents.execution.contracts import (
     WorkflowStatus,
 )
 from matsim_agents.execution.run_directory import ScientificRunDirectory
-from matsim_agents.orchestration.state import RelaxationResult
 
 
 class RelaxationMode(StrEnum):

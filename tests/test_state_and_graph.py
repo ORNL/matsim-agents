@@ -1,6 +1,7 @@
 """Smoke tests that do not require HydraGNN to be installed."""
 
-from matsim_agents.orchestration.state import MatSimState, RelaxationResult, TaskSpec
+from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.orchestration.state import MatSimState, TaskSpec
 
 
 def test_state_defaults():

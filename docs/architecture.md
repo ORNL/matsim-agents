@@ -6,7 +6,7 @@ individual experiments or machines.
 | Package | Responsibility |
 | --- | --- |
 | `orchestration` | Typed workflow state, objective/composition graphs, and explicit policies |
-| `agents` | Planner, executor, and analyst nodes used by the objective graph |
+| `orchestration.agents` | Planner, executor, and analyst nodes wired by the objective graph |
 | `discovery` | Composition parsing, structure generation, and stability analysis |
 | `active_learning` | Candidate acquisition, uncertainty evaluation, labeling, and adaptation loops |
 | `campaign` | Multi-formula campaign planning, per-formula execution, registry, and review |
@@ -97,6 +97,7 @@ replacement backend interfaces.
 
 Each module has exactly one import path. The former aliases
 (`matsim_agents.graph`, `matsim_agents.state`, `matsim_agents.llm`,
-`matsim_agents.supervisor`, the `matsim_agents.tools` package,
+`matsim_agents.supervisor`, the `matsim_agents.tools` package, the top-level
+`matsim_agents.agents` package (now `matsim_agents.orchestration.agents`),
 and `matsim_agents.active_learning.backends`) have been removed; import from the
 canonical packages listed above.

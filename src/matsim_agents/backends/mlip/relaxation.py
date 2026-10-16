@@ -18,7 +18,7 @@ import numpy as np
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.orchestration.state import RelaxationResult
+from matsim_agents.backends.mlip.results import RelaxationResult
 
 
 class RelaxStructureInput(BaseModel):

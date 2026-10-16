@@ -11,7 +11,8 @@ from ase import Atoms
 from ase.io import write
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
-from matsim_agents.orchestration.state import RelaxationResult, TaskSpec
+from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.orchestration.state import TaskSpec
 
 
 @pytest.fixture

@@ -26,6 +26,7 @@ from matsim_agents.active_learning.dataset_governance import sha256_file
 from matsim_agents.active_learning.loop import run_active_learning
 from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
+from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.campaign.registry import (
     CandidateSelectionPolicy,
     select_dft_refinement_candidates,
@@ -42,7 +43,6 @@ from matsim_agents.discovery.stability import (
     ReferencePhaseEntry,
     score_stability,
 )
-from matsim_agents.orchestration.state import RelaxationResult
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,

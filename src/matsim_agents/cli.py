@@ -337,7 +337,7 @@ def run(
 @app.command()
 def plan(objective: str):
     """Run the planner only and print the proposed task list as JSON."""
-    from matsim_agents.agents.planner import planner_node
+    from matsim_agents.orchestration.agents.planner import planner_node
 
     state = MatSimState(objective=objective)
     out = planner_node(state)

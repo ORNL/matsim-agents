@@ -17,7 +17,8 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
 
-from matsim_agents.orchestration.state import MatSimState, RelaxationResult, TaskSpec
+from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.orchestration.state import MatSimState, TaskSpec
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ class TestPlannerNode:
     """planner_node() produces a plan from the objective."""
 
     def test_empty_objective_produces_empty_plan(self):
-        from matsim_agents.agents.planner import planner_node
+        from matsim_agents.orchestration.agents.planner import planner_node
 
         result = planner_node(_state())
         assert result["plan"] == []
@@ -41,7 +42,7 @@ class TestPlannerNode:
 
     def test_fallback_plan_when_llm_unavailable(self, si_vasp):
         """When the LLM raises, planner falls back to a file-based plan."""
-        from matsim_agents.agents.planner import planner_node
+        from matsim_agents.orchestration.agents.planner import planner_node
 
         # Point at a provider that will fail to import
         state = _state(
@@ -76,7 +77,7 @@ class TestPlannerNode:
             llm_provider="vllm",
             llm_model="test-model",
         )
-        from matsim_agents.agents.planner import planner_node
+        from matsim_agents.orchestration.agents.planner import planner_node
 
         result = planner_node(state)
         assert len(result["plan"]) == 1
@@ -95,7 +96,7 @@ class TestPlannerNode:
         monkeypatch.setattr(llm_mod, "get_chat_model", lambda **_: fake_llm)
 
         state = _state(objective=f"Relax {si_vasp}", llm_provider="vllm")
-        from matsim_agents.agents.planner import planner_node
+        from matsim_agents.orchestration.agents.planner import planner_node
 
         result = planner_node(state)
         assert len(result["messages"]) == 1
@@ -109,13 +110,13 @@ class TestAnalystNode:
     """analyst_node() summarizes results deterministically and via LLM."""
 
     def test_no_results_returns_message(self):
-        from matsim_agents.agents.analyst import analyst_node
+        from matsim_agents.orchestration.agents.analyst import analyst_node
 
         result = analyst_node(_state())
         assert "No relaxation results" in result["analysis"]
 
     def test_deterministic_summary_picks_best(self, fake_relaxation_result):
-        from matsim_agents.agents.analyst import _deterministic_summary
+        from matsim_agents.orchestration.agents.analyst import _deterministic_summary
 
         # Two results; summary should pick the lower energy one
         worse = RelaxationResult(
@@ -140,7 +141,7 @@ class TestAnalystNode:
         monkeypatch.setattr(llm_mod, "get_chat_model", lambda **_: fake_llm)
 
         state = _state(results=[fake_relaxation_result], llm_provider="vllm")
-        from matsim_agents.agents.analyst import analyst_node
+        from matsim_agents.orchestration.agents.analyst import analyst_node
 
         result = analyst_node(state)
         assert result["analysis"] == "LLM-generated analysis."
@@ -154,7 +155,7 @@ class TestAnalystNode:
 
         monkeypatch.setattr(llm_mod, "get_chat_model", _fail)
         state = _state(results=[fake_relaxation_result], llm_provider="vllm")
-        from matsim_agents.agents.analyst import analyst_node
+        from matsim_agents.orchestration.agents.analyst import analyst_node
 
         result = analyst_node(state)
         # Should fall back to deterministic summary silently
@@ -162,7 +163,7 @@ class TestAnalystNode:
         assert "-5.432" in result["analysis"]
 
     def test_deterministic_summary_includes_handoff_events(self, fake_relaxation_result):
-        from matsim_agents.agents.analyst import _deterministic_summary
+        from matsim_agents.orchestration.agents.analyst import _deterministic_summary
 
         state = _state(
             results=[fake_relaxation_result],

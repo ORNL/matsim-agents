@@ -119,7 +119,7 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 # I001: ruff cannot sort import blocks that live inside function bodies.
 # SIM905: str.split() element table is intentionally formatted as a string.
 # UP035: typing.Callable/Iterable used in files that pre-date this rule.
-"src/matsim_agents/agents/planner.py" = ["E501"]
+"src/matsim_agents/orchestration/agents/planner.py" = ["E501"]
 "src/matsim_agents/chat.py" = ["E501", "UP035"]
 "src/matsim_agents/cli.py" = ["B008", "E501"]
 "src/matsim_agents/discovery/composition.py" = ["I001", "SIM905", "UP035"]
