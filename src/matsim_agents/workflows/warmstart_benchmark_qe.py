@@ -68,7 +68,6 @@ def run_warmstart_benchmark(
     qe_launcher: list[str] | str,
     *,
     qe_settings_overrides: dict[str, Any] | None = None,
-    hydragnn_kwargs: dict[str, Any] | None = None,
     mlip_backend: str = "hydragnn",
     mlip_kwargs: dict[str, Any] | None = None,
     skip_hydragnn: bool = False,
@@ -81,14 +80,9 @@ def run_warmstart_benchmark(
     ``mlip_backend`` selects the MLIP used for the warm pre-relaxation step.
     Currently supported: ``"hydragnn"`` (default) and ``"uma"``.
 
-    ``mlip_kwargs`` is forwarded to the selected MLIP relax helper.  For
-    ``"hydragnn"`` this is the same as the legacy ``hydragnn_kwargs`` argument.
+    ``mlip_kwargs`` is forwarded to the selected MLIP relax helper.
     For ``"uma"`` it should contain ``uma_model_name``, ``uma_task``, and
     optionally ``uma_device``, ``optimizer``, ``fmax``, ``maxiter``.
-
-    ``hydragnn_kwargs`` is kept for backward compatibility: when
-    ``mlip_backend="hydragnn"`` and ``mlip_kwargs`` is *not* provided,
-    ``hydragnn_kwargs`` is used as ``mlip_kwargs``.
     """
     from ase.io import read, write
 
@@ -122,9 +116,7 @@ def run_warmstart_benchmark(
     hydragnn_block: dict[str, Any] | None = None
 
     if not skip_hydragnn:
-        # Resolve effective kwargs: mlip_kwargs takes priority; fall back to
-        # legacy hydragnn_kwargs for backward compatibility.
-        effective_kwargs = mlip_kwargs if mlip_kwargs is not None else (hydragnn_kwargs or {})
+        effective_kwargs = mlip_kwargs or {}
         try:
             warm_atoms_path, hydragnn_block = _mlip_relax(
                 structure_path, work_dir, effective_kwargs, mlip_backend=mlip_backend
@@ -189,37 +181,6 @@ def _mlip_relax(
     payload.setdefault("fmax", 0.01)
     payload.setdefault("maxiter", 200)
     payload["mlip_backend"] = mlip_backend
-
-    args = RelaxStructureInput(**payload)
-    res = relax_with_mlip(args)
-    return res.optimized_structure_path, {
-        "num_steps": res.num_steps,
-        "converged": res.converged,
-        "final_energy_eV": res.final_energy_eV,
-        "final_max_force_eV_per_A": res.final_max_force_eV_per_A,
-        "optimized_structure_path": res.optimized_structure_path,
-        "trajectory_path": res.trajectory_path,
-        "log_csv_path": res.log_csv_path,
-    }
-
-
-def _hydragnn_relax(
-    structure_path: str,
-    work_dir: str,
-    kwargs: dict[str, Any],
-) -> tuple[str | None, dict[str, Any]]:
-    """Invoke the HydraGNN relax tool. Returns ``(optimized_path, info)``."""
-    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
-
-    hydragnn_dir = os.path.join(work_dir, "hydragnn")
-    Path(hydragnn_dir).mkdir(parents=True, exist_ok=True)
-
-    payload = dict(kwargs)
-    payload.setdefault("structure_path", structure_path)
-    payload.setdefault("output_dir", hydragnn_dir)
-    payload.setdefault("optimizer", "FIRE")
-    payload.setdefault("fmax", 0.01)
-    payload.setdefault("maxiter", 200)
 
     args = RelaxStructureInput(**payload)
     res = relax_with_mlip(args)
@@ -339,16 +300,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.kpts is not None:
         overrides["kpts"] = tuple(args.kpts)
 
-    hydragnn_kwargs: dict[str, Any] = {}
+    mlip_kwargs: dict[str, Any] = {}
     if args.logdir:
-        hydragnn_kwargs["logdir"] = args.logdir
+        mlip_kwargs["logdir"] = args.logdir
     if args.hydragnn_branch_mlp_checkpoint:
-        hydragnn_kwargs["hydragnn_branch_mlp_checkpoint"] = args.hydragnn_branch_mlp_checkpoint
+        mlip_kwargs["hydragnn_branch_mlp_checkpoint"] = args.hydragnn_branch_mlp_checkpoint
     if args.checkpoint:
-        hydragnn_kwargs["checkpoint"] = args.checkpoint
-    hydragnn_kwargs["mlp_device"] = args.mlp_device
-    hydragnn_kwargs["fmax"] = args.hydragnn_fmax
-    hydragnn_kwargs["maxiter"] = args.hydragnn_maxiter
+        mlip_kwargs["checkpoint"] = args.checkpoint
+    mlip_kwargs["mlp_device"] = args.mlp_device
+    mlip_kwargs["fmax"] = args.hydragnn_fmax
+    mlip_kwargs["maxiter"] = args.hydragnn_maxiter
 
     skip_hg = not (args.logdir and args.hydragnn_branch_mlp_checkpoint)
 
@@ -362,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
         pseudo_dir=args.pseudo_dir,
         qe_launcher=qe_launcher,
         qe_settings_overrides=overrides,
-        hydragnn_kwargs=hydragnn_kwargs,
+        mlip_kwargs=mlip_kwargs,
         skip_hydragnn=skip_hg,
         timeout_sec=args.timeout_sec,
     )

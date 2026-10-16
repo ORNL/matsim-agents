@@ -70,7 +70,6 @@ def run_warmstart_benchmark(
     vasp_launcher: list[str] | str,
     *,
     vasp_settings_overrides: dict[str, Any] | None = None,
-    hydragnn_kwargs: dict[str, Any] | None = None,
     mlip_backend: str = "hydragnn",
     mlip_kwargs: dict[str, Any] | None = None,
     skip_hydragnn: bool = False,
@@ -83,9 +82,7 @@ def run_warmstart_benchmark(
 
     ``mlip_backend`` selects the MLIP pre-relaxation engine: ``"hydragnn"``
     (default) or ``"uma"``.  ``mlip_kwargs`` is forwarded to the selected
-    backend.  For backward compatibility, ``hydragnn_kwargs`` is still
-    accepted and is equivalent to ``mlip_kwargs`` when
-    ``mlip_backend="hydragnn"``.
+    backend.
     """
     from ase.io import read, write
 
@@ -109,9 +106,7 @@ def run_warmstart_benchmark(
     warm_block: dict[str, Any] | None = None
     hydragnn_block: dict[str, Any] | None = None
 
-    # Resolve effective MLIP kwargs: mlip_kwargs takes precedence; fall back to
-    # hydragnn_kwargs for backward compatibility.
-    effective_mlip_kwargs = dict(mlip_kwargs or hydragnn_kwargs or {})
+    effective_mlip_kwargs = dict(mlip_kwargs or {})
 
     if not skip_hydragnn:
         try:
@@ -179,15 +174,6 @@ def _mlip_relax(
         "trajectory_path": res.trajectory_path,
         "log_csv_path": res.log_csv_path,
     }
-
-
-def _hydragnn_relax(
-    structure_path: str,
-    work_dir: str,
-    kwargs: dict[str, Any],
-) -> tuple[str | None, dict[str, Any]]:
-    """Backward-compatible wrapper — delegates to ``_mlip_relax``."""
-    return _mlip_relax(structure_path, work_dir, kwargs, mlip_backend="hydragnn")
 
 
 def _summarise(
@@ -315,16 +301,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.ediffg is not None:
         overrides["ediffg_eV_per_A"] = args.ediffg
 
-    hydragnn_kwargs: dict[str, Any] = {}
+    mlip_kwargs: dict[str, Any] = {}
     if args.logdir:
-        hydragnn_kwargs["logdir"] = args.logdir
+        mlip_kwargs["logdir"] = args.logdir
     if args.hydragnn_branch_mlp_checkpoint:
-        hydragnn_kwargs["hydragnn_branch_mlp_checkpoint"] = args.hydragnn_branch_mlp_checkpoint
+        mlip_kwargs["hydragnn_branch_mlp_checkpoint"] = args.hydragnn_branch_mlp_checkpoint
     if args.checkpoint:
-        hydragnn_kwargs["checkpoint"] = args.checkpoint
-    hydragnn_kwargs["mlp_device"] = args.mlp_device
-    hydragnn_kwargs["fmax"] = args.hydragnn_fmax
-    hydragnn_kwargs["maxiter"] = args.hydragnn_maxiter
+        mlip_kwargs["checkpoint"] = args.checkpoint
+    mlip_kwargs["mlp_device"] = args.mlp_device
+    mlip_kwargs["fmax"] = args.hydragnn_fmax
+    mlip_kwargs["maxiter"] = args.hydragnn_maxiter
 
     skip_hg = args.skip_hydragnn or not (args.logdir and args.hydragnn_branch_mlp_checkpoint)
 
@@ -338,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
         potcar_dir=args.potcar_dir,
         vasp_launcher=vasp_launcher,
         vasp_settings_overrides=overrides,
-        hydragnn_kwargs=hydragnn_kwargs,
+        mlip_kwargs=mlip_kwargs,
         skip_hydragnn=skip_hg,
         timeout_sec=args.timeout_sec,
     )

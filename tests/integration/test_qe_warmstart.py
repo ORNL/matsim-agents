@@ -140,7 +140,7 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
     # stress is reliable (e.g. well-converged insulators with small cells).
     relax_cell = bool(hydragnn_cfg.get("relax_cell", False))
 
-    hydragnn_kwargs: dict[str, Any] = {
+    mlip_kwargs: dict[str, Any] = {
         "logdir": _env("MATSIM_HYDRAGNN_LOGDIR"),
         "hydragnn_branch_mlp_checkpoint": _env("HYDRAGNN_BRANCH_MLP_CHECKPOINT"),
         "mlp_device": _env("MATSIM_QE_MLP_DEVICE") or "cuda",
@@ -164,7 +164,7 @@ def test_hydragnn_warmstart_helps_qe(fixture: dict[str, Any], tmp_path: Path) ->
         pseudo_dir=_env("MATSIM_QE_PSEUDO_DIR"),
         qe_launcher=qe_launcher,
         qe_settings_overrides=qe_overrides,
-        hydragnn_kwargs=hydragnn_kwargs,
+        mlip_kwargs=mlip_kwargs,
         timeout_sec=timeout,
     )
 

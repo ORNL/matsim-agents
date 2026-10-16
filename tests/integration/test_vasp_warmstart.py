@@ -139,7 +139,7 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
     # composition-aware defaults from recommend_settings if absent.
     vasp_overrides: dict[str, Any] = dict(fixture.get("vasp") or {})
 
-    hydragnn_kwargs: dict[str, Any] = {
+    mlip_kwargs: dict[str, Any] = {
         "logdir": _env("MATSIM_HYDRAGNN_LOGDIR"),
         "hydragnn_branch_mlp_checkpoint": _env("HYDRAGNN_BRANCH_MLP_CHECKPOINT"),
         "mlp_device": _env("MATSIM_VASP_MLP_DEVICE") or "cuda",
@@ -159,7 +159,7 @@ def test_hydragnn_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) 
         potcar_dir=_env("MATSIM_VASP_POTCAR_DIR"),
         vasp_launcher=vasp_launcher,
         vasp_settings_overrides=vasp_overrides,
-        hydragnn_kwargs=hydragnn_kwargs,
+        mlip_kwargs=mlip_kwargs,
         timeout_sec=timeout,
     )
 
