@@ -289,10 +289,7 @@ def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> Non
     assert "--promotion-validation-set" in job
     assert "--promotion-max-energy-mae" in job
     assert "--promotion-max-force-mae" in job
-    assert (
-        "--promotion-max-relative-regression "
-        '"${MATSIM_CAMPAIGN_PROMOTION_MAX_RELATIVE_REGRESSION:-0}"' in job
-    )
+    assert "--promotion-max-relative-regression" not in job
     assert "MATSIM_CAMPAIGN_PROMOTION_MIN_RELATIVE_IMPROVEMENT:-0.05" in job
     assert "--promotion-min-relative-improvement" in job
     assert "promotion_min_relative_improvement=args.promotion_min_relative_improvement" in executor

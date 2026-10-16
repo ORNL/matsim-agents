@@ -79,17 +79,17 @@ class VASPBackend:
                 rc = 124
         elapsed = time.time() - t0
 
-        legacy = parse_vasp_workdir(spec.work_dir, return_code=rc)
+        parsed = parse_vasp_workdir(spec.work_dir, return_code=rc)
         return DFTResult(
             backend=self.name,
-            work_dir=legacy.work_dir,
-            return_code=legacy.return_code,
-            converged=legacy.converged,
-            energy_eV=legacy.energy_eV,
-            forces_eV_per_A=legacy.forces_eV_per_A,
-            stress_eV_per_A3=legacy.stress_eV_per_A3,
-            n_atoms=legacy.n_atoms,
-            wall_time_sec=legacy.wall_time_sec if legacy.wall_time_sec is not None else elapsed,
-            final_atoms=legacy.final_atoms,
-            notes=legacy.notes,
+            work_dir=parsed.work_dir,
+            return_code=parsed.return_code,
+            converged=parsed.converged,
+            energy_eV=parsed.energy_eV,
+            forces_eV_per_A=parsed.forces_eV_per_A,
+            stress_eV_per_A3=parsed.stress_eV_per_A3,
+            n_atoms=parsed.n_atoms,
+            wall_time_sec=parsed.wall_time_sec if parsed.wall_time_sec is not None else elapsed,
+            final_atoms=parsed.final_atoms,
+            notes=parsed.notes,
         )

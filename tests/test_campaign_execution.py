@@ -1724,7 +1724,7 @@ def test_formula_execution_applies_retraining_and_promotion(
 
     assert observed["trainer"]["enabled"] is True
     assert observed["trainer"]["epochs_per_iter"] == 3
-    assert observed["trainer"]["promotion_max_relative_regression"] == 0.0
+    assert "promotion_max_relative_regression" not in observed["trainer"]
     assert observed["trainer"]["promotion_min_relative_improvement"] == 0.1
     assert observed["trainer"]["promote_model"] is True
     assert observed["trainer"]["validation_set"] == (

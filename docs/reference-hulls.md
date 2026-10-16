@@ -56,7 +56,7 @@ collision-prone naming convention.
 If a resumed DFT reference search finds a lower unary endpoint, persisted
 compound formation energies are rebased before the endpoint is replaced.
 Typed records are recomputed from their stored raw per-atom energies and
-retain their compound corrections. Legacy formation-only records receive the
+retain their compound corrections. Formula-keyed formation-only records receive the
 exact composition-weighted old-to-new baseline change; they require the old
 elemental baseline to be known. Previously completed compounds need not be
 rerun, and a subsequent resume does not apply the same change twice.

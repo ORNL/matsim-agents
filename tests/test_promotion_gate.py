@@ -60,7 +60,6 @@ def _trainer(tmp_path: Path) -> TrainerConfig:
         validation_set=validation_set,
         promotion_max_energy_mae_eV_per_atom=0.1,
         promotion_max_force_mae_eV_per_A=0.2,
-        promotion_max_relative_regression=0.0,
         promotion_min_evaluated_frames=5,
     )
 
@@ -201,7 +200,6 @@ def test_invalid_mae_prevents_promotion(tmp_path, value, role):
         ("promotion_min_relative_improvement", 1.01),
         ("promotion_min_relative_improvement", float("nan")),
         ("promotion_min_relative_improvement", float("inf")),
-        ("promotion_max_relative_regression", 0.05),
     ],
 )
 @pytest.mark.parametrize("config_kind", ["trainer", "campaign"])

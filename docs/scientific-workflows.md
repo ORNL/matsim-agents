@@ -610,12 +610,8 @@ strict reduction larger than the numerical tolerance. An exact-zero incumbent
 MAE cannot improve, but the other metric may qualify. This threshold is a policy
 choice, not statistical significance or broad scientific qualification.
 
-Migration: `promotion_max_relative_regression` now defaults to zero and accepts
-only zero. Explicit positive legacy values fail configuration rather than
-silently allowing degraded candidates. Likewise,
-`--promotion-max-relative-regression` and
-`MATSIM_CAMPAIGN_PROMOTION_MAX_RELATIVE_REGRESSION` accept only zero.
-Training, cumulative collection, and permanent held-out partitions are unchanged;
+Promotion never accepts an MAE regression on either metric. Training,
+cumulative collection, and permanent held-out partitions are unchanged;
 rejected candidates do not replace the incumbent.
 
 Scientific MLIP-versus-DFT energy comparisons use formation energies, not

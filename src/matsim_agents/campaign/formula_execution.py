@@ -457,12 +457,6 @@ class CampaignRetrainingConfig(BaseModel):
     validation_reference_set: Path | None = None
     promotion_max_energy_mae_eV_per_atom: float = Field(0.1, gt=0)
     promotion_max_force_mae_eV_per_A: float = Field(0.2, gt=0)
-    promotion_max_relative_regression: float = Field(
-        0.0,
-        ge=0,
-        le=0,
-        description="Compatibility field; must be zero. Promotion forbids MAE regression.",
-    )
     promotion_min_relative_improvement: float = Field(
         0.05,
         ge=0,
@@ -864,7 +858,7 @@ def _rebase_compound_references(
             raise ValueError(
                 f"cannot rebase persisted reference {formula!r} without its old elemental baseline"
             )
-        # Legacy records have only formation energies; this is the exact baseline change.
+        # Formula-keyed records have only formation energies; this is the exact baseline change.
         fraction = composition.elements[element] / composition.total_atoms
         return formation_energy + fraction * (old_energy - new_energy)
 
@@ -877,13 +871,13 @@ def _rebase_compound_references(
         )
         for entry in references.phase_entries
     ]
-    legacy_updates = {
+    formula_updates = {
         formula: rebased(formula, energy, None)
         for formula, energy in references.competing_phases.items()
     }
     for entry, energy in zip(references.phase_entries, phase_updates, strict=True):
         entry.formation_energy_eV_per_atom = energy
-    references.competing_phases = legacy_updates
+    references.competing_phases = formula_updates
 
 
 def _generate_reference_energies(
@@ -912,18 +906,18 @@ def _generate_reference_energies(
             "populated reference energies lack backend provenance; regenerate or migrate them"
         )
     references.backend = al_cfg.dft.backend
-    legacy_specs = [
+    manifest_specs = [
         ReferenceStructureSpec(
             phase_id=formula,
             formula=formula,
             structure_path=path,
             relax_cell=refinement.reference_relax_cell.get(formula),
             settings=refinement.reference_settings.get(formula, {}),
-            source="legacy_manifest",
+            source="reference_structures",
         )
         for formula, path in refinement.reference_structures.items()
     ]
-    specs = [*legacy_specs, *refinement.reference_phases]
+    specs = [*manifest_specs, *refinement.reference_phases]
     phase_ids = [spec.phase_id for spec in specs]
     if len(phase_ids) != len(set(phase_ids)):
         raise ValueError("reference structure phase IDs must be unique")
@@ -943,7 +937,7 @@ def _generate_reference_energies(
             if spec.phase_id in known_elemental_reference_ids:
                 continue
         elif spec.phase_id in existing_phase_ids or (
-            spec.source == "legacy_manifest" and spec.formula in references.competing_phases
+            spec.source == "reference_structures" and spec.formula in references.competing_phases
         ):
             continue
         pending.append((spec, composition))
@@ -1060,17 +1054,17 @@ def _pending_reference_calculation_count(refinement: CampaignDFTRefinementConfig
     phase_ids = (
         {entry.phase_id for entry in references.phase_entries} if references is not None else set()
     )
-    legacy_specs = [
+    manifest_specs = [
         ReferenceStructureSpec(
             phase_id=formula,
             formula=formula,
             structure_path=path,
-            source="legacy_manifest",
+            source="reference_structures",
         )
         for formula, path in refinement.reference_structures.items()
     ]
     pending = 0
-    for spec in [*legacy_specs, *refinement.reference_phases]:
+    for spec in [*manifest_specs, *refinement.reference_phases]:
         composition = parse_composition(spec.formula)
         if composition is None:
             raise ValueError(f"Could not parse reference formula {spec.formula!r}")
@@ -1078,7 +1072,7 @@ def _pending_reference_calculation_count(refinement: CampaignDFTRefinementConfig
             if next(iter(composition.elements)) not in elemental:
                 pending += 1
         elif spec.phase_id not in phase_ids and not (
-            spec.source == "legacy_manifest" and spec.formula in competing
+            spec.source == "reference_structures" and spec.formula in competing
         ):
             pending += 1
     return pending
@@ -1118,9 +1112,6 @@ def _prepare_al_template(
         )
         al_cfg.trainer.promotion_max_force_mae_eV_per_A = (
             config.retraining.promotion_max_force_mae_eV_per_A
-        )
-        al_cfg.trainer.promotion_max_relative_regression = (
-            config.retraining.promotion_max_relative_regression
         )
         al_cfg.trainer.promotion_min_relative_improvement = (
             config.retraining.promotion_min_relative_improvement

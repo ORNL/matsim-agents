@@ -71,7 +71,7 @@ def test_campaign_reference_preflight_precedes_launch(
         assert "retraining energy comparison requires" in result.stderr
 
 
-@pytest.mark.parametrize("layout", ["nested", "symbol", "prefixed", "mixed", "missing"])
+@pytest.mark.parametrize("layout", ["nested", "symbol", "mixed", "missing"])
 def test_vasp_campaign_preflight_matches_runtime_potcar_layouts(tmp_path, layout):
     repo = tmp_path / "repo"
     jobs = repo / "deployments/perlmutter/jobs"
@@ -86,16 +86,10 @@ def test_vasp_campaign_preflight_matches_runtime_potcar_layouts(tmp_path, layout
     potcars = tmp_path / "potcars"
     potcars.mkdir()
     for index, symbol in enumerate(("Nb", "Ta", "O")):
-        kind = ["nested", "symbol", "prefixed"][index] if layout == "mixed" else layout
+        kind = ["nested", "symbol", "nested"][index] if layout == "mixed" else layout
         if layout == "missing" and symbol == "O":
             continue
-        path = (
-            potcars / symbol / "POTCAR"
-            if kind in {"nested", "missing"}
-            else potcars / symbol
-            if kind == "symbol"
-            else potcars / f"POTCAR.{symbol}"
-        )
+        path = potcars / symbol / "POTCAR" if kind in {"nested", "missing"} else potcars / symbol
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("synthetic POTCAR")
     env = {

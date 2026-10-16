@@ -194,7 +194,7 @@ class ReferenceEnergySet(BaseModel):
             for entry in self.phase_entries
         ]
         records.extend(
-            (f"legacy:{formula}", formula, energy)
+            (f"formula:{formula}", formula, energy)
             for formula, energy in self.competing_phases.items()
         )
         return records
@@ -294,7 +294,7 @@ def recalibrate_hull_reports(
             ComputedEntry(
                 composition,
                 reference_total + formation_per_atom * composition.num_atoms,
-                entry_id=None if phase_id.startswith("legacy:") else phase_id,
+                entry_id=None if phase_id.startswith("formula:") else phase_id,
             )
         )
 
@@ -461,7 +461,7 @@ def score_stability(
                 ComputedEntry(
                     comp,
                     ref_total + formation_per_atom * comp.num_atoms,
-                    entry_id=None if phase_id.startswith("legacy:") else phase_id,
+                    entry_id=None if phase_id.startswith("formula:") else phase_id,
                 )
             )
         candidate_entries = []

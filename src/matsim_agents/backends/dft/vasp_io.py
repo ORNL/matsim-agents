@@ -5,7 +5,8 @@ We deliberately use ASE's ``ase.io.vasp`` for POSCAR + ``ase.io.vasp_parsers``
 ASE's POTCAR support requires ``$VASP_PP_PATH`` pointing at the parent of the
 ``potpaw_PBE/`` directory; we work around that by concatenating per-element
 POTCAR files manually so the user only needs to point ``potcar_dir`` at a
-flat directory of element-named POTCAR files.
+directory with one entry per element: ``<element>/POTCAR`` (or a preferred
+variant such as ``Nb_pv/POTCAR``) or a bare ``<element>`` file.
 """
 
 from __future__ import annotations
@@ -142,8 +143,7 @@ def resolve_potcar_paths(
 
     paths: list[Path] = []
     for sym in seen:
-        # Build candidate list: plain element first, then preferred variants,
-        # then legacy flat-file conventions.
+        # Build candidate list: plain element first, then preferred variants.
         variant_dirs = [sym] + _PREFERRED_VARIANTS.get(sym, [])
         candidates = []
         for vd in variant_dirs:
@@ -151,7 +151,6 @@ def resolve_potcar_paths(
                 potcar_dir / vd / "POTCAR",
                 potcar_dir / vd,
             ]
-        candidates += [potcar_dir / f"POTCAR.{sym}"]
         match = next((c for c in candidates if c.is_file()), None)
         if match is None:
             raise FileNotFoundError(

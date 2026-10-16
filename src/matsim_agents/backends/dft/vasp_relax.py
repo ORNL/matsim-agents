@@ -117,7 +117,6 @@ def _max_enmax_from_potcar_dir(symbols: list[str], potcar_dir: str | Path) -> fl
         for cand in (
             potcar_dir / sym / "POTCAR",
             potcar_dir / sym,
-            potcar_dir / f"POTCAR.{sym}",
         ):
             if cand.is_file():
                 try:
