@@ -108,7 +108,3 @@ retraining. `MATSIM_RETRAIN=1` additionally requires `MATSIM_TRAIN_SCRIPT`;
 model promotion remains disabled and must happen through an explicit reviewed
 workflow. Set `MATSIM_DFT_BACKEND=qe|vasp` and provide the corresponding binary,
 pseudopotential/POTCAR, wrapper, and rank variables.
-
-Files marked `LEGACY MANUSCRIPT REPRODUCTION` reproduce an earlier published
-pipeline and are not templates for new campaigns. Current deployments should
-use the typed relaxation, active-learning, portability, or supervisor contracts.

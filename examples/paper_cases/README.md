@@ -3,13 +3,8 @@
 Test cases prepared for the FORUMAI / matsim-agents paper, based on
 categories proposed by Zekun Chen (2026-06-10).
 
-Every system has **two entry points**:
-
-* **Single pass** — `singlepass.py --case <name>`: runs the agent graph *once*
-  (MLIP relax + polymorph ranking, optional one DFT validation single-point via
-  `--dft`). Fast sanity / feasibility read. No retraining loop.
-* **Active learning** — `al_<name>.yaml`: the full discovery → uncertainty
-  acquisition → DFT labeling → retrain loop.
+Every system has an **active-learning** configuration, `al_<name>.yaml`: the
+full discovery → uncertainty acquisition → DFT labeling → retrain loop.
 
 All paths use `$PROJ_ROOT` = repo root and `$RUNS_ROOT` = scratch directory.
 Promotion-enabled AL cases also require
@@ -23,8 +18,6 @@ to, not instead of, the held-out compound split. See the
 
 These paper cases can be executed through three complementary entry points:
 
-- Single pass (`singlepass.py`): one-shot graph execution for a quick sanity
-  check and ranking (no AL retraining loop).
 - Core graph (`matsim-agents run`): planner -> executor -> uq_gate -> analyst,
   with optional run-path AL handoff when UQ thresholds are crossed.
 - Active learning (`matsim-agents al run al_<case>.yaml`): iterative
@@ -39,7 +32,6 @@ escalating to AL when configured UQ thresholds are crossed.
 
 ```mermaid
 flowchart LR
-  SP[singlepass.py] --> R[ranked feasibility output]
   RG[matsim-agents run] --> RU[uq_gate]
   SU[matsim-agents supervisor-run] --> SQ[evaluate_uq]
   CH[matsim-agents chat] --> CQ[chat UQ policy]
@@ -52,20 +44,19 @@ flowchart LR
 
 ## Coverage matrix
 
-| # | System | Dim | Single pass | Active learning |
-|---|--------|-----|-------------|-----------------|
-| 1 | LiFePO₄ olivine | 3D | `singlepass.py --case lifepo4` | `al_lifepo4.yaml` |
-| 2a | NbTaVHfZrTi BCC HEA | 3D | `singlepass.py --case hea_bcc` | `al_hea_bcc.yaml` |
-| 2b | CrMnFeCoNi Cantor FCC HEA | 3D | `singlepass.py --case hea_fcc` | `al_hea_fcc_cantor.yaml` |
-| 3 | Phosphorene (black-P / blue-P) | 2D | `singlepass.py --case phosphorene` | `al_phosphorene.yaml` |
-| 4 | Cu-BHT conductive MOF | 2D | `singlepass.py --case cu_bht` † | `al_cu_bht_2d.yaml` † |
-| 5 | Zn(HCOO)₂ MOF | 3D | `singlepass.py --case zn_formate` | `al_zn_formate.yaml` |
+| # | System | Dim | Active learning |
+|---|--------|-----|-----------------|
+| 1 | LiFePO₄ olivine | 3D | `al_lifepo4.yaml` |
+| 2a | NbTaVHfZrTi BCC HEA | 3D | `al_hea_bcc.yaml` |
+| 2b | CrMnFeCoNi Cantor FCC HEA | 3D | `al_hea_fcc_cantor.yaml` |
+| 3 | Phosphorene (black-P / blue-P) | 2D | `al_phosphorene.yaml` |
+| 4 | Cu-BHT conductive MOF | 2D | `al_cu_bht_2d.yaml` † |
+| 5 | Zn(HCOO)₂ MOF | 3D | `al_zn_formate.yaml` |
 
-† Cu-BHT requires a supplied CIF. The single-pass runner first checks the
-run-scoped path `out_singlepass/<run-id>/cu_bht/seeds/cu_bht_monolayer.cif`,
-then falls back to `examples/paper_cases/seeds/cu_bht_monolayer.cif`.
-The inorganic prototype enumerator cannot build the organic BHT ligand; all
-other cases build their seeds automatically.
+† Cu-BHT requires a supplied CIF at `examples/paper_cases/seeds/cu_bht_monolayer.cif`;
+the inorganic prototype enumerator cannot build the organic BHT ligand. The
+other cases use the seed structures shipped in `seeds/` or generate seeds from
+their compositions.
 
 ---
 
@@ -75,8 +66,6 @@ other cases build their seeds automatically.
 examples/paper_cases/
 ├── README.md                     ← this file
 │
-├── singlepass.py                 ← unified single-pass runner (all 6 cases)
-│
 ├── al_lifepo4.yaml               ← Case 1
 ├── al_hea_bcc.yaml               ← Case 2a
 ├── al_hea_fcc_cantor.yaml        ← Case 2b
@@ -84,7 +73,7 @@ examples/paper_cases/
 ├── al_cu_bht_2d.yaml             ← Case 4
 ├── al_zn_formate.yaml            ← Case 5
 │
-└── seeds/                        ← structure seeds (auto-written by singlepass.py)
+└── seeds/                        ← shipped seed structures
     ├── lifepo4_olivine.extxyz
     ├── hea_bcc_bcc_random.extxyz
     ├── hea_fcc_fcc_random.extxyz
@@ -105,23 +94,14 @@ export PROJ_ROOT=$PWD
 export RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs
 export MLIP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir
 
-# 1) write every seed structure (no agent run) — useful before AL too:
-python examples/paper_cases/singlepass.py --all --seeds-only
-
-# 2) single pass on one system (MLIP only):
-python examples/paper_cases/singlepass.py --case lifepo4
-
-# 3) single pass with one DFT validation single-point (VASP):
-python examples/paper_cases/singlepass.py --case lifepo4 --dft
-
-# 4) active learning on the same system:
+# 1) active learning on one system:
 matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run            examples/paper_cases/al_lifepo4.yaml
 
-# 4b) same AL config, UMA surrogate backend:
+# 1b) same AL config, UMA surrogate backend:
 MLIP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 
-# 5) supervisor-driven discovery -> optional AL handoff:
+# 2) supervisor-driven discovery -> optional AL handoff:
 matsim-agents supervisor-run LiFePO4 \
   --logdir $MLIP_LOGDIR \
   --hydragnn-branch-mlp-checkpoint best_model.pt \
@@ -154,24 +134,18 @@ matsim-agents supervisor-run LiFePO4 \
 ## Minimum viable commands
 
 ```bash
-# 1) Generate seeds for all paper cases
-python examples/paper_cases/singlepass.py --all --seeds-only
-
-# 2) One case, single-pass feasibility run
-python examples/paper_cases/singlepass.py --case lifepo4
-
-# 3) Run one AL case directly
+# 1) Run one AL case directly
 matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 
-# 4) Supervisor path with optional AL handoff planning
+# 2) Supervisor path with optional AL handoff planning
 matsim-agents supervisor-run LiFePO4 \
   --logdir "$MLIP_LOGDIR" \
   --hydragnn-branch-mlp-checkpoint best_model.pt \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
 
-# 5) Core run path with UQ-triggered AL handoff planning
+# 3) Core run path with UQ-triggered AL handoff planning
 matsim-agents run \
   "Relax structures/lifepo4_olivine.vasp and summarize results." \
   --logdir "$MLIP_LOGDIR" \
@@ -180,14 +154,6 @@ matsim-agents run \
   --al-config examples/paper_cases/al_lifepo4.yaml \
   --al-dry-run
 ```
-
-The single-pass runner uses these environment variables:
-
-| Variable | Meaning | Default |
-|----------|---------|---------|
-| `MLIP_LOGDIR` | HydraGNN logdir (config.json + checkpoint) | `$RUNS_ROOT/al-models/iter0_logdir` |
-| `HYDRAGNN_BRANCH_MLP_CHECKPOINT` | checkpoint filename | `best_model.pt` |
-| `OUT_DIR` | output root | `./out_singlepass` |
 
 For AL YAMLs in this folder, the surrogate backend can be switched with one
 env var when configs use `backend: ${MLIP_BACKEND:-hydragnn}`:
@@ -201,7 +167,6 @@ MLIP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 
 ## Case 1 — LiFePO₄: battery cathode polymorph search
 
-**Single pass:** relaxes the olivine seed and reports energy/atom + RMSD.
 **AL (`al_lifepo4.yaml`):** `seed_source.kind: compositions` `[LiFePO4]`,
 `n_random: 4` (pyXtal), `acquisition.strategy: mc_dropout`.
 **Science:** FORUMAI battery-design thrust; tests whether pyXtal random seeds
@@ -212,8 +177,6 @@ surface structures beyond the olivine prototype.
 
 ## Case 2a — NbTaVHfZrTi: refractory BCC HEA
 
-**Single pass:** builds a 24-atom equimolar BCC supercell (random site
-assignment, fixed seed) and relaxes it.
 **AL (`al_hea_bcc.yaml`):** 7 equimolar + sub-lattice compositions, `n_random: 6`,
 `acquisition.strategy: mc_dropout`, `ISMEAR=1` (Methfessel–Paxton, metallic).
 **Expected:** BCC preferred; 2–3 sub-lattice compositions with lower formation enthalpy.
@@ -222,7 +185,6 @@ assignment, fixed seed) and relaxes it.
 
 ## Case 2b — CrMnFeCoNi (Cantor alloy): FCC HEA with SRO
 
-**Single pass:** builds a 32-atom near-equimolar FCC supercell and relaxes it.
 **AL (`al_hea_fcc_cantor.yaml`):** 5 compositions, `n_random: 4`,
 `acquisition.strategy: mc_dropout`, `ISPIN=2`.
 **Science:** first FCC HEA with documented experimental SRO (Wang et al., Nature 2021).
@@ -233,8 +195,6 @@ assignment, fixed seed) and relaxes it.
 
 ## Case 3 — Phosphorene: 2D black-P vs blue-P
 
-**Single pass:** builds both polymorphs (black-P Pmna, blue-P P-3m1), relaxes and
-ranks them. The objective string flags the cell as a 2D slab.
 **AL (`al_phosphorene.yaml`):** `seed_source.kind: paths` (black-P seed),
 `n_random: 3`, `ISMEAR=0` (semiconductor); `KSPACING` auto-yields a single
 k-point along the vacuum axis.
@@ -246,9 +206,6 @@ structure cited in the email (materialssquare.com/work/43421) for the paper.
 
 ## Case 4 — Cu-BHT: conductive 2D MOF
 
-**Single pass:** loads `cu_bht_monolayer.cif` from the run-scoped seeds directory
-when present, otherwise from `examples/paper_cases/seeds/`, and relaxes it
-(skips with a clear message if the CIF is absent in both locations).
 **AL (`al_cu_bht_2d.yaml`):** `seed_source.kind: paths`, `n_random: 3`,
 `ISMEAR=1` (metallic), `nodes_per_job: 2`.
 **Prerequisite:** place a validated Cu₃C₆S₆ CIF at
@@ -259,8 +216,6 @@ when present, otherwise from `examples/paper_cases/seeds/`, and relaxes it
 
 ## Case 5 — Zn(HCOO)₂: MOF feasibility check
 
-**Single pass:** builds both polymorphs (alpha Pna2₁, beta P2₁2₁2₁), relaxes and
-ranks them. `--dft` adds a PBE reference single-point.
 **AL (`al_zn_formate.yaml`):** `seed_source.kind: paths`, `n_random: 3`,
 `ISMEAR=0` (insulating MOF), `nodes_per_job: 2`.
 **Expected:** alpha lower by ~15 meV/f.u.; RMSD < 0.08 Å. Larger RMSD flags
@@ -279,7 +234,7 @@ source deployments/perlmutter/setup/setup_matsim_perlmutter.sh
 export PROJ_ROOT=$PWD
 export RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs
 export MLIP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir
-export VASP_BIN=$PROJ_ROOT/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+export VASP_BIN=$PROJ_ROOT/external/vasp6/src/vasp.6.6.1/bin/vasp_std
 export POTCAR_DIR=/global/cfs/projectdirs/m5216/mlupopa/POTCAR/PBE.54
 
 matsim-agents al validate-config examples/paper_cases/<config>.yaml

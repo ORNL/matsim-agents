@@ -30,7 +30,7 @@ vars:
   RUN_TAG:    zn-formate-mof-uma-al-001
 
   SEED_XYZ:   ${PROJ_ROOT}/examples/paper_cases/seeds/zn_formate_alpha.extxyz
-  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.0/bin/vasp_std
+  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.1/bin/vasp_std
   POTCAR_DIR: /global/cfs/projectdirs/m5216/mlupopa/POTCAR/PBE.54
 
 mlip:

@@ -334,7 +334,6 @@ Use this table to choose the right entry point quickly.
 | Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--logdir`, `--hydragnn-branch-mlp-checkpoint`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
 | Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlip`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `MLIP_BACKEND=uma` | iteration state dirs, dataset, optional retrained model logdirs |
 | Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
-| Paper-case feasibility check without iterative AL | `python examples/paper_cases/singlepass.py --case <name>` | case name, `MLIP_LOGDIR`, optional `--dft` | per-case relaxed/ranked structures, optional DFT single-point validation |
 
 Notes:
 
@@ -419,9 +418,6 @@ matsim-agents al run examples/active_learning/al_config.example.yaml
 
 # 4b) Same AL config, UMA surrogate instead of HydraGNN
 MLIP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
-
-# 5) Paper-case single pass
-python examples/paper_cases/singlepass.py --case lifepo4
 ```
 
 ---

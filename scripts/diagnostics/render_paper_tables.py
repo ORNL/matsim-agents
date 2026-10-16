@@ -7,7 +7,6 @@ Inputs:
 Outputs (default under research/paper/manuscript/results/tex):
 - uq_table_rows.tex
 - warmstart_qe_table_rows.tex
-- singlepass_table_rows.tex
 
 These files contain only table row lines, ready for \input{} in LaTeX.
 """
@@ -25,15 +24,6 @@ UQ_LABEL_MAP = {
     "si": ("Si (diamond)", 8),
     "mgo": ("MgO (rocksalt)", 8),
     "monbtaw_hea": ("MoNbTaW (BCC \\acs{HEA})", 16),
-}
-
-CASE_LABEL_MAP = {
-    "lifepo4": "LiFePO\\textsubscript{4} olivine",
-    "hea_bcc": "NbTaVHfZrTi BCC \\acs{HEA}",
-    "hea_fcc": "CrMnFeCoNi Cantor FCC \\acs{HEA}",
-    "phosphorene": "Phosphorene",
-    "cu_bht": "Cu-BHT conductive \\acs{MOF}",
-    "zn_formate": "Zn(HCOO)\\textsubscript{2} \\acs{MOF}",
 }
 
 
@@ -197,35 +187,6 @@ def render_warmstart_qe(rows: List[Dict[str, str]]) -> List[str]:
     return lines
 
 
-def render_singlepass(rows: List[Dict[str, str]]) -> List[str]:
-    sp = [r for r in rows if r.get("workflow") == "singlepass"]
-    sp = _select_best_unique(sp, ["case"])
-    lines = []
-
-    for r in sorted(sp, key=lambda x: x.get("case", "")):
-        case = r.get("case") or ""
-        label = CASE_LABEL_MAP.get(case, case)
-        status = (r.get("status") or "--").upper()
-        n_relax = _as_int(r.get("n_relaxations"))
-        e = _as_float(r.get("lowest_energy_eV"))
-        e_pa = _as_float(r.get("energy_per_atom_eV"))
-        fmax = _as_float(r.get("best_final_max_force_eV_per_A"))
-        e_s = f"{e:.4f}" if e is not None else "--"
-        e_pa_s = _sci_tex(e_pa, digits=2) if e_pa is not None else "--"
-
-        lines.append(
-            "{} & {} & {} & {} & {} & {} \\\\".format(
-                label,
-                n_relax if n_relax is not None else "--",
-                status,
-                e_s,
-                e_pa_s,
-                _sci_tex(fmax, digits=1),
-            )
-        )
-    return lines
-
-
 def _write_lines(path: str, lines: List[str]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as fh:
@@ -252,20 +213,16 @@ def main() -> int:
 
     uq_lines = render_uq(rows)
     ws_lines = render_warmstart_qe(rows)
-    sp_lines = render_singlepass(rows)
 
     uq_path = os.path.join(args.output_dir, "uq_table_rows.tex")
     ws_path = os.path.join(args.output_dir, "warmstart_qe_table_rows.tex")
-    sp_path = os.path.join(args.output_dir, "singlepass_table_rows.tex")
 
     _write_lines(uq_path, uq_lines)
     _write_lines(ws_path, ws_lines)
-    _write_lines(sp_path, sp_lines)
 
     print("Rendered LaTeX table fragments:")
     print("  - {} ({} rows)".format(os.path.abspath(uq_path), len(uq_lines)))
     print("  - {} ({} rows)".format(os.path.abspath(ws_path), len(ws_lines)))
-    print("  - {} ({} rows)".format(os.path.abspath(sp_path), len(sp_lines)))
     return 0
 
 

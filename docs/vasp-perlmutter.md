@@ -36,7 +36,7 @@ notes, launchers, and non-proprietary configuration summaries are committed.
 - Module helper (single source of truth for the toolchain):
   [`deployments/perlmutter/setup/perlmutter-module-stack.sh`](../deployments/perlmutter/setup/perlmutter-module-stack.sh)
   → `load_perlmutter_modules_nvidia`.
-- Resulting binary: `external/vasp6/src/vasp.6.6.0/bin/vasp_std`.
+- Resulting binary: `external/vasp6/src/vasp.6.6.1/bin/vasp_std`.
 
 > **Why not `PrgEnv-nvhpc`?** `PrgEnv-nvhpc/8.5.0` only pairs with `cpe/25.09`
 > (`cray-mpich/9.0.1`), which breaks ABI alignment with the matsim/fairchem

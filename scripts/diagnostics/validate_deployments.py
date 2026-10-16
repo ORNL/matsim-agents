@@ -55,10 +55,6 @@ def validate() -> list[str]:
 
         if match := NONEXISTENT_MAIN_MODULE.search(text):
             errors.append(f"{rel}: references nonexistent Python module: {match.group(0)!r}")
-        if "examples/paper_cases/singlepass.py" in text and (
-            "MATSIM_LEGACY_MANUSCRIPT_REPRODUCTION=1" not in text
-        ):
-            errors.append(f"{rel}: singlepass manuscript driver must be explicitly marked legacy")
 
         if path.suffix == ".sh":
             result = subprocess.run(

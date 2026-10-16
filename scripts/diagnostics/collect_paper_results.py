@@ -5,7 +5,6 @@ Scans one or more run roots for:
 - active-learning-uq-*/outputs/uq_summary.csv
 - qe-warmstart-*/**/comparison.json
 - vasp-warmstart-*/**/comparison.json (if present)
-- singlepass-paper-*/job-*.out
 
 Writes:
 - consolidated CSV (long format)
@@ -25,7 +24,6 @@ import csv
 import glob
 import json
 import os
-import re
 from typing import Dict, Iterable, List
 
 
@@ -43,17 +41,6 @@ def _existing_roots(candidates: Iterable[str]) -> List[str]:
 def _safe_float(value):
     try:
         return float(value)
-    except Exception:
-        return None
-
-
-def _read_n_atoms_extxyz(path: str) -> int | None:
-    """Return atom count from the first line of an extxyz file."""
-    if not path:
-        return None
-    try:
-        with open(path, "r") as fh:
-            return int(fh.readline().strip())
     except Exception:
         return None
 
@@ -150,85 +137,6 @@ def _collect_warmstart(root: str) -> List[Dict[str, object]]:
     return records
 
 
-def _collect_singlepass(root: str) -> List[Dict[str, object]]:
-    records = []
-    pattern = os.path.join(root, "singlepass-paper-*", "job-*.out")
-
-    re_case = re.compile(r"^########## CASE: ([^#]+) ##########")
-    re_analyzed = re.compile(
-        r"Analyzed\s+(\d+)\s+relaxation\(s\)\.\s+Lowest energy:\s+([-+0-9.eE]+)\s+eV\s+\((.+?)\)\s+in\s+(\d+)\s+step\(s\);\s+final\s+\|F\|max\s*=\s*([-+0-9.eE]+)\s+eV/"
-    )
-    re_ok = re.compile(r"^\[OK\]\s+(.+)$")
-    re_fail = re.compile(r"^\[FAILED\]\s+(.+)$")
-
-    for job_out in sorted(glob.glob(pattern)):
-        run_dir = os.path.dirname(job_out)
-        run_name = os.path.basename(run_dir)
-        job_id = run_name.rsplit("-", 1)[-1]
-
-        current_case = None
-        case_stats = {}
-
-        with open(job_out, "r", errors="ignore") as fh:
-            for line in fh:
-                line = line.rstrip("\n")
-                m = re_case.search(line)
-                if m:
-                    current_case = m.group(1).strip()
-                    case_stats.setdefault(current_case, {})
-                    continue
-
-                m = re_analyzed.search(line)
-                if m and current_case:
-                    case_stats[current_case].update(
-                        {
-                            "n_relaxations": int(m.group(1)),
-                            "lowest_energy_eV": _safe_float(m.group(2)),
-                            "lowest_energy_structure": m.group(3),
-                            "best_steps": int(m.group(4)),
-                            "best_final_max_force_eV_per_A": _safe_float(m.group(5)),
-                        }
-                    )
-                    continue
-
-                m = re_ok.search(line)
-                if m:
-                    c = m.group(1).strip()
-                    case_stats.setdefault(c, {})["status"] = "ok"
-                    continue
-
-                m = re_fail.search(line)
-                if m:
-                    c = m.group(1).strip()
-                    case_stats.setdefault(c, {})["status"] = "failed"
-                    continue
-
-        for case, stats in sorted(case_stats.items()):
-            struct_path = stats.get("lowest_energy_structure")
-            n_atoms = _read_n_atoms_extxyz(struct_path)
-            e_eV = stats.get("lowest_energy_eV")
-            energy_per_atom = (e_eV / n_atoms) if (n_atoms and e_eV is not None) else None
-            rec = {
-                "workflow": "singlepass",
-                "run_root": root,
-                "run_dir": run_dir,
-                "job_id": job_id,
-                "source_file": job_out,
-                "case": case,
-                "status": stats.get("status"),
-                "n_relaxations": stats.get("n_relaxations"),
-                "lowest_energy_eV": e_eV,
-                "lowest_energy_structure": struct_path,
-                "n_atoms": n_atoms,
-                "energy_per_atom_eV": energy_per_atom,
-                "best_steps": stats.get("best_steps"),
-                "best_final_max_force_eV_per_A": stats.get("best_final_max_force_eV_per_A"),
-            }
-            records.append(rec)
-
-    return records
-
-
 def _write_csv(path: str, rows: List[Dict[str, object]]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     keys = sorted({k for row in rows for k in row.keys()}) if rows else ["workflow"]
@@ -293,27 +201,23 @@ def main() -> int:
         return 2
 
     all_rows: List[Dict[str, object]] = []
-    counts = {"uq": 0, "warmstart": 0, "singlepass": 0}
+    counts = {"uq": 0, "warmstart": 0}
 
     for root in roots:
         uq_rows = _collect_uq(root)
         ws_rows = _collect_warmstart(root)
-        sp_rows = _collect_singlepass(root)
 
         counts["uq"] += len(uq_rows)
         counts["warmstart"] += len(ws_rows)
-        counts["singlepass"] += len(sp_rows)
 
         all_rows.extend(uq_rows)
         all_rows.extend(ws_rows)
-        all_rows.extend(sp_rows)
 
     all_rows = _dedupe_rows(all_rows)
 
     counts = {
         "uq": sum(1 for r in all_rows if r.get("workflow") == "uq"),
         "warmstart": sum(1 for r in all_rows if str(r.get("workflow", "")).startswith("warmstart")),
-        "singlepass": sum(1 for r in all_rows if r.get("workflow") == "singlepass"),
     }
 
     _write_csv(args.output_csv, all_rows)
@@ -334,7 +238,6 @@ def main() -> int:
     print("Records:")
     print("  - uq: {}".format(counts["uq"]))
     print("  - warmstart: {}".format(counts["warmstart"]))
-    print("  - singlepass: {}".format(counts["singlepass"]))
     print("  - total: {}".format(len(all_rows)))
     print("CSV:  {}".format(os.path.abspath(args.output_csv)))
     print("JSON: {}".format(os.path.abspath(args.output_json)))
