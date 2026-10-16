@@ -499,6 +499,7 @@ class CampaignDFTRefinementConfig(BaseModel):
     """DFT relaxation and compatible reference generation for hull ranking."""
 
     method_signature: str
+    # TODO(#15): replace with typed reference_phases from the preparation script.
     reference_structures: dict[str, Path] = Field(default_factory=dict)
     reference_relax_cell: dict[str, bool] = Field(default_factory=dict)
     reference_settings: dict[str, dict[str, Any]] = Field(default_factory=dict)

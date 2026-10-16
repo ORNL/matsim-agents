@@ -131,6 +131,7 @@ class ReferenceEnergySet(BaseModel):
     elemental_energies_eV_per_atom: dict[str, float]
     elemental_entries: dict[str, ElementalReferenceEntry] = Field(default_factory=dict)
     elemental_reference_candidates: list[ElementalReferenceEntry] = Field(default_factory=list)
+    # TODO(#15): replace with typed phase_entries written by the campaign.
     competing_phases: dict[str, float] = Field(
         default_factory=dict,
         description="Formation energies in eV/atom keyed by composition formula.",
