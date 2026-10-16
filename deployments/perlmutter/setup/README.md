@@ -186,10 +186,8 @@ environment elsewhere (build dependencies remain under `INSTALL_ROOT`).
 
 Quick setup (`setup_matsim_perlmutter.sh`) activates `matsim-agents/.venv`, or
 the explicit `MATSIM_PERLMUTTER_VENV` override. It does not search legacy paths.
-The obsolete generic `job_perlmutter.sh` template was removed because it
-invoked the nonexistent `matsim_agents.main` module and could not describe a
-specific scientific contract. Submit one of the explicit jobs under
-`deployments/perlmutter/jobs/` instead.
+For batch work, submit one of the explicit jobs under
+`deployments/perlmutter/jobs/`.
 
 ### `test_matsim_perlmutter.sh`
 Comprehensive test suite validating the complete environment:
@@ -681,7 +679,7 @@ source deployments/perlmutter/setup/setup_matsim_perlmutter.sh --gpu
 # Option 2: Activate a custom env path used during install
 # source /path/used/as/VENV_PATH/bin/activate
 
-python -m matsim_agents.run --config config.yaml
+matsim-agents al run path/to/al_config.yaml
 ```
 
 ---

@@ -10,18 +10,18 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Iterable
+from collections.abc import Iterable
 
 from pydantic import BaseModel, Field
 
 # Two-letter symbols listed first so the regex is greedy on them.
-_ELEMENT_SYMBOLS = (
+_ELEMENT_SYMBOLS = (  # noqa: SIM905  (grouped by period for readability)
     "He Li Be Ne Na Mg Al Si Cl Ar Ca Sc Ti Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr "
     "Rb Sr Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te Xe Cs Ba Hf Ta Re Os Ir Pt Au Hg "
     "Tl Pb Bi Po At Rn Fr Ra Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og "
     "La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu "
     "Ac Th Pa Np Pu Am Cm Bk Cf Es Fm Md No Lr "
-    "H B C N O F P S K V Y I W U Y"
+    "H B C N O F P S K V Y I W U"
 ).split()
 _ELEMENT_SET = set(_ELEMENT_SYMBOLS)
 _ELEMENT_PATTERN = "|".join(sorted(set(_ELEMENT_SYMBOLS), key=len, reverse=True))
@@ -55,8 +55,8 @@ def _hill_order(elements: dict[str, int]) -> list[str]:
 
 
 def _reduce(elements: dict[str, int]) -> dict[str, int]:
-    from math import gcd
     from functools import reduce as _r
+    from math import gcd
 
     counts = list(elements.values())
     if not counts:

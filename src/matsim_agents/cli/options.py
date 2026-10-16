@@ -19,7 +19,10 @@ def opt_mlip_backend():
 def opt_logdir():
     return typer.Option(
         None,
-        help="HydraGNN logdir with config.json and checkpoint (required for --mlip-backend hydragnn).",
+        help=(
+            "HydraGNN logdir with config.json and checkpoint "
+            "(required for --mlip-backend hydragnn)."
+        ),
     )
 
 

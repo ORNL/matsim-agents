@@ -33,11 +33,16 @@ class RelaxStructureInput(BaseModel):
     )
     logdir: str | None = Field(
         None,
-        description="HydraGNN logdir containing config.json + checkpoint (required for mlip_backend='hydragnn').",
+        description=(
+            "HydraGNN logdir containing config.json + checkpoint "
+            "(required for mlip_backend='hydragnn')."
+        ),
     )
     hydragnn_branch_mlp_checkpoint: str | None = Field(
         None,
-        description="HydraGNN BranchWeightMLP checkpoint (.pt), required for mlip_backend='hydragnn'.",
+        description=(
+            "HydraGNN BranchWeightMLP checkpoint (.pt), required for mlip_backend='hydragnn'."
+        ),
     )
     hydragnn_inference_head: str | int | None = Field(
         None,
@@ -114,9 +119,8 @@ class RelaxStructureInput(BaseModel):
 def atoms_to_graph(atoms, graph_attr, radius: float, max_neighbours: int):
     """Mirror of the helper in the upstream ASE optimization script."""
     import torch
-    from torch_geometric.data import Data
-
     from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
+    from torch_geometric.data import Data
 
     atomic_numbers = np.asarray(atoms.get_atomic_numbers(), dtype=np.int64)
     positions = np.asarray(atoms.get_positions(), dtype=np.float64)
@@ -211,7 +215,6 @@ def _build_calculator(
     """Construct the FusedHydraGNNCalculator class lazily."""
     import torch
     from ase.calculators.calculator import Calculator, all_changes
-
     from inference_fused import run_fused_inference  # provided alongside the HydraGNN example
 
     class FusedHydraGNNCalculator(Calculator):
@@ -358,7 +361,7 @@ class _NumericalStressCalculator:
             self.calculate(atoms)
         return self.results[key]
 
-    def _numerical_stress(self, atoms) -> "np.ndarray":
+    def _numerical_stress(self, atoms) -> np.ndarray:
         """Central FD stress in ASE Voigt 6-vector convention (eV/Å³)."""
         import numpy as np
 
@@ -600,7 +603,7 @@ def _optimize_with_log(
                 steps_taken = step + 1
 
                 energy = atoms.get_potential_energy()
-                forces = atoms.get_forces()
+                atoms.get_forces()
                 # For convergence we check the optimizable's forces (which
                 # includes stress pseudo-forces when relax_cell=True).
                 opt_forces = optimizable.get_forces()

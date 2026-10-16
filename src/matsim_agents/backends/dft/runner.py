@@ -1,10 +1,10 @@
 """Backend-agnostic concurrent DFT dispatcher inside Slurm or PBS allocations.
 
-Mirrors the previous ``vasp_runner`` semantics but dispatches through any
-:class:`DFTBackend`. Each backend is responsible for: (a) preparing its own
-work_dir contents, (b) launching its own ``srun`` step via its wrapper
-script, (c) parsing its outputs back into a :class:`DFTResult`. This module
-only owns concurrency, timeouts, and exception capture.
+Dispatches single-point jobs through any :class:`DFTBackend`. Each backend is
+responsible for: (a) preparing its own work_dir contents, (b) launching its own
+``srun`` step via its wrapper script, (c) parsing its outputs back into a
+:class:`DFTResult`. This module only owns concurrency, timeouts, and exception
+capture.
 """
 
 from __future__ import annotations

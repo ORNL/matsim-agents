@@ -24,9 +24,9 @@ before any stability claim is published.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from enum import StrEnum
 from itertools import combinations
-from typing import Iterable, Sequence
 
 from pydantic import BaseModel, Field, model_validator
 

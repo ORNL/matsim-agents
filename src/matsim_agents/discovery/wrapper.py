@@ -9,16 +9,16 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Callable, Literal
+from collections.abc import Callable
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
+from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.composition import Composition, parse_composition
 from matsim_agents.discovery.seeds import PhaseCandidate, generate_seeds
 from matsim_agents.discovery.stability import StabilityReport, score_stability
-from matsim_agents.backends.mlip.results import RelaxationResult
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
-
 
 _RANKING_FORCE_TOL_EV_PER_A = 0.05
 log = logging.getLogger(__name__)
