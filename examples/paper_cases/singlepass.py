@@ -60,8 +60,8 @@ from ase.spacegroup import crystal
 # ---------------------------------------------------------------------------
 # matsim-agents programmatic API
 # ---------------------------------------------------------------------------
-from matsim_agents.graph import build_graph
-from matsim_agents.state import MatSimState
+from matsim_agents.orchestration.objective_graph import build_graph
+from matsim_agents.orchestration.state import MatSimState
 
 # ---------------------------------------------------------------------------
 # Paths

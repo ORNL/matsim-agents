@@ -9,7 +9,7 @@ for the trajectory and final energetics.
 This module is the natural pairing for :mod:`qe_relax` when the user wants a
 DFT relaxation outside of the active-learning loop. The AL loop itself only
 ever does single-point SCF labelling and uses
-:mod:`active_learning.backends.vasp` directly — that pathway is unchanged.
+:mod:`backends.dft.vasp` directly — that pathway is unchanged.
 
 Element-aware defaults:
     * ``ENCUT`` is set to ``1.3 × max(ENMAX over POTCARs)`` if a ``potcar_dir``

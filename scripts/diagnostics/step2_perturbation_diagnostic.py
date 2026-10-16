@@ -40,7 +40,7 @@ from pathlib import Path
 
 import numpy as np
 
-from matsim_agents.tools.relaxation import RelaxStructureInput, _run
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 
 
 def _atoms_rmsd(a, b) -> float:
@@ -63,7 +63,7 @@ def _initial_energy_force(structure_path: str, logdir: str, mlp_ckpt: str,
         mlp_device=device,         # type: ignore[arg-type]
         output_dir=None,
     )
-    r = _run(args)
+    r = relax_with_mlip(args)
     return r.final_energy_eV, r.final_max_force_eV_per_A
 
 
@@ -107,11 +107,11 @@ def run_case(name: str, structure_path: str, logdir: str, mlp_ckpt: str,
         mlp_device=device,           # type: ignore[arg-type]
         output_dir=str(case_dir),
     )
-    r = _run(args)
+    r = relax_with_mlip(args)
     print(f"  relaxed:    E={r.final_energy_eV:+.6e} eV  |F|max={r.final_max_force_eV_per_A:.3e} eV/A"
           f"  steps={r.num_steps}", flush=True)
 
-    # (c) inspect the per-step CSV that _run writes
+    # (c) inspect the per-step CSV that relax_with_mlip writes
     csv_candidates = sorted(case_dir.glob("*_optimization.csv"))
     assert csv_candidates, f"no optimization CSV produced in {case_dir}"
     csv_path = csv_candidates[-1]

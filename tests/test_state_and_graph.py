@@ -1,6 +1,6 @@
 """Smoke tests that do not require HydraGNN to be installed."""
 
-from matsim_agents.state import MatSimState, RelaxationResult, TaskSpec
+from matsim_agents.orchestration.state import MatSimState, RelaxationResult, TaskSpec
 
 
 def test_state_defaults():
@@ -31,7 +31,7 @@ def test_result_roundtrip():
 
 
 def test_graph_compiles():
-    from matsim_agents.graph import build_graph
+    from matsim_agents.orchestration.objective_graph import build_graph
 
     g = build_graph()
     assert g is not None

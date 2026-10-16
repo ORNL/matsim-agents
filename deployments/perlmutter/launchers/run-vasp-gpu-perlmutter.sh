@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # matsim-agents: VASP GPU launcher for NERSC Perlmutter (NVIDIA A100, sm_80).
 #
-# Invoked by ``matsim_agents.tools.vasp_relax`` (and the VASP warm-start
+# Invoked by ``matsim_agents.backends.dft.vasp_relax`` (and the VASP warm-start
 # benchmark) via the ``MATSIM_VASP_LAUNCHER`` env var. The launcher is
 # expected to be run *inside the working directory* that already contains
 # ``INCAR`` / ``POSCAR`` / ``KPOINTS`` / ``POTCAR``; no argv is passed in.

@@ -1,29 +1,37 @@
-"""Regression tests for the package-boundary migration.
+"""Regression tests for the package layout.
 
-Each test asserts one structural property of the new package layout:
-  - Legacy module aliases point to the canonical implementation.
+Each test asserts one structural property of the package layout:
   - Each of the five stable interfaces is importable from its declared location.
   - Concrete implementations satisfy their Protocol at runtime.
+  - Removed legacy import paths stay removed.
 """
 
 from __future__ import annotations
 
-import matsim_agents.graph as legacy_graph
-import matsim_agents.llm as legacy_llm
-import matsim_agents.state as legacy_state
-from matsim_agents.backends.llm import provider
-from matsim_agents.orchestration import objective_graph, state
+import importlib
 
-# ── Legacy alias tests ────────────────────────────────────────────────────── #
+import pytest
+
+# ── Removed legacy paths ──────────────────────────────────────────────────── #
 
 
-def test_legacy_orchestration_modules_alias_canonical_modules() -> None:
-    assert legacy_graph is objective_graph
-    assert legacy_state is state
-
-
-def test_legacy_llm_module_aliases_canonical_provider() -> None:
-    assert legacy_llm is provider
+@pytest.mark.parametrize(
+    "module",
+    [
+        "matsim_agents.graph",
+        "matsim_agents.llm",
+        "matsim_agents.state",
+        "matsim_agents.supervisor",
+        "matsim_agents.tools.qe_relax",
+        "matsim_agents.tools.vasp_relax",
+        "matsim_agents.tools.relaxation",
+        "matsim_agents.active_learning.backends",
+        "matsim_agents.active_learning.vasp_runner",
+    ],
+)
+def test_legacy_alias_modules_are_removed(module: str) -> None:
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module(module)
 
 
 # ── Interface 1: DFT backend ──────────────────────────────────────────────── #

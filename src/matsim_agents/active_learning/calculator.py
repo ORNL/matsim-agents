@@ -81,7 +81,7 @@ def _build_single_head_calculator(
     from ase.calculators.calculator import Calculator, all_changes
 
     from matsim_agents.active_learning.hydragnn_precision import hydragnn_autocast
-    from matsim_agents.backends.mlip.relaxation import _atoms_to_graph  # type: ignore[attr-defined]
+    from matsim_agents.backends.mlip.relaxation import atoms_to_graph
 
     class SingleHeadHydraGNNCalculator(Calculator):
         implemented_properties = ["energy", "forces"]
@@ -93,7 +93,7 @@ def _build_single_head_calculator(
 
         def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
             super().calculate(atoms, properties, system_changes)
-            data = _atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours).to(device)
+            data = atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours).to(device)
             # Keep float tensors on the model precision regardless of the ambient
             # default dtype at call time.
             data.pos = data.pos.to(param_dtype)
@@ -128,7 +128,7 @@ def _build_selected_head_calculator(
     import torch
     from ase.calculators.calculator import Calculator, all_changes
 
-    from matsim_agents.backends.mlip.relaxation import _atoms_to_graph
+    from matsim_agents.backends.mlip.relaxation import atoms_to_graph
 
     class SelectedHeadHydraGNNCalculator(Calculator):
         implemented_properties = ["energy", "forces"]
@@ -143,7 +143,7 @@ def _build_selected_head_calculator(
 
         def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
             super().calculate(atoms, properties, system_changes)
-            data = _atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours).to(device)
+            data = atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours).to(device)
             data.pos = data.pos.to(param_dtype)
             if hasattr(data, "cell") and data.cell is not None:
                 data.cell = data.cell.to(param_dtype)

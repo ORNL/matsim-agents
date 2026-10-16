@@ -36,8 +36,8 @@ from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.chat import DiscoveryChatConfig, _debate_hypothesis_response
-from matsim_agents.llm import get_chat_model
 
 # Backends surfaced as evidence, mapped to (zero-shot variant dir, fine-tuned
 # variant dir, human label). Both dirs share the same iter0 zero-shot baseline;

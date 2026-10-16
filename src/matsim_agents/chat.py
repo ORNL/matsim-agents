@@ -23,8 +23,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 
 from matsim_agents.active_learning.hydragnn_energy import has_declared_hydragnn_checkpoint
 from matsim_agents.backends.llm.provider import get_chat_model
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
-from matsim_agents.backends.mlip.relaxation import _run as _run_relaxation
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.discovery import (
     Composition,
     CompositionExplorationResult,
@@ -285,7 +284,7 @@ def _run_single_structure_relaxation(structure_path: str, cfg: DiscoveryChatConf
     """Run one HydraGNN relaxation and return a compact textual summary."""
     out_dir = Path(cfg.output_dir) / "single_relax"
     out_dir.mkdir(parents=True, exist_ok=True)
-    result = _run_relaxation(
+    result = relax_with_mlip(
         RelaxStructureInput(
             structure_path=structure_path,
             mlip_backend=cfg.mlip_backend,

@@ -154,7 +154,7 @@ def _mlip_relax(
     Supports ``mlip_backend='hydragnn'`` (default) and ``'uma'``.
     Returns ``(optimized_path, info)``.
     """
-    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
+    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 
     out_subdir = "hydragnn" if mlip_backend == "hydragnn" else mlip_backend
     mlip_dir = os.path.join(work_dir, out_subdir)
@@ -169,7 +169,7 @@ def _mlip_relax(
     payload["mlip_backend"] = mlip_backend
 
     args = RelaxStructureInput(**payload)
-    res = _run(args)
+    res = relax_with_mlip(args)
     return res.optimized_structure_path, {
         "num_steps": res.num_steps,
         "converged": res.converged,

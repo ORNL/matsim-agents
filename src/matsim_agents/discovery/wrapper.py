@@ -17,7 +17,7 @@ from matsim_agents.discovery.composition import Composition, parse_composition
 from matsim_agents.discovery.seeds import PhaseCandidate, generate_seeds
 from matsim_agents.discovery.stability import StabilityReport, score_stability
 from matsim_agents.orchestration.state import RelaxationResult
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run as _run_relaxation
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 
 
 _RANKING_FORCE_TOL_EV_PER_A = 0.05
@@ -131,7 +131,7 @@ def explore_composition(
         n_random=n_random,
         random_seed=random_seed,
     )
-    relax = relax_fn or _run_relaxation
+    relax = relax_fn or relax_with_mlip
 
     relaxations: list[RelaxationResult] = []
     failures: list[str] = []

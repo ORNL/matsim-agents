@@ -25,12 +25,7 @@ from matsim_agents.active_learning.config import (
 from matsim_agents.active_learning.dataset_governance import sha256_file
 from matsim_agents.active_learning.loop import run_active_learning
 from matsim_agents.active_learning.uncertainty import select_candidates
-from matsim_agents.backends.mlip.relaxation import (
-    RelaxStructureInput,
-)
-from matsim_agents.backends.mlip.relaxation import (
-    _run as run_mlip_relaxation,
-)
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.campaign.registry import (
     CandidateSelectionPolicy,
     select_dft_refinement_candidates,
@@ -372,7 +367,7 @@ def _perturbation_robustness(
     config: CampaignFormulaExecutionConfig,
     output_root: Path,
     *,
-    relaxation_runner: Callable[[RelaxStructureInput], RelaxationResult] = run_mlip_relaxation,
+    relaxation_runner: Callable[[RelaxStructureInput], RelaxationResult] = relax_with_mlip,
 ) -> dict[str, Any]:
     """Rerelax seeded perturbations of the lowest-energy converged minimum."""
     converged = [item for item in exploration.relaxations if item.converged]
@@ -1073,7 +1068,7 @@ def run_formula_with_active_learning(
     relaxation_runner: Callable[
         [ScientificRelaxationConfig], ScientificRelaxationResult
     ] = run_relaxation,
-    mlip_relaxation_runner: Callable[[RelaxStructureInput], RelaxationResult] = run_mlip_relaxation,
+    mlip_relaxation_runner: Callable[[RelaxStructureInput], RelaxationResult] = relax_with_mlip,
     calculator_factory: Callable[..., Any] = make_mlip_calculator,
 ) -> PhaseExplorationWorkflowResult:
     """Explore and label one formula using a fresh copy of the AL template."""

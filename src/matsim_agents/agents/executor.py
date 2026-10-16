@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 
 from matsim_agents.active_learning.hydragnn_energy import has_declared_hydragnn_checkpoint
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.orchestration.state import MatSimState
 
 
@@ -93,7 +93,7 @@ def executor_node(state: MatSimState, config: RunnableConfig | None = None) -> d
         output_dir=cfg.get("output_dir"),
     )
 
-    result = _run(args)
+    result = relax_with_mlip(args)
     msg = (
         f"[executor] relaxed {result.structure_path} -> "
         f"E={result.final_energy_eV:.4f} eV, |F|max={result.final_max_force_eV_per_A:.4f} eV/Å, "

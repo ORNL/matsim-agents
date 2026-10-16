@@ -86,7 +86,7 @@ def _patch_llm_and_phases(
         return _StubLLM(canned=llm_response)
 
     monkeypatch.setattr(
-        "matsim_agents.llm.get_chat_model",
+        "matsim_agents.backends.llm.provider.get_chat_model",
         _fake_get_chat_model,
     )
 

@@ -111,7 +111,7 @@ class RelaxStructureInput(BaseModel):
         return self
 
 
-def _atoms_to_graph(atoms, graph_attr, radius: float, max_neighbours: int):
+def atoms_to_graph(atoms, graph_attr, radius: float, max_neighbours: int):
     """Mirror of the helper in the upstream ASE optimization script."""
     import torch
     from torch_geometric.data import Data
@@ -226,7 +226,7 @@ def _build_calculator(
 
         def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
             super().calculate(atoms, properties, system_changes)
-            structure = _atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours)
+            structure = atoms_to_graph(atoms, self.graph_attr, radius, max_neighbours)
             (
                 all_energies,
                 all_forces,
@@ -390,8 +390,8 @@ class _NumericalStressCalculator:
         return stress
 
 
-def _run(args: RelaxStructureInput) -> RelaxationResult:
-    """Pure-python core of the tool (kept separate for unit testing)."""
+def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
+    """Relax one structure with the selected MLIP backend and ASE optimizer."""
     from ase.io import read, write
     from ase.io.trajectory import Trajectory
 
@@ -651,5 +651,5 @@ def relax_structure(**kwargs) -> dict:
     Returns the path of the optimized structure, trajectory, per-step CSV log,
     and the final energy and maximum force.
     """
-    result = _run(RelaxStructureInput(**kwargs))
+    result = relax_with_mlip(RelaxStructureInput(**kwargs))
     return result.model_dump()

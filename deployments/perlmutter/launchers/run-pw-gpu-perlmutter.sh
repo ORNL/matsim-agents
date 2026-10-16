@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # matsim-agents: Quantum ESPRESSO ``pw.x`` GPU launcher for NERSC Perlmutter.
 #
-# Invoked by ``matsim_agents.tools.qe_relax`` (and the warm-start benchmark)
+# Invoked by ``matsim_agents.backends.dft.qe_relax`` (and the warm-start benchmark)
 # as ``$MATSIM_QE_LAUNCHER <pw-input-file> [extra pw.x args...]``.
 #
 # Toolchain (must match build-qe-gpu-perlmutter.sh):

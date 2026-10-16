@@ -13,7 +13,7 @@
    different surrogate simulations (relaxation here vs. MD in the loop).
 
 The HydraGNN multi-branch model returns per-branch weights for every
-prediction (see :mod:`matsim_agents.tools.relaxation`). When the model is
+prediction (see :mod:`matsim_agents.backends.mlip.relaxation`). When the model is
 confident, the top branch dominates and the per-branch weight distribution
 has low entropy. When the model is *uncertain* — typically because the
 structure is out of distribution — the weights are spread across many
@@ -67,7 +67,8 @@ from pathlib import Path
 
 import numpy as np
 
-from matsim_agents.tools.relaxation import RelaxStructureInput, _run as run_relaxation
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
+from matsim_agents.backends.mlip.relaxation import relax_with_mlip as run_relaxation
 
 
 # --------------------------------------------------------------------------- #

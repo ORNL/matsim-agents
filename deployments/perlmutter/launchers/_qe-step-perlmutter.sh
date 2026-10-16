@@ -4,7 +4,7 @@
 #
 # Inner-step launcher for ONE Quantum ESPRESSO pw.x single-point on NERSC
 # Perlmutter (NVIDIA A100 / sm_80). Called by the active-learning Python driver
-# (matsim_agents.active_learning.backends.qe.QEBackend) via:
+# (matsim_agents.backends.dft.qe.QEBackend) via:
 #
 #   bash _qe-step-perlmutter.sh <work_dir> <pw_bin> <input_file> \
 #                               <nodes> <ranks_per_node> <threads_per_rank>

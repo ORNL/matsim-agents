@@ -94,7 +94,7 @@ def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
             num_steps=1,
         )
 
-    monkeypatch.setattr(executor, "_run", run)
+    monkeypatch.setattr(executor, "relax_with_mlip", run)
     state = MatSimState(pending_tasks=[TaskSpec(structure_path="structure.extxyz")])
     if declared:
         chat = DiscoveryChatConfig(logdir=str(logdir))
@@ -144,7 +144,7 @@ def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active
     structure = tmp_path / "structure.extxyz"
     write(structure, Atoms("Si", cell=[5, 5, 5], pbc=True))
     monkeypatch.setattr(factory, "build_hydragnn_calculator", lambda cfg: RoutedCalculator())
-    result = relaxation._run(
+    result = relaxation.relax_with_mlip(
         RelaxStructureInput(structure_path=str(structure), logdir=str(logdir), maxiter=1)
     )
     assert result.top_branch == 0
@@ -184,11 +184,11 @@ def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
 
     if metadata_name is None:
         with pytest.raises(RuntimeError, match="foundation loader reached"):
-            relaxation._run(request)
+            relaxation.relax_with_mlip(request)
         assert len(loaded) == 1
     else:
         with pytest.raises(ValueError, match="lacks verified energy convention"):
-            relaxation._run(request)
+            relaxation.relax_with_mlip(request)
         assert not loaded
 
 
@@ -287,7 +287,7 @@ def test_selected_head_calculator_preserves_precision_context(monkeypatch, preci
         assert torch.is_autocast_enabled("cpu") == (precision == "bf16")
         return original_grad(*args, **kwargs)
 
-    monkeypatch.setattr(relaxation, "_atoms_to_graph", graph)
+    monkeypatch.setattr(relaxation, "atoms_to_graph", graph)
     monkeypatch.setattr(torch.autograd, "grad", grad)
     calc = calculator._build_selected_head_calculator(
         model,

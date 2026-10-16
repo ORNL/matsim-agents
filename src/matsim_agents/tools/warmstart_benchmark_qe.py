@@ -176,7 +176,7 @@ def _mlip_relax(
 
     Dispatches to the correct backend based on ``mlip_backend``.
     """
-    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
+    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 
     out_subdir = "hydragnn" if mlip_backend == "hydragnn" else mlip_backend
     mlip_dir = os.path.join(work_dir, out_subdir)
@@ -191,7 +191,7 @@ def _mlip_relax(
     payload["mlip_backend"] = mlip_backend
 
     args = RelaxStructureInput(**payload)
-    res = _run(args)
+    res = relax_with_mlip(args)
     return res.optimized_structure_path, {
         "num_steps": res.num_steps,
         "converged": res.converged,
@@ -209,7 +209,7 @@ def _hydragnn_relax(
     kwargs: dict[str, Any],
 ) -> tuple[str | None, dict[str, Any]]:
     """Invoke the HydraGNN relax tool. Returns ``(optimized_path, info)``."""
-    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
+    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 
     hydragnn_dir = os.path.join(work_dir, "hydragnn")
     Path(hydragnn_dir).mkdir(parents=True, exist_ok=True)
@@ -222,7 +222,7 @@ def _hydragnn_relax(
     payload.setdefault("maxiter", 200)
 
     args = RelaxStructureInput(**payload)
-    res = _run(args)
+    res = relax_with_mlip(args)
     return res.optimized_structure_path, {
         "num_steps": res.num_steps,
         "converged": res.converged,

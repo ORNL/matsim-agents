@@ -93,8 +93,8 @@ replacement backend interfaces.
 
 ## Compatibility policy
 
-The first migration release retains aliases at the former import paths (for
-example, `matsim_agents.graph`, `matsim_agents.state`, and
-`matsim_agents.tools.relaxation`).  New code should import from the canonical
-packages.  The aliases can be deprecated in a later release after downstream
-users have migrated.
+Each module has exactly one import path. The former aliases
+(`matsim_agents.graph`, `matsim_agents.state`, `matsim_agents.llm`,
+`matsim_agents.supervisor`, `matsim_agents.tools.{relaxation,qe_relax,vasp_relax}`,
+and `matsim_agents.active_learning.backends`) have been removed; import from the
+canonical packages listed above.

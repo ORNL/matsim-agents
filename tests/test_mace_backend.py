@@ -7,7 +7,7 @@ import pytest
 
 from matsim_agents.active_learning.calculator import build_ensemble, build_mace_calculator
 from matsim_agents.active_learning.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.campaign.execution import _exploration_kwargs
 from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.discovery.wrapper import explore_composition
@@ -212,7 +212,7 @@ def test_direct_mace_relaxation_preserves_default_precision(tmp_path, monkeypatc
     )
 
     with pytest.raises(RuntimeError, match="captured"):
-        _run(
+        relax_with_mlip(
             RelaxStructureInput(
                 structure_path=str(tmp_path / "structure.extxyz"),
                 output_dir=str(tmp_path),

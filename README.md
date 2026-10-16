@@ -1098,9 +1098,9 @@ downstream scorers can filter or weight them.
 ### Single relaxation
 
 ```python
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 
-result = _run(RelaxStructureInput(
+result = relax_with_mlip(RelaxStructureInput(
     structure_path="structures/mos2.vasp",
     logdir="./multidataset_hpo-BEST6-fp64",
   hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
@@ -1171,7 +1171,7 @@ print(final["analysis"])
 ### Run the supervisor LangGraph workflow
 
 ```python
-from matsim_agents.supervisor import SupervisorConfig, run_supervisor
+from matsim_agents.orchestration.composition_graph import SupervisorConfig, run_supervisor
 
 final = run_supervisor(SupervisorConfig(
   composition="Li2MnO3",
@@ -1725,7 +1725,7 @@ trajectory + walltime + convergence flag from the native output files
 
 > **Note:** the active-learning loop itself never calls these relaxers —
 > AL labelling always uses the SCF-only backends under
-> [`src/matsim_agents/active_learning/backends/`](src/matsim_agents/active_learning/backends/).
+> [`src/matsim_agents/backends/dft/`](src/matsim_agents/backends/dft/).
 > A relaxation per AL candidate would defeat the point of uncertainty-driven
 > sampling. The standalone relaxers are intended for one-off DFT validation
 > work outside the AL pipeline.

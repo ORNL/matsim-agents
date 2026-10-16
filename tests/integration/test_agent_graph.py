@@ -17,7 +17,7 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
 
-from matsim_agents.state import MatSimState, RelaxationResult, TaskSpec
+from matsim_agents.orchestration.state import MatSimState, RelaxationResult, TaskSpec
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -56,7 +56,7 @@ class TestPlannerNode:
 
     def test_planner_with_structured_output_stub(self, si_vasp, monkeypatch):
         """Planner calls with_structured_output and uses the returned plan."""
-        import matsim_agents.llm as llm_mod
+        import matsim_agents.backends.llm.provider as llm_mod
 
         task = TaskSpec(structure_path=si_vasp)
         plan_obj = MagicMock()
@@ -84,7 +84,7 @@ class TestPlannerNode:
         assert "test rationale" in result["messages"][0].content
 
     def test_planner_message_recorded(self, si_vasp, monkeypatch):
-        import matsim_agents.llm as llm_mod
+        import matsim_agents.backends.llm.provider as llm_mod
 
         task = TaskSpec(structure_path=si_vasp)
         plan_obj = MagicMock(tasks=[task], rationale="")
@@ -134,7 +134,7 @@ class TestAnalystNode:
         assert "2 relaxation" in summary
 
     def test_analyst_uses_llm_when_available(self, fake_relaxation_result, monkeypatch):
-        import matsim_agents.llm as llm_mod
+        import matsim_agents.backends.llm.provider as llm_mod
 
         fake_llm = FakeListChatModel(responses=["LLM-generated analysis."])
         monkeypatch.setattr(llm_mod, "get_chat_model", lambda **_: fake_llm)
@@ -147,7 +147,7 @@ class TestAnalystNode:
         assert "LLM-generated analysis." in result["messages"][0].content
 
     def test_analyst_fallback_on_llm_error(self, fake_relaxation_result, monkeypatch):
-        import matsim_agents.llm as llm_mod
+        import matsim_agents.backends.llm.provider as llm_mod
 
         def _fail(**_):
             raise RuntimeError("LLM unavailable")
@@ -180,19 +180,19 @@ class TestGraphRouting:
     """The conditional edge routes correctly based on pending_tasks/iteration."""
 
     def test_routes_to_executor_when_pending(self):
-        from matsim_agents.graph import _route_after_executor
+        from matsim_agents.orchestration.objective_graph import _route_after_executor
 
         state = _state(pending_tasks=[TaskSpec(structure_path="a.vasp")], iteration=0)
         assert _route_after_executor(state) == "executor"
 
     def test_routes_to_uq_gate_when_no_pending(self):
-        from matsim_agents.graph import _route_after_executor
+        from matsim_agents.orchestration.objective_graph import _route_after_executor
 
         state = _state(pending_tasks=[], iteration=0)
         assert _route_after_executor(state) == "uq_gate"
 
     def test_routes_to_uq_gate_when_max_iterations_hit(self):
-        from matsim_agents.graph import _route_after_executor
+        from matsim_agents.orchestration.objective_graph import _route_after_executor
 
         state = _state(
             pending_tasks=[TaskSpec(structure_path="a.vasp")],
@@ -211,7 +211,7 @@ class TestFullGraphEndToEnd:
     @pytest.fixture
     def patched_graph(self, si_vasp, fake_relaxation_result, monkeypatch):
         """Build the graph with planner/analyst using fake LLM and executor mocked."""
-        import matsim_agents.llm as llm_mod
+        import matsim_agents.backends.llm.provider as llm_mod
 
         task = TaskSpec(structure_path=si_vasp)
         plan_obj = MagicMock(tasks=[task], rationale="Auto-planned relaxation.")
@@ -238,11 +238,11 @@ class TestFullGraphEndToEnd:
                 "messages": [AIMessage(content="[executor] fake relaxation done.")],
             }
 
-        from matsim_agents import graph as graph_mod
+        from matsim_agents.orchestration import objective_graph as graph_mod
 
         monkeypatch.setattr(graph_mod, "executor_node", _fake_executor)
 
-        from matsim_agents.graph import build_graph
+        from matsim_agents.orchestration.objective_graph import build_graph
 
         return build_graph()
 
@@ -275,7 +275,7 @@ class TestFullGraphEndToEnd:
 
     def test_graph_max_iterations_cap(self, si_vasp, fake_relaxation_result, monkeypatch):
         """Graph stops when max_iterations is reached even with pending tasks."""
-        import matsim_agents.llm as llm_mod
+        import matsim_agents.backends.llm.provider as llm_mod
 
         # Plan with 3 tasks but max_iterations=1
         tasks = [TaskSpec(structure_path=si_vasp) for _ in range(3)]
@@ -288,7 +288,7 @@ class TestFullGraphEndToEnd:
 
         call_count = {"n": 0}
 
-        import matsim_agents.graph as graph_mod
+        import matsim_agents.orchestration.objective_graph as graph_mod
 
         def _counting_executor(state: MatSimState, config=None):
             call_count["n"] += 1
@@ -303,7 +303,7 @@ class TestFullGraphEndToEnd:
 
         monkeypatch.setattr(graph_mod, "executor_node", _counting_executor)
 
-        from matsim_agents.graph import build_graph
+        from matsim_agents.orchestration.objective_graph import build_graph
 
         graph = build_graph()
         initial = _state(

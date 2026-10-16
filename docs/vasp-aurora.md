@@ -97,11 +97,11 @@ When reproducing the Aurora build, confirm these points before compiling:
 Two paths are exposed:
 
 - **Active-learning labelling (single-point SCF, no ionic motion):**
-  driven by [`src/matsim_agents/active_learning/backends/vasp.py`](../src/matsim_agents/active_learning/backends/vasp.py)
+  driven by [`src/matsim_agents/backends/dft/vasp.py`](../src/matsim_agents/backends/dft/vasp.py)
   using a user-supplied `INCAR.template`. This is what `matsim-agents al run`
   invokes when `dft.backend: vasp` is set in the AL config.
 - **Standalone DFT relaxations** (`scf` / `relax` / `vc-relax` /
-  `vc-relax-shape`): driven by [`src/matsim_agents/tools/vasp_relax.py`](../src/matsim_agents/tools/vasp_relax.py),
+  `vc-relax-shape`): driven by [`src/matsim_agents/backends/dft/vasp_relax.py`](../src/matsim_agents/backends/dft/vasp_relax.py),
   the symmetric pair to `tools/qe_relax.py`. It writes a self-contained
   INCAR (no template required for the common case), composition-aware
   `ENCUT/ISMEAR/SIGMA/KSPACING`, and parses `vasprun.xml`+`OUTCAR` for the
