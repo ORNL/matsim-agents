@@ -15,8 +15,8 @@ from matsim_agents.backends.mlip.config import (
     resolve_hydragnn_inference_head,
 )
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
-from matsim_agents.chat import DiscoveryChatConfig
 from matsim_agents.cli import app
+from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig
 
 EXPECTED_HEADS = (
     "Alexandria",

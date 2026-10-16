@@ -3,7 +3,7 @@
 influences the hypothesis BEFORE vs AFTER active-learning fine-tuning.
 
 This driver exercises the real matsim-agents debate machinery
-(:func:`matsim_agents.chat._debate_hypothesis_response`) with a genuine panel of
+(:func:`matsim_agents.orchestration.interactive_chat._debate_hypothesis_response`) with a genuine panel of
 *different* models drawn from the local model zoo (each served on its own
 vLLM endpoint). It does not re-implement the debate prompts.
 
@@ -37,7 +37,7 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from matsim_agents.backends.llm.provider import get_chat_model
-from matsim_agents.chat import DiscoveryChatConfig, _debate_hypothesis_response
+from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, _debate_hypothesis_response
 
 # Backends surfaced as evidence, mapped to (zero-shot variant dir, fine-tuned
 # variant dir, human label). Both dirs share the same iter0 zero-shot baseline;

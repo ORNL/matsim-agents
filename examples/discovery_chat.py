@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import argparse
 
-from matsim_agents.chat import DiscoveryChatConfig, run_chat
+from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, run_chat
 
 
 def main() -> None:

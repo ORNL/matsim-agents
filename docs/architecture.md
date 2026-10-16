@@ -5,7 +5,7 @@ individual experiments or machines.
 
 | Package | Responsibility |
 | --- | --- |
-| `orchestration` | Typed workflow state, objective/composition graphs, and explicit policies |
+| `orchestration` | Typed workflow state, objective/composition graphs, the interactive discovery chat, and explicit policies |
 | `orchestration.agents` | Planner, executor, and analyst nodes wired by the objective graph |
 | `discovery` | Composition parsing, structure generation, and stability analysis |
 | `active_learning` | Candidate acquisition, uncertainty evaluation, labeling, and adaptation loops |
@@ -33,8 +33,7 @@ enforced by `tests/test_package_boundaries.py`.
 
 | Layer | Packages |
 | --- | --- |
-| 7 | `cli` |
-| 6 | `chat` |
+| 6 | `cli` |
 | 5 | `orchestration`, `campaign` |
 | 4 | `active_learning`, `workflows` |
 | 3 | `discovery`, `training` |
@@ -121,5 +120,6 @@ Each module has exactly one import path. The former aliases
 (`matsim_agents.graph`, `matsim_agents.state`, `matsim_agents.llm`,
 `matsim_agents.supervisor`, the `matsim_agents.tools` package, the top-level
 `matsim_agents.agents` package (now `matsim_agents.orchestration.agents`),
+`matsim_agents.chat` (now `matsim_agents.orchestration.interactive_chat`),
 and `matsim_agents.active_learning.backends`) have been removed; import from the
 canonical packages listed above.

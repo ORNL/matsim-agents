@@ -1188,7 +1188,7 @@ print(final.get("summary"))
 ### Embed the chat loop in your own app
 
 ```python
-from matsim_agents.chat import DiscoveryChatConfig, DiscoveryChatSession, chat_once
+from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, DiscoveryChatSession, chat_once
 
 session = DiscoveryChatSession(config=DiscoveryChatConfig(
     logdir="./multidataset_hpo-BEST6-fp64",

@@ -27,7 +27,6 @@ LAYERS: list[set[str]] = [
     {"discovery", "training"},
     {"active_learning", "workflows"},
     {"orchestration", "campaign"},
-    {"chat"},
     {"cli"},
 ]
 LAYER_OF = {unit: index for index, units in enumerate(LAYERS) for unit in units}
@@ -97,6 +96,7 @@ def test_imports_only_point_to_lower_layers() -> None:
         "matsim_agents.supervisor",
         "matsim_agents.tools",
         "matsim_agents.agents",
+        "matsim_agents.chat",
         "matsim_agents.active_learning.backends",
         "matsim_agents.active_learning.vasp_runner",
     ],

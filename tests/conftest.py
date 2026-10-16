@@ -132,7 +132,7 @@ def fake_task(si_vasp: str) -> TaskSpec:
 @pytest.fixture
 def discovery_config(tmp_path: Path, si_vasp: str):
     """A DiscoveryChatConfig with all paths pointing at tmp_path."""
-    from matsim_agents.chat import DiscoveryChatConfig
+    from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig
 
     logdir = tmp_path / "logdir"
     logdir.mkdir()

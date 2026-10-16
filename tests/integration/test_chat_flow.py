@@ -20,9 +20,13 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import HumanMessage
 
-from matsim_agents.chat import DiscoveryChatConfig, DiscoveryChatSession, chat_once
 from matsim_agents.discovery.composition import Composition
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
+from matsim_agents.orchestration.interactive_chat import (
+    DiscoveryChatConfig,
+    DiscoveryChatSession,
+    chat_once,
+)
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -37,7 +41,7 @@ def _make_session(
     monkeypatch,
 ) -> tuple[DiscoveryChatSession, MagicMock]:
     """Build a DiscoveryChatSession with a fake LLM and mocked _kickoff_exploration."""
-    import matsim_agents.chat as chat_mod
+    import matsim_agents.orchestration.interactive_chat as chat_mod
 
     fake_llm = FakeListChatModel(responses=responses)
     monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: fake_llm)
@@ -134,7 +138,7 @@ class TestAutoConfirm:
 class TestLLMOnly:
     @pytest.mark.parametrize("custom_prompt", [None, "Custom: offer structure relaxation."])
     def test_prompt_matches_session_capabilities_after_clear(self, monkeypatch, custom_prompt):
-        from matsim_agents.chat import (
+        from matsim_agents.orchestration.interactive_chat import (
             ATOMISTIC_EXPLORATION_GUIDANCE,
             LLM_ONLY_MODE_INSTRUCTION,
         )
@@ -180,7 +184,7 @@ class TestLLMOnly:
         ],
     )
     def test_atomistic_commands_are_rejected(self, command, expected, monkeypatch):
-        import matsim_agents.chat as chat_mod
+        import matsim_agents.orchestration.interactive_chat as chat_mod
 
         cfg = DiscoveryChatConfig(llm_only=True)
         session = DiscoveryChatSession(config=cfg)
@@ -203,7 +207,7 @@ class TestExplorationErrors:
     """Errors during _kickoff_exploration propagate (no silent catch in chat_once)."""
 
     def test_exploration_error_propagates(self, discovery_config, monkeypatch):
-        import matsim_agents.chat as chat_mod
+        import matsim_agents.orchestration.interactive_chat as chat_mod
 
         fake_llm = FakeListChatModel(responses=["Try Li2MnO3 as a cathode."])
         monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: fake_llm)
@@ -262,7 +266,7 @@ class TestMessageHistory:
 
 class TestHypothesisDebate:
     def test_single_critic_revision_round(self, discovery_config, monkeypatch):
-        import matsim_agents.chat as chat_mod
+        import matsim_agents.orchestration.interactive_chat as chat_mod
 
         cfg = discovery_config
         cfg.enable_hypothesis_debate = True
@@ -295,7 +299,7 @@ class TestHypothesisDebate:
         assert models["critic-model"].invoke_count == 1
 
     def test_multi_critic_panel_with_cross_critique(self, discovery_config, monkeypatch):
-        import matsim_agents.chat as chat_mod
+        import matsim_agents.orchestration.interactive_chat as chat_mod
 
         cfg = discovery_config
         cfg.enable_hypothesis_debate = True
