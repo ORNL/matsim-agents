@@ -15,7 +15,7 @@ import gc
 import os
 
 from matsim_agents.backends.mlip.calculator import build_mace_calculator
-from matsim_agents.active_learning.config import MACEConfig
+from matsim_agents.backends.mlip.config import MACEConfig
 
 family = os.environ["FAMILY"]
 model = os.environ["MODEL"]

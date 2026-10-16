@@ -41,30 +41,103 @@ def _unit(module: str) -> str | None:
     return parts[0]
 
 
+def _imported_modules(module: str, is_package: bool, node: ast.AST) -> list[str]:
+    """Absolute dotted names a statement may import, resolving relative and package forms.
+
+    ``from pkg import name`` may import the submodule ``pkg.name``, so each
+    imported name is reported as ``pkg.name`` in addition to ``pkg`` itself.
+    """
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    if not isinstance(node, ast.ImportFrom):
+        return []
+    if node.level:
+        package = module if is_package else module.rpartition(".")[0]
+        for _ in range(node.level - 1):
+            package = package.rpartition(".")[0]
+        base = f"{package}.{node.module}" if node.module else package
+    else:
+        base = node.module or ""
+    return [base, *(f"{base}.{alias.name}" for alias in node.names if alias.name != "*")]
+
+
+def _import_target_units(module: str, is_package: bool, node: ast.AST) -> set[str | None]:
+    """Layer units reached by one import statement (``None`` is the package root)."""
+    names = [
+        name
+        for name in _imported_modules(module, is_package, node)
+        if name == "matsim_agents" or name.startswith("matsim_agents.")
+    ]
+    if not names:
+        return set()
+    base_unit = _unit(names[0])
+    if base_unit is not None and base_unit != "backends":
+        return {base_unit}
+    # ``from matsim_agents import x`` and ``from matsim_agents.backends import x``
+    # reach the unit named by ``x``; the containers themselves are not units.
+    reached = {_unit(name) for name in names[1:]}
+    return reached or {base_unit}
+
+
+def _source_violations(module: str, source_text: str, *, is_package: bool, label: str) -> list[str]:
+    source = _unit(module)
+    if source not in LAYER_OF:
+        return []
+    violations = []
+    for node in ast.walk(ast.parse(source_text)):
+        for dest in _import_target_units(module, is_package, node):
+            if dest == source:
+                continue
+            if dest not in LAYER_OF or LAYER_OF[dest] >= LAYER_OF[source]:
+                violations.append(f"{label}:{node.lineno}: {source} -> {dest or 'matsim_agents'}")
+    return violations
+
+
 def _layer_violations() -> list[str]:
     violations = []
     for path in sorted(PACKAGE_ROOT.rglob("*.py")):
         rel = path.relative_to(PACKAGE_ROOT.parent)
         module = ".".join(rel.with_suffix("").parts).removesuffix(".__init__")
-        source = _unit(module)
-        if source not in LAYER_OF:
-            continue
-        for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                targets = [node.module]
-            elif isinstance(node, ast.Import):
-                targets = [alias.name for alias in node.names]
-            else:
-                continue
-            for target in targets:
-                if not target.startswith("matsim_agents."):
-                    continue
-                dest = _unit(target)
-                if dest == source or dest is None:
-                    continue
-                if dest not in LAYER_OF or LAYER_OF[dest] >= LAYER_OF[source]:
-                    violations.append(f"{rel}:{node.lineno}: {source} -> {dest}")
+        violations += _source_violations(
+            module, path.read_text(), is_package=path.name == "__init__.py", label=str(rel)
+        )
     return violations
+
+
+@pytest.mark.parametrize(
+    ("module", "is_package", "code"),
+    [
+        ("matsim_agents.datasets.governance", False, "from ..orchestration.state import X"),
+        ("matsim_agents.datasets.governance", False, "from .. import orchestration"),
+        ("matsim_agents.datasets", True, "from ..campaign import state"),
+        ("matsim_agents.datasets.governance", False, "from matsim_agents import orchestration"),
+        ("matsim_agents.datasets.governance", False, "from matsim_agents import execution, cli"),
+        ("matsim_agents.datasets.governance", False, "from matsim_agents import MatSimState"),
+        ("matsim_agents.backends.dft.base", False, "from matsim_agents.backends import mlip"),
+        ("matsim_agents.backends.dft.base", False, "from ..mlip import config"),
+        ("matsim_agents.discovery.seeds", False, "from ..training import cost"),
+        ("matsim_agents.discovery.seeds", False, "import matsim_agents.orchestration.state"),
+    ],
+)
+def test_layer_guard_rejects_upward_relative_and_package_imports(module, is_package, code) -> None:
+    assert _source_violations(module, code, is_package=is_package, label="snippet")
+
+
+@pytest.mark.parametrize(
+    ("module", "is_package", "code"),
+    [
+        ("matsim_agents.datasets.formation_training", False, "from .governance import x"),
+        ("matsim_agents.datasets.formation_training", False, "from . import governance"),
+        ("matsim_agents.datasets", True, "from .governance import sha256_file"),
+        ("matsim_agents.discovery.seeds", False, "from ..backends.mlip import config"),
+        ("matsim_agents.discovery.seeds", False, "from matsim_agents.backends import llm, mlip"),
+        ("matsim_agents.discovery.seeds", False, "from matsim_agents import datasets"),
+        ("matsim_agents.campaign.state", False, "from ..active_learning.config import ALConfig"),
+        ("matsim_agents.backends.mlip.config", False, "from . import results"),
+    ],
+)
+def test_layer_guard_allows_same_unit_and_downward_imports(module, is_package, code) -> None:
+    assert _source_violations(module, code, is_package=is_package, label="snippet") == []
 
 
 def test_every_package_is_assigned_a_layer() -> None:
