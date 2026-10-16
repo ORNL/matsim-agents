@@ -22,13 +22,13 @@ from ase.data import atomic_numbers
 from ase.io import read, write
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.active_learning.config import DFTConfig
 from matsim_agents.active_learning.dataset_governance import sha256_file
-from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
 from matsim_agents.active_learning.dft_protocol import (
     dft_execution_signature,
     dft_method_signature,
 )
+from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
+from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.discovery.energy_references import load_elemental_reference_manifest
 
 log = logging.getLogger(__name__)
@@ -388,7 +388,7 @@ def _run_reference_relaxation(
             stress,
         )
 
-    from matsim_agents.active_learning.vasp_io import prepare_vasp_workdir
+    from matsim_agents.backends.dft.vasp_io import prepare_vasp_workdir
     from matsim_agents.backends.dft.vasp_relax import parse_relax_outputs
 
     assert cfg.vasp is not None

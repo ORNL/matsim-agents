@@ -1,6 +1,6 @@
 """First-principles backends exposed behind a shared workflow contract."""
 
-from matsim_agents.active_learning.dft_backend import (
+from matsim_agents.backends.dft.base import (
     DFTBackend,
     DFTJobSpec,
     DFTResult,

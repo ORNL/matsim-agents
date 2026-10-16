@@ -25,13 +25,13 @@ from ase.io import read as ase_read
 from ase.io import write as ase_write
 
 from matsim_agents.active_learning.config import (
-    DFTConfig,
     HydraGNNConfig,
     MACEConfig,
     TrainerConfig,
     UMAConfig,
 )
-from matsim_agents.active_learning.dft_backend import DFTResult
+from matsim_agents.backends.dft.base import DFTResult
+from matsim_agents.backends.dft.config import DFTConfig
 
 log = logging.getLogger(__name__)
 

@@ -33,7 +33,6 @@ from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import (
     AcquisitionConfig,
     ALConfig,
-    DFTConfig,
     HydraGNNConfig,
     LoopConfig,
     MACEConfig,
@@ -42,15 +41,15 @@ from matsim_agents.active_learning.config import (
     SeedSourceConfig,
     TrainerConfig,
     UMAConfig,
-    VASPConfig,
 )
 from matsim_agents.active_learning.dataset_governance import (
     DatasetValidationSummary,
     structure_identity,
     write_dataset_manifest,
 )
-from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
 from matsim_agents.active_learning.evaluate import PromotionDecision, _apply_model_override
+from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
+from matsim_agents.backends.dft.config import DFTConfig, VASPConfig
 
 
 def _campaign_elemental_manifest(cfg, elemental_manifest):

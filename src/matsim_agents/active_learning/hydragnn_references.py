@@ -12,13 +12,14 @@ from pathlib import Path
 
 from ase.io import read, write
 
-from matsim_agents.active_learning.config import DFTConfig, TrainerConfig
+from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.dataset_governance import DatasetManifest, sha256_file
 from matsim_agents.active_learning.dft_protocol import dft_method_signature
 from matsim_agents.active_learning.elemental_dft import (
     ElementalReferencePlan,
     prepare_elemental_references,
 )
+from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.discovery.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,

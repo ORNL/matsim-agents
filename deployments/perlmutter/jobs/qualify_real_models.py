@@ -17,7 +17,7 @@ from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_c
 from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import ALConfig, HydraGNNConfig, MACEConfig, MLIPConfig
 from matsim_agents.active_learning.dataset_governance import structure_identity
-from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
+from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.active_learning.evaluate import evaluate_promotion_candidate
 from matsim_agents.active_learning.loop import _dft_method_signature, run_active_learning
 from matsim_agents.active_learning.trainer import retrain_mace

@@ -15,8 +15,7 @@ from ase.io import read, write
 from pydantic import ValidationError
 
 from matsim_agents.active_learning import elemental_dft
-from matsim_agents.active_learning.config import DFTConfig, TrainerConfig
-from matsim_agents.active_learning.dft_backend import DFTResult
+from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.dft_protocol import dft_method_signature
 from matsim_agents.active_learning.elemental_dft import (
     ElementalPhaseSpec,
@@ -25,6 +24,8 @@ from matsim_agents.active_learning.elemental_dft import (
 )
 from matsim_agents.active_learning.formation_training import prepare_formation_training_dataset
 from matsim_agents.active_learning.hydragnn_references import resolve_training_references
+from matsim_agents.backends.dft.base import DFTResult
+from matsim_agents.backends.dft.config import DFTConfig
 
 
 @pytest.fixture

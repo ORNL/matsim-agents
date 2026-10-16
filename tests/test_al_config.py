@@ -19,8 +19,8 @@ import pytest
 import yaml
 
 from matsim_agents.active_learning import ALConfig
-from matsim_agents.active_learning.config import DFTConfig, QEBackendConfig
 from matsim_agents.active_learning.loop import _dft_method_signature
+from matsim_agents.backends.dft.config import DFTConfig, QEBackendConfig
 
 
 def _write(tmp_path: Path, name: str, body: str) -> Path:

@@ -12,7 +12,7 @@ individual experiments or machines.
 | `campaign` | Multi-formula campaign planning, per-formula execution, registry, and review |
 | `backends.llm` | Configuration-selected language-model providers |
 | `backends.mlip` | MLIP calculators, relaxation, and exploration interfaces |
-| `backends.dft` | Quantum ESPRESSO and VASP interfaces |
+| `backends.dft` | DFT job contracts, configuration, concurrent dispatch, and Quantum ESPRESSO/VASP interfaces |
 | `execution` | Scheduler-neutral resources, launch contracts, and provenance |
 | `workflows` | Composable relaxation, phase-exploration, investigation, and MLIP→DFT warm-start benchmark workflows |
 

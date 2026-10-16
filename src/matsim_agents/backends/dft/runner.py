@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from matsim_agents.active_learning.dft_backend import (
+from matsim_agents.backends.dft.base import (
     DFTBackend,
     DFTJobSpec,
     DFTResult,

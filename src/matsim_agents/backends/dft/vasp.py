@@ -1,7 +1,7 @@
-"""VASP backend: thin adapter around :mod:`active_learning.vasp_io`.
+"""VASP backend: thin adapter around :mod:`backends.dft.vasp_io`.
 
 The job orchestration logic (concurrency, ThreadPoolExecutor, timeouts) lives
-in :mod:`active_learning.dft_runner`. This module only knows how to run *one*
+in :mod:`backends.dft.runner`. This module only knows how to run *one*
 VASP single-point: prepare INCAR/KPOINTS/POTCAR/POSCAR, exec the wrapper
 script, parse vasprun.xml/OUTCAR.
 """
@@ -13,14 +13,14 @@ import subprocess
 import time
 from typing import TYPE_CHECKING
 
-from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
-from matsim_agents.active_learning.vasp_io import (
+from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
+from matsim_agents.backends.dft.vasp_io import (
     parse_vasp_workdir,
     prepare_vasp_workdir,
 )
 
 if TYPE_CHECKING:
-    from matsim_agents.active_learning.config import VASPConfig
+    from matsim_agents.backends.dft.config import VASPConfig
 
 
 class VASPBackend:

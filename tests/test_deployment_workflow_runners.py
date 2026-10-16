@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from matsim_agents.active_learning.config import ALConfig
-from matsim_agents.active_learning.vasp_io import resolve_potcar_paths
+from matsim_agents.backends.dft.vasp_io import resolve_potcar_paths
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 
 ROOT = Path(__file__).resolve().parents[1]

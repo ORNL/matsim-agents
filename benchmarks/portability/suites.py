@@ -116,7 +116,7 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
 
     from matsim_agents.active_learning.candidates import Candidate
     from matsim_agents.active_learning.config import ALConfig
-    from matsim_agents.active_learning.dft_backend import DFTResult
+    from matsim_agents.backends.dft.base import DFTResult
     from matsim_agents.active_learning.loop import run_active_learning
 
     atoms = read(structure)
@@ -211,8 +211,8 @@ def dft_allocation_contract(output: Path) -> dict[str, Any]:
     import numpy as np
     from ase import Atoms
 
-    from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
-    from matsim_agents.active_learning.dft_runner import run_dft_batch
+    from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
+    from matsim_agents.backends.dft.runner import run_dft_batch
 
     assignments: list[tuple[str, ...]] = []
 

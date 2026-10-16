@@ -46,12 +46,10 @@ from matsim_agents.active_learning.dataset_governance import (
     validate_labelled_frames,
     write_dataset_manifest,
 )
-from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
 from matsim_agents.active_learning.dft_protocol import (
     dft_method_signature,
     scientific_dft_payload,
 )
-from matsim_agents.active_learning.dft_runner import run_dft_batch
 from matsim_agents.active_learning.evaluate import (
     _apply_model_override,
     _reference_energy,
@@ -67,6 +65,8 @@ from matsim_agents.active_learning.trainer import (
     retrain_uma,
 )
 from matsim_agents.active_learning.uncertainty import select_candidates
+from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
+from matsim_agents.backends.dft.runner import run_dft_batch
 from matsim_agents.discovery.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,

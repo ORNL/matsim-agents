@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any
 
 # Reuse the writers we already maintain for the AL backend.
-from matsim_agents.active_learning.vasp_io import (
+from matsim_agents.backends.dft.vasp_io import (
     concat_potcar,
     write_kpoints_auto,
     write_poscar,
