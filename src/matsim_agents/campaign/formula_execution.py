@@ -116,35 +116,61 @@ class CampaignFormulaExecutionConfig(BaseModel):
         return self
 
 
-def _write_campaign_stages(path: Path, formula: str, stages: dict[str, dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "schema_version": 1,
-        "formula": formula,
-        "stages": list(stages.values()),
-    }
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(path)
+class _StageTracker:
+    """Persist per-formula campaign stage status to ``campaign_stages.json``."""
 
+    STAGE_NAMES = (
+        "initial_mlip_exploration",
+        "active_learning_labels_and_training",
+        "post_training_mlip_exploration",
+        "independent_dft_ranking",
+    )
 
-def _set_campaign_stage(
-    path: Path,
-    formula: str,
-    stages: dict[str, dict[str, Any]],
-    name: str,
-    status: str,
-    **evidence: Any,
-) -> None:
-    record = stages.setdefault(name, {"name": name})
-    now = datetime.now(UTC).isoformat()
-    record["status"] = status
-    if status == "in_progress":
-        record["started_at_utc"] = now
-    if status in {"completed", "failed", "skipped", "blocked"}:
-        record["completed_at_utc"] = now
-    record.update(evidence)
-    _write_campaign_stages(path, formula, stages)
+    def __init__(self, path: Path, formula: str, config: CampaignFormulaExecutionConfig):
+        self.path = path
+        self.formula = formula
+        self.stages: dict[str, dict[str, Any]] = {
+            name: {"name": name, "status": "pending"} for name in self.STAGE_NAMES
+        }
+        if not config.phase_policy.active_learning:
+            self.stages["active_learning_labels_and_training"]["status"] = "skipped"
+            self.stages["active_learning_labels_and_training"]["reason"] = (
+                "active learning is disabled by the phase policy"
+            )
+        if not config.phase_policy.reevaluate_after_retraining:
+            self.stages["post_training_mlip_exploration"]["status"] = "skipped"
+            self.stages["post_training_mlip_exploration"]["reason"] = (
+                "post-training reevaluation is disabled"
+            )
+        if config.dft_refinement is None:
+            self.stages["independent_dft_ranking"]["status"] = "skipped"
+            self.stages["independent_dft_ranking"]["reason"] = "DFT refinement is not configured"
+        self.write()
+
+    def status(self, name: str) -> str:
+        return self.stages[name]["status"]
+
+    def write(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": 1,
+            "formula": self.formula,
+            "stages": list(self.stages.values()),
+        }
+        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
+        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        temporary.replace(self.path)
+
+    def set(self, name: str, status: str, **evidence: Any) -> None:
+        record = self.stages.setdefault(name, {"name": name})
+        now = datetime.now(UTC).isoformat()
+        record["status"] = status
+        if status == "in_progress":
+            record["started_at_utc"] = now
+        if status in {"completed", "failed", "skipped", "blocked"}:
+            record["completed_at_utc"] = now
+        record.update(evidence)
+        self.write()
 
 
 def _model_identifier(cfg: ALConfig) -> str:
@@ -1058,20 +1084,10 @@ def _pending_reference_calculation_count(refinement: CampaignDFTRefinementConfig
     return pending
 
 
-def run_formula_with_active_learning(
-    formula: str,
-    output_dir: str,
-    *,
-    config: CampaignFormulaExecutionConfig,
-    al_runner: Callable[[ALConfig], None] = run_active_learning,
-    phase_runner: Callable[..., PhaseExplorationWorkflowResult] = run_phase_exploration,
-    relaxation_runner: Callable[
-        [ScientificRelaxationConfig], ScientificRelaxationResult
-    ] = run_relaxation,
-    mlip_relaxation_runner: Callable[[RelaxStructureInput], RelaxationResult] = relax_with_mlip,
-    calculator_factory: Callable[..., Any] = make_mlip_calculator,
-) -> PhaseExplorationWorkflowResult:
-    """Explore and label one formula using a fresh copy of the AL template."""
+def _prepare_al_template(
+    formula: str, config: CampaignFormulaExecutionConfig, al_root: Path
+) -> ALConfig:
+    """Load the AL template and apply this formula's model, training, and budget policy."""
 
     al_cfg = ALConfig.from_yaml(config.active_learning_config)
     if config.execution_mode == "uma_only" and al_cfg.mlip.backend != "uma":
@@ -1139,37 +1155,34 @@ def run_formula_with_active_learning(
                 "remaining DFT allowance is below required reference and refinement reserve"
             )
         al_cfg.loop.max_dft_calculations = config.max_dft_calculations - refinement_reserve
-
-    formula_root = Path(output_dir)
-    al_root = formula_root / "active_learning"
-    stage_manifest_path = formula_root / "campaign_stages.json"
-    stages: dict[str, dict[str, Any]] = {}
-    for stage_name in (
-        "initial_mlip_exploration",
-        "active_learning_labels_and_training",
-        "post_training_mlip_exploration",
-        "independent_dft_ranking",
-    ):
-        stages[stage_name] = {"name": stage_name, "status": "pending"}
-    if not config.phase_policy.active_learning:
-        stages["active_learning_labels_and_training"]["status"] = "skipped"
-        stages["active_learning_labels_and_training"]["reason"] = (
-            "active learning is disabled by the phase policy"
-        )
-    if not config.phase_policy.reevaluate_after_retraining:
-        stages["post_training_mlip_exploration"]["status"] = "skipped"
-        stages["post_training_mlip_exploration"]["reason"] = (
-            "post-training reevaluation is disabled"
-        )
-    if config.dft_refinement is None:
-        stages["independent_dft_ranking"]["status"] = "skipped"
-        stages["independent_dft_ranking"]["reason"] = "DFT refinement is not configured"
-    _write_campaign_stages(stage_manifest_path, formula, stages)
     al_cfg.md.seed_source.kind = "compositions"
     al_cfg.md.seed_source.paths = []
     al_cfg.md.seed_source.prompt = None
     al_cfg.md.seed_source.compositions = [formula]
     al_cfg.loop.out_dir = al_root
+    return al_cfg
+
+
+def run_formula_with_active_learning(
+    formula: str,
+    output_dir: str,
+    *,
+    config: CampaignFormulaExecutionConfig,
+    al_runner: Callable[[ALConfig], None] = run_active_learning,
+    phase_runner: Callable[..., PhaseExplorationWorkflowResult] = run_phase_exploration,
+    relaxation_runner: Callable[
+        [ScientificRelaxationConfig], ScientificRelaxationResult
+    ] = run_relaxation,
+    mlip_relaxation_runner: Callable[[RelaxStructureInput], RelaxationResult] = relax_with_mlip,
+    calculator_factory: Callable[..., Any] = make_mlip_calculator,
+) -> PhaseExplorationWorkflowResult:
+    """Explore and label one formula using a fresh copy of the AL template."""
+
+    formula_root = Path(output_dir)
+    al_root = formula_root / "active_learning"
+    al_cfg = _prepare_al_template(formula, config, al_root)
+    stage_manifest_path = formula_root / "campaign_stages.json"
+    tracker = _StageTracker(stage_manifest_path, formula, config)
 
     def active_learning_runner(
         composition: str,
@@ -1187,18 +1200,12 @@ def run_formula_with_active_learning(
             or promotion_approved != al_cfg.trainer.promotion_approved
         ):
             raise ValueError("phase promotion policy and AL trainer configuration disagree")
-        _set_campaign_stage(
-            stage_manifest_path,
-            formula,
-            stages,
+        tracker.set(
             "initial_mlip_exploration",
             "completed",
             output_dir=str(Path(phase_output_dir) / formula),
         )
-        _set_campaign_stage(
-            stage_manifest_path,
-            formula,
-            stages,
+        tracker.set(
             "active_learning_labels_and_training",
             "in_progress",
             training_enabled=al_cfg.trainer.enabled,
@@ -1215,10 +1222,7 @@ def run_formula_with_active_learning(
             partial_seconds = sum(
                 float(state.get("timings_sec", {}).get("total", 0.0)) for state in partial_states
             )
-            _set_campaign_stage(
-                stage_manifest_path,
-                formula,
-                stages,
+            tracker.set(
                 "active_learning_labels_and_training",
                 "failed",
                 failure_reason=f"{type(exc).__name__}: {exc}",
@@ -1308,10 +1312,7 @@ def run_formula_with_active_learning(
                         "logdir": latest_model,
                         "checkpoint": None,
                     }
-        _set_campaign_stage(
-            stage_manifest_path,
-            formula,
-            stages,
+        tracker.set(
             "active_learning_labels_and_training",
             "completed",
             training_enabled=al_cfg.trainer.enabled,
@@ -1336,10 +1337,7 @@ def run_formula_with_active_learning(
             "promotion_approved": al_cfg.trainer.promotion_approved,
         }
     )
-    _set_campaign_stage(
-        stage_manifest_path,
-        formula,
-        stages,
+    tracker.set(
         "initial_mlip_exploration",
         "in_progress",
         model_identifier=_model_identifier(al_cfg),
@@ -1355,13 +1353,10 @@ def run_formula_with_active_learning(
     except Exception as exc:
         stage_name = (
             "active_learning_labels_and_training"
-            if stages["active_learning_labels_and_training"]["status"] == "in_progress"
+            if tracker.status("active_learning_labels_and_training") == "in_progress"
             else "initial_mlip_exploration"
         )
-        _set_campaign_stage(
-            stage_manifest_path,
-            formula,
-            stages,
+        tracker.set(
             stage_name,
             "failed",
             failure_reason=f"{type(exc).__name__}: {exc}",
@@ -1378,11 +1373,8 @@ def run_formula_with_active_learning(
     execution_evidence["model_identifier"] = _model_identifier(effective_al_cfg)
     execution_evidence["campaign_stages_path"] = str(stage_manifest_path)
     result.active_learning_result = execution_evidence
-    if stages["initial_mlip_exploration"]["status"] == "in_progress":
-        _set_campaign_stage(
-            stage_manifest_path,
-            formula,
-            stages,
+    if tracker.status("initial_mlip_exploration") == "in_progress":
+        tracker.set(
             "initial_mlip_exploration",
             "completed",
             model_identifier=_model_identifier(al_cfg),
@@ -1390,10 +1382,7 @@ def run_formula_with_active_learning(
             relaxation_count=len(result.initial.relaxations),
         )
     if result.after_retraining is not None:
-        _set_campaign_stage(
-            stage_manifest_path,
-            formula,
-            stages,
+        tracker.set(
             "post_training_mlip_exploration",
             "completed",
             model_identifier=_model_identifier(effective_al_cfg),
@@ -1401,10 +1390,7 @@ def run_formula_with_active_learning(
             relaxation_count=len(result.after_retraining.relaxations),
         )
     elif config.phase_policy.reevaluate_after_retraining:
-        _set_campaign_stage(
-            stage_manifest_path,
-            formula,
-            stages,
+        tracker.set(
             "post_training_mlip_exploration",
             "skipped",
             reason=(
@@ -1501,19 +1487,13 @@ def run_formula_with_active_learning(
     if refinement is None:
         return result
     if not config.phase_policy.dft_approved:
-        _set_campaign_stage(
-            stage_manifest_path,
-            formula,
-            stages,
+        tracker.set(
             "independent_dft_ranking",
             "blocked",
             reason="explicit DFT approval was not provided",
         )
         raise PermissionError("campaign DFT refinement requires explicit DFT approval")
-    _set_campaign_stage(
-        stage_manifest_path,
-        formula,
-        stages,
+    tracker.set(
         "independent_dft_ranking",
         "in_progress",
         model_identifier=_model_identifier(effective_al_cfg),
@@ -1530,10 +1510,7 @@ def run_formula_with_active_learning(
             return relaxation_runner(dft_config)
         finally:
             dft_progress["elapsed_seconds"] += time.monotonic() - started
-            _set_campaign_stage(
-                stage_manifest_path,
-                formula,
-                stages,
+            tracker.set(
                 "independent_dft_ranking",
                 "in_progress",
                 dft_attempts=dft_progress["attempts"],
@@ -1556,10 +1533,7 @@ def run_formula_with_active_learning(
         selected = candidates[: refinement.max_candidates]
         candidate_scores = {}
     if not selected:
-        _set_campaign_stage(
-            stage_manifest_path,
-            formula,
-            stages,
+        tracker.set(
             "independent_dft_ranking",
             "failed",
             failure_reason="DFT refinement requires at least one converged MLIP relaxation",
@@ -1699,10 +1673,7 @@ def run_formula_with_active_learning(
         ),
     }
     result.active_learning_result = evidence
-    _set_campaign_stage(
-        stage_manifest_path,
-        formula,
-        stages,
+    tracker.set(
         "independent_dft_ranking",
         "completed",
         **evidence["independent_dft_ranking"],
