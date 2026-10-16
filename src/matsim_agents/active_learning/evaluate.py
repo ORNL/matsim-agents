@@ -40,7 +40,8 @@ import numpy as np
 from ase import Atoms
 from ase.io import read as ase_read
 
-from matsim_agents.active_learning.config import ALConfig, MLIPConfig, TrainerConfig
+from matsim_agents.active_learning.config import ALConfig, TrainerConfig
+from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     predict_elemental_references,
@@ -225,7 +226,7 @@ def evaluate_frames(
     for energy comparisons; in-memory callers must establish DFT compatibility.
     ``ref_frames`` is retained only to reject obsolete fitted-offset callers.
     """
-    from matsim_agents.active_learning.calculator import make_mlip_calculator
+    from matsim_agents.backends.mlip.calculator import make_mlip_calculator
 
     if ref_frames is not None:
         raise ValueError(

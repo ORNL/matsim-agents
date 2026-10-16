@@ -33,16 +33,16 @@ from ase import Atoms
 from ase.io import read as ase_read
 from ase.io import write as ase_write
 
-from matsim_agents.active_learning.config import (
+from matsim_agents.active_learning.evaluate import (
+    _subsample,
+    evaluate_frames,
+)
+from matsim_agents.backends.mlip.config import (
     HydraGNNConfig,
     MACEConfig,
     MCDropoutInjectionConfig,
     MLIPConfig,
     UMAConfig,
-)
-from matsim_agents.active_learning.evaluate import (
-    _subsample,
-    evaluate_frames,
 )
 
 log = logging.getLogger(__name__)

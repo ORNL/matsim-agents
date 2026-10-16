@@ -13,10 +13,11 @@ from ase.calculators.calculator import Calculator, all_changes
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
 
-from matsim_agents.active_learning.config import HydraGNNConfig, TrainerConfig
-from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.hydragnn_references import resolve_training_references
 from matsim_agents.active_learning.trainer import retrain_hydragnn
+from matsim_agents.backends.mlip.config import HydraGNNConfig
+from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 from matsim_agents.datasets.energy_references import predict_elemental_references
 from matsim_agents.datasets.formation_training import (
     prepare_hydragnn_training_frames,
@@ -291,7 +292,7 @@ def test_unmarked_foundation_retains_existing_behavior(tmp_path):
 def test_selected_head_factory_restores_total_energy(tmp_path, training_inputs, monkeypatch):
     import torch
 
-    import matsim_agents.active_learning.calculator as factory
+    import matsim_agents.backends.mlip.calculator as factory
 
     model = _checkpoint(tmp_path, training_inputs)
     loaded_model = torch.nn.Linear(1, 1)
@@ -326,8 +327,8 @@ def test_fused_and_auto_newhead_reload_restore_totals(
 ):
     import torch
 
-    import matsim_agents.active_learning.calculator as factory
-    import matsim_agents.active_learning.finetune_hydragnn_newhead as trainer
+    import matsim_agents.backends.mlip.calculator as factory
+    import matsim_agents.backends.mlip.hydragnn_newhead as newhead_surgery
     import matsim_agents.backends.mlip.relaxation as relaxation
 
     model_dir = _checkpoint(tmp_path, training_inputs)
@@ -349,7 +350,7 @@ def test_fused_and_auto_newhead_reload_restore_totals(
         precision.resolve_precision = lambda _: (None, torch.float64, nullcontext())
         monkeypatch.setitem(sys.modules, "hydragnn.models.create", create)
         monkeypatch.setitem(sys.modules, "hydragnn.train.train_validate_test", precision)
-        monkeypatch.setattr(trainer, "apply_newhead_surgery", lambda m, *_args, **kw: m)
+        monkeypatch.setattr(newhead_surgery, "apply_newhead_surgery", lambda m, *_args, **kw: m)
         monkeypatch.setattr(
             factory, "_build_single_head_calculator", lambda **kw: FormationCalculator()
         )
@@ -559,7 +560,7 @@ def test_frozen_reference_manifest_cannot_be_relabelled(tmp_path, training_input
 def test_retrain_hook_forwards_references_and_verifies_output(
     tmp_path, training_inputs, monkeypatch, script_name, launcher
 ):
-    import matsim_agents.active_learning.calculator as factory
+    import matsim_agents.backends.mlip.calculator as factory
 
     dataset, manifest = training_inputs
     output = _checkpoint(tmp_path, training_inputs)
@@ -675,7 +676,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
 def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
     tmp_path, training_inputs, dataset_method_sidecar, monkeypatch, defect
 ):
-    import matsim_agents.active_learning.calculator as factory
+    import matsim_agents.backends.mlip.calculator as factory
 
     old_dataset, manifest = training_inputs
     output = _checkpoint(tmp_path, training_inputs)
@@ -723,7 +724,7 @@ def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
 def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
     tmp_path, training_inputs, elemental_manifest, monkeypatch
 ):
-    import matsim_agents.active_learning.calculator as factory
+    import matsim_agents.backends.mlip.calculator as factory
 
     dataset, _ = training_inputs
     output = _checkpoint(tmp_path, training_inputs)

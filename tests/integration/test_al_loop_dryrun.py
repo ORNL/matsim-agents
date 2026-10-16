@@ -33,18 +33,15 @@ from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import (
     AcquisitionConfig,
     ALConfig,
-    HydraGNNConfig,
     LoopConfig,
-    MACEConfig,
     MDConfig,
-    MLIPConfig,
     SeedSourceConfig,
     TrainerConfig,
-    UMAConfig,
 )
 from matsim_agents.active_learning.evaluate import PromotionDecision, _apply_model_override
 from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
 from matsim_agents.backends.dft.config import DFTConfig, VASPConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
 from matsim_agents.datasets.governance import (
     DatasetValidationSummary,
     structure_identity,
@@ -734,8 +731,8 @@ def test_fraction_holdout_real_evaluation_and_resume(
 ):
     from ase.calculators.calculator import Calculator, all_changes
 
-    import matsim_agents.active_learning.calculator as calculator_mod
     import matsim_agents.active_learning.loop as loop_mod
+    import matsim_agents.backends.mlip.calculator as calculator_mod
     from matsim_agents.datasets.energy_references import validate_dataset_reference_method
 
     class ConstantCalculator(Calculator):

@@ -8,8 +8,9 @@ from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 from ase.io import write
 
-from matsim_agents.active_learning.config import MLIPConfig, TrainerConfig, UMAConfig
+from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.evaluate import evaluate_frames, evaluate_promotion_candidate
+from matsim_agents.backends.mlip.config import MLIPConfig, UMAConfig
 from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     predict_elemental_references,
@@ -42,7 +43,7 @@ def test_formation_comparison_removes_only_elemental_offsets(elemental_manifest,
     manifest = elemental_manifest({"Nb": -10.0, "O": -5.0})
     calculator = OffsetCalculator(compound_error=0.6)
     monkeypatch.setattr(
-        "matsim_agents.active_learning.calculator.make_mlip_calculator",
+        "matsim_agents.backends.mlip.calculator.make_mlip_calculator",
         lambda _cfg: calculator,
     )
     frames = [
@@ -71,7 +72,7 @@ def test_evaluation_only_probes_required_elements_from_superset_manifest(
     manifest = elemental_manifest({"Nb": -10.0, "O": -5.0, "Ti": -7.0})
     calculator = OffsetCalculator()
     monkeypatch.setattr(
-        "matsim_agents.active_learning.calculator.make_mlip_calculator",
+        "matsim_agents.backends.mlip.calculator.make_mlip_calculator",
         lambda _cfg: calculator,
     )
     metrics, _ = evaluate_frames(
@@ -134,7 +135,7 @@ def test_promotion_evaluates_each_models_elemental_baselines(
         calculators.append(calculator)
         return calculator
 
-    monkeypatch.setattr("matsim_agents.active_learning.calculator.make_mlip_calculator", build)
+    monkeypatch.setattr("matsim_agents.backends.mlip.calculator.make_mlip_calculator", build)
     cfg = SimpleNamespace(
         mlip=MLIPConfig(backend="uma", uma=UMAConfig()),
         trainer=TrainerConfig(
@@ -170,7 +171,7 @@ def test_force_only_evaluation_needs_neither_elemental_references_nor_model_ener
             self.results = {"forces": np.full((len(atoms), 3), 0.2)}
 
     monkeypatch.setattr(
-        "matsim_agents.active_learning.calculator.make_mlip_calculator",
+        "matsim_agents.backends.mlip.calculator.make_mlip_calculator",
         lambda _cfg: ForcesOnlyCalculator(),
     )
     frame = Atoms("NbO2")
@@ -254,7 +255,7 @@ def test_energy_comparison_rejects_unverified_method_before_inference(
         pytest.fail("invalid DFT provenance must fail before model construction")
 
     monkeypatch.setattr(
-        "matsim_agents.active_learning.calculator.make_mlip_calculator", unexpected_model
+        "matsim_agents.backends.mlip.calculator.make_mlip_calculator", unexpected_model
     )
     monkeypatch.setattr(finetune_eval, "_enforce_device_visibility", lambda _device: None)
     mlip = MLIPConfig(backend="uma", uma=UMAConfig())

@@ -11,7 +11,7 @@ individual experiments or machines.
 | `active_learning` | Candidate acquisition, uncertainty evaluation, labeling, and adaptation loops |
 | `campaign` | Multi-formula campaign planning, per-formula execution, registry, and review |
 | `backends.llm` | Configuration-selected language-model providers |
-| `backends.mlip` | MLIP calculators, relaxation, and exploration interfaces |
+| `backends.mlip` | MLIP configuration, calculator factories, HydraGNN checkpoint/energy loading, MC dropout, and relaxation |
 | `backends.dft` | DFT job contracts, configuration, concurrent dispatch, and Quantum ESPRESSO/VASP interfaces |
 | `execution` | Scheduler-neutral resources, launch contracts, and provenance |
 | `datasets` | Dependency-free dataset governance, elemental reference manifests, and formation-energy dataset preparation |

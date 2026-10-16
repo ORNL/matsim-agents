@@ -21,8 +21,8 @@ from typing import Callable
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from matsim_agents.active_learning.hydragnn_energy import has_declared_hydragnn_checkpoint
 from matsim_agents.backends.llm.provider import get_chat_model
+from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.discovery import (
     Composition,

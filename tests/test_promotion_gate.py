@@ -7,13 +7,14 @@ from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 from ase.io import write
 
-from matsim_agents.active_learning.config import MLIPConfig, TrainerConfig, UMAConfig
+from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.evaluate import (
     EvalMetrics,
     assess_promotion,
     evaluate_frames,
     evaluate_promotion_candidate,
 )
+from matsim_agents.backends.mlip.config import MLIPConfig, UMAConfig
 
 
 def _metrics(
@@ -79,7 +80,7 @@ def test_cross_composition_comparison_requires_pure_element_references(
             self.results["forces"] = np.zeros((len(atoms), 3))
 
     monkeypatch.setattr(
-        "matsim_agents.active_learning.calculator.make_mlip_calculator",
+        "matsim_agents.backends.mlip.calculator.make_mlip_calculator",
         lambda _cfg: CompositionCalculator(),
     )
     frames = [

@@ -14,7 +14,7 @@ FAMILY="${FAMILY}" MODEL="${MODEL}" python - <<'PY'
 import gc
 import os
 
-from matsim_agents.active_learning.calculator import build_mace_calculator
+from matsim_agents.backends.mlip.calculator import build_mace_calculator
 from matsim_agents.active_learning.config import MACEConfig
 
 family = os.environ["FAMILY"]

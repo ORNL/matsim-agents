@@ -8,8 +8,8 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from typer.main import get_command
 
-from matsim_agents.active_learning.calculator import build_hydragnn_calculator
-from matsim_agents.active_learning.config import (
+from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
+from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
     HydraGNNConfig,
     resolve_hydragnn_inference_head,
@@ -125,7 +125,7 @@ def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active
     from ase.calculators.calculator import Calculator, all_changes
     from ase.io import write
 
-    import matsim_agents.active_learning.calculator as factory
+    import matsim_agents.backends.mlip.calculator as factory
     import matsim_agents.backends.mlip.relaxation as relaxation
 
     class RoutedCalculator(Calculator):
@@ -193,7 +193,7 @@ def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
 
 
 def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
-    import matsim_agents.active_learning.calculator as calculator
+    import matsim_agents.backends.mlip.calculator as calculator
 
     logdir = tmp_path / "model"
     logdir.mkdir()
@@ -226,7 +226,7 @@ def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
 
 
 def test_selected_head_calculator_exposes_model_for_mc_dropout(monkeypatch):
-    import matsim_agents.active_learning.calculator as calculator
+    import matsim_agents.backends.mlip.calculator as calculator
 
     torch = ModuleType("torch")
     torch.float32 = "float32"
@@ -254,7 +254,7 @@ def test_selected_head_calculator_preserves_precision_context(monkeypatch, preci
     import torch
     from ase import Atoms
 
-    import matsim_agents.active_learning.calculator as calculator
+    import matsim_agents.backends.mlip.calculator as calculator
     import matsim_agents.backends.mlip.relaxation as relaxation
 
     dtype = torch.float64 if precision == "fp64" else torch.float32

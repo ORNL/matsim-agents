@@ -97,7 +97,7 @@ class RelaxStructureInput(BaseModel):
         if self.mlip_backend == "hydragnn":
             if not self.logdir:
                 raise ValueError("mlip_backend='hydragnn' requires logdir.")
-            from matsim_agents.active_learning.hydragnn_energy import (
+            from matsim_agents.backends.mlip.hydragnn_energy import (
                 has_declared_hydragnn_checkpoint,
             )
 
@@ -413,8 +413,8 @@ def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
     if args.mlip_backend == "hydragnn":
         declared_checkpoint = Path(args.logdir) / "energy-convention.json"
         if args.hydragnn_inference_head is not None or declared_checkpoint.exists():
-            from matsim_agents.active_learning.calculator import build_hydragnn_calculator
-            from matsim_agents.active_learning.config import HydraGNNConfig
+            from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
+            from matsim_agents.backends.mlip.config import HydraGNNConfig
 
             calculator = build_hydragnn_calculator(
                 HydraGNNConfig(
@@ -442,7 +442,7 @@ def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
         else:
             from ase.calculators.calculator import Calculator
 
-            from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+            from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 
             restore_hydragnn_total_energy(Calculator(), Path(args.logdir), args.checkpoint)
 
@@ -490,8 +490,8 @@ def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
             )
             uq_note = None
     elif args.mlip_backend == "uma":
-        from matsim_agents.active_learning.calculator import build_uma_calculator
-        from matsim_agents.active_learning.config import UMAConfig
+        from matsim_agents.backends.mlip.calculator import build_uma_calculator
+        from matsim_agents.backends.mlip.config import UMAConfig
 
         calculator = build_uma_calculator(
             UMAConfig(
@@ -505,8 +505,8 @@ def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
         active_branches = 0
         uq_note = "branch-weight UQ unavailable for UMA backend"
     else:
-        from matsim_agents.active_learning.calculator import build_mace_calculator
-        from matsim_agents.active_learning.config import MACEConfig
+        from matsim_agents.backends.mlip.calculator import build_mace_calculator
+        from matsim_agents.backends.mlip.config import MACEConfig
 
         calculator = build_mace_calculator(
             MACEConfig(

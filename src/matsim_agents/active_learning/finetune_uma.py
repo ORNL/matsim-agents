@@ -3,7 +3,7 @@
 This turns an extended-XYZ dataset (as written by
 :func:`matsim_agents.active_learning.trainer.append_frames_to_extxyz`) into a
 fine-tuned ``inference_ckpt.pt`` that
-:func:`matsim_agents.active_learning.calculator.build_uma_calculator` can load
+:func:`matsim_agents.backends.mlip.calculator.build_uma_calculator` can load
 via ``load_predict_unit``.
 
 Approach (matches allaffa/HydraGNN_GFM_FineTuning4Materials @ ``uma-sota-comparison``)
@@ -420,7 +420,7 @@ def finetune_uma(
 
     The returned ``inference_ckpt.pt`` reloads through
     :func:`fairchem.core.units.mlip_unit.load_predict_unit` (and hence
-    :func:`matsim_agents.active_learning.calculator.build_uma_calculator`).
+    :func:`matsim_agents.backends.mlip.calculator.build_uma_calculator`).
 
     When ``run`` is False the model and dataset are loaded/validated but no
     training or checkpoint write occurs (dry-run); the intended checkpoint path

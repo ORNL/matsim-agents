@@ -5,8 +5,8 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from matsim_agents.active_learning.calculator import build_ensemble, build_mace_calculator
-from matsim_agents.active_learning.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
+from matsim_agents.backends.mlip.calculator import build_ensemble, build_mace_calculator
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.campaign.execution import _exploration_kwargs
 from matsim_agents.discovery.seeds import PhaseCandidate
@@ -61,7 +61,7 @@ def test_mace_ensemble_builds_primary_and_family_or_checkpoint_members(
         calls.append((member, enable_mc_dropout))
         return len(calls)
 
-    monkeypatch.setattr("matsim_agents.active_learning.calculator.build_mace_calculator", build)
+    monkeypatch.setattr("matsim_agents.backends.mlip.calculator.build_mace_calculator", build)
     assert build_ensemble(cfg, enable_mc_dropout=True) == list(range(1, len(names) + 2))
     assert calls[0][0] == cfg.mace
     assert all(
@@ -86,7 +86,7 @@ def test_mace_checkpoint_ensemble_rejects_missing_member(tmp_path, monkeypatch):
         mace=MACEConfig(family="checkpoint", model=str(primary), ensemble_models=["missing.model"]),
     )
     monkeypatch.setattr(
-        "matsim_agents.active_learning.calculator.build_mace_calculator",
+        "matsim_agents.backends.mlip.calculator.build_mace_calculator",
         lambda *args, **kwargs: object(),
     )
     with pytest.raises(ValueError, match="existing file"):
@@ -208,7 +208,7 @@ def test_direct_mace_relaxation_preserves_default_precision(tmp_path, monkeypatc
         raise RuntimeError("captured")
 
     monkeypatch.setattr(
-        "matsim_agents.active_learning.calculator.build_mace_calculator", capture_config
+        "matsim_agents.backends.mlip.calculator.build_mace_calculator", capture_config
     )
 
     with pytest.raises(RuntimeError, match="captured"):

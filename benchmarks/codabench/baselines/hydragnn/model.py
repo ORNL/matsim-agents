@@ -5,7 +5,7 @@ HydraGNN baseline calculator following the Matsim-Agents competition interface.
 the directory that contains config.json and the model checkpoint file.
 
 The HydraGNN ASE calculator is built via matsim-agents'
-`active_learning.calculator.build_hydragnn_calculator`.
+`backends.mlip.calculator.build_hydragnn_calculator`.
 """
 from __future__ import annotations
 
@@ -34,8 +34,8 @@ class AtomisticCalculator(Calculator):
             checkpoint_path: Path to the HydraGNN logdir (must contain config.json).
             device: "cpu", "cuda", "xpu", etc.
         """
-        from matsim_agents.active_learning.calculator import build_hydragnn_calculator
-        from matsim_agents.active_learning.config import HydraGNNConfig
+        from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
+        from matsim_agents.backends.mlip.config import HydraGNNConfig
 
         cfg = HydraGNNConfig(logdir=checkpoint_path)
         inner = build_hydragnn_calculator(cfg)

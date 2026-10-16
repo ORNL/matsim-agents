@@ -100,7 +100,7 @@ from mace.calculators import (  # noqa: F401
     mace_omol,
     mace_polar,
 )
-from matsim_agents.active_learning.calculator import build_mace_calculator  # noqa: F401
+from matsim_agents.backends.mlip.calculator import build_mace_calculator  # noqa: F401
 
 assert e3nn.__version__ == "0.4.4", e3nn.__version__
 print("verified", "torch", torch.__version__, "e3nn", e3nn.__version__, "mace", mace.__version__,

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from matsim_agents.active_learning.config import TrainerConfig, UMAConfig
+from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.trainer import retrain_uma
+from matsim_agents.backends.mlip.config import UMAConfig
 
 
 def test_retrain_uma_returns_verified_checkpoint(tmp_path):

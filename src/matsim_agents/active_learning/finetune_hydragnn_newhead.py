@@ -40,10 +40,8 @@ from __future__ import annotations
 
 import argparse
 import copy
-import importlib.util
 import json
 import logging
-import os
 import shutil
 from pathlib import Path
 
@@ -56,12 +54,15 @@ from matsim_agents.active_learning.finetune_hydragnn import (
     _resolve_hydragnn_paths,
     _split,
 )
-from matsim_agents.active_learning.hydragnn_checkpoint import load_hydragnn_state_dict
+from matsim_agents.backends.mlip.hydragnn_checkpoint import load_hydragnn_state_dict
+from matsim_agents.backends.mlip.hydragnn_newhead import (
+    apply_newhead_surgery,
+    load_update_model,
+)
 
 log = logging.getLogger(__name__)
 
 STRATEGIES = ("unfrozen", "frozen", "scratch")
-_DEFAULT_FT_REPO = "/global/cfs/projectdirs/m5216/mlupopa/HydraGNN_GFM_FineTuning4Materials"
 
 # Map our user-facing strategy -> (load_pretrained, ORNL freeze_mode).
 _STRATEGY_SPEC = {
@@ -122,32 +123,8 @@ def _resolve_head_index(head) -> int | None:
 
 
 # --------------------------------------------------------------------------- #
-# ORNL reference-repo loading + head config                                   #
+# Fine-tune head config                                                        #
 # --------------------------------------------------------------------------- #
-
-
-def load_update_model(ft_repo: str | Path | None = None):
-    """Import ORNL's ``utils/update_model.py`` by file path.
-
-    The module name ``utils`` collides with HydraGNN's own ``utils`` on
-    ``sys.path``, so we load it directly from the repo file to avoid shadowing.
-    """
-    repo = (
-        Path(ft_repo or os.environ.get("HYDRAGNN_FT_REPO") or _DEFAULT_FT_REPO)
-        .expanduser()
-        .resolve()
-    )
-    path = repo / "utils" / "update_model.py"
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"ORNL update_model.py not found at {path}. Clone "
-            "ORNL/HydraGNN_GFM_FineTuning4Materials or set HYDRAGNN_FT_REPO."
-        )
-    spec = importlib.util.spec_from_file_location("ornl_update_model", str(path))
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
 
 
 def build_newhead_ft_config(
@@ -177,20 +154,6 @@ def build_newhead_ft_config(
             "Training": {"freeze_mode": freeze_mode, "keep_pretrained_decoder": False},
         }
     }
-
-
-def apply_newhead_surgery(model, ft_config: dict, *, ft_repo=None, freeze: bool = True):
-    """Replace the decoder with a single fresh ``branch-0`` head (+ optional freeze).
-
-    Uses ORNL ``update_architecture`` (and ``apply_freeze_mode`` when ``freeze``)
-    directly so the surgery matches the reference implementation. Returns the
-    updated model.
-    """
-    um = load_update_model(ft_repo)
-    model = um.update_architecture(model, ft_config)
-    if freeze:
-        model = um.apply_freeze_mode(model, ft_config)
-    return model
 
 
 def _keep_pretrained_branch(decoder_target, branch_index: int) -> None:
@@ -303,7 +266,7 @@ def _target_scales(train_graphs) -> tuple[float, float]:
 def _batch_loss_single_head(
     model, batch, e_w, f_w, *, f_scale=1.0, e_scale=1.0, autocast_dtype=None
 ):
-    from matsim_agents.active_learning.hydragnn_precision import hydragnn_autocast
+    from matsim_agents.backends.mlip.hydragnn_precision import hydragnn_autocast
 
     with hydragnn_autocast(batch.pos.device, autocast_dtype):
         return _batch_loss_single_head_impl(
@@ -413,7 +376,7 @@ def finetune_hydragnn_newhead(
     if load_pretrained and (gfm_logdir / "newhead.json").exists():
         from ase.calculators.calculator import Calculator
 
-        from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+        from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 
         restore_hydragnn_total_energy(Calculator(), gfm_logdir, gfm_checkpoint)
         previous = json.loads((gfm_logdir / "energy-convention.json").read_text())

@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.active_learning.config import (
+from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
     HydraGNNConfig,
     MACEConfig,
@@ -80,7 +80,7 @@ def _build_single_head_calculator(
     import torch
     from ase.calculators.calculator import Calculator, all_changes
 
-    from matsim_agents.active_learning.hydragnn_precision import hydragnn_autocast
+    from matsim_agents.backends.mlip.hydragnn_precision import hydragnn_autocast
     from matsim_agents.backends.mlip.relaxation import atoms_to_graph
 
     class SingleHeadHydraGNNCalculator(Calculator):
@@ -182,7 +182,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         raise FileNotFoundError(f"HydraGNN config.json not found in {logdir}")
     from ase.calculators.calculator import Calculator
 
-    from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+    from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 
     restore_hydragnn_total_energy(Calculator(), logdir, cfg.checkpoint)
     convention_path = logdir / "energy-convention.json"
@@ -226,7 +226,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
             str(logdir), cfg.checkpoint, cfg.precision
         )
         if convention_path.exists():
-            from matsim_agents.active_learning.hydragnn_checkpoint import (
+            from matsim_agents.backends.mlip.hydragnn_checkpoint import (
                 restore_hydragnn_checkpoint,
             )
 
@@ -274,9 +274,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
         from hydragnn.models.create import create_model_config
         from hydragnn.train.train_validate_test import resolve_precision
 
-        from matsim_agents.active_learning.finetune_hydragnn_newhead import (
-            apply_newhead_surgery,
-        )
+        from matsim_agents.backends.mlip.hydragnn_newhead import apply_newhead_surgery
 
         with open(config_path) as f:
             hcfg = json.load(f)
@@ -330,7 +328,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
                 (k[len("module.") :] if k.startswith("module.") else k): v
                 for k, v in state_dict.items()
             }
-            from matsim_agents.active_learning.hydragnn_checkpoint import load_hydragnn_state_dict
+            from matsim_agents.backends.mlip.hydragnn_checkpoint import load_hydragnn_state_dict
 
             load_hydragnn_state_dict(model, state_dict)
         model.to(device).eval()
@@ -382,7 +380,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
     )
 
     if convention_path.exists():
-        from matsim_agents.active_learning.hydragnn_checkpoint import restore_hydragnn_checkpoint
+        from matsim_agents.backends.mlip.hydragnn_checkpoint import restore_hydragnn_checkpoint
 
         restore_hydragnn_checkpoint(model, logdir / cfg.checkpoint, device=device)
 
@@ -584,7 +582,7 @@ def build_uma_calculator(cfg: UMAConfig, *, enable_mc_dropout: bool = False):
         except Exception:  # noqa: BLE001 - some calculators forbid new attrs
             log.debug("Could not attach `.model` to the UMA calculator instance.")
         if enable_mc_dropout and cfg.dropout.enabled:
-            from matsim_agents.active_learning.uncertainty import inject_inference_dropout
+            from matsim_agents.backends.mlip.dropout import inject_inference_dropout
 
             n = inject_inference_dropout(
                 torch_model,
@@ -680,7 +678,7 @@ def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
         except Exception:  # noqa: BLE001 - some calculators forbid new attrs
             log.debug("Could not attach `.model` to the MACE calculator instance.")
         if enable_mc_dropout and cfg.dropout.enabled:
-            from matsim_agents.active_learning.uncertainty import inject_inference_dropout
+            from matsim_agents.backends.mlip.dropout import inject_inference_dropout
 
             n = inject_inference_dropout(
                 torch_model,

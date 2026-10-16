@@ -9,13 +9,8 @@ import pytest
 from ase import Atoms
 from ase.io import read, write
 
-from matsim_agents.active_learning.config import (
-    ALConfig,
-    HydraGNNConfig,
-    MACEConfig,
-    MLIPConfig,
-    UMAConfig,
-)
+from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.campaign.execution import (
     CampaignDFTRefinementConfig,

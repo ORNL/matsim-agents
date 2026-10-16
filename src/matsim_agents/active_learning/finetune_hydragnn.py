@@ -20,7 +20,7 @@ non-routed heads carry ~0 weight for these compositions, so this matches the
 full fused prediction).
 
 The output is a logdir (``config.json`` + a ``.pk`` checkpoint) consumable by
-:func:`matsim_agents.active_learning.calculator.build_hydragnn_calculator`,
+:func:`matsim_agents.backends.mlip.calculator.build_hydragnn_calculator`,
 plus a ``cost.json`` recording wall time / GPU-hours / peak memory / parameter
 counts.
 
@@ -49,7 +49,7 @@ from matsim_agents.active_learning.branch_routing import (
     load_branch_mlp,
 )
 from matsim_agents.active_learning.cost import CostReport, count_parameters, track_cost
-from matsim_agents.active_learning.hydragnn_precision import hydragnn_autocast
+from matsim_agents.backends.mlip.hydragnn_precision import hydragnn_autocast
 from matsim_agents.datasets.governance import sha256_file
 
 log = logging.getLogger(__name__)
@@ -247,7 +247,7 @@ def finetune_hydragnn(
     if previous_convention.exists():
         from ase.calculators.calculator import Calculator
 
-        from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+        from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 
         restore_hydragnn_total_energy(Calculator(), gfm_logdir, gfm_checkpoint)
         previous = json.loads(previous_convention.read_text())
@@ -305,7 +305,7 @@ def finetune_hydragnn(
     state_dict = {
         (k[len("module.") :] if k.startswith("module.") else k): v for k, v in state_dict.items()
     }
-    from matsim_agents.active_learning.hydragnn_checkpoint import load_hydragnn_state_dict
+    from matsim_agents.backends.mlip.hydragnn_checkpoint import load_hydragnn_state_dict
 
     load_hydragnn_state_dict(model, state_dict, strict=False)
     model.eval()  # no BN/dropout in the heads; keeps frozen backbone stats fixed

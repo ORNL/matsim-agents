@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.active_learning.config import ALConfig, MLIPConfig
+from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.backends.mlip.config import MLIPConfig
 
 
 def _base_blocks(tmp_path) -> dict:

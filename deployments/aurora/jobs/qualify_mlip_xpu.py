@@ -23,7 +23,7 @@ def validate_predictions(energy: float, forces: list[list[float]], atom_count: i
 
 
 def verify_model_residency(calculator, backend: str) -> list[str]:
-    from matsim_agents.active_learning.calculator import _find_torch_module
+    from matsim_agents.backends.mlip.calculator import _find_torch_module
 
     if backend == "hydragnn":
         roots = [getattr(calculator, name, None) for name in ("model", "mlp")]
@@ -76,12 +76,12 @@ def qualify(args, progress: Progress) -> dict:
     from ase.build import bulk
 
     progress.stage("import_matsim_calculators")
-    from matsim_agents.active_learning.calculator import (
+    from matsim_agents.backends.mlip.calculator import (
         build_hydragnn_calculator,
         build_mace_calculator,
         build_uma_calculator,
     )
-    from matsim_agents.active_learning.config import HydraGNNConfig, MACEConfig, UMAConfig
+    from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 
     progress.stage("xpu_availability")
     if not torch.xpu.is_available():

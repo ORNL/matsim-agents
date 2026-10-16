@@ -471,7 +471,7 @@ def test_aurora_fused_residency_requires_xpu_gnn_and_mlp(monkeypatch):
 
     import pytest
 
-    import matsim_agents.active_learning.calculator as calculator
+    import matsim_agents.backends.mlip.calculator as calculator
 
     helper = ROOT / "deployments/aurora/jobs/qualify_mlip_xpu.py"
     spec = importlib.util.spec_from_file_location("qualify_mlip_xpu", helper)

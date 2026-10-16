@@ -15,15 +15,15 @@ from ase.io import read as ase_read
 from ase.io import write as ase_write
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.active_learning.candidates import Candidate
-from matsim_agents.active_learning.config import (
-    HYDRAGNN_DATASET_HEADS,
-    ALConfig,
-    resolve_hydragnn_inference_head,
-)
+from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.loop import run_active_learning
 from matsim_agents.active_learning.uncertainty import select_candidates
+from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
+from matsim_agents.backends.mlip.config import (
+    HYDRAGNN_DATASET_HEADS,
+    resolve_hydragnn_inference_head,
+)
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.campaign.registry import (

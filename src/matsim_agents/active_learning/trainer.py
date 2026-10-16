@@ -24,14 +24,10 @@ from ase import Atoms
 from ase.io import read as ase_read
 from ase.io import write as ase_write
 
-from matsim_agents.active_learning.config import (
-    HydraGNNConfig,
-    MACEConfig,
-    TrainerConfig,
-    UMAConfig,
-)
+from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.backends.dft.base import DFTResult
 from matsim_agents.backends.dft.config import DFTConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 
 log = logging.getLogger(__name__)
 
@@ -245,8 +241,8 @@ def retrain_hydragnn(
         raise RuntimeError(f"HydraGNN trainer produced no config.json; see {log_path}")
     from ase.calculators.calculator import Calculator
 
-    from matsim_agents.active_learning.calculator import build_hydragnn_calculator
-    from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+    from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
+    from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 
     restore_hydragnn_total_energy(Calculator(), out_logdir)
     metadata = json.loads((out_logdir / "energy-convention.json").read_text())
@@ -333,7 +329,7 @@ def retrain_uma(
     if proc.returncode != 0:
         raise RuntimeError(f"UMA fine-tune failed with exit {proc.returncode}; see {log_path}")
 
-    from matsim_agents.active_learning.calculator import _resolve_finetuned_uma_checkpoint
+    from matsim_agents.backends.mlip.calculator import _resolve_finetuned_uma_checkpoint
 
     checkpoint = _resolve_finetuned_uma_checkpoint(str(out_model_dir))
     if checkpoint is None:

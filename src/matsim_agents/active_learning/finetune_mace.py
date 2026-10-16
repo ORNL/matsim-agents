@@ -3,12 +3,12 @@
 This turns an extended-XYZ dataset (as written by
 :func:`matsim_agents.active_learning.trainer.append_frames_to_extxyz`) into a
 fine-tuned ``mace_finetuned.model`` that
-:func:`matsim_agents.active_learning.calculator.build_mace_calculator` can load
+:func:`matsim_agents.backends.mlip.calculator.build_mace_calculator` can load
 via ``family="checkpoint"``.
 
 All MACE versions are fine-tunable behind the same entry point -- the base model
 is selected exactly as for inference (see
-:class:`matsim_agents.active_learning.config.MACEConfig`):
+:class:`matsim_agents.backends.mlip.config.MACEConfig`):
 
 * ``family="mace_mp"`` with ``base_model in {small, medium, large}`` (or a
   release tag / URL) -- Materials Project inorganic foundation models;
@@ -170,8 +170,8 @@ def _resolve_foundation_model_file(
     if os.path.isfile(base_model):
         return str(Path(base_model).resolve())
 
-    from matsim_agents.active_learning.calculator import build_mace_calculator
-    from matsim_agents.active_learning.config import MACEConfig
+    from matsim_agents.backends.mlip.calculator import build_mace_calculator
+    from matsim_agents.backends.mlip.config import MACEConfig
 
     mcfg = MACEConfig(
         family=family,  # type: ignore[arg-type]
@@ -375,7 +375,7 @@ def finetune_mace(
     reference recipe; pass ``lora=True`` for the parameter-efficient variant.
 
     The returned ``mace_finetuned.model`` reloads through
-    :func:`matsim_agents.active_learning.calculator.build_mace_calculator`
+    :func:`matsim_agents.backends.mlip.calculator.build_mace_calculator`
     (``family="checkpoint"``). When ``run`` is False the dataset is loaded and
     validated but no training/checkpoint write occurs; the intended checkpoint
     path is still returned.

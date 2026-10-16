@@ -325,7 +325,7 @@ so they inherit the unified HydraGNN-aligned toolchain (`cudatoolkit/12.9`,
 ## UMA MLIP Backend (fairchem-core)
 
 `matsim-agents` supports a second MLIP backend — Meta's Universal Model for Atoms
-(UMA) — via `matsim_agents.active_learning.calculator.build_uma_calculator` and
+(UMA) — via `matsim_agents.backends.mlip.calculator.build_uma_calculator` and
 the `mlip_backend="uma"` field on `RelaxStructureInput` (canonical:
 `matsim_agents.backends.mlip.relaxation.RelaxStructureInput`). The backend requires
 `fairchem-core`.

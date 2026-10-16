@@ -11,7 +11,7 @@ import os
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 
-from matsim_agents.active_learning.hydragnn_energy import has_declared_hydragnn_checkpoint
+from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.orchestration.state import MatSimState
 
