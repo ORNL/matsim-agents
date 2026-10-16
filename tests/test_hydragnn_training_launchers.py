@@ -67,40 +67,38 @@ def test_launcher_executes_expected_cli(tmp_path, platform, configured, script_n
         text=True,
         check=False,
     )
-    if script_name == "custom" and platform == "perlmutter":
+    if script_name == "custom":
         assert proc.returncode == 2
         assert "unsupported HydraGNN trainer" in proc.stderr
         assert not capture.exists()
         return
     assert proc.returncode == 0, proc.stderr
     actual = json.loads(capture.read_text())
-    built_in = script_name != "custom"
     expected = [
         "--dataset",
         str(tmp_path / "dataset.extxyz"),
-        "--output-dir" if built_in else "--logdir",
+        "--output-dir",
         str(output),
-        "--gfm-logdir" if built_in else "--resume_from",
+        "--gfm-logdir",
         str(tmp_path / "resume"),
         "--epochs",
         "2",
         "--elemental-reference-manifest",
         str(manifest),
     ]
-    if built_in:
-        expected.extend(
-            [
-                "--gfm-checkpoint",
-                "incumbent.pk",
-                "--charge",
-                "-2.5" if configured else "0.0",
-                "--spin",
-                "3.0" if configured else "0.0",
-            ]
-        )
+    expected.extend(
+        [
+            "--gfm-checkpoint",
+            "incumbent.pk",
+            "--charge",
+            "-2.5" if configured else "0.0",
+            "--spin",
+            "3.0" if configured else "0.0",
+        ]
+    )
     if script_name == "finetune_hydragnn_newhead" and configured:
         expected.extend(["--ft-repo", str(tmp_path / "fine tuning repo")])
-    if built_in and configured:
+    if configured:
         expected.extend(["--hydragnn-root", str(tmp_path / "HydraGNN source")])
     if script_name == "finetune_hydragnn":
         expected.extend(["--branch-mlp", str(branch_mlp)])

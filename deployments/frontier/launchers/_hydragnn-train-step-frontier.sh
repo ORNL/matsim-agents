@@ -10,11 +10,10 @@
 #        <epochs> <nodes_for_train> <ranks_per_node> <elemental_manifest> \
 #        [checkpoint] [branch_mlp] [ft_repo] [charge] [spin] [hydragnn_root]
 #
-# Runs the built-in CLI or the legacy custom --logdir/--resume_from CLI,
-# always passing --elemental-reference-manifest.
-# inside the SAME allocation as the AL driver (no separate sbatch). The
-# training script must accept these flags; if your script uses a different
-# CLI, edit the `srun python ...` line at the bottom.
+# Runs one of the built-in matsim-agents HydraGNN fine-tuners
+# (finetune_hydragnn.py or finetune_hydragnn_newhead.py) inside the SAME
+# allocation as the AL driver (no separate sbatch), always passing
+# --elemental-reference-manifest.
 # =============================================================================
 
 set -euo pipefail
@@ -36,24 +35,22 @@ TOTAL_RANKS=$(( NNODES * RANKS_PER_NODE ))
 
 [[ -f "${TRAIN_SCRIPT}" ]] || { echo "train script not found: ${TRAIN_SCRIPT}" >&2; exit 2; }
 [[ -f "${ELEMENTAL_MANIFEST}" ]] || { echo "elemental manifest missing" >&2; exit 2; }
-EXTRA_ARGS=()
-OUTPUT_FLAG=--logdir
-RESUME_FLAG=--resume_from
 SCRIPT_NAME="$(basename "${TRAIN_SCRIPT}")"
-if [[ "${SCRIPT_NAME}" == "finetune_hydragnn.py" || "${SCRIPT_NAME}" == "finetune_hydragnn_newhead.py" ]]; then
-  [[ "${TOTAL_RANKS}" == 1 ]] || { echo "Built-in HydraGNN trainers require one process" >&2; exit 2; }
-  OUTPUT_FLAG=--output-dir
-  RESUME_FLAG=--gfm-logdir
-  if [[ -n "${9:-}" ]]; then
-    EXTRA_ARGS+=(--gfm-checkpoint "${9}")
-  fi
-  EXTRA_ARGS+=(--charge "${12:-0.0}" --spin "${13:-0.0}")
-  if [[ "${SCRIPT_NAME}" == "finetune_hydragnn_newhead.py" && -n "${11:-}" ]]; then
-    EXTRA_ARGS+=(--ft-repo "${11}")
-  fi
-  if [[ -n "${14:-}" ]]; then
-    EXTRA_ARGS+=(--hydragnn-root "${14}")
-  fi
+[[ "${TOTAL_RANKS}" == 1 ]] || { echo "Built-in HydraGNN trainers require one process" >&2; exit 2; }
+[[ "${SCRIPT_NAME}" == "finetune_hydragnn.py" || "${SCRIPT_NAME}" == "finetune_hydragnn_newhead.py" ]] || {
+  echo "unsupported HydraGNN trainer: ${SCRIPT_NAME}" >&2
+  exit 2
+}
+EXTRA_ARGS=()
+if [[ -n "${9:-}" ]]; then
+  EXTRA_ARGS+=(--gfm-checkpoint "${9}")
+fi
+EXTRA_ARGS+=(--charge "${12:-0.0}" --spin "${13:-0.0}")
+if [[ "${SCRIPT_NAME}" == "finetune_hydragnn_newhead.py" && -n "${11:-}" ]]; then
+  EXTRA_ARGS+=(--ft-repo "${11}")
+fi
+if [[ -n "${14:-}" ]]; then
+  EXTRA_ARGS+=(--hydragnn-root "${14}")
 fi
 if [[ "${SCRIPT_NAME}" == "finetune_hydragnn.py" ]]; then
   BRANCH_MLP="${10:-${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-}}"
@@ -81,8 +78,8 @@ exec srun \
   --gpu-bind=closest \
   python "${TRAIN_SCRIPT}" \
     --dataset "${DATASET}" \
-    "${OUTPUT_FLAG}" "${OUT_LOGDIR}" \
-    "${RESUME_FLAG}" "${RESUME_LOGDIR}" \
+    --output-dir "${OUT_LOGDIR}" \
+    --gfm-logdir "${RESUME_LOGDIR}" \
     --epochs "${EPOCHS}" \
     --elemental-reference-manifest "${ELEMENTAL_MANIFEST}" \
     "${EXTRA_ARGS[@]}"

@@ -280,7 +280,7 @@ working directory.
 
 The directory convention is mandatory for new launches: the naming helper
 generates `MATSIM_CAMPAIGN_RUN_TAG`, replacing any inherited custom tag.
-There is no legacy naming mode. The bounded submission script captures the
+The bounded submission script captures the
 Git revision at submission; direct launcher submissions capture it at job
 startup unless submission revision metadata was explicitly exported.
 The Slurm job name and persisted campaign ID remain separate identifiers.
@@ -409,8 +409,8 @@ existing evaluation subtracts its own model elemental references once.
 Forces/stress and dropout access are preserved. New-head checkpoints are
 auto-detected, and routed checkpoints retain their trained-head restriction
 and frozen routing MLP. Unsupported elements, incompatible/tampered artifacts,
-and ambiguous legacy fitted-offset checkpoints fail explicitly; unmarked
-foundation checkpoints retain their previous behavior.
+and fine-tuned checkpoints without a verified energy convention fail explicitly;
+unmarked foundation checkpoints are used unchanged.
 
 Checkpoint reconstruction materializes HydraGNN's lazy graph-conditioning
 projectors from saved weight shapes before loading weights. Single-head resume
@@ -422,12 +422,12 @@ for dry-run, optimization, and validation losses. BF16 keeps FP32 master
 parameters and uses autocast for compute; single-head checkpoint inference
 also honors that setting. FP32/FP64 paths do not enable autocast.
 
-Custom trainer scripts retain `--logdir`/`--resume_from`, but must now accept
-`--elemental-reference-manifest` and emit the same verified checkpoint contract.
+`trainer.train_script` must be one of the built-in fine-tuners,
+`training/finetune_hydragnn.py` or `training/finetune_hydragnn_newhead.py`.
 Launchers receive the manifest as positional argument eight, then optional
-checkpoint and branch-MLP arguments. Built-in scripts use
-`--output-dir`/`--gfm-logdir`; they are single-process trainers, so configure
-one node/one rank when using a launcher. Multi-rank training is not implemented.
+checkpoint, branch-MLP, ft_repo, charge, spin, and HydraGNN-root arguments, and
+invoke the fine-tuner with `--output-dir`/`--gfm-logdir`. The fine-tuners are
+single-process, so configure one node/one rank when using a launcher.
 
 #### Approved elemental DFT prerequisite
 
@@ -685,9 +685,9 @@ resume the same formula dataset to accumulate more data. DFT failures and
 duplicate rejection can delay readiness further. These are software minimums,
 not evidence that such a small validation set scientifically qualifies a model.
 
-Eval-only reuse requires existing, hash-matching split sidecars. Legacy data
-must have its actual DFT protocol verified and recorded before comparison;
-do not infer compatibility from the elemental manifest alone. The caller
+Eval-only reuse requires existing, hash-matching split sidecars. Data without a
+recorded DFT method signature is rejected; do not infer compatibility from the
+elemental manifest alone. The caller
 remains responsible for convergence of the supplied DFT calculations.
 
 Energy evaluation and fine-tune/evaluation require

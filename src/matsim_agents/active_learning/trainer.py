@@ -118,6 +118,9 @@ def append_frames_to_extxyz(frames: list[LabelledFrame], path: str | Path) -> in
 # --------------------------------------------------------------------------- #
 
 
+HYDRAGNN_FINETUNERS = frozenset({"finetune_hydragnn", "finetune_hydragnn_newhead"})
+
+
 def retrain_hydragnn(
     trainer_cfg: TrainerConfig,
     hydragnn_cfg: HydraGNNConfig,
@@ -140,13 +143,14 @@ def retrain_hydragnn(
         return Path(hydragnn_cfg.logdir)
 
     train_script = Path(str(trainer_cfg.train_script))
-    built_in = train_script.stem in {
-        "finetune_hydragnn",
-        "finetune_hydragnn_newhead",
-    }
+    script_name = train_script.stem
+    if script_name not in HYDRAGNN_FINETUNERS:
+        raise ValueError(
+            f"trainer.train_script must be one of the built-in HydraGNN fine-tuners "
+            f"({', '.join(sorted(HYDRAGNN_FINETUNERS))}); got {train_script}"
+        )
     if (
-        built_in
-        and trainer_cfg.train_launcher is not None
+        trainer_cfg.train_launcher is not None
         and trainer_cfg.nodes_for_train * trainer_cfg.ranks_per_node != 1
     ):
         raise ValueError("Built-in HydraGNN fine-tuners require exactly one process")
@@ -164,8 +168,7 @@ def retrain_hydragnn(
     out_logdir.mkdir(parents=True, exist_ok=True)
 
     # Launchers receive script, dataset, output, resume, epochs, nodes, ranks,
-    # references, checkpoint and branch MLP. Built-ins additionally receive
-    # ft_repo, charge and spin; custom launcher positional arguments stay unchanged.
+    # references, checkpoint, branch MLP, ft_repo, charge, spin and HydraGNN root.
     # Without a launcher, invoke the script directly with Python.
     if trainer_cfg.train_launcher is not None:
         argv = [
@@ -181,16 +184,11 @@ def retrain_hydragnn(
             str(reference_manifest),
             hydragnn_cfg.checkpoint or "",
             str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint or ""),
+            str(hydragnn_cfg.ft_repo or ""),
+            str(hydragnn_cfg.charge),
+            str(hydragnn_cfg.spin),
+            str(hydragnn_cfg.hydragnn_root or ""),
         ]
-        if built_in:
-            argv.extend(
-                [
-                    str(hydragnn_cfg.ft_repo or ""),
-                    str(hydragnn_cfg.charge),
-                    str(hydragnn_cfg.spin),
-                    str(hydragnn_cfg.hydragnn_root or ""),
-                ]
-            )
     else:
         log.warning(
             "trainer.train_launcher not set; running training in-process "
@@ -201,26 +199,24 @@ def retrain_hydragnn(
             str(train_script),
             "--dataset",
             str(dataset_path),
-            "--output-dir" if built_in else "--logdir",
+            "--output-dir",
             str(out_logdir),
-            "--gfm-logdir" if built_in else "--resume_from",
+            "--gfm-logdir",
             str(hydragnn_cfg.logdir),
             "--epochs",
             str(trainer_cfg.epochs_per_iter),
             "--elemental-reference-manifest",
             str(reference_manifest),
         ]
-        script_name = Path(str(trainer_cfg.train_script)).stem
         if script_name == "finetune_hydragnn":
             if hydragnn_cfg.hydragnn_branch_mlp_checkpoint is None:
                 raise ValueError("Routed HydraGNN training requires a branch MLP checkpoint")
             argv.extend(["--branch-mlp", str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint)])
-        if built_in and hydragnn_cfg.checkpoint is not None:
+        if hydragnn_cfg.checkpoint is not None:
             argv.extend(["--gfm-checkpoint", hydragnn_cfg.checkpoint])
-        if built_in:
-            argv.extend(["--charge", str(hydragnn_cfg.charge), "--spin", str(hydragnn_cfg.spin)])
-            if hydragnn_cfg.hydragnn_root is not None:
-                argv.extend(["--hydragnn-root", str(hydragnn_cfg.hydragnn_root)])
+        argv.extend(["--charge", str(hydragnn_cfg.charge), "--spin", str(hydragnn_cfg.spin)])
+        if hydragnn_cfg.hydragnn_root is not None:
+            argv.extend(["--hydragnn-root", str(hydragnn_cfg.hydragnn_root)])
         if script_name == "finetune_hydragnn_newhead" and hydragnn_cfg.ft_repo is not None:
             argv.extend(["--ft-repo", str(hydragnn_cfg.ft_repo)])
 

@@ -554,9 +554,7 @@ def test_frozen_reference_manifest_cannot_be_relabelled(tmp_path, training_input
 
 
 @pytest.mark.parametrize("launcher", [False, True])
-@pytest.mark.parametrize(
-    "script_name", ["custom", "finetune_hydragnn", "finetune_hydragnn_newhead"]
-)
+@pytest.mark.parametrize("script_name", ["finetune_hydragnn", "finetune_hydragnn_newhead"])
 def test_retrain_hook_forwards_references_and_verifies_output(
     tmp_path, training_inputs, monkeypatch, script_name, launcher
 ):
@@ -564,7 +562,6 @@ def test_retrain_hook_forwards_references_and_verifies_output(
 
     dataset, manifest = training_inputs
     output = _checkpoint(tmp_path, training_inputs)
-    built_in = script_name != "custom"
     script = tmp_path / f"{script_name}.py"
     script.touch()
     config = TrainerConfig(
@@ -605,7 +602,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         config,
         HydraGNNConfig(
             logdir=tmp_path,
-            checkpoint="incumbent-custom.pk",
+            checkpoint="incumbent.pk",
             mlp_checkpoint=tmp_path / "mlp.pt",
             ft_repo=tmp_path / "fine tuning repo",
             hydragnn_root=tmp_path / "HydraGNN source",
@@ -631,7 +628,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             str(config.ranks_per_node),
             str(output.parent / "elemental-training-reference/elemental-references.json"),
         ]
-        assert argv[10:12] == ["incumbent-custom.pk", str(tmp_path / "mlp.pt")]
+        assert argv[10:12] == ["incumbent.pk", str(tmp_path / "mlp.pt")]
         assert argv[12:] == (
             [
                 str(tmp_path / "fine tuning repo"),
@@ -639,20 +636,14 @@ def test_retrain_hook_forwards_references_and_verifies_output(
                 "3.0",
                 str(tmp_path / "HydraGNN source"),
             ]
-            if built_in
-            else []
         )
     else:
         assert "--elemental-reference-manifest" in argv
-        assert ("--output-dir" if built_in else "--logdir") in argv
-        assert ("--gfm-logdir" if built_in else "--resume_from") in argv
-        if built_in:
-            assert argv[argv.index("--charge") + 1] == "-2.5"
-            assert argv[argv.index("--spin") + 1] == "3.0"
-            assert argv[argv.index("--hydragnn-root") + 1] == str(tmp_path / "HydraGNN source")
-        else:
-            assert "--charge" not in argv
-            assert "--spin" not in argv
+        assert "--output-dir" in argv
+        assert "--gfm-logdir" in argv
+        assert argv[argv.index("--charge") + 1] == "-2.5"
+        assert argv[argv.index("--spin") + 1] == "3.0"
+        assert argv[argv.index("--hydragnn-root") + 1] == str(tmp_path / "HydraGNN source")
         if script_name == "finetune_hydragnn_newhead":
             assert argv[argv.index("--ft-repo") + 1] == str(tmp_path / "fine tuning repo")
         else:
@@ -663,7 +654,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             config,
             HydraGNNConfig(
                 logdir=tmp_path,
-                checkpoint="incumbent-custom.pk",
+                checkpoint="incumbent.pk",
                 mlp_checkpoint=tmp_path / "mlp.pt",
             ),
             dataset,
@@ -698,7 +689,7 @@ def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
     restore_hydragnn_total_energy(FormationCalculator(), output)
     config = TrainerConfig(
         enabled=True,
-        train_script=tmp_path / "custom.py",
+        train_script=tmp_path / "finetune_hydragnn_newhead.py",
         validation_reference_set=manifest,
     )
 
@@ -731,7 +722,7 @@ def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
     different_manifest = elemental_manifest({"Nb": -9, "O": -5})
     config = TrainerConfig(
         enabled=True,
-        train_script=tmp_path / "custom.py",
+        train_script=tmp_path / "finetune_hydragnn_newhead.py",
         validation_reference_set=different_manifest,
     )
     monkeypatch.setattr(
@@ -844,3 +835,17 @@ def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_i
     branch_mlp.write_text("tampered-routing-mlp")
     with pytest.raises(ValueError, match="routing MLP differs from training artifact"):
         restore_hydragnn_total_energy(FormationCalculator(), model)
+
+
+def test_retrain_rejects_non_builtin_train_script(tmp_path, training_inputs):
+    dataset, _ = training_inputs
+    script = tmp_path / "train.py"
+    script.touch()
+    with pytest.raises(ValueError, match="built-in HydraGNN fine-tuners"):
+        retrain_hydragnn(
+            TrainerConfig(enabled=True, train_script=script),
+            HydraGNNConfig(logdir=tmp_path),
+            dataset_path=dataset,
+            iteration=0,
+            out_logdir=tmp_path / "out",
+        )

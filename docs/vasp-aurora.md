@@ -44,8 +44,8 @@ any existing working configuration. Set `MAKEFILE_INCLUDE` to use another recipe
 The helper resets the module environment and loads
 `oneapi/release/2026.1.0` and `intel_gpu_umd_aicoe`, rather than the Python
 frameworks module. Override these with `ONEAPI_MODULE` and `GPU_UMD_MODULE`.
-The module-provided `MKLROOT` takes precedence over the recipe's legacy fallback;
-the current toolchain supplies `/opt/aurora/26.181.0/oneapi/mkl/latest`.
+The module-provided `MKLROOT` takes precedence over the recipe's default,
+`/opt/aurora/26.181.0/oneapi/mkl/latest`, which matches the current toolchain.
 
 ## Build command
 

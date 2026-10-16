@@ -70,6 +70,6 @@ FFLAGS     += $(VASP_TARGET_CPU)
 
 # Intel MKL (FFTW, BLAS, LAPACK, and scaLAPACK)
 FCL        += -qmkl -fiopenmp -fopenmp-targets=spir64_gen -Xs "-device pvc" -fopenmp-device-code-split=per_kernel -fopenmp-max-parallel-link-jobs=8 -lze_loader
-MKLROOT    ?= /opt/aurora/26.26.0/oneapi/mkl/latest
+MKLROOT    ?= /opt/aurora/26.181.0/oneapi/mkl/latest
 LLIBS      += -L$(MKLROOT)/lib/intel64 -lmkl_scalapack_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_sycl
 INCS        =-I$(MKLROOT)/include -I$(MKLROOT)/include/fftw
