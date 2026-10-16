@@ -46,7 +46,7 @@
 # local .model path. MACE_FAMILY (mace_mp|mace_off; default mace_mp) picks the
 # foundation family. MACE_LORA (0|1|both; default 0) adds the native LoRA
 # fine-tune variant (both = naive + LoRA per size). Extra MACE knobs
-# (MACE_PRECISION, MACE_EPOCHS, MACE_LR, MACE_FORCE_WEIGHT, MACE_WEIGHT_DECAY,
+# (MACE_PRECISION, MACE_EPOCHS, MACE_LR, MACE_WEIGHT_DECAY,
 # MACE_FREEZE_BACKBONE, MACE_DISPERSION, MACE_LORA_RANK, MACE_LORA_ALPHA) are
 # forwarded when set.
 #
@@ -178,7 +178,6 @@ for backend in "${BACKEND_LIST[@]}"; do
           [[ -n "${MACE_PRECISION:-}" ]]      && exports+=",MACE_PRECISION=${MACE_PRECISION}"
           [[ -n "${MACE_EPOCHS:-}" ]]         && exports+=",MACE_EPOCHS=${MACE_EPOCHS}"
           [[ -n "${MACE_LR:-}" ]]             && exports+=",MACE_LR=${MACE_LR}"
-          [[ -n "${MACE_FORCE_WEIGHT:-}" ]]   && exports+=",MACE_FORCE_WEIGHT=${MACE_FORCE_WEIGHT}"
           [[ -n "${MACE_WEIGHT_DECAY:-}" ]]   && exports+=",MACE_WEIGHT_DECAY=${MACE_WEIGHT_DECAY}"
           [[ -n "${MACE_FREEZE_BACKBONE:-}" ]] && exports+=",MACE_FREEZE_BACKBONE=${MACE_FREEZE_BACKBONE}"
           [[ -n "${MACE_DISPERSION:-}" ]]     && exports+=",MACE_DISPERSION=${MACE_DISPERSION}"

@@ -411,10 +411,6 @@ def finetune_uma(
     lora: bool = False,
     lora_r: int = 8,
     lora_alpha: float = 16.0,
-    # Accepted for backward compatibility with the previous fairchem-config
-    # based implementation; ignored by the custom training loop.
-    ranks_per_node: int = 1,
-    **_legacy,
 ) -> Path:
     """Fine-tune ``base_model`` on ``dataset_path`` and return the checkpoint path.
 

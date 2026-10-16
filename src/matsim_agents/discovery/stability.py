@@ -49,8 +49,8 @@ class PhaseStability(BaseModel):
         ...,
         description="True if max residual force is below `force_tol_eV_per_A`.",
     )
-    # Seed-provenance fields (populated from the matching PhaseCandidate when
-    # provided; ``source`` defaults to "prototype" for legacy callers).
+    # Seed-provenance fields, populated from the matching PhaseCandidate when one
+    # is provided; ``source`` defaults to "prototype" otherwise.
     source: str = "prototype"
     prototype_id: str | None = None
     space_group: int | None = None

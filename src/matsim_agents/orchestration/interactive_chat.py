@@ -463,7 +463,7 @@ def _debate_hypothesis_response(
     rounds = max(1, int(cfg.debate_rounds))
     current = draft_response
 
-    # Backward-compatible critic selection:
+    # Critic selection:
     # - panel mode: critic_panel_models (optionally paired with providers/base URLs)
     # - single critic mode: critic_llm_* fields
     # - fallback: same model as primary

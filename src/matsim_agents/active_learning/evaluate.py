@@ -207,7 +207,6 @@ def evaluate_frames(
     iteration: int | None = None,
     model_path: str | None = None,
     test_set_label: str = "",
-    ref_frames: list[Atoms] | None = None,
     elemental_reference_manifest: Path | None = None,
 ) -> tuple[EvalMetrics, dict[str, np.ndarray]]:
     """Run single-points with ``mlip_cfg`` and score them against references.
@@ -221,15 +220,9 @@ def evaluate_frames(
     own elemental baselines. No offsets are fitted to training or test data.
     When ``test_set_label`` identifies a file, its method sidecar is required
     for energy comparisons; in-memory callers must establish DFT compatibility.
-    ``ref_frames`` is retained only to reject obsolete fitted-offset callers.
     """
     from matsim_agents.backends.mlip.calculator import make_mlip_calculator
 
-    if ref_frames is not None:
-        raise ValueError(
-            "ref_frames energy-offset fitting is unsupported; "
-            "provide an elemental reference manifest"
-        )
     has_energy_labels = any(_reference_energy(frame) is not None for frame in frames)
     if has_energy_labels and elemental_reference_manifest is None:
         raise ValueError("energy evaluation requires a DFT-labelled elemental reference manifest")

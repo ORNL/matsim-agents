@@ -494,7 +494,6 @@ def run_finetune_endpoints(
     mace_dispersion: bool = False,
     mace_epochs: int | None = None,
     mace_lr: float | None = None,
-    mace_force_weight: float = 10.0,
     mace_weight_decay: float = 0.0,
     mace_freeze_backbone: bool = False,
     mace_lora: bool = False,
@@ -604,7 +603,6 @@ def run_finetune_endpoints(
                 "lora": mace_lora,
                 "lora_rank": mace_lora_rank,
                 "lora_alpha": mace_lora_alpha,
-                "force_weight": mace_force_weight,
                 "freeze_backbone": mace_freeze_backbone,
                 "weight_decay": mace_weight_decay,
                 "seed": seed,
@@ -752,12 +750,6 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="MACE fine-tune LR (default: 5e-3 for LoRA, 1e-3 for naive).",
     )
-    parser.add_argument(
-        "--mace-force-weight",
-        type=float,
-        default=10.0,
-        help="Recorded for parity; mace_run_train uses its own energy/force weighting.",
-    )
     parser.add_argument("--mace-freeze-backbone", action="store_true")
     parser.add_argument("--mace-weight-decay", type=float, default=0.0)
     parser.add_argument(
@@ -841,7 +833,6 @@ def main(argv: list[str] | None = None) -> int:
         mace_dispersion=args.mace_dispersion,
         mace_epochs=args.mace_epochs,
         mace_lr=args.mace_lr,
-        mace_force_weight=args.mace_force_weight,
         mace_freeze_backbone=args.mace_freeze_backbone,
         mace_weight_decay=args.mace_weight_decay,
         mace_lora=args.mace_lora,

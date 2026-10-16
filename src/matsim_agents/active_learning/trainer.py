@@ -70,10 +70,6 @@ def dft_results_to_frames(results: Iterable[DFTResult], iteration: int) -> list[
     return frames
 
 
-# Back-compat alias for the previous VASP-only public name.
-vasp_results_to_frames = dft_results_to_frames
-
-
 def append_frames_to_extxyz(frames: list[LabelledFrame], path: str | Path) -> int:
     """Append frames while enforcing one DFT energy reference per dataset."""
     path = Path(path)

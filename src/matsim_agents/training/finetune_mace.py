@@ -360,13 +360,9 @@ def finetune_mace(
     seed: int = 0,
     device: str | None = None,
     run: bool = True,
-    # Accepted for parity with the other fine-tune entry points. mace_run_train
-    # uses its own energy/force weighting and (for LoRA) parameter-efficient
-    # freezing, so these are recorded but not passed through.
-    force_weight: float = 10.0,
+    # mace_run_train handles parameter-efficient freezing through LoRA; a plain
+    # freeze_backbone request is rejected with a warning below.
     freeze_backbone: bool = False,
-    ranks_per_node: int = 1,
-    **_legacy,
 ) -> Path:
     """Fine-tune a MACE foundation model and return the checkpoint path.
 
