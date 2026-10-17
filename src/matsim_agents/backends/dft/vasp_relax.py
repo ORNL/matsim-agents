@@ -9,7 +9,7 @@ for the trajectory and final energetics.
 This module is the natural pairing for :mod:`qe_relax` when the user wants a
 DFT relaxation outside of the active-learning loop. The AL loop itself only
 ever does single-point SCF labelling and uses
-:mod:`active_learning.backends.vasp` directly — that pathway is unchanged.
+:mod:`backends.dft.vasp` directly — that pathway is unchanged.
 
 Element-aware defaults:
     * ``ENCUT`` is set to ``1.3 × max(ENMAX over POTCARs)`` if a ``potcar_dir``
@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any
 
 # Reuse the writers we already maintain for the AL backend.
-from matsim_agents.active_learning.vasp_io import (
+from matsim_agents.backends.dft.vasp_io import (
     concat_potcar,
     write_kpoints_auto,
     write_poscar,
@@ -117,7 +117,6 @@ def _max_enmax_from_potcar_dir(symbols: list[str], potcar_dir: str | Path) -> fl
         for cand in (
             potcar_dir / sym / "POTCAR",
             potcar_dir / sym,
-            potcar_dir / f"POTCAR.{sym}",
         ):
             if cand.is_file():
                 try:

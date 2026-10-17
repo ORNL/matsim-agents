@@ -4,7 +4,7 @@
 #
 # Inner-step launcher for ONE VASP single-point on NERSC Perlmutter
 # (NVIDIA A100, sm_80).  Called by the active-learning Python driver
-# (matsim_agents.active_learning.backends.vasp) via:
+# (matsim_agents.backends.dft.vasp) via:
 #
 #   bash _vasp-step-perlmutter.sh <work_dir> <vasp_bin> <nodes> <ranks_per_node> <threads_per_rank>
 #

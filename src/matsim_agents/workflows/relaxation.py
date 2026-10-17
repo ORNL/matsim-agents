@@ -14,8 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
-from matsim_agents.backends.mlip.relaxation import _run as run_mlip
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
+from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.execution.contracts import (
     ApprovalPolicy,
     EvidenceLevel,
@@ -24,7 +24,6 @@ from matsim_agents.execution.contracts import (
     WorkflowStatus,
 )
 from matsim_agents.execution.run_directory import ScientificRunDirectory
-from matsim_agents.orchestration.state import RelaxationResult
 
 
 class RelaxationMode(StrEnum):
@@ -257,7 +256,7 @@ def _dft_stage(
 def run_relaxation(
     cfg: ScientificRelaxationConfig,
     *,
-    mlip_runner: Callable[[RelaxStructureInput], RelaxationResult] = run_mlip,
+    mlip_runner: Callable[[RelaxStructureInput], RelaxationResult] = relax_with_mlip,
 ) -> ScientificRelaxationResult:
     """Execute a composable relaxation and always persist a terminal result."""
 

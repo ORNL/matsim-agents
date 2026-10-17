@@ -6,8 +6,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from matsim_agents.graph import uq_gate_node
-from matsim_agents.state import MatSimState, RelaxationResult
+from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.orchestration.objective_graph import uq_gate_node
+from matsim_agents.orchestration.state import MatSimState
 
 
 def _result(base_path: str, top_weight: float | None) -> RelaxationResult:

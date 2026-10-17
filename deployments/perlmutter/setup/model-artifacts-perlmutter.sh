@@ -16,15 +16,10 @@ configure_uma_model_artifacts() {
 }
 
 configure_mace_model_artifacts() {
-  local repo="$1" proj durable_root legacy_root
+  local repo="$1" proj durable_root
   proj="$(dirname "${repo}")"
   durable_root="${MATSIM_MODEL_ARTIFACTS_ROOT:-${proj}/models/artifacts}"
-  legacy_root="${proj}/models/mace_cache"
   MACE_ARTIFACT_DIR="${MACE_ARTIFACT_DIR:-${durable_root}/mace}"
-  if [[ ! -d "${MACE_ARTIFACT_DIR}/mace" && -d "${legacy_root}/mace" ]]; then
-    mkdir -p "$(dirname "${MACE_ARTIFACT_DIR}")"
-    mv "${legacy_root}" "${MACE_ARTIFACT_DIR}"
-  fi
   XDG_CACHE_HOME="${MACE_ARTIFACT_DIR}"
   MACE_CACHE="${MACE_ARTIFACT_DIR}/mace"
   mkdir -p "${MACE_CACHE}"

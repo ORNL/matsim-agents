@@ -5,14 +5,18 @@ individual experiments or machines.
 
 | Package | Responsibility |
 | --- | --- |
-| `orchestration` | Typed workflow state, objective/composition graphs, and explicit policies |
+| `orchestration` | Typed workflow state, objective/composition graphs, the interactive discovery chat, and explicit policies |
+| `orchestration.agents` | Planner, executor, and analyst nodes wired by the objective graph |
 | `discovery` | Composition parsing, structure generation, and stability analysis |
 | `active_learning` | Candidate acquisition, uncertainty evaluation, labeling, and adaptation loops |
+| `training` | Standalone UMA, MACE, and HydraGNN fine-tuning programs and their cost tracking |
+| `campaign` | Multi-formula campaign planning, per-formula execution, registry, and review |
 | `backends.llm` | Configuration-selected language-model providers |
-| `backends.mlip` | MLIP calculators, relaxation, and exploration interfaces |
-| `backends.dft` | Quantum ESPRESSO and VASP interfaces |
+| `backends.mlip` | MLIP configuration, calculator factories, HydraGNN checkpoint/energy loading, MC dropout, and relaxation |
+| `backends.dft` | DFT job contracts, configuration, concurrent dispatch, and Quantum ESPRESSO/VASP interfaces |
 | `execution` | Scheduler-neutral resources, launch contracts, and provenance |
-| `workflows` | Composable relaxation, phase-exploration, and investigation policies/results |
+| `datasets` | Dependency-free dataset governance, elemental reference manifests, and formation-energy dataset preparation |
+| `workflows` | Composable relaxation, phase-exploration, investigation, and MLIP→DFT warm-start benchmark workflows |
 
 The workflow layer uses `execution.contracts` for evidence, validation,
 approval, compute-budget, provenance, status, and result envelopes. Scientific
@@ -20,6 +24,25 @@ run directories are owned by `execution.run_directory`; scheduler allocation
 discovery and disjoint DFT node grouping are owned by `execution.allocation`.
 See [Scientific workflow contracts](scientific-workflows.md) for behavior and
 [Run artifacts and restarts](run-artifacts-and-restarts.md) for persistence.
+
+## Import layers
+
+Packages are layered; a package may import only from strictly lower layers.
+Packages on the same layer are independent of each other. The order is
+enforced by `tests/test_package_boundaries.py`.
+
+| Layer | Packages |
+| --- | --- |
+| 6 | `cli` |
+| 5 | `orchestration`, `campaign` |
+| 4 | `active_learning`, `workflows` |
+| 3 | `discovery`, `training` |
+| 2 | `backends.llm`, `backends.dft`, `backends.mlip` |
+| 1 | `execution`, `datasets` |
+
+When new code needs something from a higher layer, move the shared piece down
+(usually into `datasets`, `execution`, or the relevant `backends` package)
+instead of adding an upward import.
 
 ## Orchestration topology
 
@@ -93,8 +116,10 @@ replacement backend interfaces.
 
 ## Compatibility policy
 
-The first migration release retains aliases at the former import paths (for
-example, `matsim_agents.graph`, `matsim_agents.state`, and
-`matsim_agents.tools.relaxation`).  New code should import from the canonical
-packages.  The aliases can be deprecated in a later release after downstream
-users have migrated.
+Each module has exactly one import path. The former aliases
+(`matsim_agents.graph`, `matsim_agents.state`, `matsim_agents.llm`,
+`matsim_agents.supervisor`, the `matsim_agents.tools` package, the top-level
+`matsim_agents.agents` package (now `matsim_agents.orchestration.agents`),
+`matsim_agents.chat` (now `matsim_agents.orchestration.interactive_chat`),
+and `matsim_agents.active_learning.backends`) have been removed; import from the
+canonical packages listed above.

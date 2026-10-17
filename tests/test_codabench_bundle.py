@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-from matsim_agents.active_learning.finetune_mace import MACE_MODELS
+from matsim_agents.training.finetune_mace import MACE_MODELS
 
 ROOT = Path(__file__).resolve().parents[1]
 CODEBENCH = ROOT / "benchmarks" / "codabench"
@@ -92,7 +92,7 @@ def test_baselines_load_as_distinct_modules() -> None:
 
 def test_codabench_mace_catalog_matches_workflow() -> None:
     runner = _load("codabench_mace_catalog", CODEBENCH / "run_baselines.py")
-    from matsim_agents.active_learning.finetune_mace import MACE_MODELS
+    from matsim_agents.training.finetune_mace import MACE_MODELS
 
     expected = {name: (entry["family"], entry["model"]) for name, entry in MACE_MODELS.items()}
     assert expected == runner.MACE_MODELS
@@ -100,7 +100,6 @@ def test_codabench_mace_catalog_matches_workflow() -> None:
     common = {
         "mace_family": None,
         "mace_model": None,
-        "legacy_mace_size": None,
     }
     materials = runner.selected_mace_models(Namespace(**common, mace_variant="materials"))
     all_models = runner.selected_mace_models(Namespace(**common, mace_variant="all"))
@@ -121,7 +120,6 @@ def test_codabench_mace_variants_select_load_and_predict(monkeypatch, variant) -
             mace_variant=variant,
             mace_family=None,
             mace_model=None,
-            legacy_mace_size=None,
         )
     )
     assert selections == [(variant, family, model)]

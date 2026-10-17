@@ -334,7 +334,6 @@ Use this table to choose the right entry point quickly.
 | Automated discovery -> UQ policy -> optional AL handoff | `matsim-agents supervisor-run` | composition, `--logdir`, `--hydragnn-branch-mlp-checkpoint`, optional `--al-config` | supervisor summary + optional AL handoff + JSONL audit records |
 | Standalone active-learning loop (MD -> UQ -> DFT -> retrain/frozen) | `matsim-agents al run <config.yaml>` | AL YAML config (`mlip`, `md`, `acquisition`, `dft`, `trainer`, `loop`) + optional `MLIP_BACKEND=uma` | iteration state dirs, dataset, optional retrained model logdirs |
 | Config-only validation (no execution) | `matsim-agents al validate-config <config.yaml>` | AL YAML config + env vars used in `${VAR}` placeholders | resolved/validated JSON config dump |
-| Paper-case feasibility check without iterative AL | `python examples/paper_cases/singlepass.py --case <name>` | case name, `MLIP_LOGDIR`, optional `--dft` | per-case relaxed/ranked structures, optional DFT single-point validation |
 
 Notes:
 
@@ -419,9 +418,6 @@ matsim-agents al run examples/active_learning/al_config.example.yaml
 
 # 4b) Same AL config, UMA surrogate instead of HydraGNN
 MLIP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example.yaml
-
-# 5) Paper-case single pass
-python examples/paper_cases/singlepass.py --case lifepo4
 ```
 
 ---
@@ -1098,9 +1094,9 @@ downstream scorers can filter or weight them.
 ### Single relaxation
 
 ```python
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, _run
+from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 
-result = _run(RelaxStructureInput(
+result = relax_with_mlip(RelaxStructureInput(
     structure_path="structures/mos2.vasp",
     logdir="./multidataset_hpo-BEST6-fp64",
   hydragnn_branch_mlp_checkpoint="./mlp_branch_weights.pt",
@@ -1171,7 +1167,7 @@ print(final["analysis"])
 ### Run the supervisor LangGraph workflow
 
 ```python
-from matsim_agents.supervisor import SupervisorConfig, run_supervisor
+from matsim_agents.orchestration.composition_graph import SupervisorConfig, run_supervisor
 
 final = run_supervisor(SupervisorConfig(
   composition="Li2MnO3",
@@ -1188,7 +1184,7 @@ print(final.get("summary"))
 ### Embed the chat loop in your own app
 
 ```python
-from matsim_agents.chat import DiscoveryChatConfig, DiscoveryChatSession, chat_once
+from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, DiscoveryChatSession, chat_once
 
 session = DiscoveryChatSession(config=DiscoveryChatConfig(
     logdir="./multidataset_hpo-BEST6-fp64",
@@ -1596,8 +1592,6 @@ benchmarks/codabench/
 ├── requirements.txt             # backend-neutral competition dependencies
 ├── requirements-mace.txt        # MACE process dependencies (e3nn 0.4.4)
 ├── requirements-fairchem.txt    # UMA/AllScAIP process dependencies
-├── install_mace_aurora.sh       # MACE-MP-0 install helper for Aurora (XPU)
-├── fix_h5py_system_conflict_aurora.sh  # h5py/HDF5 conflict workaround (Aurora)
 ├── baselines/
 │   ├── mace_mp0/model.py        # MACE-MP-0 baseline
 │   ├── hydragnn/model.py        # HydraGNN baseline
@@ -1694,7 +1688,7 @@ options of the upstream HydraGNN ASE script
 For cases where the user wants a *real* DFT relaxation rather than the
 cheap HydraGNN one (e.g. validating a discovered structure, refining a
 final candidate), two drivers ship under `src/matsim_agents/backends/dft/`
-with matching APIs (also importable via the `matsim_agents.tools` compat aliases):
+with matching APIs:
 
 | Module | Backend | Calculation modes | Composition-aware defaults |
 |---|---|---|---|
@@ -1725,7 +1719,7 @@ trajectory + walltime + convergence flag from the native output files
 
 > **Note:** the active-learning loop itself never calls these relaxers —
 > AL labelling always uses the SCF-only backends under
-> [`src/matsim_agents/active_learning/backends/`](src/matsim_agents/active_learning/backends/).
+> [`src/matsim_agents/backends/dft/`](src/matsim_agents/backends/dft/).
 > A relaxation per AL candidate would defeat the point of uncertainty-driven
 > sampling. The standalone relaxers are intended for one-off DFT validation
 > work outside the AL pipeline.
@@ -1738,8 +1732,8 @@ that the integration tests consume:
 
 | Module | Backend | CLI |
 |---|---|---|
-| [`warmstart_benchmark_qe.py`](src/matsim_agents/tools/warmstart_benchmark_qe.py)     | Quantum ESPRESSO `pw.x` | `python -m matsim_agents.tools.warmstart_benchmark_qe …`   |
-| [`warmstart_benchmark_vasp.py`](src/matsim_agents/tools/warmstart_benchmark_vasp.py) | VASP `vasp_std`         | `python -m matsim_agents.tools.warmstart_benchmark_vasp …` |
+| [`warmstart_benchmark_qe.py`](src/matsim_agents/workflows/warmstart_benchmark_qe.py)     | Quantum ESPRESSO `pw.x` | `python -m matsim_agents.workflows.warmstart_benchmark_qe …`   |
+| [`warmstart_benchmark_vasp.py`](src/matsim_agents/workflows/warmstart_benchmark_vasp.py) | VASP `vasp_std`         | `python -m matsim_agents.workflows.warmstart_benchmark_vasp …` |
 
 Each driver runs (1) HydraGNN ASE relaxation, (2) DFT relaxation from the
 *original* coordinates (cold), (3) DFT relaxation from the

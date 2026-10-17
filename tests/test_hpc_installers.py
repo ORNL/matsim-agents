@@ -471,7 +471,7 @@ def test_aurora_fused_residency_requires_xpu_gnn_and_mlp(monkeypatch):
 
     import pytest
 
-    import matsim_agents.active_learning.calculator as calculator
+    import matsim_agents.backends.mlip.calculator as calculator
 
     helper = ROOT / "deployments/aurora/jobs/qualify_mlip_xpu.py"
     spec = importlib.util.spec_from_file_location("qualify_mlip_xpu", helper)
@@ -588,8 +588,8 @@ def test_deployment_scripts_do_not_reference_hydragnn_owned_environment() -> Non
     assert "installation_DOE_supercomputers" not in generic
     assert "hydragnn_installation_bash_script" not in generic
     assert "deployments/${FACILITY}/setup/install.sh" in generic
-    assert "frontier|frontier-rocm71|frontier-rocm64)" in generic
-    assert "perlmutter|aurora)" in generic
+    assert "frontier|perlmutter|aurora)" in generic
+    assert "frontier-rocm" not in generic
 
 
 def test_aurora_fairchem_wheel_changes_only_torch_dependency(tmp_path):

@@ -1,29 +1,182 @@
-"""Regression tests for the package-boundary migration.
+"""Regression tests for the package layout.
 
-Each test asserts one structural property of the new package layout:
-  - Legacy module aliases point to the canonical implementation.
+Each test asserts one structural property of the package layout:
+  - Imports only point to lower layers (see ``LAYERS`` and docs/architecture.md).
   - Each of the five stable interfaces is importable from its declared location.
   - Concrete implementations satisfy their Protocol at runtime.
+  - Removed legacy import paths stay removed.
 """
 
 from __future__ import annotations
 
-import matsim_agents.graph as legacy_graph
-import matsim_agents.llm as legacy_llm
-import matsim_agents.state as legacy_state
-from matsim_agents.backends.llm import provider
-from matsim_agents.orchestration import objective_graph, state
+import ast
+import importlib
+from pathlib import Path
 
-# ── Legacy alias tests ────────────────────────────────────────────────────── #
+import pytest
+
+# ── Layering ──────────────────────────────────────────────────────────────── #
+
+PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "matsim_agents"
+
+# Lowest layer first. A unit may import only from units in strictly lower
+# layers (or from itself); units in the same layer must not import each other.
+LAYERS: list[set[str]] = [
+    {"execution", "datasets"},
+    {"backends.llm", "backends.dft", "backends.mlip"},
+    {"discovery", "training"},
+    {"active_learning", "workflows"},
+    {"orchestration", "campaign"},
+    {"cli"},
+]
+LAYER_OF = {unit: index for index, units in enumerate(LAYERS) for unit in units}
 
 
-def test_legacy_orchestration_modules_alias_canonical_modules() -> None:
-    assert legacy_graph is objective_graph
-    assert legacy_state is state
+def _unit(module: str) -> str | None:
+    parts = module.split(".")[1:]
+    if not parts:
+        return None
+    if parts[0] == "backends":
+        return ".".join(parts[:2]) if len(parts) > 1 else "backends"
+    return parts[0]
 
 
-def test_legacy_llm_module_aliases_canonical_provider() -> None:
-    assert legacy_llm is provider
+def _imported_modules(module: str, is_package: bool, node: ast.AST) -> list[str]:
+    """Absolute dotted names a statement may import, resolving relative and package forms.
+
+    ``from pkg import name`` may import the submodule ``pkg.name``, so each
+    imported name is reported as ``pkg.name`` in addition to ``pkg`` itself.
+    """
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    if not isinstance(node, ast.ImportFrom):
+        return []
+    if node.level:
+        package = module if is_package else module.rpartition(".")[0]
+        for _ in range(node.level - 1):
+            package = package.rpartition(".")[0]
+        base = f"{package}.{node.module}" if node.module else package
+    else:
+        base = node.module or ""
+    return [base, *(f"{base}.{alias.name}" for alias in node.names if alias.name != "*")]
+
+
+def _import_target_units(module: str, is_package: bool, node: ast.AST) -> set[str | None]:
+    """Layer units reached by one import statement (``None`` is the package root)."""
+    names = [
+        name
+        for name in _imported_modules(module, is_package, node)
+        if name == "matsim_agents" or name.startswith("matsim_agents.")
+    ]
+    if not names:
+        return set()
+    base_unit = _unit(names[0])
+    if base_unit is not None and base_unit != "backends":
+        return {base_unit}
+    # ``from matsim_agents import x`` and ``from matsim_agents.backends import x``
+    # reach the unit named by ``x``; the containers themselves are not units.
+    reached = {_unit(name) for name in names[1:]}
+    return reached or {base_unit}
+
+
+def _source_violations(module: str, source_text: str, *, is_package: bool, label: str) -> list[str]:
+    source = _unit(module)
+    if source not in LAYER_OF:
+        return []
+    violations = []
+    for node in ast.walk(ast.parse(source_text)):
+        for dest in _import_target_units(module, is_package, node):
+            if dest == source:
+                continue
+            if dest not in LAYER_OF or LAYER_OF[dest] >= LAYER_OF[source]:
+                violations.append(f"{label}:{node.lineno}: {source} -> {dest or 'matsim_agents'}")
+    return violations
+
+
+def _layer_violations() -> list[str]:
+    violations = []
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        rel = path.relative_to(PACKAGE_ROOT.parent)
+        module = ".".join(rel.with_suffix("").parts).removesuffix(".__init__")
+        violations += _source_violations(
+            module, path.read_text(), is_package=path.name == "__init__.py", label=str(rel)
+        )
+    return violations
+
+
+@pytest.mark.parametrize(
+    ("module", "is_package", "code"),
+    [
+        ("matsim_agents.datasets.governance", False, "from ..orchestration.state import X"),
+        ("matsim_agents.datasets.governance", False, "from .. import orchestration"),
+        ("matsim_agents.datasets", True, "from ..campaign import state"),
+        ("matsim_agents.datasets.governance", False, "from matsim_agents import orchestration"),
+        ("matsim_agents.datasets.governance", False, "from matsim_agents import execution, cli"),
+        ("matsim_agents.datasets.governance", False, "from matsim_agents import MatSimState"),
+        ("matsim_agents.backends.dft.base", False, "from matsim_agents.backends import mlip"),
+        ("matsim_agents.backends.dft.base", False, "from ..mlip import config"),
+        ("matsim_agents.discovery.seeds", False, "from ..training import cost"),
+        ("matsim_agents.discovery.seeds", False, "import matsim_agents.orchestration.state"),
+    ],
+)
+def test_layer_guard_rejects_upward_relative_and_package_imports(module, is_package, code) -> None:
+    assert _source_violations(module, code, is_package=is_package, label="snippet")
+
+
+@pytest.mark.parametrize(
+    ("module", "is_package", "code"),
+    [
+        ("matsim_agents.datasets.formation_training", False, "from .governance import x"),
+        ("matsim_agents.datasets.formation_training", False, "from . import governance"),
+        ("matsim_agents.datasets", True, "from .governance import sha256_file"),
+        ("matsim_agents.discovery.seeds", False, "from ..backends.mlip import config"),
+        ("matsim_agents.discovery.seeds", False, "from matsim_agents.backends import llm, mlip"),
+        ("matsim_agents.discovery.seeds", False, "from matsim_agents import datasets"),
+        ("matsim_agents.campaign.state", False, "from ..active_learning.config import ALConfig"),
+        ("matsim_agents.backends.mlip.config", False, "from . import results"),
+    ],
+)
+def test_layer_guard_allows_same_unit_and_downward_imports(module, is_package, code) -> None:
+    assert _source_violations(module, code, is_package=is_package, label="snippet") == []
+
+
+def test_every_package_is_assigned_a_layer() -> None:
+    units = {
+        _unit(
+            "matsim_agents."
+            + ".".join(p.relative_to(PACKAGE_ROOT).with_suffix("").parts).removesuffix(".__init__")
+        )
+        for p in PACKAGE_ROOT.rglob("*.py")
+        if p.parent != PACKAGE_ROOT
+    }
+    units |= {p.stem for p in PACKAGE_ROOT.glob("*.py") if p.stem != "__init__"}
+    assert units - set(LAYER_OF) - {"backends"} == set()
+
+
+def test_imports_only_point_to_lower_layers() -> None:
+    assert _layer_violations() == []
+
+
+# ── Removed legacy paths ──────────────────────────────────────────────────── #
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
+        "matsim_agents.graph",
+        "matsim_agents.llm",
+        "matsim_agents.state",
+        "matsim_agents.supervisor",
+        "matsim_agents.tools",
+        "matsim_agents.agents",
+        "matsim_agents.chat",
+        "matsim_agents.active_learning.backends",
+        "matsim_agents.active_learning.vasp_runner",
+    ],
+)
+def test_legacy_alias_modules_are_removed(module: str) -> None:
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module(module)
 
 
 # ── Interface 1: DFT backend ──────────────────────────────────────────────── #

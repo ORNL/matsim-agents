@@ -40,13 +40,14 @@ import numpy as np
 from ase import Atoms
 from ase.io import read as ase_read
 
-from matsim_agents.active_learning.config import ALConfig, MLIPConfig, TrainerConfig
-from matsim_agents.active_learning.dataset_governance import structure_identity
-from matsim_agents.discovery.energy_references import (
+from matsim_agents.active_learning.config import ALConfig, TrainerConfig
+from matsim_agents.backends.mlip.config import MLIPConfig
+from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     predict_elemental_references,
     validate_dataset_reference_method,
 )
+from matsim_agents.datasets.governance import structure_identity
 
 log = logging.getLogger(__name__)
 
@@ -101,9 +102,6 @@ class EvalMetrics:
     # Energy (per atom) — the standard size-intensive metric.
     energy_mae_eV_per_atom: float
     energy_rmse_eV_per_atom: float
-    # Deprecated output aliases for formation-energy errors; no fitted shifts.
-    energy_mae_eV_per_atom_shifted: float
-    energy_rmse_eV_per_atom_shifted: float
     energy_mean_offset_eV_per_atom: float
 
     # Forces (per component, offset-invariant — the robust headline metric).
@@ -209,7 +207,6 @@ def evaluate_frames(
     iteration: int | None = None,
     model_path: str | None = None,
     test_set_label: str = "",
-    ref_frames: list[Atoms] | None = None,
     elemental_reference_manifest: Path | None = None,
 ) -> tuple[EvalMetrics, dict[str, np.ndarray]]:
     """Run single-points with ``mlip_cfg`` and score them against references.
@@ -223,15 +220,9 @@ def evaluate_frames(
     own elemental baselines. No offsets are fitted to training or test data.
     When ``test_set_label`` identifies a file, its method sidecar is required
     for energy comparisons; in-memory callers must establish DFT compatibility.
-    ``ref_frames`` is retained only to reject obsolete fitted-offset callers.
     """
-    from matsim_agents.active_learning.calculator import make_mlip_calculator
+    from matsim_agents.backends.mlip.calculator import make_mlip_calculator
 
-    if ref_frames is not None:
-        raise ValueError(
-            "ref_frames energy-offset fitting is unsupported; "
-            "provide an elemental reference manifest"
-        )
     has_energy_labels = any(_reference_energy(frame) is not None for frame in frames)
     if has_energy_labels and elemental_reference_manifest is None:
         raise ValueError("energy evaluation requires a DFT-labelled elemental reference manifest")
@@ -318,7 +309,7 @@ def evaluate_frames(
     offset_pa = float(np.mean(de_pa)) if de_pa.size else 0.0
     formation_ref_a = np.asarray(formation_ref)
     formation_pred_a = np.asarray(formation_pred)
-    de_pa_shifted = formation_pred_a - formation_ref_a
+    de_pa_formation = formation_pred_a - formation_ref_a
 
     if f_ref_all:
         f_ref_a = np.concatenate(f_ref_all)
@@ -352,14 +343,12 @@ def evaluate_frames(
         energy_rmse_eV=_rmse(de_tot),
         energy_mae_eV_per_atom=_mae(de_pa),
         energy_rmse_eV_per_atom=_rmse(de_pa),
-        energy_mae_eV_per_atom_shifted=_mae(de_pa_shifted),
-        energy_rmse_eV_per_atom_shifted=_rmse(de_pa_shifted),
         energy_mean_offset_eV_per_atom=offset_pa,
         force_mae_eV_per_A=force_mae,
         force_rmse_eV_per_A=force_rmse,
         failures=failures,
-        formation_energy_mae_eV_per_atom=_mae(de_pa_shifted),
-        formation_energy_rmse_eV_per_atom=_rmse(de_pa_shifted),
+        formation_energy_mae_eV_per_atom=_mae(de_pa_formation),
+        formation_energy_rmse_eV_per_atom=_rmse(de_pa_formation),
         elemental_reference_provenance=references.provenance if references is not None else {},
     )
     parity = {

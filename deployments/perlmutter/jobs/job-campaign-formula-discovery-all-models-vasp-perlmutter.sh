@@ -34,8 +34,7 @@ export MATSIM_CAMPAIGN_DFT_METHOD_SIGNATURE="${MATSIM_CAMPAIGN_DFT_METHOD_SIGNAT
 }
 for element in Nb Ta O; do
   [[ -f "$MATSIM_VASP_POTCAR_DIR/$element/POTCAR" ||
-     -f "$MATSIM_VASP_POTCAR_DIR/$element" ||
-     -f "$MATSIM_VASP_POTCAR_DIR/POTCAR.$element" ]] || {
+     -f "$MATSIM_VASP_POTCAR_DIR/$element" ]] || {
     echo "ERROR: missing $element POTCAR under $MATSIM_VASP_POTCAR_DIR" >&2
     exit 2
   }

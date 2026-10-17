@@ -8,8 +8,8 @@ import pytest
 def test_training_loss_uses_requested_autocast_and_preserves_force_gradients(routed, bf16):
     import torch
 
-    from matsim_agents.active_learning.finetune_hydragnn import _batch_loss
-    from matsim_agents.active_learning.finetune_hydragnn_newhead import _batch_loss_single_head
+    from matsim_agents.training.finetune_hydragnn import _batch_loss
+    from matsim_agents.training.finetune_hydragnn_newhead import _batch_loss_single_head
 
     model = torch.nn.Linear(3, 1)
     seen = []

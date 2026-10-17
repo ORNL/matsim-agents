@@ -289,10 +289,7 @@ def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> Non
     assert "--promotion-validation-set" in job
     assert "--promotion-max-energy-mae" in job
     assert "--promotion-max-force-mae" in job
-    assert (
-        "--promotion-max-relative-regression "
-        '"${MATSIM_CAMPAIGN_PROMOTION_MAX_RELATIVE_REGRESSION:-0}"' in job
-    )
+    assert "--promotion-max-relative-regression" not in job
     assert "MATSIM_CAMPAIGN_PROMOTION_MIN_RELATIVE_IMPROVEMENT:-0.05" in job
     assert "--promotion-min-relative-improvement" in job
     assert "promotion_min_relative_improvement=args.promotion_min_relative_improvement" in executor
@@ -434,3 +431,65 @@ def test_campaign_launcher_uses_new_names_without_legacy_branch():
     assert "MATSIM_CAMPAIGN_RUN_NAMING" not in job
     assert 'source "$REPO/deployments/perlmutter/setup/campaign-naming.sh"' in job
     assert '>"$OUTPUT/run_identity.txt"' in job.replace(" > ", ">")
+
+
+def _module_source(root: Path, module: str) -> Path | None:
+    base = root / "src" / Path(*module.split("."))
+    for candidate in (base.with_suffix(".py"), base / "__init__.py"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _top_level_names(path: Path) -> set[str]:
+    import ast
+
+    names: set[str] = set()
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            names.update((alias.asname or alias.name).split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.Assign):
+            names.update(t.id for t in node.targets if isinstance(t, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return names
+
+
+def test_shell_embedded_matsim_imports_resolve() -> None:
+    """Python embedded in launchers/scripts must use existing matsim_agents paths."""
+    import re
+
+    root = Path(__file__).resolve().parents[1]
+    tracked = subprocess.run(
+        ["git", "ls-files", "deployments", "scripts"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    from_re = re.compile(r"from\s+(matsim_agents(?:\.\w+)*)\s+import\s+(\([^)]*\)|[^\n#]+)")
+    module_re = re.compile(r"(?:-m|^\s*import)\s+(matsim_agents(?:\.\w+)+)", re.M)
+    problems = []
+    for name in tracked:
+        if not name.endswith(".sh"):
+            continue
+        text = (root / name).read_text(errors="ignore")
+        for match in module_re.finditer(text):
+            if _module_source(root, match.group(1)) is None:
+                problems.append(f"{name}: no module {match.group(1)}")
+        for match in from_re.finditer(text):
+            module = match.group(1)
+            source = _module_source(root, module)
+            if source is None:
+                problems.append(f"{name}: no module {module}")
+                continue
+            defined = _top_level_names(source)
+            for item in match.group(2).strip("()").replace("\n", ",").split(","):
+                symbol = item.split(" as ")[0].strip()
+                if not symbol or symbol == "*":
+                    continue
+                if symbol not in defined and _module_source(root, f"{module}.{symbol}") is None:
+                    problems.append(f"{name}: {module} has no {symbol}")
+    assert problems == []

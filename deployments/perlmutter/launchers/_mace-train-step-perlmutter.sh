@@ -80,4 +80,4 @@ echo "[mace-train-step] family=${FAMILY} model=${BASE_MODEL} epochs=${EPOCHS:-de
 echo "[mace-train-step] dataset=${DATASET}"
 echo "[mace-train-step] out=${OUT_DIR}"
 
-exec python -m matsim_agents.active_learning.finetune_mace "${ARGS[@]}"
+exec python -m matsim_agents.training.finetune_mace "${ARGS[@]}"

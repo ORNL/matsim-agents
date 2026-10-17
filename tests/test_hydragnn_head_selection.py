@@ -8,15 +8,15 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from typer.main import get_command
 
-from matsim_agents.active_learning.calculator import build_hydragnn_calculator
-from matsim_agents.active_learning.config import (
+from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
+from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
     HydraGNNConfig,
     resolve_hydragnn_inference_head,
 )
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
-from matsim_agents.chat import DiscoveryChatConfig
 from matsim_agents.cli import app
+from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig
 
 EXPECTED_HEADS = (
     "Alexandria",
@@ -74,7 +74,7 @@ def test_pinned_head_does_not_require_branch_weight_mlp(tmp_path):
 def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
     tmp_path, monkeypatch, declared
 ):
-    from matsim_agents.agents import executor
+    from matsim_agents.orchestration.agents import executor
     from matsim_agents.orchestration.state import MatSimState, TaskSpec
 
     logdir = tmp_path / "model"
@@ -94,7 +94,7 @@ def test_public_relaxation_inputs_accept_bundled_declared_checkpoint(
             num_steps=1,
         )
 
-    monkeypatch.setattr(executor, "_run", run)
+    monkeypatch.setattr(executor, "relax_with_mlip", run)
     state = MatSimState(pending_tasks=[TaskSpec(structure_path="structure.extxyz")])
     if declared:
         chat = DiscoveryChatConfig(logdir=str(logdir))
@@ -125,7 +125,7 @@ def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active
     from ase.calculators.calculator import Calculator, all_changes
     from ase.io import write
 
-    import matsim_agents.active_learning.calculator as factory
+    import matsim_agents.backends.mlip.calculator as factory
     import matsim_agents.backends.mlip.relaxation as relaxation
 
     class RoutedCalculator(Calculator):
@@ -144,7 +144,7 @@ def test_relaxation_uq_uses_active_routed_branches(tmp_path, monkeypatch, active
     structure = tmp_path / "structure.extxyz"
     write(structure, Atoms("Si", cell=[5, 5, 5], pbc=True))
     monkeypatch.setattr(factory, "build_hydragnn_calculator", lambda cfg: RoutedCalculator())
-    result = relaxation._run(
+    result = relaxation.relax_with_mlip(
         RelaxStructureInput(structure_path=str(structure), logdir=str(logdir), maxiter=1)
     )
     assert result.top_branch == 0
@@ -184,16 +184,16 @@ def test_unmarked_relaxation_rejects_fitted_offsets_before_loading(
 
     if metadata_name is None:
         with pytest.raises(RuntimeError, match="foundation loader reached"):
-            relaxation._run(request)
+            relaxation.relax_with_mlip(request)
         assert len(loaded) == 1
     else:
         with pytest.raises(ValueError, match="lacks verified energy convention"):
-            relaxation._run(request)
+            relaxation.relax_with_mlip(request)
         assert not loaded
 
 
 def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
-    import matsim_agents.active_learning.calculator as calculator
+    import matsim_agents.backends.mlip.calculator as calculator
 
     logdir = tmp_path / "model"
     logdir.mkdir()
@@ -226,7 +226,7 @@ def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
 
 
 def test_selected_head_calculator_exposes_model_for_mc_dropout(monkeypatch):
-    import matsim_agents.active_learning.calculator as calculator
+    import matsim_agents.backends.mlip.calculator as calculator
 
     torch = ModuleType("torch")
     torch.float32 = "float32"
@@ -254,7 +254,7 @@ def test_selected_head_calculator_preserves_precision_context(monkeypatch, preci
     import torch
     from ase import Atoms
 
-    import matsim_agents.active_learning.calculator as calculator
+    import matsim_agents.backends.mlip.calculator as calculator
     import matsim_agents.backends.mlip.relaxation as relaxation
 
     dtype = torch.float64 if precision == "fp64" else torch.float32
@@ -287,7 +287,7 @@ def test_selected_head_calculator_preserves_precision_context(monkeypatch, preci
         assert torch.is_autocast_enabled("cpu") == (precision == "bf16")
         return original_grad(*args, **kwargs)
 
-    monkeypatch.setattr(relaxation, "_atoms_to_graph", graph)
+    monkeypatch.setattr(relaxation, "atoms_to_graph", graph)
     monkeypatch.setattr(torch.autograd, "grad", grad)
     calc = calculator._build_selected_head_calculator(
         model,

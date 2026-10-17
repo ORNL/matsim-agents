@@ -1,7 +1,7 @@
-"""VASP backend: thin adapter around :mod:`active_learning.vasp_io`.
+"""VASP backend: thin adapter around :mod:`backends.dft.vasp_io`.
 
 The job orchestration logic (concurrency, ThreadPoolExecutor, timeouts) lives
-in :mod:`active_learning.dft_runner`. This module only knows how to run *one*
+in :mod:`backends.dft.runner`. This module only knows how to run *one*
 VASP single-point: prepare INCAR/KPOINTS/POTCAR/POSCAR, exec the wrapper
 script, parse vasprun.xml/OUTCAR.
 """
@@ -13,14 +13,14 @@ import subprocess
 import time
 from typing import TYPE_CHECKING
 
-from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
-from matsim_agents.active_learning.vasp_io import (
+from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
+from matsim_agents.backends.dft.vasp_io import (
     parse_vasp_workdir,
     prepare_vasp_workdir,
 )
 
 if TYPE_CHECKING:
-    from matsim_agents.active_learning.config import VASPConfig
+    from matsim_agents.backends.dft.config import VASPConfig
 
 
 class VASPBackend:
@@ -79,17 +79,17 @@ class VASPBackend:
                 rc = 124
         elapsed = time.time() - t0
 
-        legacy = parse_vasp_workdir(spec.work_dir, return_code=rc)
+        parsed = parse_vasp_workdir(spec.work_dir, return_code=rc)
         return DFTResult(
             backend=self.name,
-            work_dir=legacy.work_dir,
-            return_code=legacy.return_code,
-            converged=legacy.converged,
-            energy_eV=legacy.energy_eV,
-            forces_eV_per_A=legacy.forces_eV_per_A,
-            stress_eV_per_A3=legacy.stress_eV_per_A3,
-            n_atoms=legacy.n_atoms,
-            wall_time_sec=legacy.wall_time_sec if legacy.wall_time_sec is not None else elapsed,
-            final_atoms=legacy.final_atoms,
-            notes=legacy.notes,
+            work_dir=parsed.work_dir,
+            return_code=parsed.return_code,
+            converged=parsed.converged,
+            energy_eV=parsed.energy_eV,
+            forces_eV_per_A=parsed.forces_eV_per_A,
+            stress_eV_per_A3=parsed.stress_eV_per_A3,
+            n_atoms=parsed.n_atoms,
+            wall_time_sec=parsed.wall_time_sec if parsed.wall_time_sec is not None else elapsed,
+            final_atoms=parsed.final_atoms,
+            notes=parsed.notes,
         )

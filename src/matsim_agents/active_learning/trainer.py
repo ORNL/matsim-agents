@@ -24,14 +24,10 @@ from ase import Atoms
 from ase.io import read as ase_read
 from ase.io import write as ase_write
 
-from matsim_agents.active_learning.config import (
-    DFTConfig,
-    HydraGNNConfig,
-    MACEConfig,
-    TrainerConfig,
-    UMAConfig,
-)
-from matsim_agents.active_learning.dft_backend import DFTResult
+from matsim_agents.active_learning.config import TrainerConfig
+from matsim_agents.backends.dft.base import DFTResult
+from matsim_agents.backends.dft.config import DFTConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
 
 log = logging.getLogger(__name__)
 
@@ -72,10 +68,6 @@ def dft_results_to_frames(results: Iterable[DFTResult], iteration: int) -> list[
             )
         )
     return frames
-
-
-# Back-compat alias for the previous VASP-only public name.
-vasp_results_to_frames = dft_results_to_frames
 
 
 def append_frames_to_extxyz(frames: list[LabelledFrame], path: str | Path) -> int:
@@ -126,6 +118,9 @@ def append_frames_to_extxyz(frames: list[LabelledFrame], path: str | Path) -> in
 # --------------------------------------------------------------------------- #
 
 
+HYDRAGNN_FINETUNERS = frozenset({"finetune_hydragnn", "finetune_hydragnn_newhead"})
+
+
 def retrain_hydragnn(
     trainer_cfg: TrainerConfig,
     hydragnn_cfg: HydraGNNConfig,
@@ -148,19 +143,20 @@ def retrain_hydragnn(
         return Path(hydragnn_cfg.logdir)
 
     train_script = Path(str(trainer_cfg.train_script))
-    built_in = train_script.stem in {
-        "finetune_hydragnn",
-        "finetune_hydragnn_newhead",
-    }
+    script_name = train_script.stem
+    if script_name not in HYDRAGNN_FINETUNERS:
+        raise ValueError(
+            f"trainer.train_script must be one of the built-in HydraGNN fine-tuners "
+            f"({', '.join(sorted(HYDRAGNN_FINETUNERS))}); got {train_script}"
+        )
     if (
-        built_in
-        and trainer_cfg.train_launcher is not None
+        trainer_cfg.train_launcher is not None
         and trainer_cfg.nodes_for_train * trainer_cfg.ranks_per_node != 1
     ):
         raise ValueError("Built-in HydraGNN fine-tuners require exactly one process")
 
-    from matsim_agents.active_learning.dataset_governance import sha256_file
     from matsim_agents.active_learning.hydragnn_references import resolve_training_references
+    from matsim_agents.datasets.governance import sha256_file
 
     reference_manifest = resolve_training_references(
         trainer_cfg,
@@ -172,8 +168,7 @@ def retrain_hydragnn(
     out_logdir.mkdir(parents=True, exist_ok=True)
 
     # Launchers receive script, dataset, output, resume, epochs, nodes, ranks,
-    # references, checkpoint and branch MLP. Built-ins additionally receive
-    # ft_repo, charge and spin; custom launcher positional arguments stay unchanged.
+    # references, checkpoint, branch MLP, ft_repo, charge, spin and HydraGNN root.
     # Without a launcher, invoke the script directly with Python.
     if trainer_cfg.train_launcher is not None:
         argv = [
@@ -189,16 +184,11 @@ def retrain_hydragnn(
             str(reference_manifest),
             hydragnn_cfg.checkpoint or "",
             str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint or ""),
+            str(hydragnn_cfg.ft_repo or ""),
+            str(hydragnn_cfg.charge),
+            str(hydragnn_cfg.spin),
+            str(hydragnn_cfg.hydragnn_root or ""),
         ]
-        if built_in:
-            argv.extend(
-                [
-                    str(hydragnn_cfg.ft_repo or ""),
-                    str(hydragnn_cfg.charge),
-                    str(hydragnn_cfg.spin),
-                    str(hydragnn_cfg.hydragnn_root or ""),
-                ]
-            )
     else:
         log.warning(
             "trainer.train_launcher not set; running training in-process "
@@ -209,26 +199,24 @@ def retrain_hydragnn(
             str(train_script),
             "--dataset",
             str(dataset_path),
-            "--output-dir" if built_in else "--logdir",
+            "--output-dir",
             str(out_logdir),
-            "--gfm-logdir" if built_in else "--resume_from",
+            "--gfm-logdir",
             str(hydragnn_cfg.logdir),
             "--epochs",
             str(trainer_cfg.epochs_per_iter),
             "--elemental-reference-manifest",
             str(reference_manifest),
         ]
-        script_name = Path(str(trainer_cfg.train_script)).stem
         if script_name == "finetune_hydragnn":
             if hydragnn_cfg.hydragnn_branch_mlp_checkpoint is None:
                 raise ValueError("Routed HydraGNN training requires a branch MLP checkpoint")
             argv.extend(["--branch-mlp", str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint)])
-        if built_in and hydragnn_cfg.checkpoint is not None:
+        if hydragnn_cfg.checkpoint is not None:
             argv.extend(["--gfm-checkpoint", hydragnn_cfg.checkpoint])
-        if built_in:
-            argv.extend(["--charge", str(hydragnn_cfg.charge), "--spin", str(hydragnn_cfg.spin)])
-            if hydragnn_cfg.hydragnn_root is not None:
-                argv.extend(["--hydragnn-root", str(hydragnn_cfg.hydragnn_root)])
+        argv.extend(["--charge", str(hydragnn_cfg.charge), "--spin", str(hydragnn_cfg.spin)])
+        if hydragnn_cfg.hydragnn_root is not None:
+            argv.extend(["--hydragnn-root", str(hydragnn_cfg.hydragnn_root)])
         if script_name == "finetune_hydragnn_newhead" and hydragnn_cfg.ft_repo is not None:
             argv.extend(["--ft-repo", str(hydragnn_cfg.ft_repo)])
 
@@ -245,8 +233,8 @@ def retrain_hydragnn(
         raise RuntimeError(f"HydraGNN trainer produced no config.json; see {log_path}")
     from ase.calculators.calculator import Calculator
 
-    from matsim_agents.active_learning.calculator import build_hydragnn_calculator
-    from matsim_agents.active_learning.hydragnn_energy import restore_hydragnn_total_energy
+    from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
+    from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 
     restore_hydragnn_total_energy(Calculator(), out_logdir)
     metadata = json.loads((out_logdir / "energy-convention.json").read_text())
@@ -333,7 +321,7 @@ def retrain_uma(
     if proc.returncode != 0:
         raise RuntimeError(f"UMA fine-tune failed with exit {proc.returncode}; see {log_path}")
 
-    from matsim_agents.active_learning.calculator import _resolve_finetuned_uma_checkpoint
+    from matsim_agents.backends.mlip.calculator import _resolve_finetuned_uma_checkpoint
 
     checkpoint = _resolve_finetuned_uma_checkpoint(str(out_model_dir))
     if checkpoint is None:
@@ -396,7 +384,7 @@ def retrain_mace(
         argv = [
             sys.executable,
             "-m",
-            "matsim_agents.active_learning.finetune_mace",
+            "matsim_agents.training.finetune_mace",
             "--dataset",
             str(dataset_path),
             "--output-dir",

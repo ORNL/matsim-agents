@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from matsim_agents.active_learning.config import ALConfig, MLIPConfig
+from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.backends.mlip.config import MLIPConfig
 
 
 def _base_blocks(tmp_path) -> dict:
@@ -33,10 +34,12 @@ def _base_blocks(tmp_path) -> dict:
     }
 
 
-def test_legacy_hydragnn_block_is_promoted_to_mlp(tmp_path) -> None:
-    """A top-level ``hydragnn:`` block (old schema) must become mlp.backend=hydragnn."""
+def test_hydragnn_backend_parses(tmp_path) -> None:
     data = _base_blocks(tmp_path)
-    data["hydragnn"] = {"logdir": str(tmp_path / "logdir"), "checkpoint": "best_model.pt"}
+    data["mlip"] = {
+        "backend": "hydragnn",
+        "hydragnn": {"logdir": str(tmp_path / "logdir"), "checkpoint": "best_model.pt"},
+    }
     cfg = ALConfig.model_validate(data)
     assert cfg.mlip.backend == "hydragnn"
     assert cfg.mlip.hydragnn is not None

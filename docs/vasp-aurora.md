@@ -44,8 +44,8 @@ any existing working configuration. Set `MAKEFILE_INCLUDE` to use another recipe
 The helper resets the module environment and loads
 `oneapi/release/2026.1.0` and `intel_gpu_umd_aicoe`, rather than the Python
 frameworks module. Override these with `ONEAPI_MODULE` and `GPU_UMD_MODULE`.
-The module-provided `MKLROOT` takes precedence over the recipe's legacy fallback;
-the current toolchain supplies `/opt/aurora/26.181.0/oneapi/mkl/latest`.
+The module-provided `MKLROOT` takes precedence over the recipe's default,
+`/opt/aurora/26.181.0/oneapi/mkl/latest`, which matches the current toolchain.
 
 ## Build command
 
@@ -97,12 +97,12 @@ When reproducing the Aurora build, confirm these points before compiling:
 Two paths are exposed:
 
 - **Active-learning labelling (single-point SCF, no ionic motion):**
-  driven by [`src/matsim_agents/active_learning/backends/vasp.py`](../src/matsim_agents/active_learning/backends/vasp.py)
+  driven by [`src/matsim_agents/backends/dft/vasp.py`](../src/matsim_agents/backends/dft/vasp.py)
   using a user-supplied `INCAR.template`. This is what `matsim-agents al run`
   invokes when `dft.backend: vasp` is set in the AL config.
 - **Standalone DFT relaxations** (`scf` / `relax` / `vc-relax` /
-  `vc-relax-shape`): driven by [`src/matsim_agents/tools/vasp_relax.py`](../src/matsim_agents/tools/vasp_relax.py),
-  the symmetric pair to `tools/qe_relax.py`. It writes a self-contained
+  `vc-relax-shape`): driven by [`src/matsim_agents/backends/dft/vasp_relax.py`](../src/matsim_agents/backends/dft/vasp_relax.py),
+  the symmetric pair to `backends/dft/qe_relax.py`. It writes a self-contained
   INCAR (no template required for the common case), composition-aware
   `ENCUT/ISMEAR/SIGMA/KSPACING`, and parses `vasprun.xml`+`OUTCAR` for the
   full per-ionic-step trajectory. Set `MATSIM_VASP_LAUNCHER` to point at a

@@ -19,7 +19,7 @@ export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 export OMP_NUM_THREADS=8
 if [[ "$STAGE" == "mace" ]]; then
   PYTHON="$REPO/.venv-mace/bin/python"
-elif [[ "$STAGE" == "hydragnn" ]]; then
+elif [[ "$STAGE" == hydragnn* ]]; then
   PYTHON="$REPO/.venv/bin/python"
   export HYDRAGNN_ROOT="$REPO/HydraGNN"
   export PYTHONPATH="$HYDRAGNN_ROOT/examples/multidataset_hpo_sc26:$HYDRAGNN_ROOT:$PYTHONPATH"

@@ -1,0 +1,128 @@
+# =============================================================================
+# Portability case: Phosphorene (2D black-P allotrope) AL loop on ALCF Aurora.
+#
+# Aurora analogue of al_phosphorene.yaml: the SAME active-learning loop (MLIP MD sampling +
+# mc_dropout acquisition + VASP vasp_std labelling), retargeted to Aurora's Intel
+# Data Center GPU Max. Only the vars/paths, the DFT + train launchers, the
+# per-node rank layout, and the xpu device strings differ.
+#
+# Aurora node layout: 12 GPU tiles per node (ZE_FLAT_DEVICE_HIERARCHY=FLAT)
+#   -> ranks_per_node=12, threads_per_rank=1 (the Aurora step wrappers bind
+#   one core per rank).
+#
+# PROJ_ROOT, RUNS_ROOT, HYDRAGNN_DIR (and HYDRAGNN_FT_REPO where used) must be
+# exported; the Aurora paper-case job sets them from the checkout.
+#
+# How to run (from the Aurora repo checkout):
+#   qsub -v CASE=phosphorene deployments/aurora/jobs/job-active-learning-paper-cases-aurora.sh
+# =============================================================================
+vars:
+  PROJ_ROOT:    ${PROJ_ROOT:?export PROJ_ROOT to the Aurora matsim-agents checkout}
+  RUNS_ROOT:    ${RUNS_ROOT:?export RUNS_ROOT}
+  HYDRAGNN_DIR: ${HYDRAGNN_DIR:?export HYDRAGNN_DIR}
+  HYDRAGNN_FT_REPO: ${HYDRAGNN_FT_REPO:?export HYDRAGNN_FT_REPO}
+  RUN_TAG:      phosphorene-2d-aurora-al-001
+
+  SEED_XYZ:   ${PROJ_ROOT}/examples/paper_cases/seeds/phosphorene_black_P.extxyz
+  # Built by deployments/aurora/setup/build-vasp-gpu-aurora.sh.
+  VASP_BIN:   ${PROJ_ROOT}/external/vasp6/src/vasp.6.6.1/bin/vasp_std
+  POTCAR_DIR: ${PROJ_ROOT}/external/vasp6/potcar/potpaw_PBE.64
+
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+mlip:
+  # HydraGNN runs from .venv; MLIP_BACKEND=uma or mace uses .venv-uma / .venv-mace.
+  backend: ${MLIP_BACKEND:-hydragnn}
+  hydragnn:
+    hydragnn_root: ${HYDRAGNN_DIR}
+    ft_repo: ${HYDRAGNN_FT_REPO}
+    logdir:         ${INITIAL_LOGDIR}
+    checkpoint:     best_model.pt
+    mlp_checkpoint: null
+    precision:  fp32
+    mlp_device: xpu
+    ensemble_paths: []
+  uma:
+    model_name: uma-s-1p1
+    task_name:  omat
+    device:     xpu
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear
+
+md:
+  seed_source:
+    # Supply the monolayer seed explicitly (2D allotropes are not in the
+    # inorganic prototype enumerator). Fall back to 'compositions' [P] below.
+    kind: paths
+    paths:
+      - ${SEED_XYZ}
+    # ---- fallback if seed file absent ----
+    # kind: compositions
+    # compositions:
+    #   - P
+    # max_phases_per_composition: 3
+    n_random: 3          # random strained / rumpled monolayer cells
+    random_seed: 17
+  timestep_fs: 0.5       # light element + soft pucker mode: short step
+  n_steps: 200
+  temperature_K: 300.0
+  thermostat: langevin
+  friction_inv_ps: 0.2
+  sample_every: 10
+  max_force_threshold_eV_per_A: 40.0
+  max_displacement_A: 3.0
+
+acquisition:
+  strategy: mc_dropout
+  mc_dropout_passes: 16
+  mc_dropout_p: 0.1
+  n_select: 64
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: ${DFT_BACKEND:-vasp}
+
+  vasp:
+    vasp_bin:         ${VASP_BIN}
+    vasp_wrapper:     ${PROJ_ROOT}/deployments/aurora/launchers/_vasp-step-aurora.sh
+    incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
+    kpoints_template: null            # KSPACING from INCAR (auto Gamma mesh)
+    potcar_dir:       ${POTCAR_DIR}
+    nodes_per_job: 1                  # small monolayer cell (4 atoms + vacuum)
+    ranks_per_node: 12                 # 12 GPU tiles per Aurora node (FLAT mode)
+    threads_per_rank: 1               # Aurora step wrappers bind one core per rank
+    timeout_sec: 7200
+    # NOTE: AL DFT backend runs single-point SCF labeling only; the in-plane
+    # relaxation is done by the MLIP/MD stage. KSPACING auto-yields one k-point
+    # along the large vacuum reciprocal vector, so no special 2D k-mesh is
+    # needed. Phosphorene is a semiconductor -> Gaussian smearing (ISMEAR=0).
+    extra_incar:
+      ENCUT: "520"
+      ISMEAR: "0"          # Gaussian smearing: phosphorene is a semiconductor
+      SIGMA: "0.05"
+      KSPACING: "0.25"
+      LREAL: "Auto"
+      NCORE: "4"
+
+trainer:
+  enabled: true
+  promote_model: true          # explicitly use the validated candidate in the next iteration
+  promotion_approved: true     # explicit acceptance after reviewing validation metrics
+  validation_fraction: 0.2
+  validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
+  validation_split_seed: 42
+  train_script:   ${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py
+  train_launcher: ${PROJ_ROOT}/deployments/aurora/launchers/_hydragnn-train-step-aurora.sh
+  epochs_per_iter: 5
+  nodes_for_train: 1
+  ranks_per_node:  1
+
+loop:
+  n_iterations: 8
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: false

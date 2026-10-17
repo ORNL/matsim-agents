@@ -4,7 +4,7 @@
 #SBATCH -e %x-%j.err
 #SBATCH -t 01:30:00
 #SBATCH -N 1
-#SBATCH -C gpu
+#SBATCH -C gpu&hbm80g
 #SBATCH -q regular
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32

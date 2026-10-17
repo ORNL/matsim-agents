@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from ase import Atoms
     from ase.calculators.calculator import Calculator
 
-    from matsim_agents.orchestration.state import RelaxationResult
+    from matsim_agents.backends.mlip.results import RelaxationResult
 
 
 @runtime_checkable

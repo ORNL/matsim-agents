@@ -11,7 +11,8 @@ from ase import Atoms
 from ase.io import write
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
-from matsim_agents.state import RelaxationResult, TaskSpec
+from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.orchestration.state import TaskSpec
 
 
 @pytest.fixture
@@ -47,7 +48,7 @@ def elemental_manifest(tmp_path):
 @pytest.fixture
 def dataset_method_sidecar():
     def create(dataset, reference_manifest, *, method_signature_elements=None):
-        from matsim_agents.active_learning.dataset_governance import (
+        from matsim_agents.datasets.governance import (
             DatasetValidationSummary,
             write_dataset_manifest,
         )
@@ -131,7 +132,7 @@ def fake_task(si_vasp: str) -> TaskSpec:
 @pytest.fixture
 def discovery_config(tmp_path: Path, si_vasp: str):
     """A DiscoveryChatConfig with all paths pointing at tmp_path."""
-    from matsim_agents.chat import DiscoveryChatConfig
+    from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig
 
     logdir = tmp_path / "logdir"
     logdir.mkdir()

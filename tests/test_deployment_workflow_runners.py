@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from matsim_agents.active_learning.config import ALConfig
-from matsim_agents.active_learning.vasp_io import resolve_potcar_paths
+from matsim_agents.backends.dft.vasp_io import resolve_potcar_paths
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,7 +71,7 @@ def test_campaign_reference_preflight_precedes_launch(
         assert "retraining energy comparison requires" in result.stderr
 
 
-@pytest.mark.parametrize("layout", ["nested", "symbol", "prefixed", "mixed", "missing"])
+@pytest.mark.parametrize("layout", ["nested", "symbol", "mixed", "missing"])
 def test_vasp_campaign_preflight_matches_runtime_potcar_layouts(tmp_path, layout):
     repo = tmp_path / "repo"
     jobs = repo / "deployments/perlmutter/jobs"
@@ -86,16 +86,10 @@ def test_vasp_campaign_preflight_matches_runtime_potcar_layouts(tmp_path, layout
     potcars = tmp_path / "potcars"
     potcars.mkdir()
     for index, symbol in enumerate(("Nb", "Ta", "O")):
-        kind = ["nested", "symbol", "prefixed"][index] if layout == "mixed" else layout
+        kind = ["nested", "symbol", "nested"][index] if layout == "mixed" else layout
         if layout == "missing" and symbol == "O":
             continue
-        path = (
-            potcars / symbol / "POTCAR"
-            if kind in {"nested", "missing"}
-            else potcars / symbol
-            if kind == "symbol"
-            else potcars / f"POTCAR.{symbol}"
-        )
+        path = potcars / symbol / "POTCAR" if kind in {"nested", "missing"} else potcars / symbol
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("synthetic POTCAR")
     env = {
@@ -214,3 +208,90 @@ def test_perlmutter_vasp_campaign_config_resolves(tmp_path: Path, monkeypatch) -
     assert cfg.dft.vasp.timeout_sec == 14400
     assert cfg.dft.vasp.extra_incar["KSPACING"] == "0.25"
     assert cfg.dft.vasp.extra_incar["KPAR"] == "4"
+
+
+def _fake_aurora_venv(tmp_path: Path, capture: Path) -> Path:
+    venv = tmp_path / "venv"
+    bin_dir = venv / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "python").symlink_to(sys.executable)
+    cli = bin_dir / "matsim-agents"
+    cli.write_text(
+        "#!/bin/bash\n"
+        f'printf "%s|%s|%s|%s|%s\\n" "$*" "$MLIP_BACKEND" "$DFT_BACKEND" '
+        f'"${{SCALE_TAG:-}}" "${{AL_SEED:-}}" >> "{capture}"\n'
+    )
+    cli.chmod(0o755)
+    (bin_dir / "activate").write_text(f'export PATH="{bin_dir}:$PATH"\n')
+    (venv / "bash-env").write_text("module() { return 0; }\n")
+    return venv
+
+
+@pytest.mark.parametrize(
+    ("case", "config", "dft"),
+    [
+        ("hea_bcc", "al_hea_bcc_aurora.yaml", "vasp"),
+        ("phosphorene_qe", "al_phosphorene_qe_aurora.yaml", "qe"),
+    ],
+)
+def test_aurora_paper_case_job_runs_aurora_config(tmp_path, case, config, dft):
+    capture = tmp_path / "calls.txt"
+    venv = _fake_aurora_venv(tmp_path, capture)
+    result = subprocess.run(
+        ["bash", str(ROOT / "deployments/aurora/jobs/job-active-learning-paper-cases-aurora.sh")],
+        env={
+            **os.environ,
+            "PROJECT_ROOT": str(ROOT),
+            "RUNS_ROOT": str(tmp_path / "runs"),
+            "MATSIM_AURORA_VENV": str(venv),
+            "BASH_ENV": str(venv / "bash-env"),
+            "CASE": case,
+            "PBS_JOBID": "123.aurora",
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    calls = capture.read_text().splitlines()
+    assert calls[0].startswith(f"al validate-config {ROOT}/examples/paper_cases/{config}|")
+    assert calls[1].startswith(f"al run {ROOT}/examples/paper_cases/{config} --log-level INFO|")
+    assert calls[1].split("|")[1:3] == ["hydragnn", dft]
+
+
+def test_aurora_paper_case_job_rejects_unknown_case(tmp_path):
+    result = subprocess.run(
+        ["bash", str(ROOT / "deployments/aurora/jobs/job-active-learning-paper-cases-aurora.sh")],
+        env={**os.environ, "PROJECT_ROOT": str(ROOT), "CASE": "nope"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "unknown CASE='nope'" in result.stderr
+
+
+def test_aurora_scaling_job_tags_run_by_unique_pbs_nodes(tmp_path):
+    capture = tmp_path / "calls.txt"
+    venv = _fake_aurora_venv(tmp_path, capture)
+    nodefile = tmp_path / "nodefile"
+    nodefile.write_text("x1\nx1\nx2\nx2\n")
+    result = subprocess.run(
+        ["bash", str(ROOT / "deployments/aurora/jobs/job-al-dft-scaling-aurora.sh")],
+        env={
+            **os.environ,
+            "PROJECT_ROOT": str(ROOT),
+            "RUNS_ROOT": str(tmp_path / "runs"),
+            "MATSIM_AURORA_VENV": str(venv),
+            "BASH_ENV": str(venv / "bash-env"),
+            "PBS_NODEFILE": str(nodefile),
+            "REP": "3",
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    run = capture.read_text().splitlines()[1].split("|")
+    assert (
+        run[0]
+        == f"al run {ROOT}/examples/paper_cases/al_hea_fcc_scaling_aurora.yaml --log-level INFO"
+    )
+    assert run[3:] == ["hea-fcc-scaling-aurora-N2-r3", "15"]

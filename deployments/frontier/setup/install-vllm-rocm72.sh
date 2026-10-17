@@ -25,18 +25,6 @@ VLLM_SRC="${VLLM_SRC:-${REPO}/external/vllm/src}"
 TRITON_SRC="${TRITON_SRC:-${REPO}/external/triton/src}"
 PROTECTED_REQS=$REPO/deployments/frontier/setup/vllm-rocm72-protected-requirements.txt
 
-migrate_legacy_source() {
-    local legacy="$1" destination="$2"
-    if [[ ! -e "${destination}" && -d "${legacy}/.git" ]]; then
-        echo "Migrating required source tree: ${legacy} -> ${destination}"
-        mkdir -p "$(dirname "${destination}")"
-        mv "${legacy}" "${destination}"
-    fi
-}
-
-migrate_legacy_source "${PROJ}/cache/vllm-src/vllm" "${VLLM_SRC}"
-migrate_legacy_source "${PROJ}/cache/triton-src/triton" "${TRITON_SRC}"
-
 # ── Phase 1: Validate the base environment and prepare compatibility pins ────
 [[ -x "${VENV}/bin/python" ]] || {
     echo "ERROR: matsim environment not found: ${VENV}" >&2

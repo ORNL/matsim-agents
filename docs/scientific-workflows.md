@@ -280,7 +280,7 @@ working directory.
 
 The directory convention is mandatory for new launches: the naming helper
 generates `MATSIM_CAMPAIGN_RUN_TAG`, replacing any inherited custom tag.
-There is no legacy naming mode. The bounded submission script captures the
+The bounded submission script captures the
 Git revision at submission; direct launcher submissions capture it at job
 startup unless submission revision metadata was explicitly exported.
 The Slurm job name and persisted campaign ID remain separate identifiers.
@@ -333,7 +333,7 @@ The shared formation-label preparation layer is implemented. Given a verified
 native-total-energy dataset sidecar and compatible elemental DFT manifest, run:
 
 ```bash
-python -m matsim_agents.active_learning.formation_training \
+python -m matsim_agents.datasets.formation_training \
   --dataset /path/to/raw-dft.extxyz \
   --elemental-reference-manifest /path/to/elemental-references.json \
   --output-dir /path/to/new-formation-snapshot
@@ -363,7 +363,7 @@ MLP should select `finetune_hydragnn.py` instead and provide that MLP checkpoint
 HydraGNN's `examples/mptrj/train.py` is a pretraining entry point, not an AL
 fine-tuner, and is not used by these configurations.
 AL forwards the configured charge/spin conditioning to both built-in trainers
-and `hydragnn.ft_repo` to the new-head trainer, including through HPC launchers.
+and `mlip.hydragnn.ft_repo` to the new-head trainer, including through HPC launchers.
 
 AL training requires references even with comparison and promotion disabled.
 Configure a verified manifest explicitly:
@@ -409,8 +409,8 @@ existing evaluation subtracts its own model elemental references once.
 Forces/stress and dropout access are preserved. New-head checkpoints are
 auto-detected, and routed checkpoints retain their trained-head restriction
 and frozen routing MLP. Unsupported elements, incompatible/tampered artifacts,
-and ambiguous legacy fitted-offset checkpoints fail explicitly; unmarked
-foundation checkpoints retain their previous behavior.
+and fine-tuned checkpoints without a verified energy convention fail explicitly;
+unmarked foundation checkpoints are used unchanged.
 
 Checkpoint reconstruction materializes HydraGNN's lazy graph-conditioning
 projectors from saved weight shapes before loading weights. Single-head resume
@@ -422,12 +422,12 @@ for dry-run, optimization, and validation losses. BF16 keeps FP32 master
 parameters and uses autocast for compute; single-head checkpoint inference
 also honors that setting. FP32/FP64 paths do not enable autocast.
 
-Custom trainer scripts retain `--logdir`/`--resume_from`, but must now accept
-`--elemental-reference-manifest` and emit the same verified checkpoint contract.
+`trainer.train_script` must be one of the built-in fine-tuners,
+`training/finetune_hydragnn.py` or `training/finetune_hydragnn_newhead.py`.
 Launchers receive the manifest as positional argument eight, then optional
-checkpoint and branch-MLP arguments. Built-in scripts use
-`--output-dir`/`--gfm-logdir`; they are single-process trainers, so configure
-one node/one rank when using a launcher. Multi-rank training is not implemented.
+checkpoint, branch-MLP, ft_repo, charge, spin, and HydraGNN-root arguments, and
+invoke the fine-tuner with `--output-dir`/`--gfm-logdir`. The fine-tuners are
+single-process, so configure one node/one rank when using a launcher.
 
 #### Approved elemental DFT prerequisite
 
@@ -610,12 +610,8 @@ strict reduction larger than the numerical tolerance. An exact-zero incumbent
 MAE cannot improve, but the other metric may qualify. This threshold is a policy
 choice, not statistical significance or broad scientific qualification.
 
-Migration: `promotion_max_relative_regression` now defaults to zero and accepts
-only zero. Explicit positive legacy values fail configuration rather than
-silently allowing degraded candidates. Likewise,
-`--promotion-max-relative-regression` and
-`MATSIM_CAMPAIGN_PROMOTION_MAX_RELATIVE_REGRESSION` accept only zero.
-Training, cumulative collection, and permanent held-out partitions are unchanged;
+Promotion never accepts an MAE regression on either metric. Training,
+cumulative collection, and permanent held-out partitions are unchanged;
 rejected candidates do not replace the incumbent.
 
 Scientific MLIP-versus-DFT energy comparisons use formation energies, not
@@ -689,9 +685,9 @@ resume the same formula dataset to accumulate more data. DFT failures and
 duplicate rejection can delay readiness further. These are software minimums,
 not evidence that such a small validation set scientifically qualifies a model.
 
-Eval-only reuse requires existing, hash-matching split sidecars. Legacy data
-must have its actual DFT protocol verified and recorded before comparison;
-do not infer compatibility from the elemental manifest alone. The caller
+Eval-only reuse requires existing, hash-matching split sidecars. Data without a
+recorded DFT method signature is rejected; do not infer compatibility from the
+elemental manifest alone. The caller
 remains responsible for convergence of the supplied DFT calculations.
 
 Energy evaluation and fine-tune/evaluation require
@@ -707,9 +703,9 @@ Fine-tune/evaluation launchers require `ELEMENTAL_REFERENCE_MANIFEST`, or an
 existing `elemental_references.json` in each dataset's case directory.
 Promotion energy thresholds now apply to
 `formation_energy_mae_eV_per_atom`; raw total-energy errors remain diagnostic.
-The deprecated `energy_*_per_atom_shifted` output fields alias formation-energy
-errors and no longer represent a fitted shift. Reassess historical thresholds
-under this new convention. Force comparisons and within-method polymorph/hull
+Evaluation outputs no longer contain `energy_*_per_atom_shifted` fields; use
+`formation_energy_*_per_atom`. Reassess historical thresholds under this
+convention. Force comparisons and within-method polymorph/hull
 ranking are unchanged; final DFT ranking results still never enter training.
 
 Nb-Ta-O reference preparation merges curated phases before unary structure

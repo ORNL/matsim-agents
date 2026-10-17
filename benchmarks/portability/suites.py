@@ -20,7 +20,7 @@ from unittest.mock import patch
 def relaxation_contract(structure: Path, output: Path) -> dict[str, Any]:
     """Exercise the complete relaxation workflow with a deterministic backend."""
 
-    from matsim_agents.orchestration.state import RelaxationResult
+    from matsim_agents.backends.mlip.results import RelaxationResult
     from matsim_agents.workflows.relaxation import ScientificRelaxationConfig, run_relaxation
 
     def fake_runner(args):
@@ -62,7 +62,7 @@ def active_learning_contract(output: Path) -> dict[str, Any]:
     import numpy as np
     from ase import Atoms
 
-    from matsim_agents.active_learning.dataset_governance import (
+    from matsim_agents.datasets.governance import (
         validate_labelled_frames,
         write_dataset_manifest,
     )
@@ -116,7 +116,7 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
 
     from matsim_agents.active_learning.candidates import Candidate
     from matsim_agents.active_learning.config import ALConfig
-    from matsim_agents.active_learning.dft_backend import DFTResult
+    from matsim_agents.backends.dft.base import DFTResult
     from matsim_agents.active_learning.loop import run_active_learning
 
     atoms = read(structure)
@@ -211,8 +211,8 @@ def dft_allocation_contract(output: Path) -> dict[str, Any]:
     import numpy as np
     from ase import Atoms
 
-    from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
-    from matsim_agents.active_learning.dft_runner import run_dft_batch
+    from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
+    from matsim_agents.backends.dft.runner import run_dft_batch
 
     assignments: list[tuple[str, ...]] = []
 

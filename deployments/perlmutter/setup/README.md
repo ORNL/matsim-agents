@@ -12,7 +12,6 @@ bash deployments/perlmutter/setup/install.sh
 
 It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current Perlmutter installer,
 then installs and verifies matsim-agents in that environment.
-`install_matsim_perlmutter.sh` is only a compatibility alias.
 
 ## Model Download Safety Policy
 
@@ -186,10 +185,8 @@ environment elsewhere (build dependencies remain under `INSTALL_ROOT`).
 
 Quick setup (`setup_matsim_perlmutter.sh`) activates `matsim-agents/.venv`, or
 the explicit `MATSIM_PERLMUTTER_VENV` override. It does not search legacy paths.
-The obsolete generic `job_perlmutter.sh` template was removed because it
-invoked the nonexistent `matsim_agents.main` module and could not describe a
-specific scientific contract. Submit one of the explicit jobs under
-`deployments/perlmutter/jobs/` instead.
+For batch work, submit one of the explicit jobs under
+`deployments/perlmutter/jobs/`.
 
 ### `test_matsim_perlmutter.sh`
 Comprehensive test suite validating the complete environment:
@@ -325,7 +322,7 @@ so they inherit the unified HydraGNN-aligned toolchain (`cudatoolkit/12.9`,
 ## UMA MLIP Backend (fairchem-core)
 
 `matsim-agents` supports a second MLIP backend — Meta's Universal Model for Atoms
-(UMA) — via `matsim_agents.active_learning.calculator.build_uma_calculator` and
+(UMA) — via `matsim_agents.backends.mlip.calculator.build_uma_calculator` and
 the `mlip_backend="uma"` field on `RelaxStructureInput` (canonical:
 `matsim_agents.backends.mlip.relaxation.RelaxStructureInput`). The backend requires
 `fairchem-core`.
@@ -406,8 +403,6 @@ and nothing about `.venv`, `.venv-uma`, or `.venv-mace` needs to change.
 
 ```bash
 INSTALL_VLLM=1 bash deployments/perlmutter/setup/install.sh
-# or standalone:
-bash deployments/perlmutter/setup/build-vllm-venv-perlmutter.sh
 ```
 
 This creates `$MATSIM_DIR/venv_vllm` and installs/import-checks `vllm` there.
@@ -681,7 +676,7 @@ source deployments/perlmutter/setup/setup_matsim_perlmutter.sh --gpu
 # Option 2: Activate a custom env path used during install
 # source /path/used/as/VENV_PATH/bin/activate
 
-python -m matsim_agents.run --config config.yaml
+matsim-agents al run path/to/al_config.yaml
 ```
 
 ---

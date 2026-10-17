@@ -9,14 +9,10 @@ import pytest
 from ase import Atoms
 from ase.io import read, write
 
-from matsim_agents.active_learning.config import (
-    ALConfig,
-    HydraGNNConfig,
-    MACEConfig,
-    MLIPConfig,
-    UMAConfig,
-)
-from matsim_agents.campaign.execution import (
+from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
+from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.campaign.formula_execution import (
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,
@@ -46,7 +42,6 @@ from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
-from matsim_agents.orchestration.state import RelaxationResult
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
@@ -80,7 +75,9 @@ def test_formula_runner_wires_remaining_mlip_allowance_without_changing_seeds(
             ),
         )
 
-    monkeypatch.setattr("matsim_agents.campaign.execution.run_formula_with_active_learning", run)
+    monkeypatch.setattr(
+        "matsim_agents.campaign.formula_execution.run_formula_with_active_learning", run
+    )
     make_formula_runner(config)(
         "NbO", str(tmp_path), mlip_allowance=1, on_mlip_relaxation_attempt=callback
     )
@@ -480,7 +477,7 @@ def test_surrogate_hull_scales_compound_reference_from_loaded_structure(tmp_path
 
 
 def test_relaxed_candidate_uncertainty_uses_registry_candidate_ids(tmp_path, monkeypatch):
-    import matsim_agents.campaign.execution as execution
+    import matsim_agents.campaign.formula_execution as execution
     from matsim_agents.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
@@ -590,7 +587,7 @@ def test_cross_model_scores_records_ranking_disagreement(tmp_path):
 def test_cross_model_scores_dispatches_validator_to_independent_python(tmp_path, monkeypatch):
     from ase.calculators.calculator import Calculator, all_changes
 
-    import matsim_agents.campaign.execution as execution
+    import matsim_agents.campaign.formula_execution as execution
     from matsim_agents.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
@@ -653,7 +650,7 @@ def test_cross_model_scores_dispatches_validator_to_independent_python(tmp_path,
 
 
 def test_cross_model_scores_uses_per_validator_python(tmp_path, monkeypatch):
-    import matsim_agents.campaign.execution as execution
+    import matsim_agents.campaign.formula_execution as execution
     from matsim_agents.active_learning.config import ALConfig
 
     config_path = tmp_path / "al.yaml"
@@ -851,7 +848,7 @@ def test_uma_only_execution_rejects_non_uma_backend(tmp_path, monkeypatch):
     config_path = tmp_path / "al.yaml"
     config_path.touch()
     monkeypatch.setattr(
-        "matsim_agents.campaign.execution.ALConfig.from_yaml",
+        "matsim_agents.campaign.formula_execution.ALConfig.from_yaml",
         lambda path: SimpleNamespace(mlip=SimpleNamespace(backend="mace")),
     )
 
@@ -1643,7 +1640,7 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
 def test_formula_execution_applies_retraining_and_promotion(
     tmp_path, monkeypatch, validation_fraction
 ):
-    import matsim_agents.campaign.execution as execution
+    import matsim_agents.campaign.formula_execution as execution
 
     config_path = tmp_path / "al.yaml"
     config_path.write_text(
@@ -1727,7 +1724,7 @@ def test_formula_execution_applies_retraining_and_promotion(
 
     assert observed["trainer"]["enabled"] is True
     assert observed["trainer"]["epochs_per_iter"] == 3
-    assert observed["trainer"]["promotion_max_relative_regression"] == 0.0
+    assert "promotion_max_relative_regression" not in observed["trainer"]
     assert observed["trainer"]["promotion_min_relative_improvement"] == 0.1
     assert observed["trainer"]["promote_model"] is True
     assert observed["trainer"]["validation_set"] == (
@@ -1744,7 +1741,7 @@ def test_formula_execution_applies_retraining_and_promotion(
 
 
 def test_campaign_hydragnn_override_discovers_checkpoint_in_promoted_logdir(tmp_path):
-    import matsim_agents.campaign.execution as execution
+    import matsim_agents.campaign.formula_execution as execution
 
     promoted = tmp_path / "promoted-model"
     cfg = SimpleNamespace(
@@ -1772,7 +1769,7 @@ def test_promoted_mace_checkpoint_disables_incompatible_dispersion(tmp_path):
         )
     )
 
-    import matsim_agents.campaign.execution as execution
+    import matsim_agents.campaign.formula_execution as execution
 
     execution._apply_model_override(cfg, str(tmp_path / "promoted.model"))
 

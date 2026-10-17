@@ -7,12 +7,13 @@ import pytest
 from ase import Atoms
 from ase.io import write
 
+from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.campaign.acquisition import (
     CampaignAcquisitionPolicy,
     FormulaAcquisitionMetrics,
     select_formula_batch,
 )
-from matsim_agents.campaign.execution import latest_promoted_model
+from matsim_agents.campaign.formula_execution import latest_promoted_model
 from matsim_agents.campaign.orchestrator import (
     CampaignReviewDecision,
     CampaignRunPolicy,
@@ -29,7 +30,6 @@ from matsim_agents.discovery.stability import (
 )
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.contracts import ComputeBudget, WorkflowStatus
-from matsim_agents.orchestration.state import RelaxationResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 

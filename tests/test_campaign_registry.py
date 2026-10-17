@@ -4,6 +4,7 @@ import numpy as np
 from ase import Atoms
 from ase.io import write
 
+from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.campaign.registry import (
     CandidateRegistry,
     CandidateSelectionPolicy,
@@ -17,7 +18,6 @@ from matsim_agents.campaign.registry import (
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.seeds import PhaseCandidate
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
-from matsim_agents.orchestration.state import RelaxationResult
 
 
 def _write_structure(path, *, displacement: float = 0.0):

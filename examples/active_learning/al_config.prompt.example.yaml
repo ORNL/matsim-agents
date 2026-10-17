@@ -37,17 +37,19 @@ vars:
 
 # ---------------------------------------------------------------------------
 
-hydragnn:
-  hydragnn_root: ${HYDRAGNN_DIR}
-  ft_repo: ${HYDRAGNN_FT_REPO}
-  logdir: ${INITIAL_LOGDIR}
-  checkpoint: best_model.pt
-  mlp_checkpoint: null
-  charge: 0.0
-  spin: 0.0
-  precision: fp32
-  mlp_device: cuda
-  ensemble_paths: []
+mlip:
+  backend: hydragnn
+  hydragnn:
+    hydragnn_root: ${HYDRAGNN_DIR}
+    ft_repo: ${HYDRAGNN_FT_REPO}
+    logdir: ${INITIAL_LOGDIR}
+    checkpoint: best_model.pt
+    mlp_checkpoint: null
+    charge: 0.0
+    spin: 0.0
+    precision: fp32
+    mlp_device: cuda
+    ensemble_paths: []
 
 md:
   # LLM-driven seed source.
@@ -105,7 +107,7 @@ trainer:
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
   validation_split_seed: 42
-  train_script:   ${PROJ_ROOT}/src/matsim_agents/active_learning/finetune_hydragnn_newhead.py
+  train_script:   ${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5
   nodes_for_train: 1

@@ -47,21 +47,23 @@ vars:
 
 # ---------------------------------------------------------------------------
 
-hydragnn:
-  hydragnn_root: ${HYDRAGNN_DIR}
-  ft_repo: ${HYDRAGNN_FT_REPO}
-  logdir: ${INITIAL_LOGDIR}
-  checkpoint: best_model.pt           # filename inside logdir, OR absolute path
-  mlp_checkpoint: null                 # set if your model uses BranchWeightMLP
-  charge: 0.0
-  spin: 0.0
-  precision: fp32
-  mlp_device: cuda
-  # For ensemble / ensemble_then_dropout strategies, list 1-4 sibling logdirs:
-  ensemble_paths: []
-  # ensemble_paths:
-  #   - ${RUNS_ROOT}/al-models/iter0_logdir_seed1
-  #   - ${RUNS_ROOT}/al-models/iter0_logdir_seed2
+mlip:
+  backend: hydragnn
+  hydragnn:
+    hydragnn_root: ${HYDRAGNN_DIR}
+    ft_repo: ${HYDRAGNN_FT_REPO}
+    logdir: ${INITIAL_LOGDIR}
+    checkpoint: best_model.pt           # filename inside logdir, OR absolute path
+    mlp_checkpoint: null                 # set if your model uses BranchWeightMLP
+    charge: 0.0
+    spin: 0.0
+    precision: fp32
+    mlp_device: cuda
+    # For ensemble / ensemble_then_dropout strategies, list 1-4 sibling logdirs:
+    ensemble_paths: []
+    # ensemble_paths:
+    #   - ${RUNS_ROOT}/al-models/iter0_logdir_seed1
+    #   - ${RUNS_ROOT}/al-models/iter0_logdir_seed2
 
 md:
   # New schema: pick ONE of the three seed sources below.
@@ -143,7 +145,7 @@ trainer:
   validation_fraction: 0.2
   validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
   validation_split_seed: 42
-  train_script:   ${PROJ_ROOT}/src/matsim_agents/active_learning/finetune_hydragnn_newhead.py
+  train_script:   ${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5
   nodes_for_train: 1

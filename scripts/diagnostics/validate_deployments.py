@@ -18,7 +18,6 @@ EMBEDDED_ACCOUNT = re.compile(r"^#(?:SBATCH|PBS) -A\s+(?!<)", re.MULTILINE)
 ABSOLUTE_SCHEDULER_LOG = re.compile(r"^#SBATCH -[oe]\s+/", re.MULTILINE)
 SITE_PROJECT_PATH = re.compile(r"/(?:lustre/orion|lus/flare|global/cfs)/")
 NONEXISTENT_MAIN_MODULE = re.compile(r"python(?:3)?\s+-m\s+matsim_agents\.main\b")
-LEGACY_UQ_DRIVER = re.compile(r"examples/active_learning_uq\.py")
 
 FACILITIES = ("frontier", "aurora", "perlmutter")
 SHARED_JOB_CONTRACTS = {
@@ -47,7 +46,6 @@ def validate() -> list[str]:
         if (
             "matsim-agents " in text
             and "--mlp-checkpoint" in text
-            and "examples/active_learning_uq.py" not in text
             and "step2_perturbation_diagnostic.py" not in text
         ):
             errors.append(
@@ -57,15 +55,6 @@ def validate() -> list[str]:
 
         if match := NONEXISTENT_MAIN_MODULE.search(text):
             errors.append(f"{rel}: references nonexistent Python module: {match.group(0)!r}")
-        if match := LEGACY_UQ_DRIVER.search(text):
-            errors.append(
-                f"{rel}: uses retired standalone UQ driver; use matsim-agents al run: "
-                f"{match.group(0)!r}"
-            )
-        if "examples/paper_cases/singlepass.py" in text and (
-            "MATSIM_LEGACY_MANUSCRIPT_REPRODUCTION=1" not in text
-        ):
-            errors.append(f"{rel}: singlepass manuscript driver must be explicitly marked legacy")
 
         if path.suffix == ".sh":
             result = subprocess.run(

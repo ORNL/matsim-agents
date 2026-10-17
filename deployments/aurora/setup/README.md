@@ -12,7 +12,6 @@ bash deployments/aurora/setup/install.sh
 It preserves an existing HydraGNN checkout unless `HYDRAGNN_REF` is explicitly
 set, runs HydraGNN's current Aurora installer, then installs and verifies
 matsim-agents wheels in that environment.
-`install_matsim_aurora.sh` is only a compatibility alias.
 
 The phases follow the Perlmutter installer: HydraGNN dependencies, project
 wheels in `.venv`, then optional isolated UMA and MACE environments. Aurora
@@ -90,6 +89,35 @@ dependency revision and refreshes that checkout on subsequent installs.
 can pin an audited dependency revision or change its location. An explicit
 `HYDRAGNN_INSTALLER` overrides the installer script, not the dependency profile.
 The selected feature branch is never switched implicitly.
+
+## Module Stacks and Job Catalog
+
+Aurora jobs source `aurora-module-stack.sh` instead of loading modules inline:
+`load_aurora_frameworks_modules` (the ALCF `frameworks` stack the matsim venvs
+build on), `load_aurora_xpu_modules` (oneAPI + GPU UMD + PTI for the qualified
+MLIP XPU path), and `load_aurora_oneapi_modules` (native builds such as VASP).
+Jobs that run vLLM source `launchers/aurora-vllm.sh`, which launches the server
+through `mpiexec` with the same environment as the vLLM smoke test.
+
+The following entry points match their Frontier and Perlmutter counterparts.
+Submit with your allocation (`qsub -A <project> ...`); none embed an account.
+
+| Script | Purpose |
+| --- | --- |
+| `launchers/_hydragnn-train-step-aurora.sh` | AL retraining step: one built-in HydraGNN fine-tuner on one XPU tile (`--device xpu`) |
+| `jobs/job-active-learning-paper-cases-aurora.sh` | Full AL loop for one paper case (`CASE=hea_bcc\|lifepo4\|phosphorene\|phosphorene_qe`) using `examples/paper_cases/al_<case>_aurora.yaml` |
+| `jobs/submit-active-learning-paper-cases.sh` | Submit the paper-case job for every case |
+| `jobs/job-al-dft-scaling-aurora.sh` | One DFT strong-scaling point; node count from `PBS_NODEFILE` |
+| `jobs/submit-al-dft-scaling-sweep.sh` | Submit the scaling sweep over `NODES` x `REPS` |
+| `jobs/job-llm-check-aurora.sh` | Live vLLM server + six-stage `matsim-agents llm-check` qualification |
+| `jobs/job-sequential-benchmark-aurora.sh` | Per-model vLLM benchmark with merged leaderboard and plot |
+| `launchers/launch-test-all-models-aurora.sh` | Submit the single-node vLLM smoke test once per local model |
+| `launchers/launch-test-singlenode-resume-aurora.sh` | Resume the single-node sweep for a subset (`RESUME_MODELS`) |
+| `launchers/launch-test-multinode-aurora.sh` | Submit `job-serve-multinode-vllm-aurora.sh` with `SERVE_SMOKE=1` for multi-node models |
+| `smoke-tests/smoke-transformers-aurora.sh` | HuggingFace provider smoke test across the 12 PVC tiles |
+
+These scripts are syntax-checked and their argument wiring is tested off-system;
+they have not yet been run on Aurora.
 
 ## Single-Node XPU Qualification
 

@@ -221,10 +221,8 @@ def test_inject_inference_dropout_makes_mc_dropout_nonzero() -> None:
     import torch
     import torch.nn as nn
 
-    from matsim_agents.active_learning.uncertainty import (
-        inject_inference_dropout,
-        score_mc_dropout,
-    )
+    from matsim_agents.active_learning.uncertainty import score_mc_dropout
+    from matsim_agents.backends.mlip.dropout import inject_inference_dropout
 
     class _TorchForceCalc:
         """Minimal ASE-like calc: forces = MLP(positions), no native dropout."""
@@ -306,7 +304,7 @@ def test_mc_dropout_resets_ase_calculator_between_passes() -> None:
 def test_inject_inference_dropout_is_idempotent() -> None:
     import torch.nn as nn
 
-    from matsim_agents.active_learning.uncertainty import inject_inference_dropout
+    from matsim_agents.backends.mlip.dropout import inject_inference_dropout
 
     model = nn.Sequential(nn.Linear(3, 8), nn.ReLU(), nn.Linear(8, 3))
     n1 = inject_inference_dropout(model, p=0.1)

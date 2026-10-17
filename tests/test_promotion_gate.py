@@ -7,13 +7,14 @@ from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 from ase.io import write
 
-from matsim_agents.active_learning.config import MLIPConfig, TrainerConfig, UMAConfig
+from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.evaluate import (
     EvalMetrics,
     assess_promotion,
     evaluate_frames,
     evaluate_promotion_candidate,
 )
+from matsim_agents.backends.mlip.config import MLIPConfig, UMAConfig
 
 
 def _metrics(
@@ -38,8 +39,6 @@ def _metrics(
         energy_rmse_eV=0.6,
         energy_mae_eV_per_atom=energy_mae,
         energy_rmse_eV_per_atom=energy_mae,
-        energy_mae_eV_per_atom_shifted=energy_mae,
-        energy_rmse_eV_per_atom_shifted=energy_mae,
         formation_energy_mae_eV_per_atom=energy_mae,
         formation_energy_rmse_eV_per_atom=energy_mae,
         energy_mean_offset_eV_per_atom=0.0,
@@ -61,7 +60,6 @@ def _trainer(tmp_path: Path) -> TrainerConfig:
         validation_set=validation_set,
         promotion_max_energy_mae_eV_per_atom=0.1,
         promotion_max_force_mae_eV_per_A=0.2,
-        promotion_max_relative_regression=0.0,
         promotion_min_evaluated_frames=5,
     )
 
@@ -79,7 +77,7 @@ def test_cross_composition_comparison_requires_pure_element_references(
             self.results["forces"] = np.zeros((len(atoms), 3))
 
     monkeypatch.setattr(
-        "matsim_agents.active_learning.calculator.make_mlip_calculator",
+        "matsim_agents.backends.mlip.calculator.make_mlip_calculator",
         lambda _cfg: CompositionCalculator(),
     )
     frames = [
@@ -202,14 +200,13 @@ def test_invalid_mae_prevents_promotion(tmp_path, value, role):
         ("promotion_min_relative_improvement", 1.01),
         ("promotion_min_relative_improvement", float("nan")),
         ("promotion_min_relative_improvement", float("inf")),
-        ("promotion_max_relative_regression", 0.05),
     ],
 )
 @pytest.mark.parametrize("config_kind", ["trainer", "campaign"])
 def test_promotion_policy_rejects_invalid_thresholds(tmp_path, field, value, config_kind):
     from pydantic import ValidationError
 
-    from matsim_agents.campaign.execution import CampaignRetrainingConfig
+    from matsim_agents.campaign.formula_execution import CampaignRetrainingConfig
 
     config_type = TrainerConfig if config_kind == "trainer" else CampaignRetrainingConfig
     script = tmp_path / "train.py"

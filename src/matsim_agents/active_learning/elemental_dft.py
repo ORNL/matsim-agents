@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import io
 import json
@@ -13,7 +12,7 @@ import re
 import subprocess
 import uuid
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, NamedTuple
 
 import numpy as np
 import yaml
@@ -22,14 +21,15 @@ from ase.data import atomic_numbers
 from ase.io import read, write
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matsim_agents.active_learning.config import DFTConfig
-from matsim_agents.active_learning.dataset_governance import sha256_file
-from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
 from matsim_agents.active_learning.dft_protocol import (
     dft_execution_signature,
     dft_method_signature,
 )
-from matsim_agents.discovery.energy_references import load_elemental_reference_manifest
+from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
+from matsim_agents.backends.dft.config import DFTConfig
+from matsim_agents.datasets.energy_references import load_elemental_reference_manifest
+from matsim_agents.datasets.governance import sha256_file
+from matsim_agents.execution.locking import exclusive_lock
 
 log = logging.getLogger(__name__)
 
@@ -388,7 +388,7 @@ def _run_reference_relaxation(
             stress,
         )
 
-    from matsim_agents.active_learning.vasp_io import prepare_vasp_workdir
+    from matsim_agents.backends.dft.vasp_io import prepare_vasp_workdir
     from matsim_agents.backends.dft.vasp_relax import parse_relax_outputs
 
     assert cfg.vasp is not None
@@ -481,176 +481,196 @@ def _validate_relaxation_stress(phase: ElementalPhaseSpec, stress: np.ndarray | 
         )
 
 
-def prepare_elemental_references(
-    plan: ElementalReferencePlan,
+class _PreparedPhase(NamedTuple):
+    phase: ElementalPhaseSpec
+    atoms: Atoms
+    geometry_bytes: bytes
+    cfg: DFTConfig
+    signature: str
+    execution_signature: str
+    input_digest: str
+    relax_key: str | None
+    cached_relaxation: CachedElementalRelaxation | None
+    relaxed_bytes: bytes
+    atoms_for_static: Atoms
+    static_digest: str
+    static_key: str
+
+
+class _ReferenceRecord(NamedTuple):
+    phase: ElementalPhaseSpec
+    relaxed_bytes: bytes
+    record: CachedElementalCalculation
+    relaxation: CachedElementalRelaxation | None
+    input_digest: str
+
+
+class _DFTAttemptBudget:
+    """Count launched reference DFT calculations against an optional cap."""
+
+    def __init__(self, cap: int | None):
+        self.cap = cap
+        self.attempts = 0
+
+    def reserve(self) -> None:
+        if self.cap is not None and self.attempts >= self.cap:
+            raise ValueError("Reference DFT calculation cap reached before launch")
+        self.attempts += 1
+
+
+def _static_cache_key(
+    phase: ElementalPhaseSpec,
+    protocol: Any,
+    static_digest: str,
+    signature: str,
+    execution_signature: str,
+) -> str:
+    """Content key for a single-point reference calculation in the shared cache."""
+    static_identity = {
+        "schema_version": 4,
+        "geometry_sha256": static_digest,
+        "method_signature": signature,
+        "execution_signature": execution_signature,
+        "phase": {
+            "element": phase.element,
+            "kind": phase.kind,
+            "magnetic_state": phase.magnetic_state,
+            "qe_magnetic_settings": phase.qe_magnetic_settings,
+            "vasp_magnetic_settings": phase.vasp_magnetic_settings,
+            "kpts": phase.kpts,
+        },
+        "protocol": protocol,
+    }
+    return hashlib.sha256(json.dumps(static_identity, sort_keys=True).encode()).hexdigest()
+
+
+def _prepare_reference_phase(
+    phase: ElementalPhaseSpec,
     dft: DFTConfig,
-    *,
-    required_elements: set[str],
+    plan: ElementalReferencePlan,
     cache_dir: Path,
-    output_dir: Path,
-    phases_approved: bool = False,
-    dft_approved: bool = False,
-    max_dft_calculations: int | None = None,
-) -> Path:
-    """Select lowest energy/atom among declared phases, never an implicit search.
-
-    A phase explicitly attested as ``verified_converged`` gets a fixed-geometry
-    single point. Other phases are relaxed first, must meet the requested force
-    threshold, and then receive a production-protocol single point. This only
-    compares declared phases; it is not an implicit structure or magnetic-state
-    search.
-    """
-    if not phases_approved:
-        raise ValueError("Elemental reference phase selection requires explicit approval")
-    if not required_elements:
-        raise ValueError("Elemental references require a nonempty element set")
-    missing = required_elements - {phase.element for phase in plan.phases}
-    if missing:
-        raise ValueError(f"Approved reference plan lacks coverage for {sorted(missing)}")
-    if output_dir.exists():
-        raise ValueError(f"Elemental reference snapshot already exists: {output_dir}")
-    if max_dft_calculations is not None and max_dft_calculations < 0:
-        raise ValueError("Reference DFT calculation cap must be nonnegative")
-    cache_dir = Path(cache_dir).expanduser().resolve()
-    compound_signature = dft_method_signature(dft, required_elements)
-
-    prepared = []
-    for phase in sorted(plan.phases, key=lambda item: item.phase_id):
-        if phase.element not in required_elements:
-            continue
-        geometry_bytes = phase.structure_path.read_bytes()
-        frames = list(read(phase.structure_path, index=":"))
-        if len(frames) != 1 or not len(frames[0]):
-            raise ValueError(f"{phase.phase_id}: reference must contain exactly one nonempty frame")
-        atoms = frames[0]
-        if sha256_file(phase.structure_path) != hashlib.sha256(geometry_bytes).hexdigest():
-            raise ValueError(f"{phase.phase_id}: reference geometry changed during preflight")
-        if set(atoms.get_chemical_symbols()) != {phase.element}:
-            raise ValueError(f"{phase.phase_id}: reference must be pure {phase.element}")
-        if not np.isfinite(atoms.positions).all() or not np.isfinite(atoms.cell.array).all():
-            raise ValueError(f"{phase.phase_id}: invalid reference geometry")
-        if phase.kind == "bulk" and not atoms.pbc.all():
-            raise ValueError(f"{phase.phase_id}: bulk reference must be periodic")
-        cfg = _phase_config(dft, phase)
-        signature = dft_method_signature(cfg, {phase.element})
-        execution_signature = dft_execution_signature(cfg)
-        input_digest = hashlib.sha256(geometry_bytes).hexdigest()
-        relax_key = (
-            _relaxation_key(phase, input_digest, signature, execution_signature)
-            if phase.geometry_status == "requires_relaxation"
-            else None
-        )
-        serialized = io.StringIO()
-        snapshot_atoms = atoms.copy()
-        snapshot_atoms.calc = None
-        write(serialized, snapshot_atoms, format="extxyz")
-        relaxed_bytes = serialized.getvalue().encode()
-        relaxation = None
-        if relax_key is not None:
-            relax_entry = cache_dir / "relaxations" / relax_key
-            if relax_entry.exists():
-                with (relax_entry / "calculation.lock").open("a") as lock:
-                    fcntl.flock(lock, fcntl.LOCK_EX)
-                    result_path = relax_entry / "result.json"
-                    geometry_path = relax_entry / "geometry.extxyz"
-                    if result_path.exists() or geometry_path.exists():
-                        if not result_path.is_file() or not geometry_path.is_file():
-                            raise ValueError(
-                                f"{phase.phase_id}: incomplete cached elemental relaxation"
-                            )
-                        relaxation = CachedElementalRelaxation.model_validate_json(
-                            result_path.read_text()
+) -> _PreparedPhase:
+    """Validate one declared phase and resolve any cached relaxation/static results."""
+    geometry_bytes = phase.structure_path.read_bytes()
+    frames = list(read(phase.structure_path, index=":"))
+    if len(frames) != 1 or not len(frames[0]):
+        raise ValueError(f"{phase.phase_id}: reference must contain exactly one nonempty frame")
+    atoms = frames[0]
+    if sha256_file(phase.structure_path) != hashlib.sha256(geometry_bytes).hexdigest():
+        raise ValueError(f"{phase.phase_id}: reference geometry changed during preflight")
+    if set(atoms.get_chemical_symbols()) != {phase.element}:
+        raise ValueError(f"{phase.phase_id}: reference must be pure {phase.element}")
+    if not np.isfinite(atoms.positions).all() or not np.isfinite(atoms.cell.array).all():
+        raise ValueError(f"{phase.phase_id}: invalid reference geometry")
+    if phase.kind == "bulk" and not atoms.pbc.all():
+        raise ValueError(f"{phase.phase_id}: bulk reference must be periodic")
+    cfg = _phase_config(dft, phase)
+    signature = dft_method_signature(cfg, {phase.element})
+    execution_signature = dft_execution_signature(cfg)
+    input_digest = hashlib.sha256(geometry_bytes).hexdigest()
+    relax_key = (
+        _relaxation_key(phase, input_digest, signature, execution_signature)
+        if phase.geometry_status == "requires_relaxation"
+        else None
+    )
+    serialized = io.StringIO()
+    snapshot_atoms = atoms.copy()
+    snapshot_atoms.calc = None
+    write(serialized, snapshot_atoms, format="extxyz")
+    relaxed_bytes = serialized.getvalue().encode()
+    relaxation = None
+    if relax_key is not None:
+        relax_entry = cache_dir / "relaxations" / relax_key
+        if relax_entry.exists():
+            with exclusive_lock(relax_entry / "calculation.lock"):
+                result_path = relax_entry / "result.json"
+                geometry_path = relax_entry / "geometry.extxyz"
+                if result_path.exists() or geometry_path.exists():
+                    if not result_path.is_file() or not geometry_path.is_file():
+                        raise ValueError(
+                            f"{phase.phase_id}: incomplete cached elemental relaxation"
                         )
-                        relaxed_bytes = geometry_path.read_bytes()
-                        atoms_for_static = _validate_cached_relaxation(
-                            phase,
-                            atoms,
-                            relaxation,
-                            relax_key=relax_key,
-                            input_digest=input_digest,
-                            method_signature=signature,
-                            execution_signature=execution_signature,
-                            geometry_path=geometry_path,
-                        )
-            if relaxation is None:
-                atoms_for_static = atoms
-        else:
+                    relaxation = CachedElementalRelaxation.model_validate_json(
+                        result_path.read_text()
+                    )
+                    relaxed_bytes = geometry_path.read_bytes()
+                    atoms_for_static = _validate_cached_relaxation(
+                        phase,
+                        atoms,
+                        relaxation,
+                        relax_key=relax_key,
+                        input_digest=input_digest,
+                        method_signature=signature,
+                        execution_signature=execution_signature,
+                        geometry_path=geometry_path,
+                    )
+        if relaxation is None:
             atoms_for_static = atoms
-        atoms_for_static = read(io.StringIO(relaxed_bytes.decode("utf-8")), format="extxyz")
-        static_digest = hashlib.sha256(relaxed_bytes).hexdigest()
-        static_identity = {
-            "schema_version": 4,
-            "geometry_sha256": static_digest,
-            "method_signature": signature,
-            "execution_signature": execution_signature,
-            "phase": {
-                "element": phase.element,
-                "kind": phase.kind,
-                "magnetic_state": phase.magnetic_state,
-                "qe_magnetic_settings": phase.qe_magnetic_settings,
-                "vasp_magnetic_settings": phase.vasp_magnetic_settings,
-                "kpts": phase.kpts,
-            },
-            "protocol": plan.protocol,
-        }
-        static_key = hashlib.sha256(
-            json.dumps(static_identity, sort_keys=True).encode()
-        ).hexdigest()
-        if relax_key is None or relaxation is not None:
-            static_entry = cache_dir / "calculations" / static_key
-            if static_entry.exists():
-                with (static_entry / "calculation.lock").open("a") as lock:
-                    fcntl.flock(lock, fcntl.LOCK_EX)
-                    static_result_path = static_entry / "result.json"
-                    static_geometry_path = static_entry / "geometry.extxyz"
-                    if static_result_path.exists() or static_geometry_path.exists():
-                        if not static_result_path.is_file() or not static_geometry_path.is_file():
-                            raise ValueError(
-                                f"{phase.phase_id}: incomplete cached elemental calculation"
-                            )
-                        cached = CachedElementalCalculation.model_validate_json(
-                            static_result_path.read_text()
+    else:
+        atoms_for_static = atoms
+    atoms_for_static = read(io.StringIO(relaxed_bytes.decode("utf-8")), format="extxyz")
+    static_digest = hashlib.sha256(relaxed_bytes).hexdigest()
+    static_key = _static_cache_key(
+        phase, plan.protocol, static_digest, signature, execution_signature
+    )
+    if relax_key is None or relaxation is not None:
+        static_entry = cache_dir / "calculations" / static_key
+        if static_entry.exists():
+            with exclusive_lock(static_entry / "calculation.lock"):
+                static_result_path = static_entry / "result.json"
+                static_geometry_path = static_entry / "geometry.extxyz"
+                if static_result_path.exists() or static_geometry_path.exists():
+                    if not static_result_path.is_file() or not static_geometry_path.is_file():
+                        raise ValueError(
+                            f"{phase.phase_id}: incomplete cached elemental calculation"
                         )
-                        if (
-                            cached.cache_key != static_key
-                            or cached.geometry_sha256 != static_digest
-                            or cached.method_signature != signature
-                            or cached.execution_signature != execution_signature
-                            or cached.n_atoms != len(atoms_for_static)
-                            or sha256_file(static_geometry_path) != static_digest
-                        ):
-                            raise ValueError(
-                                f"{phase.phase_id}: invalid cached elemental calculation"
-                            )
-        prepared.append(
-            (
-                phase,
-                atoms,
-                geometry_bytes,
-                cfg,
-                signature,
-                execution_signature,
-                input_digest,
-                relax_key,
-                relaxation,
-                relaxed_bytes,
-                atoms_for_static,
-                static_digest,
-                static_key,
-            )
-        )
+                    cached = CachedElementalCalculation.model_validate_json(
+                        static_result_path.read_text()
+                    )
+                    if (
+                        cached.cache_key != static_key
+                        or cached.geometry_sha256 != static_digest
+                        or cached.method_signature != signature
+                        or cached.execution_signature != execution_signature
+                        or cached.n_atoms != len(atoms_for_static)
+                        or sha256_file(static_geometry_path) != static_digest
+                    ):
+                        raise ValueError(f"{phase.phase_id}: invalid cached elemental calculation")
+    return _PreparedPhase(
+        phase,
+        atoms,
+        geometry_bytes,
+        cfg,
+        signature,
+        execution_signature,
+        input_digest,
+        relax_key,
+        relaxation,
+        relaxed_bytes,
+        atoms_for_static,
+        static_digest,
+        static_key,
+    )
 
+
+def _preflight_reference_calculations(
+    prepared: list[_PreparedPhase],
+    cache_dir: Path,
+    dft_approved: bool,
+    max_dft_calculations: int | None,
+) -> None:
+    """Check approval and the DFT cap for every missing calculation before launching any."""
     # Preflight every phase before any DFT work, including the full approval gate.
     missing_relaxations = {
-        record[7]: record[0].phase_id
+        record.relax_key: record.phase.phase_id
         for record in prepared
-        if record[7] is not None and record[8] is None
+        if record.relax_key is not None and record.cached_relaxation is None
     }
     missing_static_keys = {
-        record[12]: record[0].phase_id
+        record.static_key: record.phase.phase_id
         for record in prepared
-        if (record[7] is None or record[8] is not None)
-        and not (cache_dir / "calculations" / record[12] / "result.json").is_file()
+        if (record.relax_key is None or record.cached_relaxation is not None)
+        and not (cache_dir / "calculations" / record.static_key / "result.json").is_file()
     }
     calculation_count = len(missing_static_keys) + 2 * len(missing_relaxations)
     if not dft_approved and calculation_count:
@@ -663,10 +683,17 @@ def prepare_elemental_references(
             f"Reference plan needs {calculation_count} DFT calculations; "
             f"cap is {max_dft_calculations}"
         )
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    records = []
-    dft_attempts = 0
-    for (
+
+
+def _compute_reference(
+    item: _PreparedPhase,
+    plan: ElementalReferencePlan,
+    cache_dir: Path,
+    dft_approved: bool,
+    budget: _DFTAttemptBudget,
+) -> _ReferenceRecord:
+    """Reuse or run the relaxation (if required) and the static single point for one phase."""
+    (
         phase,
         atoms,
         _geometry_bytes,
@@ -680,190 +707,170 @@ def prepare_elemental_references(
         atoms_for_static,
         static_digest,
         static_key,
-    ) in prepared:
-        relaxation = cached_relaxation
-        if relax_key is not None:
-            relax_entry = cache_dir / "relaxations" / relax_key
-            relax_entry.mkdir(parents=True, exist_ok=True)
-            with (relax_entry / "calculation.lock").open("a") as lock:
-                fcntl.flock(lock, fcntl.LOCK_EX)
-                relax_result_path = relax_entry / "result.json"
-                relax_geometry_path = relax_entry / "geometry.extxyz"
-                if relax_result_path.exists():
-                    relaxation = CachedElementalRelaxation.model_validate_json(
-                        relax_result_path.read_text()
-                    )
-                    relaxed_bytes = relax_geometry_path.read_bytes()
-                    atoms_for_static = _validate_cached_relaxation(
-                        phase,
-                        atoms,
-                        relaxation,
-                        relax_key=relax_key,
-                        input_digest=input_digest,
-                        method_signature=signature,
-                        execution_signature=execution_signature,
-                        geometry_path=relax_geometry_path,
-                    )
-                    log.info(
-                        "Reusing relaxed elemental geometry %s (%s)", phase.phase_id, relax_key
-                    )
-                else:
-                    if not dft_approved:
-                        raise ValueError(
-                            f"{phase.phase_id}: missing relaxation requires DFT approval"
-                        )
-                    if max_dft_calculations is not None and dft_attempts >= max_dft_calculations:
-                        raise ValueError("Reference DFT calculation cap reached before launch")
-                    dft_attempts += 1
-                    work_dir = relax_entry / f"relax-{uuid.uuid4().hex}"
-                    log.info("Relaxing elemental reference %s (%s)", phase.phase_id, relax_key)
-                    (
-                        relaxed_atoms,
-                        final_force,
-                        ionic_steps,
-                        final_stress,
-                    ) = _run_reference_relaxation(phase, cfg, atoms, work_dir)
-                    if (
-                        relaxed_atoms.get_chemical_symbols() != atoms.get_chemical_symbols()
-                        or not np.isfinite(relaxed_atoms.positions).all()
-                        or not np.isfinite(relaxed_atoms.cell.array).all()
-                        or (phase.kind == "bulk" and not relaxed_atoms.pbc.all())
-                    ):
-                        raise RuntimeError(
-                            f"{phase.phase_id}: relaxation returned invalid final geometry"
-                        )
-                    if phase.kind == "molecule" and not np.allclose(
-                        relaxed_atoms.cell.array, atoms.cell.array, atol=1e-8, rtol=0
-                    ):
-                        raise RuntimeError(
-                            f"{phase.phase_id}: molecular relaxation changed its vacuum cell"
-                        )
-                    relaxed_atoms.calc = None
-                    geometry_tmp = relax_entry / "geometry.tmp.extxyz"
-                    write(geometry_tmp, relaxed_atoms, format="extxyz")
-                    relaxed_bytes = geometry_tmp.read_bytes()
-                    relaxed_digest = hashlib.sha256(relaxed_bytes).hexdigest()
-                    geometry_tmp.replace(relax_geometry_path)
-                    relaxation = CachedElementalRelaxation(
-                        cache_key=relax_key,
-                        input_geometry_sha256=input_digest,
-                        relaxed_geometry_sha256=relaxed_digest,
-                        method_signature=signature,
-                        execution_signature=execution_signature,
-                        n_atoms=len(atoms),
-                        converged=True,
-                        final_max_force_eV_per_A=final_force,
-                        final_stress_eV_per_A3=(
-                            None if final_stress is None else final_stress.reshape(-1).tolist()
-                        ),
-                        ionic_steps=ionic_steps,
-                        work_dir=str(work_dir),
-                    )
-                    temporary = relax_entry / "result.tmp"
-                    temporary.write_text(relaxation.model_dump_json(indent=2) + "\n")
-                    temporary.replace(relax_result_path)
-                    atoms_for_static = relaxed_atoms
-            static_digest = hashlib.sha256(relaxed_bytes).hexdigest()
-            static_identity = {
-                "schema_version": 4,
-                "geometry_sha256": static_digest,
-                "method_signature": signature,
-                "execution_signature": execution_signature,
-                "phase": {
-                    "element": phase.element,
-                    "kind": phase.kind,
-                    "magnetic_state": phase.magnetic_state,
-                    "qe_magnetic_settings": phase.qe_magnetic_settings,
-                    "vasp_magnetic_settings": phase.vasp_magnetic_settings,
-                    "kpts": phase.kpts,
-                },
-                "protocol": plan.protocol,
-            }
-            static_key = hashlib.sha256(
-                json.dumps(static_identity, sort_keys=True).encode()
-            ).hexdigest()
-
-        entry = cache_dir / "calculations" / static_key
-        entry.mkdir(parents=True, exist_ok=True)
-        with (entry / "calculation.lock").open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            result_path = entry / "result.json"
-            if result_path.exists():
-                record = CachedElementalCalculation.model_validate_json(result_path.read_text())
-                if (
-                    record.cache_key != static_key
-                    or record.geometry_sha256 != static_digest
-                    or record.method_signature != signature
-                    or record.execution_signature != execution_signature
-                    or record.n_atoms != len(atoms_for_static)
-                    or sha256_file(entry / "geometry.extxyz") != static_digest
-                ):
-                    raise ValueError(f"{phase.phase_id}: invalid cached elemental calculation")
-                log.info("Reusing elemental DFT reference %s (%s)", phase.phase_id, static_key)
-            else:
-                if not dft_approved:
-                    raise ValueError(f"{phase.phase_id}: missing DFT calculation requires approval")
-                if max_dft_calculations is not None and dft_attempts >= max_dft_calculations:
-                    raise ValueError("Reference DFT calculation cap reached before launch")
-                dft_attempts += 1
-                work_dir = entry / f"dft-{uuid.uuid4().hex}"
-                log.info("Calculating elemental DFT reference %s (%s)", phase.phase_id, static_key)
-                result = make_backend(cfg).run_one(
-                    DFTJobSpec(phase.phase_id, atoms_for_static, str(work_dir))
+    ) = item
+    relaxation = cached_relaxation
+    if relax_key is not None:
+        relax_entry = cache_dir / "relaxations" / relax_key
+        relax_entry.mkdir(parents=True, exist_ok=True)
+        with exclusive_lock(relax_entry / "calculation.lock"):
+            relax_result_path = relax_entry / "result.json"
+            relax_geometry_path = relax_entry / "geometry.extxyz"
+            if relax_result_path.exists():
+                relaxation = CachedElementalRelaxation.model_validate_json(
+                    relax_result_path.read_text()
                 )
-                if (
-                    not result.converged
-                    or result.return_code != 0
-                    or result.backend != cfg.backend
-                    or result.energy_eV is None
-                    or not np.isfinite(result.energy_eV)
-                    or result.n_atoms != len(atoms_for_static)
-                ):
-                    raise RuntimeError(
-                        f"{phase.phase_id}: elemental DFT failed: {result.notes}; see {work_dir}"
-                    )
-                if dft_method_signature(cfg, {phase.element}) != signature:
-                    raise ValueError("DFT protocol changed during elemental calculation")
-                if result.final_atoms is not None and (
-                    result.final_atoms.get_chemical_symbols()
-                    != atoms_for_static.get_chemical_symbols()
-                    or not np.allclose(
-                        result.final_atoms.positions,
-                        atoms_for_static.positions,
-                        atol=1e-6,
-                        rtol=0,
-                    )
-                    or not np.allclose(
-                        result.final_atoms.cell.array,
-                        atoms_for_static.cell.array,
-                        atol=1e-6,
-                        rtol=0,
-                    )
-                ):
-                    raise ValueError(f"{phase.phase_id}: single-point changed reference geometry")
-                record = CachedElementalCalculation(
-                    cache_key=static_key,
-                    geometry_sha256=static_digest,
+                relaxed_bytes = relax_geometry_path.read_bytes()
+                atoms_for_static = _validate_cached_relaxation(
+                    phase,
+                    atoms,
+                    relaxation,
+                    relax_key=relax_key,
+                    input_digest=input_digest,
                     method_signature=signature,
                     execution_signature=execution_signature,
-                    n_atoms=len(atoms_for_static),
-                    energy_eV=result.energy_eV,
+                    geometry_path=relax_geometry_path,
+                )
+                log.info("Reusing relaxed elemental geometry %s (%s)", phase.phase_id, relax_key)
+            else:
+                if not dft_approved:
+                    raise ValueError(f"{phase.phase_id}: missing relaxation requires DFT approval")
+                budget.reserve()
+                work_dir = relax_entry / f"relax-{uuid.uuid4().hex}"
+                log.info("Relaxing elemental reference %s (%s)", phase.phase_id, relax_key)
+                (
+                    relaxed_atoms,
+                    final_force,
+                    ionic_steps,
+                    final_stress,
+                ) = _run_reference_relaxation(phase, cfg, atoms, work_dir)
+                if (
+                    relaxed_atoms.get_chemical_symbols() != atoms.get_chemical_symbols()
+                    or not np.isfinite(relaxed_atoms.positions).all()
+                    or not np.isfinite(relaxed_atoms.cell.array).all()
+                    or (phase.kind == "bulk" and not relaxed_atoms.pbc.all())
+                ):
+                    raise RuntimeError(
+                        f"{phase.phase_id}: relaxation returned invalid final geometry"
+                    )
+                if phase.kind == "molecule" and not np.allclose(
+                    relaxed_atoms.cell.array, atoms.cell.array, atol=1e-8, rtol=0
+                ):
+                    raise RuntimeError(
+                        f"{phase.phase_id}: molecular relaxation changed its vacuum cell"
+                    )
+                relaxed_atoms.calc = None
+                geometry_tmp = relax_entry / "geometry.tmp.extxyz"
+                write(geometry_tmp, relaxed_atoms, format="extxyz")
+                relaxed_bytes = geometry_tmp.read_bytes()
+                relaxed_digest = hashlib.sha256(relaxed_bytes).hexdigest()
+                geometry_tmp.replace(relax_geometry_path)
+                relaxation = CachedElementalRelaxation(
+                    cache_key=relax_key,
+                    input_geometry_sha256=input_digest,
+                    relaxed_geometry_sha256=relaxed_digest,
+                    method_signature=signature,
+                    execution_signature=execution_signature,
+                    n_atoms=len(atoms),
+                    converged=True,
+                    final_max_force_eV_per_A=final_force,
+                    final_stress_eV_per_A3=(
+                        None if final_stress is None else final_stress.reshape(-1).tolist()
+                    ),
+                    ionic_steps=ionic_steps,
                     work_dir=str(work_dir),
                 )
-                (entry / "geometry.extxyz").write_bytes(relaxed_bytes)
-                temporary = entry / "result.tmp"
-                temporary.write_text(record.model_dump_json(indent=2) + "\n")
-                temporary.replace(result_path)
-        records.append((phase, relaxed_bytes, record, relaxation, input_digest))
+                temporary = relax_entry / "result.tmp"
+                temporary.write_text(relaxation.model_dump_json(indent=2) + "\n")
+                temporary.replace(relax_result_path)
+                atoms_for_static = relaxed_atoms
+        static_digest = hashlib.sha256(relaxed_bytes).hexdigest()
+        static_key = _static_cache_key(
+            phase, plan.protocol, static_digest, signature, execution_signature
+        )
 
-    if dft_method_signature(dft, required_elements) != compound_signature:
-        raise ValueError("Compound DFT protocol changed during reference preparation")
-    for phase, _, geometry_bytes, cfg, signature, *_ in prepared:
-        if (
-            phase.structure_path.read_bytes() != geometry_bytes
-            or dft_method_signature(cfg, {phase.element}) != signature
-        ):
-            raise ValueError(f"{phase.phase_id}: reference inputs changed during preparation")
+    entry = cache_dir / "calculations" / static_key
+    entry.mkdir(parents=True, exist_ok=True)
+    with exclusive_lock(entry / "calculation.lock"):
+        result_path = entry / "result.json"
+        if result_path.exists():
+            record = CachedElementalCalculation.model_validate_json(result_path.read_text())
+            if (
+                record.cache_key != static_key
+                or record.geometry_sha256 != static_digest
+                or record.method_signature != signature
+                or record.execution_signature != execution_signature
+                or record.n_atoms != len(atoms_for_static)
+                or sha256_file(entry / "geometry.extxyz") != static_digest
+            ):
+                raise ValueError(f"{phase.phase_id}: invalid cached elemental calculation")
+            log.info("Reusing elemental DFT reference %s (%s)", phase.phase_id, static_key)
+        else:
+            if not dft_approved:
+                raise ValueError(f"{phase.phase_id}: missing DFT calculation requires approval")
+            budget.reserve()
+            work_dir = entry / f"dft-{uuid.uuid4().hex}"
+            log.info("Calculating elemental DFT reference %s (%s)", phase.phase_id, static_key)
+            result = make_backend(cfg).run_one(
+                DFTJobSpec(phase.phase_id, atoms_for_static, str(work_dir))
+            )
+            if (
+                not result.converged
+                or result.return_code != 0
+                or result.backend != cfg.backend
+                or result.energy_eV is None
+                or not np.isfinite(result.energy_eV)
+                or result.n_atoms != len(atoms_for_static)
+            ):
+                raise RuntimeError(
+                    f"{phase.phase_id}: elemental DFT failed: {result.notes}; see {work_dir}"
+                )
+            if dft_method_signature(cfg, {phase.element}) != signature:
+                raise ValueError("DFT protocol changed during elemental calculation")
+            if result.final_atoms is not None and (
+                result.final_atoms.get_chemical_symbols() != atoms_for_static.get_chemical_symbols()
+                or not np.allclose(
+                    result.final_atoms.positions,
+                    atoms_for_static.positions,
+                    atol=1e-6,
+                    rtol=0,
+                )
+                or not np.allclose(
+                    result.final_atoms.cell.array,
+                    atoms_for_static.cell.array,
+                    atol=1e-6,
+                    rtol=0,
+                )
+            ):
+                raise ValueError(f"{phase.phase_id}: single-point changed reference geometry")
+            record = CachedElementalCalculation(
+                cache_key=static_key,
+                geometry_sha256=static_digest,
+                method_signature=signature,
+                execution_signature=execution_signature,
+                n_atoms=len(atoms_for_static),
+                energy_eV=result.energy_eV,
+                work_dir=str(work_dir),
+            )
+            (entry / "geometry.extxyz").write_bytes(relaxed_bytes)
+            temporary = entry / "result.tmp"
+            temporary.write_text(record.model_dump_json(indent=2) + "\n")
+            temporary.replace(result_path)
+    return _ReferenceRecord(phase, relaxed_bytes, record, relaxation, input_digest)
+
+
+def _write_reference_manifest(
+    records: list[_ReferenceRecord],
+    *,
+    plan: ElementalReferencePlan,
+    dft: DFTConfig,
+    required_elements: set[str],
+    output_dir: Path,
+    compound_signature: str,
+    phases_approved: bool,
+    dft_approved: bool,
+    budget: _DFTAttemptBudget,
+) -> Path:
+    """Select the lowest energy/atom phase per element and write the audited manifest."""
     output_dir.mkdir(parents=True)
     selected = {}
     audit = []
@@ -914,7 +921,7 @@ def prepare_elemental_references(
                     "protocol": plan.protocol,
                     "phases_approved": phases_approved,
                     "dft_approved": dft_approved,
-                    "dft_attempts": dft_attempts,
+                    "dft_attempts": budget.attempts,
                     "scope": "lowest_among_declared_phases_after_required_relaxations",
                     "phases": audit,
                 },
@@ -923,6 +930,74 @@ def prepare_elemental_references(
             allow_nan=False,
         )
         + "\n"
+    )
+    return manifest_path
+
+
+def prepare_elemental_references(
+    plan: ElementalReferencePlan,
+    dft: DFTConfig,
+    *,
+    required_elements: set[str],
+    cache_dir: Path,
+    output_dir: Path,
+    phases_approved: bool = False,
+    dft_approved: bool = False,
+    max_dft_calculations: int | None = None,
+) -> Path:
+    """Select lowest energy/atom among declared phases, never an implicit search.
+
+    A phase explicitly attested as ``verified_converged`` gets a fixed-geometry
+    single point. Other phases are relaxed first, must meet the requested force
+    threshold, and then receive a production-protocol single point. This only
+    compares declared phases; it is not an implicit structure or magnetic-state
+    search.
+    """
+    if not phases_approved:
+        raise ValueError("Elemental reference phase selection requires explicit approval")
+    if not required_elements:
+        raise ValueError("Elemental references require a nonempty element set")
+    missing = required_elements - {phase.element for phase in plan.phases}
+    if missing:
+        raise ValueError(f"Approved reference plan lacks coverage for {sorted(missing)}")
+    if output_dir.exists():
+        raise ValueError(f"Elemental reference snapshot already exists: {output_dir}")
+    if max_dft_calculations is not None and max_dft_calculations < 0:
+        raise ValueError("Reference DFT calculation cap must be nonnegative")
+    cache_dir = Path(cache_dir).expanduser().resolve()
+    compound_signature = dft_method_signature(dft, required_elements)
+
+    prepared = []
+    for phase in sorted(plan.phases, key=lambda item: item.phase_id):
+        if phase.element not in required_elements:
+            continue
+        prepared.append(_prepare_reference_phase(phase, dft, plan, cache_dir))
+
+    _preflight_reference_calculations(prepared, cache_dir, dft_approved, max_dft_calculations)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    records = []
+    budget = _DFTAttemptBudget(max_dft_calculations)
+    for item in prepared:
+        records.append(_compute_reference(item, plan, cache_dir, dft_approved, budget))
+
+    if dft_method_signature(dft, required_elements) != compound_signature:
+        raise ValueError("Compound DFT protocol changed during reference preparation")
+    for phase, _, geometry_bytes, cfg, signature, *_ in prepared:
+        if (
+            phase.structure_path.read_bytes() != geometry_bytes
+            or dft_method_signature(cfg, {phase.element}) != signature
+        ):
+            raise ValueError(f"{phase.phase_id}: reference inputs changed during preparation")
+    manifest_path = _write_reference_manifest(
+        records,
+        plan=plan,
+        dft=dft,
+        required_elements=required_elements,
+        output_dir=output_dir,
+        compound_signature=compound_signature,
+        phases_approved=phases_approved,
+        dft_approved=dft_approved,
+        budget=budget,
     )
     load_elemental_reference_manifest(manifest_path, required_elements=required_elements)
     return manifest_path

@@ -1,4 +1,4 @@
-"""Unit tests for matsim_agents.tools.vasp_relax.
+"""Unit tests for matsim_agents.backends.dft.vasp_relax.
 
 These tests exercise the input-deck writer and the parser against canned
 data; they never invoke a real VASP binary.
@@ -13,7 +13,7 @@ import pytest
 from ase.build import bulk
 from ase.calculators.singlepoint import SinglePointCalculator
 
-from matsim_agents.tools.vasp_relax import (
+from matsim_agents.backends.dft.vasp_relax import (
     VASPSettings,
     parse_relax_outputs,
     prepare_relax_workdir,

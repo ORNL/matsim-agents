@@ -107,14 +107,14 @@ def make_figure(series: dict[str, dict], out_path: str) -> None:
     fig, axes = plt.subplots(2, 2, figsize=(9.0, 7.5))
     (ax_f, ax_e), (ax_pb, ax_pa) = axes
 
-    # (a) Force MAE vs iteration; (b) Energy MAE (shifted) vs iteration.
+    # (a) Force MAE vs iteration; (b) formation-energy MAE vs iteration.
     for label, s in series.items():
         recs = s["records"]
         if not recs:
             continue
         its = [r["_iteration"] for r in recs]
         f_mae = [r.get("force_mae_eV_per_A", np.nan) for r in recs]
-        e_mae = [r.get("energy_mae_eV_per_atom_shifted", np.nan) for r in recs]
+        e_mae = [r.get("formation_energy_mae_eV_per_atom", np.nan) for r in recs]
         ax_f.plot(its, f_mae, "o-", color=colors[label], label=label)
         ax_e.plot(its, e_mae, "o-", color=colors[label], label=label)
 
@@ -125,7 +125,7 @@ def make_figure(series: dict[str, dict], out_path: str) -> None:
     ax_f.legend()
 
     ax_e.set_xlabel("AL iteration")
-    ax_e.set_ylabel("Energy MAE (eV/atom, offset-corrected)")
+    ax_e.set_ylabel("Formation-energy MAE (eV/atom)")
     ax_e.set_title("(b) Energy error vs. fine-tuning iteration")
     ax_e.grid(True, alpha=0.3)
     ax_e.legend()
@@ -152,8 +152,8 @@ def make_figure(series: dict[str, dict], out_path: str) -> None:
             f"{label}: iter {first['_iteration']}->{last['_iteration']}  "
             f"F_MAE {first.get('force_mae_eV_per_A', float('nan')):.4f}->"
             f"{last.get('force_mae_eV_per_A', float('nan')):.4f} eV/A  "
-            f"E_MAE(shift) {first.get('energy_mae_eV_per_atom_shifted', float('nan')):.4f}->"
-            f"{last.get('energy_mae_eV_per_atom_shifted', float('nan')):.4f} eV/atom"
+            f"E_form_MAE {first.get('formation_energy_mae_eV_per_atom', float('nan')):.4f}->"
+            f"{last.get('formation_energy_mae_eV_per_atom', float('nan')):.4f} eV/atom"
         )
 
 

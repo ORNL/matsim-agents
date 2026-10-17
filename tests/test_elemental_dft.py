@@ -15,16 +15,17 @@ from ase.io import read, write
 from pydantic import ValidationError
 
 from matsim_agents.active_learning import elemental_dft
-from matsim_agents.active_learning.config import DFTConfig, TrainerConfig
-from matsim_agents.active_learning.dft_backend import DFTResult
+from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.dft_protocol import dft_method_signature
 from matsim_agents.active_learning.elemental_dft import (
     ElementalPhaseSpec,
     ElementalReferencePlan,
     prepare_elemental_references,
 )
-from matsim_agents.active_learning.formation_training import prepare_formation_training_dataset
 from matsim_agents.active_learning.hydragnn_references import resolve_training_references
+from matsim_agents.backends.dft.base import DFTResult
+from matsim_agents.backends.dft.config import DFTConfig
+from matsim_agents.datasets.formation_training import prepare_formation_training_dataset
 
 
 @pytest.fixture
@@ -471,7 +472,7 @@ def test_trusted_reference_formats_are_serialized_as_extxyz(
 def test_reference_manifest_feeds_formation_preparation(setup_references):
     from ase.calculators.singlepoint import SinglePointCalculator
 
-    from matsim_agents.active_learning.dataset_governance import (
+    from matsim_agents.datasets.governance import (
         DatasetValidationSummary,
         write_dataset_manifest,
     )
@@ -870,12 +871,12 @@ def test_post_lock_relaxation_cache_is_fully_validated(
     phase = setup.plan.phases[0]
     phase.geometry_status = "requires_relaxation"
     phase_atoms = read(phase.structure_path)
-    original_flock = elemental_dft.fcntl.flock
+    original_lock = elemental_dft.exclusive_lock
     inserted = False
 
-    def insert_racing_cache(lock_file, operation):
+    def insert_racing_cache(lock_path, **kwargs):
         nonlocal inserted
-        lock_path = Path(lock_file.name)
+        lock_path = Path(lock_path)
         if not inserted and lock_path.parent.parent.name == "relaxations":
             inserted = True
             relaxed_atoms = phase_atoms.copy()
@@ -908,9 +909,9 @@ def test_post_lock_relaxation_cache_is_fully_validated(
                 "work_dir": str(lock_path.parent),
             }
             (lock_path.parent / "result.json").write_text(json.dumps(payload))
-        return original_flock(lock_file, operation)
+        return original_lock(lock_path, **kwargs)
 
-    monkeypatch.setattr(elemental_dft.fcntl, "flock", insert_racing_cache)
+    monkeypatch.setattr(elemental_dft, "exclusive_lock", insert_racing_cache)
     with pytest.raises(ValueError, match=error):
         _prepare(setup, dft_approved=True, max_dft_calculations=4)
     assert inserted
@@ -926,7 +927,7 @@ def test_concurrent_reference_preflight_waits_for_locked_relaxation_cache(
     relaxation_started = threading.Event()
     allow_relaxation_to_finish = threading.Event()
     second_preflight_waiting = threading.Event()
-    original_flock = elemental_dft.fcntl.flock
+    original_lock = elemental_dft.exclusive_lock
     thread_label = threading.local()
 
     def fake_relax(_phase, _cfg, atoms, _work_dir):
@@ -934,16 +935,16 @@ def test_concurrent_reference_preflight_waits_for_locked_relaxation_cache(
         assert allow_relaxation_to_finish.wait(timeout=10)
         return atoms.copy(), 0.01, 4, np.zeros(6)
 
-    def observe_lock(lock_file, operation):
+    def observe_lock(lock_path, **kwargs):
         if (
             getattr(thread_label, "value", None) == "second"
-            and Path(lock_file.name).parent.parent.name == "relaxations"
+            and Path(lock_path).parent.parent.name == "relaxations"
         ):
             second_preflight_waiting.set()
-        return original_flock(lock_file, operation)
+        return original_lock(lock_path, **kwargs)
 
     monkeypatch.setattr(elemental_dft, "_run_reference_relaxation", fake_relax)
-    monkeypatch.setattr(elemental_dft.fcntl, "flock", observe_lock)
+    monkeypatch.setattr(elemental_dft, "exclusive_lock", observe_lock)
 
     def prepare(label, name):
         thread_label.value = label
@@ -1118,7 +1119,7 @@ def test_al_additive_reference_extension_across_iterations(
 
     # Iteration 2: AL dataset now has Si and O (newly labelled species O)
     # Run with dft_approved=True to calculate newly introduced species O
-    from matsim_agents.active_learning.dataset_governance import (
+    from matsim_agents.datasets.governance import (
         DatasetValidationSummary,
         write_dataset_manifest,
     )
@@ -1203,7 +1204,7 @@ def test_al_additive_reference_extension_across_iterations(
 
 
 def test_manifest_reference_extension_accepts_expanded_real_method_scope(setup_references):
-    from matsim_agents.active_learning.dataset_governance import (
+    from matsim_agents.datasets.governance import (
         DatasetValidationSummary,
         write_dataset_manifest,
     )

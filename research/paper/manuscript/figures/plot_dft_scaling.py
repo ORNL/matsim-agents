@@ -36,8 +36,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Match only the randomized-repeat sweep tags hea-fcc-scaling-N<nodes>-r<rep>.
-# The trailing anchor excludes the legacy single-run baseline dirs (no -r suffix,
-# same seed as r1) and any moved-aside ".timeout-<jobid>" partial dirs, so the
+# The trailing anchor skips moved-aside ".timeout-<jobid>" partial dirs, so the
 # aggregate reflects exactly the R independent random draws per node count.
 TAG_RE = re.compile(r"hea-fcc-scaling-N(\d+)-r(\d+)$")
 

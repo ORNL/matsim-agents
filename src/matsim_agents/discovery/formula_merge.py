@@ -10,6 +10,9 @@ applies the same deterministic constraints used for the enumerated grid.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Protocol
+
 from pydantic import BaseModel
 
 from matsim_agents.discovery.composition import extract_compositions
@@ -18,7 +21,13 @@ from matsim_agents.discovery.formula import (
     FormulaGenerationPolicy,
     _charge_balance_possible,
 )
-from matsim_agents.workflows.debate import DebateVerdict
+
+
+class ParticipantResponse(Protocol):
+    """Free-text answer attributed to one debate participant."""
+
+    participant: str
+    response: str
 
 
 def _policy_rejection_reasons(
@@ -54,7 +63,7 @@ class LLMFormulaProposal(BaseModel):
 
 
 def extract_llm_formula_proposals(
-    verdicts: list[DebateVerdict],
+    verdicts: Sequence[ParticipantResponse],
     policy: FormulaGenerationPolicy,
 ) -> list[LLMFormulaProposal]:
     """Pull formula mentions out of free-text debate verdicts.

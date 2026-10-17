@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from matsim_agents.active_learning.config import LLMSeedConfig, SeedSourceConfig
-from matsim_agents.active_learning.seeds import resolve_seed_structures
+from matsim_agents.active_learning.seed_sources import resolve_seed_structures
 
 
 def _write_dummy_structure(p: Path) -> None:
@@ -86,7 +86,7 @@ def _patch_llm_and_phases(
         return _StubLLM(canned=llm_response)
 
     monkeypatch.setattr(
-        "matsim_agents.llm.get_chat_model",
+        "matsim_agents.backends.llm.provider.get_chat_model",
         _fake_get_chat_model,
     )
 

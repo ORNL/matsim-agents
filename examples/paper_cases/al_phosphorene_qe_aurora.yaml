@@ -1,0 +1,101 @@
+# =============================================================================
+# Portability case: phosphorene AL loop with Quantum ESPRESSO labelling on ALCF Aurora.
+#
+# Aurora analogue of al_phosphorene_qe.yaml: the SAME active-learning loop (MLIP MD sampling +
+# mc_dropout acquisition + QE pw.x labelling), retargeted to Aurora's Intel
+# Data Center GPU Max. Only the vars/paths, the DFT + train launchers, the
+# per-node rank layout, and the xpu device strings differ.
+#
+# Aurora node layout: 12 GPU tiles per node (ZE_FLAT_DEVICE_HIERARCHY=FLAT)
+#   -> ranks_per_node=12, threads_per_rank=1 (the Aurora step wrappers bind
+#   one core per rank).
+#
+# PROJ_ROOT, RUNS_ROOT, HYDRAGNN_DIR (and HYDRAGNN_FT_REPO where used) must be
+# exported; the Aurora paper-case job sets them from the checkout.
+#
+# How to run (from the Aurora repo checkout):
+#   qsub -v CASE=phosphorene_qe deployments/aurora/jobs/job-active-learning-paper-cases-aurora.sh
+# =============================================================================
+vars:
+  PROJ_ROOT:    ${PROJ_ROOT:?export PROJ_ROOT to the Aurora matsim-agents checkout}
+  RUNS_ROOT:    ${RUNS_ROOT:?export RUNS_ROOT}
+  HYDRAGNN_DIR: ${HYDRAGNN_DIR:?export HYDRAGNN_DIR}
+  RUN_TAG:      phosphorene-2d-qe-aurora-al-001
+
+  SEED_XYZ:   ${PROJ_ROOT}/examples/paper_cases/seeds/phosphorene_black_P.extxyz
+  PW_BIN:     ${PROJ_ROOT}/external/quantum-espresso/install-gpu/bin/pw.x
+  PSEUDO_DIR: ${PROJ_ROOT}/external/quantum-espresso/src/pseudo
+
+  INITIAL_LOGDIR: ${RUNS_ROOT}/al-models/iter0_logdir
+
+mlip:
+  # HydraGNN runs from .venv; MLIP_BACKEND=uma or mace uses .venv-uma / .venv-mace.
+  backend: ${MLIP_BACKEND:-hydragnn}
+  hydragnn:
+    logdir:         ${INITIAL_LOGDIR}
+    checkpoint:     best_model.pt
+    mlp_checkpoint: null
+    precision:  fp32
+    mlp_device: xpu
+    ensemble_paths: []
+  uma:
+    model_name: uma-s-1p1
+    task_name:  omat
+    device:     xpu
+    dropout:
+      enabled: true
+      p: 0.1
+      target_layers: linear
+
+md:
+  seed_source:
+    kind: paths
+    paths:
+      - ${SEED_XYZ}
+    n_random: 3
+    random_seed: 17
+  timestep_fs: 0.5
+  n_steps: 200
+  temperature_K: 300.0
+  thermostat: langevin
+  friction_inv_ps: 0.2
+  sample_every: 10
+  max_force_threshold_eV_per_A: 40.0
+  max_displacement_A: 3.0
+
+acquisition:
+  strategy: mc_dropout
+  mc_dropout_passes: 16
+  mc_dropout_p: 0.1
+  n_select: 32
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: ${DFT_BACKEND:-qe}
+
+  qe:
+    pw_bin:      ${PW_BIN}
+    pw_wrapper:  ${PROJ_ROOT}/deployments/aurora/launchers/_qe-step-aurora.sh
+    pseudo_dir:  ${PSEUDO_DIR}
+    pseudopotentials:
+      P: P.pbe-n-kjpaw_psl.1.0.0.UPF
+    kpts:     [4, 4, 1]
+    koffset:  [0, 0, 0]
+    occupations: smearing
+    smearing:    gaussian
+    degauss_ry:  0.007
+    nodes_per_job:    1
+    ranks_per_node:   12      # 12 GPU tiles per Aurora node (FLAT mode)
+    threads_per_rank: 1      # Aurora step wrappers bind one core per rank
+    timeout_sec:      7200
+
+trainer:
+  enabled: false
+
+loop:
+  n_iterations: 3
+  out_dir: ${RUNS_ROOT}/${RUN_TAG}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: false

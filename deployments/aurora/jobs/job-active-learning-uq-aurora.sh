@@ -18,7 +18,6 @@
 # Override:
 #   qsub -v MATSIM_STRUCTURES="a.vasp b.vasp",MATSIM_N_SELECT=4 \
 #        deployments/aurora/jobs/job-active-learning-uq-aurora.sh
-# Backward-compatible alias: MATSIM_AL_STRUCTURES
 # ---------------------------------------------------------------------------
 
 set -eo pipefail  # NOTE: no -u; lmod's bash init breaks under nounset
@@ -42,7 +41,7 @@ DEFAULT_STRUCTURES=(
   "${REPO}/tests/integration/data/MgO.vasp"
   "${REPO}/tests/integration/data/NaCl.vasp"
 )
-STRUCTURE_LIST="${MATSIM_STRUCTURES:-${MATSIM_AL_STRUCTURES:-}}"
+STRUCTURE_LIST="${MATSIM_STRUCTURES:-}"
 if [[ -n "${STRUCTURE_LIST}" ]]; then
   # shellcheck disable=SC2206
   STRUCTURES=( ${STRUCTURE_LIST} )
@@ -56,10 +55,8 @@ OUTPUT_DIR="${RUN_DIR}/outputs"
 mkdir -p "${RUN_DIR}" "${OUTPUT_DIR}"
 
 # ── modules + venv ──────────────────────────────────────────────────────────
-if command -v module >/dev/null 2>&1; then
-  module reset
-  module load frameworks
-fi
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+load_aurora_frameworks_modules
 # shellcheck disable=SC1091
 source "${VENV}/bin/activate"
 

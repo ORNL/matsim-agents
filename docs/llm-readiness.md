@@ -113,6 +113,11 @@ terminal `result.json`, and always stops the server through an exit trap. It
 preserves the vLLM launch log, endpoint response, generated check configuration,
 console log, and full qualification directory under one Slurm run directory.
 
+The Frontier and Aurora jobs (`deployments/frontier/jobs/job-llm-check-frontier.sh`,
+`deployments/aurora/jobs/job-llm-check-aurora.sh`) follow the same contract; on
+Aurora the server runs from the `frameworks` vLLM build on `MATSIM_VLLM_TP` PVC
+tiles.
+
 Set `MATSIM_RUN_PORTABILITY=1` to run the live scientific portability suite
 after qualification; that run receives the successful check directory through
 `--llm-check-run`. The dedicated job is the authoritative deployment check.

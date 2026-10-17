@@ -66,7 +66,7 @@ export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
 # Make HydraGNN example utilities importable (inference_fused, etc.), which the
-# HydraGNN ASE calculator in tools/relaxation.py imports at build time.
+# HydraGNN ASE calculator in backends/mlip/relaxation.py imports at build time.
 HYDRAGNN_EXAMPLE="${HYDRAGNN_DIR:-$PROJ/HydraGNN}/examples/multidataset_hpo_sc26"
 export PYTHONPATH="$HYDRAGNN_EXAMPLE:${HYDRAGNN_DIR:-$PROJ/HydraGNN}:${PYTHONPATH:-}"
 

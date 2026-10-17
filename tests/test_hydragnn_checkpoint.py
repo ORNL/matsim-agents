@@ -2,7 +2,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from matsim_agents.active_learning.hydragnn_checkpoint import (  # noqa: E402
+from matsim_agents.backends.mlip.hydragnn_checkpoint import (  # noqa: E402
     load_hydragnn_state_dict,
     restore_hydragnn_checkpoint,
 )

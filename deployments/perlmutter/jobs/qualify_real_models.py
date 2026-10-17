@@ -13,14 +13,15 @@ import numpy as np
 from ase.build import bulk
 from ase.io import read, write
 
-from matsim_agents.active_learning.calculator import build_ensemble, make_mlip_calculator
+from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
 from matsim_agents.active_learning.candidates import Candidate
-from matsim_agents.active_learning.config import ALConfig, HydraGNNConfig, MACEConfig, MLIPConfig
-from matsim_agents.active_learning.dataset_governance import structure_identity
-from matsim_agents.active_learning.dft_backend import DFTJobSpec, make_backend
+from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig
+from matsim_agents.datasets.governance import structure_identity
+from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.active_learning.evaluate import evaluate_promotion_candidate
 from matsim_agents.active_learning.loop import _dft_method_signature, run_active_learning
-from matsim_agents.active_learning.trainer import retrain_mace
+from matsim_agents.active_learning.trainer import retrain_hydragnn, retrain_mace
 from matsim_agents.active_learning.uncertainty import score_ensemble
 from matsim_agents.discovery.wrapper import explore_composition
 
@@ -98,7 +99,7 @@ def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
             "dft": dft,
             "trainer": {
                 "enabled": True,
-                "train_script": str(source / "src/matsim_agents/active_learning/finetune_uma.py"),
+                "train_script": str(source / "src/matsim_agents/training/finetune_uma.py"),
                 "epochs_per_iter": 1,
                 "nodes_for_train": 1,
                 "ranks_per_node": 1,
@@ -253,7 +254,7 @@ def mace(repo: Path, root: Path) -> dict:
         energies.append(energy)
     require(len(energies) == 2, "MACE ensemble member missing")
     cfg.trainer.train_script = (
-        Path(__file__).resolve().parents[3] / "src/matsim_agents/active_learning/finetune_mace.py"
+        Path(__file__).resolve().parents[3] / "src/matsim_agents/training/finetune_mace.py"
     )
     cfg.trainer.validation_fraction = 0
     cfg.trainer.validation_set = root / "al/validation.extxyz"
@@ -312,12 +313,110 @@ def hydragnn(repo: Path, root: Path) -> dict:
     return {"pinned_head": "OMat24", "checkpoint_logdir": str(logdir), "energies_eV": predictions}
 
 
+def hydragnn_finetune(repo: Path, root: Path) -> dict:
+    """Fine-tune with both built-in HydraGNN trainers, reload, infer, and relax."""
+    import os
+
+    from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
+
+    cfg = ALConfig.model_validate_json((root / "al-config.json").read_text())
+    dataset = root / "al/dataset.extxyz"
+    require(dataset.is_file(), "Run the bootstrap and resume stages first")
+    source = Path(__file__).resolve().parents[3]
+    hydragnn_root = repo / "HydraGNN"
+    example = hydragnn_root / "examples/multidataset_hpo_sc26"
+    gfm = example / "multidataset_hpo-BEST6-fp64"
+    branch_mlp = example / "mlp_branch_weights.pt"
+    ft_repo = Path(
+        os.environ.get("HYDRAGNN_FT_REPO", repo.parent / "HydraGNN_GFM_FineTuning4Materials")
+    )
+    require((gfm / "config.json").is_file() and branch_mlp.is_file(), "HydraGNN assets missing")
+    seed = root / "Si.extxyz"
+    results: dict = {}
+
+    def relax(label: str, **kwargs) -> dict:
+        outcome = relax_with_mlip(
+            RelaxStructureInput(
+                structure_path=str(seed),
+                output_dir=str(root / f"relax-{label}"),
+                mlip_backend="hydragnn",
+                maxiter=20,
+                random_displacement=True,
+                **kwargs,
+            )
+        )
+        require(
+            np.isfinite(outcome.final_energy_eV) and np.isfinite(outcome.final_max_force_eV_per_A),
+            f"HydraGNN {label} relaxation returned nonfinite values",
+        )
+        require(outcome.num_steps >= 1, f"HydraGNN {label} relaxation took no steps")
+        return outcome.model_dump(mode="json")
+
+    results["relax_pretrained_routed"] = relax(
+        "pretrained-routed",
+        logdir=str(gfm),
+        checkpoint="multidataset_hpo-BEST6-fp64_epoch_97.pk",
+        hydragnn_branch_mlp_checkpoint=str(branch_mlp),
+    )
+    for script, extra in (
+        ("finetune_hydragnn_newhead", {"ft_repo": ft_repo}),
+        ("finetune_hydragnn", {"hydragnn_branch_mlp_checkpoint": branch_mlp}),
+    ):
+        out = root / f"hydragnn-{script}"
+        require(not out.exists(), f"{out} already exists")
+        trainer = cfg.trainer.model_copy(
+            update={
+                "train_script": source / f"src/matsim_agents/training/{script}.py",
+                "train_launcher": None,
+                "epochs_per_iter": 1,
+                "nodes_for_train": 1,
+                "ranks_per_node": 1,
+            },
+            deep=True,
+        )
+        hydragnn = HydraGNNConfig(
+            logdir=gfm,
+            checkpoint="multidataset_hpo-BEST6-fp64_epoch_97.pk",
+            hydragnn_root=hydragnn_root,
+            **extra,
+        )
+        logdir = retrain_hydragnn(
+            trainer,
+            hydragnn,
+            dataset,
+            1,
+            out,
+            dft_config=cfg.dft,
+            reference_root=root / f"hydragnn-{script}-references",
+        )
+        calculator = make_mlip_calculator(
+            MLIPConfig(
+                backend="hydragnn",
+                hydragnn=hydragnn.model_copy(update={"logdir": logdir, "checkpoint": None}),
+            )
+        )
+        atoms = read(seed)
+        atoms.calc = calculator
+        energy = float(atoms.get_potential_energy())
+        forces = atoms.get_forces()
+        require(np.isfinite(energy) and np.isfinite(forces).all(), f"{script} inference nonfinite")
+        results[script] = {
+            "logdir": str(logdir),
+            "energy_eV": energy,
+            "max_force_eV_per_A": float(np.linalg.norm(forces, axis=1).max()),
+            "relaxation": relax(script, logdir=str(logdir)),
+        }
+    return results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", required=True, type=Path)
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument(
-        "--stage", choices=["bootstrap", "resume", "mace", "hydragnn"], required=True
+        "--stage",
+        choices=["bootstrap", "resume", "mace", "hydragnn", "hydragnn-finetune"],
+        required=True,
     )
     parser.add_argument("--dft-backend", choices=["qe", "vasp"], default="qe")
     args = parser.parse_args()
@@ -329,8 +428,10 @@ def main() -> None:
         result = resume(args.root)
     elif args.stage == "mace":
         result = mace(args.repo, args.root)
-    else:
+    elif args.stage == "hydragnn":
         result = hydragnn(args.repo, args.root)
+    else:
+        result = hydragnn_finetune(args.repo, args.root)
     (args.root / f"{args.stage}-verified.json").write_text(json.dumps(result, indent=2))
     print(f"VERIFIED {args.stage}: {args.root}")
 

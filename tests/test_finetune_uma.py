@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from types import ModuleType, SimpleNamespace
 
-from matsim_agents.active_learning import finetune_uma
+from matsim_agents.training import finetune_uma
 
 
 def test_load_trainable_uma_uses_traineval_profile(monkeypatch):

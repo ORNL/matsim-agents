@@ -20,8 +20,8 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
-from matsim_agents.agents import analyst_node, executor_node, planner_node
 from matsim_agents.discovery.composition import parse_composition
+from matsim_agents.orchestration.agents import analyst_node, executor_node, planner_node
 from matsim_agents.orchestration.state import MatSimState
 
 
@@ -143,7 +143,10 @@ def uq_gate_node(state: MatSimState, config: RunnableConfig = None) -> dict:
 
     composition = _infer_formula_from_latest_result(state)
     if not composition:
-        msg = "AL handoff requested but skipped: could not infer composition from optimized structure."
+        msg = (
+            "AL handoff requested but skipped: could not infer composition "
+            "from optimized structure."
+        )
         _append_handoff_audit_record(
             cfg=cfg, state=state, action="triggered_but_missing_composition", message=msg
         )

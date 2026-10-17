@@ -4,6 +4,7 @@ import pytest
 from ase import Atoms
 from ase.io import write
 
+from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.stability import (
     RankingMode,
     ReferenceCompletenessPolicy,
@@ -12,7 +13,6 @@ from matsim_agents.discovery.stability import (
     recalibrate_hull_reports,
     score_stability,
 )
-from matsim_agents.orchestration.state import RelaxationResult
 
 
 def _phase(phase_id: str, formula: str, energy: float) -> ReferencePhaseEntry:

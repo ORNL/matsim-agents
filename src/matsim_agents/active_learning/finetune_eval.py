@@ -25,24 +25,26 @@ import argparse
 import json
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any, NamedTuple
 
 import numpy as np
 from ase import Atoms
 from ase.io import read as ase_read
 from ase.io import write as ase_write
 
-from matsim_agents.active_learning.config import (
+from matsim_agents.active_learning.evaluate import (
+    _subsample,
+    evaluate_frames,
+)
+from matsim_agents.backends.mlip.config import (
     HydraGNNConfig,
     MACEConfig,
     MCDropoutInjectionConfig,
     MLIPConfig,
     UMAConfig,
-)
-from matsim_agents.active_learning.evaluate import (
-    _subsample,
-    evaluate_frames,
 )
 
 log = logging.getLogger(__name__)
@@ -83,54 +85,6 @@ def _hydragnn_cfg(logdir: Path, checkpoint: str, branch_mlp: Path, device: str) 
             logdir=logdir,
             checkpoint=checkpoint,
             hydragnn_branch_mlp_checkpoint=branch_mlp,
-            mlp_device="cuda" if device.startswith("cuda") else "cpu",
-        ),
-    )
-
-
-def _newhead_cfg(
-    logdir: Path, checkpoint: str, ft_repo: str | Path | None, device: str
-) -> MLIPConfig:
-    """Eval config for a single-branch 'new head' fine-tuned model (no branch-MLP)."""
-    return MLIPConfig(
-        backend="hydragnn",
-        hydragnn=HydraGNNConfig(
-            logdir=logdir,
-            checkpoint=checkpoint,
-            newhead_ft_config=logdir / "newhead.json",
-            ft_repo=Path(ft_repo).expanduser().resolve() if ft_repo else None,
-            mlp_device="cuda" if device.startswith("cuda") else "cpu",
-        ),
-    )
-
-
-def _newhead_cfg(
-    logdir: Path, checkpoint: str, ft_repo: str | Path | None, device: str
-) -> MLIPConfig:
-    """Eval config for a single-branch 'new head' fine-tuned model (no branch-MLP)."""
-    return MLIPConfig(
-        backend="hydragnn",
-        hydragnn=HydraGNNConfig(
-            logdir=logdir,
-            checkpoint=checkpoint,
-            newhead_ft_config=logdir / "newhead.json",
-            ft_repo=Path(ft_repo).expanduser().resolve() if ft_repo else None,
-            mlp_device="cuda" if device.startswith("cuda") else "cpu",
-        ),
-    )
-
-
-def _newhead_cfg(
-    logdir: Path, checkpoint: str, ft_repo: str | Path | None, device: str
-) -> MLIPConfig:
-    """Eval config for a single-branch 'new head' fine-tuned model (no branch-MLP)."""
-    return MLIPConfig(
-        backend="hydragnn",
-        hydragnn=HydraGNNConfig(
-            logdir=logdir,
-            checkpoint=checkpoint,
-            newhead_ft_config=logdir / "newhead.json",
-            ft_repo=Path(ft_repo).expanduser().resolve() if ft_repo else None,
             mlp_device="cuda" if device.startswith("cuda") else "cpu",
         ),
     )
@@ -220,12 +174,297 @@ def _run_eval(
     return asdict(metrics)
 
 
+class _Split(NamedTuple):
+    train_frames: list[Atoms]
+    test_frames: list[Atoms]
+    train_path: Path
+    test_path: Path
+    n_iters: int
+
+
+def _prepare_split(
+    dataset_path: Path,
+    output_dir: Path,
+    *,
+    backend: str,
+    reference_manifest: Path,
+    test_fraction: float,
+    seed: int,
+    eval_only: bool,
+) -> _Split:
+    """Validate the dataset's DFT method and write (or reuse) the deterministic split."""
+    from matsim_agents.datasets.energy_references import (
+        load_elemental_reference_manifest,
+        validate_dataset_reference_method,
+    )
+    from matsim_agents.datasets.governance import (
+        DatasetManifest,
+        DatasetValidationSummary,
+        write_dataset_manifest,
+    )
+
+    (output_dir / "split").mkdir(parents=True, exist_ok=True)
+    raw = ase_read(str(dataset_path), index=":")
+    frames = [raw] if isinstance(raw, Atoms) else list(raw)
+    if len(frames) < 4:
+        raise ValueError(f"Need >=4 frames for a split; got {len(frames)}.")
+
+    manifest, _, _ = load_elemental_reference_manifest(
+        reference_manifest,
+        required_elements={symbol for frame in frames for symbol in frame.get_chemical_symbols()},
+    )
+
+    def validate_method(path: Path) -> None:
+        validate_dataset_reference_method(
+            path,
+            reference_backend=manifest["backend"],
+            reference_method_signature=manifest["method_signature"],
+            reference_base_method_signature=manifest.get("base_method_signature"),
+            reference_element_method_signatures=manifest.get("element_method_signatures"),
+            require_sidecar=True,
+        )
+
+    validate_method(dataset_path)
+    source_metadata = json.loads(
+        dataset_path.with_suffix(dataset_path.suffix + ".manifest.json").read_text()
+    )
+    if backend == "hydragnn":
+        source_metadata = DatasetManifest.model_validate(source_metadata).model_dump()
+
+    train_frames, test_frames = _split_dataset(frames, test_fraction, seed)
+    n_iters = _num_al_iterations(frames)
+    train_path = output_dir / "split" / "train.extxyz"
+    test_path = output_dir / "split" / "test_set.extxyz"
+    if eval_only and train_path.exists() and test_path.exists():
+        # Reuse the exact frames scored originally (avoid clobbering the split).
+        train_frames = list(ase_read(str(train_path), index=":"))
+        test_frames = list(ase_read(str(test_path), index=":"))
+    else:
+        ase_write(str(train_path), train_frames, format="extxyz")
+        ase_write(str(test_path), test_frames, format="extxyz")
+        for split_path, split_frames, split_role in (
+            (train_path, train_frames, "training_pool"),
+            (test_path, test_frames, "validation"),
+        ):
+            write_dataset_manifest(
+                split_path,
+                dft_backend=source_metadata["dft_backend"],
+                method_signature=source_metadata.get("method_signature"),
+                method_signature_elements=(
+                    set(source_metadata["method_signature_elements"])
+                    if source_metadata.get("method_signature_elements") is not None
+                    else None
+                ),
+                base_method_signature=source_metadata.get("base_method_signature"),
+                element_method_signatures=source_metadata.get("element_method_signatures"),
+                energy_reference=source_metadata.get(
+                    "energy_reference", f"{source_metadata['dft_backend']}:native_total_energy"
+                ),
+                validation=DatasetValidationSummary(accepted=len(split_frames)),
+                split_role=split_role,
+            )
+    for split_path in (train_path, test_path):
+        validate_method(split_path)
+    log.info(
+        "%s campaign: %d train / %d test frames; N_al_iterations=%d",
+        backend,
+        len(train_frames),
+        len(test_frames),
+        n_iters,
+    )
+    return _Split(train_frames, test_frames, train_path, test_path, n_iters)
+
+
+def _require_checkpoint(path: Path, label: str) -> Path:
+    if not path.exists():
+        raise FileNotFoundError(f"eval-only: missing {label} checkpoint {path}")
+    return path
+
+
+def _training_device(dev: str) -> str:
+    return "CUDA" if dev.startswith("cuda") else "CPU"
+
+
+Evaluate = Callable[..., None]
+
+
+def _uma_endpoints(
+    evaluate: Evaluate,
+    train_path: Path,
+    ft_dir: Path,
+    dev: str,
+    *,
+    eval_only: bool,
+    base_model: str,
+    task_name: str,
+    finetune_kwargs: dict[str, Any],
+) -> tuple[MLIPConfig, str]:
+    """Score the UMA foundation model, then fine-tune (or reuse) and return the result."""
+    evaluate(_uma_cfg(base_model, task_name, dev), iteration=0, model_path=base_model)
+    if eval_only:
+        ckpt = _require_checkpoint(ft_dir / "inference_ckpt.pt", "UMA")
+    else:
+        from matsim_agents.training.finetune_uma import finetune_uma
+
+        ckpt = finetune_uma(
+            train_path,
+            ft_dir,
+            base_model=base_model,
+            task_name=task_name,
+            device=_training_device(dev),
+            **finetune_kwargs,
+        )
+    return _uma_cfg(str(ckpt), task_name, dev), str(ckpt)
+
+
+def _mace_endpoints(
+    evaluate: Evaluate,
+    train_path: Path,
+    ft_dir: Path,
+    dev: str,
+    *,
+    eval_only: bool,
+    family: str,
+    model: str,
+    model_id: str | None,
+    precision: str,
+    finetune_kwargs: dict[str, Any],
+) -> tuple[MLIPConfig, str]:
+    """Score the MACE foundation model, then fine-tune (or reuse) and return the result."""
+    # A MACE_MODELS id (if given) selects the family/variant for the
+    # baseline eval too, so "before" and "after" use the same foundation.
+    if model_id is not None:
+        from matsim_agents.training.finetune_mace import MACE_MODELS
+
+        if model_id not in MACE_MODELS:
+            raise ValueError(
+                f"mace_model_id must be one of {sorted(MACE_MODELS)}, got {model_id!r}"
+            )
+        family = MACE_MODELS[model_id]["family"]
+        model = MACE_MODELS[model_id]["model"]
+    evaluate(
+        _mace_cfg(family, model, dev, precision=precision),
+        iteration=0,
+        model_path=f"{family}:{model}",
+    )
+    if eval_only:
+        ckpt = _require_checkpoint(ft_dir / "mace_finetuned.model", "MACE")
+    else:
+        from matsim_agents.training.finetune_mace import finetune_mace
+
+        ckpt = finetune_mace(
+            train_path,
+            ft_dir,
+            family=family,
+            base_model=model,
+            model_id=model_id,
+            precision=precision,
+            device=_training_device(dev),
+            **finetune_kwargs,
+        )
+    # Fine-tuned checkpoint reloads via family="checkpoint".
+    return _mace_cfg("checkpoint", str(ckpt), dev, precision=precision), str(ckpt)
+
+
+def _hydragnn_endpoints(
+    evaluate: Evaluate,
+    train_path: Path,
+    ft_dir: Path,
+    dev: str,
+    *,
+    eval_only: bool,
+    reference_manifest: Path,
+    gfm_logdir: str | Path | None,
+    branch_mlp_path: str | Path | None,
+    gfm_checkpoint: str | None,
+    strategy: str,
+    head: str | int | None,
+    ft_repo: str | Path | None,
+    hydragnn_root: str | Path | None,
+    weight_threshold: float,
+    unfreeze_backbone: bool,
+    epochs: int,
+    lr: float | None,
+    batch_size: int,
+    seed: int,
+) -> tuple[MLIPConfig, str]:
+    """Score the HydraGNN GFM, then run the routed or single-head fine-tune (or reuse it)."""
+    if gfm_logdir is None or branch_mlp_path is None:
+        raise ValueError("hydragnn backend requires gfm_logdir and branch_mlp_path.")
+    gfm_logdir = Path(gfm_logdir).expanduser().resolve()
+    branch_mlp_path = Path(branch_mlp_path).expanduser().resolve()
+    base_ckpt = gfm_checkpoint or _newest_pk(gfm_logdir).name
+    evaluate(
+        _hydragnn_cfg(gfm_logdir, base_ckpt, branch_mlp_path, dev),
+        iteration=0,
+        model_path=str(gfm_logdir),
+    )
+    from matsim_agents.training.finetune_hydragnn import finetune_hydragnn
+
+    if strategy == "routed":
+        if eval_only:
+            ft_logdir = ft_dir
+            _require_checkpoint(ft_logdir / "ft_model.pk", "HydraGNN")
+        else:
+            ft_logdir = finetune_hydragnn(
+                train_path,
+                ft_dir,
+                elemental_reference_manifest=reference_manifest,
+                gfm_logdir=gfm_logdir,
+                branch_mlp_path=branch_mlp_path,
+                gfm_checkpoint=base_ckpt,
+                weight_threshold=weight_threshold,
+                epochs=epochs,
+                # 1e-4 (not 1e-3): a full-backbone step at 1e-3 collapses the
+                # net into a constant predictor; force_weight stays ~94 (config).
+                lr=lr if lr is not None else 1e-4,
+                batch_size=batch_size,
+                seed=seed,
+                unfreeze_backbone=unfreeze_backbone,
+                hydragnn_root=hydragnn_root,
+                device=dev,
+            )
+        return _hydragnn_cfg(ft_logdir, "ft_model.pk", branch_mlp_path, dev), str(ft_logdir)
+
+    from matsim_agents.training.finetune_hydragnn_newhead import finetune_hydragnn_newhead
+
+    ft_repo_p = Path(ft_repo).expanduser().resolve() if ft_repo else None
+    if eval_only:
+        ft_logdir = ft_dir
+        _require_checkpoint(ft_logdir / "ft_model.pk", "HydraGNN")
+    else:
+        ft_logdir = finetune_hydragnn_newhead(
+            train_path,
+            ft_dir,
+            elemental_reference_manifest=reference_manifest,
+            gfm_logdir=gfm_logdir,
+            strategy=strategy,
+            head=head,
+            gfm_checkpoint=base_ckpt,
+            epochs=epochs,
+            # The new-head loss is normalised (forces/energy scaled to O(1))
+            # with LR warmup+cosine and gradient clipping, so a 1e-3 step no
+            # longer collapses the head into a constant predictor; this is
+            # what actually moves the metrics off the zero-shot baseline.
+            lr=lr if lr is not None else 1e-3,
+            batch_size=batch_size,
+            seed=seed,
+            hydragnn_root=hydragnn_root,
+            ft_repo=ft_repo_p,
+            device=dev,
+        )
+    return (
+        _hydragnn_newhead_cfg(ft_logdir, "ft_model.pk", dev, ft_repo=ft_repo_p),
+        str(ft_logdir),
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Campaign                                                                    #
 # --------------------------------------------------------------------------- #
 
 
-def run_campaign(
+def run_finetune_endpoints(
     dataset_path: str | Path,
     output_dir: str | Path,
     *,
@@ -255,7 +494,6 @@ def run_campaign(
     mace_dispersion: bool = False,
     mace_epochs: int | None = None,
     mace_lr: float | None = None,
-    mace_force_weight: float = 10.0,
     mace_weight_decay: float = 0.0,
     mace_freeze_backbone: bool = False,
     mace_lora: bool = False,
@@ -296,291 +534,107 @@ def run_campaign(
 
     dataset_path = Path(dataset_path).expanduser().resolve()
     output_dir = Path(output_dir).expanduser().resolve()
-    (output_dir / "split").mkdir(parents=True, exist_ok=True)
     eval_dir = output_dir / "eval"
     ft_dir = output_dir / "ft"
-
     dev = device or _default_device()
-
-    raw = ase_read(str(dataset_path), index=":")
-    frames = [raw] if isinstance(raw, Atoms) else list(raw)
-    if len(frames) < 4:
-        raise ValueError(f"Need >=4 frames for a split; got {len(frames)}.")
-    from matsim_agents.discovery.energy_references import (
-        load_elemental_reference_manifest,
-        validate_dataset_reference_method,
-    )
-
-    manifest, _, _ = load_elemental_reference_manifest(
-        elemental_reference_manifest,
-        required_elements={symbol for frame in frames for symbol in frame.get_chemical_symbols()},
-    )
-    validate_dataset_reference_method(
-        dataset_path,
-        reference_backend=manifest["backend"],
-        reference_method_signature=manifest["method_signature"],
-        reference_base_method_signature=manifest.get("base_method_signature"),
-        reference_element_method_signatures=manifest.get("element_method_signatures"),
-        require_sidecar=True,
-    )
-    from matsim_agents.active_learning.dataset_governance import DatasetManifest
-
-    source_metadata = json.loads(
-        dataset_path.with_suffix(dataset_path.suffix + ".manifest.json").read_text()
-    )
-    if backend == "hydragnn":
-        source_metadata = DatasetManifest.model_validate(source_metadata).model_dump()
-
-    train_frames, test_frames = _split_dataset(frames, test_fraction, seed)
-    n_iters = _num_al_iterations(frames)
-    train_path = output_dir / "split" / "train.extxyz"
-    test_path = output_dir / "split" / "test_set.extxyz"
-    if eval_only and train_path.exists() and test_path.exists():
-        # Reuse the exact frames scored originally (avoid clobbering the split).
-        train_frames = list(ase_read(str(train_path), index=":"))
-        test_frames = list(ase_read(str(test_path), index=":"))
-    else:
-        ase_write(str(train_path), train_frames, format="extxyz")
-        ase_write(str(test_path), test_frames, format="extxyz")
-        from matsim_agents.active_learning.dataset_governance import (
-            DatasetValidationSummary,
-            write_dataset_manifest,
-        )
-
-        for split_path, split_frames, split_role in (
-            (train_path, train_frames, "training_pool"),
-            (test_path, test_frames, "validation"),
-        ):
-            write_dataset_manifest(
-                split_path,
-                dft_backend=source_metadata["dft_backend"],
-                method_signature=source_metadata.get("method_signature"),
-                method_signature_elements=(
-                    set(source_metadata["method_signature_elements"])
-                    if source_metadata.get("method_signature_elements") is not None
-                    else None
-                ),
-                base_method_signature=source_metadata.get("base_method_signature"),
-                element_method_signatures=source_metadata.get("element_method_signatures"),
-                energy_reference=source_metadata.get(
-                    "energy_reference", f"{source_metadata['dft_backend']}:native_total_energy"
-                ),
-                validation=DatasetValidationSummary(accepted=len(split_frames)),
-                split_role=split_role,
-            )
-    for split_path in (train_path, test_path):
-        validate_dataset_reference_method(
-            split_path,
-            reference_backend=manifest["backend"],
-            reference_method_signature=manifest["method_signature"],
-            reference_base_method_signature=manifest.get("base_method_signature"),
-            reference_element_method_signatures=manifest.get("element_method_signatures"),
-            require_sidecar=True,
-        )
-    log.info(
-        "%s campaign: %d train / %d test frames; N_al_iterations=%d",
-        backend,
-        len(train_frames),
-        len(test_frames),
-        n_iters,
-    )
-
     reference_manifest = Path(elemental_reference_manifest)
-    _suf = "_formation" if eval_only else ""
+
+    split = _prepare_split(
+        dataset_path,
+        output_dir,
+        backend=backend,
+        reference_manifest=reference_manifest,
+        test_fraction=test_fraction,
+        seed=seed,
+        eval_only=eval_only,
+    )
+
+    def evaluate(cfg: MLIPConfig, *, iteration: int, model_path: str) -> None:
+        _run_eval(
+            cfg,
+            split.test_frames,
+            iteration=iteration,
+            model_path=model_path,
+            test_label=str(split.test_path),
+            eval_dir=eval_dir,
+            max_parity_points=max_parity_points,
+            elemental_reference_manifest=reference_manifest,
+            out_suffix="_formation" if eval_only else "",
+        )
 
     if backend == "uma":
-        base_cfg = _uma_cfg(uma_base_model, uma_task_name, dev)
-        _run_eval(
-            base_cfg,
-            test_frames,
-            iteration=0,
-            model_path=uma_base_model,
-            test_label=str(test_path),
-            eval_dir=eval_dir,
-            max_parity_points=max_parity_points,
-            elemental_reference_manifest=reference_manifest,
-            out_suffix=_suf,
+        after_cfg, after_model_path = _uma_endpoints(
+            evaluate,
+            split.train_path,
+            ft_dir,
+            dev,
+            eval_only=eval_only,
+            base_model=uma_base_model,
+            task_name=uma_task_name,
+            finetune_kwargs={
+                "epochs": uma_epochs,
+                "batch_size": batch_size,
+                "lr": lr if lr is not None else uma_lr,
+                "force_weight": uma_force_weight,
+                "freeze_backbone": uma_freeze_backbone,
+                "weight_decay": uma_weight_decay,
+                "seed": seed,
+                "lora": uma_lora,
+                "lora_r": uma_lora_r,
+                "lora_alpha": uma_lora_alpha,
+            },
         )
-        if eval_only:
-            ckpt = ft_dir / "inference_ckpt.pt"
-            if not ckpt.exists():
-                raise FileNotFoundError(f"eval-only: missing UMA checkpoint {ckpt}")
-        else:
-            from matsim_agents.active_learning.finetune_uma import finetune_uma
-
-            ckpt = finetune_uma(
-                train_path,
-                ft_dir,
-                base_model=uma_base_model,
-                task_name=uma_task_name,
-                epochs=uma_epochs,
-                batch_size=batch_size,
-                lr=lr if lr is not None else uma_lr,
-                force_weight=uma_force_weight,
-                freeze_backbone=uma_freeze_backbone,
-                weight_decay=uma_weight_decay,
-                device="CUDA" if dev.startswith("cuda") else "CPU",
-                seed=seed,
-                lora=uma_lora,
-                lora_r=uma_lora_r,
-                lora_alpha=uma_lora_alpha,
-            )
-        after_cfg = _uma_cfg(str(ckpt), uma_task_name, dev)
-        after_model_path = str(ckpt)
-
     elif backend == "mace":
-        # A MACE_MODELS id (if given) selects the family/variant for the
-        # baseline eval too, so "before" and "after" use the same foundation.
-        if mace_model_id is not None:
-            from matsim_agents.active_learning.finetune_mace import MACE_MODELS
-
-            if mace_model_id not in MACE_MODELS:
-                raise ValueError(
-                    f"mace_model_id must be one of {sorted(MACE_MODELS)}, got {mace_model_id!r}"
-                )
-            mace_family = MACE_MODELS[mace_model_id]["family"]
-            mace_model = MACE_MODELS[mace_model_id]["model"]
-        base_cfg = _mace_cfg(mace_family, mace_model, dev, precision=mace_precision)
-        _run_eval(
-            base_cfg,
-            test_frames,
-            iteration=0,
-            model_path=f"{mace_family}:{mace_model}",
-            test_label=str(test_path),
-            eval_dir=eval_dir,
-            max_parity_points=max_parity_points,
-            elemental_reference_manifest=reference_manifest,
-            out_suffix=_suf,
+        after_cfg, after_model_path = _mace_endpoints(
+            evaluate,
+            split.train_path,
+            ft_dir,
+            dev,
+            eval_only=eval_only,
+            family=mace_family,
+            model=mace_model,
+            model_id=mace_model_id,
+            precision=mace_precision,
+            finetune_kwargs={
+                "dispersion": mace_dispersion,
+                "epochs": mace_epochs,
+                "batch_size": batch_size,
+                "lr": lr if lr is not None else mace_lr,
+                "lora": mace_lora,
+                "lora_rank": mace_lora_rank,
+                "lora_alpha": mace_lora_alpha,
+                "freeze_backbone": mace_freeze_backbone,
+                "weight_decay": mace_weight_decay,
+                "seed": seed,
+            },
         )
-        if eval_only:
-            ckpt = ft_dir / "mace_finetuned.model"
-            if not ckpt.exists():
-                raise FileNotFoundError(f"eval-only: missing MACE checkpoint {ckpt}")
-        else:
-            from matsim_agents.active_learning.finetune_mace import finetune_mace
-
-            ckpt = finetune_mace(
-                train_path,
-                ft_dir,
-                family=mace_family,
-                base_model=mace_model,
-                model_id=mace_model_id,
-                precision=mace_precision,
-                dispersion=mace_dispersion,
-                epochs=mace_epochs,
-                batch_size=batch_size,
-                lr=lr if lr is not None else mace_lr,
-                lora=mace_lora,
-                lora_rank=mace_lora_rank,
-                lora_alpha=mace_lora_alpha,
-                force_weight=mace_force_weight,
-                freeze_backbone=mace_freeze_backbone,
-                weight_decay=mace_weight_decay,
-                device="CUDA" if dev.startswith("cuda") else "CPU",
-                seed=seed,
-            )
-        # Fine-tuned checkpoint reloads via family="checkpoint".
-        after_cfg = _mace_cfg("checkpoint", str(ckpt), dev, precision=mace_precision)
-        after_model_path = str(ckpt)
-
     elif backend == "hydragnn":
-        if gfm_logdir is None or branch_mlp_path is None:
-            raise ValueError("hydragnn backend requires gfm_logdir and branch_mlp_path.")
-        gfm_logdir = Path(gfm_logdir).expanduser().resolve()
-        branch_mlp_path = Path(branch_mlp_path).expanduser().resolve()
-        base_ckpt = gfm_checkpoint or _newest_pk(gfm_logdir).name
-        base_cfg = _hydragnn_cfg(gfm_logdir, base_ckpt, branch_mlp_path, dev)
-        _run_eval(
-            base_cfg,
-            test_frames,
-            iteration=0,
-            model_path=str(gfm_logdir),
-            test_label=str(test_path),
-            eval_dir=eval_dir,
-            max_parity_points=max_parity_points,
-            elemental_reference_manifest=reference_manifest,
-            out_suffix=_suf,
+        after_cfg, after_model_path = _hydragnn_endpoints(
+            evaluate,
+            split.train_path,
+            ft_dir,
+            dev,
+            eval_only=eval_only,
+            reference_manifest=reference_manifest,
+            gfm_logdir=gfm_logdir,
+            branch_mlp_path=branch_mlp_path,
+            gfm_checkpoint=gfm_checkpoint,
+            strategy=hydragnn_strategy,
+            head=hydragnn_head,
+            ft_repo=ft_repo,
+            hydragnn_root=hydragnn_root,
+            weight_threshold=weight_threshold,
+            unfreeze_backbone=unfreeze_backbone,
+            epochs=epochs,
+            lr=lr,
+            batch_size=batch_size,
+            seed=seed,
         )
-        from matsim_agents.active_learning.finetune_hydragnn import finetune_hydragnn
-
-        if hydragnn_strategy == "routed":
-            if eval_only:
-                ft_logdir = ft_dir
-                if not (ft_logdir / "ft_model.pk").exists():
-                    raise FileNotFoundError(
-                        f"eval-only: missing HydraGNN checkpoint {ft_logdir / 'ft_model.pk'}"
-                    )
-            else:
-                ft_logdir = finetune_hydragnn(
-                    train_path,
-                    ft_dir,
-                    elemental_reference_manifest=reference_manifest,
-                    gfm_logdir=gfm_logdir,
-                    branch_mlp_path=branch_mlp_path,
-                    gfm_checkpoint=base_ckpt,
-                    weight_threshold=weight_threshold,
-                    epochs=epochs,
-                    # 1e-4 (not 1e-3): a full-backbone step at 1e-3 collapses the
-                    # net into a constant predictor; force_weight stays ~94 (config).
-                    lr=lr if lr is not None else 1e-4,
-                    batch_size=batch_size,
-                    seed=seed,
-                    unfreeze_backbone=unfreeze_backbone,
-                    hydragnn_root=hydragnn_root,
-                    device=dev,
-                )
-            after_cfg = _hydragnn_cfg(ft_logdir, "ft_model.pk", branch_mlp_path, dev)
-        else:
-            from matsim_agents.active_learning.finetune_hydragnn_newhead import (
-                finetune_hydragnn_newhead,
-            )
-
-            ft_repo_p = Path(ft_repo).expanduser().resolve() if ft_repo else None
-            if eval_only:
-                ft_logdir = ft_dir
-                if not (ft_logdir / "ft_model.pk").exists():
-                    raise FileNotFoundError(
-                        f"eval-only: missing HydraGNN checkpoint {ft_logdir / 'ft_model.pk'}"
-                    )
-            else:
-                ft_logdir = finetune_hydragnn_newhead(
-                    train_path,
-                    ft_dir,
-                    elemental_reference_manifest=reference_manifest,
-                    gfm_logdir=gfm_logdir,
-                    strategy=hydragnn_strategy,
-                    head=hydragnn_head,
-                    gfm_checkpoint=base_ckpt,
-                    epochs=epochs,
-                    # The new-head loss is normalised (forces/energy scaled to O(1))
-                    # with LR warmup+cosine and gradient clipping, so a 1e-3 step no
-                    # longer collapses the head into a constant predictor; this is
-                    # what actually moves the metrics off the zero-shot baseline.
-                    lr=lr if lr is not None else 1e-3,
-                    batch_size=batch_size,
-                    seed=seed,
-                    hydragnn_root=hydragnn_root,
-                    ft_repo=ft_repo_p,
-                    device=dev,
-                )
-            after_cfg = _hydragnn_newhead_cfg(ft_logdir, "ft_model.pk", dev, ft_repo=ft_repo_p)
-        after_model_path = str(ft_logdir)
-
     else:
         raise ValueError(f"Unknown backend {backend!r} (expected 'hydragnn', 'uma', or 'mace').")
 
-    _run_eval(
-        after_cfg,
-        test_frames,
-        iteration=n_iters,
-        model_path=after_model_path,
-        test_label=str(test_path),
-        eval_dir=eval_dir,
-        max_parity_points=max_parity_points,
-        elemental_reference_manifest=reference_manifest,
-        out_suffix=_suf,
-    )
-    log.info("Campaign complete -> %s (eval: iter0 vs iter%d)", output_dir, n_iters)
+    evaluate(after_cfg, iteration=split.n_iters, model_path=after_model_path)
+    log.info("Campaign complete -> %s (eval: iter0 vs iter%d)", output_dir, split.n_iters)
     return output_dir
 
 
@@ -696,12 +750,6 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="MACE fine-tune LR (default: 5e-3 for LoRA, 1e-3 for naive).",
     )
-    parser.add_argument(
-        "--mace-force-weight",
-        type=float,
-        default=10.0,
-        help="Recorded for parity; mace_run_train uses its own energy/force weighting.",
-    )
     parser.add_argument("--mace-freeze-backbone", action="store_true")
     parser.add_argument("--mace-weight-decay", type=float, default=0.0)
     parser.add_argument(
@@ -763,7 +811,7 @@ def main(argv: list[str] | None = None) -> int:
     # Set GPU visibility from the requested device before torch is imported.
     _enforce_device_visibility(args.device)
 
-    run_campaign(
+    run_finetune_endpoints(
         args.dataset,
         args.output_dir,
         backend=args.backend,
@@ -785,7 +833,6 @@ def main(argv: list[str] | None = None) -> int:
         mace_dispersion=args.mace_dispersion,
         mace_epochs=args.mace_epochs,
         mace_lr=args.mace_lr,
-        mace_force_weight=args.mace_force_weight,
         mace_freeze_backbone=args.mace_freeze_backbone,
         mace_weight_decay=args.mace_weight_decay,
         mace_lora=args.mace_lora,

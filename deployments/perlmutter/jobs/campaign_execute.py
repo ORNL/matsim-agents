@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
 
 from matsim_agents.active_learning.config import ALConfig  # noqa: E402
 from matsim_agents.campaign.acquisition import CampaignAcquisitionPolicy  # noqa: E402
-from matsim_agents.campaign.execution import (  # noqa: E402
+from matsim_agents.campaign.formula_execution import (  # noqa: E402
     CampaignDFTRefinementConfig,
     CampaignFormulaExecutionConfig,
     CampaignRetrainingConfig,
@@ -153,13 +153,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--promotion-validation-reference-set", type=Path)
     parser.add_argument("--promotion-max-energy-mae", type=float, default=0.1)
     parser.add_argument("--promotion-max-force-mae", type=float, default=0.2)
-    parser.add_argument(
-        "--promotion-max-relative-regression",
-        type=float,
-        choices=[0.0],
-        default=0.0,
-        help="Compatibility option; only zero is accepted. Promotion forbids MAE regression.",
-    )
     parser.add_argument(
         "--promotion-min-relative-improvement",
         type=float,
@@ -368,7 +361,6 @@ def main(argv: list[str] | None = None) -> int:
                     validation_reference_set=args.promotion_validation_reference_set,
                     promotion_max_energy_mae_eV_per_atom=args.promotion_max_energy_mae,
                     promotion_max_force_mae_eV_per_A=args.promotion_max_force_mae,
-                    promotion_max_relative_regression=args.promotion_max_relative_regression,
                     promotion_min_relative_improvement=args.promotion_min_relative_improvement,
                     promotion_min_evaluated_frames=args.promotion_min_evaluated_frames,
                 )

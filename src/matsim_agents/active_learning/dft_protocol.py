@@ -9,9 +9,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.active_learning.config import DFTConfig
-from matsim_agents.active_learning.vasp_io import resolve_potcar_paths
+from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.backends.dft.qe_relax import resolve_pseudopotentials
+from matsim_agents.backends.dft.vasp_io import resolve_potcar_paths
 
 
 def path_identity(path: Path | None) -> dict[str, Any] | None:

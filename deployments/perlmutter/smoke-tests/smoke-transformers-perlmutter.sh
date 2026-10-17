@@ -66,7 +66,7 @@ os.environ["MATSIM_HF_MODEL_PATH"] = "$MODEL_DIR"
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
-from matsim_agents.llm import get_chat_model
+from matsim_agents.backends.llm.provider import get_chat_model
 from langchain_core.messages import HumanMessage
 
 print("Building chat model...")

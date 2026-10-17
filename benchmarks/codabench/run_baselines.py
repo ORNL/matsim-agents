@@ -54,7 +54,7 @@ from ase.io import read
 if (Path(__file__).parent / "energy_references.py").is_file():
     from energy_references import predict_elemental_references
 else:
-    from matsim_agents.discovery.energy_references import predict_elemental_references
+    from matsim_agents.datasets.energy_references import predict_elemental_references
 
 HERE = Path(__file__).parent
 STRUCT_META = HERE / "public_data" / "structures_metadata.csv"
@@ -143,7 +143,6 @@ def parse_args() -> argparse.Namespace:
         "--mace-model",
         help="Model alias, URL, or local path used with --mace-family.",
     )
-    p.add_argument("--mace-size", dest="legacy_mace_size", help=argparse.SUPPRESS)
     # HydraGNN
     p.add_argument(
         "--hydragnn-logdir",
@@ -330,8 +329,6 @@ def selected_mace_models(args: argparse.Namespace) -> list[tuple[str, str, str]]
             character if character.isalnum() else "_" for character in args.mace_model
         ).strip("_")
         return [(f"mace_{args.mace_family}_{safe_model}", args.mace_family, args.mace_model)]
-    if args.legacy_mace_size:
-        return [("mace_mp0", "mace_mp", args.legacy_mace_size)]
     if args.mace_variant == "materials":
         names = MACE_MATERIAL_MODELS
     elif args.mace_variant == "all":

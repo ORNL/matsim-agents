@@ -30,6 +30,8 @@
 #   SERVE_DTYPE         – bfloat16 | float16 (default: bfloat16)
 #   SERVE_MAX_MODEL_LEN – default: 32768
 #   SERVE_EXTRA_ARGS    – verbatim extra args for `vllm serve`
+#   SERVE_SMOKE=1       – after readiness, send one chat completion and exit
+#                         (used by launchers/launch-test-multinode-aurora.sh)
 #   RAY_PORT            – Ray head port (default: 6379)
 #
 # Submit (2 nodes, Mixtral-8x22B):
@@ -42,7 +44,8 @@
 #        -v SERVE_MODEL_PATH=$PROJ/models/Llama-3.3-70B-Instruct \
 #        deployments/aurora/jobs/job-serve-multinode-vllm-aurora.sh
 #
-# Server stays alive until walltime or manual cancel. Connect clients to:
+# Unless SERVE_SMOKE=1, the server stays alive until walltime or manual
+# cancel. Connect clients to:
 #   http://<head_node_hostname>:${SERVE_PORT}/v1
 # ---------------------------------------------------------------------------
 
@@ -85,10 +88,8 @@ TILES_PER_NODE=12   # 6 PVC GPUs × 2 tiles
 SERVE_TP_SIZE="${SERVE_TP_SIZE:-$(( NNODES * TILES_PER_NODE ))}"
 
 # ── Modules ─────────────────────────────────────────────────────────────
-if command -v module >/dev/null 2>&1; then
-  module reset
-  module load frameworks
-fi
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+load_aurora_frameworks_modules
 if [[ -f "$VENV_PATH/bin/activate" ]]; then
   # shellcheck disable=SC1091
   source "$VENV_PATH/bin/activate"
@@ -273,6 +274,17 @@ echo "  export MATSIM_LLM_PROVIDER=vllm"
 echo "  export MATSIM_VLLM_BASE_URL=http://${HEAD_NODE_IP}:${SERVE_PORT}/v1"
 echo "  export MATSIM_VLLM_API_KEY=EMPTY"
 echo
+
+if [[ "${SERVE_SMOKE:-0}" == "1" ]]; then
+  echo "[smoke] Sending one chat-completion request ..."
+  curl -sf -X POST "http://localhost:${SERVE_PORT}/v1/chat/completions" \
+    -H "Content-Type: application/json" \
+    -d "{\"model\": \"${MODEL_NAME}\", \"messages\": [{\"role\":\"user\",\"content\":\"What is 2+2? Reply with only the number.\"}], \"max_tokens\": 16, \"temperature\": 0.0}" \
+    | tee "$RUN_DIR/response.json"
+  echo
+  echo "[OK] vLLM-XPU multi-node smoke test PASSED."
+  exit 0
+fi
 
 echo "[serve] Server running. Waiting for walltime or cancellation ..."
 wait "$VLLM_PID"

@@ -24,14 +24,14 @@ before any stability claim is published.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from enum import StrEnum
 from itertools import combinations
-from typing import Iterable, Sequence
 
 from pydantic import BaseModel, Field, model_validator
 
+from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.seeds import PhaseCandidate
-from matsim_agents.orchestration.state import RelaxationResult
 
 
 class PhaseStability(BaseModel):
@@ -49,8 +49,8 @@ class PhaseStability(BaseModel):
         ...,
         description="True if max residual force is below `force_tol_eV_per_A`.",
     )
-    # Seed-provenance fields (populated from the matching PhaseCandidate when
-    # provided; ``source`` defaults to "prototype" for legacy callers).
+    # Seed-provenance fields, populated from the matching PhaseCandidate when one
+    # is provided; ``source`` defaults to "prototype" otherwise.
     source: str = "prototype"
     prototype_id: str | None = None
     space_group: int | None = None
@@ -131,6 +131,7 @@ class ReferenceEnergySet(BaseModel):
     elemental_energies_eV_per_atom: dict[str, float]
     elemental_entries: dict[str, ElementalReferenceEntry] = Field(default_factory=dict)
     elemental_reference_candidates: list[ElementalReferenceEntry] = Field(default_factory=list)
+    # TODO(#15): replace with typed phase_entries written by the campaign.
     competing_phases: dict[str, float] = Field(
         default_factory=dict,
         description="Formation energies in eV/atom keyed by composition formula.",
@@ -194,7 +195,7 @@ class ReferenceEnergySet(BaseModel):
             for entry in self.phase_entries
         ]
         records.extend(
-            (f"legacy:{formula}", formula, energy)
+            (f"formula:{formula}", formula, energy)
             for formula, energy in self.competing_phases.items()
         )
         return records
@@ -294,7 +295,7 @@ def recalibrate_hull_reports(
             ComputedEntry(
                 composition,
                 reference_total + formation_per_atom * composition.num_atoms,
-                entry_id=None if phase_id.startswith("legacy:") else phase_id,
+                entry_id=None if phase_id.startswith("formula:") else phase_id,
             )
         )
 
@@ -461,7 +462,7 @@ def score_stability(
                 ComputedEntry(
                     comp,
                     ref_total + formation_per_atom * comp.num_atoms,
-                    entry_id=None if phase_id.startswith("legacy:") else phase_id,
+                    entry_id=None if phase_id.startswith("formula:") else phase_id,
                 )
             )
         candidate_entries = []

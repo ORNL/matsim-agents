@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 from ase.io import read as ase_read
 
-from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
+from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
 from matsim_agents.backends.dft.qe_relax import (
     QESettings,
     recommend_settings,
@@ -34,7 +34,7 @@ from matsim_agents.backends.dft.qe_relax import (
 )
 
 if TYPE_CHECKING:
-    from matsim_agents.active_learning.config import QEBackendConfig
+    from matsim_agents.backends.dft.config import QEBackendConfig
 
 log = logging.getLogger(__name__)
 

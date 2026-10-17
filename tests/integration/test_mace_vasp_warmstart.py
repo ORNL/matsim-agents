@@ -110,7 +110,7 @@ _FIXTURES = _load_fixtures() if FIXTURES_YAML.exists() else []
 @pytest.mark.parametrize("fixture", _FIXTURES, ids=_ids(_FIXTURES))
 def test_mace_warmstart_helps_vasp(fixture: dict[str, Any], tmp_path: Path) -> None:
     """Warm-started VASP relaxation should not need more ionic steps than cold."""
-    from matsim_agents.tools.warmstart_benchmark_vasp import run_warmstart_benchmark
+    from matsim_agents.workflows.warmstart_benchmark_vasp import run_warmstart_benchmark
 
     structure = DATA_DIR / fixture["file"]
     assert structure.exists(), f"missing fixture file: {structure}"

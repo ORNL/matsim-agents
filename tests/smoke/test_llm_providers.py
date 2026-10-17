@@ -26,17 +26,17 @@ class TestGetChatModelInstantiation:
         """ChatOllama is returned for the 'ollama' provider."""
         mock_ollama = MagicMock()
         with (
-            patch("matsim_agents.llm.ChatOllama", mock_ollama, create=True),
+            patch("matsim_agents.backends.llm.provider.ChatOllama", mock_ollama, create=True),
             patch.dict("sys.modules", {"langchain_ollama": MagicMock(ChatOllama=mock_ollama)}),
         ):
-            from matsim_agents.llm import get_chat_model
+            from matsim_agents.backends.llm.provider import get_chat_model
 
             get_chat_model(provider="ollama", model="test:model")
             mock_ollama.assert_called_once()
 
     def test_vllm_provider(self):
         """ChatVLLM is returned for the 'vllm' provider (OpenAI-compatible, no langchain_openai)."""
-        from matsim_agents.llm import ChatVLLM, get_chat_model
+        from matsim_agents.backends.llm.provider import ChatVLLM, get_chat_model
 
         result = get_chat_model(
             provider="vllm",
@@ -51,7 +51,7 @@ class TestGetChatModelInstantiation:
         assert result.request_timeout == 3600
 
     def test_vllm_completion_tokens_from_environment(self, monkeypatch):
-        from matsim_agents.llm import get_chat_model
+        from matsim_agents.backends.llm.provider import get_chat_model
 
         monkeypatch.setenv("MATSIM_VLLM_MAX_TOKENS", "4096")
         result = get_chat_model(provider="vllm", model="test-model")
@@ -60,7 +60,7 @@ class TestGetChatModelInstantiation:
 
     @pytest.mark.parametrize("environment", ["4096", "invalid"])
     def test_vllm_explicit_completion_tokens_override_environment(self, monkeypatch, environment):
-        from matsim_agents.llm import get_chat_model
+        from matsim_agents.backends.llm.provider import get_chat_model
 
         monkeypatch.setenv("MATSIM_VLLM_MAX_TOKENS", environment)
         result = get_chat_model(
@@ -72,7 +72,7 @@ class TestGetChatModelInstantiation:
         assert result.max_completion_tokens == 2048
 
     def test_vllm_timeout_from_environment(self, monkeypatch):
-        from matsim_agents.llm import get_chat_model
+        from matsim_agents.backends.llm.provider import get_chat_model
 
         monkeypatch.setenv("MATSIM_VLLM_TIMEOUT_SECONDS", "7200")
         result = get_chat_model(provider="vllm", model="test-model")
@@ -81,7 +81,7 @@ class TestGetChatModelInstantiation:
 
     @pytest.mark.parametrize("environment", ["7200", "invalid"])
     def test_vllm_explicit_timeout_overrides_environment(self, monkeypatch, environment):
-        from matsim_agents.llm import get_chat_model
+        from matsim_agents.backends.llm.provider import get_chat_model
 
         monkeypatch.setenv("MATSIM_VLLM_TIMEOUT_SECONDS", environment)
         result = get_chat_model(
@@ -94,7 +94,7 @@ class TestGetChatModelInstantiation:
 
     @pytest.mark.parametrize("variable", ["MATSIM_VLLM_MAX_TOKENS", "MATSIM_VLLM_TIMEOUT_SECONDS"])
     def test_invalid_vllm_environment_without_override_raises(self, monkeypatch, variable):
-        from matsim_agents.llm import get_chat_model
+        from matsim_agents.backends.llm.provider import get_chat_model
 
         monkeypatch.setenv(variable, "invalid")
         with pytest.raises(ValueError):
@@ -116,7 +116,7 @@ class TestGetChatModelInstantiation:
     def test_invalid_vllm_limits_fail_during_configuration(
         self, monkeypatch, source, field, variable, value
     ):
-        from matsim_agents.llm import ChatVLLM, get_chat_model
+        from matsim_agents.backends.llm.provider import ChatVLLM, get_chat_model
 
         kwargs = {}
         if source == "environment":
@@ -131,7 +131,7 @@ class TestGetChatModelInstantiation:
 
     @pytest.mark.parametrize("source", ["environment", "explicit"])
     def test_vllm_positive_string_limits_parse_uniformly(self, monkeypatch, source):
-        from matsim_agents.llm import get_chat_model
+        from matsim_agents.backends.llm.provider import get_chat_model
 
         kwargs = {}
         if source == "environment":
@@ -144,7 +144,7 @@ class TestGetChatModelInstantiation:
         assert model.request_timeout == 0.5
 
     def test_vllm_passes_timeout_to_client(self):
-        from matsim_agents.llm import ChatVLLM
+        from matsim_agents.backends.llm.provider import ChatVLLM
 
         response = MagicMock()
         response.choices[0].message.content = "local response"
@@ -163,7 +163,7 @@ class TestGetChatModelInstantiation:
     def test_openai_provider(self):
         mock_openai = MagicMock()
         with patch.dict("sys.modules", {"langchain_openai": MagicMock(ChatOpenAI=mock_openai)}):
-            from matsim_agents.llm import get_chat_model
+            from matsim_agents.backends.llm.provider import get_chat_model
 
             get_chat_model(provider="openai", model="gpt-4o-mini")
             mock_openai.assert_called_once()
@@ -173,13 +173,13 @@ class TestGetChatModelInstantiation:
         with patch.dict(
             "sys.modules", {"langchain_anthropic": MagicMock(ChatAnthropic=mock_anthropic)}
         ):
-            from matsim_agents.llm import get_chat_model
+            from matsim_agents.backends.llm.provider import get_chat_model
 
             get_chat_model(provider="anthropic", model="claude-3-5-sonnet-latest")
             mock_anthropic.assert_called_once()
 
     def test_unknown_provider_raises(self):
-        from matsim_agents.llm import get_chat_model
+        from matsim_agents.backends.llm.provider import get_chat_model
 
         with pytest.raises(ValueError, match="Unknown LLM provider"):
             get_chat_model(provider="nonexistent_provider")
@@ -188,7 +188,7 @@ class TestGetChatModelInstantiation:
         """MATSIM_LLM_PROVIDER env var is respected."""
         monkeypatch.setenv("MATSIM_LLM_PROVIDER", "vllm")
         monkeypatch.setenv("MATSIM_VLLM_BASE_URL", "http://localhost:8000/v1")
-        from matsim_agents.llm import ChatVLLM, get_chat_model
+        from matsim_agents.backends.llm.provider import ChatVLLM, get_chat_model
 
         result = get_chat_model()
         assert isinstance(result, ChatVLLM)
@@ -218,7 +218,7 @@ class TestHuggingFaceProvider:
         monkeypatch.setenv("MATSIM_HF_MODEL_PATH", str(tmp_path))
         mock_module, fake_pipeline, _ = self._make_hf_mocks()
         with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
-            from matsim_agents.llm import get_chat_model
+            from matsim_agents.backends.llm.provider import get_chat_model
 
             get_chat_model(provider="huggingface", model=str(tmp_path))
         fake_pipeline.from_model_id.assert_called_once()
@@ -231,7 +231,7 @@ class TestHuggingFaceProvider:
         monkeypatch.setenv("MATSIM_HF_MODEL_PATH", str(tmp_path))
         mock_module, fake_pipeline, _ = self._make_hf_mocks()
         with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
-            from matsim_agents.llm import get_chat_model
+            from matsim_agents.backends.llm.provider import get_chat_model
 
             get_chat_model(provider="huggingface", model=str(tmp_path), temperature=0.0)
         kwargs = fake_pipeline.from_model_id.call_args[1]
@@ -244,7 +244,7 @@ class TestHuggingFaceProvider:
         monkeypatch.setenv("MATSIM_HF_MODEL_PATH", str(tmp_path))
         mock_module, fake_pipeline, _ = self._make_hf_mocks()
         with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
-            from matsim_agents.llm import get_chat_model
+            from matsim_agents.backends.llm.provider import get_chat_model
 
             get_chat_model(provider="huggingface", model=str(tmp_path), temperature=0.7)
         kwargs = fake_pipeline.from_model_id.call_args[1]
@@ -258,7 +258,7 @@ class TestHuggingFaceProvider:
         monkeypatch.setenv("MATSIM_HF_MODEL_PATH", str(tmp_path))
         mock_module, _, fake_chat = self._make_hf_mocks()
         with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
-            from matsim_agents.llm import get_chat_model
+            from matsim_agents.backends.llm.provider import get_chat_model
 
             model = get_chat_model(provider="huggingface", model=str(tmp_path))
 

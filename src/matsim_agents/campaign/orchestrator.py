@@ -388,6 +388,363 @@ def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> 
     )
 
 
+def _select_batch(
+    campaign: CampaignState, policy: CampaignRunPolicy, eligible: list[str], batch_size: int
+) -> tuple[list[str], Any]:
+    """Pick the next formula batch, by acquisition scores when enabled."""
+    selection = None
+    if policy.acquisition.enabled:
+        selection = select_formula_batch(
+            eligible=eligible,
+            batch_size=batch_size,
+            iteration=campaign.iteration,
+            policy=policy.acquisition,
+            state=campaign.acquisition,
+        )
+        batch = selection.selected_formulas
+    else:
+        batch = eligible[:batch_size]
+    return batch, selection
+
+
+def _start_formula_record(
+    campaign: CampaignState, formula: str, formula_dir: Path, selection: Any
+) -> FormulaRunRecord:
+    """Reset the formula's run record for a new attempt in this iteration."""
+    record = campaign.formula_runs.get(formula) or FormulaRunRecord(formula=formula)
+    record.status = WorkflowStatus.RUNNING
+    record.iteration = campaign.iteration
+    record.attempts += 1
+    record.output_dir = str(formula_dir)
+    record.failure_reason = None
+    record.evidence["accounted_refinement_stage_attempts"] = 0
+    record.evidence["accounted_refinement_stage_node_hours"] = 0.0
+    if selection is not None:
+        record.acquisition_branch = selection.scores[formula].assigned_branch
+    campaign.formula_runs[formula] = record
+    return record
+
+
+def _formula_allowances(campaign: CampaignState) -> tuple[int | None, int | None]:
+    """Remaining DFT and MLIP-relaxation allowances under the campaign budget."""
+    dft_allowance = None
+    if campaign.budget.max_dft_calculations is not None:
+        used_dft = sum(item.n_dft_calculations for item in campaign.formula_runs.values())
+        dft_allowance = max(0, campaign.budget.max_dft_calculations - used_dft)
+    mlip_allowance = None
+    if campaign.budget.max_mlip_relaxations is not None:
+        used_mlip = sum(item.n_mlip_relaxations for item in campaign.formula_runs.values())
+        mlip_allowance = max(0, campaign.budget.max_mlip_relaxations - used_mlip)
+    return dft_allowance, mlip_allowance
+
+
+def _account_completed_formula(
+    campaign: CampaignState,
+    record: FormulaRunRecord,
+    result: Any,
+    formula_dir: Path,
+    dft_allowance: int | None,
+) -> None:
+    """Charge this attempt's new DFT/node-hour usage without double counting retries."""
+    al_result = result.active_learning_result or {}
+    formula_dft = int(al_result.get("n_dft_calculations", al_result.get("n_dft_converged", 0)))
+    prior_evidence = record.evidence
+    previous_al_dft = int(prior_evidence.get("accounted_active_learning_dft_calculations", 0))
+    previous_al_node_hours = float(prior_evidence.get("accounted_active_learning_node_hours", 0.0))
+    previous_al_iterations = int(prior_evidence.get("accounted_active_learning_iterations", 0))
+    previous_refinement_dft = int(prior_evidence.get("accounted_refinement_dft_attempts", 0))
+    previous_dft_total = max(
+        record.n_dft_calculations,
+        int(prior_evidence.get("accounted_total_dft_calculations", 0)),
+    )
+    previous_node_hours = max(
+        record.node_hours,
+        float(prior_evidence.get("accounted_total_node_hours", 0.0)),
+    )
+    durable_progress = _recover_partial_formula_evidence(formula_dir)
+    refinement_result = al_result.get("dft_refinement", {})
+    if not isinstance(refinement_result, dict):
+        refinement_result = {}
+    reported_refinement_dft = int(refinement_result.get("reference_calculations", 0))
+    reported_refinement_dft += int(refinement_result.get("candidate_calculations", 0))
+    current_refinement_dft_total = max(
+        durable_progress["refinement_dft_attempts"],
+        reported_refinement_dft,
+    )
+    previous_refinement_stage_dft = int(
+        prior_evidence.get("accounted_refinement_stage_attempts", 0)
+    )
+    current_refinement_dft = max(
+        0,
+        current_refinement_dft_total - previous_refinement_stage_dft,
+    )
+    reported_al_dft = max(0, formula_dft - reported_refinement_dft)
+    current_al_dft = max(
+        durable_progress["active_learning_dft_calculations"],
+        reported_al_dft,
+    )
+    if not durable_progress["active_learning_dft_calculations"] and not reported_refinement_dft:
+        current_al_dft = formula_dft
+
+    reported_total_node_hours = float(al_result.get("node_hours", 0.0))
+    durable_al_node_hours = durable_progress["active_learning_node_hours"]
+    current_refinement_node_hours_total = max(
+        durable_progress["refinement_node_hours"],
+        max(0.0, reported_total_node_hours - durable_al_node_hours),
+    )
+    previous_refinement_stage_node_hours = float(
+        prior_evidence.get("accounted_refinement_stage_node_hours", 0.0)
+    )
+    current_refinement_node_hours = max(
+        0.0,
+        current_refinement_node_hours_total - previous_refinement_stage_node_hours,
+    )
+    current_al_node_hours = max(
+        durable_al_node_hours,
+        reported_total_node_hours - current_refinement_node_hours,
+    )
+    reported_iterations = int(
+        al_result.get(
+            "n_active_learning_iterations",
+            al_result.get("n_iterations", 0),
+        )
+    )
+    current_al_iterations = max(
+        reported_iterations,
+        len(durable_progress["iteration_states"]),
+    )
+
+    additional_al_dft = max(0, current_al_dft - previous_al_dft)
+    additional_al_node_hours = max(0.0, current_al_node_hours - previous_al_node_hours)
+    additional_al_iterations = max(0, current_al_iterations - previous_al_iterations)
+    attempt_dft = additional_al_dft + current_refinement_dft
+    if dft_allowance is not None and attempt_dft > dft_allowance:
+        raise RuntimeError(
+            f"formula used {attempt_dft} new DFT calculations with allowance {dft_allowance}"
+        )
+    record.n_dft_calculations = previous_dft_total + additional_al_dft + current_refinement_dft
+    record.n_active_learning_iterations += additional_al_iterations
+    record.node_hours = (
+        previous_node_hours + additional_al_node_hours + current_refinement_node_hours
+    )
+    record.model_promoted = result.model_promoted
+    if result.model_promoted:
+        record.promotion_sequence = (
+            max(
+                (
+                    item.promotion_sequence
+                    for item in campaign.formula_runs.values()
+                    if item.promotion_sequence is not None
+                ),
+                default=-1,
+            )
+            + 1
+        )
+    record.evidence = {
+        key: value for key, value in al_result.items() if key != "exploration_kwargs"
+    }
+    record.evidence.update(
+        {
+            "accounted_active_learning_dft_calculations": max(previous_al_dft, current_al_dft),
+            "accounted_active_learning_node_hours": max(
+                previous_al_node_hours, current_al_node_hours
+            ),
+            "accounted_active_learning_iterations": max(
+                previous_al_iterations, current_al_iterations
+            ),
+            "accounted_refinement_dft_attempts": (previous_refinement_dft + current_refinement_dft),
+            "accounted_refinement_stage_attempts": (current_refinement_dft_total),
+            "accounted_refinement_stage_node_hours": (current_refinement_node_hours_total),
+            "accounted_total_dft_calculations": record.n_dft_calculations,
+            "accounted_total_node_hours": record.node_hours,
+        }
+    )
+
+
+def _record_relaxation_evidence(
+    record: FormulaRunRecord,
+    result: Any,
+    exploration: Any,
+    mlip_allowance: int | None,
+    attempt_count: int,
+) -> None:
+    """Store candidate relaxation budget and outcome evidence on the record."""
+    record.evidence["candidate_counts"] = record.candidate_counts
+    record.evidence["candidate_relaxation_budget"] = {
+        "scope": "candidate_structure_attempts",
+        "allowance": mlip_allowance,
+        "attempted": attempt_count,
+        "initial_exhausted": result.initial.relaxation_budget_exhausted,
+        "initial_unrelaxed": result.initial.unrelaxed_candidate_paths,
+        "reevaluation_exhausted": (
+            result.after_retraining.relaxation_budget_exhausted
+            if result.after_retraining is not None
+            else False
+        ),
+        "reevaluation_unrelaxed": (
+            result.after_retraining.unrelaxed_candidate_paths
+            if result.after_retraining is not None
+            else []
+        ),
+    }
+    record.evidence["outcome_class"] = record.outcome_class
+    record.evidence["relaxation_failures"] = list(exploration.failures)
+    record.evidence["ranking_failure"] = exploration.ranking_failure
+
+
+def _ingest_formula_outcome(
+    campaign: CampaignState, record: FormulaRunRecord, formula: str, exploration: Any
+) -> None:
+    """Update the candidate registry, reference energies, hulls, and acquisition metrics."""
+    prior_families = set(campaign.candidate_registry.relaxed_families)
+    novelty_references = [
+        candidate.optimized_structure_path
+        for candidate in campaign.candidate_registry.candidates.values()
+        if candidate.optimized_structure_path is not None
+    ]
+    uncertainty_by_candidate = {
+        str(key): float(value)
+        for key, value in record.evidence.get("candidate_uncertainty", {}).items()
+    }
+    ingest_exploration_result(
+        campaign.candidate_registry,
+        exploration,
+        iteration=campaign.iteration,
+        backend=record.evidence.get("mlip_backend"),
+        model_identifier=record.evidence.get("model_identifier"),
+        model_checkpoint_hash=record.evidence.get("model_checkpoint_hash"),
+        uncertainty_by_candidate=uncertainty_by_candidate,
+        novelty_reference_paths=novelty_references,
+    )
+    reference_payload = record.evidence.get("dft_refinement", {}).get("reference_energy_set")
+    previous_references = campaign.reference_energies
+    incoming_references = None
+    if reference_payload is not None:
+        incoming_references = ReferenceEnergySet.model_validate(reference_payload)
+        campaign.reference_energies = _merge_reference_energy_sets(
+            previous_references,
+            incoming_references,
+        )
+    if exploration.stability is not None:
+        report = exploration.stability
+        references = campaign.reference_energies
+        if (
+            references is not None
+            and report.ranking_mode.value == "convex_hull_ranking"
+            and report.reference_set_id == references.identifier
+        ):
+            if (
+                previous_references is not None
+                and incoming_references is not None
+                and report.formula in previous_references.competing_phases
+                and report.formula not in incoming_references.competing_phases
+            ):
+                references.competing_phases.pop(report.formula, None)
+            campaign.stability_reports[report.formula] = report
+            recalibrate_hull_reports(
+                campaign.stability_reports.values(),
+                references,
+            )
+        campaign.record_stability(exploration.stability)
+    candidate = campaign.formulas[formula]
+    disagreement_count = len(candidate.model_disagreements)
+    panel_evidence_count = len(candidate.llm_contributors) + disagreement_count
+    disagreement = disagreement_count / panel_evidence_count if panel_evidence_count else 0.0
+    hull_energy = None
+    if exploration.stability is not None:
+        hull_energy = exploration.stability.ground_state.energy_above_hull_eV_per_atom
+    campaign.acquisition.formula_metrics[formula] = formula_acquisition_metrics(
+        campaign.candidate_registry,
+        formula,
+        energy_above_hull_eV_per_atom=hull_energy,
+        llm_disagreement=disagreement,
+    )
+    new_families = set(campaign.candidate_registry.relaxed_families) - prior_families
+    near_hull = hull_energy is not None and hull_energy <= 0.05
+    dft_verified_family = bool(new_families and record.n_dft_calculations)
+    record.evidence.setdefault(
+        "useful_outcome",
+        bool(near_hull or dft_verified_family or record.model_promoted),
+    )
+
+
+def _account_failed_formula(record: FormulaRunRecord, formula_dir: Path) -> None:
+    """Charge durable partial progress from a failed formula attempt."""
+    partial = _recover_partial_formula_evidence(formula_dir)
+    previous_al_dft = int(record.evidence.get("accounted_active_learning_dft_calculations", 0))
+    previous_al_node_hours = float(record.evidence.get("accounted_active_learning_node_hours", 0.0))
+    previous_al_iterations = int(record.evidence.get("accounted_active_learning_iterations", 0))
+    previous_refinement_stage_dft = int(
+        record.evidence.get("accounted_refinement_stage_attempts", 0)
+    )
+    previous_refinement_stage_node_hours = float(
+        record.evidence.get("accounted_refinement_stage_node_hours", 0.0)
+    )
+    additional_al_dft = max(
+        0,
+        partial["active_learning_dft_calculations"] - previous_al_dft,
+    )
+    additional_al_node_hours = max(
+        0.0,
+        partial["active_learning_node_hours"] - previous_al_node_hours,
+    )
+    additional_refinement_dft = max(
+        0,
+        partial["refinement_dft_attempts"] - previous_refinement_stage_dft,
+    )
+    additional_refinement_node_hours = max(
+        0.0,
+        partial["refinement_node_hours"] - previous_refinement_stage_node_hours,
+    )
+    record.n_dft_calculations += additional_al_dft + additional_refinement_dft
+    record.node_hours += additional_al_node_hours + additional_refinement_node_hours
+    record.n_active_learning_iterations = max(
+        record.n_active_learning_iterations,
+        len(partial["iteration_states"]),
+    )
+    record.evidence.update(
+        {
+            "partial_campaign_stages": partial["stages"],
+            "iteration_states": partial["iteration_states"],
+            "accounted_active_learning_dft_calculations": partial[
+                "active_learning_dft_calculations"
+            ],
+            "accounted_active_learning_node_hours": partial["active_learning_node_hours"],
+            "accounted_active_learning_iterations": max(
+                previous_al_iterations,
+                len(partial["iteration_states"]),
+            ),
+            "accounted_refinement_dft_attempts": (
+                int(record.evidence.get("accounted_refinement_dft_attempts", 0))
+                + additional_refinement_dft
+            ),
+            "accounted_refinement_stage_attempts": partial["refinement_dft_attempts"],
+            "accounted_refinement_stage_node_hours": partial["refinement_node_hours"],
+            "accounted_total_dft_calculations": record.n_dft_calculations,
+            "accounted_total_node_hours": record.node_hours,
+            "partial_progress": partial,
+        }
+    )
+
+
+def _update_adaptive_acquisition(
+    campaign: CampaignState,
+    policy: CampaignRunPolicy,
+    iteration_records: list[FormulaRunRecord],
+) -> None:
+    """Update exploit/explore usefulness counters and the adaptive lambda."""
+    if policy.acquisition.enabled and policy.acquisition.mode == "adaptive":
+        for record in iteration_records:
+            useful = bool(record.evidence.get("useful_outcome", False))
+            if record.acquisition_branch == "exploitation":
+                campaign.acquisition.exploitation_attempts += 1
+                campaign.acquisition.exploitation_useful += int(useful)
+            elif record.acquisition_branch == "exploration":
+                campaign.acquisition.exploration_attempts += 1
+                campaign.acquisition.exploration_useful += int(useful)
+        update_adaptive_lambda(campaign.acquisition, policy.acquisition)
+
+
 def run_campaign(
     campaign: CampaignState,
     *,
@@ -447,18 +804,7 @@ def run_campaign(
         if batch_size == 0:
             stop_reason = "remaining budget is below per-formula reservation"
             break
-        selection = None
-        if policy.acquisition.enabled:
-            selection = select_formula_batch(
-                eligible=eligible,
-                batch_size=batch_size,
-                iteration=campaign.iteration,
-                policy=policy.acquisition,
-                state=campaign.acquisition,
-            )
-            batch = selection.selected_formulas
-        else:
-            batch = eligible[:batch_size]
+        batch, selection = _select_batch(campaign, policy, eligible, batch_size)
         iteration_records: list[FormulaRunRecord] = []
         for formula in batch:
             budget_reason = _budget_stop_reason(campaign)
@@ -466,32 +812,11 @@ def run_campaign(
                 stop_reason = budget_reason
                 break
             formula_dir = root / "formulas" / formula
-            record = campaign.formula_runs.get(formula) or FormulaRunRecord(formula=formula)
-            record.status = WorkflowStatus.RUNNING
-            record.iteration = campaign.iteration
-            record.attempts += 1
-            record.output_dir = str(formula_dir)
-            record.failure_reason = None
-            record.evidence["accounted_refinement_stage_attempts"] = 0
-            record.evidence["accounted_refinement_stage_node_hours"] = 0.0
-            if selection is not None:
-                record.acquisition_branch = selection.scores[formula].assigned_branch
-            campaign.formula_runs[formula] = record
+            record = _start_formula_record(campaign, formula, formula_dir, selection)
             campaign.save(state_path)
             try:
-                dft_allowance = None
-                if campaign.budget.max_dft_calculations is not None:
-                    used_dft = sum(
-                        item.n_dft_calculations for item in campaign.formula_runs.values()
-                    )
-                    dft_allowance = max(0, campaign.budget.max_dft_calculations - used_dft)
-                mlip_allowance = None
+                dft_allowance, mlip_allowance = _formula_allowances(campaign)
                 mlip_attempts = 0
-                if campaign.budget.max_mlip_relaxations is not None:
-                    used_mlip = sum(
-                        item.n_mlip_relaxations for item in campaign.formula_runs.values()
-                    )
-                    mlip_allowance = max(0, campaign.budget.max_mlip_relaxations - used_mlip)
 
                 def record_mlip_attempt(
                     allowance: int | None = mlip_allowance,
@@ -533,302 +858,15 @@ def run_campaign(
                     )
                 record.outcome_class = exploration.outcome_class
                 record.candidate_counts = exploration.candidate_counts
-                al_result = result.active_learning_result or {}
-                formula_dft = int(
-                    al_result.get("n_dft_calculations", al_result.get("n_dft_converged", 0))
+                _account_completed_formula(campaign, record, result, formula_dir, dft_allowance)
+                _record_relaxation_evidence(
+                    record, result, exploration, mlip_allowance, attempt_count
                 )
-                prior_evidence = record.evidence
-                previous_al_dft = int(
-                    prior_evidence.get("accounted_active_learning_dft_calculations", 0)
-                )
-                previous_al_node_hours = float(
-                    prior_evidence.get("accounted_active_learning_node_hours", 0.0)
-                )
-                previous_al_iterations = int(
-                    prior_evidence.get("accounted_active_learning_iterations", 0)
-                )
-                previous_refinement_dft = int(
-                    prior_evidence.get("accounted_refinement_dft_attempts", 0)
-                )
-                previous_dft_total = max(
-                    record.n_dft_calculations,
-                    int(prior_evidence.get("accounted_total_dft_calculations", 0)),
-                )
-                previous_node_hours = max(
-                    record.node_hours,
-                    float(prior_evidence.get("accounted_total_node_hours", 0.0)),
-                )
-                durable_progress = _recover_partial_formula_evidence(formula_dir)
-                refinement_result = al_result.get("dft_refinement", {})
-                if not isinstance(refinement_result, dict):
-                    refinement_result = {}
-                reported_refinement_dft = int(refinement_result.get("reference_calculations", 0))
-                reported_refinement_dft += int(refinement_result.get("candidate_calculations", 0))
-                current_refinement_dft_total = max(
-                    durable_progress["refinement_dft_attempts"],
-                    reported_refinement_dft,
-                )
-                previous_refinement_stage_dft = int(
-                    prior_evidence.get("accounted_refinement_stage_attempts", 0)
-                )
-                current_refinement_dft = max(
-                    0,
-                    current_refinement_dft_total - previous_refinement_stage_dft,
-                )
-                reported_al_dft = max(0, formula_dft - reported_refinement_dft)
-                current_al_dft = max(
-                    durable_progress["active_learning_dft_calculations"],
-                    reported_al_dft,
-                )
-                if (
-                    not durable_progress["active_learning_dft_calculations"]
-                    and not reported_refinement_dft
-                ):
-                    current_al_dft = formula_dft
-
-                reported_total_node_hours = float(al_result.get("node_hours", 0.0))
-                durable_al_node_hours = durable_progress["active_learning_node_hours"]
-                current_refinement_node_hours_total = max(
-                    durable_progress["refinement_node_hours"],
-                    max(0.0, reported_total_node_hours - durable_al_node_hours),
-                )
-                previous_refinement_stage_node_hours = float(
-                    prior_evidence.get("accounted_refinement_stage_node_hours", 0.0)
-                )
-                current_refinement_node_hours = max(
-                    0.0,
-                    current_refinement_node_hours_total - previous_refinement_stage_node_hours,
-                )
-                current_al_node_hours = max(
-                    durable_al_node_hours,
-                    reported_total_node_hours - current_refinement_node_hours,
-                )
-                reported_iterations = int(
-                    al_result.get(
-                        "n_active_learning_iterations",
-                        al_result.get("n_iterations", 0),
-                    )
-                )
-                current_al_iterations = max(
-                    reported_iterations,
-                    len(durable_progress["iteration_states"]),
-                )
-
-                additional_al_dft = max(0, current_al_dft - previous_al_dft)
-                additional_al_node_hours = max(0.0, current_al_node_hours - previous_al_node_hours)
-                additional_al_iterations = max(0, current_al_iterations - previous_al_iterations)
-                attempt_dft = additional_al_dft + current_refinement_dft
-                if dft_allowance is not None and attempt_dft > dft_allowance:
-                    raise RuntimeError(
-                        f"formula used {attempt_dft} new DFT calculations with allowance "
-                        f"{dft_allowance}"
-                    )
-                record.n_dft_calculations = (
-                    previous_dft_total + additional_al_dft + current_refinement_dft
-                )
-                record.n_active_learning_iterations += additional_al_iterations
-                record.node_hours = (
-                    previous_node_hours + additional_al_node_hours + current_refinement_node_hours
-                )
-                record.model_promoted = result.model_promoted
-                if result.model_promoted:
-                    record.promotion_sequence = (
-                        max(
-                            (
-                                item.promotion_sequence
-                                for item in campaign.formula_runs.values()
-                                if item.promotion_sequence is not None
-                            ),
-                            default=-1,
-                        )
-                        + 1
-                    )
-                record.evidence = {
-                    key: value for key, value in al_result.items() if key != "exploration_kwargs"
-                }
-                record.evidence.update(
-                    {
-                        "accounted_active_learning_dft_calculations": max(
-                            previous_al_dft, current_al_dft
-                        ),
-                        "accounted_active_learning_node_hours": max(
-                            previous_al_node_hours, current_al_node_hours
-                        ),
-                        "accounted_active_learning_iterations": max(
-                            previous_al_iterations, current_al_iterations
-                        ),
-                        "accounted_refinement_dft_attempts": (
-                            previous_refinement_dft + current_refinement_dft
-                        ),
-                        "accounted_refinement_stage_attempts": (current_refinement_dft_total),
-                        "accounted_refinement_stage_node_hours": (
-                            current_refinement_node_hours_total
-                        ),
-                        "accounted_total_dft_calculations": record.n_dft_calculations,
-                        "accounted_total_node_hours": record.node_hours,
-                    }
-                )
-                record.evidence["candidate_counts"] = record.candidate_counts
-                record.evidence["candidate_relaxation_budget"] = {
-                    "scope": "candidate_structure_attempts",
-                    "allowance": mlip_allowance,
-                    "attempted": attempt_count,
-                    "initial_exhausted": result.initial.relaxation_budget_exhausted,
-                    "initial_unrelaxed": result.initial.unrelaxed_candidate_paths,
-                    "reevaluation_exhausted": (
-                        result.after_retraining.relaxation_budget_exhausted
-                        if result.after_retraining is not None
-                        else False
-                    ),
-                    "reevaluation_unrelaxed": (
-                        result.after_retraining.unrelaxed_candidate_paths
-                        if result.after_retraining is not None
-                        else []
-                    ),
-                }
-                record.evidence["outcome_class"] = record.outcome_class
-                record.evidence["relaxation_failures"] = list(exploration.failures)
-                record.evidence["ranking_failure"] = exploration.ranking_failure
-                prior_families = set(campaign.candidate_registry.relaxed_families)
-                novelty_references = [
-                    candidate.optimized_structure_path
-                    for candidate in campaign.candidate_registry.candidates.values()
-                    if candidate.optimized_structure_path is not None
-                ]
-                uncertainty_by_candidate = {
-                    str(key): float(value)
-                    for key, value in record.evidence.get("candidate_uncertainty", {}).items()
-                }
-                ingest_exploration_result(
-                    campaign.candidate_registry,
-                    exploration,
-                    iteration=campaign.iteration,
-                    backend=record.evidence.get("mlip_backend"),
-                    model_identifier=record.evidence.get("model_identifier"),
-                    model_checkpoint_hash=record.evidence.get("model_checkpoint_hash"),
-                    uncertainty_by_candidate=uncertainty_by_candidate,
-                    novelty_reference_paths=novelty_references,
-                )
-                reference_payload = record.evidence.get("dft_refinement", {}).get(
-                    "reference_energy_set"
-                )
-                previous_references = campaign.reference_energies
-                incoming_references = None
-                if reference_payload is not None:
-                    incoming_references = ReferenceEnergySet.model_validate(reference_payload)
-                    campaign.reference_energies = _merge_reference_energy_sets(
-                        previous_references,
-                        incoming_references,
-                    )
-                if exploration.stability is not None:
-                    report = exploration.stability
-                    references = campaign.reference_energies
-                    if (
-                        references is not None
-                        and report.ranking_mode.value == "convex_hull_ranking"
-                        and report.reference_set_id == references.identifier
-                    ):
-                        if (
-                            previous_references is not None
-                            and incoming_references is not None
-                            and report.formula in previous_references.competing_phases
-                            and report.formula not in incoming_references.competing_phases
-                        ):
-                            references.competing_phases.pop(report.formula, None)
-                        campaign.stability_reports[report.formula] = report
-                        recalibrate_hull_reports(
-                            campaign.stability_reports.values(),
-                            references,
-                        )
-                    campaign.record_stability(exploration.stability)
-                candidate = campaign.formulas[formula]
-                disagreement_count = len(candidate.model_disagreements)
-                panel_evidence_count = len(candidate.llm_contributors) + disagreement_count
-                disagreement = (
-                    disagreement_count / panel_evidence_count if panel_evidence_count else 0.0
-                )
-                hull_energy = None
-                if exploration.stability is not None:
-                    hull_energy = exploration.stability.ground_state.energy_above_hull_eV_per_atom
-                campaign.acquisition.formula_metrics[formula] = formula_acquisition_metrics(
-                    campaign.candidate_registry,
-                    formula,
-                    energy_above_hull_eV_per_atom=hull_energy,
-                    llm_disagreement=disagreement,
-                )
-                new_families = set(campaign.candidate_registry.relaxed_families) - prior_families
-                near_hull = hull_energy is not None and hull_energy <= 0.05
-                dft_verified_family = bool(new_families and record.n_dft_calculations)
-                record.evidence.setdefault(
-                    "useful_outcome",
-                    bool(near_hull or dft_verified_family or record.model_promoted),
-                )
+                _ingest_formula_outcome(campaign, record, formula, exploration)
                 record.status = WorkflowStatus.COMPLETE
                 completed.append(formula)
             except Exception as exc:  # noqa: BLE001
-                partial = _recover_partial_formula_evidence(formula_dir)
-                previous_al_dft = int(
-                    record.evidence.get("accounted_active_learning_dft_calculations", 0)
-                )
-                previous_al_node_hours = float(
-                    record.evidence.get("accounted_active_learning_node_hours", 0.0)
-                )
-                previous_al_iterations = int(
-                    record.evidence.get("accounted_active_learning_iterations", 0)
-                )
-                previous_refinement_stage_dft = int(
-                    record.evidence.get("accounted_refinement_stage_attempts", 0)
-                )
-                previous_refinement_stage_node_hours = float(
-                    record.evidence.get("accounted_refinement_stage_node_hours", 0.0)
-                )
-                additional_al_dft = max(
-                    0,
-                    partial["active_learning_dft_calculations"] - previous_al_dft,
-                )
-                additional_al_node_hours = max(
-                    0.0,
-                    partial["active_learning_node_hours"] - previous_al_node_hours,
-                )
-                additional_refinement_dft = max(
-                    0,
-                    partial["refinement_dft_attempts"] - previous_refinement_stage_dft,
-                )
-                additional_refinement_node_hours = max(
-                    0.0,
-                    partial["refinement_node_hours"] - previous_refinement_stage_node_hours,
-                )
-                record.n_dft_calculations += additional_al_dft + additional_refinement_dft
-                record.node_hours += additional_al_node_hours + additional_refinement_node_hours
-                record.n_active_learning_iterations = max(
-                    record.n_active_learning_iterations,
-                    len(partial["iteration_states"]),
-                )
-                record.evidence.update(
-                    {
-                        "partial_campaign_stages": partial["stages"],
-                        "iteration_states": partial["iteration_states"],
-                        "accounted_active_learning_dft_calculations": partial[
-                            "active_learning_dft_calculations"
-                        ],
-                        "accounted_active_learning_node_hours": partial[
-                            "active_learning_node_hours"
-                        ],
-                        "accounted_active_learning_iterations": max(
-                            previous_al_iterations,
-                            len(partial["iteration_states"]),
-                        ),
-                        "accounted_refinement_dft_attempts": (
-                            int(record.evidence.get("accounted_refinement_dft_attempts", 0))
-                            + additional_refinement_dft
-                        ),
-                        "accounted_refinement_stage_attempts": partial["refinement_dft_attempts"],
-                        "accounted_refinement_stage_node_hours": partial["refinement_node_hours"],
-                        "accounted_total_dft_calculations": record.n_dft_calculations,
-                        "accounted_total_node_hours": record.node_hours,
-                        "partial_progress": partial,
-                    }
-                )
+                _account_failed_formula(record, formula_dir)
                 record.status = WorkflowStatus.FAILED
                 record.failure_reason = repr(exc)
                 failed.append(formula)
@@ -841,16 +879,7 @@ def run_campaign(
                 campaign.save(state_path)
             iteration_records.append(record)
 
-        if policy.acquisition.enabled and policy.acquisition.mode == "adaptive":
-            for record in iteration_records:
-                useful = bool(record.evidence.get("useful_outcome", False))
-                if record.acquisition_branch == "exploitation":
-                    campaign.acquisition.exploitation_attempts += 1
-                    campaign.acquisition.exploitation_useful += int(useful)
-                elif record.acquisition_branch == "exploration":
-                    campaign.acquisition.exploration_attempts += 1
-                    campaign.acquisition.exploration_useful += int(useful)
-            update_adaptive_lambda(campaign.acquisition, policy.acquisition)
+        _update_adaptive_acquisition(campaign, policy, iteration_records)
 
         if review_runner is not None and iteration_records:
             try:

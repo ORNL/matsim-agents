@@ -5,8 +5,8 @@ from time import sleep
 import pytest
 from ase import Atoms
 
-from matsim_agents.active_learning.dft_backend import DFTJobSpec, DFTResult
-from matsim_agents.active_learning.dft_runner import run_dft_batch
+from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
+from matsim_agents.backends.dft.runner import run_dft_batch
 from matsim_agents.execution.allocation import (
     Allocation,
     discover_allocation,
