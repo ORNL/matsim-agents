@@ -4,7 +4,11 @@
 nodes, so the lock is an atomically created lock file (``O_CREAT | O_EXCL``),
 which is supported on CFS, Lustre, GPFS, and local disks. The file records the
 holder's host and PID. A lock left by a crashed process on the same host is
-reclaimed; a lock held from another host is never broken automatically.
+reclaimed; a lock held from another host is never broken automatically. A lock
+file without holder metadata (for example one left behind by the former
+``fcntl.flock`` implementation) is reclaimed once it is older than
+``UNOWNED_LOCK_GRACE_SECONDS``, which leaves time for a new holder to record
+itself.
 """
 
 from __future__ import annotations
@@ -19,6 +23,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+UNOWNED_LOCK_GRACE_SECONDS = 60.0
+
 
 class LockTimeoutError(TimeoutError):
     """Raised when an exclusive lock could not be acquired in time."""
@@ -31,8 +37,14 @@ def _holder(path: Path) -> dict | None:
         return None
 
 
-def _is_stale(holder: dict | None) -> bool:
-    if not holder or holder.get("host") != socket.gethostname():
+def _is_stale(path: Path, holder: dict | None) -> bool:
+    if not isinstance(holder, dict) or "pid" not in holder or "host" not in holder:
+        try:
+            age = time.time() - path.stat().st_mtime
+        except FileNotFoundError:
+            return False
+        return age > UNOWNED_LOCK_GRACE_SECONDS
+    if holder.get("host") != socket.gethostname():
         return False
     try:
         os.kill(int(holder["pid"]), 0)
@@ -56,7 +68,7 @@ def exclusive_lock(
         try:
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
         except FileExistsError:
-            if _is_stale(_holder(path)):
+            if _is_stale(path, _holder(path)):
                 with contextlib.suppress(FileNotFoundError):
                     path.unlink()
                 continue

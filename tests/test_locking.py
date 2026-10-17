@@ -78,3 +78,20 @@ def test_lock_held_by_live_process_on_this_host_is_not_broken(tmp_path):
     path.write_text(json.dumps({"host": socket.gethostname(), "pid": os.getppid()}))
     with pytest.raises(LockTimeoutError), exclusive_lock(path, timeout=0.2, poll_interval=0.05):
         pass
+
+
+def test_ownerless_lock_file_is_reclaimed_after_grace_period(tmp_path):
+    path = tmp_path / ".references.lock"
+    path.touch()
+    old = time.time() - 600
+    os.utime(path, (old, old))
+    with exclusive_lock(path, timeout=1):
+        assert json.loads(path.read_text())["pid"] == os.getpid()
+
+
+def test_fresh_ownerless_lock_file_is_respected(tmp_path):
+    path = tmp_path / ".references.lock"
+    path.touch()
+    with pytest.raises(LockTimeoutError), exclusive_lock(path, timeout=0.2, poll_interval=0.05):
+        pass
+    assert path.exists()
