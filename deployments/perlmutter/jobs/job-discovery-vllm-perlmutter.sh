@@ -56,7 +56,9 @@ VLLM_HOST=${MATSIM_VLLM_HOST:-127.0.0.1}
 VLLM_PORT=${MATSIM_VLLM_PORT:-8000}
 VLLM_TP=${MATSIM_VLLM_TP:-1}                       # tensor-parallel size (GPUs for server)
 VLLM_GPUS=${MATSIM_VLLM_GPUS:-0}                   # CUDA ids for the server
-VLLM_MAXLEN=${MATSIM_VLLM_MAXLEN:-8192}
+# Peer-review transcripts exceed 4k tokens and each request reserves
+# MATSIM_VLLM_MAX_TOKENS (default 4096) output tokens, so 8192 is too small.
+VLLM_MAXLEN=${MATSIM_VLLM_MAXLEN:-16384}
 VLLM_GPU_UTIL=${MATSIM_VLLM_GPU_UTIL:-0.90}
 CLIENT_GPUS=${MATSIM_CLIENT_GPUS:-1,2,3}           # CUDA ids for MLFF relaxations
 BASE_URL="http://${VLLM_HOST}:${VLLM_PORT}/v1"

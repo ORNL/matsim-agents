@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import io
 import json
@@ -30,6 +29,7 @@ from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.datasets.energy_references import load_elemental_reference_manifest
 from matsim_agents.datasets.governance import sha256_file
+from matsim_agents.execution.locking import exclusive_lock
 
 log = logging.getLogger(__name__)
 
@@ -582,8 +582,7 @@ def _prepare_reference_phase(
     if relax_key is not None:
         relax_entry = cache_dir / "relaxations" / relax_key
         if relax_entry.exists():
-            with (relax_entry / "calculation.lock").open("a") as lock:
-                fcntl.flock(lock, fcntl.LOCK_EX)
+            with exclusive_lock(relax_entry / "calculation.lock"):
                 result_path = relax_entry / "result.json"
                 geometry_path = relax_entry / "geometry.extxyz"
                 if result_path.exists() or geometry_path.exists():
@@ -617,8 +616,7 @@ def _prepare_reference_phase(
     if relax_key is None or relaxation is not None:
         static_entry = cache_dir / "calculations" / static_key
         if static_entry.exists():
-            with (static_entry / "calculation.lock").open("a") as lock:
-                fcntl.flock(lock, fcntl.LOCK_EX)
+            with exclusive_lock(static_entry / "calculation.lock"):
                 static_result_path = static_entry / "result.json"
                 static_geometry_path = static_entry / "geometry.extxyz"
                 if static_result_path.exists() or static_geometry_path.exists():
@@ -714,8 +712,7 @@ def _compute_reference(
     if relax_key is not None:
         relax_entry = cache_dir / "relaxations" / relax_key
         relax_entry.mkdir(parents=True, exist_ok=True)
-        with (relax_entry / "calculation.lock").open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        with exclusive_lock(relax_entry / "calculation.lock"):
             relax_result_path = relax_entry / "result.json"
             relax_geometry_path = relax_entry / "geometry.extxyz"
             if relax_result_path.exists():
@@ -793,8 +790,7 @@ def _compute_reference(
 
     entry = cache_dir / "calculations" / static_key
     entry.mkdir(parents=True, exist_ok=True)
-    with (entry / "calculation.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with exclusive_lock(entry / "calculation.lock"):
         result_path = entry / "result.json"
         if result_path.exists():
             record = CachedElementalCalculation.model_validate_json(result_path.read_text())

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import shutil
 import tempfile
@@ -24,6 +23,7 @@ from matsim_agents.datasets.energy_references import (
     validate_dataset_reference_method,
 )
 from matsim_agents.datasets.governance import DatasetManifest, sha256_file
+from matsim_agents.execution.locking import exclusive_lock
 
 
 def _phase_plan_identity(
@@ -192,8 +192,7 @@ def resolve_training_references(
     reference_root = Path(reference_root)
     reference_root.parent.mkdir(parents=True, exist_ok=True)
     lock_path = reference_root.parent / f".{reference_root.name}.lock"
-    with lock_path.open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with exclusive_lock(lock_path):
         _recover_reference_publication(reference_root)
         return _resolve_training_references_unlocked(
             trainer,
