@@ -1,7 +1,8 @@
 # Resource dispatch for LLMs, MLIPs, and DFT
 
-Status: **design proposal** — not implemented. Review before implementation;
-the implementation lands in a separate PR after #14.
+Status: **design proposal** — not implemented. The open design questions are
+resolved in [section 11](#11-design-decisions). The implementation lands in a
+separate PR after #14.
 
 ## 1. Problem
 
@@ -72,11 +73,17 @@ facility preset:
 **Pool.** A named, non-empty slice of the allocation: a set of nodes and, on
 each of those nodes, a set of logical devices. Pools are declared per
 component: `llm`, `mlip`, `dft`, `training`. A component without a pool does
-not run.
+not run. All nodes in a pool must have the same geometry (decision 11.1).
 
 **Sharing.** Pools are exclusive unless they name each other in `share_with`.
 Sharing is symmetric and must be declared on both pools, so it is always
-deliberate and visible in the preview.
+deliberate and visible in the preview. A shared device can carry a memory
+budget per pool (`memory_fraction`, decision 11.2).
+
+**LLM server.** A named entry in the `llm` pool's `servers` list: one model
+reachable at one endpoint, either started by matsim-agents on its own slice of
+the pool or supplied as an external URL. A debate panel is one `llm` pool with
+several servers (decision 11.3).
 
 **Placement.** The resolved plan: for each pool, concrete hosts and device
 indices, plus the launch details derived from them (device masks, `srun` or
@@ -95,12 +102,14 @@ resources:
     llm:
       nodes: 1                  # count, "all", "rest", or explicit host list
       devices: [0]              # explicit indices, a count, or "all"
-      service:
-        kind: managed-vllm      # managed-vllm | external | in-process
-        model: ${MODEL_ROOT}/Qwen2.5-14B-Instruct
-        served_name: Qwen2.5-14B-Instruct
-        max_model_len: 16384
-        # tensor_parallel_size defaults to the pool's device count
+      servers:
+        - name: proposer        # referenced by workflows (roles, panel members)
+          kind: managed-vllm    # managed-vllm | external | in-process
+          model: ${MODEL_ROOT}/Qwen2.5-14B-Instruct
+          served_name: Qwen2.5-14B-Instruct
+          max_model_len: 16384
+          # nodes/devices default to the whole pool; tensor_parallel_size
+          # defaults to the server's device count
     mlip:
       nodes: 1                  # same node as llm (node 0 of the allocation)
       devices: [1, 2, 3]        # three concurrent relaxations
@@ -114,10 +123,15 @@ Field reference:
 | `pools.<name>.nodes` | int, `"all"`, `"rest"`, or list of hosts | Which allocation nodes the pool uses; `rest` takes nodes not used by any other pool |
 | `pools.<name>.devices` | list of ints, int, `"all"` | Logical devices per node; an int takes the lowest free indices |
 | `pools.<name>.share_with` | list of pool names | Pools allowed to overlap with this one |
-| `pools.llm.service.kind` | `managed-vllm`, `external`, `in-process` | How the LLM runs |
-| `pools.llm.service.base_url` | URL | Required for `external` |
-| `pools.llm.service.tensor_parallel_size` | int | Defaults to devices per server |
-| `pools.llm.service.servers` | int | Independent servers in the pool (panels of different models) |
+| `pools.<name>.memory_fraction` | float in (0, 1] | Device-memory budget on shared devices; required for a `managed-vllm` server on a shared device |
+| `pools.llm.servers` | list | One entry per model endpoint; a single-model setup is a one-entry list |
+| `pools.llm.servers[].name` | string | Unique name used by workflows (proposer, critic, panel member) |
+| `pools.llm.servers[].kind` | `managed-vllm`, `external`, `in-process` | How this model runs |
+| `pools.llm.servers[].model` / `served_name` | path / string | Model directory and the identifier the server exposes |
+| `pools.llm.servers[].nodes` / `devices` | as for pools | This server's slice of the pool; defaults to the whole pool when there is one server |
+| `pools.llm.servers[].base_url` | URL | Required for `external`; such a server takes no nodes or devices |
+| `pools.llm.servers[].tensor_parallel_size` | int | Defaults to the server's device count |
+| `pools.llm.servers[].max_model_len` | int | Context length passed to vLLM |
 | `pools.mlip.max_concurrent` | int | Defaults to the pool's device count |
 | `pools.dft.nodes_per_job` | int | Nodes per DFT calculation |
 | `pools.dft.ranks_per_device` | int | Defaults to 1; ranks per node = devices x ranks_per_device |
@@ -136,20 +150,30 @@ Single Perlmutter node, vLLM on one GPU, three concurrent HydraGNN relaxations:
 resources:
   preset: perlmutter-gpu
   pools:
-    llm:  {nodes: 1, devices: [0], service: {kind: managed-vllm, model: /models/Qwen2.5-14B-Instruct}}
+    llm:
+      nodes: 1
+      devices: [0]
+      servers:
+        - {name: proposer, kind: managed-vllm, model: /models/Qwen2.5-14B-Instruct}
     mlip: {nodes: 1, devices: [1, 2, 3]}
 ```
 
 Single node with the LLM in-process across all GPUs and the MLIP sharing GPU 0
-(the layout the Hugging Face discovery job uses today, now explicit):
+(the layout the Hugging Face discovery job uses today, now explicit, with a
+memory budget on the shared GPU):
 
 ```yaml
 resources:
   preset: perlmutter-gpu
   pools:
-    llm:  {nodes: 1, devices: all, share_with: [mlip],
-           service: {kind: in-process, model: /models/Qwen2.5-72B-Instruct}}
-    mlip: {nodes: 1, devices: [0], share_with: [llm]}
+    llm:
+      nodes: 1
+      devices: all
+      share_with: [mlip]
+      memory_fraction: 0.75      # applies on GPU 0, the only shared device
+      servers:
+        - {name: proposer, kind: in-process, model: /models/Qwen2.5-72B-Instruct}
+    mlip: {nodes: 1, devices: [0], share_with: [llm], memory_fraction: 0.2}
 ```
 
 Active learning: one node for MLIP MD and training, the rest for DFT:
@@ -163,18 +187,29 @@ resources:
     dft:      {nodes: rest, devices: all, nodes_per_job: 1}
 ```
 
-Campaign with an external multi-node LLM panel and DFT on the allocation:
+Campaign with a debate panel of locally served and remote models, plus MLIP and
+DFT on the rest of the allocation:
 
 ```yaml
 resources:
   preset: perlmutter-gpu
   pools:
-    llm:  {service: {kind: external, base_url: "http://nid001234:8000/v1"}}
+    llm:
+      nodes: 7
+      servers:
+        - {name: kimi,  kind: managed-vllm, model: /models/Kimi-K2.5, nodes: 4}
+        - {name: glm,   kind: managed-vllm, model: /models/GLM-4.7, nodes: 2}
+        - {name: gemma, kind: managed-vllm, model: /models/gemma-4-31B-it, nodes: 1, devices: [0, 1]}
+        - {name: qwen,  kind: managed-vllm, model: /models/Qwen2.5-14B-Instruct, nodes: 1, devices: [2]}
+        - {name: remote, kind: external, base_url: "https://llm.example.org/v1"}
     mlip: {nodes: 1, devices: all}
     dft:  {nodes: rest, devices: all, nodes_per_job: 1}
 ```
 
-An `external` LLM pool owns no devices and needs no `nodes` or `devices`.
+Server slices are taken from the pool in list order: `kimi` takes the pool's
+first four nodes, `glm` the next two, and `gemma` and `qwen` share the last
+node on disjoint GPUs. An `external` server owns no nodes or devices; a pool
+whose servers are all external needs no `nodes` or `devices`.
 
 ## 5. Resolution and validation
 
@@ -182,16 +217,23 @@ An `external` LLM pool owns no devices and needs no `nodes` or `devices`.
 
 1. Apply the preset, then auto-detected geometry, then explicit overrides.
 2. Resolve `nodes` for each pool in declaration order; `rest` resolves last.
-3. Resolve `devices` per node; indices must exist on the node.
-4. Reject any device claimed by two pools unless both list each other in
-   `share_with`.
-5. Component checks:
-   - `managed-vllm`: tensor-parallel size divides the pool's devices; `servers`
-     x `tensor_parallel_size` fits the pool.
+3. Reject a pool whose nodes differ in vendor, logical device count, device
+   memory, or usable cores (decision 11.1).
+4. Resolve `devices` per node; indices must exist on the node.
+5. Reject any device claimed by two pools unless both list each other in
+   `share_with`. On each shared device, the `memory_fraction` values of the
+   pools using it must sum to at most 0.95; a `managed-vllm` server on a shared
+   device must set one (decision 11.2).
+6. Resolve LLM servers in list order inside the `llm` pool. Each server's
+   `nodes` / `devices` must lie inside the pool, and servers must not overlap
+   one another (decision 11.3). Server names must be unique.
+7. Component checks:
+   - `managed-vllm`: `tensor_parallel_size` equals or divides the server's
+     device count and divides the model's attention heads.
    - `dft`: `nodes_per_job` divides the pool's node count; derived ranks and
      threads fit the node's cores.
    - `training`: built-in HydraGNN trainers get exactly one device.
-6. Produce a `Placement` with concrete hosts, device indices, environment
+8. Produce a `Placement` with concrete hosts, device indices, environment
    (`CUDA_VISIBLE_DEVICES`, `ROCR_VISIBLE_DEVICES`, `ZE_AFFINITY_MASK`), and
    launcher arguments, and write it to the run directory as
    `placement.json` for provenance.
@@ -203,18 +245,22 @@ Errors name the pool, node, and device involved, for example:
 
 ### 6.1 LLM
 
-- **managed-vllm.** A `VLLMServerManager` starts one server per configured
-  server slot on its devices, waits until `/v1/models` lists the exact served
-  name, and stops the servers on exit. The launch recipe is per vendor:
+- **managed-vllm.** A `VLLMServerManager` starts one server per
+  `managed-vllm` entry on that server's slice, waits until `/v1/models` lists
+  the exact served name, and stops the servers on exit. On a shared device the
+  server's `memory_fraction` becomes `--gpu-memory-utilization`. The launch recipe is per vendor:
   `vllm serve` with a device mask on CUDA and ROCm; on Aurora, the qualified
   `mpiexec` + `aurora_vllm_entrypoint.py` recipe already used by
   `deployments/aurora/launchers/aurora-vllm.sh`. Logs go to the run directory.
 - **external.** No lifecycle; the plan supplies `base_url`.
-- **in-process.** The Hugging Face provider receives the pool's devices and
+- **in-process.** The Hugging Face provider receives the server's devices and
   passes an explicit `max_memory` / device list to Accelerate, so the model can
-  no longer silently spread onto MLIP devices.
-- `get_chat_model()` takes the endpoint from the placement instead of
-  `MATSIM_VLLM_BASE_URL`; the CLI `--llm-*` options remain for model choice, not
+  no longer silently spread onto MLIP devices. On a shared device, `max_memory`
+  is the device's capacity times `memory_fraction`.
+- `get_chat_model()` takes the endpoint for a named server from the placement
+  instead of `MATSIM_VLLM_BASE_URL`. Workflows select servers by name: the chat
+  proposer and critic, and each debate panel member, refer to entries of the
+  `servers` list. The CLI `--llm-*` options remain for model choice, not
   placement.
 
 ### 6.2 MLIP
@@ -225,6 +271,8 @@ Errors name the pool, node, and device involved, for example:
   submit independent relaxations to the pool; results return in submission
   order so provenance is deterministic.
 - A one-device pool behaves exactly like today, without worker processes.
+- On a shared device, each worker sets PyTorch's per-process memory cap from
+  the pool's `memory_fraction`.
 
 ### 6.3 DFT
 
@@ -247,7 +295,7 @@ from matsim_agents.execution.placement import ResourcePlan, Placement
 plan = ResourcePlan.from_yaml(path)            # or the resources: block of a config
 placement = plan.resolve(discover_allocation())
 with placement.services() as services:         # starts and stops managed LLM servers
-    services.llm.base_url
+    services.llm["proposer"].base_url             # one entry per named server
     services.mlip.map(relax, structures)        # concurrent, one per device
 ```
 
@@ -288,17 +336,83 @@ nodes, campaign). Presets never contain accounts or site paths.
 | 1 | `ResourcePlan`, geometry discovery, presets, `resolve()`, validation, `placement.json`, `resources plan` / `validate` CLI | Unit tests for every resolution and conflict rule; plans for all three facilities |
 | 2 | DFT and training read the placement; remove backend rank/thread/device fields | Existing DFT allocation tests; Perlmutter QE/VASP qualification |
 | 3 | `MLIPWorkerPool` and concurrent relaxations in phase exploration, chat, campaign, AL | Determinism and failure-isolation tests; Perlmutter run with 3 devices |
-| 4 | `VLLMServerManager` (CUDA, ROCm, XPU), in-process LLM device limits, `get_chat_model` from placement; job-script rewrite | Lifecycle tests with stub servers; Perlmutter chat, LLM check, campaign |
+| 4 | `VLLMServerManager` (CUDA, ROCm, XPU), named servers, memory budgets, in-process LLM device limits, `get_chat_model` from placement; job-script rewrite | Lifecycle tests with stub servers; Perlmutter chat, LLM check, campaign |
 | 5 | Multi-node managed LLM servers (Ray) | Campaign panel on Perlmutter, Aurora serve job |
 
 Each phase is a separate commit series in the new PR and keeps the full suite
 green.
 
-## 11. Open questions
+## 11. Design decisions
 
-1. Should a pool be allowed to span nodes with different geometry (mixed
-   partitions), or must all nodes in a pool match?
-2. Should `share_with` support a memory budget (for example a fraction of device
-   memory for vLLM `--gpu-memory-utilization`) instead of plain overlap?
-3. For campaigns, should each LLM in a panel be its own pool, or one pool with
-   `servers: N` and per-server models?
+### 11.1 Pools are homogeneous
+
+**Decision.** Every node in a pool must have the same geometry: accelerator
+vendor, logical device count, device memory, and usable cores. A job that needs
+two node types expresses each type as its own pool.
+
+**Rationale.**
+
+- On Perlmutter, Frontier, and Aurora an ordinary job receives one node type.
+  Mixing types (for example 40 GB and 80 GB A100 nodes) requires a Slurm
+  heterogeneous job, which no current workflow uses.
+- DFT rank and thread arithmetic, vLLM tensor-parallel sizing, and one MLIP
+  worker per device all assume identical nodes. Mixed pools would need
+  per-node rules everywhere for a case that does not occur.
+- The planner already discovers each node's geometry, so it can reject a mixed
+  pool with a precise message. If heterogeneous jobs are needed later, each
+  component of the job maps naturally to its own pool; the design does not
+  block that extension.
+
+**Consequence.** Resolution rule 3 (section 5) rejects pools whose nodes differ
+in vendor, device count, device memory, or usable cores.
+
+### 11.2 Shared devices carry optional memory budgets
+
+**Decision.** A pool may set `memory_fraction`, the share of each shared
+device's memory it may use. It is required for a `managed-vllm` server on a
+shared device and optional otherwise. On every shared device, the fractions of
+the pools using it must sum to at most 0.95.
+
+**Rationale.**
+
+- vLLM reserves 90% of a device's memory by default. Sharing a device with
+  vLLM without a budget always starves the other component, which is why the
+  budget is mandatory in that case.
+- Each backend has a native mechanism to honor the budget:
+  - vLLM: `--gpu-memory-utilization`;
+  - in-process Hugging Face: Accelerate's per-device `max_memory`;
+  - MLIP workers: PyTorch's per-process memory fraction.
+- The 0.95 ceiling leaves headroom for the driver, CUDA/HIP/Level Zero
+  contexts, and allocator fragmentation.
+
+**Limitation.** These are budgets that each library respects, not hardware
+isolation. A process that ignores them can still exhaust the device. True
+partitioning (for example A100 MIG) is generally not available to users on
+these systems and is out of scope.
+
+**Consequence.** Resolution rule 5 (section 5) validates the budgets; the LLM
+and MLIP mechanisms (section 6) apply them.
+
+### 11.3 A debate panel is one LLM pool with named servers
+
+**Decision.** The `llm` pool holds a `servers` list. Each entry is one model
+endpoint with a unique name, a `kind` (`managed-vllm`, `external`,
+`in-process`), and, for managed and in-process servers, its own slice of the
+pool's nodes or devices. A single-model setup is a one-entry list. This
+replaces a single `service` block with a server count.
+
+**Rationale.**
+
+- The panel is one unit. Debate, chat, and campaign code refer to models by
+  role or name (proposer, critic, panel member), not by pool; one list keeps
+  those names together instead of creating a pool per model (seven pools for
+  the current campaign panel).
+- The same exclusivity checks still apply: servers must lie inside the pool
+  and must not overlap one another.
+- Local and remote models can be mixed in one panel, which separate pools
+  would make awkward.
+- The common single-model case stays a one-entry list.
+
+**Consequence.** Resolution rule 6 (section 5) assigns and validates server
+slices in list order; `get_chat_model()` and the workflows select servers by
+name (section 6.1).
