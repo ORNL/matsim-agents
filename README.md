@@ -1212,6 +1212,7 @@ matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <->
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
 matsim-agents resources plan CONFIG.yaml [--nodes N]   # preview LLM/MLIP/DFT placement
 matsim-agents resources validate CONFIG.yaml           # exit non-zero on conflicts
+matsim-agents resources serve CONFIG.yaml -- CMD ...    # run CMD while the plan's LLM servers are up
 ```
 
 Common options (all commands that touch HydraGNN):

@@ -155,3 +155,71 @@ def resources_validate(
     for warning in placement.warnings:
         console.print(f"[yellow]warning:[/yellow] {warning}")
     console.print(f"[green]ok[/green]: {config} fits {len(placement.nodes)} node(s)")
+
+
+@resources_app.command("serve")
+def resources_serve(
+    config: Path = PLAN_ARGUMENT,
+    command: list[str] = typer.Argument(
+        ..., help="Command to run while the servers are up; put it after `--`."
+    ),
+    output: Path = typer.Option(
+        Path("./llm-servers"),
+        "--output",
+        "-o",
+        help="Directory for placement.json, llm-endpoints.json, and server logs.",
+    ),
+    server: str | None = typer.Option(
+        None,
+        "--server",
+        help="Server exported as MATSIM_LLM_PROVIDER/MODEL/VLLM_BASE_URL (default: the only one).",
+    ),
+):
+    """Start the plan's LLM servers, run a command, and stop the servers afterwards.
+
+    The command receives MATSIM_LLM_ENDPOINTS (a JSON file with every server's
+    endpoint) and, for the selected server, MATSIM_LLM_PROVIDER, MATSIM_LLM_MODEL,
+    and MATSIM_VLLM_BASE_URL. Its exit code becomes this command's exit code.
+    """
+    import os
+    import signal
+    import subprocess
+
+    from matsim_agents.backends.llm.servers import ENDPOINTS_VARIABLE, LLMServices
+    from matsim_agents.execution.placement import ResourcePlan
+
+    try:
+        placement = ResourcePlan.from_yaml(config).place(output)
+    except ValueError as exc:
+        console.print(f"[red]resource plan {config} is invalid:[/red]\n{exc}", markup=True)
+        raise typer.Exit(1) from None
+    if "llm" not in placement.pools:
+        console.print(f"[red]{config} has no llm pool to serve[/red]", markup=True)
+        raise typer.Exit(1)
+    in_process = [s.name for s in placement.pool("llm").servers if s.kind == "in-process"]
+    if in_process:
+        console.print(
+            f"[red]in-process servers {in_process} load inside one process and cannot be "
+            "served to another command[/red]",
+            markup=True,
+        )
+        raise typer.Exit(1)
+
+    def _terminate(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    # Slurm and PBS send SIGTERM at the time limit; stop the servers cleanly.
+    signal.signal(signal.SIGTERM, _terminate)
+    with LLMServices.start(placement, log_dir=output) as services:
+        env = dict(os.environ)
+        env[ENDPOINTS_VARIABLE] = str(services.write(output / "llm-endpoints.json"))
+        if server is not None or len(services.endpoints) == 1:
+            selected = services.endpoint(server)
+            env["MATSIM_LLM_PROVIDER"] = selected.provider
+            env["MATSIM_LLM_MODEL"] = selected.model
+            if selected.base_url:
+                env["MATSIM_VLLM_BASE_URL"] = selected.base_url
+            env.setdefault("MATSIM_VLLM_API_KEY", "EMPTY")
+        console.print(f"LLM servers ready: {', '.join(services.endpoints)}")
+        returncode = subprocess.run(command, env=env, check=False).returncode
+    raise typer.Exit(returncode)

@@ -555,7 +555,8 @@ def test_shipped_layout_resolves(path, monkeypatch):
     nodes = int(preview.get("nodes", 1))
     gpus = get_preset(plan.preset).geometry.devices_per_node
     placement = plan.resolve(_alloc(nodes=nodes, gpus=gpus))
-    assert not placement.idle, placement.warnings
+    # Layouts that deliberately leave devices free say so in their preview block.
+    assert bool(placement.idle) == bool(preview.get("spare_devices")), placement.warnings
 
 
 # -- CLI ------------------------------------------------------------------------

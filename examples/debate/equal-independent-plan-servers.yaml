@@ -1,0 +1,39 @@
+# Equal debate whose participants are served by matsim-agents: the llm pool
+# below starts one vLLM server per model on one Perlmutter node, and every
+# participant names its server instead of a provider, model, and URL.
+#   MODEL_ROOT=/path/to/models matsim-agents resources plan \
+#     examples/debate/equal-independent-plan-servers.yaml
+#   MODEL_ROOT=/path/to/models matsim-agents debate \
+#     examples/debate/equal-independent-plan-servers.yaml
+hypothesis: >
+  What candidate material provides an optimal thermoelectric functional property,
+  specifically high ZT near 800 K, while remaining chemically stable and using
+  reasonably abundant elements?
+rounds: 2
+output_root: ./runs
+debate_mode: equal
+synthesis_method: independent_verdicts
+participants:
+  - name: model_a
+    server: qwen
+  - name: model_b
+    server: gemma
+resources:
+  preset: perlmutter-gpu-80gb
+  pools:
+    llm:
+      nodes: 1
+      devices: [0, 1]
+      servers:
+        - name: qwen
+          kind: managed-vllm
+          model: ${MODEL_ROOT}/Qwen2.5-14B-Instruct
+          nodes: 1
+          devices: [0]
+          max_model_len: 8192
+        - name: gemma
+          kind: managed-vllm
+          model: ${MODEL_ROOT}/gemma-4-31B-it
+          nodes: 1
+          devices: [1]
+          max_model_len: 8192

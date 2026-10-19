@@ -19,7 +19,9 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -28,9 +30,11 @@ from matsim_agents.execution.devices import child_mask_environment, visible_ordi
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
-    from matsim_agents.execution.placement import Placement, ServerPlacement
+    from matsim_agents.execution.placement import Placement, ResourcePlan, ServerPlacement
 
 log = logging.getLogger(__name__)
+
+ENDPOINTS_VARIABLE = "MATSIM_LLM_ENDPOINTS"
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,9 @@ class LLMEndpoint:
     provider: Literal["vllm", "huggingface"]
     model: str
     base_url: str | None = None
+    tensor_parallel_size: int | None = None
+    device_count: int | None = None
+    max_model_len: int | None = None
 
     def chat_model(self, **kwargs: Any) -> BaseChatModel:
         from matsim_agents.backends.llm.provider import get_chat_model
@@ -84,6 +91,9 @@ class _ManagedServer:
                 "servers run on one node (multi-node serving is phase 5 of "
                 "docs/resource-dispatch.md); run it as an external server instead"
             )
+        model = Path(str(server.model))
+        if model.is_absolute() and not model.exists():
+            raise ValueError(f"LLM server {server.name!r}: model directory not found: {model}")
         self.server = server
         self.slice = server.slices[0]
         self.local = placement.scheduler in {"local", "preview"} or (
@@ -237,7 +247,13 @@ class LLMServices:
                 process = _ManagedServer(server, placement, log_dir=log_dir, local_host=local_host)
                 managed.append(process)
                 endpoints[server.name] = LLMEndpoint(
-                    server.name, "vllm", str(server.served_name), process.base_url
+                    server.name,
+                    "vllm",
+                    str(server.served_name),
+                    process.base_url,
+                    tensor_parallel_size=server.tensor_parallel_size,
+                    device_count=sum(len(item.devices) for item in server.slices),
+                    max_model_len=server.max_model_len,
                 )
         services = cls(endpoints, managed)
         try:
@@ -267,6 +283,22 @@ class LLMServices:
                 time.sleep(poll_interval_s)
         for process in self._managed:
             log.info("LLM server %s ready at %s", process.server.name, process.base_url)
+
+    def write(self, path: str | Path) -> Path:
+        """Publish the endpoints as JSON for other processes (see :func:`llm_endpoints`)."""
+
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {name: asdict(endpoint) for name, endpoint in self.endpoints.items()}
+        target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        return target
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> LLMServices:
+        """Endpoints published by another process; this object owns no servers."""
+
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        return cls({name: LLMEndpoint(**values) for name, values in payload.items()})
 
     def endpoint(self, name: str | None = None) -> LLMEndpoint:
         """Return the named endpoint; without a name, the only server of the plan."""
@@ -315,7 +347,42 @@ def _in_process_endpoint(
         for ordinal, device in zip(ordinals, item.devices, strict=True)
     }
     limit_in_process_devices(str(server.model), fractions)
-    return LLMEndpoint(server.name, "huggingface", str(server.model))
+    return LLMEndpoint(
+        server.name, "huggingface", str(server.model), device_count=len(item.devices)
+    )
 
 
-__all__ = ["LLMEndpoint", "LLMServices", "served_models"]
+@contextmanager
+def llm_endpoints(
+    resources: ResourcePlan | None, *, output_dir: str | Path
+) -> Iterator[LLMServices]:
+    """Endpoints for named servers: started from *resources*, or published by a parent.
+
+    With a plan, its servers are started (and stopped on exit) and the placement
+    is recorded in *output_dir*. Without one, the endpoints come from the file
+    named by ``MATSIM_LLM_ENDPOINTS``, which ``matsim-agents resources serve``
+    sets for the command it runs.
+    """
+
+    if resources is not None:
+        placement = resources.place(output_dir)
+        with LLMServices.start(placement, log_dir=Path(output_dir) / "llm-servers") as services:
+            yield services
+        return
+    published = os.environ.get(ENDPOINTS_VARIABLE)
+    if not published:
+        raise ValueError(
+            "LLM servers are named, but there is no resources: block and "
+            f"{ENDPOINTS_VARIABLE} is unset; add a plan or run under "
+            "`matsim-agents resources serve`"
+        )
+    yield LLMServices.from_file(published)
+
+
+__all__ = [
+    "ENDPOINTS_VARIABLE",
+    "LLMEndpoint",
+    "LLMServices",
+    "llm_endpoints",
+    "served_models",
+]

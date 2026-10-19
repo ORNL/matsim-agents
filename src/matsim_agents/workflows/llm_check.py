@@ -18,7 +18,9 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.llm.provider import DEFAULT_MODELS, get_chat_model
+from matsim_agents.backends.llm.servers import llm_endpoints
 from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord, WorkflowStatus
+from matsim_agents.execution.placement import ResourcePlan
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.workflows.investigation import ScientificHypothesis
 
@@ -39,9 +41,28 @@ class LLMCheckConfig(BaseModel):
     concurrent_requests: int = Field(1, ge=1)
     deterministic_prompt: str = "Return exactly the token PORTABILITY_OK and no additional text."
     scientific_objective: str = "Propose a testable hypothesis for stable elemental silicon."
+    server: str | None = Field(
+        None,
+        description=(
+            "Check this server of the plan's llm pool: from resources (default: its "
+            "only server) or from the plan served by `matsim-agents resources serve`."
+        ),
+    )
+    resources: ResourcePlan | None = None
+
+    @property
+    def uses_plan_server(self) -> bool:
+        return self.server is not None or self.resources is not None
 
     @model_validator(mode="after")
     def _validate_provider(self) -> LLMCheckConfig:
+        if self.uses_plan_server:
+            if set_fields := sorted({"provider", "model", "base_url"} & self.model_fields_set):
+                raise ValueError(
+                    "llm-check takes its model from the plan's server; remove "
+                    + ", ".join(set_fields)
+                )
+            return self
         self.provider = self.provider.lower()
         if self.provider not in PROVIDERS:
             raise ValueError(f"provider must be one of {sorted(PROVIDERS)}")
@@ -162,8 +183,41 @@ def run_llm_check(
     model_factory: Callable[..., Any] = get_chat_model,
     readiness_probe: Callable[[LLMCheckConfig], dict[str, Any]] = probe_readiness,
 ) -> LLMCheckResult:
-    """Run all LLM checks and persist a terminal result even on failure."""
+    """Run all LLM checks and persist a terminal result even on failure.
 
+    With a plan server, the check runs against that server's endpoint, and its
+    tensor-parallel size, device count, and context length default to the
+    placement's.
+    """
+
+    if not cfg.uses_plan_server:
+        return _run_llm_check(cfg, model_factory=model_factory, readiness_probe=readiness_probe)
+    with llm_endpoints(cfg.resources, output_dir=cfg.output_root) as services:
+        endpoint = services.endpoint(cfg.server)
+        resolved = cfg.model_copy(
+            update={
+                "provider": endpoint.provider,
+                "model": endpoint.model,
+                "base_url": endpoint.base_url,
+                "api_key": cfg.api_key or ("EMPTY" if endpoint.provider == "vllm" else None),
+                "tensor_parallel_size": cfg.tensor_parallel_size or endpoint.tensor_parallel_size,
+                "expected_accelerators": cfg.expected_accelerators or endpoint.device_count,
+                "context_length": cfg.context_length or endpoint.max_model_len,
+                "server": endpoint.name,
+                "resources": None,
+            }
+        )
+        return _run_llm_check(
+            resolved, model_factory=model_factory, readiness_probe=readiness_probe
+        )
+
+
+def _run_llm_check(
+    cfg: LLMCheckConfig,
+    *,
+    model_factory: Callable[..., Any],
+    readiness_probe: Callable[[LLMCheckConfig], dict[str, Any]],
+) -> LLMCheckResult:
     provenance = ProvenanceRecord(
         workflow="llm_readiness_check",
         evidence_level=EvidenceLevel.HYPOTHESIS,

@@ -1,7 +1,7 @@
 # Resource dispatch for LLMs, MLIPs, and DFT
 
 Status: **phases 1–3 implemented, phase 4 implemented for the discovery
-chat** (planner, presets, layouts, CLI; DFT and training read the placement;
+chat, `llm-check`, and `debate`** (planner, presets, layouts, CLI; DFT and training read the placement;
 concurrent MLIP relaxations; managed single-node vLLM servers, named servers,
 in-process device limits); phase 5 is not.
 Design questions are resolved in [section 11](#11-design-decisions);
@@ -604,10 +604,27 @@ named endpoints:
   critic panel; MLIP relaxations use the `mlip` pool. The Perlmutter vLLM and
   Hugging Face discovery jobs now pass a layout instead of starting servers and
   masking GPUs themselves.
-- **Not yet migrated.** `llm-check`, `debate`, campaign formula discovery, and
-  the Frontier and Aurora discovery jobs still start their servers in their job
-  scripts and keep `MATSIM_VLLM_GPUS` / `MATSIM_VLLM_TP` there. Their panels use
-  multi-node servers (phase 5) or facility launch recipes (the Aurora
-  `mpiexec` + `aurora_vllm_entrypoint.py` recipe) that need a launcher and a
-  hardware run of their own before switching.
-
+- **`resources serve`.** `matsim-agents resources serve PLAN -- CMD` starts the
+  plan's servers (managed and external; in-process servers cannot be shared
+  with another process), writes `llm-endpoints.json`, runs `CMD` with
+  `MATSIM_LLM_ENDPOINTS` pointing at it (and `MATSIM_LLM_PROVIDER`,
+  `MATSIM_LLM_MODEL`, `MATSIM_VLLM_BASE_URL` for the selected server), stops
+  the servers, and exits with the command's code. `SIGTERM` from the scheduler
+  also stops the servers.
+- **llm-check and debate.** `LLMCheckConfig` takes `server` and/or
+  `resources`; the check then uses that server's endpoint and defaults its
+  tensor-parallel size, device count, and context length from the placement.
+  Debate participants may name a `server` instead of `provider`, `model`, and
+  `base_url`, with servers from the config's `resources:` block. Without a
+  `resources:` block, names resolve through `MATSIM_LLM_ENDPOINTS`, so commands
+  run under `resources serve` share its servers.
+- **Migrated jobs.** The Perlmutter, Frontier, and Aurora `llm-check` jobs run
+  under `resources serve` with per-facility `llm-check.yaml` layouts and
+  launchers (`vllm-server-{perlmutter,frontier,aurora}.sh`); the shared steps
+  live in `deployments/common/run-llm-check.sh`. The Perlmutter hypothesis
+  debate job names its panel in `hypothesis-debate.yaml` (or
+  `hypothesis-debate-smoke.yaml`). The Aurora launcher runs vLLM through
+  `mpiexec` itself, so Aurora servers must sit on the driver's node.
+- **Not yet migrated.** Campaign formula discovery and the all-model debate
+  benchmarks serve multi-node models (phase 5), and the Frontier and Aurora
+  discovery-chat jobs still start their servers in their job scripts.

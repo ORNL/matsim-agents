@@ -1,0 +1,19 @@
+# Hypothesis debate smoke test: one small model on GPU 0 acts as proposer and
+# critic (GPUs 1-3 are spare).
+#   matsim-agents resources plan deployments/perlmutter/resources/hypothesis-debate-smoke.yaml
+preview: {nodes: 1, spare_devices: [1, 2, 3]}
+resources:
+  preset: perlmutter-gpu-80gb
+  pools:
+    llm:
+      nodes: 1
+      devices: [0]
+      servers:
+        - name: proposer
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Qwen2.5-14B-Instruct
+          nodes: 1
+          devices: [0]
+          max_model_len: 8192
+          launcher: [bash, "${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/perlmutter/launchers/vllm-server-perlmutter.sh"]
+          extra_args: [--enforce-eager]

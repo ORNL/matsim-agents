@@ -9,7 +9,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.llm.provider import get_chat_model
+from matsim_agents.backends.llm.servers import llm_endpoints
 from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord, WorkflowStatus
+from matsim_agents.execution.placement import ResourcePlan
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 
 
@@ -17,10 +19,30 @@ class DebateParticipant(BaseModel):
     """One independently configured model and its scientific perspective."""
 
     name: str = Field(min_length=1)
-    provider: str
-    model: str
+    provider: str | None = None
+    model: str | None = None
     base_url: str | None = None
+    server: str | None = Field(
+        None,
+        description=(
+            "Name of a server in the llm pool of the debate's resources: plan (or of "
+            "the plan served by `matsim-agents resources serve`); replaces provider, "
+            "model, and base_url."
+        ),
+    )
     role: str = "independent scientific reviewer"
+
+    @model_validator(mode="after")
+    def _model_source(self) -> DebateParticipant:
+        if self.server is not None:
+            if set_fields := [f for f in ("provider", "model", "base_url") if getattr(self, f)]:
+                raise ValueError(
+                    f"participant {self.name!r} names server {self.server!r}; remove "
+                    f"{', '.join(set_fields)}"
+                )
+        elif not (self.provider and self.model):
+            raise ValueError(f"participant {self.name!r} needs provider and model, or server")
+        return self
 
 
 class ScientificDebateConfig(BaseModel):
@@ -34,6 +56,10 @@ class ScientificDebateConfig(BaseModel):
     max_transcript_chars: int = Field(60_000, ge=1_000)
     final_response_instruction: str | None = None
     single_call: bool = False
+    resources: ResourcePlan | None = Field(
+        None,
+        description="Plan whose llm pool serves the participants that name a server.",
+    )
 
     @model_validator(mode="after")
     def _validate_participants(self) -> ScientificDebateConfig:
@@ -50,6 +76,8 @@ class ScientificDebateConfig(BaseModel):
             raise ValueError("single_call requires exactly one participant and one round")
         if not self.single_call and len(self.participants) < 2:
             raise ValueError("scientific debate requires at least two participants")
+        if self.resources is not None and not any(p.server for p in self.participants):
+            raise ValueError("resources: is set, but no participant names a server")
         return self
 
 
@@ -100,6 +128,39 @@ def run_scientific_debate(
     cfg: ScientificDebateConfig,
     *,
     model_factory: Callable[..., Any] = get_chat_model,
+) -> ScientificDebateResult:
+    """Run the debate; participants that name a server use its endpoint.
+
+    Servers come from ``cfg.resources`` (started for the debate and stopped
+    afterwards) or from the plan served by ``matsim-agents resources serve``.
+    """
+
+    if not any(participant.server for participant in cfg.participants):
+        return _run_scientific_debate(cfg, model_factory=model_factory)
+    with llm_endpoints(cfg.resources, output_dir=cfg.output_root) as services:
+        participants = []
+        for participant in cfg.participants:
+            if participant.server is None:
+                participants.append(participant)
+                continue
+            endpoint = services.endpoint(participant.server)
+            participants.append(
+                participant.model_copy(
+                    update={
+                        "provider": endpoint.provider,
+                        "model": endpoint.model,
+                        "base_url": endpoint.base_url,
+                    }
+                )
+            )
+        resolved = cfg.model_copy(update={"participants": participants, "resources": None})
+        return _run_scientific_debate(resolved, model_factory=model_factory)
+
+
+def _run_scientific_debate(
+    cfg: ScientificDebateConfig,
+    *,
+    model_factory: Callable[..., Any],
 ) -> ScientificDebateResult:
     """Run round-robin critique rounds and persist the complete enclave transcript.
 
