@@ -67,6 +67,17 @@ class LLMServerSpec(_StrictModel):
     devices: DevicesSpec | None = None
     tensor_parallel_size: PositiveInt | None = None
     max_model_len: PositiveInt | None = None
+    port: int | None = Field(default=None, ge=1024, le=65535)
+    launcher: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Command that runs `vllm serve`; the server's arguments are appended. "
+            "Defaults to `vllm serve` on PATH."
+        ),
+    )
+    extra_args: list[str] = Field(default_factory=list)
+    startup_timeout_s: float = Field(default=2400.0, gt=0)
 
     @model_validator(mode="after")
     def _check_kind_fields(self) -> LLMServerSpec:
@@ -74,7 +85,14 @@ class LLMServerSpec(_StrictModel):
         if self.kind == "external":
             if not self.base_url:
                 raise ValueError(f"{where} requires base_url")
-            placed = ("nodes", "devices", "tensor_parallel_size", "max_model_len")
+            placed = (
+                "nodes",
+                "devices",
+                "tensor_parallel_size",
+                "max_model_len",
+                "port",
+                "launcher",
+            )
             if set_fields := [field for field in placed if getattr(self, field) is not None]:
                 raise ValueError(f"{where} runs elsewhere and takes no {', '.join(set_fields)}")
             return self
@@ -83,9 +101,12 @@ class LLMServerSpec(_StrictModel):
         if self.base_url:
             raise ValueError(f"{where} gets its endpoint from the placement; remove base_url")
         if self.kind == "in-process":
-            for field in ("tensor_parallel_size", "max_model_len"):
+            vllm_only = ("tensor_parallel_size", "max_model_len", "port", "launcher")
+            for field in vllm_only:
                 if getattr(self, field) is not None:
                     raise ValueError(f"{where} does not accept {field}; it applies to vLLM only")
+            if self.extra_args:
+                raise ValueError(f"{where} does not accept extra_args; it applies to vLLM only")
         return self
 
 
@@ -139,6 +160,7 @@ class NodeSlice(_StrictModel):
     host: str
     devices: tuple[int, ...]
     env: dict[str, str] = Field(default_factory=dict)
+    shared_devices: tuple[int, ...] = ()
 
 
 class ProcessLaunch(_StrictModel):
@@ -189,6 +211,10 @@ class ServerPlacement(_StrictModel):
     pipeline_parallel_size: int | None = None
     max_model_len: int | None = None
     memory_fraction: float | None = None
+    port: int | None = None
+    launcher: list[str] | None = None
+    extra_args: list[str] = Field(default_factory=list)
+    startup_timeout_s: float | None = None
 
 
 class PoolPlacement(_StrictModel):
@@ -371,13 +397,17 @@ class _Resolver:
 
     def _slice(self, host: str, devices: tuple[int, ...]) -> NodeSlice:
         env = self.geometry.device_mask_environment(devices) if devices else {}
-        return NodeSlice(host=host, devices=devices, env=env)
+        shared = tuple(d for d in devices if len(self.claims.get((host, d), [])) > 1)
+        return NodeSlice(host=host, devices=devices, env=env, shared_devices=shared)
 
     # -- pools ----------------------------------------------------------
     def run(self) -> Placement:
         order = [name for name, spec in self.plan.pools.items() if spec.nodes != "rest"]
         order += [name for name, spec in self.plan.pools.items() if spec.nodes == "rest"]
         placements = {name: self._resolve_pool(name) for name in order}
+        for placement in placements.values():
+            # Sharing is only known once every pool has claimed its devices.
+            placement.slices = [self._slice(item.host, item.devices) for item in placement.slices]
         self._check_shared_memory()
         for name in self.plan.pools:
             self._finish_pool(placements[name])
@@ -573,6 +603,8 @@ class _Resolver:
         pool_devices = {item.host: item.devices for item in placement.slices}
         used: dict[tuple[str, int], str] = {}
         single = len(spec.placed_servers) == 1
+        managed = [server.name for server in spec.servers if server.kind == "managed-vllm"]
+        ports: dict[tuple[str, int], str] = {}
         for server in spec.servers:
             result = ServerPlacement(
                 name=server.name,
@@ -587,6 +619,19 @@ class _Resolver:
             if server.kind != "external":
                 result.slices = self._place_server(server, pool_devices, used, single)
                 self._check_server(server, result, spec)
+            if server.kind == "managed-vllm":
+                port = server.port or 8000 + managed.index(server.name)
+                for item in result.slices:
+                    if (item.host, port) in ports:
+                        raise ValueError(
+                            f"LLM servers {ports[(item.host, port)]!r} and {server.name!r} both "
+                            f"use port {port} on {item.host}; set port on one of them"
+                        )
+                    ports[(item.host, port)] = server.name
+                result.port = port
+                result.launcher = server.launcher
+                result.extra_args = list(server.extra_args)
+                result.startup_timeout_s = server.startup_timeout_s
             placement.servers.append(result)
         unused = [
             f"{host}: {[d for d in devices if (host, d) not in used]}"

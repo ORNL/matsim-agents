@@ -1,12 +1,15 @@
 # Resource dispatch for LLMs, MLIPs, and DFT
 
-Status: **phases 1–3 implemented** (planner, presets, layouts, CLI; DFT and
-training read the placement; concurrent MLIP relaxations); phases 4–5 are not.
+Status: **phases 1–3 implemented, phase 4 implemented for the discovery
+chat** (planner, presets, layouts, CLI; DFT and training read the placement;
+concurrent MLIP relaxations; managed single-node vLLM servers, named servers,
+in-process device limits); phase 5 is not.
 Design questions are resolved in [section 11](#11-design-decisions);
 implementation choices are recorded in
 [section 12](#12-phase-1-implementation-notes),
-[section 13](#13-phase-2-implementation-notes), and
-[section 14](#14-phase-3-implementation-notes).
+[section 13](#13-phase-2-implementation-notes),
+[section 14](#14-phase-3-implementation-notes), and
+[section 15](#15-phase-4-implementation-notes).
 
 ## 1. Problem
 
@@ -556,4 +559,55 @@ relaxations concurrently:
   example a Slurm step), worker masks are translated through it; a pool device
   the driver cannot see is an error. Campaign configs declare no `mlip` pool
   because the campaign step sees one GPU.
+
+## 15. Phase 4 implementation notes
+
+`matsim_agents.backends.llm.servers.LLMServices` turns the `llm` pool into
+named endpoints:
+
+- **managed-vllm.** One process per server, started on the server's node with
+  its device mask: directly when that is the driver's node (bound to
+  `127.0.0.1`), otherwise through `srun --overlap ... env <mask> ...` or
+  `mpiexec --hosts ... env <mask> ...` (bound to `0.0.0.0`, reached by host
+  name). A server is ready once `GET /v1/models` lists its served name; a
+  server that exits or misses `startup_timeout_s` (default 2400 s) fails the
+  start with the tail of its log (`<output>/llm-servers/<name>.log`), and every
+  server already started is stopped. Servers stop with `SIGTERM`, then `SIGKILL`
+  after 30 s, when the session ends.
+- **Server fields.** `port` (default 8000 + the server's position among managed
+  servers; two servers on one node must differ), `launcher` (command that runs
+  `vllm serve`, default `vllm serve` on `PATH`), `extra_args`, and
+  `startup_timeout_s`. The launcher receives the model and `--served-model-name`,
+  `--host`, `--port`, `--tensor-parallel-size`, `--pipeline-parallel-size` (when
+  above 1), `--max-model-len`, and `--gpu-memory-utilization` (the pool's
+  `memory_fraction`, only when the server uses a shared device), followed by
+  `extra_args`. Facility environments belong in the launcher:
+  `deployments/perlmutter/launchers/vllm-server-perlmutter.sh` runs vLLM from
+  `venv_vllm` with node-local JIT caches.
+- **Single node.** A managed server spanning several nodes is rejected with a
+  pointer to phase 5 (Ray) or an external server.
+- **in-process.** The server must sit on the driver's node. Its devices are
+  registered with the Hugging Face provider, which loads the model with
+  `device_map="auto"` and an explicit `max_memory` for exactly those devices
+  (free memory, or `memory_fraction` of the total on shared devices), so the
+  model can no longer spread onto MLIP devices or the CPU.
+- **external.** Endpoint only, reached as an OpenAI-compatible server.
+- **Shared devices.** `NodeSlice.shared_devices` records which devices of a
+  slice another pool also uses; it drives the vLLM memory flag and the
+  in-process budgets.
+- **Device indices** are positions among the devices the driver can see
+  (`execution/devices.py`): under a Slurm step, which renumbers its GPUs from
+  zero, index `i` is the step's `i`-th GPU.
+- **Discovery chat.** `--resources` resolves the plan once per session, writes
+  `placement.json`, starts the `llm` pool's servers, and uses `--llm-server`
+  (default: the only server) as proposer and `--critic-llm-servers` as the
+  critic panel; MLIP relaxations use the `mlip` pool. The Perlmutter vLLM and
+  Hugging Face discovery jobs now pass a layout instead of starting servers and
+  masking GPUs themselves.
+- **Not yet migrated.** `llm-check`, `debate`, campaign formula discovery, and
+  the Frontier and Aurora discovery jobs still start their servers in their job
+  scripts and keep `MATSIM_VLLM_GPUS` / `MATSIM_VLLM_TP` there. Their panels use
+  multi-node servers (phase 5) or facility launch recipes (the Aurora
+  `mpiexec` + `aurora_vllm_entrypoint.py` recipe) that need a launcher and a
+  hardware run of their own before switching.
 

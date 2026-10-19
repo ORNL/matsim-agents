@@ -51,9 +51,20 @@ def chat(
         None,
         "--resources",
         help=(
-            "Resource plan (a file with a resources: block). Its mlip pool relaxes "
-            "candidates concurrently, one worker per device; see docs/resource-dispatch.md."
+            "Resource plan (a file with a resources: block). Its llm pool starts or "
+            "names the models, and its mlip pool relaxes candidates concurrently, one "
+            "worker per device; see docs/resource-dispatch.md."
         ),
+    ),
+    llm_server: str | None = typer.Option(
+        None,
+        "--llm-server",
+        help="Proposer: name of a server in the plan's llm pool (default: its only server).",
+    ),
+    critic_llm_servers: str | None = typer.Option(
+        None,
+        "--critic-llm-servers",
+        help="Comma-separated names of plan servers that critique with --llm-peer-review.",
     ),
     precision: str | None = opt_precision("HydraGNN precision override."),
     mlp_precision: str | None = opt_mlp_precision("MLP precision override."),
@@ -173,6 +184,8 @@ def chat(
         checkpoint=checkpoint,
         mlp_device=mlp_device,
         resources=path_or_none(resources),
+        llm_server=llm_server,
+        critic_llm_servers=[s.strip() for s in (critic_llm_servers or "").split(",") if s.strip()],
         precision=precision,
         mlp_precision=mlp_precision,
         optimizer=optimizer,

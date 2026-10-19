@@ -24,6 +24,8 @@ from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from matsim_agents.execution.devices import child_mask_environment
+
 if TYPE_CHECKING:
     from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
     from matsim_agents.backends.mlip.results import RelaxationResult
@@ -113,32 +115,6 @@ def _short_host(name: str) -> str:
     return name.split(".", 1)[0]
 
 
-def _within_inherited_mask(env: dict[str, str]) -> dict[str, str]:
-    """Translate placement device indices through a mask the driver already has.
-
-    Placement indices count every device of the node. When the driver itself
-    runs under a mask (for example a Slurm step with one GPU), worker masks
-    must name devices the driver can see.
-    """
-
-    from matsim_agents.execution.presets import DEVICE_MASK_VARIABLES
-
-    result = dict(env)
-    for variable in set(DEVICE_MASK_VARIABLES.values()) & set(env):
-        inherited = os.environ.get(variable, "").strip()
-        if not inherited:
-            continue
-        visible = [item.strip() for item in inherited.split(",") if item.strip()]
-        requested = [int(item) for item in env[variable].split(",")]
-        if any(index >= len(visible) for index in requested):
-            raise ValueError(
-                f"pool 'mlip' uses devices {requested}, but this process sees only "
-                f"{variable}={inherited}; give the driver every device of the mlip pool"
-            )
-        result[variable] = ",".join(visible[index] for index in requested)
-    return result
-
-
 class MLIPWorkerPool:
     """Runs independent MLIP tasks concurrently, one per device of the ``mlip`` pool."""
 
@@ -173,8 +149,9 @@ class MLIPWorkerPool:
             [
                 WorkerSlot(
                     device=device,
-                    env=_within_inherited_mask(
-                        placement.geometry.device_mask_environment((device,))
+                    env=child_mask_environment(
+                        placement.geometry.device_mask_environment((device,)),
+                        owner="pool 'mlip'",
                     ),
                     memory_fraction=pool.memory_fraction,
                 )

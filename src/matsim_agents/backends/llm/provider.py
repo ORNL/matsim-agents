@@ -21,8 +21,10 @@ For Ollama, set ``MATSIM_OLLAMA_BASE_URL`` to point at a non-default host
 
 For HuggingFace local inference, set ``MATSIM_HF_MODEL_PATH`` to a local
 model directory (default: the ``model`` argument). Uses ``device_map="auto"``
-to spread across all available GPUs. Each model is loaded once per process and
-shared by every caller; replies contain only newly generated text.
+to spread across all available GPUs, or across the devices a resource plan
+assigns to the model (:func:`limit_in_process_devices`). Each model is loaded
+once per process and shared by every caller; replies contain only newly
+generated text.
 Install extras: ``pip install -e .[huggingface]``.
 """
 
@@ -130,16 +132,54 @@ class ChatVLLM(BaseChatModel):
 _HUGGINGFACE_PIPELINES: dict[tuple[str, str], Any] = {}
 
 
+# Devices (and optional memory budgets) a resource plan assigns to an in-process
+# model, keyed by model path; see matsim_agents.backends.llm.servers.
+_IN_PROCESS_DEVICES: dict[str, dict[int, float | None]] = {}
+
+
+def limit_in_process_devices(model_path: str, fractions: dict[int, float | None]) -> None:
+    """Restrict an in-process model to these device ordinals.
+
+    A device mapped to a fraction may use at most that share of its memory; a
+    device mapped to ``None`` may use its free memory. Other devices and the
+    CPU are not used.
+    """
+
+    if not fractions:
+        raise ValueError(f"in-process model {model_path} needs at least one device")
+    _IN_PROCESS_DEVICES[model_path] = dict(fractions)
+
+
+def _max_memory(fractions: dict[int, float | None]) -> dict[int, int]:
+    import torch
+
+    backend = torch.cuda if torch.cuda.is_available() else getattr(torch, "xpu", None)
+    if backend is None or not backend.is_available():
+        raise RuntimeError("in-process LLM devices were assigned, but no GPU is available")
+    budget: dict[int, int] = {}
+    for device, fraction in fractions.items():
+        total = int(backend.get_device_properties(device).total_memory)
+        mem_get_info = getattr(backend, "mem_get_info", None)
+        free = int(mem_get_info(device)[0]) if mem_get_info is not None else total
+        budget[device] = min(free, int(total * fraction)) if fraction is not None else free
+    return budget
+
+
 def _load_huggingface_pipeline(model_path: str, load_kwargs: dict[str, Any]) -> Any:
     from langchain_huggingface import HuggingFacePipeline
 
     key = (model_path, repr(sorted(load_kwargs.items())))
     if key not in _HUGGINGFACE_PIPELINES:
+        kwargs = dict(load_kwargs)
+        if model_path in _IN_PROCESS_DEVICES:
+            model_kwargs = dict(kwargs.pop("model_kwargs", None) or {})
+            model_kwargs["max_memory"] = _max_memory(_IN_PROCESS_DEVICES[model_path])
+            kwargs["model_kwargs"] = model_kwargs
         _HUGGINGFACE_PIPELINES[key] = HuggingFacePipeline.from_model_id(
             model_id=model_path,
             task="text-generation",
             device_map="auto",
-            **load_kwargs,
+            **kwargs,
         )
     return _HUGGINGFACE_PIPELINES[key]
 

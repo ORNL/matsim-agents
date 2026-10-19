@@ -531,7 +531,9 @@ def test_placement_round_trips_as_json(tmp_path):
     assert written == tmp_path / "placement.json"
     data = json.loads(written.read_text())
     assert data["pools"]["mlip"]["slices"][0]["env"] == {"CUDA_VISIBLE_DEVICES": "1"}
-    assert data["idle"] == [{"host": "nid000000", "devices": [0, 2, 3], "env": {}}]
+    assert data["idle"] == [
+        {"host": "nid000000", "devices": [0, 2, 3], "env": {}, "shared_devices": []}
+    ]
 
 
 # -- shipped layouts ------------------------------------------------------------
@@ -545,6 +547,7 @@ def test_layouts_are_shipped_for_every_facility():
 @pytest.mark.parametrize("path", LAYOUTS, ids=lambda path: f"{path.parts[-3]}/{path.name}")
 def test_shipped_layout_resolves(path, monkeypatch):
     monkeypatch.setenv("MODEL_ROOT", "/models")
+    monkeypatch.setenv("PROJECT_ROOT", str(ROOT))
     document = yaml.safe_load(path.read_text())
     preview = document.get("preview", {})
     plan = ResourcePlan.from_yaml(path)
@@ -568,6 +571,7 @@ def _cli(*args: str):
 
 def test_cli_plan_prints_pools_and_writes_json(tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL_ROOT", "/models")
+    monkeypatch.setenv("PROJECT_ROOT", str(ROOT))
     layout = ROOT / "deployments/perlmutter/resources/campaign-panel.yaml"
     result = _cli("plan", str(layout), "--nodes", "16", "--output", str(tmp_path))
     assert result.exit_code == 0, result.output
