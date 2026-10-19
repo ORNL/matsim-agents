@@ -21,11 +21,14 @@ For Ollama, set ``MATSIM_OLLAMA_BASE_URL`` to point at a non-default host
 
 For HuggingFace local inference, set ``MATSIM_HF_MODEL_PATH`` to a local
 model directory (default: the ``model`` argument). Uses ``device_map="auto"``
-to spread across all available GPUs. Install extras: ``pip install -e .[huggingface]``.
+to spread across all available GPUs. Each model is loaded once per process and
+shared by every caller; replies contain only newly generated text.
+Install extras: ``pip install -e .[huggingface]``.
 """
 
 from __future__ import annotations
 
+import functools
 import os
 from collections.abc import Iterator
 from typing import Any
@@ -121,6 +124,48 @@ class ChatVLLM(BaseChatModel):
                 yield ChatGenerationChunk(message=AIMessageChunk(content=delta))
 
 
+# Loaded in-process models keyed by model path and load options. Every
+# ``get_chat_model`` call reuses the same weights; only generation settings
+# differ between callers.
+_HUGGINGFACE_PIPELINES: dict[tuple[str, str], Any] = {}
+
+
+def _load_huggingface_pipeline(model_path: str, load_kwargs: dict[str, Any]) -> Any:
+    from langchain_huggingface import HuggingFacePipeline
+
+    key = (model_path, repr(sorted(load_kwargs.items())))
+    if key not in _HUGGINGFACE_PIPELINES:
+        _HUGGINGFACE_PIPELINES[key] = HuggingFacePipeline.from_model_id(
+            model_id=model_path,
+            task="text-generation",
+            device_map="auto",
+            **load_kwargs,
+        )
+    return _HUGGINGFACE_PIPELINES[key]
+
+
+@functools.cache
+def _generation_pipeline_class(base: type) -> type:
+    """Subclass *base* so its ``pipeline_kwargs`` apply to every generation call.
+
+    ``HuggingFacePipeline`` applies generation settings only when the
+    transformers pipeline is built; a shared, already-loaded pipeline would
+    otherwise ignore each caller's temperature and token limit.
+    """
+
+    def _with_generation(self: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
+        merged = {**(self.pipeline_kwargs or {}), **kwargs.get("pipeline_kwargs", {})}
+        return {**kwargs, "pipeline_kwargs": merged}
+
+    def _generate(self, prompts, stop=None, run_manager=None, **kwargs):
+        return base._generate(self, prompts, stop, run_manager, **_with_generation(self, kwargs))
+
+    def _stream(self, prompt, stop=None, run_manager=None, **kwargs):
+        return base._stream(self, prompt, stop, run_manager, **_with_generation(self, kwargs))
+
+    return type(f"Generation{base.__name__}", (base,), {"_generate": _generate, "_stream": _stream})
+
+
 DEFAULT_PROVIDER = "ollama"
 DEFAULT_MODELS = {
     "ollama": "llama3.1:8b",
@@ -204,28 +249,27 @@ def get_chat_model(
         return ChatAnthropic(model=model, temperature=temperature, **kwargs)
 
     if provider == "huggingface":
-        from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
+        from langchain_huggingface import ChatHuggingFace
 
         model_path = os.environ.get("MATSIM_HF_MODEL_PATH") or model
-        pipeline_kwargs: dict[str, Any] = {
+        generation: dict[str, Any] = {
             "max_new_tokens": kwargs.pop("max_new_tokens", 2048),
             "do_sample": temperature > 0.0,
-            # Suppress warnings from model's generation_config by not passing
-            # conflicting/irrelevant parameters. Only add temperature if sampling.
+            # Chat replies must not repeat the rendered prompt.
+            "return_full_text": False,
         }
         if temperature > 0.0:
-            pipeline_kwargs["temperature"] = temperature
-            # top_p, top_k are only relevant when do_sample=True
-            if "top_p" not in pipeline_kwargs:
-                pipeline_kwargs["top_p"] = 0.9
-        hf_pipeline = HuggingFacePipeline.from_model_id(
+            generation["temperature"] = temperature
+            generation["top_p"] = 0.9
+        loaded = _load_huggingface_pipeline(model_path, kwargs)
+        llm = _generation_pipeline_class(type(loaded))(
+            pipeline=loaded.pipeline,
             model_id=model_path,
-            task="text-generation",
-            device_map="auto",
-            pipeline_kwargs=pipeline_kwargs,
-            **kwargs,
+            model_kwargs=loaded.model_kwargs,
+            pipeline_kwargs=generation,
+            batch_size=loaded.batch_size,
         )
-        return ChatHuggingFace(llm=hf_pipeline)
+        return ChatHuggingFace(llm=llm, tokenizer=loaded.pipeline.tokenizer)
 
     raise ValueError(
         f"Unknown LLM provider: {provider!r}. Expected one of: {sorted(DEFAULT_MODELS)}."
