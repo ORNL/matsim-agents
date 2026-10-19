@@ -352,10 +352,9 @@ class ALConfig(BaseModel):
         on the raw YAML text, so you can interpolate inside paths, lists, and
         even keys.
         """
-        import os
-        import re
-
         import yaml
+
+        from matsim_agents.execution.variables import expand_variables, variable_defaults
 
         path = Path(path)
         raw_text = path.read_text()
@@ -365,68 +364,9 @@ class ALConfig(BaseModel):
             preview = yaml.safe_load(raw_text) or {}
         except yaml.YAMLError:
             preview = {}
-
-        # ${VAR}, ${VAR:-default}, ${VAR:?msg}.  Nested braces not supported.
-        pattern = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:[-?][^}]*)?\}")
-
-        defaults: dict[str, str] = {}
-        if isinstance(preview, dict) and isinstance(preview.get("vars"), dict):
-            # A `vars:` entry may reference the environment with its own name as
-            # a fallback default, e.g.  ``RUNS_ROOT: ${RUNS_ROOT:-/some/path}``
-            # ("use $RUNS_ROOT if exported, else this literal"). Resolve that
-            # self-reference up front: without this, ``_resolve`` would look the
-            # name up in ``defaults`` and hand back the entry's own raw string,
-            # so it converges to the literal ``${RUNS_ROOT:-/some/path}`` and the
-            # default path is never applied. References to *other* vars are left
-            # untouched here and resolved by the main loop below.
-            def _break_self_ref(key: str, value: str) -> str:
-                def _sub(match: re.Match[str]) -> str:
-                    name = match.group(1)
-                    modifier = match.group(2) or ""
-                    if os.environ.get(name):
-                        return os.environ[name]
-                    if name == key:
-                        if modifier.startswith(":-"):
-                            return modifier[2:]
-                        if modifier.startswith(":?"):
-                            msg = modifier[2:].strip() or f"required variable {name!r} is unset"
-                            raise ValueError(f"{path}: {msg}")
-                    return match.group(0)  # env var or cross-ref; resolve later
-
-                return pattern.sub(_sub, value)
-
-            defaults = {str(k): _break_self_ref(str(k), str(v)) for k, v in preview["vars"].items()}
-
-        def _resolve(match: re.Match[str]) -> str:
-
-            name = match.group(1)
-            modifier = match.group(2) or ""
-            if name in os.environ and os.environ[name] != "":
-                return os.environ[name]
-            if name in defaults:
-                return defaults[name]
-            if modifier.startswith(":-"):
-                return modifier[2:]
-            if modifier.startswith(":?"):
-                msg = modifier[2:].strip() or f"required variable {name!r} is unset"
-                raise ValueError(f"{path}: {msg}")
-            raise ValueError(
-                f"{path}: undefined variable ${{{name}}} "
-                "(set it in the environment, in the YAML 'vars:' block, "
-                "or use ${VAR:-default} syntax)."
-            )
-
-        substituted = raw_text
-        for _ in range(10):  # iterate so vars can reference other vars
-            new_text = pattern.sub(_resolve, substituted)
-            if new_text == substituted:
-                break
-            substituted = new_text
-        else:
-            raise ValueError(
-                f"{path}: variable substitution did not converge after 10 passes "
-                "(possible circular reference in 'vars:')."
-            )
+        vars_block = preview.get("vars") if isinstance(preview, dict) else None
+        defaults = variable_defaults(vars_block, source=path)
+        substituted = expand_variables(raw_text, defaults, source=path)
         data = yaml.safe_load(substituted)
         if isinstance(data, dict):
             data.pop("vars", None)

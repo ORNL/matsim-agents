@@ -1,0 +1,9 @@
+# Active learning: MLIP MD on GCDs 0-6 and HydraGNN fine-tuning on GCD 7 of the
+# first node; every other node runs DFT, one calculation per node.
+preview: {nodes: 3}
+resources:
+  preset: frontier
+  pools:
+    mlip:     {nodes: 1, devices: [0, 1, 2, 3, 4, 5, 6]}
+    training: {nodes: 1, devices: [7]}
+    dft:      {nodes: rest, devices: all, nodes_per_job: 1}

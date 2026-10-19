@@ -1,0 +1,15 @@
+# Discovery chat on one Frontier node: a managed vLLM server on GCDs 0-1
+# (tensor parallel 2) and six concurrent MLIP relaxations on GCDs 2-7.
+preview: {nodes: 1}
+resources:
+  preset: frontier
+  pools:
+    llm:
+      nodes: 1
+      devices: [0, 1]
+      servers:
+        - name: proposer
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Qwen2.5-14B-Instruct
+          max_model_len: 16384
+    mlip: {nodes: 1, devices: [2, 3, 4, 5, 6, 7]}

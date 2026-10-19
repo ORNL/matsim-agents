@@ -1,0 +1,31 @@
+# Formula-discovery campaign on 16 Perlmutter nodes: a seven-model debate panel
+# on 15 nodes (the layout of job-campaign-formula-discovery-all-models-perlmutter.sh)
+# and one node shared by MLIP exploration and DFT, which run one after the other.
+#   matsim-agents resources plan deployments/perlmutter/resources/campaign-panel.yaml --nodes 16
+preview: {nodes: 16}
+vars:
+  MODELS: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}
+resources:
+  preset: perlmutter-gpu
+  pools:
+    llm:
+      nodes: 15
+      servers:
+        - {name: kimi-k2.5, kind: managed-vllm, model: "${MODELS}/Kimi-K2.5", nodes: 4}
+        - {name: glm-4.7, kind: managed-vllm, model: "${MODELS}/GLM-4.7", nodes: 4}
+        - {name: glm-4.7-flash, kind: managed-vllm, model: "${MODELS}/GLM-4.7-Flash", nodes: 1}
+        - name: qwen3-235b-a22b-instruct-2507
+          kind: managed-vllm
+          model: ${MODELS}/Qwen3-235B-A22B-Instruct-2507
+          nodes: 2
+        - name: qwen3-235b-a22b-thinking-2507
+          kind: managed-vllm
+          model: ${MODELS}/Qwen3-235B-A22B-Thinking-2507
+          nodes: 2
+        - {name: gemma-4-31b-it, kind: managed-vllm, model: "${MODELS}/gemma-4-31B-it", nodes: 1}
+        - name: gemma-4-26b-a4b-it
+          kind: managed-vllm
+          model: ${MODELS}/gemma-4-26B-A4B-it
+          nodes: 1
+    mlip: {nodes: 1, devices: all, share_with: [dft]}
+    dft: {nodes: 1, devices: all, share_with: [mlip], nodes_per_job: 1}

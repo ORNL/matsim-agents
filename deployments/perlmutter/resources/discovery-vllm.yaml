@@ -1,0 +1,16 @@
+# Discovery chat on one Perlmutter node: a managed vLLM server on GPU 0 and
+# three concurrent MLIP relaxations on GPUs 1-3.
+#   matsim-agents resources plan deployments/perlmutter/resources/discovery-vllm.yaml
+preview: {nodes: 1}
+resources:
+  preset: perlmutter-gpu
+  pools:
+    llm:
+      nodes: 1
+      devices: [0]
+      servers:
+        - name: proposer
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Qwen2.5-14B-Instruct
+          max_model_len: 16384
+    mlip: {nodes: 1, devices: [1, 2, 3]}

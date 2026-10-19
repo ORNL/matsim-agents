@@ -1210,6 +1210,8 @@ matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific d
 matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
 matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
+matsim-agents resources plan CONFIG.yaml [--nodes N]   # preview LLM/MLIP/DFT placement
+matsim-agents resources validate CONFIG.yaml           # exit non-zero on conflicts
 ```
 
 Common options (all commands that touch HydraGNN):

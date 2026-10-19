@@ -1,8 +1,9 @@
 # Resource dispatch for LLMs, MLIPs, and DFT
 
-Status: **design proposal** — not implemented. The open design questions are
-resolved in [section 11](#11-design-decisions). The implementation lands in a
-separate PR after #14.
+Status: **phase 1 implemented** (planner, presets, layouts, CLI); phases 2–5
+are not. Design questions are resolved in [section 11](#11-design-decisions);
+phase-1 implementation choices are recorded in
+[section 12](#12-phase-1-implementation-notes).
 
 ## 1. Problem
 
@@ -313,10 +314,19 @@ command; device masks and server launches move into the placement.
 
 ## 8. Facility presets
 
-Presets live in `deployments/<facility>/resources/` as small YAML files with
-geometry and launch flavor (`srun` vs `mpiexec`, device-mask variable, cores per
-node), plus a few named layouts per scenario (single-node discovery, AL with DFT
-nodes, campaign). Presets never contain accounts or site paths.
+Presets are built into the package (`matsim_agents.execution.presets`) and
+describe node hardware and launch flavor only: `perlmutter-gpu`,
+`perlmutter-gpu-80gb`, `frontier`, and `aurora`. Named scenario layouts that
+use them live in `deployments/<facility>/resources/`:
+
+| Facility | Layouts |
+| --- | --- |
+| Perlmutter | `discovery-vllm`, `discovery-hf-80gb`, `active-learning`, `campaign-panel` |
+| Frontier | `discovery-vllm`, `active-learning` |
+| Aurora | `discovery-vllm`, `active-learning` |
+
+Presets and layouts never contain accounts or site paths; model locations come
+from `${MODEL_ROOT}`.
 
 ## 9. Migration
 
@@ -416,3 +426,45 @@ replaces a single `service` block with a server count.
 **Consequence.** Resolution rule 6 (section 5) assigns and validates server
 slices in list order; `get_chat_model()` and the workflows select servers by
 name (section 6.1).
+
+## 12. Phase 1 implementation notes
+
+Phase 1 adds `execution/placement.py` (`ResourcePlan`, `Placement`),
+`execution/presets.py`, `execution/variables.py` (the `${VAR}` substitution now
+shared with `ALConfig.from_yaml`), the layouts listed in section 8, and the
+`matsim-agents resources plan|validate` commands. Nothing in the workflows reads
+the placement yet; phases 2–4 connect it.
+
+Choices made while implementing, relative to sections 4–8:
+
+- **Presets are code, not YAML.** Geometry is part of the validated schema and
+  is needed by tests without a checkout of `deployments/`. Layouts stay in
+  `deployments/`. There is no `local` preset: a workstation plan sets
+  `geometry:` explicitly (`vendor`, `devices_per_node`, `cores_per_node`) and,
+  optionally, `launcher: local`. CPU-only nodes use `vendor: cpu` with
+  `devices_per_node: 0`; pools then claim whole nodes.
+- **One geometry per plan.** All nodes of an allocation share one geometry, so
+  decision 11.1 holds by construction. Precedence is preset, then the GPU count
+  reported by the scheduler, then explicit `geometry:` fields; an explicit
+  device count that contradicts the scheduler is an error.
+- **Node selection.** An integer `nodes` takes the first allocation nodes on
+  which the requested devices are free for that pool (respecting
+  `share_with`); `rest` takes nodes no other pool touches and resolves last;
+  explicit host lists are checked for conflicts. An integer `devices` takes the
+  lowest free indices on each node.
+- **Loading.** `ResourcePlan.from_yaml` reads only the top-level `resources:`
+  (and `vars:`) keys, so the same block can sit in any workflow config without
+  that config's schema knowing about it yet. A value that is exactly one
+  variable (`nodes: ${LLM_NODES}`) takes the type of its expansion. Layout
+  files carry a `preview: {nodes: N}` hint used by the tests and readers.
+- **LLM servers.** When the `llm` pool has one non-external server, the server
+  defaults to the whole pool; with several, each must set `nodes`. A
+  `managed-vllm` server's tensor-parallel size defaults to its devices per node
+  and the pipeline-parallel size is derived as devices / tensor-parallel size.
+  The attention-head check runs when the model's `config.json` (or its
+  `text_config`) is readable.
+- **Training** requires exactly one node and one device; **MLIP**
+  `max_concurrent` may not exceed the pool's device count.
+- **Diagnostics.** Unused devices and unused LLM-pool devices are reported as
+  warnings, not errors. `resources plan --nodes N` or `--hosts a,b` previews a
+  multi-node plan from a login node; `--output` writes `placement.json`.
