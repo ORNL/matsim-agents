@@ -189,7 +189,7 @@ def resources_serve(
     from matsim_agents.execution.placement import ResourcePlan
 
     try:
-        placement = ResourcePlan.from_yaml(config).place(output)
+        placement = ResourcePlan.from_yaml(config).place()
     except ValueError as exc:
         console.print(f"[red]resource plan {config} is invalid:[/red]\n{exc}", markup=True)
         raise typer.Exit(1) from None
@@ -210,6 +210,7 @@ def resources_serve(
 
     # Slurm and PBS send SIGTERM at the time limit; stop the servers cleanly.
     signal.signal(signal.SIGTERM, _terminate)
+    placement.write(output / "placement.json")
     with LLMServices.start(placement, log_dir=output) as services:
         env = dict(os.environ)
         env[ENDPOINTS_VARIABLE] = str(services.write(output / "llm-endpoints.json"))

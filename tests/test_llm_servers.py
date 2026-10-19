@@ -430,9 +430,13 @@ def test_resources_serve_rejects_in_process_servers(tmp_path, monkeypatch):
 
     _no_scheduler(monkeypatch)
     plan = _serve_plan(tmp_path, None, [{"name": "hf", "kind": "in-process", "model": "org/A"}])
-    result = CliRunner().invoke(app, ["resources", "serve", str(plan), "--", "true"])
+    output = tmp_path / "servers"
+    result = CliRunner().invoke(
+        app, ["resources", "serve", str(plan), "--output", str(output), "--", "true"]
+    )
     assert result.exit_code == 1
     assert "cannot be served" in result.output
+    assert not output.exists()
 
 
 def _published(tmp_path, monkeypatch, **extra):
