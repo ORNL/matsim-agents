@@ -31,7 +31,7 @@ from matsim_agents.orchestration.interactive_chat import (
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
-def _fake_exploration_result(comp: Composition, cfg=None) -> CompositionExplorationResult:
+def _fake_exploration_result(comp: Composition, cfg=None, **_) -> CompositionExplorationResult:
     return CompositionExplorationResult(composition=comp, phase_candidates=[])
 
 
@@ -212,7 +212,7 @@ class TestExplorationErrors:
         fake_llm = FakeListChatModel(responses=["Try Li2MnO3 as a cathode."])
         monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: fake_llm)
 
-        def _boom(comp, cfg):
+        def _boom(comp, cfg, **_):
             raise RuntimeError("Relaxation failed")
 
         monkeypatch.setattr(chat_mod, "_kickoff_exploration", _boom)

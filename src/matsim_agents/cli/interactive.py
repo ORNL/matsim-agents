@@ -47,6 +47,14 @@ def chat(
     ),
     checkpoint: str | None = opt_checkpoint("HydraGNN checkpoint filename or path."),
     mlp_device: str = opt_mlp_device(),
+    resources: Path | None = typer.Option(
+        None,
+        "--resources",
+        help=(
+            "Resource plan (a file with a resources: block). Its mlip pool relaxes "
+            "candidates concurrently, one worker per device; see docs/resource-dispatch.md."
+        ),
+    ),
     precision: str | None = opt_precision("HydraGNN precision override."),
     mlp_precision: str | None = opt_mlp_precision("MLP precision override."),
     optimizer: str = typer.Option(
@@ -164,6 +172,7 @@ def chat(
         output_dir=str(output_dir),
         checkpoint=checkpoint,
         mlp_device=mlp_device,
+        resources=path_or_none(resources),
         precision=precision,
         mlp_precision=mlp_precision,
         optimizer=optimizer,

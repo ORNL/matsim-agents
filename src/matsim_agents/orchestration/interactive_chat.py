@@ -23,6 +23,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 
 from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
+from matsim_agents.backends.mlip.pool import MLIPWorkerPool
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.discovery import (
     Composition,
@@ -30,6 +31,7 @@ from matsim_agents.discovery import (
     explore_composition,
     extract_compositions,
 )
+from matsim_agents.execution.placement import ResourcePlan
 
 ATOMISTIC_EXPLORATION_GUIDANCE = """The system will offer the user the option
     to run a surrogate-driven atomistic exploration of crystal phases for
@@ -70,6 +72,7 @@ class DiscoveryChatConfig:
     mlp_device: str = "cuda"
     uma_model_name: str = "uma-s-1p1"
     uma_task: str = "omat"
+    resources: str | None = None  # plan file; its mlip pool relaxes candidates concurrently
     precision: str | None = None
     mlp_precision: str | None = None
     optimizer: str = "FIRE"
@@ -143,6 +146,22 @@ class DiscoveryChatSession:
     messages: list[BaseMessage] = field(default_factory=list)
     seen_compositions: set[str] = field(default_factory=set)
     explorations: list[CompositionExplorationResult] = field(default_factory=list)
+    mlip_pool: MLIPWorkerPool | None = None
+
+    def relaxation_pool(self) -> MLIPWorkerPool:
+        """Workers for the plan's mlip pool, or in-process relaxations reusing the model."""
+        if self.mlip_pool is None:
+            placement = None
+            if self.config.resources:
+                plan = ResourcePlan.from_yaml(self.config.resources)
+                placement = plan.place(self.config.output_dir)
+            self.mlip_pool = MLIPWorkerPool.from_placement(placement)
+        return self.mlip_pool
+
+    def close(self) -> None:
+        if self.mlip_pool is not None:
+            self.mlip_pool.close()
+            self.mlip_pool = None
 
 
 def _print(msg: str) -> None:
@@ -168,6 +187,8 @@ def _confirm(prompt: str, *, auto: bool) -> bool:
 def _kickoff_exploration(
     composition: Composition,
     cfg: DiscoveryChatConfig,
+    *,
+    mlip_pool: MLIPWorkerPool | None = None,
 ) -> CompositionExplorationResult:
     """Run the auxiliary atomistic exploration with live progress prints."""
     _print(f"\n[bold cyan]>>> Exploring composition {composition.formula}[/bold cyan]")
@@ -215,6 +236,7 @@ def _kickoff_exploration(
         random_seed=cfg.random_seed,
         on_phase_start=_on_start,
         on_phase_done=_on_done,
+        mlip_pool=mlip_pool,
     )
 
     if result.stability is not None:
@@ -280,11 +302,17 @@ def _extract_al_command(user_text: str) -> tuple[bool, str | None]:
     return False, None
 
 
-def _run_single_structure_relaxation(structure_path: str, cfg: DiscoveryChatConfig) -> str:
-    """Run one HydraGNN relaxation and return a compact textual summary."""
+def _run_single_structure_relaxation(
+    structure_path: str,
+    cfg: DiscoveryChatConfig,
+    *,
+    mlip_pool: MLIPWorkerPool | None = None,
+) -> str:
+    """Run one MLIP relaxation and return a compact textual summary."""
     out_dir = Path(cfg.output_dir) / "single_relax"
     out_dir.mkdir(parents=True, exist_ok=True)
-    result = relax_with_mlip(
+    relax = mlip_pool.relax_one if mlip_pool is not None else relax_with_mlip
+    result = relax(
         RelaxStructureInput(
             structure_path=structure_path,
             mlip_backend=cfg.mlip_backend,
@@ -669,7 +697,9 @@ def chat_once(
             )
         else:
             try:
-                assistant_text = _run_single_structure_relaxation(relax_path, cfg)
+                assistant_text = _run_single_structure_relaxation(
+                    relax_path, cfg, mlip_pool=session.relaxation_pool()
+                )
             except Exception as exc:  # pragma: no cover - depends on runtime environment
                 assistant_text = (
                     f"Single-structure relaxation failed for {relax_path}: {exc!s}. "
@@ -714,7 +744,7 @@ def chat_once(
                 "Run surrogate-based phase exploration?",
                 auto=cfg.auto_confirm,
             ):
-                exploration = _kickoff_exploration(comp, cfg)
+                exploration = _kickoff_exploration(comp, cfg, mlip_pool=session.relaxation_pool())
                 session.explorations.append(exploration)
                 if cfg.trigger_active_learning_on_high_uq:
                     should_handoff, handoff_reason = _should_handoff_to_active_learning(
@@ -773,15 +803,18 @@ def run_chat(config: DiscoveryChatConfig) -> DiscoveryChatSession:
         "Type 'exit' to quit. Propose compositions like 'Li2MnO3' to trigger exploration.\n"
         "Commands: /relax <structure_path>, /al [composition], /clear.\n"
     )
-    while True:
-        try:
-            user_text = input("\nyou> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            _print("\n[dim]bye[/dim]")
-            break
-        if not user_text:
-            continue
-        if user_text.lower() in {"exit", "quit", ":q"}:
-            break
-        chat_once(session, user_text, on_assistant=lambda t: _print(f"\nassistant> {t}"))
+    try:
+        while True:
+            try:
+                user_text = input("\nyou> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                _print("\n[dim]bye[/dim]")
+                break
+            if not user_text:
+                continue
+            if user_text.lower() in {"exit", "quit", ":q"}:
+                break
+            chat_once(session, user_text, on_assistant=lambda t: _print(f"\nassistant> {t}"))
+    finally:
+        session.close()
     return session

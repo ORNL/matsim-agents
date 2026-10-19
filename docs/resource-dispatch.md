@@ -1,10 +1,12 @@
 # Resource dispatch for LLMs, MLIPs, and DFT
 
-Status: **phases 1–2 implemented** (planner, presets, layouts, CLI; DFT and
-training read the placement); phases 3–5 are not. Design questions are resolved
-in [section 11](#11-design-decisions); implementation choices are recorded in
-[section 12](#12-phase-1-implementation-notes) and
-[section 13](#13-phase-2-implementation-notes).
+Status: **phases 1–3 implemented** (planner, presets, layouts, CLI; DFT and
+training read the placement; concurrent MLIP relaxations); phases 4–5 are not.
+Design questions are resolved in [section 11](#11-design-decisions);
+implementation choices are recorded in
+[section 12](#12-phase-1-implementation-notes),
+[section 13](#13-phase-2-implementation-notes), and
+[section 14](#14-phase-3-implementation-notes).
 
 ## 1. Problem
 
@@ -506,4 +508,42 @@ placement:
 - **Training launchers** pin the trainer to the placed host
   (`--nodelist` / `--hosts`); the Aurora trainer requires the tile mask from the
   placement instead of `MATSIM_TRAIN_TILE`.
+
+## 14. Phase 3 implementation notes
+
+`matsim_agents.backends.mlip.pool.MLIPWorkerPool` runs independent MLIP
+relaxations concurrently:
+
+- **Workers.** One `spawn`-started process per device of the `mlip` pool (up to
+  `max_concurrent`), each started with that device's mask and, on a shared
+  device, PyTorch's per-process memory cap from `memory_fraction`. `spawn` is
+  required because the parent may already hold CUDA state (for example an
+  in-process LLM). Workers inherit the parent's `sys.path`.
+- **Model reuse.** `relax_with_mlip(..., calculators=CalculatorCache())` reuses
+  a loaded calculator for identical model settings (backend, checkpoint paths,
+  head, precision, device, charge, spin); the cache keeps the two most recent
+  models. Every worker owns one cache, so each device loads a model once
+  instead of once per relaxation.
+- **Ordering and failures.** `map` / `relax` return outcomes in submission
+  order. A task's exception is its outcome; a worker that exits fails only the
+  task it was running and is replaced before the next task.
+- **Local mode.** Without an `mlip` pool, or on CPU-only geometry, relaxations
+  run in the calling process, now with model reuse. This departs from the
+  original "a one-device pool behaves exactly like today": a one-device `mlip`
+  pool still gets a worker so its device mask is honoured.
+- **Driver node.** Worker processes run on the node of the calling process, so
+  the `mlip` pool must have one node and that node must be the driver's;
+  otherwise resolution fails with a message naming both hosts.
+- **Callers.** `explore_composition(..., mlip_pool=...)` builds every input
+  first, calling the start and attempt callbacks in candidate order (so
+  per-attempt budget accounting is unchanged), then records results and
+  completion callbacks in candidate order. The discovery chat uses
+  `--resources` (only the `mlip` pool is used until phase 4) and reuses the pool
+  for the whole session, including `/relax`. Campaign formula exploration uses
+  the AL template's `mlip` pool when declared; perturbation-robustness trials
+  reuse one in-process model.
+- **Not parallelised.** AL MD sampling still runs seeds one after another: the
+  seeds share one random stream, so running them in parallel would change the
+  sampled trajectories. Parallel MD needs per-seed random streams, which is a
+  separate scientific decision.
 

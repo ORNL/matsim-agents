@@ -14,6 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from matsim_agents.backends.mlip.pool import MLIPWorkerPool
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.composition import Composition, parse_composition
@@ -85,6 +86,7 @@ def explore_composition(
     on_phase_start: Callable[[PhaseCandidate], None] | None = None,
     on_phase_done: Callable[[PhaseCandidate, RelaxationResult], None] | None = None,
     relax_fn: Callable[[RelaxStructureInput], RelaxationResult] | None = None,
+    mlip_pool: MLIPWorkerPool | None = None,
 ) -> CompositionExplorationResult:
     """Enumerate seeds for a composition, relax each, and score stability.
 
@@ -112,7 +114,13 @@ def explore_composition(
         relaxation failures; successful relaxation results remain eligible.
     relax_fn:
         Override the relaxation backend (used by tests / stub mode).
+    mlip_pool:
+        Relax candidates concurrently on this pool (one worker per device of the
+        ``mlip`` pool). Start callbacks run for every candidate before work is
+        submitted; results and completion callbacks follow candidate order.
     """
+    if relax_fn is not None and mlip_pool is not None:
+        raise ValueError("pass either relax_fn or mlip_pool, not both")
     if max_relaxations is not None and max_relaxations < 0:
         raise ValueError("max_relaxations must be non-negative")
     if isinstance(composition, str):
@@ -131,66 +139,88 @@ def explore_composition(
         n_random=n_random,
         random_seed=random_seed,
     )
-    relax = relax_fn or relax_with_mlip
-
     relaxations: list[RelaxationResult] = []
     failures: list[str] = []
     callback_failures: list[str] = []
     unrelaxed_candidate_paths: list[str] = []
 
-    for index, cand in enumerate(candidates):
-        if max_relaxations is not None and index >= max_relaxations:
-            unrelaxed_candidate_paths = [item.structure_path for item in candidates[index:]]
-            log.warning(
-                "Candidate relaxation budget exhausted for %s; %d seeds remain unrelaxed",
-                composition.formula,
-                len(unrelaxed_candidate_paths),
-            )
-            break
-        if on_phase_start is not None:
-            on_phase_start(cand)
-        if on_relaxation_attempt is not None:
-            on_relaxation_attempt()
-        try:
-            result = relax(
-                RelaxStructureInput(
-                    structure_path=cand.structure_path,
-                    mlip_backend=mlip_backend,
-                    logdir=logdir,
-                    hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
-                    hydragnn_inference_head=hydragnn_inference_head,
-                    checkpoint=checkpoint,
-                    uma_model_name=uma_model_name,
-                    uma_task=uma_task,
-                    mace_family=mace_family,
-                    mace_model=mace_model,
-                    mace_dispersion=mace_dispersion,
-                    optimizer=optimizer,
-                    maxiter=maxiter,
-                    maxstep=maxstep,
-                    fmax=fmax,
-                    relative_increase_threshold=relative_increase_threshold,
-                    precision=precision,
-                    mlp_precision=mlp_precision,
-                    mlp_device=mlp_device,
-                    output_dir=relax_dir,
-                )
-            )
-            relaxations.append(result)
-        except Exception as exc:  # pragma: no cover - depends on HydraGNN env
-            tag = "seed"
-            if cand.prototype_id:
-                tag = cand.prototype_id
-            elif cand.source == "random" and cand.space_group is not None:
-                tag = f"pyxtal_sg{int(cand.space_group):03d}"
-            failures.append(f"{tag}: {exc!s}")
-            continue
+    def relax_input(cand: PhaseCandidate) -> RelaxStructureInput:
+        return RelaxStructureInput(
+            structure_path=cand.structure_path,
+            mlip_backend=mlip_backend,
+            logdir=logdir,
+            hydragnn_branch_mlp_checkpoint=hydragnn_branch_mlp_checkpoint,
+            hydragnn_inference_head=hydragnn_inference_head,
+            checkpoint=checkpoint,
+            uma_model_name=uma_model_name,
+            uma_task=uma_task,
+            mace_family=mace_family,
+            mace_model=mace_model,
+            mace_dispersion=mace_dispersion,
+            optimizer=optimizer,
+            maxiter=maxiter,
+            maxstep=maxstep,
+            fmax=fmax,
+            relative_increase_threshold=relative_increase_threshold,
+            precision=precision,
+            mlp_precision=mlp_precision,
+            mlp_device=mlp_device,
+            output_dir=relax_dir,
+        )
+
+    def record_failure(cand: PhaseCandidate, exc: BaseException) -> None:
+        tag = "seed"
+        if cand.prototype_id:
+            tag = cand.prototype_id
+        elif cand.source == "random" and cand.space_group is not None:
+            tag = f"pyxtal_sg{int(cand.space_group):03d}"
+        failures.append(f"{tag}: {exc!s}")
+
+    def record_success(cand: PhaseCandidate, result: RelaxationResult) -> None:
+        relaxations.append(result)
         if on_phase_done is not None:
             try:
                 on_phase_done(cand, result)
             except Exception as exc:
                 callback_failures.append(f"{cand.structure_path}: {exc!s}")
                 log.exception("Completion callback failed for %s", cand.structure_path)
+
+    attempted = candidates
+    if max_relaxations is not None and len(candidates) > max_relaxations:
+        attempted = candidates[:max_relaxations]
+        unrelaxed_candidate_paths = [item.structure_path for item in candidates[max_relaxations:]]
+        log.warning(
+            "Candidate relaxation budget exhausted for %s; %d seeds remain unrelaxed",
+            composition.formula,
+            len(unrelaxed_candidate_paths),
+        )
+
+    if mlip_pool is not None:
+        inputs = []
+        for cand in attempted:
+            if on_phase_start is not None:
+                on_phase_start(cand)
+            if on_relaxation_attempt is not None:
+                on_relaxation_attempt()
+            inputs.append(relax_input(cand))
+        for cand, outcome in zip(attempted, mlip_pool.relax(inputs), strict=True):
+            if outcome.error is not None:
+                record_failure(cand, outcome.error)
+            else:
+                record_success(cand, outcome.value)
+    else:
+        relax = relax_fn or relax_with_mlip
+        for cand in attempted:
+            if on_phase_start is not None:
+                on_phase_start(cand)
+            if on_relaxation_attempt is not None:
+                on_relaxation_attempt()
+            try:
+                result = relax(relax_input(cand))
+            except Exception as exc:  # pragma: no cover - depends on HydraGNN env
+                record_failure(cand, exc)
+                continue
+            record_success(cand, result)
 
     report: StabilityReport | None = None
     ranking_failure: str | None = None

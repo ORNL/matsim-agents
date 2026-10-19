@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import subprocess
 import time
@@ -24,7 +25,12 @@ from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
     resolve_hydragnn_inference_head,
 )
-from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
+from matsim_agents.backends.mlip.pool import MLIPWorkerPool
+from matsim_agents.backends.mlip.relaxation import (
+    CalculatorCache,
+    RelaxStructureInput,
+    relax_with_mlip,
+)
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.campaign.registry import (
     CandidateSelectionPolicy,
@@ -1297,6 +1303,13 @@ def _uma_only_evidence(
     }
 
 
+def _formula_mlip_pool(al_cfg: ALConfig, formula_root: Path) -> MLIPWorkerPool:
+    """Workers for the template's mlip pool, or in-process relaxations reusing the model."""
+    if "mlip" not in al_cfg.resources.pools:
+        return MLIPWorkerPool()
+    return MLIPWorkerPool.from_placement(al_cfg.resources.place(formula_root))
+
+
 def run_formula_with_active_learning(
     formula: str,
     output_dir: str,
@@ -1399,12 +1412,16 @@ def run_formula_with_active_learning(
         "in_progress",
         model_identifier=_model_identifier(al_cfg),
     )
+    mlip_pool = _formula_mlip_pool(al_cfg, formula_root)
     try:
         result = phase_runner(
             formula,
             policy=phase_policy,
             output_dir=str(formula_root / "phase_exploration"),
-            exploration_kwargs=_exploration_kwargs(al_cfg, config.exploration_kwargs),
+            exploration_kwargs={
+                **_exploration_kwargs(al_cfg, config.exploration_kwargs),
+                "mlip_pool": mlip_pool,
+            },
             active_learning_runner=active_learning_runner,
         )
     except Exception as exc:
@@ -1419,6 +1436,8 @@ def run_formula_with_active_learning(
             failure_reason=f"{type(exc).__name__}: {exc}",
         )
         raise
+    finally:
+        mlip_pool.close()
     phase_seconds = time.monotonic() - phase_started
     exploration = result.after_retraining or result.initial
     effective_al_cfg = al_cfg.model_copy(deep=True)
@@ -1491,7 +1510,11 @@ def run_formula_with_active_learning(
         effective_al_cfg,
         config,
         formula_root / "robustness",
-        relaxation_runner=mlip_relaxation_runner,
+        relaxation_runner=(
+            functools.partial(relax_with_mlip, calculators=CalculatorCache())
+            if mlip_relaxation_runner is relax_with_mlip
+            else mlip_relaxation_runner
+        ),
     )
     if config.execution_mode == "uma_only":
         result.active_learning_result = _uma_only_evidence(
