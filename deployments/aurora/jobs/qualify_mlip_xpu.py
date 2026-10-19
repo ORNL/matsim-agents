@@ -58,7 +58,8 @@ class Progress:
     def stage(self, name: str) -> None:
         self.last_stage = name
         record = {
-            "backend": self.backend, "stage": name,
+            "backend": self.backend,
+            "stage": name,
             "elapsed_seconds": round(time.monotonic() - self.started, 3),
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,23 +96,28 @@ def qualify(args, progress: Progress) -> dict:
         raise RuntimeError("XPU arithmetic probe failed")
     progress.stage("load_checkpoint_and_build_calculator")
     if args.backend == "hydragnn":
-        calculator = build_hydragnn_calculator(HydraGNNConfig(
-            logdir=args.hydragnn_logdir,
-            checkpoint=args.hydragnn_checkpoint,
-            mlp_checkpoint=args.hydragnn_mlp,
-            mlp_device="xpu",
-            precision="fp32",
-        ))
+        calculator = build_hydragnn_calculator(
+            HydraGNNConfig(
+                logdir=args.hydragnn_logdir,
+                checkpoint=args.hydragnn_checkpoint,
+                mlp_checkpoint=args.hydragnn_mlp,
+                mlp_device="xpu",
+                precision="fp32",
+            )
+        )
     elif args.backend == "uma":
-        calculator = build_uma_calculator(UMAConfig(
-            model_name=args.uma_model, device="xpu", task_name="omat"
-        ))
+        calculator = build_uma_calculator(
+            UMAConfig(model_name=args.uma_model, device="xpu", task_name="omat")
+        )
     else:
-        calculator = build_mace_calculator(MACEConfig(
-            model=args.mace_model,
-            family="checkpoint" if Path(args.mace_model).is_file() else "mace_mp",
-            device="xpu", precision="fp32",
-        ))
+        calculator = build_mace_calculator(
+            MACEConfig(
+                model=args.mace_model,
+                family="checkpoint" if Path(args.mace_model).is_file() else "mace_mp",
+                device="xpu",
+                precision="fp32",
+            )
+        )
     progress.stage("construct_silicon_input")
     atoms = bulk("Si", "diamond", a=5.43)
     atoms.positions[1, 0] += 0.02
@@ -127,10 +133,15 @@ def qualify(args, progress: Progress) -> dict:
     progress.stage("validate_predictions")
     validate_predictions(energy, forces, len(atoms))
     return {
-        "status": "PASSED", "backend": args.backend, "host": platform.node(),
-        "torch": torch.__version__, "torch_path": torch.__file__,
-        "xpu_name": torch.xpu.get_device_name(0), "model_devices": sorted(devices),
-        "energy_eV": energy, "forces_eV_per_A": forces,
+        "status": "PASSED",
+        "backend": args.backend,
+        "host": platform.node(),
+        "torch": torch.__version__,
+        "torch_path": torch.__file__,
+        "xpu_name": torch.xpu.get_device_name(0),
+        "model_devices": sorted(devices),
+        "energy_eV": energy,
+        "forces_eV_per_A": forces,
         "qualification": "two-atom checkpoint inference smoke test; not scientific accuracy",
     }
 
@@ -158,8 +169,10 @@ def main() -> int:
     except Exception as error:
         traceback.print_exc()
         result = {
-            "status": "FAILED", "backend": args.backend,
-            "host": platform.node(), "error": f"{type(error).__name__}: {error}",
+            "status": "FAILED",
+            "backend": args.backend,
+            "host": platform.node(),
+            "error": f"{type(error).__name__}: {error}",
         }
     finally:
         faulthandler.cancel_dump_traceback_later()

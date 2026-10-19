@@ -172,7 +172,9 @@ def test_shared_active_learning_runner_generates_current_schema(tmp_path: Path) 
         "MATSIM_PW_BIN": "/opt/qe/bin/pw.x",
         "MATSIM_PSEUDO_DIR": "/opt/qe/pseudo",
         "MATSIM_DFT_WRAPPER": str(ROOT / "deployments/perlmutter/launchers/_qe-step-perlmutter.sh"),
-        "MATSIM_DFT_RANKS_PER_NODE": "4",
+        "MATSIM_RESOURCES": str(
+            ROOT / "deployments/perlmutter/resources/active-learning-sequential.yaml"
+        ),
     }
     subprocess.run(
         ["bash", str(ROOT / "deployments/common/run-active-learning.sh")],
@@ -185,6 +187,8 @@ def test_shared_active_learning_runner_generates_current_schema(tmp_path: Path) 
     assert cfg.dft.backend == "qe"
     assert cfg.trainer.enabled is False
     assert list(cfg.md.seed_source.paths) == seeds
+    assert cfg.resources.preset == "perlmutter-gpu"
+    assert cfg.resources.pools["dft"].share_with == ["training"]
 
 
 def test_perlmutter_vasp_campaign_config_resolves(tmp_path: Path, monkeypatch) -> None:
@@ -204,7 +208,7 @@ def test_perlmutter_vasp_campaign_config_resolves(tmp_path: Path, monkeypatch) -
     assert cfg.dft.vasp is not None
     assert cfg.dft.vasp.vasp_bin == vasp_bin
     assert cfg.dft.vasp.potcar_dir == potcar_dir
-    assert cfg.dft.vasp.ranks_per_node == 4
+    assert cfg.resources.pools["dft"].max_concurrent == 1
     assert cfg.dft.vasp.timeout_sec == 14400
     assert cfg.dft.vasp.extra_incar["KSPACING"] == "0.25"
     assert cfg.dft.vasp.extra_incar["KPAR"] == "4"

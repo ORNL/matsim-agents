@@ -36,6 +36,7 @@ Reference
 Qu et al., "A recipe for scalable attention-based MLIPs: unlocking long-range
 accuracy with all-to-all node attention", arXiv:2603.06567 (2026).
 """
+
 from __future__ import annotations
 
 from typing import ClassVar
@@ -108,8 +109,10 @@ class AtomisticCalculator(Calculator):
         results = []
         for atoms in structures:
             self.calculate(atoms)
-            results.append({
-                "energy": self.results["energy"],
-                "forces": self.results["forces"].copy(),
-            })
+            results.append(
+                {
+                    "energy": self.results["energy"],
+                    "forces": self.results["forces"].copy(),
+                }
+            )
         return results

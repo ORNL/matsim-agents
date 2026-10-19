@@ -24,6 +24,7 @@ from matsim_agents.datasets.energy_references import (
 )
 from matsim_agents.datasets.governance import DatasetManifest, sha256_file
 from matsim_agents.execution.locking import exclusive_lock
+from matsim_agents.execution.placement import ProcessLaunch
 
 
 def _phase_plan_identity(
@@ -187,6 +188,7 @@ def resolve_training_references(
     dataset: str | Path,
     *,
     dft_config: DFTConfig | None,
+    dft_launch: ProcessLaunch | None = None,
     reference_root: Path,
 ) -> Path:
     reference_root = Path(reference_root)
@@ -198,6 +200,7 @@ def resolve_training_references(
             trainer,
             dataset,
             dft_config=dft_config,
+            dft_launch=dft_launch,
             reference_root=reference_root,
         )
 
@@ -276,10 +279,14 @@ def _merge_extension_selection(
     ) + new_selection.get("dft_attempts", 0)
 
 
-def _prepare_plan_references(config, plan, dft_config: DFTConfig, elements, output_dir: Path):
+def _prepare_plan_references(
+    config, plan, placed: tuple[DFTConfig, ProcessLaunch], elements, output_dir: Path
+):
+    dft_config, launch = placed
     return prepare_elemental_references(
         plan,
         dft_config,
+        launch=launch,
         required_elements=elements,
         cache_dir=config.cache_dir,
         output_dir=output_dir,
@@ -290,9 +297,15 @@ def _prepare_plan_references(config, plan, dft_config: DFTConfig, elements, outp
 
 
 def _extend_planned_references(
-    config, plan, dft_config: DFTConfig, dataset: Path, elements: set[str], reference_root: Path
+    config,
+    plan,
+    placed: tuple[DFTConfig, ProcessLaunch],
+    dataset: Path,
+    elements: set[str],
+    reference_root: Path,
 ) -> None:
     """Add DFT references for elements missing from an existing frozen phase-plan snapshot."""
+    dft_config = placed[0]
     source = reference_root / "elemental-references.json"
     recorded = json.loads((reference_root / "training-reference-inputs.json").read_text())
     if recorded.get("snapshot_manifest_sha256") != sha256_file(source):
@@ -319,7 +332,7 @@ def _extend_planned_references(
     )
     with tempfile.TemporaryDirectory(prefix="ext-references-") as temp_dir:
         temp_output = Path(temp_dir) / "snapshot"
-        _prepare_plan_references(config, plan, dft_config, new_elements, temp_output)
+        _prepare_plan_references(config, plan, placed, new_elements, temp_output)
         new_manifest = json.loads((temp_output / "elemental-references.json").read_text())
         if existing_manifest.get("base_method_signature") != new_manifest.get(
             "base_method_signature"
@@ -351,9 +364,15 @@ def _extend_planned_references(
 
 
 def _create_planned_references(
-    config, plan, dft_config: DFTConfig, dataset: Path, elements: set[str], reference_root: Path
+    config,
+    plan,
+    placed: tuple[DFTConfig, ProcessLaunch],
+    dataset: Path,
+    elements: set[str],
+    reference_root: Path,
 ) -> None:
     """Compute and freeze DFT references for every element from the approved phase plan."""
+    dft_config = placed[0]
     identity = _phase_plan_identity(config.phase_plan, plan, dft_config, elements)
     validate_dataset_reference_method(
         dataset,
@@ -362,7 +381,7 @@ def _create_planned_references(
         require_sidecar=True,
     )
     with _staged_reference_snapshot(reference_root, copy_existing=False) as staged:
-        staged_source = _prepare_plan_references(config, plan, dft_config, elements, staged)
+        staged_source = _prepare_plan_references(config, plan, placed, elements, staged)
         _save_frozen_inputs(staged / "training-reference-inputs.json", identity, staged_source)
         _publish_reference_snapshot(reference_root, staged)
 
@@ -432,6 +451,7 @@ def _resolve_training_references_unlocked(
     dataset: str | Path,
     *,
     dft_config: DFTConfig | None,
+    dft_launch: ProcessLaunch | None = None,
     reference_root: Path,
 ) -> Path:
     dataset = Path(dataset)
@@ -443,13 +463,17 @@ def _resolve_training_references_unlocked(
                 "HydraGNN phase-plan references require the dataset manifest to record "
                 "method_signature_elements"
             )
-        if dft_config is None or config.cache_dir is None:
-            raise ValueError("Automatic HydraGNN references require DFTConfig and cache_dir")
+        if dft_config is None or dft_launch is None or config.cache_dir is None:
+            raise ValueError(
+                "Automatic HydraGNN references require a DFT config, a dft pool launch, "
+                "and cache_dir"
+            )
         plan = ElementalReferencePlan.from_yaml(config.phase_plan)
+        placed = (dft_config, dft_launch)
         if reference_root.exists():
-            _extend_planned_references(config, plan, dft_config, dataset, elements, reference_root)
+            _extend_planned_references(config, plan, placed, dataset, elements, reference_root)
         else:
-            _create_planned_references(config, plan, dft_config, dataset, elements, reference_root)
+            _create_planned_references(config, plan, placed, dataset, elements, reference_root)
     else:
         source = config.manifest if config is not None else trainer.validation_reference_set
         if source is None:

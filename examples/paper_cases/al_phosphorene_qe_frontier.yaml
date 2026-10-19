@@ -87,9 +87,6 @@ dft:
     occupations: smearing
     smearing:    gaussian
     degauss_ry:  0.007
-    nodes_per_job:    1
-    ranks_per_node:   8      # 8 GCDs per Frontier node
-    threads_per_rank: 7      # 56 usable cores / 8 GCDs
     timeout_sec:      7200
 
 trainer:
@@ -101,3 +98,11 @@ loop:
   dataset_format: extxyz
   resume: true
   fail_fast: false
+
+# Placement (docs/resource-dispatch.md). AL stages run one after another, so
+# training shares a device with the DFT pool.
+resources:
+  preset: frontier
+  pools:
+    dft:      {nodes: all, devices: all, share_with: [training]}
+    training: {nodes: 1, devices: 1, share_with: [dft]}

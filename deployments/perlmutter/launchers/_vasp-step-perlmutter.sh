@@ -40,6 +40,8 @@ NNODES="$3"
 RANKS_PER_NODE="$4"
 THREADS_PER_RANK="$5"
 TOTAL_RANKS=$(( NNODES * RANKS_PER_NODE ))
+# Devices per node come from the placement; several ranks may share one device.
+GPUS_PER_NODE="${MATSIM_DEVICES_PER_NODE:-$RANKS_PER_NODE}"
 
 [[ -d "${WORK_DIR}" ]] || { echo "work_dir not a directory: ${WORK_DIR}" >&2; exit 2; }
 [[ -x "${VASP_BIN}"  ]] || { echo "vasp binary not executable: ${VASP_BIN}" >&2; exit 2; }
@@ -126,12 +128,12 @@ cd "${WORK_DIR}"
 
 echo "[vasp-step] $(date) host=$(hostname) work_dir=${WORK_DIR}"
 NODE_ARGS=()
-if [[ -n "${MATSIM_DFT_ASSIGNED_NODES:-}" ]]; then
-  NODE_ARGS=(--nodelist "${MATSIM_DFT_ASSIGNED_NODES}")
+if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
+  NODE_ARGS=(--nodelist "${MATSIM_ASSIGNED_NODES}")
 fi
-echo "[vasp-step] assigned_nodes=${MATSIM_DFT_ASSIGNED_NODES:-scheduler-selected}"
+echo "[vasp-step] assigned_nodes=${MATSIM_ASSIGNED_NODES:-scheduler-selected}"
 echo "[vasp-step] srun --exclusive -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK} \\"
-echo "             --gpus-per-node=${RANKS_PER_NODE} --gpu-bind=closest ${VASP_BIN}"
+echo "             --gpus-per-node=${GPUS_PER_NODE} --gpu-bind=closest ${VASP_BIN}"
 
 # --exclusive is REQUIRED for concurrent multi-node dispatch: the AL driver
 # launches up to (SLURM_JOB_NUM_NODES / nodes_per_job) of these steps at once
@@ -146,6 +148,6 @@ exec srun \
   -N "${NNODES}" \
   -n "${TOTAL_RANKS}" \
   -c "${THREADS_PER_RANK}" \
-  --gpus-per-node="${RANKS_PER_NODE}" \
+  --gpus-per-node="${GPUS_PER_NODE}" \
   --gpu-bind=closest \
   "${VASP_BIN}"

@@ -29,16 +29,12 @@ acquisition:
 
 dft:
   backend: vasp
-  max_concurrent_jobs: 1
   vasp:
     vasp_bin: ${MATSIM_VASP_BIN:?export MATSIM_VASP_BIN}
     vasp_wrapper: ${PROJECT_ROOT:?export PROJECT_ROOT}/deployments/perlmutter/launchers/_vasp-step-perlmutter.sh
     incar_template: ${PROJECT_ROOT:?export PROJECT_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null
     potcar_dir: ${MATSIM_VASP_POTCAR_DIR:?export MATSIM_VASP_POTCAR_DIR}
-    nodes_per_job: 1
-    ranks_per_node: 4
-    threads_per_rank: 16
     timeout_sec: 14400
     extra_incar:
       ENCUT: "520"
@@ -60,3 +56,11 @@ loop:
   dataset_format: extxyz
   resume: true
   fail_fast: true
+
+# Placement (docs/resource-dispatch.md). AL stages run one after another, so
+# training shares a device with the DFT pool.
+resources:
+  preset: perlmutter-gpu
+  pools:
+    dft:      {nodes: all, devices: all, max_concurrent: 1, share_with: [training]}
+    training: {nodes: 1, devices: 1, share_with: [dft]}

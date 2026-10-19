@@ -7,7 +7,6 @@ import hashlib
 import io
 import json
 import logging
-import os
 import re
 import subprocess
 import uuid
@@ -30,6 +29,7 @@ from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.datasets.energy_references import load_elemental_reference_manifest
 from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.execution.locking import exclusive_lock
+from matsim_agents.execution.placement import ProcessLaunch, ResourcePlan
 
 log = logging.getLogger(__name__)
 
@@ -292,7 +292,7 @@ def _relaxation_key(
 
 
 def _run_reference_relaxation(
-    phase: ElementalPhaseSpec, cfg: DFTConfig, atoms, work_dir: Path
+    phase: ElementalPhaseSpec, cfg: DFTConfig, launch: ProcessLaunch, atoms, work_dir: Path
 ) -> tuple[object, float, int, np.ndarray | None]:
     """Relax positions (and optionally a bulk cell) using the reference DFT method."""
     work_dir.mkdir(parents=True)
@@ -336,9 +336,7 @@ def _run_reference_relaxation(
             str(work_dir),
             str(qe.pw_bin),
             str(input_path),
-            str(qe.nodes_per_job),
-            str(qe.ranks_per_node),
-            str(qe.threads_per_rank),
+            *launch.wrapper_args(),
         ]
         try:
             with log_path.open("w") as log_file:
@@ -349,7 +347,7 @@ def _run_reference_relaxation(
                     stderr=subprocess.STDOUT,
                     timeout=qe.timeout_sec,
                     check=False,
-                    env=os.environ.copy(),
+                    env=launch.environment(),
                 )
             result = parse_pw_stdout(str(log_path), return_code=proc.returncode)
         except subprocess.TimeoutExpired as exc:
@@ -415,9 +413,7 @@ def _run_reference_relaxation(
         str(vasp.vasp_wrapper),
         str(work_dir),
         str(vasp.vasp_bin),
-        str(vasp.nodes_per_job),
-        str(vasp.ranks_per_node),
-        str(vasp.threads_per_rank),
+        *launch.wrapper_args(),
     ]
     log_path = work_dir / "vasp.out"
     try:
@@ -429,7 +425,7 @@ def _run_reference_relaxation(
                 stderr=subprocess.STDOUT,
                 timeout=vasp.timeout_sec,
                 check=False,
-                env=os.environ.copy(),
+                env=launch.environment(),
             )
         result = parse_relax_outputs(work_dir, return_code=proc.returncode)
     except subprocess.TimeoutExpired as exc:
@@ -495,6 +491,7 @@ class _PreparedPhase(NamedTuple):
     atoms_for_static: Atoms
     static_digest: str
     static_key: str
+    launch: ProcessLaunch
 
 
 class _ReferenceRecord(NamedTuple):
@@ -547,6 +544,7 @@ def _static_cache_key(
 def _prepare_reference_phase(
     phase: ElementalPhaseSpec,
     dft: DFTConfig,
+    launch: ProcessLaunch,
     plan: ElementalReferencePlan,
     cache_dir: Path,
 ) -> _PreparedPhase:
@@ -566,7 +564,7 @@ def _prepare_reference_phase(
         raise ValueError(f"{phase.phase_id}: bulk reference must be periodic")
     cfg = _phase_config(dft, phase)
     signature = dft_method_signature(cfg, {phase.element})
-    execution_signature = dft_execution_signature(cfg)
+    execution_signature = dft_execution_signature(cfg, launch)
     input_digest = hashlib.sha256(geometry_bytes).hexdigest()
     relax_key = (
         _relaxation_key(phase, input_digest, signature, execution_signature)
@@ -650,6 +648,7 @@ def _prepare_reference_phase(
         atoms_for_static,
         static_digest,
         static_key,
+        launch,
     )
 
 
@@ -707,6 +706,7 @@ def _compute_reference(
         atoms_for_static,
         static_digest,
         static_key,
+        launch,
     ) = item
     relaxation = cached_relaxation
     if relax_key is not None:
@@ -742,7 +742,7 @@ def _compute_reference(
                     final_force,
                     ionic_steps,
                     final_stress,
-                ) = _run_reference_relaxation(phase, cfg, atoms, work_dir)
+                ) = _run_reference_relaxation(phase, cfg, launch, atoms, work_dir)
                 if (
                     relaxed_atoms.get_chemical_symbols() != atoms.get_chemical_symbols()
                     or not np.isfinite(relaxed_atoms.positions).all()
@@ -811,7 +811,7 @@ def _compute_reference(
             work_dir = entry / f"dft-{uuid.uuid4().hex}"
             log.info("Calculating elemental DFT reference %s (%s)", phase.phase_id, static_key)
             result = make_backend(cfg).run_one(
-                DFTJobSpec(phase.phase_id, atoms_for_static, str(work_dir))
+                DFTJobSpec(phase.phase_id, atoms_for_static, str(work_dir), launch=launch)
             )
             if (
                 not result.converged
@@ -938,6 +938,7 @@ def prepare_elemental_references(
     plan: ElementalReferencePlan,
     dft: DFTConfig,
     *,
+    launch: ProcessLaunch,
     required_elements: set[str],
     cache_dir: Path,
     output_dir: Path,
@@ -971,7 +972,7 @@ def prepare_elemental_references(
     for phase in sorted(plan.phases, key=lambda item: item.phase_id):
         if phase.element not in required_elements:
             continue
-        prepared.append(_prepare_reference_phase(phase, dft, plan, cache_dir))
+        prepared.append(_prepare_reference_phase(phase, dft, launch, plan, cache_dir))
 
     _preflight_reference_calculations(prepared, cache_dir, dft_approved, max_dft_calculations)
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -1006,7 +1007,12 @@ def prepare_elemental_references(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase-plan", type=Path, required=True)
-    parser.add_argument("--dft-config", type=Path, required=True, help="YAML DFTConfig block")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="YAML with a top-level dft: block and a resources: plan that has a dft pool",
+    )
     parser.add_argument("--elements", nargs="+", required=True)
     parser.add_argument("--cache-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -1015,10 +1021,17 @@ def main() -> None:
     parser.add_argument("--max-dft-calculations", type=int)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    dft = DFTConfig.model_validate(yaml.safe_load(args.dft_config.read_text()))
+    document = yaml.safe_load(args.config.read_text())
+    if not isinstance(document, dict) or "dft" not in document:
+        raise SystemExit(f"{args.config}: expected a top-level dft: block")
+    dft = DFTConfig.model_validate(document["dft"])
+    placement = ResourcePlan.from_mapping(document, source=args.config).place()
+    if "dft" not in placement.pools:
+        raise SystemExit(f"{args.config}: resources.pools.dft is required")
     manifest = prepare_elemental_references(
         ElementalReferencePlan.from_yaml(args.phase_plan),
         dft,
+        launch=placement.pool("dft").launches[0],
         required_elements=set(args.elements),
         cache_dir=args.cache_dir,
         output_dir=args.output_dir,

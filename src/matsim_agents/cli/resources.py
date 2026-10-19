@@ -72,10 +72,11 @@ def _print_placement(placement) -> None:
             details.append(f"memory_fraction {pool.memory_fraction:g}")
         if pool.max_concurrent is not None:
             details.append(f"{pool.max_concurrent} concurrent")
-        if pool.ranks_per_node is not None:
+        if pool.launches:
+            launch = pool.launches[0]
             details.append(
-                f"{len(pool.job_groups)} job(s) x {pool.nodes_per_job} node(s), "
-                f"{pool.ranks_per_node} ranks x {pool.threads_per_rank} threads per node"
+                f"{len(pool.launches)} launch(es) x {launch.node_count} node(s), "
+                f"{launch.ranks_per_node} ranks x {launch.threads_per_rank} threads per node"
             )
         table.add_row(pool.name, "", _hosts(pool.slices), _devices(pool.slices), "; ".join(details))
         for server in pool.servers:

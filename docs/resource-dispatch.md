@@ -1,9 +1,10 @@
 # Resource dispatch for LLMs, MLIPs, and DFT
 
-Status: **phase 1 implemented** (planner, presets, layouts, CLI); phases 2–5
-are not. Design questions are resolved in [section 11](#11-design-decisions);
-phase-1 implementation choices are recorded in
-[section 12](#12-phase-1-implementation-notes).
+Status: **phases 1–2 implemented** (planner, presets, layouts, CLI; DFT and
+training read the placement); phases 3–5 are not. Design questions are resolved
+in [section 11](#11-design-decisions); implementation choices are recorded in
+[section 12](#12-phase-1-implementation-notes) and
+[section 13](#13-phase-2-implementation-notes).
 
 ## 1. Problem
 
@@ -468,3 +469,41 @@ Choices made while implementing, relative to sections 4–8:
 - **Diagnostics.** Unused devices and unused LLM-pool devices are reported as
   warnings, not errors. `resources plan --nodes N` or `--hosts a,b` previews a
   multi-node plan from a login node; `--output` writes `placement.json`.
+
+## 13. Phase 2 implementation notes
+
+DFT and training now take their nodes, ranks, threads, and devices from the
+placement:
+
+- **Removed fields.** `nodes_per_job`, `ranks_per_node`, `threads_per_rank`
+  (`dft.qe`, `dft.vasp`), `dft.max_concurrent_jobs`, and
+  `trainer.nodes_for_train` / `trainer.ranks_per_node` are rejected with a
+  message naming the `resources:` field that replaces each one.
+  `MATSIM_GPUS_PER_NODE`, `MATSIM_DFT_RANKS_PER_NODE`,
+  `MATSIM_DFT_THREADS_PER_RANK`, `MATSIM_DFT_NODES_PER_JOB`, and
+  `MATSIM_DFT_ASSIGNED_NODES` are gone.
+- **`ProcessLaunch`.** Each DFT job group and the training pool resolve to a
+  `ProcessLaunch` (hosts, devices, ranks per node, threads per rank, device
+  mask). Step wrappers keep their positional
+  `<nodes> <ranks_per_node> <threads_per_rank>` contract and read
+  `MATSIM_ASSIGNED_NODES` and `MATSIM_DEVICES_PER_NODE`; Slurm wrappers request
+  that many GPUs per node, so several ranks can share a device
+  (`ranks_per_device`).
+- **Required plans.** `ALConfig.resources` is required, with a `dft` pool and,
+  when `trainer.enabled`, a `training` pool. `matsim-agents al run` resolves the
+  plan once and writes `placement.json` into `loop.out_dir`. The DFT execution
+  signature records the launch layout but not host names, so cached elemental
+  references stay valid across allocations with the same layout.
+- **Other entry points.** Elemental references, campaign DFT refinement, and
+  `relax` use the first DFT job group. `relax` launchers may use `{nodes}`,
+  `{ranks_per_node}`, and `{threads_per_rank}`; a plain `pw.x` launcher needs no
+  plan. `elemental_dft` takes `--config` with `dft:` and `resources:` blocks.
+- **Sequential layouts.** AL stages run one after another, so shipped AL
+  configs and `deployments/<facility>/resources/active-learning-sequential.yaml`
+  give DFT every device and let training share one device with it
+  (`share_with`). `deployments/common/run-active-learning.sh` reads the layout
+  from `MATSIM_RESOURCES`.
+- **Training launchers** pin the trainer to the placed host
+  (`--nodelist` / `--hosts`); the Aurora trainer requires the tile mask from the
+  placement instead of `MATSIM_TRAIN_TILE`.
+

@@ -7,6 +7,7 @@ Honors $HF_TOKEN (set it before calling for gated repos).  Uses
 huggingface_hub.snapshot_download under the hood so partial downloads resume
 cleanly on re-invocation.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -22,14 +23,16 @@ DEFAULT_DEST = Path(os.environ.get("MODEL_ROOT", Path.cwd() / "models"))
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("repo_id", help="e.g. mistralai/Mistral-Small-24B-Instruct-2501")
-    p.add_argument("--name", default=None,
-                   help="local directory name (defaults to repo basename)")
-    p.add_argument("--dest", default=str(DEFAULT_DEST),
-                   help="parent directory (default: %(default)s)")
-    p.add_argument("--allow-patterns", default=None,
-                   help="comma-separated patterns to keep")
-    p.add_argument("--ignore-patterns", default="*.gguf,original/*,consolidated*",
-                   help="comma-separated patterns to skip (default skips GGUF + raw shards)")
+    p.add_argument("--name", default=None, help="local directory name (defaults to repo basename)")
+    p.add_argument(
+        "--dest", default=str(DEFAULT_DEST), help="parent directory (default: %(default)s)"
+    )
+    p.add_argument("--allow-patterns", default=None, help="comma-separated patterns to keep")
+    p.add_argument(
+        "--ignore-patterns",
+        default="*.gguf,original/*,consolidated*",
+        help="comma-separated patterns to skip (default skips GGUF + raw shards)",
+    )
     args = p.parse_args()
 
     name = args.name or args.repo_id.split("/", 1)[-1]

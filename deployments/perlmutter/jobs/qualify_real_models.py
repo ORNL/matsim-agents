@@ -50,10 +50,7 @@ def identities(path: Path) -> set[str]:
 
 def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
     source = Path(__file__).resolve().parents[3]
-    dft = {
-        "backend": backend,
-        "max_concurrent_jobs": 1,
-    }
+    dft = {"backend": backend}
     if backend == "vasp":
         dft["vasp"] = {
             "vasp_bin": str(repo / "external/vasp6/src/vasp.6.6.1/bin/vasp_std"),
@@ -62,9 +59,6 @@ def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
             ),
             "incar_template": str(source / "examples/active_learning/INCAR.template"),
             "potcar_dir": str(repo / "external/vasp6/potcar/potpaw_PBE.64"),
-            "nodes_per_job": 1,
-            "ranks_per_node": 4,
-            "threads_per_rank": 16,
             "timeout_sec": 1800,
             "extra_incar": {"LREAL": ".FALSE.", "KPAR": "1"},
         }
@@ -78,9 +72,6 @@ def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
             "ecutrho_ry": 400,
             "kpts": [2, 2, 2],
             "occupations": "fixed",
-            "nodes_per_job": 1,
-            "ranks_per_node": 4,
-            "threads_per_rank": 16,
             "timeout_sec": 1800,
         }
     else:
@@ -97,12 +88,23 @@ def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
             },
             "acquisition": {"strategy": "random", "n_select": 2, "diversity_filter": False},
             "dft": dft,
+            # One node: the stages run one after another, so training shares a GPU with DFT.
+            "resources": {
+                "preset": "perlmutter-gpu",
+                "pools": {
+                    "dft": {
+                        "nodes": 1,
+                        "devices": "all",
+                        "max_concurrent": 1,
+                        "share_with": ["training"],
+                    },
+                    "training": {"nodes": 1, "devices": 1, "share_with": ["dft"]},
+                },
+            },
             "trainer": {
                 "enabled": True,
                 "train_script": str(source / "src/matsim_agents/training/finetune_uma.py"),
                 "epochs_per_iter": 1,
-                "nodes_for_train": 1,
-                "ranks_per_node": 1,
                 "validation_fraction": 0.2,
                 "compare_after_training": True,
                 "promote_model": True,
@@ -136,7 +138,12 @@ def bootstrap(repo: Path, root: Path, backend: str = "qe") -> dict:
     manifest.write_text(json.dumps(payload))
     cfg = config(repo, root, backend)
     result = make_backend(cfg.dft).run_one(
-        DFTJobSpec("elemental-Si", read(seed_path), str(root / f"reference-{backend}"))
+        DFTJobSpec(
+            "elemental-Si",
+            read(seed_path),
+            str(root / f"reference-{backend}"),
+            launch=cfg.resources.place(root).pool("dft").launches[0],
+        )
     )
     require(
         result.converged
@@ -260,7 +267,12 @@ def mace(repo: Path, root: Path) -> dict:
     cfg.trainer.validation_set = root / "al/validation.extxyz"
     cfg.mlip.mace.ensemble_models = []
     checkpoint = retrain_mace(
-        cfg.trainer, cfg.mlip.mace, root / "al/dataset.extxyz", 1, root / "mace-training"
+        cfg.trainer,
+        cfg.mlip.mace,
+        root / "al/dataset.extxyz",
+        1,
+        root / "mace-training",
+        launch=cfg.resources.place().pool("training").launches[0],
     )
     require(checkpoint.is_file(), "MACE training did not produce an inference checkpoint")
     decision = evaluate_promotion_candidate(
@@ -320,6 +332,7 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
     from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 
     cfg = ALConfig.model_validate_json((root / "al-config.json").read_text())
+    placement = cfg.resources.place()
     dataset = root / "al/dataset.extxyz"
     require(dataset.is_file(), "Run the bootstrap and resume stages first")
     source = Path(__file__).resolve().parents[3]
@@ -369,8 +382,6 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
                 "train_script": source / f"src/matsim_agents/training/{script}.py",
                 "train_launcher": None,
                 "epochs_per_iter": 1,
-                "nodes_for_train": 1,
-                "ranks_per_node": 1,
             },
             deep=True,
         )
@@ -386,7 +397,9 @@ def hydragnn_finetune(repo: Path, root: Path) -> dict:
             dataset,
             1,
             out,
+            launch=placement.pool("training").launches[0],
             dft_config=cfg.dft,
+            dft_launch=placement.pool("dft").launches[0],
             reference_root=root / f"hydragnn-{script}-references",
         )
         calculator = make_mlip_calculator(

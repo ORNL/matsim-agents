@@ -146,7 +146,9 @@ def test_cpu_geometry_claims_whole_nodes():
     assert placement.pool("mlip").hosts == ["nid000000"]
     dft = placement.pool("dft")
     assert dft.hosts == ["nid000001", "nid000002"]
-    assert dft.ranks_per_node == 128 and dft.threads_per_rank == 1
+    assert [launch.hosts for launch in dft.launches] == [("nid000001",), ("nid000002",)]
+    assert dft.launches[0].ranks_per_node == 128 and dft.launches[0].threads_per_rank == 1
+    assert dft.launches[0].env == {}
     assert dft.slices[0].env == {}
 
 
@@ -397,9 +399,15 @@ def test_external_only_llm_pool_claims_nothing():
 def test_dft_derives_ranks_threads_and_groups():
     plan = _plan({"dft": {"nodes": "all", "nodes_per_job": 2}}, preset="frontier")
     dft = plan.resolve(_alloc(nodes=4, gpus=8)).pool("dft")
-    assert dft.ranks_per_node == 8
-    assert dft.threads_per_rank == 7
-    assert dft.job_groups == [["nid000000", "nid000001"], ["nid000002", "nid000003"]]
+    assert [launch.hosts for launch in dft.launches] == [
+        ("nid000000", "nid000001"),
+        ("nid000002", "nid000003"),
+    ]
+    launch = dft.launches[0]
+    assert (launch.ranks_per_node, launch.threads_per_rank) == (8, 7)
+    assert launch.wrapper_args() == ["2", "8", "7"]
+    assert launch.env == {"ROCR_VISIBLE_DEVICES": "0,1,2,3,4,5,6,7"}
+    assert dft.max_concurrent == 2
 
 
 def test_dft_nodes_per_job_must_divide_pool():
@@ -414,14 +422,41 @@ def test_dft_ranks_and_threads_must_fit_cores():
         plan.resolve(_alloc(gpus=4))
 
 
-def test_training_requires_one_device():
-    with pytest.raises(ValueError, match="pool 'training' must use exactly 1 device"):
-        _plan({"training": {"devices": 2}}).resolve(_alloc(gpus=4))
+def test_dft_ranks_per_device_multiplies_ranks():
+    plan = _plan({"dft": {"devices": [2, 3], "ranks_per_device": 2}})
+    launch = plan.resolve(_alloc(gpus=4)).pool("dft").launches[0]
+    assert (launch.ranks_per_node, launch.threads_per_rank) == (4, 16)
+    assert launch.environment({})["MATSIM_DEVICES_PER_NODE"] == "2"
+    assert launch.environment({})["CUDA_VISIBLE_DEVICES"] == "2,3"
 
 
-def test_training_requires_one_node():
-    with pytest.raises(ValueError, match="pool 'training' must use exactly 1 node"):
-        _plan({"training": {"nodes": 2}}).resolve(_alloc(nodes=2, gpus=4))
+def test_dft_max_concurrent_cannot_exceed_groups():
+    with pytest.raises(ValueError, match="max_concurrent=3 exceeds its 2 job group"):
+        _plan({"dft": {"nodes": "all", "max_concurrent": 3}}).resolve(_alloc(nodes=2, gpus=4))
+
+
+def test_pool_devices_must_match_across_nodes():
+    plan = _plan(
+        {"mlip": {"nodes": ["nid000000"], "devices": [0]}, "dft": {"nodes": "all", "devices": 3}}
+    )
+    with pytest.raises(ValueError, match="same devices on every node"):
+        plan.resolve(_alloc(nodes=2, gpus=4))
+
+
+def test_training_defaults_to_one_device():
+    training = _plan({"training": {}}).resolve(_alloc(gpus=4)).pool("training")
+    launch = training.launches[0]
+    assert launch.hosts == ("nid000000",)
+    assert launch.devices == (0,)
+    assert (launch.ranks_per_node, launch.threads_per_rank) == (1, 64)
+
+
+def test_training_can_span_nodes():
+    plan = _plan({"training": {"nodes": 2, "devices": "all"}})
+    launch = plan.resolve(_alloc(nodes=2, gpus=4)).pool("training").launches[0]
+    assert launch.hosts == ("nid000000", "nid000001")
+    assert launch.total_ranks == 8
+    assert launch.environment({})["MATSIM_ASSIGNED_NODES"] == "nid000000,nid000001"
 
 
 def test_mlip_max_concurrent_cannot_exceed_devices():

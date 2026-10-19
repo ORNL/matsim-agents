@@ -3,6 +3,9 @@ from __future__ import annotations
 from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.trainer import retrain_uma
 from matsim_agents.backends.mlip.config import UMAConfig
+from matsim_agents.execution.placement import ProcessLaunch
+
+LAUNCH = ProcessLaunch(hosts=("node0",), devices=(0,), ranks_per_node=1, threads_per_rank=1)
 
 
 def test_retrain_uma_returns_verified_checkpoint(tmp_path):
@@ -32,6 +35,7 @@ Path(a.output_dir).mkdir(parents=True, exist_ok=True)
         dataset,
         iteration=0,
         out_model_dir=output,
+        launch=LAUNCH,
     )
 
     assert checkpoint == output / "inference_ckpt.pt"
@@ -66,6 +70,7 @@ checkpoint.write_text('checkpoint')
         dataset,
         iteration=0,
         out_model_dir=output,
+        launch=LAUNCH,
     )
 
     assert checkpoint == output / "run-1" / "checkpoints" / "final" / "inference_ckpt.pt"

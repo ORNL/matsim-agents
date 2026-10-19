@@ -30,13 +30,11 @@ class VASPBackend:
 
     def __init__(self, cfg: VASPConfig) -> None:
         self.cfg = cfg
-        self.nodes_per_job = cfg.nodes_per_job
-        self.ranks_per_node = cfg.ranks_per_node
-        self.threads_per_rank = cfg.threads_per_rank
         self.timeout_sec = cfg.timeout_sec
 
     def run_one(self, spec: DFTJobSpec) -> DFTResult:
         cfg = self.cfg
+        launch = spec.require_launch()
 
         prepare_vasp_workdir(
             spec.atoms,
@@ -53,18 +51,13 @@ class VASPBackend:
             str(cfg.vasp_wrapper),
             spec.work_dir,
             str(cfg.vasp_bin),
-            str(cfg.nodes_per_job),
-            str(cfg.ranks_per_node),
-            str(cfg.threads_per_rank),
+            *launch.wrapper_args(),
         ]
 
         log_path = os.path.join(spec.work_dir, "vasp.out")
         t0 = time.time()
         with open(log_path, "w") as logf:
             try:
-                env = os.environ.copy()
-                if spec.assigned_nodes:
-                    env["MATSIM_DFT_ASSIGNED_NODES"] = ",".join(spec.assigned_nodes)
                 proc = subprocess.run(
                     argv,
                     cwd=spec.work_dir,
@@ -72,7 +65,7 @@ class VASPBackend:
                     stderr=subprocess.STDOUT,
                     timeout=cfg.timeout_sec,
                     check=False,
-                    env=env,
+                    env=launch.environment(),
                 )
                 rc = proc.returncode
             except subprocess.TimeoutExpired:

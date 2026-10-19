@@ -28,6 +28,7 @@ from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.backends.dft.base import DFTResult
 from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
+from matsim_agents.execution.placement import ProcessLaunch
 
 log = logging.getLogger(__name__)
 
@@ -128,7 +129,9 @@ def retrain_hydragnn(
     iteration: int,
     out_logdir: str | Path,
     *,
+    launch: ProcessLaunch,
     dft_config: DFTConfig | None = None,
+    dft_launch: ProcessLaunch | None = None,
     reference_root: Path | None = None,
 ) -> Path:
     """Spawn a formation-aware HydraGNN fine-tuner as a child process.
@@ -149,11 +152,12 @@ def retrain_hydragnn(
             f"trainer.train_script must be one of the built-in HydraGNN fine-tuners "
             f"({', '.join(sorted(HYDRAGNN_FINETUNERS))}); got {train_script}"
         )
-    if (
-        trainer_cfg.train_launcher is not None
-        and trainer_cfg.nodes_for_train * trainer_cfg.ranks_per_node != 1
-    ):
-        raise ValueError("Built-in HydraGNN fine-tuners require exactly one process")
+    if launch.total_ranks != 1:
+        raise ValueError(
+            "Built-in HydraGNN fine-tuners run as one process; set resources.pools.training "
+            f"to 1 node and 1 device (it resolved to {launch.node_count} node(s) x "
+            f"{launch.ranks_per_node} rank(s))"
+        )
 
     from matsim_agents.active_learning.hydragnn_references import resolve_training_references
     from matsim_agents.datasets.governance import sha256_file
@@ -162,6 +166,7 @@ def retrain_hydragnn(
         trainer_cfg,
         dataset_path,
         dft_config=dft_config,
+        dft_launch=dft_launch,
         reference_root=reference_root or out_logdir.parent / "elemental-training-reference",
     )
     dataset_sha256 = sha256_file(Path(dataset_path))
@@ -179,8 +184,8 @@ def retrain_hydragnn(
             str(out_logdir),
             str(hydragnn_cfg.logdir),  # resume from current logdir
             str(trainer_cfg.epochs_per_iter),
-            str(trainer_cfg.nodes_for_train),
-            str(trainer_cfg.ranks_per_node),
+            str(launch.node_count),
+            str(launch.ranks_per_node),
             str(reference_manifest),
             hydragnn_cfg.checkpoint or "",
             str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint or ""),
@@ -223,7 +228,9 @@ def retrain_hydragnn(
     log.info("Launching retrain: %s", " ".join(argv))
     log_path = out_logdir / "train.log"
     with open(log_path, "w") as f:
-        proc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, check=False)
+        proc = subprocess.run(
+            argv, stdout=f, stderr=subprocess.STDOUT, check=False, env=launch.environment()
+        )
     if proc.returncode != 0:
         raise RuntimeError(f"HydraGNN retrain failed with exit {proc.returncode}; see {log_path}")
 
@@ -261,6 +268,8 @@ def retrain_uma(
     dataset_path: str | Path,
     iteration: int,
     out_model_dir: str | Path,
+    *,
+    launch: ProcessLaunch,
 ) -> Path:
     """Spawn a user-supplied UMA fine-tuning script as a child process.
 
@@ -291,8 +300,8 @@ def retrain_uma(
             str(uma_cfg.model_name),
             str(uma_cfg.task_name),
             str(trainer_cfg.epochs_per_iter),
-            str(trainer_cfg.nodes_for_train),
-            str(trainer_cfg.ranks_per_node),
+            str(launch.node_count),
+            str(launch.ranks_per_node),
         ]
     else:
         log.warning(
@@ -317,7 +326,9 @@ def retrain_uma(
     log.info("Launching UMA fine-tune: %s", " ".join(argv))
     log_path = out_model_dir / "train.log"
     with open(log_path, "w") as f:
-        proc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, check=False)
+        proc = subprocess.run(
+            argv, stdout=f, stderr=subprocess.STDOUT, check=False, env=launch.environment()
+        )
     if proc.returncode != 0:
         raise RuntimeError(f"UMA fine-tune failed with exit {proc.returncode}; see {log_path}")
 
@@ -338,6 +349,8 @@ def retrain_mace(
     dataset_path: str | Path,
     iteration: int,
     out_model_dir: str | Path,
+    *,
+    launch: ProcessLaunch,
 ) -> Path:
     """Spawn a MACE fine-tuning job as a child process.
 
@@ -371,8 +384,8 @@ def retrain_mace(
             str(mace_cfg.family),
             str(mace_cfg.model),
             str(trainer_cfg.epochs_per_iter),
-            str(trainer_cfg.nodes_for_train),
-            str(trainer_cfg.ranks_per_node),
+            str(launch.node_count),
+            str(launch.ranks_per_node),
         ]
     else:
         log.warning(
@@ -400,7 +413,9 @@ def retrain_mace(
     log.info("Launching MACE fine-tune: %s", " ".join(argv))
     log_path = out_model_dir / "train.log"
     with open(log_path, "w") as f:
-        proc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, check=False)
+        proc = subprocess.run(
+            argv, stdout=f, stderr=subprocess.STDOUT, check=False, env=launch.environment()
+        )
     if proc.returncode != 0:
         raise RuntimeError(f"MACE fine-tune failed with exit {proc.returncode}; see {log_path}")
 

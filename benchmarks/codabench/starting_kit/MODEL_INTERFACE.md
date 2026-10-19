@@ -61,8 +61,8 @@ class MyAtomisticCalculator(Calculator):
         Calculator.calculate(self, atoms, properties, system_changes)
 
         # --- Replace below with your model inference ---
-        self.results["energy"] = 0.0                              # eV
-        self.results["forces"] = np.zeros((len(atoms), 3))        # eV/Å
+        self.results["energy"] = 0.0  # eV
+        self.results["forces"] = np.zeros((len(atoms), 3))  # eV/Å
         # -----------------------------------------------
 
     # Optional — implement for efficient batched evaluation.
@@ -90,13 +90,13 @@ from your_package import MyAtomisticCalculator
 
 calc = MyAtomisticCalculator.from_checkpoint(
     checkpoint_path="/submitted/checkpoint",
-    device="cpu",           # or 'cuda' / 'xpu' depending on the eval node
+    device="cpu",  # or 'cuda' / 'xpu' depending on the eval node
 )
 
 # Single structure
 atoms.calc = calc
-energy = atoms.get_potential_energy()   # eV
-forces = atoms.get_forces()             # (N, 3) eV/Å
+energy = atoms.get_potential_energy()  # eV
+forces = atoms.get_forces()  # (N, 3) eV/Å
 
 # Batch (if predict_many is implemented)
 results = calc.predict_many(list_of_atoms)

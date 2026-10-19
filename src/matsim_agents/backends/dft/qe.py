@@ -46,9 +46,6 @@ class QEBackend:
 
     def __init__(self, cfg: QEBackendConfig) -> None:
         self.cfg = cfg
-        self.nodes_per_job = cfg.nodes_per_job
-        self.ranks_per_node = cfg.ranks_per_node
-        self.threads_per_rank = cfg.threads_per_rank
         self.timeout_sec = cfg.timeout_sec
 
     # ----- input prep -------------------------------------------------------
@@ -86,6 +83,7 @@ class QEBackend:
 
     def run_one(self, spec: DFTJobSpec) -> DFTResult:
         cfg = self.cfg
+        launch = spec.require_launch()
         os.makedirs(spec.work_dir, exist_ok=True)
 
         input_path = os.path.join(spec.work_dir, "pw.in")
@@ -113,18 +111,13 @@ class QEBackend:
             spec.work_dir,
             str(cfg.pw_bin),
             input_path,
-            str(cfg.nodes_per_job),
-            str(cfg.ranks_per_node),
-            str(cfg.threads_per_rank),
+            *launch.wrapper_args(),
         ]
 
         stdout_path = os.path.join(spec.work_dir, "pw.out")
         t0 = time.time()
         with open(stdout_path, "w") as logf:
             try:
-                env = os.environ.copy()
-                if spec.assigned_nodes:
-                    env["MATSIM_DFT_ASSIGNED_NODES"] = ",".join(spec.assigned_nodes)
                 proc = subprocess.run(
                     argv,
                     cwd=spec.work_dir,
@@ -132,7 +125,7 @@ class QEBackend:
                     stderr=subprocess.STDOUT,
                     timeout=cfg.timeout_sec,
                     check=False,
-                    env=env,
+                    env=launch.environment(),
                 )
                 rc = proc.returncode
             except subprocess.TimeoutExpired:

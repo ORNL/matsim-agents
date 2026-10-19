@@ -46,9 +46,6 @@ dft:
     occupations: smearing
     smearing: gaussian
     degauss_ry: 0.007
-    nodes_per_job: 1
-    ranks_per_node: 4
-    threads_per_rank: 16
     timeout_sec: 3600
 
 trainer:
@@ -60,3 +57,11 @@ loop:
   dataset_format: extxyz
   resume: true
   fail_fast: true
+
+# Placement (docs/resource-dispatch.md). AL stages run one after another, so
+# training shares a device with the DFT pool.
+resources:
+  preset: perlmutter-gpu
+  pools:
+    dft:      {nodes: all, devices: all, share_with: [training]}
+    training: {nodes: 1, devices: 1, share_with: [dft]}

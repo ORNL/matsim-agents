@@ -1,0 +1,10 @@
+# Active learning where MD, DFT, and training run one after another: DFT uses
+# every device of every node, and training shares one device with it.
+# deployments/common/run-active-learning.sh uses this layout by default.
+#   matsim-agents resources plan deployments/frontier/resources/active-learning-sequential.yaml --nodes 2
+preview: {nodes: 2}
+resources:
+  preset: frontier
+  pools:
+    dft:      {nodes: all, devices: all, share_with: [training]}
+    training: {nodes: 1, devices: 1, share_with: [dft]}

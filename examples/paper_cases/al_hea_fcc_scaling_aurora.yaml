@@ -97,9 +97,6 @@ dft:
     incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null
     potcar_dir:       ${POTCAR_DIR}
-    nodes_per_job: 1
-    ranks_per_node: 12                 # 12 GPU tiles per Aurora node (FLAT mode)
-    threads_per_rank: 1               # Aurora step wrappers bind one core per rank
     timeout_sec: 10800
     extra_incar:
       ENCUT: "520"
@@ -118,3 +115,11 @@ loop:
   dataset_format: extxyz
   resume: false                      # every scaling point starts fresh
   fail_fast: false
+
+# Placement (docs/resource-dispatch.md). AL stages run one after another, so
+# training shares a device with the DFT pool.
+resources:
+  preset: aurora
+  pools:
+    dft:      {nodes: all, devices: all, threads_per_rank: 1, share_with: [training]}
+    training: {nodes: 1, devices: 1, share_with: [dft]}

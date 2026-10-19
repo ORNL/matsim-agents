@@ -34,6 +34,8 @@ NNODES="$4"
 RANKS_PER_NODE="$5"
 THREADS_PER_RANK="$6"
 TOTAL_RANKS=$(( NNODES * RANKS_PER_NODE ))
+# Devices per node come from the placement; several ranks may share one device.
+GPUS_PER_NODE="${MATSIM_DEVICES_PER_NODE:-$RANKS_PER_NODE}"
 
 [[ -d "${WORK_DIR}" ]] || { echo "work_dir not a directory: ${WORK_DIR}" >&2; exit 2; }
 [[ -x "${PW_BIN}"   ]] || { echo "pw.x not executable: ${PW_BIN}" >&2; exit 2; }
@@ -76,12 +78,12 @@ cd "${WORK_DIR}"
 
 echo "[qe-step] $(date) host=$(hostname) work_dir=${WORK_DIR}"
 NODE_ARGS=()
-if [[ -n "${MATSIM_DFT_ASSIGNED_NODES:-}" ]]; then
-  NODE_ARGS=(--nodelist "${MATSIM_DFT_ASSIGNED_NODES}")
+if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
+  NODE_ARGS=(--nodelist "${MATSIM_ASSIGNED_NODES}")
 fi
-echo "[qe-step] assigned_nodes=${MATSIM_DFT_ASSIGNED_NODES:-scheduler-selected}"
+echo "[qe-step] assigned_nodes=${MATSIM_ASSIGNED_NODES:-scheduler-selected}"
 echo "[qe-step] srun --exclusive -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK} \\"
-echo "             --gpus-per-node=${RANKS_PER_NODE} --gpu-bind=closest ${PW_BIN} -in ${INPUT}"
+echo "             --gpus-per-node=${GPUS_PER_NODE} --gpu-bind=closest ${PW_BIN} -in ${INPUT}"
 
 # --exclusive lets the AL driver run several of these srun steps concurrently
 # inside one allocation (as with _vasp-step-perlmutter.sh); without it Slurm
@@ -92,6 +94,6 @@ exec srun \
   -N "${NNODES}" \
   -n "${TOTAL_RANKS}" \
   -c "${THREADS_PER_RANK}" \
-  --gpus-per-node="${RANKS_PER_NODE}" \
+  --gpus-per-node="${GPUS_PER_NODE}" \
   --gpu-bind=closest \
   "${PW_BIN}" -in "${INPUT}"

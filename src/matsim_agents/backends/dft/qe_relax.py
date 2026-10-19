@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -641,6 +642,7 @@ def run_pw(
     launcher_cmd: list[str] | str,
     stdout_name: str = "pw.out",
     timeout_sec: int | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> PWResult:
     """Run ``pw.x`` via the user-provided launcher and parse the output.
 
@@ -679,6 +681,7 @@ def run_pw(
                 stderr=subprocess.STDOUT,
                 timeout=timeout_sec,
                 check=False,
+                env={**os.environ, **env} if env else None,
             )
             rc = proc.returncode
         except subprocess.TimeoutExpired:

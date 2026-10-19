@@ -727,6 +727,7 @@ def _dft_relaxation_config(
     refinement: CampaignDFTRefinementConfig,
     settings_overrides: dict[str, Any] | None = None,
 ) -> ScientificRelaxationConfig:
+    launch = al_cfg.resources.place().pool("dft").launches[0]
     if al_cfg.dft.backend == "vasp":
         vasp = al_cfg.dft.vasp
         if vasp is None:
@@ -744,13 +745,14 @@ def _dft_relaxation_config(
                     str(vasp.vasp_wrapper),
                     ".",
                     str(vasp.vasp_bin),
-                    str(vasp.nodes_per_job),
-                    str(vasp.ranks_per_node),
-                    str(vasp.threads_per_rank),
+                    "{nodes}",
+                    "{ranks_per_node}",
+                    "{threads_per_rank}",
                 ],
                 potcar_dir=str(vasp.potcar_dir),
                 settings=settings,
                 timeout_sec=vasp.timeout_sec,
+                launch=launch,
             ),
             dft_approved=True,
             max_steps=refinement.max_steps,
@@ -789,13 +791,14 @@ def _dft_relaxation_config(
                 "{work_dir}",
                 str(qe.pw_bin),
                 "{input}",
-                str(qe.nodes_per_job),
-                str(qe.ranks_per_node),
-                str(qe.threads_per_rank),
+                "{nodes}",
+                "{ranks_per_node}",
+                "{threads_per_rank}",
             ],
             pseudo_dir=str(qe.pseudo_dir),
             settings={key: value for key, value in settings.items() if value is not None},
             timeout_sec=qe.timeout_sec,
+            launch=launch,
         ),
         dft_approved=True,
         max_steps=refinement.max_steps,

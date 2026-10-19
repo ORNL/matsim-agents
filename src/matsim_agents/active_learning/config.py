@@ -8,12 +8,13 @@ a top-level field so the YAML is self-documenting and trivially diffable.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.backends.mlip.config import MLIPConfig
+from matsim_agents.execution.placement import ResourcePlan
 
 
 class MDConfig(BaseModel):
@@ -252,8 +253,18 @@ class TrainerConfig(BaseModel):
         ),
     )
     epochs_per_iter: int = 5
-    nodes_for_train: int = 8
-    ranks_per_node: int = 8
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_placement(cls, data: Any) -> Any:
+        moved = {
+            "nodes_for_train": "resources.pools.training.nodes",
+            "ranks_per_node": "resources.pools.training.devices",
+        }
+        if isinstance(data, dict) and (present := [key for key in moved if key in data]):
+            targets = "; ".join(f"trainer.{key} -> {moved[key]}" for key in present)
+            raise ValueError(f"placement settings moved to the resources: plan: {targets}")
+        return data
 
     @model_validator(mode="after")
     def _check_train_script(self) -> TrainerConfig:
@@ -320,6 +331,22 @@ class ALConfig(BaseModel):
     dft: DFTConfig
     trainer: TrainerConfig
     loop: LoopConfig
+    resources: ResourcePlan = Field(
+        ...,
+        description=(
+            "Placement of DFT and training work on the allocation; see "
+            "docs/resource-dispatch.md. Requires a dft pool, and a training pool "
+            "when trainer.enabled is true."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_resource_pools(self) -> ALConfig:
+        if "dft" not in self.resources.pools:
+            raise ValueError("resources.pools.dft is required: active learning labels with DFT")
+        if self.trainer.enabled and "training" not in self.resources.pools:
+            raise ValueError("trainer.enabled=True requires resources.pools.training")
+        return self
 
     @model_validator(mode="after")
     def _check_ensemble_for_strategy(self) -> ALConfig:

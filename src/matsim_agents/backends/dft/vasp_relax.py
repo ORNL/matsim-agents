@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -444,6 +445,7 @@ def run_vasp(
     launcher_cmd: list[str] | str,
     stdout_name: str = "vasp.out",
     timeout_sec: int | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> VASPRelaxResult:
     """Run VASP via the user-provided launcher and parse the relax outputs.
 
@@ -469,6 +471,7 @@ def run_vasp(
                 stderr=subprocess.STDOUT,
                 timeout=timeout_sec,
                 check=False,
+                env={**os.environ, **env} if env else None,
             )
             rc = proc.returncode
         except subprocess.TimeoutExpired:

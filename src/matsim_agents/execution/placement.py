@@ -119,6 +119,7 @@ class DFTPoolSpec(_PoolSpec):
     nodes_per_job: PositiveInt = 1
     ranks_per_device: PositiveInt = 1
     threads_per_rank: PositiveInt | None = None
+    max_concurrent: PositiveInt | None = None
 
 
 class TrainingPoolSpec(_PoolSpec):
@@ -138,6 +139,43 @@ class NodeSlice(_StrictModel):
     host: str
     devices: tuple[int, ...]
     env: dict[str, str] = Field(default_factory=dict)
+
+
+class ProcessLaunch(_StrictModel):
+    """One multi-process step: its hosts, devices, rank layout, and environment.
+
+    Launch wrappers keep their positional ``<nodes> <ranks_per_node>
+    <threads_per_rank>`` contract (:meth:`wrapper_args`) and read the host list
+    and per-node device count from :meth:`environment`.
+    """
+
+    hosts: tuple[str, ...]
+    devices: tuple[int, ...]
+    ranks_per_node: int
+    threads_per_rank: int
+    env: dict[str, str] = Field(default_factory=dict)
+
+    @property
+    def node_count(self) -> int:
+        return len(self.hosts)
+
+    @property
+    def total_ranks(self) -> int:
+        return self.node_count * self.ranks_per_node
+
+    def wrapper_args(self) -> list[str]:
+        return [str(self.node_count), str(self.ranks_per_node), str(self.threads_per_rank)]
+
+    def environment(self, base: Mapping[str, str] | None = None) -> dict[str, str]:
+        """Return *base* (default ``os.environ``) plus this launch's variables."""
+
+        import os
+
+        env = dict(os.environ if base is None else base)
+        env.update(self.env)
+        env["MATSIM_ASSIGNED_NODES"] = ",".join(self.hosts)
+        env["MATSIM_DEVICES_PER_NODE"] = str(len(self.devices))
+        return env
 
 
 class ServerPlacement(_StrictModel):
@@ -160,10 +198,7 @@ class PoolPlacement(_StrictModel):
     memory_fraction: float | None = None
     servers: list[ServerPlacement] = Field(default_factory=list)
     max_concurrent: int | None = None
-    nodes_per_job: int | None = None
-    ranks_per_node: int | None = None
-    threads_per_rank: int | None = None
-    job_groups: list[list[str]] = Field(default_factory=list)
+    launches: list[ProcessLaunch] = Field(default_factory=list)
 
     @property
     def hosts(self) -> list[str]:
@@ -277,6 +312,22 @@ class ResourcePlan(_StrictModel):
 
     def resolve(self, allocation: Allocation) -> Placement:
         return _Resolver(self, allocation).run()
+
+    def place(self, run_dir: str | Path | None = None) -> Placement:
+        """Resolve against the current allocation and record ``placement.json``."""
+
+        import logging
+
+        from matsim_agents.execution.allocation import discover_allocation
+
+        placement = self.resolve(discover_allocation())
+        logger = logging.getLogger(__name__)
+        for warning in placement.warnings:
+            logger.warning("resource placement: %s", warning)
+        if run_dir is not None:
+            Path(run_dir).mkdir(parents=True, exist_ok=True)
+            placement.write(Path(run_dir) / "placement.json")
+        return placement
 
 
 def _substitute(value: Any, defaults: Mapping[str, str], *, source: object) -> Any:
@@ -452,6 +503,28 @@ class _Resolver:
                 "concurrently"
             )
 
+    def _uniform_devices(self, placement: PoolPlacement) -> tuple[int, ...]:
+        patterns = {item.devices for item in placement.slices}
+        if len(patterns) != 1:
+            described = "; ".join(f"{item.host}: {list(item.devices)}" for item in placement.slices)
+            raise ValueError(
+                f"pool {placement.name!r} must use the same devices on every node so one "
+                f"launch can span them; it resolved to {described}"
+            )
+        return patterns.pop()
+
+    def _launch(
+        self, hosts: Sequence[str], devices: tuple[int, ...], ranks: int, threads: int
+    ) -> ProcessLaunch:
+        env = self.geometry.device_mask_environment(devices) if devices else {}
+        return ProcessLaunch(
+            hosts=tuple(hosts),
+            devices=devices,
+            ranks_per_node=ranks,
+            threads_per_rank=threads,
+            env=env,
+        )
+
     def _finish_dft(self, spec: DFTPoolSpec, placement: PoolPlacement) -> None:
         node_count = len(placement.slices)
         if node_count % spec.nodes_per_job:
@@ -459,13 +532,10 @@ class _Resolver:
                 f"pool 'dft' nodes_per_job={spec.nodes_per_job} does not divide its "
                 f"{node_count} node(s)"
             )
-        per_node = {len(item.devices) for item in placement.slices}
-        if len(per_node) != 1:
-            raise ValueError("pool 'dft' must use the same number of devices on every node")
-        devices = per_node.pop()
+        devices = self._uniform_devices(placement)
         cores = self.geometry.cores_per_node
         if devices:
-            ranks = devices * spec.ranks_per_device
+            ranks = len(devices) * spec.ranks_per_device
         else:
             ranks = cores // (spec.threads_per_rank or 1)
         if ranks < 1:
@@ -479,26 +549,24 @@ class _Resolver:
                 f"pool 'dft' needs {ranks} rank(s) x {max(threads, 1)} thread(s) per node, "
                 f"but nodes have {cores} cores"
             )
-        placement.nodes_per_job = spec.nodes_per_job
-        placement.ranks_per_node = ranks
-        placement.threads_per_rank = threads
         hosts = placement.hosts
-        placement.job_groups = [
-            hosts[start : start + spec.nodes_per_job]
+        placement.launches = [
+            self._launch(hosts[start : start + spec.nodes_per_job], devices, ranks, threads)
             for start in range(0, node_count, spec.nodes_per_job)
         ]
+        groups = len(placement.launches)
+        if spec.max_concurrent is not None and spec.max_concurrent > groups:
+            raise ValueError(
+                f"pool 'dft' max_concurrent={spec.max_concurrent} exceeds its {groups} "
+                f"job group(s) of {spec.nodes_per_job} node(s)"
+            )
+        placement.max_concurrent = spec.max_concurrent or groups
 
     def _finish_training(self, placement: PoolPlacement) -> None:
-        if len(placement.slices) != 1:
-            raise ValueError(
-                f"pool 'training' must use exactly 1 node; it resolved to {len(placement.slices)}"
-            )
-        devices = placement.slices[0].devices
-        if self.geometry.devices_per_node and len(devices) != 1:
-            raise ValueError(
-                "pool 'training' must use exactly 1 device; built-in HydraGNN trainers "
-                f"run on one device, but it resolved to {list(devices)}"
-            )
+        devices = self._uniform_devices(placement)
+        ranks = len(devices) or 1
+        threads = max(1, self.geometry.cores_per_node // ranks)
+        placement.launches = [self._launch(placement.hosts, devices, ranks, threads)]
 
     # -- LLM servers ----------------------------------------------------
     def _resolve_servers(self, spec: LLMPoolSpec, placement: PoolPlacement) -> None:
@@ -773,6 +841,7 @@ __all__ = [
     "NodeSlice",
     "Placement",
     "PoolPlacement",
+    "ProcessLaunch",
     "ResourcePlan",
     "ServerPlacement",
     "TrainingPoolSpec",

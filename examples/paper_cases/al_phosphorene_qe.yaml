@@ -85,9 +85,6 @@ dft:
     smearing:    gaussian    # phosphorene is a semiconductor
     degauss_ry:  0.007       # ~0.1 eV
     # ecutwfc/ecutrho left to recommend_settings() from the PAW pseudo.
-    nodes_per_job:    1      # small monolayer cell (few atoms + vacuum)
-    ranks_per_node:   4      # 4 A100 GPUs per Perlmutter node
-    threads_per_rank: 16
     timeout_sec:      7200
 
 trainer:
@@ -99,3 +96,11 @@ loop:
   dataset_format: extxyz
   resume: true
   fail_fast: false
+
+# Placement (docs/resource-dispatch.md). AL stages run one after another, so
+# training shares a device with the DFT pool.
+resources:
+  preset: perlmutter-gpu
+  pools:
+    dft:      {nodes: all, devices: all, share_with: [training]}
+    training: {nodes: 1, devices: 1, share_with: [dft]}

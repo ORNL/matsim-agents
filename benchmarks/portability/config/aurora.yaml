@@ -2,8 +2,7 @@
   "facility": "aurora",
   "scheduler": "pbs",
   "accelerator": "intel-data-center-gpu-max",
-  "gpus_per_node": 12,
-  "ranks_per_node": 12,
+  "resource_preset": "aurora",
   "launchers": {
     "qe": "deployments/aurora/launchers/_qe-step-aurora.sh",
     "vasp": "deployments/aurora/launchers/_vasp-step-aurora.sh"

@@ -121,6 +121,10 @@ trainer:
 loop:
   n_iterations: 1
   out_dir: /unused/output
+resources:
+  geometry: {{vendor: cpu, devices_per_node: 0, cores_per_node: 1}}
+  pools:
+    dft: {{nodes: all}}
 """
 
 
@@ -938,9 +942,6 @@ dft:
         vasp_wrapper: {wrapper}
         incar_template: {incar}
         potcar_dir: {potcar_dir}
-        nodes_per_job: 2
-        ranks_per_node: 4
-        threads_per_rank: 8
         extra_incar:
             LMAXMIX: '4'
 trainer:
@@ -948,6 +949,10 @@ trainer:
 loop:
     n_iterations: 1
     out_dir: /unused/output
+resources:
+    preset: perlmutter-gpu
+    pools:
+        dft: {{nodes: all, devices: all, threads_per_rank: 8}}
 """
 
 
@@ -1151,10 +1156,11 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
             "{work_dir}",
             "/unused/pw.x",
             "{input}",
-            "1",
-            "8",
-            "7",
+            "{nodes}",
+            "{ranks_per_node}",
+            "{threads_per_rank}",
         ]
+        assert cfg.dft.launch.wrapper_args() == ["1", "1", "1"]
         observed_settings.append(cfg.dft.settings)
         source = next(
             formula for formula, path in structures.items() if str(path) == cfg.structure_path
@@ -1626,7 +1632,14 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
     assert reference_dft.settings["extra_incar"] == {"LMAXMIX": "4", "MAGMOM": "2*1.0"}
     assert dft.backend == "vasp"
     assert dft.launcher[0:3] == ["bash", str(tmp_path / "vasp-wrapper.sh"), "."]
-    assert dft.launcher[3:] == [str(tmp_path / "vasp_std"), "2", "4", "8"]
+    assert dft.launcher[3:] == [
+        str(tmp_path / "vasp_std"),
+        "{nodes}",
+        "{ranks_per_node}",
+        "{threads_per_rank}",
+    ]
+    assert dft.launcher_argv("vasp_std")[3:] == [str(tmp_path / "vasp_std"), "1", "4", "8"]
+    assert dft.launch_environment()["CUDA_VISIBLE_DEVICES"] == "0,1,2,3"
     assert dft.settings["encut_ev"] == 600
     assert dft.settings["ismear"] == 0
     assert dft.settings["extra_incar"]["LMAXMIX"] == "4"

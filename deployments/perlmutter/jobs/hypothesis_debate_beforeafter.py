@@ -37,7 +37,10 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from matsim_agents.backends.llm.provider import get_chat_model
-from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, _debate_hypothesis_response
+from matsim_agents.orchestration.interactive_chat import (
+    DiscoveryChatConfig,
+    _debate_hypothesis_response,
+)
 
 # Backends surfaced as evidence, mapped to (zero-shot variant dir, fine-tuned
 # variant dir, human label). Both dirs share the same iter0 zero-shot baseline;
@@ -54,9 +57,7 @@ def _read_eval(eval_dir: Path, endpoint: str) -> dict | None:
     if not eval_dir.is_dir():
         return None
     iters = sorted(
-        (int(p.stem[4:]), p)
-        for p in eval_dir.glob("iter*.json")
-        if p.stem[4:].isdigit()
+        (int(p.stem[4:]), p) for p in eval_dir.glob("iter*.json") if p.stem[4:].isdigit()
     )
     if not iters:
         return None
@@ -97,13 +98,11 @@ def build_evidence(runs_root: Path, case: str) -> tuple[str, str, dict]:
             raw["after"][label] = after
     pre = (
         "Surrogate-accuracy evidence on held-out frames for this material "
-        "(pretrained models, BEFORE any active-learning fine-tuning):\n"
-        + "\n".join(pre_lines)
+        "(pretrained models, BEFORE any active-learning fine-tuning):\n" + "\n".join(pre_lines)
     )
     post = (
         "Surrogate-accuracy evidence on held-out frames for this material "
-        "(AFTER active-learning fine-tuning on loop-collected data):\n"
-        + "\n".join(post_lines)
+        "(AFTER active-learning fine-tuning on loop-collected data):\n" + "\n".join(post_lines)
     )
     return pre, post, raw
 
@@ -163,8 +162,7 @@ MATERIAL_REGISTRY: dict[str, dict] = {
         "elements": "Zn, C, O, H",
         "stoichiometry": "the Zn(HCOO)2 framework composition",
         "structures": (
-            "the alpha (Pna2_1) framework polymorph versus the chiral beta "
-            "(P2_12_12_1) polymorph"
+            "the alpha (Pna2_1) framework polymorph versus the chiral beta (P2_12_12_1) polymorph"
         ),
     },
 }
@@ -242,9 +240,7 @@ def run_condition(cfg: DiscoveryChatConfig, spec: dict, evidence: str) -> dict:
         evidence=evidence,
     )
     draft = draft_hypothesis(cfg, user_text)
-    final = _debate_hypothesis_response(
-        cfg=cfg, user_text=user_text, draft_response=draft
-    )
+    final = _debate_hypothesis_response(cfg=cfg, user_text=user_text, draft_response=draft)
     return {"user_text": user_text, "draft": draft, "final": final}
 
 
@@ -313,9 +309,7 @@ def main() -> None:
         "before_fine_tuning": before,
         "after_fine_tuning": after,
     }
-    (out / "hypothesis_debate_beforeafter.json").write_text(
-        json.dumps(result, indent=2)
-    )
+    (out / "hypothesis_debate_beforeafter.json").write_text(json.dumps(result, indent=2))
     (out / "before_final.md").write_text(before["final"])
     (out / "after_final.md").write_text(after["final"])
     print(f"\n[done] wrote transcripts to {out}", flush=True)

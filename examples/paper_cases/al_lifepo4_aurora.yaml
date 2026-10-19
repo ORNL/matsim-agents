@@ -88,9 +88,6 @@ dft:
     incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null            # use KSPACING from INCAR (auto Gamma mesh)
     potcar_dir:       ${POTCAR_DIR}
-    nodes_per_job: 1
-    ranks_per_node: 12                 # 12 GPU tiles per Aurora node (FLAT mode)
-    threads_per_rank: 1               # Aurora step wrappers bind one core per rank
     timeout_sec: 7200
     extra_incar:
       ENCUT: "520"
@@ -110,8 +107,6 @@ trainer:
   train_script:   ${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py
   train_launcher: ${PROJ_ROOT}/deployments/aurora/launchers/_hydragnn-train-step-aurora.sh
   epochs_per_iter: 5
-  nodes_for_train: 1
-  ranks_per_node:  1
 
 loop:
   n_iterations: 10
@@ -119,3 +114,11 @@ loop:
   dataset_format: extxyz
   resume: true
   fail_fast: false
+
+# Placement (docs/resource-dispatch.md). AL stages run one after another, so
+# training shares a device with the DFT pool.
+resources:
+  preset: aurora
+  pools:
+    dft:      {nodes: all, devices: all, threads_per_rank: 1, share_with: [training]}
+    training: {nodes: 1, devices: 1, share_with: [dft]}

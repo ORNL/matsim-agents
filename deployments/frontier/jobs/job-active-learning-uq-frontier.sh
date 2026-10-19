@@ -70,8 +70,7 @@ export MATSIM_DFT_BACKEND="${MATSIM_DFT_BACKEND:-qe}"
 export MATSIM_PW_BIN="${MATSIM_PW_BIN:-$REPO/external/quantum-espresso/install-gpu/bin/pw.x}"
 export MATSIM_PSEUDO_DIR="${MATSIM_PSEUDO_DIR:-$REPO/external/quantum-espresso/src/pseudo}"
 export MATSIM_DFT_WRAPPER="${MATSIM_DFT_WRAPPER:-$REPO/deployments/frontier/launchers/_qe-step-frontier.sh}"
-export MATSIM_DFT_RANKS_PER_NODE="${MATSIM_DFT_RANKS_PER_NODE:-8}"
-export MATSIM_DFT_THREADS_PER_RANK="${MATSIM_DFT_THREADS_PER_RANK:-7}"
+export MATSIM_RESOURCES="${MATSIM_RESOURCES:-$REPO/deployments/frontier/resources/active-learning-sequential.yaml}"
 export MATSIM_SEED_STRUCTURES="$(IFS=:; echo "${STRUCTURES[*]}")"
 
 # ── diagnostics ──────────────────────────────────────────────────────────────
@@ -88,6 +87,7 @@ echo "Structures:  ${#STRUCTURES[@]}"
 for s in "${STRUCTURES[@]}"; do echo "             - $s"; done
 echo "DFT backend: ${MATSIM_DFT_BACKEND}"
 echo "DFT wrapper: ${MATSIM_DFT_WRAPPER}"
+echo "Resources:   ${MATSIM_RESOURCES}"
 echo "Run dir:     $RUN_DIR"
 echo "=========================================="
 

@@ -23,6 +23,7 @@ from matsim_agents.execution.contracts import (
     ValidationRecord,
     WorkflowStatus,
 )
+from matsim_agents.execution.placement import ProcessLaunch, ResourcePlan
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 
 
@@ -48,13 +49,46 @@ class GeometryControls(BaseModel):
         return self
 
 
+PLACEMENT_PLACEHOLDERS = ("{nodes}", "{ranks_per_node}", "{threads_per_rank}")
+
+
 class DFTBackendConfig(BaseModel):
     backend: str = "qe"
-    launcher: str | list[str] | None = None
+    launcher: str | list[str] | None = Field(
+        None,
+        description=(
+            "Command that runs the DFT code. A list may use {work_dir} and {input}, and "
+            "{nodes}, {ranks_per_node}, {threads_per_rank} filled from the placement."
+        ),
+    )
     pseudo_dir: str | None = None
     potcar_dir: str | None = None
     settings: dict[str, Any] = Field(default_factory=dict)
     timeout_sec: int | None = Field(None, gt=0)
+    launch: ProcessLaunch | None = Field(
+        None,
+        description=(
+            "Resolved placement for this calculation; set from the config's resources: "
+            "plan or by the calling workflow."
+        ),
+    )
+
+    def launcher_argv(self, default: str) -> list[str]:
+        argv = (
+            [self.launcher] if isinstance(self.launcher, str) else list(self.launcher or [default])
+        )
+        if any(token in PLACEMENT_PLACEHOLDERS for token in argv):
+            if self.launch is None:
+                raise ValueError(
+                    "DFT launcher uses placement placeholders; add a resources: plan with a "
+                    "dft pool"
+                )
+            values = dict(zip(PLACEMENT_PLACEHOLDERS, self.launch.wrapper_args(), strict=True))
+            argv = [values.get(token, token) for token in argv]
+        return argv
+
+    def launch_environment(self) -> dict[str, str] | None:
+        return self.launch.environment({}) if self.launch is not None else None
 
     @model_validator(mode="after")
     def _valid_backend(self) -> DFTBackendConfig:
@@ -79,11 +113,17 @@ class ScientificRelaxationConfig(BaseModel):
     max_steps: int = Field(200, ge=1)
     force_tolerance_eV_per_A: float = Field(0.02, gt=0)
     parent_run_id: str | None = None
+    resources: ResourcePlan | None = Field(
+        None,
+        description="Placement for the DFT stage; its dft pool's first job group runs it.",
+    )
 
     @model_validator(mode="after")
     def _mode_requirements(self) -> ScientificRelaxationConfig:
         if self.mode in {RelaxationMode.DFT, RelaxationMode.MLIP_DFT} and self.dft is None:
             raise ValueError(f"mode={self.mode.value!r} requires dft configuration")
+        if self.resources is not None and "dft" not in self.resources.pools:
+            raise ValueError("resources: for a relaxation requires a dft pool")
         return self
 
 
@@ -169,6 +209,9 @@ def _dft_stage(
 
     dft = cfg.dft
     assert dft is not None
+    if dft.launch is None and cfg.resources is not None:
+        placement = cfg.resources.place(run.path)
+        dft = dft.model_copy(update={"launch": placement.pool("dft").launches[0]})
     work_dir = run.path / "calculations" / dft.backend
     atoms = read(input_path)
     calculation = "vc-relax" if cfg.geometry.relax_cell else "relax"
@@ -188,7 +231,12 @@ def _dft_stage(
             **dft.settings,
         )
         prepare_relax_workdir(atoms, work_dir, settings, dft.potcar_dir or "")
-        result = run_vasp(work_dir, dft.launcher or "vasp_std", timeout_sec=dft.timeout_sec)
+        result = run_vasp(
+            work_dir,
+            dft.launcher_argv("vasp_std"),
+            timeout_sec=dft.timeout_sec,
+            env=dft.launch_environment(),
+        )
         optimized = None
         if result.final_atoms is not None:
             optimized = str(run.path / "structures" / "dft_optimized.vasp")
@@ -221,7 +269,13 @@ def _dft_stage(
         **dft.settings,
     )
     input_file = write_pw_input(atoms, settings, str(work_dir / "pw.in"))
-    result = run_pw(input_file, str(work_dir), dft.launcher or "pw.x", timeout_sec=dft.timeout_sec)
+    result = run_pw(
+        input_file,
+        str(work_dir),
+        dft.launcher_argv("pw.x"),
+        timeout_sec=dft.timeout_sec,
+        env=dft.launch_environment(),
+    )
     optimized = None
     try:
         final_atoms = read(result.stdout_path, index=-1, format="espresso-out")

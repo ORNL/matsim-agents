@@ -68,9 +68,15 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-7}"
 export MPICH_GPU_SUPPORT_ENABLED=1
 
 echo "[hydragnn-train] $(date) host=$(hostname)"
+# The training pool's host comes from the placement (MATSIM_ASSIGNED_NODES).
+NODE_ARGS=()
+if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
+  NODE_ARGS=(--nodelist "${MATSIM_ASSIGNED_NODES}")
+fi
 echo "[hydragnn-train] srun -N ${NNODES} -n ${TOTAL_RANKS} python ${TRAIN_SCRIPT} ..."
 
 exec srun \
+  "${NODE_ARGS[@]}" \
   -N "${NNODES}" \
   -n "${TOTAL_RANKS}" \
   -c "${OMP_NUM_THREADS}" \

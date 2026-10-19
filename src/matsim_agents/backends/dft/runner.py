@@ -18,30 +18,24 @@ from matsim_agents.backends.dft.base import (
     DFTJobSpec,
     DFTResult,
 )
-from matsim_agents.execution.allocation import discover_allocation, validate_dft_resources
+from matsim_agents.execution.placement import PoolPlacement, ProcessLaunch
 
 
 def run_dft_batch(
     specs: Iterable[DFTJobSpec],
     backend: DFTBackend,
-    max_workers: int | None = None,
+    pool: PoolPlacement,
     on_complete: Callable[[DFTJobSpec, DFTResult], None] | None = None,
 ) -> list[DFTResult]:
-    """Run DFT jobs concurrently on stable, disjoint allocation partitions."""
+    """Run DFT jobs concurrently on the disjoint job groups of the ``dft`` pool."""
     specs_list = list(specs)
     if not specs_list:
         return []
+    if not pool.launches:
+        raise ValueError(f"pool {pool.name!r} has no DFT launches")
 
-    allocation = discover_allocation()
-    validate_dft_resources(
-        allocation,
-        nodes_per_job=backend.nodes_per_job,
-        ranks_per_node=backend.ranks_per_node,
-    )
-    groups = allocation.groups(backend.nodes_per_job)
-    available_workers = len(groups)
-    nworkers = max_workers if max_workers is not None else available_workers
-    nworkers = max(1, min(nworkers, available_workers, len(specs_list)))
+    groups = pool.launches
+    nworkers = max(1, min(pool.max_concurrent or len(groups), len(groups), len(specs_list)))
 
     for s in specs_list:
         Path(s.work_dir).mkdir(parents=True, exist_ok=True)
@@ -49,13 +43,13 @@ def run_dft_batch(
     queues = [specs_list[index::nworkers] for index in range(nworkers)]
 
     def run_partition(
-        node_group: tuple[str, ...], queue: list[DFTJobSpec]
+        launch: ProcessLaunch, queue: list[DFTJobSpec]
     ) -> list[tuple[DFTJobSpec, DFTResult]]:
         completed: list[tuple[DFTJobSpec, DFTResult]] = []
         # A partition processes its queue serially, so a node group can never
         # be reused while its previous scheduler step is still running.
         for spec in queue:
-            spec.assigned_nodes = node_group
+            spec.launch = launch
             try:
                 result = backend.run_one(spec)
             except Exception as exc:  # noqa: BLE001

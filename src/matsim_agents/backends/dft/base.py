@@ -21,6 +21,8 @@ from typing import Any, Protocol, runtime_checkable
 
 from ase import Atoms
 
+from matsim_agents.execution.placement import ProcessLaunch
+
 # --------------------------------------------------------------------------- #
 # Result + job spec                                                           #
 # --------------------------------------------------------------------------- #
@@ -51,7 +53,15 @@ class DFTJobSpec:
     atoms: Atoms
     work_dir: str
     extra: dict[str, str] | None = None  # backend-specific per-job overrides
-    assigned_nodes: tuple[str, ...] = ()
+    launch: ProcessLaunch | None = None  # hosts, ranks, and devices from the dft pool
+
+    def require_launch(self) -> ProcessLaunch:
+        if self.launch is None:
+            raise ValueError(
+                f"DFT job {self.job_id!r} has no launch; DFT runs take their nodes, ranks, "
+                "and devices from the dft pool of a resources: plan"
+            )
+        return self.launch
 
 
 # --------------------------------------------------------------------------- #
@@ -68,9 +78,6 @@ class DFTBackend(Protocol):
     """
 
     name: str
-    nodes_per_job: int
-    ranks_per_node: int
-    threads_per_rank: int
     timeout_sec: int
 
     def run_one(self, spec: DFTJobSpec) -> DFTResult:

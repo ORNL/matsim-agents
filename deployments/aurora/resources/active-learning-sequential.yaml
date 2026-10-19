@@ -1,0 +1,11 @@
+# Active learning where MD, DFT, and training run one after another: DFT uses
+# every device of every node, and training shares one device with it.
+# deployments/common/run-active-learning.sh uses this layout by default.
+#   matsim-agents resources plan deployments/aurora/resources/active-learning-sequential.yaml --nodes 2
+# Aurora step wrappers bind one core per rank.
+preview: {nodes: 2}
+resources:
+  preset: aurora
+  pools:
+    dft:      {nodes: all, devices: all, share_with: [training], threads_per_rank: 1}
+    training: {nodes: 1, devices: 1, share_with: [dft]}

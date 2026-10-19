@@ -31,6 +31,7 @@ def _base_blocks(tmp_path) -> dict:
         },
         "trainer": {"enabled": False},
         "loop": {"out_dir": str(tmp_path / "out")},
+        "resources": {"preset": "perlmutter-gpu", "pools": {"dft": {"nodes": "all"}}},
     }
 
 

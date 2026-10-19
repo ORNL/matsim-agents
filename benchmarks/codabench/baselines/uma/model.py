@@ -38,6 +38,7 @@ Reference
 ---------
 Wood et al., "UMA: A Family of Universal Models for Atoms", arXiv:2506.23971
 """
+
 from __future__ import annotations
 
 from typing import ClassVar
@@ -105,8 +106,10 @@ class AtomisticCalculator(Calculator):
         results = []
         for atoms in structures:
             self.calculate(atoms)
-            results.append({
-                "energy": self.results["energy"],
-                "forces": self.results["forces"].copy(),
-            })
+            results.append(
+                {
+                    "energy": self.results["energy"],
+                    "forces": self.results["forces"].copy(),
+                }
+            )
         return results

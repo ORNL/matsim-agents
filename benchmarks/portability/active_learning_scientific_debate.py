@@ -38,7 +38,9 @@ from matsim_agents.active_learning.config import ALConfig  # noqa: E402
 from matsim_agents.active_learning.loop import run_active_learning  # noqa: E402
 from matsim_agents.backends.llm.provider import get_chat_model  # noqa: E402
 
-DEFAULT_AL_CONFIG = ROOT / "benchmarks" / "portability" / "config" / "active_learning" / "al-si-uma-qe.yaml"
+DEFAULT_AL_CONFIG = (
+    ROOT / "benchmarks" / "portability" / "config" / "active_learning" / "al-si-uma-qe.yaml"
+)
 
 HYPOTHESIS_TEMPLATE = (
     "An active-learning loop just generated candidate configurations of the fixed "

@@ -108,9 +108,6 @@ dft:
     incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null            # use KSPACING from INCAR (auto Gamma mesh)
     potcar_dir:       ${POTCAR_DIR}
-    nodes_per_job: 1
-    ranks_per_node: 4                 # 4 A100 GPUs per Perlmutter node
-    threads_per_rank: 16
     timeout_sec: 10800
     extra_incar:
       ENCUT: "520"
@@ -129,8 +126,6 @@ trainer:
   train_script:   ${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py
   train_launcher: ${TRAIN_LAUNCHER}
   epochs_per_iter: 5
-  nodes_for_train: 1
-  ranks_per_node:  1
 
 loop:
   n_iterations: 12
@@ -138,3 +133,11 @@ loop:
   dataset_format: extxyz
   resume: true
   fail_fast: false
+
+# Placement (docs/resource-dispatch.md). AL stages run one after another, so
+# training shares a device with the DFT pool.
+resources:
+  preset: perlmutter-gpu
+  pools:
+    dft:      {nodes: all, devices: all, share_with: [training]}
+    training: {nodes: 1, devices: 1, share_with: [dft]}

@@ -7,7 +7,7 @@
     "relax_atoms": true,
     "relax_cell": false,
     "mlip": {"backend": "mace", "model": "small"},
-    "dft": {"backend": "qe", "nodes_per_job": 1}
+    "dft": {"backend": "qe"}
   },
   "active_learning": {
     "fixed_candidate_pool": true,

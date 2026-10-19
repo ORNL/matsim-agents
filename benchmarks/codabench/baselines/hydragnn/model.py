@@ -7,6 +7,7 @@ the directory that contains config.json and the model checkpoint file.
 The HydraGNN ASE calculator is built via matsim-agents'
 `backends.mlip.calculator.build_hydragnn_calculator`.
 """
+
 from __future__ import annotations
 
 from typing import ClassVar
@@ -65,6 +66,7 @@ class AtomisticCalculator(Calculator):
         results = []
         for atoms in structures:
             self.calculate(atoms)
-            results.append({"energy": self.results["energy"],
-                             "forces": self.results["forces"].copy()})
+            results.append(
+                {"energy": self.results["energy"], "forces": self.results["forces"].copy()}
+            )
         return results

@@ -6,7 +6,7 @@ set -euo pipefail
 [[ $# -eq 6 ]] || { echo "Usage: $0 <work_dir> <pw_bin> <input> <nodes> <ranks_per_node> <threads_per_rank>" >&2; exit 2; }
 WORK_DIR=$1; PW_BIN=$2; INPUT=$3; NNODES=$4; RANKS_PER_NODE=$5; THREADS_PER_RANK=$6
 TOTAL_RANKS=$((NNODES * RANKS_PER_NODE))
-HOSTS=${MATSIM_DFT_ASSIGNED_NODES:?dispatcher must assign disjoint Aurora nodes}
+HOSTS=${MATSIM_ASSIGNED_NODES:?dispatcher must assign disjoint Aurora nodes}
 
 export OMP_NUM_THREADS=${THREADS_PER_RANK}
 export MPICH_GPU_SUPPORT_ENABLED=1

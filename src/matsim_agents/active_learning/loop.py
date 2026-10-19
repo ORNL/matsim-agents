@@ -71,6 +71,7 @@ from matsim_agents.datasets.governance import (
     validate_labelled_frames,
     write_dataset_manifest,
 )
+from matsim_agents.execution.placement import Placement
 
 log = logging.getLogger(__name__)
 
@@ -281,7 +282,12 @@ def _select_for_labelling(
 
 
 def _label_with_dft(
-    cfg: ALConfig, selected: list, it_dir: Path, i: int, state: IterationState
+    cfg: ALConfig,
+    selected: list,
+    it_dir: Path,
+    i: int,
+    state: IterationState,
+    placement: Placement,
 ) -> tuple[list, Any]:
     """Run single-point DFT for the selected candidates and record outcome counts."""
     t0 = time.time()
@@ -296,11 +302,7 @@ def _label_with_dft(
         )
         for cand in selected
     ]
-    results = run_dft_batch(
-        specs,
-        backend,
-        max_workers=cfg.dft.max_concurrent_jobs,
-    )
+    results = run_dft_batch(specs, backend, placement.pool("dft"))
     n_ok = sum(1 for r in results if r.converged)
     state.n_dft_converged = n_ok
     state.n_dft_failed = len(results) - n_ok
@@ -534,8 +536,10 @@ def _retrain_candidate(
     root: Path,
     state: IterationState,
     n_appended: int,
+    placement: Placement,
 ) -> None:
     """Fine-tune a candidate model for the configured backend, if training is enabled."""
+    launch = placement.pool("training").launches[0] if cfg.trainer.enabled else None
     if cfg.trainer.enabled and cfg.mlip.backend == "hydragnn" and cfg.mlip.hydragnn is not None:
         new_logdir = retrain_hydragnn(
             cfg.trainer,
@@ -543,7 +547,9 @@ def _retrain_candidate(
             dataset_path=dataset_path,
             iteration=i,
             out_logdir=it_dir / "model",
+            launch=launch,
             dft_config=cfg.dft,
+            dft_launch=placement.pool("dft").launches[0],
             reference_root=root / "elemental-training-reference",
         )
         state.candidate_model_path = str(new_logdir)
@@ -554,6 +560,7 @@ def _retrain_candidate(
             dataset_path=dataset_path,
             iteration=i,
             out_model_dir=it_dir / "model",
+            launch=launch,
         )
         state.candidate_model_path = str(new_model)
     elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None and cfg.trainer.enabled:
@@ -563,6 +570,7 @@ def _retrain_candidate(
             dataset_path=dataset_path,
             iteration=i,
             out_model_dir=it_dir / "model",
+            launch=launch,
         )
         state.candidate_model_path = str(new_model)
     else:
@@ -623,6 +631,7 @@ def run_active_learning(cfg: ALConfig) -> None:
     comparison_enabled = _validate_comparison_inputs(cfg)
     root = Path(cfg.loop.out_dir)
     root.mkdir(parents=True, exist_ok=True)
+    placement = cfg.resources.place(root)
 
     dataset_path = root / (
         "dataset.extxyz" if cfg.loop.dataset_format == "extxyz" else "dataset.db"
@@ -687,7 +696,7 @@ def run_active_learning(cfg: ALConfig) -> None:
             )
 
             # --- 4. DFT labelling (VASP or QE) --------------------------------
-            results, backend = _label_with_dft(cfg, selected, it_dir, i, state)
+            results, backend = _label_with_dft(cfg, selected, it_dir, i, state, placement)
             completed_dft += len(results)
 
             # --- 5. Append to dataset -----------------------------------------
@@ -719,7 +728,7 @@ def run_active_learning(cfg: ALConfig) -> None:
                     state.status = "complete"
                     continue
                 state.training_status = "running"
-            _retrain_candidate(cfg, dataset_path, i, it_dir, root, state, n_appended)
+            _retrain_candidate(cfg, dataset_path, i, it_dir, root, state, n_appended, placement)
             _compare_and_promote(
                 cfg, state, i, dataset_path, validation_dataset_path, comparison_enabled
             )
