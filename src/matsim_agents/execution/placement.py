@@ -709,15 +709,17 @@ def _pick_devices(
     if isinstance(devices_spec, list):
         if len(set(devices_spec)) != len(devices_spec):
             raise ValueError(f"{owner} lists a device more than once: {devices_spec}")
+        # Hosts can differ in which devices are available (e.g. an LLM pool slice),
+        # so a missing device rejects this host; callers raise if none qualify.
         for device in devices_spec:
             if device not in candidates:
-                raise ValueError(outside(device))
+                return outside(device)
         wanted = list(devices_spec)
     elif devices_spec == "all":
         wanted = candidates
     else:
         if devices_spec > len(candidates):
-            raise ValueError(
+            return (
                 f"{owner} requests {devices_spec} device(s) per node, but only "
                 f"{len(candidates)} are available to it on {host}"
             )

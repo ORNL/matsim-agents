@@ -349,6 +349,24 @@ def test_servers_cannot_overlap():
         _plan({"llm": {"servers": [first, second]}}).resolve(_alloc(gpus=4))
 
 
+def test_server_skips_pool_hosts_without_its_devices():
+    server = {**VLLM, "nodes": 1, "devices": [0]}
+    plan = _plan(
+        {
+            "training": {"nodes": ["nid000000"], "devices": [0]},
+            "llm": {"nodes": 2, "devices": 3, "servers": [server]},
+        }
+    )
+    placement = plan.resolve(_alloc(nodes=2, gpus=4))
+    llm = placement.pool("llm")
+    assert [(item.host, item.devices) for item in llm.slices] == [
+        ("nid000000", (1, 2, 3)),
+        ("nid000001", (0, 1, 2)),
+    ]
+    proposer = llm.server("proposer")
+    assert [(item.host, item.devices) for item in proposer.slices] == [("nid000001", (0,))]
+
+
 def test_server_devices_must_lie_in_pool():
     server = {**VLLM, "devices": [3]}
     with pytest.raises(ValueError, match="outside pool 'llm'"):
