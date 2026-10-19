@@ -242,3 +242,17 @@ def test_exploration_rejects_both_relax_fn_and_pool(tmp_path):
             relax_fn=lambda args: None,
             mlip_pool=MLIPWorkerPool(),
         )
+
+
+def test_worker_masks_follow_the_driver_mask(monkeypatch):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+    placement = _placement({"mlip": {"devices": [0, 1]}})
+    pool = MLIPWorkerPool.from_placement(placement)
+    assert [slot.env["CUDA_VISIBLE_DEVICES"] for slot in pool.slots] == ["2", "3"]
+
+
+def test_worker_masks_reject_devices_the_driver_cannot_see(monkeypatch):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    placement = _placement({"mlip": {"devices": [0, 1]}})
+    with pytest.raises(ValueError, match="give the driver every device of the mlip pool"):
+        MLIPWorkerPool.from_placement(placement)

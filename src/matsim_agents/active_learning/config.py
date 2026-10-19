@@ -45,9 +45,11 @@ class MDConfig(BaseModel):
         default=None,
         description=(
             "If set, seed the MD RNG (Maxwell-Boltzmann velocities and the "
-            "Langevin thermostat noise) so the sampled trajectory and the "
-            "resulting candidate pool are reproducible across runs. Leave "
-            "unset for stochastic sampling (the default)."
+            "Langevin thermostat noise) so the sampled trajectories and the "
+            "resulting candidate pool are reproducible across runs. Each seed "
+            "structure gets its own stream derived from this value, so results "
+            "do not depend on whether seeds run sequentially or concurrently. "
+            "Leave unset for stochastic sampling (the default)."
         ),
     )
 

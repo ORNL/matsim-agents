@@ -188,7 +188,8 @@ def test_shared_active_learning_runner_generates_current_schema(tmp_path: Path) 
     assert cfg.trainer.enabled is False
     assert list(cfg.md.seed_source.paths) == seeds
     assert cfg.resources.preset == "perlmutter-gpu"
-    assert cfg.resources.pools["dft"].share_with == ["training"]
+    assert cfg.resources.pools["dft"].share_with == ["training", "mlip"]
+    assert "mlip" in cfg.resources.pools
 
 
 def test_perlmutter_vasp_campaign_config_resolves(tmp_path: Path, monkeypatch) -> None:

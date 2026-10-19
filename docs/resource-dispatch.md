@@ -542,8 +542,18 @@ relaxations concurrently:
   for the whole session, including `/relax`. Campaign formula exploration uses
   the AL template's `mlip` pool when declared; perturbation-robustness trials
   reuse one in-process model.
-- **Not parallelised.** AL MD sampling still runs seeds one after another: the
-  seeds share one random stream, so running them in parallel would change the
-  sampled trajectories. Parallel MD needs per-seed random streams, which is a
-  separate scientific decision.
+- **AL MD.** Each seed draws from its own random stream, spawned from
+  `md.random_seed` with NumPy's `SeedSequence`, so a seed's trajectory depends
+  only on `random_seed` and the seed's position in the list. Seeds then run
+  concurrently on the `mlip` pool, one per device, and candidates are returned
+  in seed order; the result is identical to running them one after another.
+  Trajectories differ from runs made before this change, which drew every seed
+  from one shared stream. The MD workers exit after sampling so their device
+  memory is free for DFT. Shipped AL configs and the `active-learning-sequential`
+  layouts declare an `mlip` pool on the first node, sharing devices with `dft`
+  and `training`.
+- **Driver masks.** When the driver already runs under a device mask (for
+  example a Slurm step), worker masks are translated through it; a pool device
+  the driver cannot see is an error. Campaign configs declare no `mlip` pool
+  because the campaign step sees one GPU.
 

@@ -61,6 +61,7 @@ from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.backends.dft.runner import run_dft_batch
 from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
+from matsim_agents.backends.mlip.pool import MLIPWorkerPool
 from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,
@@ -679,7 +680,18 @@ def run_active_learning(cfg: ALConfig) -> None:
             # --- 2. Generate candidates via MD --------------------------------
             t0 = time.time()
             md_dir = it_dir / "md"
-            candidates = sample_md_candidates(cfg.md, primary_calc, md_dir, seed_paths=seed_paths)
+            # Seeds run concurrently on the mlip pool, one per device; the
+            # workers exit afterwards so their memory is free for DFT.
+            with MLIPWorkerPool.from_placement(placement) as md_pool:
+                candidates = sample_md_candidates(
+                    cfg.md,
+                    primary_calc,
+                    md_dir,
+                    seed_paths=seed_paths,
+                    mlip_pool=md_pool,
+                    mlip_cfg=cfg.mlip,
+                    enable_mc_dropout=enable_drop,
+                )
             state.n_candidates = len(candidates)
             state.timings_sec["md_sampling"] = time.time() - t0
             log.info("Iter %d: produced %d MD candidates", i, len(candidates))

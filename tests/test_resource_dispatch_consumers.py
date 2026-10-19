@@ -179,5 +179,6 @@ def test_shipped_sequential_layouts_share_one_training_device():
     for facility in ("perlmutter", "frontier", "aurora"):
         path = root / "deployments" / facility / "resources" / "active-learning-sequential.yaml"
         pools = yaml.safe_load(path.read_text())["resources"]["pools"]
-        assert pools["dft"]["share_with"] == ["training"]
-        assert pools["training"] == {"nodes": 1, "devices": 1, "share_with": ["dft"]}
+        assert pools["dft"]["share_with"] == ["training", "mlip"]
+        assert pools["training"] == {"nodes": 1, "devices": 1, "share_with": ["dft", "mlip"]}
+        assert pools["mlip"] == {"nodes": 1, "devices": "all", "share_with": ["dft", "training"]}

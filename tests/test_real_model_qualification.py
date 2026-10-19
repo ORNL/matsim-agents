@@ -33,7 +33,7 @@ def test_config_roundtrip_and_backend_isolation(tmp_path, backend):
     block = getattr(cfg.dft, backend)
     assert block.timeout_sec == 1800
     assert cfg.resources.preset == "perlmutter-gpu"
-    assert set(cfg.resources.pools) == {"dft", "training"}
+    assert set(cfg.resources.pools) == {"dft", "training", "mlip"}
     assert getattr(cfg.dft, "vasp" if backend == "qe" else "qe") is None
     if backend == "vasp":
         assert block.vasp_wrapper.is_file()

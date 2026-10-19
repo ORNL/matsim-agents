@@ -72,7 +72,9 @@ def _initialize_worker(env: dict[str, str], sys_path: list[str], memory_fraction
     _WORKER.memory_fraction = memory_fraction
 
 
-def _apply_memory_fraction() -> None:
+def prepare_worker_device() -> None:
+    """Apply the worker's device-memory budget once; call at the start of every task."""
+
     if _WORKER.memory_fraction_applied or _WORKER.memory_fraction is None:
         return
     import torch
@@ -102,13 +104,39 @@ def relax_task(args_json: str) -> dict:
 
     from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 
-    _apply_memory_fraction()
+    prepare_worker_device()
     args = RelaxStructureInput.model_validate_json(args_json)
     return relax_with_mlip(args, calculators=_worker_calculators()).model_dump(mode="json")
 
 
 def _short_host(name: str) -> str:
     return name.split(".", 1)[0]
+
+
+def _within_inherited_mask(env: dict[str, str]) -> dict[str, str]:
+    """Translate placement device indices through a mask the driver already has.
+
+    Placement indices count every device of the node. When the driver itself
+    runs under a mask (for example a Slurm step with one GPU), worker masks
+    must name devices the driver can see.
+    """
+
+    from matsim_agents.execution.presets import DEVICE_MASK_VARIABLES
+
+    result = dict(env)
+    for variable in set(DEVICE_MASK_VARIABLES.values()) & set(env):
+        inherited = os.environ.get(variable, "").strip()
+        if not inherited:
+            continue
+        visible = [item.strip() for item in inherited.split(",") if item.strip()]
+        requested = [int(item) for item in env[variable].split(",")]
+        if any(index >= len(visible) for index in requested):
+            raise ValueError(
+                f"pool 'mlip' uses devices {requested}, but this process sees only "
+                f"{variable}={inherited}; give the driver every device of the mlip pool"
+            )
+        result[variable] = ",".join(visible[index] for index in requested)
+    return result
 
 
 class MLIPWorkerPool:
@@ -145,7 +173,9 @@ class MLIPWorkerPool:
             [
                 WorkerSlot(
                     device=device,
-                    env=placement.geometry.device_mask_environment((device,)),
+                    env=_within_inherited_mask(
+                        placement.geometry.device_mask_environment((device,))
+                    ),
                     memory_fraction=pool.memory_fraction,
                 )
                 for device in devices
@@ -261,4 +291,10 @@ class MLIPWorkerPool:
         self.close()
 
 
-__all__ = ["MLIPWorkerPool", "WorkerOutcome", "WorkerSlot", "relax_task"]
+__all__ = [
+    "MLIPWorkerPool",
+    "WorkerOutcome",
+    "WorkerSlot",
+    "prepare_worker_device",
+    "relax_task",
+]

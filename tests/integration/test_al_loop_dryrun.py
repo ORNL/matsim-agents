@@ -246,7 +246,7 @@ def _patch_runtime(
     monkeypatch.setattr(
         loop_mod,
         "sample_md_candidates",
-        lambda md_cfg, calc, out_dir, seed_paths=None: [_make_candidate(i) for i in range(3)],
+        lambda md_cfg, calc, out_dir, seed_paths=None, **_: [_make_candidate(i) for i in range(3)],
     )
     monkeypatch.setattr(loop_mod, "make_backend", lambda dft_cfg: _FakeDFTBackend())
     monkeypatch.setattr(
@@ -404,7 +404,7 @@ def test_held_out_frames_are_excluded_from_later_training_iterations(
     calls = 0
     held_out_id = None
 
-    def sample_candidates(md_cfg, calc, out_dir, seed_paths=None):
+    def sample_candidates(md_cfg, calc, out_dir, seed_paths=None, **_):
         nonlocal calls, held_out_id
         calls += 1
         if calls == 1:

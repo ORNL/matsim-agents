@@ -128,9 +128,11 @@ loop:
   fail_fast: false
 
 # Placement (docs/resource-dispatch.md). AL stages run one after another, so
-# training shares a device with the DFT pool.
+# DFT, training, and MLIP MD share devices; MD runs one seed per GPU of the
+# first node.
 resources:
   preset: frontier
   pools:
-    dft:      {nodes: all, devices: all, share_with: [training]}
-    training: {nodes: 1, devices: 1, share_with: [dft]}
+    dft:      {nodes: all, devices: all, share_with: [training, mlip]}
+    training: {nodes: 1, devices: 1, share_with: [dft, mlip]}
+    mlip:     {nodes: 1, devices: all, share_with: [dft, training]}

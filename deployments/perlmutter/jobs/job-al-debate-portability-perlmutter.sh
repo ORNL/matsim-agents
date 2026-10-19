@@ -164,6 +164,9 @@ srun --nodes=1 --ntasks=1 --nodelist="$AL_NODE" --exclusive \
     configure_uma_model_artifacts '$REPO'
     export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 CUDA_DEVICE_ORDER=PCI_BUS_ID
     export HF_HUB_OFFLINE=\"\${HF_HUB_OFFLINE:-1}\" TRANSFORMERS_OFFLINE=\"\${TRANSFORMERS_OFFLINE:-1}\"
+    # Present only the AL node to the resource plan, so DFT and MLIP work never
+    # lands on the nodes serving the debate models.
+    export SLURM_JOB_NODELIST='$AL_NODE' SLURM_JOB_NUM_NODES=1 SLURM_GPUS_ON_NODE=4
     if [[ -z \"\${HF_TOKEN:-}\" && -f \"\${HOME}/.cache/huggingface/token\" ]]; then
       export HF_TOKEN=\"\$(< \"\${HOME}/.cache/huggingface/token\")\"
     fi

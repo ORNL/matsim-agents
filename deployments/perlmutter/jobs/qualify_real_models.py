@@ -88,7 +88,8 @@ def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
             },
             "acquisition": {"strategy": "random", "n_select": 2, "diversity_filter": False},
             "dft": dft,
-            # One node: the stages run one after another, so training shares a GPU with DFT.
+            # One node: the stages run one after another, so DFT, training, and MLIP MD
+            # share its GPUs.
             "resources": {
                 "preset": "perlmutter-gpu",
                 "pools": {
@@ -96,9 +97,10 @@ def config(repo: Path, root: Path, backend: str = "qe") -> ALConfig:
                         "nodes": 1,
                         "devices": "all",
                         "max_concurrent": 1,
-                        "share_with": ["training"],
+                        "share_with": ["training", "mlip"],
                     },
-                    "training": {"nodes": 1, "devices": 1, "share_with": ["dft"]},
+                    "training": {"nodes": 1, "devices": 1, "share_with": ["dft", "mlip"]},
+                    "mlip": {"nodes": 1, "devices": "all", "share_with": ["dft", "training"]},
                 },
             },
             "trainer": {
