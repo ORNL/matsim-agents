@@ -820,3 +820,37 @@ def test_llm_check_vllm_workers_include_pipeline_stages(tmp_path, monkeypatch):
     cfg = seen["cfg"]
     assert (cfg.tensor_parallel_size, cfg.pipeline_parallel_size) == (4, 2)
     assert cfg.expected_accelerators == 8
+
+
+def test_saved_configs_with_plan_servers_reload(tmp_path, monkeypatch):
+    from matsim_agents.workflows.debate import ScientificDebateConfig, run_scientific_debate
+    from matsim_agents.workflows.llm_check import LLMCheckConfig, run_llm_check
+
+    _published(tmp_path, monkeypatch)
+
+    class Model:
+        def invoke(self, _messages):
+            return type("Response", (), {"content": "claim: yes\nconfidence: 0.5"})()
+
+    debate = run_scientific_debate(
+        ScientificDebateConfig(
+            hypothesis="Is Si stable?",
+            rounds=1,
+            output_root=str(tmp_path / "debate"),
+            participants=[{"name": "a", "server": "qwen"}, {"name": "b", "server": "gemma"}],
+        ),
+        model_factory=lambda **kwargs: Model(),
+    )
+    saved = json.loads((Path(debate.run_directory) / "resolved_config.json").read_text())
+    reloaded = ScientificDebateConfig.model_validate(saved)
+    assert [p.model for p in reloaded.participants] == ["Qwen2.5-14B-Instruct", "gemma-4-31B-it"]
+
+    def readiness(cfg):
+        raise RuntimeError("stop")
+
+    check = run_llm_check(
+        LLMCheckConfig(server="qwen", output_root=str(tmp_path / "check")),
+        readiness_probe=readiness,
+    )
+    saved = json.loads((Path(check.run_directory) / "resolved_config.json").read_text())
+    assert LLMCheckConfig.model_validate(saved).model == "Qwen2.5-14B-Instruct"

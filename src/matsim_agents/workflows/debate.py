@@ -156,6 +156,8 @@ def run_scientific_debate(
                         "model": endpoint.model,
                         "base_url": endpoint.base_url,
                         "api_key_env": participant.api_key_env or endpoint.api_key_env,
+                        # Saved configs record the resolved endpoint, which reloads on its own.
+                        "server": None,
                     }
                 )
             )

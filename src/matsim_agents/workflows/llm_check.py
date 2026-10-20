@@ -264,7 +264,8 @@ def run_llm_check(
                 "expected_devices": cfg.expected_devices
                 or (list(endpoint.devices) if endpoint.devices is not None else None),
                 "context_length": cfg.context_length or endpoint.max_model_len,
-                "server": endpoint.name,
+                # Saved configs record the resolved endpoint, which reloads on its own.
+                "server": None,
                 "resources": None,
             }
         )

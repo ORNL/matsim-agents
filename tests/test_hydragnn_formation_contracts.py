@@ -1,6 +1,7 @@
 """Physical training and reconstructed inference contracts without real models."""
 
 import json
+import socket
 import sys
 from contextlib import nullcontext
 from pathlib import Path
@@ -25,7 +26,10 @@ from matsim_agents.datasets.formation_training import (
 )
 from matsim_agents.execution.placement import ProcessLaunch
 
-LAUNCH = ProcessLaunch(hosts=("node0",), devices=(0,), ranks_per_node=1, threads_per_rank=1)
+# Direct (launcher-less) training must be placed on the driver node.
+LAUNCH = ProcessLaunch(
+    hosts=(socket.gethostname(),), devices=(0,), ranks_per_node=1, threads_per_rank=1
+)
 
 
 @pytest.fixture

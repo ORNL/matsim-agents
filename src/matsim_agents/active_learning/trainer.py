@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import subprocess
 import sys
 from collections.abc import Iterable
@@ -122,6 +123,27 @@ def append_frames_to_extxyz(frames: list[LabelledFrame], path: str | Path) -> in
 HYDRAGNN_FINETUNERS = frozenset({"finetune_hydragnn", "finetune_hydragnn_newhead"})
 
 
+def _require_direct_placement(trainer_cfg: TrainerConfig, launch: ProcessLaunch, what: str) -> None:
+    """Without a launcher, training is one Python process on this node; the plan must agree."""
+
+    if trainer_cfg.train_launcher is not None:
+        return
+    if launch.total_ranks != 1:
+        raise ValueError(
+            f"{what} without trainer.train_launcher runs one local process, but "
+            f"resources.pools.training resolved to {launch.node_count} node(s) x "
+            f"{launch.ranks_per_node} rank(s); set train_launcher or use 1 node and 1 device"
+        )
+    local = socket.gethostname().split(".", 1)[0]
+    host = launch.hosts[0].split(".", 1)[0]
+    if host != local:
+        raise ValueError(
+            f"{what} without trainer.train_launcher runs on this node ({local}), but "
+            f"resources.pools.training places it on {launch.hosts[0]}; set train_launcher "
+            "or place the training pool on the driver's node"
+        )
+
+
 def retrain_hydragnn(
     trainer_cfg: TrainerConfig,
     hydragnn_cfg: HydraGNNConfig,
@@ -158,6 +180,7 @@ def retrain_hydragnn(
             f"to 1 node and 1 device (it resolved to {launch.node_count} node(s) x "
             f"{launch.ranks_per_node} rank(s))"
         )
+    _require_direct_placement(trainer_cfg, launch, "HydraGNN fine-tuning")
 
     from matsim_agents.active_learning.hydragnn_references import resolve_training_references
     from matsim_agents.datasets.governance import sha256_file
@@ -293,6 +316,7 @@ def retrain_uma(
         log.info("trainer.enabled=False; skipping UMA fine-tune at iteration %d", iteration)
         return Path(str(uma_cfg.model_name))
 
+    _require_direct_placement(trainer_cfg, launch, "UMA fine-tuning")
     out_model_dir.mkdir(parents=True, exist_ok=True)
 
     if trainer_cfg.train_launcher is not None:
@@ -382,6 +406,7 @@ def retrain_mace(
         # Point downstream at the existing base model (checkpoint path or variant).
         return Path(str(mace_cfg.model))
 
+    _require_direct_placement(trainer_cfg, launch, "MACE fine-tuning")
     out_model_dir.mkdir(parents=True, exist_ok=True)
 
     if trainer_cfg.train_launcher is not None:
