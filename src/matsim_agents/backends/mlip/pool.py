@@ -25,7 +25,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from matsim_agents.execution.devices import child_mask_environment, visible_ordinals
+from matsim_agents.execution.devices import (
+    apply_mask_environment,
+    child_mask_environment,
+    visible_ordinals,
+)
 
 if TYPE_CHECKING:
     from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
@@ -68,7 +72,7 @@ _WORKER = _WorkerState()
 
 def _initialize_worker(env: dict[str, str], sys_path: list[str], memory_fraction) -> None:
     # Runs before any task imports torch, so the device mask takes effect.
-    os.environ.update(env)
+    apply_mask_environment(os.environ, env)
     for entry in reversed(sys_path):
         if entry not in sys.path:
             sys.path.insert(0, entry)

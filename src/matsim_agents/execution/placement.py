@@ -211,10 +211,15 @@ class ProcessLaunch(_StrictModel):
 
         import os
 
-        from matsim_agents.execution.devices import child_mask_environment
+        from matsim_agents.execution.devices import (
+            apply_mask_environment,
+            child_mask_environment,
+        )
 
         env = dict(os.environ if base is None else base)
-        env.update(child_mask_environment(self.env, owner="this launch") if local else self.env)
+        apply_mask_environment(
+            env, child_mask_environment(self.env, owner="this launch") if local else self.env
+        )
         if local:
             # Step wrappers set OMP_NUM_THREADS from <threads_per_rank>; a process
             # started directly takes it from the placement here.

@@ -25,7 +25,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from matsim_agents.execution.devices import child_mask_environment, visible_ordinals
+from matsim_agents.execution.devices import (
+    apply_mask_environment,
+    child_mask_environment,
+    visible_ordinals,
+)
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
@@ -198,8 +202,9 @@ class _ManagedServer:
             # vLLM reads its key from VLLM_API_KEY, which keeps it out of argv and logs.
             env["VLLM_API_KEY"] = self.api_key
         if self.local:
-            env.update(
-                child_mask_environment(self.slice.env, owner=f"LLM server {self.server.name!r}")
+            apply_mask_environment(
+                env,
+                child_mask_environment(self.slice.env, owner=f"LLM server {self.server.name!r}"),
             )
         return env
 

@@ -262,3 +262,34 @@ def test_vasp_launcher_work_dir_placeholder_is_resolved(tmp_path):
     )
     argv = dft.launcher_argv("vasp_std", work_dir=tmp_path / "calc")
     assert argv == ["bash", "wrap.sh", str((tmp_path / "calc").resolve()), "vasp_std", "2"]
+
+
+def test_rocm_worker_masks_follow_hip_only_driver_masks(monkeypatch):
+    from matsim_agents.execution.devices import (
+        apply_mask_environment,
+        child_mask_environment,
+        visible_ordinals,
+    )
+
+    monkeypatch.delenv("ROCR_VISIBLE_DEVICES", raising=False)
+    monkeypatch.setenv("HIP_VISIBLE_DEVICES", "4,5")
+    mask = child_mask_environment({"ROCR_VISIBLE_DEVICES": "0"}, owner="pool 'mlip'")
+    assert mask == {"ROCR_VISIBLE_DEVICES": "4"}
+    env = {"HIP_VISIBLE_DEVICES": "4,5"}
+    apply_mask_environment(env, mask)
+    assert env == {"ROCR_VISIBLE_DEVICES": "4"}
+    with pytest.raises(ValueError, match="sees only ROCR_VISIBLE_DEVICES=4,5"):
+        visible_ordinals("rocm", (2,), owner="x")
+
+
+def test_rocm_worker_masks_compose_hip_with_rocr(monkeypatch):
+    from matsim_agents.execution.devices import child_mask_environment
+
+    monkeypatch.setenv("ROCR_VISIBLE_DEVICES", "2,3,6,7")
+    monkeypatch.setenv("HIP_VISIBLE_DEVICES", "1,3")
+    assert child_mask_environment({"ROCR_VISIBLE_DEVICES": "1"}, owner="x") == {
+        "ROCR_VISIBLE_DEVICES": "7"
+    }
+    monkeypatch.setenv("HIP_VISIBLE_DEVICES", "5")
+    with pytest.raises(ValueError, match="selects devices outside"):
+        child_mask_environment({"ROCR_VISIBLE_DEVICES": "0"}, owner="x")
