@@ -608,14 +608,12 @@ def test_pseudopotential_directories_are_relative_to_the_contract(system):
 
 
 def test_a_second_execution_of_the_same_run_is_refused(system):
-    import fcntl
+    from matsim_agents.execution.locking import exclusive_lock
 
     tmp_path, structures, _references = system
     contract = _contract(tmp_path, structures[:1], "relaxation")
     run_dir = Path(contract.output_root) / "characterization-relaxation-test"
-    run_dir.mkdir(parents=True)
-    with (run_dir / ".lock").open("w") as held:
-        fcntl.flock(held, fcntl.LOCK_EX)
+    with exclusive_lock(run_dir / ".lock"):
         relax = FakeRelax({"NbO2-a.extxyz": -21.0})
         with pytest.raises(RuntimeError, match="in use by another execution"):
             run_characterization(contract, relax=relax)

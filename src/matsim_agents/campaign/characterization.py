@@ -27,8 +27,8 @@ with the outstanding steps and never repeats a completed calculation.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
-import fcntl
 import hashlib
 import json
 import logging
@@ -61,6 +61,7 @@ from matsim_agents.execution.contracts import (
     ObservableValue,
     at_least,
 )
+from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
 from matsim_agents.workflows.relaxation import (
     DFTBackendConfig,
     GeometryControls,
@@ -409,12 +410,12 @@ class _Run:
         self.contract = contract
         self.directory = Path(contract.output_root) / f"characterization-{contract.contract_id}"
         self.directory.mkdir(parents=True, exist_ok=True)
-        # One execution owns the run: its state is read, checked, and written under the lock.
-        self._lock = (self.directory / ".lock").open("w")
+        # One execution owns the run: its state is read, checked, and written under the
+        # lock (a lock file, since flock is unsupported on NERSC CFS compute nodes).
+        self._stack = contextlib.ExitStack()
         try:
-            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            self._lock.close()
+            self._stack.enter_context(exclusive_lock(self.directory / ".lock", timeout=0))
+        except LockTimeoutError:
             raise RuntimeError(
                 f"{self.directory} is in use by another execution of this contract"
             ) from None
@@ -425,9 +426,7 @@ class _Run:
             raise
 
     def close(self) -> None:
-        if not self._lock.closed:
-            fcntl.flock(self._lock, fcntl.LOCK_UN)
-            self._lock.close()
+        self._stack.close()
 
     def __enter__(self) -> _Run:
         return self
