@@ -26,6 +26,8 @@ from typing import Any
 
 import numpy as np
 
+from matsim_agents.execution.devices import apply_mask_environment
+
 # --------------------------------------------------------------------------- #
 # Element-aware defaults                                                      #
 # --------------------------------------------------------------------------- #
@@ -681,7 +683,7 @@ def run_pw(
                 stderr=subprocess.STDOUT,
                 timeout=timeout_sec,
                 check=False,
-                env={**os.environ, **env} if env else None,
+                env=_child_environment(env),
             )
             rc = proc.returncode
         except subprocess.TimeoutExpired:
@@ -700,3 +702,13 @@ def find_default_launcher() -> str | None:
     if val and shutil.which(val.split()[0] if " " in val else val):
         return val
     return None
+
+
+def _child_environment(env: Mapping[str, str] | None) -> dict[str, str] | None:
+    """Parent environment plus *env*; a placed ROCR mask drops an inherited HIP mask."""
+
+    if not env:
+        return None
+    merged = dict(os.environ)
+    apply_mask_environment(merged, env)
+    return merged
