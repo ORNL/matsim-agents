@@ -78,6 +78,15 @@ class LLMServerSpec(_StrictModel):
     )
     extra_args: list[str] = Field(default_factory=list)
     startup_timeout_s: float = Field(default=2400.0, gt=0)
+    api_key_env: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+        description=(
+            "Environment variable holding the server's API key. Clients send it; a "
+            "managed vLLM server receives it as VLLM_API_KEY. The key itself is never "
+            "stored in the plan, placement.json, or llm-endpoints.json."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_kind_fields(self) -> LLMServerSpec:
@@ -101,7 +110,7 @@ class LLMServerSpec(_StrictModel):
         if self.base_url:
             raise ValueError(f"{where} gets its endpoint from the placement; remove base_url")
         if self.kind == "in-process":
-            vllm_only = ("tensor_parallel_size", "max_model_len", "port", "launcher")
+            vllm_only = ("tensor_parallel_size", "max_model_len", "port", "launcher", "api_key_env")
             for field in vllm_only:
                 if getattr(self, field) is not None:
                     raise ValueError(f"{where} does not accept {field}; it applies to vLLM only")
@@ -188,13 +197,22 @@ class ProcessLaunch(_StrictModel):
     def wrapper_args(self) -> list[str]:
         return [str(self.node_count), str(self.ranks_per_node), str(self.threads_per_rank)]
 
-    def environment(self, base: Mapping[str, str] | None = None) -> dict[str, str]:
-        """Return *base* (default ``os.environ``) plus this launch's variables."""
+    def environment(
+        self, base: Mapping[str, str] | None = None, *, local: bool = False
+    ) -> dict[str, str]:
+        """Return *base* (default ``os.environ``) plus this launch's variables.
+
+        With ``local=True`` the process runs directly on this node, so its device
+        mask is translated through the mask this process already has. Launches
+        through ``srun``/``mpiexec`` keep node-wide indices for the launcher.
+        """
 
         import os
 
+        from matsim_agents.execution.devices import child_mask_environment
+
         env = dict(os.environ if base is None else base)
-        env.update(self.env)
+        env.update(child_mask_environment(self.env, owner="this launch") if local else self.env)
         env["MATSIM_ASSIGNED_NODES"] = ",".join(self.hosts)
         env["MATSIM_DEVICES_PER_NODE"] = str(len(self.devices))
         return env
@@ -215,6 +233,7 @@ class ServerPlacement(_StrictModel):
     launcher: list[str] | None = None
     extra_args: list[str] = Field(default_factory=list)
     startup_timeout_s: float | None = None
+    api_key_env: str | None = None
 
 
 class PoolPlacement(_StrictModel):
@@ -615,6 +634,7 @@ class _Resolver:
                 base_url=server.base_url,
                 max_model_len=server.max_model_len,
                 memory_fraction=spec.memory_fraction,
+                api_key_env=server.api_key_env,
             )
             if server.kind != "external":
                 result.slices = self._place_server(server, pool_devices, used, single)

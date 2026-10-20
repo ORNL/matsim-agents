@@ -555,13 +555,18 @@ class CalculatorCache:
         key = self.key(args)
         entry = self._entries.pop(key, None)
         if entry is None:
+            if len(self._entries) >= self.capacity:
+                from matsim_agents.backends.mlip.pool import release_device_memory
+
+                while len(self._entries) >= self.capacity:
+                    self._entries.pop(next(iter(self._entries)))
+                # Free the evicted model before loading its replacement.
+                release_device_memory()
             entry = _relaxation_calculator(args)
             self.loads += 1
         elif hasattr(entry.calculator, "reset"):
             entry.calculator.reset()
         self._entries[key] = entry
-        while len(self._entries) > self.capacity:
-            self._entries.pop(next(iter(self._entries)))
         return entry
 
 

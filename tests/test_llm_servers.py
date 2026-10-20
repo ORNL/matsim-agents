@@ -35,6 +35,7 @@ STUB_SERVER = textwrap.dedent(
         stream.write(json.dumps({
             "argv": sys.argv[1:],
             "mask": os.environ.get("CUDA_VISIBLE_DEVICES"),
+            "vllm_api_key": os.environ.get("VLLM_API_KEY"),
         }) + "\\n")
     if os.environ.get("STUB_FAIL"):
         print("stub failure: out of memory", flush=True)
@@ -494,7 +495,8 @@ def test_llm_check_uses_plan_server_from_published_endpoints(tmp_path, monkeypat
     resolved = seen["cfg"]
     assert (resolved.tensor_parallel_size, resolved.expected_accelerators) == (4, 4)
     assert resolved.context_length == 8192
-    assert resolved.api_key == "EMPTY"
+    # No api_key_env: the provider default (MATSIM_VLLM_API_KEY or EMPTY) applies.
+    assert resolved.api_key is None
 
 
 def test_llm_check_starts_the_plan_server(stub, tmp_path, monkeypatch):
@@ -536,8 +538,106 @@ def test_named_servers_need_a_plan_or_published_endpoints(tmp_path, monkeypatch)
     from matsim_agents.workflows.llm_check import LLMCheckConfig, run_llm_check
 
     monkeypatch.delenv(ENDPOINTS_VARIABLE, raising=False)
-    with pytest.raises(ValueError, match="resources serve"):
-        run_llm_check(LLMCheckConfig(server="qwen", output_root=str(tmp_path)))
+    result = run_llm_check(LLMCheckConfig(server="qwen", output_root=str(tmp_path)))
+    assert result.status == "failed"
+    assert "resources serve" in result.failure_reason
+    assert (Path(result.run_directory) / "result.json").is_file()
+
+
+def test_llm_check_records_a_server_that_fails_to_start(stub, tmp_path, monkeypatch):
+    from matsim_agents.workflows.llm_check import LLMCheckConfig, run_llm_check
+
+    script, _ = stub
+    _no_scheduler(monkeypatch)
+    monkeypatch.setenv("STUB_FAIL", "1")
+    plan = ResourcePlan.model_validate(
+        {
+            "preset": "perlmutter-gpu",
+            "geometry": {"devices_per_node": 4},
+            "pools": {"llm": {"devices": [0], "servers": [_managed(script)]}},
+        }
+    )
+    result = run_llm_check(LLMCheckConfig(resources=plan, output_root=str(tmp_path / "check")))
+    assert result.status == "failed"
+    assert "exited with code 3" in result.failure_reason
+    recorded = json.loads((Path(result.run_directory) / "result.json").read_text())
+    assert recorded["status"] == "failed" and not any(recorded["stages"].values())
+
+
+def test_api_keys_come_from_named_environment_variables(stub, tmp_path, monkeypatch):
+    from matsim_agents.backends.llm.servers import LLMEndpoint, api_key_from_env
+
+    monkeypatch.setenv("REMOTE_KEY", "s3cret")
+    endpoint = LLMEndpoint("remote", "vllm", "m", "http://h/v1", api_key_env="REMOTE_KEY")
+    assert endpoint.api_key == "s3cret"
+    published = LLMServices({"remote": endpoint}).write(tmp_path / "endpoints.json")
+    assert "s3cret" not in published.read_text()
+    assert LLMServices.from_file(published).endpoint("remote").api_key == "s3cret"
+    monkeypatch.delenv("REMOTE_KEY")
+    with pytest.raises(ValueError, match="REMOTE_KEY, which is unset"):
+        api_key_from_env("REMOTE_KEY", owner="x")
+
+    script, record = stub
+    monkeypatch.setenv("SERVER_KEY", "k-123")
+    plan = _plan([_managed(script, api_key_env="SERVER_KEY")])
+    with LLMServices.start(_local(plan), log_dir=tmp_path, poll_interval_s=0.2) as services:
+        assert services.endpoint().api_key == "k-123"
+    launched = json.loads(record.read_text().splitlines()[0])
+    assert launched["vllm_api_key"] == "k-123"
+    assert "k-123" not in " ".join(launched["argv"])
+
+
+def test_llm_check_sends_the_plan_server_key(tmp_path, monkeypatch):
+    from matsim_agents.backends.llm.servers import LLMEndpoint
+    from matsim_agents.workflows.llm_check import LLMCheckConfig, run_llm_check
+
+    monkeypatch.setenv("REMOTE_KEY", "s3cret")
+    _published(
+        tmp_path,
+        monkeypatch,
+        remote=LLMEndpoint("remote", "vllm", "m", "http://h/v1", api_key_env="REMOTE_KEY"),
+    )
+    seen = {}
+
+    def readiness(cfg):
+        seen["key"] = cfg.api_key
+        raise RuntimeError("stop")
+
+    result = run_llm_check(
+        LLMCheckConfig(server="remote", output_root=str(tmp_path / "c")), readiness_probe=readiness
+    )
+    assert seen["key"] == "s3cret"
+    for path in Path(result.run_directory).rglob("*.json"):
+        assert "s3cret" not in path.read_text(), path
+
+
+def test_debate_participant_key_is_used_but_not_recorded(tmp_path, monkeypatch):
+    from matsim_agents.workflows.debate import ScientificDebateConfig, run_scientific_debate
+
+    monkeypatch.setenv("PANEL_KEY", "p-456")
+    calls = []
+
+    class Model:
+        def invoke(self, _messages):
+            return type("Response", (), {"content": "claim: yes\nconfidence: 0.5"})()
+
+    def factory(**kwargs):
+        calls.append(kwargs)
+        return Model()
+
+    cfg = ScientificDebateConfig(
+        hypothesis="Is Si stable?",
+        rounds=1,
+        output_root=str(tmp_path / "runs"),
+        participants=[
+            {"name": "a", "provider": "vllm", "model": "m", "api_key_env": "PANEL_KEY"},
+            {"name": "b", "provider": "ollama", "model": "llama3.1:8b"},
+        ],
+    )
+    result = run_scientific_debate(cfg, model_factory=factory)
+    assert calls[0]["api_key"] == "p-456" and "api_key" not in calls[1]
+    for path in Path(result.run_directory).rglob("*.json*"):
+        assert "p-456" not in path.read_text(), path
 
 
 def test_debate_participants_resolve_servers(tmp_path, monkeypatch):

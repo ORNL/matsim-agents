@@ -375,3 +375,37 @@ def test_chat_releases_exploration_models_only_for_real_active_learning(monkeypa
     )
     real.release_mlip_models()
     assert Pool.closed == 1 and released == [1]
+
+
+def test_cache_eviction_frees_memory_before_loading(monkeypatch):
+    from matsim_agents.backends.mlip import pool as pool_module
+
+    events = []
+    monkeypatch.setattr(pool_module, "release_device_memory", lambda: events.append("free"))
+
+    def build(args):
+        events.append(f"load {args.uma_model_name}")
+        return relaxation._RelaxCalculator(_Calculator(), 0, 0, None)
+
+    monkeypatch.setattr(relaxation, "_relaxation_calculator", build)
+    cache = CalculatorCache(capacity=1)
+    cache.get(_uma_args(uma_model_name="a"))
+    cache.get(_uma_args(uma_model_name="a"))
+    cache.get(_uma_args(uma_model_name="b"))
+    assert events == ["load a", "free", "load b"]
+
+
+def test_local_training_mask_follows_the_driver_mask(monkeypatch):
+    from matsim_agents.execution.placement import ProcessLaunch
+
+    launch = ProcessLaunch(
+        hosts=("n0",),
+        devices=(1,),
+        ranks_per_node=1,
+        threads_per_rank=1,
+        env={"CUDA_VISIBLE_DEVICES": "1"},
+    )
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "4,5")
+    assert launch.environment(local=True)["CUDA_VISIBLE_DEVICES"] == "5"
+    # Launcher-started steps keep node-wide indices for srun/mpiexec.
+    assert launch.environment()["CUDA_VISIBLE_DEVICES"] == "1"

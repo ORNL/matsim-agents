@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import platform
@@ -11,6 +12,7 @@ import time
 import urllib.request
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -92,8 +94,11 @@ class LLMCheckResult(BaseModel):
     failure_reason: str | None = None
 
 
-def _get_json(url: str, timeout: int) -> Any:
-    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+def _get_json(url: str, timeout: int, api_key: str | None = None) -> Any:
+    headers = {"Accept": "application/json"}
+    if api_key and api_key != "EMPTY":
+        headers["Authorization"] = f"Bearer {api_key}"
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
         return json.loads(response.read().decode("utf-8"))
 
@@ -102,7 +107,8 @@ def probe_readiness(cfg: LLMCheckConfig) -> dict[str, Any]:
     """Check artifacts, credentials, or an already-running provider endpoint."""
 
     if cfg.provider == "vllm":
-        payload = _get_json(f"{cfg.base_url.rstrip('/')}/models", cfg.timeout_sec)
+        key = cfg.api_key or os.environ.get("MATSIM_VLLM_API_KEY")
+        payload = _get_json(f"{cfg.base_url.rstrip('/')}/models", cfg.timeout_sec, key)
         models = [entry.get("id") for entry in payload.get("data", [])]
         if cfg.model not in models:
             raise RuntimeError(f"configured model {cfg.model!r} not served; available={models}")
@@ -206,6 +212,10 @@ def _model_identity(cfg: LLMCheckConfig, readiness: dict[str, Any]) -> dict[str,
     }
 
 
+def _raise_setup_failure(reason: str, _cfg: LLMCheckConfig) -> dict[str, Any]:
+    raise RuntimeError(reason)
+
+
 def run_llm_check(
     cfg: LLMCheckConfig,
     *,
@@ -221,14 +231,29 @@ def run_llm_check(
 
     if not cfg.uses_plan_server:
         return _run_llm_check(cfg, model_factory=model_factory, readiness_probe=readiness_probe)
-    with llm_endpoints(cfg.resources, output_dir=cfg.output_root) as services:
+    stack = ExitStack()
+    try:
+        services = stack.enter_context(llm_endpoints(cfg.resources, output_dir=cfg.output_root))
         endpoint = services.endpoint(cfg.server)
+    except Exception as exc:  # noqa: BLE001 - a server that cannot start is a recorded failure
+        stack.close()
+        reason = f"plan server {cfg.server or '(only server)'} unavailable: {exc}"
+        unresolved = cfg.model_copy(
+            update={"provider": "plan-server", "model": cfg.server, "resources": None}
+        )
+        return _run_llm_check(
+            unresolved,
+            model_factory=model_factory,
+            readiness_probe=functools.partial(_raise_setup_failure, reason),
+        )
+    with stack:
         resolved = cfg.model_copy(
             update={
                 "provider": endpoint.provider,
                 "model": endpoint.model,
                 "base_url": endpoint.base_url,
-                "api_key": cfg.api_key or ("EMPTY" if endpoint.provider == "vllm" else None),
+                # None falls back to the provider default (MATSIM_VLLM_API_KEY or EMPTY).
+                "api_key": cfg.api_key or endpoint.api_key,
                 "tensor_parallel_size": cfg.tensor_parallel_size or endpoint.tensor_parallel_size,
                 "pipeline_parallel_size": endpoint.pipeline_parallel_size
                 or cfg.pipeline_parallel_size,

@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.llm.provider import get_chat_model
-from matsim_agents.backends.llm.servers import llm_endpoints
+from matsim_agents.backends.llm.servers import api_key_from_env, llm_endpoints
 from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord, WorkflowStatus
 from matsim_agents.execution.placement import ResourcePlan
 from matsim_agents.execution.run_directory import ScientificRunDirectory
@@ -31,6 +31,11 @@ class DebateParticipant(BaseModel):
         ),
     )
     role: str = "independent scientific reviewer"
+    api_key_env: str | None = Field(
+        None,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+        description="Environment variable holding this participant's API key; never recorded.",
+    )
 
     @model_validator(mode="after")
     def _model_source(self) -> DebateParticipant:
@@ -150,6 +155,7 @@ def run_scientific_debate(
                         "provider": endpoint.provider,
                         "model": endpoint.model,
                         "base_url": endpoint.base_url,
+                        "api_key_env": participant.api_key_env or endpoint.api_key_env,
                     }
                 )
             )
@@ -187,14 +193,15 @@ def _run_scientific_debate(
         resolved_config=cfg.model_dump(mode="json"),
         provenance=provenance,
     )
-    models = {
-        participant.name: model_factory(
+    models = {}
+    for participant in cfg.participants:
+        key = api_key_from_env(participant.api_key_env, owner=f"participant {participant.name!r}")
+        models[participant.name] = model_factory(
             provider=participant.provider,
             model=participant.model,
             base_url=participant.base_url,
+            **({"api_key": key} if key is not None else {}),
         )
-        for participant in cfg.participants
-    }
     turns: list[DebateTurn] = []
     equal_instruction = (
         "You are one equal member of a scientific debate panel. No participant has greater "

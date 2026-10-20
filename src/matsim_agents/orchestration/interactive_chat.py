@@ -22,7 +22,7 @@ from pathlib import Path
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from matsim_agents.backends.llm.provider import get_chat_model
-from matsim_agents.backends.llm.servers import LLMServices
+from matsim_agents.backends.llm.servers import LLMServices, api_key_from_env
 from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool, release_device_memory
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
@@ -90,6 +90,7 @@ class DiscoveryChatConfig:
     llm_provider: str = "ollama"
     llm_model: str = "qwen2.5:14b"
     llm_base_url: str | None = None
+    llm_api_key_env: str | None = None  # environment variable holding the proposer's key
     enable_hypothesis_debate: bool = False
     debate_rounds: int = 1
     critic_llm_provider: str | None = None
@@ -98,6 +99,7 @@ class DiscoveryChatConfig:
     critic_panel_models: list[str] = field(default_factory=list)
     critic_panel_providers: list[str] = field(default_factory=list)
     critic_panel_base_urls: list[str] = field(default_factory=list)
+    critic_panel_api_key_envs: list[str | None] = field(default_factory=list)
     critic_cross_critique: bool = False
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     auto_confirm: bool = False  # if True, skip the interactive y/N prompt
@@ -180,11 +182,14 @@ class DiscoveryChatSession:
             llm_provider=proposer.provider,
             llm_model=proposer.model,
             llm_base_url=proposer.base_url,
+            llm_api_key_env=proposer.api_key_env,
             critic_panel_models=[item.model for item in critics] or self.config.critic_panel_models,
             critic_panel_providers=[item.provider for item in critics]
             or self.config.critic_panel_providers,
             critic_panel_base_urls=[item.base_url or "" for item in critics]
             or self.config.critic_panel_base_urls,
+            critic_panel_api_key_envs=[item.api_key_env for item in critics]
+            or self.config.critic_panel_api_key_envs,
         )
 
     def relaxation_pool(self) -> MLIPWorkerPool:
@@ -541,7 +546,7 @@ def _debate_hypothesis_response(
     # - fallback: same model as primary
     panel_models = [m for m in cfg.critic_panel_models if m]
     if panel_models:
-        critic_specs: list[tuple[str, str, str | None]] = []
+        critic_specs: list[tuple[str, str, str, str | None, str | None]] = []
         for i, model_name in enumerate(panel_models):
             provider = (
                 cfg.critic_panel_providers[i]
@@ -553,7 +558,10 @@ def _debate_hypothesis_response(
                 if i < len(cfg.critic_panel_base_urls)
                 else cfg.critic_llm_base_url
             )
-            critic_specs.append((f"critic_{i + 1}", provider, model_name, base_url))
+            key_env = (
+                cfg.critic_panel_api_key_envs[i] if i < len(cfg.critic_panel_api_key_envs) else None
+            )
+            critic_specs.append((f"critic_{i + 1}", provider, model_name, base_url, key_env))
     else:
         critic_specs = [
             (
@@ -561,21 +569,28 @@ def _debate_hypothesis_response(
                 cfg.critic_llm_provider or cfg.llm_provider,
                 cfg.critic_llm_model or cfg.llm_model,
                 cfg.critic_llm_base_url,
+                None,
             )
         ]
 
     critics = [
         (
             label,
-            get_chat_model(provider=provider, model=model_name, base_url=base_url),
+            get_chat_model(
+                provider=provider,
+                model=model_name,
+                base_url=base_url,
+                api_key=api_key_from_env(key_env, owner=label),
+            ),
         )
-        for (label, provider, model_name, base_url) in critic_specs
+        for (label, provider, model_name, base_url, key_env) in critic_specs
     ]
 
     primary = get_chat_model(
         provider=cfg.llm_provider,
         model=cfg.llm_model,
         base_url=cfg.llm_base_url,
+        api_key=api_key_from_env(cfg.llm_api_key_env, owner="proposer"),
     )
 
     for _ in range(rounds):
@@ -761,6 +776,7 @@ def chat_once(
         provider=cfg.llm_provider,
         model=cfg.llm_model,
         base_url=cfg.llm_base_url,
+        api_key=api_key_from_env(cfg.llm_api_key_env, owner="proposer"),
     )
     response = llm.invoke(session.messages)
     assistant_text = (

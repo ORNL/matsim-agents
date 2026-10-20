@@ -229,7 +229,12 @@ def retrain_hydragnn(
     log_path = out_logdir / "train.log"
     with open(log_path, "w") as f:
         proc = subprocess.run(
-            argv, stdout=f, stderr=subprocess.STDOUT, check=False, env=launch.environment()
+            argv,
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            check=False,
+            # Without a launcher the trainer runs directly on this node.
+            env=launch.environment(local=trainer_cfg.train_launcher is None),
         )
     if proc.returncode != 0:
         raise RuntimeError(f"HydraGNN retrain failed with exit {proc.returncode}; see {log_path}")
@@ -327,7 +332,12 @@ def retrain_uma(
     log_path = out_model_dir / "train.log"
     with open(log_path, "w") as f:
         proc = subprocess.run(
-            argv, stdout=f, stderr=subprocess.STDOUT, check=False, env=launch.environment()
+            argv,
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            check=False,
+            # Without a launcher the trainer runs directly on this node.
+            env=launch.environment(local=trainer_cfg.train_launcher is None),
         )
     if proc.returncode != 0:
         raise RuntimeError(f"UMA fine-tune failed with exit {proc.returncode}; see {log_path}")
@@ -414,7 +424,12 @@ def retrain_mace(
     log_path = out_model_dir / "train.log"
     with open(log_path, "w") as f:
         proc = subprocess.run(
-            argv, stdout=f, stderr=subprocess.STDOUT, check=False, env=launch.environment()
+            argv,
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            check=False,
+            # Without a launcher the trainer runs directly on this node.
+            env=launch.environment(local=trainer_cfg.train_launcher is None),
         )
     if proc.returncode != 0:
         raise RuntimeError(f"MACE fine-tune failed with exit {proc.returncode}; see {log_path}")

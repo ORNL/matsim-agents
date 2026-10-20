@@ -197,13 +197,15 @@ def _sample_seed_task(task: _SeedTask) -> list[Candidate]:
     """MLIP worker entry point: MD from one seed with the worker's own calculator."""
     from matsim_agents.backends.mlip.calculator import make_mlip_calculator
     from matsim_agents.backends.mlip.config import MLIPConfig
-    from matsim_agents.backends.mlip.pool import prepare_worker_device
+    from matsim_agents.backends.mlip.pool import prepare_worker_device, release_device_memory
 
     prepare_worker_device()
     key = (task.mlip_json, task.enable_mc_dropout)
     calculator = _WORKER_CALCULATORS.get(key)
     if calculator is None:
-        _WORKER_CALCULATORS.clear()
+        if _WORKER_CALCULATORS:
+            _WORKER_CALCULATORS.clear()
+            release_device_memory()  # free the previous model before loading the next
         calculator = make_mlip_calculator(
             MLIPConfig.model_validate_json(task.mlip_json),
             enable_mc_dropout=task.enable_mc_dropout,

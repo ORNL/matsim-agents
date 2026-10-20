@@ -51,13 +51,35 @@ class LLMEndpoint:
     max_model_len: int | None = None
     # Device ordinals an in-process model may use (positions among the visible devices).
     devices: tuple[int, ...] | None = None
+    # Environment variable holding the API key; the key itself is never recorded.
+    api_key_env: str | None = None
+
+    @property
+    def api_key(self) -> str | None:
+        """The server's API key from ``api_key_env``; ``None`` uses the provider default."""
+        return api_key_from_env(self.api_key_env, owner=f"LLM server {self.name!r}")
 
     def chat_model(self, **kwargs: Any) -> BaseChatModel:
         from matsim_agents.backends.llm.provider import get_chat_model
 
         return get_chat_model(
-            provider=self.provider, model=self.model, base_url=self.base_url, **kwargs
+            provider=self.provider,
+            model=self.model,
+            base_url=self.base_url,
+            api_key=self.api_key,
+            **kwargs,
         )
+
+
+def api_key_from_env(variable: str | None, *, owner: str) -> str | None:
+    """Read an API key from the named environment variable; ``None`` without a name."""
+
+    if variable is None:
+        return None
+    key = os.environ.get(variable)
+    if not key:
+        raise ValueError(f"{owner} needs an API key in ${variable}, which is unset")
+    return key
 
 
 def _short_host(name: str) -> str:
@@ -71,10 +93,14 @@ def _tail(path: Path, lines: int = 40) -> str:
         return "(no log)"
 
 
-def served_models(base_url: str, timeout: float = 5.0) -> list[str]:
+def served_models(base_url: str, timeout: float = 5.0, api_key: str | None = None) -> list[str]:
     """Return the model ids an OpenAI-compatible server lists, or raise ``OSError``."""
 
-    with urllib.request.urlopen(f"{base_url.rstrip('/')}/models", timeout=timeout) as response:
+    headers = {"Accept": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    request = urllib.request.Request(f"{base_url.rstrip('/')}/models", headers=headers)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         payload = json.loads(response.read().decode())
     return [str(item.get("id")) for item in payload.get("data", [])]
 
@@ -106,6 +132,7 @@ class _ManagedServer:
         address = "127.0.0.1" if self.local else self.slice.host
         self.base_url = f"http://{address}:{server.port}/v1"
         self.log_path = log_dir / f"{server.name}.log"
+        self.api_key = api_key_from_env(server.api_key_env, owner=f"LLM server {server.name!r}")
         self.command = self._command(placement, bind)
         self.env = self._environment()
         self.process: subprocess.Popen | None = None
@@ -164,6 +191,9 @@ class _ManagedServer:
 
     def _environment(self) -> dict[str, str]:
         env = dict(os.environ)
+        if self.api_key is not None:
+            # vLLM reads its key from VLLM_API_KEY, which keeps it out of argv and logs.
+            env["VLLM_API_KEY"] = self.api_key
         if self.local:
             env.update(
                 child_mask_environment(self.slice.env, owner=f"LLM server {self.server.name!r}")
@@ -191,7 +221,9 @@ class _ManagedServer:
                 f"before becoming ready; tail of {self.log_path}:\n{_tail(self.log_path)}"
             )
         try:
-            self.ready = str(self.server.served_name) in served_models(self.base_url)
+            self.ready = str(self.server.served_name) in served_models(
+                self.base_url, api_key=self.api_key
+            )
         except (OSError, ValueError):
             self.ready = False
         return self.ready
@@ -242,7 +274,11 @@ class LLMServices:
         for server in placement.pool("llm").servers:
             if server.kind == "external":
                 endpoints[server.name] = LLMEndpoint(
-                    server.name, "vllm", str(server.served_name or server.name), server.base_url
+                    server.name,
+                    "vllm",
+                    str(server.served_name or server.name),
+                    server.base_url,
+                    api_key_env=server.api_key_env,
                 )
             elif server.kind == "in-process":
                 endpoints[server.name] = _in_process_endpoint(server, placement, local_host)
@@ -258,6 +294,7 @@ class LLMServices:
                     pipeline_parallel_size=server.pipeline_parallel_size,
                     device_count=sum(len(item.devices) for item in server.slices),
                     max_model_len=server.max_model_len,
+                    api_key_env=server.api_key_env,
                 )
         services = cls(endpoints, managed)
         try:
@@ -396,6 +433,7 @@ __all__ = [
     "ENDPOINTS_VARIABLE",
     "LLMEndpoint",
     "LLMServices",
+    "api_key_from_env",
     "llm_endpoints",
     "served_models",
 ]

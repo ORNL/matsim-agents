@@ -563,6 +563,14 @@ relaxations concurrently:
   exploration workers are stopped before active learning starts and restarted
   for reevaluation, so no exploration model stays resident during DFT or
   training on shared devices.
+- **Slurm device choice.** Slurm steps (`srun --gpus-per-node=N`) receive
+  *N* GPUs of Slurm's choosing; the placement fixes how many devices a DFT or
+  training step uses on each node, and which nodes, but under Slurm not which
+  device indices. Pools that share a node with a Slurm step should therefore
+  either take whole nodes or run one after the other (`share_with`), as the
+  shipped layouts do. Processes started directly on the driver's node (MLIP
+  workers, managed vLLM servers, training without a launcher) use the placed
+  indices.
 - **Driver masks.** When the driver already runs under a device mask (for
   example a Slurm step), worker masks are translated through it; a pool device
   the driver cannot see is an error. Campaign configs declare no `mlip` pool
@@ -605,6 +613,15 @@ named endpoints:
   devices. `llm-check` verifies an in-process model's device map lies within
   its assigned devices (not every GPU the driver sees), and a vLLM server's
   workers as tensor x pipeline parallel size.
+- **API keys.** A server may set `api_key_env`, the name of an environment
+  variable holding its key. Clients (chat, critics, debate participants,
+  `llm-check`, readiness probes) send it as a bearer token, and a managed vLLM
+  server receives it as `VLLM_API_KEY` (never on its command line). Only the
+  variable name appears in plans, `placement.json`, `llm-endpoints.json`, and
+  run records. Without `api_key_env`, the provider default applies
+  (`MATSIM_VLLM_API_KEY`, else `EMPTY`).
+- **Failure records.** When a plan server cannot start or a server name cannot
+  be resolved, `llm-check` still writes a failed `result.json` with the reason.
 - **external.** Endpoint only, reached as an OpenAI-compatible server.
 - **Shared devices.** `NodeSlice.shared_devices` records which devices of a
   slice another pool also uses; it drives the vLLM memory flag and the
