@@ -143,6 +143,11 @@ class _ManagedServer:
         address = "127.0.0.1" if private else self.slice.host
         self.base_url = f"http://{address}:{server.port}/v1"
         self.log_path = log_dir / f"{server.name}.log"
+        # A multi-node launcher stops in order (vLLM, workers, head) once this file
+        # appears; a signal to an srun-wrapped head would make Slurm kill the step.
+        self.stop_file = (
+            log_dir / f"{server.name}-ray" / ".stop-server" if len(server.slices) > 1 else None
+        )
         self.api_key = api_key_from_env(server.api_key_env, owner=f"LLM server {server.name!r}")
         self.command = self._command(placement, bind)
         self.env = self._environment()
@@ -185,6 +190,11 @@ class _ManagedServer:
             # the launcher copies each node's Ray logs here when it stops.
             "MATSIM_SERVER_LOG_DIR": str(
                 self.log_path.with_name(f"{self.server.name}-ray").absolute()
+            ),
+            **(
+                {"MATSIM_SERVER_STOP_FILE": str(self.stop_file.absolute())}
+                if self.stop_file is not None
+                else {}
             ),
         }
 
@@ -237,6 +247,8 @@ class _ManagedServer:
 
     def start(self) -> None:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.stop_file is not None:
+            self.stop_file.unlink(missing_ok=True)
         log.info("Starting LLM server %s: %s", self.server.name, " ".join(self.command))
         with self.log_path.open("w") as log_file:
             self.process = subprocess.Popen(
@@ -268,9 +280,18 @@ class _ManagedServer:
         if process is None or process.poll() is not None:
             return
         log.info("Stopping LLM server %s (pid %d)", self.server.name, process.pid)
-        if len(self.server.slices) > 1:
-            # Stopping the Ray cluster and saving every node's Ray logs takes longer.
-            grace_s = max(grace_s, 120.0)
+        if self.stop_file is not None:
+            # Ask the launcher to stop vLLM and the Ray cluster and save every
+            # node's Ray logs; signal it only if that does not finish in time.
+            self.stop_file.parent.mkdir(parents=True, exist_ok=True)
+            self.stop_file.touch()
+            try:
+                process.wait(timeout=max(grace_s, 120.0))
+                return
+            except subprocess.TimeoutExpired:
+                log.warning(
+                    "LLM server %s did not stop on request; signalling it", self.server.name
+                )
         for sig, wait_s in ((signal.SIGTERM, grace_s), (signal.SIGKILL, 10.0)):
             try:
                 os.killpg(process.pid, sig)

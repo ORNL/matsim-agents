@@ -18,10 +18,11 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize(
     ("retrain", "config_references", "reference_exists", "blocked"),
     [
-        ("1", False, False, True),
-        ("1", False, True, False),
-        ("1", True, False, False),
-        ("0", False, False, False),
+        ("1", None, False, True),
+        ("1", None, True, False),
+        ("1", "training_references", False, False),
+        ("1", "validation_reference_set", False, False),
+        ("0", None, False, False),
     ],
 )
 def test_campaign_reference_preflight_precedes_launch(
@@ -38,9 +39,11 @@ def test_campaign_reference_preflight_precedes_launch(
     (venv / "bin/python3").symlink_to(sys.executable)
     config = tmp_path / "al.yaml"
     config.write_text(
-        "trainer:\n  training_references: {manifest: refs.json}\n"
-        if config_references
-        else "trainer: {}\n"
+        {
+            "training_references": "trainer:\n  training_references: {manifest: refs.json}\n",
+            "validation_reference_set": "trainer:\n  validation_reference_set: refs.json\n",
+            None: "trainer: {}\n",
+        }[config_references]
     )
     reference = tmp_path / "elemental.json"
     if reference_exists:

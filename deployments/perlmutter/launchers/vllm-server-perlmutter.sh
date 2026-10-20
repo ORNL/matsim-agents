@@ -128,9 +128,15 @@ cleanup() {
   stop_processes 5 "${WORKER_PIDS[@]}"
   stop_processes 20 $HEAD_PID
   rm -f "$RAY_STOP"
-  timeout 20s "$VLLM_VENV/bin/ray" stop --force >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
+# matsim-agents asks a multi-node server to stop by creating this file: when the
+# launcher runs in an srun step, a signal would make Slurm kill the step before
+# cleanup() has stopped the workers and saved the logs.
+if [[ -n "${MATSIM_SERVER_STOP_FILE:-}" ]]; then
+  ( while [[ ! -e "$MATSIM_SERVER_STOP_FILE" ]] && kill -0 $$ 2>/dev/null; do sleep 2; done
+    kill -TERM $$ 2>/dev/null ) &
+fi
 
 echo "[ray] head ${HEAD_IP}:${RAY_PORT} with ${HEAD_GPUS} GPU(s); ${#SLICES[@]} node(s), ${EXPECTED} GPU(s)"
 # The Ray nodes run in their own sessions: stopping the server reaches them only

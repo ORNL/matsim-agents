@@ -214,6 +214,9 @@ def main(argv: list[str] | None = None) -> int:
 
     campaign = CampaignState.load(args.campaign_state)
     al_config = ALConfig.from_yaml(args.al_config)
+    # An explicit --promotion-validation-reference-set overrides the AL config's.
+    if args.promotion_validation_reference_set is None:
+        args.promotion_validation_reference_set = al_config.trainer.validation_reference_set
     if (
         args.retrain
         and args.promotion_validation_reference_set is None
@@ -221,8 +224,9 @@ def main(argv: list[str] | None = None) -> int:
     ):
         parser.error(
             "--retrain requires elemental DFT references to train against: "
-            "--promotion-validation-reference-set (DFT-labelled elemental JSON manifest) "
-            "or trainer.training_references in the AL config"
+            "--promotion-validation-reference-set (DFT-labelled elemental JSON manifest), "
+            "or trainer.training_references or trainer.validation_reference_set in the "
+            "AL config"
         )
     campaign.budget.max_candidates = args.max_candidates
     campaign.budget.max_dft_calculations = (

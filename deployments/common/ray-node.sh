@@ -10,7 +10,8 @@
 #
 # Slurm kills a step outright when its srun is signalled, so a node on another
 # host is asked to stop through a file instead: with RAY_NODE_STOP_FILE set, the
-# node stops as if terminated once that file exists.
+# node stops as if terminated once that file exists. Only this node's processes
+# are stopped, never other Ray instances on the host.
 set -uo pipefail
 
 log_dir=${1:?usage: ray-node.sh <log dir> <ray> start --temp-dir=<dir> ...}
@@ -48,6 +49,13 @@ if (( ! stop )); then
 fi
 
 [[ -z "$watcher" ]] || kill "$watcher" 2>/dev/null
+# Stop any process of this Ray node that outlived `ray start`. They name the
+# node's session directory on their command lines, so other Ray instances on
+# the host (other servers' nodes) are never touched, unlike `ray stop`.
+leftovers=$(ps -u "$(id -u)" -o pid=,ppid=,args= \
+  | RAY_NODE_DIR="$temp_dir" SELF=$$ \
+    awk 'index($0, ENVIRON["RAY_NODE_DIR"]) && $1 != ENVIRON["SELF"] && $2 != ENVIRON["SELF"] {print $1}')
+[[ -z "$leftovers" ]] || kill -KILL $leftovers 2>/dev/null
 if save_logs; then
   echo "[ray] logs of $host saved to $dest"
 else

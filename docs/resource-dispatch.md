@@ -707,10 +707,15 @@ A `managed-vllm` server may span several nodes:
   asked to stop through a file in the log directory that `ray-node.sh` watches
   (`RAY_NODE_STOP_FILE`), not by signalling their `srun` or `mpiexec`: two-node
   check 60044230 showed that Slurm kills a step outright when its `srun` is
-  signalled, before the worker can save its logs. The Ray nodes run in their
-  own sessions so that the signal that stops the server reaches them only
-  through this sequence. A multi-node server gets 120 s instead of 30 s to stop
-  before it is killed. Worker steps request at most the job's CPUs per node.
+  signalled, before the worker can save its logs. matsim-agents asks the
+  launcher itself to stop the same way, through `MATSIM_SERVER_STOP_FILE`, since
+  a remote head runs in an `srun` step too; it waits up to 120 s and signals the
+  launcher only if it has not exited. The Ray nodes run in their own sessions so
+  that a signal reaches them only through this sequence. After its node stops,
+  `ray-node.sh` stops any of that node's processes that outlived `ray start`,
+  found by its session directory; nothing calls `ray stop`, which would stop
+  every Ray instance on the host, including other servers' nodes. Worker steps
+  request at most the job's CPUs per node.
 - **Parallelism.** `tensor_parallel_size` defaults to the server's devices per
   node, with pipeline stages across nodes (`--pipeline-parallel-size`). The
   campaign panel sets tensor parallelism over all of a server's GPUs, as the

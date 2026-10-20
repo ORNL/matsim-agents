@@ -220,7 +220,6 @@ cleanup() {
     # saves its Ray logs as it stops (ray-node.sh).
     stop_workers
     stop_processes 20 $RAY_HEAD_PID
-    "$VLLM_VENV/bin/ray" stop --force 2>/dev/null || true
   fi
   echo "[cleanup] Done."
 }
@@ -270,7 +269,6 @@ if [[ "$N_NODES" -gt 1 ]]; then
     fi
     kill "$RAY_HEAD_PID" 2>/dev/null || true
     wait "$RAY_HEAD_PID" 2>/dev/null || true
-    timeout 30s "$VLLM_VENV/bin/ray" stop --force >/dev/null 2>&1 || true
     RAY_HEAD_PID=""
     (( attempt < 3 )) || { echo "[ray] ERROR: head failed after 3 attempts." >&2; exit 1; }
     sleep 30

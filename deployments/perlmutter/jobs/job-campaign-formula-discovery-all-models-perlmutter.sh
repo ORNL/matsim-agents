@@ -84,12 +84,17 @@ from pathlib import Path
 import yaml
 
 config = yaml.safe_load(Path(sys.argv[1]).read_text())
-has_references = config.get("trainer", {}).get("training_references") is not None
+trainer = config.get("trainer") or {}
+has_references = (
+    trainer.get("training_references") is not None
+    or trainer.get("validation_reference_set") is not None
+)
 if not has_references and not Path(sys.argv[2]).is_file():
     print(
         "ERROR: retraining requires elemental DFT references to train against: "
         "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET "
-        "(DFT-labelled elemental JSON manifest) or trainer.training_references",
+        "(DFT-labelled elemental JSON manifest), or trainer.training_references or "
+        "trainer.validation_reference_set in the AL config",
         file=sys.stderr,
     )
     sys.exit(2)

@@ -195,11 +195,6 @@ cleanup() {
   # saves its Ray logs as it stops (ray-node.sh).
   stop_workers
   stop_processes 20 $RAY_HEAD_PID
-  ray stop --force 2>/dev/null || true
-  # Also kill stale ray processes on workers
-  for node in "${ALL_NODES[@]:1}"; do
-    mpiexec -n 1 --ppn 1 --hosts "$node" "$RAY" stop --force 2>/dev/null || true
-  done
   echo "[cleanup] Done."
 }
 trap cleanup EXIT

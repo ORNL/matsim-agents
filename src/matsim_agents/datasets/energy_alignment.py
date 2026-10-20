@@ -30,8 +30,10 @@ from matsim_agents.datasets.energy_references import load_elemental_reference_ma
 
 ENERGY_ALIGNMENT_FILE = "energy-alignment.json"
 ALIGNMENT_CONVENTION = "dft_formation_on_model_elemental_scale"
-# How far above a model file to look for the alignment of the fine-tune that wrote it.
-_SEARCH_DEPTH = 3
+# Directories searched, from a model file's own upwards, for the alignment of the
+# fine-tune that wrote it; fairchem nests checkpoints as
+# <output>/<run>/checkpoints/final/inference_ckpt.pt.
+_SEARCH_DEPTH = 4
 
 
 class EnergyAlignment(BaseModel):

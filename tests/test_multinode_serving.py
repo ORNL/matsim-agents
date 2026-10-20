@@ -180,7 +180,8 @@ def test_launcher_builds_a_ray_cluster_before_serving(stub_tools):
     assert "--num-gpus=2" in worker and worker.endswith("CUDA=2,3")
     serve = next(call for call in calls if call.startswith("vllm serve"))
     assert "/models/Big --port 8000 --distributed-executor-backend ray" in serve
-    assert any(call.startswith("ray stop --force") for call in calls)
+    # Never `ray stop`: it would stop every Ray instance on the node.
+    assert not any(call.startswith("ray stop") for call in calls)
     assert "[ray] 6/6 GPUs available" in result.stdout
     # Each node's Ray logs end up on shared storage; the node-local copies are gone.
     logs = Path(env["MATSIM_SERVER_LOG_DIR"])
@@ -192,9 +193,12 @@ def test_launcher_builds_a_ray_cluster_before_serving(stub_tools):
     assert calls.index("stopped n1") < calls.index("stopped n0")
 
 
-def test_stopping_the_server_stops_workers_before_the_head(stub_tools):
-    """matsim-agents stops a server by signalling its process group."""
+@pytest.mark.parametrize("request_by", ["stop_file", "signal"])
+def test_stopping_the_server_stops_workers_before_the_head(stub_tools, request_by):
+    """matsim-agents asks through the stop file; a signal works too (local heads)."""
     env, record = stub_tools
+    stop_file = record.parent / "stop-server"
+    env["MATSIM_SERVER_STOP_FILE"] = str(stop_file)
     env["MATSIM_SERVER_SLICES"] = "n0=0,1,2,3;n1=0,1,2,3"
     env["STUB_VLLM_SERVES"] = "1"
     process = subprocess.Popen(
@@ -209,7 +213,10 @@ def test_stopping_the_server_stops_workers_before_the_head(stub_tools):
     while "vllm serve" not in (record.read_text() if record.exists() else ""):
         assert time.monotonic() < deadline and process.poll() is None
         time.sleep(0.2)
-    os.killpg(process.pid, signal.SIGTERM)
+    if request_by == "stop_file":
+        stop_file.touch()
+    else:
+        os.killpg(process.pid, signal.SIGTERM)
     output, _ = process.communicate(timeout=60)
     calls = record.read_text().splitlines()
     assert calls.index("stopped n1") < calls.index("stopped n0"), output
@@ -280,7 +287,8 @@ def test_launcher_fails_when_the_cluster_does_not_form(stub_tools, monkeypatch):
     assert "only 4/8 GPUs" in result.stderr
     calls = record.read_text().splitlines()
     assert not any(call.startswith("vllm serve") for call in calls)
-    assert any(call.startswith("ray stop --force") for call in calls)
+    # Never `ray stop`: it would stop every Ray instance on the node.
+    assert not any(call.startswith("ray stop") for call in calls)
     # The logs that explain the failure are kept.
     assert (Path(env["MATSIM_SERVER_LOG_DIR"]) / "n0" / "raylet.out").exists()
 
@@ -298,3 +306,55 @@ def test_single_node_allocations_keep_servers_on_the_loopback(tmp_path):
     )
     assert managed.base_url == "http://127.0.0.1:8000/v1"
     assert managed.command[managed.command.index("--host") + 1] == "127.0.0.1"
+
+
+def test_ray_node_stops_only_its_own_leftover_processes(tmp_path):
+    ours = tmp_path / "ours"
+    theirs = tmp_path / "theirs"
+    ray = tmp_path / "ray"
+    # `ray start` leaves a process naming its session directory, then exits.
+    _stub(
+        ray,
+        'd=${1#--temp-dir=}; mkdir -p "$d/session_1/logs" && ln -sfn session_1 '
+        '"$d/session_latest"\n'
+        'bash -c "sleep 60" "$d/session_1" &\n',
+    )
+    other = subprocess.Popen(["bash", "-c", "sleep 60", str(theirs / "session_1")])
+    try:
+        subprocess.run(
+            ["bash", str(RAY_NODE), str(tmp_path / "logs"), str(ray), f"--temp-dir={ours}"],
+            check=True,
+            timeout=30,
+        )
+        listing = subprocess.run(
+            ["ps", "-u", str(os.getuid()), "-o", "args="], capture_output=True, text=True
+        ).stdout
+        assert str(ours) not in listing
+        assert other.poll() is None  # another Ray instance on the host is untouched
+    finally:
+        other.kill()
+
+
+def test_multi_node_servers_stop_through_the_stop_file(tmp_path):
+    placement = _placement([_server()])
+    managed = _ManagedServer(
+        placement.pool("llm").server("big"), placement, log_dir=tmp_path, local_host="n0"
+    )
+    stop_file = Path(managed.env["MATSIM_SERVER_STOP_FILE"])
+    assert stop_file == tmp_path / "big-ray" / ".stop-server"
+    # A launcher that ignores SIGTERM and exits only when the stop file appears.
+    managed.command = [
+        "bash",
+        "-c",
+        'trap "" TERM; while [[ ! -e "$MATSIM_SERVER_STOP_FILE" ]]; do sleep 0.2; done; '
+        "echo stopped-by-file",
+    ]
+    managed.start()
+    started = time.monotonic()
+    managed.stop()
+    assert managed.process.returncode == 0
+    assert time.monotonic() - started < 30
+    assert "stopped-by-file" in managed.log_path.read_text()
+    managed.start()  # a restart clears the previous request
+    assert not stop_file.exists()
+    managed.stop()

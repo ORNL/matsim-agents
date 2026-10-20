@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from ase import Atoms
-from ase.io import read
+from ase.io import read, write
 
 from matsim_agents.datasets.energy_alignment import (
     ENERGY_ALIGNMENT_FILE,
@@ -314,3 +314,55 @@ def test_fine_tuning_writes_its_alignment(tmp_path, references):
     record = json.loads(path.read_text())
     assert record["convention"] == "dft_formation_on_model_elemental_scale"
     assert record["source_dataset_sha256"] == "abc"
+
+
+def test_alignment_is_found_for_fairchem_nested_checkpoints(tmp_path, references):
+    output = tmp_path / "model"
+    checkpoint = output / "run-1" / "checkpoints" / "final" / "inference_ckpt.pt"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_text("weights")
+    energy_alignment(
+        references, {"Nb"}, _model_energy({"Nb": -10.0}), base_model="uma-s-1p1"
+    ).write(output)
+    found = recorded_alignment(checkpoint)
+    assert found is not None and found[1] == output / ENERGY_ALIGNMENT_FILE
+
+
+def test_mace_reads_dft_stress_from_extxyz(tmp_path):
+    from ase.calculators.singlepoint import SinglePointCalculator
+
+    from matsim_agents.training.finetune_mace import _write_xyz_splits
+    from matsim_agents.training.finetune_uma import _load_labeled_frames
+
+    frames = []
+    for index in range(3):
+        atoms = Atoms("Si2", positions=[[0, 0, 0], [1.5 + 0.1 * index, 0, 0]], cell=[5, 5, 5])
+        atoms.pbc = True
+        atoms.calc = SinglePointCalculator(
+            atoms, energy=-1.0, forces=np.zeros((2, 3)), stress=np.full(6, 0.01 * index)
+        )
+        frames.append(atoms)
+    path = tmp_path / "labels.extxyz"
+    write(path, frames)
+    loaded = _load_labeled_frames(path)
+    *_, with_stress = _write_xyz_splits(loaded, [-1.0] * 3, tmp_path, seed=0)
+    assert with_stress
+    stresses = [atoms.info["REF_stress"] for atoms in read(tmp_path / "train.xyz", index=":")]
+    assert len(stresses) == 2 and all(len(stress) in (6, 9) for stress in stresses)
+
+
+def test_mace_cli_takes_the_elemental_references(tmp_path, references):
+    from matsim_agents.training import finetune_mace
+
+    path = tmp_path / "labels.extxyz"
+    frames = []
+    for index in range(2):
+        atoms = Atoms("Nb", positions=[[0.1 * index, 0, 0]])
+        atoms.info["energy"] = -10.0
+        atoms.arrays["forces"] = np.zeros((1, 3))
+        frames.append(atoms)
+    write(path, frames)
+    argv = ["--dataset", str(path), "--output-dir", str(tmp_path / "out"), "--dry-run"]
+    with pytest.raises(SystemExit):
+        finetune_mace.main(argv)  # the references are required
+    assert finetune_mace.main([*argv, "--elemental-reference-manifest", str(references)]) == 0

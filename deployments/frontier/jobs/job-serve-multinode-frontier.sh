@@ -236,7 +236,6 @@ cleanup() {
   # saves its Ray logs as it stops (ray-node.sh).
   stop_workers
   stop_processes 20 "$RAY_HEAD_PID"
-  ray stop --force 2>/dev/null || true
   echo "[cleanup] Done."
 }
 trap cleanup EXIT
