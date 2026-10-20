@@ -126,7 +126,7 @@ The Frontier and Aurora jobs (`deployments/frontier/jobs/job-llm-check-frontier.
 `deployments/aurora/jobs/job-llm-check-aurora.sh`) follow the same contract with
 their own layouts and launchers (`vllm-server-frontier.sh`: ROCm vLLM on the
 placed GCDs; `vllm-server-aurora.sh`: the `frameworks` vLLM build through
-`mpiexec` on the placed PVC tiles, on the driver's node).
+`mpiexec` on the placed PVC tiles).
 
 Set `MATSIM_RUN_PORTABILITY=1` to run the live scientific portability suite
 after qualification; that run receives the successful check directory through

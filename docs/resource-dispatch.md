@@ -660,8 +660,10 @@ named endpoints:
   launchers (`vllm-server-{perlmutter,frontier,aurora}.sh`); the shared steps
   live in `deployments/common/run-llm-check.sh`. The Perlmutter hypothesis
   debate job names its panel in `hypothesis-debate.yaml` (or
-  `hypothesis-debate-smoke.yaml`). The Aurora launcher runs vLLM through
-  `mpiexec` itself, so Aurora servers must sit on the driver's node.
+  `hypothesis-debate-smoke.yaml`). The Frontier and Aurora launchers start
+  their own `srun`/`mpiexec` step for a server on the driver's node; for a
+  server matsim-agents already launched on another node (`MATSIM_SERVER_IN_STEP=1`)
+  they run vLLM directly instead of nesting a second step.
 - **Not yet migrated.** Campaign formula discovery and the all-model debate
   benchmarks serve multi-node models (phase 5), and the Frontier and Aurora
   discovery-chat jobs still start their servers in their job scripts.

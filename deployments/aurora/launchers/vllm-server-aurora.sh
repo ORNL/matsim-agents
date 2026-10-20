@@ -7,7 +7,8 @@
 # the server's tiles. Mirrors aurora-vllm.sh: the server runs through `mpiexec`
 # (bare Python on compute nodes cannot see the PVC tiles) with PMI/PALS rank
 # variables cleared, and aurora_vllm_entrypoint.py keeps the model-registry
-# subprocess off Level Zero. The server must be placed on the driver's node.
+# subprocess off Level Zero. When matsim-agents already started this through
+# mpiexec on another node (MATSIM_SERVER_IN_STEP=1), it runs the server directly.
 #
 #   bash vllm-server-aurora.sh <model> --served-model-name ... --port ...
 set -eo pipefail
@@ -37,15 +38,22 @@ mkdir -p "${VLLM_CACHE_ROOT}" "${TRITON_CACHE_DIR}"
 ulimit -c 0
 
 echo "[vllm-server] $(date) host=$(hostname) ZE_AFFINITY_MASK=${ZE_AFFINITY_MASK}"
+# The API server must not see PMI/PALS rank variables, or vLLM treats it as an MPI rank.
+SERVE=(
+    env -u PMI_RANK -u PMI_SIZE -u PMI_FD
+        -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR
+        -u MPI_LOCALRANKID -u MPI_LOCALNRANKS
+        -u OMPI_COMM_WORLD_RANK -u OMPI_COMM_WORLD_SIZE
+    python "${ENTRYPOINT}"
+        --model "${MODEL}"
+        --dtype bfloat16
+        --distributed-executor-backend mp
+        "$@"
+)
+if [[ "${MATSIM_SERVER_IN_STEP:-0}" == "1" ]]; then
+    # matsim-agents already started this through mpiexec on the server's node.
+    exec "${SERVE[@]}"
+fi
 # Pin the rank to this node: in a multi-node job mpiexec would otherwise use the
 # first host of the PBS nodefile, which need not be the node the plan chose.
-exec mpiexec --hosts "$(hostname)" -n 1 --ppn 1 \
-    env -u PMI_RANK -u PMI_SIZE -u PMI_FD \
-        -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR \
-        -u MPI_LOCALRANKID -u MPI_LOCALNRANKS \
-        -u OMPI_COMM_WORLD_RANK -u OMPI_COMM_WORLD_SIZE \
-    python "${ENTRYPOINT}" \
-        --model "${MODEL}" \
-        --dtype bfloat16 \
-        --distributed-executor-backend mp \
-        "$@"
+exec mpiexec --hosts "$(hostname)" -n 1 --ppn 1 "${SERVE[@]}"

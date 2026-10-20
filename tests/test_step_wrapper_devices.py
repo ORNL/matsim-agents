@@ -110,3 +110,46 @@ def test_aurora_whole_node_steps_bind_nearest_tile(tmp_path, name):
     mask = ",".join(str(index) for index in range(12))
     args = _run_aurora(tmp_path, AURORA[name], mask, ranks_per_node=12, threads=1)
     assert "--gpu-bind=closest" in args and "--depth=1" in args
+
+
+def _run_aurora_vllm(tmp_path, in_step):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    record = tmp_path / "calls"
+    for tool in ("mpiexec", "python"):
+        (bin_dir / tool).write_text(
+            f'#!/bin/bash\nprintf "{tool} %s\\n" "$*" >> {record}\n'
+            f'printf "{tool} PMI_RANK=%s\\n" "${{PMI_RANK:-unset}}" >> {record}\n'
+        )
+        (bin_dir / tool).chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "ZE_AFFINITY_MASK": "0,1",
+        "PMI_RANK": "0",
+        "PBS_JOBID": "1",
+    }
+    if in_step:
+        env["MATSIM_SERVER_IN_STEP"] = "1"
+    script = ROOT / "deployments/aurora/launchers/vllm-server-aurora.sh"
+    subprocess.run(
+        ["bash", str(script), "/models/m", "--port", "8000"],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return record.read_text().splitlines()
+
+
+def test_aurora_vllm_launcher_starts_its_own_mpiexec_step(tmp_path):
+    calls = _run_aurora_vllm(tmp_path, in_step=False)
+    assert calls[0].startswith("mpiexec --hosts ")
+    assert "-n 1 --ppn 1 env -u PMI_RANK" in calls[0]
+
+
+def test_aurora_vllm_launcher_runs_directly_inside_an_existing_step(tmp_path):
+    calls = _run_aurora_vllm(tmp_path, in_step=True)
+    assert not any(call.startswith("mpiexec") for call in calls)
+    assert calls[0].startswith("python ") and "--model /models/m" in calls[0]
+    assert calls[1] == "python PMI_RANK=unset"
