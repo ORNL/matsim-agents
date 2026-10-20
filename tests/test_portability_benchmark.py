@@ -159,3 +159,16 @@ def test_live_portability_requires_complete_llm_qualification(tmp_path):
     qualification = validate_llm_check(run)
     assert qualification["run_id"] == "qualified"
     assert qualification["model"]["model"] == "model"
+
+
+def test_mocked_al_loop_ignores_a_surrounding_gpu_allocation(tmp_path, monkeypatch):
+    """The CPU-only loop plan must not contradict a real Slurm GPU allocation."""
+    from benchmarks.portability.suites import active_learning_loop_contract
+
+    monkeypatch.setenv("SLURM_JOB_ID", "1")
+    monkeypatch.setenv("SLURM_JOB_NUM_NODES", "1")
+    monkeypatch.setenv("SLURM_JOB_NODELIST", "nid000001")
+    monkeypatch.setenv("SLURM_GPUS_ON_NODE", "4")
+    structure = Path(__file__).resolve().parents[1] / "benchmarks/portability/structures/Si.vasp"
+    result = active_learning_loop_contract(structure, tmp_path)
+    assert result["status"] == "complete"

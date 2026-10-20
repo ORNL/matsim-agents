@@ -1639,7 +1639,7 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
         "{threads_per_rank}",
     ]
     assert dft.launcher_argv("vasp_std")[3:] == [str(tmp_path / "vasp_std"), "1", "4", "8"]
-    assert dft.launch_environment()["CUDA_VISIBLE_DEVICES"] == "0,1,2,3"
+    assert dft.launch_environment("vasp_std")["CUDA_VISIBLE_DEVICES"] == "0,1,2,3"
     assert dft.settings["encut_ev"] == 600
     assert dft.settings["ismear"] == 0
     assert dft.settings["extra_incar"]["LMAXMIX"] == "4"

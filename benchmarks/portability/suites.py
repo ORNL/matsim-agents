@@ -111,6 +111,8 @@ def active_learning_contract(output: Path) -> dict[str, Any]:
 def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, Any]:
     """Execute one production AL iteration with deterministic numerical adapters."""
 
+    import socket
+
     import numpy as np
     from ase.io import read
 
@@ -118,6 +120,7 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
     from matsim_agents.active_learning.config import ALConfig
     from matsim_agents.backends.dft.base import DFTResult
     from matsim_agents.active_learning.loop import run_active_learning
+    from matsim_agents.execution.allocation import Allocation
 
     atoms = read(structure)
     candidates = [
@@ -186,6 +189,12 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
             return_value=SimpleNamespace(name="qe"),
         ),
         patch("matsim_agents.active_learning.loop.run_dft_batch", return_value=labelled),
+        # The loop is mocked; resolve its CPU-only plan on a local allocation so a real
+        # Slurm/PBS GPU allocation around the benchmark does not contradict it.
+        patch(
+            "matsim_agents.execution.allocation.discover_allocation",
+            return_value=Allocation("local", (socket.gethostname(),)),
+        ),
     ):
         run_active_learning(cfg)
         # Running a second time must resume rather than duplicate iteration 0.

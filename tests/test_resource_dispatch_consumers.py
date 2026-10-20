@@ -147,13 +147,13 @@ def test_relaxation_launcher_fills_placement_placeholders():
         launch=LAUNCH,
     )
     assert dft.launcher_argv("pw.x") == ["bash", "wrap.sh", "{input}", "2", "4", "16"]
-    assert dft.launch_environment()["MATSIM_ASSIGNED_NODES"] == "nid000001,nid000002"
+    assert dft.launch_environment("pw.x")["MATSIM_ASSIGNED_NODES"] == "nid000001,nid000002"
 
 
 def test_relaxation_launcher_without_placeholders_needs_no_placement():
     dft = DFTBackendConfig(backend="qe", pseudo_dir="/opt/pseudo")
     assert dft.launcher_argv("pw.x") == ["pw.x"]
-    assert dft.launch_environment() is None
+    assert dft.launch_environment("pw.x") is None
 
 
 def test_relaxation_placeholders_require_placement():
@@ -182,3 +182,35 @@ def test_shipped_sequential_layouts_share_one_training_device():
         assert pools["dft"]["share_with"] == ["training", "mlip"]
         assert pools["training"] == {"nodes": 1, "devices": 1, "share_with": ["dft", "mlip"]}
         assert pools["mlip"] == {"nodes": 1, "devices": "all", "share_with": ["dft", "training"]}
+
+
+def test_direct_dft_launcher_runs_on_this_node_with_translated_mask(monkeypatch):
+    import socket
+
+    here = LAUNCH.model_copy(
+        update={
+            "hosts": (socket.gethostname(),),
+            "devices": (1,),
+            "env": {"CUDA_VISIBLE_DEVICES": "1"},
+        }
+    )
+    dft = DFTBackendConfig(backend="qe", pseudo_dir="/opt/pseudo", launcher="pw.x", launch=here)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "6,7")
+    assert dft.launch_environment("pw.x")["CUDA_VISIBLE_DEVICES"] == "7"
+
+    elsewhere = dft.model_copy(update={"launch": LAUNCH})
+    with pytest.raises(ValueError, match="runs directly on this node"):
+        elsewhere.launch_environment("pw.x")
+
+
+def test_saved_workflow_configs_with_null_resources_rerun(tmp_path):
+    from matsim_agents.cli.workflow_commands import _load_workflow_config
+    from matsim_agents.workflows.llm_check import LLMCheckConfig
+
+    saved = tmp_path / "resolved_config.json"
+    saved.write_text(
+        '{"provider": "vllm", "model": "m", "base_url": "http://h:8000/v1", '
+        '"server": null, "resources": null}'
+    )
+    cfg = LLMCheckConfig.model_validate(_load_workflow_config(saved))
+    assert cfg.model == "m" and cfg.resources is None

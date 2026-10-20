@@ -16,7 +16,8 @@ def _load_workflow_config(path: Path) -> dict:
     from matsim_agents.execution.placement import ResourcePlan
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if isinstance(raw, dict) and "resources" in raw:
+    # Saved resolved configs carry "resources": null once their servers are resolved.
+    if isinstance(raw, dict) and raw.get("resources") is not None:
         plan = ResourcePlan.from_mapping(raw, source=path)
         raw = {key: value for key, value in raw.items() if key != "vars"}
         raw["resources"] = plan

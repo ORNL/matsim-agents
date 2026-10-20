@@ -7,6 +7,7 @@ in :mod:`matsim_agents.backends` and can still be used independently.
 
 from __future__ import annotations
 
+import socket
 from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
@@ -87,8 +88,31 @@ class DFTBackendConfig(BaseModel):
             argv = [values.get(token, token) for token in argv]
         return argv
 
-    def launch_environment(self) -> dict[str, str] | None:
-        return self.launch.environment({}) if self.launch is not None else None
+    def launch_environment(self, default: str) -> dict[str, str] | None:
+        """Placement variables for the DFT process.
+
+        A launcher that takes ``{nodes}``/``{ranks_per_node}``/``{threads_per_rank}``
+        is a step wrapper (``srun``/``mpiexec``) and gets node-wide device indices.
+        Any other launcher runs directly on this node: its placement must be this
+        node, and its device mask is translated through this process's mask.
+        """
+
+        if self.launch is None:
+            return None
+        argv = (
+            [self.launcher] if isinstance(self.launcher, str) else list(self.launcher or [default])
+        )
+        if any(token in PLACEMENT_PLACEHOLDERS for token in argv):
+            return self.launch.environment({})
+        local = socket.gethostname().split(".", 1)[0]
+        hosts = [host.split(".", 1)[0] for host in self.launch.hosts]
+        if hosts != [local]:
+            raise ValueError(
+                f"DFT launcher {argv[0]!r} runs directly on this node ({local}), but the dft "
+                f"pool places it on {self.launch.hosts}; use a step wrapper with {{nodes}}, "
+                "{ranks_per_node}, and {threads_per_rank}, or place the dft pool here"
+            )
+        return self.launch.environment({}, local=True)
 
     @model_validator(mode="after")
     def _valid_backend(self) -> DFTBackendConfig:
@@ -235,7 +259,7 @@ def _dft_stage(
             work_dir,
             dft.launcher_argv("vasp_std"),
             timeout_sec=dft.timeout_sec,
-            env=dft.launch_environment(),
+            env=dft.launch_environment("vasp_std"),
         )
         optimized = None
         if result.final_atoms is not None:
@@ -274,7 +298,7 @@ def _dft_stage(
         str(work_dir),
         dft.launcher_argv("pw.x"),
         timeout_sec=dft.timeout_sec,
-        env=dft.launch_environment(),
+        env=dft.launch_environment("pw.x"),
     )
     optimized = None
     try:
