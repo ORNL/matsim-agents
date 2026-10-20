@@ -28,7 +28,16 @@ def _visible(variable: str) -> list[str] | None:
     inherited = inherited.strip()
     if not inherited:
         return None if variable == "ZE_AFFINITY_MASK" else []
-    return [item.strip() for item in inherited.split(",") if item.strip()]
+    visible = []
+    for item in (part.strip() for part in inherited.split(",")):
+        if not item:
+            continue
+        # CUDA/HIP/ROCR stop at the first invalid (negative) index, so "-1"
+        # hides every device and "0,-1,1" leaves only device 0.
+        if item.lstrip("-").isdigit() and int(item) < 0:
+            break
+        visible.append(item)
+    return visible
 
 
 def _effective(variable: str) -> list[str] | None:
@@ -53,7 +62,7 @@ def _effective(variable: str) -> list[str] | None:
             f"HIP_VISIBLE_DEVICES={','.join(hip)} must list indices into "
             f"ROCR_VISIBLE_DEVICES={','.join(rocr)}"
         ) from None
-    if any(position >= len(rocr) for position in positions):
+    if any(position < 0 or position >= len(rocr) for position in positions):
         raise ValueError(
             f"HIP_VISIBLE_DEVICES={','.join(hip)} selects devices outside "
             f"ROCR_VISIBLE_DEVICES={','.join(rocr)}"
@@ -82,7 +91,7 @@ def child_mask_environment(env: Mapping[str, str], *, owner: str) -> dict[str, s
         if visible is None:
             continue
         requested = [int(item) for item in env[variable].split(",") if item]
-        if any(index >= len(visible) for index in requested):
+        if any(index < 0 or index >= len(visible) for index in requested):
             raise ValueError(
                 f"{owner} uses devices {requested}, but this process sees only "
                 f"{variable}={','.join(visible) or '(none)'}; give the driver every device "
@@ -97,7 +106,7 @@ def visible_ordinals(vendor: str, devices: Sequence[int], *, owner: str) -> tupl
 
     variable = DEVICE_MASK_VARIABLES.get(vendor)
     visible = _effective(variable) if variable else None
-    if visible is not None and any(index >= len(visible) for index in devices):
+    if visible is not None and any(index < 0 or index >= len(visible) for index in devices):
         raise ValueError(
             f"{owner} uses devices {list(devices)}, but this process sees only "
             f"{variable}={','.join(visible) or '(none)'}"

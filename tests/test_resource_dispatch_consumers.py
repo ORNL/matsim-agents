@@ -308,3 +308,32 @@ def test_direct_rocm_dft_child_keeps_the_placed_device(monkeypatch, module):
     assert env["ROCR_VISIBLE_DEVICES"] == "7"
     assert "HIP_VISIBLE_DEVICES" not in env
     assert child_environment(None) is None
+
+
+@pytest.mark.parametrize(
+    ("variables", "vendor_variable"),
+    [
+        ({"ROCR_VISIBLE_DEVICES": "2,3", "HIP_VISIBLE_DEVICES": "-1"}, "ROCR_VISIBLE_DEVICES"),
+        ({"CUDA_VISIBLE_DEVICES": "-1"}, "CUDA_VISIBLE_DEVICES"),
+    ],
+)
+def test_hide_all_sentinel_exposes_no_device(monkeypatch, variables, vendor_variable):
+    from matsim_agents.execution.devices import child_mask_environment
+
+    for name in ("ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in variables.items():
+        monkeypatch.setenv(name, value)
+    with pytest.raises(ValueError, match=r"\(none\)"):
+        child_mask_environment({vendor_variable: "0"}, owner="x")
+
+
+def test_masks_stop_at_the_first_negative_index(monkeypatch):
+    from matsim_agents.execution.devices import child_mask_environment
+
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,-1,5")
+    assert child_mask_environment({"CUDA_VISIBLE_DEVICES": "0"}, owner="x") == {
+        "CUDA_VISIBLE_DEVICES": "3"
+    }
+    with pytest.raises(ValueError, match="sees only CUDA_VISIBLE_DEVICES=3"):
+        child_mask_environment({"CUDA_VISIBLE_DEVICES": "1"}, owner="x")
