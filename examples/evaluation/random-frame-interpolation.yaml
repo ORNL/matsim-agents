@@ -1,0 +1,18 @@
+# (a) Interpolation among similar frames of the training distribution.
+# Frames of one MD trajectory are correlated, so this does NOT show transfer to
+# new trajectories, structures, or compositions. It is what finetune_eval used
+# before split strategies existed (80/20, seeded), now with a validation
+# partition for early stopping and model selection.
+#   python -m matsim_agents.active_learning.finetune_eval --backend uma \
+#     --dataset dataset.extxyz --elemental-reference-manifest refs.json \
+#     --output-dir runs/uma-random --evaluation-config random-frame-interpolation.yaml
+evaluation:
+  objective: within-distribution interpolation among frames like the training frames
+  split:
+    strategy: random_frame
+    train_fraction: 0.7
+    validation_fraction: 0.1
+    test_fraction: 0.2
+    seed: 0
+  repetitions:
+    split_seeds: [11, 22, 33]

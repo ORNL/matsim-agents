@@ -343,6 +343,24 @@ class TrainerConfig(BaseModel):
         return self
 
 
+class BenchmarkSet(BaseModel):
+    """A frozen, DFT-labelled evaluation set scored after every iteration.
+
+    Benchmarks give learning curves (error against cumulative DFT labels) and a
+    common yardstick for comparing acquisition strategies. They never influence
+    acquisition, training, or promotion; their frames must not be acquired.
+    """
+
+    name: str = Field(pattern=r"^[A-Za-z0-9_.-]+$")
+    dataset: Path
+
+    @model_validator(mode="after")
+    def _exists(self) -> BenchmarkSet:
+        if not self.dataset.is_file():
+            raise ValueError(f"benchmark set {self.name!r} does not exist: {self.dataset}")
+        return self
+
+
 class LoopConfig(BaseModel):
     """Top-level loop control."""
 
@@ -354,6 +372,11 @@ class LoopConfig(BaseModel):
     dataset_format: Literal["ase_db", "extxyz"] = "extxyz"
     resume: bool = True
     fail_fast: bool = False  # if True, abort on any VASP failure
+    benchmark_sets: list[BenchmarkSet] = Field(
+        default_factory=list,
+        description="Frozen evaluation sets scored with the model in use after each "
+        "iteration's training and promotion decisions (learning curves).",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -386,6 +409,25 @@ class ALConfig(BaseModel):
         if self.trainer.enabled and "training" not in self.resources.pools:
             raise ValueError("trainer.enabled=True requires resources.pools.training")
         return self
+
+    @model_validator(mode="after")
+    def _check_benchmarks(self) -> ALConfig:
+        names = [benchmark.name for benchmark in self.loop.benchmark_sets]
+        if len(names) != len(set(names)):
+            raise ValueError("loop.benchmark_sets names must be unique")
+        if names and self.benchmark_reference_manifest() is None:
+            raise ValueError(
+                "loop.benchmark_sets compare formation energies and need elemental DFT "
+                "references: trainer.validation_reference_set or "
+                "trainer.training_references.manifest"
+            )
+        return self
+
+    def benchmark_reference_manifest(self) -> Path | None:
+        if self.trainer.validation_reference_set is not None:
+            return self.trainer.validation_reference_set
+        references = self.trainer.training_references
+        return references.manifest if references is not None else None
 
     @model_validator(mode="after")
     def _check_ensemble_for_strategy(self) -> ALConfig:

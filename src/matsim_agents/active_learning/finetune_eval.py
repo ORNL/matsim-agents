@@ -1,42 +1,63 @@
-"""Endpoints fine-tune + evaluation campaign for one (backend, dataset) pair.
+"""Fine-tune and evaluate one MLIP backend on one dataset, with explicit data roles.
 
-Produces the two learning-curve endpoints the paper reports -- *before*
-(baseline foundation model, no fine-tuning) and *after* (fine-tuned on all the
-AL-corrected data) -- on a fixed held-out test set, for a single backend on a
-single dataset. Emits, under ``output_dir``:
+The dataset is split by a declared strategy (:mod:`matsim_agents.datasets.splits`)
+into ``train``, optional ``validation``, and ``test`` partitions, written once
+with a content-addressed manifest that every backend reuses. The run then:
 
-* ``split/train.extxyz`` + ``split/test_set.extxyz`` -- deterministic 80/20
-  split (seeded, so both backends score the *same* held-out frames);
-* ``ft/`` -- the fine-tuned model (logdir/checkpoint) and its ``cost.json``;
-* ``eval/iter0.json`` (+ ``iter0_parity.npz``) -- baseline "before";
-* ``eval/iter<N>.json`` (+ ``iter<N>_parity.npz``) -- fine-tuned "after", where
-  ``N`` is the number of distinct AL iterations in the dataset (so the x-axis
-  is meaningful and matches the ``iter(\\d+)`` plot regex).
+1. fine-tunes the foundation model on ``train`` (``validation`` serves early
+   stopping when present);
+2. evaluates the foundation ("baseline") and the fine-tuned model on
+   ``validation`` and selects one with a declared rule (``SelectionRule``), or
+   reports the fine-tuned model without selection when there is no validation
+   partition;
+3. writes and freezes that decision in ``selection.json``;
+4. only then evaluates both models on ``test`` and on every named test domain.
+
+Outputs under ``output_dir`` (or one directory per repetition):
+
+* ``split/`` -- partitions and ``split-manifest.json`` (or the reused split);
+* ``ft/`` -- the fine-tuned model and its ``cost.json``;
+* ``eval/iter0.json`` / ``eval/iter<N>.json`` (+ ``_parity.npz``) -- baseline and
+  fine-tuned on ``test``, ``N`` being the number of AL iterations in the dataset;
+* ``eval/validation/`` and ``eval/domains/<name>/`` -- the other evaluations;
+* ``eval/report.json`` -- metric definitions, split summary and limitations, the
+  selection, per-group summaries with group-bootstrap intervals, and paired
+  fine-tuned minus baseline differences;
+* ``repetitions.json`` -- spread over split and training seeds, when repeated.
 
 Backend/venv coupling (IMPORTANT): HydraGNN needs the *hydragnn* venv and UMA
 needs the *fairchem* venv, so this runner handles ONE backend per invocation.
 The Perlmutter launcher submits one job per (backend, dataset) with the correct
-interpreter/venv.
+interpreter/venv; later backends reuse the first run's split (``split_manifest``).
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
-from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 from ase import Atoms
 from ase.io import read as ase_read
-from ase.io import write as ase_write
+from pydantic import BaseModel, Field, model_validator
 
+from matsim_agents.active_learning.eval_report import (
+    METRIC_DEFINITIONS,
+    group_report,
+    paired_difference,
+    summarize_repetitions,
+)
 from matsim_agents.active_learning.evaluate import (
     _subsample,
+    assess_promotion,
     evaluate_frames,
 )
 from matsim_agents.backends.mlip.config import (
@@ -45,6 +66,13 @@ from matsim_agents.backends.mlip.config import (
     MCDropoutInjectionConfig,
     MLIPConfig,
     UMAConfig,
+)
+from matsim_agents.datasets.splits import (
+    SplitConfig,
+    SplitManifest,
+    TestDomainConfig,
+    load_split,
+    make_split,
 )
 
 log = logging.getLogger(__name__)
@@ -60,17 +88,79 @@ def _num_al_iterations(frames: list[Atoms]) -> int:
     return len(iters) if iters else 1
 
 
-def _split_dataset(
-    frames: list[Atoms], test_fraction: float, seed: int
-) -> tuple[list[Atoms], list[Atoms]]:
-    rng = np.random.default_rng(seed)
-    idx = np.arange(len(frames))
-    rng.shuffle(idx)
-    n_test = max(1, int(round(len(frames) * test_fraction)))
-    test_idx = set(idx[:n_test].tolist())
-    train = [f for i, f in enumerate(frames) if i not in test_idx]
-    test = [f for i, f in enumerate(frames) if i in test_idx]
-    return train, test
+class SelectionRule(BaseModel):
+    """When the fine-tuned model is selected over the foundation model, on validation.
+
+    The fine-tuned model must meet the absolute limits, not be worse in either
+    formation-energy or force MAE, and improve one of them by
+    ``min_relative_improvement``; otherwise the foundation model is selected.
+    """
+
+    min_evaluated_frames: int = Field(1, ge=1)
+    max_formation_energy_mae_eV_per_atom: float = Field(float("inf"), gt=0)
+    max_force_mae_eV_per_A: float = Field(float("inf"), gt=0)
+    min_relative_improvement: float = Field(0.0, ge=0, le=1)
+
+    def as_promotion_rule(self) -> SimpleNamespace:
+        return SimpleNamespace(
+            promotion_min_evaluated_frames=self.min_evaluated_frames,
+            promotion_max_energy_mae_eV_per_atom=self.max_formation_energy_mae_eV_per_atom,
+            promotion_max_force_mae_eV_per_A=self.max_force_mae_eV_per_A,
+            promotion_min_relative_improvement=self.min_relative_improvement,
+        )
+
+
+class Repetitions(BaseModel):
+    split_seeds: list[int] = Field(
+        default_factory=list, description="Splits to repeat with; empty uses split.seed."
+    )
+    training_seeds: list[int] = Field(
+        default_factory=list, description="Fine-tuning seeds per split; empty uses one."
+    )
+
+
+class EvaluationConfig(BaseModel):
+    """What the evaluation tests, and how the data are divided for it."""
+
+    objective: str = Field(min_length=1, description="The scientific question being tested.")
+    split: SplitConfig | None = None
+    split_manifest: Path | None = Field(
+        None, description="Reuse an existing split (e.g. made for another backend)."
+    )
+    test_domains: list[TestDomainConfig] = Field(default_factory=list)
+    repetitions: Repetitions = Field(default_factory=Repetitions)
+    selection: SelectionRule = Field(default_factory=SelectionRule)
+
+    @model_validator(mode="after")
+    def _one_split_source(self) -> EvaluationConfig:
+        if (self.split is None) == (self.split_manifest is None):
+            raise ValueError("give exactly one of split and split_manifest")
+        if self.split_manifest is not None and (self.test_domains or self.repetitions.split_seeds):
+            raise ValueError(
+                "a reused split_manifest already fixes its test domains and split; "
+                "test_domains and repetitions.split_seeds need a split configuration"
+            )
+        return self
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> EvaluationConfig:
+        import yaml
+
+        data = yaml.safe_load(Path(path).read_text())
+        return cls.model_validate(data.get("evaluation", data))
+
+
+def random_frame_evaluation(test_fraction: float, seed: int) -> EvaluationConfig:
+    """The random-frame split earlier versions always used (interpolation only)."""
+    return EvaluationConfig(
+        objective="within-distribution interpolation among similar frames (random frames)",
+        split=SplitConfig(
+            strategy="random_frame",
+            train_fraction=1.0 - test_fraction,
+            test_fraction=test_fraction,
+            seed=seed,
+        ),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -136,79 +226,59 @@ def _mace_cfg(family: str, model: str, device: str, *, precision: str = "fp64") 
 # --------------------------------------------------------------------------- #
 
 
-def _run_eval(
+def _evaluate(
     mlip_cfg: MLIPConfig,
     frames: list[Atoms],
+    group_ids: list[str],
     *,
     iteration: int,
     model_path: str,
-    test_label: str,
-    eval_dir: Path,
+    label: str,
+    out_json: Path,
     max_parity_points: int,
-    elemental_reference_manifest: Path | None = None,
-    out_suffix: str = "",
+    reference_manifest: Path,
+    seed: int,
 ) -> dict:
+    """Evaluate one model on one partition; write its metrics and parity data."""
     metrics, parity = evaluate_frames(
         mlip_cfg,
         frames,
         iteration=iteration,
         model_path=model_path,
-        test_set_label=test_label,
-        elemental_reference_manifest=elemental_reference_manifest,
+        test_set_label=label,
+        elemental_reference_manifest=reference_manifest,
     )
-    eval_dir.mkdir(parents=True, exist_ok=True)
-    out_json = eval_dir / f"iter{iteration}{out_suffix}.json"
+    out_json.parent.mkdir(parents=True, exist_ok=True)
     out_json.write_text(json.dumps(asdict(metrics), indent=2))
     np.savez_compressed(
-        eval_dir / f"iter{iteration}{out_suffix}_parity.npz",
+        out_json.with_name(out_json.stem + "_parity.npz"),
         **_subsample(parity, max_parity_points),
     )
     log.info(
-        "iter%d %s: raw_E_MAE=%.4f (formation %.4f) eV/atom  F_MAE=%.4f eV/A",
-        iteration,
+        "%s %s on %s: raw_E_MAE=%.4f (formation %.4f) eV/atom  F_MAE=%.4f eV/A",
+        out_json.stem,
         mlip_cfg.backend,
+        Path(label).name,
         metrics.energy_mae_eV_per_atom,
         metrics.formation_energy_mae_eV_per_atom,
         metrics.force_mae_eV_per_A,
     )
-    return asdict(metrics)
+    return {
+        "metrics": asdict(metrics),
+        "groups": group_report(parity, group_ids, seed=seed),
+    }
 
 
-class _Split(NamedTuple):
-    train_frames: list[Atoms]
-    test_frames: list[Atoms]
-    train_path: Path
-    test_path: Path
-    n_iters: int
-
-
-def _prepare_split(
-    dataset_path: Path,
-    output_dir: Path,
-    *,
-    backend: str,
-    reference_manifest: Path,
-    test_fraction: float,
-    seed: int,
-    eval_only: bool,
-) -> _Split:
-    """Validate the dataset's DFT method and write (or reuse) the deterministic split."""
+def _dataset_method_check(dataset_path: Path, reference_manifest: Path):
+    """Verify the dataset's DFT method against the references; return the checker."""
     from matsim_agents.datasets.energy_references import (
         load_elemental_reference_manifest,
         validate_dataset_reference_method,
     )
-    from matsim_agents.datasets.governance import (
-        DatasetManifest,
-        DatasetValidationSummary,
-        write_dataset_manifest,
-    )
 
-    (output_dir / "split").mkdir(parents=True, exist_ok=True)
-    raw = ase_read(str(dataset_path), index=":")
-    frames = [raw] if isinstance(raw, Atoms) else list(raw)
+    frames = list(ase_read(str(dataset_path), index=":"))
     if len(frames) < 4:
         raise ValueError(f"Need >=4 frames for a split; got {len(frames)}.")
-
     manifest, _, _ = load_elemental_reference_manifest(
         reference_manifest,
         required_elements={symbol for frame in frames for symbol in frame.get_chemical_symbols()},
@@ -225,54 +295,56 @@ def _prepare_split(
         )
 
     validate_method(dataset_path)
-    source_metadata = json.loads(
-        dataset_path.with_suffix(dataset_path.suffix + ".manifest.json").read_text()
-    )
-    if backend == "hydragnn":
-        source_metadata = DatasetManifest.model_validate(source_metadata).model_dump()
+    return frames, validate_method
 
-    train_frames, test_frames = _split_dataset(frames, test_fraction, seed)
-    n_iters = _num_al_iterations(frames)
-    train_path = output_dir / "split" / "train.extxyz"
-    test_path = output_dir / "split" / "test_set.extxyz"
-    if eval_only and train_path.exists() and test_path.exists():
-        # Reuse the exact frames scored originally (avoid clobbering the split).
-        train_frames = list(ase_read(str(train_path), index=":"))
-        test_frames = list(ase_read(str(test_path), index=":"))
-    else:
-        ase_write(str(train_path), train_frames, format="extxyz")
-        ase_write(str(test_path), test_frames, format="extxyz")
-        for split_path, split_frames, split_role in (
-            (train_path, train_frames, "training_pool"),
-            (test_path, test_frames, "validation"),
-        ):
-            write_dataset_manifest(
-                split_path,
-                dft_backend=source_metadata["dft_backend"],
-                method_signature=source_metadata.get("method_signature"),
-                method_signature_elements=(
-                    set(source_metadata["method_signature_elements"])
-                    if source_metadata.get("method_signature_elements") is not None
-                    else None
-                ),
-                base_method_signature=source_metadata.get("base_method_signature"),
-                element_method_signatures=source_metadata.get("element_method_signatures"),
-                energy_reference=source_metadata.get(
-                    "energy_reference", f"{source_metadata['dft_backend']}:native_total_energy"
-                ),
-                validation=DatasetValidationSummary(accepted=len(split_frames)),
-                split_role=split_role,
+
+def _prepare_split(
+    dataset_path: Path,
+    split_dir: Path,
+    evaluation: EvaluationConfig,
+    split_seed: int,
+    *,
+    eval_only: bool,
+    validate_method,
+) -> SplitManifest:
+    """Make, or load and verify, the split one repetition uses."""
+    from matsim_agents.datasets.governance import sha256_file
+
+    if evaluation.split_manifest is not None:
+        manifest = load_split(evaluation.split_manifest)
+    elif eval_only:
+        if not (split_dir / "split-manifest.json").is_file():
+            raise FileNotFoundError(
+                f"eval-only reuses the run's split, but {split_dir} has no split-manifest.json; "
+                "evaluate runs made before split manifests by splitting again (see "
+                "docs/mlip-evaluation.md)"
             )
-    for split_path in (train_path, test_path):
-        validate_method(split_path)
+        manifest = load_split(split_dir)
+    else:
+        assert evaluation.split is not None
+        manifest = make_split(
+            dataset_path,
+            evaluation.split.model_copy(update={"seed": split_seed}),
+            split_dir,
+            objective=evaluation.objective,
+            test_domains=evaluation.test_domains,
+        )
+    if manifest.source["sha256"] != sha256_file(dataset_path):
+        raise ValueError(f"split {manifest.source['path']} was made from another dataset")
+    for membership in manifest.roles.values():
+        validate_method(Path(membership.path))
+    for domain in manifest.test_domains:
+        validate_method(Path(domain.dataset))
     log.info(
-        "%s campaign: %d train / %d test frames; N_al_iterations=%d",
-        backend,
-        len(train_frames),
-        len(test_frames),
-        n_iters,
+        "%s split (%s): %s",
+        manifest.strategy,
+        manifest.objective,
+        ", ".join(
+            f"{role} {m.n_frames} frames / {m.n_groups} groups"
+            for role, m in manifest.roles.items()
+        ),
     )
-    return _Split(train_frames, test_frames, train_path, test_path, n_iters)
+    return manifest
 
 
 def _require_checkpoint(path: Path, label: str) -> Path:
@@ -285,12 +357,19 @@ def _training_device(dev: str) -> str:
     return "CUDA" if dev.startswith("cuda") else "CPU"
 
 
-Evaluate = Callable[..., None]
+@dataclass
+class _Models:
+    """The foundation ("baseline") and fine-tuned models of one run."""
+
+    baseline: MLIPConfig
+    baseline_path: str
+    finetuned: MLIPConfig
+    finetuned_path: str
 
 
 def _uma_endpoints(
-    evaluate: Evaluate,
     train_path: Path,
+    validation_path: Path | None,
     ft_dir: Path,
     dev: str,
     *,
@@ -298,9 +377,8 @@ def _uma_endpoints(
     base_model: str,
     task_name: str,
     finetune_kwargs: dict[str, Any],
-) -> tuple[MLIPConfig, str]:
-    """Score the UMA foundation model, then fine-tune (or reuse) and return the result."""
-    evaluate(_uma_cfg(base_model, task_name, dev), iteration=0, model_path=base_model)
+) -> _Models:
+    """Fine-tune the UMA foundation model (or reuse the fine-tune)."""
     if eval_only:
         ckpt = _require_checkpoint(ft_dir / "inference_ckpt.pt", "UMA")
     else:
@@ -312,14 +390,20 @@ def _uma_endpoints(
             base_model=base_model,
             task_name=task_name,
             device=_training_device(dev),
+            validation_dataset=validation_path,
             **finetune_kwargs,
         )
-    return _uma_cfg(str(ckpt), task_name, dev), str(ckpt)
+    return _Models(
+        _uma_cfg(base_model, task_name, dev),
+        base_model,
+        _uma_cfg(str(ckpt), task_name, dev),
+        str(ckpt),
+    )
 
 
 def _mace_endpoints(
-    evaluate: Evaluate,
     train_path: Path,
+    validation_path: Path | None,
     ft_dir: Path,
     dev: str,
     *,
@@ -329,8 +413,8 @@ def _mace_endpoints(
     model_id: str | None,
     precision: str,
     finetune_kwargs: dict[str, Any],
-) -> tuple[MLIPConfig, str]:
-    """Score the MACE foundation model, then fine-tune (or reuse) and return the result."""
+) -> _Models:
+    """Fine-tune the MACE foundation model (or reuse the fine-tune)."""
     # A MACE_MODELS id (if given) selects the family/variant for the
     # baseline eval too, so "before" and "after" use the same foundation.
     if model_id is not None:
@@ -342,11 +426,6 @@ def _mace_endpoints(
             )
         family = MACE_MODELS[model_id]["family"]
         model = MACE_MODELS[model_id]["model"]
-    evaluate(
-        _mace_cfg(family, model, dev, precision=precision),
-        iteration=0,
-        model_path=f"{family}:{model}",
-    )
     if eval_only:
         ckpt = _require_checkpoint(ft_dir / "mace_finetuned.model", "MACE")
     else:
@@ -360,15 +439,21 @@ def _mace_endpoints(
             model_id=model_id,
             precision=precision,
             device=_training_device(dev),
+            validation_dataset=validation_path,
             **finetune_kwargs,
         )
     # Fine-tuned checkpoint reloads via family="checkpoint".
-    return _mace_cfg("checkpoint", str(ckpt), dev, precision=precision), str(ckpt)
+    return _Models(
+        _mace_cfg(family, model, dev, precision=precision),
+        f"{family}:{model}",
+        _mace_cfg("checkpoint", str(ckpt), dev, precision=precision),
+        str(ckpt),
+    )
 
 
 def _hydragnn_endpoints(
-    evaluate: Evaluate,
     train_path: Path,
+    validation_path: Path | None,
     ft_dir: Path,
     dev: str,
     *,
@@ -387,18 +472,14 @@ def _hydragnn_endpoints(
     lr: float | None,
     batch_size: int,
     seed: int,
-) -> tuple[MLIPConfig, str]:
-    """Score the HydraGNN GFM, then run the routed or single-head fine-tune (or reuse it)."""
+) -> _Models:
+    """Run the routed or single-head HydraGNN fine-tune (or reuse it)."""
     if gfm_logdir is None or branch_mlp_path is None:
         raise ValueError("hydragnn backend requires gfm_logdir and branch_mlp_path.")
     gfm_logdir = Path(gfm_logdir).expanduser().resolve()
     branch_mlp_path = Path(branch_mlp_path).expanduser().resolve()
     base_ckpt = gfm_checkpoint or _newest_pk(gfm_logdir).name
-    evaluate(
-        _hydragnn_cfg(gfm_logdir, base_ckpt, branch_mlp_path, dev),
-        iteration=0,
-        model_path=str(gfm_logdir),
-    )
+    baseline = _hydragnn_cfg(gfm_logdir, base_ckpt, branch_mlp_path, dev)
     from matsim_agents.training.finetune_hydragnn import finetune_hydragnn
 
     if strategy == "routed":
@@ -423,8 +504,14 @@ def _hydragnn_endpoints(
                 unfreeze_backbone=unfreeze_backbone,
                 hydragnn_root=hydragnn_root,
                 device=dev,
+                validation_dataset=validation_path,
             )
-        return _hydragnn_cfg(ft_logdir, "ft_model.pk", branch_mlp_path, dev), str(ft_logdir)
+        return _Models(
+            baseline,
+            str(gfm_logdir),
+            _hydragnn_cfg(ft_logdir, "ft_model.pk", branch_mlp_path, dev),
+            str(ft_logdir),
+        )
 
     from matsim_agents.training.finetune_hydragnn_newhead import finetune_hydragnn_newhead
 
@@ -452,8 +539,11 @@ def _hydragnn_endpoints(
             hydragnn_root=hydragnn_root,
             ft_repo=ft_repo_p,
             device=dev,
+            validation_dataset=validation_path,
         )
-    return (
+    return _Models(
+        baseline,
+        str(gfm_logdir),
         _hydragnn_newhead_cfg(ft_logdir, "ft_model.pk", dev, ft_repo=ft_repo_p),
         str(ft_logdir),
     )
@@ -517,15 +607,17 @@ def run_finetune_endpoints(
     device: str | None = None,
     max_parity_points: int = 20000,
     eval_only: bool = False,
+    evaluation: EvaluationConfig | None = None,
 ) -> Path:
-    """Run before/after fine-tune + eval for one backend on one dataset.
+    """Fine-tune one backend on one dataset and evaluate it with explicit data roles.
 
-    When ``eval_only`` is True, the training step is skipped: the existing
-    deterministic train/test split and the already-fine-tuned checkpoint under
-    ``ft/`` are reused, and both endpoints are re-scored using fixed DFT-labelled
-    elemental geometries, writing ``eval/iter*_formation.json``.
-    The original ``iter*.json`` files are left
-    untouched.
+    ``evaluation`` declares the objective, the split, test domains, repetitions,
+    and the selection rule (module docstring); without it, the random-frame
+    split of ``test_fraction`` with ``seed`` is used, as in earlier versions.
+    ``seed`` is also the fine-tuning seed unless ``evaluation.repetitions``
+    lists training seeds. With ``eval_only`` the existing split and fine-tuned
+    checkpoint are re-scored and evaluations are written with a ``_formation``
+    suffix, leaving the original ones untouched.
     """
     # Apply the GPU-visibility policy *before* any torch/HydraGNN import happens
     # downstream, so an explicit CPU request is actually honoured.
@@ -533,109 +625,365 @@ def run_finetune_endpoints(
 
     dataset_path = Path(dataset_path).expanduser().resolve()
     output_dir = Path(output_dir).expanduser().resolve()
-    eval_dir = output_dir / "eval"
-    ft_dir = output_dir / "ft"
     dev = device or _default_device()
     reference_manifest = Path(elemental_reference_manifest)
+    evaluation = evaluation or random_frame_evaluation(test_fraction, seed)
+    frames, validate_method = _dataset_method_check(dataset_path, reference_manifest)
+    n_iters = _num_al_iterations(frames)
 
-    split = _prepare_split(
-        dataset_path,
-        output_dir,
-        backend=backend,
-        reference_manifest=reference_manifest,
-        test_fraction=test_fraction,
-        seed=seed,
-        eval_only=eval_only,
-    )
-
-    def evaluate(cfg: MLIPConfig, *, iteration: int, model_path: str) -> None:
-        _run_eval(
-            cfg,
-            split.test_frames,
-            iteration=iteration,
-            model_path=model_path,
-            test_label=str(split.test_path),
-            eval_dir=eval_dir,
-            max_parity_points=max_parity_points,
-            elemental_reference_manifest=reference_manifest,
-            out_suffix="_formation" if eval_only else "",
-        )
-
-    if backend == "uma":
-        after_cfg, after_model_path = _uma_endpoints(
-            evaluate,
-            split.train_path,
-            ft_dir,
-            dev,
-            eval_only=eval_only,
-            base_model=uma_base_model,
-            task_name=uma_task_name,
-            finetune_kwargs={
-                "elemental_reference_manifest": reference_manifest,
-                "epochs": uma_epochs,
-                "batch_size": batch_size,
-                "lr": lr if lr is not None else uma_lr,
-                "force_weight": uma_force_weight,
-                "freeze_backbone": uma_freeze_backbone,
-                "weight_decay": uma_weight_decay,
-                "seed": seed,
-                "lora": uma_lora,
-                "lora_r": uma_lora_r,
-                "lora_alpha": uma_lora_alpha,
-            },
-        )
-    elif backend == "mace":
-        after_cfg, after_model_path = _mace_endpoints(
-            evaluate,
-            split.train_path,
-            ft_dir,
-            dev,
-            eval_only=eval_only,
-            family=mace_family,
-            model=mace_model,
-            model_id=mace_model_id,
-            precision=mace_precision,
-            finetune_kwargs={
-                "elemental_reference_manifest": reference_manifest,
-                "epochs": mace_epochs,
-                "batch_size": batch_size,
-                "lr": lr if lr is not None else mace_lr,
-                "lora": mace_lora,
-                "lora_rank": mace_lora_rank,
-                "lora_alpha": mace_lora_alpha,
-                "freeze_backbone": mace_freeze_backbone,
-                "weight_decay": mace_weight_decay,
-                "seed": seed,
-            },
-        )
-    elif backend == "hydragnn":
-        after_cfg, after_model_path = _hydragnn_endpoints(
-            evaluate,
-            split.train_path,
-            ft_dir,
-            dev,
-            eval_only=eval_only,
-            reference_manifest=reference_manifest,
-            gfm_logdir=gfm_logdir,
-            branch_mlp_path=branch_mlp_path,
-            gfm_checkpoint=gfm_checkpoint,
-            strategy=hydragnn_strategy,
-            head=hydragnn_head,
-            ft_repo=ft_repo,
-            hydragnn_root=hydragnn_root,
-            weight_threshold=weight_threshold,
-            unfreeze_backbone=unfreeze_backbone,
-            epochs=epochs,
-            lr=lr,
-            batch_size=batch_size,
-            seed=seed,
-        )
-    else:
+    def fine_tune(train: Path, validation: Path | None, ft_dir: Path, run_seed: int) -> _Models:
+        if backend == "uma":
+            return _uma_endpoints(
+                train,
+                validation,
+                ft_dir,
+                dev,
+                eval_only=eval_only,
+                base_model=uma_base_model,
+                task_name=uma_task_name,
+                finetune_kwargs={
+                    "elemental_reference_manifest": reference_manifest,
+                    "epochs": uma_epochs,
+                    "batch_size": batch_size,
+                    "lr": lr if lr is not None else uma_lr,
+                    "force_weight": uma_force_weight,
+                    "freeze_backbone": uma_freeze_backbone,
+                    "weight_decay": uma_weight_decay,
+                    "seed": run_seed,
+                    "lora": uma_lora,
+                    "lora_r": uma_lora_r,
+                    "lora_alpha": uma_lora_alpha,
+                },
+            )
+        if backend == "mace":
+            return _mace_endpoints(
+                train,
+                validation,
+                ft_dir,
+                dev,
+                eval_only=eval_only,
+                family=mace_family,
+                model=mace_model,
+                model_id=mace_model_id,
+                precision=mace_precision,
+                finetune_kwargs={
+                    "elemental_reference_manifest": reference_manifest,
+                    "epochs": mace_epochs,
+                    "batch_size": batch_size,
+                    "lr": lr if lr is not None else mace_lr,
+                    "lora": mace_lora,
+                    "lora_rank": mace_lora_rank,
+                    "lora_alpha": mace_lora_alpha,
+                    "freeze_backbone": mace_freeze_backbone,
+                    "weight_decay": mace_weight_decay,
+                    "seed": run_seed,
+                },
+            )
+        if backend == "hydragnn":
+            return _hydragnn_endpoints(
+                train,
+                validation,
+                ft_dir,
+                dev,
+                eval_only=eval_only,
+                reference_manifest=reference_manifest,
+                gfm_logdir=gfm_logdir,
+                branch_mlp_path=branch_mlp_path,
+                gfm_checkpoint=gfm_checkpoint,
+                strategy=hydragnn_strategy,
+                head=hydragnn_head,
+                ft_repo=ft_repo,
+                hydragnn_root=hydragnn_root,
+                weight_threshold=weight_threshold,
+                unfreeze_backbone=unfreeze_backbone,
+                epochs=epochs,
+                lr=lr,
+                batch_size=batch_size,
+                seed=run_seed,
+            )
         raise ValueError(f"Unknown backend {backend!r} (expected 'hydragnn', 'uma', or 'mace').")
 
-    evaluate(after_cfg, iteration=split.n_iters, model_path=after_model_path)
-    log.info("Campaign complete -> %s (eval: iter0 vs iter%d)", output_dir, split.n_iters)
+    split_seeds = evaluation.repetitions.split_seeds or [
+        evaluation.split.seed if evaluation.split is not None else 0
+    ]
+    training_seeds = evaluation.repetitions.training_seeds or [seed]
+    summaries = []
+    test_groups = []
+    for split_seed in split_seeds:
+        split_root = output_dir / (f"split-seed-{split_seed}" if len(split_seeds) > 1 else "")
+        manifest = _prepare_split(
+            dataset_path,
+            split_root / "split",
+            evaluation,
+            split_seed,
+            eval_only=eval_only,
+            validate_method=validate_method,
+        )
+        for training_seed in training_seeds:
+            run_dir = split_root / (
+                f"train-seed-{training_seed}" if len(training_seeds) > 1 else ""
+            )
+            summary = _run_repetition(
+                manifest,
+                run_dir,
+                fine_tune,
+                backend=backend,
+                training_seed=training_seed,
+                selection=evaluation.selection,
+                reference_manifest=reference_manifest,
+                n_iters=n_iters,
+                max_parity_points=max_parity_points,
+                eval_only=eval_only,
+            )
+            summaries.append({**summary, "split_seed": split_seed})
+            test_groups.append(manifest.roles["test"].n_groups if "test" in manifest.roles else 0)
+    if len(summaries) > 1:
+        (output_dir / "repetitions.json").write_text(
+            json.dumps(summarize_repetitions(summaries, n_test_groups=test_groups), indent=2)
+        )
+    log.info("Fine-tune evaluation complete -> %s", output_dir)
     return output_dir
+
+
+def _role_frames(manifest: SplitManifest, role: str) -> tuple[list[Atoms], list[str], Path]:
+    membership = manifest.roles[role]
+    return (
+        list(ase_read(membership.path, index=":")),
+        membership.frame_group_ids,
+        Path(membership.path),
+    )
+
+
+def _artifact_digest(path: str) -> str | None:
+    """SHA-256 of a model file, or of the files directly in a model directory."""
+    target = Path(path)
+    if target.is_file():
+        from matsim_agents.datasets.governance import sha256_file
+
+        return sha256_file(target)
+    if target.is_dir():
+        from matsim_agents.datasets.governance import sha256_file
+
+        digest = hashlib.sha256()
+        for item in sorted(p for p in target.iterdir() if p.is_file()):
+            digest.update(f"{item.name}:{sha256_file(item)}\n".encode())
+        return digest.hexdigest()
+    return None  # a foundation model named by its release
+
+
+def _select(
+    models: _Models,
+    manifest: SplitManifest,
+    run_dir: Path,
+    *,
+    rule: SelectionRule,
+    evaluate,
+    suffix: str,
+) -> tuple[dict, dict]:
+    """Choose between the models on validation only, and freeze the choice."""
+    evaluations: dict = {}
+    if "validation" in manifest.roles:
+        frames, groups, path = _role_frames(manifest, "validation")
+        for name, cfg, model_path in (
+            ("baseline", models.baseline, models.baseline_path),
+            ("finetuned", models.finetuned, models.finetuned_path),
+        ):
+            evaluations[name] = evaluate(
+                cfg,
+                frames,
+                groups,
+                model_path=model_path,
+                label=str(path),
+                out_json=run_dir / "eval" / "validation" / f"{name}{suffix}.json",
+                iteration=0,
+            )
+        decision = assess_promotion(
+            _metrics(evaluations["finetuned"]),
+            _metrics(evaluations["baseline"]),
+            rule.as_promotion_rule(),
+        )
+        selected = "finetuned" if decision.approved else "baseline"
+        basis = {
+            "rule": rule.model_dump(),
+            "satisfied": decision.approved,
+            "reasons": decision.reasons,
+        }
+    else:
+        selected = "finetuned"
+        basis = {
+            "rule": None,
+            "satisfied": None,
+            "reasons": [
+                "no validation partition: the fine-tuned model is reported without selection"
+            ],
+        }
+    selection = {
+        "selected": selected,
+        "decided_on": "validation" if "validation" in manifest.roles else None,
+        **basis,
+        "split_manifest_sha256": manifest.content_sha256,
+        "models": {
+            "baseline": {
+                "path": models.baseline_path,
+                "sha256": _artifact_digest(models.baseline_path),
+            },
+            "finetuned": {
+                "path": models.finetuned_path,
+                "sha256": _artifact_digest(models.finetuned_path),
+            },
+        },
+        "frozen_at_utc": datetime.now(UTC).isoformat(),
+    }
+    path = run_dir / f"selection{suffix}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(selection, indent=2))
+    return selection, evaluations
+
+
+def _metrics(evaluation: dict):
+    from matsim_agents.active_learning.evaluate import EvalMetrics
+
+    return EvalMetrics(**evaluation["metrics"])
+
+
+def _run_repetition(
+    manifest: SplitManifest,
+    run_dir: Path,
+    fine_tune,
+    *,
+    backend: str,
+    training_seed: int,
+    selection: SelectionRule,
+    reference_manifest: Path,
+    n_iters: int,
+    max_parity_points: int,
+    eval_only: bool,
+) -> dict:
+    """Fine-tune, select on validation, freeze, then evaluate test and test domains."""
+    suffix = "_formation" if eval_only else ""
+
+    def evaluate(cfg, frames, groups, **kwargs):
+        return _evaluate(
+            cfg,
+            frames,
+            groups,
+            max_parity_points=max_parity_points,
+            reference_manifest=reference_manifest,
+            seed=training_seed,
+            **kwargs,
+        )
+
+    validation_path = (
+        Path(manifest.roles["validation"].path) if "validation" in manifest.roles else None
+    )
+    models = fine_tune(
+        Path(manifest.roles["train"].path), validation_path, run_dir / "ft", training_seed
+    )
+    chosen, validation = _select(
+        models, manifest, run_dir, rule=selection, evaluate=evaluate, suffix=suffix
+    )
+    # The selection is frozen on disk before any test frame is evaluated.
+    evaluations: dict = {"validation": validation} if validation else {}
+    targets = []
+    if "test" in manifest.roles:
+        frames, groups, path = _role_frames(manifest, "test")
+        targets.append(
+            (
+                "test",
+                frames,
+                groups,
+                path,
+                run_dir / "eval" / f"iter0{suffix}.json",
+                run_dir / "eval" / f"iter{n_iters}{suffix}.json",
+            )
+        )
+    for domain in manifest.test_domains:
+        directory = run_dir / "eval" / "domains" / domain.name
+        targets.append(
+            (
+                f"domain:{domain.name}",
+                list(ase_read(domain.dataset, index=":")),
+                domain.frame_group_ids,
+                Path(domain.dataset),
+                directory / f"baseline{suffix}.json",
+                directory / f"finetuned{suffix}.json",
+            )
+        )
+    for name, frames, groups, path, baseline_json, finetuned_json in targets:
+        evaluations[name] = {
+            "baseline": evaluate(
+                models.baseline,
+                frames,
+                groups,
+                model_path=models.baseline_path,
+                label=str(path),
+                out_json=baseline_json,
+                iteration=0,
+            ),
+            "finetuned": evaluate(
+                models.finetuned,
+                frames,
+                groups,
+                model_path=models.finetuned_path,
+                label=str(path),
+                out_json=finetuned_json,
+                iteration=n_iters,
+            ),
+        }
+    report = _report(manifest, backend, chosen, evaluations, run_dir)
+    (run_dir / "eval" / f"report{suffix}.json").write_text(json.dumps(report, indent=2))
+    return {
+        "training_seed": training_seed,
+        "selected": chosen["selected"],
+        "selected_metrics": {
+            name: {
+                metric: models_[chosen["selected"]]["metrics"].get(metric)
+                for metric in METRIC_DEFINITIONS
+            }
+            for name, models_ in evaluations.items()
+            if name != "validation"
+        },
+    }
+
+
+def _report(
+    manifest: SplitManifest, backend: str, selection: dict, evaluations: dict, run_dir: Path
+) -> dict:
+    cost = run_dir / "ft" / "cost.json"
+    return {
+        "backend": backend,
+        "metric_definitions": METRIC_DEFINITIONS,
+        "split": {
+            "strategy": manifest.strategy,
+            "objective": manifest.objective,
+            "manifest_sha256": manifest.content_sha256,
+            "roles": {
+                role: {"n_frames": m.n_frames, "n_groups": m.n_groups}
+                for role, m in manifest.roles.items()
+            },
+            "test_domains": {
+                d.name: {"membership": d.membership, "n_frames": d.n_frames, "n_groups": d.n_groups}
+                for d in manifest.test_domains
+            },
+            "limitations": manifest.limitations,
+        },
+        "selection": selection,
+        "evaluations": {
+            name: {
+                model: {
+                    "metrics": {k: result["metrics"].get(k) for k in METRIC_DEFINITIONS},
+                    "groups": result["groups"],
+                }
+                for model, result in models.items()
+            }
+            for name, models in evaluations.items()
+        },
+        "paired_finetuned_minus_baseline": {
+            name: paired_difference(models["finetuned"]["groups"], models["baseline"]["groups"])
+            for name, models in evaluations.items()
+        },
+        "fine_tuning_cost": json.loads(cost.read_text()) if cost.is_file() else None,
+    }
 
 
 def _default_device() -> str:
@@ -794,6 +1142,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument(
+        "--evaluation-config",
+        type=Path,
+        default=None,
+        help="YAML evaluation config (objective, split, test domains, repetitions, "
+        "selection); see docs/mlip-evaluation.md. Without it a random-frame split of "
+        "--test-fraction is used.",
+    )
     parser.add_argument("--test-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default=None)
@@ -853,6 +1209,11 @@ def main(argv: list[str] | None = None) -> int:
         device=args.device,
         max_parity_points=args.max_parity_points,
         eval_only=args.eval_only,
+        evaluation=(
+            EvaluationConfig.from_yaml(args.evaluation_config)
+            if args.evaluation_config is not None
+            else None
+        ),
     )
     return 0
 

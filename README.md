@@ -295,6 +295,14 @@ MACE fine-tune with low-rank adapters by default (`trainer.finetune_mode: lora`;
 configured model each time instead of the last promoted one. See
 [Fine-tuning UMA and MACE](docs/scientific-workflows.md#fine-tuning-uma-and-mace).
 
+**Evaluating fine-tuned MLIPs.** `python -m matsim_agents.active_learning.finetune_eval`
+splits a labelled dataset by a declared strategy (random frames, time blocks,
+trajectories, structures, compositions, conditions, or AL iterations) into
+train, validation, and test partitions with a content-addressed manifest and
+leakage checks, selects between the foundation and fine-tuned model on
+validation only, and evaluates the frozen choice on test and named test
+domains with per-group errors. See [MLIP evaluation](docs/mlip-evaluation.md).
+
 Held-out model energy comparisons and promotion use **formation-energy
 errors**, subtracting each method's own elemental energies on the same fixed
 reference geometries. These comparisons require a DFT-labelled elemental JSON

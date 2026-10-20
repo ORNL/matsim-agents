@@ -860,3 +860,16 @@ def test_retrain_rejects_non_builtin_train_script(tmp_path, training_inputs):
             out_logdir=tmp_path / "out",
             launch=LAUNCH,
         )
+
+
+def test_validation_partition_gets_the_same_formation_labels(tmp_path, training_inputs):
+    from matsim_agents.datasets.formation_training import prepare_hydragnn_validation_frames
+
+    dataset, manifest = training_inputs
+    model = tmp_path / "model"
+    training = prepare_hydragnn_training_frames(dataset, model, manifest)
+    validation = prepare_hydragnn_validation_frames(dataset, model, manifest)
+    assert [a.get_potential_energy() for a in validation] == [
+        a.get_potential_energy() for a in training
+    ]
+    assert (model / "validation-reference").is_dir()

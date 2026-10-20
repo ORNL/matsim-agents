@@ -199,6 +199,18 @@ def prepare_hydragnn_training_frames(
     return list(read(target, index=":"))
 
 
+def prepare_hydragnn_validation_frames(
+    dataset_path: str | Path,
+    output_dir: Path,
+    elemental_reference_manifest: str | Path,
+) -> list[Atoms]:
+    """Formation labels of a dataset split's validation partition (same references)."""
+    target = prepare_formation_training_dataset(
+        dataset_path, elemental_reference_manifest, output_dir / "validation-reference"
+    )
+    return list(read(target, index=":"))
+
+
 def save_hydragnn_energy_convention(
     output_dir: Path, checkpoint: Path, *, inference_metadata: dict | None = None
 ) -> None:

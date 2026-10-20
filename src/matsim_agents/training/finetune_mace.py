@@ -209,20 +209,28 @@ def _write_xyz_splits(
     *,
     seed: int,
     val_fraction: float = 0.1,
+    n_validation: int | None = None,
 ) -> tuple[Path, Path, int, int, bool]:
     """Write ``train.xyz`` / ``val.xyz`` with ``REF_energy`` / ``REF_forces`` keys.
 
     ``mace_run_train`` reads labels from the extended-XYZ ``info``/``arrays``
     fields named by ``--energy_key`` / ``--forces_key``, so we materialise those
-    keys explicitly; ``energies`` are the (aligned) energy labels. ``REF_stress``
-    is written when every frame has a stress. Returns
+    keys explicitly; ``energies`` are the (aligned) energy labels. With
+    ``n_validation`` the last that many frames are the validation set (a
+    dataset split's validation partition); otherwise ``val_fraction`` of the
+    frames is held out at random. ``REF_stress`` is written when every frame has
+    a stress. Returns
     ``(train_xyz, val_xyz, n_train, n_val, with_stress)``.
     """
     from ase.io import write as ase_write
 
-    with_stress = all("stress" in a.info or "REF_stress" in a.info for a in frames)
-    _train_index, val_index = split_indices(len(frames), val_fraction=val_fraction, seed=seed)
-    val_idx = set(val_index)
+    stresses = [_reference_stress(a) for a in frames]
+    with_stress = all(stress is not None for stress in stresses)
+    if n_validation is not None:
+        val_idx = set(range(len(frames) - n_validation, len(frames)))
+    else:
+        _train, val_index = split_indices(len(frames), val_fraction=val_fraction, seed=seed)
+        val_idx = set(val_index)
 
     train_atoms, val_atoms = [], []
     for i, (a, e) in enumerate(zip(frames, energies, strict=True)):
@@ -232,7 +240,7 @@ def _write_xyz_splits(
         a2.info["REF_energy"] = float(e)
         a2.arrays["REF_forces"] = np.asarray(f, dtype=float)
         if with_stress:
-            a2.info["REF_stress"] = np.asarray(a.info.get("REF_stress", a.info.get("stress")))
+            a2.info["REF_stress"] = stresses[i]
         a2.info.setdefault("charge", 0)
         a2.info.setdefault("spin", 1)
         (val_atoms if i in val_idx else train_atoms).append(a2)
@@ -242,6 +250,17 @@ def _write_xyz_splits(
     ase_write(str(train_xyz), train_atoms, format="extxyz")
     ase_write(str(val_xyz), val_atoms, format="extxyz")
     return train_xyz, val_xyz, len(train_atoms), len(val_atoms), with_stress
+
+
+def _reference_stress(atoms) -> np.ndarray | None:
+    """The DFT stress label: from ``info`` or, as ASE reads extxyz, the calculator."""
+    for key in ("REF_stress", "stress"):
+        if key in atoms.info:
+            return np.asarray(atoms.info[key], dtype=float)
+    results = getattr(atoms.calc, "results", None) or {}
+    if "stress" in results:
+        return np.asarray(results["stress"], dtype=float)
+    return None
 
 
 def _model_energy(calculator, atoms) -> float:
@@ -388,6 +407,7 @@ def finetune_mace(
     # mace_run_train handles parameter-efficient freezing through LoRA; a plain
     # freeze_backbone request is rejected with a warning below.
     freeze_backbone: bool = False,
+    validation_dataset: str | Path | None = None,
 ) -> Path:
     """Fine-tune a MACE foundation model and return the checkpoint path.
 
@@ -396,7 +416,8 @@ def finetune_mace(
     docstring); pass ``lora=True`` for the parameter-efficient variant. Energy
     labels are aligned to the base model's scale with the elemental DFT
     references of ``elemental_reference_manifest``; the alignment is written to
-    ``energy-alignment.json`` beside the checkpoint.
+    ``energy-alignment.json`` beside the checkpoint. ``validation_dataset``
+    (a dataset split's validation partition) replaces the random hold-out.
 
     The returned ``mace_finetuned.model`` reloads through
     :func:`matsim_agents.backends.mlip.calculator.build_mace_calculator`
@@ -439,6 +460,11 @@ def finetune_mace(
     mace_device = "cuda" if dev.startswith("cuda") else "cpu"
 
     train_atoms = _load_labeled_frames(dataset_path)
+    n_validation = None
+    if validation_dataset is not None:
+        validation = _load_labeled_frames(validation_dataset, minimum=1)
+        n_validation = len(validation)
+        train_atoms = train_atoms + validation
     log.info(
         "MACE fine-tune: %d frames (family=%s, base=%s, lora=%s, device=%s)",
         len(train_atoms),
@@ -467,7 +493,7 @@ def finetune_mace(
     energies = [alignment.aligned_energy(a, _reference_energy(a)) for a in train_atoms]
     foundation = _resolve_foundation_model_file(base_model, base, work_dir=work_dir)
     train_xyz, val_xyz, n_train, n_val, with_stress = _write_xyz_splits(
-        train_atoms, energies, work_dir, seed=seed
+        train_atoms, energies, work_dir, seed=seed, n_validation=n_validation
     )
     run_name = re.sub(r"[^0-9A-Za-z_]+", "_", f"mace_ft_{family}_{Path(base_model).name}")
     if lora:
@@ -546,6 +572,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dataset", required=True, help="AL-collected extxyz dataset.")
     parser.add_argument("--output-dir", required=True, help="Work/output directory.")
     parser.add_argument(
+        "--elemental-reference-manifest",
+        required=True,
+        help="Elemental DFT references that put the labels on the base model's energy scale.",
+    )
+    parser.add_argument(
         "--model-id",
         default=None,
         choices=sorted(MACE_MODELS),
@@ -590,6 +621,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lora-alpha", type=float, default=None, help="LoRA alpha (default: 1.0).")
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--validation-dataset",
+        default=None,
+        help="Validation partition for mace_run_train (replaces the random hold-out).",
+    )
     parser.add_argument("--device", default=None, choices=["CUDA", "CPU", "cuda", "cpu"])
     parser.add_argument(
         "--dry-run",
@@ -603,6 +639,7 @@ def main(argv: list[str] | None = None) -> int:
     ckpt = finetune_mace(
         args.dataset,
         args.output_dir,
+        elemental_reference_manifest=args.elemental_reference_manifest,
         family=args.family,
         base_model=args.base_model,
         model_id=args.model_id,
@@ -617,6 +654,7 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         device=args.device,
         run=not args.dry_run,
+        validation_dataset=args.validation_dataset,
     )
     print(ckpt)
     return 0

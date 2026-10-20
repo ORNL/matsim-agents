@@ -45,10 +45,12 @@ from matsim_agents.active_learning.dft_protocol import (
     dft_method_signature,
     scientific_dft_payload,
 )
+from matsim_agents.active_learning.eval_report import METRIC_DEFINITIONS
 from matsim_agents.active_learning.evaluate import (
     _apply_model_override,
     _reference_energy,
     _reference_forces,
+    evaluate_frames,
     evaluate_promotion_candidate,
 )
 from matsim_agents.active_learning.seed_sources import resolve_seed_structures
@@ -126,6 +128,8 @@ class IterationState:
     new_logdir: str | None = None
     timings_sec: dict[str, float] = field(default_factory=dict)
     notes: str | None = None
+    # Scores of the model in use on loop.benchmark_sets, after this iteration's decisions.
+    benchmark: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -328,6 +332,28 @@ def _label_with_dft(
     return results, backend
 
 
+def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> None:
+    """Record where each label came from, for grouped and chronological dataset splits.
+
+    Each seed's MD in an iteration is one trajectory; ``time_index`` is the MD
+    step of the snapshot. See :mod:`matsim_agents.datasets.splits`.
+    """
+    candidates = {candidate.candidate_id: candidate for candidate in selected}
+    for frame in frames:
+        candidate = candidates.get(Path(frame.source_work_dir).name)
+        info = frame.atoms.info
+        info["temperature_K"] = float(cfg.md.temperature_K)
+        info["source_campaign"] = str(cfg.loop.out_dir)
+        if candidate is None:
+            continue
+        seed = Path(candidate.seed_path).stem
+        info["config_id"] = f"iteration-{i:04d}/{candidate.candidate_id}"
+        info["candidate_id"] = candidate.candidate_id
+        info["trajectory_id"] = f"iteration-{i:04d}/{seed}"
+        info["time_index"] = int(candidate.md_step)
+        info["initial_structure_id"] = seed
+
+
 def _append_labelled_frames(
     cfg: ALConfig,
     results: list,
@@ -341,6 +367,7 @@ def _append_labelled_frames(
     """Validate new labels against the persisted datasets, split, append, and write manifests."""
     t0 = time.time()
     frames = dft_results_to_frames(results, iteration=i)
+    _record_provenance(cfg, frames, selected, i)
     existing_training_frames = []
     existing_validation_frames = []
     manifest_path = dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
@@ -766,6 +793,63 @@ def run_active_learning(cfg: ALConfig) -> None:
             models.close()
 
 
+def _model_id(mlip: MLIPConfig) -> str:
+    if mlip.backend == "hydragnn" and mlip.hydragnn is not None:
+        return str(mlip.hydragnn.logdir)
+    if mlip.backend == "uma" and mlip.uma is not None:
+        return str(mlip.uma.model_name)
+    if mlip.backend == "mace" and mlip.mace is not None:
+        return f"{mlip.mace.family}:{mlip.mace.model}"
+    return mlip.backend
+
+
+def _score_benchmarks(
+    cfg: ALConfig,
+    state: IterationState,
+    models: _SurrogateModels,
+    dataset_path: Path,
+    validation_dataset_path: Path,
+) -> None:
+    """Score the model in use on the frozen benchmark sets, for learning curves.
+
+    Runs after the iteration's training and promotion decisions and feeds none
+    of them; frames that were also acquired as labels are counted and logged.
+    """
+    if not cfg.loop.benchmark_sets:
+        return
+    from ase.io import read as ase_read
+
+    labelled = {
+        structure_identity(frame)
+        for path in (dataset_path, validation_dataset_path)
+        if path.exists()
+        for frame in ase_read(path, index=":")
+    }
+    for benchmark in cfg.loop.benchmark_sets:
+        frames = list(ase_read(benchmark.dataset, index=":"))
+        overlap = sum(structure_identity(frame) in labelled for frame in frames)
+        if overlap:
+            log.warning(
+                "Benchmark %s: %d frame(s) were also acquired as labels", benchmark.name, overlap
+            )
+        metrics, _ = evaluate_frames(
+            cfg.mlip,
+            frames,
+            iteration=state.iteration,
+            model_path=_model_id(cfg.mlip),
+            test_set_label=str(benchmark.dataset),
+            elemental_reference_manifest=cfg.benchmark_reference_manifest(),
+            calculator=models.incumbent_calculator(cfg.mlip),
+        )
+        values = asdict(metrics)
+        state.benchmark[benchmark.name] = {
+            "model": _model_id(cfg.mlip),
+            "n_dft_labels_total": state.n_training_frames_total + state.n_validation_frames_total,
+            "frames_also_labelled": overlap,
+            "metrics": {key: values[key] for key in METRIC_DEFINITIONS},
+        }
+
+
 def _run_iterations(
     cfg: ALConfig,
     placement: Placement,
@@ -863,6 +947,7 @@ def _run_iterations(
                         "; ".join(state.training_deferred_reasons),
                     )
                     state.timings_sec["retrain"] = time.time() - t0
+                    _score_benchmarks(cfg, state, models, dataset_path, validation_dataset_path)
                     state.status = "complete"
                     continue
                 state.training_status = "running"
@@ -882,6 +967,7 @@ def _run_iterations(
             state.timings_sec["retrain"] = time.time() - t0
             if cfg.trainer.enabled:
                 state.training_status = "completed"
+            _score_benchmarks(cfg, state, models, dataset_path, validation_dataset_path)
 
             state.status = "complete"
         except Exception as exc:  # noqa: BLE001

@@ -1,0 +1,16 @@
+# (b) Transfer to independent MD trajectories at the same compositions.
+# Needs info["trajectory_id"] on every frame (recorded by the AL loop).
+evaluation:
+  objective: accuracy on independent trajectories not used for fine-tuning
+  split:
+    strategy: trajectory_holdout
+    train_fraction: 0.7
+    validation_fraction: 0.15
+    test_fraction: 0.15
+    seed: 42
+    min_groups_per_role: 3
+  repetitions:
+    split_seeds: [11, 22, 33, 44, 55]
+    training_seeds: [101, 102]
+  selection:
+    min_relative_improvement: 0.05

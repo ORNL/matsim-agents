@@ -112,6 +112,8 @@ class EvalMetrics:
     failures: list[str] = field(default_factory=list)
     formation_energy_mae_eV_per_atom: float = float("nan")
     formation_energy_rmse_eV_per_atom: float = float("nan")
+    # Mean Euclidean norm of the per-atom force error vector.
+    force_vector_mae_eV_per_A: float = float("nan")
     elemental_reference_provenance: dict[str, object] = field(default_factory=dict)
 
 
@@ -265,6 +267,12 @@ def evaluate_frames(
     failures: list[str] = []
     formation_ref: list[float] = []
     formation_pred: list[float] = []
+    # Per-frame errors (NaN where a label is missing), for per-group reports.
+    frame_energy_err = np.full(len(frames), np.nan)
+    frame_formation_err = np.full(len(frames), np.nan)
+    frame_force_mae = np.full(len(frames), np.nan)
+    frame_force_vector_mae = np.full(len(frames), np.nan)
+    vector_errors: list[np.ndarray] = []
 
     for i, atoms in enumerate(frames):
         e_ref = _reference_energy(atoms)
@@ -292,9 +300,15 @@ def evaluate_frames(
             e_pred_tot.append(e_pred)
             e_ref_pa.append(e_ref / n)
             e_pred_pa.append(e_pred / n)
+            frame_energy_err[i] = abs(e_pred - e_ref) / n
+            frame_formation_err[i] = abs(formation_pred[-1] - formation_ref[-1])
         if f_ref is not None and f_ref.shape == f_pred.shape:
             f_ref_all.append(f_ref.reshape(-1))
             f_pred_all.append(f_pred.reshape(-1))
+            norms = np.linalg.norm(f_pred - f_ref, axis=1)
+            vector_errors.append(norms)
+            frame_force_mae[i] = float(np.mean(np.abs(f_pred - f_ref)))
+            frame_force_vector_mae[i] = float(np.mean(norms))
 
     n_eval = max(len(e_ref_tot), len(f_ref_all))
     if n_eval == 0:
@@ -353,6 +367,9 @@ def evaluate_frames(
         failures=failures,
         formation_energy_mae_eV_per_atom=_mae(de_pa_formation),
         formation_energy_rmse_eV_per_atom=_rmse(de_pa_formation),
+        force_vector_mae_eV_per_A=(
+            float(np.mean(np.concatenate(vector_errors))) if vector_errors else float("nan")
+        ),
         elemental_reference_provenance=references.provenance if references is not None else {},
     )
     parity = {
@@ -362,6 +379,10 @@ def evaluate_frames(
         "formation_pred_eV_per_atom": formation_pred_a,
         "f_ref_eV_per_A": f_ref_a,
         "f_pred_eV_per_A": f_pred_a,
+        "frame_energy_abs_err_eV_per_atom": frame_energy_err,
+        "frame_formation_abs_err_eV_per_atom": frame_formation_err,
+        "frame_force_mae_eV_per_A": frame_force_mae,
+        "frame_force_vector_mae_eV_per_A": frame_force_vector_mae,
     }
     return metrics, parity
 

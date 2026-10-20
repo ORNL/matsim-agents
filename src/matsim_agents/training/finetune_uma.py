@@ -97,7 +97,7 @@ def split_indices(n: int, *, val_fraction: float, seed: int) -> tuple[list[int],
     return sorted(order[n_val:].tolist()), sorted(order[:n_val].tolist())
 
 
-def _load_labeled_frames(dataset_path: str | Path) -> list[Atoms]:
+def _load_labeled_frames(dataset_path: str | Path, *, minimum: int = 2) -> list[Atoms]:
     """Read frames that carry both an energy and a forces label."""
     raw = ase_read(str(dataset_path), index=":")
     frames = [raw] if isinstance(raw, Atoms) else list(raw)
@@ -105,10 +105,10 @@ def _load_labeled_frames(dataset_path: str | Path) -> list[Atoms]:
     for a in frames:
         if _reference_energy(a) is not None and _reference_forces(a) is not None:
             usable.append(a)
-    if len(usable) < 2:
+    if len(usable) < minimum:
         raise ValueError(
             f"Only {len(usable)}/{len(frames)} frames in {dataset_path} carry both "
-            "energy and forces labels; need >=2 to fine-tune."
+            f"energy and forces labels; need >={minimum}."
         )
     return usable
 
@@ -473,6 +473,7 @@ def finetune_uma(
     lora_r: int = 8,
     lora_alpha: float = 16.0,
     val_fraction: float = 0.1,
+    validation_dataset: str | Path | None = None,
 ) -> Path:
     """Fine-tune ``base_model`` on ``dataset_path`` and return the checkpoint path.
 
@@ -481,7 +482,8 @@ def finetune_uma(
     :func:`matsim_agents.backends.mlip.calculator.build_uma_calculator`).
     Energy labels are aligned to the base model's scale with the elemental DFT
     references of ``elemental_reference_manifest``; the alignment is written to
-    ``energy-alignment.json`` beside the checkpoint.
+    ``energy-alignment.json`` beside the checkpoint. The best epoch is chosen on
+    ``validation_dataset`` when given, otherwise on ``val_fraction`` of the frames.
 
     When ``run`` is False the model and dataset are loaded/validated but no
     training or checkpoint write occurs (dry-run); the intended checkpoint path
@@ -503,7 +505,15 @@ def finetune_uma(
         dev = "cpu"
 
     frames = _load_labeled_frames(dataset_path)
-    train_index, val_index = split_indices(len(frames), val_fraction=val_fraction, seed=seed)
+    if validation_dataset is not None:
+        # The validation partition of a dataset split (datasets.splits) replaces
+        # the random hold-out of training frames.
+        validation = _load_labeled_frames(validation_dataset, minimum=1)
+        train_index = list(range(len(frames)))
+        val_index = list(range(len(frames), len(frames) + len(validation)))
+        frames = frames + validation
+    else:
+        train_index, val_index = split_indices(len(frames), val_fraction=val_fraction, seed=seed)
     train_atoms = [frames[i] for i in train_index]
     val_atoms = [frames[i] for i in val_index]
     log.info(
@@ -552,6 +562,7 @@ def finetune_uma(
             "lora_r": int(lora_r) if lora else None,
             "lora_alpha": float(lora_alpha) if lora else None,
             "energy_loss": "per_atom",
+            "validation": str(validation_dataset) if validation_dataset else "random_hold_out",
             "energy_alignment": alignment.convention,
         },
     )
@@ -660,6 +671,11 @@ def main(argv: list[str] | None = None) -> int:
         default=0.1,
         help="Frames held out to keep the best epoch (at least one; 0 disables).",
     )
+    parser.add_argument(
+        "--validation-dataset",
+        default=None,
+        help="Validation partition for choosing the best epoch (replaces --val-fraction).",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default=None, choices=["CUDA", "CPU", "cuda", "cpu"])
     parser.add_argument(
@@ -690,6 +706,7 @@ def main(argv: list[str] | None = None) -> int:
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         val_fraction=args.val_fraction,
+        validation_dataset=args.validation_dataset,
     )
     print(ckpt)
     return 0

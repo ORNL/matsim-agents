@@ -666,6 +666,12 @@ recorded hashes rather than loaded; the promotion comparison loads it.
 
 ### Current promotion and evaluation behavior
 
+Offline evaluation of fine-tuned models (which split, which partition selects,
+and which is the untouched test) is described in
+[MLIP evaluation](./mlip-evaluation.md). In the AL loop below, promotion uses
+held-out validation labels only; those are held out frame by frame, so they are
+correlated with training frames of the same trajectories.
+
 Promotion requires both held-out formation-energy MAE (eV/atom) and
 force-component MAE (eV/Å) to meet their absolute limits and not worsen relative
 to the incumbent, apart from an absolute `1e-12` numerical tolerance in each
