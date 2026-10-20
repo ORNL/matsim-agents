@@ -129,7 +129,10 @@ cleanup() {
   stop_processes 20 $HEAD_PID
   rm -f "$RAY_STOP"
 }
-trap cleanup EXIT INT TERM
+# A stop request (signal or stop file) exits, and the EXIT trap cleans up once:
+# returning from a signal trap would resume the bootstrap after cleanup.
+trap cleanup EXIT
+trap 'exit 143' INT TERM
 # matsim-agents asks a multi-node server to stop by creating this file: when the
 # launcher runs in an srun step, a signal would make Slurm kill the step before
 # cleanup() has stopped the workers and saved the logs.

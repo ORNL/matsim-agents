@@ -252,9 +252,10 @@ def calibrate_uncertainty(
     ``scores`` are ensemble or MC-dropout disagreements and ``errors`` the
     model's actual errors on the same frames (e.g. per-frame force MAE against
     DFT). Returns the Spearman rank correlation, the mean error and the fraction
-    above ``error_threshold`` per score quantile bin, and the lowest score bin
-    edge above which most frames exceed the threshold, with its precision and
-    recall. Calibrate on ``validation`` (or a dedicated calibration subset),
+    above ``error_threshold`` per score quantile bin, and the lowest score at or
+    above which most frames exceed the threshold (with the precision and recall
+    of flagging them), or no screening threshold when no such upper tail exists.
+    Calibrate on ``validation`` (or a dedicated calibration subset),
     never on test data. The result is an empirical relation on these frames, not
     a calibrated probability of error.
     """
@@ -272,8 +273,11 @@ def calibrate_uncertainty(
     )
     edges = np.quantile(scores, np.linspace(0.0, 1.0, n_bins + 1))
     bins = []
-    for low, high in zip(edges[:-1], edges[1:], strict=True):
-        inside = (scores >= low) & (scores <= high if high == edges[-1] else scores < high)
+    for index, (low, high) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
+        # Only the last bin includes its upper edge, so tied edges never count a
+        # frame twice.
+        upper = scores <= high if index == n_bins - 1 else scores < high
+        inside = (scores >= low) & upper
         if not inside.any():
             continue
         bins.append(
@@ -286,17 +290,20 @@ def calibrate_uncertainty(
             }
         )
     above = errors > error_threshold
-    threshold = next(
-        (b["score_range"][0] for b in bins if b["fraction_above_threshold"] >= 0.5), None
-    )
+    # The lowest score from which most of the flagged frames (all scores at or
+    # above it) exceed the error threshold; none if no upper tail does.
     screening = None
-    if threshold is not None:
+    for threshold in np.unique(scores):
         flagged = scores >= threshold
-        screening = {
-            "score_threshold": threshold,
-            "precision": float(above[flagged].mean()) if flagged.any() else None,
-            "recall": float(flagged[above].mean()) if above.any() else None,
-        }
+        precision = float(above[flagged].mean())
+        if precision >= 0.5:
+            screening = {
+                "score_threshold": float(threshold),
+                "n_flagged": int(flagged.sum()),
+                "precision": precision,
+                "recall": float(flagged[above].mean()) if above.any() else None,
+            }
+            break
     return {
         "partition": partition,
         "n_frames": int(len(scores)),

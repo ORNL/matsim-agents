@@ -119,3 +119,29 @@ def test_finetuners_take_the_validation_partition(tmp_path):
     assert len(_load_labeled_frames(one, minimum=1)) == 1
     with pytest.raises(ValueError, match="need >=2"):
         _load_labeled_frames(one)
+
+
+def test_calibration_bins_count_each_frame_once():
+    constant = calibrate_uncertainty(
+        np.ones(5), np.linspace(0, 1, 5), error_threshold=0.5, partition="validation"
+    )
+    assert sum(b["n_frames"] for b in constant["bins"]) == 5
+    tied = calibrate_uncertainty(
+        np.array([0.1, 0.2, 0.3, 1.0, 1.0, 1.0]),
+        np.zeros(6),
+        error_threshold=0.5,
+        partition="validation",
+    )
+    assert sum(b["n_frames"] for b in tied["bins"]) == 6
+
+
+def test_screening_needs_an_upper_tail_that_mostly_exceeds_the_threshold():
+    scores = np.arange(10.0)
+    errors = np.array([1.0, 1.0] + [0.0] * 8)  # only the two lowest scores are bad
+    report = calibrate_uncertainty(scores, errors, error_threshold=0.5, partition="validation")
+    assert report["screening"] is None
+    report = calibrate_uncertainty(
+        scores, np.array([0.0] * 6 + [1.0] * 4), error_threshold=0.5, partition="validation"
+    )
+    assert report["screening"]["score_threshold"] <= 6.0
+    assert report["screening"]["precision"] >= 0.5 and report["screening"]["recall"] == 1.0

@@ -20,4 +20,4 @@ resources:
           max_model_len: 32768
           startup_timeout_s: 5400
           launcher: [bash, "${LAUNCHER}"]
-          extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
+          extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager, --reasoning-parser, glm45]

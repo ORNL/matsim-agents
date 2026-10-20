@@ -114,3 +114,20 @@ def test_run_prefix_and_directories(tmp_path):
     run = _run(tmp_path, prefix="debate", directories=())
     assert run.run_id.startswith("debate-")
     assert not any(path.is_dir() for path in run.path.iterdir())
+
+
+def test_truncated_reasoning_without_tags():
+    # With a reasoning parser the server returns the reasoning separately, so a
+    # reply cut off inside it has an empty answer.
+    parsed = AIMessage(
+        content="",
+        additional_kwargs={"reasoning_content": "still thinking"},
+        response_metadata={"finish_reason": "length"},
+    )
+    reply = reply_from_message(parsed)
+    assert (reply.text, reply.reasoning, reply.truncated) == ("", "still thinking", True)
+    # Without one, tagless text cannot be told apart from an answer: it is kept,
+    # and flagged as cut off.
+    unparsed = AIMessage(content="still thinking", response_metadata={"finish_reason": "length"})
+    reply = reply_from_message(unparsed)
+    assert (reply.text, reply.reasoning, reply.truncated) == ("still thinking", None, True)

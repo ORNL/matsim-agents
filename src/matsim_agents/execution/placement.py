@@ -663,7 +663,7 @@ class _Resolver:
         used: dict[tuple[str, int], str] = {}
         single = len(spec.placed_servers) == 1
         managed = [server.name for server in spec.servers if server.kind == "managed-vllm"]
-        ports: dict[tuple[str, int], str] = {}
+        ports: dict[tuple[str, int], tuple[str, str]] = {}
         for server in spec.servers:
             result = ServerPlacement(
                 name=server.name,
@@ -681,13 +681,18 @@ class _Resolver:
                 self._check_server(server, result, spec)
             if server.kind == "managed-vllm":
                 port = server.port or 8000 + managed.index(server.name)
-                for item in result.slices:
-                    if (item.host, port) in ports:
+                bound = [(item.host, port, "port") for item in result.slices]
+                if len(result.slices) > 1:
+                    # The multi-node launcher's Ray head listens on port + 1000.
+                    bound.append((result.slices[0].host, port + 1000, "Ray port"))
+                for host, number, what in bound:
+                    if (host, number) in ports:
+                        other, other_what = ports[(host, number)]
                         raise ValueError(
-                            f"LLM servers {ports[(item.host, port)]!r} and {server.name!r} both "
-                            f"use port {port} on {item.host}; set port on one of them"
+                            f"LLM servers {other!r} ({other_what}) and {server.name!r} ({what}) "
+                            f"both use port {number} on {host}; set port on one of them"
                         )
-                    ports[(item.host, port)] = server.name
+                    ports[(host, number)] = (server.name, what)
                 result.port = port
                 result.launcher = server.launcher
                 result.extra_args = list(server.extra_args)

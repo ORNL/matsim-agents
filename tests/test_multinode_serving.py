@@ -225,6 +225,34 @@ def test_stopping_the_server_stops_workers_before_the_head(stub_tools, request_b
         assert (logs / host / "raylet.out").read_text().strip() == host
 
 
+def test_a_stop_during_bootstrap_ends_the_launcher(stub_tools):
+    """Stopping while workers join must not resume the GPU wait after cleanup."""
+    env, record = stub_tools
+    stop_file = record.parent / "stop-server"
+    env["MATSIM_SERVER_STOP_FILE"] = str(stop_file)
+    env["MATSIM_SERVER_SLICES"] = "n0=0,1,2,3;n1=0,1,2,3"
+    env["STUB_GPUS"] = "4"  # the cluster never reaches 8 GPUs
+    process = subprocess.Popen(
+        ["bash", str(LAUNCHER), "/models/Big"],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + 30
+    while "ray start --address" not in (record.read_text() if record.exists() else ""):
+        assert time.monotonic() < deadline and process.poll() is None
+        time.sleep(0.2)
+    stop_file.touch()
+    started = time.monotonic()
+    output, _ = process.communicate(timeout=60)
+    assert time.monotonic() - started < 40, output
+    calls = record.read_text().splitlines()
+    assert not any(call.startswith("vllm serve") for call in calls)
+    assert calls.index("stopped n1") < calls.index("stopped n0")
+
+
 def test_ray_node_saves_logs_when_asked_to_stop_even_if_killed_after(tmp_path):
     ray = tmp_path / "ray"
     pid_file = tmp_path / "ray.pid"

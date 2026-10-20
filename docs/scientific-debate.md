@@ -155,7 +155,11 @@ participants: [...]
 Peers are shown each other's answers only, quoted between `<contribution>`
 tags, never their reasoning. A reasoning model's reasoning is separated from
 its answer whether the server returns it separately (vLLM with
-`--reasoning-parser`) or before `</think>` in the reply.
+`--reasoning-parser`) or before `</think>` in the reply. Without a parser, a
+reply cut off before `</think>`, whose prompt opened `<think>`, contains no tag
+and cannot be told apart from an answer; it is flagged incomplete and shown to
+peers as cut off. Serve reasoning models with a reasoning parser (the
+Perlmutter campaign panel layouts do).
 - `synthesis_participant` is forbidden with `independent_verdicts`, must match
   a participant name with `designated_model`, and otherwise defaults to the
   first participant.
