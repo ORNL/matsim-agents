@@ -204,7 +204,12 @@ def test_remote_server_commands_use_the_facility_launcher(tmp_path):
         "--cpus-per-task=16",
         "env",
     ]
-    assert managed.command[8:11] == ["CUDA_VISIBLE_DEVICES=2", "vllm", "serve"]
+    assert managed.command[8:12] == [
+        "CUDA_VISIBLE_DEVICES=2",
+        "MATSIM_SERVER_IN_STEP=1",
+        "vllm",
+        "serve",
+    ]
     assert managed.command[managed.command.index("--host") + 1] == "0.0.0.0"
 
     aurora = ResourcePlan.model_validate(

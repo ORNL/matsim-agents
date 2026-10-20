@@ -646,3 +646,12 @@ def test_whole_value_variables_only_become_numbers_or_lists(tmp_path, monkeypatc
     assert (llm.nodes, llm.devices) == (2, [0, 1])
     assert llm.servers[0].served_name == "on"
     assert llm.servers[0].model == "/models/a: b"
+
+
+def test_launch_environment_carries_the_placed_devices():
+    plan = _plan({"dft": {"devices": [1, 2, 3]}})
+    launch = plan.resolve(_alloc(gpus=4)).pool("dft").launches[0]
+    env = launch.environment({})
+    assert env["MATSIM_DEVICE_MASK"] == "1,2,3"
+    assert env["MATSIM_NODE_DEVICES"] == "4"
+    assert env["MATSIM_DEVICES_PER_NODE"] == "3"

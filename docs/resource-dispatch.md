@@ -563,14 +563,17 @@ relaxations concurrently:
   exploration workers are stopped before active learning starts and restarted
   for reevaluation, so no exploration model stays resident during DFT or
   training on shared devices.
-- **Slurm device choice.** Slurm steps (`srun --gpus-per-node=N`) receive
-  *N* GPUs of Slurm's choosing; the placement fixes how many devices a DFT or
-  training step uses on each node, and which nodes, but under Slurm not which
-  device indices. Pools that share a node with a Slurm step should therefore
-  either take whole nodes or run one after the other (`share_with`), as the
-  shipped layouts do. Processes started directly on the driver's node (MLIP
-  workers, managed vLLM servers, training without a launcher) use the placed
-  indices.
+- **Slurm device choice.** A Slurm step that requests *N* GPUs receives *N*
+  GPUs of Slurm's choosing. Launches therefore also export `MATSIM_DEVICE_MASK`
+  (the placed indices) and `MATSIM_NODE_DEVICES`. When a step uses only some of
+  a node's GPUs, the Perlmutter and Frontier DFT and training wrappers request
+  all of the node's GPUs with `--gpu-bind=none` and set `CUDA_VISIBLE_DEVICES`
+  (or `ROCR_VISIBLE_DEVICES`) to the placed indices inside the step; whole-node
+  steps keep `--gpu-bind=closest`. Aurora wrappers pass the placed
+  `ZE_AFFINITY_MASK` through `mpiexec`. The Frontier vLLM launcher likewise runs
+  the server in an `srun --overlap` step that takes the node's GCDs and exposes
+  only the placed ones through `HIP_VISIBLE_DEVICES`, as the qualified Frontier
+  vLLM recipes do.
 - **Driver masks.** When the driver already runs under a device mask (for
   example a Slurm step), worker masks are translated through it; a pool device
   the driver cannot see is an error. Campaign configs declare no `mlip` pool

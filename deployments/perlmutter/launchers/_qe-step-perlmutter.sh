@@ -88,12 +88,24 @@ echo "             --gpus-per-node=${GPUS_PER_NODE} --gpu-bind=closest ${PW_BIN}
 # --exclusive lets the AL driver run several of these srun steps concurrently
 # inside one allocation (as with _vasp-step-perlmutter.sh); without it Slurm
 # serialises the steps ("Job step creation temporarily disabled").
+# Slurm picks which GPUs a step receives, so a GPU count alone cannot honour the
+# placement's device indices. When the placement uses only some of the node's
+# GPUs, take them all for the step and expose only the placed ones inside it.
+STEP_GPUS="${GPUS_PER_NODE}"
+GPU_ARGS=(--gpus-per-node="${STEP_GPUS}" --gpu-bind=closest)
+STEP_ENV=()
+if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
+      && "${STEP_GPUS}" != "${MATSIM_NODE_DEVICES}" ]]; then
+  GPU_ARGS=(--gpus-per-node="${MATSIM_NODE_DEVICES}" --gpu-bind=none)
+  STEP_ENV=(env "CUDA_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
+fi
+echo "[step] gpu_args=${GPU_ARGS[*]} placed_devices=${MATSIM_DEVICE_MASK:-all}"
 exec srun \
   --exclusive \
   "${NODE_ARGS[@]}" \
   -N "${NNODES}" \
   -n "${TOTAL_RANKS}" \
   -c "${THREADS_PER_RANK}" \
-  --gpus-per-node="${GPUS_PER_NODE}" \
-  --gpu-bind=closest \
+  "${GPU_ARGS[@]}" \
+  "${STEP_ENV[@]}" \
   "${PW_BIN}" -in "${INPUT}"

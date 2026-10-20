@@ -185,6 +185,7 @@ class ProcessLaunch(_StrictModel):
     ranks_per_node: int
     threads_per_rank: int
     env: dict[str, str] = Field(default_factory=dict)
+    node_devices: int = Field(0, ge=0, description="Devices per node of the geometry.")
 
     @property
     def node_count(self) -> int:
@@ -215,6 +216,10 @@ class ProcessLaunch(_StrictModel):
         env.update(child_mask_environment(self.env, owner="this launch") if local else self.env)
         env["MATSIM_ASSIGNED_NODES"] = ",".join(self.hosts)
         env["MATSIM_DEVICES_PER_NODE"] = str(len(self.devices))
+        # Step wrappers use these to keep the exact devices when a step takes only
+        # some of a node's GPUs (Slurm otherwise picks the step's GPUs itself).
+        env["MATSIM_DEVICE_MASK"] = ",".join(str(device) for device in self.devices)
+        env["MATSIM_NODE_DEVICES"] = str(self.node_devices)
         return env
 
 
@@ -579,6 +584,7 @@ class _Resolver:
             ranks_per_node=ranks,
             threads_per_rank=threads,
             env=env,
+            node_devices=self.geometry.devices_per_node,
         )
 
     def _finish_dft(self, spec: DFTPoolSpec, placement: PoolPlacement) -> None:

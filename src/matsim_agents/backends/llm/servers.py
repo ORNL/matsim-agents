@@ -163,7 +163,10 @@ class _ManagedServer:
         command = list(self.server.launcher or ["vllm", "serve"]) + self._serve_args(bind)
         if self.local:
             return command
+        # The server already runs in its scheduler step; launchers that would otherwise
+        # start their own step (vllm-server-frontier.sh) check this.
         mask = [f"{key}={value}" for key, value in self.slice.env.items()]
+        mask.append("MATSIM_SERVER_IN_STEP=1")
         host = self.slice.host
         geometry = placement.geometry
         if placement.launcher == "srun":

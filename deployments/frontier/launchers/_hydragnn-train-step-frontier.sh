@@ -75,13 +75,25 @@ if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
 fi
 echo "[hydragnn-train] srun -N ${NNODES} -n ${TOTAL_RANKS} python ${TRAIN_SCRIPT} ..."
 
+# Slurm picks which GPUs a step receives, so a GPU count alone cannot honour the
+# placement's device indices. When the placement uses only some of the node's
+# GPUs, take them all for the step and expose only the placed ones inside it.
+STEP_GPUS="${RANKS_PER_NODE}"
+GPU_ARGS=(--gpus-per-node="${STEP_GPUS}" --gpu-bind=closest)
+STEP_ENV=()
+if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
+      && "${STEP_GPUS}" != "${MATSIM_NODE_DEVICES}" ]]; then
+  GPU_ARGS=(--gpus-per-node="${MATSIM_NODE_DEVICES}" --gpu-bind=none)
+  STEP_ENV=(env -u HIP_VISIBLE_DEVICES "ROCR_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
+fi
+echo "[step] gpu_args=${GPU_ARGS[*]} placed_devices=${MATSIM_DEVICE_MASK:-all}"
 exec srun \
   "${NODE_ARGS[@]}" \
   -N "${NNODES}" \
   -n "${TOTAL_RANKS}" \
   -c "${OMP_NUM_THREADS}" \
-  --gpus-per-node="${RANKS_PER_NODE}" \
-  --gpu-bind=closest \
+  "${GPU_ARGS[@]}" \
+  "${STEP_ENV[@]}" \
   python "${TRAIN_SCRIPT}" \
     --dataset "${DATASET}" \
     --output-dir "${OUT_LOGDIR}" \

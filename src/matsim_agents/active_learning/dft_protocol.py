@@ -100,7 +100,12 @@ def dft_execution_signature(cfg: DFTConfig, launch: ProcessLaunch) -> str:
     if wrapper.is_file():
         text = wrapper.read_text()
         for name, default in re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]*)\}", text):
-            if name in {"MATSIM_ASSIGNED_NODES", "MATSIM_DEVICES_PER_NODE"}:
+            if name in {
+                "MATSIM_ASSIGNED_NODES",
+                "MATSIM_DEVICES_PER_NODE",
+                "MATSIM_DEVICE_MASK",
+                "MATSIM_NODE_DEVICES",
+            }:
                 continue
             resolved_defaults[name] = os.environ.get(name) or default
     payload = {
