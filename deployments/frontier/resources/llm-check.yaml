@@ -1,0 +1,19 @@
+# LLM deployment qualification: one vLLM server for Qwen2.5-72B-Instruct on all eight MI250X GCDs (tensor parallel 8),
+# started by `matsim-agents resources serve` in job-llm-check-frontier.sh.
+#   matsim-agents resources plan deployments/frontier/resources/llm-check.yaml
+preview: {nodes: 1}
+resources:
+  preset: frontier
+  pools:
+    llm:
+      nodes: 1
+      devices: all
+      servers:
+        - name: model
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Qwen2.5-72B-Instruct
+          max_model_len: 8192
+          launcher:
+            - bash
+            - ${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/frontier/launchers/vllm-server-frontier.sh
+          extra_args: [--trust-remote-code, --no-enable-log-requests, --enforce-eager]

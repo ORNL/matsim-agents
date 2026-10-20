@@ -198,73 +198,116 @@ class TestGetChatModelInstantiation:
 # ── huggingface provider ──────────────────────────────────────────────────────
 
 
+class _FakeTextGenerationPipeline:
+    """Stand-in for a loaded transformers text-generation pipeline."""
+
+    task = "text-generation"
+    tokenizer = object()
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+
+class _FakeHuggingFacePipeline:
+    """Stand-in for ``langchain_huggingface.HuggingFacePipeline``."""
+
+    loads: list[tuple[str, dict]] = []
+
+    def __init__(
+        self, pipeline=None, model_id=None, model_kwargs=None, pipeline_kwargs=None, batch_size=4
+    ):
+        self.pipeline = pipeline
+        self.model_id = model_id
+        self.model_kwargs = model_kwargs
+        self.pipeline_kwargs = pipeline_kwargs
+        self.batch_size = batch_size
+
+    @classmethod
+    def from_model_id(cls, model_id, task, device_map=None, **kwargs):
+        cls.loads.append((model_id, {"task": task, "device_map": device_map, **kwargs}))
+        return cls(pipeline=_FakeTextGenerationPipeline(), model_id=model_id, model_kwargs={})
+
+    def _generate(self, prompts, stop=None, run_manager=None, **kwargs):
+        self.pipeline.calls.append(kwargs["pipeline_kwargs"])
+        return ["reply" for _ in prompts]
+
+    def _stream(self, prompt, stop=None, run_manager=None, **kwargs):
+        self.pipeline.calls.append(kwargs["pipeline_kwargs"])
+        return iter(["reply"])
+
+
 class TestHuggingFaceProvider:
-    """The huggingface provider builds correctly when the pipeline is mocked."""
+    """The huggingface provider loads each model once and keeps per-caller settings."""
 
-    def _make_hf_mocks(self):
-        """Return patched langchain_huggingface module with FakeListChatModel stand-in."""
-        fake_pipeline = MagicMock()
-        fake_pipeline.from_model_id.return_value = fake_pipeline
+    @pytest.fixture(autouse=True)
+    def _fake_module(self, monkeypatch, tmp_path):
+        from matsim_agents.backends.llm import provider
 
-        # ChatHuggingFace wraps the pipeline; we make it return a FakeListChatModel
-        # so we can call .invoke() in test_hf_inference.
+        monkeypatch.setattr(provider, "_HUGGINGFACE_PIPELINES", {})
+        _FakeHuggingFacePipeline.loads = []
         fake_chat = FakeListChatModel(responses=["2 + 2 equals 4."])
-        mock_module = MagicMock()
-        mock_module.HuggingFacePipeline = fake_pipeline
-        mock_module.ChatHuggingFace.return_value = fake_chat
-        return mock_module, fake_pipeline, fake_chat
-
-    def test_hf_provider_calls_from_model_id(self, monkeypatch, tmp_path):
+        module = MagicMock(HuggingFacePipeline=_FakeHuggingFacePipeline)
+        module.ChatHuggingFace.return_value = fake_chat
         monkeypatch.setenv("MATSIM_HF_MODEL_PATH", str(tmp_path))
-        mock_module, fake_pipeline, _ = self._make_hf_mocks()
-        with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
-            from matsim_agents.backends.llm.provider import get_chat_model
+        with patch.dict("sys.modules", {"langchain_huggingface": module}):
+            self.module = module
+            self.model_path = str(tmp_path)
+            yield
 
-            get_chat_model(provider="huggingface", model=str(tmp_path))
-        fake_pipeline.from_model_id.assert_called_once()
-        call_kwargs = fake_pipeline.from_model_id.call_args[1]
-        assert call_kwargs.get("task") == "text-generation"
-        assert call_kwargs.get("device_map") == "auto"
+    def _llm(self, **kwargs):
+        from matsim_agents.backends.llm.provider import get_chat_model
 
-    def test_hf_pipeline_kwargs_no_sampling(self, monkeypatch, tmp_path):
-        """With temperature=0, do_sample=False and temperature not in pipeline_kwargs."""
-        monkeypatch.setenv("MATSIM_HF_MODEL_PATH", str(tmp_path))
-        mock_module, fake_pipeline, _ = self._make_hf_mocks()
-        with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
-            from matsim_agents.backends.llm.provider import get_chat_model
+        get_chat_model(provider="huggingface", model=self.model_path, **kwargs)
+        return self.module.ChatHuggingFace.call_args.kwargs["llm"]
 
-            get_chat_model(provider="huggingface", model=str(tmp_path), temperature=0.0)
-        kwargs = fake_pipeline.from_model_id.call_args[1]
-        pkwargs = kwargs.get("pipeline_kwargs", {})
-        assert pkwargs.get("do_sample") is False
-        assert "temperature" not in pkwargs
+    def test_loads_text_generation_pipeline_across_devices(self):
+        self._llm()
+        assert _FakeHuggingFacePipeline.loads == [
+            (self.model_path, {"task": "text-generation", "device_map": "auto"})
+        ]
+        tokenizer = self.module.ChatHuggingFace.call_args.kwargs["tokenizer"]
+        assert tokenizer is _FakeTextGenerationPipeline.tokenizer
 
-    def test_hf_pipeline_kwargs_with_sampling(self, monkeypatch, tmp_path):
-        """With temperature>0, do_sample=True and temperature/top_p included."""
-        monkeypatch.setenv("MATSIM_HF_MODEL_PATH", str(tmp_path))
-        mock_module, fake_pipeline, _ = self._make_hf_mocks()
-        with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
-            from matsim_agents.backends.llm.provider import get_chat_model
+    def test_model_is_loaded_once_per_process(self):
+        first = self._llm(temperature=0.0)
+        second = self._llm(temperature=0.7)
+        assert len(_FakeHuggingFacePipeline.loads) == 1
+        assert first.pipeline is second.pipeline
 
-            get_chat_model(provider="huggingface", model=str(tmp_path), temperature=0.7)
-        kwargs = fake_pipeline.from_model_id.call_args[1]
-        pkwargs = kwargs.get("pipeline_kwargs", {})
-        assert pkwargs.get("do_sample") is True
-        assert pkwargs.get("temperature") == pytest.approx(0.7)
-        assert "top_p" in pkwargs
+    def test_greedy_generation_settings(self):
+        llm = self._llm(temperature=0.0)
+        llm._generate(["prompt"])
+        settings = llm.pipeline.calls[-1]
+        assert settings["do_sample"] is False
+        assert settings["return_full_text"] is False
+        assert "temperature" not in settings
 
-    def test_hf_inference_roundtrip(self, monkeypatch, tmp_path):
+    def test_sampling_generation_settings_apply_per_caller(self):
+        greedy = self._llm(temperature=0.0)
+        sampling = self._llm(temperature=0.7, max_new_tokens=128)
+        sampling._generate(["prompt"])
+        settings = sampling.pipeline.calls[-1]
+        assert settings["do_sample"] is True
+        assert settings["temperature"] == pytest.approx(0.7)
+        assert settings["max_new_tokens"] == 128
+        assert "top_p" in settings
+        greedy._stream("prompt")
+        assert greedy.pipeline.calls[-1]["do_sample"] is False
+
+    def test_call_time_settings_override_defaults(self):
+        llm = self._llm(temperature=0.0)
+        llm._generate(["prompt"], pipeline_kwargs={"max_new_tokens": 8})
+        assert llm.pipeline.calls[-1]["max_new_tokens"] == 8
+        assert llm.pipeline.calls[-1]["return_full_text"] is False
+
+    def test_hf_inference_roundtrip(self):
         """End-to-end: mocked HF provider returns a valid AIMessage."""
-        monkeypatch.setenv("MATSIM_HF_MODEL_PATH", str(tmp_path))
-        mock_module, _, fake_chat = self._make_hf_mocks()
-        with patch.dict("sys.modules", {"langchain_huggingface": mock_module}):
-            from matsim_agents.backends.llm.provider import get_chat_model
+        from matsim_agents.backends.llm.provider import get_chat_model
 
-            model = get_chat_model(provider="huggingface", model=str(tmp_path))
-
+        model = get_chat_model(provider="huggingface", model=self.model_path)
         result = model.invoke([HumanMessage(content="What is 2 + 2?")])
         assert isinstance(result, AIMessage)
-        assert result.content  # non-empty
+        assert result.content
 
 
 # ── stub LLM end-to-end invocation ───────────────────────────────────────────

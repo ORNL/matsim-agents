@@ -515,7 +515,7 @@ signature are both recorded, including the explicit state/sampling exceptions.
 ```bash
 python -m matsim_agents.active_learning.elemental_dft \
   --phase-plan /path/to/approved-phases.yaml \
-  --dft-config /path/to/dft-block.yaml \
+  --config /path/to/dft-and-resources.yaml \
   --elements Nb Ta O \
   --cache-dir /path/to/shared-reference-cache \
   --output-dir /path/to/new-reference-snapshot \
@@ -523,6 +523,9 @@ python -m matsim_agents.active_learning.elemental_dft \
   --max-dft-calculations 5
 ```
 
+The `--config` file holds a top-level `dft:` block and a `resources:` plan
+with a `dft` pool ([resource dispatch](resource-dispatch.md)); the first DFT
+job group of that pool runs every reference calculation.
 Run on allocated compute resources with the backend's wrapper/environment,
 not a login node. Phase-list approval is always required. Without
 `--approve-dft`, all phases must already have valid compatible cached results.

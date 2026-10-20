@@ -398,8 +398,9 @@ srun --nodes=1 --ntasks=1 --nodelist="$CAMPAIGN_NODE" --overlap \
     source '$REPO/.venv-uma/bin/activate'
     export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 CUDA_DEVICE_ORDER=PCI_BUS_ID
     export HF_HUB_OFFLINE=\"\${HF_HUB_OFFLINE:-1}\" TRANSFORMERS_OFFLINE=\"\${TRANSFORMERS_OFFLINE:-1}\"
-    export PROJECT_ROOT='$REPO' MATSIM_GPUS_PER_NODE=4
-    export SLURM_JOB_NODELIST='$CAMPAIGN_NODE' SLURM_JOB_NUM_NODES=1
+    export PROJECT_ROOT='$REPO'
+    # Present the campaign node as a one-node, four-GPU allocation to the resource plan.
+    export SLURM_JOB_NODELIST='$CAMPAIGN_NODE' SLURM_JOB_NUM_NODES=1 SLURM_GPUS_ON_NODE=4
     cd '$REPO'
     python3 deployments/perlmutter/jobs/campaign_execute.py \
       --campaign-state '$OUTPUT/campaign/campaign_state.json' \

@@ -1,0 +1,9 @@
+# Active learning: MLIP MD on tiles 0-10 and HydraGNN fine-tuning on tile 11 of
+# the first node; every other node runs DFT, one calculation per node.
+preview: {nodes: 3}
+resources:
+  preset: aurora
+  pools:
+    mlip:     {nodes: 1, devices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+    training: {nodes: 1, devices: [11]}
+    dft:      {nodes: rest, devices: all, nodes_per_job: 1}

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import subprocess
 import sys
 from collections.abc import Iterable
@@ -28,6 +29,7 @@ from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.backends.dft.base import DFTResult
 from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, UMAConfig
+from matsim_agents.execution.placement import ProcessLaunch
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +123,27 @@ def append_frames_to_extxyz(frames: list[LabelledFrame], path: str | Path) -> in
 HYDRAGNN_FINETUNERS = frozenset({"finetune_hydragnn", "finetune_hydragnn_newhead"})
 
 
+def _require_direct_placement(trainer_cfg: TrainerConfig, launch: ProcessLaunch, what: str) -> None:
+    """Without a launcher, training is one Python process on this node; the plan must agree."""
+
+    if trainer_cfg.train_launcher is not None:
+        return
+    if launch.total_ranks != 1:
+        raise ValueError(
+            f"{what} without trainer.train_launcher runs one local process, but "
+            f"resources.pools.training resolved to {launch.node_count} node(s) x "
+            f"{launch.ranks_per_node} rank(s); set train_launcher or use 1 node and 1 device"
+        )
+    local = socket.gethostname().split(".", 1)[0]
+    host = launch.hosts[0].split(".", 1)[0]
+    if host != local:
+        raise ValueError(
+            f"{what} without trainer.train_launcher runs on this node ({local}), but "
+            f"resources.pools.training places it on {launch.hosts[0]}; set train_launcher "
+            "or place the training pool on the driver's node"
+        )
+
+
 def retrain_hydragnn(
     trainer_cfg: TrainerConfig,
     hydragnn_cfg: HydraGNNConfig,
@@ -128,7 +151,9 @@ def retrain_hydragnn(
     iteration: int,
     out_logdir: str | Path,
     *,
+    launch: ProcessLaunch,
     dft_config: DFTConfig | None = None,
+    dft_launch: ProcessLaunch | None = None,
     reference_root: Path | None = None,
 ) -> Path:
     """Spawn a formation-aware HydraGNN fine-tuner as a child process.
@@ -149,11 +174,13 @@ def retrain_hydragnn(
             f"trainer.train_script must be one of the built-in HydraGNN fine-tuners "
             f"({', '.join(sorted(HYDRAGNN_FINETUNERS))}); got {train_script}"
         )
-    if (
-        trainer_cfg.train_launcher is not None
-        and trainer_cfg.nodes_for_train * trainer_cfg.ranks_per_node != 1
-    ):
-        raise ValueError("Built-in HydraGNN fine-tuners require exactly one process")
+    if launch.total_ranks != 1:
+        raise ValueError(
+            "Built-in HydraGNN fine-tuners run as one process; set resources.pools.training "
+            f"to 1 node and 1 device (it resolved to {launch.node_count} node(s) x "
+            f"{launch.ranks_per_node} rank(s))"
+        )
+    _require_direct_placement(trainer_cfg, launch, "HydraGNN fine-tuning")
 
     from matsim_agents.active_learning.hydragnn_references import resolve_training_references
     from matsim_agents.datasets.governance import sha256_file
@@ -162,6 +189,7 @@ def retrain_hydragnn(
         trainer_cfg,
         dataset_path,
         dft_config=dft_config,
+        dft_launch=dft_launch,
         reference_root=reference_root or out_logdir.parent / "elemental-training-reference",
     )
     dataset_sha256 = sha256_file(Path(dataset_path))
@@ -179,8 +207,8 @@ def retrain_hydragnn(
             str(out_logdir),
             str(hydragnn_cfg.logdir),  # resume from current logdir
             str(trainer_cfg.epochs_per_iter),
-            str(trainer_cfg.nodes_for_train),
-            str(trainer_cfg.ranks_per_node),
+            str(launch.node_count),
+            str(launch.ranks_per_node),
             str(reference_manifest),
             hydragnn_cfg.checkpoint or "",
             str(hydragnn_cfg.hydragnn_branch_mlp_checkpoint or ""),
@@ -223,7 +251,14 @@ def retrain_hydragnn(
     log.info("Launching retrain: %s", " ".join(argv))
     log_path = out_logdir / "train.log"
     with open(log_path, "w") as f:
-        proc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, check=False)
+        proc = subprocess.run(
+            argv,
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            check=False,
+            # Without a launcher the trainer runs directly on this node.
+            env=launch.environment(local=trainer_cfg.train_launcher is None),
+        )
     if proc.returncode != 0:
         raise RuntimeError(f"HydraGNN retrain failed with exit {proc.returncode}; see {log_path}")
 
@@ -261,6 +296,8 @@ def retrain_uma(
     dataset_path: str | Path,
     iteration: int,
     out_model_dir: str | Path,
+    *,
+    launch: ProcessLaunch,
 ) -> Path:
     """Spawn a user-supplied UMA fine-tuning script as a child process.
 
@@ -279,6 +316,7 @@ def retrain_uma(
         log.info("trainer.enabled=False; skipping UMA fine-tune at iteration %d", iteration)
         return Path(str(uma_cfg.model_name))
 
+    _require_direct_placement(trainer_cfg, launch, "UMA fine-tuning")
     out_model_dir.mkdir(parents=True, exist_ok=True)
 
     if trainer_cfg.train_launcher is not None:
@@ -291,8 +329,8 @@ def retrain_uma(
             str(uma_cfg.model_name),
             str(uma_cfg.task_name),
             str(trainer_cfg.epochs_per_iter),
-            str(trainer_cfg.nodes_for_train),
-            str(trainer_cfg.ranks_per_node),
+            str(launch.node_count),
+            str(launch.ranks_per_node),
         ]
     else:
         log.warning(
@@ -317,7 +355,14 @@ def retrain_uma(
     log.info("Launching UMA fine-tune: %s", " ".join(argv))
     log_path = out_model_dir / "train.log"
     with open(log_path, "w") as f:
-        proc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, check=False)
+        proc = subprocess.run(
+            argv,
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            check=False,
+            # Without a launcher the trainer runs directly on this node.
+            env=launch.environment(local=trainer_cfg.train_launcher is None),
+        )
     if proc.returncode != 0:
         raise RuntimeError(f"UMA fine-tune failed with exit {proc.returncode}; see {log_path}")
 
@@ -338,6 +383,8 @@ def retrain_mace(
     dataset_path: str | Path,
     iteration: int,
     out_model_dir: str | Path,
+    *,
+    launch: ProcessLaunch,
 ) -> Path:
     """Spawn a MACE fine-tuning job as a child process.
 
@@ -359,6 +406,7 @@ def retrain_mace(
         # Point downstream at the existing base model (checkpoint path or variant).
         return Path(str(mace_cfg.model))
 
+    _require_direct_placement(trainer_cfg, launch, "MACE fine-tuning")
     out_model_dir.mkdir(parents=True, exist_ok=True)
 
     if trainer_cfg.train_launcher is not None:
@@ -371,8 +419,8 @@ def retrain_mace(
             str(mace_cfg.family),
             str(mace_cfg.model),
             str(trainer_cfg.epochs_per_iter),
-            str(trainer_cfg.nodes_for_train),
-            str(trainer_cfg.ranks_per_node),
+            str(launch.node_count),
+            str(launch.ranks_per_node),
         ]
     else:
         log.warning(
@@ -400,7 +448,14 @@ def retrain_mace(
     log.info("Launching MACE fine-tune: %s", " ".join(argv))
     log_path = out_model_dir / "train.log"
     with open(log_path, "w") as f:
-        proc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, check=False)
+        proc = subprocess.run(
+            argv,
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            check=False,
+            # Without a launcher the trainer runs directly on this node.
+            env=launch.environment(local=trainer_cfg.train_launcher is None),
+        )
     if proc.returncode != 0:
         raise RuntimeError(f"MACE fine-tune failed with exit {proc.returncode}; see {log_path}")
 

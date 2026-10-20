@@ -168,7 +168,7 @@ def test_aurora_resume_launcher_honors_model_whitelist(tmp_path):
 @pytest.mark.parametrize(
     ("script", "env", "message"),
     [
-        ("jobs/job-llm-check-aurora.sh", {"MATSIM_MODEL_DIR": "/nonexistent"}, "model directory"),
+        ("jobs/job-llm-check-aurora.sh", {"MODEL_ROOT": "/nonexistent"}, "model directory"),
         ("jobs/job-sequential-benchmark-aurora.sh", {}, "BENCHMARK_PROMPT is required"),
         ("smoke-tests/smoke-transformers-aurora.sh", {"MATSIM_MODEL_DIR": "/nonexistent"}, "model"),
     ],

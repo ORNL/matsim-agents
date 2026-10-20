@@ -83,9 +83,6 @@ dft:
     incar_template:   ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null
     potcar_dir:       ${POTCAR_DIR}
-    nodes_per_job: 2
-    ranks_per_node: 4
-    threads_per_rank: 16
     timeout_sec: 14400
     extra_incar:
       ENCUT: "520"
@@ -104,3 +101,13 @@ loop:
   dataset_format: extxyz
   resume: true
   fail_fast: false
+
+# Placement (docs/resource-dispatch.md). AL stages run one after another, so
+# DFT, training, and MLIP MD share devices; MD runs one seed per GPU of the
+# first node.
+resources:
+  preset: perlmutter-gpu
+  pools:
+    dft:      {nodes: all, devices: all, nodes_per_job: 2, share_with: [training, mlip]}
+    training: {nodes: 1, devices: 1, share_with: [dft, mlip]}
+    mlip:     {nodes: 1, devices: all, share_with: [dft, training]}

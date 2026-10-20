@@ -104,9 +104,6 @@ dft:
     incar_template:  ${PROJ_ROOT}/examples/active_learning/INCAR.template
     kpoints_template: null               # use KSPACING in INCAR
     potcar_dir:      ${POTCAR_DIR}
-    nodes_per_job: 1
-    ranks_per_node: 8                    # 8 GCDs per MI250X node
-    threads_per_rank: 7
     timeout_sec: 7200
     extra_incar:
       NCORE: "8"
@@ -133,9 +130,6 @@ dft:
     extra_system: {}
     extra_electrons:
       mixing_beta: 0.4
-    nodes_per_job: 1
-    ranks_per_node: 8
-    threads_per_rank: 7
     timeout_sec: 7200
 
 trainer:
@@ -148,8 +142,6 @@ trainer:
   train_script:   ${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py
   train_launcher: ${PROJ_ROOT}/deployments/frontier/launchers/_hydragnn-train-step-frontier.sh
   epochs_per_iter: 5
-  nodes_for_train: 1
-  ranks_per_node: 1
 
 loop:
   n_iterations: 10
@@ -157,3 +149,13 @@ loop:
   dataset_format: extxyz
   resume: true
   fail_fast: false
+
+# Placement (docs/resource-dispatch.md). AL stages run one after another, so
+# DFT, training, and MLIP MD share devices; MD runs one seed per GPU of the
+# first node.
+resources:
+  preset: frontier
+  pools:
+    dft:      {nodes: all, devices: all, share_with: [training, mlip]}
+    training: {nodes: 1, devices: 1, share_with: [dft, mlip]}
+    mlip:     {nodes: 1, devices: all, share_with: [dft, training]}

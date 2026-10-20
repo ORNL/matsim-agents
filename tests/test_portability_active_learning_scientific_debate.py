@@ -36,6 +36,10 @@ trainer:
 loop:
   n_iterations: 1
   out_dir: ${MATSIM_AL_OUT_DIR}
+resources:
+  geometry: {vendor: cpu, devices_per_node: 0, cores_per_node: 1}
+  pools:
+    dft: {nodes: all}
 """
 
 

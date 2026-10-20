@@ -12,6 +12,7 @@ from typing import Any
 from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.backends.dft.qe_relax import resolve_pseudopotentials
 from matsim_agents.backends.dft.vasp_io import resolve_potcar_paths
+from matsim_agents.execution.placement import ProcessLaunch
 
 
 def path_identity(path: Path | None) -> dict[str, Any] | None:
@@ -86,8 +87,12 @@ def dft_method_signature(cfg: DFTConfig, elements: set[str]) -> str:
     return f"{cfg.backend}-{hashlib.sha256(payload).hexdigest()[:16]}"
 
 
-def dft_execution_signature(cfg: DFTConfig) -> str:
-    """Identify the launcher and resolved settings without changing the scientific method."""
+def dft_execution_signature(cfg: DFTConfig, launch: ProcessLaunch) -> str:
+    """Identify the launcher, rank layout, and resolved wrapper settings.
+
+    Host names are excluded so cached results stay valid across allocations
+    with the same per-calculation layout.
+    """
     block = cfg.vasp if cfg.backend == "vasp" else cfg.qe
     assert block is not None
     wrapper = block.vasp_wrapper if cfg.backend == "vasp" else block.pw_wrapper
@@ -95,16 +100,22 @@ def dft_execution_signature(cfg: DFTConfig) -> str:
     if wrapper.is_file():
         text = wrapper.read_text()
         for name, default in re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]*)\}", text):
-            if name == "MATSIM_DFT_ASSIGNED_NODES":
+            if name in {
+                "MATSIM_ASSIGNED_NODES",
+                "MATSIM_DEVICES_PER_NODE",
+                "MATSIM_DEVICE_MASK",
+                "MATSIM_NODE_DEVICES",
+            }:
                 continue
             resolved_defaults[name] = os.environ.get(name) or default
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "backend": cfg.backend,
         "wrapper": path_identity(wrapper),
-        "nodes_per_job": block.nodes_per_job,
-        "ranks_per_node": block.ranks_per_node,
-        "threads_per_rank": block.threads_per_rank,
+        "nodes": launch.node_count,
+        "ranks_per_node": launch.ranks_per_node,
+        "threads_per_rank": launch.threads_per_rank,
+        "devices_per_node": len(launch.devices),
         "timeout_sec": block.timeout_sec,
         "resolved_wrapper_defaults": resolved_defaults,
     }

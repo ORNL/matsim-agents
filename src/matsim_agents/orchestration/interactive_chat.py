@@ -15,14 +15,16 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from matsim_agents.backends.llm.provider import get_chat_model
+from matsim_agents.backends.llm.servers import LLMServices, api_key_from_env
 from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
+from matsim_agents.backends.mlip.pool import MLIPWorkerPool, release_device_memory
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.discovery import (
     Composition,
@@ -30,6 +32,7 @@ from matsim_agents.discovery import (
     explore_composition,
     extract_compositions,
 )
+from matsim_agents.execution.placement import Placement, ResourcePlan
 
 ATOMISTIC_EXPLORATION_GUIDANCE = """The system will offer the user the option
     to run a surrogate-driven atomistic exploration of crystal phases for
@@ -70,6 +73,11 @@ class DiscoveryChatConfig:
     mlp_device: str = "cuda"
     uma_model_name: str = "uma-s-1p1"
     uma_task: str = "omat"
+    # Resource plan file: its llm pool serves the models named by llm_server and
+    # critic_llm_servers, and its mlip pool relaxes candidates concurrently.
+    resources: str | None = None
+    llm_server: str | None = None
+    critic_llm_servers: list[str] = field(default_factory=list)
     precision: str | None = None
     mlp_precision: str | None = None
     optimizer: str = "FIRE"
@@ -82,6 +90,7 @@ class DiscoveryChatConfig:
     llm_provider: str = "ollama"
     llm_model: str = "qwen2.5:14b"
     llm_base_url: str | None = None
+    llm_api_key_env: str | None = None  # environment variable holding the proposer's key
     enable_hypothesis_debate: bool = False
     debate_rounds: int = 1
     critic_llm_provider: str | None = None
@@ -90,6 +99,7 @@ class DiscoveryChatConfig:
     critic_panel_models: list[str] = field(default_factory=list)
     critic_panel_providers: list[str] = field(default_factory=list)
     critic_panel_base_urls: list[str] = field(default_factory=list)
+    critic_panel_api_key_envs: list[str | None] = field(default_factory=list)
     critic_cross_critique: bool = False
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     auto_confirm: bool = False  # if True, skip the interactive y/N prompt
@@ -143,6 +153,64 @@ class DiscoveryChatSession:
     messages: list[BaseMessage] = field(default_factory=list)
     seen_compositions: set[str] = field(default_factory=set)
     explorations: list[CompositionExplorationResult] = field(default_factory=list)
+    mlip_pool: MLIPWorkerPool | None = None
+    llm_services: LLMServices | None = None
+    placement: Placement | None = None
+
+    def _placement(self) -> Placement | None:
+        if self.placement is None and self.config.resources:
+            plan = ResourcePlan.from_yaml(self.config.resources)
+            self.placement = plan.place(self.config.output_dir)
+        return self.placement
+
+    def open(self) -> None:
+        """Start the plan's LLM servers and point the proposer and critics at them."""
+        placement = self._placement()
+        if placement is None or "llm" not in placement.pools:
+            if self.config.llm_server or self.config.critic_llm_servers:
+                raise ValueError(
+                    "--llm-server and --critic-llm-servers need a plan with an llm pool"
+                )
+            return
+        self.llm_services = LLMServices.start(
+            placement, log_dir=Path(self.config.output_dir) / "llm-servers"
+        )
+        proposer = self.llm_services.endpoint(self.config.llm_server)
+        critics = [self.llm_services.endpoint(name) for name in self.config.critic_llm_servers]
+        self.config = replace(
+            self.config,
+            llm_provider=proposer.provider,
+            llm_model=proposer.model,
+            llm_base_url=proposer.base_url,
+            llm_api_key_env=proposer.api_key_env,
+            critic_panel_models=[item.model for item in critics] or self.config.critic_panel_models,
+            critic_panel_providers=[item.provider for item in critics]
+            or self.config.critic_panel_providers,
+            critic_panel_base_urls=[item.base_url or "" for item in critics]
+            or self.config.critic_panel_base_urls,
+            critic_panel_api_key_envs=[item.api_key_env for item in critics]
+            or self.config.critic_panel_api_key_envs,
+        )
+
+    def relaxation_pool(self) -> MLIPWorkerPool:
+        """Workers for the plan's mlip pool, or in-process relaxations reusing the model."""
+        if self.mlip_pool is None:
+            self.mlip_pool = MLIPWorkerPool.from_placement(self._placement())
+        return self.mlip_pool
+
+    def release_mlip_models(self) -> None:
+        """Free exploration models before active learning uses the same devices."""
+        if self.mlip_pool is not None and not self.config.active_learning_dry_run:
+            self.mlip_pool.close()
+            release_device_memory()
+
+    def close(self) -> None:
+        if self.mlip_pool is not None:
+            self.mlip_pool.close()
+            self.mlip_pool = None
+        if self.llm_services is not None:
+            self.llm_services.close()
+            self.llm_services = None
 
 
 def _print(msg: str) -> None:
@@ -168,6 +236,8 @@ def _confirm(prompt: str, *, auto: bool) -> bool:
 def _kickoff_exploration(
     composition: Composition,
     cfg: DiscoveryChatConfig,
+    *,
+    mlip_pool: MLIPWorkerPool | None = None,
 ) -> CompositionExplorationResult:
     """Run the auxiliary atomistic exploration with live progress prints."""
     _print(f"\n[bold cyan]>>> Exploring composition {composition.formula}[/bold cyan]")
@@ -215,6 +285,7 @@ def _kickoff_exploration(
         random_seed=cfg.random_seed,
         on_phase_start=_on_start,
         on_phase_done=_on_done,
+        mlip_pool=mlip_pool,
     )
 
     if result.stability is not None:
@@ -280,11 +351,17 @@ def _extract_al_command(user_text: str) -> tuple[bool, str | None]:
     return False, None
 
 
-def _run_single_structure_relaxation(structure_path: str, cfg: DiscoveryChatConfig) -> str:
-    """Run one HydraGNN relaxation and return a compact textual summary."""
+def _run_single_structure_relaxation(
+    structure_path: str,
+    cfg: DiscoveryChatConfig,
+    *,
+    mlip_pool: MLIPWorkerPool | None = None,
+) -> str:
+    """Run one MLIP relaxation and return a compact textual summary."""
     out_dir = Path(cfg.output_dir) / "single_relax"
     out_dir.mkdir(parents=True, exist_ok=True)
-    result = relax_with_mlip(
+    relax = mlip_pool.relax_one if mlip_pool is not None else relax_with_mlip
+    result = relax(
         RelaxStructureInput(
             structure_path=structure_path,
             mlip_backend=cfg.mlip_backend,
@@ -469,7 +546,7 @@ def _debate_hypothesis_response(
     # - fallback: same model as primary
     panel_models = [m for m in cfg.critic_panel_models if m]
     if panel_models:
-        critic_specs: list[tuple[str, str, str | None]] = []
+        critic_specs: list[tuple[str, str, str, str | None, str | None]] = []
         for i, model_name in enumerate(panel_models):
             provider = (
                 cfg.critic_panel_providers[i]
@@ -481,7 +558,10 @@ def _debate_hypothesis_response(
                 if i < len(cfg.critic_panel_base_urls)
                 else cfg.critic_llm_base_url
             )
-            critic_specs.append((f"critic_{i + 1}", provider, model_name, base_url))
+            key_env = (
+                cfg.critic_panel_api_key_envs[i] if i < len(cfg.critic_panel_api_key_envs) else None
+            )
+            critic_specs.append((f"critic_{i + 1}", provider, model_name, base_url, key_env))
     else:
         critic_specs = [
             (
@@ -489,21 +569,28 @@ def _debate_hypothesis_response(
                 cfg.critic_llm_provider or cfg.llm_provider,
                 cfg.critic_llm_model or cfg.llm_model,
                 cfg.critic_llm_base_url,
+                None,
             )
         ]
 
     critics = [
         (
             label,
-            get_chat_model(provider=provider, model=model_name, base_url=base_url),
+            get_chat_model(
+                provider=provider,
+                model=model_name,
+                base_url=base_url,
+                api_key=api_key_from_env(key_env, owner=label),
+            ),
         )
-        for (label, provider, model_name, base_url) in critic_specs
+        for (label, provider, model_name, base_url, key_env) in critic_specs
     ]
 
     primary = get_chat_model(
         provider=cfg.llm_provider,
         model=cfg.llm_model,
         base_url=cfg.llm_base_url,
+        api_key=api_key_from_env(cfg.llm_api_key_env, owner="proposer"),
     )
 
     for _ in range(rounds):
@@ -647,6 +734,7 @@ def chat_once(
                 )
             else:
                 try:
+                    session.release_mlip_models()
                     assistant_text = _run_active_learning_for_formula(al_formula, cfg)
                 except Exception as exc:  # pragma: no cover - depends on runtime environment
                     assistant_text = (
@@ -669,7 +757,9 @@ def chat_once(
             )
         else:
             try:
-                assistant_text = _run_single_structure_relaxation(relax_path, cfg)
+                assistant_text = _run_single_structure_relaxation(
+                    relax_path, cfg, mlip_pool=session.relaxation_pool()
+                )
             except Exception as exc:  # pragma: no cover - depends on runtime environment
                 assistant_text = (
                     f"Single-structure relaxation failed for {relax_path}: {exc!s}. "
@@ -686,6 +776,7 @@ def chat_once(
         provider=cfg.llm_provider,
         model=cfg.llm_model,
         base_url=cfg.llm_base_url,
+        api_key=api_key_from_env(cfg.llm_api_key_env, owner="proposer"),
     )
     response = llm.invoke(session.messages)
     assistant_text = (
@@ -714,7 +805,7 @@ def chat_once(
                 "Run surrogate-based phase exploration?",
                 auto=cfg.auto_confirm,
             ):
-                exploration = _kickoff_exploration(comp, cfg)
+                exploration = _kickoff_exploration(comp, cfg, mlip_pool=session.relaxation_pool())
                 session.explorations.append(exploration)
                 if cfg.trigger_active_learning_on_high_uq:
                     should_handoff, handoff_reason = _should_handoff_to_active_learning(
@@ -722,6 +813,7 @@ def chat_once(
                         cfg,
                     )
                     if should_handoff:
+                        session.release_mlip_models()
                         handoff_msg = _handoff_to_active_learning(exploration, cfg)
                         handoff_action = (
                             "triggered_dry_run" if cfg.active_learning_dry_run else "triggered_run"
@@ -766,22 +858,27 @@ def chat_once(
 def run_chat(config: DiscoveryChatConfig) -> DiscoveryChatSession:
     """Blocking REPL. Type ``exit`` / ``quit`` / Ctrl-D to leave."""
     session = DiscoveryChatSession(config=config)
-    _print(
-        f"[bold]matsim-agents discovery chat[/bold]  "
-        f"(provider={config.llm_provider}, model={config.llm_model}, "
-        f"debate={'on' if config.enable_hypothesis_debate else 'off'})\n"
-        "Type 'exit' to quit. Propose compositions like 'Li2MnO3' to trigger exploration.\n"
-        "Commands: /relax <structure_path>, /al [composition], /clear.\n"
-    )
-    while True:
-        try:
-            user_text = input("\nyou> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            _print("\n[dim]bye[/dim]")
-            break
-        if not user_text:
-            continue
-        if user_text.lower() in {"exit", "quit", ":q"}:
-            break
-        chat_once(session, user_text, on_assistant=lambda t: _print(f"\nassistant> {t}"))
+    try:
+        session.open()
+        config = session.config
+        _print(
+            f"[bold]matsim-agents discovery chat[/bold]  "
+            f"(provider={config.llm_provider}, model={config.llm_model}, "
+            f"debate={'on' if config.enable_hypothesis_debate else 'off'})\n"
+            "Type 'exit' to quit. Propose compositions like 'Li2MnO3' to trigger exploration.\n"
+            "Commands: /relax <structure_path>, /al [composition], /clear.\n"
+        )
+        while True:
+            try:
+                user_text = input("\nyou> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                _print("\n[dim]bye[/dim]")
+                break
+            if not user_text:
+                continue
+            if user_text.lower() in {"exit", "quit", ":q"}:
+                break
+            chat_once(session, user_text, on_assistant=lambda t: _print(f"\nassistant> {t}"))
+    finally:
+        session.close()
     return session

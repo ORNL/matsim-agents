@@ -50,7 +50,7 @@ def prepare_source(code: Path, dependencies: Path, output_root: Path, torch_vers
         installer = dependencies / installer_path
         if installer.is_file():
             text, replacements = re.subn(
-                r'(?m)^([ \t]*)module load frameworks[ \t]*$',
+                r"(?m)^([ \t]*)module load frameworks[ \t]*$",
                 r'\1module load "${FRAMEWORKS_MODULE:-frameworks}"',
                 installer.read_text(),
             )

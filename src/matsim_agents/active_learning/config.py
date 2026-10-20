@@ -8,12 +8,13 @@ a top-level field so the YAML is self-documenting and trivially diffable.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.backends.mlip.config import MLIPConfig
+from matsim_agents.execution.placement import ResourcePlan
 
 
 class MDConfig(BaseModel):
@@ -44,9 +45,11 @@ class MDConfig(BaseModel):
         default=None,
         description=(
             "If set, seed the MD RNG (Maxwell-Boltzmann velocities and the "
-            "Langevin thermostat noise) so the sampled trajectory and the "
-            "resulting candidate pool are reproducible across runs. Leave "
-            "unset for stochastic sampling (the default)."
+            "Langevin thermostat noise) so the sampled trajectories and the "
+            "resulting candidate pool are reproducible across runs. Each seed "
+            "structure gets its own stream derived from this value, so results "
+            "do not depend on whether seeds run sequentially or concurrently. "
+            "Leave unset for stochastic sampling (the default)."
         ),
     )
 
@@ -252,8 +255,18 @@ class TrainerConfig(BaseModel):
         ),
     )
     epochs_per_iter: int = 5
-    nodes_for_train: int = 8
-    ranks_per_node: int = 8
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_placement(cls, data: Any) -> Any:
+        moved = {
+            "nodes_for_train": "resources.pools.training.nodes",
+            "ranks_per_node": "resources.pools.training.devices",
+        }
+        if isinstance(data, dict) and (present := [key for key in moved if key in data]):
+            targets = "; ".join(f"trainer.{key} -> {moved[key]}" for key in present)
+            raise ValueError(f"placement settings moved to the resources: plan: {targets}")
+        return data
 
     @model_validator(mode="after")
     def _check_train_script(self) -> TrainerConfig:
@@ -320,6 +333,22 @@ class ALConfig(BaseModel):
     dft: DFTConfig
     trainer: TrainerConfig
     loop: LoopConfig
+    resources: ResourcePlan = Field(
+        ...,
+        description=(
+            "Placement of DFT and training work on the allocation; see "
+            "docs/resource-dispatch.md. Requires a dft pool, and a training pool "
+            "when trainer.enabled is true."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_resource_pools(self) -> ALConfig:
+        if "dft" not in self.resources.pools:
+            raise ValueError("resources.pools.dft is required: active learning labels with DFT")
+        if self.trainer.enabled and "training" not in self.resources.pools:
+            raise ValueError("trainer.enabled=True requires resources.pools.training")
+        return self
 
     @model_validator(mode="after")
     def _check_ensemble_for_strategy(self) -> ALConfig:
@@ -352,10 +381,9 @@ class ALConfig(BaseModel):
         on the raw YAML text, so you can interpolate inside paths, lists, and
         even keys.
         """
-        import os
-        import re
-
         import yaml
+
+        from matsim_agents.execution.variables import expand_variables, variable_defaults
 
         path = Path(path)
         raw_text = path.read_text()
@@ -365,68 +393,9 @@ class ALConfig(BaseModel):
             preview = yaml.safe_load(raw_text) or {}
         except yaml.YAMLError:
             preview = {}
-
-        # ${VAR}, ${VAR:-default}, ${VAR:?msg}.  Nested braces not supported.
-        pattern = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:[-?][^}]*)?\}")
-
-        defaults: dict[str, str] = {}
-        if isinstance(preview, dict) and isinstance(preview.get("vars"), dict):
-            # A `vars:` entry may reference the environment with its own name as
-            # a fallback default, e.g.  ``RUNS_ROOT: ${RUNS_ROOT:-/some/path}``
-            # ("use $RUNS_ROOT if exported, else this literal"). Resolve that
-            # self-reference up front: without this, ``_resolve`` would look the
-            # name up in ``defaults`` and hand back the entry's own raw string,
-            # so it converges to the literal ``${RUNS_ROOT:-/some/path}`` and the
-            # default path is never applied. References to *other* vars are left
-            # untouched here and resolved by the main loop below.
-            def _break_self_ref(key: str, value: str) -> str:
-                def _sub(match: re.Match[str]) -> str:
-                    name = match.group(1)
-                    modifier = match.group(2) or ""
-                    if os.environ.get(name):
-                        return os.environ[name]
-                    if name == key:
-                        if modifier.startswith(":-"):
-                            return modifier[2:]
-                        if modifier.startswith(":?"):
-                            msg = modifier[2:].strip() or f"required variable {name!r} is unset"
-                            raise ValueError(f"{path}: {msg}")
-                    return match.group(0)  # env var or cross-ref; resolve later
-
-                return pattern.sub(_sub, value)
-
-            defaults = {str(k): _break_self_ref(str(k), str(v)) for k, v in preview["vars"].items()}
-
-        def _resolve(match: re.Match[str]) -> str:
-
-            name = match.group(1)
-            modifier = match.group(2) or ""
-            if name in os.environ and os.environ[name] != "":
-                return os.environ[name]
-            if name in defaults:
-                return defaults[name]
-            if modifier.startswith(":-"):
-                return modifier[2:]
-            if modifier.startswith(":?"):
-                msg = modifier[2:].strip() or f"required variable {name!r} is unset"
-                raise ValueError(f"{path}: {msg}")
-            raise ValueError(
-                f"{path}: undefined variable ${{{name}}} "
-                "(set it in the environment, in the YAML 'vars:' block, "
-                "or use ${VAR:-default} syntax)."
-            )
-
-        substituted = raw_text
-        for _ in range(10):  # iterate so vars can reference other vars
-            new_text = pattern.sub(_resolve, substituted)
-            if new_text == substituted:
-                break
-            substituted = new_text
-        else:
-            raise ValueError(
-                f"{path}: variable substitution did not converge after 10 passes "
-                "(possible circular reference in 'vars:')."
-            )
+        vars_block = preview.get("vars") if isinstance(preview, dict) else None
+        defaults = variable_defaults(vars_block, source=path)
+        substituted = expand_variables(raw_text, defaults, source=path)
         data = yaml.safe_load(substituted)
         if isinstance(data, dict):
             data.pop("vars", None)

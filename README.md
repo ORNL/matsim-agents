@@ -290,14 +290,14 @@ See [Energy comparison and promotion](#energy-comparison-and-promotion).
 
 #### Consistent multi-node DFT labeling
 
-The DFT batch planner discovers Slurm allocations on Frontier/Perlmutter and
-PBS nodefiles on Aurora, partitions the nodes into stable disjoint groups, and
-processes one serial queue per group. This prevents a node from being reused
-while its preceding VASP/QE step is still running. Facility launchers consume
-the assigned host list and use every configured GPU rank per node. Set
-`MATSIM_GPUS_PER_NODE` on PBS (12 for Aurora tile-as-device runs); Slurm GPU
-counts are discovered from its environment. A mismatch between allocated GPUs
-and `ranks_per_node` fails before launching expensive calculations.
+Where DFT runs is declared in the config's `resources:` block
+([resource dispatch](docs/resource-dispatch.md)): the `dft` pool's nodes are
+split into stable, disjoint groups of `nodes_per_job`, and each group processes
+one serial queue, so a node is never reused while its preceding VASP/QE step is
+still running. Ranks per node are the pool's devices per node times
+`ranks_per_device`; threads per rank default to the cores per node divided by
+the ranks. The plan is checked against the Slurm or PBS allocation before any
+calculation starts, and the resolved layout is written to `placement.json`.
 Set `dft.max_concurrent_jobs` to impose a lower concurrency cap; when omitted,
 all complete `nodes_per_job` partitions are used.
 
@@ -1210,6 +1210,9 @@ matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific d
 matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
 matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
+matsim-agents resources plan CONFIG.yaml [--nodes N]   # preview LLM/MLIP/DFT placement
+matsim-agents resources validate CONFIG.yaml           # exit non-zero on conflicts
+matsim-agents resources serve CONFIG.yaml -- CMD ...    # run CMD while the plan's LLM servers are up
 ```
 
 Common options (all commands that touch HydraGNN):

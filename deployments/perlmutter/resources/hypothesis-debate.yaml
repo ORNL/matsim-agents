@@ -1,0 +1,35 @@
+# Hypothesis debate panel on one 80 GB Perlmutter node: a proposer and two
+# critics from different model families, one GPU each (GPU 3 is spare).
+#   matsim-agents resources plan deployments/perlmutter/resources/hypothesis-debate.yaml
+preview: {nodes: 1, spare_devices: [3]}
+resources:
+  preset: perlmutter-gpu-80gb
+  pools:
+    llm:
+      nodes: 1
+      devices: [0, 1, 2]
+      servers:
+        - name: proposer
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Qwen2.5-14B-Instruct
+          nodes: 1
+          devices: [0]
+          max_model_len: 8192
+          launcher: [bash, "${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/perlmutter/launchers/vllm-server-perlmutter.sh"]
+          extra_args: [--enforce-eager]
+        - name: critic-deepseek
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/DeepSeek-R1-Distill-Qwen-32B
+          nodes: 1
+          devices: [1]
+          max_model_len: 8192
+          launcher: [bash, "${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/perlmutter/launchers/vllm-server-perlmutter.sh"]
+          extra_args: [--enforce-eager]
+        - name: critic-gemma
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/gemma-4-31B-it
+          nodes: 1
+          devices: [2]
+          max_model_len: 8192
+          launcher: [bash, "${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/perlmutter/launchers/vllm-server-perlmutter.sh"]
+          extra_args: [--enforce-eager]

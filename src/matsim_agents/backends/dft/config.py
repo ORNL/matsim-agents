@@ -7,6 +7,23 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+# Placement settings that moved to the ``resources:`` plan (docs/resource-dispatch.md).
+_MOVED_TO_RESOURCES = {
+    "nodes_per_job": "resources.pools.dft.nodes_per_job",
+    "ranks_per_node": "resources.pools.dft (devices per node x ranks_per_device)",
+    "threads_per_rank": "resources.pools.dft.threads_per_rank",
+    "max_concurrent_jobs": "resources.pools.dft.max_concurrent",
+}
+
+
+def reject_moved_placement_fields(data: Any, block: str) -> Any:
+    """Fail with a pointer to the ``resources:`` plan when a config sets a moved field."""
+
+    if isinstance(data, dict) and (moved := [key for key in _MOVED_TO_RESOURCES if key in data]):
+        targets = "; ".join(f"{block}.{key} -> {_MOVED_TO_RESOURCES[key]}" for key in moved)
+        raise ValueError(f"placement settings moved to the resources: plan: {targets}")
+    return data
+
 
 class VASPConfig(BaseModel):
     """How to run VASP single-point calculations."""
@@ -25,11 +42,13 @@ class VASPConfig(BaseModel):
         None, description="Optional KPOINTS template; otherwise auto KSPACING in INCAR."
     )
     potcar_dir: Path = Field(..., description="Directory containing per-element POTCAR files.")
-    nodes_per_job: int = 1
-    ranks_per_node: int = 8  # 8 GCDs per MI250X node
-    threads_per_rank: int = 7
     timeout_sec: int = 7200
     extra_incar: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_placement(cls, data: Any) -> Any:
+        return reject_moved_placement_fields(data, "dft.vasp")
 
 
 class QEBackendConfig(BaseModel):
@@ -86,10 +105,12 @@ class QEBackendConfig(BaseModel):
     extra_control: dict[str, Any] = Field(default_factory=dict)
     extra_system: dict[str, Any] = Field(default_factory=dict)
     extra_electrons: dict[str, Any] = Field(default_factory=dict)
-    nodes_per_job: int = 1
-    ranks_per_node: int = 8
-    threads_per_rank: int = 7
     timeout_sec: int = 7200
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_placement(cls, data: Any) -> Any:
+        return reject_moved_placement_fields(data, "dft.qe")
 
 
 class DFTConfig(BaseModel):
@@ -101,14 +122,11 @@ class DFTConfig(BaseModel):
     backend: Literal["vasp", "qe"] = "vasp"
     vasp: VASPConfig | None = None
     qe: QEBackendConfig | None = None
-    max_concurrent_jobs: int | None = Field(
-        None,
-        ge=1,
-        description=(
-            "Optional concurrency cap. The scheduler-neutral allocation planner "
-            "otherwise uses every complete nodes_per_job partition."
-        ),
-    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_placement(cls, data: Any) -> Any:
+        return reject_moved_placement_fields(data, "dft")
 
     @model_validator(mode="after")
     def _check_backend_block(self) -> DFTConfig:

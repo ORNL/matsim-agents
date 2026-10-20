@@ -60,14 +60,37 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-16}"
 export MPICH_GPU_SUPPORT_ENABLED=1
 
 echo "[hydragnn-train] $(date) host=$(hostname)"
-echo "[hydragnn-train] srun -N 1 -n 1 python ${TRAIN_SCRIPT} ..."
+# The training pool's host comes from the placement (MATSIM_ASSIGNED_NODES).
+NODE_ARGS=()
+if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
+  NODE_ARGS=(--nodelist "${MATSIM_ASSIGNED_NODES}")
+fi
 
+# Slurm picks which GPUs a step receives, so a GPU count alone cannot honour the
+# placement's device indices. When the placement uses only some of the node's
+# GPUs, take them all for the step and expose only the placed ones inside it.
+STEP_GPUS="1"
+GPU_ARGS=(--gpus-per-node="${STEP_GPUS}" --gpu-bind=closest)
+STEP_ENV=()
+STEP_SHARE=()
+if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
+      && "${STEP_GPUS}" != "${MATSIM_NODE_DEVICES}" ]]; then
+  GPU_ARGS=(--gpus-per-node="${MATSIM_NODE_DEVICES}" --gpu-bind=none)
+  # Other pools may hold the node's remaining GPUs (e.g. a vLLM step); the
+  # placement keeps devices disjoint, so overlap instead of waiting for them.
+  STEP_SHARE=(--overlap)
+  STEP_ENV=(env "CUDA_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
+fi
+echo "[hydragnn-train] srun ${STEP_SHARE[*]} ${GPU_ARGS[*]} ${STEP_ENV[*]} python ${TRAIN_SCRIPT} ..."
+echo "[step] gpu_args=${GPU_ARGS[*]} placed_devices=${MATSIM_DEVICE_MASK:-all}"
 exec srun \
+  "${STEP_SHARE[@]}" \
+  "${NODE_ARGS[@]}" \
   -N 1 \
   -n 1 \
   -c "${OMP_NUM_THREADS}" \
-  --gpus-per-node=1 \
-  --gpu-bind=closest \
+  "${GPU_ARGS[@]}" \
+  "${STEP_ENV[@]}" \
   python "${TRAIN_SCRIPT}" \
     --dataset "${DATASET}" \
     --output-dir "${OUT_LOGDIR}" \

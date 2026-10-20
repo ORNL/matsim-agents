@@ -1,0 +1,19 @@
+# LLM deployment qualification: one vLLM server for Qwen2.5-14B-Instruct on PVC tiles 0-3 (tensor parallel 4),
+# started by `matsim-agents resources serve` in job-llm-check-aurora.sh.
+#   matsim-agents resources plan deployments/aurora/resources/llm-check.yaml
+preview: {nodes: 1, spare_devices: [4, 5, 6, 7, 8, 9, 10, 11]}
+resources:
+  preset: aurora
+  pools:
+    llm:
+      nodes: 1
+      devices: [0, 1, 2, 3]
+      servers:
+        - name: model
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Qwen2.5-14B-Instruct
+          max_model_len: 8192
+          launcher:
+            - bash
+            - ${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/aurora/launchers/vllm-server-aurora.sh
+          extra_args: [--trust-remote-code, --enforce-eager]

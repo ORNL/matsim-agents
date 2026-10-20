@@ -1,0 +1,15 @@
+# Discovery chat on one Aurora node (FLAT mode): a managed vLLM server on tiles
+# 0-1 (tensor parallel 2) and ten concurrent MLIP relaxations on tiles 2-11.
+preview: {nodes: 1}
+resources:
+  preset: aurora
+  pools:
+    llm:
+      nodes: 1
+      devices: [0, 1]
+      servers:
+        - name: proposer
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Qwen2.5-14B-Instruct
+          max_model_len: 16384
+    mlip: {nodes: 1, devices: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]}

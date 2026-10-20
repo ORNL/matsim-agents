@@ -8,12 +8,15 @@ set -euo pipefail
 : "${LOGDIR:?set LOGDIR}"
 : "${HYDRAGNN_BRANCH_MLP_CHECKPOINT:?set HYDRAGNN_BRANCH_MLP_CHECKPOINT}"
 : "${MATSIM_DFT_BACKEND:=qe}"
+: "${MATSIM_RESOURCES:?set MATSIM_RESOURCES to a resource layout, e.g. deployments/<facility>/resources/active-learning-sequential.yaml}"
 
 AL_CONFIG="${RUN_DIR}/active-learning-config.json"
-export AL_CONFIG RUN_DIR LOGDIR HYDRAGNN_BRANCH_MLP_CHECKPOINT
+export AL_CONFIG RUN_DIR LOGDIR HYDRAGNN_BRANCH_MLP_CHECKPOINT MATSIM_RESOURCES
 python3 -c '
 import json, os
 from pathlib import Path
+
+from matsim_agents.execution.placement import ResourcePlan
 
 backend = os.environ["MATSIM_DFT_BACKEND"]
 if backend == "qe":
@@ -25,9 +28,6 @@ if backend == "qe":
         "pw_bin": os.environ["MATSIM_PW_BIN"],
         "pw_wrapper": os.environ["MATSIM_DFT_WRAPPER"],
         "pseudo_dir": os.environ["MATSIM_PSEUDO_DIR"],
-        "nodes_per_job": int(os.environ.get("MATSIM_DFT_NODES_PER_JOB", "1")),
-        "ranks_per_node": int(os.environ["MATSIM_DFT_RANKS_PER_NODE"]),
-        "threads_per_rank": int(os.environ.get("MATSIM_DFT_THREADS_PER_RANK", "1")),
     }}
 elif backend == "vasp":
     required = ("MATSIM_VASP_BIN", "MATSIM_POTCAR_DIR", "MATSIM_DFT_WRAPPER", "MATSIM_INCAR_TEMPLATE")
@@ -39,9 +39,6 @@ elif backend == "vasp":
         "vasp_wrapper": os.environ["MATSIM_DFT_WRAPPER"],
         "incar_template": os.environ["MATSIM_INCAR_TEMPLATE"],
         "potcar_dir": os.environ["MATSIM_POTCAR_DIR"],
-        "nodes_per_job": int(os.environ.get("MATSIM_DFT_NODES_PER_JOB", "1")),
-        "ranks_per_node": int(os.environ["MATSIM_DFT_RANKS_PER_NODE"]),
-        "threads_per_rank": int(os.environ.get("MATSIM_DFT_THREADS_PER_RANK", "1")),
     }}
 else:
     raise SystemExit("MATSIM_DFT_BACKEND must be qe or vasp")
@@ -71,6 +68,9 @@ cfg = {
                     "diversity_filter": True},
     "dft": dft,
     "trainer": trainer,
+    "resources": ResourcePlan.from_yaml(os.environ["MATSIM_RESOURCES"]).model_dump(
+        mode="json", exclude_unset=True
+    ),
     "loop": {"n_iterations": int(os.environ.get("MATSIM_AL_ITERATIONS", "1")),
              "out_dir": str(Path(os.environ["RUN_DIR"]) / "workflow"),
              "dataset_format": "extxyz", "resume": True, "fail_fast": False},

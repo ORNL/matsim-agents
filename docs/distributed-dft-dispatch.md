@@ -12,27 +12,32 @@ is used on Frontier, Aurora, and Perlmutter.
   preserving node order, and uses PBS/PALS launchers.
 - A non-scheduler process receives a one-node local allocation for testing.
 
-The allocation is partitioned into stable, disjoint groups of
+The `dft` pool of the config's `resources:` plan
+([resource dispatch](resource-dispatch.md)) selects nodes and devices from the
+allocation. Its nodes are partitioned into stable, disjoint groups of
 `nodes_per_job`. Each group owns a serial queue of DFT jobs. Different groups
 run concurrently; a group is not reused until its preceding calculation has
-finished. Consequently, `max_concurrent_jobs` is a cap on independent groups,
-not permission to oversubscribe a node.
+finished. Consequently, the pool's `max_concurrent` is a cap on independent
+groups, not permission to oversubscribe a node.
 
 ## Resource keys
 
 | Setting | Meaning |
 | --- | --- |
-| `nodes_per_job` | Whole nodes assigned to one VASP or QE calculation |
-| `ranks_per_node` | Accelerator-using MPI ranks launched on each assigned node |
-| `threads_per_rank` | CPU threads reserved for each rank |
-| `dft.max_concurrent_jobs` | Optional cap below the number of complete node groups |
-| `MATSIM_GPUS_PER_NODE` | Explicit device count when the scheduler environment does not report it |
-| `MATSIM_DFT_ASSIGNED_NODES` | Host list passed by the planner to a facility step launcher |
+| `resources.pools.dft.nodes` / `devices` | Nodes and per-node devices of the DFT pool |
+| `resources.pools.dft.nodes_per_job` | Whole nodes assigned to one VASP or QE calculation; must divide the pool's nodes |
+| `resources.pools.dft.ranks_per_device` | MPI ranks per device; ranks per node = devices per node x this value |
+| `resources.pools.dft.threads_per_rank` | CPU threads per rank; defaults to cores per node / ranks per node |
+| `resources.pools.dft.max_concurrent` | Optional cap below the number of job groups |
+| `MATSIM_ASSIGNED_NODES` | Host list of one job group, passed to the facility step launcher |
+| `MATSIM_DEVICES_PER_NODE` | Devices per node of the job group; Slurm launchers request this many GPUs |
 
-When the GPU count is known, `ranks_per_node` must equal it. This fail-fast
-rule prevents an apparently successful benchmark from using only part of a
-node. Aurora jobs normally set `MATSIM_GPUS_PER_NODE=12` because the supported
-configuration treats the two tiles on each of six PVC GPUs as devices.
+Step launchers keep the positional contract
+`<nodes> <ranks_per_node> <threads_per_rank>` after their input arguments. The
+device-mask variable of the vendor (`CUDA_VISIBLE_DEVICES`,
+`ROCR_VISIBLE_DEVICES`, or `ZE_AFFINITY_MASK`) is also set for each group.
+Device counts come from the scheduler when it reports them and otherwise from
+the plan's preset, so Aurora uses the `aurora` preset's 12 tiles per node.
 
 ## Facility launchers
 

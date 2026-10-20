@@ -19,11 +19,14 @@ import re
 import shutil
 import subprocess
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from matsim_agents.execution.devices import apply_mask_environment
 
 # --------------------------------------------------------------------------- #
 # Element-aware defaults                                                      #
@@ -641,6 +644,7 @@ def run_pw(
     launcher_cmd: list[str] | str,
     stdout_name: str = "pw.out",
     timeout_sec: int | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> PWResult:
     """Run ``pw.x`` via the user-provided launcher and parse the output.
 
@@ -679,6 +683,7 @@ def run_pw(
                 stderr=subprocess.STDOUT,
                 timeout=timeout_sec,
                 check=False,
+                env=_child_environment(env),
             )
             rc = proc.returncode
         except subprocess.TimeoutExpired:
@@ -697,3 +702,13 @@ def find_default_launcher() -> str | None:
     if val and shutil.which(val.split()[0] if " " in val else val):
         return val
     return None
+
+
+def _child_environment(env: Mapping[str, str] | None) -> dict[str, str] | None:
+    """Parent environment plus *env*; a placed ROCR mask drops an inherited HIP mask."""
+
+    if not env:
+        return None
+    merged = dict(os.environ)
+    apply_mask_environment(merged, env)
+    return merged

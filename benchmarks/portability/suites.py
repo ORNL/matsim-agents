@@ -111,6 +111,8 @@ def active_learning_contract(output: Path) -> dict[str, Any]:
 def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, Any]:
     """Execute one production AL iteration with deterministic numerical adapters."""
 
+    import socket
+
     import numpy as np
     from ase.io import read
 
@@ -118,6 +120,7 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
     from matsim_agents.active_learning.config import ALConfig
     from matsim_agents.backends.dft.base import DFTResult
     from matsim_agents.active_learning.loop import run_active_learning
+    from matsim_agents.execution.allocation import Allocation
 
     atoms = read(structure)
     candidates = [
@@ -156,10 +159,13 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
                     "pw_bin": "/portability/pw.x",
                     "pw_wrapper": "/portability/qe-wrapper.sh",
                     "pseudo_dir": "/portability/pseudo",
-                    "ranks_per_node": 1,
                 },
             },
             "trainer": {"enabled": False},
+            "resources": {
+                "geometry": {"vendor": "cpu", "devices_per_node": 0, "cores_per_node": 1},
+                "pools": {"dft": {"nodes": "all"}},
+            },
             "loop": {
                 "n_iterations": 1,
                 "out_dir": str(output / "production-loop"),
@@ -183,6 +189,12 @@ def active_learning_loop_contract(structure: Path, output: Path) -> dict[str, An
             return_value=SimpleNamespace(name="qe"),
         ),
         patch("matsim_agents.active_learning.loop.run_dft_batch", return_value=labelled),
+        # The loop is mocked; resolve its CPU-only plan on a local allocation so a real
+        # Slurm/PBS GPU allocation around the benchmark does not contradict it.
+        patch(
+            "matsim_agents.execution.allocation.discover_allocation",
+            return_value=Allocation("local", (socket.gethostname(),)),
+        ),
     ):
         run_active_learning(cfg)
         # Running a second time must resume rather than duplicate iteration 0.
@@ -213,18 +225,16 @@ def dft_allocation_contract(output: Path) -> dict[str, Any]:
 
     from matsim_agents.backends.dft.base import DFTJobSpec, DFTResult
     from matsim_agents.backends.dft.runner import run_dft_batch
+    from matsim_agents.execution.placement import ResourcePlan
 
     assignments: list[tuple[str, ...]] = []
 
     class Backend:
         name = "qe"
-        nodes_per_job = 1
-        ranks_per_node = 1
-        threads_per_rank = 1
         timeout_sec = 30
 
         def run_one(self, spec):
-            assignments.append(spec.assigned_nodes)
+            assignments.append(spec.require_launch().hosts)
             return DFTResult(
                 backend="qe",
                 work_dir=spec.work_dir,
@@ -246,10 +256,13 @@ def dft_allocation_contract(output: Path) -> dict[str, Any]:
         "SLURM_JOB_ID": "portability",
         "SLURM_JOB_NUM_NODES": "4",
         "SLURM_JOB_NODELIST": "node0,node1,node2,node3",
-        "MATSIM_GPUS_PER_NODE": "1",
+        "SLURM_GPUS_ON_NODE": "1",
     }
+    plan = ResourcePlan.model_validate(
+        {"preset": "perlmutter-gpu", "pools": {"dft": {"nodes": "all", "devices": "all"}}}
+    )
     with patch.dict(os.environ, environment, clear=False):
-        results = run_dft_batch(specs, Backend())
+        results = run_dft_batch(specs, Backend(), plan.place().pool("dft"))
     unique = {group for group in assignments}
     return {
         "status": "complete",

@@ -1,0 +1,12 @@
+# Active learning where MD, DFT, and training run one after another: DFT uses
+# every device of every node, training shares one device with it, and MD runs
+# one seed per device of the first node.
+# deployments/common/run-active-learning.sh uses this layout by default.
+#   matsim-agents resources plan deployments/perlmutter/resources/active-learning-sequential.yaml --nodes 2
+preview: {nodes: 2}
+resources:
+  preset: perlmutter-gpu
+  pools:
+    dft:      {nodes: all, devices: all, share_with: [training, mlip]}
+    training: {nodes: 1, devices: 1, share_with: [dft, mlip]}
+    mlip:     {nodes: 1, devices: all, share_with: [dft, training]}

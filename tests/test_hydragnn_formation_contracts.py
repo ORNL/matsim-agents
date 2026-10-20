@@ -1,6 +1,7 @@
 """Physical training and reconstructed inference contracts without real models."""
 
 import json
+import socket
 import sys
 from contextlib import nullcontext
 from pathlib import Path
@@ -22,6 +23,12 @@ from matsim_agents.datasets.energy_references import predict_elemental_reference
 from matsim_agents.datasets.formation_training import (
     prepare_hydragnn_training_frames,
     save_hydragnn_energy_convention,
+)
+from matsim_agents.execution.placement import ProcessLaunch
+
+# Direct (launcher-less) training must be placed on the driver node.
+LAUNCH = ProcessLaunch(
+    hosts=(socket.gethostname(),), devices=(0,), ranks_per_node=1, threads_per_rank=1
 )
 
 
@@ -568,8 +575,6 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         enabled=True,
         train_script=script,
         train_launcher=tmp_path / "launcher.sh" if launcher else None,
-        nodes_for_train=1,
-        ranks_per_node=1,
         validation_reference_set=manifest,
     )
     argv = []
@@ -612,6 +617,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         dataset,
         0,
         output,
+        launch=LAUNCH,
     )
     assert result == output
     assert len(built_calculators) == 1
@@ -624,8 +630,8 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             str(output),
             str(tmp_path),
             str(config.epochs_per_iter),
-            str(config.nodes_for_train),
-            str(config.ranks_per_node),
+            "1",
+            "1",
             str(output.parent / "elemental-training-reference/elemental-references.json"),
         ]
         assert argv[10:12] == ["incumbent.pk", str(tmp_path / "mlp.pt")]
@@ -660,6 +666,7 @@ def test_retrain_hook_forwards_references_and_verifies_output(
             dataset,
             0,
             output,
+            launch=LAUNCH,
         )
 
 
@@ -709,7 +716,7 @@ def test_retrain_rejects_bundle_not_bound_to_requested_dataset(
 
     monkeypatch.setattr(factory, "build_hydragnn_calculator", unexpected_model_load)
     with pytest.raises(ValueError, match="does not match the requested training dataset"):
-        retrain_hydragnn(config, HydraGNNConfig(logdir=tmp_path), dataset, 1, output)
+        retrain_hydragnn(config, HydraGNNConfig(logdir=tmp_path), dataset, 1, output, launch=LAUNCH)
 
 
 def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
@@ -736,7 +743,7 @@ def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
     )
 
     with pytest.raises(ValueError, match="requested elemental reference manifest"):
-        retrain_hydragnn(config, HydraGNNConfig(logdir=tmp_path), dataset, 1, output)
+        retrain_hydragnn(config, HydraGNNConfig(logdir=tmp_path), dataset, 1, output, launch=LAUNCH)
 
 
 def test_retrain_rejects_multirank_builtin_before_resolving_references(
@@ -751,8 +758,6 @@ def test_retrain_rejects_multirank_builtin_before_resolving_references(
         enabled=True,
         train_script=script,
         train_launcher=tmp_path / "launcher.sh",
-        nodes_for_train=2,
-        ranks_per_node=1,
         validation_reference_set=manifest,
     )
 
@@ -761,13 +766,15 @@ def test_retrain_rejects_multirank_builtin_before_resolving_references(
 
     monkeypatch.setattr(references, "resolve_training_references", unexpected_reference_resolution)
 
-    with pytest.raises(ValueError, match="require exactly one process"):
+    two_nodes = LAUNCH.model_copy(update={"hosts": ("node0", "node1")})
+    with pytest.raises(ValueError, match="run as one process"):
         retrain_hydragnn(
             config,
             HydraGNNConfig(logdir=tmp_path),
             dataset,
             0,
             tmp_path / "output",
+            launch=two_nodes,
         )
 
 
@@ -848,4 +855,5 @@ def test_retrain_rejects_non_builtin_train_script(tmp_path, training_inputs):
             dataset_path=dataset,
             iteration=0,
             out_logdir=tmp_path / "out",
+            launch=LAUNCH,
         )

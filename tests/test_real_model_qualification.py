@@ -31,9 +31,9 @@ def test_config_roundtrip_and_backend_isolation(tmp_path, backend):
     assert cfg.trainer.validation_fraction == 0.2
     assert cfg.trainer.train_script.is_file()
     block = getattr(cfg.dft, backend)
-    assert block.nodes_per_job == 1
     assert block.timeout_sec == 1800
-    assert block.ranks_per_node * block.threads_per_rank == 64
+    assert cfg.resources.preset == "perlmutter-gpu"
+    assert set(cfg.resources.pools) == {"dft", "training", "mlip"}
     assert getattr(cfg.dft, "vasp" if backend == "qe" else "qe") is None
     if backend == "vasp":
         assert block.vasp_wrapper.is_file()

@@ -59,13 +59,19 @@ fi
 mkdir -p "${OUT_LOGDIR}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 export ZE_FLAT_DEVICE_HIERARCHY="${ZE_FLAT_DEVICE_HIERARCHY:-FLAT}"
-export ZE_AFFINITY_MASK="${MATSIM_TRAIN_TILE:-0}"
+# The training pool sets ZE_AFFINITY_MASK to its tile.
+export ZE_AFFINITY_MASK="${ZE_AFFINITY_MASK:?resources.pools.training must place the trainer on one tile}"
 export ONEAPI_DEVICE_SELECTOR="${ONEAPI_DEVICE_SELECTOR:-level_zero:gpu}"
 
 echo "[hydragnn-train] $(date) host=$(hostname) tile=${ZE_AFFINITY_MASK}"
 echo "[hydragnn-train] mpiexec -n 1 --ppn 1 python ${TRAIN_SCRIPT} ..."
 
-exec mpiexec -n 1 --ppn 1 \
+# The training pool's host and tile come from the placement.
+HOST_ARGS=()
+if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
+  HOST_ARGS=(--hosts "${MATSIM_ASSIGNED_NODES}")
+fi
+exec mpiexec "${HOST_ARGS[@]}" -n 1 --ppn 1 \
   python "${TRAIN_SCRIPT}" \
     --dataset "${DATASET}" \
     --output-dir "${OUT_LOGDIR}" \

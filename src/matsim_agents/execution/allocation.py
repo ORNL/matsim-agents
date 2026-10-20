@@ -19,14 +19,6 @@ class Allocation:
     def node_count(self) -> int:
         return len(self.nodes)
 
-    def groups(self, nodes_per_job: int) -> list[tuple[str, ...]]:
-        if nodes_per_job < 1:
-            raise ValueError("nodes_per_job must be positive")
-        return [
-            self.nodes[start : start + nodes_per_job]
-            for start in range(0, self.node_count - nodes_per_job + 1, nodes_per_job)
-        ]
-
 
 def _expand_slurm_nodelist(value: str) -> tuple[str, ...]:
     """Use scontrol when available; accept a plain comma list in tests/fallbacks."""
@@ -63,9 +55,12 @@ def _int_from_environment(*names: str) -> int | None:
 
 
 def discover_allocation() -> Allocation:
-    """Discover Slurm, PBS/PALS, or a safe single-node local allocation."""
+    """Discover Slurm, PBS/PALS, or a safe single-node local allocation.
 
-    override_gpus = _int_from_environment("MATSIM_GPUS_PER_NODE")
+    ``gpus_per_node`` is what the scheduler reports, or ``None``; resource
+    plans take the rest of the node geometry from their preset.
+    """
+
     if os.environ.get("SLURM_JOB_ID") or os.environ.get("SLURM_JOB_NUM_NODES"):
         nodes = _expand_slurm_nodelist(os.environ.get("SLURM_JOB_NODELIST", ""))
         count = _int_from_environment("SLURM_JOB_NUM_NODES") or len(nodes) or 1
@@ -74,8 +69,7 @@ def discover_allocation() -> Allocation:
         return Allocation(
             scheduler="slurm",
             nodes=nodes,
-            gpus_per_node=override_gpus
-            or _int_from_environment("SLURM_GPUS_ON_NODE", "SLURM_GPUS_PER_NODE"),
+            gpus_per_node=_int_from_environment("SLURM_GPUS_ON_NODE", "SLURM_GPUS_PER_NODE"),
         )
 
     nodefile = os.environ.get("PBS_NODEFILE")
@@ -87,30 +81,9 @@ def discover_allocation() -> Allocation:
                 line.strip() for line in Path(nodefile).read_text().splitlines() if line.strip()
             )
         )
-        return Allocation(scheduler="pbs", nodes=nodes, gpus_per_node=override_gpus)
+        return Allocation(scheduler="pbs", nodes=nodes)
 
-    return Allocation(
-        scheduler="local",
-        nodes=(socket.gethostname(),),
-        gpus_per_node=override_gpus,
-    )
+    return Allocation(scheduler="local", nodes=(socket.gethostname(),))
 
 
-def validate_dft_resources(
-    allocation: Allocation,
-    *,
-    nodes_per_job: int,
-    ranks_per_node: int,
-) -> None:
-    if nodes_per_job > allocation.node_count:
-        raise ValueError(
-            f"DFT job requests {nodes_per_job} node(s), but allocation has {allocation.node_count}"
-        )
-    if allocation.gpus_per_node is not None and ranks_per_node != allocation.gpus_per_node:
-        raise ValueError(
-            f"ranks_per_node={ranks_per_node} does not use exactly the allocated "
-            f"{allocation.gpus_per_node} GPU(s) per node"
-        )
-
-
-__all__ = ["Allocation", "discover_allocation", "validate_dft_resources"]
+__all__ = ["Allocation", "discover_allocation"]

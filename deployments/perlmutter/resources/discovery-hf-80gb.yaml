@@ -1,0 +1,17 @@
+# Discovery chat on one 80 GB Perlmutter node (sbatch -C 'gpu&hbm80g'): a 72B
+# model loaded in-process across all four GPUs, sharing GPU 0 with the MLIP
+# under explicit memory budgets.
+preview: {nodes: 1}
+resources:
+  preset: perlmutter-gpu-80gb
+  pools:
+    llm:
+      nodes: 1
+      devices: all
+      share_with: [mlip]
+      memory_fraction: 0.75
+      servers:
+        - name: proposer
+          kind: in-process
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Qwen2.5-72B-Instruct
+    mlip: {nodes: 1, devices: [0], share_with: [llm], memory_fraction: 0.2}

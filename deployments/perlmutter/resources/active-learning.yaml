@@ -1,0 +1,10 @@
+# Active learning: MLIP MD on GPUs 0-2 and HydraGNN fine-tuning on GPU 3 of the
+# first node; every other node runs DFT, one calculation per node.
+#   matsim-agents resources plan deployments/perlmutter/resources/active-learning.yaml --nodes 4
+preview: {nodes: 4}
+resources:
+  preset: perlmutter-gpu
+  pools:
+    mlip:     {nodes: 1, devices: [0, 1, 2]}
+    training: {nodes: 1, devices: [3]}
+    dft:      {nodes: rest, devices: all, nodes_per_job: 1}

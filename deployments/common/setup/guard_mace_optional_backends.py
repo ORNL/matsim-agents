@@ -11,7 +11,8 @@ from pathlib import Path
 def guard_openequivariance(path: Path) -> bool:
     source = path.read_text()
     imports = [
-        node for node in ast.walk(ast.parse(source))
+        node
+        for node in ast.walk(ast.parse(source))
         if isinstance(node, ast.Import)
         and any(alias.name == "openequivariance" for alias in node.names)
     ]
@@ -21,11 +22,12 @@ def guard_openequivariance(path: Path) -> bool:
     lines = source.splitlines(keepends=True)
     line = lines[node.lineno - 1]
     if (
-        node.lineno != node.end_lineno or len(node.names) != 1
+        node.lineno != node.end_lineno
+        or len(node.names) != 1
         or node.names[0].asname not in {"oeq", "_oeq"}
     ):
         raise ValueError("Unsupported MACE OpenEquivariance import layout")
-    indentation = line[:len(line) - len(line.lstrip())]
+    indentation = line[: len(line) - len(line.lstrip())]
     if indentation.endswith("    "):
         parent_indent = indentation[:-4]
         guard_line = f"{parent_indent}if torch.version.cuda or torch.version.hip:\n"

@@ -26,6 +26,9 @@ from matsim_agents.active_learning.hydragnn_references import resolve_training_r
 from matsim_agents.backends.dft.base import DFTResult
 from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.datasets.formation_training import prepare_formation_training_dataset
+from matsim_agents.execution.placement import ProcessLaunch
+
+LAUNCH = ProcessLaunch(hosts=("node0",), devices=(0,), ranks_per_node=1, threads_per_rank=1)
 
 
 @pytest.fixture
@@ -116,6 +119,7 @@ def _prepare(setup, name="snapshot", **kwargs):
     return prepare_elemental_references(
         setup.plan,
         setup.dft,
+        launch=LAUNCH,
         required_elements=required,
         cache_dir=setup.cache,
         output_dir=setup.tmp / name,
@@ -151,7 +155,9 @@ def test_al_automatic_training_references_are_approved_bounded_and_frozen(
         },
     )
     root = setup.tmp / "al-references"
-    selected = resolve_training_references(cfg, dataset, dft_config=setup.dft, reference_root=root)
+    selected = resolve_training_references(
+        cfg, dataset, dft_config=setup.dft, dft_launch=LAUNCH, reference_root=root
+    )
     assert selected == root / "elemental-references.json"
     assert len(setup.calls) == 3
     if changed == "plan":
@@ -165,10 +171,14 @@ def test_al_automatic_training_references_are_approved_bounded_and_frozen(
         setup.dft.qe.ecutwfc_ry += 10
     if changed:
         with pytest.raises(ValueError, match="inputs changed"):
-            resolve_training_references(cfg, dataset, dft_config=setup.dft, reference_root=root)
+            resolve_training_references(
+                cfg, dataset, dft_config=setup.dft, dft_launch=LAUNCH, reference_root=root
+            )
     else:
         assert (
-            resolve_training_references(cfg, dataset, dft_config=setup.dft, reference_root=root)
+            resolve_training_references(
+                cfg, dataset, dft_config=setup.dft, dft_launch=LAUNCH, reference_root=root
+            )
             == selected
         )
     assert len(setup.calls) == 3
@@ -203,7 +213,9 @@ def test_phase_plan_references_use_recorded_scope_beyond_training_elements(
     )
     root = setup.tmp / "al-references"
 
-    selected = resolve_training_references(cfg, dataset, dft_config=setup.dft, reference_root=root)
+    selected = resolve_training_references(
+        cfg, dataset, dft_config=setup.dft, dft_launch=LAUNCH, reference_root=root
+    )
 
     manifest = json.loads(selected.read_text())
     assert set(manifest["references"]) == {"Si", "O"}
@@ -246,7 +258,11 @@ def test_phase_plan_references_reject_missing_or_incomplete_scope(
 
     with pytest.raises(ValueError, match=error):
         resolve_training_references(
-            cfg, dataset, dft_config=setup.dft, reference_root=setup.tmp / "al-references"
+            cfg,
+            dataset,
+            dft_config=setup.dft,
+            dft_launch=LAUNCH,
+            reference_root=setup.tmp / "al-references",
         )
 
 
@@ -258,7 +274,7 @@ def test_unverified_phase_relaxes_then_runs_static_and_caches_geometry(
     phase.geometry_status = "requires_relaxation"
     relax_calls = []
 
-    def fake_relax(phase, cfg, atoms, work_dir):
+    def fake_relax(phase, cfg, _launch, atoms, work_dir):
         relaxed = atoms.copy()
         relaxed.positions[0, 0] += 0.05
         relax_calls.append((phase, cfg, atoms.copy(), work_dir))
@@ -305,7 +321,7 @@ def test_relative_cache_uses_absolute_static_and_relaxation_work_dirs(
     if requires_relaxation:
         phase.geometry_status = "requires_relaxation"
 
-        def fake_relax(_phase, _cfg, atoms, work_dir):
+        def fake_relax(_phase, _cfg, _launch, atoms, work_dir):
             path = Path(work_dir)
             assert path.is_absolute()
             assert path.is_relative_to((setup.tmp / "relative-cache").resolve())
@@ -348,7 +364,7 @@ def test_bulk_relaxation_rejects_nonperiodic_final_geometry(setup_references, mo
     phase = setup.plan.phases[0]
     phase.geometry_status = "requires_relaxation"
 
-    def fake_relax(_phase, _cfg, atoms, _work_dir):
+    def fake_relax(_phase, _cfg, _launch, atoms, _work_dir):
         relaxed = atoms.copy()
         relaxed.pbc = False
         return relaxed, 0.01, 4, np.zeros(6)
@@ -395,7 +411,11 @@ def test_al_reference_method_mismatch_fails_before_any_dft(
     )
     with pytest.raises(ValueError, match="different DFT methods"):
         resolve_training_references(
-            cfg, dataset, dft_config=setup.dft, reference_root=setup.tmp / "al-references"
+            cfg,
+            dataset,
+            dft_config=setup.dft,
+            dft_launch=LAUNCH,
+            reference_root=setup.tmp / "al-references",
         )
     assert setup.calls == []
 
@@ -599,7 +619,7 @@ def test_qe_relaxation_keeps_reference_sampling_and_spin(setup_references, monke
     )
     monkeypatch.setattr(elemental_dft, "read", lambda *args, **kwargs: final_atoms)
     relaxed, force, steps, stress = elemental_dft._run_reference_relaxation(
-        phase, cfg, atoms, setup.tmp / "qe-relax"
+        phase, cfg, LAUNCH, atoms, setup.tmp / "qe-relax"
     )
     assert relaxed.get_chemical_symbols() == atoms.get_chemical_symbols()
     assert force == pytest.approx(0.015)
@@ -648,14 +668,14 @@ def test_qe_cell_relaxation_checks_bulk_stress_tolerance(
 
     if accepted:
         relaxed, _, _, stress = elemental_dft._run_reference_relaxation(
-            phase, setup.dft, atoms, setup.tmp / "qe-cell-relax"
+            phase, setup.dft, LAUNCH, atoms, setup.tmp / "qe-cell-relax"
         )
         assert relaxed.get_chemical_symbols() == atoms.get_chemical_symbols()
         assert stress.tolist() == pytest.approx([stress_component] * 6)
     else:
         with pytest.raises(RuntimeError, match="stress threshold"):
             elemental_dft._run_reference_relaxation(
-                phase, setup.dft, atoms, setup.tmp / "qe-cell-relax"
+                phase, setup.dft, LAUNCH, atoms, setup.tmp / "qe-cell-relax"
             )
 
 
@@ -723,11 +743,13 @@ def test_vasp_relaxation_checks_bulk_stress_tolerance(
     )
     if accepted:
         relaxed, force, steps, stress = elemental_dft._run_reference_relaxation(
-            phase, cfg, atoms, setup.tmp / "vasp-relax"
+            phase, cfg, LAUNCH, atoms, setup.tmp / "vasp-relax"
         )
     else:
         with pytest.raises(RuntimeError, match="stress threshold"):
-            elemental_dft._run_reference_relaxation(phase, cfg, atoms, setup.tmp / "vasp-relax")
+            elemental_dft._run_reference_relaxation(
+                phase, cfg, LAUNCH, atoms, setup.tmp / "vasp-relax"
+            )
         return
     assert relaxed.get_chemical_symbols() == atoms.get_chemical_symbols()
     assert force == pytest.approx(0.01)
@@ -759,6 +781,7 @@ def test_phase_approval_and_coverage_before_launch(setup_references, approved, r
         prepare_elemental_references(
             setup.plan,
             setup.dft,
+            launch=LAUNCH,
             required_elements=required,
             cache_dir=setup.cache,
             output_dir=setup.tmp / "snapshot",
@@ -897,7 +920,7 @@ def test_post_lock_relaxation_cache_is_fully_validated(
                     elemental_dft._phase_config(setup.dft, phase), {phase.element}
                 ),
                 "execution_signature": elemental_dft.dft_execution_signature(
-                    elemental_dft._phase_config(setup.dft, phase)
+                    elemental_dft._phase_config(setup.dft, phase), LAUNCH
                 ),
                 "n_atoms": len(relaxed_atoms) + (1 if defect == "atom_count" else 0),
                 "converged": defect != "convergence",
@@ -930,7 +953,7 @@ def test_concurrent_reference_preflight_waits_for_locked_relaxation_cache(
     original_lock = elemental_dft.exclusive_lock
     thread_label = threading.local()
 
-    def fake_relax(_phase, _cfg, atoms, _work_dir):
+    def fake_relax(_phase, _cfg, _launch, atoms, _work_dir):
         relaxation_started.set()
         assert allow_relaxation_to_finish.wait(timeout=10)
         return atoms.copy(), 0.01, 4, np.zeros(6)
@@ -999,6 +1022,7 @@ def test_vasp_overrides_are_explicit(setup_references):
     manifest = prepare_elemental_references(
         setup.plan,
         dft,
+        launch=LAUNCH,
         required_elements={"Si", "O"},
         cache_dir=setup.cache,
         output_dir=setup.tmp / "snapshot",
@@ -1105,7 +1129,7 @@ def test_al_additive_reference_extension_across_iterations(
     )
     root = setup.tmp / "al-references"
     res1 = resolve_training_references(
-        cfg1, iter1_dataset, dft_config=setup.dft, reference_root=root
+        cfg1, iter1_dataset, dft_config=setup.dft, dft_launch=LAUNCH, reference_root=root
     )
     assert res1 == root / "elemental-references.json"
     manifest1 = json.loads(res1.read_text())
@@ -1163,10 +1187,12 @@ def test_al_additive_reference_extension_across_iterations(
 
     monkeypatch.setattr(Path, "replace", interrupt_activation)
     with pytest.raises(RuntimeError, match="simulated publication interruption"):
-        resolve_training_references(cfg2, iter2_dataset, dft_config=setup.dft, reference_root=root)
+        resolve_training_references(
+            cfg2, iter2_dataset, dft_config=setup.dft, dft_launch=LAUNCH, reference_root=root
+        )
     monkeypatch.setattr(Path, "replace", original_replace)
     res2 = resolve_training_references(
-        cfg2, iter2_dataset, dft_config=setup.dft, reference_root=root
+        cfg2, iter2_dataset, dft_config=setup.dft, dft_launch=LAUNCH, reference_root=root
     )
     assert interrupted
     assert res2 == root / "elemental-references.json"
@@ -1192,7 +1218,7 @@ def test_al_additive_reference_extension_across_iterations(
 
     # Iteration 3: same elements, no new DFT calls needed
     res3 = resolve_training_references(
-        cfg2, iter2_dataset, dft_config=setup.dft, reference_root=root
+        cfg2, iter2_dataset, dft_config=setup.dft, dft_launch=LAUNCH, reference_root=root
     )
     assert res3 == root / "elemental-references.json"
     assert len(setup.calls) == calls_after_iter2
@@ -1200,7 +1226,9 @@ def test_al_additive_reference_extension_across_iterations(
     # Verification: changing DFT method for existing element raises error
     setup.dft.qe.ecutwfc_ry += 10
     with pytest.raises(ValueError, match="inputs changed"):
-        resolve_training_references(cfg2, iter2_dataset, dft_config=setup.dft, reference_root=root)
+        resolve_training_references(
+            cfg2, iter2_dataset, dft_config=setup.dft, dft_launch=LAUNCH, reference_root=root
+        )
 
 
 def test_manifest_reference_extension_accepts_expanded_real_method_scope(setup_references):

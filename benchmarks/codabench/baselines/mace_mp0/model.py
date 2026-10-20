@@ -7,6 +7,7 @@ Install:
 ``family`` selects any loader included in mace-torch 0.3.16. ``checkpoint_path``
 is that family's model alias, URL, or local ``.model`` path.
 """
+
 from __future__ import annotations
 
 from typing import ClassVar
@@ -96,6 +97,7 @@ class AtomisticCalculator(Calculator):
         results = []
         for atoms in structures:
             self.calculate(atoms)
-            results.append({"energy": self.results["energy"],
-                             "forces": self.results["forces"].copy()})
+            results.append(
+                {"energy": self.results["energy"], "forces": self.results["forces"].copy()}
+            )
         return results

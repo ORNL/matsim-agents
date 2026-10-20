@@ -9,18 +9,19 @@
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
 # ---------------------------------------------------------------------------
-# matsim-agents: discovery run on NERSC Perlmutter using HuggingFace
-# Transformers as the LLM backend (no vLLM server required).
+# matsim-agents: discovery run on NERSC Perlmutter with the LLM loaded
+# in-process through Hugging Face Transformers (no vLLM server).
 #
-# Layout:
-#   • HuggingFace pipeline : all 4 A100s via device_map="auto" (Accelerate)
-#   • matsim-agents chat   : --llm-provider huggingface (loads model inline)
+# Placement comes from a resource layout (default
+# deployments/perlmutter/resources/discovery-hf-80gb.yaml):
+#   • Qwen2.5-72B in-process : all 4 A100-80GB, at most 75% of GPU 0
+#   • MLIP relaxations       : one worker on GPU 0, at most 20% of its memory
 #
 # Usage:
 #   sbatch deployments/perlmutter/jobs/job-discovery-chat-perlmutter.sh
 #
-# Override model at submission:
-#   MATSIM_MODEL_DIR=.../Qwen3-32B MATSIM_MODEL_NAME=Qwen/Qwen3-32B \
+# Another model or layout at submission:
+#   MATSIM_RESOURCES=/path/to/layout.yaml MODEL_ROOT=$PROJ/models \
 #     sbatch deployments/perlmutter/jobs/job-discovery-chat-perlmutter.sh
 # ---------------------------------------------------------------------------
 
@@ -37,9 +38,10 @@ VENV=$REPO/.venv
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
 HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
-MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-72B-Instruct}
-MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
 init_run_dirs "$PROJ" "discovery-chat" "${SLURM_JOB_ID}"
+export MODEL_ROOT="${MODEL_ROOT:-$PROJ/models}"
+export PROJECT_ROOT="$REPO"
+RESOURCES="${MATSIM_RESOURCES:-$REPO/deployments/perlmutter/resources/discovery-hf-80gb.yaml}"
 
 # ── modules & conda env ──────────────────────────────────────────────────────
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
@@ -59,17 +61,14 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 
-# Point matsim-agents at the local model directory
-export MATSIM_LLM_PROVIDER=huggingface
-export MATSIM_HF_MODEL_PATH=$MODEL_DIR
-
 # CUDA / NCCL knobs
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 
 # ── diagnostics ──────────────────────────────────────────────────────────────
 echo "[$(date)] Python: $(which python) ($(python --version 2>&1))"
-echo "[$(date)] Model:  $MODEL_NAME  ($MODEL_DIR)"
+echo "[$(date)] Resources: $RESOURCES"
+matsim-agents resources plan "$RESOURCES"
 python - <<'PY'
 import torch
 print(f"[torch] {torch.__version__}  cuda={torch.cuda.is_available()}  devices={torch.cuda.device_count()}")
@@ -90,13 +89,12 @@ EOF
 )"
 fi
 
-echo "[$(date)] Submitting discovery query to matsim-agents (HuggingFace provider) ..."
+echo "[$(date)] Submitting discovery query to matsim-agents (in-process Hugging Face model) ..."
 echo "$QUERY" | matsim-agents chat \
     --logdir          "$LOGDIR" \
     --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
-    --llm-provider    huggingface \
-    --llm-model       "$MODEL_DIR" \
+    --resources       "$RESOURCES" \
     --ase-structure-optimizer FIRE \
     --maxiter         500 \
     --fmax            0.02 \

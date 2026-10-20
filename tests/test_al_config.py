@@ -78,7 +78,17 @@ def _minimal_yaml(
         "loop:\n"
         "  n_iterations: 1\n"
         "  out_dir: ${OUT_DIR}\n"
+        f"{RESOURCES_YAML}"
     )
+
+
+RESOURCES_YAML = (
+    "resources:\n"
+    "  preset: perlmutter-gpu\n"
+    "  pools:\n"
+    "    dft: {nodes: all, share_with: [training]}\n"
+    "    training: {share_with: [dft]}\n"
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -200,8 +210,9 @@ def test_hydragnn_al_examples_use_native_single_process_finetuner():
         assert trainer["train_script"] == (
             "${PROJ_ROOT}/src/matsim_agents/training/finetune_hydragnn_newhead.py"
         ), example
-        assert trainer["nodes_for_train"] == 1, example
-        assert trainer["ranks_per_node"] == 1, example
+        assert "nodes_for_train" not in trainer and "ranks_per_node" not in trainer, example
+        training = config["resources"]["pools"]["training"]
+        assert training["nodes"] == 1 and training["devices"] == 1, example
         launcher = config.get("vars", {}).get("TRAIN_LAUNCHER", trainer["train_launcher"])
         launcher_path = Path(launcher.replace("${PROJ_ROOT}", str(repo_root)))
         assert launcher_path.is_file(), example
@@ -380,8 +391,8 @@ def test_dft_method_signature_excludes_operational_settings(
     assert operational_change.dft.vasp is not None
     operational_change.dft.vasp.vasp_wrapper = tmp_path / "relocated-wrapper.sh"
     operational_change.dft.vasp.timeout_sec = 99
-    operational_change.dft.vasp.ranks_per_node = 2
-    operational_change.dft.max_concurrent_jobs = 3
+    operational_change.resources.pools["dft"].ranks_per_device = 2
+    operational_change.resources.pools["dft"].max_concurrent = 3
 
     elements = {"Nb", "O"}
     assert _dft_method_signature(operational_change, elements) == _dft_method_signature(

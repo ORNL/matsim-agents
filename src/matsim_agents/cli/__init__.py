@@ -7,6 +7,7 @@ from matsim_agents.cli import (  # noqa: F401, I001  (register commands)
     interactive,
     composition,
     active_learning,
+    resources,
 )
 from matsim_agents.cli._app import app
 

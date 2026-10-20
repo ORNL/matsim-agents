@@ -322,8 +322,12 @@ class _NumericalStressCalculator:
 
     def calculate(self, atoms=None, properties=("energy", "forces"), system_changes=None):
         """Compute energy, forces, and (numerical) stress for *atoms*."""
-        # Energy + forces from the inner calculator on the original geometry.
-        self._inner.calculate(atoms, ["energy", "forces"], system_changes)
+        from ase.calculators.calculator import all_changes
+
+        # Energy + forces from the inner calculator on the original geometry. ASE
+        # calculators expect a list of changes; None means "unknown", i.e. all.
+        changes = all_changes if system_changes is None else system_changes
+        self._inner.calculate(atoms, ["energy", "forces"], changes)
         self.results["energy"] = self._inner.results["energy"]
         self.results["forces"] = self._inner.results["forces"]
         # Copy last_branch_weights *before* perturbations overwrite them.
@@ -513,6 +517,63 @@ def _fused_hydragnn_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
     return _RelaxCalculator(calculator, num_branches, active_branches, uq_note)
 
 
+_CALCULATOR_FIELDS = (
+    "mlip_backend",
+    "logdir",
+    "hydragnn_branch_mlp_checkpoint",
+    "hydragnn_inference_head",
+    "checkpoint",
+    "precision",
+    "mlp_precision",
+    "mlp_device",
+    "charge",
+    "spin",
+    "uma_model_name",
+    "uma_task",
+    "mace_family",
+    "mace_model",
+    "mace_dispersion",
+)
+
+
+class CalculatorCache:
+    """Loaded MLIP calculators reused across relaxations with identical model settings.
+
+    Keeps the ``capacity`` most recently used calculators so alternating
+    between, for example, an incumbent and a candidate model does not reload
+    either; older entries are dropped to bound device memory.
+    """
+
+    def __init__(self, capacity: int = 2) -> None:
+        if capacity < 1:
+            raise ValueError("calculator cache capacity must be positive")
+        self.capacity = capacity
+        self._entries: dict[tuple, _RelaxCalculator] = {}
+        self.loads = 0
+
+    @staticmethod
+    def key(args: RelaxStructureInput) -> tuple:
+        return tuple(getattr(args, field) for field in _CALCULATOR_FIELDS)
+
+    def get(self, args: RelaxStructureInput) -> _RelaxCalculator:
+        key = self.key(args)
+        entry = self._entries.pop(key, None)
+        if entry is None:
+            if len(self._entries) >= self.capacity:
+                from matsim_agents.backends.mlip.pool import release_device_memory
+
+                while len(self._entries) >= self.capacity:
+                    self._entries.pop(next(iter(self._entries)))
+                # Free the evicted model before loading its replacement.
+                release_device_memory()
+            entry = _relaxation_calculator(args)
+            self.loads += 1
+        elif hasattr(entry.calculator, "reset"):
+            entry.calculator.reset()
+        self._entries[key] = entry
+        return entry
+
+
 def _relaxation_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
     """Build the selected MLIP calculator and describe its branch-weight UQ support."""
     if args.mlip_backend == "hydragnn":
@@ -654,13 +715,20 @@ def _optimize_with_log(
     return _OptimizationOutcome(energy, max_force, top_branch, top_weight, converged, steps_taken)
 
 
-def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
-    """Relax one structure with the selected MLIP backend and ASE optimizer."""
+def relax_with_mlip(
+    args: RelaxStructureInput, *, calculators: CalculatorCache | None = None
+) -> RelaxationResult:
+    """Relax one structure with the selected MLIP backend and ASE optimizer.
+
+    With *calculators*, a model already loaded for the same settings is reused
+    instead of being read from disk again.
+    """
     from ase.io import read, write
     from ase.io.trajectory import Trajectory
 
     paths = _relaxation_paths(args)
-    calculator, num_branches, active_branches, uq_note = _relaxation_calculator(args)
+    built = calculators.get(args) if calculators is not None else _relaxation_calculator(args)
+    calculator, num_branches, active_branches, uq_note = built
 
     atoms = read(paths.structure)
     atoms.calc = calculator
@@ -683,7 +751,7 @@ def relax_with_mlip(args: RelaxStructureInput) -> RelaxationResult:
 
     cell_relax_active = False
     if args.relax_cell:
-        from ase.constraints import ExpCellFilter
+        from ase.filters import ExpCellFilter
 
         # Wrap with numerical stress unconditionally when relax_cell=True;
         # _NumericalStressCalculator.calculate() will try the inner calc first

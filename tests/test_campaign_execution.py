@@ -121,6 +121,10 @@ trainer:
 loop:
   n_iterations: 1
   out_dir: /unused/output
+resources:
+  geometry: {{vendor: cpu, devices_per_node: 0, cores_per_node: 1}}
+  pools:
+    dft: {{nodes: all}}
 """
 
 
@@ -938,9 +942,6 @@ dft:
         vasp_wrapper: {wrapper}
         incar_template: {incar}
         potcar_dir: {potcar_dir}
-        nodes_per_job: 2
-        ranks_per_node: 4
-        threads_per_rank: 8
         extra_incar:
             LMAXMIX: '4'
 trainer:
@@ -948,6 +949,10 @@ trainer:
 loop:
     n_iterations: 1
     out_dir: /unused/output
+resources:
+    preset: perlmutter-gpu
+    pools:
+        dft: {{nodes: all, devices: all, threads_per_rank: 8}}
 """
 
 
@@ -1151,10 +1156,11 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
             "{work_dir}",
             "/unused/pw.x",
             "{input}",
-            "1",
-            "8",
-            "7",
+            "{nodes}",
+            "{ranks_per_node}",
+            "{threads_per_rank}",
         ]
+        assert cfg.dft.launch.wrapper_args() == ["1", "1", "1"]
         observed_settings.append(cfg.dft.settings)
         source = next(
             formula for formula, path in structures.items() if str(path) == cfg.structure_path
@@ -1626,7 +1632,14 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
     assert reference_dft.settings["extra_incar"] == {"LMAXMIX": "4", "MAGMOM": "2*1.0"}
     assert dft.backend == "vasp"
     assert dft.launcher[0:3] == ["bash", str(tmp_path / "vasp-wrapper.sh"), "."]
-    assert dft.launcher[3:] == [str(tmp_path / "vasp_std"), "2", "4", "8"]
+    assert dft.launcher[3:] == [
+        str(tmp_path / "vasp_std"),
+        "{nodes}",
+        "{ranks_per_node}",
+        "{threads_per_rank}",
+    ]
+    assert dft.launcher_argv("vasp_std")[3:] == [str(tmp_path / "vasp_std"), "1", "4", "8"]
+    assert dft.launch_environment("vasp_std")["CUDA_VISIBLE_DEVICES"] == "0,1,2,3"
     assert dft.settings["encut_ev"] == 600
     assert dft.settings["ismear"] == 0
     assert dft.settings["extra_incar"]["LMAXMIX"] == "4"
@@ -2021,3 +2034,93 @@ def test_latest_promoted_model_recovers_checkpoint_from_state(tmp_path):
     )
 
     assert latest_promoted_model(campaign) == str(tmp_path / "inference_ckpt.pt")
+
+
+def test_formula_execution_releases_exploration_models_before_active_learning(
+    tmp_path, monkeypatch
+):
+    from matsim_agents.campaign import formula_execution
+
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    events = []
+
+    class Pool:
+        def close(self):
+            events.append("close")
+
+    monkeypatch.setattr(formula_execution, "_formula_mlip_pool", lambda cfg, root: (Pool(), None))
+    monkeypatch.setattr(
+        formula_execution, "release_device_memory", lambda: events.append("release")
+    )
+
+    def al_runner(cfg):
+        events.append("active_learning")
+        raise RuntimeError("stop after active learning starts")
+
+    def phase_runner(formula, *, policy, output_dir, exploration_kwargs, active_learning_runner):
+        assert isinstance(exploration_kwargs["mlip_pool"], Pool)
+        events.append("explore")
+        active_learning_runner(formula, output_dir, False, False, False)
+
+    with pytest.raises(RuntimeError, match="stop after active learning starts"):
+        run_formula_with_active_learning(
+            "NbO2",
+            str(tmp_path / "formula"),
+            config=CampaignFormulaExecutionConfig(
+                active_learning_config=config_path,
+                phase_policy=PhaseExplorationPolicy(active_learning=True, dft_approved=True),
+            ),
+            al_runner=al_runner,
+            phase_runner=phase_runner,
+        )
+    assert events == ["explore", "close", "release", "active_learning", "close"]
+
+
+def test_campaign_driver_mlip_work_runs_on_the_mlip_device(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    from matsim_agents.campaign import formula_execution
+
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    events = []
+
+    class Pool:
+        def close(self):
+            pass
+
+    placement = object()
+    monkeypatch.setattr(
+        formula_execution, "_formula_mlip_pool", lambda cfg, root: (Pool(), placement)
+    )
+
+    @contextmanager
+    def on_device(value):
+        events.append(("enter", value is placement))
+        try:
+            yield 1
+        finally:
+            events.append(("exit",))
+
+    def scoring(*args, **kwargs):
+        events.append(("score",))
+        raise RuntimeError("stop after scoring")
+
+    monkeypatch.setattr(formula_execution, "driver_on_mlip_device", on_device)
+    monkeypatch.setattr(formula_execution, "_score_relaxed_candidate_uncertainty", scoring)
+
+    def phase_runner(formula, *, policy, output_dir, exploration_kwargs, active_learning_runner):
+        return _empty_result(formula, {})
+
+    with pytest.raises(RuntimeError, match="stop after scoring"):
+        formula_execution.run_formula_with_active_learning(
+            "NbO2",
+            str(tmp_path / "formula"),
+            config=CampaignFormulaExecutionConfig(
+                active_learning_config=config_path,
+                phase_policy=PhaseExplorationPolicy(active_learning=False, dft_approved=True),
+            ),
+            phase_runner=phase_runner,
+        )
+    assert events == [("enter", True), ("score",), ("exit",)]

@@ -144,9 +144,7 @@ def execute_all_model_scientific_debate(
     matched_exclusions = {
         exclusion
         for exclusion in exclusions
-        if any(
-            exclusion in {str(entry["name"]), str(entry["model"])} for entry in entries
-        )
+        if any(exclusion in {str(entry["name"]), str(entry["model"])} for entry in entries)
     }
     known_exclusions = {
         str(entry["name"])

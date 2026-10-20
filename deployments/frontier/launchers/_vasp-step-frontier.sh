@@ -37,6 +37,8 @@ NNODES="$3"
 RANKS_PER_NODE="$4"
 THREADS_PER_RANK="$5"
 TOTAL_RANKS=$(( NNODES * RANKS_PER_NODE ))
+# Devices per node come from the placement; several ranks may share one device.
+GPUS_PER_NODE="${MATSIM_DEVICES_PER_NODE:-$RANKS_PER_NODE}"
 
 [[ -d "${WORK_DIR}" ]] || { echo "work_dir not a directory: ${WORK_DIR}" >&2; exit 2; }
 [[ -x "${VASP_BIN}"   ]] || { echo "vasp binary not executable: ${VASP_BIN}" >&2; exit 2; }
@@ -93,19 +95,35 @@ cd "${WORK_DIR}"
 
 echo "[vasp-step] $(date) host=$(hostname) work_dir=${WORK_DIR}"
 NODE_ARGS=()
-if [[ -n "${MATSIM_DFT_ASSIGNED_NODES:-}" ]]; then
-  NODE_ARGS=(--nodelist "${MATSIM_DFT_ASSIGNED_NODES}")
+if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
+  NODE_ARGS=(--nodelist "${MATSIM_ASSIGNED_NODES}")
 fi
-echo "[vasp-step] assigned_nodes=${MATSIM_DFT_ASSIGNED_NODES:-scheduler-selected}"
-echo "[vasp-step] srun -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK} \\"
-echo "             --gpus-per-node=${RANKS_PER_NODE} --gpu-bind=closest ${VASP_BIN}"
+echo "[vasp-step] assigned_nodes=${MATSIM_ASSIGNED_NODES:-scheduler-selected}"
 
+# Slurm picks which GPUs a step receives, so a GPU count alone cannot honour the
+# placement's device indices. When the placement uses only some of the node's
+# GPUs, take them all for the step and expose only the placed ones inside it.
+STEP_GPUS="${GPUS_PER_NODE}"
+GPU_ARGS=(--gpus-per-node="${STEP_GPUS}" --gpu-bind=closest)
+STEP_ENV=()
+STEP_SHARE=(--exclusive)
+if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
+      && "${STEP_GPUS}" != "${MATSIM_NODE_DEVICES}" ]]; then
+  GPU_ARGS=(--gpus-per-node="${MATSIM_NODE_DEVICES}" --gpu-bind=none)
+  # Other pools may hold the node's remaining GPUs (e.g. a vLLM step); the
+  # placement keeps devices disjoint, so overlap instead of waiting for them.
+  STEP_SHARE=(--overlap)
+  STEP_ENV=(env -u HIP_VISIBLE_DEVICES "ROCR_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
+fi
+echo "[vasp-step] srun ${STEP_SHARE[*]} -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK}" \
+  "${GPU_ARGS[*]} ${STEP_ENV[*]} ${VASP_BIN}"
+echo "[step] gpu_args=${GPU_ARGS[*]} placed_devices=${MATSIM_DEVICE_MASK:-all}"
 exec srun \
-  --exclusive \
+  "${STEP_SHARE[@]}" \
   "${NODE_ARGS[@]}" \
   -N "${NNODES}" \
   -n "${TOTAL_RANKS}" \
   -c "${THREADS_PER_RANK}" \
-  --gpus-per-node="${RANKS_PER_NODE}" \
-  --gpu-bind=closest \
+  "${GPU_ARGS[@]}" \
+  "${STEP_ENV[@]}" \
   "${VASP_BIN}"

@@ -3,9 +3,11 @@
 influences the hypothesis BEFORE vs AFTER active-learning fine-tuning.
 
 This driver exercises the real matsim-agents debate machinery
-(:func:`matsim_agents.orchestration.interactive_chat._debate_hypothesis_response`) with a genuine panel of
-*different* models drawn from the local model zoo (each served on its own
-vLLM endpoint). It does not re-implement the debate prompts.
+(:func:`matsim_agents.orchestration.interactive_chat._debate_hypothesis_response`)
+with a genuine panel of *different* models drawn from the local model zoo. The
+servers are named in the llm pool of a resource layout; the driver starts them
+on their GPUs and stops them at the end. It does not re-implement the debate
+prompts.
 
 Pipeline
 --------
@@ -22,7 +24,7 @@ Pipeline
 4. Repeat for both conditions and write the two transcripts plus a side-by-side
    comparison, so the shift attributable to fine-tuning the MLIP is explicit.
 
-The models, endpoints and case are fully configurable so the same driver runs a
+The layout, server names, and case are configurable, so the same driver runs a
 cheap smoke test (one small model as both proposer and critic) or the full
 multi-family panel.
 """
@@ -37,7 +39,11 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from matsim_agents.backends.llm.provider import get_chat_model
-from matsim_agents.orchestration.interactive_chat import DiscoveryChatConfig, _debate_hypothesis_response
+from matsim_agents.orchestration.interactive_chat import (
+    DiscoveryChatSession,
+    DiscoveryChatConfig,
+    _debate_hypothesis_response,
+)
 
 # Backends surfaced as evidence, mapped to (zero-shot variant dir, fine-tuned
 # variant dir, human label). Both dirs share the same iter0 zero-shot baseline;
@@ -54,9 +60,7 @@ def _read_eval(eval_dir: Path, endpoint: str) -> dict | None:
     if not eval_dir.is_dir():
         return None
     iters = sorted(
-        (int(p.stem[4:]), p)
-        for p in eval_dir.glob("iter*.json")
-        if p.stem[4:].isdigit()
+        (int(p.stem[4:]), p) for p in eval_dir.glob("iter*.json") if p.stem[4:].isdigit()
     )
     if not iters:
         return None
@@ -97,13 +101,11 @@ def build_evidence(runs_root: Path, case: str) -> tuple[str, str, dict]:
             raw["after"][label] = after
     pre = (
         "Surrogate-accuracy evidence on held-out frames for this material "
-        "(pretrained models, BEFORE any active-learning fine-tuning):\n"
-        + "\n".join(pre_lines)
+        "(pretrained models, BEFORE any active-learning fine-tuning):\n" + "\n".join(pre_lines)
     )
     post = (
         "Surrogate-accuracy evidence on held-out frames for this material "
-        "(AFTER active-learning fine-tuning on loop-collected data):\n"
-        + "\n".join(post_lines)
+        "(AFTER active-learning fine-tuning on loop-collected data):\n" + "\n".join(post_lines)
     )
     return pre, post, raw
 
@@ -163,8 +165,7 @@ MATERIAL_REGISTRY: dict[str, dict] = {
         "elements": "Zn, C, O, H",
         "stoichiometry": "the Zn(HCOO)2 framework composition",
         "structures": (
-            "the alpha (Pna2_1) framework polymorph versus the chiral beta "
-            "(P2_12_12_1) polymorph"
+            "the alpha (Pna2_1) framework polymorph versus the chiral beta (P2_12_12_1) polymorph"
         ),
     },
 }
@@ -242,9 +243,7 @@ def run_condition(cfg: DiscoveryChatConfig, spec: dict, evidence: str) -> dict:
         evidence=evidence,
     )
     draft = draft_hypothesis(cfg, user_text)
-    final = _debate_hypothesis_response(
-        cfg=cfg, user_text=user_text, draft_response=draft
-    )
+    final = _debate_hypothesis_response(cfg=cfg, user_text=user_text, draft_response=draft)
     return {"user_text": user_text, "draft": draft, "final": final}
 
 
@@ -260,13 +259,10 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument("--output-dir", required=True)
-    # Proposer.
-    p.add_argument("--proposer-model", required=True)
-    p.add_argument("--proposer-base-url", required=True)
-    # Critic panel (repeatable, paired by position).
-    p.add_argument("--critic-model", action="append", default=[])
-    p.add_argument("--critic-base-url", action="append", default=[])
-    p.add_argument("--provider", default="vllm")
+    # Models come from the llm pool of a resource plan, by server name.
+    p.add_argument("--resources", required=True, help="Layout whose llm pool serves the panel.")
+    p.add_argument("--proposer-server", required=True)
+    p.add_argument("--critic-server", action="append", default=[], help="Repeatable.")
     p.add_argument("--debate-rounds", type=int, default=2)
     p.add_argument("--no-cross-critique", action="store_true")
     return p.parse_args()
@@ -277,45 +273,50 @@ def main() -> None:
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    cfg = DiscoveryChatConfig(
-        mlip_backend="uma",  # debate-only session; no relaxation is run here.
-        llm_provider=args.provider,
-        llm_model=args.proposer_model,
-        llm_base_url=args.proposer_base_url,
-        enable_hypothesis_debate=True,
-        debate_rounds=args.debate_rounds,
-        critic_panel_models=list(args.critic_model),
-        critic_panel_providers=[args.provider] * len(args.critic_model),
-        critic_panel_base_urls=list(args.critic_base_url),
-        critic_cross_critique=not args.no_cross_critique,
+    session = DiscoveryChatSession(
+        config=DiscoveryChatConfig(
+            llm_only=True,  # debate-only session; no relaxation is run here.
+            output_dir=str(out),
+            resources=args.resources,
+            llm_server=args.proposer_server,
+            critic_llm_servers=list(args.critic_server),
+            enable_hypothesis_debate=True,
+            debate_rounds=args.debate_rounds,
+            critic_cross_critique=not args.no_cross_critique,
+        )
     )
-
     spec = material_spec(args.case, args.case_pretty)
     pre, post, raw = build_evidence(Path(args.runs_root), args.case)
     print(f"[evidence] case={args.case} ({spec['pretty']})", flush=True)
     print(pre, flush=True)
     print(post, flush=True)
 
-    print("\n[debate] condition = BEFORE fine-tuning ...", flush=True)
-    before = run_condition(cfg, spec, pre)
-    print("\n[debate] condition = AFTER fine-tuning ...", flush=True)
-    after = run_condition(cfg, spec, post)
+    try:
+        session.open()  # starts the plan's servers; stopped in close()
+        cfg = session.config
+        print("\n[debate] condition = BEFORE fine-tuning ...", flush=True)
+        before = run_condition(cfg, spec, pre)
+        print("\n[debate] condition = AFTER fine-tuning ...", flush=True)
+        after = run_condition(cfg, spec, post)
+    finally:
+        session.close()
 
     result = {
         "case": args.case,
         "case_pretty": spec["pretty"],
         "material": spec,
-        "proposer": args.proposer_model,
-        "critics": list(args.critic_model),
+        "proposer": {"server": args.proposer_server, "model": cfg.llm_model},
+        "critics": [
+            {"server": name, "model": model}
+            for name, model in zip(args.critic_server, cfg.critic_panel_models, strict=True)
+        ],
         "debate_rounds": args.debate_rounds,
         "cross_critique": not args.no_cross_critique,
         "evidence": raw,
         "before_fine_tuning": before,
         "after_fine_tuning": after,
     }
-    (out / "hypothesis_debate_beforeafter.json").write_text(
-        json.dumps(result, indent=2)
-    )
+    (out / "hypothesis_debate_beforeafter.json").write_text(json.dumps(result, indent=2))
     (out / "before_final.md").write_text(before["final"])
     (out / "after_final.md").write_text(after["final"])
     print(f"\n[done] wrote transcripts to {out}", flush=True)

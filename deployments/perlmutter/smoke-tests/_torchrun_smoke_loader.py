@@ -11,6 +11,7 @@ Required env (set by the wrapping shell script):
     MATSIM_HF_MODEL_PATH  — local model directory (offline)
     HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1
 """
+
 from __future__ import annotations
 
 import os
@@ -48,15 +49,21 @@ def _log(rank: int, msg: str) -> None:
 def main() -> int:
     model_dir = os.environ.get("MATSIM_HF_MODEL_PATH")
     if not model_dir or not os.path.isdir(model_dir):
-        print(f"ERROR: MATSIM_HF_MODEL_PATH missing or not a directory: {model_dir!r}",
-              file=sys.stderr, flush=True)
+        print(
+            f"ERROR: MATSIM_HF_MODEL_PATH missing or not a directory: {model_dir!r}",
+            file=sys.stderr,
+            flush=True,
+        )
         return 2
 
     rank, world_size, local_rank = _setup_dist()
 
     if rank == 0:
-        print(f"[r0] torch={torch.__version__}  cuda={torch.cuda.is_available()}  "
-              f"world_size={world_size}  local_rank={local_rank}", flush=True)
+        print(
+            f"[r0] torch={torch.__version__}  cuda={torch.cuda.is_available()}  "
+            f"world_size={world_size}  local_rank={local_rank}",
+            flush=True,
+        )
         print(f"[r0] model_dir={model_dir}", flush=True)
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -98,8 +105,9 @@ def main() -> int:
     _log(rank, f"generate finished in {time.time() - t0:.1f}s")
 
     if rank == 0:
-        text = tokenizer.decode(out_ids[0][inputs["input_ids"].shape[1]:],
-                                skip_special_tokens=True)
+        text = tokenizer.decode(
+            out_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
         print("=== Response ===", flush=True)
         print(text, flush=True)
         print("================", flush=True)

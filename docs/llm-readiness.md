@@ -105,18 +105,28 @@ PROJECT_ROOT=$PWD sbatch -A <allocation> \
   deployments/perlmutter/jobs/job-llm-check-perlmutter.sh
 ```
 
-Override `MATSIM_MODEL_DIR`, `MATSIM_MODEL_NAME`, and `MATSIM_VLLM_TP` for the
-checkpoint and topology being qualified. The job starts vLLM in its isolated
-environment, polls `/v1/models` until the exact served identifier appears,
-runs all six `llm-check` stages from the client environment, validates the
-terminal `result.json`, and always stops the server through an exit trap. It
-preserves the vLLM launch log, endpoint response, generated check configuration,
-console log, and full qualification directory under one Slurm run directory.
+The model, its GPUs, and its tensor-parallel size come from a resource layout
+(default `deployments/perlmutter/resources/llm-check.yaml`; override with
+`MATSIM_RESOURCES` and `MODEL_ROOT`). The job runs
+`matsim-agents resources serve <layout> -- deployments/common/run-llm-check.sh`:
+`resources serve` starts vLLM through the facility launcher with the
+placement's device mask, waits until `/v1/models` lists the exact served
+identifier, runs the shared steps (all six `llm-check` stages against the
+plan's server, validation of the terminal `result.json`, optional portability
+run), and always stops the server. Server logs, `placement.json`, and
+`llm-endpoints.json` are kept under `<run>/llm-servers`, next to the generated
+check configuration, console log, and qualification directory.
+
+`llm-check` can also manage the server itself: a configuration with a
+`resources:` block (and optionally `server:`) starts the plan's server, takes
+the model, endpoint, tensor-parallel size, device count, and context length
+from the placement, and stops the server when the check ends.
 
 The Frontier and Aurora jobs (`deployments/frontier/jobs/job-llm-check-frontier.sh`,
-`deployments/aurora/jobs/job-llm-check-aurora.sh`) follow the same contract; on
-Aurora the server runs from the `frameworks` vLLM build on `MATSIM_VLLM_TP` PVC
-tiles.
+`deployments/aurora/jobs/job-llm-check-aurora.sh`) follow the same contract with
+their own layouts and launchers (`vllm-server-frontier.sh`: ROCm vLLM on the
+placed GCDs; `vllm-server-aurora.sh`: the `frameworks` vLLM build through
+`mpiexec` on the placed PVC tiles).
 
 Set `MATSIM_RUN_PORTABILITY=1` to run the live scientific portability suite
 after qualification; that run receives the successful check directory through

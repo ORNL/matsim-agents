@@ -65,6 +65,9 @@ def test_launcher_executes_expected_cli(tmp_path, platform, configured, script_n
             **os.environ,
             "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
             "CAPTURE_ARGS": str(capture),
+            # Set by the training pool's ProcessLaunch.
+            "MATSIM_ASSIGNED_NODES": "node0",
+            "ZE_AFFINITY_MASK": "3",
         },
         capture_output=True,
         text=True,

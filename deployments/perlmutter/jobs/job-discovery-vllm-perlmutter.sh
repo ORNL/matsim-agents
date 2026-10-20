@@ -9,25 +9,22 @@
 #SBATCH --gpus-per-node=4
 #SBATCH -c 32
 # ---------------------------------------------------------------------------
-# matsim-agents: discovery run on NERSC Perlmutter using a *local vLLM server*
-# as the LLM backend (OpenAI-compatible /v1 endpoint).
+# matsim-agents: discovery run on NERSC Perlmutter with a vLLM server that
+# matsim-agents starts, waits for, and stops itself.
 #
-# Layout (single node, 4xA100 80GB):
-#   • vLLM server (Qwen2.5-14B)  : GPU 0           [venv_vllm, torch 2.13.0]
-#   • matsim-agents discovery    : GPUs 1,2,3      [.venv, torch 2.13]
-#       - HydraGNN MLFF relaxations run inline on the 3 reserved GPUs
-#       - LLM proposer + critic both talk to localhost:8000/v1
-#
-# The two stacks live in separate venvs because vLLM hard-pins torch 2.11
-# while HydraGNN/UMA require torch 2.13. The matsim vLLM client only needs the
-# `openai` package plus the HTTP endpoint, so no torch conflict at the client.
+# Placement comes from a resource layout (default
+# deployments/perlmutter/resources/discovery-vllm.yaml):
+#   • vLLM server (Qwen2.5-14B)  : GPU 0    [venv_vllm, via vllm-server-perlmutter.sh]
+#   • MLIP relaxations           : GPUs 1-3 [.venv, one worker process per GPU]
+#   • LLM proposer + critic both use the plan's "proposer" server.
 #
 # Usage:
 #   sbatch deployments/perlmutter/jobs/job-discovery-vllm-perlmutter.sh
 #
-# Override model at submission:
-#   MATSIM_MODEL_DIR=$PROJ/models/Qwen2.5-72B-Instruct MATSIM_VLLM_TP=2 \
+# Another model or layout at submission:
+#   MATSIM_RESOURCES=/path/to/layout.yaml MODEL_ROOT=$PROJ/models \
 #     sbatch deployments/perlmutter/jobs/job-discovery-vllm-perlmutter.sh
+#   matsim-agents resources plan <layout.yaml>   # preview the placement first
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -43,71 +40,16 @@ source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
 VENV=$REPO/.venv          # discovery client + HydraGNN MLFF
-VLLM_VENV=$REPO/venv_vllm                 # isolated vLLM server (torch 2.13.0)
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
 HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
-MODEL_DIR=${MATSIM_MODEL_DIR:-$PROJ/models/Qwen2.5-14B-Instruct}
-MODEL_NAME=${MATSIM_MODEL_NAME:-$(basename "$MODEL_DIR")}
 init_run_dirs "$PROJ" "discovery-vllm" "${SLURM_JOB_ID:-$$}"
 
-# ── vLLM server knobs ────────────────────────────────────────────────────────
-VLLM_HOST=${MATSIM_VLLM_HOST:-127.0.0.1}
-VLLM_PORT=${MATSIM_VLLM_PORT:-8000}
-VLLM_TP=${MATSIM_VLLM_TP:-1}                       # tensor-parallel size (GPUs for server)
-VLLM_GPUS=${MATSIM_VLLM_GPUS:-0}                   # CUDA ids for the server
-# Peer-review transcripts exceed 4k tokens and each request reserves
-# MATSIM_VLLM_MAX_TOKENS (default 4096) output tokens, so 8192 is too small.
-VLLM_MAXLEN=${MATSIM_VLLM_MAXLEN:-16384}
-VLLM_GPU_UTIL=${MATSIM_VLLM_GPU_UTIL:-0.90}
-CLIENT_GPUS=${MATSIM_CLIENT_GPUS:-1,2,3}           # CUDA ids for MLFF relaxations
-BASE_URL="http://${VLLM_HOST}:${VLLM_PORT}/v1"
+# ── placement: vLLM server and MLIP workers come from the resource layout ────
+export MODEL_ROOT="${MODEL_ROOT:-$PROJ/models}"
+export PROJECT_ROOT="$REPO"
+RESOURCES="${MATSIM_RESOURCES:-$REPO/deployments/perlmutter/resources/discovery-vllm.yaml}"
 
-# ── 1) launch vLLM server (background, isolated env, GPU 0) ───────────────────
-# Launched BEFORE loading the system module stack so it uses vLLM's bundled
-# CUDA wheels (cu13) rather than a conflicting system cudatoolkit.
-echo "[$(date)] Starting vLLM server for $MODEL_NAME on GPU(s) $VLLM_GPUS (tp=$VLLM_TP) ..."
-VLLM_LOG="$RUN_DIR/vllm-server.log"
-(
-  export CUDA_VISIBLE_DEVICES="$VLLM_GPUS"
-  export CUDA_DEVICE_ORDER=PCI_BUS_ID
-  export HF_HUB_OFFLINE=1
-  export TRANSFORMERS_OFFLINE=1
-  export VLLM_DO_NOT_TRACK=1
-  export PYTHONNOUSERSITE=1
-  # FlashInfer's sampler JIT-compiles + takes an fcntl.flock in its cache dir;
-  # CFS/GPFS/$HOME do not support flock -> OSError [Errno 524]. Use the native
-  # torch sampler (no JIT, no lock), and pin any remaining caches to tmpfs.
-  export VLLM_USE_FLASHINFER_SAMPLER=0
-  _JIT_TMP="/tmp/vllm-jit.${USER}.${SLURM_JOB_ID:-$$}"
-  mkdir -p "$_JIT_TMP"
-  export FLASHINFER_WORKSPACE_BASE="$_JIT_TMP"
-  export TRITON_CACHE_DIR="$_JIT_TMP/triton"
-  export TORCHINDUCTOR_CACHE_DIR="$_JIT_TMP/inductor"
-  export VLLM_CACHE_ROOT="$_JIT_TMP/vllm"
-  _PY_HDR="$REPO/.venv/include/python3.11"
-  export CPATH="${_PY_HDR}:${CPATH:-}"
-  export C_INCLUDE_PATH="${_PY_HDR}:${C_INCLUDE_PATH:-}"
-  exec "$VLLM_VENV/bin/vllm" serve "$MODEL_DIR" \
-      --served-model-name "$MODEL_NAME" \
-      --host "$VLLM_HOST" \
-      --port "$VLLM_PORT" \
-      --tensor-parallel-size "$VLLM_TP" \
-      --max-model-len "$VLLM_MAXLEN" \
-      --gpu-memory-utilization "$VLLM_GPU_UTIL" \
-      --enforce-eager
-) >"$VLLM_LOG" 2>&1 &
-VLLM_PID=$!
-
-# Ensure the server is torn down whenever the job exits (success or failure).
-cleanup() {
-  echo "[$(date)] Stopping vLLM server (pid $VLLM_PID) ..."
-  kill "$VLLM_PID" 2>/dev/null || true
-  wait "$VLLM_PID" 2>/dev/null || true
-}
-trap cleanup EXIT
-
-# ── 2) modules & client venv (HydraGNN-aligned stack) ────────────────────────
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
 source "$(conda info --base)/etc/profile.d/conda.sh"
@@ -120,37 +62,11 @@ export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
-# Point the matsim vLLM client at the local server.
-export MATSIM_LLM_PROVIDER=vllm
-export MATSIM_VLLM_BASE_URL="$BASE_URL"
-export MATSIM_VLLM_API_KEY=EMPTY
-
-# ── 3) wait for the server's /v1/models endpoint to come up ──────────────────
-echo "[$(date)] Waiting for vLLM endpoint $BASE_URL ..."
-READY=0
-for i in $(seq 1 240); do          # up to ~40 min (vLLM import+weights load is slow on CFS)
-  if ! kill -0 "$VLLM_PID" 2>/dev/null; then
-    echo "[ERROR] vLLM server process exited early. Tail of $VLLM_LOG:" >&2
-    tail -n 40 "$VLLM_LOG" >&2 || true
-    exit 1
-  fi
-  if curl -fsS "${BASE_URL}/models" >/dev/null 2>&1; then
-    READY=1
-    echo "[$(date)] vLLM endpoint is ready after ~$((i*10))s."
-    break
-  fi
-  sleep 10
-done
-if [[ "$READY" -ne 1 ]]; then
-  echo "[ERROR] vLLM endpoint did not become ready in time. Tail of $VLLM_LOG:" >&2
-  tail -n 40 "$VLLM_LOG" >&2 || true
-  exit 1
-fi
-
 # ── diagnostics ──────────────────────────────────────────────────────────────
 echo "[$(date)] Client python: $(which python) ($(python --version 2>&1))"
-echo "[$(date)] LLM endpoint:  $BASE_URL  (model=$MODEL_NAME)"
-CUDA_VISIBLE_DEVICES="$CLIENT_GPUS" python - <<'PY'
+echo "[$(date)] Resources:     $RESOURCES"
+matsim-agents resources plan "$RESOURCES"
+python - <<'PY'
 import torch
 print(f"[torch] {torch.__version__}  cuda={torch.cuda.is_available()}  devices={torch.cuda.device_count()}")
 for i in range(torch.cuda.device_count()):
@@ -188,14 +104,12 @@ else
   AL_ARGS+=( --al-dry-run )
 fi
 
-echo "[$(date)] Submitting discovery query to matsim-agents (vLLM provider, AL mode=$AL_MODE) ..."
-echo "$QUERY" | CUDA_VISIBLE_DEVICES="$CLIENT_GPUS" matsim-agents chat \
+echo "[$(date)] Submitting discovery query to matsim-agents (managed vLLM, AL mode=$AL_MODE) ..."
+echo "$QUERY" | matsim-agents chat \
     --logdir          "$LOGDIR" \
     --hydragnn-branch-mlp-checkpoint "$HYDRAGNN_BRANCH_MLP_CHECKPOINT" \
     --output-dir      "$OUTPUT_DIR" \
-    --llm-provider    vllm \
-    --llm-model       "$MODEL_NAME" \
-    --llm-base-url    "$BASE_URL" \
+    --resources       "$RESOURCES" \
     --llm-peer-review \
     --peer-review-rounds "${MATSIM_PEER_REVIEW_ROUNDS:-2}" \
     --ase-structure-optimizer FIRE \

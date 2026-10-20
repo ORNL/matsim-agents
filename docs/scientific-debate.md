@@ -45,6 +45,18 @@ Run any configuration with:
 matsim-agents debate examples/debate/equal-independent.yaml
 ```
 
+### Participants served from a resource plan
+
+A participant may name a `server` from the `llm` pool of a `resources:` block
+instead of giving `provider`, `model`, and `base_url`
+([resource dispatch](resource-dispatch.md)). The debate then starts those
+servers on the GPUs the plan assigns, waits until each lists its model, and
+stops them afterwards; see
+[`equal-independent-plan-servers.yaml`](../examples/debate/equal-independent-plan-servers.yaml).
+Without a `resources:` block, server names refer to the plan served by
+`matsim-agents resources serve PLAN -- matsim-agents debate CONFIG`, which
+lets several commands share the same running servers.
+
 The checked-in `org/model-*` identifiers and `node-*` URLs are placeholders.
 Replace them with deployed model IDs and endpoints before execution. Different
 participants may use different supported providers; they do not need to share

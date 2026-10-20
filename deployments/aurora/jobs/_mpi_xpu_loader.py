@@ -18,6 +18,7 @@ the names torch.distributed expects:
     PALS_NODEID         -> (used for diagnostics)
     PALS_LOCAL_SIZE     -> LOCAL_WORLD_SIZE  (== 12 on Aurora)
 """
+
 from __future__ import annotations
 
 import os
@@ -27,6 +28,7 @@ import time
 # Intel Extension for PyTorch must be imported BEFORE torch.distributed init
 # so the ``ccl`` backend gets registered.
 import torch  # noqa: F401  (need the symbol before IPEX imports)
+
 try:
     import intel_extension_for_pytorch  # noqa: F401
     import oneccl_bindings_for_pytorch  # noqa: F401  (registers "ccl" backend)
@@ -41,9 +43,9 @@ import torch.distributed as dist
 def _normalise_env() -> None:
     """Map PALS_* (mpiexec) env vars to the names torch expects."""
     mappings = [
-        ("RANK",             ["PMI_RANK", "PALS_RANKID"]),
-        ("LOCAL_RANK",       ["PMI_LOCAL_RANK", "PALS_LOCAL_RANKID"]),
-        ("WORLD_SIZE",       ["PMI_SIZE", "PALS_NRANKS"]),
+        ("RANK", ["PMI_RANK", "PALS_RANKID"]),
+        ("LOCAL_RANK", ["PMI_LOCAL_RANK", "PALS_LOCAL_RANKID"]),
+        ("WORLD_SIZE", ["PMI_SIZE", "PALS_NRANKS"]),
         ("LOCAL_WORLD_SIZE", ["PALS_LOCAL_SIZE"]),
     ]
     for dst, candidates in mappings:
@@ -86,18 +88,26 @@ def _log(rank: int, msg: str) -> None:
 def main() -> int:
     model_dir = os.environ.get("MATSIM_HF_MODEL_PATH")
     if not model_dir or not os.path.isdir(model_dir):
-        print(f"ERROR: MATSIM_HF_MODEL_PATH missing or not a directory: {model_dir!r}",
-              file=sys.stderr, flush=True)
+        print(
+            f"ERROR: MATSIM_HF_MODEL_PATH missing or not a directory: {model_dir!r}",
+            file=sys.stderr,
+            flush=True,
+        )
         return 2
 
     rank, world_size, local_rank = _setup_dist()
 
     if rank == 0:
-        print(f"[r0] torch={torch.__version__}  xpu_available={torch.xpu.is_available()}  "
-              f"world_size={world_size}  local_rank={local_rank}", flush=True)
+        print(
+            f"[r0] torch={torch.__version__}  xpu_available={torch.xpu.is_available()}  "
+            f"world_size={world_size}  local_rank={local_rank}",
+            flush=True,
+        )
         print(f"[r0] model_dir={model_dir}", flush=True)
-        print(f"[r0] node={os.environ.get('PALS_NODEID', '?')}  "
-              f"hostname={os.uname().nodename}", flush=True)
+        print(
+            f"[r0] node={os.environ.get('PALS_NODEID', '?')}  hostname={os.uname().nodename}",
+            flush=True,
+        )
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -120,10 +130,7 @@ def main() -> int:
     _log(rank, f"model loaded in {time.time() - t0:.1f}s")
 
     device = "xpu:0" if torch.xpu.is_available() else "cpu"
-    prompt = (
-        os.environ.get("MATSIM_MN_PROMPT")
-        or "What is 2 + 2? Answer in one sentence."
-    )
+    prompt = os.environ.get("MATSIM_MN_PROMPT") or "What is 2 + 2? Answer in one sentence."
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
 
     _log(rank, "running generate ...")
@@ -138,7 +145,7 @@ def main() -> int:
 
     if rank == 0:
         text = tokenizer.decode(
-            out_ids[0][inputs["input_ids"].shape[1]:],
+            out_ids[0][inputs["input_ids"].shape[1] :],
             skip_special_tokens=True,
         )
         print("=== Response ===", flush=True)

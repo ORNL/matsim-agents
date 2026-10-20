@@ -47,6 +47,7 @@ from matsim_agents.datasets.governance import (
     structure_identity,
     write_dataset_manifest,
 )
+from matsim_agents.execution.placement import ResourcePlan
 
 
 def _campaign_elemental_manifest(cfg, elemental_manifest):
@@ -126,9 +127,6 @@ class _FakeDFTBackend:
     """Minimal DFTBackend Protocol implementation that fabricates a result."""
 
     name = "vasp"
-    nodes_per_job = 1
-    ranks_per_node = 1
-    threads_per_rank = 1
     timeout_sec = 60
 
     def run_one(self, spec: DFTJobSpec) -> DFTResult:
@@ -193,7 +191,18 @@ def _make_cfg(tmp_path: Path) -> ALConfig:
         ),
         trainer=TrainerConfig(enabled=False, train_script=train),
         loop=LoopConfig(n_iterations=1, out_dir=out_dir, resume=False),
+        resources=ResourcePlan.model_validate(CPU_RESOURCES),
     )
+
+
+# One CPU-only node regardless of the test host; tests enable training later.
+CPU_RESOURCES = {
+    "geometry": {"vendor": "cpu", "devices_per_node": 0, "cores_per_node": 1},
+    "pools": {
+        "dft": {"nodes": "all", "share_with": ["training"]},
+        "training": {"share_with": ["dft"]},
+    },
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -237,7 +246,7 @@ def _patch_runtime(
     monkeypatch.setattr(
         loop_mod,
         "sample_md_candidates",
-        lambda md_cfg, calc, out_dir, seed_paths=None: [_make_candidate(i) for i in range(3)],
+        lambda md_cfg, calc, out_dir, seed_paths=None, **_: [_make_candidate(i) for i in range(3)],
     )
     monkeypatch.setattr(loop_mod, "make_backend", lambda dft_cfg: _FakeDFTBackend())
     monkeypatch.setattr(
@@ -395,7 +404,7 @@ def test_held_out_frames_are_excluded_from_later_training_iterations(
     calls = 0
     held_out_id = None
 
-    def sample_candidates(md_cfg, calc, out_dir, seed_paths=None):
+    def sample_candidates(md_cfg, calc, out_dir, seed_paths=None, **_):
         nonlocal calls, held_out_id
         calls += 1
         if calls == 1:

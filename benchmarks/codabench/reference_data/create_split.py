@@ -32,6 +32,7 @@ to Codabench:
 
 Re-running with the same SEED always produces the same split.
 """
+
 from __future__ import annotations
 
 import csv
@@ -41,19 +42,27 @@ from collections import defaultdict
 from pathlib import Path
 
 # ── Configuration ────────────────────────────────────────────────────────────
-SEED             = 42          # fixed seed → reproducible, auditable split
-PUBLIC_FRACTION  = 0.30        # ~30 % of each formula group goes to public set
+SEED = 42  # fixed seed → reproducible, auditable split
+PUBLIC_FRACTION = 0.30  # ~30 % of each formula group goes to public set
 # Structures excluded from the competition.  The High-Entropy Ceramic (HEC)
 # structures encode their disordered cation sublattice with placeholder "X"
 # atoms (a dummy species, not a real element).  These cannot be labelled by DFT
 # (no pseudopotential / elemental reference for X) nor evaluated by an ML
 # interatomic potential, so they are dropped from the test set.
 EXCLUDE_IDS = {
-    "MATS-0084", "MATS-0085", "MATS-0086", "MATS-0090", "MATS-0091",
-    "MATS-0092", "MATS-0093", "MATS-0094", "MATS-0095", "MATS-0096",
+    "MATS-0084",
+    "MATS-0085",
+    "MATS-0086",
+    "MATS-0090",
+    "MATS-0091",
+    "MATS-0092",
+    "MATS-0093",
+    "MATS-0094",
+    "MATS-0095",
+    "MATS-0096",
 }
 # ── Paths ────────────────────────────────────────────────────────────────────
-HERE          = Path(__file__).parent
+HERE = Path(__file__).parent
 # Private anonymisation table (maps anon_id → descriptive, and carries `formula`).
 # NEVER committed to the public repo; supplied server-side only.
 METADATA_PATH = Path(
@@ -62,8 +71,8 @@ METADATA_PATH = Path(
         str(HERE / "private_reference" / "anon_to_descriptive.csv"),
     )
 )
-PUBLIC_FILE   = HERE / "public_ids.txt"
-PRIVATE_FILE  = HERE / "private_ids.txt"
+PUBLIC_FILE = HERE / "public_ids.txt"
+PRIVATE_FILE = HERE / "private_ids.txt"
 
 
 def main() -> None:
@@ -103,7 +112,7 @@ def main() -> None:
 
     rng = random.Random(SEED)
 
-    public_ids: list[str]  = []
+    public_ids: list[str] = []
     private_ids: list[str] = []
 
     for formula, sids in sorted(groups.items()):
@@ -119,8 +128,10 @@ def main() -> None:
         public_ids.extend(shuffled[:n_pub])
         private_ids.extend(shuffled[n_pub:])
 
-        print(f"  {formula:30s}  total={len(shuffled):3d}  "
-              f"public={n_pub}  private={len(shuffled)-n_pub}")
+        print(
+            f"  {formula:30s}  total={len(shuffled):3d}  "
+            f"public={n_pub}  private={len(shuffled) - n_pub}"
+        )
 
     # Sort for determinism and readability
     public_ids.sort()

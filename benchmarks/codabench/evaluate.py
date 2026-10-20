@@ -31,6 +31,7 @@ Usage
         [--device cpu|cuda|xpu] \\
         [--fmax 0.05]  # force convergence threshold for relaxation (eV/Å)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -56,31 +57,48 @@ else:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Evaluate a submitted AtomisticCalculator.")
-    p.add_argument("--submission",  required=True,
-                   help="Path to the unzipped submission directory (must contain model.py).")
+    p.add_argument(
+        "--submission",
+        required=True,
+        help="Path to the unzipped submission directory (must contain model.py).",
+    )
     p.add_argument("--elemental-reference-manifest", required=True, type=Path)
-    p.add_argument("--structures",  default="public_data/structures_metadata.csv",
-                   help="Path to structures_metadata.csv.")
-    p.add_argument("--struct-dir",  default="public_data/structures/",
-                   help="Root directory containing the per-class .xyz files.")
-    p.add_argument("--output",      default="predictions/",
-                   help="Output directory for prediction files.")
-    p.add_argument("--relax",       action="store_true",
-                   help="Also run ASE LBFGS relaxation (needed for Tasks 3 & 4).")
-    p.add_argument("--device",      default="cpu",
-                   help="Compute device: cpu, cuda, xpu, etc.")
-    p.add_argument("--fmax",        type=float, default=0.05,
-                   help="Force convergence threshold for relaxation (eV/Å).")
-    p.add_argument("--steps",       type=int,   default=500,
-                   help="Maximum relaxation steps.")
+    p.add_argument(
+        "--structures",
+        default="public_data/structures_metadata.csv",
+        help="Path to structures_metadata.csv.",
+    )
+    p.add_argument(
+        "--struct-dir",
+        default="public_data/structures/",
+        help="Root directory containing the per-class .xyz files.",
+    )
+    p.add_argument(
+        "--output", default="predictions/", help="Output directory for prediction files."
+    )
+    p.add_argument(
+        "--relax",
+        action="store_true",
+        help="Also run ASE LBFGS relaxation (needed for Tasks 3 & 4).",
+    )
+    p.add_argument("--device", default="cpu", help="Compute device: cpu, cuda, xpu, etc.")
+    p.add_argument(
+        "--fmax",
+        type=float,
+        default=0.05,
+        help="Force convergence threshold for relaxation (eV/Å).",
+    )
+    p.add_argument("--steps", type=int, default=500, help="Maximum relaxation steps.")
     return p.parse_args()
 
 
 # ---------------------------------------------------------------------------
 # Dynamic model loading
 # ---------------------------------------------------------------------------
+
 
 def load_calculator_class(submission_dir: str):
     """Import AtomisticCalculator from <submission_dir>/model.py."""
@@ -107,16 +125,22 @@ def load_calculator_class(submission_dir: str):
 # Prediction writers
 # ---------------------------------------------------------------------------
 
+
 def write_energy_row(writer, structure_id: str, energy: float, n_atoms: int) -> None:
-    writer.writerow({"structure_id": structure_id,
-                     "energy_eV": f"{energy:.8f}",
-                     "energy_eV_per_atom": f"{energy / n_atoms:.8f}",
-                     "n_atoms": n_atoms})
+    writer.writerow(
+        {
+            "structure_id": structure_id,
+            "energy_eV": f"{energy:.8f}",
+            "energy_eV_per_atom": f"{energy / n_atoms:.8f}",
+            "n_atoms": n_atoms,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     args = parse_args()
@@ -161,9 +185,10 @@ def main() -> None:
     t0 = time.perf_counter()
     n_ok, n_fail = 0, 0
 
-    with open(energy_file, "w", newline="") as ef, open(
-        out / "formation_energies.csv", "w", newline=""
-    ) as ff:
+    with (
+        open(energy_file, "w", newline="") as ef,
+        open(out / "formation_energies.csv", "w", newline="") as ff,
+    ):
         energy_writer = csv.DictWriter(ef, fieldnames=energy_fields)
         energy_writer.writeheader()
         formation_writer = csv.DictWriter(
@@ -172,7 +197,7 @@ def main() -> None:
         formation_writer.writeheader()
 
         for row in structures:
-            sid  = row["structure_id"]
+            sid = row["structure_id"]
             fpath = struct_root / row["file_path"]
 
             if not fpath.is_file():
@@ -189,13 +214,15 @@ def main() -> None:
                 forces = atoms.get_forces()
 
                 write_energy_row(energy_writer, sid, energy, len(atoms))
-                formation_writer.writerow({
-                    "structure_id": sid,
-                    "formation_energy_eV_per_atom": references.formation_energy(
-                        atoms, energy, model=True
-                    ),
-                    "n_atoms": len(atoms),
-                })
+                formation_writer.writerow(
+                    {
+                        "structure_id": sid,
+                        "formation_energy_eV_per_atom": references.formation_energy(
+                            atoms, energy, model=True
+                        ),
+                        "n_atoms": len(atoms),
+                    }
+                )
                 np.save(str(forces_dir / f"{sid}.npy"), forces.astype(np.float32))
 
                 # --- optional relaxation ---

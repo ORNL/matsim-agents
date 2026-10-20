@@ -29,8 +29,7 @@ FACILITY_KEYS = {
     "facility",
     "scheduler",
     "accelerator",
-    "gpus_per_node",
-    "ranks_per_node",
+    "resource_preset",
     "launchers",
 }
 

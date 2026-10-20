@@ -20,33 +20,40 @@ from wheel.wheelfile import WheelFile
 
 def adapt_xpu_source(source: str) -> str:
     tree = ast.parse(source)
-    predictor = next(node for node in tree.body if isinstance(node, ast.ClassDef)
-                     and node.name == "MLIPPredictUnit")
+    predictor = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "MLIPPredictUnit"
+    )
     methods = {node.name: node for node in predictor.body if isinstance(node, ast.FunctionDef)}
     setup = methods["_setup_device"]
     assertion = next(node for node in setup.body if isinstance(node, ast.Assert))
     load = next(
-        node for node in ast.walk(methods["__init__"])
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
-        and isinstance(node.value.func, ast.Attribute) and node.value.func.attr == "_load_model"
+        node
+        for node in ast.walk(methods["__init__"])
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Attribute)
+        and node.value.func.attr == "_load_model"
     )
     settings = (
         '        if torch.device(device).type == "xpu":\n'
-        '            if not torch.xpu.is_available():\n'
+        "            if not torch.xpu.is_available():\n"
         '                raise RuntimeError("XPU unavailable; CPU fallback is forbidden")\n'
-        '            self.inference_settings.compile = False\n'
-        '            self.inference_settings.tf32 = False\n'
-        '            self.inference_settings.merge_mole = False\n'
-        '            self.inference_settings.execution_mode = ExecutionMode.GENERAL\n'
+        "            self.inference_settings.compile = False\n"
+        "            self.inference_settings.tf32 = False\n"
+        "            self.inference_settings.merge_mole = False\n"
+        "            self.inference_settings.execution_mode = ExecutionMode.GENERAL\n"
     )
     device = (
         '        if torch.device(device).type == "xpu":\n'
-        '            self.device = torch.device(device)\n'
-        '            return\n'
+        "            self.device = torch.device(device)\n"
+        "            return\n"
     )
     lines = source.splitlines(keepends=True)
-    for position, addition in sorted(((load.lineno, settings), (assertion.lineno, device)),
-                                     reverse=True):
+    for position, addition in sorted(
+        ((load.lineno, settings), (assertion.lineno, device)), reverse=True
+    ):
         lines.insert(position - 1, addition)
     updated = "".join(lines)
     compile(updated, "fairchem-xpu-predict", "exec")
@@ -103,7 +110,8 @@ def prepare_wheel(source: Path, output: Path, torch_version: str, enable_xpu: bo
                     continue
                 data = (
                     metadata.as_bytes(policy=policy.compat32.clone(max_line_length=0))
-                    if entry.filename == metadata_path else upstream.read(entry)
+                    if entry.filename == metadata_path
+                    else upstream.read(entry)
                 )
                 if enable_xpu and entry.filename == predictor_path:
                     data = adapt_xpu_source(data.decode()).encode()
