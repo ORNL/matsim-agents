@@ -73,7 +73,6 @@ NODE_ARGS=()
 if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
   NODE_ARGS=(--nodelist "${MATSIM_ASSIGNED_NODES}")
 fi
-echo "[hydragnn-train] srun -N ${NNODES} -n ${TOTAL_RANKS} python ${TRAIN_SCRIPT} ..."
 
 # Slurm picks which GPUs a step receives, so a GPU count alone cannot honour the
 # placement's device indices. When the placement uses only some of the node's
@@ -90,6 +89,7 @@ if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
   STEP_SHARE=(--overlap)
   STEP_ENV=(env -u HIP_VISIBLE_DEVICES "ROCR_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
 fi
+echo "[hydragnn-train] srun ${STEP_SHARE[*]} ${GPU_ARGS[*]} ${STEP_ENV[*]} python ${TRAIN_SCRIPT} ..."
 echo "[step] gpu_args=${GPU_ARGS[*]} placed_devices=${MATSIM_DEVICE_MASK:-all}"
 exec srun \
   "${STEP_SHARE[@]}" \

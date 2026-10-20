@@ -82,8 +82,6 @@ if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
   NODE_ARGS=(--nodelist "${MATSIM_ASSIGNED_NODES}")
 fi
 echo "[qe-step] assigned_nodes=${MATSIM_ASSIGNED_NODES:-scheduler-selected}"
-echo "[qe-step] srun --exclusive -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK} \\"
-echo "             --gpus-per-node=${GPUS_PER_NODE} --gpu-bind=closest ${PW_BIN} -in ${INPUT}"
 
 # --exclusive lets the AL driver run several of these srun steps concurrently
 # inside one allocation (as with _vasp-step-perlmutter.sh); without it Slurm
@@ -103,6 +101,8 @@ if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
   STEP_SHARE=(--overlap)
   STEP_ENV=(env "CUDA_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
 fi
+echo "[qe-step] srun ${STEP_SHARE[*]} -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK}" \
+  "${GPU_ARGS[*]} ${STEP_ENV[*]} ${PW_BIN} -in ${INPUT}"
 echo "[step] gpu_args=${GPU_ARGS[*]} placed_devices=${MATSIM_DEVICE_MASK:-all}"
 exec srun \
   "${STEP_SHARE[@]}" \

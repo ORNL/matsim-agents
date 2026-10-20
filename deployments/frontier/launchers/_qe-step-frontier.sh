@@ -81,8 +81,6 @@ if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
   NODE_ARGS=(--nodelist "${MATSIM_ASSIGNED_NODES}")
 fi
 echo "[qe-step] assigned_nodes=${MATSIM_ASSIGNED_NODES:-scheduler-selected}"
-echo "[qe-step] srun -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK} \\"
-echo "             --gpus-per-node=${GPUS_PER_NODE} --gpu-bind=closest ${PW_BIN} -in ${INPUT}"
 
 # Slurm picks which GPUs a step receives, so a GPU count alone cannot honour the
 # placement's device indices. When the placement uses only some of the node's
@@ -99,6 +97,8 @@ if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
   STEP_SHARE=(--overlap)
   STEP_ENV=(env -u HIP_VISIBLE_DEVICES "ROCR_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
 fi
+echo "[qe-step] srun ${STEP_SHARE[*]} -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK}" \
+  "${GPU_ARGS[*]} ${STEP_ENV[*]} ${PW_BIN} -in ${INPUT}"
 echo "[step] gpu_args=${GPU_ARGS[*]} placed_devices=${MATSIM_DEVICE_MASK:-all}"
 exec srun \
   "${STEP_SHARE[@]}" \

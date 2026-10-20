@@ -132,8 +132,6 @@ if [[ -n "${MATSIM_ASSIGNED_NODES:-}" ]]; then
   NODE_ARGS=(--nodelist "${MATSIM_ASSIGNED_NODES}")
 fi
 echo "[vasp-step] assigned_nodes=${MATSIM_ASSIGNED_NODES:-scheduler-selected}"
-echo "[vasp-step] srun --exclusive -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK} \\"
-echo "             --gpus-per-node=${GPUS_PER_NODE} --gpu-bind=closest ${VASP_BIN}"
 
 # --exclusive is REQUIRED for concurrent multi-node dispatch: the AL driver
 # launches up to (SLURM_JOB_NUM_NODES / nodes_per_job) of these steps at once
@@ -157,6 +155,8 @@ if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
   STEP_SHARE=(--overlap)
   STEP_ENV=(env "CUDA_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
 fi
+echo "[vasp-step] srun ${STEP_SHARE[*]} -N ${NNODES} -n ${TOTAL_RANKS} -c ${THREADS_PER_RANK}" \
+  "${GPU_ARGS[*]} ${STEP_ENV[*]} ${VASP_BIN}"
 echo "[step] gpu_args=${GPU_ARGS[*]} placed_devices=${MATSIM_DEVICE_MASK:-all}"
 exec srun \
   "${STEP_SHARE[@]}" \
