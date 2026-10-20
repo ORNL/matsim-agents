@@ -191,6 +191,7 @@ def test_direct_dft_launcher_runs_on_this_node_with_translated_mask(monkeypatch)
         update={
             "hosts": (socket.gethostname(),),
             "devices": (1,),
+            "ranks_per_node": 1,
             "env": {"CUDA_VISIBLE_DEVICES": "1"},
         }
     )
@@ -198,7 +199,8 @@ def test_direct_dft_launcher_runs_on_this_node_with_translated_mask(monkeypatch)
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "6,7")
     assert dft.launch_environment("pw.x")["CUDA_VISIBLE_DEVICES"] == "7"
 
-    elsewhere = dft.model_copy(update={"launch": LAUNCH})
+    remote = LAUNCH.model_copy(update={"hosts": ("nid000009",), "ranks_per_node": 1})
+    elsewhere = dft.model_copy(update={"launch": remote})
     with pytest.raises(ValueError, match="runs directly on this node"):
         elsewhere.launch_environment("pw.x")
 
@@ -214,3 +216,31 @@ def test_saved_workflow_configs_with_null_resources_rerun(tmp_path):
     )
     cfg = LLMCheckConfig.model_validate(_load_workflow_config(saved))
     assert cfg.model == "m" and cfg.resources is None
+
+
+def test_direct_dft_launcher_rejects_multi_rank_placements():
+    import socket
+
+    four = LAUNCH.model_copy(update={"hosts": (socket.gethostname(),)})
+    dft = DFTBackendConfig(backend="qe", pseudo_dir="/opt/pseudo", launcher="pw.x", launch=four)
+    with pytest.raises(ValueError, match=r"starts one process.*1 node\(s\) x 4 rank"):
+        dft.launch_environment("pw.x")
+
+
+@pytest.mark.parametrize("variable", ["CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES"])
+def test_empty_device_mask_hides_every_device(monkeypatch, variable):
+    from matsim_agents.execution.devices import child_mask_environment, visible_ordinals
+
+    monkeypatch.setenv(variable, "")
+    with pytest.raises(ValueError, match=r"sees only .*\(none\)"):
+        child_mask_environment({variable: "0"}, owner="pool 'mlip'")
+    vendor = "cuda" if variable.startswith("CUDA") else "rocm"
+    with pytest.raises(ValueError, match=r"\(none\)"):
+        visible_ordinals(vendor, (0,), owner="x")
+
+
+def test_empty_level_zero_mask_applies_no_mask(monkeypatch):
+    from matsim_agents.execution.devices import child_mask_environment
+
+    monkeypatch.setenv("ZE_AFFINITY_MASK", "")
+    assert child_mask_environment({"ZE_AFFINITY_MASK": "3"}, owner="x") == {"ZE_AFFINITY_MASK": "3"}

@@ -93,8 +93,9 @@ class DFTBackendConfig(BaseModel):
 
         A launcher that takes ``{nodes}``/``{ranks_per_node}``/``{threads_per_rank}``
         is a step wrapper (``srun``/``mpiexec``) and gets node-wide device indices.
-        Any other launcher runs directly on this node: its placement must be this
-        node, and its device mask is translated through this process's mask.
+        Any other launcher is one process on this node: its placement must be one
+        rank on this node, and its device mask is translated through this
+        process's mask.
         """
 
         if self.launch is None:
@@ -104,6 +105,12 @@ class DFTBackendConfig(BaseModel):
         )
         if any(token in PLACEMENT_PLACEHOLDERS for token in argv):
             return self.launch.environment({})
+        if self.launch.total_ranks != 1:
+            raise ValueError(
+                f"DFT launcher {argv[0]!r} starts one process, but the dft pool resolved to "
+                f"{self.launch.node_count} node(s) x {self.launch.ranks_per_node} rank(s); use a "
+                "step wrapper with {nodes}, {ranks_per_node}, and {threads_per_rank}"
+            )
         local = socket.gethostname().split(".", 1)[0]
         hosts = [host.split(".", 1)[0] for host in self.launch.hosts]
         if hosts != [local]:

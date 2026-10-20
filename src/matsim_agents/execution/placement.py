@@ -386,9 +386,16 @@ def _substitute(value: Any, defaults: Mapping[str, str], *, source: object) -> A
     if VARIABLE_PATTERN.fullmatch(value) and expanded:
         import yaml
 
-        # A value that is exactly one variable takes the type of its expansion,
-        # so ``nodes: ${LLM_NODES}`` can become an integer or ``rest``.
-        return yaml.safe_load(expanded)
+        # A value that is exactly one variable becomes a number or list when it
+        # spells one (``nodes: ${LLM_NODES}``, ``devices: ${GPUS}``). Anything else
+        # stays the literal string, so names like ``on`` or ``null`` and paths are
+        # never reinterpreted as booleans, null, or mappings.
+        try:
+            typed = yaml.safe_load(expanded)
+        except yaml.YAMLError:
+            return expanded
+        if isinstance(typed, int | float | list) and not isinstance(typed, bool):
+            return typed
     return expanded
 
 

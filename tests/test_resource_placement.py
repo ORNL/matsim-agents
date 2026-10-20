@@ -610,3 +610,39 @@ def test_cli_rejects_nodes_and_hosts_together(tmp_path):
     plan.write_text("resources:\n  preset: frontier\n  pools:\n    mlip: {}\n")
     result = _cli("validate", str(plan), "--nodes", "1", "--hosts", "a")
     assert result.exit_code != 0
+
+
+def test_whole_value_variables_only_become_numbers_or_lists(tmp_path, monkeypatch):
+    monkeypatch.setenv("NODES", "2")
+    monkeypatch.setenv("GPUS", "[0, 1]")
+    monkeypatch.setenv("SERVED", "on")
+    monkeypatch.setenv("MODEL", "/models/a: b")
+    config = tmp_path / "plan.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "resources": {
+                    "preset": "perlmutter-gpu",
+                    "pools": {
+                        "llm": {
+                            "nodes": "${NODES}",
+                            "devices": "${GPUS}",
+                            "servers": [
+                                {
+                                    "name": "p",
+                                    "kind": "managed-vllm",
+                                    "model": "${MODEL}",
+                                    "served_name": "${SERVED}",
+                                }
+                            ],
+                        }
+                    },
+                }
+            }
+        )
+    )
+    plan = ResourcePlan.from_yaml(config)
+    llm = plan.pools["llm"]
+    assert (llm.nodes, llm.devices) == (2, [0, 1])
+    assert llm.servers[0].served_name == "on"
+    assert llm.servers[0].model == "/models/a: b"
