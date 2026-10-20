@@ -118,17 +118,20 @@ class _ManagedServer:
         log_dir: Path,
         local_host: str,
     ) -> None:
-        if len(server.slices) != 1:
+        if len(server.slices) > 1 and not server.launcher:
             raise ValueError(
-                f"LLM server {server.name!r} spans {len(server.slices)} nodes; managed vLLM "
-                "servers run on one node (multi-node serving is phase 5 of "
-                "docs/resource-dispatch.md); run it as an external server instead"
+                f"LLM server {server.name!r} spans {len(server.slices)} nodes; multi-node "
+                "servers need a facility launcher that starts the Ray cluster (for example "
+                "deployments/perlmutter/launchers/vllm-server-perlmutter.sh)"
             )
         model = Path(str(server.model))
         if model.is_absolute() and not model.exists():
             raise ValueError(f"LLM server {server.name!r}: model directory not found: {model}")
         self.server = server
+        # A multi-node server is launched on its first (head) node; the launcher
+        # starts Ray workers on the others from MATSIM_SERVER_SLICES.
         self.slice = server.slices[0]
+        self.geometry = placement.geometry
         self.local = placement.scheduler in {"local", "preview"} or (
             _short_host(self.slice.host) == _short_host(local_host)
         )
@@ -163,6 +166,19 @@ class _ManagedServer:
             args += ["--gpu-memory-utilization", str(server.memory_fraction)]
         return args + list(server.extra_args)
 
+    def _layout_environment(self) -> dict[str, str]:
+        """How the server spans nodes, for launchers that start a Ray cluster."""
+        port = int(self.server.port or 8000)
+        return {
+            "MATSIM_SERVER_SLICES": ";".join(
+                f"{item.host}={','.join(str(device) for device in item.devices)}"
+                for item in self.server.slices
+            ),
+            "MATSIM_SERVER_RAY_PORT": str(port + 1000),
+            "MATSIM_NODE_DEVICES": str(self.geometry.devices_per_node),
+            "MATSIM_NODE_CORES": str(self.geometry.cores_per_node),
+        }
+
     def _command(self, placement: Placement, bind: str) -> list[str]:
         command = list(self.server.launcher or ["vllm", "serve"]) + self._serve_args(bind)
         if self.local:
@@ -170,6 +186,7 @@ class _ManagedServer:
         # The server already runs in its scheduler step; launchers that would otherwise
         # start their own step (vllm-server-frontier.sh) check this.
         mask = [f"{key}={value}" for key, value in self.slice.env.items()]
+        mask += [f"{key}={value}" for key, value in self._layout_environment().items()]
         mask.append("MATSIM_SERVER_IN_STEP=1")
         host = self.slice.host
         geometry = placement.geometry
@@ -198,6 +215,7 @@ class _ManagedServer:
 
     def _environment(self) -> dict[str, str]:
         env = dict(os.environ)
+        env.update(self._layout_environment())
         if self.api_key is not None:
             # vLLM reads its key from VLLM_API_KEY, which keeps it out of argv and logs.
             env["VLLM_API_KEY"] = self.api_key

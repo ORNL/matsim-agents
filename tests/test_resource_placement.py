@@ -580,7 +580,8 @@ def test_cli_plan_prints_pools_and_writes_json(tmp_path, monkeypatch):
     data = json.loads((tmp_path / "placement.json").read_text())
     kimi = data["pools"]["llm"]["servers"][0]
     assert kimi["name"] == "kimi-k2.5"
-    assert (kimi["tensor_parallel_size"], kimi["pipeline_parallel_size"]) == (4, 4)
+    # Tensor parallel over all 16 GPUs of 4 nodes, as in the qualified campaign.
+    assert (kimi["tensor_parallel_size"], kimi["pipeline_parallel_size"]) == (16, 1)
     assert data["pools"]["dft"]["slices"][0]["host"] == "node015"
 
 

@@ -1,15 +1,17 @@
 # Resource dispatch for LLMs, MLIPs, and DFT
 
-Status: **phases 1–3 implemented, phase 4 implemented for the discovery
-chat, `llm-check`, and `debate`** (planner, presets, layouts, CLI; DFT and training read the placement;
-concurrent MLIP relaxations; managed single-node vLLM servers, named servers,
-in-process device limits); phase 5 is not.
+Status: **phases 1–3 implemented; phase 4 implemented for the discovery
+chat, `llm-check`, and `debate`; phase 5 implemented on Perlmutter** (planner,
+presets, layouts, CLI; DFT and training read the placement; concurrent MLIP
+relaxations; managed vLLM servers on one or several nodes, named servers,
+in-process device limits).
 Design questions are resolved in [section 11](#11-design-decisions);
 implementation choices are recorded in
 [section 12](#12-phase-1-implementation-notes),
 [section 13](#13-phase-2-implementation-notes),
-[section 14](#14-phase-3-implementation-notes), and
-[section 15](#15-phase-4-implementation-notes).
+[section 14](#14-phase-3-implementation-notes),
+[section 15](#15-phase-4-implementation-notes), and
+[section 16](#16-phase-5-implementation-notes).
 
 ## 1. Problem
 
@@ -606,8 +608,8 @@ named endpoints:
   `extra_args`. Facility environments belong in the launcher:
   `deployments/perlmutter/launchers/vllm-server-perlmutter.sh` runs vLLM from
   `venv_vllm` with node-local JIT caches.
-- **Single node.** A managed server spanning several nodes is rejected with a
-  pointer to phase 5 (Ray) or an external server.
+- **Several nodes.** See section 16: a managed server on several nodes needs a
+  facility launcher that starts the Ray cluster.
 - **in-process.** The server must sit on the driver's node. Its devices are
   registered with the Hugging Face provider, which loads the model with
   `device_map="auto"` and an explicit `max_memory` for exactly those devices
@@ -667,3 +669,34 @@ named endpoints:
 - **Not yet migrated.** Campaign formula discovery and the all-model debate
   benchmarks serve multi-node models (phase 5), and the Frontier and Aurora
   discovery-chat jobs still start their servers in their job scripts.
+
+## 16. Phase 5 implementation notes
+
+A `managed-vllm` server may span several nodes:
+
+- **Launch.** matsim-agents starts the server's launcher on its first (head)
+  node, directly when that is the driver's node and otherwise through the
+  facility launcher, and passes the layout as `MATSIM_SERVER_SLICES`
+  (`host=devices;host=devices`), `MATSIM_SERVER_RAY_PORT` (server port + 1000),
+  `MATSIM_NODE_DEVICES`, and `MATSIM_NODE_CORES`. Readiness, logs, and stopping
+  work as for a single-node server; the API listens on the head node.
+- **Perlmutter launcher.** With more than one node,
+  `vllm-server-perlmutter.sh` follows the qualified
+  `job-serve-multinode-perlmutter.sh` recipe: it starts the Ray head with the
+  head node's GPUs, starts one Ray worker per other node through
+  `srun --overlap --gpu-bind=none` with that node's placed GPUs in
+  `CUDA_VISIBLE_DEVICES`, waits until the cluster reports every GPU, then runs
+  `vllm serve --distributed-executor-backend ray`. Stopping the launcher stops
+  vLLM and the Ray cluster.
+- **Parallelism.** `tensor_parallel_size` defaults to the server's devices per
+  node, with pipeline stages across nodes (`--pipeline-parallel-size`). The
+  campaign panel sets tensor parallelism over all of a server's GPUs, as the
+  qualified campaign runs used.
+- **Layouts.** `campaign-panel.yaml` describes the seven-model 15-node panel
+  with the Perlmutter launcher; `llm-check-multinode.yaml` serves
+  Qwen3-235B-A22B-Instruct-2507 across two nodes for qualification.
+- **Other facilities.** A multi-node server without a launcher is rejected. The
+  Frontier and Aurora launchers serve on one node; their multi-node recipes
+  (`job-serve-multinode-frontier.sh`, `job-serve-multinode-aurora.sh`) are not
+  yet folded into the launchers.
+
