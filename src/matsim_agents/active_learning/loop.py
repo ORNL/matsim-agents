@@ -61,7 +61,11 @@ from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.backends.dft.runner import run_dft_batch
 from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
-from matsim_agents.backends.mlip.pool import MLIPWorkerPool
+from matsim_agents.backends.mlip.pool import (
+    MLIPWorkerPool,
+    driver_on_mlip_device,
+    release_device_memory,
+)
 from matsim_agents.datasets.energy_references import (
     load_elemental_reference_manifest,
     validate_dataset_reference_method,
@@ -633,133 +637,141 @@ def run_active_learning(cfg: ALConfig) -> None:
     root = Path(cfg.loop.out_dir)
     root.mkdir(parents=True, exist_ok=True)
     placement = cfg.resources.place(root)
+    # Driver-side MLIP work (model loading, single-seed MD, scoring, model
+    # comparison) runs on the mlip pool's device, not on device 0.
+    with driver_on_mlip_device(placement):
+        dataset_path = root / (
+            "dataset.extxyz" if cfg.loop.dataset_format == "extxyz" else "dataset.db"
+        )
+        validation_dataset_path = root / "validation.extxyz"
 
-    dataset_path = root / (
-        "dataset.extxyz" if cfg.loop.dataset_format == "extxyz" else "dataset.db"
-    )
-    validation_dataset_path = root / "validation.extxyz"
+        # Resolve MD seed structures once per run. For ``kind='prompt'`` this
+        # invokes the LLM exactly once and caches the resulting JSON under
+        # ``out_dir/seeds/llm_proposed_compositions.json`` for reproducibility.
+        seeds_dir = root / "seeds"
+        seed_paths = resolve_seed_structures(cfg.md.seed_source, seeds_dir)
+        log.info("Resolved %d seed structure(s) under %s", len(seed_paths), seeds_dir)
 
-    # Resolve MD seed structures once per run. For ``kind='prompt'`` this
-    # invokes the LLM exactly once and caches the resulting JSON under
-    # ``out_dir/seeds/llm_proposed_compositions.json`` for reproducibility.
-    seeds_dir = root / "seeds"
-    seed_paths = resolve_seed_structures(cfg.md.seed_source, seeds_dir)
-    log.info("Resolved %d seed structure(s) under %s", len(seed_paths), seeds_dir)
+        start_iter, resumed_logdir = (0, None)
+        if cfg.loop.resume:
+            start_iter, resumed_logdir = _scan_resume(root)
+            if start_iter > 0:
+                log.info("Resuming AL loop at iteration %d (logdir=%s)", start_iter, resumed_logdir)
+                if resumed_logdir is not None and resumed_logdir.exists():
+                    _apply_model_override(cfg, str(resumed_logdir))
 
-    start_iter, resumed_logdir = (0, None)
-    if cfg.loop.resume:
-        start_iter, resumed_logdir = _scan_resume(root)
-        if start_iter > 0:
-            log.info("Resuming AL loop at iteration %d (logdir=%s)", start_iter, resumed_logdir)
-            if resumed_logdir is not None and resumed_logdir.exists():
-                _apply_model_override(cfg, str(resumed_logdir))
-
-    completed_dft = _completed_dft_count(cfg, root)
-    for i in range(start_iter, cfg.loop.n_iterations):
-        if (
-            cfg.loop.max_dft_calculations is not None
-            and completed_dft >= cfg.loop.max_dft_calculations
-        ):
-            log.info("DFT calculation cap reached; ending loop.")
-            break
-        it_dir = _iter_dir(root, i)
-        it_dir.mkdir(parents=True, exist_ok=True)
-        state = IterationState(iteration=i)
-        t_iter0 = time.time()
-
-        try:
-            # --- 1. Build calculator(s) for this iteration --------------------
-            t0 = time.time()
-            enable_drop = cfg.acquisition.strategy in {"mc_dropout", "ensemble_then_dropout"}
-            primary_calc = make_mlip_calculator(cfg.mlip, enable_mc_dropout=enable_drop)
-            ensemble_calcs: list = []
-            if cfg.mlip.ensemble_paths:
-                ensemble_calcs = build_ensemble(cfg.mlip, enable_mc_dropout=enable_drop)
-            state.timings_sec["build_calculators"] = time.time() - t0
-
-            # --- 2. Generate candidates via MD --------------------------------
-            t0 = time.time()
-            md_dir = it_dir / "md"
-            # Seeds run concurrently on the mlip pool, one per device; the
-            # workers exit afterwards so their memory is free for DFT.
-            with MLIPWorkerPool.from_placement(placement) as md_pool:
-                candidates = sample_md_candidates(
-                    cfg.md,
-                    primary_calc,
-                    md_dir,
-                    seed_paths=seed_paths,
-                    mlip_pool=md_pool,
-                    mlip_cfg=cfg.mlip,
-                    enable_mc_dropout=enable_drop,
-                )
-            state.n_candidates = len(candidates)
-            state.timings_sec["md_sampling"] = time.time() - t0
-            log.info("Iter %d: produced %d MD candidates", i, len(candidates))
-
-            if not candidates:
-                state.notes = "No candidates produced; ending loop."
-                state.status = "complete"
-                _write_state(it_dir, state)
+        completed_dft = _completed_dft_count(cfg, root)
+        for i in range(start_iter, cfg.loop.n_iterations):
+            if (
+                cfg.loop.max_dft_calculations is not None
+                and completed_dft >= cfg.loop.max_dft_calculations
+            ):
+                log.info("DFT calculation cap reached; ending loop.")
                 break
+            it_dir = _iter_dir(root, i)
+            it_dir.mkdir(parents=True, exist_ok=True)
+            state = IterationState(iteration=i)
+            t_iter0 = time.time()
 
-            # --- 3. Score & select --------------------------------------------
-            selected = _select_for_labelling(
-                cfg, candidates, primary_calc, ensemble_calcs, i, completed_dft, state
-            )
+            try:
+                # --- 1. Build calculator(s) for this iteration --------------------
+                t0 = time.time()
+                enable_drop = cfg.acquisition.strategy in {"mc_dropout", "ensemble_then_dropout"}
+                primary_calc = make_mlip_calculator(cfg.mlip, enable_mc_dropout=enable_drop)
+                ensemble_calcs: list = []
+                if cfg.mlip.ensemble_paths:
+                    ensemble_calcs = build_ensemble(cfg.mlip, enable_mc_dropout=enable_drop)
+                state.timings_sec["build_calculators"] = time.time() - t0
 
-            # --- 4. DFT labelling (VASP or QE) --------------------------------
-            results, backend = _label_with_dft(cfg, selected, it_dir, i, state, placement)
-            completed_dft += len(results)
-
-            # --- 5. Append to dataset -----------------------------------------
-            labelled_elements, method_signature, n_appended = _append_labelled_frames(
-                cfg,
-                results,
-                selected,
-                i,
-                dataset_path,
-                validation_dataset_path,
-                backend,
-                state,
-            )
-
-            # --- 6. (Optional) retrain the surrogate --------------------------
-            if comparison_enabled:
-                _check_reference_method(cfg, labelled_elements, backend, method_signature)
-            t0 = time.time()
-            if cfg.trainer.enabled:
-                _collect_training_deferrals(cfg, state, validation_dataset_path, comparison_enabled)
-                if state.training_deferred_reasons:
-                    state.training_status = "deferred"
-                    log.warning(
-                        "Iteration %d training/comparison deferred: %s",
-                        i,
-                        "; ".join(state.training_deferred_reasons),
+                # --- 2. Generate candidates via MD --------------------------------
+                t0 = time.time()
+                md_dir = it_dir / "md"
+                # Seeds run concurrently on the mlip pool, one per device; the
+                # workers exit afterwards so their memory is free for DFT.
+                with MLIPWorkerPool.from_placement(placement) as md_pool:
+                    candidates = sample_md_candidates(
+                        cfg.md,
+                        primary_calc,
+                        md_dir,
+                        seed_paths=seed_paths,
+                        mlip_pool=md_pool,
+                        mlip_cfg=cfg.mlip,
+                        enable_mc_dropout=enable_drop,
                     )
-                    state.timings_sec["retrain"] = time.time() - t0
-                    state.status = "complete"
-                    continue
-                state.training_status = "running"
-            _retrain_candidate(cfg, dataset_path, i, it_dir, root, state, n_appended, placement)
-            _compare_and_promote(
-                cfg, state, i, dataset_path, validation_dataset_path, comparison_enabled
-            )
-            state.timings_sec["retrain"] = time.time() - t0
-            if cfg.trainer.enabled:
-                state.training_status = "completed"
+                state.n_candidates = len(candidates)
+                state.timings_sec["md_sampling"] = time.time() - t0
+                log.info("Iter %d: produced %d MD candidates", i, len(candidates))
 
-            state.status = "complete"
-        except Exception as exc:  # noqa: BLE001
-            state.status = "failed"
-            if state.training_status == "running":
-                state.training_status = "failed"
-            state.notes = repr(exc)
-            log.exception("Iteration %d failed", i)
-            _write_state(it_dir, state)
-            raise
-        finally:
-            state.timings_sec["total"] = time.time() - t_iter0
-            _write_state(it_dir, state)
+                if not candidates:
+                    state.notes = "No candidates produced; ending loop."
+                    state.status = "complete"
+                    _write_state(it_dir, state)
+                    break
+
+                # --- 3. Score & select --------------------------------------------
+                selected = _select_for_labelling(
+                    cfg, candidates, primary_calc, ensemble_calcs, i, completed_dft, state
+                )
+                # The surrogate is not needed again this iteration; free its
+                # device memory before DFT and training use the shared devices.
+                del primary_calc, ensemble_calcs
+                release_device_memory()
+
+                # --- 4. DFT labelling (VASP or QE) --------------------------------
+                results, backend = _label_with_dft(cfg, selected, it_dir, i, state, placement)
+                completed_dft += len(results)
+
+                # --- 5. Append to dataset -----------------------------------------
+                labelled_elements, method_signature, n_appended = _append_labelled_frames(
+                    cfg,
+                    results,
+                    selected,
+                    i,
+                    dataset_path,
+                    validation_dataset_path,
+                    backend,
+                    state,
+                )
+
+                # --- 6. (Optional) retrain the surrogate --------------------------
+                if comparison_enabled:
+                    _check_reference_method(cfg, labelled_elements, backend, method_signature)
+                t0 = time.time()
+                if cfg.trainer.enabled:
+                    _collect_training_deferrals(
+                        cfg, state, validation_dataset_path, comparison_enabled
+                    )
+                    if state.training_deferred_reasons:
+                        state.training_status = "deferred"
+                        log.warning(
+                            "Iteration %d training/comparison deferred: %s",
+                            i,
+                            "; ".join(state.training_deferred_reasons),
+                        )
+                        state.timings_sec["retrain"] = time.time() - t0
+                        state.status = "complete"
+                        continue
+                    state.training_status = "running"
+                _retrain_candidate(cfg, dataset_path, i, it_dir, root, state, n_appended, placement)
+                _compare_and_promote(
+                    cfg, state, i, dataset_path, validation_dataset_path, comparison_enabled
+                )
+                state.timings_sec["retrain"] = time.time() - t0
+                if cfg.trainer.enabled:
+                    state.training_status = "completed"
+
+                state.status = "complete"
+            except Exception as exc:  # noqa: BLE001
+                state.status = "failed"
+                if state.training_status == "running":
+                    state.training_status = "failed"
+                state.notes = repr(exc)
+                log.exception("Iteration %d failed", i)
+                _write_state(it_dir, state)
+                raise
+            finally:
+                state.timings_sec["total"] = time.time() - t_iter0
+                _write_state(it_dir, state)
 
 
 def _write_state(it_dir: Path, state: IterationState) -> None:

@@ -24,7 +24,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.llm.servers import LLMServices
 from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
-from matsim_agents.backends.mlip.pool import MLIPWorkerPool
+from matsim_agents.backends.mlip.pool import MLIPWorkerPool, release_device_memory
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.discovery import (
     Composition,
@@ -192,6 +192,12 @@ class DiscoveryChatSession:
         if self.mlip_pool is None:
             self.mlip_pool = MLIPWorkerPool.from_placement(self._placement())
         return self.mlip_pool
+
+    def release_mlip_models(self) -> None:
+        """Free exploration models before active learning uses the same devices."""
+        if self.mlip_pool is not None and not self.config.active_learning_dry_run:
+            self.mlip_pool.close()
+            release_device_memory()
 
     def close(self) -> None:
         if self.mlip_pool is not None:
@@ -713,6 +719,7 @@ def chat_once(
                 )
             else:
                 try:
+                    session.release_mlip_models()
                     assistant_text = _run_active_learning_for_formula(al_formula, cfg)
                 except Exception as exc:  # pragma: no cover - depends on runtime environment
                     assistant_text = (
@@ -790,6 +797,7 @@ def chat_once(
                         cfg,
                     )
                     if should_handoff:
+                        session.release_mlip_models()
                         handoff_msg = _handoff_to_active_learning(exploration, cfg)
                         handoff_action = (
                             "triggered_dry_run" if cfg.active_learning_dry_run else "triggered_run"

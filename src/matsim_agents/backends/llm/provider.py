@@ -126,15 +126,18 @@ class ChatVLLM(BaseChatModel):
                 yield ChatGenerationChunk(message=AIMessageChunk(content=delta))
 
 
-# Loaded in-process models keyed by model path and load options. Every
-# ``get_chat_model`` call reuses the same weights; only generation settings
-# differ between callers.
-_HUGGINGFACE_PIPELINES: dict[tuple[str, str], Any] = {}
-
+# Loaded in-process models keyed by model path, load options, and assigned
+# devices. Every ``get_chat_model`` call reuses the same weights; only
+# generation settings differ between callers.
+_HUGGINGFACE_PIPELINES: dict[tuple[str, str, str], Any] = {}
 
 # Devices (and optional memory budgets) a resource plan assigns to an in-process
 # model, keyed by model path; see matsim_agents.backends.llm.servers.
 _IN_PROCESS_DEVICES: dict[str, dict[int, float | None]] = {}
+
+
+def _loaded_placements(model_path: str) -> set[str]:
+    return {key[2] for key in _HUGGINGFACE_PIPELINES if key[0] == model_path}
 
 
 def limit_in_process_devices(model_path: str, fractions: dict[int, float | None]) -> None:
@@ -142,11 +145,20 @@ def limit_in_process_devices(model_path: str, fractions: dict[int, float | None]
 
     A device mapped to a fraction may use at most that share of its memory; a
     device mapped to ``None`` may use its free memory. Other devices and the
-    CPU are not used.
+    CPU are not used. A model already loaded in this process with a different
+    assignment is not moved: that raises instead of silently keeping the old
+    devices or loading a second copy.
     """
 
     if not fractions:
         raise ValueError(f"in-process model {model_path} needs at least one device")
+    placement = repr(sorted(fractions.items()))
+    loaded = _loaded_placements(model_path) - {placement}
+    if loaded:
+        raise ValueError(
+            f"in-process model {model_path} is already loaded in this process on a different "
+            f"device assignment ({sorted(loaded)}); use one assignment per process"
+        )
     _IN_PROCESS_DEVICES[model_path] = dict(fractions)
 
 
@@ -168,12 +180,19 @@ def _max_memory(fractions: dict[int, float | None]) -> dict[int, int]:
 def _load_huggingface_pipeline(model_path: str, load_kwargs: dict[str, Any]) -> Any:
     from langchain_huggingface import HuggingFacePipeline
 
-    key = (model_path, repr(sorted(load_kwargs.items())))
+    devices = _IN_PROCESS_DEVICES.get(model_path)
+    placement = repr(sorted(devices.items())) if devices is not None else "auto"
+    key = (model_path, repr(sorted(load_kwargs.items())), placement)
     if key not in _HUGGINGFACE_PIPELINES:
+        if _loaded_placements(model_path) - {placement}:
+            raise ValueError(
+                f"in-process model {model_path} is already loaded in this process on "
+                f"different devices than {placement}"
+            )
         kwargs = dict(load_kwargs)
-        if model_path in _IN_PROCESS_DEVICES:
+        if devices is not None:
             model_kwargs = dict(kwargs.pop("model_kwargs", None) or {})
-            model_kwargs["max_memory"] = _max_memory(_IN_PROCESS_DEVICES[model_path])
+            model_kwargs["max_memory"] = _max_memory(devices)
             kwargs["model_kwargs"] = model_kwargs
         _HUGGINGFACE_PIPELINES[key] = HuggingFacePipeline.from_model_id(
             model_id=model_path,

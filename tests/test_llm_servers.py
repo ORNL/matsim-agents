@@ -8,9 +8,11 @@ import sys
 import textwrap
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
+from langchain_core.messages import AIMessage
 
 from matsim_agents.backends.llm import provider
 from matsim_agents.backends.llm.servers import LLMServices, _ManagedServer, served_models
@@ -444,9 +446,25 @@ def _published(tmp_path, monkeypatch, **extra):
 
     endpoints = {
         "qwen": LLMEndpoint(
-            "qwen", "vllm", "Qwen2.5-14B-Instruct", "http://n0:8000/v1", 4, 4, 8192
+            "qwen",
+            "vllm",
+            "Qwen2.5-14B-Instruct",
+            "http://n0:8000/v1",
+            tensor_parallel_size=4,
+            pipeline_parallel_size=1,
+            device_count=4,
+            max_model_len=8192,
         ),
-        "gemma": LLMEndpoint("gemma", "vllm", "gemma-4-31B-it", "http://n0:8001/v1", 1, 1, 4096),
+        "gemma": LLMEndpoint(
+            "gemma",
+            "vllm",
+            "gemma-4-31B-it",
+            "http://n0:8001/v1",
+            tensor_parallel_size=1,
+            pipeline_parallel_size=1,
+            device_count=1,
+            max_model_len=4096,
+        ),
         **extra,
     }
     path = LLMServices(endpoints).write(tmp_path / "llm-endpoints.json")
@@ -603,3 +621,102 @@ def test_shipped_llm_layouts_resolve(monkeypatch):
         for server in placement.pool("llm").servers:
             assert server.kind == "managed-vllm"
             assert Path(server.launcher[-1]).is_file(), path
+
+
+# -- review fixes: cache identity and in-process device checks -----------------------
+
+
+def test_in_process_model_cannot_change_devices_once_loaded(monkeypatch):
+    class Pipeline:
+        @classmethod
+        def from_model_id(cls, **kwargs):
+            return cls()
+
+    monkeypatch.setattr(provider, "_HUGGINGFACE_PIPELINES", {})
+    monkeypatch.setattr(provider, "_IN_PROCESS_DEVICES", {})
+    monkeypatch.setattr(provider, "_max_memory", lambda fractions: dict.fromkeys(fractions, 1))
+    module = type(sys)("langchain_huggingface")
+    module.HuggingFacePipeline = Pipeline
+    monkeypatch.setitem(sys.modules, "langchain_huggingface", module)
+
+    provider.limit_in_process_devices("/m/A", {0: 0.5})
+    first = provider._load_huggingface_pipeline("/m/A", {})
+    assert provider._load_huggingface_pipeline("/m/A", {}) is first
+    provider.limit_in_process_devices("/m/A", {0: 0.5})  # same assignment is fine
+    with pytest.raises(ValueError, match="already loaded in this process"):
+        provider.limit_in_process_devices("/m/A", {1: None})
+
+
+def test_llm_check_in_process_server_checks_its_devices(tmp_path, monkeypatch):
+    from matsim_agents.backends.llm.servers import LLMEndpoint
+    from matsim_agents.workflows import llm_check
+    from matsim_agents.workflows.llm_check import LLMCheckConfig, run_llm_check
+
+    _published(tmp_path, monkeypatch, hf=LLMEndpoint("hf", "huggingface", "/m/A", devices=(2,)))
+    monkeypatch.setattr(llm_check, "_accelerator_record", lambda: {"accelerator_count": 4})
+
+    def model_for(device_map):
+        loaded = SimpleNamespace(hf_device_map=device_map)
+
+        class Model:
+            llm = SimpleNamespace(pipeline=SimpleNamespace(model=loaded))
+
+            def invoke(self, messages):
+                text = messages[-1].content
+                if "Return only JSON" in text:
+                    return AIMessage(
+                        content=json.dumps(
+                            {
+                                "objective": "stable Si",
+                                "hypothesis": "Si is stable in the diamond structure",
+                                "proposed_compositions": ["Si"],
+                                "scientific_rationale": "covalent sp3 bonding",
+                            }
+                        )
+                    )
+                return AIMessage(content="PORTABILITY_OK and a hypothesis")
+
+        return Model()
+
+    def run(device_map):
+        cfg = LLMCheckConfig(server="hf", output_root=str(tmp_path / "check"))
+        return run_llm_check(
+            cfg,
+            model_factory=lambda **kwargs: model_for(device_map),
+            readiness_probe=lambda cfg: {"local": True},
+        )
+
+    good = run({"model.layers.0": 2, "lm_head": 2})
+    assert good.stages["distributed"], good.failure_reason
+    spilled = run({"model.layers.0": 2, "lm_head": "cpu"})
+    assert not spilled.stages["distributed"]
+    assert "expected only devices [2]" in spilled.failure_reason
+
+
+def test_llm_check_vllm_workers_include_pipeline_stages(tmp_path, monkeypatch):
+    from matsim_agents.backends.llm.servers import LLMEndpoint
+    from matsim_agents.workflows.llm_check import LLMCheckConfig, run_llm_check
+
+    endpoint = LLMEndpoint(
+        "big",
+        "vllm",
+        "Big",
+        "http://n0:8000/v1",
+        tensor_parallel_size=4,
+        pipeline_parallel_size=2,
+        device_count=8,
+        max_model_len=8192,
+    )
+    _published(tmp_path, monkeypatch, big=endpoint)
+    seen = {}
+
+    def readiness(cfg):
+        seen["cfg"] = cfg
+        raise RuntimeError("stop")
+
+    run_llm_check(
+        LLMCheckConfig(server="big", output_root=str(tmp_path / "c")), readiness_probe=readiness
+    )
+    cfg = seen["cfg"]
+    assert (cfg.tensor_parallel_size, cfg.pipeline_parallel_size) == (4, 2)
+    assert cfg.expected_accelerators == 8

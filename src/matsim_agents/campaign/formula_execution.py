@@ -25,7 +25,7 @@ from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
     resolve_hydragnn_inference_head,
 )
-from matsim_agents.backends.mlip.pool import MLIPWorkerPool
+from matsim_agents.backends.mlip.pool import MLIPWorkerPool, release_device_memory
 from matsim_agents.backends.mlip.relaxation import (
     CalculatorCache,
     RelaxStructureInput,
@@ -1413,6 +1413,14 @@ def run_formula_with_active_learning(
         model_identifier=_model_identifier(al_cfg),
     )
     mlip_pool = _formula_mlip_pool(al_cfg, formula_root)
+
+    def active_learning_after_exploration(*args: Any) -> dict[str, Any]:
+        # Exploration models must not stay resident while AL samples, labels with
+        # DFT, and trains on the same devices; reevaluation restarts the workers.
+        mlip_pool.close()
+        release_device_memory()
+        return active_learning_runner(*args)
+
     try:
         result = phase_runner(
             formula,
@@ -1422,7 +1430,7 @@ def run_formula_with_active_learning(
                 **_exploration_kwargs(al_cfg, config.exploration_kwargs),
                 "mlip_pool": mlip_pool,
             },
-            active_learning_runner=active_learning_runner,
+            active_learning_runner=active_learning_after_exploration,
         )
     except Exception as exc:
         stage_name = (

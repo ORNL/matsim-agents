@@ -18,13 +18,14 @@ import os
 import socket
 import sys
 from collections import deque
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from concurrent.futures.process import BrokenProcessPool
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from matsim_agents.execution.devices import child_mask_environment
+from matsim_agents.execution.devices import child_mask_environment, visible_ordinals
 
 if TYPE_CHECKING:
     from matsim_agents.backends.mlip.relaxation import RelaxStructureInput
@@ -255,6 +256,8 @@ class MLIPWorkerPool:
         return outcome.value
 
     def close(self) -> None:
+        """Stop the workers and drop loaded models; the pool restarts them on next use."""
+        self._local_calculators = None
         for index in range(len(self._executors)):
             executor = self._executors[index]
             self._executors[index] = None
@@ -268,8 +271,65 @@ class MLIPWorkerPool:
         self.close()
 
 
+def _torch_device_module(vendor: str):
+    try:
+        import torch
+    except ImportError:
+        return None
+    module = torch.xpu if vendor == "xpu" and hasattr(torch, "xpu") else torch.cuda
+    return module if module.is_available() else None
+
+
+def release_device_memory() -> None:
+    """Return freed model memory to the device so other pools' processes can use it."""
+
+    import gc
+
+    gc.collect()
+    for vendor in ("cuda", "xpu"):
+        module = _torch_device_module(vendor)
+        if module is not None:
+            module.empty_cache()
+
+
+@contextmanager
+def driver_on_mlip_device(placement: Placement | None) -> Iterator[int | None]:
+    """Run this process's own MLIP work on the first device of the ``mlip`` pool.
+
+    Calculators built with ``device="cuda"`` (or ``"xpu"``) use the current
+    device, so model loading, single-seed MD, scoring, and model comparison in
+    the driver honour the pool's device and ``memory_fraction`` instead of
+    landing on device 0. Yields the device ordinal, or ``None`` without a pool.
+    """
+
+    pool = placement.pools.get("mlip") if placement is not None else None
+    if pool is None or not pool.slices or not placement.geometry.devices_per_node:
+        yield None
+        return
+    MLIPWorkerPool.from_placement(placement)  # same node checks as the workers
+    vendor = placement.geometry.vendor
+    (ordinal,) = visible_ordinals(vendor, pool.slices[0].devices[:1], owner="pool 'mlip'")
+    module = _torch_device_module(vendor)
+    if module is None:
+        yield ordinal
+        return
+    previous = module.current_device()
+    module.set_device(ordinal)
+    capped = pool.memory_fraction is not None and hasattr(module, "set_per_process_memory_fraction")
+    if capped:
+        module.set_per_process_memory_fraction(pool.memory_fraction, ordinal)
+    try:
+        yield ordinal
+    finally:
+        if capped:
+            module.set_per_process_memory_fraction(1.0, ordinal)
+        module.set_device(previous)
+
+
 __all__ = [
     "MLIPWorkerPool",
+    "driver_on_mlip_device",
+    "release_device_memory",
     "WorkerOutcome",
     "WorkerSlot",
     "prepare_worker_device",

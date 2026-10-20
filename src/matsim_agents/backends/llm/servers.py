@@ -46,8 +46,11 @@ class LLMEndpoint:
     model: str
     base_url: str | None = None
     tensor_parallel_size: int | None = None
+    pipeline_parallel_size: int | None = None
     device_count: int | None = None
     max_model_len: int | None = None
+    # Device ordinals an in-process model may use (positions among the visible devices).
+    devices: tuple[int, ...] | None = None
 
     def chat_model(self, **kwargs: Any) -> BaseChatModel:
         from matsim_agents.backends.llm.provider import get_chat_model
@@ -252,6 +255,7 @@ class LLMServices:
                     str(server.served_name),
                     process.base_url,
                     tensor_parallel_size=server.tensor_parallel_size,
+                    pipeline_parallel_size=server.pipeline_parallel_size,
                     device_count=sum(len(item.devices) for item in server.slices),
                     max_model_len=server.max_model_len,
                 )
@@ -298,7 +302,12 @@ class LLMServices:
         """Endpoints published by another process; this object owns no servers."""
 
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
-        return cls({name: LLMEndpoint(**values) for name, values in payload.items()})
+        endpoints = {}
+        for name, values in payload.items():
+            if values.get("devices") is not None:
+                values = {**values, "devices": tuple(values["devices"])}
+            endpoints[name] = LLMEndpoint(**values)
+        return cls(endpoints)
 
     def endpoint(self, name: str | None = None) -> LLMEndpoint:
         """Return the named endpoint; without a name, the only server of the plan."""
@@ -348,7 +357,11 @@ def _in_process_endpoint(
     }
     limit_in_process_devices(str(server.model), fractions)
     return LLMEndpoint(
-        server.name, "huggingface", str(server.model), device_count=len(item.devices)
+        server.name,
+        "huggingface",
+        str(server.model),
+        device_count=len(ordinals),
+        devices=tuple(ordinals),
     )
 
 

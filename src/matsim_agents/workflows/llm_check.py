@@ -37,6 +37,14 @@ class LLMCheckConfig(BaseModel):
     timeout_sec: int = Field(120, ge=1)
     expected_accelerators: int | None = Field(None, ge=1)
     tensor_parallel_size: int | None = Field(None, ge=1)
+    pipeline_parallel_size: int = Field(1, ge=1)
+    expected_devices: list[int] | None = Field(
+        None,
+        description=(
+            "In-process models: device ordinals the model may occupy. The distributed "
+            "stage checks the loaded model's device map against them."
+        ),
+    )
     context_length: int | None = Field(None, ge=1)
     concurrent_requests: int = Field(1, ge=1)
     deterministic_prompt: str = "Return exactly the token PORTABILITY_OK and no additional text."
@@ -165,6 +173,25 @@ def _accelerator_record() -> dict[str, Any]:
     return record
 
 
+def _model_devices(model: Any) -> set[str]:
+    """Devices a loaded in-process model occupies: ordinals, or names such as ``cpu``."""
+
+    pipeline = getattr(getattr(model, "llm", None), "pipeline", None)
+    loaded = getattr(pipeline, "model", None)
+    device_map = getattr(loaded, "hf_device_map", None)
+    if device_map:
+        values = device_map.values()
+    elif loaded is not None and hasattr(loaded, "device"):
+        values = [loaded.device]
+    else:
+        return set()
+    devices = set()
+    for value in values:
+        index = getattr(value, "index", value)
+        devices.add(str(index) if isinstance(index, int) else str(value).split(":")[-1])
+    return devices
+
+
 def _model_identity(cfg: LLMCheckConfig, readiness: dict[str, Any]) -> dict[str, Any]:
     return {
         "provider": cfg.provider,
@@ -172,6 +199,8 @@ def _model_identity(cfg: LLMCheckConfig, readiness: dict[str, Any]) -> dict[str,
         "base_url": cfg.base_url,
         "temperature": cfg.temperature,
         "tensor_parallel_size": cfg.tensor_parallel_size,
+        "pipeline_parallel_size": cfg.pipeline_parallel_size,
+        "expected_devices": cfg.expected_devices,
         "context_length": cfg.context_length,
         "readiness": readiness,
     }
@@ -201,7 +230,14 @@ def run_llm_check(
                 "base_url": endpoint.base_url,
                 "api_key": cfg.api_key or ("EMPTY" if endpoint.provider == "vllm" else None),
                 "tensor_parallel_size": cfg.tensor_parallel_size or endpoint.tensor_parallel_size,
-                "expected_accelerators": cfg.expected_accelerators or endpoint.device_count,
+                "pipeline_parallel_size": endpoint.pipeline_parallel_size
+                or cfg.pipeline_parallel_size,
+                # A vLLM server's devices are its workers; an in-process model is checked
+                # against its assigned devices, not every device this process can see.
+                "expected_accelerators": cfg.expected_accelerators
+                or (endpoint.device_count if endpoint.provider == "vllm" else None),
+                "expected_devices": cfg.expected_devices
+                or (list(endpoint.devices) if endpoint.devices is not None else None),
                 "context_length": cfg.context_length or endpoint.max_model_len,
                 "server": endpoint.name,
                 "resources": None,
@@ -336,12 +372,23 @@ def _run_llm_check(
             "discussion.json", {"proposal": proposal, "critique": critique, "revision": revision}
         )
 
+        if cfg.expected_devices is not None:
+            used = _model_devices(model)
+            outside = sorted(set(used) - {str(device) for device in cfg.expected_devices})
+            if not used or outside:
+                raise RuntimeError(
+                    f"in-process model occupies {sorted(used)}; expected only devices "
+                    f"{cfg.expected_devices}"
+                )
+            identity["mapped_devices"] = sorted(used)
+            run.write_json("model_identity.json", identity)
         if cfg.expected_accelerators is not None:
             if cfg.provider == "vllm":
-                if cfg.tensor_parallel_size != cfg.expected_accelerators:
+                workers = (cfg.tensor_parallel_size or 0) * cfg.pipeline_parallel_size
+                if workers != cfg.expected_accelerators:
                     raise RuntimeError(
-                        "for remote vLLM, expected_accelerators must equal the declared "
-                        "tensor_parallel_size; verify actual workers in the server launch log"
+                        "for remote vLLM, expected_accelerators must equal tensor_parallel_size "
+                        "x pipeline_parallel_size; verify actual workers in the server launch log"
                     )
             elif accelerator.get("accelerator_count") != cfg.expected_accelerators:
                 raise RuntimeError(

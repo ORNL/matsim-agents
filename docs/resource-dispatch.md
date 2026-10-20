@@ -555,6 +555,14 @@ relaxations concurrently:
   memory is free for DFT. Shipped AL configs and the `active-learning-sequential`
   layouts declare an `mlip` pool on the first node, sharing devices with `dft`
   and `training`.
+- **Driver device.** MLIP work done in the driver itself (AL model loading,
+  single-seed MD, acquisition scoring, candidate comparison) runs with the
+  `mlip` pool's first device as the current device and its `memory_fraction`
+  cap (`driver_on_mlip_device`), so it no longer lands on device 0. The AL loop
+  frees its surrogate after candidate selection, and campaign and chat
+  exploration workers are stopped before active learning starts and restarted
+  for reevaluation, so no exploration model stays resident during DFT or
+  training on shared devices.
 - **Driver masks.** When the driver already runs under a device mask (for
   example a Slurm step), worker masks are translated through it; a pool device
   the driver cannot see is an error. Campaign configs declare no `mlip` pool
@@ -591,6 +599,12 @@ named endpoints:
   `device_map="auto"` and an explicit `max_memory` for exactly those devices
   (free memory, or `memory_fraction` of the total on shared devices), so the
   model can no longer spread onto MLIP devices or the CPU.
+- **In-process caching.** A loaded in-process model is keyed by its device
+  assignment as well as its path; registering the same model for different
+  devices in one process is an error rather than silently reusing the old
+  devices. `llm-check` verifies an in-process model's device map lies within
+  its assigned devices (not every GPU the driver sees), and a vLLM server's
+  workers as tensor x pipeline parallel size.
 - **external.** Endpoint only, reached as an OpenAI-compatible server.
 - **Shared devices.** `NodeSlice.shared_devices` records which devices of a
   slice another pool also uses; it drives the vLLM memory flag and the

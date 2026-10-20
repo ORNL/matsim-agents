@@ -256,3 +256,122 @@ def test_worker_masks_reject_devices_the_driver_cannot_see(monkeypatch):
     placement = _placement({"mlip": {"devices": [0, 1]}})
     with pytest.raises(ValueError, match="give the driver every device of pool 'mlip'"):
         MLIPWorkerPool.from_placement(placement)
+
+
+# -- review fixes: driver device and model release -------------------------------------
+
+
+class _FakeDeviceModule:
+    def __init__(self):
+        self.current = 0
+        self.calls = []
+
+    def is_available(self):
+        return True
+
+    def current_device(self):
+        return self.current
+
+    def set_device(self, ordinal):
+        self.calls.append(("set_device", ordinal))
+        self.current = ordinal
+
+    def set_per_process_memory_fraction(self, fraction, ordinal):
+        self.calls.append(("fraction", fraction, ordinal))
+
+    def empty_cache(self):
+        self.calls.append(("empty_cache",))
+
+
+def test_driver_runs_on_the_mlip_device_with_its_budget(monkeypatch):
+    from matsim_agents.backends.mlip import pool as pool_module
+
+    fake = _FakeDeviceModule()
+    monkeypatch.setattr(pool_module, "_torch_device_module", lambda vendor: fake)
+    placement = _placement(
+        {
+            "llm": {
+                "devices": [0],
+                "servers": [{"name": "p", "kind": "managed-vllm", "model": "org/x"}],
+            },
+            "mlip": {"devices": [1, 2], "memory_fraction": 0.4},
+        }
+    )
+    with pool_module.driver_on_mlip_device(placement) as ordinal:
+        assert ordinal == 1
+        assert fake.current == 1
+    assert fake.calls == [
+        ("set_device", 1),
+        ("fraction", 0.4, 1),
+        ("fraction", 1.0, 1),
+        ("set_device", 0),
+    ]
+
+
+def test_driver_binding_is_a_no_op_without_an_mlip_pool(monkeypatch):
+    from matsim_agents.backends.mlip import pool as pool_module
+
+    monkeypatch.setattr(
+        pool_module, "_torch_device_module", lambda vendor: pytest.fail("no device change")
+    )
+    with pool_module.driver_on_mlip_device(None) as ordinal:
+        assert ordinal is None
+    with pool_module.driver_on_mlip_device(_placement({"dft": {"nodes": "all"}})) as ordinal:
+        assert ordinal is None
+
+
+def test_close_drops_local_models_and_restarts_lazily(monkeypatch):
+    built = []
+
+    def build(args):
+        built.append(args)
+        return relaxation._RelaxCalculator(_Calculator(), 0, 0, None)
+
+    def fake_relax(args, *, calculators=None):
+        calculators.get(args)
+        return RelaxationResult(
+            structure_path=args.structure_path,
+            optimized_structure_path="opt",
+            trajectory_path="traj",
+            log_csv_path="log",
+            final_energy_eV=-1.0,
+            final_max_force_eV_per_A=0.01,
+            num_steps=1,
+            converged=True,
+        )
+
+    monkeypatch.setattr(relaxation, "_relaxation_calculator", build)
+    monkeypatch.setattr(relaxation, "relax_with_mlip", fake_relax)
+    pool = MLIPWorkerPool()
+    pool.relax([_uma_args()])
+    pool.close()
+    assert pool._local_calculators is None
+    pool.relax([_uma_args()])
+    assert len(built) == 2
+
+
+def test_chat_releases_exploration_models_only_for_real_active_learning(monkeypatch):
+    from matsim_agents.orchestration import interactive_chat
+    from matsim_agents.orchestration.interactive_chat import (
+        DiscoveryChatConfig,
+        DiscoveryChatSession,
+    )
+
+    released = []
+    monkeypatch.setattr(interactive_chat, "release_device_memory", lambda: released.append(1))
+
+    class Pool:
+        closed = 0
+
+        def close(self):
+            Pool.closed += 1
+
+    dry = DiscoveryChatSession(config=DiscoveryChatConfig(llm_only=True), mlip_pool=Pool())
+    dry.release_mlip_models()
+    assert Pool.closed == 0 and not released
+    real = DiscoveryChatSession(
+        config=DiscoveryChatConfig(llm_only=True, active_learning_dry_run=False),
+        mlip_pool=Pool(),
+    )
+    real.release_mlip_models()
+    assert Pool.closed == 1 and released == [1]
