@@ -92,6 +92,40 @@ _WORKFLOW_SETTINGS = {
     "vasp": {"calculation", "nsw", "ediffg_eV_per_A"},
 }
 _SETTINGS_CLASSES = {"qe": QESettings, "vasp": VASPSettings}
+# Input keys the recipe's geometry, convergence, and method settings control;
+# a raw override (QE namelists, VASP INCAR tags) may not replace them.
+_CONTROLLED_INPUT_KEYS = {
+    "qe": {
+        "extra_control": {"calculation", "pseudo_dir", "nstep", "forc_conv_thr", "etot_conv_thr"},
+        "extra_system": {"ecutwfc", "ecutrho", "occupations", "smearing", "degauss"},
+        "extra_electrons": {"conv_thr", "mixing_beta"},
+        "extra_ions": set(),
+        "extra_cell": {"cell_dofree", "press"},
+    },
+    "vasp": {
+        "extra_incar": {
+            "IBRION",
+            "ISIF",
+            "NSW",
+            "EDIFFG",
+            "ENCUT",
+            "PREC",
+            "EDIFF",
+            "ISYM",
+            "ISMEAR",
+            "SIGMA",
+            "KSPACING",
+            "KGAMMA",
+            "ISPIN",
+            "LREAL",
+            "LWAVE",
+            "LCHARG",
+            "ALGO",
+            "NELM",
+            "NELMIN",
+        },
+    },
+}
 # Settings the backends otherwise choose per composition (cutoff, smearing,
 # pseudopotentials, k-point density); a hull needs one method for all phases.
 STABILITY_PINNED_SETTINGS = {
@@ -227,6 +261,18 @@ class CharacterizationContract(BaseModel):
                 raise ValueError(
                     f"methods.dft.settings {invalid} are not {backend} settings the "
                     f"contract may set; allowed: {sorted(allowed)}"
+                )
+            conflicts = [
+                f"{group}.{key}"
+                for group, controlled in _CONTROLLED_INPUT_KEYS[backend].items()
+                for key in (self.methods.dft.settings.get(group) or {})
+                if key.lower() in {c.lower() for c in controlled}
+            ]
+            if conflicts:
+                raise ValueError(
+                    f"methods.dft.settings overrides {conflicts}, which the recipe controls "
+                    "(geometry, convergence, and the method's fields): set the "
+                    "corresponding contract or settings field instead"
                 )
         return self
 
@@ -440,7 +486,13 @@ def _preflight(
         return CharacterizationStatus.INVALID_PROTOCOL, wrong
     if contract.recipe != "thermodynamic_stability":
         return None
-    references = _references(contract)
+    try:
+        references = _references(contract)
+    except (OSError, ValueError) as exc:  # pydantic's ValidationError is a ValueError
+        return CharacterizationStatus.INVALID_PROTOCOL, [
+            f"a valid reference-energy set: {contract.reference_energies} is not one "
+            f"({type(exc).__name__}: {exc})"
+        ]
     if references.method_signature != contract.methods.dft_method_signature:
         return CharacterizationStatus.INVALID_PROTOCOL, [
             f"references computed with the contract's DFT method: the reference set uses "
@@ -870,6 +922,11 @@ def load_contract(path: str | Path) -> CharacterizationContract:
     for key in ("reference_energies", "output_root"):
         if key in data:
             data[key] = resolve(data[key])
+    dft = (data.get("methods") or {}).get("dft")
+    if isinstance(dft, dict):
+        for key in ("pseudo_dir", "potcar_dir"):
+            if dft.get(key):
+                dft[key] = resolve(dft[key])
     return CharacterizationContract.model_validate(data)
 
 

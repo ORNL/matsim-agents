@@ -42,7 +42,7 @@ recipe does, and only from converged DFT.
 | `recipe` | One of the three recipes. |
 | `observables` | Optional. Overrides the recipe's defaults (for example a higher `minimum_evidence_level`). Units are fixed per observable and validated; an observable the recipe does not produce, or a level above `converged_dft` (the most a recipe produces), is rejected. |
 | `methods.mlip` | MLIP settings, as for `matsim-agents relax`. |
-| `methods.dft`, `methods.dft_method_signature` | The DFT backend, and the scientific signature of its method. `methods.dft.settings` keys are checked against the backend's settings (`QESettings`, `VASPSettings`), excluding those the relaxation sets itself. |
+| `methods.dft`, `methods.dft_method_signature` | The DFT backend, and the scientific signature of its method. `methods.dft.settings` keys are checked against the backend's settings (`QESettings`, `VASPSettings`), excluding those the relaxation sets itself; raw overrides (`extra_control`, `extra_system`, `extra_electrons`, `extra_cell`, `extra_incar`) may not set what the geometry, convergence, or a settings field controls (for example `calculation`, `cell_dofree`, `ISIF`, `ENCUT`). |
 | `geometry` | Degrees of freedom of every relaxation (`GeometryControls`); atoms and cell by default. |
 | `tolerances` | Residual force, relaxation steps, degeneracy tolerance for rankings, and hull tolerance. |
 | `reference_energies` | A `ReferenceEnergySet` JSON (`thermodynamic_stability`). |
@@ -50,7 +50,9 @@ recipe does, and only from converged DFT.
 | `approvals`, `dft_approved` | DFT waits for `dft_approved: true` when `approvals.before_dft` is set (the default). |
 | `output_root` | Where the run directory is created (default `./runs`). |
 
-Relative paths in a contract file are relative to that file.
+Relative paths in a contract file (structures, `reference_energies`,
+`output_root`, `methods.dft.pseudo_dir`, `methods.dft.potcar_dir`) are relative
+to that file.
 
 DFT is planned only when a required observable needs at least
 `low_fidelity_dft`. Raising the `relaxation` or `energy_ranking` observables to
@@ -98,7 +100,7 @@ atoms and cell.
 | --- | --- |
 | `sufficiently_characterized` | Every observable meets its fidelity, and the conclusion follows from cited evidence. |
 | `inconclusive` | Evidence is missing or insufficient. `missing` lists what and `recommended_next_test` says what to run. No conclusion is given. |
-| `invalid_protocol` | The contract cannot be answered as given: a structure of another composition, or references computed with another DFT method. Nothing is calculated. |
+| `invalid_protocol` | The contract cannot be answered as given: a structure of another composition, a reference-energy file that is not a valid `ReferenceEnergySet`, or references computed with another DFT method. Nothing is calculated. |
 | `failed_infrastructure` | A calculation could not run (missing executable, crashed process). This is not evidence about the material; running the contract again retries it. |
 | `planned`, `in_progress`, `cancelled` | Reserved for orchestrators that track contracts. |
 

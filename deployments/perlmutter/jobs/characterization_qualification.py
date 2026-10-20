@@ -28,7 +28,7 @@ from matsim_agents.campaign.characterization import (
     run_characterization,
 )
 from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
-from matsim_agents.execution.contracts import CharacterizationStatus
+from matsim_agents.execution.contracts import CharacterizationStatus, EvidenceLevel
 from matsim_agents.workflows.relaxation import run_relaxation
 
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples" / "characterization"
@@ -103,6 +103,7 @@ def main() -> int:
             relax = CountingRelax()
             report = run_characterization(contract, relax=relax)
             results[f"mlip-{name}"] = _summary(report)
+            # A resubmission reuses completed calculations: judge the evidence.
             check(
                 f"mlip {name}: answered from MLIP relaxations only",
                 report.status
@@ -110,7 +111,10 @@ def main() -> int:
                     CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED,
                     CharacterizationStatus.INCONCLUSIVE,
                 }
-                and relax.calls
+                and bool(report.evidence)
+                and all(
+                    item.evidence_level == EvidenceLevel.MLIP_RELAXATION for item in report.evidence
+                )
                 and all(mode == "mlip" for _s, mode in relax.calls),
                 f"status={report.status.value} calls={relax.calls}",
             )
@@ -170,6 +174,7 @@ def main() -> int:
             f"reference {phase}: converged DFT energy",
             report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
             and energy[phase] is not None
+            and all(item.evidence_level == EvidenceLevel.CONVERGED_DFT for item in report.evidence)
             and all(mode == "dft" for _s, mode in relax.calls),
             f"status={report.status.value} E={energy[phase]} missing={report.missing}",
         )
@@ -243,7 +248,7 @@ def main() -> int:
     check(
         "3C-SiC stability: answered from converged DFT",
         report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
-        and relax.calls == [("SiC-3C.vasp", "dft")],
+        and relax.calls in ([], [("SiC-3C.vasp", "dft")]),
         f"status={report.status.value} conclusion={report.conclusion} missing={report.missing}",
     )
     again = CountingRelax()

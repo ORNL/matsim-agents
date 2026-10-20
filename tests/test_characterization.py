@@ -538,3 +538,70 @@ def test_fidelity_requirements_are_enforced(system):
     report = run_characterization(contract, relax=weak)
     assert report.status == CharacterizationStatus.INCONCLUSIVE
     assert report.missing == ["energy_per_atom at converged_dft (the evidence is low_fidelity_dft)"]
+
+
+@pytest.mark.parametrize(
+    ("backend", "override", "conflict"),
+    [
+        ("qe", {"extra_control": {"calculation": "relax"}}, "extra_control.calculation"),
+        ("qe", {"extra_cell": {"cell_dofree": "shape"}}, "extra_cell.cell_dofree"),
+        ("vasp", {"extra_incar": {"ISIF": 2}}, "extra_incar.ISIF"),
+        ("vasp", {"extra_incar": {"encut": 300}}, "extra_incar.encut"),
+    ],
+)
+def test_raw_overrides_cannot_replace_recipe_controls(system, backend, override, conflict):
+    tmp_path, structures, references = system
+    data = _dft(references)
+    if backend == "vasp":
+        data["methods"]["dft"] = {
+            "backend": "vasp",
+            "potcar_dir": "/potcars",
+            "settings": {"encut_ev": 520, "ismear": 0, "sigma": 0.05, "kspacing": 0.2},
+        }
+    data["methods"]["dft"]["settings"].update(override)
+    with pytest.raises(ValidationError, match=rf"overrides \['{conflict}'\]"):
+        _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    harmless = _dft(references)
+    harmless["methods"]["dft"]["settings"]["extra_system"] = {"nspin": 1}
+    _contract(tmp_path, structures, "thermodynamic_stability", **harmless)
+
+
+@pytest.mark.parametrize("content", ["{not json", '{"identifier": "x"}'])
+def test_an_invalid_reference_file_is_an_invalid_protocol(system, content):
+    tmp_path, structures, references = system
+    references.write_text(content)
+    relax = FakeRelax({})
+    report = run_characterization(
+        _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references)),
+        relax=relax,
+    )
+    assert report.status == CharacterizationStatus.INVALID_PROTOCOL and relax.calls == []
+    assert "is not one" in report.missing[0]
+
+
+def test_pseudopotential_directories_are_relative_to_the_contract(system):
+    import yaml
+
+    from matsim_agents.campaign.characterization import load_contract
+
+    tmp_path, structures, references = system
+    data = {
+        "contract_id": "relative",
+        "objective": "Relax NbO2 with DFT.",
+        "formula": "NbO2",
+        "recipe": "relaxation",
+        "structures": [structures[0].name],
+        "observables": [
+            {
+                "name": "energy_per_atom",
+                "unit": "eV/atom",
+                "minimum_evidence_level": "converged_dft",
+            }
+        ],
+        "methods": {"dft": {"backend": "qe", "pseudo_dir": "pseudos"}},
+    }
+    path = tmp_path / "contract.yaml"
+    path.write_text(yaml.safe_dump(data))
+    contract = load_contract(path)
+    assert contract.methods.dft.pseudo_dir == str(tmp_path / "pseudos")
+    assert contract.structures == [structures[0]]

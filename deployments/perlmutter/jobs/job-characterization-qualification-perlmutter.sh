@@ -32,22 +32,24 @@ REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)}"
 }
 PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
-VENV="${MATSIM_VENV:-$REPO/.venv}"
+# UMA runs in the isolated compatibility environment (install-uma-compat.sh).
+VENV="${MATSIM_FAIRCHEM_VENV:-$REPO/.venv-uma}"
 VASP_LAUNCHER="${MATSIM_VASP_LAUNCHER:-$REPO/deployments/perlmutter/launchers/run-vasp-gpu-perlmutter.sh}"
 POTCAR_DIR="${MATSIM_VASP_POTCAR_DIR:-$REPO/external/vasp6/potcar/potpaw_PBE.64}"
-export MATSIM_UMA_ARTIFACT_DIR="${MATSIM_UMA_ARTIFACT_DIR:-$PROJ/models/artifacts/uma}"
 RUN_DIR="${MATSIM_CHARACTERIZATION_DIR:-$RUNS_ROOT/characterization-qualification-${SLURM_JOB_ID:-$$}}"
 mkdir -p "$RUN_DIR"
 
 source "$REPO/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$VENV"
+# shellcheck disable=SC1091
+source "${VENV}/bin/activate"
+source "$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+configure_uma_model_artifacts "$REPO"
 
 export PYTHONPATH="$REPO/src:${PYTHONPATH:-}"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
-export HF_HUB_OFFLINE=1
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 
 echo "=========================================="
 echo "[Perlmutter characterization qualification]"
