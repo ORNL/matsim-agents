@@ -42,7 +42,8 @@ recipe does, and only from converged DFT.
 | `recipe` | One of the three recipes. |
 | `observables` | Optional. Overrides the recipe's defaults (for example a higher `minimum_evidence_level`). Units are fixed per observable and validated; an observable the recipe does not produce is rejected. |
 | `methods.mlip` | MLIP settings, as for `matsim-agents relax`. |
-| `methods.dft`, `methods.dft_method_signature` | The DFT backend, and the scientific signature of its method. |
+| `methods.dft`, `methods.dft_method_signature` | The DFT backend, and the scientific signature of its method. `methods.dft.settings` keys are checked against the backend's settings (`QESettings`, `VASPSettings`), excluding those the relaxation sets itself. |
+| `geometry` | Degrees of freedom of every relaxation (`GeometryControls`); atoms and cell by default. |
 | `tolerances` | Residual force, relaxation steps, degeneracy tolerance for rankings, and hull tolerance. |
 | `reference_energies` | A `ReferenceEnergySet` JSON (`thermodynamic_stability`). |
 | `budget` | `max_mlip_relaxations` and `max_dft_calculations` over the whole contract, including resumed runs. |
@@ -69,12 +70,27 @@ The `reference_energies` file is a `ReferenceEnergySet`:
 ```
 
 These energies must be computed with the same DFT method as the
-characterization relaxations. The contract declares that method's signature
+characterization relaxations, fully relaxed (atoms and cell). The contract declares that method's signature
 in `methods.dft_method_signature`, and it must equal the reference set's
 `method_signature`. The reference set must be complete for the composition:
 every element, at least one competing phase in each binary subsystem, and for
 ternary and larger compositions a ternary competitor. The example ships no
-reference energies; they are yours to compute.
+reference energies; they are yours to compute, for example with `relaxation`
+contracts whose observables require `converged_dft` and that use the same
+`methods.dft`.
+
+The DFT backends otherwise choose some settings per composition, which would
+give the references and the material different methods. A stability contract
+must therefore fix them in `methods.dft.settings`:
+
+| Backend | Settings that must be fixed |
+| --- | --- |
+| `qe` | `ecutwfc_ry`, `ecutrho_ry`, `occupations`, `pseudopotentials` |
+| `vasp` | `encut_ev`, `ismear`, `sigma`, `kspacing` |
+
+The k-point grid of Quantum ESPRESSO still follows each cell's size (VASP's
+`kspacing` fixes the density), and the stability recipe requires relaxing
+atoms and cell.
 
 ## Statuses
 
@@ -131,6 +147,8 @@ relaxations and become `mlip_relaxation`.
   as `failed_infrastructure`; whether it was numerical or an environment
   problem is in `failure_reason`.
 - A step is attempted once per run; there is no automatic recovery.
+- The energy is the final energy of the relaxation; there is no separate
+  static calculation at the relaxed cell (Pulay stress is not corrected).
 - Recipes cover relaxation, ranking, and hull stability. Phonons, elastic
   constants, electronic structure, and defects are not implemented.
 

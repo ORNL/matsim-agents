@@ -10,6 +10,7 @@ from ase import Atoms
 from ase.io import write
 from pydantic import ValidationError
 
+from matsim_agents.backends.dft.qe_relax import QESettings
 from matsim_agents.campaign.characterization import (
     CharacterizationContract,
     outstanding_steps,
@@ -45,15 +46,18 @@ def _structure(path: Path, symbols: str, shift: float = 0.0) -> Path:
 class FakeRelax:
     """Stands in for run_relaxation: energies per structure, and optional failures."""
 
-    def __init__(self, energies, *, unconverged=(), broken=()):
+    def __init__(self, energies, *, unconverged=(), broken=(), silent=()):
         self.energies = energies
+        self.silent = set(silent)
         self.unconverged = set(unconverged)
         self.broken = set(broken)
         self.calls = []
+        self.geometries = []
 
     def __call__(self, cfg):
         name = Path(cfg.structure_path).name
         self.calls.append((name, cfg.mode))
+        self.geometries.append(cfg.geometry)
         if name in self.broken:
             raise FileNotFoundError("pw.x not found")
         out = Path(cfg.output_root)
@@ -73,8 +77,8 @@ class FakeRelax:
             evidence_level=level,
             input_structure_path=cfg.structure_path,
             optimized_structure_path=str(optimized),
-            energy_eV=self.energies[name],
-            max_force_eV_per_A=0.001 if converged else 0.5,
+            energy_eV=None if name in self.silent else self.energies[name],
+            max_force_eV_per_A=None if name in self.silent else (0.001 if converged else 0.5),
             steps=10,
             converged=converged,
         )
@@ -119,7 +123,16 @@ def _contract(tmp_path, structures, recipe, **extra):
 def _dft(references, **extra):
     return {
         "methods": {
-            "dft": {"backend": "qe", "pseudo_dir": "/pseudo"},
+            "dft": {
+                "backend": "qe",
+                "pseudo_dir": "/pseudo",
+                "settings": {
+                    "ecutwfc_ry": 60,
+                    "ecutrho_ry": 480,
+                    "occupations": "smearing",
+                    "pseudopotentials": {"Nb": "Nb.UPF", "O": "O.UPF"},
+                },
+            },
             "dft_method_signature": SIGNATURE,
         },
         "reference_energies": str(references),
@@ -378,10 +391,48 @@ def test_examples_are_valid_contracts(tmp_path):
     (tmp_path / "example" / "references.json").write_text(
         ReferenceEnergySet(
             identifier="user-supplied",
-            method_signature="qe-pbe-sssp-efficiency-ecut60",
+            method_signature="qe-pbe-pslibrary-ecut60-smearing",
             elemental_energies_eV_per_atom={"Mg": -1.0, "O": -1.0},
         ).model_dump_json()
     )
     contract = load_contract(tmp_path / "example" / "thermodynamic_stability.yaml")
     assert contract.needs_dft() and not contract.dft_approved
+    QESettings(pseudo_dir="/pseudo", **contract.methods.dft.settings)
     assert contract.reference_energies == tmp_path / "example" / "references.json"
+
+
+def test_stability_needs_one_fully_relaxed_dft_method(system):
+    tmp_path, structures, references = system
+    unpinned = _dft(references)
+    del unpinned["methods"]["dft"]["settings"]["ecutwfc_ry"]
+    with pytest.raises(ValidationError, match=r"to fix \['ecutwfc_ry'\]"):
+        _contract(tmp_path, structures, "thermodynamic_stability", **unpinned)
+    typo = _dft(references)
+    typo["methods"]["dft"]["settings"]["ecutwfc"] = 60
+    with pytest.raises(ValidationError, match=r"\['ecutwfc'\] are not qe settings"):
+        _contract(tmp_path, structures, "thermodynamic_stability", **typo)
+    with pytest.raises(ValidationError, match="must relax atoms and cell"):
+        _contract(
+            tmp_path,
+            structures,
+            "thermodynamic_stability",
+            geometry={"relax_atoms": True, "relax_cell": False},
+            **_dft(references),
+        )
+    relax = FakeRelax({"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0})
+    run_characterization(
+        _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references)),
+        relax=relax,
+    )
+    assert all(g.relax_atoms and g.relax_cell for g in relax.geometries)
+
+
+def test_a_relaxation_without_an_energy_is_an_infrastructure_failure(system):
+    tmp_path, structures, _references = system
+    relax = FakeRelax(
+        {"NbO2-a.extxyz": -21.0}, unconverged={"NbO2-a.extxyz"}, silent={"NbO2-a.extxyz"}
+    )
+    contract = _contract(tmp_path, structures[:1], "relaxation")
+    report = run_characterization(contract, relax=relax)
+    assert report.status == CharacterizationStatus.FAILED_INFRASTRUCTURE
+    assert [step.step_id for step in outstanding_steps(contract)] == ["relax-mlip-000"]

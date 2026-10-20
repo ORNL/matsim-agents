@@ -27,6 +27,7 @@ with the outstanding steps and never repeats a completed calculation.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import logging
@@ -36,6 +37,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from matsim_agents.backends.dft.qe_relax import QESettings
+from matsim_agents.backends.dft.vasp_relax import VASPSettings
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.discovery.composition import parse_composition
@@ -59,6 +62,7 @@ from matsim_agents.execution.contracts import (
 )
 from matsim_agents.workflows.relaxation import (
     DFTBackendConfig,
+    GeometryControls,
     RelaxationMode,
     ScientificRelaxationConfig,
     ScientificRelaxationResult,
@@ -81,6 +85,18 @@ RECIPE_OBSERVABLES: dict[str, list[tuple[str, str, EvidenceLevel]]] = {
         ("formation_energy_per_atom", "eV/atom", EvidenceLevel.CONVERGED_DFT),
         ("energy_above_hull", "eV/atom", EvidenceLevel.CONVERGED_DFT),
     ],
+}
+# DFT settings the relaxation workflow sets itself, per backend.
+_WORKFLOW_SETTINGS = {
+    "qe": {"calculation", "pseudo_dir", "nstep", "forc_conv_thr_ry_au"},
+    "vasp": {"calculation", "nsw", "ediffg_eV_per_A"},
+}
+_SETTINGS_CLASSES = {"qe": QESettings, "vasp": VASPSettings}
+# Settings the backends otherwise choose per composition (cutoff, smearing,
+# pseudopotentials, k-point density); a hull needs one method for all phases.
+STABILITY_PINNED_SETTINGS = {
+    "qe": ("ecutwfc_ry", "ecutrho_ry", "occupations", "pseudopotentials"),
+    "vasp": ("encut_ev", "ismear", "sigma", "kspacing"),
 }
 STATE_FILE = "characterization-state.json"
 REPORT_FILE = "characterization-report.json"
@@ -122,6 +138,10 @@ class CharacterizationContract(BaseModel):
         default_factory=list, description="The recipe's observables when empty."
     )
     methods: CharacterizationMethods = Field(default_factory=CharacterizationMethods)
+    geometry: GeometryControls = Field(
+        default_factory=lambda: GeometryControls(relax_atoms=True, relax_cell=True),
+        description="Degrees of freedom of every relaxation; atoms and cell by default.",
+    )
     tolerances: NumericalTolerances = Field(default_factory=NumericalTolerances)
     reference_energies: Path | None = Field(
         None, description="ReferenceEnergySet JSON (thermodynamic_stability)."
@@ -162,10 +182,38 @@ class CharacterizationContract(BaseModel):
                 raise ValueError("thermodynamic stability needs a reference_energies file")
             if not self.methods.dft_method_signature:
                 raise ValueError("thermodynamic stability needs methods.dft_method_signature")
+            if not (self.geometry.relax_atoms and self.geometry.relax_cell):
+                raise ValueError(
+                    "thermodynamic stability compares fully relaxed energies: "
+                    "geometry must relax atoms and cell"
+                )
+            dft = self.methods.dft
+            if dft is not None:
+                unpinned = [
+                    key
+                    for key in STABILITY_PINNED_SETTINGS[dft.backend]
+                    if dft.settings.get(key) is None
+                ]
+                if unpinned:
+                    raise ValueError(
+                        f"thermodynamic stability needs methods.dft.settings to fix {unpinned}: "
+                        f"{dft.backend} otherwise chooses them per composition, and the "
+                        "references and the material must share one method"
+                    )
         if self.recipe == "energy_ranking" and len(self.structures) < 2:
             raise ValueError("an energy ranking needs at least two structures")
         if self.needs_dft() and self.methods.dft is None:
             raise ValueError("DFT-level observables need methods.dft")
+        if self.methods.dft is not None:
+            backend = self.methods.dft.backend
+            known = {f.name for f in dataclasses.fields(_SETTINGS_CLASSES[backend])}
+            allowed = known - _WORKFLOW_SETTINGS[backend]
+            invalid = sorted(set(self.methods.dft.settings) - allowed)
+            if invalid:
+                raise ValueError(
+                    f"methods.dft.settings {invalid} are not {backend} settings the "
+                    f"contract may set; allowed: {sorted(allowed)}"
+                )
         return self
 
     def required_level(self) -> EvidenceLevel:
@@ -239,6 +287,7 @@ def _relaxation_config(
         mode=RelaxationMode.DFT if step.fidelity == "dft" else RelaxationMode.MLIP,
         structure_path=str(step.structure),
         output_root=str(work_dir),
+        geometry=contract.geometry,
         mlip=contract.methods.mlip,
         dft=contract.methods.dft if step.fidelity == "dft" else None,
         approvals=contract.approvals,
@@ -253,6 +302,13 @@ def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
     stage = result.stages[-1] if result.stages else None
     if result.status == "failed" or stage is None:
         return {"status": "failed", "failure_reason": result.failure_reason or "no stage result"}
+    if stage.energy_eV is None or stage.max_force_eV_per_A is None:
+        # The code ran but produced no energy (e.g. it exited before the first step).
+        return {
+            "status": "failed",
+            "failure_reason": stage.failure_reason or "the relaxation produced no energy",
+            "run_directory": result.run_directory,
+        }
     return {
         "status": "done",
         "run_id": result.run_id,

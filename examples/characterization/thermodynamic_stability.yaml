@@ -16,11 +16,18 @@ methods:
     backend: qe
     launcher: pw.x
     pseudo_dir: /path/to/pseudopotentials
+    # The references and MgO must share one method: fix what pw.x would
+    # otherwise choose per composition. k-points follow each cell's size.
     settings:
-      ecutwfc: 60
-      kpts: [6, 6, 6]
+      ecutwfc_ry: 60
+      ecutrho_ry: 480
+      occupations: smearing
+      pseudopotentials:
+        Mg: Mg.pbe-spnl-kjpaw_psl.1.0.0.UPF
+        O: O.pbe-n-kjpaw_psl.0.1.UPF
   # Must equal the reference set's method_signature.
-  dft_method_signature: qe-pbe-sssp-efficiency-ecut60
+  dft_method_signature: qe-pbe-pslibrary-ecut60-smearing
+# Atoms and cell are relaxed (the default; stability requires it).
 tolerances:
   force_tolerance_eV_per_A: 0.02
   hull_tolerance_eV_per_atom: 0.0
