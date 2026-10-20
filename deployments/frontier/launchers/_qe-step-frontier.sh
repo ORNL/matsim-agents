@@ -90,14 +90,18 @@ echo "             --gpus-per-node=${GPUS_PER_NODE} --gpu-bind=closest ${PW_BIN}
 STEP_GPUS="${GPUS_PER_NODE}"
 GPU_ARGS=(--gpus-per-node="${STEP_GPUS}" --gpu-bind=closest)
 STEP_ENV=()
+STEP_SHARE=(--exclusive)
 if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
       && "${STEP_GPUS}" != "${MATSIM_NODE_DEVICES}" ]]; then
   GPU_ARGS=(--gpus-per-node="${MATSIM_NODE_DEVICES}" --gpu-bind=none)
+  # Other pools may hold the node's remaining GPUs (e.g. a vLLM step); the
+  # placement keeps devices disjoint, so overlap instead of waiting for them.
+  STEP_SHARE=(--overlap)
   STEP_ENV=(env -u HIP_VISIBLE_DEVICES "ROCR_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
 fi
 echo "[step] gpu_args=${GPU_ARGS[*]} placed_devices=${MATSIM_DEVICE_MASK:-all}"
 exec srun \
-  --exclusive \
+  "${STEP_SHARE[@]}" \
   "${NODE_ARGS[@]}" \
   -N "${NNODES}" \
   -n "${TOTAL_RANKS}" \

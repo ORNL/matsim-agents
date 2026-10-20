@@ -48,6 +48,8 @@ def test_subset_placement_takes_the_node_and_masks_inside_the_step(tmp_path, nam
     script, vendor = WRAPPERS[name]
     args = _run(tmp_path, script, "1,2,3", "3")
     assert "--gpus-per-node=4" in args and "--gpu-bind=none" in args
+    # Other pools may hold the node's other GPUs, so the step overlaps them.
+    assert "--overlap" in args and "--exclusive" not in args
     assert f"{vendor}_VISIBLE_DEVICES=1,2,3" in args
     assert args.index(f"{vendor}_VISIBLE_DEVICES=1,2,3") < len(args) - 1
 
@@ -57,4 +59,54 @@ def test_whole_node_placement_keeps_slurm_binding(tmp_path, name):
     script, vendor = WRAPPERS[name]
     args = _run(tmp_path, script, "0,1,2,3", "4")
     assert "--gpus-per-node=4" in args and "--gpu-bind=closest" in args
+    assert "--exclusive" in args and "--overlap" not in args
     assert not any(arg.startswith(f"{vendor}_VISIBLE_DEVICES") for arg in args)
+
+
+AURORA = {
+    "aurora-qe": "deployments/aurora/launchers/_qe-step-aurora.sh",
+    "aurora-vasp": "deployments/aurora/launchers/_vasp-step-aurora.sh",
+}
+
+
+def _run_aurora(tmp_path, script, mask, ranks_per_node, threads=8):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    record = tmp_path / "mpiexec.args"
+    (bin_dir / "mpiexec").write_text(
+        f'#!/bin/bash\nprintf "%s\\n" "$@" "ZE=${{ZE_AFFINITY_MASK:-unset}}" > {record}\n'
+    )
+    (bin_dir / "mpiexec").chmod(0o755)
+    text = (ROOT / script).read_text()
+    tail = text[text.index("# Each rank owns") :]
+    stub = tmp_path / "wrapper-tail.sh"
+    stub.write_text(
+        "set -euo pipefail\n"
+        f"HOSTS=x1; RANKS_PER_NODE={ranks_per_node}; TOTAL_RANKS={ranks_per_node}\n"
+        f"THREADS_PER_RANK={threads}; PW_BIN=pw.x; INPUT=pw.in; VASP_BIN=vasp_std\n" + tail
+    )
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "MATSIM_DEVICE_MASK": mask,
+        "MATSIM_DEVICES_PER_NODE": str(len(mask.split(","))),
+        "MATSIM_NODE_DEVICES": "12",
+        "ZE_AFFINITY_MASK": mask,
+    }
+    subprocess.run(["bash", str(stub)], env=env, check=True, capture_output=True, text=True)
+    return record.read_text().splitlines()
+
+
+@pytest.mark.parametrize("name", sorted(AURORA))
+def test_aurora_steps_bind_rank_cores_and_placed_tiles(tmp_path, name):
+    args = _run_aurora(tmp_path, AURORA[name], "4,5", ranks_per_node=4)
+    assert "--depth=8" in args and "--cpu-bind=depth" in args
+    assert "--gpu-bind=list:4:5:4:5" in args
+    assert args[-1] == "ZE=unset"  # mpiexec sets each rank's mask from --gpu-bind
+
+
+@pytest.mark.parametrize("name", sorted(AURORA))
+def test_aurora_whole_node_steps_bind_nearest_tile(tmp_path, name):
+    mask = ",".join(str(index) for index in range(12))
+    args = _run_aurora(tmp_path, AURORA[name], mask, ranks_per_node=12, threads=1)
+    assert "--gpu-bind=closest" in args and "--depth=1" in args

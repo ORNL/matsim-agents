@@ -73,13 +73,18 @@ echo "[hydragnn-train] srun -N 1 -n 1 python ${TRAIN_SCRIPT} ..."
 STEP_GPUS="1"
 GPU_ARGS=(--gpus-per-node="${STEP_GPUS}" --gpu-bind=closest)
 STEP_ENV=()
+STEP_SHARE=()
 if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
       && "${STEP_GPUS}" != "${MATSIM_NODE_DEVICES}" ]]; then
   GPU_ARGS=(--gpus-per-node="${MATSIM_NODE_DEVICES}" --gpu-bind=none)
+  # Other pools may hold the node's remaining GPUs (e.g. a vLLM step); the
+  # placement keeps devices disjoint, so overlap instead of waiting for them.
+  STEP_SHARE=(--overlap)
   STEP_ENV=(env "CUDA_VISIBLE_DEVICES=${MATSIM_DEVICE_MASK}")
 fi
 echo "[step] gpu_args=${GPU_ARGS[*]} placed_devices=${MATSIM_DEVICE_MASK:-all}"
 exec srun \
+  "${STEP_SHARE[@]}" \
   "${NODE_ARGS[@]}" \
   -N 1 \
   -n 1 \

@@ -568,9 +568,12 @@ relaxations concurrently:
   (the placed indices) and `MATSIM_NODE_DEVICES`. When a step uses only some of
   a node's GPUs, the Perlmutter and Frontier DFT and training wrappers request
   all of the node's GPUs with `--gpu-bind=none` and set `CUDA_VISIBLE_DEVICES`
-  (or `ROCR_VISIBLE_DEVICES`) to the placed indices inside the step; whole-node
-  steps keep `--gpu-bind=closest`. Aurora wrappers pass the placed
-  `ZE_AFFINITY_MASK` through `mpiexec`. The Frontier vLLM launcher likewise runs
+  (or `ROCR_VISIBLE_DEVICES`) to the placed indices inside the step, and use
+  `--overlap` instead of `--exclusive` because other pools may hold the node's
+  other GPUs; whole-node steps keep `--exclusive --gpu-bind=closest`. Aurora
+  DFT wrappers bind each rank to `threads_per_rank` cores
+  (`--depth --cpu-bind=depth`) and, for a subset of tiles, map ranks to the
+  placed tiles with `--gpu-bind=list:...`. The Frontier vLLM launcher likewise runs
   the server in an `srun --overlap` step that takes the node's GCDs and exposes
   only the placed ones through `HIP_VISIBLE_DEVICES`, as the qualified Frontier
   vLLM recipes do.
