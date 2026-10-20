@@ -605,3 +605,72 @@ def test_pseudopotential_directories_are_relative_to_the_contract(system):
     contract = load_contract(path)
     assert contract.methods.dft.pseudo_dir == str(tmp_path / "pseudos")
     assert contract.structures == [structures[0]]
+
+
+def test_a_second_execution_of_the_same_run_is_refused(system):
+    import fcntl
+
+    tmp_path, structures, _references = system
+    contract = _contract(tmp_path, structures[:1], "relaxation")
+    run_dir = Path(contract.output_root) / "characterization-relaxation-test"
+    run_dir.mkdir(parents=True)
+    with (run_dir / ".lock").open("w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        relax = FakeRelax({"NbO2-a.extxyz": -21.0})
+        with pytest.raises(RuntimeError, match="in use by another execution"):
+            run_characterization(contract, relax=relax)
+        assert relax.calls == []
+    report = run_characterization(contract, relax=relax)
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+
+
+def test_unreadable_structures_and_uncovered_phases_are_invalid_protocols(system):
+    tmp_path, structures, references = system
+    empty = tmp_path / "empty.vasp"
+    empty.write_text("")
+    relax = FakeRelax({})
+    report = run_characterization(
+        _contract(tmp_path, [empty], "relaxation", contract_id="empty"), relax=relax
+    )
+    assert report.status == CharacterizationStatus.INVALID_PROTOCOL
+    assert "is not a readable structure" in report.missing[0] and relax.calls == []
+    broken = ReferenceEnergySet.model_validate_json(references.read_text())
+    broken.competing_phases["TaO"] = -0.4
+    references.write_text(broken.model_dump_json())
+    report = run_characterization(
+        _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references)),
+        relax=relax,
+    )
+    assert report.status == CharacterizationStatus.INVALID_PROTOCOL and relax.calls == []
+    assert report.missing == [
+        "elemental energies for ['Ta'], needed by competing phase formula:TaO"
+    ]
+
+
+def test_relative_and_absolute_contract_paths_resume_the_same_run(system, monkeypatch):
+    import yaml
+
+    from matsim_agents.campaign.characterization import load_contract
+
+    tmp_path, structures, _references = system
+    path = tmp_path / "contract.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "contract_id": "paths",
+                "objective": "Relax NbO2.",
+                "formula": "NbO2",
+                "recipe": "relaxation",
+                "structures": [structures[0].name],
+                "output_root": "runs",
+            }
+        )
+    )
+    monkeypatch.chdir(tmp_path)
+    relative = load_contract("contract.yaml")
+    absolute = load_contract(path)
+    assert relative.digest() == absolute.digest()
+    run_characterization(relative, relax=FakeRelax({"NbO2-a.extxyz": -21.0}))
+    again = FakeRelax({})
+    run_characterization(absolute, relax=again)
+    assert again.calls == []

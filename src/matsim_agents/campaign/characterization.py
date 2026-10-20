@@ -28,6 +28,7 @@ with the outstanding steps and never repeats a completed calculation.
 from __future__ import annotations
 
 import dataclasses
+import fcntl
 import hashlib
 import json
 import logging
@@ -408,6 +409,33 @@ class _Run:
         self.contract = contract
         self.directory = Path(contract.output_root) / f"characterization-{contract.contract_id}"
         self.directory.mkdir(parents=True, exist_ok=True)
+        # One execution owns the run: its state is read, checked, and written under the lock.
+        self._lock = (self.directory / ".lock").open("w")
+        try:
+            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            self._lock.close()
+            raise RuntimeError(
+                f"{self.directory} is in use by another execution of this contract"
+            ) from None
+        try:
+            self._open(contract)
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        if not self._lock.closed:
+            fcntl.flock(self._lock, fcntl.LOCK_UN)
+            self._lock.close()
+
+    def __enter__(self) -> _Run:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+    def _open(self, contract: CharacterizationContract) -> None:
         self.state_path = self.directory / STATE_FILE
         digest = contract.digest()
         if self.state_path.is_file():
@@ -479,7 +507,12 @@ def _preflight(
     assert expected is not None
     wrong = []
     for path in contract.structures:
-        found = parse_composition(read(path).get_chemical_formula(empirical=True))
+        try:
+            atoms = read(path)
+        except Exception as exc:  # noqa: BLE001 - any unreadable file is a protocol error
+            wrong.append(f"{path} is not a readable structure ({type(exc).__name__}: {exc})")
+            continue
+        found = parse_composition(atoms.get_chemical_formula(empirical=True))
         if found is None or found.formula != expected.formula:
             wrong.append(f"{path} is not {expected.formula}")
     if wrong:
@@ -499,6 +532,20 @@ def _preflight(
             f"{references.method_signature!r}, the relaxations "
             f"{contract.methods.dft_method_signature!r}"
         ]
+    uncovered = []
+    for phase_id, formula, _energy in references.competing_phase_records():
+        phase = parse_composition(formula)
+        missing = (
+            sorted(set(phase.elements) - set(references.elemental_energies_eV_per_atom))
+            if phase is not None
+            else [formula]
+        )
+        if missing:
+            uncovered.append(
+                f"elemental energies for {missing}, needed by competing phase {phase_id}"
+            )
+    if uncovered:
+        return CharacterizationStatus.INVALID_PROTOCOL, uncovered
     completeness = references.audit_completeness(expected.elements)
     if completeness.provisional:
         # The hull would be provisional whatever the relaxations give: no DFT is spent.
@@ -523,7 +570,11 @@ def run_characterization(
     report then says which evidence is missing. ``relax`` runs one relaxation
     (the provenance-tracked relaxation workflow by default).
     """
-    run = _Run(contract)
+    with _Run(contract) as run:
+        return _execute(contract, run, relax)
+
+
+def _execute(contract: CharacterizationContract, run: _Run, relax: Relax) -> CharacterizationReport:
     problem = _preflight(contract)
     if problem is not None:
         status, missing = problem
@@ -910,7 +961,7 @@ def load_contract(path: str | Path) -> CharacterizationContract:
     """Read a YAML or JSON contract; relative paths in it are relative to the file."""
     import yaml
 
-    path = Path(path)
+    path = Path(path).resolve()
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict):
         raise ValueError(f"{path} is not a characterization contract mapping")

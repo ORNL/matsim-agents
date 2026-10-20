@@ -100,7 +100,7 @@ atoms and cell.
 | --- | --- |
 | `sufficiently_characterized` | Every observable meets its fidelity, and the conclusion follows from cited evidence. |
 | `inconclusive` | Evidence is missing or insufficient. `missing` lists what and `recommended_next_test` says what to run. No conclusion is given. |
-| `invalid_protocol` | The contract cannot be answered as given: a structure of another composition, a reference-energy file that is not a valid `ReferenceEnergySet`, or references computed with another DFT method. Nothing is calculated. |
+| `invalid_protocol` | The contract cannot be answered as given: an unreadable structure or one of another composition, a reference-energy file that is not a valid `ReferenceEnergySet`, a competing phase without elemental energies for all of its elements, or references computed with another DFT method. Nothing is calculated. |
 | `failed_infrastructure` | A calculation could not run (missing executable, crashed process). This is not evidence about the material; running the contract again retries it. |
 | `planned`, `in_progress`, `cancelled` | Reserved for orchestrators that track contracts. |
 
@@ -142,6 +142,12 @@ The run is bound to a fingerprint of the question: every contract field except
 each structure file and the reference-energy file. Approving DFT or raising a
 budget therefore continues the same run; changing anything else, including
 editing an input file in place, is refused and needs a new `contract_id`.
+Paths are resolved to absolute paths first, so loading the contract by a
+relative or an absolute filename resumes the same run.
+
+Only one execution of a contract runs at a time: it holds a lock on the run
+directory while it reads, executes, and saves, and a concurrent execution is
+refused before it calculates anything.
 
 ## Stability fidelity in campaigns
 
