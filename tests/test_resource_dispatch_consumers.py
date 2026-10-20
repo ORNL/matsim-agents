@@ -244,3 +244,10 @@ def test_empty_level_zero_mask_applies_no_mask(monkeypatch):
 
     monkeypatch.setenv("ZE_AFFINITY_MASK", "")
     assert child_mask_environment({"ZE_AFFINITY_MASK": "3"}, owner="x") == {"ZE_AFFINITY_MASK": "3"}
+
+
+def test_direct_launches_take_threads_from_the_placement(monkeypatch):
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    assert LAUNCH.environment({}, local=True)["OMP_NUM_THREADS"] == "16"
+    # Step wrappers set OMP_NUM_THREADS themselves from <threads_per_rank>.
+    assert "OMP_NUM_THREADS" not in LAUNCH.environment({})

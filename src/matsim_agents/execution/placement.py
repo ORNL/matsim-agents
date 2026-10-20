@@ -204,8 +204,9 @@ class ProcessLaunch(_StrictModel):
         """Return *base* (default ``os.environ``) plus this launch's variables.
 
         With ``local=True`` the process runs directly on this node, so its device
-        mask is translated through the mask this process already has. Launches
-        through ``srun``/``mpiexec`` keep node-wide indices for the launcher.
+        mask is translated through the mask this process already has and its
+        ``OMP_NUM_THREADS`` is the placement's threads per rank. Launches through
+        ``srun``/``mpiexec`` keep node-wide indices for the launcher.
         """
 
         import os
@@ -214,6 +215,10 @@ class ProcessLaunch(_StrictModel):
 
         env = dict(os.environ if base is None else base)
         env.update(child_mask_environment(self.env, owner="this launch") if local else self.env)
+        if local:
+            # Step wrappers set OMP_NUM_THREADS from <threads_per_rank>; a process
+            # started directly takes it from the placement here.
+            env["OMP_NUM_THREADS"] = str(self.threads_per_rank)
         env["MATSIM_ASSIGNED_NODES"] = ",".join(self.hosts)
         env["MATSIM_DEVICES_PER_NODE"] = str(len(self.devices))
         # Step wrappers use these to keep the exact devices when a step takes only

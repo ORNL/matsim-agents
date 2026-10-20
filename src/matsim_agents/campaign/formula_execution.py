@@ -25,7 +25,11 @@ from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
     resolve_hydragnn_inference_head,
 )
-from matsim_agents.backends.mlip.pool import MLIPWorkerPool, release_device_memory
+from matsim_agents.backends.mlip.pool import (
+    MLIPWorkerPool,
+    driver_on_mlip_device,
+    release_device_memory,
+)
 from matsim_agents.backends.mlip.relaxation import (
     CalculatorCache,
     RelaxStructureInput,
@@ -49,6 +53,7 @@ from matsim_agents.discovery.stability import (
     ReferencePhaseEntry,
     score_stability,
 )
+from matsim_agents.execution.placement import Placement
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
     PhaseExplorationWorkflowResult,
@@ -1303,11 +1308,14 @@ def _uma_only_evidence(
     }
 
 
-def _formula_mlip_pool(al_cfg: ALConfig, formula_root: Path) -> MLIPWorkerPool:
-    """Workers for the template's mlip pool, or in-process relaxations reusing the model."""
+def _formula_mlip_pool(
+    al_cfg: ALConfig, formula_root: Path
+) -> tuple[MLIPWorkerPool, Placement | None]:
+    """Workers for the template's mlip pool (or in-process relaxations) and its placement."""
     if "mlip" not in al_cfg.resources.pools:
-        return MLIPWorkerPool()
-    return MLIPWorkerPool.from_placement(al_cfg.resources.place(formula_root))
+        return MLIPWorkerPool(), None
+    placement = al_cfg.resources.place(formula_root)
+    return MLIPWorkerPool.from_placement(placement), placement
 
 
 def run_formula_with_active_learning(
@@ -1412,7 +1420,7 @@ def run_formula_with_active_learning(
         "in_progress",
         model_identifier=_model_identifier(al_cfg),
     )
-    mlip_pool = _formula_mlip_pool(al_cfg, formula_root)
+    mlip_pool, mlip_placement = _formula_mlip_pool(al_cfg, formula_root)
 
     def active_learning_after_exploration(*args: Any) -> dict[str, Any]:
         # Exploration models must not stay resident while AL samples, labels with
@@ -1484,46 +1492,49 @@ def run_formula_with_active_learning(
             ),
             model_identifier=_model_identifier(effective_al_cfg),
         )
-    candidate_uncertainty = _score_relaxed_candidate_uncertainty(exploration, effective_al_cfg)
-    validation_configs = [
-        effective_al_cfg,
-        *(ALConfig.from_yaml(path) for path in config.validation_configs),
-    ]
-    cross_model = _cross_model_scores(
-        exploration,
-        validation_configs,
-        config_paths=[None, *config.validation_configs],
-        validation_python=config.validation_python,
-        validation_pythons=(
-            [
-                None,
-                *(
-                    config.validation_pythons * len(config.validation_configs)
-                    if len(config.validation_pythons) == 1
-                    else config.validation_pythons
-                ),
-            ]
-            if config.validation_pythons
-            else None
-        ),
-        reference_manifest=config.surrogate_reference_structures,
-        unary_max_steps=config.surrogate_unary_max_steps,
-        unary_fmax_eV_per_A=config.surrogate_unary_fmax_eV_per_A,
-        unary_maxstep_A=config.surrogate_unary_maxstep_A,
-        minimum_unique_unary=config.surrogate_minimum_unique_unary,
-        calculator_factory=calculator_factory,
-    )
-    robustness = _perturbation_robustness(
-        exploration,
-        effective_al_cfg,
-        config,
-        formula_root / "robustness",
-        relaxation_runner=(
-            functools.partial(relax_with_mlip, calculators=CalculatorCache())
-            if mlip_relaxation_runner is relax_with_mlip
-            else mlip_relaxation_runner
-        ),
-    )
+    # Driver-side scoring, cross-model checks, and robustness relaxations run on the
+    # mlip pool's device (and budget), not on device 0.
+    with driver_on_mlip_device(mlip_placement):
+        candidate_uncertainty = _score_relaxed_candidate_uncertainty(exploration, effective_al_cfg)
+        validation_configs = [
+            effective_al_cfg,
+            *(ALConfig.from_yaml(path) for path in config.validation_configs),
+        ]
+        cross_model = _cross_model_scores(
+            exploration,
+            validation_configs,
+            config_paths=[None, *config.validation_configs],
+            validation_python=config.validation_python,
+            validation_pythons=(
+                [
+                    None,
+                    *(
+                        config.validation_pythons * len(config.validation_configs)
+                        if len(config.validation_pythons) == 1
+                        else config.validation_pythons
+                    ),
+                ]
+                if config.validation_pythons
+                else None
+            ),
+            reference_manifest=config.surrogate_reference_structures,
+            unary_max_steps=config.surrogate_unary_max_steps,
+            unary_fmax_eV_per_A=config.surrogate_unary_fmax_eV_per_A,
+            unary_maxstep_A=config.surrogate_unary_maxstep_A,
+            minimum_unique_unary=config.surrogate_minimum_unique_unary,
+            calculator_factory=calculator_factory,
+        )
+        robustness = _perturbation_robustness(
+            exploration,
+            effective_al_cfg,
+            config,
+            formula_root / "robustness",
+            relaxation_runner=(
+                functools.partial(relax_with_mlip, calculators=CalculatorCache())
+                if mlip_relaxation_runner is relax_with_mlip
+                else mlip_relaxation_runner
+            ),
+        )
     if config.execution_mode == "uma_only":
         result.active_learning_result = _uma_only_evidence(
             exploration,

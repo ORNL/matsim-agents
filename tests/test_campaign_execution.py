@@ -2049,7 +2049,7 @@ def test_formula_execution_releases_exploration_models_before_active_learning(
         def close(self):
             events.append("close")
 
-    monkeypatch.setattr(formula_execution, "_formula_mlip_pool", lambda cfg, root: Pool())
+    monkeypatch.setattr(formula_execution, "_formula_mlip_pool", lambda cfg, root: (Pool(), None))
     monkeypatch.setattr(
         formula_execution, "release_device_memory", lambda: events.append("release")
     )
@@ -2075,3 +2075,52 @@ def test_formula_execution_releases_exploration_models_before_active_learning(
             phase_runner=phase_runner,
         )
     assert events == ["explore", "close", "release", "active_learning", "close"]
+
+
+def test_campaign_driver_mlip_work_runs_on_the_mlip_device(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    from matsim_agents.campaign import formula_execution
+
+    config_path = tmp_path / "al.yaml"
+    config_path.write_text(_config_yaml(tmp_path, "{Nb: Nb.upf, O: O.upf}"), encoding="utf-8")
+    events = []
+
+    class Pool:
+        def close(self):
+            pass
+
+    placement = object()
+    monkeypatch.setattr(
+        formula_execution, "_formula_mlip_pool", lambda cfg, root: (Pool(), placement)
+    )
+
+    @contextmanager
+    def on_device(value):
+        events.append(("enter", value is placement))
+        try:
+            yield 1
+        finally:
+            events.append(("exit",))
+
+    def scoring(*args, **kwargs):
+        events.append(("score",))
+        raise RuntimeError("stop after scoring")
+
+    monkeypatch.setattr(formula_execution, "driver_on_mlip_device", on_device)
+    monkeypatch.setattr(formula_execution, "_score_relaxed_candidate_uncertainty", scoring)
+
+    def phase_runner(formula, *, policy, output_dir, exploration_kwargs, active_learning_runner):
+        return _empty_result(formula, {})
+
+    with pytest.raises(RuntimeError, match="stop after scoring"):
+        formula_execution.run_formula_with_active_learning(
+            "NbO2",
+            str(tmp_path / "formula"),
+            config=CampaignFormulaExecutionConfig(
+                active_learning_config=config_path,
+                phase_policy=PhaseExplorationPolicy(active_learning=False, dft_approved=True),
+            ),
+            phase_runner=phase_runner,
+        )
+    assert events == [("enter", True), ("score",), ("exit",)]
