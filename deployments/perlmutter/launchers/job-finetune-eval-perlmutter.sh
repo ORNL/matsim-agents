@@ -50,6 +50,9 @@
 #   EPOCHS        fine-tune epochs                  (default 20)
 #   BATCH_SIZE    training batch size               (default 4)
 #   DEVICE        override torch device             (default: auto = cuda)
+#   EVALUATION_CONFIG  evaluation YAML: objective, split strategy, test domains,
+#                 repetitions, selection (docs/mlip-evaluation.md); default is a
+#                 seeded random-frame 80/20 split
 #   HYDRAGNN_STRATEGY  routed | unfrozen | frozen | scratch (hydragnn only;
 #                      default routed = branch-MLP head reuse. The other three
 #                      drop all 16 heads and grow one fresh head.)
@@ -207,7 +210,6 @@ else
   fi
   EXTRA_ARGS+=(--mace-precision "${MACE_PRECISION}")
   [[ -n "${MACE_EPOCHS:-}" ]]               && EXTRA_ARGS+=(--mace-epochs "${MACE_EPOCHS}")
-  [[ "${MACE_DISPERSION:-0}" == "1" ]]      && EXTRA_ARGS+=(--mace-dispersion)
   [[ -n "${MACE_LR:-}" ]]                   && EXTRA_ARGS+=(--mace-lr "${MACE_LR}")
   [[ -n "${MACE_WEIGHT_DECAY:-}" ]]         && EXTRA_ARGS+=(--mace-weight-decay "${MACE_WEIGHT_DECAY}")
   [[ "${MACE_FREEZE_BACKBONE:-0}" == "1" ]] && EXTRA_ARGS+=(--mace-freeze-backbone)
@@ -219,6 +221,7 @@ fi
 # Optional explicit device override; default leaves detection to torch, which
 # picks the Slurm-bound GPU.
 [[ -n "${DEVICE:-}" ]] && EXTRA_ARGS+=(--device "${DEVICE}")
+[[ -n "${EVALUATION_CONFIG:-}" ]] && EXTRA_ARGS+=(--evaluation-config "${EVALUATION_CONFIG}")
 
 # Leakage-free RE-SCORE mode: skip training, reuse the existing split +
 # fine-tuned checkpoint, and re-score both endpoints using fixed elemental

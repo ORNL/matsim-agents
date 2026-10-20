@@ -148,8 +148,8 @@ def test_campaign_review_requires_cross_model_agreement(tmp_path):
             turns=[],
             verdicts=verdicts,
             synthesis="",
-            transcript_path=str(tmp_path / "transcript.json"),
-            dialogue_path=str(tmp_path / "dialogue.json"),
+            transcript_path=str(tmp_path / "transcript.md"),
+            contributions_path=str(tmp_path / "contributions.jsonl"),
         )
 
     decision = run_campaign_debate_review(
@@ -241,8 +241,8 @@ def test_campaign_review_cannot_deactivate_converged_result_without_hull_evidenc
             turns=[],
             verdicts=verdicts,
             synthesis="",
-            transcript_path=str(tmp_path / "transcript.json"),
-            dialogue_path=str(tmp_path / "dialogue.json"),
+            transcript_path=str(tmp_path / "transcript.md"),
+            contributions_path=str(tmp_path / "contributions.jsonl"),
         )
 
     decision = run_campaign_debate_review(
@@ -354,8 +354,8 @@ def test_campaign_review_preserves_revisions_and_validates_new_formulas(tmp_path
             turns=[],
             verdicts=verdicts,
             synthesis="",
-            transcript_path=str(tmp_path / "transcript.json"),
-            dialogue_path=str(tmp_path / "dialogue.json"),
+            transcript_path=str(tmp_path / "transcript.md"),
+            contributions_path=str(tmp_path / "contributions.jsonl"),
         )
 
     decision = run_campaign_debate_review(
@@ -421,8 +421,8 @@ def test_campaign_review_treats_invalid_verdict_as_abstention(tmp_path) -> None:
             turns=[],
             verdicts=verdicts,
             synthesis="",
-            transcript_path=str(tmp_path / "transcript.json"),
-            dialogue_path=str(tmp_path / "dialogue.json"),
+            transcript_path=str(tmp_path / "transcript.md"),
+            contributions_path=str(tmp_path / "contributions.jsonl"),
         )
 
     decision = run_campaign_debate_review(

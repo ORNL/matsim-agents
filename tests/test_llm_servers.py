@@ -204,12 +204,11 @@ def test_remote_server_commands_use_the_facility_launcher(tmp_path):
         "--cpus-per-task=16",
         "env",
     ]
-    assert managed.command[8:12] == [
-        "CUDA_VISIBLE_DEVICES=2",
-        "MATSIM_SERVER_IN_STEP=1",
-        "vllm",
-        "serve",
-    ]
+    step_env = managed.command[8 : managed.command.index("vllm")]
+    assert step_env[0] == "CUDA_VISIBLE_DEVICES=2"
+    assert "MATSIM_SERVER_SLICES=n1=2" in step_env
+    assert step_env[-1] == "MATSIM_SERVER_IN_STEP=1"
+    assert managed.command[managed.command.index("vllm") + 1] == "serve"
     assert managed.command[managed.command.index("--host") + 1] == "0.0.0.0"
 
     aurora = ResourcePlan.model_validate(
@@ -238,12 +237,12 @@ def test_missing_model_directory_fails_before_launch(tmp_path):
         LLMServices.start(_local(plan), log_dir=tmp_path)
 
 
-def test_multi_node_managed_servers_are_phase_5(tmp_path):
+def test_multi_node_managed_servers_need_a_ray_launcher(tmp_path):
     plan = _plan(
         [{"name": "big", "kind": "managed-vllm", "model": "org/A", "nodes": 2}], llm={"nodes": 2}
     )
     placement = plan.resolve(Allocation("slurm", ("n0", "n1"), 4))
-    with pytest.raises(ValueError, match="multi-node serving is phase 5"):
+    with pytest.raises(ValueError, match="need a facility launcher that starts the Ray cluster"):
         LLMServices.start(placement, log_dir=tmp_path)
 
 
@@ -673,6 +672,7 @@ def test_debate_participants_resolve_servers(tmp_path, monkeypatch):
         "provider": "vllm",
         "model": "Qwen2.5-14B-Instruct",
         "base_url": "http://n0:8000/v1",
+        "max_tokens": 8192,
     }
     assert calls[1]["provider"] == "ollama"
 

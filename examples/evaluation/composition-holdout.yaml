@@ -1,0 +1,21 @@
+# (c) Transfer to compositions not used for fine-tuning, plus an external,
+# independently generated set of new alloy compositions (immutable; it must not
+# share a composition with train or validation).
+evaluation:
+  objective: accuracy on alloy compositions not used for fine-tuning
+  split:
+    strategy: composition_holdout
+    train_fraction: 0.7
+    validation_fraction: 0.15
+    test_fraction: 0.15
+    seed: 42
+    composition:
+      mode: bin          # nearby alloy compositions share a group
+      bin_width: 0.05    # atomic-fraction bins
+  test_domains:
+    - name: novel_compositions
+      dataset: /path/to/independent_test.extxyz
+      membership: composition_holdout
+    - name: higher_temperature
+      dataset: /path/to/high_temperature_test.extxyz
+      membership: random_frame   # only distinct configurations are required

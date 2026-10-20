@@ -1,31 +1,91 @@
 # Formula-discovery campaign on 16 Perlmutter nodes: a seven-model debate panel
 # on 15 nodes (the layout of job-campaign-formula-discovery-all-models-perlmutter.sh)
 # and one node shared by MLIP exploration and DFT, which run one after the other.
+# Servers on several nodes run one Ray cluster each (vllm-server-perlmutter.sh) with
+# tensor parallelism over all of their GPUs, as in the qualified campaign runs.
 #   matsim-agents resources plan deployments/perlmutter/resources/campaign-panel.yaml --nodes 16
+# Reasoning models are served with vLLM reasoning parsers (the model providers'
+# recipes), so their reasoning comes back separately from the answer even when
+# the token limit cuts it off before </think>; not yet qualified on Perlmutter.
 preview: {nodes: 16}
 vars:
   MODELS: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}
+  LAUNCHER: ${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/perlmutter/launchers/vllm-server-perlmutter.sh
 resources:
-  preset: perlmutter-gpu
+  preset: perlmutter-gpu-80gb
   pools:
     llm:
       nodes: 15
       servers:
-        - {name: kimi-k2.5, kind: managed-vllm, model: "${MODELS}/Kimi-K2.5", nodes: 4}
-        - {name: glm-4.7, kind: managed-vllm, model: "${MODELS}/GLM-4.7", nodes: 4}
-        - {name: glm-4.7-flash, kind: managed-vllm, model: "${MODELS}/GLM-4.7-Flash", nodes: 1}
+        - name: kimi-k2.5
+          kind: managed-vllm
+          model: ${MODELS}/Kimi-K2.5
+          served_name: moonshotai/Kimi-K2.5
+          nodes: 4
+          tensor_parallel_size: 16
+          max_model_len: 32768
+          startup_timeout_s: 5400
+          launcher: [bash, "${LAUNCHER}"]
+          extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager, --reasoning-parser, kimi_k2]
+        - name: glm-4.7
+          kind: managed-vllm
+          model: ${MODELS}/GLM-4.7
+          served_name: zai-org/GLM-4.7
+          nodes: 4
+          tensor_parallel_size: 16
+          max_model_len: 32768
+          startup_timeout_s: 5400
+          launcher: [bash, "${LAUNCHER}"]
+          extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager, --reasoning-parser, glm45]
+        - name: glm-4.7-flash
+          kind: managed-vllm
+          model: ${MODELS}/GLM-4.7-Flash
+          served_name: zai-org/GLM-4.7-Flash
+          nodes: 1
+          tensor_parallel_size: 4
+          max_model_len: 32768
+          startup_timeout_s: 5400
+          launcher: [bash, "${LAUNCHER}"]
+          extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager, --reasoning-parser, glm45]
         - name: qwen3-235b-a22b-instruct-2507
           kind: managed-vllm
           model: ${MODELS}/Qwen3-235B-A22B-Instruct-2507
+          served_name: Qwen/Qwen3-235B-A22B-Instruct-2507
           nodes: 2
+          tensor_parallel_size: 8
+          max_model_len: 32768
+          startup_timeout_s: 5400
+          launcher: [bash, "${LAUNCHER}"]
+          extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
         - name: qwen3-235b-a22b-thinking-2507
           kind: managed-vllm
           model: ${MODELS}/Qwen3-235B-A22B-Thinking-2507
+          served_name: Qwen/Qwen3-235B-A22B-Thinking-2507
           nodes: 2
-        - {name: gemma-4-31b-it, kind: managed-vllm, model: "${MODELS}/gemma-4-31B-it", nodes: 1}
+          tensor_parallel_size: 8
+          max_model_len: 32768
+          startup_timeout_s: 5400
+          launcher: [bash, "${LAUNCHER}"]
+          extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager, --reasoning-parser, deepseek_r1]
+        - name: gemma-4-31b-it
+          kind: managed-vllm
+          model: ${MODELS}/gemma-4-31B-it
+          served_name: google/gemma-4-31B-it
+          nodes: 1
+          tensor_parallel_size: 4
+          max_model_len: 32768
+          startup_timeout_s: 5400
+          launcher: [bash, "${LAUNCHER}"]
+          extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
         - name: gemma-4-26b-a4b-it
           kind: managed-vllm
           model: ${MODELS}/gemma-4-26B-A4B-it
+          served_name: google/gemma-4-26B-A4B-it
           nodes: 1
+          tensor_parallel_size: 4
+          max_model_len: 32768
+          startup_timeout_s: 5400
+          launcher: [bash, "${LAUNCHER}"]
+          extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
     mlip: {nodes: 1, devices: all, share_with: [dft]}
     dft: {nodes: 1, devices: all, share_with: [mlip], nodes_per_job: 1}

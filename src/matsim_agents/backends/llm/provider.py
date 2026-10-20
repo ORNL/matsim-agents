@@ -42,6 +42,8 @@ from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import Field
 
+from matsim_agents.backends.llm.replies import split_reasoning
+
 log = logging.getLogger(__name__)
 
 
@@ -97,8 +99,42 @@ class ChatVLLM(BaseChatModel):
             stop=stop,
             **kwargs,
         )
-        content = response.choices[0].message.content or ""
-        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
+        choice = response.choices[0]
+        # With a reasoning parser vLLM returns the reasoning separately
+        # (`reasoning`, formerly `reasoning_content`); without one it precedes
+        # </think> in the content. Either way the content is only the answer.
+        reasoning = next(
+            (
+                value
+                for value in (
+                    getattr(choice.message, "reasoning", None),
+                    getattr(choice.message, "reasoning_content", None),
+                )
+                if isinstance(value, str) and value
+            ),
+            None,
+        )
+        content = choice.message.content or ""
+        if reasoning is None:
+            content, reasoning = split_reasoning(content)
+        finish = choice.finish_reason if isinstance(choice.finish_reason, str) else None
+        usage = getattr(response, "usage", None)
+        tokens = [getattr(usage, name, None) for name in ("prompt_tokens", "completion_tokens")]
+        message = AIMessage(
+            content=content,
+            additional_kwargs={"reasoning_content": reasoning} if reasoning else {},
+            response_metadata={"finish_reason": finish, "model_name": self.model},
+            usage_metadata=(
+                {
+                    "input_tokens": tokens[0],
+                    "output_tokens": tokens[1],
+                    "total_tokens": tokens[0] + tokens[1],
+                }
+                if all(isinstance(count, int) for count in tokens)
+                else None
+            ),
+        )
+        return ChatResult(generations=[ChatGeneration(message=message)])
 
     def _stream(
         self,
@@ -263,6 +299,7 @@ def get_chat_model(
     temperature: float = 0.0,
     base_url: str | None = None,
     api_key: str | None = None,
+    max_tokens: int | None = None,
     **kwargs: Any,
 ) -> BaseChatModel:
     """Return a configured LangChain chat model.
@@ -279,6 +316,9 @@ def get_chat_model(
         Override the server URL (Ollama or vLLM).
     api_key:
         Override the API key (OpenAI, Anthropic, or a secured vLLM server).
+    max_tokens:
+        Most tokens one reply may generate, including a reasoning model's
+        reasoning; the provider's default when omitted.
     """
     provider = (provider or os.environ.get("MATSIM_LLM_PROVIDER", DEFAULT_PROVIDER)).lower()
     model = model or DEFAULT_MODELS.get(provider)
@@ -289,6 +329,8 @@ def get_chat_model(
         url = base_url or os.environ.get("MATSIM_OLLAMA_BASE_URL")
         if url:
             kwargs.setdefault("base_url", url)
+        if max_tokens is not None:
+            kwargs.setdefault("num_predict", max_tokens)
         return ChatOllama(model=model, temperature=temperature, **kwargs)
 
     if provider == "vllm":
@@ -296,11 +338,12 @@ def get_chat_model(
         # which talks directly to the openai package — no langchain_openai required.
         url = base_url or os.environ.get("MATSIM_VLLM_BASE_URL", "http://localhost:8000/v1")
         key = api_key or os.environ.get("MATSIM_VLLM_API_KEY", "EMPTY")
-        max_tokens = (
-            kwargs.pop("max_completion_tokens")
-            if "max_completion_tokens" in kwargs
-            else os.environ.get("MATSIM_VLLM_MAX_TOKENS", 4096)
-        )
+        if max_tokens is None:
+            max_tokens = (
+                kwargs.pop("max_completion_tokens")
+                if "max_completion_tokens" in kwargs
+                else os.environ.get("MATSIM_VLLM_MAX_TOKENS", 4096)
+            )
         request_timeout = (
             kwargs.pop("request_timeout")
             if "request_timeout" in kwargs
@@ -320,6 +363,8 @@ def get_chat_model(
 
         if api_key:
             kwargs.setdefault("api_key", api_key)
+        if max_tokens is not None:
+            kwargs.setdefault("max_tokens", max_tokens)
         return ChatOpenAI(model=model, temperature=temperature, **kwargs)
 
     if provider == "anthropic":
@@ -327,14 +372,17 @@ def get_chat_model(
 
         if api_key:
             kwargs.setdefault("api_key", api_key)
+        if max_tokens is not None:
+            kwargs.setdefault("max_tokens", max_tokens)
         return ChatAnthropic(model=model, temperature=temperature, **kwargs)
 
     if provider == "huggingface":
         from langchain_huggingface import ChatHuggingFace
 
         model_path = _huggingface_model_path(model)
+        default_new_tokens = kwargs.pop("max_new_tokens", 2048)
         generation: dict[str, Any] = {
-            "max_new_tokens": kwargs.pop("max_new_tokens", 2048),
+            "max_new_tokens": max_tokens if max_tokens is not None else default_new_tokens,
             "do_sample": temperature > 0.0,
             # Chat replies must not repeat the rendered prompt.
             "return_full_text": False,

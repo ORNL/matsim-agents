@@ -118,24 +118,36 @@ class _ManagedServer:
         log_dir: Path,
         local_host: str,
     ) -> None:
-        if len(server.slices) != 1:
+        if len(server.slices) > 1 and not server.launcher:
             raise ValueError(
-                f"LLM server {server.name!r} spans {len(server.slices)} nodes; managed vLLM "
-                "servers run on one node (multi-node serving is phase 5 of "
-                "docs/resource-dispatch.md); run it as an external server instead"
+                f"LLM server {server.name!r} spans {len(server.slices)} nodes; multi-node "
+                "servers need a facility launcher that starts the Ray cluster (for example "
+                "deployments/perlmutter/launchers/vllm-server-perlmutter.sh)"
             )
         model = Path(str(server.model))
         if model.is_absolute() and not model.exists():
             raise ValueError(f"LLM server {server.name!r}: model directory not found: {model}")
         self.server = server
+        # A multi-node server is launched on its first (head) node; the launcher
+        # starts Ray workers on the others from MATSIM_SERVER_SLICES.
         self.slice = server.slices[0]
+        self.geometry = placement.geometry
         self.local = placement.scheduler in {"local", "preview"} or (
             _short_host(self.slice.host) == _short_host(local_host)
         )
-        bind = "127.0.0.1" if self.local else "0.0.0.0"
-        address = "127.0.0.1" if self.local else self.slice.host
+        # In a multi-node allocation, steps on other nodes may use the server too
+        # (e.g. a campaign's execution node), so it listens on all interfaces and
+        # is advertised by host name; on one node it stays on the loopback.
+        private = self.local and len(placement.nodes) == 1
+        bind = "127.0.0.1" if private else "0.0.0.0"
+        address = "127.0.0.1" if private else self.slice.host
         self.base_url = f"http://{address}:{server.port}/v1"
         self.log_path = log_dir / f"{server.name}.log"
+        # A multi-node launcher stops in order (vLLM, workers, head) once this file
+        # appears; a signal to an srun-wrapped head would make Slurm kill the step.
+        self.stop_file = (
+            log_dir / f"{server.name}-ray" / ".stop-server" if len(server.slices) > 1 else None
+        )
         self.api_key = api_key_from_env(server.api_key_env, owner=f"LLM server {server.name!r}")
         self.command = self._command(placement, bind)
         self.env = self._environment()
@@ -163,6 +175,29 @@ class _ManagedServer:
             args += ["--gpu-memory-utilization", str(server.memory_fraction)]
         return args + list(server.extra_args)
 
+    def _layout_environment(self) -> dict[str, str]:
+        """How the server spans nodes, for launchers that start a Ray cluster."""
+        port = int(self.server.port or 8000)
+        return {
+            "MATSIM_SERVER_SLICES": ";".join(
+                f"{item.host}={','.join(str(device) for device in item.devices)}"
+                for item in self.server.slices
+            ),
+            "MATSIM_SERVER_RAY_PORT": str(port + 1000),
+            "MATSIM_NODE_DEVICES": str(self.geometry.devices_per_node),
+            "MATSIM_NODE_CORES": str(self.geometry.cores_per_node),
+            # Ray keeps its session (sockets and logs) on node-local storage;
+            # the launcher copies each node's Ray logs here when it stops.
+            "MATSIM_SERVER_LOG_DIR": str(
+                self.log_path.with_name(f"{self.server.name}-ray").absolute()
+            ),
+            **(
+                {"MATSIM_SERVER_STOP_FILE": str(self.stop_file.absolute())}
+                if self.stop_file is not None
+                else {}
+            ),
+        }
+
     def _command(self, placement: Placement, bind: str) -> list[str]:
         command = list(self.server.launcher or ["vllm", "serve"]) + self._serve_args(bind)
         if self.local:
@@ -170,6 +205,7 @@ class _ManagedServer:
         # The server already runs in its scheduler step; launchers that would otherwise
         # start their own step (vllm-server-frontier.sh) check this.
         mask = [f"{key}={value}" for key, value in self.slice.env.items()]
+        mask += [f"{key}={value}" for key, value in self._layout_environment().items()]
         mask.append("MATSIM_SERVER_IN_STEP=1")
         host = self.slice.host
         geometry = placement.geometry
@@ -198,6 +234,7 @@ class _ManagedServer:
 
     def _environment(self) -> dict[str, str]:
         env = dict(os.environ)
+        env.update(self._layout_environment())
         if self.api_key is not None:
             # vLLM reads its key from VLLM_API_KEY, which keeps it out of argv and logs.
             env["VLLM_API_KEY"] = self.api_key
@@ -210,6 +247,8 @@ class _ManagedServer:
 
     def start(self) -> None:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.stop_file is not None:
+            self.stop_file.unlink(missing_ok=True)
         log.info("Starting LLM server %s: %s", self.server.name, " ".join(self.command))
         with self.log_path.open("w") as log_file:
             self.process = subprocess.Popen(
@@ -241,6 +280,18 @@ class _ManagedServer:
         if process is None or process.poll() is not None:
             return
         log.info("Stopping LLM server %s (pid %d)", self.server.name, process.pid)
+        if self.stop_file is not None:
+            # Ask the launcher to stop vLLM and the Ray cluster and save every
+            # node's Ray logs; signal it only if that does not finish in time.
+            self.stop_file.parent.mkdir(parents=True, exist_ok=True)
+            self.stop_file.touch()
+            try:
+                process.wait(timeout=max(grace_s, 120.0))
+                return
+            except subprocess.TimeoutExpired:
+                log.warning(
+                    "LLM server %s did not stop on request; signalling it", self.server.name
+                )
         for sig, wait_s in ((signal.SIGTERM, grace_s), (signal.SIGKILL, 10.0)):
             try:
                 os.killpg(process.pid, sig)

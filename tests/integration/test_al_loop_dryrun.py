@@ -68,7 +68,7 @@ def test_missing_elemental_manifest_fails_before_training(tmp_path):
     cfg.trainer.enabled = True
     cfg.trainer.compare_after_training = True
     cfg.trainer.validation_fraction = 0.2
-    with pytest.raises(ValueError, match="elemental reference manifest"):
+    with pytest.raises(ValueError, match="requires trainer.training_references"):
         run_active_learning(cfg)
     assert not (Path(cfg.loop.out_dir) / "iteration_0").exists()
 
@@ -298,6 +298,13 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     dataset = out_dir / "dataset.extxyz"
     assert dataset.is_file()
     assert dataset.stat().st_size > 0
+    # Each label records its trajectory and MD step for grouped dataset splits.
+    for frame in ase_read(dataset, index=":"):
+        assert frame.info["trajectory_id"] == "iteration-0000/dummy"
+        assert frame.info["config_id"] == f"iteration-0000/{frame.info['candidate_id']}"
+        assert frame.info["time_index"] in {0, 1, 2}
+        assert frame.info["al_iteration"] == 0
+        assert frame.info["temperature_K"] == cfg.md.temperature_K
 
     # Per-candidate DFT work dirs exist.
     dft_dir = iter_dir / "dft"
@@ -533,6 +540,58 @@ def test_promotion_decision_controls_model_activation(
     expected_model = trained_model if approved else incumbent
     assert cfg.mlip.hydragnn.logdir == expected_model
     assert cfg.mlip.hydragnn.checkpoint == (None if approved else "incumbent.pk")
+
+
+@pytest.mark.parametrize("start_from", ["incumbent", "foundation"])
+def test_retraining_starts_from_the_configured_start_point(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    start_from: str,
+    elemental_manifest,
+    dataset_method_sidecar,
+) -> None:
+    cfg = _make_cfg(tmp_path)
+    validation_set = tmp_path / "held-out.extxyz"
+    from ase.calculators.singlepoint import SinglePointCalculator
+
+    frame = Atoms("Si", positions=[[0, 0, 0]], cell=[6, 6, 6], pbc=True)
+    frame.calc = SinglePointCalculator(frame, energy=-1.234, forces=np.zeros((1, 3)))
+    ase_write(validation_set, frame)
+    cfg.trainer = TrainerConfig(
+        enabled=True,
+        promote_model=True,
+        promotion_approved=True,
+        train_script=cfg.trainer.train_script,
+        validation_set=validation_set,
+        validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
+        start_from=start_from,
+    )
+    dataset_method_sidecar(validation_set, cfg.trainer.validation_reference_set)
+    cfg.loop.n_iterations = 2
+    foundation = cfg.mlip.hydragnn.logdir
+    trained_model = tmp_path / "candidate-model"
+    trained_model.mkdir()
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    _patch_runtime(
+        loop_mod,
+        monkeypatch,
+        promotion_decision=PromotionDecision(
+            approved=True, reasons=[], candidate_metrics={}, incumbent_metrics={}
+        ),
+    )
+    bases = []
+
+    def retrain(tcfg, hcfg, **kwargs):
+        bases.append(hcfg.logdir)
+        return trained_model
+
+    monkeypatch.setattr(loop_mod, "retrain_hydragnn", retrain)
+    loop_mod.run_active_learning(cfg)
+    # The first candidate is promoted; the second retrain starts from it or again
+    # from the configured model.
+    assert bases == [foundation, trained_model if start_from == "incumbent" else foundation]
 
 
 @pytest.mark.parametrize("reference_defect", [None, "coverage", "backend", "signature"])
@@ -886,3 +945,81 @@ def test_resume_applies_last_promoted_model_for_all_backends(
     else:
         assert cfg.mlip.uma is not None
         assert cfg.mlip.uma.model_name == str(promoted)
+
+
+def test_benchmark_sets_give_a_learning_curve_after_each_decision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    elemental_manifest,
+    dataset_method_sidecar,
+) -> None:
+    import matsim_agents.active_learning.loop as loop_mod
+    from matsim_agents.active_learning.config import BenchmarkSet
+    from matsim_agents.active_learning.eval_report import learning_curve
+    from matsim_agents.active_learning.evaluate import EvalMetrics
+
+    cfg = _make_cfg(tmp_path)
+    cfg.loop.n_iterations = 2
+    reference = _campaign_elemental_manifest(cfg, elemental_manifest)
+    cfg.trainer = TrainerConfig(
+        enabled=False, train_script=cfg.trainer.train_script, validation_reference_set=reference
+    )
+    benchmark = tmp_path / "benchmark.extxyz"
+    frame = Atoms("Si2", positions=[[0, 0, 0], [2.0, 0, 0]], cell=[6, 6, 6], pbc=True)
+    frame.info["energy"] = -2.0
+    frame.arrays["forces"] = np.zeros((2, 3))
+    ase_write(benchmark, frame)
+    dataset_method_sidecar(benchmark, reference)
+    cfg.loop.benchmark_sets = [BenchmarkSet(name="frozen", dataset=benchmark)]
+    _patch_runtime(loop_mod, monkeypatch)
+    scored = []
+
+    def fake_evaluate(mlip_cfg, frames, **kwargs):
+        scored.append(kwargs["test_set_label"])
+        values = dict.fromkeys(
+            [
+                "energy_mae_eV",
+                "energy_rmse_eV",
+                "energy_mae_eV_per_atom",
+                "energy_rmse_eV_per_atom",
+                "energy_mean_offset_eV_per_atom",
+                "force_mae_eV_per_A",
+                "force_rmse_eV_per_A",
+            ],
+            0.1,
+        )
+        return (
+            EvalMetrics(
+                backend="hydragnn",
+                model_path=kwargs["model_path"],
+                iteration=kwargs["iteration"],
+                test_set=kwargs["test_set_label"],
+                n_frames_total=1,
+                n_frames_evaluated=1,
+                n_energy_frames_evaluated=1,
+                n_force_frames_evaluated=1,
+                n_atoms_total=2,
+                **values,
+            ),
+            {},
+        )
+
+    monkeypatch.setattr(loop_mod, "evaluate_frames", fake_evaluate)
+    loop_mod.run_active_learning(cfg)
+    assert scored == [str(benchmark)] * 2
+    rows = learning_curve(cfg.loop.out_dir)
+    assert [row["iteration"] for row in rows] == [0, 1]
+    assert rows[0]["n_dft_labels_total"] < rows[1]["n_dft_labels_total"]
+    assert rows[1]["force_mae_eV_per_A"] == 0.1 and rows[0]["benchmark"] == "frozen"
+
+
+def test_benchmark_sets_need_elemental_references(tmp_path: Path) -> None:
+    from matsim_agents.active_learning.config import BenchmarkSet
+
+    cfg = _make_cfg(tmp_path)
+    benchmark = tmp_path / "benchmark.extxyz"
+    benchmark.write_text("")
+    data = cfg.model_dump()
+    data["loop"]["benchmark_sets"] = [BenchmarkSet(name="frozen", dataset=benchmark)]
+    with pytest.raises(ValueError, match="need elemental DFT references"):
+        ALConfig.model_validate(data)

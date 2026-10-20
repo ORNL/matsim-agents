@@ -22,7 +22,9 @@ from pathlib import Path
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from matsim_agents.backends.llm.provider import get_chat_model
+from matsim_agents.backends.llm.replies import ModelReply, invoke_model
 from matsim_agents.backends.llm.servers import LLMServices, api_key_from_env
+from matsim_agents.backends.llm.transcript import Contribution, Transcript
 from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool, release_device_memory
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
@@ -33,6 +35,7 @@ from matsim_agents.discovery import (
     extract_compositions,
 )
 from matsim_agents.execution.placement import Placement, ResourcePlan
+from matsim_agents.execution.run_directory import make_run_id
 
 ATOMISTIC_EXPLORATION_GUIDANCE = """The system will offer the user the option
     to run a surrogate-driven atomistic exploration of crystal phases for
@@ -156,6 +159,8 @@ class DiscoveryChatSession:
     mlip_pool: MLIPWorkerPool | None = None
     llm_services: LLMServices | None = None
     placement: Placement | None = None
+    # <output_dir>/chat/<session id>/: every message of the session, as it happens.
+    transcript: Transcript | None = None
 
     def _placement(self) -> Placement | None:
         if self.placement is None and self.config.resources:
@@ -191,6 +196,44 @@ class DiscoveryChatSession:
             critic_panel_api_key_envs=[item.api_key_env for item in critics]
             or self.config.critic_panel_api_key_envs,
         )
+
+    def record(
+        self,
+        kind: str,
+        speaker: str,
+        text: str = "",
+        *,
+        reply: ModelReply | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        prompt: list[BaseMessage] | None = None,
+    ) -> None:
+        """Append one message (a person's turn, a model reply, or a tool result)."""
+        if self.transcript is None:
+            cfg = self.config
+            critics = ", ".join(cfg.critic_panel_models) or cfg.critic_llm_model or "none"
+            self.transcript = Transcript(
+                Path(cfg.output_dir) / "chat" / make_run_id(),
+                title="Discovery chat",
+                preamble=(
+                    f"Proposer: {cfg.llm_provider} `{cfg.llm_model}`. "
+                    f"Hypothesis debate: {'on' if cfg.enable_hypothesis_debate else 'off'} "
+                    f"(critics: {critics}). LLM-only: {'yes' if cfg.llm_only else 'no'}."
+                ),
+            )
+        fields = {
+            "id": f"{self.transcript.count + 1:04d}-{kind}",
+            "kind": kind,
+            "speaker": speaker,
+            "provider": provider,
+            "model": model,
+        }
+        contribution = (
+            Contribution.from_reply(reply, **fields)
+            if reply is not None
+            else Contribution(text=text, **fields)
+        )
+        self.transcript.add(contribution, prompt=prompt)
 
     def relaxation_pool(self) -> MLIPWorkerPool:
         """Workers for the plan's mlip pool, or in-process relaxations reusing the model."""
@@ -532,8 +575,13 @@ def _debate_hypothesis_response(
     cfg: DiscoveryChatConfig,
     user_text: str,
     draft_response: str,
+    record: Callable[..., None],
 ) -> str:
-    """Run optional multi-LLM critique/revision rounds for hypothesis quality."""
+    """Run optional multi-LLM critique/revision rounds for hypothesis quality.
+
+    ``record`` (:meth:`DiscoveryChatSession.record`) receives every critique and
+    revision.
+    """
     if not cfg.enable_hypothesis_debate:
         return draft_response
 
@@ -585,6 +633,13 @@ def _debate_hypothesis_response(
         )
         for (label, provider, model_name, base_url, key_env) in critic_specs
     ]
+    critic_models = {label: (provider, model) for label, provider, model, _, _ in critic_specs}
+
+    def ask(kind: str, speaker: str, llm: object, messages: list[BaseMessage]) -> str:
+        reply = invoke_model(llm, messages)
+        provider, model = critic_models.get(speaker, (cfg.llm_provider, cfg.llm_model))
+        record(kind, speaker, reply=reply, provider=provider, model=model, prompt=messages)
+        return reply.text
 
     primary = get_chat_model(
         provider=cfg.llm_provider,
@@ -596,7 +651,10 @@ def _debate_hypothesis_response(
     for _ in range(rounds):
         critiques: list[tuple[str, str]] = []
         for label, critic in critics:
-            critique_rsp = critic.invoke(
+            critique_text = ask(
+                "critique",
+                label,
+                critic,
                 [
                     SystemMessage(
                         content=(
@@ -613,12 +671,7 @@ def _debate_hypothesis_response(
                             "(3) one strongest counter-hypothesis."
                         )
                     ),
-                ]
-            )
-            critique_text = (
-                critique_rsp.content
-                if isinstance(critique_rsp.content, str)
-                else str(critique_rsp.content)
+                ],
             )
             critiques.append((label, critique_text))
 
@@ -628,7 +681,10 @@ def _debate_hypothesis_response(
             for label, critic in critics:
                 own = next((txt for lbl, txt in critiques if lbl == label), "")
                 others = "\n\n".join([f"[{lbl}] {txt}" for lbl, txt in critiques if lbl != label])
-                cross_rsp = critic.invoke(
+                cross_text = ask(
+                    "cross_critique",
+                    label,
+                    critic,
                     [
                         SystemMessage(
                             content=(
@@ -646,19 +702,17 @@ def _debate_hypothesis_response(
                                 "Return your final improved critique only."
                             )
                         ),
-                    ]
-                )
-                cross_text = (
-                    cross_rsp.content
-                    if isinstance(cross_rsp.content, str)
-                    else str(cross_rsp.content)
+                    ],
                 )
                 refined.append((label, cross_text))
             critiques = refined
 
         critique_text = "\n\n".join([f"[{label}] {txt}" for label, txt in critiques])
 
-        revised_rsp = primary.invoke(
+        current = ask(
+            "revision",
+            "proposer",
+            primary,
             [
                 SystemMessage(
                     content=(
@@ -674,12 +728,7 @@ def _debate_hypothesis_response(
                         "Produce the improved final response only."
                     )
                 ),
-            ]
-        )
-        current = (
-            revised_rsp.content
-            if isinstance(revised_rsp.content, str)
-            else str(revised_rsp.content)
+            ],
         )
 
     return current
@@ -700,6 +749,7 @@ def chat_once(
         system_prompt = f"{system_prompt.rstrip()}\n\n{LLM_ONLY_MODE_INSTRUCTION}"
     if not session.messages:
         session.messages.append(SystemMessage(content=system_prompt))
+    session.record("user", "user", user_text)
 
     # Direct command: /clear resets the conversation and discovery state.
     if _is_clear_command(user_text):
@@ -707,6 +757,7 @@ def chat_once(
         session.seen_compositions.clear()
         session.explorations.clear()
         assistant_text = "Conversation history and discovery state cleared."
+        session.record("tool", "matsim-agents", assistant_text)
         if on_assistant is not None:
             on_assistant(assistant_text)
         return assistant_text
@@ -742,6 +793,7 @@ def chat_once(
                         "Check active_learning_config and retry."
                     )
         session.messages.append(AIMessage(content=assistant_text))
+        session.record("tool", "matsim-agents", assistant_text)
         if on_assistant is not None:
             on_assistant(assistant_text)
         return assistant_text
@@ -766,6 +818,7 @@ def chat_once(
                     "Check path/model configuration and retry."
                 )
         session.messages.append(AIMessage(content=assistant_text))
+        session.record("tool", "matsim-agents", assistant_text)
         if on_assistant is not None:
             on_assistant(assistant_text)
         return assistant_text
@@ -778,14 +831,20 @@ def chat_once(
         base_url=cfg.llm_base_url,
         api_key=api_key_from_env(cfg.llm_api_key_env, owner="proposer"),
     )
-    response = llm.invoke(session.messages)
-    assistant_text = (
-        response.content if isinstance(response.content, str) else str(response.content)
+    reply = invoke_model(llm, session.messages)
+    session.record(
+        "draft" if cfg.enable_hypothesis_debate else "assistant",
+        "proposer",
+        reply=reply,
+        provider=cfg.llm_provider,
+        model=cfg.llm_model,
+        prompt=session.messages,
     )
     assistant_text = _debate_hypothesis_response(
         cfg=cfg,
         user_text=user_text,
-        draft_response=assistant_text,
+        draft_response=reply.text,
+        record=session.record,
     )
     session.messages.append(AIMessage(content=assistant_text))
     if on_assistant is not None:
@@ -831,6 +890,7 @@ def chat_once(
                         session.messages.append(
                             HumanMessage(content="[active_learning] " + handoff_msg)
                         )
+                        session.record("tool", "active_learning", handoff_msg)
                     else:
                         _audit_handoff_event(
                             cfg=cfg,
@@ -848,9 +908,9 @@ def chat_once(
                 # appearing after an `assistant` turn (vLLM raises HTTP
                 # 400 "Unexpected role 'system' after role 'assistant'").
                 # A user-role injection is portable across providers.
-                session.messages.append(
-                    HumanMessage(content="[discovery] " + _summarize_for_llm(exploration))
-                )
+                summary = _summarize_for_llm(exploration)
+                session.messages.append(HumanMessage(content="[discovery] " + summary))
+                session.record("tool", "discovery", summary)
 
     return assistant_text
 
@@ -881,4 +941,6 @@ def run_chat(config: DiscoveryChatConfig) -> DiscoveryChatSession:
             chat_once(session, user_text, on_assistant=lambda t: _print(f"\nassistant> {t}"))
     finally:
         session.close()
+        if session.transcript is not None:
+            _print(f"[dim]Transcript: {session.transcript.markdown_path}[/dim]")
     return session

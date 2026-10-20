@@ -20,7 +20,9 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.llm.provider import DEFAULT_MODELS, get_chat_model
+from matsim_agents.backends.llm.replies import invoke_model
 from matsim_agents.backends.llm.servers import llm_endpoints
+from matsim_agents.backends.llm.transcript import Contribution, Transcript
 from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord, WorkflowStatus
 from matsim_agents.execution.placement import ResourcePlan
 from matsim_agents.execution.run_directory import ScientificRunDirectory
@@ -93,6 +95,10 @@ class LLMCheckResult(BaseModel):
     model: str
     stages: dict[str, bool]
     failure_reason: str | None = None
+    incomplete_replies: list[str] = Field(
+        default_factory=list,
+        description="Replies the token limit cut off or that contain no answer (see transcript).",
+    )
 
 
 def _get_json(url: str, timeout: int, api_key: str | None = None) -> Any:
@@ -136,11 +142,6 @@ def probe_readiness(cfg: LLMCheckConfig) -> dict[str, Any]:
     if not (cfg.api_key or os.environ.get(credential)):
         raise RuntimeError(f"{cfg.provider} readiness requires {credential}")
     return {"credential": credential, "configured": True}
-
-
-def _content(response: Any) -> str:
-    value = getattr(response, "content", response)
-    return str(value).strip()
 
 
 def _json_object(text: str) -> dict[str, Any]:
@@ -299,6 +300,24 @@ def _run_llm_check(
         name: False
         for name in ("readiness", "load", "generation", "structured", "discussion", "distributed")
     }
+    transcript = Transcript(run.path, title=f"LLM check: {cfg.provider} `{cfg.model}`")
+    model: Any = None
+
+    def ask(contribution_id: str, kind: str, messages: list[Any]) -> str:
+        reply = invoke_model(model, messages)
+        transcript.add(
+            Contribution.from_reply(
+                reply,
+                id=contribution_id,
+                kind=kind,
+                speaker=cfg.model or cfg.provider,
+                provider=cfg.provider,
+                model=cfg.model,
+            ),
+            prompt=messages,
+        )
+        return reply.text.strip()
+
     failure = None
     accelerator = _accelerator_record()
     run.write_json(
@@ -325,7 +344,9 @@ def _run_llm_check(
         run.write_json("model_identity.json", identity)
 
         generation_start = time.perf_counter()
-        generated = _content(model.invoke([HumanMessage(content=cfg.deterministic_prompt)]))
+        generated = ask(
+            "generation", "generation", [HumanMessage(content=cfg.deterministic_prompt)]
+        )
         generation_seconds = time.perf_counter() - generation_start
         if "PORTABILITY_OK" not in generated:
             raise RuntimeError("deterministic generation did not contain PORTABILITY_OK")
@@ -335,8 +356,10 @@ def _run_llm_check(
             with ThreadPoolExecutor(max_workers=cfg.concurrent_requests) as executor:
                 concurrent_outputs = list(
                     executor.map(
-                        lambda _index: _content(
-                            model.invoke([HumanMessage(content=cfg.deterministic_prompt)])
+                        lambda index: ask(
+                            f"concurrent-{index + 1:03d}",
+                            "concurrent_generation",
+                            [HumanMessage(content=cfg.deterministic_prompt)],
                         ),
                         range(cfg.concurrent_requests),
                     )
@@ -346,58 +369,45 @@ def _run_llm_check(
         else:
             concurrent_outputs = [generated]
         concurrent_seconds = time.perf_counter() - concurrency_start
-        run.write_json(
-            "generation.json",
-            {
-                "prompt": cfg.deterministic_prompt,
-                "response": generated,
-                "concurrent_responses": concurrent_outputs,
-            },
-        )
 
         schema = ScientificHypothesis.model_json_schema()
         structured_prompt = (
             f"{cfg.scientific_objective}\nReturn only JSON matching this schema:\n"
             f"{json.dumps(schema, sort_keys=True)}"
         )
-        structured_text = _content(model.invoke([HumanMessage(content=structured_prompt)]))
+        structured_text = ask("structured", "structured", [HumanMessage(content=structured_prompt)])
         hypothesis = ScientificHypothesis.model_validate(_json_object(structured_text))
         stages["structured"] = True
         run.write_json("structured_hypothesis.json", hypothesis)
 
-        proposal = _content(model.invoke([HumanMessage(content=cfg.scientific_objective)]))
+        proposal = ask("proposal", "proposal", [HumanMessage(content=cfg.scientific_objective)])
         critique_prompt = f"Critique this hypothesis and identify a missing test:\n{proposal}"
-        critique = _content(
-            model.invoke(
-                [
-                    HumanMessage(content=cfg.scientific_objective),
-                    AIMessage(content=proposal),
-                    HumanMessage(content=critique_prompt),
-                ]
-            )
+        critique = ask(
+            "critique",
+            "critique",
+            [
+                HumanMessage(content=cfg.scientific_objective),
+                AIMessage(content=proposal),
+                HumanMessage(content=critique_prompt),
+            ],
         )
         revision_prompt = (
             "Revise the proposal in response to the critique and mention the critique."
         )
-        revision = _content(
-            model.invoke(
-                [
-                    SystemMessage(
-                        content="Revise scientific claims only when evidence supports it."
-                    ),
-                    HumanMessage(content=cfg.scientific_objective),
-                    AIMessage(content=proposal),
-                    HumanMessage(content=critique),
-                    HumanMessage(content=revision_prompt),
-                ]
-            )
+        revision = ask(
+            "revision",
+            "revision",
+            [
+                SystemMessage(content="Revise scientific claims only when evidence supports it."),
+                HumanMessage(content=cfg.scientific_objective),
+                AIMessage(content=proposal),
+                HumanMessage(content=critique),
+                HumanMessage(content=revision_prompt),
+            ],
         )
         if not all((proposal, critique, revision)):
             raise RuntimeError("proposal, critique, and revision must all be nonempty")
         stages["discussion"] = True
-        run.write_json(
-            "discussion.json", {"proposal": proposal, "critique": critique, "revision": revision}
-        )
 
         if cfg.expected_devices is not None:
             used = _model_devices(model)
@@ -447,6 +457,7 @@ def _run_llm_check(
         model=cfg.model or "",
         stages=stages,
         failure_reason=failure,
+        incomplete_replies=[item.id for item in transcript.contributions() if item.incomplete],
     )
     run.write_json("result.json", result)
     run.append_event("run_finished", {"status": status, "failure_reason": failure})

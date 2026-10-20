@@ -290,7 +290,18 @@ def test_finetune_split_preserves_verified_method(
     from matsim_agents.active_learning import finetune_eval
 
     dataset = tmp_path / "dataset.extxyz"
-    write(dataset, [Atoms("NbO2", info={"energy": -23.0}) for _ in range(4)])
+    # Distinct geometries: identical frames in train and test are rejected as leakage.
+    write(
+        dataset,
+        [
+            Atoms(
+                "NbO2",
+                positions=[[0, 0, 0], [1.8 + 0.1 * i, 0, 0], [0, 1.8, 0]],
+                info={"energy": -23.0},
+            )
+            for i in range(4)
+        ],
+    )
     reference = elemental_manifest({"Nb": -10.0, "O": -5.0})
     dataset_method_sidecar(dataset, reference)
     output = tmp_path / "campaign"
@@ -300,10 +311,10 @@ def test_finetune_split_preserves_verified_method(
         pass
 
     def check_split(*_args, **_kwargs):
-        for path in (output / "split/train.extxyz", output / "split/test_set.extxyz"):
+        for path in (output / "split/train.extxyz", output / "split/test.extxyz"):
             metadata = json.loads(path.with_suffix(".extxyz.manifest.json").read_text())
             assert metadata["split_role"] == (
-                "training_pool" if path.name == "train.extxyz" else "validation"
+                "training_pool" if path.name == "train.extxyz" else "test"
             )
             validate_dataset_reference_method(
                 path,
@@ -313,7 +324,7 @@ def test_finetune_split_preserves_verified_method(
             )
         raise StopBeforeTraining
 
-    monkeypatch.setattr(finetune_eval, "_run_eval", check_split)
+    monkeypatch.setattr(finetune_eval, "_uma_endpoints", check_split)
     kwargs = dict(
         backend="uma",
         device="cpu",
@@ -322,13 +333,13 @@ def test_finetune_split_preserves_verified_method(
     with pytest.raises(StopBeforeTraining):
         finetune_eval.run_finetune_endpoints(str(dataset), output, **kwargs)
     if reuse_defect is not None:
-        test_path = output / "split/test_set.extxyz"
+        test_path = output / "split/test.extxyz"
         if reuse_defect == "missing":
             test_path.with_suffix(".extxyz.manifest.json").unlink()
         else:
             with test_path.open("a") as stream:
                 stream.write("\n")
-        with pytest.raises(ValueError, match="dataset sidecar|hash"):
+        with pytest.raises(ValueError, match="dataset sidecar|hash|changed"):
             finetune_eval.run_finetune_endpoints(dataset, output, eval_only=True, **kwargs)
     else:
         with pytest.raises(StopBeforeTraining):
@@ -342,7 +353,18 @@ def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
     from matsim_agents.active_learning import finetune_eval
 
     dataset = tmp_path / "dataset.extxyz"
-    write(dataset, [Atoms("NbO2", info={"energy": -23.0}) for _ in range(4)])
+    # Distinct geometries: identical frames in train and test are rejected as leakage.
+    write(
+        dataset,
+        [
+            Atoms(
+                "NbO2",
+                positions=[[0, 0, 0], [1.8 + 0.1 * i, 0, 0], [0, 1.8, 0]],
+                info={"energy": -23.0},
+            )
+            for i in range(4)
+        ],
+    )
     reference = elemental_manifest({"Nb": -10.0, "O": -5.0})
     dataset.with_suffix(".extxyz.manifest.json").write_text(
         json.dumps(
@@ -360,7 +382,7 @@ def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
         pass
 
     def check_split(*_args, **_kwargs):
-        for path in (output / "split/train.extxyz", output / "split/test_set.extxyz"):
+        for path in (output / "split/train.extxyz", output / "split/test.extxyz"):
             validate_dataset_reference_method(
                 path,
                 reference_backend="qe",
@@ -369,7 +391,7 @@ def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
             )
         raise StopBeforeTraining
 
-    monkeypatch.setattr(finetune_eval, "_run_eval", check_split)
+    monkeypatch.setattr(finetune_eval, f"_{backend}_endpoints", check_split)
     with pytest.raises(StopBeforeTraining):
         finetune_eval.run_finetune_endpoints(
             dataset,
@@ -418,7 +440,18 @@ def test_finetune_campaign_checks_reference_coverage_before_training(
     from matsim_agents.active_learning import finetune_eval
 
     dataset = tmp_path / "dataset.extxyz"
-    write(dataset, [Atoms("NbO2", info={"energy": -23.0}) for _ in range(4)])
+    # Distinct geometries: identical frames in train and test are rejected as leakage.
+    write(
+        dataset,
+        [
+            Atoms(
+                "NbO2",
+                positions=[[0, 0, 0], [1.8 + 0.1 * i, 0, 0], [0, 1.8, 0]],
+                info={"energy": -23.0},
+            )
+            for i in range(4)
+        ],
+    )
     monkeypatch.setattr(finetune_eval, "_enforce_device_visibility", lambda _device: None)
     with pytest.raises(ValueError, match="coverage"):
         finetune_eval.run_finetune_endpoints(

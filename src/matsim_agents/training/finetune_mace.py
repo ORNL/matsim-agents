@@ -22,13 +22,22 @@ launcher can iterate "all versions" by model id.
 Method (matches allaffa/HydraGNN_GFM_FineTuning4Materials @ ``uma-sota-comparison``)
 ------------------------------------------------------------------------------------
 Fine-tuning is delegated to MACE's own ``mace_run_train`` entry point (run as a
-subprocess), using the exact reference recipe so the results are reproducible
-against that benchmark pipeline::
+subprocess), following the reference recipe of that benchmark pipeline::
 
-    mace_run_train --foundation_model <ckpt> --loss ef --E0s average
+    mace_run_train --foundation_model <ckpt> --loss ef --E0s foundation
+      --multiheads_finetuning False
       --default_dtype float64 --lr <lr> --max_num_epochs <N> --batch_size 4
       --ema --ema_decay 0.995 --amsgrad --clip_grad 10.0 --weight_decay <wd>
       [--lora True --lora_rank <r> --lora_alpha <a>]
+      [--loss stress --compute_stress True --stress_key REF_stress]
+
+with two differences. Energy labels are first put on the foundation model's
+energy scale with the elemental DFT references
+(:mod:`matsim_agents.datasets.energy_alignment`), so the foundation's atomic
+energies (``--E0s foundation``) stay valid; the reference recipe's
+``--E0s average`` refits them from the training set, which cannot separate the
+elements when the AL data cover few compositions. When every frame carries a
+DFT stress, stress is trained as well.
 
 Defaults follow the reference: naive full fine-tune uses ``lr=1e-3`` for 50
 epochs; LoRA (parameter-efficient, mitigates catastrophic forgetting) uses
@@ -51,11 +60,14 @@ from pathlib import Path
 
 import numpy as np
 
+from matsim_agents.datasets.energy_alignment import energy_alignment
+from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.training.cost import CostReport, GpuMemorySampler, track_cost
 from matsim_agents.training.finetune_uma import (
     _load_labeled_frames,
     _reference_energy,
     _reference_forces,
+    split_indices,
 )
 
 log = logging.getLogger(__name__)
@@ -148,20 +160,31 @@ MACE_MODELS: dict[str, dict[str, str]] = {
 # --------------------------------------------------------------------------- #
 
 
-def _resolve_foundation_model_file(
-    family: str,
-    base_model: str,
-    *,
-    precision: str | None,
-    dispersion: bool,
-    work_dir: Path,
-) -> str:
+def _base_calculator(family: str, base_model: str, *, precision: str | None):
+    """The base model as an ASE calculator on the CPU (without dispersion)."""
+    import os
+
+    from matsim_agents.backends.mlip.calculator import build_mace_calculator
+    from matsim_agents.backends.mlip.config import MACEConfig
+
+    local = os.path.isfile(base_model)
+    mcfg = MACEConfig(
+        family="checkpoint" if local else family,  # type: ignore[arg-type]
+        model=str(Path(base_model).resolve()) if local else base_model,
+        device="cpu",
+        precision=precision,  # type: ignore[arg-type]
+        dispersion=False,
+    )
+    return build_mace_calculator(mcfg, enable_mc_dropout=False)
+
+
+def _resolve_foundation_model_file(base_model: str, calculator, *, work_dir: Path) -> str:
     """Return a local ``.model`` path for ``mace_run_train --foundation_model``.
 
-    A local checkpoint path is returned as-is. For ``mace_mp`` / ``mace_off``
-    families the foundation model is loaded through the shared calculator (which
-    downloads/caches it), then its module is serialised to ``foundation.model``
-    so ``mace_run_train`` can consume it uniformly across families/machines.
+    A local checkpoint path is returned as-is. Otherwise the module of the base
+    model's calculator (which downloads/caches it) is serialised to
+    ``foundation.model`` so ``mace_run_train`` can consume it uniformly across
+    families/machines.
     """
     import os
 
@@ -169,58 +192,55 @@ def _resolve_foundation_model_file(
 
     if os.path.isfile(base_model):
         return str(Path(base_model).resolve())
-
-    from matsim_agents.backends.mlip.calculator import build_mace_calculator
-    from matsim_agents.backends.mlip.config import MACEConfig
-
-    mcfg = MACEConfig(
-        family=family,  # type: ignore[arg-type]
-        model=base_model,
-        device="cpu",
-        precision=precision,  # type: ignore[arg-type]
-        dispersion=dispersion,
-    )
-    calc = build_mace_calculator(mcfg, enable_mc_dropout=False)
-    models = getattr(calc, "models", None)
-    module = models[0] if models else getattr(calc, "model", None)
+    models = getattr(calculator, "models", None)
+    module = models[0] if models else getattr(calculator, "model", None)
     if module is None:
         raise RuntimeError("Could not obtain the MACE foundation module to seed fine-tuning.")
     foundation = Path(work_dir) / "foundation.model"
     torch.save(module.to("cpu"), str(foundation))
-    log.info("Seeded foundation model for %s:%s -> %s", family, base_model, foundation)
+    log.info("Seeded foundation model %s -> %s", base_model, foundation)
     return str(foundation)
 
 
 def _write_xyz_splits(
     frames: list,
+    energies: list[float],
     work_dir: Path,
     *,
     seed: int,
     val_fraction: float = 0.1,
-) -> tuple[Path, Path, int, int]:
+    n_validation: int | None = None,
+) -> tuple[Path, Path, int, int, bool]:
     """Write ``train.xyz`` / ``val.xyz`` with ``REF_energy`` / ``REF_forces`` keys.
 
     ``mace_run_train`` reads labels from the extended-XYZ ``info``/``arrays``
     fields named by ``--energy_key`` / ``--forces_key``, so we materialise those
-    keys explicitly. Returns ``(train_xyz, val_xyz, n_train, n_val)``.
+    keys explicitly; ``energies`` are the (aligned) energy labels. With
+    ``n_validation`` the last that many frames are the validation set (a
+    dataset split's validation partition); otherwise ``val_fraction`` of the
+    frames is held out at random. ``REF_stress`` is written when every frame has
+    a stress. Returns
+    ``(train_xyz, val_xyz, n_train, n_val, with_stress)``.
     """
     from ase.io import write as ase_write
 
-    rng = np.random.default_rng(seed)
-    n = len(frames)
-    order = rng.permutation(n)
-    n_val = max(1, int(round(val_fraction * n)))
-    n_val = min(n_val, n - 1)
-    val_idx = set(order[:n_val].tolist())
+    stresses = [_reference_stress(a) for a in frames]
+    with_stress = all(stress is not None for stress in stresses)
+    if n_validation is not None:
+        val_idx = set(range(len(frames) - n_validation, len(frames)))
+    else:
+        _train, val_index = split_indices(len(frames), val_fraction=val_fraction, seed=seed)
+        val_idx = set(val_index)
 
     train_atoms, val_atoms = [], []
-    for i, a in enumerate(frames):
-        e = _reference_energy(a)
+    for i, (a, e) in enumerate(zip(frames, energies, strict=True)):
         f = _reference_forces(a)
         a2 = a.copy()
         a2.calc = None  # never serialise a live calculator into the training XYZ
         a2.info["REF_energy"] = float(e)
         a2.arrays["REF_forces"] = np.asarray(f, dtype=float)
+        if with_stress:
+            a2.info["REF_stress"] = stresses[i]
         a2.info.setdefault("charge", 0)
         a2.info.setdefault("spin", 1)
         (val_atoms if i in val_idx else train_atoms).append(a2)
@@ -229,7 +249,24 @@ def _write_xyz_splits(
     val_xyz = Path(work_dir) / "val.xyz"
     ase_write(str(train_xyz), train_atoms, format="extxyz")
     ase_write(str(val_xyz), val_atoms, format="extxyz")
-    return train_xyz, val_xyz, len(train_atoms), len(val_atoms)
+    return train_xyz, val_xyz, len(train_atoms), len(val_atoms), with_stress
+
+
+def _reference_stress(atoms) -> np.ndarray | None:
+    """The DFT stress label: from ``info`` or, as ASE reads extxyz, the calculator."""
+    for key in ("REF_stress", "stress"):
+        if key in atoms.info:
+            return np.asarray(atoms.info[key], dtype=float)
+    results = getattr(atoms.calc, "results", None) or {}
+    if "stress" in results:
+        return np.asarray(results["stress"], dtype=float)
+    return None
+
+
+def _model_energy(calculator, atoms) -> float:
+    probe = atoms.copy()
+    probe.calc = calculator
+    return float(probe.get_potential_energy())
 
 
 # --------------------------------------------------------------------------- #
@@ -262,8 +299,9 @@ def _run_mace_train(
     lora: bool,
     lora_rank: int,
     lora_alpha: float,
+    with_stress: bool = False,
 ) -> None:
-    """Invoke ``mace_run_train`` with the reference fine-tuning recipe."""
+    """Invoke ``mace_run_train`` with the fine-tuning recipe (module docstring)."""
     cmd = [
         *_mace_run_train_cmd(),
         "--name",
@@ -279,9 +317,13 @@ def _run_mace_train(
         "--forces_key",
         "REF_forces",
         "--loss",
-        "ef",
+        "stress" if with_stress else "ef",
+        # Labels are aligned to the foundation's scale, so its atomic energies hold.
         "--E0s",
-        "average",
+        "foundation",
+        # No replay of pretraining data: compute nodes are offline.
+        "--multiheads_finetuning",
+        "False",
         "--lr",
         str(lr),
         "--max_num_epochs",
@@ -303,10 +345,12 @@ def _run_mace_train(
         "--results_dir",
         str(work_dir / "results"),
         "--compute_stress",
-        "False",
+        str(with_stress),
         "--log_level",
         "WARNING",
     ]
+    if with_stress:
+        cmd += ["--stress_key", "REF_stress"]
     if lora:
         cmd += ["--lora", "True", "--lora_rank", str(lora_rank), "--lora_alpha", str(lora_alpha)]
     cmd += [
@@ -345,11 +389,11 @@ def finetune_mace(
     dataset_path: str | Path,
     output_dir: str | Path,
     *,
+    elemental_reference_manifest: str | Path,
     family: str = "mace_mp",
     base_model: str = "medium",
     model_id: str | None = None,
     precision: str | None = "fp64",
-    dispersion: bool = False,
     epochs: int | None = None,
     batch_size: int = 4,
     lr: float | None = None,
@@ -363,12 +407,17 @@ def finetune_mace(
     # mace_run_train handles parameter-efficient freezing through LoRA; a plain
     # freeze_backbone request is rejected with a warning below.
     freeze_backbone: bool = False,
+    validation_dataset: str | Path | None = None,
 ) -> Path:
     """Fine-tune a MACE foundation model and return the checkpoint path.
 
     ``family`` + ``base_model`` (or a :data:`MACE_MODELS` ``model_id``) select the
-    MACE version. Fine-tuning is delegated to ``mace_run_train`` with the
-    reference recipe; pass ``lora=True`` for the parameter-efficient variant.
+    MACE version. Fine-tuning is delegated to ``mace_run_train`` (module
+    docstring); pass ``lora=True`` for the parameter-efficient variant. Energy
+    labels are aligned to the base model's scale with the elemental DFT
+    references of ``elemental_reference_manifest``; the alignment is written to
+    ``energy-alignment.json`` beside the checkpoint. ``validation_dataset``
+    (a dataset split's validation partition) replaces the random hold-out.
 
     The returned ``mace_finetuned.model`` reloads through
     :func:`matsim_agents.backends.mlip.calculator.build_mace_calculator`
@@ -411,6 +460,11 @@ def finetune_mace(
     mace_device = "cuda" if dev.startswith("cuda") else "cpu"
 
     train_atoms = _load_labeled_frames(dataset_path)
+    n_validation = None
+    if validation_dataset is not None:
+        validation = _load_labeled_frames(validation_dataset, minimum=1)
+        n_validation = len(validation)
+        train_atoms = train_atoms + validation
     log.info(
         "MACE fine-tune: %d frames (family=%s, base=%s, lora=%s, device=%s)",
         len(train_atoms),
@@ -428,10 +482,19 @@ def finetune_mace(
     model_dir = work_dir / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    foundation = _resolve_foundation_model_file(
-        family, base_model, precision=precision, dispersion=dispersion, work_dir=work_dir
+    base = _base_calculator(family, base_model, precision=precision)
+    alignment = energy_alignment(
+        elemental_reference_manifest,
+        {symbol for atoms in train_atoms for symbol in atoms.get_chemical_symbols()},
+        lambda atoms: _model_energy(base, atoms),
+        base_model=base_model,
     )
-    train_xyz, val_xyz, n_train, n_val = _write_xyz_splits(train_atoms, work_dir, seed=seed)
+    alignment.source_dataset_sha256 = sha256_file(dataset_path)
+    energies = [alignment.aligned_energy(a, _reference_energy(a)) for a in train_atoms]
+    foundation = _resolve_foundation_model_file(base_model, base, work_dir=work_dir)
+    train_xyz, val_xyz, n_train, n_val, with_stress = _write_xyz_splits(
+        train_atoms, energies, work_dir, seed=seed, n_validation=n_validation
+    )
     run_name = re.sub(r"[^0-9A-Za-z_]+", "_", f"mace_ft_{family}_{Path(base_model).name}")
     if lora:
         run_name += "_lora"
@@ -461,8 +524,9 @@ def finetune_mace(
             "ema_decay": 0.995,
             "clip_grad": 10.0,
             "amsgrad": True,
-            "loss": "ef",
-            "e0s": "average",
+            "loss": "stress" if with_stress else "ef",
+            "e0s": "foundation",
+            "energy_alignment": alignment.convention,
         },
     )
     sampler = GpuMemorySampler(enabled=mace_device == "cuda")
@@ -483,6 +547,7 @@ def finetune_mace(
             lora=bool(lora),
             lora_rank=int(lora_rank),
             lora_alpha=float(lora_alpha),
+            with_stress=with_stress,
         )
     if sampler.peak_gb:
         report.peak_gpu_mem_gb = round(sampler.peak_gb, 3)
@@ -492,6 +557,7 @@ def finetune_mace(
     # The .model is a pickled MACE module; MACECalculator reloads it with
     # map_location=<device>, so a straight copy is portable across GPUs/machines.
     shutil.copy(str(produced), str(dest_ckpt))
+    alignment.write(output_dir)
     log.info(
         "MACE fine-tune complete -> %s (%.1fs, %.4f GPU-h)",
         dest_ckpt,
@@ -505,6 +571,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--dataset", required=True, help="AL-collected extxyz dataset.")
     parser.add_argument("--output-dir", required=True, help="Work/output directory.")
+    parser.add_argument(
+        "--elemental-reference-manifest",
+        required=True,
+        help="Elemental DFT references that put the labels on the base model's energy scale.",
+    )
     parser.add_argument(
         "--model-id",
         default=None,
@@ -529,9 +600,6 @@ def main(argv: list[str] | None = None) -> int:
         "--precision", default="fp64", choices=["fp32", "fp64"], help="Training dtype."
     )
     parser.add_argument(
-        "--dispersion", action="store_true", help="Seed with DFT-D3 dispersion (mace_mp/mace_off)."
-    )
-    parser.add_argument(
         "--epochs",
         type=int,
         default=None,
@@ -553,6 +621,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lora-alpha", type=float, default=None, help="LoRA alpha (default: 1.0).")
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--validation-dataset",
+        default=None,
+        help="Validation partition for mace_run_train (replaces the random hold-out).",
+    )
     parser.add_argument("--device", default=None, choices=["CUDA", "CPU", "cuda", "cpu"])
     parser.add_argument(
         "--dry-run",
@@ -566,11 +639,11 @@ def main(argv: list[str] | None = None) -> int:
     ckpt = finetune_mace(
         args.dataset,
         args.output_dir,
+        elemental_reference_manifest=args.elemental_reference_manifest,
         family=args.family,
         base_model=args.base_model,
         model_id=args.model_id,
         precision=args.precision,
-        dispersion=args.dispersion,
         epochs=args.epochs,
         batch_size=args.batch_size,
         lr=args.lr,
@@ -581,6 +654,7 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         device=args.device,
         run=not args.dry_run,
+        validation_dataset=args.validation_dataset,
     )
     print(ckpt)
     return 0

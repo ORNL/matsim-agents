@@ -222,3 +222,139 @@ def select_candidates(
 
     selected = [eligible_cands[i] for i in chosen_local]
     return selected, scores
+
+
+# --------------------------------------------------------------------------- #
+# Empirical calibration on validation data                                    #
+# --------------------------------------------------------------------------- #
+
+
+def _ranks(values: np.ndarray) -> np.ndarray:
+    order = np.argsort(values, kind="mergesort")
+    ranks = np.empty(len(values), dtype=float)
+    ranks[order] = np.arange(len(values), dtype=float)
+    for value in np.unique(values):  # average ranks of ties
+        tied = values == value
+        ranks[tied] = ranks[tied].mean()
+    return ranks
+
+
+def calibrate_uncertainty(
+    scores: np.ndarray,
+    errors: np.ndarray,
+    *,
+    error_threshold: float,
+    partition: str,
+    n_bins: int = 5,
+) -> dict:
+    """Relate acquisition scores to actual errors on labelled validation frames.
+
+    ``scores`` are ensemble or MC-dropout disagreements and ``errors`` the
+    model's actual errors on the same frames (e.g. per-frame force MAE against
+    DFT). Returns the Spearman rank correlation, the mean error and the fraction
+    above ``error_threshold`` per score quantile bin, and the lowest score at or
+    above which most frames exceed the threshold (with the precision and recall
+    of flagging them), or no screening threshold when no such upper tail exists.
+    Calibrate on ``validation`` (or a dedicated calibration subset),
+    never on test data. The result is an empirical relation on these frames, not
+    a calibrated probability of error.
+    """
+    if partition == "test":
+        raise ValueError("calibrate uncertainty on validation data, never on test data")
+    scores = np.asarray(scores, dtype=float)
+    errors = np.asarray(errors, dtype=float)
+    keep = np.isfinite(scores) & np.isfinite(errors)
+    scores, errors = scores[keep], errors[keep]
+    if len(scores) < max(3, n_bins):
+        raise ValueError(f"{len(scores)} frames are too few to calibrate {n_bins} bins")
+    rank_s, rank_e = _ranks(scores), _ranks(errors)
+    spearman = (
+        float(np.corrcoef(rank_s, rank_e)[0, 1]) if rank_s.std() and rank_e.std() else float("nan")
+    )
+    edges = np.quantile(scores, np.linspace(0.0, 1.0, n_bins + 1))
+    bins = []
+    for index, (low, high) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
+        # Only the last bin includes its upper edge, so tied edges never count a
+        # frame twice.
+        upper = scores <= high if index == n_bins - 1 else scores < high
+        inside = (scores >= low) & upper
+        if not inside.any():
+            continue
+        bins.append(
+            {
+                "score_range": [float(low), float(high)],
+                "n_frames": int(inside.sum()),
+                "mean_score": float(scores[inside].mean()),
+                "mean_error": float(errors[inside].mean()),
+                "fraction_above_threshold": float((errors[inside] > error_threshold).mean()),
+            }
+        )
+    above = errors > error_threshold
+    # The lowest score from which most of the flagged frames (all scores at or
+    # above it) exceed the error threshold; none if no upper tail does.
+    screening = None
+    for threshold in np.unique(scores):
+        flagged = scores >= threshold
+        precision = float(above[flagged].mean())
+        if precision >= 0.5:
+            screening = {
+                "score_threshold": float(threshold),
+                "n_flagged": int(flagged.sum()),
+                "precision": precision,
+                "recall": float(flagged[above].mean()) if above.any() else None,
+            }
+            break
+    return {
+        "partition": partition,
+        "n_frames": int(len(scores)),
+        "error_threshold": error_threshold,
+        "spearman_score_vs_error": spearman,
+        "bins": bins,
+        "screening": screening,
+        "note": (
+            "Empirical relation between disagreement and error on these validation frames; "
+            "not a calibrated error probability. Check it again on independent data before "
+            "relying on it."
+        ),
+    }
+
+
+def validation_uncertainty_report(
+    frames: Sequence[Atoms],
+    primary_calculator,
+    *,
+    error_threshold: float,
+    ensemble_calculators: Sequence | None = None,
+    mc_dropout_calculator=None,
+    mc_dropout_passes: int = 8,
+    mc_dropout_p: float = 0.1,
+    partition: str = "validation",
+) -> dict:
+    """Score labelled frames, compute the primary model's force errors, and calibrate."""
+    candidates = [
+        Candidate(candidate_id=str(i), atoms=atoms, seed_path="", md_step=0)
+        for i, atoms in enumerate(frames)
+    ]
+    if ensemble_calculators:
+        scores = score_ensemble(candidates, [primary_calculator, *ensemble_calculators])
+        method = "ensemble"
+    elif mc_dropout_calculator is not None:
+        scores = score_mc_dropout(
+            candidates, mc_dropout_calculator, mc_dropout_passes, mc_dropout_p
+        )
+        method = "mc_dropout"
+    else:
+        raise ValueError("give ensemble_calculators or an mc_dropout_calculator")
+    errors = []
+    for atoms in frames:
+        reference = atoms.arrays.get("forces")
+        if reference is None:
+            reference = atoms.get_forces()
+        predicted = _forces_from(primary_calculator, atoms)
+        errors.append(float(np.mean(np.abs(predicted - np.asarray(reference, dtype=float)))))
+    report = calibrate_uncertainty(
+        scores, np.asarray(errors), error_threshold=error_threshold, partition=partition
+    )
+    report["method"] = method
+    report["error"] = "per-frame force MAE (eV/A) of the primary model against DFT"
+    return report

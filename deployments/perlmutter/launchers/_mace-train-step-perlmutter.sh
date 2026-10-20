@@ -17,9 +17,12 @@
 #   $6  epochs
 #   $7  nodes          (ignored; single-GPU fine-tune)
 #   $8  ranks_per_node (ignored)
+#   $9  reference_manifest (elemental DFT references; aligns the labels to the
+#                       base model's energy scale)
+#   $10 finetune_mode  (lora | full; trainer.finetune_mode)
 #
-# Optional env: MACE_PRECISION (fp64), MACE_LORA=1 (+ MACE_LORA_RANK/ALPHA),
-#   MACE_LR, MACE_WEIGHT_DECAY.
+# Optional env: MACE_PRECISION (fp64), MACE_LORA_RANK/ALPHA, MACE_LR,
+#   MACE_WEIGHT_DECAY.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -30,6 +33,8 @@ FAMILY="${4:-mace_mp}"
 BASE_MODEL="${5:-medium}"
 EPOCHS="${6:-}"
 # $7 nodes, $8 ranks: single-GPU MACE fine-tune, ignored.
+REFERENCES="${9:?elemental reference manifest required}"
+MODE="${10:?finetune mode (lora|full) required}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
@@ -68,15 +73,16 @@ ARGS=(
   --family "${FAMILY}"
   --base-model "${BASE_MODEL}"
   --precision "${MACE_PRECISION:-fp64}"
+  --elemental-reference-manifest "${REFERENCES}"
 )
 [[ -n "${EPOCHS}" ]]                && ARGS+=(--epochs "${EPOCHS}")
 [[ -n "${MACE_LR:-}" ]]            && ARGS+=(--lr "${MACE_LR}")
 [[ -n "${MACE_WEIGHT_DECAY:-}" ]]  && ARGS+=(--weight-decay "${MACE_WEIGHT_DECAY}")
-[[ "${MACE_LORA:-0}" == "1" ]]     && ARGS+=(--lora)
+[[ "${MODE}" == "lora" ]]          && ARGS+=(--lora)
 [[ -n "${MACE_LORA_RANK:-}" ]]     && ARGS+=(--lora-rank "${MACE_LORA_RANK}")
 [[ -n "${MACE_LORA_ALPHA:-}" ]]    && ARGS+=(--lora-alpha "${MACE_LORA_ALPHA}")
 
-echo "[mace-train-step] family=${FAMILY} model=${BASE_MODEL} epochs=${EPOCHS:-default} lora=${MACE_LORA:-0}"
+echo "[mace-train-step] family=${FAMILY} model=${BASE_MODEL} epochs=${EPOCHS:-default} mode=${MODE}"
 echo "[mace-train-step] dataset=${DATASET}"
 echo "[mace-train-step] out=${OUT_DIR}"
 

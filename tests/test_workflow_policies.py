@@ -214,20 +214,30 @@ def test_model_promotion_requires_retraining():
         TrainerConfig(promote_model=True)
 
 
-def test_model_promotion_requires_explicit_approval(tmp_path):
+def _training_inputs(tmp_path):
     script = tmp_path / "train.py"
     script.touch()
+    references = tmp_path / "elemental-references.json"
+    references.touch()
+    return {"enabled": True, "train_script": script, "validation_reference_set": references}
+
+
+def test_training_requires_elemental_references(tmp_path):
+    inputs = _training_inputs(tmp_path)
+    del inputs["validation_reference_set"]
+    with pytest.raises(ValueError, match="requires trainer.training_references"):
+        TrainerConfig(**inputs)
+
+
+def test_model_promotion_requires_explicit_approval(tmp_path):
     with pytest.raises(ValueError, match="promotion_approved"):
-        TrainerConfig(enabled=True, train_script=script, promote_model=True)
+        TrainerConfig(**_training_inputs(tmp_path), promote_model=True)
 
 
 def test_model_promotion_requires_held_out_validation(tmp_path):
-    script = tmp_path / "train.py"
-    script.touch()
     with pytest.raises(ValueError, match="validation_set"):
         TrainerConfig(
-            enabled=True,
-            train_script=script,
+            **_training_inputs(tmp_path),
             promote_model=True,
             promotion_approved=True,
         )

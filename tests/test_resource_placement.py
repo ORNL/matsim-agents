@@ -576,11 +576,12 @@ def test_cli_plan_prints_pools_and_writes_json(tmp_path, monkeypatch):
     layout = ROOT / "deployments/perlmutter/resources/campaign-panel.yaml"
     result = _cli("plan", str(layout), "--nodes", "16", "--output", str(tmp_path))
     assert result.exit_code == 0, result.output
-    assert "perlmutter-gpu: 16 node(s)" in result.output
+    assert "perlmutter-gpu-80gb: 16 node(s)" in result.output
     data = json.loads((tmp_path / "placement.json").read_text())
     kimi = data["pools"]["llm"]["servers"][0]
     assert kimi["name"] == "kimi-k2.5"
-    assert (kimi["tensor_parallel_size"], kimi["pipeline_parallel_size"]) == (4, 4)
+    # Tensor parallel over all 16 GPUs of 4 nodes, as in the qualified campaign.
+    assert (kimi["tensor_parallel_size"], kimi["pipeline_parallel_size"]) == (16, 1)
     assert data["pools"]["dft"]["slices"][0]["host"] == "node015"
 
 
@@ -655,3 +656,19 @@ def test_launch_environment_carries_the_placed_devices():
     assert env["MATSIM_DEVICE_MASK"] == "1,2,3"
     assert env["MATSIM_NODE_DEVICES"] == "4"
     assert env["MATSIM_DEVICES_PER_NODE"] == "3"
+
+
+def test_ray_ports_of_multi_node_servers_are_reserved():
+    big = {
+        **VLLM,
+        "name": "big",
+        "nodes": 2,
+        "devices": 2,
+        "launcher": ["bash", "launcher.sh"],
+        "port": 8000,
+    }
+    small = {**VLLM, "name": "small", "nodes": 1, "devices": 2, "port": 9000}
+    plan = _plan({"llm": {"nodes": 2, "servers": [big, small]}})
+    message = r"'big' \(Ray port\) and 'small' \(port\) both use port 9000 on nid000000"
+    with pytest.raises(ValueError, match=message):
+        plan.resolve(_alloc(nodes=2, gpus=4))

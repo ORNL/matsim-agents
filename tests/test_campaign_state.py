@@ -57,8 +57,8 @@ def _debate_result() -> ScientificDebateResult:
             )
         ],
         synthesis="",
-        transcript_path="/tmp/run-001/debate_transcript.json",
-        dialogue_path="/tmp/run-001/dialogue.json",
+        transcript_path="/tmp/run-001/transcript.md",
+        contributions_path="/tmp/run-001/contributions.jsonl",
     )
 
 

@@ -166,7 +166,10 @@ def test_perlmutter_campaign_supports_debate_only_and_uma_only_modes() -> None:
     execution_call = content.index("campaign_execute.py")
     assert discovery_call < debate_exit < execution_call
     assert '[[ "$CAMPAIGN_MODE" == "single-llm-once" ]] && EXPECTED_NODES=1' in content
-    assert "NAMES=(glm-4.7-flash)" in content
+    assert "single-llm-once) LAYOUT=campaign-panel-single.yaml ;;" in content
+    assert "debate-only) LAYOUT=campaign-panel-debate.yaml ;;" in content
+    assert 'resources serve "$RESOURCES"' in content
+    assert content.index('resources serve "$RESOURCES"') < discovery_call
     assert "DISCOVERY_ARGS+=(--single-call)" in content
     assert (
         '[[ "$CAMPAIGN_MODE" == "debate-only" || "$CAMPAIGN_MODE" == '

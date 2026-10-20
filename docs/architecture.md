@@ -15,7 +15,7 @@ individual experiments or machines.
 | `backends.mlip` | MLIP configuration, calculator factories, HydraGNN checkpoint/energy loading, MC dropout, and relaxation |
 | `backends.dft` | DFT job contracts, configuration, concurrent dispatch, and Quantum ESPRESSO/VASP interfaces |
 | `execution` | Scheduler-neutral resources, launch contracts, and provenance |
-| `datasets` | Dependency-free dataset governance, elemental reference manifests, and formation-energy dataset preparation |
+| `datasets` | Dependency-free dataset governance, elemental reference manifests, formation-energy dataset preparation, energy alignment, and objective-aware train/validation/test splits |
 | `workflows` | Composable relaxation, phase-exploration, investigation, and MLIP→DFT warm-start benchmark workflows |
 
 The workflow layer uses `execution.contracts` for evidence, validation,

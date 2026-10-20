@@ -13,6 +13,7 @@ verifying that:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -137,14 +138,16 @@ class TestAutoConfirm:
 
 class TestLLMOnly:
     @pytest.mark.parametrize("custom_prompt", [None, "Custom: offer structure relaxation."])
-    def test_prompt_matches_session_capabilities_after_clear(self, monkeypatch, custom_prompt):
+    def test_prompt_matches_session_capabilities_after_clear(
+        self, monkeypatch, custom_prompt, tmp_path
+    ):
         from matsim_agents.orchestration.interactive_chat import (
             ATOMISTIC_EXPLORATION_GUIDANCE,
             LLM_ONLY_MODE_INSTRUCTION,
         )
 
         kwargs = {"system_prompt": custom_prompt} if custom_prompt else {}
-        cfg = DiscoveryChatConfig(llm_only=True, **kwargs)
+        cfg = DiscoveryChatConfig(llm_only=True, output_dir=str(tmp_path), **kwargs)
         session, _ = _make_session(cfg, responses=["Hypothesis."], monkeypatch=monkeypatch)
         chat_once(session, "Discuss materials")
         initial_prompt = session.messages[0].content
@@ -162,8 +165,8 @@ class TestLLMOnly:
         assert cfg.llm_only is True
         assert cfg.trigger_active_learning_on_high_uq is False
 
-    def test_formulas_do_not_trigger_atomistic_tools(self, monkeypatch):
-        cfg = DiscoveryChatConfig(llm_only=True, auto_confirm=True)
+    def test_formulas_do_not_trigger_atomistic_tools(self, monkeypatch, tmp_path):
+        cfg = DiscoveryChatConfig(llm_only=True, auto_confirm=True, output_dir=str(tmp_path))
         session, mock_explore = _make_session(
             cfg,
             responses=["Li2MnO3 is a useful candidate."],
@@ -183,10 +186,10 @@ class TestLLMOnly:
             ("/al Li2MnO3", "Active learning is unavailable"),
         ],
     )
-    def test_atomistic_commands_are_rejected(self, command, expected, monkeypatch):
+    def test_atomistic_commands_are_rejected(self, command, expected, monkeypatch, tmp_path):
         import matsim_agents.orchestration.interactive_chat as chat_mod
 
-        cfg = DiscoveryChatConfig(llm_only=True)
+        cfg = DiscoveryChatConfig(llm_only=True, output_dir=str(tmp_path))
         session = DiscoveryChatSession(config=cfg)
         relax = MagicMock()
         active_learning = MagicMock()
@@ -333,3 +336,47 @@ class TestHypothesisDebate:
         assert models["critic-a"].invoke_count == 2  # initial + cross critique
         assert models["critic-b"].invoke_count == 2
         assert models["critic-c"].invoke_count == 2
+
+
+class TestTranscript:
+    def test_session_transcript_records_every_message(self, discovery_config, monkeypatch):
+        import matsim_agents.orchestration.interactive_chat as chat_mod
+
+        cfg = discovery_config
+        cfg.enable_hypothesis_debate = True
+        cfg.llm_model = "primary-model"
+        cfg.critic_llm_model = "critic-model"
+        models = {
+            "primary-model": _StubModel(
+                "primary-model", outputs=["<think>plan</think>Draft.", "Revised."]
+            ),
+            "critic-model": _StubModel("critic-model", outputs=["Weak."]),
+        }
+        monkeypatch.setattr(chat_mod, "get_chat_model", lambda **kw: models[kw["model"]])
+
+        session = DiscoveryChatSession(config=cfg)
+        assert chat_once(session, "Suggest a hypothesis.") == "Revised."
+        assert session.messages[-1].content == "Revised."
+        chat_once(session, "/clear")
+
+        records = session.transcript.contributions()
+        assert [(r.id, r.speaker) for r in records] == [
+            ("0001-user", "user"),
+            ("0002-draft", "proposer"),
+            ("0003-critique", "critic_1"),
+            ("0004-revision", "proposer"),
+            ("0005-user", "user"),
+            ("0006-tool", "matsim-agents"),
+        ]
+        assert records[1].text == "Draft." and records[1].reasoning == "plan"
+        assert records[2].model == "critic-model"
+        directory = session.transcript.directory
+        assert directory.parent == Path(cfg.output_dir) / "chat"
+        assert sorted(p.stem for p in (directory / "prompts").iterdir()) == [
+            "0002-draft",
+            "0003-critique",
+            "0004-revision",
+        ]
+        markdown = (directory / "transcript.md").read_text()
+        assert markdown.startswith("# Discovery chat")
+        assert "<summary>Reasoning (4 characters)</summary>" in markdown

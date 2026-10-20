@@ -18,6 +18,12 @@ from matsim_agents.execution.contracts import ProvenanceRecord
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]+")
 _STANDARD_DIRS = ("structures", "calculations", "datasets", "models")
+# Read once at import: os.umask can only be queried by setting it. Files written
+# through a temporary file get the permissions of an ordinary new file, not the
+# owner-only mode of mkstemp, so collaborators sharing the project can read runs.
+_UMASK = os.umask(0o022)
+os.umask(_UMASK)
+_FILE_MODE = 0o666 & ~_UMASK
 
 
 def safe_component(value: str, *, fallback: str = "run") -> str:
@@ -57,12 +63,22 @@ class ScientificRunDirectory:
         resolved_config: Mapping[str, Any],
         provenance: ProvenanceRecord,
         run_id: str | None = None,
+        prefix: str | None = None,
+        directories: tuple[str, ...] = _STANDARD_DIRS,
     ) -> ScientificRunDirectory:
-        run_id = safe_component(run_id or make_run_id())
+        """Create a run; ``prefix`` names its kind (``debate-<timestamp>_<suffix>``).
+
+        ``directories`` are the subdirectories created up front, for workflows
+        that store structures, calculations, datasets, or models.
+        """
+
+        if not run_id:
+            run_id = make_run_id() if prefix is None else f"{prefix}-{make_run_id()}"
+        run_id = safe_component(run_id)
         path = Path(root) / run_id
         path.mkdir(parents=True, exist_ok=False)
         run = cls(path, run_id)
-        for name in _STANDARD_DIRS:
+        for name in directories:
             (path / name).mkdir()
         run.write_json("request.json", dict(request))
         run.write_json("resolved_config.json", dict(resolved_config))
@@ -84,6 +100,7 @@ class ScientificRunDirectory:
         encoded = json.dumps(_jsonable(payload), indent=2, sort_keys=True) + "\n"
         fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", dir=self.path)
         try:
+            os.fchmod(fd, _FILE_MODE)
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
                 stream.write(encoded)
                 stream.flush()

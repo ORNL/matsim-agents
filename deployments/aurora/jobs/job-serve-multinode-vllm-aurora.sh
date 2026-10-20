@@ -162,30 +162,59 @@ echo "=========================================="
 VLLM_PID=""
 RAY_HEAD_PID=""
 WORKER_PIDS=()
+# Stop processes with SIGTERM, wait up to $1 seconds for all of them, then kill the rest.
+stop_processes() {
+  local deadline=$(( SECONDS + $1 )) pid
+  shift
+  (( $# )) || return 0
+  kill -TERM "$@" 2>/dev/null || true
+  for pid in "$@"; do
+    while kill -0 "$pid" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+}
+# Workers on other nodes stop when RAY_STOP appears (ray-node.sh): signalling
+# their launcher would kill them before they save their logs.
+stop_workers() {
+  (( ${#WORKER_PIDS[@]} )) || return 0
+  [[ -z "${RAY_STOP:-}" ]] || touch "$RAY_STOP"
+  local deadline=$(( SECONDS + 40 )) pid
+  for pid in "${WORKER_PIDS[@]}"; do
+    while kill -0 "$pid" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+  done
+  stop_processes 5 "${WORKER_PIDS[@]}"
+  [[ -z "${RAY_STOP:-}" ]] || rm -f "$RAY_STOP"
+}
 cleanup() {
   echo
   echo "[cleanup] Stopping vLLM and Ray cluster ..."
   [[ -n "$VLLM_PID" ]]      && kill "$VLLM_PID"      2>/dev/null || true
   wait "$VLLM_PID" 2>/dev/null || true
-  ray stop --force 2>/dev/null || true
-  for pid in "${WORKER_PIDS[@]}"; do
-    kill "$pid" 2>/dev/null || true
-  done
-  [[ -n "$RAY_HEAD_PID" ]]  && kill "$RAY_HEAD_PID"  2>/dev/null || true
-  # Also kill stale ray processes on workers
-  for node in "${ALL_NODES[@]:1}"; do
-    mpiexec -n 1 --ppn 1 --hosts "$node" "$RAY" stop --force 2>/dev/null || true
-  done
+  # Workers leave while the head still runs, then the head stops; each node
+  # saves its Ray logs as it stops (ray-node.sh).
+  stop_workers
+  stop_processes 20 $RAY_HEAD_PID
   echo "[cleanup] Done."
 }
 trap cleanup EXIT
 
 # ── Start Ray head on this node ─────────────────────────────────────────────
+# Every Ray node runs under ray-node.sh: its session directory is short,
+# node-local scratch (Ray's Unix sockets have a path-length limit), and its
+# logs are copied to RAY_LOGS/<host> when the node stops.
+RAY_NODE="$REPO/deployments/common/ray-node.sh"
+RAY_TMP="/tmp/r${JOBID%%.*}.${RAY_PORT}"
+RAY_LOGS="$RUN_DIR/ray-logs"
+RAY_STOP="$RAY_LOGS/.stop.$$"
+mkdir -p "$RAY_LOGS"
+rm -f "$RAY_STOP"
 
 echo "[ray] Starting head at $RAY_ADDRESS ..."
-"$RAY" start --head \
+"$RAY_NODE" "$RAY_LOGS" "$RAY" start --head \
     --node-ip-address="$HEAD_NODE_IP" \
     --port="$RAY_PORT" \
+    --temp-dir="$RAY_TMP" \
     --num-cpus=104 \
     --num-gpus="$TILES_PER_NODE" \
     --block \
@@ -204,7 +233,8 @@ for node in "${ALL_NODES[@]:1}"; do
         export RAY_USAGE_STATS_ENABLED=0
         unset ZE_AFFINITY_MASK
         # Keep ONEAPI_DEVICE_SELECTOR as set by the frameworks module.
-        ray start --address='$RAY_ADDRESS' \
+        RAY_NODE_STOP_FILE='$RAY_STOP' '$RAY_NODE' '$RAY_LOGS' ray start --address='$RAY_ADDRESS' \
+             --temp-dir='$RAY_TMP' \
              --num-cpus=104 \
              --num-gpus=$TILES_PER_NODE \
              --block

@@ -96,7 +96,13 @@ def test_enabled_trainer_requires_training_pool(tmp_path):
     script = tmp_path / "finetune_uma.py"
     script.touch()
     resources = {"preset": "perlmutter-gpu", "pools": {"dft": {"nodes": "all"}}}
-    trainer = {"enabled": True, "train_script": str(script)}
+    references = tmp_path / "elemental-references.json"
+    references.touch()
+    trainer = {
+        "enabled": True,
+        "train_script": str(script),
+        "validation_reference_set": str(references),
+    }
     with pytest.raises(ValidationError, match="requires resources.pools.training"):
         ALConfig.model_validate(_al(tmp_path, resources=resources, trainer=trainer))
 
@@ -337,3 +343,16 @@ def test_masks_stop_at_the_first_negative_index(monkeypatch):
     }
     with pytest.raises(ValueError, match="sees only CUDA_VISIBLE_DEVICES=3"):
         child_mask_environment({"CUDA_VISIBLE_DEVICES": "1"}, owner="x")
+
+
+def test_campaign_layouts_share_one_panel():
+    root = Path(__file__).resolve().parents[1] / "deployments/perlmutter/resources"
+    full = yaml.safe_load((root / "campaign-panel.yaml").read_text())["resources"]["pools"]
+    debate = yaml.safe_load((root / "campaign-panel-debate.yaml").read_text())["resources"]
+    single = yaml.safe_load((root / "campaign-panel-single.yaml").read_text())["resources"]
+    assert debate["pools"]["llm"]["servers"] == full["llm"]["servers"]
+    assert set(debate["pools"]) == {"llm"}
+    (flash,) = single["pools"]["llm"]["servers"]
+    assert flash == next(s for s in full["llm"]["servers"] if s["name"] == "glm-4.7-flash")
+    for server in full["llm"]["servers"]:
+        assert server["tensor_parallel_size"] == 4 * server["nodes"]

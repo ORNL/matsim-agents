@@ -111,7 +111,7 @@ def test_active_learning_evidence_reaches_every_debate_participant(tmp_path):
     catalog = _catalog(tmp_path)
     models = {}
 
-    def factory(*, provider, model, base_url):
+    def factory(*, provider, model, base_url, max_tokens):
         assert provider == "vllm"
         models[model] = _FakeModel(model)
         return models[model]
@@ -138,8 +138,7 @@ def test_active_learning_evidence_reaches_every_debate_participant(tmp_path):
     assert result["debate"]["turn_count"] == 4
     assert all(model.calls == 3 for model in models.values())
 
-    dialogue_path = Path(result["debate"]["dialogue_path"])
-    assert dialogue_path.is_file()
+    assert Path(result["debate"]["contributions_path"]).is_file()
 
     result_path = tmp_path / "output" / "active_learning_scientific_debate_result.json"
     assert json.loads(result_path.read_text())["status"] == "passed"

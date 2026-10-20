@@ -315,6 +315,7 @@ def finetune_hydragnn(
     checkpoint_name: str = "ft_model.pk",
     run: bool = True,
     elemental_reference_manifest: str | Path | None = None,
+    validation_dataset: str | Path | None = None,
 ) -> Path:
     """Fine-tune the routed HydraGNN head(s) on ``dataset_path``.
 
@@ -324,12 +325,21 @@ def finetune_hydragnn(
     """
     from matsim_agents.datasets.formation_training import (
         prepare_hydragnn_training_frames,
+        prepare_hydragnn_validation_frames,
         save_hydragnn_energy_convention,
     )
 
     output_dir = Path(output_dir).expanduser().resolve()
     frames = prepare_hydragnn_training_frames(
         dataset_path, output_dir, elemental_reference_manifest
+    )
+    # A dataset split's validation partition replaces the random hold-out.
+    validation_frames = (
+        prepare_hydragnn_validation_frames(
+            validation_dataset, output_dir, elemental_reference_manifest
+        )
+        if validation_dataset is not None
+        else None
     )
     root, example_dir = _resolve_hydragnn_paths(hydragnn_root)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -397,7 +407,18 @@ def finetune_hydragnn(
     graphs = [g for g in graphs if g is not None]
     if len(graphs) < 2:
         raise ValueError(f"Only {len(graphs)} usable frames (need >=2 with energy+forces).")
-    train_graphs, val_graphs = _split(graphs, val_fraction, seed)
+    if validation_frames is not None:
+        train_graphs = graphs
+        val_graphs = [
+            g
+            for g in (
+                _atoms_to_data(a, add_edges_pbc, param_dtype, charge, spin)
+                for a in validation_frames
+            )
+            if g is not None
+        ]
+    else:
+        train_graphs, val_graphs = _split(graphs, val_fraction, seed)
     log.info("Graphs: %d train / %d val", len(train_graphs), len(val_graphs))
 
     branch_mlp = load_branch_mlp(branch_mlp_path).to(device=dev, dtype=param_dtype)
@@ -584,6 +605,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--val-fraction", type=float, default=0.1)
+    parser.add_argument(
+        "--validation-dataset",
+        default=None,
+        help="Validation partition for keeping the best epoch (replaces --val-fraction).",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--energy-weight", type=float, default=None)
     parser.add_argument("--force-weight", type=float, default=None)
@@ -613,6 +639,7 @@ def main(argv: list[str] | None = None) -> int:
         lr=args.lr,
         batch_size=args.batch_size,
         val_fraction=args.val_fraction,
+        validation_dataset=args.validation_dataset,
         seed=args.seed,
         energy_weight=args.energy_weight,
         force_weight=args.force_weight,

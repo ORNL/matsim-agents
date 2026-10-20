@@ -179,7 +179,9 @@ def _sample_seed(
     return candidates
 
 
-# Calculators loaded by an MD worker process, reused across seeds and iterations.
+# Calculators loaded by an MD worker process, reused across its seeds; across AL
+# iterations too while the worker pool stays up (when no other pool uses the mlip
+# devices). A different model (a promotion) replaces the loaded one.
 _WORKER_CALCULATORS: dict[tuple[str, bool], object] = {}
 
 

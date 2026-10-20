@@ -1,0 +1,10 @@
+# (d) Prediction of later, unobserved acquisition batches: earlier AL
+# iterations train, the next ones validate, the latest ones test (never a
+# random permutation of iterations). Needs info["al_iteration"].
+evaluation:
+  objective: accuracy on configurations acquired after the training data
+  split:
+    strategy: al_iteration_holdout
+    train_fraction: 0.6
+    validation_fraction: 0.2
+    test_fraction: 0.2

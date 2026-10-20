@@ -1,15 +1,17 @@
 # Resource dispatch for LLMs, MLIPs, and DFT
 
-Status: **phases 1–3 implemented, phase 4 implemented for the discovery
-chat, `llm-check`, and `debate`** (planner, presets, layouts, CLI; DFT and training read the placement;
-concurrent MLIP relaxations; managed single-node vLLM servers, named servers,
-in-process device limits); phase 5 is not.
+Status: **phases 1–3 implemented; phase 4 implemented for the discovery
+chat, `llm-check`, and `debate`; phase 5 implemented on Perlmutter** (planner,
+presets, layouts, CLI; DFT and training read the placement; concurrent MLIP
+relaxations; managed vLLM servers on one or several nodes, named servers,
+in-process device limits).
 Design questions are resolved in [section 11](#11-design-decisions);
 implementation choices are recorded in
 [section 12](#12-phase-1-implementation-notes),
 [section 13](#13-phase-2-implementation-notes),
-[section 14](#14-phase-3-implementation-notes), and
-[section 15](#15-phase-4-implementation-notes).
+[section 14](#14-phase-3-implementation-notes),
+[section 15](#15-phase-4-implementation-notes), and
+[section 16](#16-phase-5-implementation-notes).
 
 ## 1. Problem
 
@@ -551,15 +553,18 @@ relaxations concurrently:
   concurrently on the `mlip` pool, one per device, and candidates are returned
   in seed order; the result is identical to running them one after another.
   Trajectories differ from runs made before this change, which drew every seed
-  from one shared stream. The MD workers exit after sampling so their device
-  memory is free for DFT. Shipped AL configs and the `active-learning-sequential`
-  layouts declare an `mlip` pool on the first node, sharing devices with `dft`
-  and `training`.
+  from one shared stream. When the `mlip` pool shares devices with `dft` or
+  `training`, the MD workers exit after sampling so their device memory is free
+  for DFT; when its devices are its own, the workers and the driver's
+  calculators stay loaded across iterations and reload only after a promotion
+  ([Keeping the surrogate loaded](scientific-workflows.md#keeping-the-surrogate-loaded-across-iterations)).
+  Shipped AL configs and the `active-learning-sequential` layouts declare an
+  `mlip` pool on the first node, sharing devices with `dft` and `training`.
 - **Driver device.** MLIP work done in the driver itself (AL model loading,
   single-seed MD, acquisition scoring, candidate comparison) runs with the
   `mlip` pool's first device as the current device and its `memory_fraction`
   cap (`driver_on_mlip_device`), so it no longer lands on device 0. The AL loop
-  frees its surrogate after candidate selection, and campaign and chat
+  frees its surrogate after candidate selection when its devices are shared, and campaign and chat
   exploration workers are stopped before active learning starts and restarted
   for reevaluation, so no exploration model stays resident during DFT or
   training on shared devices.
@@ -606,8 +611,8 @@ named endpoints:
   `extra_args`. Facility environments belong in the launcher:
   `deployments/perlmutter/launchers/vllm-server-perlmutter.sh` runs vLLM from
   `venv_vllm` with node-local JIT caches.
-- **Single node.** A managed server spanning several nodes is rejected with a
-  pointer to phase 5 (Ray) or an external server.
+- **Several nodes.** See section 16: a managed server on several nodes needs a
+  facility launcher that starts the Ray cluster.
 - **in-process.** The server must sit on the driver's node. Its devices are
   registered with the Hugging Face provider, which loads the model with
   `device_map="auto"` and an explicit `max_memory` for exactly those devices
@@ -664,6 +669,70 @@ named endpoints:
   their own `srun`/`mpiexec` step for a server on the driver's node; for a
   server matsim-agents already launched on another node (`MATSIM_SERVER_IN_STEP=1`)
   they run vLLM directly instead of nesting a second step.
-- **Not yet migrated.** Campaign formula discovery and the all-model debate
-  benchmarks serve multi-node models (phase 5), and the Frontier and Aurora
-  discovery-chat jobs still start their servers in their job scripts.
+- **Not yet migrated.** The all-model debate benchmarks
+  (`job-all-local-model-debate-perlmutter.sh`, `job-al-debate-portability-perlmutter.sh`)
+  and the Frontier and Aurora discovery-chat jobs still start their servers in
+  their job scripts (campaign formula discovery moved in phase 5, section 16).
+
+## 16. Phase 5 implementation notes
+
+A `managed-vllm` server may span several nodes:
+
+- **Launch.** matsim-agents starts the server's launcher on its first (head)
+  node, directly when that is the driver's node and otherwise through the
+  facility launcher, and passes the layout as `MATSIM_SERVER_SLICES`
+  (`host=devices;host=devices`), `MATSIM_SERVER_RAY_PORT` (server port + 1000),
+  `MATSIM_NODE_DEVICES`, `MATSIM_NODE_CORES`, and `MATSIM_SERVER_LOG_DIR`.
+  Readiness, logs, and stopping
+  work as for a single-node server; the API listens on the head node.
+- **Perlmutter launcher.** With more than one node,
+  `vllm-server-perlmutter.sh` follows the qualified
+  `job-serve-multinode-perlmutter.sh` recipe: it starts the Ray head with the
+  head node's GPUs, starts one Ray worker per other node through
+  `srun --overlap --gpu-bind=none` with that node's placed GPUs in
+  `CUDA_VISIBLE_DEVICES`, waits until the cluster reports every GPU, then runs
+  `vllm serve --distributed-executor-backend ray`. Stopping the launcher stops
+  vLLM and the Ray cluster.
+- **Ray logs.** Ray's session directory must be a short node-local path
+  (`/tmp/r<job>.<ray port>`, because of the Unix-socket path-length limit), so
+  it holds only scratch data. Every Ray node runs under
+  `deployments/common/ray-node.sh`, which, when the node stops, copies the
+  node's Ray logs to shared storage and removes the node-local directory: for a
+  managed server to `<log dir>/<server>-ray/<host>/` (`MATSIM_SERVER_LOG_DIR`),
+  for the standalone `job-serve-multinode-*.sh` jobs on all three facilities to
+  `<run dir>/ray-logs/<host>/`. It copies the logs as soon as the node is asked
+  to stop and again once Ray has shut down. Stopping a server stops vLLM, then
+  the workers while the head still runs (a worker whose head is gone waits
+  30 s for it before shutting down), then the head. Workers on other nodes are
+  asked to stop through a file in the log directory that `ray-node.sh` watches
+  (`RAY_NODE_STOP_FILE`), not by signalling their `srun` or `mpiexec`: two-node
+  check 60044230 showed that Slurm kills a step outright when its `srun` is
+  signalled, before the worker can save its logs. matsim-agents asks the
+  launcher itself to stop the same way, through `MATSIM_SERVER_STOP_FILE`, since
+  a remote head runs in an `srun` step too; it waits up to 120 s and signals the
+  launcher only if it has not exited. The Ray nodes run in their own sessions so
+  that a signal reaches them only through this sequence. After its node stops,
+  `ray-node.sh` stops any of that node's processes that outlived `ray start`,
+  found by its session directory; nothing calls `ray stop`, which would stop
+  every Ray instance on the host, including other servers' nodes. Worker steps
+  request at most the job's CPUs per node.
+- **Parallelism.** `tensor_parallel_size` defaults to the server's devices per
+  node, with pipeline stages across nodes (`--pipeline-parallel-size`). The
+  campaign panel sets tensor parallelism over all of a server's GPUs, as the
+  qualified campaign runs used.
+- **Advertised address.** In a multi-node allocation every managed server
+  listens on all interfaces and is advertised by host name, because steps on
+  other nodes (the campaign's execution node) use it; in a one-node allocation
+  servers stay on the loopback.
+- **Campaign job.** `job-campaign-formula-discovery-all-models-perlmutter.sh`
+  serves its panel with `matsim-agents resources serve` from
+  `campaign-panel.yaml` (16 nodes), `campaign-panel-debate.yaml` (debate-only,
+  15 nodes), or `campaign-panel-single.yaml` (single-llm-once, 1 node), and
+  reruns itself for the campaign stage with the published endpoints as its
+  `--model` panel. `llm-check-multinode.yaml` serves
+  Qwen3-235B-A22B-Instruct-2507 across two nodes for qualification.
+- **Other facilities.** A multi-node server without a launcher is rejected. The
+  Frontier and Aurora launchers serve on one node; their multi-node recipes
+  (`job-serve-multinode-frontier.sh`, `job-serve-multinode-aurora.sh`) are not
+  yet folded into the launchers.
+

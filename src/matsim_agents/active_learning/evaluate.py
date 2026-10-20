@@ -35,6 +35,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from ase import Atoms
@@ -111,6 +112,8 @@ class EvalMetrics:
     failures: list[str] = field(default_factory=list)
     formation_energy_mae_eV_per_atom: float = float("nan")
     formation_energy_rmse_eV_per_atom: float = float("nan")
+    # Mean Euclidean norm of the per-atom force error vector.
+    force_vector_mae_eV_per_A: float = float("nan")
     elemental_reference_provenance: dict[str, object] = field(default_factory=dict)
 
 
@@ -208,8 +211,11 @@ def evaluate_frames(
     model_path: str | None = None,
     test_set_label: str = "",
     elemental_reference_manifest: Path | None = None,
+    calculator: Any = None,
 ) -> tuple[EvalMetrics, dict[str, np.ndarray]]:
     """Run single-points with ``mlip_cfg`` and score them against references.
+
+    ``calculator`` is ``mlip_cfg``'s model when it is already loaded.
 
     Returns ``(metrics, parity)`` where ``parity`` holds the raw arrays for
     scatter plots: per-atom reference/predicted energies and flattened
@@ -238,7 +244,7 @@ def evaluate_frames(
             reference_element_method_signatures=manifest.get("element_method_signatures"),
             require_sidecar=True,
         )
-    calc = make_mlip_calculator(mlip_cfg)
+    calc = calculator if calculator is not None else make_mlip_calculator(mlip_cfg)
     references = (
         predict_elemental_references(
             elemental_reference_manifest,
@@ -261,6 +267,12 @@ def evaluate_frames(
     failures: list[str] = []
     formation_ref: list[float] = []
     formation_pred: list[float] = []
+    # Per-frame errors (NaN where a label is missing), for per-group reports.
+    frame_energy_err = np.full(len(frames), np.nan)
+    frame_formation_err = np.full(len(frames), np.nan)
+    frame_force_mae = np.full(len(frames), np.nan)
+    frame_force_vector_mae = np.full(len(frames), np.nan)
+    vector_errors: list[np.ndarray] = []
 
     for i, atoms in enumerate(frames):
         e_ref = _reference_energy(atoms)
@@ -288,9 +300,15 @@ def evaluate_frames(
             e_pred_tot.append(e_pred)
             e_ref_pa.append(e_ref / n)
             e_pred_pa.append(e_pred / n)
+            frame_energy_err[i] = abs(e_pred - e_ref) / n
+            frame_formation_err[i] = abs(formation_pred[-1] - formation_ref[-1])
         if f_ref is not None and f_ref.shape == f_pred.shape:
             f_ref_all.append(f_ref.reshape(-1))
             f_pred_all.append(f_pred.reshape(-1))
+            norms = np.linalg.norm(f_pred - f_ref, axis=1)
+            vector_errors.append(norms)
+            frame_force_mae[i] = float(np.mean(np.abs(f_pred - f_ref)))
+            frame_force_vector_mae[i] = float(np.mean(norms))
 
     n_eval = max(len(e_ref_tot), len(f_ref_all))
     if n_eval == 0:
@@ -349,6 +367,9 @@ def evaluate_frames(
         failures=failures,
         formation_energy_mae_eV_per_atom=_mae(de_pa_formation),
         formation_energy_rmse_eV_per_atom=_rmse(de_pa_formation),
+        force_vector_mae_eV_per_A=(
+            float(np.mean(np.concatenate(vector_errors))) if vector_errors else float("nan")
+        ),
         elemental_reference_provenance=references.provenance if references is not None else {},
     )
     parity = {
@@ -358,6 +379,10 @@ def evaluate_frames(
         "formation_pred_eV_per_atom": formation_pred_a,
         "f_ref_eV_per_A": f_ref_a,
         "f_pred_eV_per_A": f_pred_a,
+        "frame_energy_abs_err_eV_per_atom": frame_energy_err,
+        "frame_formation_abs_err_eV_per_atom": frame_formation_err,
+        "frame_force_mae_eV_per_A": frame_force_mae,
+        "frame_force_vector_mae_eV_per_A": frame_force_vector_mae,
     }
     return metrics, parity
 
@@ -384,8 +409,12 @@ def evaluate_promotion_candidate(
     *,
     iteration: int,
     training_set: Path,
+    incumbent_calculator: Any = None,
 ) -> PromotionDecision:
-    """Evaluate incumbent and candidate models on the configured held-out set."""
+    """Evaluate incumbent and candidate models on the configured held-out set.
+
+    ``incumbent_calculator`` is the incumbent model when it is already loaded.
+    """
     validation_set = cfg.trainer.validation_set
     if validation_set is None:
         raise ValueError("model promotion requires trainer.validation_set")
@@ -439,6 +468,7 @@ def evaluate_promotion_candidate(
         iteration=iteration,
         test_set_label=str(validation_set),
         elemental_reference_manifest=reference_path,
+        calculator=incumbent_calculator,
     )
     candidate_metrics, _ = evaluate_frames(
         candidate_cfg,

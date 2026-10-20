@@ -60,7 +60,18 @@ def test_llm_check_persists_all_required_stages(tmp_path):
     run = Path(result.run_directory)
     assert json.loads((run / "result.json").read_text())["model"] == cfg.model
     assert (run / "structured_hypothesis.json").is_file()
-    assert (run / "discussion.json").is_file()
+    records = [json.loads(line) for line in (run / "contributions.jsonl").read_text().splitlines()]
+    assert [record["id"] for record in records] == [
+        "generation",
+        "structured",
+        "proposal",
+        "critique",
+        "revision",
+    ]
+    assert records[3]["text"] == "The proposal needs a competing-phase comparison."
+    assert (run / "prompts" / "revision.json").is_file()
+    assert (run / "transcript.md").is_file()
+    assert result.incomplete_replies == []
     assert "api_key" not in (run / "resolved_config.json").read_text()
 
 
@@ -88,8 +99,15 @@ def test_llm_check_exercises_configured_concurrency(tmp_path):
         model_factory=lambda **_kwargs: _RoutingFakeModel(),
         readiness_probe=lambda _cfg: {"served_models": [cfg.model]},
     )
-    generation = json.loads(
-        (Path(result.run_directory) / "generation.json").read_text(encoding="utf-8")
-    )
+    records = [
+        json.loads(line)
+        for line in (Path(result.run_directory) / "contributions.jsonl").read_text().splitlines()
+    ]
+    concurrent = [record for record in records if record["kind"] == "concurrent_generation"]
     assert result.status == "complete"
-    assert generation["concurrent_responses"] == ["PORTABILITY_OK"] * 3
+    assert sorted(record["id"] for record in concurrent) == [
+        "concurrent-001",
+        "concurrent-002",
+        "concurrent-003",
+    ]
+    assert all(record["text"] == "PORTABILITY_OK" for record in concurrent)

@@ -88,7 +88,7 @@ def test_agentic_investigation_can_use_equal_multi_llm_debate(tmp_path):
     result = run_investigation(
         config,
         phase_runner=_phase_result,
-        model_factory=lambda *, provider, model, base_url: models[model],
+        model_factory=lambda *, provider, model, base_url, max_tokens: models[model],
     )
     assert result.hypothesis.discussion_mode == "multi_llm_debate"
     assert result.hypothesis.discussion_run_id

@@ -179,6 +179,30 @@ wait_for_ray_gpus() {
   return 1
 }
 
+# Stop processes with SIGTERM, wait up to $1 seconds for all of them, then kill the rest.
+stop_processes() {
+  local deadline=$(( SECONDS + $1 )) pid
+  shift
+  (( $# )) || return 0
+  kill -TERM "$@" 2>/dev/null || true
+  for pid in "$@"; do
+    while kill -0 "$pid" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+}
+# Workers on other nodes stop when RAY_STOP appears (ray-node.sh): signalling
+# their launcher would kill them before they save their logs.
+stop_workers() {
+  (( ${#WORKER_PIDS[@]} )) || return 0
+  [[ -z "${RAY_STOP:-}" ]] || touch "$RAY_STOP"
+  local deadline=$(( SECONDS + 40 )) pid
+  for pid in "${WORKER_PIDS[@]}"; do
+    while kill -0 "$pid" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+  done
+  stop_processes 5 "${WORKER_PIDS[@]}"
+  [[ -z "${RAY_STOP:-}" ]] || rm -f "$RAY_STOP"
+}
 cleanup() {
   echo ""
   echo "[cleanup] Stopping vLLM and Ray cluster ..."
@@ -192,9 +216,10 @@ cleanup() {
     wait "$VLLM_PID" 2>/dev/null || true
   fi
   if [[ "$N_NODES" -gt 1 ]]; then
-    "$VLLM_VENV/bin/ray" stop --force 2>/dev/null || true
-    for pid in "${WORKER_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
-    [[ -n "$RAY_HEAD_PID" ]] && kill "$RAY_HEAD_PID" 2>/dev/null || true
+    # Workers leave while the head still runs, then the head stops; each node
+    # saves its Ray logs as it stops (ray-node.sh).
+    stop_workers
+    stop_processes 20 $RAY_HEAD_PID
   fi
   echo "[cleanup] Done."
 }
@@ -217,11 +242,17 @@ if [[ "$N_NODES" -gt 1 ]]; then
   # Keep this root deliberately short: Ray appends a timestamped session path,
   # and Linux AF_UNIX socket paths may not exceed 107 bytes. The Slurm step ID
   # distinguishes concurrent model clusters within a coordinated allocation.
+  # It is node-local scratch: ray-node.sh copies each node's Ray logs to
+  # RAY_LOGS/<host> when the node stops and then removes it.
   RAY_TMPDIR="/tmp/r${SLURM_JOB_ID:-$$}.${SLURM_STEP_ID:-0}"
+  RAY_NODE="$REPO/deployments/common/ray-node.sh"
+  RAY_LOGS="$RUN_DIR/ray-logs"
+  RAY_STOP="$RAY_LOGS/.stop.$$"
+  mkdir -p "$RAY_LOGS"
+  rm -f "$RAY_STOP"
   for attempt in 1 2 3; do
     echo "[ray] Starting head node at $RAY_ADDRESS (attempt $attempt/3) ..."
-    rm -rf "$RAY_TMPDIR"
-    "$VLLM_VENV/bin/ray" start \
+    "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start \
       --head \
       --node-ip-address="$HEAD_NODE_IP" \
       --port="$RAY_PORT" \
@@ -238,7 +269,6 @@ if [[ "$N_NODES" -gt 1 ]]; then
     fi
     kill "$RAY_HEAD_PID" 2>/dev/null || true
     wait "$RAY_HEAD_PID" 2>/dev/null || true
-    timeout 30s "$VLLM_VENV/bin/ray" stop --force >/dev/null 2>&1 || true
     RAY_HEAD_PID=""
     (( attempt < 3 )) || { echo "[ray] ERROR: head failed after 3 attempts." >&2; exit 1; }
     sleep 30
@@ -249,8 +279,9 @@ if [[ "$N_NODES" -gt 1 ]]; then
     srun --nodes=1 --ntasks=1 --ntasks-per-node=1 \
          -w "$node" \
          --export=ALL \
-      "$VLLM_VENV/bin/ray" start \
+      env RAY_NODE_STOP_FILE="$RAY_STOP" "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start \
         --address="$RAY_ADDRESS" \
+        --temp-dir="$RAY_TMPDIR" \
         --num-cpus="$NCPUS" \
         --num-gpus="$GPUS_PER_NODE" \
         --block &

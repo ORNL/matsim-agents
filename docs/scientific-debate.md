@@ -137,32 +137,56 @@ hypothesis: "What candidate material provides high thermoelectric ZT near 800 K?
 rounds: 2
 output_root: ./runs
 max_transcript_chars: 60000
+max_completion_tokens: 8192
 participants: [...] 
 ```
 
 - `hypothesis` is the exact question or claim assigned to every model.
 - `rounds` is the number of complete panel passes.
 - `output_root` receives a uniquely named, provenance-tracked run directory.
-- `max_transcript_chars` bounds context sent to a model. It does not truncate
-  the dialogue persisted to disk.
+- `max_transcript_chars` bounds the earlier answers shown to a model in one
+  prompt. Contributions are kept whole, newest first; the oldest ones that do
+  not fit are left out and named in the prompt and in the contribution's
+  `omitted_context`. The dialogue on disk is never shortened.
+- `max_completion_tokens` (default 8192) bounds one reply, including a
+  reasoning model's reasoning; a participant's own `max_completion_tokens`
+  overrides it, and `null` uses the provider's default.
+
+Peers are shown each other's answers only, quoted between `<contribution>`
+tags, never their reasoning. A reasoning model's reasoning is separated from
+its answer whether the server returns it separately (vLLM with
+`--reasoning-parser`) or before `</think>` in the reply. Without a parser, a
+reply cut off before `</think>`, whose prompt opened `<think>`, contains no tag
+and cannot be told apart from an answer; it is flagged incomplete and shown to
+peers as cut off. Serve reasoning models with a reasoning parser (the
+Perlmutter campaign panel layouts do).
 - `synthesis_participant` is forbidden with `independent_verdicts`, must match
   a participant name with `designated_model`, and otherwise defaults to the
   first participant.
 
 ## Outcomes and artifacts
 
-Every successful run contains:
+A run directory is named `debate-<UTC timestamp>_<suffix>` and contains:
 
-- `dialogue.json`: chronological dialogue beginning with the assigned
-  hypothesis, followed by every argument and final verdict;
-- `debate_transcript.json`: structured turns, verdicts, and aggregate output;
-- `results.json`: typed workflow result and artifact paths;
-- resolved configuration and provenance files managed by the scientific run
-  directory.
+- `transcript.md`: the debate for reading, one section per argument and
+  verdict, with the reasoning folded away and incomplete replies marked;
+- `contributions.jsonl`: one record per argument and verdict, appended as soon
+  as it is made, so a crash or walltime cutoff loses at most the reply in
+  progress. Each record has the contribution `id`, `kind` (`argument`,
+  `verdict`, or `synthesis`), round, speaker, provider, model, `text` (the
+  answer), `reasoning`, `finish_reason`, `truncated`, prompt and completion
+  token counts, latency, and the earlier contributions the model was shown
+  (`context`) or not shown (`omitted_context`);
+- `prompts/<id>.json`: the exact messages sent for each contribution;
+- `result.json`: status, contribution ids, and `incomplete_contributions`,
+  the replies the token limit cut off or that contain no answer;
+- `request.json`, `resolved_config.json`, `provenance.json`, and
+  `events.jsonl`, managed by the scientific run directory.
 
-Every model argument and verdict has a unique contribution ID. Argument IDs
-encode their round and turn; verdict IDs identify the independent or designated
-conclusion. Records include participant, provider, model, and complete text.
+Argument IDs encode their round and turn; verdict IDs identify the independent
+or designated conclusion. A reply cut off at the token limit is logged as a
+warning, marked in the transcript, and shown to later speakers with a note;
+raise `max_completion_tokens` for that participant when it happens.
 
 All debate output has `hypothesis` evidence level. Agreement between many LLMs
 is not physical validation. Candidate materials, mechanisms, and property

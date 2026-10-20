@@ -47,13 +47,21 @@ Each run creates a collision-resistant directory containing:
 ├── events.jsonl
 ├── health.json
 ├── model_identity.json
-├── generation.json
+├── contributions.jsonl
+├── prompts/<id>.json
+├── transcript.md
 ├── structured_hypothesis.json
-├── discussion.json
 ├── environment.json
 ├── performance.json
 └── result.json
 ```
+
+Every model reply (`generation`, `concurrent-NNN`, `structured`, `proposal`,
+`critique`, `revision`) is appended to `contributions.jsonl` with its answer,
+any reasoning, finish reason, token counts, and latency; `prompts/<id>.json`
+holds the messages sent and `transcript.md` the same exchange for reading.
+`result.json` lists in `incomplete_replies` the replies the token limit cut off
+or that contain no answer.
 
 API keys are excluded from resolved configuration and provenance artifacts.
 

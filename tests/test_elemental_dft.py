@@ -22,7 +22,7 @@ from matsim_agents.active_learning.elemental_dft import (
     ElementalReferencePlan,
     prepare_elemental_references,
 )
-from matsim_agents.active_learning.hydragnn_references import resolve_training_references
+from matsim_agents.active_learning.training_references import resolve_training_references
 from matsim_agents.backends.dft.base import DFTResult
 from matsim_agents.backends.dft.config import DFTConfig
 from matsim_agents.datasets.formation_training import prepare_formation_training_dataset
@@ -146,7 +146,7 @@ def test_al_automatic_training_references_are_approved_bounded_and_frozen(
         train_script=setup.tmp / "train.py",
         compare_after_training=False,
         promote_model=False,
-        hydragnn_training_references={
+        training_references={
             "phase_plan": plan_path,
             "cache_dir": setup.cache,
             "phases_approved": True,
@@ -203,7 +203,7 @@ def test_phase_plan_references_use_recorded_scope_beyond_training_elements(
         train_script=setup.tmp / "train.py",
         compare_after_training=False,
         promote_model=False,
-        hydragnn_training_references={
+        training_references={
             "phase_plan": plan_path,
             "cache_dir": setup.cache,
             "phases_approved": True,
@@ -249,7 +249,7 @@ def test_phase_plan_references_reject_missing_or_incomplete_scope(
     cfg = TrainerConfig(
         enabled=True,
         train_script=setup.tmp / "train.py",
-        hydragnn_training_references={
+        training_references={
             "phase_plan": plan_path,
             "cache_dir": setup.cache,
             "phases_approved": True,
@@ -401,7 +401,7 @@ def test_al_reference_method_mismatch_fails_before_any_dft(
         method_signature_elements={"Si", "O"},
     )
     cfg = TrainerConfig(
-        hydragnn_training_references={
+        training_references={
             "phase_plan": phase_plan,
             "cache_dir": setup.cache,
             "phases_approved": True,
@@ -1119,7 +1119,7 @@ def test_al_additive_reference_extension_across_iterations(
         train_script=setup.tmp / "train.py",
         compare_after_training=False,
         promote_model=False,
-        hydragnn_training_references={
+        training_references={
             "phase_plan": plan_path,
             "cache_dir": setup.cache,
             "phases_approved": True,
@@ -1166,7 +1166,7 @@ def test_al_additive_reference_extension_across_iterations(
         train_script=setup.tmp / "train.py",
         compare_after_training=False,
         promote_model=False,
-        hydragnn_training_references={
+        training_references={
             "phase_plan": plan_path,
             "cache_dir": setup.cache,
             "phases_approved": True,
@@ -1242,7 +1242,7 @@ def test_manifest_reference_extension_accepts_expanded_real_method_scope(setup_r
     config = TrainerConfig(
         enabled=True,
         train_script=setup.tmp / "train.py",
-        hydragnn_training_references={"manifest": source},
+        training_references={"manifest": source},
     )
     root = setup.tmp / "manifest-references"
     si_atoms = Atoms("Si2", positions=np.zeros((2, 3)))

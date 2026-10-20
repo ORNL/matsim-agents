@@ -152,7 +152,7 @@ PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON" \
   --output "$OUTPUT/debate"
 
 RESULT="$OUTPUT/debate/all_model_scientific_debate_result.json"
-DIALOGUE=$("$PYTHON" -c 'import json, sys; print(json.load(open(sys.argv[1]))["dialogue_path"])' "$RESULT")
+TRANSCRIPT=$("$PYTHON" -c 'import json, sys; print(json.load(open(sys.argv[1]))["transcript_path"])' "$RESULT")
 echo "[$(date)] Debate complete"
 echo "Result: $RESULT"
-echo "Complete discussion with contribution IDs: $DIALOGUE"
+echo "Transcript: $TRANSCRIPT (records with contribution IDs: contributions.jsonl beside it)"
