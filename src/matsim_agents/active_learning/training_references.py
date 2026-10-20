@@ -1,4 +1,4 @@
-"""Resolve and freeze HydraGNN training references independently of promotion."""
+"""Resolve and freeze the elemental DFT references every MLIP fine-tune trains against."""
 
 from __future__ import annotations
 
@@ -149,14 +149,14 @@ def _recover_reference_publication(reference_root: Path) -> None:
         not isinstance(publication.get(key), str) or Path(publication[key]).name != publication[key]
         for key in ("generation", "backup")
     ):
-        raise RuntimeError("Invalid HydraGNN reference publication marker")
+        raise RuntimeError("Invalid training reference publication marker")
     generation = reference_root.parent / publication["generation"]
     backup = reference_root.parent / publication["backup"]
     if not generation.is_dir():
         if _path_exists(backup) and not _path_exists(reference_root):
             backup.replace(reference_root)
         marker.unlink()
-        raise RuntimeError("Incomplete HydraGNN reference publication could not be recovered")
+        raise RuntimeError("Incomplete training reference publication could not be recovered")
     if reference_root.is_symlink() and reference_root.resolve() == generation.resolve():
         _remove_previous_snapshot(backup, reference_root)
         _remove_transient_links(reference_root)
@@ -216,7 +216,7 @@ def _training_element_scope(dataset: Path) -> tuple[set[str], bool]:
         dataset.with_suffix(dataset.suffix + ".manifest.json").read_text()
     )
     if dataset_metadata.energy_reference != f"{dataset_metadata.dft_backend}:native_total_energy":
-        raise ValueError("HydraGNN reference preparation requires native DFT total-energy labels")
+        raise ValueError("Training reference preparation requires native DFT total-energy labels")
     if sha256_file(dataset) != dataset_metadata.sha256:
         raise ValueError("DFT dataset manifest hash does not match the training data")
     frames = list(read(dataset, index=":"))
@@ -456,16 +456,16 @@ def _resolve_training_references_unlocked(
 ) -> Path:
     dataset = Path(dataset)
     elements, scope_recorded = _training_element_scope(dataset)
-    config = trainer.hydragnn_training_references
+    config = trainer.training_references
     if config is not None and config.phase_plan is not None:
         if not scope_recorded:
             raise ValueError(
-                "HydraGNN phase-plan references require the dataset manifest to record "
+                "Phase-plan training references require the dataset manifest to record "
                 "method_signature_elements"
             )
         if dft_config is None or dft_launch is None or config.cache_dir is None:
             raise ValueError(
-                "Automatic HydraGNN references require a DFT config, a dft pool launch, "
+                "Automatic training references require a DFT config, a dft pool launch, "
                 "and cache_dir"
             )
         plan = ElementalReferencePlan.from_yaml(config.phase_plan)
@@ -478,7 +478,7 @@ def _resolve_training_references_unlocked(
         source = config.manifest if config is not None else trainer.validation_reference_set
         if source is None:
             raise ValueError(
-                "HydraGNN training requires hydragnn_training_references or "
+                "MLIP training requires trainer.training_references or "
                 "validation_reference_set even when model comparison/promotion is disabled"
             )
         _freeze_declared_references(source, dataset, elements, reference_root)

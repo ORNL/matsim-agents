@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--train-script",
         type=Path,
-        default=ROOT / "src" / "matsim_agents" / "active_learning" / "finetune_uma.py",
+        default=ROOT / "src" / "matsim_agents" / "training" / "finetune_uma.py",
     )
     parser.add_argument("--train-launcher", type=Path)
     parser.add_argument("--train-epochs", type=int, default=5)
@@ -214,11 +214,15 @@ def main(argv: list[str] | None = None) -> int:
 
     campaign = CampaignState.load(args.campaign_state)
     al_config = ALConfig.from_yaml(args.al_config)
-    compares_energy = args.promote_model or al_config.trainer.compare_after_training
-    if args.retrain and compares_energy and args.promotion_validation_reference_set is None:
+    if (
+        args.retrain
+        and args.promotion_validation_reference_set is None
+        and al_config.trainer.training_references is None
+    ):
         parser.error(
-            "--retrain energy comparison requires --promotion-validation-reference-set "
-            "(DFT-labelled elemental JSON manifest)"
+            "--retrain requires elemental DFT references to train against: "
+            "--promotion-validation-reference-set (DFT-labelled elemental JSON manifest) "
+            "or trainer.training_references in the AL config"
         )
     campaign.budget.max_candidates = args.max_candidates
     campaign.budget.max_dft_calculations = (

@@ -281,6 +281,20 @@ frames are checked for finite energies/forces, correct force shapes, and exact
 duplicate geometries; a SHA-256 dataset manifest records the DFT energy
 reference and validation summary.
 
+**Training needs elemental DFT references.** Every fine-tune trains against
+pure-element DFT energies computed with the same DFT method as the labels:
+HydraGNN trains on formation energies relative to them, and UMA and MACE use
+them to put the labels on their foundation model's energy scale (DFT totals
+from Quantum ESPRESSO, or VASP with other settings, differ from the foundation's
+pretraining energies by large per-element constants). Set
+`trainer.training_references` (a verified manifest or an approved elemental
+phase plan) or `trainer.validation_reference_set`; `enabled: true` without one
+is rejected when the configuration loads, before any MD or DFT runs. UMA and
+MACE fine-tune with low-rank adapters by default (`trainer.finetune_mode: lora`;
+`full` trains all weights), and `trainer.start_from: foundation` retrains the
+configured model each time instead of the last promoted one. See
+[Fine-tuning UMA and MACE](docs/scientific-workflows.md#fine-tuning-uma-and-mace).
+
 Held-out model energy comparisons and promotion use **formation-energy
 errors**, subtracting each method's own elemental energies on the same fixed
 reference geometries. These comparisons require a DFT-labelled elemental JSON

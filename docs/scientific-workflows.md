@@ -322,7 +322,20 @@ See [Competing-phase reference hulls](./reference-hulls.md).
 
 ## Formation-energy comparisons and campaign promotion
 
-### HydraGNN training references
+### Training references
+
+Every AL fine-tune trains against elemental DFT references, so
+`trainer.enabled: true` requires `trainer.training_references` or
+`trainer.validation_reference_set`. The configuration is rejected when it
+loads, and `run_active_learning` checks again before any MD or DFT runs (for
+callers that edit a loaded configuration), instead of failing at the first
+retrain after that iteration's DFT. HydraGNN trains on formation energies
+relative to the references (below); UMA and MACE use them to align the labels
+to their foundation model's energy scale
+([Fine-tuning UMA and MACE](#fine-tuning-uma-and-mace)). The frozen reference
+snapshot is shared by every backend.
+
+#### HydraGNN formation energies
 
 Both routed and new-head fine-tuners now require verified elemental DFT
 references and train on physical formation energies plus unchanged forces.
@@ -370,7 +383,7 @@ Configure a verified manifest explicitly:
 
 ```yaml
 trainer:
-  hydragnn_training_references:
+  training_references:
     manifest: /path/to/elemental-references.json
 ```
 
@@ -378,7 +391,7 @@ Alternatively use an approved elemental-reference phase plan automatically:
 
 ```yaml
 trainer:
-  hydragnn_training_references:
+  training_references:
     phase_plan: /path/to/approved-phases.yaml
     cache_dir: /path/to/elemental-dft-cache
     phases_approved: true
@@ -578,14 +591,78 @@ The implemented replacement workflow:
   honor that convention. Reconstruct DFT-reference total energies only where
   needed, and prevent a second elemental subtraction from formation outputs.
 
-This change is HydraGNN-specific: UMA and MACE energy conventions must be
-verified separately rather than transformed automatically. Per-formula
+The formation-energy convention is HydraGNN's; UMA and MACE keep their
+foundation's total-energy convention and align the labels to it instead
+([Fine-tuning UMA and MACE](#fine-tuning-uma-and-mace)). Per-formula
 cumulative collection and permanent train/held-out membership remain unchanged.
 Validation must cover multiple polymorphs, cell multiplicity, reference reuse,
 missing or incompatible references, approval gates, unchanged forces, and
 checkpoint reload without double referencing. CPU contract tests cover the
 reference/training/inference wiring; end-to-end real GPU model and DFT
 qualification of this new workflow remains pending.
+
+### Fine-tuning UMA and MACE
+
+A foundation model's energies follow its pretraining DFT setup (UMA OMat and
+MACE-MP: VASP PBE). Labels from Quantum ESPRESSO, or VASP with other settings,
+differ from it by large per-element constants; training on raw totals would make
+the model absorb them. The UMA and MACE fine-tuners
+(`matsim_agents.training.finetune_uma` / `finetune_mace`, both requiring
+`--elemental-reference-manifest`) therefore shift every label by the elemental
+reference offsets:
+
+```text
+E_label = E_DFT - sum over atoms i of (e_DFT[el_i] - e_model[el_i])
+```
+
+where `e_DFT` is the DFT energy per atom of each declared elemental reference
+and `e_model` the base model's energy per atom on the same geometry. DFT
+formation energies relative to the references are unchanged, and the fine-tuned
+model stays on its foundation's scale. The alignment is written to
+`energy-alignment.json` beside the checkpoint, with the hashes of the training
+dataset and reference manifest; `retrain_uma` / `retrain_mace` reject a model
+whose recorded hashes do not match what they asked for. Fine-tuning a model that
+has an `energy-alignment.json` reuses its recorded model references, so repeated
+fine-tunes keep one scale. Promotion comparisons are unaffected: each model's
+formation energies use its own predicted elemental references.
+
+Other details:
+
+- **UMA**: the energy loss is per atom (`(E_err / N_atoms)^2`, so large cells do
+  not dominate) plus `force_weight` times the force MSE. 10% of the frames (at
+  least one) are held out, scored after every epoch, and the weights of the best
+  epoch are kept.
+- **MACE**: `mace_run_train` uses the foundation's atomic energies
+  (`--E0s foundation`) instead of refitting them from the training set
+  (`--E0s average`), which cannot separate the elements when the AL data cover
+  few compositions; multihead replay of pretraining data is off (compute nodes
+  are offline). When every frame carries a DFT stress, stress is trained too
+  (`--loss stress`). The retrain fails if no `mace_finetuned.model` is written.
+- **Adapters**: `trainer.finetune_mode: lora` (default) trains low-rank adapters
+  and the heads, which keeps more of the pretraining on small AL datasets;
+  `full` trains all weights. HydraGNN uses its fine-tuner's own strategy.
+- **Start point**: by default each retrain starts from the current model (the
+  last promoted one). `trainer.start_from: foundation` starts every retrain from
+  the model the run was configured with, on the cumulative dataset, so
+  successive fine-tunes do not compound.
+- **Stress**: the UMA and HydraGNN fine-tuners train on energies and forces only.
+- **Launchers**: a UMA or MACE `train_launcher` receives
+  `<train_script> <dataset> <out_model_dir> <base model fields> <epochs> <nodes>`
+  `<ranks> <reference_manifest> <finetune_mode>` and must write the model and
+  `energy-alignment.json` to `<out_model_dir>`
+  (see `deployments/perlmutter/launchers/_mace-train-step-perlmutter.sh`).
+
+### Keeping the surrogate loaded across iterations
+
+The AL loop loads the surrogate on the driver for scoring and in one worker per
+mlip device for MD. When the resource plan gives the `mlip` pool devices that
+neither the `dft` nor the `training` pool uses, these models and the MD workers
+stay loaded across iterations and are reloaded only when a candidate is
+promoted; the promotion comparison then reuses the loaded incumbent (unless it
+was loaded with MC dropout for acquisition). When the devices are shared, the
+models are released before DFT and reloaded each iteration, as before. The run
+log states which applies. The retrained HydraGNN candidate is checked from its
+recorded hashes rather than loaded; the promotion comparison loads it.
 
 ### Current promotion and evaluation behavior
 

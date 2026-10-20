@@ -491,7 +491,6 @@ def run_finetune_endpoints(
     mace_model: str = "medium",
     mace_model_id: str | None = None,
     mace_precision: str = "fp64",
-    mace_dispersion: bool = False,
     mace_epochs: int | None = None,
     mace_lr: float | None = None,
     mace_weight_decay: float = 0.0,
@@ -572,6 +571,7 @@ def run_finetune_endpoints(
             base_model=uma_base_model,
             task_name=uma_task_name,
             finetune_kwargs={
+                "elemental_reference_manifest": reference_manifest,
                 "epochs": uma_epochs,
                 "batch_size": batch_size,
                 "lr": lr if lr is not None else uma_lr,
@@ -596,7 +596,7 @@ def run_finetune_endpoints(
             model_id=mace_model_id,
             precision=mace_precision,
             finetune_kwargs={
-                "dispersion": mace_dispersion,
+                "elemental_reference_manifest": reference_manifest,
                 "epochs": mace_epochs,
                 "batch_size": batch_size,
                 "lr": lr if lr is not None else mace_lr,
@@ -737,7 +737,6 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument("--mace-precision", default="fp64", choices=["fp32", "fp64"])
-    parser.add_argument("--mace-dispersion", action="store_true")
     parser.add_argument(
         "--mace-epochs",
         type=int,
@@ -830,7 +829,6 @@ def main(argv: list[str] | None = None) -> int:
         mace_model=args.mace_model,
         mace_model_id=args.mace_model_id,
         mace_precision=args.mace_precision,
-        mace_dispersion=args.mace_dispersion,
         mace_epochs=args.mace_epochs,
         mace_lr=args.mace_lr,
         mace_freeze_backbone=args.mace_freeze_backbone,

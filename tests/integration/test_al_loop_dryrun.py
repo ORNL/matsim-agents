@@ -68,7 +68,7 @@ def test_missing_elemental_manifest_fails_before_training(tmp_path):
     cfg.trainer.enabled = True
     cfg.trainer.compare_after_training = True
     cfg.trainer.validation_fraction = 0.2
-    with pytest.raises(ValueError, match="elemental reference manifest"):
+    with pytest.raises(ValueError, match="requires trainer.training_references"):
         run_active_learning(cfg)
     assert not (Path(cfg.loop.out_dir) / "iteration_0").exists()
 
@@ -533,6 +533,58 @@ def test_promotion_decision_controls_model_activation(
     expected_model = trained_model if approved else incumbent
     assert cfg.mlip.hydragnn.logdir == expected_model
     assert cfg.mlip.hydragnn.checkpoint == (None if approved else "incumbent.pk")
+
+
+@pytest.mark.parametrize("start_from", ["incumbent", "foundation"])
+def test_retraining_starts_from_the_configured_start_point(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    start_from: str,
+    elemental_manifest,
+    dataset_method_sidecar,
+) -> None:
+    cfg = _make_cfg(tmp_path)
+    validation_set = tmp_path / "held-out.extxyz"
+    from ase.calculators.singlepoint import SinglePointCalculator
+
+    frame = Atoms("Si", positions=[[0, 0, 0]], cell=[6, 6, 6], pbc=True)
+    frame.calc = SinglePointCalculator(frame, energy=-1.234, forces=np.zeros((1, 3)))
+    ase_write(validation_set, frame)
+    cfg.trainer = TrainerConfig(
+        enabled=True,
+        promote_model=True,
+        promotion_approved=True,
+        train_script=cfg.trainer.train_script,
+        validation_set=validation_set,
+        validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
+        start_from=start_from,
+    )
+    dataset_method_sidecar(validation_set, cfg.trainer.validation_reference_set)
+    cfg.loop.n_iterations = 2
+    foundation = cfg.mlip.hydragnn.logdir
+    trained_model = tmp_path / "candidate-model"
+    trained_model.mkdir()
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    _patch_runtime(
+        loop_mod,
+        monkeypatch,
+        promotion_decision=PromotionDecision(
+            approved=True, reasons=[], candidate_metrics={}, incumbent_metrics={}
+        ),
+    )
+    bases = []
+
+    def retrain(tcfg, hcfg, **kwargs):
+        bases.append(hcfg.logdir)
+        return trained_model
+
+    monkeypatch.setattr(loop_mod, "retrain_hydragnn", retrain)
+    loop_mod.run_active_learning(cfg)
+    # The first candidate is promoted; the second retrain starts from it or again
+    # from the configured model.
+    assert bases == [foundation, trained_model if start_from == "incumbent" else foundation]
 
 
 @pytest.mark.parametrize("reference_defect", [None, "coverage", "backend", "signature"])

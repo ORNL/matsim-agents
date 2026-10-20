@@ -31,6 +31,8 @@ import json
 import logging
 import shutil
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -61,6 +63,7 @@ from matsim_agents.active_learning.uncertainty import select_candidates
 from matsim_agents.backends.dft.base import DFTJobSpec, make_backend
 from matsim_agents.backends.dft.runner import run_dft_batch
 from matsim_agents.backends.mlip.calculator import build_ensemble, make_mlip_calculator
+from matsim_agents.backends.mlip.config import MLIPConfig
 from matsim_agents.backends.mlip.pool import (
     MLIPWorkerPool,
     driver_on_mlip_device,
@@ -542,50 +545,43 @@ def _retrain_candidate(
     state: IterationState,
     n_appended: int,
     placement: Placement,
+    base_mlip: MLIPConfig,
 ) -> None:
-    """Fine-tune a candidate model for the configured backend, if training is enabled."""
-    launch = placement.pool("training").launches[0] if cfg.trainer.enabled else None
-    if cfg.trainer.enabled and cfg.mlip.backend == "hydragnn" and cfg.mlip.hydragnn is not None:
-        new_logdir = retrain_hydragnn(
-            cfg.trainer,
-            cfg.mlip.hydragnn,
-            dataset_path=dataset_path,
-            iteration=i,
-            out_logdir=it_dir / "model",
-            launch=launch,
-            dft_config=cfg.dft,
-            dft_launch=placement.pool("dft").launches[0],
-            reference_root=root / "elemental-training-reference",
-        )
-        state.candidate_model_path = str(new_logdir)
-    elif cfg.mlip.backend == "uma" and cfg.mlip.uma is not None and cfg.trainer.enabled:
-        new_model = retrain_uma(
-            cfg.trainer,
-            cfg.mlip.uma,
-            dataset_path=dataset_path,
-            iteration=i,
-            out_model_dir=it_dir / "model",
-            launch=launch,
-        )
-        state.candidate_model_path = str(new_model)
-    elif cfg.mlip.backend == "mace" and cfg.mlip.mace is not None and cfg.trainer.enabled:
-        new_model = retrain_mace(
-            cfg.trainer,
-            cfg.mlip.mace,
-            dataset_path=dataset_path,
-            iteration=i,
-            out_model_dir=it_dir / "model",
-            launch=launch,
-        )
-        state.candidate_model_path = str(new_model)
-    else:
-        # Frozen foundation model / disabled trainer: keep accumulating labels.
+    """Fine-tune a candidate model for the configured backend, if training is enabled.
+
+    ``base_mlip`` is the model the fine-tune starts from (``trainer.start_from``).
+    """
+    if not cfg.trainer.enabled:
         log.info(
             "Skipping retraining for backend=%s; %d labelled frames accumulated in %s.",
             cfg.mlip.backend,
             n_appended,
             dataset_path,
         )
+        return
+    common = {
+        "dataset_path": dataset_path,
+        "iteration": i,
+        "launch": placement.pool("training").launches[0],
+        "dft_config": cfg.dft,
+        "dft_launch": placement.pool("dft").launches[0],
+        "reference_root": root / "elemental-training-reference",
+    }
+    if base_mlip.backend == "hydragnn" and base_mlip.hydragnn is not None:
+        new_model = retrain_hydragnn(
+            cfg.trainer, base_mlip.hydragnn, out_logdir=it_dir / "model", **common
+        )
+    elif base_mlip.backend == "uma" and base_mlip.uma is not None:
+        new_model = retrain_uma(
+            cfg.trainer, base_mlip.uma, out_model_dir=it_dir / "model", **common
+        )
+    elif base_mlip.backend == "mace" and base_mlip.mace is not None:
+        new_model = retrain_mace(
+            cfg.trainer, base_mlip.mace, out_model_dir=it_dir / "model", **common
+        )
+    else:  # pragma: no cover - guarded by MLIPConfig validation
+        raise ValueError(f"no {base_mlip.backend} configuration to fine-tune")
+    state.candidate_model_path = str(new_model)
 
 
 def _compare_and_promote(
@@ -595,8 +591,12 @@ def _compare_and_promote(
     dataset_path: Path,
     validation_dataset_path: Path,
     comparison_enabled: bool,
+    incumbent_calculator: Any = None,
 ) -> None:
-    """Compare the candidate against the incumbent and promote it when approved."""
+    """Compare the candidate against the incumbent and promote it when approved.
+
+    ``incumbent_calculator`` is the incumbent model when it is still loaded.
+    """
     compare_candidate = comparison_enabled and state.candidate_model_path is not None
     if compare_candidate:
         try:
@@ -609,6 +609,7 @@ def _compare_and_promote(
                 state.candidate_model_path,
                 iteration=i,
                 training_set=dataset_path,
+                incumbent_calculator=incumbent_calculator,
             )
             state.model_comparison = asdict(decision)
         except Exception as exc:  # noqa: BLE001
@@ -631,8 +632,85 @@ def _compare_and_promote(
         _apply_model_override(cfg, state.candidate_model_path)
 
 
+class _SurrogateModels:
+    """The surrogate's calculators and MD worker pool across AL iterations.
+
+    When no other pool uses the mlip devices (``keep``), the calculators and the
+    MD workers stay loaded between iterations and are rebuilt only when the
+    model changes (a promotion). Otherwise they are built each iteration and
+    released before DFT and training, which use the same devices.
+    """
+
+    def __init__(self, placement: Placement, *, keep: bool) -> None:
+        self.placement = placement
+        self.keep = keep
+        self._key: tuple[str, bool] | None = None
+        self._primary: Any = None
+        self._ensemble: list = []
+        self._pool: MLIPWorkerPool | None = None
+
+    def calculators(self, mlip_cfg: MLIPConfig, enable_drop: bool) -> tuple[Any, list]:
+        key = (mlip_cfg.model_dump_json(), enable_drop)
+        if key != self._key:
+            self._drop()
+            self._primary = make_mlip_calculator(mlip_cfg, enable_mc_dropout=enable_drop)
+            self._ensemble = (
+                build_ensemble(mlip_cfg, enable_mc_dropout=enable_drop)
+                if mlip_cfg.ensemble_paths
+                else []
+            )
+            self._key = key
+        return self._primary, self._ensemble
+
+    @contextmanager
+    def md_pool(self) -> Iterator[MLIPWorkerPool]:
+        """Workers running the MD seeds concurrently, one per mlip device."""
+        if not self.keep:
+            # The workers exit afterwards so their memory is free for DFT.
+            with MLIPWorkerPool.from_placement(self.placement) as pool:
+                yield pool
+            return
+        if self._pool is None:
+            self._pool = MLIPWorkerPool.from_placement(self.placement)
+        yield self._pool
+
+    def after_scoring(self) -> None:
+        """Free the mlip devices for DFT and training unless the models stay loaded."""
+        if not self.keep:
+            self._drop()
+
+    def incumbent_calculator(self, mlip_cfg: MLIPConfig) -> Any:
+        """The loaded deterministic incumbent model, for the promotion comparison."""
+        if self.keep and self._key == (mlip_cfg.model_dump_json(), False):
+            return self._primary
+        return None
+
+    def _drop(self) -> None:
+        if self._key is not None:
+            self._primary, self._ensemble, self._key = None, [], None
+            release_device_memory()
+
+    def close(self) -> None:
+        self._drop()
+        if self._pool is not None:
+            self._pool.close()
+            self._pool = None
+
+
 def run_active_learning(cfg: ALConfig) -> None:
     """Run the full AL loop. Idempotent: safe to re-invoke after a job restart."""
+    if (
+        cfg.trainer.enabled
+        and cfg.trainer.training_references is None
+        and cfg.trainer.validation_reference_set is None
+    ):
+        # Callers that edit a loaded configuration skip TrainerConfig validation;
+        # fail before any MD or DFT rather than at the first retrain.
+        raise ValueError(
+            "trainer.enabled=True requires trainer.training_references (or "
+            "trainer.validation_reference_set): every fine-tune trains against "
+            "elemental DFT references"
+        )
     comparison_enabled = _validate_comparison_inputs(cfg)
     root = Path(cfg.loop.out_dir)
     root.mkdir(parents=True, exist_ok=True)
@@ -652,6 +730,8 @@ def run_active_learning(cfg: ALConfig) -> None:
         seed_paths = resolve_seed_structures(cfg.md.seed_source, seeds_dir)
         log.info("Resolved %d seed structure(s) under %s", len(seed_paths), seeds_dir)
 
+        # The configured model, before a resume points cfg.mlip at the last promoted one.
+        foundation_mlip = cfg.mlip.model_copy(deep=True)
         start_iter, resumed_logdir = (0, None)
         if cfg.loop.resume:
             start_iter, resumed_logdir = _scan_resume(root)
@@ -661,117 +741,160 @@ def run_active_learning(cfg: ALConfig) -> None:
                     _apply_model_override(cfg, str(resumed_logdir))
 
         completed_dft = _completed_dft_count(cfg, root)
-        for i in range(start_iter, cfg.loop.n_iterations):
-            if (
-                cfg.loop.max_dft_calculations is not None
-                and completed_dft >= cfg.loop.max_dft_calculations
-            ):
-                log.info("DFT calculation cap reached; ending loop.")
-                break
-            it_dir = _iter_dir(root, i)
-            it_dir.mkdir(parents=True, exist_ok=True)
-            state = IterationState(iteration=i)
-            t_iter0 = time.time()
+        models = _SurrogateModels(
+            placement, keep=not placement.shares_devices("mlip", ("dft", "training"))
+        )
+        log.info(
+            "Surrogate models %s between iterations",
+            "stay loaded" if models.keep else "are reloaded (their devices are shared)",
+        )
+        try:
+            _run_iterations(
+                cfg,
+                placement,
+                models,
+                root=root,
+                start_iter=start_iter,
+                completed_dft=completed_dft,
+                seed_paths=seed_paths,
+                dataset_path=dataset_path,
+                validation_dataset_path=validation_dataset_path,
+                comparison_enabled=comparison_enabled,
+                foundation_mlip=foundation_mlip,
+            )
+        finally:
+            models.close()
 
-            try:
-                # --- 1. Build calculator(s) for this iteration --------------------
-                t0 = time.time()
-                enable_drop = cfg.acquisition.strategy in {"mc_dropout", "ensemble_then_dropout"}
-                primary_calc = make_mlip_calculator(cfg.mlip, enable_mc_dropout=enable_drop)
-                ensemble_calcs: list = []
-                if cfg.mlip.ensemble_paths:
-                    ensemble_calcs = build_ensemble(cfg.mlip, enable_mc_dropout=enable_drop)
-                state.timings_sec["build_calculators"] = time.time() - t0
 
-                # --- 2. Generate candidates via MD --------------------------------
-                t0 = time.time()
-                md_dir = it_dir / "md"
-                # Seeds run concurrently on the mlip pool, one per device; the
-                # workers exit afterwards so their memory is free for DFT.
-                with MLIPWorkerPool.from_placement(placement) as md_pool:
-                    candidates = sample_md_candidates(
-                        cfg.md,
-                        primary_calc,
-                        md_dir,
-                        seed_paths=seed_paths,
-                        mlip_pool=md_pool,
-                        mlip_cfg=cfg.mlip,
-                        enable_mc_dropout=enable_drop,
-                    )
-                state.n_candidates = len(candidates)
-                state.timings_sec["md_sampling"] = time.time() - t0
-                log.info("Iter %d: produced %d MD candidates", i, len(candidates))
+def _run_iterations(
+    cfg: ALConfig,
+    placement: Placement,
+    models: _SurrogateModels,
+    *,
+    root: Path,
+    start_iter: int,
+    completed_dft: int,
+    seed_paths: list,
+    dataset_path: Path,
+    validation_dataset_path: Path,
+    comparison_enabled: bool,
+    foundation_mlip: MLIPConfig,
+) -> None:
+    """Iterations ``start_iter`` .. ``cfg.loop.n_iterations - 1`` of the AL loop."""
+    for i in range(start_iter, cfg.loop.n_iterations):
+        if (
+            cfg.loop.max_dft_calculations is not None
+            and completed_dft >= cfg.loop.max_dft_calculations
+        ):
+            log.info("DFT calculation cap reached; ending loop.")
+            break
+        it_dir = _iter_dir(root, i)
+        it_dir.mkdir(parents=True, exist_ok=True)
+        state = IterationState(iteration=i)
+        t_iter0 = time.time()
 
-                if not candidates:
-                    state.notes = "No candidates produced; ending loop."
-                    state.status = "complete"
-                    _write_state(it_dir, state)
-                    break
+        try:
+            # --- 1. Build calculator(s) for this iteration --------------------
+            t0 = time.time()
+            enable_drop = cfg.acquisition.strategy in {"mc_dropout", "ensemble_then_dropout"}
+            primary_calc, ensemble_calcs = models.calculators(cfg.mlip, enable_drop)
+            state.timings_sec["build_calculators"] = time.time() - t0
 
-                # --- 3. Score & select --------------------------------------------
-                selected = _select_for_labelling(
-                    cfg, candidates, primary_calc, ensemble_calcs, i, completed_dft, state
+            # --- 2. Generate candidates via MD --------------------------------
+            t0 = time.time()
+            md_dir = it_dir / "md"
+            # Seeds run concurrently on the mlip pool, one per device.
+            with models.md_pool() as md_pool:
+                candidates = sample_md_candidates(
+                    cfg.md,
+                    primary_calc,
+                    md_dir,
+                    seed_paths=seed_paths,
+                    mlip_pool=md_pool,
+                    mlip_cfg=cfg.mlip,
+                    enable_mc_dropout=enable_drop,
                 )
-                # The surrogate is not needed again this iteration; free its
-                # device memory before DFT and training use the shared devices.
-                del primary_calc, ensemble_calcs
-                release_device_memory()
+            state.n_candidates = len(candidates)
+            state.timings_sec["md_sampling"] = time.time() - t0
+            log.info("Iter %d: produced %d MD candidates", i, len(candidates))
 
-                # --- 4. DFT labelling (VASP or QE) --------------------------------
-                results, backend = _label_with_dft(cfg, selected, it_dir, i, state, placement)
-                completed_dft += len(results)
-
-                # --- 5. Append to dataset -----------------------------------------
-                labelled_elements, method_signature, n_appended = _append_labelled_frames(
-                    cfg,
-                    results,
-                    selected,
-                    i,
-                    dataset_path,
-                    validation_dataset_path,
-                    backend,
-                    state,
-                )
-
-                # --- 6. (Optional) retrain the surrogate --------------------------
-                if comparison_enabled:
-                    _check_reference_method(cfg, labelled_elements, backend, method_signature)
-                t0 = time.time()
-                if cfg.trainer.enabled:
-                    _collect_training_deferrals(
-                        cfg, state, validation_dataset_path, comparison_enabled
-                    )
-                    if state.training_deferred_reasons:
-                        state.training_status = "deferred"
-                        log.warning(
-                            "Iteration %d training/comparison deferred: %s",
-                            i,
-                            "; ".join(state.training_deferred_reasons),
-                        )
-                        state.timings_sec["retrain"] = time.time() - t0
-                        state.status = "complete"
-                        continue
-                    state.training_status = "running"
-                _retrain_candidate(cfg, dataset_path, i, it_dir, root, state, n_appended, placement)
-                _compare_and_promote(
-                    cfg, state, i, dataset_path, validation_dataset_path, comparison_enabled
-                )
-                state.timings_sec["retrain"] = time.time() - t0
-                if cfg.trainer.enabled:
-                    state.training_status = "completed"
-
+            if not candidates:
+                state.notes = "No candidates produced; ending loop."
                 state.status = "complete"
-            except Exception as exc:  # noqa: BLE001
-                state.status = "failed"
-                if state.training_status == "running":
-                    state.training_status = "failed"
-                state.notes = repr(exc)
-                log.exception("Iteration %d failed", i)
                 _write_state(it_dir, state)
-                raise
-            finally:
-                state.timings_sec["total"] = time.time() - t_iter0
-                _write_state(it_dir, state)
+                break
+
+            # --- 3. Score & select --------------------------------------------
+            selected = _select_for_labelling(
+                cfg, candidates, primary_calc, ensemble_calcs, i, completed_dft, state
+            )
+            # The surrogate is not needed again this iteration; free its device
+            # memory before DFT and training, unless they use other devices.
+            del primary_calc, ensemble_calcs
+            models.after_scoring()
+
+            # --- 4. DFT labelling (VASP or QE) --------------------------------
+            results, backend = _label_with_dft(cfg, selected, it_dir, i, state, placement)
+            completed_dft += len(results)
+
+            # --- 5. Append to dataset -----------------------------------------
+            labelled_elements, method_signature, n_appended = _append_labelled_frames(
+                cfg,
+                results,
+                selected,
+                i,
+                dataset_path,
+                validation_dataset_path,
+                backend,
+                state,
+            )
+
+            # --- 6. (Optional) retrain the surrogate --------------------------
+            if comparison_enabled:
+                _check_reference_method(cfg, labelled_elements, backend, method_signature)
+            t0 = time.time()
+            if cfg.trainer.enabled:
+                _collect_training_deferrals(cfg, state, validation_dataset_path, comparison_enabled)
+                if state.training_deferred_reasons:
+                    state.training_status = "deferred"
+                    log.warning(
+                        "Iteration %d training/comparison deferred: %s",
+                        i,
+                        "; ".join(state.training_deferred_reasons),
+                    )
+                    state.timings_sec["retrain"] = time.time() - t0
+                    state.status = "complete"
+                    continue
+                state.training_status = "running"
+            base_mlip = foundation_mlip if cfg.trainer.start_from == "foundation" else cfg.mlip
+            _retrain_candidate(
+                cfg, dataset_path, i, it_dir, root, state, n_appended, placement, base_mlip
+            )
+            _compare_and_promote(
+                cfg,
+                state,
+                i,
+                dataset_path,
+                validation_dataset_path,
+                comparison_enabled,
+                incumbent_calculator=models.incumbent_calculator(cfg.mlip),
+            )
+            state.timings_sec["retrain"] = time.time() - t0
+            if cfg.trainer.enabled:
+                state.training_status = "completed"
+
+            state.status = "complete"
+        except Exception as exc:  # noqa: BLE001
+            state.status = "failed"
+            if state.training_status == "running":
+                state.training_status = "failed"
+            state.notes = repr(exc)
+            log.exception("Iteration %d failed", i)
+            _write_state(it_dir, state)
+            raise
+        finally:
+            state.timings_sec["total"] = time.time() - t_iter0
+            _write_state(it_dir, state)
 
 
 def _write_state(it_dir: Path, state: IterationState) -> None:

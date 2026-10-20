@@ -553,15 +553,18 @@ relaxations concurrently:
   concurrently on the `mlip` pool, one per device, and candidates are returned
   in seed order; the result is identical to running them one after another.
   Trajectories differ from runs made before this change, which drew every seed
-  from one shared stream. The MD workers exit after sampling so their device
-  memory is free for DFT. Shipped AL configs and the `active-learning-sequential`
-  layouts declare an `mlip` pool on the first node, sharing devices with `dft`
-  and `training`.
+  from one shared stream. When the `mlip` pool shares devices with `dft` or
+  `training`, the MD workers exit after sampling so their device memory is free
+  for DFT; when its devices are its own, the workers and the driver's
+  calculators stay loaded across iterations and reload only after a promotion
+  ([Keeping the surrogate loaded](scientific-workflows.md#keeping-the-surrogate-loaded-across-iterations)).
+  Shipped AL configs and the `active-learning-sequential` layouts declare an
+  `mlip` pool on the first node, sharing devices with `dft` and `training`.
 - **Driver device.** MLIP work done in the driver itself (AL model loading,
   single-seed MD, acquisition scoring, candidate comparison) runs with the
   `mlip` pool's first device as the current device and its `memory_fraction`
   cap (`driver_on_mlip_device`), so it no longer lands on device 0. The AL loop
-  frees its surrogate after candidate selection, and campaign and chat
+  frees its surrogate after candidate selection when its devices are shared, and campaign and chat
   exploration workers are stopped before active learning starts and restarted
   for reevaluation, so no exploration model stays resident during DFT or
   training on shared devices.

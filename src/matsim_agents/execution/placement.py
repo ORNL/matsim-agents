@@ -10,7 +10,7 @@ environment, and derived launch values. See ``docs/resource-dispatch.md``.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -290,6 +290,23 @@ class Placement(_StrictModel):
             return self.pools[name]
         except KeyError:
             raise KeyError(f"placement has no pool {name!r}") from None
+
+    def shares_devices(self, pool: str, others: Iterable[str]) -> bool:
+        """Whether a device of ``pool`` is also placed in one of ``others``.
+
+        A missing ``pool`` counts as sharing: its work runs wherever the process is.
+        """
+
+        if pool not in self.pools:
+            return True
+
+        def units(name: str) -> set[tuple[str, int]]:
+            return {
+                (item.host, device) for item in self.pools[name].slices for device in item.devices
+            }
+
+        mine = units(pool)
+        return any(other in self.pools and mine & units(other) for other in others)
 
     def to_json(self) -> str:
         return self.model_dump_json(indent=2)

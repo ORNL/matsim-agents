@@ -16,18 +16,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.parametrize(
-    ("retrain", "promote", "compare", "reference_exists", "blocked"),
+    ("retrain", "config_references", "reference_exists", "blocked"),
     [
-        ("1", "0", True, False, True),
-        ("1", "1", False, False, True),
-        ("1", "0", True, True, False),
-        ("1", "0", False, False, False),
-        ("0", "0", True, False, False),
+        ("1", False, False, True),
+        ("1", False, True, False),
+        ("1", True, False, False),
+        ("0", False, False, False),
     ],
 )
 def test_campaign_reference_preflight_precedes_launch(
-    tmp_path, retrain, promote, compare, reference_exists, blocked
+    tmp_path, retrain, config_references, reference_exists, blocked
 ):
+    """Retraining needs elemental DFT references, checked before anything launches."""
     repo = tmp_path / "repo"
     setup = repo / "deployments/perlmutter/setup"
     setup.mkdir(parents=True)
@@ -37,7 +37,11 @@ def test_campaign_reference_preflight_precedes_launch(
     (venv / "bin").mkdir(parents=True)
     (venv / "bin/python3").symlink_to(sys.executable)
     config = tmp_path / "al.yaml"
-    config.write_text(f"trainer:\n  compare_after_training: {str(compare).lower()}\n")
+    config.write_text(
+        "trainer:\n  training_references: {manifest: refs.json}\n"
+        if config_references
+        else "trainer: {}\n"
+    )
     reference = tmp_path / "elemental.json"
     if reference_exists:
         reference.write_text("{}")
@@ -47,7 +51,6 @@ def test_campaign_reference_preflight_precedes_launch(
         "MATSIM_PERLMUTTER_VENV": str(venv),
         "MATSIM_CAMPAIGN_MODE": "dft",
         "MATSIM_CAMPAIGN_RETRAIN": retrain,
-        "MATSIM_CAMPAIGN_PROMOTE_MODEL": promote,
         "MATSIM_CAMPAIGN_AL_CONFIG": str(config),
         "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET": str(reference),
         "TEST_PREFLIGHT_MARKER": str(marker),
@@ -68,7 +71,7 @@ def test_campaign_reference_preflight_precedes_launch(
     assert result.returncode == (2 if blocked else 37), result.stderr
     assert marker.exists() is not blocked
     if blocked:
-        assert "retraining energy comparison requires" in result.stderr
+        assert "retraining requires elemental DFT references" in result.stderr
 
 
 @pytest.mark.parametrize("layout", ["nested", "symbol", "mixed", "missing"])

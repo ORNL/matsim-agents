@@ -47,7 +47,7 @@
 # foundation family. MACE_LORA (0|1|both; default 0) adds the native LoRA
 # fine-tune variant (both = naive + LoRA per size). Extra MACE knobs
 # (MACE_PRECISION, MACE_EPOCHS, MACE_LR, MACE_WEIGHT_DECAY,
-# MACE_FREEZE_BACKBONE, MACE_DISPERSION, MACE_LORA_RANK, MACE_LORA_ALPHA) are
+# MACE_FREEZE_BACKBONE, MACE_LORA_RANK, MACE_LORA_ALPHA) are
 # forwarded when set.
 #
 # UMA_VARIANTS (comma-separated; default 'full') selects UMA fine-tune modes:
@@ -180,7 +180,6 @@ for backend in "${BACKEND_LIST[@]}"; do
           [[ -n "${MACE_LR:-}" ]]             && exports+=",MACE_LR=${MACE_LR}"
           [[ -n "${MACE_WEIGHT_DECAY:-}" ]]   && exports+=",MACE_WEIGHT_DECAY=${MACE_WEIGHT_DECAY}"
           [[ -n "${MACE_FREEZE_BACKBONE:-}" ]] && exports+=",MACE_FREEZE_BACKBONE=${MACE_FREEZE_BACKBONE}"
-          [[ -n "${MACE_DISPERSION:-}" ]]     && exports+=",MACE_DISPERSION=${MACE_DISPERSION}"
           [[ -n "${MACE_LORA_RANK:-}" ]]      && exports+=",MACE_LORA_RANK=${MACE_LORA_RANK}"
           [[ -n "${MACE_LORA_ALPHA:-}" ]]     && exports+=",MACE_LORA_ALPHA=${MACE_LORA_ALPHA}"
         fi

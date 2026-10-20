@@ -147,8 +147,13 @@ class AcquisitionConfig(BaseModel):
     min_uncertainty_eV_per_A: float = 0.0  # below this, skip labelling
 
 
-class HydraGNNTrainingReferences(BaseModel):
-    """Verified manifest or approved elemental reference calculation plan."""
+class TrainingReferences(BaseModel):
+    """Elemental DFT references every fine-tune trains against.
+
+    HydraGNN trains on formation energies relative to them; UMA and MACE use them
+    to put the DFT labels on their foundation model's energy scale. Give a
+    verified manifest or an approved elemental reference calculation plan.
+    """
 
     manifest: Path | None = None
     phase_plan: Path | None = None
@@ -158,23 +163,24 @@ class HydraGNNTrainingReferences(BaseModel):
     max_dft_calculations: int = Field(0, ge=0)
 
     @model_validator(mode="after")
-    def _reference_source(self) -> HydraGNNTrainingReferences:
+    def _reference_source(self) -> TrainingReferences:
         if (self.manifest is None) == (self.phase_plan is None):
-            raise ValueError("Specify exactly one HydraGNN reference manifest or phase_plan")
+            raise ValueError("Specify exactly one training reference manifest or phase_plan")
         source = self.manifest if self.manifest is not None else self.phase_plan
         if source is None or not source.is_file():
-            raise ValueError(f"HydraGNN reference input does not exist: {source}")
+            raise ValueError(f"Training reference input does not exist: {source}")
         if self.phase_plan is not None and (self.cache_dir is None or not self.phases_approved):
-            raise ValueError("HydraGNN phase_plan requires cache_dir and phases_approved")
+            raise ValueError("Training reference phase_plan requires cache_dir and phases_approved")
         return self
 
 
 class TrainerConfig(BaseModel):
     """How to retrain the MLIP at the end of each AL iteration.
 
-    HydraGNN and UMA both use a user-supplied training script/launcher. For UMA,
-    leave ``enabled: false`` to keep using the frozen foundation model and simply
-    accumulate labels for offline fine-tuning.
+    Every backend fine-tunes against elemental DFT references
+    (``training_references``, or ``validation_reference_set``), which are
+    checked when the configuration is loaded. Leave ``enabled: false`` to keep
+    the foundation model and only accumulate labels.
     """
 
     enabled: bool = Field(
@@ -206,7 +212,28 @@ class TrainerConfig(BaseModel):
             "its own elemental energies; complete element coverage is required."
         ),
     )
-    hydragnn_training_references: HydraGNNTrainingReferences | None = None
+    training_references: TrainingReferences | None = Field(
+        None,
+        description=(
+            "Elemental DFT references for training; validation_reference_set is used when "
+            "unset. One of them is required when enabled=True."
+        ),
+    )
+    finetune_mode: Literal["lora", "full"] = Field(
+        "lora",
+        description=(
+            "How UMA and MACE fine-tunes adapt the model: low-rank adapters, which keep "
+            "more of the pretraining on small AL datasets, or all weights. HydraGNN "
+            "uses its fine-tuner's own strategy."
+        ),
+    )
+    start_from: Literal["incumbent", "foundation"] = Field(
+        "incumbent",
+        description=(
+            "Model each retrain starts from: the current (last promoted) model, or the "
+            "configured foundation model, so successive fine-tunes do not compound."
+        ),
+    )
     validation_fraction: float = Field(
         0.0,
         ge=0.0,
@@ -278,6 +305,16 @@ class TrainerConfig(BaseModel):
                 )
         if self.enabled and self.train_script is None:
             raise ValueError("trainer.enabled=True requires trainer.train_script.")
+        if (
+            self.enabled
+            and self.training_references is None
+            and self.validation_reference_set is None
+        ):
+            raise ValueError(
+                "trainer.enabled=True requires trainer.training_references (or "
+                "trainer.validation_reference_set): every fine-tune trains against "
+                "elemental DFT references"
+            )
         if self.promote_model and not self.enabled:
             raise ValueError("trainer.promote_model=True requires trainer.enabled=True.")
         if self.promote_model and not self.promotion_approved:

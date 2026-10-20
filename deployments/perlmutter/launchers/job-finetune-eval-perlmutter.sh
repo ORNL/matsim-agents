@@ -207,7 +207,6 @@ else
   fi
   EXTRA_ARGS+=(--mace-precision "${MACE_PRECISION}")
   [[ -n "${MACE_EPOCHS:-}" ]]               && EXTRA_ARGS+=(--mace-epochs "${MACE_EPOCHS}")
-  [[ "${MACE_DISPERSION:-0}" == "1" ]]      && EXTRA_ARGS+=(--mace-dispersion)
   [[ -n "${MACE_LR:-}" ]]                   && EXTRA_ARGS+=(--mace-lr "${MACE_LR}")
   [[ -n "${MACE_WEIGHT_DECAY:-}" ]]         && EXTRA_ARGS+=(--mace-weight-decay "${MACE_WEIGHT_DECAY}")
   [[ "${MACE_FREEZE_BACKBONE:-0}" == "1" ]] && EXTRA_ARGS+=(--mace-freeze-backbone)

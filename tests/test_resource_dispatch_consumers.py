@@ -96,7 +96,13 @@ def test_enabled_trainer_requires_training_pool(tmp_path):
     script = tmp_path / "finetune_uma.py"
     script.touch()
     resources = {"preset": "perlmutter-gpu", "pools": {"dft": {"nodes": "all"}}}
-    trainer = {"enabled": True, "train_script": str(script)}
+    references = tmp_path / "elemental-references.json"
+    references.touch()
+    trainer = {
+        "enabled": True,
+        "train_script": str(script),
+        "validation_reference_set": str(references),
+    }
     with pytest.raises(ValidationError, match="requires resources.pools.training"):
         ALConfig.model_validate(_al(tmp_path, resources=resources, trainer=trainer))
 

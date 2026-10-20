@@ -26,7 +26,10 @@
 #   PROJECT_ROOT   matsim-agents checkout
 #   MATSIM_CAMPAIGN_MODE=single-llm-once|debate-only|uma-only|dft (default: dft)
 # Optional retraining controls:
-#   MATSIM_CAMPAIGN_RETRAIN=1              train a candidate UMA checkpoint
+#   MATSIM_CAMPAIGN_RETRAIN=1              train a candidate UMA checkpoint; needs
+#                                          elemental DFT references to train against:
+#   MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET=/path/to/elemental-references.json
+#                                          (or trainer.training_references in the AL config)
 #   MATSIM_CAMPAIGN_TRAIN_EPOCHS=5         fine-tuning epochs per formula
 #   MATSIM_CAMPAIGN_PROMOTE_MODEL=1        approve promotion and reevaluation
 #   MATSIM_CAMPAIGN_PROMOTION_VALIDATION_SET=/path/to/held-out.extxyz
@@ -74,22 +77,19 @@ REPO="${PROJECT_ROOT:?export PROJECT_ROOT to the matsim-agents checkout}"
 PYTHON="${MATSIM_PERLMUTTER_VENV:-$REPO/.venv}/bin/python3"
 AL_CONFIG="${MATSIM_CAMPAIGN_AL_CONFIG:-$REPO/deployments/perlmutter/jobs/config/campaign-nb-ta-o-uma-qe.yaml}"
 if [[ "$CAMPAIGN_MODE" == "dft" && "${MATSIM_CAMPAIGN_RETRAIN:-0}" == "1" ]]; then
-  "$PYTHON" - "$AL_CONFIG" "${MATSIM_CAMPAIGN_PROMOTE_MODEL:-0}" \
-    "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" <<'PY'
+  "$PYTHON" - "$AL_CONFIG" "${MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET:-}" <<'PY'
 import sys
 from pathlib import Path
 
 import yaml
 
 config = yaml.safe_load(Path(sys.argv[1]).read_text())
-compares_energy = sys.argv[2] == "1" or config.get("trainer", {}).get(
-    "compare_after_training", False
-)
-if compares_energy and not Path(sys.argv[3]).is_file():
+has_references = config.get("trainer", {}).get("training_references") is not None
+if not has_references and not Path(sys.argv[2]).is_file():
     print(
-        "ERROR: retraining energy comparison requires "
+        "ERROR: retraining requires elemental DFT references to train against: "
         "MATSIM_CAMPAIGN_PROMOTION_VALIDATION_REFERENCE_SET "
-        "(DFT-labelled elemental JSON manifest)",
+        "(DFT-labelled elemental JSON manifest) or trainer.training_references",
         file=sys.stderr,
     )
     sys.exit(2)

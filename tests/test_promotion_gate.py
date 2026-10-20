@@ -52,8 +52,11 @@ def _trainer(tmp_path: Path) -> TrainerConfig:
     train_script.touch()
     validation_set = tmp_path / "held-out.extxyz"
     validation_set.touch()
+    references = tmp_path / "elemental-references.json"
+    references.touch()
     return TrainerConfig(
         enabled=True,
+        validation_reference_set=references,
         promote_model=True,
         promotion_approved=True,
         train_script=train_script,

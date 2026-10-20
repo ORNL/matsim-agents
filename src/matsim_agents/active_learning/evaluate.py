@@ -35,6 +35,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from ase import Atoms
@@ -208,8 +209,11 @@ def evaluate_frames(
     model_path: str | None = None,
     test_set_label: str = "",
     elemental_reference_manifest: Path | None = None,
+    calculator: Any = None,
 ) -> tuple[EvalMetrics, dict[str, np.ndarray]]:
     """Run single-points with ``mlip_cfg`` and score them against references.
+
+    ``calculator`` is ``mlip_cfg``'s model when it is already loaded.
 
     Returns ``(metrics, parity)`` where ``parity`` holds the raw arrays for
     scatter plots: per-atom reference/predicted energies and flattened
@@ -238,7 +242,7 @@ def evaluate_frames(
             reference_element_method_signatures=manifest.get("element_method_signatures"),
             require_sidecar=True,
         )
-    calc = make_mlip_calculator(mlip_cfg)
+    calc = calculator if calculator is not None else make_mlip_calculator(mlip_cfg)
     references = (
         predict_elemental_references(
             elemental_reference_manifest,
@@ -384,8 +388,12 @@ def evaluate_promotion_candidate(
     *,
     iteration: int,
     training_set: Path,
+    incumbent_calculator: Any = None,
 ) -> PromotionDecision:
-    """Evaluate incumbent and candidate models on the configured held-out set."""
+    """Evaluate incumbent and candidate models on the configured held-out set.
+
+    ``incumbent_calculator`` is the incumbent model when it is already loaded.
+    """
     validation_set = cfg.trainer.validation_set
     if validation_set is None:
         raise ValueError("model promotion requires trainer.validation_set")
@@ -439,6 +447,7 @@ def evaluate_promotion_candidate(
         iteration=iteration,
         test_set_label=str(validation_set),
         elemental_reference_manifest=reference_path,
+        calculator=incumbent_calculator,
     )
     candidate_metrics, _ = evaluate_frames(
         candidate_cfg,

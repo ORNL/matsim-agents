@@ -15,8 +15,8 @@ from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
 
 from matsim_agents.active_learning.config import TrainerConfig
-from matsim_agents.active_learning.hydragnn_references import resolve_training_references
 from matsim_agents.active_learning.trainer import retrain_hydragnn
+from matsim_agents.active_learning.training_references import resolve_training_references
 from matsim_agents.backends.mlip.config import HydraGNNConfig
 from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 from matsim_agents.datasets.energy_references import predict_elemental_references
@@ -420,7 +420,7 @@ def test_training_reference_is_frozen_independently_of_comparison(tmp_path, trai
         train_script=tmp_path / "train.py",
         compare_after_training=False,
         promote_model=False,
-        hydragnn_training_references={"manifest": manifest},
+        training_references={"manifest": manifest},
     )
     root = tmp_path / "frozen"
     first = resolve_training_references(config, dataset, dft_config=None, reference_root=root)
@@ -451,7 +451,7 @@ def test_manifest_freeze_includes_label_scope_and_filters_superset(
         train_script=tmp_path / "train.py",
         compare_after_training=False,
         promote_model=False,
-        hydragnn_training_references={"manifest": manifest},
+        training_references={"manifest": manifest},
     )
 
     frozen = resolve_training_references(
@@ -483,7 +483,7 @@ def test_training_reference_manifest_additive_extension_across_iterations(
         train_script=tmp_path / "train.py",
         compare_after_training=False,
         promote_model=False,
-        hydragnn_training_references={"manifest": manifest},
+        training_references={"manifest": manifest},
     )
     root = tmp_path / "frozen"
     res1 = resolve_training_references(config, dataset1, dft_config=None, reference_root=root)
@@ -539,9 +539,12 @@ def test_training_reference_manifest_additive_extension_across_iterations(
 
 def test_training_without_comparison_still_requires_references(tmp_path, training_inputs):
     dataset, _ = training_inputs
+    with pytest.raises(ValueError, match="requires trainer.training_references"):
+        TrainerConfig(enabled=True, train_script=tmp_path / "train.py")
+    # A configuration edited after loading skips validation; resolution still refuses.
     with pytest.raises(ValueError, match="even when"):
         resolve_training_references(
-            TrainerConfig(enabled=True, train_script=tmp_path / "train.py"),
+            TrainerConfig.model_construct(enabled=True, train_script=tmp_path / "train.py"),
             dataset,
             dft_config=None,
             reference_root=tmp_path / "frozen",
@@ -620,9 +623,9 @@ def test_retrain_hook_forwards_references_and_verifies_output(
         launch=LAUNCH,
     )
     assert result == output
-    assert len(built_calculators) == 1
-    assert built_calculators[0].logdir == output
-    assert built_calculators[0].checkpoint is None
+    # The output is verified from its recorded hashes; the promotion comparison
+    # is what loads the model.
+    assert built_calculators == []
     if launcher:
         assert argv[0:3] == ["bash", str(config.train_launcher), str(script)]
         assert argv[3:10] == [
@@ -749,7 +752,7 @@ def test_retrain_rejects_bundle_bound_to_different_elemental_manifest(
 def test_retrain_rejects_multirank_builtin_before_resolving_references(
     tmp_path, training_inputs, monkeypatch
 ):
-    import matsim_agents.active_learning.hydragnn_references as references
+    import matsim_agents.active_learning.training_references as references
 
     dataset, manifest = training_inputs
     script = tmp_path / "finetune_hydragnn_newhead.py"
@@ -845,12 +848,12 @@ def test_routed_checkpoint_rejects_routed_branch_mismatches(tmp_path, training_i
 
 
 def test_retrain_rejects_non_builtin_train_script(tmp_path, training_inputs):
-    dataset, _ = training_inputs
+    dataset, manifest = training_inputs
     script = tmp_path / "train.py"
     script.touch()
     with pytest.raises(ValueError, match="built-in HydraGNN fine-tuners"):
         retrain_hydragnn(
-            TrainerConfig(enabled=True, train_script=script),
+            TrainerConfig(enabled=True, train_script=script, validation_reference_set=manifest),
             HydraGNNConfig(logdir=tmp_path),
             dataset_path=dataset,
             iteration=0,
