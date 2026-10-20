@@ -21,7 +21,7 @@ resources:
           nodes: 4
           tensor_parallel_size: 16
           max_model_len: 32768
-          startup_timeout_s: 3600
+          startup_timeout_s: 5400
           launcher: [bash, "${LAUNCHER}"]
           extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
         - name: glm-4.7
@@ -31,7 +31,7 @@ resources:
           nodes: 4
           tensor_parallel_size: 16
           max_model_len: 32768
-          startup_timeout_s: 3600
+          startup_timeout_s: 5400
           launcher: [bash, "${LAUNCHER}"]
           extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
         - name: glm-4.7-flash
@@ -41,7 +41,7 @@ resources:
           nodes: 1
           tensor_parallel_size: 4
           max_model_len: 32768
-          startup_timeout_s: 3600
+          startup_timeout_s: 5400
           launcher: [bash, "${LAUNCHER}"]
           extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
         - name: qwen3-235b-a22b-instruct-2507
@@ -51,7 +51,7 @@ resources:
           nodes: 2
           tensor_parallel_size: 8
           max_model_len: 32768
-          startup_timeout_s: 3600
+          startup_timeout_s: 5400
           launcher: [bash, "${LAUNCHER}"]
           extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
         - name: qwen3-235b-a22b-thinking-2507
@@ -61,7 +61,7 @@ resources:
           nodes: 2
           tensor_parallel_size: 8
           max_model_len: 32768
-          startup_timeout_s: 3600
+          startup_timeout_s: 5400
           launcher: [bash, "${LAUNCHER}"]
           extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
         - name: gemma-4-31b-it
@@ -71,7 +71,7 @@ resources:
           nodes: 1
           tensor_parallel_size: 4
           max_model_len: 32768
-          startup_timeout_s: 3600
+          startup_timeout_s: 5400
           launcher: [bash, "${LAUNCHER}"]
           extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
         - name: gemma-4-26b-a4b-it
@@ -81,7 +81,7 @@ resources:
           nodes: 1
           tensor_parallel_size: 4
           max_model_len: 32768
-          startup_timeout_s: 3600
+          startup_timeout_s: 5400
           launcher: [bash, "${LAUNCHER}"]
           extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]
     mlip: {nodes: 1, devices: all, share_with: [dft]}

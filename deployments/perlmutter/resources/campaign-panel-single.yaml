@@ -1,0 +1,23 @@
+# Single-model formula discovery (MATSIM_CAMPAIGN_MODE=single-llm-once, sbatch -N 1):
+# GLM-4.7-Flash on one Perlmutter node.
+#   matsim-agents resources plan deployments/perlmutter/resources/campaign-panel-single.yaml
+preview: {nodes: 1}
+vars:
+  MODELS: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}
+  LAUNCHER: ${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/perlmutter/launchers/vllm-server-perlmutter.sh
+resources:
+  preset: perlmutter-gpu
+  pools:
+    llm:
+      nodes: 1
+      servers:
+        - name: glm-4.7-flash
+          kind: managed-vllm
+          model: ${MODELS}/GLM-4.7-Flash
+          served_name: zai-org/GLM-4.7-Flash
+          nodes: 1
+          tensor_parallel_size: 4
+          max_model_len: 32768
+          startup_timeout_s: 5400
+          launcher: [bash, "${LAUNCHER}"]
+          extra_args: [--dtype, bfloat16, --trust-remote-code, --enforce-eager]

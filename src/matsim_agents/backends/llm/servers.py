@@ -135,8 +135,12 @@ class _ManagedServer:
         self.local = placement.scheduler in {"local", "preview"} or (
             _short_host(self.slice.host) == _short_host(local_host)
         )
-        bind = "127.0.0.1" if self.local else "0.0.0.0"
-        address = "127.0.0.1" if self.local else self.slice.host
+        # In a multi-node allocation, steps on other nodes may use the server too
+        # (e.g. a campaign's execution node), so it listens on all interfaces and
+        # is advertised by host name; on one node it stays on the loopback.
+        private = self.local and len(placement.nodes) == 1
+        bind = "127.0.0.1" if private else "0.0.0.0"
+        address = "127.0.0.1" if private else self.slice.host
         self.base_url = f"http://{address}:{server.port}/v1"
         self.log_path = log_dir / f"{server.name}.log"
         self.api_key = api_key_from_env(server.api_key_env, owner=f"LLM server {server.name!r}")

@@ -41,7 +41,9 @@ def test_multi_node_server_runs_its_launcher_on_the_head_node(tmp_path):
     placement = _placement([_server(tensor_parallel_size=8)])
     server = placement.pool("llm").server("big")
     managed = _ManagedServer(server, placement, log_dir=tmp_path, local_host="n0")
-    assert managed.local and managed.base_url == "http://127.0.0.1:8000/v1"
+    # Other nodes of the allocation can reach it by host name.
+    assert managed.local and managed.base_url == "http://n0:8000/v1"
+    assert managed.command[managed.command.index("--host") + 1] == "0.0.0.0"
     assert managed.env["MATSIM_SERVER_SLICES"] == "n0=0,1,2,3;n1=0,1,2,3"
     assert managed.env["MATSIM_SERVER_RAY_PORT"] == "9000"
     argv = managed.command
@@ -163,3 +165,18 @@ def test_launcher_fails_when_the_cluster_does_not_form(stub_tools, monkeypatch):
     calls = record.read_text().splitlines()
     assert not any(call.startswith("vllm serve") for call in calls)
     assert any(call.startswith("ray stop --force") for call in calls)
+
+
+def test_single_node_allocations_keep_servers_on_the_loopback(tmp_path):
+    plan = ResourcePlan.model_validate(
+        {
+            "preset": "perlmutter-gpu",
+            "pools": {"llm": {"servers": [{**_server(), "nodes": 1}]}},
+        }
+    )
+    placement = plan.resolve(Allocation("slurm", ("n0",), 4))
+    managed = _ManagedServer(
+        placement.pool("llm").server("big"), placement, log_dir=tmp_path, local_host="n0"
+    )
+    assert managed.base_url == "http://127.0.0.1:8000/v1"
+    assert managed.command[managed.command.index("--host") + 1] == "127.0.0.1"

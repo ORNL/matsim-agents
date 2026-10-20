@@ -666,9 +666,10 @@ named endpoints:
   their own `srun`/`mpiexec` step for a server on the driver's node; for a
   server matsim-agents already launched on another node (`MATSIM_SERVER_IN_STEP=1`)
   they run vLLM directly instead of nesting a second step.
-- **Not yet migrated.** Campaign formula discovery and the all-model debate
-  benchmarks serve multi-node models (phase 5), and the Frontier and Aurora
-  discovery-chat jobs still start their servers in their job scripts.
+- **Not yet migrated.** The all-model debate benchmarks
+  (`job-all-local-model-debate-perlmutter.sh`, `job-al-debate-portability-perlmutter.sh`)
+  and the Frontier and Aurora discovery-chat jobs still start their servers in
+  their job scripts (campaign formula discovery moved in phase 5, section 16).
 
 ## 16. Phase 5 implementation notes
 
@@ -692,8 +693,16 @@ A `managed-vllm` server may span several nodes:
   node, with pipeline stages across nodes (`--pipeline-parallel-size`). The
   campaign panel sets tensor parallelism over all of a server's GPUs, as the
   qualified campaign runs used.
-- **Layouts.** `campaign-panel.yaml` describes the seven-model 15-node panel
-  with the Perlmutter launcher; `llm-check-multinode.yaml` serves
+- **Advertised address.** In a multi-node allocation every managed server
+  listens on all interfaces and is advertised by host name, because steps on
+  other nodes (the campaign's execution node) use it; in a one-node allocation
+  servers stay on the loopback.
+- **Campaign job.** `job-campaign-formula-discovery-all-models-perlmutter.sh`
+  serves its panel with `matsim-agents resources serve` from
+  `campaign-panel.yaml` (16 nodes), `campaign-panel-debate.yaml` (debate-only,
+  15 nodes), or `campaign-panel-single.yaml` (single-llm-once, 1 node), and
+  reruns itself for the campaign stage with the published endpoints as its
+  `--model` panel. `llm-check-multinode.yaml` serves
   Qwen3-235B-A22B-Instruct-2507 across two nodes for qualification.
 - **Other facilities.** A multi-node server without a launcher is rejected. The
   Frontier and Aurora launchers serve on one node; their multi-node recipes
