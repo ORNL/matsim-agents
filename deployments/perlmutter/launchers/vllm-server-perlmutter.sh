@@ -57,8 +57,12 @@ NODE_GPUS="${MATSIM_NODE_DEVICES:-4}"
 NODE_CPUS="${MATSIM_NODE_CORES:-64}"
 HEAD_IP=$(hostname -I | awk '{print $1}')
 export RAY_ADDRESS="${HEAD_IP}:${RAY_PORT}"
-# Short, node-local Ray directory: Ray's Unix sockets have a path-length limit.
+# Every Ray node runs under ray-node.sh: its session directory is node-local
+# scratch (a short path, for Ray's Unix sockets), and its logs are copied to
+# RAY_LOGS/<host> on shared storage when it stops.
+RAY_NODE="$REPO/deployments/common/ray-node.sh"
 RAY_TMP="/tmp/r${SLURM_JOB_ID:-0}.${RAY_PORT}"
+RAY_LOGS="${MATSIM_SERVER_LOG_DIR:?matsim-agents sets MATSIM_SERVER_LOG_DIR}"
 
 count() { local IFS=,; set -- $1; echo $#; }
 EXPECTED=0
@@ -95,8 +99,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "[ray] head ${HEAD_IP}:${RAY_PORT} with ${HEAD_GPUS} GPU(s); ${#SLICES[@]} node(s), ${EXPECTED} GPU(s)"
-rm -rf "$RAY_TMP"
-"$VLLM_VENV/bin/ray" start --head --node-ip-address="$HEAD_IP" --port="$RAY_PORT" \
+"$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start --head \
+  --node-ip-address="$HEAD_IP" --port="$RAY_PORT" \
   --temp-dir="$RAY_TMP" --include-dashboard=false \
   --num-cpus="$NODE_CPUS" --num-gpus="$HEAD_GPUS" --block &
 CHILDREN+=("$!")
@@ -108,13 +112,13 @@ for slice in "${SLICES[@]:1}"; do
   echo "[ray] worker on ${host} (GPUs ${devices})"
   # Take the node's GPUs and expose only the placed ones (Slurm picks a step's
   # GPUs itself); --overlap so other pools' steps on the node are not blocked.
-  # The JIT and temporary directories exported above are node-local paths, so
-  # the worker creates them on its own node before Ray starts.
+  # The worker creates the node-local directories exported above on its own
+  # node; srun forwards SIGTERM to it when the cluster stops.
   srun --nodes=1 --ntasks=1 --nodelist="$host" --overlap \
     --gpus-per-node="$NODE_GPUS" --gpu-bind=none --cpus-per-task="$NODE_CPUS" --export=ALL \
     env "CUDA_VISIBLE_DEVICES=${devices}" \
     bash -c 'mkdir -p "$TMPDIR" "$TRITON_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR" "$VLLM_CACHE_ROOT" && exec "$@"' worker \
-    "$VLLM_VENV/bin/ray" start --address="$RAY_ADDRESS" --temp-dir="$RAY_TMP" \
+    "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start --address="$RAY_ADDRESS" --temp-dir="$RAY_TMP" \
       --num-cpus="$NODE_CPUS" --num-gpus="$(count "$devices")" --block &
   CHILDREN+=("$!")
 done

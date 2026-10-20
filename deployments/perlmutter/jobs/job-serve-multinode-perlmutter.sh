@@ -195,6 +195,8 @@ cleanup() {
     "$VLLM_VENV/bin/ray" stop --force 2>/dev/null || true
     for pid in "${WORKER_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
     [[ -n "$RAY_HEAD_PID" ]] && kill "$RAY_HEAD_PID" 2>/dev/null || true
+    # Each node saves its Ray logs as it stops (ray-node.sh).
+    for pid in "${WORKER_PIDS[@]}" $RAY_HEAD_PID; do wait "$pid" 2>/dev/null || true; done
   fi
   echo "[cleanup] Done."
 }
@@ -217,11 +219,14 @@ if [[ "$N_NODES" -gt 1 ]]; then
   # Keep this root deliberately short: Ray appends a timestamped session path,
   # and Linux AF_UNIX socket paths may not exceed 107 bytes. The Slurm step ID
   # distinguishes concurrent model clusters within a coordinated allocation.
+  # It is node-local scratch: ray-node.sh copies each node's Ray logs to
+  # RAY_LOGS/<host> when the node stops and then removes it.
   RAY_TMPDIR="/tmp/r${SLURM_JOB_ID:-$$}.${SLURM_STEP_ID:-0}"
+  RAY_NODE="$REPO/deployments/common/ray-node.sh"
+  RAY_LOGS="$RUN_DIR/ray-logs"
   for attempt in 1 2 3; do
     echo "[ray] Starting head node at $RAY_ADDRESS (attempt $attempt/3) ..."
-    rm -rf "$RAY_TMPDIR"
-    "$VLLM_VENV/bin/ray" start \
+    "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start \
       --head \
       --node-ip-address="$HEAD_NODE_IP" \
       --port="$RAY_PORT" \
@@ -249,8 +254,9 @@ if [[ "$N_NODES" -gt 1 ]]; then
     srun --nodes=1 --ntasks=1 --ntasks-per-node=1 \
          -w "$node" \
          --export=ALL \
-      "$VLLM_VENV/bin/ray" start \
+      "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start \
         --address="$RAY_ADDRESS" \
+        --temp-dir="$RAY_TMPDIR" \
         --num-cpus="$NCPUS" \
         --num-gpus="$GPUS_PER_NODE" \
         --block &

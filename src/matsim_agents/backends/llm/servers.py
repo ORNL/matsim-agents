@@ -181,6 +181,11 @@ class _ManagedServer:
             "MATSIM_SERVER_RAY_PORT": str(port + 1000),
             "MATSIM_NODE_DEVICES": str(self.geometry.devices_per_node),
             "MATSIM_NODE_CORES": str(self.geometry.cores_per_node),
+            # Ray keeps its session (sockets and logs) on node-local storage;
+            # the launcher copies each node's Ray logs here when it stops.
+            "MATSIM_SERVER_LOG_DIR": str(
+                self.log_path.with_name(f"{self.server.name}-ray").absolute()
+            ),
         }
 
     def _command(self, placement: Placement, bind: str) -> list[str]:
@@ -263,6 +268,9 @@ class _ManagedServer:
         if process is None or process.poll() is not None:
             return
         log.info("Stopping LLM server %s (pid %d)", self.server.name, process.pid)
+        if len(self.server.slices) > 1:
+            # Stopping the Ray cluster and saving every node's Ray logs takes longer.
+            grace_s = max(grace_s, 120.0)
         for sig, wait_s in ((signal.SIGTERM, grace_s), (signal.SIGKILL, 10.0)):
             try:
                 os.killpg(process.pid, sig)

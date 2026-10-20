@@ -151,12 +151,19 @@ echo ""
 # Start Ray head on this node (node 0)
 # ---------------------------------------------------------------------------
 RAY="$VENV/bin/ray"
+# Every Ray node runs under ray-node.sh: its session directory is short,
+# node-local scratch (Ray's Unix sockets have a path-length limit), and its
+# logs are copied to RAY_LOGS/<host> when the node stops.
+RAY_NODE="$REPO/deployments/common/ray-node.sh"
+RAY_TMP="/tmp/r${SLURM_JOB_ID}.${RAY_PORT}"
+RAY_LOGS="$RUN_DIR/ray-logs"
 
 echo "[ray] Starting head node at $RAY_ADDRESS ..."
-"$RAY" start \
+"$RAY_NODE" "$RAY_LOGS" "$RAY" start \
   --head \
   --node-ip-address="$HEAD_NODE_IP" \
   --port="$RAY_PORT" \
+  --temp-dir="$RAY_TMP" \
   --num-cpus=56 \
   --num-gpus="$GPUS_PER_NODE" \
   --block &
@@ -173,8 +180,9 @@ for node in "${ALL_NODES[@]:1}"; do
   srun --nodes=1 --ntasks=1 --ntasks-per-node=1 \
        -w "$node" \
        --export=ALL \
-    "$VENV/bin/ray" start \
+    "$RAY_NODE" "$RAY_LOGS" "$RAY" start \
       --address="$RAY_ADDRESS" \
+      --temp-dir="$RAY_TMP" \
       --num-cpus=56 \
       --num-gpus="$GPUS_PER_NODE" \
       --block &
@@ -202,6 +210,8 @@ cleanup() {
     kill "$pid" 2>/dev/null || true
   done
   kill "$RAY_HEAD_PID" 2>/dev/null || true
+  # Each node saves its Ray logs as it stops (ray-node.sh).
+  for pid in "${WORKER_PIDS[@]}" "$RAY_HEAD_PID"; do wait "$pid" 2>/dev/null || true; done
   echo "[cleanup] Done."
 }
 trap cleanup EXIT

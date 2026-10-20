@@ -46,6 +46,7 @@ def test_multi_node_server_runs_its_launcher_on_the_head_node(tmp_path):
     assert managed.command[managed.command.index("--host") + 1] == "0.0.0.0"
     assert managed.env["MATSIM_SERVER_SLICES"] == "n0=0,1,2,3;n1=0,1,2,3"
     assert managed.env["MATSIM_SERVER_RAY_PORT"] == "9000"
+    assert managed.env["MATSIM_SERVER_LOG_DIR"] == str(tmp_path / "big-ray")
     argv = managed.command
     assert argv[argv.index("--tensor-parallel-size") + 1] == "8"
     assert "--pipeline-parallel-size" not in argv
@@ -88,28 +89,61 @@ def stub_tools(tmp_path):
         'printf "%s %s | CUDA=%s\\n" "$(basename "$0")" "$*" "${CUDA_VISIBLE_DEVICES:-}"'
         f" >> {record}\n"
     )
-    # `ray start --block` would run until stopped; the stubs return at once.
-    _stub(venv / "ray", log)
+    # `ray start --block` runs until stopped: the worker stub blocks until it is
+    # terminated (the head's stub returns at once). The Ray stub writes a session
+    # log naming its node, as Ray does under --temp-dir, before it records the call
+    # (which the GPU probe below waits for).
+    _stub(
+        venv / "ray",
+        'for arg in "$@"; do case "$arg" in --temp-dir=*) d=${arg#*=}\n'
+        '  mkdir -p "$d/session_1/logs" && ln -sfn session_1 "$d/session_latest"\n'
+        '  hostname > "$d/session_1/logs/raylet.out";; esac; done\n'
+        'if [[ "$*" == *--address=*--block* ]]; then\n'
+        "  sleep 30 & sleeper=$!\n"
+        '  trap "kill $sleeper; exit 0" TERM\n'
+        f"  {log}"
+        '  wait "$sleeper"\n'
+        f"else\n  {log}"
+        "fi\n",
+    )
     _stub(venv / "vllm", log)
     # The GPU probe reports the whole cluster as joined once a worker has started
     # (or after a few seconds), like Ray counting GPUs as workers register.
     _stub(
         venv / "python",
-        f'for _ in $(seq 50); do grep -q "ray start --address" {record} 2>/dev/null && break; '
+        f'for _ in $(seq 50); do grep -q "^ray start --address" {record} 2>/dev/null && break; '
         "sleep 0.1; done\n"
         'echo "${STUB_GPUS:-8}"\n',
     )
-    _stub(bin_dir / "srun", log + 'while [[ "$1" == --* ]]; do shift; done\nexec "$@"\n')
+    # srun runs the step "on" its node: `hostname` reports that node, and the
+    # node-local Ray directory is a separate path per node.
+    _stub(
+        bin_dir / "srun",
+        log + 'while [[ "$1" == --* ]]; do\n'
+        '  [[ "$1" == --nodelist=* ]] && host=${1#*=}; shift\n'
+        "done\n"
+        "export STUB_HOST=$host\n"
+        'args=(); for a in "$@"; do\n'
+        '  [[ "$a" == --temp-dir=* ]] && a="$a.$host"; args+=("$a")\n'
+        "done\n"
+        'exec "${args[@]}"\n',
+    )
+    _stub(
+        bin_dir / "hostname",
+        'if [[ "${1:-}" == -I ]]; then echo 127.0.0.1; else echo "${STUB_HOST:-n0}"; fi\n',
+    )
     env = {
         **os.environ,
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         "MATSIM_VLLM_VENV": str(venv.parent),
         "PROJECT_ROOT": str(ROOT),
         "MATSIM_SERVER_RAY_PORT": "9000",
+        "MATSIM_SERVER_LOG_DIR": str(tmp_path / "logs" / "big-ray"),
         "MATSIM_NODE_DEVICES": "4",
         "MATSIM_NODE_CORES": "64",
         "CUDA_VISIBLE_DEVICES": "0,1,2,3",
-        "SLURM_JOB_ID": "1",
+        # Unique, so the launcher's node-local Ray directory does not collide.
+        "SLURM_JOB_ID": f"test{os.getpid()}",
     }
     return env, record
 
@@ -137,6 +171,12 @@ def test_launcher_builds_a_ray_cluster_before_serving(stub_tools):
     assert "/models/Big --port 8000 --distributed-executor-backend ray" in serve
     assert any(call.startswith("ray stop --force") for call in calls)
     assert "[ray] 6/6 GPUs available" in result.stdout
+    # Each node's Ray logs end up on shared storage; the node-local copies are gone.
+    logs = Path(env["MATSIM_SERVER_LOG_DIR"])
+    for host in ("n0", "n1"):
+        assert (logs / host / "raylet.out").read_text().strip() == host
+    ray_tmp = Path(f"/tmp/r{env['SLURM_JOB_ID']}.9000")
+    assert not ray_tmp.exists() and not Path(f"{ray_tmp}.n1").exists()
 
 
 def test_launcher_serves_one_node_directly(stub_tools):
@@ -171,6 +211,8 @@ def test_launcher_fails_when_the_cluster_does_not_form(stub_tools, monkeypatch):
     calls = record.read_text().splitlines()
     assert not any(call.startswith("vllm serve") for call in calls)
     assert any(call.startswith("ray stop --force") for call in calls)
+    # The logs that explain the failure are kept.
+    assert (Path(env["MATSIM_SERVER_LOG_DIR"]) / "n0" / "raylet.out").exists()
 
 
 def test_single_node_allocations_keep_servers_on_the_loopback(tmp_path):

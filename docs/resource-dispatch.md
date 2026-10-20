@@ -679,7 +679,8 @@ A `managed-vllm` server may span several nodes:
   node, directly when that is the driver's node and otherwise through the
   facility launcher, and passes the layout as `MATSIM_SERVER_SLICES`
   (`host=devices;host=devices`), `MATSIM_SERVER_RAY_PORT` (server port + 1000),
-  `MATSIM_NODE_DEVICES`, and `MATSIM_NODE_CORES`. Readiness, logs, and stopping
+  `MATSIM_NODE_DEVICES`, `MATSIM_NODE_CORES`, and `MATSIM_SERVER_LOG_DIR`.
+  Readiness, logs, and stopping
   work as for a single-node server; the API listens on the head node.
 - **Perlmutter launcher.** With more than one node,
   `vllm-server-perlmutter.sh` follows the qualified
@@ -689,6 +690,15 @@ A `managed-vllm` server may span several nodes:
   `CUDA_VISIBLE_DEVICES`, waits until the cluster reports every GPU, then runs
   `vllm serve --distributed-executor-backend ray`. Stopping the launcher stops
   vLLM and the Ray cluster.
+- **Ray logs.** Ray's session directory must be a short node-local path
+  (`/tmp/r<job>.<ray port>`, because of the Unix-socket path-length limit), so
+  it holds only scratch data. Every Ray node runs under
+  `deployments/common/ray-node.sh`, which, when the node stops, copies the
+  node's Ray logs to shared storage and removes the node-local directory: for a
+  managed server to `<log dir>/<server>-ray/<host>/` (`MATSIM_SERVER_LOG_DIR`),
+  for the standalone `job-serve-multinode-*.sh` jobs on all three facilities to
+  `<run dir>/ray-logs/<host>/`. A multi-node server gets 120 s instead of 30 s
+  to stop before it is killed.
 - **Parallelism.** `tensor_parallel_size` defaults to the server's devices per
   node, with pipeline stages across nodes (`--pipeline-parallel-size`). The
   campaign panel sets tensor parallelism over all of a server's GPUs, as the
