@@ -576,7 +576,7 @@ def test_cli_plan_prints_pools_and_writes_json(tmp_path, monkeypatch):
     layout = ROOT / "deployments/perlmutter/resources/campaign-panel.yaml"
     result = _cli("plan", str(layout), "--nodes", "16", "--output", str(tmp_path))
     assert result.exit_code == 0, result.output
-    assert "perlmutter-gpu: 16 node(s)" in result.output
+    assert "perlmutter-gpu-80gb: 16 node(s)" in result.output
     data = json.loads((tmp_path / "placement.json").read_text())
     kimi = data["pools"]["llm"]["servers"][0]
     assert kimi["name"] == "kimi-k2.5"

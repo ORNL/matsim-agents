@@ -7,7 +7,7 @@ vars:
   MODELS: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}
   LAUNCHER: ${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/perlmutter/launchers/vllm-server-perlmutter.sh
 resources:
-  preset: perlmutter-gpu
+  preset: perlmutter-gpu-80gb
   pools:
     llm:
       nodes: 15

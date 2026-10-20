@@ -1,11 +1,12 @@
 # Multi-node LLM qualification: Qwen3-235B-A22B-Instruct-2507 served by one vLLM
 # server across two Perlmutter nodes (Ray cluster, tensor parallel 8), the
-# two-node layout of the qualified campaign panel. Submit job-llm-check-perlmutter.sh
-# with `sbatch -N 2` and MATSIM_RESOURCES pointing here.
+# two-node layout of the qualified campaign panel. The model needs 80 GB A100s:
+# submit job-llm-check-perlmutter.sh with `sbatch -N 2 -C 'gpu&hbm80g'` and
+# MATSIM_RESOURCES pointing here.
 #   matsim-agents resources plan deployments/perlmutter/resources/llm-check-multinode.yaml --nodes 2
 preview: {nodes: 2}
 resources:
-  preset: perlmutter-gpu
+  preset: perlmutter-gpu-80gb
   pools:
     llm:
       nodes: 2

@@ -108,9 +108,12 @@ for slice in "${SLICES[@]:1}"; do
   echo "[ray] worker on ${host} (GPUs ${devices})"
   # Take the node's GPUs and expose only the placed ones (Slurm picks a step's
   # GPUs itself); --overlap so other pools' steps on the node are not blocked.
+  # The JIT and temporary directories exported above are node-local paths, so
+  # the worker creates them on its own node before Ray starts.
   srun --nodes=1 --ntasks=1 --nodelist="$host" --overlap \
     --gpus-per-node="$NODE_GPUS" --gpu-bind=none --cpus-per-task="$NODE_CPUS" --export=ALL \
     env "CUDA_VISIBLE_DEVICES=${devices}" \
+    bash -c 'mkdir -p "$TMPDIR" "$TRITON_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR" "$VLLM_CACHE_ROOT" && exec "$@"' worker \
     "$VLLM_VENV/bin/ray" start --address="$RAY_ADDRESS" --temp-dir="$RAY_TMP" \
       --num-cpus="$NODE_CPUS" --num-gpus="$(count "$devices")" --block &
   CHILDREN+=("$!")

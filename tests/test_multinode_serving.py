@@ -91,8 +91,14 @@ def stub_tools(tmp_path):
     # `ray start --block` would run until stopped; the stubs return at once.
     _stub(venv / "ray", log)
     _stub(venv / "vllm", log)
-    # The GPU probe reports the whole cluster as joined.
-    _stub(venv / "python", 'echo "${STUB_GPUS:-8}"\n')
+    # The GPU probe reports the whole cluster as joined once a worker has started
+    # (or after a few seconds), like Ray counting GPUs as workers register.
+    _stub(
+        venv / "python",
+        f'for _ in $(seq 50); do grep -q "ray start --address" {record} 2>/dev/null && break; '
+        "sleep 0.1; done\n"
+        'echo "${STUB_GPUS:-8}"\n',
+    )
     _stub(bin_dir / "srun", log + 'while [[ "$1" == --* ]]; do shift; done\nexec "$@"\n')
     env = {
         **os.environ,
