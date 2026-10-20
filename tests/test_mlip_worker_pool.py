@@ -5,6 +5,7 @@ from __future__ import annotations
 import operator
 import os
 import socket
+from pathlib import Path
 
 import pytest
 
@@ -409,3 +410,28 @@ def test_local_training_mask_follows_the_driver_mask(monkeypatch):
     assert launch.environment(local=True)["CUDA_VISIBLE_DEVICES"] == "5"
     # Launcher-started steps keep node-wide indices for srun/mpiexec.
     assert launch.environment()["CUDA_VISIBLE_DEVICES"] == "1"
+
+
+def test_cell_relaxation_runs_with_the_current_ase_filter(tmp_path, monkeypatch):
+    """relax_cell=True must work on ASE releases without ase.constraints.ExpCellFilter."""
+    from ase.build import bulk
+    from ase.calculators.emt import EMT
+    from ase.io import write
+
+    structure = tmp_path / "Cu.extxyz"
+    write(structure, bulk("Cu", "fcc", a=3.7))
+    monkeypatch.setattr(
+        relaxation,
+        "_relaxation_calculator",
+        lambda args: relaxation._RelaxCalculator(EMT(), 0, 0, None),
+    )
+    result = relaxation.relax_with_mlip(
+        _uma_args(
+            structure_path=str(structure),
+            relax_cell=True,
+            maxiter=20,
+            output_dir=str(tmp_path / "out"),
+        )
+    )
+    assert result.num_steps > 0
+    assert Path(result.optimized_structure_path).is_file()

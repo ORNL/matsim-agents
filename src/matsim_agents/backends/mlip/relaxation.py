@@ -322,8 +322,12 @@ class _NumericalStressCalculator:
 
     def calculate(self, atoms=None, properties=("energy", "forces"), system_changes=None):
         """Compute energy, forces, and (numerical) stress for *atoms*."""
-        # Energy + forces from the inner calculator on the original geometry.
-        self._inner.calculate(atoms, ["energy", "forces"], system_changes)
+        from ase.calculators.calculator import all_changes
+
+        # Energy + forces from the inner calculator on the original geometry. ASE
+        # calculators expect a list of changes; None means "unknown", i.e. all.
+        changes = all_changes if system_changes is None else system_changes
+        self._inner.calculate(atoms, ["energy", "forces"], changes)
         self.results["energy"] = self._inner.results["energy"]
         self.results["forces"] = self._inner.results["forces"]
         # Copy last_branch_weights *before* perturbations overwrite them.
@@ -747,7 +751,7 @@ def relax_with_mlip(
 
     cell_relax_active = False
     if args.relax_cell:
-        from ase.constraints import ExpCellFilter
+        from ase.filters import ExpCellFilter
 
         # Wrap with numerical stress unconditionally when relax_cell=True;
         # _NumericalStressCalculator.calculate() will try the inner calc first
