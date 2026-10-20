@@ -37,7 +37,9 @@ mkdir -p "${VLLM_CACHE_ROOT}" "${TRITON_CACHE_DIR}"
 ulimit -c 0
 
 echo "[vllm-server] $(date) host=$(hostname) ZE_AFFINITY_MASK=${ZE_AFFINITY_MASK}"
-exec mpiexec -n 1 --ppn 1 \
+# Pin the rank to this node: in a multi-node job mpiexec would otherwise use the
+# first host of the PBS nodefile, which need not be the node the plan chose.
+exec mpiexec --hosts "$(hostname)" -n 1 --ppn 1 \
     env -u PMI_RANK -u PMI_SIZE -u PMI_FD \
         -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR \
         -u MPI_LOCALRANKID -u MPI_LOCALNRANKS \
