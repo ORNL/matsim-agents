@@ -46,8 +46,9 @@ def _structure(path: Path, symbols: str, shift: float = 0.0) -> Path:
 class FakeRelax:
     """Stands in for run_relaxation: energies per structure, and optional failures."""
 
-    def __init__(self, energies, *, unconverged=(), broken=(), silent=()):
+    def __init__(self, energies, *, unconverged=(), broken=(), silent=(), level=None):
         self.energies = energies
+        self.level = level
         self.silent = set(silent)
         self.unconverged = set(unconverged)
         self.broken = set(broken)
@@ -71,6 +72,7 @@ class FakeRelax:
             if dft
             else EvidenceLevel.MLIP_RELAXATION
         )
+        level = self.level or level
         stage = RelaxationStageResult(
             stage="dft" if dft else "mlip",
             backend="qe" if dft else "uma",
@@ -436,3 +438,103 @@ def test_a_relaxation_without_an_energy_is_an_infrastructure_failure(system):
     report = run_characterization(contract, relax=relax)
     assert report.status == CharacterizationStatus.FAILED_INFRASTRUCTURE
     assert [step.step_id for step in outstanding_steps(contract)] == ["relax-mlip-000"]
+
+
+def test_changed_input_files_invalidate_the_saved_run(system):
+    tmp_path, structures, references = system
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    relax = FakeRelax({"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0})
+    run_characterization(contract, relax=relax)
+    _structure(structures[1], "NbOO", shift=0.7)
+    with pytest.raises(ValueError, match="different input files"):
+        run_characterization(contract, relax=relax)
+    _structure(structures[1], "NbOO", shift=0.3)
+    run_characterization(contract, relax=relax)
+    edited = ReferenceEnergySet.model_validate_json(references.read_text())
+    edited.competing_phases["NbO"] = -0.6
+    references.write_text(edited.model_dump_json())
+    with pytest.raises(ValueError, match="different input files"):
+        run_characterization(contract, relax=relax)
+
+
+def test_approval_and_budget_changes_resume_the_same_run(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    data = _dft(references, dft_approved=False, budget={"max_dft_calculations": 1})
+    first = run_characterization(
+        _contract(tmp_path, structures, "thermodynamic_stability", **data), relax=FakeRelax({})
+    )
+    assert first.status == CharacterizationStatus.INCONCLUSIVE
+    broken = FakeRelax(energies, broken={"NbO2-a.extxyz"})
+    approved = _contract(
+        tmp_path, structures, "thermodynamic_stability", **{**data, "dft_approved": True}
+    )
+    report = run_characterization(approved, relax=broken)
+    assert broken.calls == [("NbO2-a.extxyz", RelaxationMode.DFT)]
+    assert report.status == CharacterizationStatus.FAILED_INFRASTRUCTURE
+    # The failed attempt consumed the budget: a resume may not run it again.
+    again = FakeRelax(energies)
+    report = run_characterization(approved, relax=again)
+    assert again.calls == [] and report.status == CharacterizationStatus.FAILED_INFRASTRUCTURE
+    assert any("beyond the dft relaxation budget (1 attempted)" in m for m in report.missing)
+    raised = _contract(
+        tmp_path,
+        structures,
+        "thermodynamic_stability",
+        **{**data, "dft_approved": True, "budget": {"max_dft_calculations": 3}},
+    )
+    report = run_characterization(raised, relax=again)
+    assert len(again.calls) == 2
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+
+
+def test_the_assessment_is_saved_and_not_repeated(system, monkeypatch):
+    tmp_path, structures, references = system
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    report = run_characterization(
+        contract, relax=FakeRelax({"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0})
+    )
+    assert outstanding_steps(contract) == []
+    import matsim_agents.campaign.characterization as module
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("the hull was recomputed")
+
+    monkeypatch.setattr(module, "score_stability", fail)
+    assert run_characterization(contract, relax=FakeRelax({})) == report
+
+
+def test_fidelity_requirements_are_enforced(system):
+    tmp_path, structures, _references = system
+    with pytest.raises(ValidationError, match="the highest fidelity a characterization"):
+        _contract(
+            tmp_path,
+            structures[:1],
+            "relaxation",
+            observables=[
+                {
+                    "name": "energy_per_atom",
+                    "unit": "eV/atom",
+                    "minimum_evidence_level": "higher_accuracy_dft",
+                }
+            ],
+            methods={"dft": {"backend": "qe", "pseudo_dir": "/pseudo"}},
+        )
+    contract = _contract(
+        tmp_path,
+        structures[:1],
+        "relaxation",
+        observables=[
+            {
+                "name": "energy_per_atom",
+                "unit": "eV/atom",
+                "minimum_evidence_level": "converged_dft",
+            }
+        ],
+        methods={"dft": {"backend": "qe", "pseudo_dir": "/pseudo"}},
+        dft_approved=True,
+    )
+    weak = FakeRelax({"NbO2-a.extxyz": -21.0}, level=EvidenceLevel.LOW_FIDELITY_DFT)
+    report = run_characterization(contract, relax=weak)
+    assert report.status == CharacterizationStatus.INCONCLUSIVE
+    assert report.missing == ["energy_per_atom at converged_dft (the evidence is low_fidelity_dft)"]

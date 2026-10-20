@@ -98,6 +98,10 @@ STABILITY_PINNED_SETTINGS = {
     "qe": ("ecutwfc_ry", "ecutrho_ry", "occupations", "pseudopotentials"),
     "vasp": ("encut_ev", "ismear", "sigma", "kspacing"),
 }
+MAX_RECIPE_EVIDENCE = EvidenceLevel.CONVERGED_DFT
+# Contract fields that control execution, not the question: changing them
+# keeps the run's completed calculations.
+OPERATIONAL_FIELDS = {"budget", "approvals", "dft_approved", "output_root"}
 STATE_FILE = "characterization-state.json"
 REPORT_FILE = "characterization-report.json"
 
@@ -167,6 +171,16 @@ class CharacterizationContract(BaseModel):
         if unknown:
             raise ValueError(f"the {self.recipe} recipe does not produce {unknown}")
         self.observables = [given.get(name, default) for name, default in defaults.items()]
+        unreachable = [
+            r.name
+            for r in self.observables
+            if not at_least(MAX_RECIPE_EVIDENCE, r.minimum_evidence_level)
+        ]
+        if unreachable:
+            raise ValueError(
+                f"{unreachable} require more than {MAX_RECIPE_EVIDENCE.value}, the highest "
+                "fidelity a characterization recipe produces"
+            )
         if self.recipe == "thermodynamic_stability":
             weak = [
                 r.name
@@ -226,8 +240,20 @@ class CharacterizationContract(BaseModel):
         return at_least(self.required_level(), EvidenceLevel.LOW_FIDELITY_DFT)
 
     def digest(self) -> str:
-        payload = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(payload.encode()).hexdigest()
+        """Fingerprint of the scientific question: its fields and its input files' contents.
+
+        Budget, approvals, and output_root are excluded, so raising a budget or
+        approving DFT resumes the same run.
+        """
+        inputs = [*self.structures]
+        if self.reference_energies is not None:
+            inputs.append(self.reference_energies)
+        payload = {
+            "contract": self.model_dump(mode="json", exclude=OPERATIONAL_FIELDS),
+            "input_sha256": {str(path): sha256_file(path) for path in inputs},
+        }
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode()).hexdigest()
 
 
 class RecipeStep(BaseModel):
@@ -302,11 +328,16 @@ def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
     stage = result.stages[-1] if result.stages else None
     if result.status == "failed" or stage is None:
         return {"status": "failed", "failure_reason": result.failure_reason or "no stage result"}
-    if stage.energy_eV is None or stage.max_force_eV_per_A is None:
-        # The code ran but produced no energy (e.g. it exited before the first step).
+    if (
+        stage.energy_eV is None
+        or stage.max_force_eV_per_A is None
+        or stage.optimized_structure_path is None
+    ):
+        # The code ran but produced no usable result (e.g. it exited before the first step).
         return {
             "status": "failed",
-            "failure_reason": stage.failure_reason or "the relaxation produced no energy",
+            "failure_reason": stage.failure_reason
+            or "the relaxation produced no energy, force, or structure",
             "run_directory": result.run_directory,
         }
     return {
@@ -337,22 +368,32 @@ class _Run:
             self.state = json.loads(self.state_path.read_text())
             if self.state["contract_sha256"] != digest:
                 raise ValueError(
-                    f"{self.directory} holds a different contract; give the changed "
-                    "contract a new contract_id"
+                    f"{self.directory} holds a different contract or different input "
+                    "files; give the changed contract a new contract_id"
                 )
+            self.state["contract"] = contract.model_dump(mode="json")
         else:
             self.state = {
                 "schema_version": 1,
                 "contract_sha256": digest,
                 "contract": contract.model_dump(mode="json"),
+                "attempts": {"mlip": 0, "dft": 0},
                 "steps": {},
             }
-            self._save()
+        self._save()
 
     def _save(self) -> None:
         staged = self.state_path.with_name(f".{self.state_path.name}.tmp")
         staged.write_text(json.dumps(self.state, indent=2) + "\n")
         staged.replace(self.state_path)
+
+    def attempts(self, fidelity: str) -> int:
+        return int(self.state["attempts"][fidelity])
+
+    def charge(self, fidelity: str) -> None:
+        """Count a calculation against the budget before it starts."""
+        self.state["attempts"][fidelity] += 1
+        self._save()
 
     def record(self, step: RecipeStep, outcome: dict[str, Any]) -> None:
         self.state["steps"][step.step_id] = outcome
@@ -455,20 +496,22 @@ def run_characterization(
         "mlip": contract.budget.max_mlip_relaxations,
         "dft": contract.budget.max_dft_calculations,
     }
-    used = {"mlip": 0, "dft": 0}
     for step in steps:
         if step.operator != "relax":
             continue
         fidelity = step.fidelity or "mlip"
-        used[fidelity] += 1
         if run.done(step.step_id) is not None:
             continue
         if step.needs_dft_approval and not contract.dft_approved:
             blockers.append(f"{step.step_id}: DFT is required but not approved (dft_approved)")
             continue
-        if budget[fidelity] is not None and used[fidelity] > budget[fidelity]:
-            blockers.append(f"{step.step_id}: beyond the {fidelity} relaxation budget")
+        if budget[fidelity] is not None and run.attempts(fidelity) >= budget[fidelity]:
+            blockers.append(
+                f"{step.step_id}: beyond the {fidelity} relaxation budget "
+                f"({run.attempts(fidelity)} attempted)"
+            )
             continue
+        run.charge(fidelity)
         try:
             outcome = _relax_record(
                 relax(_relaxation_config(contract, step, run.directory / step.step_id))
@@ -476,8 +519,16 @@ def run_characterization(
         except Exception as exc:  # noqa: BLE001 - a failed tool is not evidence
             outcome = {"status": "failed", "failure_reason": f"{type(exc).__name__}: {exc}"}
         run.record(step, {**outcome, "structure": step.structure})
+    final = steps[-1] if steps[-1].operator != "relax" else None
+    report_path = run.directory / REPORT_FILE
+    if final is not None and run.done(final.step_id) is not None and report_path.is_file():
+        return CharacterizationReport.model_validate_json(report_path.read_text())
     report = _assess(contract, steps, run, blockers)
-    (run.directory / REPORT_FILE).write_text(report.model_dump_json(indent=2) + "\n")
+    report_path.write_text(report.model_dump_json(indent=2) + "\n")
+    inputs_done = all(run.done(step.step_id) for step in steps if step.operator == "relax")
+    if final is not None and inputs_done:
+        # Assessed from complete inputs, whatever the answer: not repeated on resume.
+        run.record(final, {"status": "done", "characterization_status": report.status.value})
     return report
 
 
@@ -603,6 +654,20 @@ def _assess(
                 else "Complete the missing relaxations (more steps or budget) and run the "
                 "contract again"
             ),
+        )
+    level = _level(relaxed)
+    below = [
+        f"{r.name} at {r.minimum_evidence_level.value} (the evidence is {level.value})"
+        for r in contract.observables
+        if not at_least(level, r.minimum_evidence_level)
+    ]
+    if below:
+        return CharacterizationReport(
+            **base,
+            status=CharacterizationStatus.INCONCLUSIVE,
+            observables=observables,
+            missing=below,
+            recommended_next_test="Relax the structures at the required fidelity.",
         )
     return {
         "relaxation": _assess_relaxation,
