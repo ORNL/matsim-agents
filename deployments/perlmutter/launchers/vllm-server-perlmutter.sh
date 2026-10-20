@@ -55,6 +55,8 @@ export NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-hsn}" NCCL_NET_GDR_LEVEL="${NCC
 RAY_PORT="${MATSIM_SERVER_RAY_PORT:?matsim-agents sets MATSIM_SERVER_RAY_PORT}"
 NODE_GPUS="${MATSIM_NODE_DEVICES:-4}"
 NODE_CPUS="${MATSIM_NODE_CORES:-64}"
+# A worker step cannot take more CPUs than the job has on the node.
+STEP_CPUS=$(( ${SLURM_CPUS_ON_NODE:-$NODE_CPUS} < NODE_CPUS ? ${SLURM_CPUS_ON_NODE:-$NODE_CPUS} : NODE_CPUS ))
 HEAD_IP=$(hostname -I | awk '{print $1}')
 export RAY_ADDRESS="${HEAD_IP}:${RAY_PORT}"
 # Every Ray node runs under ray-node.sh: its session directory is node-local
@@ -63,6 +65,11 @@ export RAY_ADDRESS="${HEAD_IP}:${RAY_PORT}"
 RAY_NODE="$REPO/deployments/common/ray-node.sh"
 RAY_TMP="/tmp/r${SLURM_JOB_ID:-0}.${RAY_PORT}"
 RAY_LOGS="${MATSIM_SERVER_LOG_DIR:?matsim-agents sets MATSIM_SERVER_LOG_DIR}"
+# Workers stop when this file appears (ray-node.sh): signalling their srun would
+# make Slurm kill the step before the worker saves its logs.
+RAY_STOP="$RAY_LOGS/.stop.${SLURM_JOB_ID:-0}.$$"
+mkdir -p "$RAY_LOGS"
+rm -f "$RAY_STOP"
 
 count() { local IFS=,; set -- $1; echo $#; }
 EXPECTED=0
@@ -100,6 +107,14 @@ stop_processes() {
     wait "$pid" 2>/dev/null || true
   done
 }
+# Wait up to $1 seconds for processes to exit on their own.
+wait_for_exit() {
+  local deadline=$(( SECONDS + $1 )) pid
+  shift
+  for pid in "$@"; do
+    while kill -0 "$pid" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+  done
+}
 VLLM_PID= HEAD_PID=
 WORKER_PIDS=()
 cleanup() {
@@ -108,9 +123,12 @@ cleanup() {
   # vLLM first; then the workers while the head still runs, so they leave the
   # cluster at once and save their logs; then the head.
   stop_processes 20 $VLLM_PID
-  stop_processes 30 "${WORKER_PIDS[@]}"
+  touch "$RAY_STOP"
+  wait_for_exit 40 "${WORKER_PIDS[@]}"
+  stop_processes 5 "${WORKER_PIDS[@]}"
   stop_processes 20 $HEAD_PID
-  timeout 30s "$VLLM_VENV/bin/ray" stop --force >/dev/null 2>&1 || true
+  rm -f "$RAY_STOP"
+  timeout 20s "$VLLM_VENV/bin/ray" stop --force >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 
@@ -132,8 +150,8 @@ for slice in "${SLICES[@]:1}"; do
   # GPUs itself); --overlap so other pools' steps on the node are not blocked.
   # The worker creates the node-local directories exported above on its own node.
   setsid srun --nodes=1 --ntasks=1 --nodelist="$host" --overlap \
-    --gpus-per-node="$NODE_GPUS" --gpu-bind=none --cpus-per-task="$NODE_CPUS" --export=ALL \
-    env "CUDA_VISIBLE_DEVICES=${devices}" \
+    --gpus-per-node="$NODE_GPUS" --gpu-bind=none --cpus-per-task="$STEP_CPUS" --export=ALL \
+    env "CUDA_VISIBLE_DEVICES=${devices}" "RAY_NODE_STOP_FILE=${RAY_STOP}" \
     bash -c 'mkdir -p "$TMPDIR" "$TRITON_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR" "$VLLM_CACHE_ROOT" && exec "$@"' worker \
     "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start --address="$RAY_ADDRESS" --temp-dir="$RAY_TMP" \
       --num-cpus="$NODE_CPUS" --num-gpus="$(count "$devices")" --block &

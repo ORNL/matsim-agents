@@ -701,13 +701,16 @@ A `managed-vllm` server may span several nodes:
   managed server to `<log dir>/<server>-ray/<host>/` (`MATSIM_SERVER_LOG_DIR`),
   for the standalone `job-serve-multinode-*.sh` jobs on all three facilities to
   `<run dir>/ray-logs/<host>/`. It copies the logs as soon as the node is asked
-  to stop and again once Ray has shut down, because the scheduler may kill a
-  step before Ray finishes. Stopping a server stops vLLM, then the workers
-  while the head still runs (a worker whose head is gone waits 30 s for it
-  before shutting down), then the head; the Ray nodes run in their own
-  sessions so that the signal that stops the server does not reach them out of
-  order. A multi-node server gets 120 s instead of 30 s to stop before it is
-  killed.
+  to stop and again once Ray has shut down. Stopping a server stops vLLM, then
+  the workers while the head still runs (a worker whose head is gone waits
+  30 s for it before shutting down), then the head. Workers on other nodes are
+  asked to stop through a file in the log directory that `ray-node.sh` watches
+  (`RAY_NODE_STOP_FILE`), not by signalling their `srun` or `mpiexec`: two-node
+  check 60044230 showed that Slurm kills a step outright when its `srun` is
+  signalled, before the worker can save its logs. The Ray nodes run in their
+  own sessions so that the signal that stops the server reaches them only
+  through this sequence. A multi-node server gets 120 s instead of 30 s to stop
+  before it is killed. Worker steps request at most the job's CPUs per node.
 - **Parallelism.** `tensor_parallel_size` defaults to the server's devices per
   node, with pipeline stages across nodes (`--pipeline-parallel-size`). The
   campaign panel sets tensor parallelism over all of a server's GPUs, as the

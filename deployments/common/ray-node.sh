@@ -7,6 +7,10 @@
 # a path-length limit), so it is only scratch. When the node stops, or this
 # script is terminated (which stops the node), the node's Ray logs are copied to
 # <log dir>/<host>/ on shared storage and the session directory is removed.
+#
+# Slurm kills a step outright when its srun is signalled, so a node on another
+# host is asked to stop through a file instead: with RAY_NODE_STOP_FILE set, the
+# node stops as if terminated once that file exists.
 set -uo pipefail
 
 log_dir=${1:?usage: ray-node.sh <log dir> <ray> start --temp-dir=<dir> ...}
@@ -29,6 +33,12 @@ stop=0 ray_pid= status=0
 # node down on SIGTERM; the logs are copied again once it has.
 trap 'stop=1; save_logs; [[ -z $ray_pid ]] || kill -TERM "$ray_pid" 2>/dev/null' TERM INT
 rm -rf "$temp_dir"
+watcher=
+if [[ -n "${RAY_NODE_STOP_FILE:-}" ]]; then
+  ( while [[ ! -e "$RAY_NODE_STOP_FILE" ]] && kill -0 $$ 2>/dev/null; do sleep 2; done
+    kill -TERM $$ 2>/dev/null ) &
+  watcher=$!
+fi
 if (( ! stop )); then
   "$@" &
   ray_pid=$!
@@ -37,6 +47,7 @@ if (( ! stop )); then
   while kill -0 "$ray_pid" 2>/dev/null; do wait "$ray_pid"; status=$?; done
 fi
 
+[[ -z "$watcher" ]] || kill "$watcher" 2>/dev/null
 if save_logs; then
   echo "[ray] logs of $host saved to $dest"
 else

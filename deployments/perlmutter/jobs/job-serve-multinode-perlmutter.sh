@@ -191,6 +191,18 @@ stop_processes() {
     wait "$pid" 2>/dev/null || true
   done
 }
+# Workers on other nodes stop when RAY_STOP appears (ray-node.sh): signalling
+# their launcher would kill them before they save their logs.
+stop_workers() {
+  (( ${#WORKER_PIDS[@]} )) || return 0
+  [[ -z "${RAY_STOP:-}" ]] || touch "$RAY_STOP"
+  local deadline=$(( SECONDS + 40 )) pid
+  for pid in "${WORKER_PIDS[@]}"; do
+    while kill -0 "$pid" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+  done
+  stop_processes 5 "${WORKER_PIDS[@]}"
+  [[ -z "${RAY_STOP:-}" ]] || rm -f "$RAY_STOP"
+}
 cleanup() {
   echo ""
   echo "[cleanup] Stopping vLLM and Ray cluster ..."
@@ -206,7 +218,7 @@ cleanup() {
   if [[ "$N_NODES" -gt 1 ]]; then
     # Workers leave while the head still runs, then the head stops; each node
     # saves its Ray logs as it stops (ray-node.sh).
-    stop_processes 30 "${WORKER_PIDS[@]}"
+    stop_workers
     stop_processes 20 $RAY_HEAD_PID
     "$VLLM_VENV/bin/ray" stop --force 2>/dev/null || true
   fi
@@ -236,6 +248,9 @@ if [[ "$N_NODES" -gt 1 ]]; then
   RAY_TMPDIR="/tmp/r${SLURM_JOB_ID:-$$}.${SLURM_STEP_ID:-0}"
   RAY_NODE="$REPO/deployments/common/ray-node.sh"
   RAY_LOGS="$RUN_DIR/ray-logs"
+  RAY_STOP="$RAY_LOGS/.stop.$$"
+  mkdir -p "$RAY_LOGS"
+  rm -f "$RAY_STOP"
   for attempt in 1 2 3; do
     echo "[ray] Starting head node at $RAY_ADDRESS (attempt $attempt/3) ..."
     "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start \
@@ -266,7 +281,7 @@ if [[ "$N_NODES" -gt 1 ]]; then
     srun --nodes=1 --ntasks=1 --ntasks-per-node=1 \
          -w "$node" \
          --export=ALL \
-      "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start \
+      env RAY_NODE_STOP_FILE="$RAY_STOP" "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start \
         --address="$RAY_ADDRESS" \
         --temp-dir="$RAY_TMPDIR" \
         --num-cpus="$NCPUS" \

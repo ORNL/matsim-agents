@@ -123,7 +123,8 @@ def stub_tools(tmp_path):
         'echo "${STUB_GPUS:-8}"\n',
     )
     # srun runs the step "on" its node: `hostname` reports that node, and the
-    # node-local Ray directory is a separate path per node.
+    # node-local Ray directory is a separate path per node. Signalling it kills
+    # the step, as Slurm does, so workers must be stopped another way.
     _stub(
         bin_dir / "srun",
         log + 'while [[ "$1" == --* ]]; do\n'
@@ -133,7 +134,10 @@ def stub_tools(tmp_path):
         'args=(); for a in "$@"; do\n'
         '  [[ "$a" == --temp-dir=* ]] && a="$a.$host"; args+=("$a")\n'
         "done\n"
-        'exec "${args[@]}"\n',
+        # Like Slurm: a signalled srun kills its step outright.
+        '"${args[@]}" & child=$!\n'
+        'trap "kill -KILL $child" TERM INT\n'
+        'wait "$child"; wait "$child"\n',
     )
     _stub(
         bin_dir / "hostname",
