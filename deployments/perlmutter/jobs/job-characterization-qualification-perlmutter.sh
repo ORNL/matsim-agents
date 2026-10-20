@@ -18,6 +18,7 @@
 #
 # Submit:
 #   sbatch deployments/perlmutter/jobs/job-characterization-qualification-perlmutter.sh
+# MLIP recipes only: MATSIM_QUALIFICATION_ARGS=--skip-dft sbatch ...
 # Resume an interrupted run (completed calculations are reused):
 #   MATSIM_CHARACTERIZATION_DIR=<run dir> sbatch ...
 # ---------------------------------------------------------------------------
@@ -66,4 +67,4 @@ echo "=========================================="
 python "$REPO/deployments/perlmutter/jobs/characterization_qualification.py" \
   --output-root "$RUN_DIR" \
   --vasp-launcher "$VASP_LAUNCHER" \
-  --potcar-dir "$POTCAR_DIR" 2>&1 | tee -a "$RUN_DIR/qualification.log"
+  --potcar-dir "$POTCAR_DIR" ${MATSIM_QUALIFICATION_ARGS:-} 2>&1 | tee -a "$RUN_DIR/qualification.log"

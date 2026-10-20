@@ -75,6 +75,7 @@ def main() -> int:
     parser.add_argument("--vasp-launcher", required=True)
     parser.add_argument("--potcar-dir", required=True)
     parser.add_argument("--skip-mlip", action="store_true")
+    parser.add_argument("--skip-dft", action="store_true", help="Run only the MLIP recipes.")
     args = parser.parse_args()
     root = args.output_root.resolve()
     structures = root / "structures"
@@ -118,6 +119,9 @@ def main() -> int:
                 and all(mode == "mlip" for _s, mode in relax.calls),
                 f"status={report.status.value} calls={relax.calls}",
             )
+
+    if args.skip_dft:
+        return _finish(root, results, checks)
 
     # 2. VASP references and the stability question.
     phases = {
