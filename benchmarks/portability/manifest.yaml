@@ -16,13 +16,13 @@
       "purpose": "Every first-class catalog LLM debates one materials-design hypothesis with every peer.",
       "minimum_rounds": 2,
       "model_set": "deployments/common/open-model-catalog.json",
-      "required_artifacts": ["all_model_scientific_debate_result.json", "dialogue.json"]
+      "required_artifacts": ["all_model_scientific_debate_result.json", "contributions.jsonl", "transcript.md"]
     },
     "active_learning_scientific_debate": {
       "purpose": "Real UMA+QE active-learning loop on the benchmark Si cell; every first-class catalog LLM then debates the resulting DFT-labelled evidence.",
       "minimum_rounds": 2,
       "model_set": "deployments/common/open-model-catalog.json",
-      "required_artifacts": ["active_learning_scientific_debate_result.json", "dialogue.json"]
+      "required_artifacts": ["active_learning_scientific_debate_result.json", "contributions.jsonl", "transcript.md"]
     }
   },
   "suites": {

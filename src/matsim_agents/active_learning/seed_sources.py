@@ -82,6 +82,7 @@ def _ask_llm_for_compositions(
     from langchain_core.messages import HumanMessage, SystemMessage
 
     from matsim_agents.backends.llm.provider import get_chat_model
+    from matsim_agents.backends.llm.replies import invoke_model
 
     user_msg = f"Target: {prompt.strip()}\nReturn up to {n_target} distinct compositions."
     llm = get_chat_model(
@@ -90,14 +91,14 @@ def _ask_llm_for_compositions(
         base_url=llm_cfg.base_url,
         temperature=llm_cfg.temperature,
     )
-    response = llm.invoke(
+    reply = invoke_model(
+        llm,
         [
             SystemMessage(content=_SEED_SYSTEM_PROMPT),
             HumanMessage(content=user_msg),
-        ]
+        ],
     )
-    text = response.content if isinstance(response.content, str) else str(response.content)
-    return _extract_formula_list(text)
+    return _extract_formula_list(reply.text)
 
 
 def _extract_formula_list(text: str) -> list[str]:

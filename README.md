@@ -327,7 +327,7 @@ Use this table to choose the right entry point quickly.
 | Goal | Recommended entry point | Required inputs | Typical outputs |
 |---|---|---|---|
 | One-shot objective execution with planning, UQ gate, and summary | `matsim-agents run` | natural-language objective, `--logdir`, `--hydragnn-branch-mlp-checkpoint`, optional AL handoff flags | planner/executor/UQ/analyst result; optional AL handoff + JSONL audit |
-| Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--logdir`, `--hydragnn-branch-mlp-checkpoint`, LLM provider/model | chat transcript + discovery artifacts under `output_dir/discovery/` |
+| Interactive hypothesis generation with optional atomistic exploration | `matsim-agents chat` | `--logdir`, `--hydragnn-branch-mlp-checkpoint`, LLM provider/model | chat transcript under `output_dir/chat/<session>/` + discovery artifacts under `output_dir/discovery/` |
 | Optional single structure relax during chat | `matsim-agents chat` + `/relax <path>` | same as chat + structure path | one relaxation summary + optimized structure under `output_dir/single_relax/` |
 | Trigger active-learning handoff during chat | `matsim-agents chat` + `/al [composition]` | same as chat + `--al-config`; composition optional (defaults to last discussed) | AL handoff (dry-run or run) + JSONL audit record |
 | Reset conversation/discovery state during chat | `matsim-agents chat` + `/clear` | none | cleared session history and seen-composition state |
@@ -1035,6 +1035,15 @@ If `--al-handoff-audit-path` is not set, handoff events default to:
 ```
 <output_dir>/discovery/al_handoff_events.jsonl
 ```
+
+Every session writes its transcript as it goes, to
+`<output_dir>/chat/<UTC timestamp>_<suffix>/`: `transcript.md` for reading,
+`contributions.jsonl` with one record per message (your turns, the proposer's
+replies, critiques and revisions when the hypothesis debate is on, and command
+and exploration results) including each model's reasoning, finish reason, and
+token counts, and `prompts/<id>.json` with the messages sent for each model
+reply. The proposer and critics see each other's answers only, never their
+reasoning.
 
 Output artifacts per composition (under `--output-dir`):
 

@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.llm.provider import get_chat_model
+from matsim_agents.backends.llm.replies import invoke_model
 from matsim_agents.execution.contracts import (
     ComputeBudget,
     EvidenceLevel,
@@ -150,16 +151,17 @@ def build_hypothesis_from_discussion(
     if discussion.mode == "single_llm":
         spec = discussion.single_llm
         model = model_factory(provider=spec.provider, model=spec.model, base_url=spec.base_url)
-        response = model.invoke(
+        reply = invoke_model(
+            model,
             [
                 SystemMessage(
                     content="Formulate a testable materials-science hypothesis. "
                     + _HYPOTHESIS_JSON_INSTRUCTION
                 ),
                 HumanMessage(content=f"Scientific objective:\n{objective}{context}"),
-            ]
+            ],
         )
-        hypothesis = _parse_hypothesis_proposal(str(response.content), objective)
+        hypothesis = _parse_hypothesis_proposal(reply.text, objective)
         hypothesis.discussion_mode = "single_llm"
         return hypothesis
 

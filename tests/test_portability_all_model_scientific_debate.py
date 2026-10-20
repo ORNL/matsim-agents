@@ -53,7 +53,7 @@ def test_every_catalog_model_completes_two_scientific_interaction_rounds(tmp_pat
     catalog = _catalog(tmp_path)
     models = {}
 
-    def factory(*, provider, model, base_url):
+    def factory(*, provider, model, base_url, max_tokens):
         assert provider == "vllm"
         assert base_url.endswith("/v1")
         models[model] = _FakeModel(model)
@@ -71,10 +71,12 @@ def test_every_catalog_model_completes_two_scientific_interaction_rounds(tmp_pat
     assert result["required_models"] == [f"org/model-{index}" for index in range(3)]
     assert result["turn_count"] == 6
     assert all(model.calls == 3 for model in models.values())
-    dialogue = json.loads(Path(result["dialogue_path"]).read_text())
-    contributions = [entry for entry in dialogue if entry["kind"] == "model_argument"]
+    records = [
+        json.loads(line) for line in Path(result["contributions_path"]).read_text().splitlines()
+    ]
+    contributions = [entry for entry in records if entry["kind"] == "argument"]
     assert len(contributions) == 6
-    assert len({entry["contribution_id"] for entry in contributions}) == 6
+    assert len({entry["id"] for entry in contributions}) == 6
 
 
 def test_actual_first_class_catalog_defines_the_enabled_enclave(tmp_path):
@@ -88,7 +90,7 @@ def test_actual_first_class_catalog_defines_the_enabled_enclave(tmp_path):
         for index, entry in enumerate(entries)
     }
 
-    def factory(*, provider, model, base_url):
+    def factory(*, provider, model, base_url, max_tokens):
         return _FakeModel(model)
 
     result = execute_all_model_scientific_debate(
@@ -117,7 +119,7 @@ def test_enclave_fails_closed_for_missing_model_endpoint(tmp_path):
 
 
 def test_enclave_excludes_catalog_models_not_stored_locally(tmp_path):
-    def factory(*, provider, model, base_url):
+    def factory(*, provider, model, base_url, max_tokens):
         return _FakeModel(model)
 
     result = execute_all_model_scientific_debate(

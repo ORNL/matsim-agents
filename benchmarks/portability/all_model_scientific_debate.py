@@ -123,6 +123,10 @@ def validate_enclave_result(
         errors.append("independent final verdicts do not cover every model")
     if any(not verdict.response.strip() for verdict in result.verdicts):
         errors.append("one or more independent final verdicts are empty")
+    if result.incomplete_contributions:
+        errors.append(
+            f"the token limit cut off contributions {', '.join(result.incomplete_contributions)}"
+        )
     return errors
 
 
@@ -185,7 +189,7 @@ def execute_all_model_scientific_debate(
             "turn_count": len(debate.turns),
             "debate_run_directory": debate.run_directory,
             "transcript_path": debate.transcript_path,
-            "dialogue_path": debate.dialogue_path,
+            "contributions_path": debate.contributions_path,
             "errors": errors,
         }
     except Exception as error:

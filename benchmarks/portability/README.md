@@ -117,7 +117,8 @@ recorded in the result. A facility launcher may repeat `--exclude-model` with a
 catalog name or model ID when the local accelerator cannot execute that model;
 these runtime exclusions are recorded separately in `runtime_excluded_models`.
 Every selected model must contribute exactly once in each of at least two rounds,
-directly respond to the accumulated peer dialogue, and return non-empty text.
+directly respond to the accumulated peer dialogue, and return a complete,
+non-empty answer: a reply the token limit cut off fails the benchmark.
 Every participant receives identical neutral system instructions and produces
 its own final verdict; the benchmark has no privileged synthesizer. The
 assigned materials-design question is:
@@ -148,14 +149,14 @@ Blackwell and Perlmutter provides Ampere A100 GPUs. Its eight compatible local
 models use 17 nodes. This is a facility runtime exclusion, not a global catalog
 policy; facilities with supported accelerators may still qualify DeepSeek-V3.2.
 
-Each debate turn and verdict is checkpointed to the run's `events.jsonl` as
+Each debate turn and verdict is appended to the run's `contributions.jsonl` as
 soon as it completes, not just at the end of the debate, so a crash or
 walltime cutoff on a long multi-round job loses at most the in-flight turn.
 
-The required `dialogue.json` artifact contains the original user question,
-every model argument in chronological dialogue order, and the final synthesis.
-Every model argument and synthesis has a unique `contribution_id`, together
-with its round, participant, provider, model identifier, and full text. The
+`contributions.jsonl` holds every model argument and verdict in chronological
+order, each with a unique `id`, its round, participant, provider, model
+identifier, answer, reasoning, finish reason, and token counts; `transcript.md`
+is the same debate for reading (see docs/scientific-debate.md). The
 machine-readable result records nonlocal and policy-disabled catalog entries and fails
 for fewer than two local models, a missing selected-model endpoint, missing or
 empty turns, duplicate contribution IDs, or empty synthesis.
@@ -199,7 +200,7 @@ python benchmarks/portability/active_learning_scientific_debate.py \
 
 `active_learning_scientific_debate_result.json` records the active-learning
 state, the labelled-frame evidence, and the full debate payload (including
-`dialogue_path`) under one `status`; it passes only when the active-learning
+`contributions_path`) under one `status`; it passes only when the active-learning
 iteration completes with at least one converged DFT label *and* the debate
 covers every expected participant with non-empty turns and verdicts.
 

@@ -36,6 +36,7 @@ def analyst_node(state: MatSimState) -> dict:
 
     try:
         from matsim_agents.backends.llm.provider import get_chat_model
+        from matsim_agents.backends.llm.replies import invoke_model
 
         llm = get_chat_model(
             provider=state.llm_provider,
@@ -44,7 +45,8 @@ def analyst_node(state: MatSimState) -> dict:
         )
         results_json = [r.model_dump() for r in state.results]
         handoff_events = state.handoff_events
-        rsp = llm.invoke(
+        summary = invoke_model(
+            llm,
             [
                 SystemMessage(content=_SYSTEM_PROMPT),
                 AIMessage(
@@ -54,9 +56,8 @@ def analyst_node(state: MatSimState) -> dict:
                         f"Deterministic summary: {summary}"
                     )
                 ),
-            ]
-        )
-        summary = rsp.content if isinstance(rsp.content, str) else str(rsp.content)
+            ],
+        ).text
     except Exception:  # pragma: no cover - LLM is optional
         pass
 

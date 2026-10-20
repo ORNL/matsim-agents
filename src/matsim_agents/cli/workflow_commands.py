@@ -38,7 +38,9 @@ def debate_workflow(
     from matsim_agents.workflows.debate import ScientificDebateConfig, run_scientific_debate
 
     cfg = ScientificDebateConfig.model_validate(_load_workflow_config(config))
-    console.print_json(run_scientific_debate(cfg).model_dump_json())
+    result = run_scientific_debate(cfg)
+    # The texts are in the run's transcript.md and contributions.jsonl.
+    console.print_json(result.model_dump_json(exclude={"turns", "verdicts", "synthesis"}))
 
 
 @app.command("llm-check")

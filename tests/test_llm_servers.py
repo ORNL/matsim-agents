@@ -672,6 +672,7 @@ def test_debate_participants_resolve_servers(tmp_path, monkeypatch):
         "provider": "vllm",
         "model": "Qwen2.5-14B-Instruct",
         "base_url": "http://n0:8000/v1",
+        "max_tokens": 8192,
     }
     assert calls[1]["provider"] == "ollama"
 

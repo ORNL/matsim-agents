@@ -352,6 +352,7 @@ def investigation_contract(output: Path, *, live_llm: bool = False) -> dict[str,
             from langchain_core.messages import HumanMessage
 
             from matsim_agents.backends.llm.provider import get_chat_model
+            from matsim_agents.backends.llm.replies import invoke_model
 
             model = get_chat_model(
                 provider=os.environ.get("MATSIM_LLM_PROVIDER", "vllm"),
@@ -359,9 +360,9 @@ def investigation_contract(output: Path, *, live_llm: bool = False) -> dict[str,
                 base_url=os.environ.get("MATSIM_VLLM_BASE_URL"),
                 temperature=0.0,
             )
-            proposal = str(model.invoke([HumanMessage(content=objective)]).content)
+            proposal = invoke_model(model, [HumanMessage(content=objective)]).text
             critique_prompt = f"Critique this materials hypothesis concisely:\n{proposal}"
-            critique = str(model.invoke([HumanMessage(content=critique_prompt)]).content)
+            critique = invoke_model(model, [HumanMessage(content=critique_prompt)]).text
         else:
             proposal = "Diamond Si should remain the lowest-energy candidate in this fixed set."
             critique = (
