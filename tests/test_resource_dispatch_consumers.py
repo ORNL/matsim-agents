@@ -251,3 +251,14 @@ def test_direct_launches_take_threads_from_the_placement(monkeypatch):
     assert LAUNCH.environment({}, local=True)["OMP_NUM_THREADS"] == "16"
     # Step wrappers set OMP_NUM_THREADS themselves from <threads_per_rank>.
     assert "OMP_NUM_THREADS" not in LAUNCH.environment({})
+
+
+def test_vasp_launcher_work_dir_placeholder_is_resolved(tmp_path):
+    dft = DFTBackendConfig(
+        backend="vasp",
+        potcar_dir="/opt/potcar",
+        launcher=["bash", "wrap.sh", "{work_dir}", "vasp_std", "{nodes}"],
+        launch=LAUNCH,
+    )
+    argv = dft.launcher_argv("vasp_std", work_dir=tmp_path / "calc")
+    assert argv == ["bash", "wrap.sh", str((tmp_path / "calc").resolve()), "vasp_std", "2"]

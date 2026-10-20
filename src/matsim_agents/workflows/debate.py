@@ -24,6 +24,7 @@ class DebateParticipant(BaseModel):
     base_url: str | None = None
     server: str | None = Field(
         None,
+        min_length=1,
         description=(
             "Name of a server in the llm pool of the debate's resources: plan (or of "
             "the plan served by `matsim-agents resources serve`); replaces provider, "
@@ -81,7 +82,7 @@ class ScientificDebateConfig(BaseModel):
             raise ValueError("single_call requires exactly one participant and one round")
         if not self.single_call and len(self.participants) < 2:
             raise ValueError("scientific debate requires at least two participants")
-        if self.resources is not None and not any(p.server for p in self.participants):
+        if self.resources is not None and not any(p.server is not None for p in self.participants):
             raise ValueError("resources: is set, but no participant names a server")
         return self
 
@@ -140,7 +141,7 @@ def run_scientific_debate(
     afterwards) or from the plan served by ``matsim-agents resources serve``.
     """
 
-    if not any(participant.server for participant in cfg.participants):
+    if not any(participant.server is not None for participant in cfg.participants):
         return _run_scientific_debate(cfg, model_factory=model_factory)
     with llm_endpoints(cfg.resources, output_dir=cfg.output_root) as services:
         participants = []

@@ -74,7 +74,7 @@ class DFTBackendConfig(BaseModel):
         ),
     )
 
-    def launcher_argv(self, default: str) -> list[str]:
+    def launcher_argv(self, default: str, *, work_dir: str | Path | None = None) -> list[str]:
         argv = (
             [self.launcher] if isinstance(self.launcher, str) else list(self.launcher or [default])
         )
@@ -86,6 +86,8 @@ class DFTBackendConfig(BaseModel):
                 )
             values = dict(zip(PLACEMENT_PLACEHOLDERS, self.launch.wrapper_args(), strict=True))
             argv = [values.get(token, token) for token in argv]
+        if work_dir is not None:
+            argv = [str(Path(work_dir).resolve()) if t == "{work_dir}" else t for t in argv]
         return argv
 
     def launch_environment(self, default: str) -> dict[str, str] | None:
@@ -264,7 +266,7 @@ def _dft_stage(
         prepare_relax_workdir(atoms, work_dir, settings, dft.potcar_dir or "")
         result = run_vasp(
             work_dir,
-            dft.launcher_argv("vasp_std"),
+            dft.launcher_argv("vasp_std", work_dir=work_dir),
             timeout_sec=dft.timeout_sec,
             env=dft.launch_environment("vasp_std"),
         )

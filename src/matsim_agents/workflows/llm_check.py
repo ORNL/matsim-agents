@@ -53,6 +53,7 @@ class LLMCheckConfig(BaseModel):
     scientific_objective: str = "Propose a testable hypothesis for stable elemental silicon."
     server: str | None = Field(
         None,
+        min_length=1,
         description=(
             "Check this server of the plan's llm pool: from resources (default: its "
             "only server) or from the plan served by `matsim-agents resources serve`."

@@ -31,6 +31,7 @@ Install extras: ``pip install -e .[huggingface]``.
 from __future__ import annotations
 
 import functools
+import logging
 import os
 from collections.abc import Iterator
 from typing import Any
@@ -40,6 +41,8 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import Field
+
+log = logging.getLogger(__name__)
 
 
 class ChatVLLM(BaseChatModel):
@@ -160,6 +163,25 @@ def limit_in_process_devices(model_path: str, fractions: dict[int, float | None]
             f"device assignment ({sorted(loaded)}); use one assignment per process"
         )
     _IN_PROCESS_DEVICES[model_path] = dict(fractions)
+
+
+def _huggingface_model_path(model: str | None) -> str:
+    """Model directory to load; a model placed by a resource plan is authoritative.
+
+    ``MATSIM_HF_MODEL_PATH`` would otherwise replace it with a snapshot that has
+    no registered devices and would load with unrestricted placement.
+    """
+
+    override = os.environ.get("MATSIM_HF_MODEL_PATH")
+    if model is not None and model in _IN_PROCESS_DEVICES:
+        if override and override != model:
+            log.warning(
+                "Ignoring MATSIM_HF_MODEL_PATH=%s: the resource plan places in-process model %s",
+                override,
+                model,
+            )
+        return model
+    return override or str(model)
 
 
 def _max_memory(fractions: dict[int, float | None]) -> dict[int, int]:
@@ -310,7 +332,7 @@ def get_chat_model(
     if provider == "huggingface":
         from langchain_huggingface import ChatHuggingFace
 
-        model_path = os.environ.get("MATSIM_HF_MODEL_PATH") or model
+        model_path = _huggingface_model_path(model)
         generation: dict[str, Any] = {
             "max_new_tokens": kwargs.pop("max_new_tokens", 2048),
             "do_sample": temperature > 0.0,

@@ -859,3 +859,23 @@ def test_saved_configs_with_plan_servers_reload(tmp_path, monkeypatch):
     )
     saved = json.loads((Path(check.run_directory) / "resolved_config.json").read_text())
     assert LLMCheckConfig.model_validate(saved).model == "Qwen2.5-14B-Instruct"
+
+
+def test_empty_server_names_are_rejected():
+    from pydantic import ValidationError
+
+    from matsim_agents.workflows.debate import DebateParticipant
+    from matsim_agents.workflows.llm_check import LLMCheckConfig
+
+    with pytest.raises(ValidationError, match="at least 1 character"):
+        DebateParticipant(name="a", server="")
+    with pytest.raises(ValidationError, match="at least 1 character"):
+        LLMCheckConfig(server="")
+
+
+def test_planned_in_process_model_ignores_model_path_override(monkeypatch):
+    monkeypatch.setattr(provider, "_IN_PROCESS_DEVICES", {"/models/planned": {2: None}})
+    monkeypatch.setenv("MATSIM_HF_MODEL_PATH", "/models/other")
+    assert provider._huggingface_model_path("/models/planned") == "/models/planned"
+    # Models without a plan keep the documented override.
+    assert provider._huggingface_model_path("/models/unplanned") == "/models/other"
