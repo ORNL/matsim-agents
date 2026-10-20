@@ -29,7 +29,7 @@ from matsim_agents.discovery.stability import (
     score_stability,
 )
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
-from matsim_agents.execution.contracts import ComputeBudget, WorkflowStatus
+from matsim_agents.execution.contracts import ComputeBudget, EvidenceLevel, WorkflowStatus
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
@@ -655,6 +655,7 @@ def test_sequential_formula_refinements_preserve_campaign_hull_vertices(tmp_path
             ranking_mode=RankingMode.CONVEX_HULL,
             reference_energies=references,
             method_signature=references.method_signature,
+            evidence_level=EvidenceLevel.CONVERGED_DFT,  # stands in for DFT refinement
         )
         result = _result(formula, output_dir)
         result.initial.relaxations = [relaxation]

@@ -12,7 +12,7 @@ from matsim_agents.campaign.review import (
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
 from matsim_agents.discovery.stability import PhaseStability, StabilityReport
-from matsim_agents.execution.contracts import WorkflowStatus
+from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.workflows.debate import DebateParticipant, DebateVerdict, ScientificDebateResult
 
 
@@ -105,6 +105,7 @@ def test_campaign_review_requires_cross_model_agreement(tmp_path):
         ranking=[ranked_phase],
         chemically_stable_proxy=False,
         summary="Ranked above the hull.",
+        evidence_level=EvidenceLevel.MLIP_RELAXATION,
     )
     participants = [
         DebateParticipant(name="model-a", provider="vllm", model="a"),
@@ -203,6 +204,7 @@ def test_campaign_review_cannot_deactivate_converged_result_without_hull_evidenc
         ranking=[phase],
         chemically_stable_proxy=True,
         summary="Relative MLIP ranking only.",
+        evidence_level=EvidenceLevel.MLIP_RELAXATION,
     )
     records = [FormulaRunRecord(formula="Nb2O3", status=WorkflowStatus.COMPLETE)]
     participants = [

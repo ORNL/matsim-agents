@@ -1,0 +1,30 @@
+# Is MgO rocksalt thermodynamically stable against the declared Mg-O phases?
+# This needs converged DFT for MgO and a ReferenceEnergySet computed with the
+# same DFT method (same signature): Mg and O elemental energies and at least one
+# competing Mg-O phase. Produce references.json yourself (see
+# docs/characterization.md); this example ships no reference energies.
+#   matsim-agents characterize examples/characterization/thermodynamic_stability.yaml
+contract_id: mgo-rocksalt-stability
+objective: Is MgO rocksalt on the Mg-O convex hull?
+formula: MgO
+recipe: thermodynamic_stability
+structures:
+  - structures/MgO-rocksalt.vasp
+reference_energies: references.json
+methods:
+  dft:
+    backend: qe
+    launcher: pw.x
+    pseudo_dir: /path/to/pseudopotentials
+    settings:
+      ecutwfc: 60
+      kpts: [6, 6, 6]
+  # Must equal the reference set's method_signature.
+  dft_method_signature: qe-pbe-sssp-efficiency-ecut60
+tolerances:
+  force_tolerance_eV_per_A: 0.02
+  hull_tolerance_eV_per_atom: 0.0
+budget:
+  max_dft_calculations: 1
+# DFT waits for explicit approval; set true once the calculation is approved.
+dft_approved: false

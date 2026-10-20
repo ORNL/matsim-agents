@@ -1,0 +1,764 @@
+"""Characterize a material against an explicit contract with deterministic recipes.
+
+A characterization answers one question about given structures of one
+composition, with no optimization objective. Its contract
+(:class:`CharacterizationContract`) declares the objective, the observables
+with their units and minimum fidelity, the methods, the numerical tolerances,
+the references, the budget, and the approvals. A recipe plans the calculations
+as an ordered task graph (:func:`plan_recipe`); the numerical work is done by
+the existing deterministic operators (:func:`matsim_agents.workflows.relaxation.
+run_relaxation`, :func:`matsim_agents.discovery.stability.score_stability`), never
+by an LLM. The answer (:class:`~matsim_agents.execution.contracts.
+CharacterizationReport`) states a conclusion only when the evidence suffices
+and says otherwise what is missing:
+
+- ``relaxation``: relaxed structures with converged residual forces;
+- ``energy_ranking``: the lowest-energy structure among same-composition
+  candidates, which is not a thermodynamic-stability claim;
+- ``thermodynamic_stability``: the energy above the convex hull of declared,
+  method-compatible DFT elemental and competing-phase references. MLIP
+  energies, clean relaxations, or a low total energy are never sufficient; a
+  provisional reference set gives ``inconclusive``.
+
+DFT runs only when a required observable needs DFT fidelity. Every step's
+outcome is saved as it completes, so running the same contract again resumes
+with the outstanding steps and never repeats a completed calculation.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+from matsim_agents.backends.mlip.results import RelaxationResult
+from matsim_agents.datasets.governance import sha256_file
+from matsim_agents.discovery.composition import parse_composition
+from matsim_agents.discovery.stability import (
+    RankingMode,
+    ReferenceEnergySet,
+    StabilityReport,
+    score_stability,
+)
+from matsim_agents.execution.contracts import (
+    DFT_EVIDENCE,
+    ApprovalPolicy,
+    CharacterizationReport,
+    CharacterizationStatus,
+    ComputeBudget,
+    EvidenceItem,
+    EvidenceLevel,
+    ObservableRequirement,
+    ObservableValue,
+    at_least,
+)
+from matsim_agents.workflows.relaxation import (
+    DFTBackendConfig,
+    RelaxationMode,
+    ScientificRelaxationConfig,
+    ScientificRelaxationResult,
+    run_relaxation,
+)
+
+log = logging.getLogger(__name__)
+
+Recipe = Literal["relaxation", "energy_ranking", "thermodynamic_stability"]
+RECIPE_OBSERVABLES: dict[str, list[tuple[str, str, EvidenceLevel]]] = {
+    "relaxation": [
+        ("relaxed_structure", "structure", EvidenceLevel.MLIP_RELAXATION),
+        ("energy_per_atom", "eV/atom", EvidenceLevel.MLIP_RELAXATION),
+        ("residual_max_force", "eV/A", EvidenceLevel.MLIP_RELAXATION),
+    ],
+    "energy_ranking": [
+        ("relative_energy_per_atom", "eV/atom", EvidenceLevel.MLIP_RELAXATION),
+    ],
+    "thermodynamic_stability": [
+        ("formation_energy_per_atom", "eV/atom", EvidenceLevel.CONVERGED_DFT),
+        ("energy_above_hull", "eV/atom", EvidenceLevel.CONVERGED_DFT),
+    ],
+}
+STATE_FILE = "characterization-state.json"
+REPORT_FILE = "characterization-report.json"
+
+
+class CharacterizationMethods(BaseModel):
+    """How relaxations are computed."""
+
+    mlip: dict[str, Any] = Field(
+        default_factory=dict, description="MLIP settings, as for `matsim-agents relax`."
+    )
+    dft: DFTBackendConfig | None = None
+    dft_method_signature: str | None = Field(
+        None,
+        description="The DFT method's scientific signature; thermodynamic stability "
+        "requires it to equal the reference set's.",
+    )
+
+
+class NumericalTolerances(BaseModel):
+    force_tolerance_eV_per_A: float = Field(0.02, gt=0)
+    max_relaxation_steps: int = Field(200, ge=1)
+    degeneracy_tolerance_eV_per_atom: float = Field(0.01, ge=0)
+    hull_tolerance_eV_per_atom: float = Field(
+        0.0, ge=0, description="Largest energy above the hull reported as on the hull."
+    )
+
+
+class CharacterizationContract(BaseModel):
+    """A characterization question, the evidence that answers it, and its limits."""
+
+    schema_version: Literal[1] = 1
+    contract_id: str = Field(pattern=r"^[A-Za-z0-9_.-]+$")
+    objective: str = Field(min_length=1, description="The question, in words.")
+    formula: str
+    structures: list[Path] = Field(min_length=1)
+    recipe: Recipe
+    observables: list[ObservableRequirement] = Field(
+        default_factory=list, description="The recipe's observables when empty."
+    )
+    methods: CharacterizationMethods = Field(default_factory=CharacterizationMethods)
+    tolerances: NumericalTolerances = Field(default_factory=NumericalTolerances)
+    reference_energies: Path | None = Field(
+        None, description="ReferenceEnergySet JSON (thermodynamic_stability)."
+    )
+    budget: ComputeBudget = Field(default_factory=ComputeBudget)
+    approvals: ApprovalPolicy = Field(default_factory=ApprovalPolicy)
+    dft_approved: bool = False
+    output_root: Path = Path("./runs")
+
+    @model_validator(mode="after")
+    def _consistent(self) -> CharacterizationContract:
+        if parse_composition(self.formula) is None:
+            raise ValueError(f"cannot parse formula {self.formula!r}")
+        missing_files = [str(path) for path in self.structures if not path.is_file()]
+        if missing_files:
+            raise ValueError(f"structures do not exist: {missing_files}")
+        defaults = {
+            name: ObservableRequirement(name=name, unit=unit, minimum_evidence_level=level)
+            for name, unit, level in RECIPE_OBSERVABLES[self.recipe]
+        }
+        given = {requirement.name: requirement for requirement in self.observables}
+        unknown = sorted(set(given) - set(defaults))
+        if unknown:
+            raise ValueError(f"the {self.recipe} recipe does not produce {unknown}")
+        self.observables = [given.get(name, default) for name, default in defaults.items()]
+        if self.recipe == "thermodynamic_stability":
+            weak = [
+                r.name
+                for r in self.observables
+                if not at_least(r.minimum_evidence_level, EvidenceLevel.CONVERGED_DFT)
+            ]
+            if weak:
+                raise ValueError(
+                    f"thermodynamic stability needs converged DFT for {weak}: MLIP or "
+                    "unconverged energies cannot establish it"
+                )
+            if self.reference_energies is None or not self.reference_energies.is_file():
+                raise ValueError("thermodynamic stability needs a reference_energies file")
+            if not self.methods.dft_method_signature:
+                raise ValueError("thermodynamic stability needs methods.dft_method_signature")
+        if self.recipe == "energy_ranking" and len(self.structures) < 2:
+            raise ValueError("an energy ranking needs at least two structures")
+        if self.needs_dft() and self.methods.dft is None:
+            raise ValueError("DFT-level observables need methods.dft")
+        return self
+
+    def required_level(self) -> EvidenceLevel:
+        return max(
+            (r.minimum_evidence_level for r in self.observables),
+            key=list(EvidenceLevel).index,
+        )
+
+    def needs_dft(self) -> bool:
+        return at_least(self.required_level(), EvidenceLevel.LOW_FIDELITY_DFT)
+
+    def digest(self) -> str:
+        payload = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+
+class RecipeStep(BaseModel):
+    """One node of a recipe's task graph."""
+
+    step_id: str
+    operator: Literal["relax", "rank", "hull"]
+    fidelity: Literal["mlip", "dft"] | None = None
+    structure: str | None = None
+    requires: list[str] = Field(default_factory=list)
+    produces: list[str]
+    needs_dft_approval: bool = False
+    max_attempts: int = Field(1, description="No automatic recovery: one attempt per run.")
+
+
+def plan_recipe(contract: CharacterizationContract) -> list[RecipeStep]:
+    """The ordered task graph of a contract's recipe (deterministic)."""
+    fidelity: Literal["mlip", "dft"] = "dft" if contract.needs_dft() else "mlip"
+    relax = [
+        RecipeStep(
+            step_id=f"relax-{fidelity}-{index:03d}",
+            operator="relax",
+            fidelity=fidelity,
+            structure=str(path),
+            produces=["relaxed_structure", "energy_per_atom", "residual_max_force"],
+            needs_dft_approval=fidelity == "dft" and contract.approvals.before_dft,
+        )
+        for index, path in enumerate(contract.structures)
+    ]
+    if contract.recipe == "relaxation":
+        return relax
+    final = (
+        RecipeStep(
+            step_id="rank",
+            operator="rank",
+            requires=[step.step_id for step in relax],
+            produces=["relative_energy_per_atom"],
+        )
+        if contract.recipe == "energy_ranking"
+        else RecipeStep(
+            step_id="hull",
+            operator="hull",
+            requires=[step.step_id for step in relax],
+            produces=["formation_energy_per_atom", "energy_above_hull"],
+        )
+    )
+    return [*relax, final]
+
+
+Relax = Callable[[ScientificRelaxationConfig], ScientificRelaxationResult]
+
+
+def _relaxation_config(
+    contract: CharacterizationContract, step: RecipeStep, work_dir: Path
+) -> ScientificRelaxationConfig:
+    return ScientificRelaxationConfig(
+        mode=RelaxationMode.DFT if step.fidelity == "dft" else RelaxationMode.MLIP,
+        structure_path=str(step.structure),
+        output_root=str(work_dir),
+        mlip=contract.methods.mlip,
+        dft=contract.methods.dft if step.fidelity == "dft" else None,
+        approvals=contract.approvals,
+        dft_approved=contract.dft_approved,
+        max_steps=contract.tolerances.max_relaxation_steps,
+        force_tolerance_eV_per_A=contract.tolerances.force_tolerance_eV_per_A,
+    )
+
+
+def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
+    """What a relaxation step contributes: a numerical outcome or an infrastructure failure."""
+    stage = result.stages[-1] if result.stages else None
+    if result.status == "failed" or stage is None:
+        return {"status": "failed", "failure_reason": result.failure_reason or "no stage result"}
+    return {
+        "status": "done",
+        "run_id": result.run_id,
+        "run_directory": result.run_directory,
+        "evidence_level": stage.evidence_level.value,
+        "converged": stage.converged,
+        "energy_eV": stage.energy_eV,
+        "max_force_eV_per_A": stage.max_force_eV_per_A,
+        "steps": stage.steps,
+        "input_structure_path": stage.input_structure_path,
+        "optimized_structure_path": stage.optimized_structure_path,
+        "failure_reason": stage.failure_reason,
+    }
+
+
+class _Run:
+    """The persisted progress of one contract (``<output_root>/characterization-<id>``)."""
+
+    def __init__(self, contract: CharacterizationContract) -> None:
+        self.contract = contract
+        self.directory = Path(contract.output_root) / f"characterization-{contract.contract_id}"
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.state_path = self.directory / STATE_FILE
+        digest = contract.digest()
+        if self.state_path.is_file():
+            self.state = json.loads(self.state_path.read_text())
+            if self.state["contract_sha256"] != digest:
+                raise ValueError(
+                    f"{self.directory} holds a different contract; give the changed "
+                    "contract a new contract_id"
+                )
+        else:
+            self.state = {
+                "schema_version": 1,
+                "contract_sha256": digest,
+                "contract": contract.model_dump(mode="json"),
+                "steps": {},
+            }
+            self._save()
+
+    def _save(self) -> None:
+        staged = self.state_path.with_name(f".{self.state_path.name}.tmp")
+        staged.write_text(json.dumps(self.state, indent=2) + "\n")
+        staged.replace(self.state_path)
+
+    def record(self, step: RecipeStep, outcome: dict[str, Any]) -> None:
+        self.state["steps"][step.step_id] = outcome
+        self._save()
+
+    def done(self, step_id: str) -> dict[str, Any] | None:
+        outcome = self.state["steps"].get(step_id)
+        return outcome if outcome is not None and outcome["status"] == "done" else None
+
+
+def outstanding_steps(contract: CharacterizationContract) -> list[RecipeStep]:
+    """Steps of the contract's recipe that have no completed outcome yet."""
+    state_path = (
+        Path(contract.output_root) / f"characterization-{contract.contract_id}" / STATE_FILE
+    )
+    steps = json.loads(state_path.read_text())["steps"] if state_path.is_file() else {}
+    return [
+        step
+        for step in plan_recipe(contract)
+        if steps.get(step.step_id, {}).get("status") != "done"
+    ]
+
+
+def _references(contract: CharacterizationContract) -> ReferenceEnergySet:
+    return ReferenceEnergySet.model_validate_json(
+        Path(str(contract.reference_energies)).read_text()
+    )
+
+
+def _preflight(
+    contract: CharacterizationContract,
+) -> tuple[CharacterizationStatus, list[str]] | None:
+    """Problems that make calculations pointless, found before any of them runs."""
+    from ase.io import read
+
+    expected = parse_composition(contract.formula)
+    assert expected is not None
+    wrong = []
+    for path in contract.structures:
+        found = parse_composition(read(path).get_chemical_formula(empirical=True))
+        if found is None or found.formula != expected.formula:
+            wrong.append(f"{path} is not {expected.formula}")
+    if wrong:
+        return CharacterizationStatus.INVALID_PROTOCOL, wrong
+    if contract.recipe != "thermodynamic_stability":
+        return None
+    references = _references(contract)
+    if references.method_signature != contract.methods.dft_method_signature:
+        return CharacterizationStatus.INVALID_PROTOCOL, [
+            f"references computed with the contract's DFT method: the reference set uses "
+            f"{references.method_signature!r}, the relaxations "
+            f"{contract.methods.dft_method_signature!r}"
+        ]
+    completeness = references.audit_completeness(expected.elements)
+    if completeness.provisional:
+        # The hull would be provisional whatever the relaxations give: no DFT is spent.
+        return CharacterizationStatus.INCONCLUSIVE, (
+            [f"elemental reference: {e}" for e in completeness.missing_elemental_references]
+            + [f"required phase: {f}" for f in completeness.missing_required_formulas]
+            + [
+                f"competing phase in the {pair} subsystem"
+                for pair in completeness.missing_binary_subsystems
+            ]
+            + (["a ternary competing phase"] if completeness.missing_ternary_competitor else [])
+        )
+    return None
+
+
+def run_characterization(
+    contract: CharacterizationContract, *, relax: Relax = run_relaxation
+) -> CharacterizationReport:
+    """Run the outstanding steps of the contract's recipe and assess the evidence.
+
+    Relaxations stop at the contract's budget and, for DFT, at its approval; the
+    report then says which evidence is missing. ``relax`` runs one relaxation
+    (the provenance-tracked relaxation workflow by default).
+    """
+    run = _Run(contract)
+    problem = _preflight(contract)
+    if problem is not None:
+        status, missing = problem
+        report = CharacterizationReport(
+            contract_id=contract.contract_id,
+            contract_sha256=contract.digest(),
+            recipe=contract.recipe,
+            status=status,
+            missing=missing,
+            limitations=["No calculation was run: the contract cannot be answered as given."],
+            recommended_next_test=(
+                "Compute the missing references with the contract's DFT method."
+                if status == CharacterizationStatus.INCONCLUSIVE
+                else "Correct the contract (structures, references, or DFT method)."
+            ),
+        )
+        (run.directory / REPORT_FILE).write_text(report.model_dump_json(indent=2) + "\n")
+        return report
+    steps = plan_recipe(contract)
+    blockers: list[str] = []
+    budget = {
+        "mlip": contract.budget.max_mlip_relaxations,
+        "dft": contract.budget.max_dft_calculations,
+    }
+    used = {"mlip": 0, "dft": 0}
+    for step in steps:
+        if step.operator != "relax":
+            continue
+        fidelity = step.fidelity or "mlip"
+        used[fidelity] += 1
+        if run.done(step.step_id) is not None:
+            continue
+        if step.needs_dft_approval and not contract.dft_approved:
+            blockers.append(f"{step.step_id}: DFT is required but not approved (dft_approved)")
+            continue
+        if budget[fidelity] is not None and used[fidelity] > budget[fidelity]:
+            blockers.append(f"{step.step_id}: beyond the {fidelity} relaxation budget")
+            continue
+        try:
+            outcome = _relax_record(
+                relax(_relaxation_config(contract, step, run.directory / step.step_id))
+            )
+        except Exception as exc:  # noqa: BLE001 - a failed tool is not evidence
+            outcome = {"status": "failed", "failure_reason": f"{type(exc).__name__}: {exc}"}
+        run.record(step, {**outcome, "structure": step.structure})
+    report = _assess(contract, steps, run, blockers)
+    (run.directory / REPORT_FILE).write_text(report.model_dump_json(indent=2) + "\n")
+    return report
+
+
+# --------------------------------------------------------------------------- #
+# Assessment                                                                  #
+# --------------------------------------------------------------------------- #
+
+
+def _evidence_item(contract: CharacterizationContract, step_id: str, outcome: dict) -> EvidenceItem:
+    artifact = outcome.get("optimized_structure_path")
+    return EvidenceItem(
+        evidence_id=f"{contract.contract_id}/{step_id}",
+        kind="relaxation",
+        evidence_level=EvidenceLevel(outcome["evidence_level"]),
+        method=outcome.get("run_id", ""),
+        artifact=artifact,
+        artifact_sha256=sha256_file(artifact) if artifact and Path(artifact).is_file() else None,
+        converged=outcome["converged"],
+    )
+
+
+def _relaxation_results(relaxed: list[tuple[str, dict]]) -> list[RelaxationResult]:
+    return [
+        RelaxationResult(
+            structure_path=outcome["structure"],
+            optimized_structure_path=outcome["optimized_structure_path"],
+            trajectory_path="",
+            log_csv_path="",
+            final_energy_eV=outcome["energy_eV"],
+            final_max_force_eV_per_A=outcome["max_force_eV_per_A"],
+            num_steps=outcome["steps"],
+            converged=outcome["converged"],
+        )
+        for _step_id, outcome in relaxed
+    ]
+
+
+def _assess(
+    contract: CharacterizationContract,
+    steps: list[RecipeStep],
+    run: _Run,
+    blockers: list[str],
+) -> CharacterizationReport:
+    relax_steps = [step for step in steps if step.operator == "relax"]
+    outcomes = {step.step_id: run.state["steps"].get(step.step_id) for step in relax_steps}
+    relaxed = [
+        (step_id, outcome)
+        for step_id, outcome in outcomes.items()
+        if outcome is not None and outcome["status"] == "done"
+    ]
+    evidence = [_evidence_item(contract, step_id, outcome) for step_id, outcome in relaxed]
+    base = {
+        "contract_id": contract.contract_id,
+        "contract_sha256": contract.digest(),
+        "recipe": contract.recipe,
+        "evidence": evidence,
+        "methods": {
+            "relaxation": "dft" if contract.needs_dft() else "mlip",
+            **(
+                {"dft_method_signature": contract.methods.dft_method_signature}
+                if contract.methods.dft_method_signature
+                else {}
+            ),
+        },
+    }
+    failed = [
+        f"{step_id}: {outcome['failure_reason']}"
+        for step_id, outcome in outcomes.items()
+        if outcome is not None and outcome["status"] == "failed"
+    ]
+    if failed:
+        return CharacterizationReport(
+            **base,
+            status=CharacterizationStatus.FAILED_INFRASTRUCTURE,
+            missing=failed + blockers,
+            limitations=["A calculation could not run; this is not evidence about the material."],
+            recommended_next_test="Fix the failed calculations and run the contract again "
+            "(completed steps are kept).",
+        )
+    tolerance = contract.tolerances.force_tolerance_eV_per_A
+    observables = []
+    for step_id, outcome in relaxed:
+        level = EvidenceLevel(outcome["evidence_level"])
+        cite = [f"{contract.contract_id}/{step_id}"]
+        structure = outcome["structure"]
+        observables += [
+            ObservableValue(
+                name="relaxed_structure",
+                value=str(outcome["optimized_structure_path"]),
+                unit="structure",
+                evidence_level=level,
+                structure=structure,
+                evidence_ids=cite,
+            ),
+            ObservableValue(
+                name="residual_max_force",
+                value=float(outcome["max_force_eV_per_A"]),
+                unit="eV/A",
+                evidence_level=level,
+                structure=structure,
+                evidence_ids=cite,
+            ),
+        ]
+    unconverged = [
+        step_id
+        for step_id, outcome in relaxed
+        if not outcome["converged"] or outcome["max_force_eV_per_A"] > tolerance
+    ]
+    missing = blockers + [
+        f"{step_id}: not converged to {tolerance} eV/A (numerical; not evidence against "
+        "the material)"
+        for step_id in unconverged
+    ]
+    if missing:
+        return CharacterizationReport(
+            **base,
+            status=CharacterizationStatus.INCONCLUSIVE,
+            observables=observables,
+            missing=missing,
+            recommended_next_test=(
+                "Approve the required DFT calculations"
+                if any("not approved" in item for item in blockers)
+                else "Complete the missing relaxations (more steps or budget) and run the "
+                "contract again"
+            ),
+        )
+    return {
+        "relaxation": _assess_relaxation,
+        "energy_ranking": _assess_ranking,
+        "thermodynamic_stability": _assess_stability,
+    }[contract.recipe](contract, relaxed, observables, base)
+
+
+def _energy_observables(
+    contract: CharacterizationContract, relaxed: list[tuple[str, dict]]
+) -> list[ObservableValue]:
+    from ase.io import read
+
+    values = []
+    for step_id, outcome in relaxed:
+        n_atoms = len(read(outcome["optimized_structure_path"]))
+        values.append(
+            ObservableValue(
+                name="energy_per_atom",
+                value=float(outcome["energy_eV"]) / n_atoms,
+                unit="eV/atom",
+                evidence_level=EvidenceLevel(outcome["evidence_level"]),
+                structure=outcome["structure"],
+                evidence_ids=[f"{contract.contract_id}/{step_id}"],
+            )
+        )
+    return values
+
+
+def _level(relaxed: list[tuple[str, dict]]) -> EvidenceLevel:
+    return min(
+        (EvidenceLevel(outcome["evidence_level"]) for _step, outcome in relaxed),
+        key=list(EvidenceLevel).index,
+    )
+
+
+def _assess_relaxation(contract, relaxed, observables, base) -> CharacterizationReport:
+    level = _level(relaxed)
+    return CharacterizationReport(
+        **base,
+        status=CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED,
+        conclusion=f"All {len(relaxed)} structure(s) of {contract.formula} relaxed to residual "
+        f"forces at most {contract.tolerances.force_tolerance_eV_per_A} eV/A ({level.value}).",
+        observables=observables + _energy_observables(contract, relaxed),
+        limitations=[
+            "A converged relaxation is a local minimum of the method's energy; it says "
+            "nothing about stability against other structures or compositions."
+        ],
+    )
+
+
+def _assess_ranking(contract, relaxed, observables, base) -> CharacterizationReport:
+    level = _level(relaxed)
+    report = score_stability(
+        contract.formula,
+        _relaxation_results(relaxed),
+        force_tol_eV_per_A=contract.tolerances.force_tolerance_eV_per_A,
+        degeneracy_tol_eV_per_atom=contract.tolerances.degeneracy_tolerance_eV_per_atom,
+        evidence_level=level,
+    )
+    observables = (
+        observables
+        + _energy_observables(contract, relaxed)
+        + _ranking_values(contract, relaxed, report)
+    )
+    limitations = [
+        "A same-composition ranking; it does not establish formation energy, convex-hull "
+        "stability, or synthesizability."
+    ]
+    if report.near_degenerate_structure_paths:
+        return CharacterizationReport(
+            **base,
+            status=CharacterizationStatus.INCONCLUSIVE,
+            observables=observables,
+            missing=[
+                f"a ground state distinguishable within "
+                f"{contract.tolerances.degeneracy_tolerance_eV_per_atom} eV/atom: "
+                f"{len(report.near_degenerate_structure_paths)} structure(s) are as low"
+            ],
+            limitations=limitations,
+            recommended_next_test="Rank the near-degenerate structures at higher fidelity.",
+        )
+    ground = report.ground_state
+    gap = report.ranking[1].delta_e_above_min_eV_per_atom if len(report.ranking) > 1 else None
+    return CharacterizationReport(
+        **base,
+        status=CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED,
+        conclusion=f"Lowest-energy structure of {contract.formula} among "
+        f"{len(report.ranking)} ranked: {ground.structure_path}"
+        + (f", {gap:.4g} eV/atom below the next" if gap is not None else "")
+        + f" ({level.value}).",
+        observables=observables,
+        limitations=limitations,
+    )
+
+
+def _ranking_values(
+    contract: CharacterizationContract, relaxed: list[tuple[str, dict]], report: StabilityReport
+) -> list[ObservableValue]:
+    step_by_input = {outcome["structure"]: step_id for step_id, outcome in relaxed}
+    return [
+        ObservableValue(
+            name="relative_energy_per_atom",
+            value=phase.delta_e_above_min_eV_per_atom,
+            unit="eV/atom",
+            evidence_level=report.evidence_level,
+            structure=phase.structure_path,
+            evidence_ids=[f"{contract.contract_id}/{step_by_input[phase.structure_path]}"],
+        )
+        for phase in report.ranking
+    ]
+
+
+def _assess_stability(contract, relaxed, observables, base) -> CharacterizationReport:
+    level = _level(relaxed)
+    limitations = [
+        "Stability is relative to the declared reference phases (the lowest among those "
+        "tested, not a global ground-state search), at 0 K without zero-point or "
+        "finite-temperature contributions."
+    ]
+    if level not in DFT_EVIDENCE or not at_least(level, EvidenceLevel.CONVERGED_DFT):
+        return CharacterizationReport(
+            **base,
+            status=CharacterizationStatus.INCONCLUSIVE,
+            observables=observables,
+            missing=[f"converged DFT energies (the evidence is {level.value})"],
+            limitations=limitations,
+            recommended_next_test="Relax the structures with converged DFT.",
+        )
+    references = _references(contract)
+    report = score_stability(
+        contract.formula,
+        _relaxation_results(relaxed),
+        force_tol_eV_per_A=contract.tolerances.force_tolerance_eV_per_A,
+        degeneracy_tol_eV_per_atom=contract.tolerances.degeneracy_tolerance_eV_per_atom,
+        ranking_mode=RankingMode.CONVEX_HULL,
+        reference_energies=references,
+        method_signature=contract.methods.dft_method_signature,
+        evidence_level=level,
+    )
+    ground = report.ground_state
+    cite = [
+        f"{contract.contract_id}/{step_id}"
+        for step_id, outcome in relaxed
+        if outcome["structure"] == ground.structure_path
+    ]
+    observables = (
+        observables
+        + _energy_observables(contract, relaxed)
+        + [
+            ObservableValue(
+                name=name,
+                value=float(value),
+                unit="eV/atom",
+                evidence_level=level,
+                structure=ground.structure_path,
+                evidence_ids=cite,
+            )
+            for name, value in (
+                ("formation_energy_per_atom", ground.formation_energy_eV_per_atom),
+                ("energy_above_hull", ground.energy_above_hull_eV_per_atom),
+            )
+        ]
+    )
+    e_hull = float(ground.energy_above_hull_eV_per_atom)
+    on_hull = e_hull <= contract.tolerances.hull_tolerance_eV_per_atom + 1e-8
+    decomposition = ", ".join(sorted(ground.decomposition))
+    conclusion = (
+        f"{contract.formula} ({ground.structure_path}) is on the convex hull of the declared "
+        f"reference phases within {contract.tolerances.hull_tolerance_eV_per_atom} eV/atom "
+        f"({e_hull:.4g} eV/atom above it; {level.value}, "
+        f"{references.method_signature})."
+        if on_hull
+        else f"{contract.formula} ({ground.structure_path}) lies {e_hull:.4g} eV/atom above "
+        f"the convex hull of the declared reference phases and decomposes to "
+        f"{decomposition} ({level.value}, {references.method_signature})."
+    )
+    return CharacterizationReport(
+        **base,
+        status=CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED,
+        conclusion=conclusion,
+        observables=observables,
+        limitations=limitations,
+    )
+
+
+def load_contract(path: str | Path) -> CharacterizationContract:
+    """Read a YAML or JSON contract; relative paths in it are relative to the file."""
+    import yaml
+
+    path = Path(path)
+    data = yaml.safe_load(path.read_text())
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a characterization contract mapping")
+
+    def resolve(value: Any) -> Any:
+        return str(path.parent / value) if isinstance(value, str) else value
+
+    data["structures"] = [resolve(item) for item in data.get("structures") or []]
+    for key in ("reference_energies", "output_root"):
+        if key in data:
+            data[key] = resolve(data[key])
+    return CharacterizationContract.model_validate(data)
+
+
+__all__ = [
+    "CharacterizationContract",
+    "CharacterizationMethods",
+    "NumericalTolerances",
+    "RecipeStep",
+    "load_contract",
+    "outstanding_steps",
+    "plan_recipe",
+    "run_characterization",
+]

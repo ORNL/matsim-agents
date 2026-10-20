@@ -20,6 +20,7 @@ relaxation
 | Phase exploration | `matsim_agents.workflows.run_phase_exploration` | Programmatic workflow; relaxation and optional AL are composed through callbacks |
 | Agentic investigation | `matsim_agents.workflows.run_investigation` | Programmatic orchestration and persisted hypothesis revision; numerical work is delegated to phase exploration |
 | Cross-facility benchmark | `benchmarks/portability/run.py` | Separates deterministic workflow contracts from `--qualification compute`, which executes real MLIP and QE relaxation configs and emits a mandatory scientific summary |
+| Characterization | `matsim-agents characterize CONTRACT.yaml` | Deterministic relaxation, energy-ranking, and hull-stability recipes against an explicit contract; tested with stand-in operators, not yet qualified on HPC ([Characterization contracts](characterization.md)) |
 | Scientific debate | `matsim-agents debate debate.yaml` | Runs independently configured LLMs that challenge a shared hypothesis for a user-selected number of rounds, then persists the transcript and synthesis |
 
 ## Multi-model scientific hypothesis debate
@@ -920,12 +921,16 @@ candidates with their rejection reasons and participant attribution.
 `ApprovalPolicy` exposes gates before DFT, retraining, and model promotion.
 `EvidenceLevel` distinguishes hypotheses, MLIP predictions/relaxations,
 low-fidelity DFT, converged DFT, higher-accuracy DFT, and experiment.
+Stability reports carry their evidence level; only DFT convex-hull reports
+enter a campaign's hull, and only converged DFT can establish thermodynamic
+stability in a [characterization](characterization.md).
 
 Every failed or rejected result must include a reason. Unconverged jobs remain
 in the run record and are excluded from rankings rather than silently dropped.
 
 Related documentation:
 
+- [Characterization contracts](characterization.md)
 - [Distributed DFT dispatch](distributed-dft-dispatch.md)
 - [Run artifacts and restarts](run-artifacts-and-restarts.md)
 - [Cross-facility portability benchmark](../benchmarks/portability/README.md)

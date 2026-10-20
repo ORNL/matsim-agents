@@ -1,0 +1,20 @@
+# Rank MgO polymorphs by MLIP energy per atom. This answers "which of these
+# structures is lowest in energy", never "is MgO thermodynamically stable".
+#   matsim-agents characterize examples/characterization/energy_ranking.yaml
+contract_id: mgo-polymorph-ranking
+objective: Which MgO polymorph, rocksalt or zincblende, is lower in energy?
+formula: MgO
+recipe: energy_ranking
+structures:
+  - structures/MgO-rocksalt.vasp
+  - structures/MgO-zincblende.vasp
+methods:
+  mlip:
+    mlip_backend: uma
+    uma_model_name: uma-s-1p1
+    uma_task: omat
+    mlp_device: cuda
+tolerances:
+  force_tolerance_eV_per_A: 0.02
+  # Energy differences below this are reported as near-degenerate (inconclusive).
+  degeneracy_tolerance_eV_per_atom: 0.01

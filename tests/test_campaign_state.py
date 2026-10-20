@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -12,7 +14,7 @@ from matsim_agents.discovery.stability import (
     ReferenceEnergySet,
     StabilityReport,
 )
-from matsim_agents.execution.contracts import WorkflowStatus
+from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.workflows.debate import DebateVerdict, ScientificDebateResult
 
 
@@ -98,6 +100,7 @@ def test_record_stability_feeds_hull_reference_set():
         chemically_stable_proxy=True,
         summary="NbTaO4 relaxed to a new hull vertex.",
         ranking_mode=RankingMode.CONVEX_HULL,
+        evidence_level=EvidenceLevel.CONVERGED_DFT,
         reference_set_id="nb-ta-o-pbe-v1",
     )
     campaign.record_stability(report)
@@ -135,6 +138,7 @@ def test_record_stability_admits_near_degenerate_hull_vertex():
         chemically_stable_proxy=False,
         summary="NbTaO4 has a near-degenerate polymorph.",
         ranking_mode=RankingMode.CONVEX_HULL,
+        evidence_level=EvidenceLevel.CONVERGED_DFT,
         reference_set_id="nb-ta-o-pbe-v1",
         near_degenerate_structure_paths=["candidates/NbTaO4-P004-relaxed.vasp"],
     )
@@ -168,6 +172,7 @@ def _hull_report(formula: str, energy: float, formation_energy: float) -> Stabil
         chemically_stable_proxy=True,
         summary=f"{formula} hull result",
         ranking_mode=RankingMode.CONVEX_HULL,
+        evidence_level=EvidenceLevel.CONVERGED_DFT,
         reference_set_id="nb-o-pbe-v1",
     )
 
@@ -260,3 +265,56 @@ def test_record_stability_does_not_admit_above_hull_phase():
     campaign.record_stability(report)
 
     assert "NbO" not in campaign.reference_energies.competing_phases
+
+
+def _vertex_report(level: EvidenceLevel) -> StabilityReport:
+    ground_state = PhaseStability(
+        structure_path="candidates/NbTaO4-P003.vasp",
+        optimized_structure_path="candidates/NbTaO4-P003-relaxed.vasp",
+        composition={"Nb": 1, "Ta": 1, "O": 4},
+        final_energy_eV=-62.56,
+        energy_per_atom_eV=-7.82,
+        delta_e_above_min_eV_per_atom=0.0,
+        final_max_force_eV_per_A=0.01,
+        converged=True,
+        dynamically_stable_proxy=True,
+        formation_energy_eV_per_atom=-0.45,
+        energy_above_hull_eV_per_atom=0.0,
+    )
+    return StabilityReport(
+        formula="NbTaO4",
+        ground_state=ground_state,
+        ranking=[ground_state],
+        chemically_stable_proxy=True,
+        summary="NbTaO4 on the hull.",
+        ranking_mode=RankingMode.CONVEX_HULL,
+        evidence_level=level,
+        reference_set_id="nb-ta-o-pbe-v1",
+    )
+
+
+def test_mlip_hull_reports_never_enter_the_campaign_hull():
+    campaign = _campaign()
+    campaign.record_stability(_vertex_report(EvidenceLevel.MLIP_RELAXATION))
+    assert "NbTaO4" in campaign.stability_reports
+    assert "NbTaO4" not in campaign.reference_energies.competing_phases
+    assert campaign.current_hull is None
+
+
+def test_version_1_campaign_state_migrates_explicitly():
+    campaign = _campaign()
+    campaign.record_stability(_vertex_report(EvidenceLevel.CONVERGED_DFT))
+    saved = campaign.model_dump(mode="json")
+    saved.pop("schema_version")
+    del saved["stability_reports"]["NbTaO4"]["evidence_level"]
+    del saved["current_hull"]["evidence_level"]
+    for hull in saved["hull_history"]:
+        del hull["evidence_level"]
+    original = json.loads(json.dumps(saved))
+    restored = CampaignState.model_validate(saved)
+    assert saved == original
+    assert restored.schema_version == 2
+    assert restored.stability_reports["NbTaO4"].evidence_level == EvidenceLevel.CONVERGED_DFT
+    assert restored.current_hull.evidence_level == EvidenceLevel.CONVERGED_DFT
+    with pytest.raises(ValidationError, match="newer than this code"):
+        CampaignState.model_validate({**saved, "schema_version": 3})
