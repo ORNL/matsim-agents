@@ -179,6 +179,18 @@ wait_for_ray_gpus() {
   return 1
 }
 
+# Stop processes with SIGTERM, wait up to $1 seconds for all of them, then kill the rest.
+stop_processes() {
+  local deadline=$(( SECONDS + $1 )) pid
+  shift
+  (( $# )) || return 0
+  kill -TERM "$@" 2>/dev/null || true
+  for pid in "$@"; do
+    while kill -0 "$pid" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+}
 cleanup() {
   echo ""
   echo "[cleanup] Stopping vLLM and Ray cluster ..."
@@ -192,11 +204,11 @@ cleanup() {
     wait "$VLLM_PID" 2>/dev/null || true
   fi
   if [[ "$N_NODES" -gt 1 ]]; then
+    # Workers leave while the head still runs, then the head stops; each node
+    # saves its Ray logs as it stops (ray-node.sh).
+    stop_processes 30 "${WORKER_PIDS[@]}"
+    stop_processes 20 $RAY_HEAD_PID
     "$VLLM_VENV/bin/ray" stop --force 2>/dev/null || true
-    for pid in "${WORKER_PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
-    [[ -n "$RAY_HEAD_PID" ]] && kill "$RAY_HEAD_PID" 2>/dev/null || true
-    # Each node saves its Ray logs as it stops (ray-node.sh).
-    for pid in "${WORKER_PIDS[@]}" $RAY_HEAD_PID; do wait "$pid" 2>/dev/null || true; done
   fi
   echo "[cleanup] Done."
 }

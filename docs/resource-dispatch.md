@@ -697,8 +697,14 @@ A `managed-vllm` server may span several nodes:
   node's Ray logs to shared storage and removes the node-local directory: for a
   managed server to `<log dir>/<server>-ray/<host>/` (`MATSIM_SERVER_LOG_DIR`),
   for the standalone `job-serve-multinode-*.sh` jobs on all three facilities to
-  `<run dir>/ray-logs/<host>/`. A multi-node server gets 120 s instead of 30 s
-  to stop before it is killed.
+  `<run dir>/ray-logs/<host>/`. It copies the logs as soon as the node is asked
+  to stop and again once Ray has shut down, because the scheduler may kill a
+  step before Ray finishes. Stopping a server stops vLLM, then the workers
+  while the head still runs (a worker whose head is gone waits 30 s for it
+  before shutting down), then the head; the Ray nodes run in their own
+  sessions so that the signal that stops the server does not reach them out of
+  order. A multi-node server gets 120 s instead of 30 s to stop before it is
+  killed.
 - **Parallelism.** `tensor_parallel_size` defaults to the server's devices per
   node, with pipeline stages across nodes (`--pipeline-parallel-size`). The
   campaign panel sets tensor parallelism over all of a server's GPUs, as the

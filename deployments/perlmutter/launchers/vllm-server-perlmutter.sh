@@ -88,22 +88,40 @@ wait_for_gpus() {
   return 1
 }
 
-CHILDREN=()
+# Stop processes with SIGTERM, wait up to $1 seconds for all of them, then kill the rest.
+stop_processes() {
+  local deadline=$(( SECONDS + $1 )) pid
+  shift
+  (( $# )) || return 0
+  kill -TERM "$@" 2>/dev/null || true
+  for pid in "$@"; do
+    while kill -0 "$pid" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+}
+VLLM_PID= HEAD_PID=
+WORKER_PIDS=()
 cleanup() {
   trap - EXIT INT TERM
   echo "[vllm-server] stopping vLLM and the Ray cluster"
-  for pid in "${CHILDREN[@]}"; do kill "$pid" 2>/dev/null || true; done
-  timeout 60s "$VLLM_VENV/bin/ray" stop --force >/dev/null 2>&1 || true
-  for pid in "${CHILDREN[@]}"; do wait "$pid" 2>/dev/null || true; done
+  # vLLM first; then the workers while the head still runs, so they leave the
+  # cluster at once and save their logs; then the head.
+  stop_processes 20 $VLLM_PID
+  stop_processes 30 "${WORKER_PIDS[@]}"
+  stop_processes 20 $HEAD_PID
+  timeout 30s "$VLLM_VENV/bin/ray" stop --force >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 
 echo "[ray] head ${HEAD_IP}:${RAY_PORT} with ${HEAD_GPUS} GPU(s); ${#SLICES[@]} node(s), ${EXPECTED} GPU(s)"
-"$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start --head \
+# The Ray nodes run in their own sessions: stopping the server reaches them only
+# through cleanup(), which stops the workers before the head.
+setsid "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start --head \
   --node-ip-address="$HEAD_IP" --port="$RAY_PORT" \
   --temp-dir="$RAY_TMP" --include-dashboard=false \
   --num-cpus="$NODE_CPUS" --num-gpus="$HEAD_GPUS" --block &
-CHILDREN+=("$!")
+HEAD_PID=$!
 wait_for_gpus "$HEAD_GPUS" 300
 
 for slice in "${SLICES[@]:1}"; do
@@ -112,19 +130,18 @@ for slice in "${SLICES[@]:1}"; do
   echo "[ray] worker on ${host} (GPUs ${devices})"
   # Take the node's GPUs and expose only the placed ones (Slurm picks a step's
   # GPUs itself); --overlap so other pools' steps on the node are not blocked.
-  # The worker creates the node-local directories exported above on its own
-  # node; srun forwards SIGTERM to it when the cluster stops.
-  srun --nodes=1 --ntasks=1 --nodelist="$host" --overlap \
+  # The worker creates the node-local directories exported above on its own node.
+  setsid srun --nodes=1 --ntasks=1 --nodelist="$host" --overlap \
     --gpus-per-node="$NODE_GPUS" --gpu-bind=none --cpus-per-task="$NODE_CPUS" --export=ALL \
     env "CUDA_VISIBLE_DEVICES=${devices}" \
     bash -c 'mkdir -p "$TMPDIR" "$TRITON_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR" "$VLLM_CACHE_ROOT" && exec "$@"' worker \
     "$RAY_NODE" "$RAY_LOGS" "$VLLM_VENV/bin/ray" start --address="$RAY_ADDRESS" --temp-dir="$RAY_TMP" \
       --num-cpus="$NODE_CPUS" --num-gpus="$(count "$devices")" --block &
-  CHILDREN+=("$!")
+  WORKER_PIDS+=("$!")
 done
 wait_for_gpus "$EXPECTED" 600
 "$VLLM_VENV/bin/ray" status --address="$RAY_ADDRESS" || true
 
 "$VLLM_VENV/bin/vllm" serve "$@" --distributed-executor-backend ray &
-CHILDREN+=("$!")
-wait "${CHILDREN[-1]}"
+VLLM_PID=$!
+wait "$VLLM_PID"

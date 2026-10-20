@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import os
+import signal
+import socket
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -14,6 +17,7 @@ from matsim_agents.execution.placement import ResourcePlan
 
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / "deployments/perlmutter/launchers/vllm-server-perlmutter.sh"
+RAY_NODE = ROOT / "deployments/common/ray-node.sh"
 
 
 def _placement(servers, nodes=("n0", "n1", "n2"), llm_nodes=3):
@@ -89,24 +93,27 @@ def stub_tools(tmp_path):
         'printf "%s %s | CUDA=%s\\n" "$(basename "$0")" "$*" "${CUDA_VISIBLE_DEVICES:-}"'
         f" >> {record}\n"
     )
-    # `ray start --block` runs until stopped: the worker stub blocks until it is
-    # terminated (the head's stub returns at once). The Ray stub writes a session
-    # log naming its node, as Ray does under --temp-dir, before it records the call
-    # (which the GPU probe below waits for).
+    # `ray start --block` runs until it is terminated and records when it stops.
+    # The Ray stub writes a session log naming its node, as Ray does under
+    # --temp-dir, before it records the call (which the GPU probe below waits for).
     _stub(
         venv / "ray",
         'for arg in "$@"; do case "$arg" in --temp-dir=*) d=${arg#*=}\n'
         '  mkdir -p "$d/session_1/logs" && ln -sfn session_1 "$d/session_latest"\n'
         '  hostname > "$d/session_1/logs/raylet.out";; esac; done\n'
-        'if [[ "$*" == *--address=*--block* ]]; then\n'
+        'if [[ "$*" == *--block* ]]; then\n'
         "  sleep 30 & sleeper=$!\n"
-        '  trap "kill $sleeper; exit 0" TERM\n'
+        f'  trap "kill $sleeper; echo stopped $(hostname) >> {record}; exit 0" TERM\n'
         f"  {log}"
         '  wait "$sleeper"\n'
         f"else\n  {log}"
         "fi\n",
     )
-    _stub(venv / "vllm", log)
+    # vLLM serves until it is stopped when STUB_VLLM_SERVES is set.
+    _stub(
+        venv / "vllm",
+        log + 'if [[ -n "${STUB_VLLM_SERVES:-}" ]]; then sleep 30 & wait; fi\n',
+    )
     # The GPU probe reports the whole cluster as joined once a worker has started
     # (or after a few seconds), like Ray counting GPUs as workers register.
     _stub(
@@ -177,6 +184,65 @@ def test_launcher_builds_a_ray_cluster_before_serving(stub_tools):
         assert (logs / host / "raylet.out").read_text().strip() == host
     ray_tmp = Path(f"/tmp/r{env['SLURM_JOB_ID']}.9000")
     assert not ray_tmp.exists() and not Path(f"{ray_tmp}.n1").exists()
+    # Workers leave while the head still runs.
+    assert calls.index("stopped n1") < calls.index("stopped n0")
+
+
+def test_stopping_the_server_stops_workers_before_the_head(stub_tools):
+    """matsim-agents stops a server by signalling its process group."""
+    env, record = stub_tools
+    env["MATSIM_SERVER_SLICES"] = "n0=0,1,2,3;n1=0,1,2,3"
+    env["STUB_VLLM_SERVES"] = "1"
+    process = subprocess.Popen(
+        ["bash", str(LAUNCHER), "/models/Big"],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + 30
+    while "vllm serve" not in (record.read_text() if record.exists() else ""):
+        assert time.monotonic() < deadline and process.poll() is None
+        time.sleep(0.2)
+    os.killpg(process.pid, signal.SIGTERM)
+    output, _ = process.communicate(timeout=60)
+    calls = record.read_text().splitlines()
+    assert calls.index("stopped n1") < calls.index("stopped n0"), output
+    logs = Path(env["MATSIM_SERVER_LOG_DIR"])
+    for host in ("n0", "n1"):
+        assert (logs / host / "raylet.out").read_text().strip() == host
+
+
+def test_ray_node_saves_logs_when_asked_to_stop_even_if_killed_after(tmp_path):
+    ray = tmp_path / "ray"
+    pid_file = tmp_path / "ray.pid"
+    # A Ray node that writes its session log and then ignores SIGTERM.
+    _stub(
+        ray,
+        'd=${1#--temp-dir=}; mkdir -p "$d/session_1/logs" && ln -sfn session_1 '
+        '"$d/session_latest"; echo log > "$d/session_1/logs/raylet.out"\n'
+        f'echo $$ > {pid_file}; trap "" TERM; sleep 30\n',
+    )
+    logs = tmp_path / "logs"
+    process = subprocess.Popen(
+        ["bash", str(RAY_NODE), str(logs), str(ray), f"--temp-dir={tmp_path / 'session'}"]
+    )
+    deadline = time.monotonic() + 10
+    while not pid_file.exists() or not pid_file.read_text().strip():
+        assert time.monotonic() < deadline
+        time.sleep(0.1)
+    try:
+        process.send_signal(signal.SIGTERM)
+        host_logs = logs / socket.gethostname()
+        while not (host_logs / "raylet.out").exists():
+            assert time.monotonic() < deadline + 10
+            time.sleep(0.1)
+        # The scheduler may kill the step before Ray has shut down.
+        process.kill()
+        process.wait(timeout=10)
+    finally:
+        os.kill(int(pid_file.read_text()), signal.SIGKILL)
 
 
 def test_launcher_serves_one_node_directly(stub_tools):

@@ -17,9 +17,17 @@ for arg in "$@"; do
 done
 [[ -n "$temp_dir" ]] || { echo "ray-node.sh: pass --temp-dir=<node-local dir>" >&2; exit 2; }
 
+host=$(hostname)
+dest="$log_dir/$host"
+save_logs() {
+  mkdir -p "$dest" && cp -r "$temp_dir/session_latest/logs/." "$dest/" 2>/dev/null
+}
+
 stop=0 ray_pid= status=0
-# `ray start --block` shuts its node down on SIGTERM.
-trap 'stop=1; [[ -z $ray_pid ]] || kill -TERM "$ray_pid" 2>/dev/null' TERM INT
+# Copy the logs as soon as the node is asked to stop: the scheduler may kill
+# this step before Ray finishes shutting down. `ray start --block` shuts its
+# node down on SIGTERM; the logs are copied again once it has.
+trap 'stop=1; save_logs; [[ -z $ray_pid ]] || kill -TERM "$ray_pid" 2>/dev/null' TERM INT
 rm -rf "$temp_dir"
 if (( ! stop )); then
   "$@" &
@@ -29,9 +37,7 @@ if (( ! stop )); then
   while kill -0 "$ray_pid" 2>/dev/null; do wait "$ray_pid"; status=$?; done
 fi
 
-host=$(hostname)
-dest="$log_dir/$host"
-if mkdir -p "$dest" && cp -r "$temp_dir/session_latest/logs/." "$dest/" 2>/dev/null; then
+if save_logs; then
   echo "[ray] logs of $host saved to $dest"
 else
   echo "[ray] WARNING: could not save the Ray logs of $host to $dest" >&2

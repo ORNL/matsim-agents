@@ -162,22 +162,32 @@ echo "=========================================="
 VLLM_PID=""
 RAY_HEAD_PID=""
 WORKER_PIDS=()
+# Stop processes with SIGTERM, wait up to $1 seconds for all of them, then kill the rest.
+stop_processes() {
+  local deadline=$(( SECONDS + $1 )) pid
+  shift
+  (( $# )) || return 0
+  kill -TERM "$@" 2>/dev/null || true
+  for pid in "$@"; do
+    while kill -0 "$pid" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+}
 cleanup() {
   echo
   echo "[cleanup] Stopping vLLM and Ray cluster ..."
   [[ -n "$VLLM_PID" ]]      && kill "$VLLM_PID"      2>/dev/null || true
   wait "$VLLM_PID" 2>/dev/null || true
+  # Workers leave while the head still runs, then the head stops; each node
+  # saves its Ray logs as it stops (ray-node.sh).
+  stop_processes 30 "${WORKER_PIDS[@]}"
+  stop_processes 20 $RAY_HEAD_PID
   ray stop --force 2>/dev/null || true
-  for pid in "${WORKER_PIDS[@]}"; do
-    kill "$pid" 2>/dev/null || true
-  done
-  [[ -n "$RAY_HEAD_PID" ]]  && kill "$RAY_HEAD_PID"  2>/dev/null || true
   # Also kill stale ray processes on workers
   for node in "${ALL_NODES[@]:1}"; do
     mpiexec -n 1 --ppn 1 --hosts "$node" "$RAY" stop --force 2>/dev/null || true
   done
-  # Each node saves its Ray logs as it stops (ray-node.sh).
-  for pid in "${WORKER_PIDS[@]}" $RAY_HEAD_PID; do wait "$pid" 2>/dev/null || true; done
   echo "[cleanup] Done."
 }
 trap cleanup EXIT
