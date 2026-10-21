@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -12,7 +14,7 @@ from matsim_agents.discovery.stability import (
     ReferenceEnergySet,
     StabilityReport,
 )
-from matsim_agents.execution.contracts import WorkflowStatus
+from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.workflows.debate import DebateVerdict, ScientificDebateResult
 
 
@@ -98,6 +100,7 @@ def test_record_stability_feeds_hull_reference_set():
         chemically_stable_proxy=True,
         summary="NbTaO4 relaxed to a new hull vertex.",
         ranking_mode=RankingMode.CONVEX_HULL,
+        evidence_level=EvidenceLevel.CONVERGED_DFT,
         reference_set_id="nb-ta-o-pbe-v1",
     )
     campaign.record_stability(report)
@@ -135,6 +138,7 @@ def test_record_stability_admits_near_degenerate_hull_vertex():
         chemically_stable_proxy=False,
         summary="NbTaO4 has a near-degenerate polymorph.",
         ranking_mode=RankingMode.CONVEX_HULL,
+        evidence_level=EvidenceLevel.CONVERGED_DFT,
         reference_set_id="nb-ta-o-pbe-v1",
         near_degenerate_structure_paths=["candidates/NbTaO4-P004-relaxed.vasp"],
     )
@@ -168,6 +172,7 @@ def _hull_report(formula: str, energy: float, formation_energy: float) -> Stabil
         chemically_stable_proxy=True,
         summary=f"{formula} hull result",
         ranking_mode=RankingMode.CONVEX_HULL,
+        evidence_level=EvidenceLevel.CONVERGED_DFT,
         reference_set_id="nb-o-pbe-v1",
     )
 
@@ -260,3 +265,140 @@ def test_record_stability_does_not_admit_above_hull_phase():
     campaign.record_stability(report)
 
     assert "NbO" not in campaign.reference_energies.competing_phases
+
+
+def _vertex_report(level: EvidenceLevel) -> StabilityReport:
+    ground_state = PhaseStability(
+        structure_path="candidates/NbTaO4-P003.vasp",
+        optimized_structure_path="candidates/NbTaO4-P003-relaxed.vasp",
+        composition={"Nb": 1, "Ta": 1, "O": 4},
+        final_energy_eV=-62.56,
+        energy_per_atom_eV=-7.82,
+        delta_e_above_min_eV_per_atom=0.0,
+        final_max_force_eV_per_A=0.01,
+        converged=True,
+        dynamically_stable_proxy=True,
+        formation_energy_eV_per_atom=-0.45,
+        energy_above_hull_eV_per_atom=0.0,
+    )
+    return StabilityReport(
+        formula="NbTaO4",
+        ground_state=ground_state,
+        ranking=[ground_state],
+        chemically_stable_proxy=True,
+        summary="NbTaO4 on the hull.",
+        ranking_mode=RankingMode.CONVEX_HULL,
+        evidence_level=level,
+        reference_set_id="nb-ta-o-pbe-v1",
+    )
+
+
+def test_mlip_hull_reports_never_enter_the_campaign_hull():
+    campaign = _campaign()
+    campaign.record_stability(_vertex_report(EvidenceLevel.MLIP_RELAXATION))
+    assert "NbTaO4" in campaign.stability_reports
+    assert "NbTaO4" not in campaign.reference_energies.competing_phases
+    assert campaign.current_hull is None
+
+
+def test_version_1_campaign_state_migrates_explicitly():
+    campaign = _campaign()
+    campaign.record_stability(_vertex_report(EvidenceLevel.CONVERGED_DFT))
+    saved = campaign.model_dump(mode="json")
+    saved.pop("schema_version")
+    del saved["stability_reports"]["NbTaO4"]["evidence_level"]
+    del saved["current_hull"]["evidence_level"]
+    for hull in saved["hull_history"]:
+        del hull["evidence_level"]
+    original = json.loads(json.dumps(saved))
+    restored = CampaignState.model_validate(saved)
+    assert saved == original
+    assert restored.schema_version == 3
+    assert restored.stability_reports["NbTaO4"].evidence_level == EvidenceLevel.CONVERGED_DFT
+    assert restored.current_hull.evidence_level == EvidenceLevel.CONVERGED_DFT
+    with pytest.raises(ValidationError, match="newer than this code"):
+        CampaignState.model_validate({**saved, "schema_version": 4})
+
+
+def _version_2_state() -> dict:
+    from matsim_agents.campaign.state import CampaignReviewRecord, FormulaRunRecord
+
+    campaign = _campaign()
+    campaign.record_stability(_vertex_report(EvidenceLevel.CONVERGED_DFT))
+    campaign.formula_runs["NbTaO4"] = FormulaRunRecord(
+        formula="NbTaO4",
+        status=WorkflowStatus.COMPLETE,
+        output_dir="formulas/NbTaO4",
+        evidence={"dft_refinement": {"backend": "qe", "method_signature": "pbe-v1"}},
+    )
+    campaign.formula_runs["Nb2O5"] = FormulaRunRecord(
+        formula="Nb2O5", status=WorkflowStatus.FAILED, failure_reason="RuntimeError('pw.x')"
+    )
+    campaign.review_history.append(
+        CampaignReviewRecord(
+            iteration=0,
+            debate_run_id="review-001",
+            deactivate_formulas=["Nb2O5"],
+            notes=["[a] Nb2O5: deactivate - no converged candidates"],
+            metadata={
+                "hypothesis_revisions": [
+                    {
+                        "participant": "model-a",
+                        "claim": "NbTaO4 is a new hull vertex",
+                        "status": "supported",
+                        "evidence": ["DFT hull distance 0.0"],
+                        "proposed_test": "phonons",
+                    }
+                ]
+            },
+        )
+    )
+    saved = campaign.model_dump(mode="json")
+    saved["schema_version"] = 2
+    del saved["evidence_ledger_file"]
+    return saved
+
+
+def test_version_2_campaign_is_backfilled_into_its_ledger(tmp_path):
+    from matsim_agents.campaign.evidence import open_campaign_ledger
+    from matsim_agents.execution.ledger import EvidenceOutcome
+
+    campaign = CampaignState.model_validate(_version_2_state())
+    assert campaign.schema_version == 3 and campaign.evidence_ledger_file is None
+    ledger = open_campaign_ledger(campaign, tmp_path / "one")
+    assert campaign.evidence_ledger_file == "evidence-ledger.jsonl"
+    [hull] = ledger.evidence(subject="NbTaO4")
+    assert hull.kind == "stability" and hull.evidence_level == EvidenceLevel.CONVERGED_DFT
+    assert hull.method.method_signature == "pbe-v1"
+    [failure] = ledger.evidence(subject="Nb2O5")
+    assert failure.outcome == EvidenceOutcome.FAILED_TO_COMPUTE
+    [decision] = ledger.decisions()
+    assert decision.subject == "Nb2O5" and decision.imported_from
+    [claim] = ledger.current_hypotheses().values()
+    assert claim.imported_from and claim.evidence_ids == []
+    assert "DFT hull distance 0.0" in claim.scientific_rationale
+    # Opening again does not backfill twice; replaying the saved state gives the same IDs.
+    assert len(open_campaign_ledger(campaign, tmp_path / "one")) == len(ledger)
+    replay = open_campaign_ledger(
+        CampaignState.model_validate(_version_2_state()), tmp_path / "two"
+    )
+    assert [r.model_dump(exclude={"recorded_at"}) for r in replay.records()] == [
+        r.model_dump(exclude={"recorded_at"}) for r in ledger.records()
+    ]
+
+
+def test_recalibrated_reports_become_new_evidence_with_their_parent(tmp_path):
+    from matsim_agents.campaign.evidence import open_campaign_ledger, sync_stability_evidence
+
+    campaign = _campaign()
+    campaign.record_stability(_vertex_report(EvidenceLevel.CONVERGED_DFT))
+    ledger = open_campaign_ledger(campaign, tmp_path)
+    [first] = sync_stability_evidence(ledger, campaign)
+    assert sync_stability_evidence(ledger, campaign) == []
+    report = campaign.stability_reports["NbTaO4"]
+    shifted = report.ground_state.model_copy(update={"energy_above_hull_eV_per_atom": 0.02})
+    campaign.stability_reports["NbTaO4"] = report.model_copy(
+        update={"ground_state": shifted, "ranking": [shifted]}
+    )
+    [second] = sync_stability_evidence(ledger, campaign)
+    assert ledger.get(second).parent_record_ids == [first]

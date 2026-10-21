@@ -13,12 +13,13 @@ any of that.
 
 from __future__ import annotations
 
+import copy
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from matsim_agents.campaign.acquisition import CampaignAcquisitionState
 from matsim_agents.campaign.registry import CandidateRegistry
@@ -30,7 +31,49 @@ from matsim_agents.discovery.stability import (
     StabilityReport,
     recalibrate_hull_reports,
 )
-from matsim_agents.execution.contracts import ComputeBudget, WorkflowStatus
+from matsim_agents.execution.contracts import (
+    DFT_EVIDENCE,
+    ComputeBudget,
+    EvidenceLevel,
+    WorkflowStatus,
+)
+
+if TYPE_CHECKING:
+    from matsim_agents.execution.ledger import EvidenceLedger
+
+# Version of the saved campaign state; migrate_campaign_state upgrades older ones.
+CAMPAIGN_STATE_SCHEMA_VERSION = 3
+
+
+def migrate_campaign_state(data: dict[str, Any]) -> dict[str, Any]:
+    """Upgrade a saved campaign state to the current schema, explicitly.
+
+    Version 1 (no ``schema_version``) predates stability-report fidelity. Its
+    convex-hull reports came only from DFT refinement, so they become
+    ``converged_dft``; relative rankings came from MLIP relaxations.
+    Version 2 predates the evidence ledger: ``evidence_ledger_file`` stays
+    unset, and the campaign's ledger is backfilled from the saved state when
+    it is next opened (:func:`matsim_agents.campaign.evidence.open_campaign_ledger`).
+    """
+    data = copy.deepcopy(data)
+    version = data.get("schema_version", 1)
+    if version > CAMPAIGN_STATE_SCHEMA_VERSION:
+        raise ValueError(f"campaign state schema {version} is newer than this code")
+    if version == 1:
+        for report in (data.get("stability_reports") or {}).values():
+            if isinstance(report, dict) and "evidence_level" not in report:
+                report["evidence_level"] = (
+                    EvidenceLevel.CONVERGED_DFT.value
+                    if report.get("ranking_mode") == RankingMode.CONVEX_HULL.value
+                    else EvidenceLevel.MLIP_RELAXATION.value
+                )
+        for hull in [data.get("current_hull"), *(data.get("hull_history") or [])]:
+            if isinstance(hull, dict):
+                hull.setdefault("evidence_level", EvidenceLevel.CONVERGED_DFT.value)
+        data["schema_version"] = version = 2
+    if version == 2:
+        data["schema_version"] = 3
+    return data
 
 
 class FormulaRunRecord(BaseModel):
@@ -72,6 +115,9 @@ class HullState(BaseModel):
     parent_version: int | None = None
     reference_set_id: str
     method_signature: str
+    evidence_level: EvidenceLevel = Field(
+        description="Lowest fidelity among the reports in this hull; always a DFT level."
+    )
     hull_vertices: dict[str, str] = Field(default_factory=dict)
     near_hull_phases: dict[str, float] = Field(default_factory=dict)
     energy_above_hull_eV_per_atom: dict[str, float] = Field(default_factory=dict)
@@ -88,6 +134,7 @@ class HullState(BaseModel):
 class CampaignState(BaseModel):
     """Persistent record of a multi-formula discovery campaign."""
 
+    schema_version: int = CAMPAIGN_STATE_SCHEMA_VERSION
     campaign_id: str
     element_set: list[str]
     formula_policy: FormulaGenerationPolicy
@@ -104,6 +151,40 @@ class CampaignState(BaseModel):
     iteration: int = 0
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
     status: WorkflowStatus = WorkflowStatus.PLANNED
+    evidence_ledger_file: str | None = Field(
+        None,
+        description="Ledger file in the campaign's output directory; unset until the ledger "
+        "is opened (and, for older states, backfilled).",
+    )
+    _ledger: EvidenceLedger | None = PrivateAttr(None)
+
+    def attach_ledger(self, ledger: EvidenceLedger) -> None:
+        self._ledger = ledger
+
+    def __eq__(self, other: object) -> bool:
+        # The attached ledger is a runtime handle, not part of the saved state.
+        return (
+            isinstance(other, CampaignState)
+            and self.__dict__ == other.__dict__
+            and self.__pydantic_extra__ == other.__pydantic_extra__
+        )
+
+    __hash__ = None  # type: ignore[assignment]
+
+    @property
+    def ledger(self) -> EvidenceLedger:
+        """The campaign's evidence ledger, attached by run_campaign."""
+        if self._ledger is None:
+            raise RuntimeError(
+                "campaign has no evidence ledger attached; open it with "
+                "matsim_agents.campaign.evidence.open_campaign_ledger"
+            )
+        return self._ledger
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate(cls, data: Any) -> Any:
+        return migrate_campaign_state(data) if isinstance(data, dict) else data
 
     @model_validator(mode="after")
     def _validate_element_set(self) -> CampaignState:
@@ -135,11 +216,16 @@ class CampaignState(BaseModel):
         return [candidate for candidate in self.formulas.values() if candidate.active]
 
     def record_stability(self, report: StabilityReport) -> None:
-        """Record a report, admit true hull phases, and recalibrate the hull."""
+        """Record a report, admit true hull phases, and recalibrate the hull.
+
+        Only DFT-level convex-hull reports enter the thermodynamic hull; an MLIP
+        hull is recorded as a report but never becomes a reference phase.
+        """
         self.stability_reports[report.formula] = report
         ground_state = report.ground_state
         if (
             report.ranking_mode == RankingMode.CONVEX_HULL
+            and report.evidence_level in DFT_EVIDENCE
             and ground_state.eligible_for_ranking
             and ground_state.formation_energy_eV_per_atom is not None
             and ground_state.energy_above_hull_eV_per_atom is not None
@@ -152,6 +238,7 @@ class CampaignState(BaseModel):
             )
         if (
             report.ranking_mode == RankingMode.CONVEX_HULL
+            and report.evidence_level in DFT_EVIDENCE
             and self.reference_energies is not None
             and report.reference_set_id == self.reference_energies.identifier
         ):
@@ -172,6 +259,7 @@ class CampaignState(BaseModel):
             energy = report.ground_state.energy_above_hull_eV_per_atom
             if (
                 report.ranking_mode != RankingMode.CONVEX_HULL
+                or report.evidence_level not in DFT_EVIDENCE
                 or report.reference_set_id != self.reference_energies.identifier
                 or energy is None
             ):
@@ -201,8 +289,17 @@ class CampaignState(BaseModel):
         )
         if completeness.missing_ternary_competitor:
             undersampled.append("missing ternary competing phase")
+        levels = [
+            report.evidence_level
+            for formula, report in self.stability_reports.items()
+            if formula in energies
+        ]
         snapshot = HullState(
             version=len(self.hull_history) + 1,
+            evidence_level=min(
+                levels or [EvidenceLevel.CONVERGED_DFT],
+                key=list(EvidenceLevel).index,
+            ),
             parent_version=previous.version if previous is not None else None,
             reference_set_id=self.reference_energies.identifier,
             method_signature=self.reference_energies.method_signature,

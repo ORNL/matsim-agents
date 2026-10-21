@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.execution.contracts import DFT_EVIDENCE, EvidenceLevel
 
 
 class PhaseStability(BaseModel):
@@ -256,6 +257,10 @@ class StabilityReport(BaseModel):
         "other phase is within `degeneracy_tol_eV_per_atom`.",
     )
     summary: str
+    evidence_level: EvidenceLevel = Field(
+        description="Fidelity of the relaxed energies; a hull supports thermodynamic "
+        "claims only at a DFT level (execution.contracts.DFT_EVIDENCE)."
+    )
     ranking_mode: RankingMode = RankingMode.RELATIVE
     reference_set_id: str | None = None
     degeneracy_tolerance_eV_per_atom: float = 0.01
@@ -267,7 +272,7 @@ def recalibrate_hull_reports(
     reports: Iterable[StabilityReport],
     reference_energies: ReferenceEnergySet,
 ) -> None:
-    """Recompute stored phase-diagram results against one reference set."""
+    """Recompute stored DFT phase-diagram results against one reference set."""
     try:
         from pymatgen.analysis.phase_diagram import PhaseDiagram
         from pymatgen.core import Composition as PMGComposition
@@ -275,11 +280,13 @@ def recalibrate_hull_reports(
     except ImportError as exc:  # pragma: no cover - dependency error is environment-specific
         raise RuntimeError("convex-hull ranking requires pymatgen") from exc
 
+    # Reference sets hold DFT energies: MLIP energies never enter their diagram.
     compatible_reports = [
         report
         for report in reports
         if report.ranking_mode == RankingMode.CONVEX_HULL
         and report.reference_set_id == reference_energies.identifier
+        and report.evidence_level in DFT_EVIDENCE
     ]
     entries = [
         ComputedEntry(element, energy)
@@ -361,11 +368,16 @@ def score_stability(
     ranking_mode: RankingMode = RankingMode.RELATIVE,
     reference_energies: ReferenceEnergySet | None = None,
     method_signature: str | None = None,
+    evidence_level: EvidenceLevel = EvidenceLevel.MLIP_RELAXATION,
 ) -> StabilityReport:
     """Rank relaxations of the same composition and report stability.
 
     Parameters
     ----------
+    evidence_level:
+        Fidelity of the relaxations (MLIP unless they are DFT relaxations). A
+        convex-hull ranking computed from MLIP energies is reported as such and
+        never feeds a campaign's thermodynamic hull.
     candidates:
         Optional seed candidates to join against by ``structure_path`` so
         that the report can carry the ``source`` / ``prototype_id`` /
@@ -548,6 +560,7 @@ def score_stability(
         ranking=ranking,
         chemically_stable_proxy=chem_stable,
         summary="\n".join(summary_lines),
+        evidence_level=evidence_level,
         ranking_mode=ranking_mode,
         reference_set_id=(reference_energies.identifier if reference_energies else None),
         degeneracy_tolerance_eV_per_atom=degeneracy_tol_eV_per_atom,

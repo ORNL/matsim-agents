@@ -294,6 +294,9 @@ class _NumericalStressCalculator:
         self._inner = inner
         self.dx = dx
         self.results: dict = {}
+        self._state: tuple | None = None
+        # An inner calculator that predicts stress is used for it directly.
+        self._native_stress = "stress" in getattr(inner, "implemented_properties", ())
         # Patch the inner calculator's implemented_properties so ASE doesn't
         # short-circuit to raising NotImplementedError before our wrapper runs.
         if hasattr(inner, "implemented_properties"):
@@ -327,30 +330,59 @@ class _NumericalStressCalculator:
         # Energy + forces from the inner calculator on the original geometry. ASE
         # calculators expect a list of changes; None means "unknown", i.e. all.
         changes = all_changes if system_changes is None else system_changes
-        self._inner.calculate(atoms, ["energy", "forces"], changes)
-        self.results["energy"] = self._inner.results["energy"]
-        self.results["forces"] = self._inner.results["forces"]
+        properties = ["energy", "forces"] + (["stress"] if self._native_stress else [])
+        self._inner.calculate(atoms, properties, changes)
+        self.results = {
+            "energy": self._inner.results["energy"],
+            "forces": self._inner.results["forces"],
+        }
+        native = self._inner.results.get("stress") if self._native_stress else None
         # Copy last_branch_weights *before* perturbations overwrite them.
         if hasattr(self._inner, "last_branch_weights"):
             self.last_branch_weights = self._inner.last_branch_weights
 
-        # Always compute numerical stress so ASE's property cache stays consistent.
-        self.results["stress"] = self._numerical_stress(atoms)
+        # Always provide stress so ASE's property cache stays consistent.
+        self.results["stress"] = native if native is not None else self._numerical_stress(atoms)
+        self._state = self._snapshot(atoms)
+
+    @staticmethod
+    def _snapshot(atoms) -> tuple:
+        return (
+            atoms.get_positions().copy(),
+            atoms.cell.array.copy(),
+            atoms.numbers.copy(),
+            atoms.pbc.copy(),
+        )
+
+    def _current(self, atoms, key: str):
+        """Results for ``atoms``, recalculated when the geometry changed."""
+        import numpy as np
+
+        if atoms is None:
+            atoms = getattr(self._inner, "atoms", None)
+        stale = (
+            key not in self.results
+            or self._state is None
+            or (
+                atoms is not None
+                and not all(
+                    np.array_equal(old, new)
+                    for old, new in zip(self._state, self._snapshot(atoms), strict=True)
+                )
+            )
+        )
+        if stale:
+            self.calculate(atoms)
+        return self.results[key]
 
     def get_potential_energy(self, atoms=None, force_consistent=False):
-        if "energy" not in self.results:
-            self.calculate(atoms)
-        return self.results["energy"]
+        return self._current(atoms, "energy")
 
     def get_forces(self, atoms=None):
-        if "forces" not in self.results:
-            self.calculate(atoms)
-        return self.results["forces"]
+        return self._current(atoms, "forces")
 
     def get_stress(self, atoms=None):
-        if "stress" not in self.results:
-            self.calculate(atoms)
-        return self.results["stress"]
+        return self._current(atoms, "stress")
 
     def get_property(self, name, atoms=None, allow_calculation=True):
         # 'stresses' (per-atom) is requested by some ASE filters; map to 'stress'.
@@ -359,42 +391,43 @@ class _NumericalStressCalculator:
             # Return None gracefully for unsupported properties (e.g. 'dipole')
             # rather than raising, so ASE internals don't crash.
             return None
-        if key not in self.results:
-            if not allow_calculation:
-                return None
-            self.calculate(atoms)
-        return self.results[key]
+        if not allow_calculation:
+            return self.results.get(key)
+        return self._current(atoms, key)
 
     def _numerical_stress(self, atoms) -> np.ndarray:
-        """Central FD stress in ASE Voigt 6-vector convention (eV/Å³)."""
+        """Central-difference stress, ASE convention: Voigt (xx, yy, zz, yz, xz, xy), eV/Å³.
+
+        sigma_ij = (1/V) dE/d(epsilon_ij) for the symmetric strain epsilon applied
+        to the Cartesian coordinates (cell -> cell @ (I + epsilon)), as in
+        ase.calculators.calculator.Calculator.calculate_numerical_stress.
+        """
         import numpy as np
 
         cell = atoms.cell.array.copy()
-        vol = atoms.get_volume()
-        stress = np.zeros(6)
+        volume = atoms.get_volume()
+        stress = np.zeros((3, 3))
 
-        # Voigt order: xx=0, yy=1, zz=2, yz=3, xz=4, xy=5
-        # Corresponding 3×3 indices:
-        voigt = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
+        def energy(strain: np.ndarray) -> float:
+            deformed = atoms.copy()
+            deformed.set_cell(cell @ (np.eye(3) + strain), scale_atoms=True)
+            deformed.calc = self._inner
+            return float(deformed.get_potential_energy())
 
-        for k, (i, j) in enumerate(voigt):
-            energies = {}
-            for sign in (+1, -1):
-                F = np.eye(3)
-                F[i, j] += sign * self.dx
-                a = atoms.copy()
-                a.set_cell(F @ cell, scale_atoms=True)
-                a.calc = self._inner
-                energies[sign] = a.get_potential_energy()
-
-            # σ_k = −(1/V) · dE/dε_k  (central difference)
-            stress[k] = -(energies[+1] - energies[-1]) / (2.0 * self.dx * vol)
+        for i in range(3):
+            for j in range(i, 3):
+                strain = np.zeros((3, 3))
+                strain[i, j] = strain[j, i] = self.dx
+                difference = energy(strain) - energy(-strain)
+                # A shear strain moves both epsilon_ij and epsilon_ji.
+                scale = 2.0 if i == j else 4.0
+                stress[i, j] = stress[j, i] = difference / (scale * self.dx * volume)
 
         # Restore inner calc's atom reference so its cache is consistent.
         if hasattr(self._inner, "atoms"):
             self._inner.atoms = atoms
 
-        return stress
+        return stress.flat[[0, 4, 8, 5, 2, 1]]
 
 
 class _RelaxPaths(NamedTuple):

@@ -1,0 +1,19 @@
+# Relax MgO rocksalt with an MLIP and report the relaxed structure, its energy
+# per atom, and the residual force. No optimization objective is involved.
+#   matsim-agents characterize examples/characterization/relaxation.yaml
+# Relative paths are relative to this file.
+contract_id: mgo-rocksalt-relaxation
+objective: Relax MgO rocksalt to a converged local minimum.
+formula: MgO
+recipe: relaxation
+structures:
+  - structures/MgO-rocksalt.vasp
+methods:
+  mlip:
+    mlip_backend: uma
+    uma_model_name: uma-s-1p1
+    uma_task: omat
+    mlp_device: cuda
+tolerances:
+  force_tolerance_eV_per_A: 0.02
+  max_relaxation_steps: 300

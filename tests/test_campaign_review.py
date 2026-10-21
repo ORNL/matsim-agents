@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from matsim_agents.campaign.evidence import open_campaign_ledger, sync_stability_evidence
 from matsim_agents.campaign.review import (
     CampaignDebateReviewConfig,
     _deactivation_block_reason,
@@ -12,11 +13,11 @@ from matsim_agents.campaign.review import (
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
 from matsim_agents.discovery.stability import PhaseStability, StabilityReport
-from matsim_agents.execution.contracts import WorkflowStatus
+from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.workflows.debate import DebateParticipant, DebateVerdict, ScientificDebateResult
 
 
-def test_review_evidence_defines_authoritative_numerical_semantics() -> None:
+def test_review_evidence_defines_authoritative_numerical_semantics(tmp_path) -> None:
     policy = FormulaGenerationPolicy(
         elements=["Nb", "Ta", "O"],
         require_charge_balance=True,
@@ -46,8 +47,11 @@ def test_review_evidence_defines_authoritative_numerical_semantics() -> None:
         },
     )
 
+    open_campaign_ledger(campaign, tmp_path)
     evidence = json.loads(_review_evidence(campaign, [record]))
     facts = evidence["formulas"][0]["authoritative_facts"]
+    assert evidence["formulas"][0]["evidence_records"] == []
+    assert evidence["hypotheses"] == []
 
     assert facts["canonical_formula"] == "Nb2O5Ta"
     assert facts["element_counts"] == {"Nb": 2, "Ta": 1, "O": 5}
@@ -105,7 +109,10 @@ def test_campaign_review_requires_cross_model_agreement(tmp_path):
         ranking=[ranked_phase],
         chemically_stable_proxy=False,
         summary="Ranked above the hull.",
+        evidence_level=EvidenceLevel.MLIP_RELAXATION,
     )
+    ledger = open_campaign_ledger(campaign, tmp_path)
+    [nbo_evidence] = sync_stability_evidence(ledger, campaign)
     participants = [
         DebateParticipant(name="model-a", provider="vllm", model="a"),
         DebateParticipant(name="model-b", provider="vllm", model="b"),
@@ -113,16 +120,23 @@ def test_campaign_review_requires_cross_model_agreement(tmp_path):
 
     def debate_runner(config, *, model_factory):
         assert "NbO2" in config.hypothesis
+        assert nbo_evidence in config.hypothesis
+        deactivate_nbo = {
+            "formula": "NbO",
+            "action": "deactivate",
+            "rationale": "poor evidence",
+            "evidence_ids": [nbo_evidence],
+        }
         responses = [
             {
                 "decisions": [
-                    {"formula": "NbO", "action": "deactivate", "rationale": "poor evidence"},
+                    deactivate_nbo,
                     {"formula": "NbO2", "action": "deactivate", "rationale": "uncertain"},
                 ]
             },
             {
                 "decisions": [
-                    {"formula": "NbO", "action": "deactivate", "rationale": "poor evidence"},
+                    deactivate_nbo,
                     {"formula": "NbO2", "action": "keep", "rationale": "needs more evidence"},
                 ]
             },
@@ -166,6 +180,7 @@ def test_campaign_review_requires_cross_model_agreement(tmp_path):
 
     assert decision.debate_run_id == "review-001"
     assert decision.deactivate_formulas == ["NbO"]
+    assert decision.evidence_ids == {"NbO": [nbo_evidence]}
     assert decision.reactivate_formulas == []
 
 
@@ -203,8 +218,10 @@ def test_campaign_review_cannot_deactivate_converged_result_without_hull_evidenc
         ranking=[phase],
         chemically_stable_proxy=True,
         summary="Relative MLIP ranking only.",
+        evidence_level=EvidenceLevel.MLIP_RELAXATION,
     )
     records = [FormulaRunRecord(formula="Nb2O3", status=WorkflowStatus.COMPLETE)]
+    open_campaign_ledger(campaign, tmp_path)
     participants = [
         DebateParticipant(name="model-a", provider="vllm", model="a"),
         DebateParticipant(name="model-b", provider="vllm", model="b"),
@@ -306,6 +323,26 @@ def test_campaign_review_preserves_revisions_and_validates_new_formulas(tmp_path
         },
     )
     records = [FormulaRunRecord(formula="NbO2", status=WorkflowStatus.COMPLETE)]
+    phase = PhaseStability(
+        structure_path="NbO2-seed.vasp",
+        optimized_structure_path="NbO2-relaxed.vasp",
+        final_energy_eV=-30.0,
+        energy_per_atom_eV=-10.0,
+        delta_e_above_min_eV_per_atom=0.0,
+        final_max_force_eV_per_A=0.01,
+        converged=True,
+        dynamically_stable_proxy=True,
+    )
+    campaign.stability_reports["NbO2"] = StabilityReport(
+        formula="NbO2",
+        ground_state=phase,
+        ranking=[phase],
+        chemically_stable_proxy=True,
+        summary="MLIP ranking.",
+        evidence_level=EvidenceLevel.MLIP_RELAXATION,
+    )
+    ledger = open_campaign_ledger(campaign, tmp_path)
+    [mlip_ranking] = sync_stability_evidence(ledger, campaign)
     participants = [
         DebateParticipant(name="model-a", provider="vllm", model="a"),
         DebateParticipant(name="model-b", provider="vllm", model="b"),
@@ -316,11 +353,21 @@ def test_campaign_review_preserves_revisions_and_validates_new_formulas(tmp_path
             "decisions": [],
             "revisions": [
                 {
-                    "claim": "NbO2 is competitive",
+                    "claim": "The relaxed NbO2 seed is its lowest-energy structure",
+                    "claim_type": "energy_ranking",
                     "status": "supported",
-                    "evidence": ["DFT hull distance"],
+                    "evidence_ids": [mlip_ranking],
+                    "falsifiable_prediction": "No other NbO2 prototype relaxes lower",
                     "proposed_test": "phonons",
-                }
+                },
+                {
+                    "claim": "NbO2 is thermodynamically stable",
+                    "claim_type": "thermodynamic_stability",
+                    "status": "supported",
+                    "evidence_ids": [mlip_ranking],
+                },
+                {"claim": "NbO2 is competitive", "status": "supported"},
+                {"claim": "NbO2 may be metallic", "status": "proposed"},
             ],
             "new_formula_proposals": [
                 {
@@ -366,7 +413,14 @@ def test_campaign_review_preserves_revisions_and_validates_new_formulas(tmp_path
         debate_runner=debate_runner,
     )
 
-    assert len(decision.hypothesis_revisions) == 2
+    # Each participant: the cited ranking claim and the uncited proposal are kept.
+    assert len(decision.hypothesis_revisions) == 4
+    kept = {(r.scientific_claim, r.agent_model_id) for r in decision.hypothesis_revisions}
+    assert ("NbO2 may be metallic", "model-a:a") in kept
+    rejected = [note for note in decision.notes if "rejected hypothesis revision" in note]
+    assert len(rejected) == 4
+    assert any("needs converged_dft evidence" in note for note in rejected)
+    assert any("must cite evidence" in note for note in rejected)
     assert {proposal.formula for proposal in decision.formula_proposals} == {"NbO2"}
     assert sum("out-of-scope" in note for note in decision.notes) == 2
 
@@ -387,6 +441,7 @@ def test_campaign_review_treats_invalid_verdict_as_abstention(tmp_path) -> None:
         },
     )
     records = [FormulaRunRecord(formula="NbO2", status=WorkflowStatus.COMPLETE)]
+    open_campaign_ledger(campaign, tmp_path)
     participants = [
         DebateParticipant(name="model-a", provider="vllm", model="a"),
         DebateParticipant(name="model-b", provider="vllm", model="b"),

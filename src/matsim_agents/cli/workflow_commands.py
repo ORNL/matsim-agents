@@ -1,4 +1,4 @@
-"""Config-file driven workflow commands: ``debate``, ``llm-check``, ``relax``."""
+"""Config-file driven workflow commands: ``debate``, ``llm-check``, ``relax``, ``characterize``."""
 
 from __future__ import annotations
 
@@ -83,4 +83,26 @@ def relax_workflow(
     result = run_relaxation(cfg)
     console.print_json(result.model_dump_json())
     if result.status == "failed":
+        raise typer.Exit(code=1)
+
+
+@app.command("characterize")
+def characterize_workflow(
+    contract: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        help="YAML or JSON CharacterizationContract file.",
+    ),
+) -> None:
+    """Answer a characterization contract (relaxation, energy ranking, or hull stability).
+
+    Running the same contract again resumes with its outstanding calculations.
+    """
+
+    from matsim_agents.campaign.characterization import load_contract, run_characterization
+
+    report = run_characterization(load_contract(contract))
+    console.print_json(report.model_dump_json())
+    if report.status in {"invalid_protocol", "failed_infrastructure"}:
         raise typer.Exit(code=1)

@@ -29,7 +29,8 @@ from matsim_agents.discovery.stability import (
     score_stability,
 )
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
-from matsim_agents.execution.contracts import ComputeBudget, WorkflowStatus
+from matsim_agents.execution.contracts import ComputeBudget, EvidenceLevel, WorkflowStatus
+from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
@@ -273,11 +274,15 @@ def test_campaign_applies_review_decision_before_next_iteration(tmp_path):
         calls.append(formula)
         return _result(formula, output_dir)
 
+    cited: list[str] = []
+
     def review(campaign, records):
         if records[0].formula == "NbO2":
+            cited.extend(records[0].evidence["ledger_evidence_ids"])
             return CampaignReviewDecision(
                 debate_run_id="review-001",
-                deactivate_formulas=["NbO"],
+                deactivate_formulas=["NbO", "Nb2O3"],
+                evidence_ids={"NbO": cited},
             )
         return CampaignReviewDecision()
 
@@ -288,10 +293,19 @@ def test_campaign_applies_review_decision_before_next_iteration(tmp_path):
         review_runner=review,
     )
 
+    # Nb2O3's deactivation cites no evidence, so it is recorded as not applied.
     assert calls == ["NbO2", "Nb2O3"]
     assert not result.campaign.formulas["NbO"].active
+    assert result.campaign.formulas["Nb2O3"].active
     assert result.campaign.debate_run_ids == ["review-001"]
     assert result.campaign.status == WorkflowStatus.COMPLETE
+    review_record = result.campaign.review_history[0]
+    assert review_record.deactivate_formulas == ["NbO"]
+    assert any("not applied: deactivate_formula Nb2O3" in n for n in review_record.notes)
+    ledger = EvidenceLedger(tmp_path / "evidence-ledger.jsonl")
+    [decision] = ledger.decisions()
+    assert decision.subject == "NbO" and decision.evidence_ids == cited
+    assert decision.decision_id == review_record.metadata["decision_ids"][0]
 
 
 def test_adaptive_acquisition_reserves_branches_updates_lambda_and_persists(tmp_path):
@@ -655,6 +669,7 @@ def test_sequential_formula_refinements_preserve_campaign_hull_vertices(tmp_path
             ranking_mode=RankingMode.CONVEX_HULL,
             reference_energies=references,
             method_signature=references.method_signature,
+            evidence_level=EvidenceLevel.CONVERGED_DFT,  # stands in for DFT refinement
         )
         result = _result(formula, output_dir)
         result.initial.relaxations = [relaxation]

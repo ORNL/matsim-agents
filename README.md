@@ -263,6 +263,22 @@ optimized geometry to VASP or Quantum ESPRESSO. See
 `examples/relaxation/scientific_relaxation.example.yaml`. DFT execution
 requires explicit approval by default.
 
+#### Characterization contracts
+
+`matsim-agents characterize CONTRACT.yaml` answers one question about given
+structures, without an optimization objective: relaxed structure, energy
+ranking of polymorphs, or thermodynamic stability against declared DFT
+references. The contract fixes observables, units, minimum fidelity, methods,
+tolerances, budget, and approvals; the report concludes only when the evidence
+suffices (MLIP energies never establish stability) and otherwise lists what is
+missing. See [docs/characterization.md](docs/characterization.md) and
+`examples/characterization/`.
+
+Campaigns and characterizations record every result, failure, hypothesis
+revision, and review decision in a hash-chained, append-only evidence ledger
+(`evidence-ledger.jsonl`), checked with `matsim-agents ledger verify`. See
+[docs/evidence-ledger.md](docs/evidence-ledger.md).
+
 #### Active-learning safety defaults
 
 Active learning defaults to DFT label collection without retraining:
@@ -1237,6 +1253,9 @@ matsim-agents plan    OBJECTIVE             # show the planner's task list
 matsim-agents chat    [options]             # interactive discovery REPL
 matsim-agents supervisor-run COMPOSITION [options]  # discovery -> UQ -> optional AL handoff
 matsim-agents relax   CONFIG.yaml           # provenance-tracked MLIP/DFT relaxation
+matsim-agents characterize CONTRACT.yaml   # answer a characterization contract (resumable)
+matsim-agents ledger  verify LEDGER.jsonl    # check the evidence ledger's hash chain and artifacts
+matsim-agents ledger  show LEDGER.jsonl      # evidence counts and current hypothesis revisions
 matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
 matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
 matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)

@@ -53,6 +53,7 @@ from matsim_agents.discovery.stability import (
     ReferencePhaseEntry,
     score_stability,
 )
+from matsim_agents.execution.contracts import EvidenceLevel
 from matsim_agents.execution.placement import Placement
 from matsim_agents.workflows.phase_exploration import (
     PhaseExplorationPolicy,
@@ -1714,6 +1715,7 @@ def _run_independent_dft_ranking(
         ranking_mode=RankingMode.CONVEX_HULL,
         reference_energies=references,
         method_signature=refinement.method_signature,
+        evidence_level=EvidenceLevel.CONVERGED_DFT,
     )
     evidence = result.active_learning_result or {}
     evidence["n_dft_calculations"] = (

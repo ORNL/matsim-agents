@@ -336,6 +336,19 @@ _RE_OUTCAR_WALL = re.compile(r"Elapsed time \(sec\):\s*([0-9.]+)")
 _RE_OUTCAR_NSCF = re.compile(r"-+ Iteration\s+(\d+)\(\s*(\d+)\)")
 
 
+_RE_INCAR_NSW = re.compile(r"^\s*NSW\s*=\s*(\d+)", re.IGNORECASE | re.MULTILINE)
+
+
+def _incar_nsw(incar: str) -> int | None:
+    """The INCAR's NSW (VASP's default is 0), or None when there is no readable INCAR."""
+    try:
+        text = Path(incar).read_text(errors="replace")
+    except OSError:
+        return None
+    match = _RE_INCAR_NSW.search(text)
+    return int(match.group(1)) if match else 0
+
+
 def parse_relax_outputs(work_dir: str | Path, return_code: int = 0) -> VASPRelaxResult:
     """Parse a VASP relax/vc-relax run from ``work_dir``.
 
@@ -418,7 +431,10 @@ def parse_relax_outputs(work_dir: str | Path, return_code: int = 0) -> VASPRelax
         n_ionic = 1  # one (failed) attempt
 
     final_energy = energies[-1] if energies else None
-    converged = return_code == 0 and (converged_flag or job_done) and final_energy is not None
+    # A relaxation that stops at NSW terminates normally without reaching the ionic criterion.
+    nsw = _incar_nsw(os.path.join(work_dir, "INCAR"))
+    geometry_done = converged_flag or (job_done and nsw == 0)
+    converged = return_code == 0 and geometry_done and final_energy is not None
 
     return VASPRelaxResult(
         work_dir=work_dir,

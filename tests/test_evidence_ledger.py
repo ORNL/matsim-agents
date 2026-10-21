@@ -1,0 +1,191 @@
+"""Append-only evidence ledger: identifiers, integrity, validation, and lineage."""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+from typer.testing import CliRunner
+
+from matsim_agents.cli import app
+from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.execution.ledger import (
+    DecisionRecord,
+    EvidenceLedger,
+    EvidenceOutcome,
+    EvidenceRecord,
+    HypothesisRecord,
+    HypothesisStatus,
+    LedgerIntegrityError,
+    LedgerQuantity,
+    LedgerValidationError,
+    MethodRecord,
+    hashes_of,
+)
+
+
+def _evidence(level=EvidenceLevel.CONVERGED_DFT, kind="stability", **extra) -> EvidenceRecord:
+    data = {
+        "kind": kind,
+        "subject": "SiC",
+        "method": MethodRecord(backend="vasp", method_signature="pbe"),
+        "evidence_level": level,
+        "outcome": EvidenceOutcome.MEASURED,
+        "reference_complete": True if kind == "stability" else None,
+        "values": [LedgerQuantity(name="energy_above_hull", value=0.0, unit="eV/atom")],
+    }
+    return EvidenceRecord(**{**data, **extra})
+
+
+def _claim(evidence_ids, **extra) -> HypothesisRecord:
+    data = {
+        "hypothesis_id": "hyp-sic",
+        "claim_type": "thermodynamic_stability",
+        "scientific_claim": "3C-SiC is on the Si-C hull",
+        "status": HypothesisStatus.SUPPORTED,
+        "evidence_ids": evidence_ids,
+    }
+    return HypothesisRecord(**{**data, **extra})
+
+
+def test_identifiers_are_content_hashes_and_appends_are_idempotent(tmp_path):
+    first = _evidence()
+    again = _evidence()
+    assert first.evidence_id == again.evidence_id
+    ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
+    ledger.append(first)
+    ledger.append(again)
+    assert len(ledger) == 1
+    with pytest.raises(ValueError, match="does not match the record's content"):
+        EvidenceRecord.model_validate({**first.model_dump(), "subject": "Si"})
+
+
+def test_a_failure_to_compute_carries_no_values_and_a_reason():
+    with pytest.raises(ValueError, match="needs a failure_reason"):
+        _evidence(outcome=EvidenceOutcome.FAILED_TO_COMPUTE, values=[])
+    with pytest.raises(ValueError, match="has no values"):
+        _evidence(outcome=EvidenceOutcome.FAILED_TO_COMPUTE, failure_reason="pw.x crashed")
+
+
+@pytest.mark.parametrize("edit", ["value", "delete", "reorder"])
+def test_editing_the_ledger_file_is_detected(tmp_path, edit):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    first = ledger.append(_evidence())
+    ledger.append(_evidence(level=EvidenceLevel.MLIP_RELAXATION, kind="energy_ranking"))
+    ledger.append(_claim([first.evidence_id]))
+    lines = path.read_text().splitlines()
+    if edit == "value":
+        lines[0] = lines[0].replace('"value":0.0', '"value":0.5')
+    elif edit == "delete":
+        del lines[1]
+    else:
+        lines[0], lines[1] = lines[1], lines[0]
+    path.write_text("\n".join(lines) + "\n")
+    with pytest.raises(LedgerIntegrityError):
+        EvidenceLedger(path)
+
+
+def test_concurrent_writers_cannot_fork_the_chain(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    one, two = EvidenceLedger(path), EvidenceLedger(path)
+    one.append(_evidence())
+    with pytest.raises(LedgerIntegrityError, match="changed since it was read"):
+        two.append(_evidence(level=EvidenceLevel.MLIP_RELAXATION, kind="energy_ranking"))
+    assert len(EvidenceLedger(path)) == 1
+
+
+def test_claims_must_cite_existing_measured_evidence(tmp_path):
+    ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
+    with pytest.raises(LedgerValidationError, match="not in the ledger"):
+        ledger.append(_claim(["ev-missing"]))
+    with pytest.raises(LedgerValidationError, match="must cite evidence"):
+        ledger.append(_claim([]))
+    failed = ledger.append(
+        _evidence(
+            outcome=EvidenceOutcome.FAILED_TO_COMPUTE,
+            values=[],
+            failure_reason="SCF did not converge",
+        )
+    )
+    with pytest.raises(LedgerValidationError, match="not evidence for or against"):
+        ledger.append(_claim([failed.evidence_id], status=HypothesisStatus.CONTRADICTED))
+    ledger.append(_claim([], status=HypothesisStatus.PROPOSED))
+    with pytest.raises(LedgerValidationError, match="cites no evidence"):
+        ledger.append(DecisionRecord(action="deactivate_formula", subject="SiC", actor="review"))
+
+
+def test_mlip_and_dft_evidence_are_not_merged_into_one_fidelity(tmp_path):
+    ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
+    dft = ledger.append(_evidence())
+    mlip = ledger.append(_evidence(level=EvidenceLevel.MLIP_RELAXATION, kind="energy_ranking"))
+    incomplete = ledger.append(_evidence(reference_complete=False, uncertainties={"x": 1.0}))
+    with pytest.raises(LedgerValidationError, match="weakest cited is mlip_relaxation"):
+        ledger.append(_claim([dft.evidence_id, mlip.evidence_id]))
+    with pytest.raises(LedgerValidationError, match="complete reference phases"):
+        ledger.append(_claim([incomplete.evidence_id]))
+    ranking = ledger.append(
+        _claim(
+            [mlip.evidence_id],
+            hypothesis_id="hyp-rank",
+            claim_type="energy_ranking",
+            scientific_claim="3C is below 2H",
+        )
+    )
+    assert ranking.support_level == EvidenceLevel.MLIP_RELAXATION
+    stable = ledger.append(_claim([dft.evidence_id]))
+    assert stable.support_level == EvidenceLevel.CONVERGED_DFT
+
+
+def test_a_claim_keeps_its_full_revision_history(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    dft = ledger.append(_evidence())
+    proposed = ledger.append(_claim([], status=HypothesisStatus.PROPOSED))
+    with pytest.raises(LedgerValidationError, match="must follow its latest revision"):
+        ledger.append(_claim([dft.evidence_id]))
+    supported = ledger.append(_claim([dft.evidence_id], prior_revision_id=proposed.revision_id))
+    superseded = ledger.append(
+        _claim(
+            [dft.evidence_id],
+            status=HypothesisStatus.SUPERSEDED,
+            prior_revision_id=supported.revision_id,
+        )
+    )
+    with pytest.raises(LedgerValidationError, match="must follow its latest revision"):
+        ledger.append(
+            _claim([], status=HypothesisStatus.UNRESOLVED, prior_revision_id=proposed.revision_id)
+        )
+    reopened = EvidenceLedger(path)
+    assert [r.status for r in reopened.history("hyp-sic")] == [
+        HypothesisStatus.PROPOSED,
+        HypothesisStatus.SUPPORTED,
+        HypothesisStatus.SUPERSEDED,
+    ]
+    assert reopened.current_hypotheses()["hyp-sic"].revision_id == superseded.revision_id
+
+
+def test_changed_artifacts_are_detected(tmp_path):
+    structure = tmp_path / "relaxed.vasp"
+    structure.write_text("Si\n")
+    ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
+    ledger.append(_evidence(output_artifact_sha256=hashes_of([structure])))
+    assert ledger.verify_artifacts() == []
+    structure.write_text("C\n")
+    [problem] = ledger.verify_artifacts()
+    assert "changed since it was recorded" in problem
+
+
+def test_cli_verifies_and_shows_the_ledger(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    dft = ledger.append(_evidence())
+    ledger.append(_claim([dft.evidence_id]))
+    runner = CliRunner()
+    result = runner.invoke(app, ["ledger", "verify", str(path)])
+    assert result.exit_code == 0 and "hash chain intact" in result.output
+    shown = runner.invoke(app, ["ledger", "show", str(path)])
+    assert json.loads(shown.output)["hypotheses"]["hyp-sic"]["status"] == "supported"
+    path.write_text(path.read_text().replace('"value":0.0', '"value":1.0'))
+    result = runner.invoke(app, ["ledger", "verify", str(path)])
+    assert result.exit_code == 1 and "tampered" in result.output

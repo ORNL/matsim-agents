@@ -11,10 +11,19 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from matsim_agents.backends.llm.provider import get_chat_model
+from matsim_agents.campaign.evidence import evidence_for_review, new_hypothesis_id
 from matsim_agents.campaign.orchestrator import CampaignReviewDecision, ReviewRunner
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.formula_merge import LLMFormulaProposal
+from matsim_agents.execution.ledger import (
+    ClaimType,
+    EvidenceLedger,
+    EvidenceOutcome,
+    EvidenceRecord,
+    HypothesisRecord,
+    HypothesisStatus,
+)
 from matsim_agents.workflows.debate import (
     DebateParticipant,
     ScientificDebateConfig,
@@ -34,12 +43,17 @@ class FormulaReview(BaseModel):
     formula: str
     action: Literal["keep", "deactivate", "reactivate"]
     rationale: str
+    evidence_ids: list[str] = Field(default_factory=list)
 
 
 class HypothesisRevision(BaseModel):
+    hypothesis_id: str | None = None
     claim: str
-    status: Literal["supported", "contradicted", "unresolved", "superseded"]
-    evidence: list[str] = Field(default_factory=list)
+    claim_type: ClaimType = "other"
+    status: HypothesisStatus
+    evidence_ids: list[str] = Field(default_factory=list)
+    falsifiable_prediction: str | None = None
+    rationale: str = ""
     proposed_test: str | None = None
 
 
@@ -56,20 +70,28 @@ class ReviewVerdict(BaseModel):
 
 
 _REVIEW_INSTRUCTION = """Return JSON only with this exact structure:
-{"decisions": [{"formula": "...", "action": "keep|deactivate|reactivate", "rationale": "..."}],
- "revisions": [{"claim": "...", "status": "supported|contradicted|unresolved|superseded",
- "evidence": ["..."], "proposed_test": "..."}],
+{"decisions": [{"formula": "...", "action": "keep|deactivate|reactivate", "rationale": "...",
+ "evidence_ids": ["ev-..."]}],
+ "revisions": [{"hypothesis_id": "hyp-... to revise an existing hypothesis, or null for a new one",
+ "claim": "...",
+ "claim_type": "thermodynamic_stability|energy_ranking|structure|property|synthesis|other",
+ "status": "proposed|supported|contradicted|unresolved|superseded", "evidence_ids": ["ev-..."],
+ "falsifiable_prediction": "...", "rationale": "...", "proposed_test": "..."}],
  "new_formula_proposals": [{"formula": "...", "rationale": "...",
  "falsification_tests": ["..."]}]}
-Only review formulas present in the evidence. Deactivate only when numerical evidence makes
-continued computation scientifically unjustified; uncertainty alone is not evidence of failure.
+Only review formulas present in the evidence. Cite evidence only by the evidence_id values in
+evidence_records; deactivations, reactivations, and supported or contradicted claims without valid
+citations are discarded. A failed_to_compute or not_converged record is not evidence for or
+against a material. A thermodynamic_stability claim needs converged DFT hull evidence with
+complete references; MLIP evidence supports at most an energy_ranking claim.
+Deactivate only when numerical evidence makes continued computation scientifically
+unjustified; uncertainty alone is not evidence of failure.
 Treat authoritative_facts and evidence_semantics as constraints, not hypotheses. Do not infer
 composition from prototype_id, reinterpret charge balance, equate missing or zero summary counters
 with zero attempted calculations, or treat MLIP convergence/relative energies as thermodynamic
 stability. Use outcome_class as the authoritative stage classification and do not infer a software,
 generation, or pre-relaxation root cause beyond that classification unless a corresponding recorded
-exception identifies it. Surrogate hull values are MLIP proxies, not DFT validation. Cite the
-numerical field and evidence level that support every decision.
+exception identifies it. Surrogate hull values are MLIP proxies, not DFT validation.
 New formulas are proposals only and will undergo deterministic chemical and budget validation.
 Do not wrap the JSON in Markdown."""
 
@@ -131,6 +153,7 @@ def _parse_verdict(text: str) -> ReviewVerdict:
 
 
 def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -> str:
+    ledger = campaign.ledger
     formulas: list[dict[str, Any]] = []
     for record in records:
         report = campaign.stability_reports.get(record.formula)
@@ -180,6 +203,7 @@ def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -
                         else None
                     ),
                 },
+                "evidence_records": evidence_for_review(ledger, record.formula),
                 "run": record.model_dump(mode="json"),
                 "stability": report.model_dump(mode="json") if report is not None else None,
             }
@@ -190,6 +214,18 @@ def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -
             "iteration": campaign.iteration,
             "evidence_semantics": _EVIDENCE_SEMANTICS,
             "formulas": formulas,
+            "hypotheses": [
+                {
+                    "hypothesis_id": h.hypothesis_id,
+                    "claim": h.scientific_claim,
+                    "claim_type": h.claim_type,
+                    "status": h.status.value,
+                    "evidence_ids": h.evidence_ids,
+                    "support_level": h.support_level.value if h.support_level else None,
+                    "revisions": len(ledger.history(h.hypothesis_id)),
+                }
+                for h in ledger.current_hypotheses().values()
+            ],
         },
         sort_keys=True,
     )
@@ -211,6 +247,54 @@ def _deactivation_block_reason(
         "authoritative numerical evidence contains a converged, ranking-eligible candidate "
         "but no energy-above-hull result; relative MLIP ranking cannot justify deactivation"
     )
+
+
+def _citation_problem(ledger: EvidenceLedger, formula: str, evidence_ids: list[str]) -> str | None:
+    """Why a deactivation's citations do not support it (None when they do)."""
+    cited = [ledger.get(i) for i in evidence_ids]
+    if not evidence_ids:
+        return "it cites no ledger evidence"
+    unknown = [
+        i for i, r in zip(evidence_ids, cited, strict=True) if not isinstance(r, EvidenceRecord)
+    ]
+    if unknown:
+        return f"it cites evidence that is not in the ledger: {unknown}"
+    if not any(
+        r.subject == formula and r.outcome == EvidenceOutcome.MEASURED  # type: ignore[union-attr]
+        for r in cited
+    ):
+        return f"none of its citations is a measured result for {formula}"
+    return None
+
+
+def _hypothesis_record(
+    campaign: CampaignState, revision: HypothesisRevision, participant: str, model: str
+) -> HypothesisRecord | str:
+    """The ledger revision for a reviewer's claim, or why it is rejected."""
+    ledger = campaign.ledger
+    if revision.hypothesis_id is not None and revision.hypothesis_id not in (
+        ledger.current_hypotheses()
+    ):
+        return f"unknown hypothesis_id {revision.hypothesis_id!r}"
+    hypothesis_id = revision.hypothesis_id or new_hypothesis_id(
+        campaign.campaign_id, revision.claim
+    )
+    history = ledger.history(hypothesis_id)
+    record = HypothesisRecord(
+        hypothesis_id=hypothesis_id,
+        prior_revision_id=history[-1].revision_id if history else None,
+        campaign_id=campaign.campaign_id,
+        claim_type=revision.claim_type,
+        scientific_claim=revision.claim,
+        falsifiable_prediction=revision.falsifiable_prediction,
+        status=revision.status,
+        evidence_ids=revision.evidence_ids,
+        scientific_rationale=revision.rationale,
+        proposed_tests=[revision.proposed_test] if revision.proposed_test else [],
+        agent_model_id=f"{participant}:{model}",
+    )
+    problems = ledger.problems(record)
+    return "; ".join(problems) if problems else record
 
 
 def run_campaign_debate_review(
@@ -240,9 +324,11 @@ def run_campaign_debate_review(
     )
     threshold = math.ceil(config.minimum_agreement_fraction * len(debate.verdicts))
     votes: Counter[tuple[str, str]] = Counter()
+    cited: dict[tuple[str, str], set[str]] = {}
     notes: list[str] = []
     proposals: list[LLMFormulaProposal] = []
-    revisions: list[dict[str, str | list[str]]] = []
+    revisions: list[HypothesisRecord] = []
+    ledger = campaign.ledger
     allowed = set(campaign.formulas)
     records_by_formula = {record.formula: record for record in records}
     for verdict in debate.verdicts:
@@ -267,21 +353,31 @@ def run_campaign_debate_review(
                         f"{block_reason}"
                     )
                     continue
+            if decision.action in {"deactivate", "reactivate"}:
+                problem = _citation_problem(ledger, decision.formula, decision.evidence_ids)
+                if problem is not None:
+                    notes.append(
+                        f"[{verdict.participant}] rejected {decision.formula} "
+                        f"{decision.action}: {problem}"
+                    )
+                    continue
+                cited.setdefault((decision.formula, decision.action), set()).update(
+                    decision.evidence_ids
+                )
             votes[(decision.formula, decision.action)] += 1
             notes.append(
                 f"[{verdict.participant}] {decision.formula}: "
                 f"{decision.action} - {decision.rationale}"
             )
         for revision in payload.revisions:
-            revisions.append(
-                {
-                    "participant": verdict.participant,
-                    "claim": revision.claim,
-                    "status": revision.status,
-                    "evidence": revision.evidence,
-                    "proposed_test": revision.proposed_test or "",
-                }
-            )
+            outcome = _hypothesis_record(campaign, revision, verdict.participant, verdict.model)
+            if isinstance(outcome, str):
+                notes.append(
+                    f"[{verdict.participant}] rejected hypothesis revision "
+                    f"{revision.claim!r}: {outcome}"
+                )
+                continue
+            revisions.append(outcome)
         for proposal in payload.new_formula_proposals:
             composition = parse_composition(proposal.formula)
             if composition is None or not set(composition.elements).issubset(
@@ -315,6 +411,11 @@ def run_campaign_debate_review(
         deactivate_formulas=deactivate,
         reactivate_formulas=reactivate,
         formula_proposals=proposals,
+        evidence_ids={
+            formula: sorted(cited[(formula, action)])
+            for action, formulas in (("deactivate", deactivate), ("reactivate", reactivate))
+            for formula in formulas
+        },
         hypothesis_revisions=revisions,
         notes=notes,
     )
