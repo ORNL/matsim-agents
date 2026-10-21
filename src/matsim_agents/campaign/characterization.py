@@ -32,6 +32,7 @@ import dataclasses
 import hashlib
 import json
 import logging
+import math
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
@@ -216,6 +217,11 @@ class CharacterizationContract(BaseModel):
         unknown = sorted(set(given) - set(defaults))
         if unknown:
             raise ValueError(f"the {self.recipe} recipe does not produce {unknown}")
+        if not self.geometry.relax_atoms:
+            raise ValueError(
+                "cell-only relaxation (relax_atoms: false) is not supported: the MLIP and "
+                "DFT relaxations would still move the atoms"
+            )
         self.observables = [given.get(name, default) for name, default in defaults.items()]
         unreachable = [
             r.name
@@ -396,6 +402,15 @@ def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
             "status": "failed",
             "failure_reason": stage.failure_reason
             or "the relaxation produced no energy, force, or structure",
+            "run_directory": result.run_directory,
+        }
+    if not (math.isfinite(stage.energy_eV) and math.isfinite(stage.max_force_eV_per_A)):
+        return {
+            "status": "failed",
+            "failure_reason": (
+                f"non-finite relaxation output: energy {stage.energy_eV} eV, "
+                f"max force {stage.max_force_eV_per_A} eV/A"
+            ),
             "run_directory": result.run_directory,
         }
     return {

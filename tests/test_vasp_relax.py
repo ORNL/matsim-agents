@@ -191,3 +191,41 @@ def test_parse_relax_outputs_extracts_final_stress(tmp_path: Path, monkeypatch) 
 
     assert result.final_stress_eV_per_A3 == pytest.approx(stress)
     assert result.to_dict()["final_stress_eV_per_A3"] == pytest.approx(stress.tolist())
+
+
+def _finished_run(tmp_path: Path, monkeypatch, *, nsw: int, reached: bool) -> None:
+    atoms = bulk("Si")
+    atoms.calc = SinglePointCalculator(atoms, energy=-10.0, forces=np.full((len(atoms), 3), 0.2))
+    (tmp_path / "vasprun.xml").write_text("<vasprun />")
+    (tmp_path / "INCAR").write_text(f"IBRION = 2\nNSW    = {nsw}\n")
+    (tmp_path / "OUTCAR").write_text(
+        "----------- Iteration    1(   1) -----------\n"
+        + (
+            "reached required accuracy - stopping structural energy minimisation\n"
+            if reached
+            else ""
+        )
+        + "General timing and accounting informations for this job:\n"
+    )
+    monkeypatch.setattr("ase.io.read", lambda *args, **kwargs: [atoms])
+
+
+def test_parse_relax_outputs_step_limited_run_is_not_converged(tmp_path: Path, monkeypatch) -> None:
+    """VASP stops normally at NSW without reaching EDIFFG: that is not a converged geometry."""
+    _finished_run(tmp_path, monkeypatch, nsw=3, reached=False)
+    res = parse_relax_outputs(tmp_path, return_code=0)
+    assert res.job_done is True
+    assert res.final_energy_eV == pytest.approx(-10.0)
+    assert res.converged is False
+
+
+def test_parse_relax_outputs_converged_relaxation(tmp_path: Path, monkeypatch) -> None:
+    _finished_run(tmp_path, monkeypatch, nsw=100, reached=True)
+    assert parse_relax_outputs(tmp_path, return_code=0).converged is True
+
+
+def test_parse_relax_outputs_static_run_converges_on_normal_termination(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _finished_run(tmp_path, monkeypatch, nsw=0, reached=False)
+    assert parse_relax_outputs(tmp_path, return_code=0).converged is True

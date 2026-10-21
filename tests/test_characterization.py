@@ -440,6 +440,36 @@ def test_a_relaxation_without_an_energy_is_an_infrastructure_failure(system):
     assert [step.step_id for step in outstanding_steps(contract)] == ["relax-mlip-000"]
 
 
+def test_cell_only_relaxation_is_rejected(system):
+    tmp_path, structures, _references = system
+    with pytest.raises(ValidationError, match="cell-only relaxation"):
+        _contract(
+            tmp_path,
+            structures,
+            "relaxation",
+            geometry={"relax_atoms": False, "relax_cell": True},
+        )
+
+
+@pytest.mark.parametrize(
+    ("energy", "force"),
+    [(float("nan"), 0.001), (float("inf"), 0.001), (-21.0, float("nan")), (-21.0, float("inf"))],
+)
+def test_non_finite_relaxation_outputs_are_retryable_failures(system, energy, force):
+    tmp_path, structures, _references = system
+    fake = FakeRelax({"NbO2-a.extxyz": energy})
+
+    def relax(cfg):
+        result = fake(cfg)
+        result.stages[-1].max_force_eV_per_A = force
+        return result
+
+    contract = _contract(tmp_path, structures[:1], "relaxation")
+    report = run_characterization(contract, relax=relax)
+    assert report.status == CharacterizationStatus.FAILED_INFRASTRUCTURE
+    assert [step.step_id for step in outstanding_steps(contract)] == ["relax-mlip-000"]
+
+
 def test_changed_input_files_invalidate_the_saved_run(system):
     tmp_path, structures, references = system
     contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
