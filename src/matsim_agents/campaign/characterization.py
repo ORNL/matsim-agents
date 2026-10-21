@@ -222,6 +222,11 @@ class CharacterizationContract(BaseModel):
                 "cell-only relaxation (relax_atoms: false) is not supported: the MLIP and "
                 "DFT relaxations would still move the atoms"
             )
+        if self.geometry.pressure_GPa:
+            raise ValueError(
+                "relaxation under pressure (geometry.pressure_GPa) is not supported: the "
+                "relaxations run at zero pressure"
+            )
         self.observables = [given.get(name, default) for name, default in defaults.items()]
         unreachable = [
             r.name
@@ -625,7 +630,9 @@ def run_characterization(
     cites the ledger's evidence identifiers.
     """
     with _Run(contract) as run:
-        return _execute(contract, run, relax, ledger or EvidenceLedger(run.directory / LEDGER_FILE))
+        if ledger is None:
+            ledger = EvidenceLedger(run.directory / LEDGER_FILE)
+        return _execute(contract, run, relax, ledger)
 
 
 def _method_record(contract: CharacterizationContract, fidelity: str) -> MethodRecord:

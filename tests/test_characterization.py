@@ -24,6 +24,7 @@ from matsim_agents.execution.contracts import (
     EvidenceLevel,
     ObservableRequirement,
 )
+from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.workflows.relaxation import (
     RelaxationMode,
     RelaxationStageResult,
@@ -449,6 +450,34 @@ def test_cell_only_relaxation_is_rejected(system):
             "relaxation",
             geometry={"relax_atoms": False, "relax_cell": True},
         )
+
+
+def test_relaxation_under_pressure_is_rejected(system):
+    tmp_path, structures, _references = system
+    with pytest.raises(ValidationError, match="relaxation under pressure"):
+        _contract(
+            tmp_path,
+            structures,
+            "relaxation",
+            geometry={"relax_atoms": True, "relax_cell": True, "pressure_GPa": 5.0},
+        )
+    _contract(
+        tmp_path,
+        structures,
+        "relaxation",
+        geometry={"relax_atoms": True, "relax_cell": True, "pressure_GPa": 0.0},
+    )
+
+
+def test_an_empty_ledger_passed_in_is_the_one_written(system):
+    tmp_path, structures, _references = system
+    ledger = EvidenceLedger(tmp_path / "elsewhere" / "ledger.jsonl")
+    assert len(ledger) == 0
+    contract = _contract(tmp_path, structures[:1], "relaxation")
+    run_characterization(contract, relax=FakeRelax({"NbO2-a.extxyz": -21.0}), ledger=ledger)
+    assert len(ledger) > 0
+    assert len(EvidenceLedger(tmp_path / "elsewhere" / "ledger.jsonl")) == len(ledger)
+    assert not list(tmp_path.rglob("evidence-ledger.jsonl"))
 
 
 @pytest.mark.parametrize(

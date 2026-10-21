@@ -245,6 +245,10 @@ def migrate_campaign_to_ledger(campaign: CampaignState, ledger: EvidenceLedger) 
     and no evidence identifiers.
     """
     before = len(ledger)
+    # Predecessors come from the order of the review history, not the ledger's
+    # current head, so a repeated or interrupted backfill reproduces the same
+    # revision identifiers and appends only what is missing.
+    imported_heads: dict[str, str | None] = {}
     for record in campaign.formula_runs.values():
         if record.status in {WorkflowStatus.COMPLETE, WorkflowStatus.FAILED}:
             record_formula_evidence(ledger, campaign, record)
@@ -271,12 +275,11 @@ def migrate_campaign_to_ledger(campaign: CampaignState, ledger: EvidenceLedger) 
             if not claim:
                 continue
             hypothesis_id = new_hypothesis_id(campaign.campaign_id, claim)
-            prior = ledger.history(hypothesis_id)
             evidence = revision.get("evidence") or []
-            ledger.append(
+            appended = ledger.append(
                 HypothesisRecord(
                     hypothesis_id=hypothesis_id,
-                    prior_revision_id=prior[-1].revision_id if prior else None,
+                    prior_revision_id=imported_heads.get(hypothesis_id),
                     campaign_id=campaign.campaign_id,
                     scientific_claim=claim,
                     status=HypothesisStatus(str(revision.get("status", "unresolved"))),
@@ -290,6 +293,7 @@ def migrate_campaign_to_ledger(campaign: CampaignState, ledger: EvidenceLedger) 
                     imported_from=LEGACY_REVIEW,
                 )
             )
+            imported_heads[hypothesis_id] = appended.revision_id  # type: ignore[union-attr]
     return len(ledger) - before
 
 

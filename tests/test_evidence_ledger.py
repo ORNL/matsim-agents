@@ -95,6 +95,80 @@ def test_concurrent_writers_cannot_fork_the_chain(tmp_path):
     assert len(EvidenceLedger(path)) == 1
 
 
+@pytest.mark.parametrize("truncate", ["suffix", "empty", "deleted"])
+def test_truncating_the_ledger_is_detected(tmp_path, truncate):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    first = ledger.append(_evidence())
+    ledger.append(_claim([first.evidence_id]))
+    lines = path.read_text().splitlines(keepends=True)
+    if truncate == "suffix":
+        path.write_text(lines[0])
+    elif truncate == "empty":
+        path.write_text("")
+    else:
+        path.unlink()
+    with pytest.raises(LedgerIntegrityError, match="truncated or replaced"):
+        EvidenceLedger(path)
+
+
+def test_entries_past_the_checkpoint_are_accepted(tmp_path):
+    # A writer that stopped between appending and updating the checkpoint.
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    ledger.append(_evidence())
+    checkpoint = (tmp_path / "ledger.jsonl.head").read_text()
+    ledger.append(_evidence(level=EvidenceLevel.MLIP_RELAXATION, kind="energy_ranking"))
+    (tmp_path / "ledger.jsonl.head").write_text(checkpoint)
+    reopened = EvidenceLedger(path)
+    assert len(reopened) == 2
+    reopened.append(_evidence(subject="Si"))
+    assert len(EvidenceLedger(path)) == 3
+
+
+def test_an_appending_ledger_stays_usable_and_in_step(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    for subject in ("Si", "C", "SiC"):
+        ledger.append(_evidence(subject=subject))
+    assert ledger._written == path.stat().st_size
+    assert json.loads((tmp_path / "ledger.jsonl.head").read_text())["seq"] == 3
+    assert [r.subject for r in EvidenceLedger(path).evidence()] == ["Si", "C", "SiC"]
+
+
+def test_an_append_racing_the_read_is_detected(tmp_path, monkeypatch):
+    path = tmp_path / "ledger.jsonl"
+    EvidenceLedger(path).append(_evidence())
+    original = EvidenceLedger._check_head
+
+    def race(self, head, hashes):
+        # Another writer appends after this ledger read the file.
+        if not getattr(race, "done", False):
+            race.done = True
+            EvidenceLedger(path).append(_evidence(subject="Si"))
+        original(self, head, hashes)
+
+    monkeypatch.setattr(EvidenceLedger, "_check_head", race)
+    stale = EvidenceLedger(path)
+    assert len(stale) == 1
+    with pytest.raises(LedgerIntegrityError, match="changed since it was read"):
+        stale.append(_evidence(subject="C"))
+
+
+def test_characterization_evidence_does_not_support_an_energy_ranking(tmp_path):
+    ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
+    relaxed = ledger.append(_evidence(level=EvidenceLevel.MLIP_RELAXATION, kind="characterization"))
+    with pytest.raises(LedgerValidationError, match="needs evidence of kind"):
+        ledger.append(
+            _claim(
+                [relaxed.evidence_id],
+                hypothesis_id="hyp-rank",
+                claim_type="energy_ranking",
+                scientific_claim="3C is below 2H",
+            )
+        )
+
+
 def test_claims_must_cite_existing_measured_evidence(tmp_path):
     ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
     with pytest.raises(LedgerValidationError, match="not in the ledger"):

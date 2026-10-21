@@ -387,6 +387,29 @@ def test_version_2_campaign_is_backfilled_into_its_ledger(tmp_path):
     ]
 
 
+def test_repeating_or_resuming_a_backfill_appends_nothing_new(tmp_path):
+    from matsim_agents.campaign.evidence import migrate_campaign_to_ledger
+    from matsim_agents.execution.ledger import EvidenceLedger, record_id
+
+    saved = _version_2_state()
+    [revision] = saved["review_history"][0]["metadata"]["hypothesis_revisions"]
+    saved["review_history"][0]["metadata"]["hypothesis_revisions"].append(
+        {**revision, "status": "contradicted", "evidence": ["phonons unstable"]}
+    )
+    campaign = CampaignState.model_validate(saved)
+    ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
+    added = migrate_campaign_to_ledger(campaign, ledger)
+    [claim] = ledger.current_hypotheses()
+    assert len(ledger.history(claim)) == 2
+    assert migrate_campaign_to_ledger(campaign, ledger) == 0
+    # An interrupted backfill, resumed from a fresh copy of the saved state.
+    partial = EvidenceLedger(tmp_path / "partial.jsonl")
+    for record in list(ledger.records())[: added - 1]:
+        partial.append(record)
+    assert migrate_campaign_to_ledger(CampaignState.model_validate(saved), partial) == 1
+    assert [record_id(r) for r in partial.records()] == [record_id(r) for r in ledger.records()]
+
+
 def test_recalibrated_reports_become_new_evidence_with_their_parent(tmp_path):
     from matsim_agents.campaign.evidence import open_campaign_ledger, sync_stability_evidence
 
