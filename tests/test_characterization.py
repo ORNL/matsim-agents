@@ -672,3 +672,75 @@ def test_relative_and_absolute_contract_paths_resume_the_same_run(system, monkey
     again = FakeRelax({})
     run_characterization(absolute, relax=again)
     assert again.calls == []
+
+
+@pytest.mark.parametrize("where", ["set", "phase", "element"])
+def test_references_from_another_dft_backend_are_invalid_protocols(system, where):
+    from matsim_agents.discovery.stability import ElementalReferenceEntry, ReferencePhaseEntry
+
+    tmp_path, structures, references = system
+    foreign = ReferenceEnergySet.model_validate_json(references.read_text())
+    if where == "set":
+        foreign.backend = "vasp"
+    elif where == "phase":
+        foreign.phase_entries = [
+            ReferencePhaseEntry(
+                phase_id="NbO-vasp",
+                formula="NbO",
+                formation_energy_eV_per_atom=-0.5,
+                method_signature=SIGNATURE,
+                backend="vasp",
+            )
+        ]
+    else:
+        foreign.elemental_entries = {
+            "Nb": ElementalReferenceEntry(
+                element="Nb",
+                phase_id="Nb-bcc",
+                reference_formula="Nb",
+                energy_eV_per_atom=-10.0,
+                method_signature=SIGNATURE,
+                backend="vasp",
+            )
+        }
+    references.write_text(foreign.model_dump_json())
+    relax = FakeRelax({})
+    report = run_characterization(
+        _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references)),
+        relax=relax,
+    )
+    assert report.status == CharacterizationStatus.INVALID_PROTOCOL and relax.calls == []
+    assert "uses 'vasp', the relaxations 'qe'" in report.missing[0]
+
+
+def test_fractional_and_grouped_reference_formulas_are_accepted(system):
+    tmp_path, structures, references = system
+    extended = ReferenceEnergySet.model_validate_json(references.read_text())
+    extended.competing_phases.update({"Nb0.5O": -0.3, "Nb3(O2)2": -0.2})
+    references.write_text(extended.model_dump_json())
+    relax = FakeRelax({"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0})
+    report = run_characterization(
+        _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references)),
+        relax=relax,
+    )
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+
+
+def test_an_edited_relaxation_output_is_not_reused_on_resume(system):
+    tmp_path, structures, references = system
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    run_characterization(contract, relax=FakeRelax(energies, broken={"NbO2-b.extxyz"}))
+    state = json.loads(
+        (
+            Path(contract.output_root)
+            / "characterization-thermodynamic_stability-test"
+            / "characterization-state.json"
+        ).read_text()
+    )
+    done = state["steps"]["relax-dft-000"]
+    _structure(Path(done["optimized_structure_path"]), "NbOO", shift=0.7)
+    retry = FakeRelax(energies)
+    with pytest.raises(ValueError, match="differs from the relaxation's output"):
+        run_characterization(contract, relax=retry)
+    assert retry.calls == []

@@ -74,7 +74,8 @@ The `reference_energies` file is a `ReferenceEnergySet`:
 These energies must be computed with the same DFT method as the
 characterization relaxations, fully relaxed (atoms and cell). The contract declares that method's signature
 in `methods.dft_method_signature`, and it must equal the reference set's
-`method_signature`. The reference set must be complete for the composition:
+`method_signature`. Any backend the reference set or its entries declare must
+also equal `methods.dft.backend`. The reference set must be complete for the composition:
 every element, at least one competing phase in each binary subsystem, and for
 ternary and larger compositions a ternary competitor. The example ships no
 reference energies; they are yours to compute, for example with `relaxation`
@@ -100,7 +101,7 @@ atoms and cell.
 | --- | --- |
 | `sufficiently_characterized` | Every observable meets its fidelity, and the conclusion follows from cited evidence. |
 | `inconclusive` | Evidence is missing or insufficient. `missing` lists what and `recommended_next_test` says what to run. No conclusion is given. |
-| `invalid_protocol` | The contract cannot be answered as given: an unreadable structure or one of another composition, a reference-energy file that is not a valid `ReferenceEnergySet`, a competing phase without elemental energies for all of its elements, or references computed with another DFT method. Nothing is calculated. |
+| `invalid_protocol` | The contract cannot be answered as given: an unreadable structure or one of another composition, a reference-energy file that is not a valid `ReferenceEnergySet`, a competing phase without elemental energies for all of its elements, or references computed with another DFT method or backend. Nothing is calculated. |
 | `failed_infrastructure` | A calculation could not run (missing executable, crashed process). This is not evidence about the material; running the contract again retries it. |
 | `planned`, `in_progress`, `cancelled` | Reserved for orchestrators that track contracts. |
 
@@ -143,7 +144,9 @@ each structure file and the reference-energy file. Approving DFT or raising a
 budget therefore continues the same run; changing anything else, including
 editing an input file in place, is refused and needs a new `contract_id`.
 Paths are resolved to absolute paths first, so loading the contract by a
-relative or an absolute filename resumes the same run.
+relative or an absolute filename resumes the same run. Each completed
+relaxation also records the SHA-256 of its optimized structure; if that file
+has since been changed or removed, the run is refused rather than reusing it.
 
 Only one execution of a contract runs at a time: it holds a lock on the run
 directory while it reads, executes, and saves, and a concurrent execution is

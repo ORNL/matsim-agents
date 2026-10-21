@@ -399,6 +399,7 @@ def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
         "steps": stage.steps,
         "input_structure_path": stage.input_structure_path,
         "optimized_structure_path": stage.optimized_structure_path,
+        "optimized_structure_sha256": sha256_file(stage.optimized_structure_path),
         "failure_reason": stage.failure_reason,
     }
 
@@ -531,12 +532,35 @@ def _preflight(
             f"{references.method_signature!r}, the relaxations "
             f"{contract.methods.dft_method_signature!r}"
         ]
+    backend = contract.methods.dft.backend if contract.methods.dft is not None else None
+    declared = [("the reference set", references.backend)]
+    declared += [(f"competing phase {e.phase_id}", e.backend) for e in references.phase_entries]
+    declared += [
+        (f"elemental reference {e.phase_id}", e.backend)
+        for e in [
+            *references.elemental_entries.values(),
+            *references.elemental_reference_candidates,
+        ]
+    ]
+    foreign = [
+        f"references computed with the contract's DFT backend: {source} uses "
+        f"{value!r}, the relaxations {backend!r}"
+        for source, value in declared
+        if value is not None and value != backend
+    ]
+    if foreign:
+        return CharacterizationStatus.INVALID_PROTOCOL, foreign
+    from pymatgen.core import Composition as PMGComposition
+
     uncovered = []
     for phase_id, formula, _energy in references.competing_phase_records():
-        phase = parse_composition(formula)
+        try:
+            elements = {str(element) for element in PMGComposition(formula).elements}
+        except Exception:  # noqa: BLE001 - pymatgen raises several types for bad formulas
+            elements = None
         missing = (
-            sorted(set(phase.elements) - set(references.elemental_energies_eV_per_atom))
-            if phase is not None
+            sorted(elements - set(references.elemental_energies_eV_per_atom))
+            if elements
             else [formula]
         )
         if missing:
@@ -593,6 +617,7 @@ def _execute(contract: CharacterizationContract, run: _Run, relax: Relax) -> Cha
         (run.directory / REPORT_FILE).write_text(report.model_dump_json(indent=2) + "\n")
         return report
     steps = plan_recipe(contract)
+    _verify_completed_artifacts(run, steps)
     blockers: list[str] = []
     budget = {
         "mlip": contract.budget.max_mlip_relaxations,
@@ -634,20 +659,40 @@ def _execute(contract: CharacterizationContract, run: _Run, relax: Relax) -> Cha
     return report
 
 
+def _verify_completed_artifacts(run: _Run, steps: list[RecipeStep]) -> None:
+    """Refuse to resume from completed relaxations whose saved structure has changed."""
+    changed = []
+    for step in steps:
+        outcome = run.done(step.step_id) if step.operator == "relax" else None
+        if outcome is None:
+            continue
+        path = Path(outcome["optimized_structure_path"])
+        recorded = outcome.get("optimized_structure_sha256")
+        if not path.is_file():
+            changed.append(f"{step.step_id}: {path} no longer exists")
+        elif recorded is None or sha256_file(path) != recorded:
+            changed.append(f"{step.step_id}: {path} differs from the relaxation's output")
+    if changed:
+        raise ValueError(
+            f"{run.directory} cannot be resumed; completed relaxation outputs changed: "
+            + "; ".join(changed)
+            + ". Give the contract a new contract_id to recompute them."
+        )
+
+
 # --------------------------------------------------------------------------- #
 # Assessment                                                                  #
 # --------------------------------------------------------------------------- #
 
 
 def _evidence_item(contract: CharacterizationContract, step_id: str, outcome: dict) -> EvidenceItem:
-    artifact = outcome.get("optimized_structure_path")
     return EvidenceItem(
         evidence_id=f"{contract.contract_id}/{step_id}",
         kind="relaxation",
         evidence_level=EvidenceLevel(outcome["evidence_level"]),
         method=outcome.get("run_id", ""),
-        artifact=artifact,
-        artifact_sha256=sha256_file(artifact) if artifact and Path(artifact).is_file() else None,
+        artifact=outcome.get("optimized_structure_path"),
+        artifact_sha256=outcome.get("optimized_structure_sha256"),
         converged=outcome["converged"],
     )
 
