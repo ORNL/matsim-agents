@@ -744,3 +744,47 @@ def test_an_edited_relaxation_output_is_not_reused_on_resume(system):
     with pytest.raises(ValueError, match="differs from the relaxation's output"):
         run_characterization(contract, relax=retry)
     assert retry.calls == []
+
+
+def test_every_attempt_and_the_answer_enter_the_evidence_ledger(system):
+    from matsim_agents.execution.ledger import (
+        EvidenceLedger,
+        EvidenceOutcome,
+        HypothesisRecord,
+        LedgerValidationError,
+    )
+
+    tmp_path, structures, references = system
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    run_characterization(contract, relax=FakeRelax(energies, broken={"NbO2-b.extxyz"}))
+    report = run_characterization(contract, relax=FakeRelax(energies))
+    ledger = EvidenceLedger(
+        Path(contract.output_root)
+        / "characterization-thermodynamic_stability-test"
+        / "evidence-ledger.jsonl"
+    )
+    relaxations = [e for e in ledger.evidence() if e.kind == "relaxation"]
+    assert [(e.calculation_id, e.task_id, e.outcome) for e in relaxations] == [
+        ("relax-dft-000", "attempt-1", EvidenceOutcome.MEASURED),
+        ("relax-dft-001", "attempt-2", EvidenceOutcome.FAILED_TO_COMPUTE),
+        ("relax-dft-001", "attempt-3", EvidenceOutcome.MEASURED),
+    ]
+    assert relaxations[0].method.method_signature == SIGNATURE
+    assert relaxations[0].output_artifact_sha256 and relaxations[0].input_sha256
+    [answer] = [e for e in ledger.evidence() if e.kind == "stability"]
+    assert answer.parent_record_ids == [relaxations[0].evidence_id, relaxations[2].evidence_id]
+    assert answer.reference_complete and answer.evidence_level == EvidenceLevel.CONVERGED_DFT
+    assert {item.evidence_id for item in report.evidence} == {
+        relaxations[0].evidence_id,
+        relaxations[2].evidence_id,
+    }
+    claim = {
+        "hypothesis_id": "hyp-nbo2",
+        "claim_type": "thermodynamic_stability",
+        "scientific_claim": "NbO2 is on the Nb-O hull",
+        "status": "supported",
+    }
+    with pytest.raises(LedgerValidationError, match="needs evidence of kind"):
+        ledger.append(HypothesisRecord(**claim, evidence_ids=[relaxations[0].evidence_id]))
+    ledger.append(HypothesisRecord(**claim, evidence_ids=[answer.evidence_id]))

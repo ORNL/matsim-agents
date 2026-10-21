@@ -313,8 +313,92 @@ def test_version_1_campaign_state_migrates_explicitly():
     original = json.loads(json.dumps(saved))
     restored = CampaignState.model_validate(saved)
     assert saved == original
-    assert restored.schema_version == 2
+    assert restored.schema_version == 3
     assert restored.stability_reports["NbTaO4"].evidence_level == EvidenceLevel.CONVERGED_DFT
     assert restored.current_hull.evidence_level == EvidenceLevel.CONVERGED_DFT
     with pytest.raises(ValidationError, match="newer than this code"):
-        CampaignState.model_validate({**saved, "schema_version": 3})
+        CampaignState.model_validate({**saved, "schema_version": 4})
+
+
+def _version_2_state() -> dict:
+    from matsim_agents.campaign.state import CampaignReviewRecord, FormulaRunRecord
+
+    campaign = _campaign()
+    campaign.record_stability(_vertex_report(EvidenceLevel.CONVERGED_DFT))
+    campaign.formula_runs["NbTaO4"] = FormulaRunRecord(
+        formula="NbTaO4",
+        status=WorkflowStatus.COMPLETE,
+        output_dir="formulas/NbTaO4",
+        evidence={"dft_refinement": {"backend": "qe", "method_signature": "pbe-v1"}},
+    )
+    campaign.formula_runs["Nb2O5"] = FormulaRunRecord(
+        formula="Nb2O5", status=WorkflowStatus.FAILED, failure_reason="RuntimeError('pw.x')"
+    )
+    campaign.review_history.append(
+        CampaignReviewRecord(
+            iteration=0,
+            debate_run_id="review-001",
+            deactivate_formulas=["Nb2O5"],
+            notes=["[a] Nb2O5: deactivate - no converged candidates"],
+            metadata={
+                "hypothesis_revisions": [
+                    {
+                        "participant": "model-a",
+                        "claim": "NbTaO4 is a new hull vertex",
+                        "status": "supported",
+                        "evidence": ["DFT hull distance 0.0"],
+                        "proposed_test": "phonons",
+                    }
+                ]
+            },
+        )
+    )
+    saved = campaign.model_dump(mode="json")
+    saved["schema_version"] = 2
+    del saved["evidence_ledger_file"]
+    return saved
+
+
+def test_version_2_campaign_is_backfilled_into_its_ledger(tmp_path):
+    from matsim_agents.campaign.evidence import open_campaign_ledger
+    from matsim_agents.execution.ledger import EvidenceOutcome
+
+    campaign = CampaignState.model_validate(_version_2_state())
+    assert campaign.schema_version == 3 and campaign.evidence_ledger_file is None
+    ledger = open_campaign_ledger(campaign, tmp_path / "one")
+    assert campaign.evidence_ledger_file == "evidence-ledger.jsonl"
+    [hull] = ledger.evidence(subject="NbTaO4")
+    assert hull.kind == "stability" and hull.evidence_level == EvidenceLevel.CONVERGED_DFT
+    assert hull.method.method_signature == "pbe-v1"
+    [failure] = ledger.evidence(subject="Nb2O5")
+    assert failure.outcome == EvidenceOutcome.FAILED_TO_COMPUTE
+    [decision] = ledger.decisions()
+    assert decision.subject == "Nb2O5" and decision.imported_from
+    [claim] = ledger.current_hypotheses().values()
+    assert claim.imported_from and claim.evidence_ids == []
+    assert "DFT hull distance 0.0" in claim.scientific_rationale
+    # Opening again does not backfill twice; replaying the saved state gives the same IDs.
+    assert len(open_campaign_ledger(campaign, tmp_path / "one")) == len(ledger)
+    replay = open_campaign_ledger(
+        CampaignState.model_validate(_version_2_state()), tmp_path / "two"
+    )
+    assert [r.model_dump(exclude={"recorded_at"}) for r in replay.records()] == [
+        r.model_dump(exclude={"recorded_at"}) for r in ledger.records()
+    ]
+
+
+def test_recalibrated_reports_become_new_evidence_with_their_parent(tmp_path):
+    from matsim_agents.campaign.evidence import open_campaign_ledger, sync_stability_evidence
+
+    campaign = _campaign()
+    campaign.record_stability(_vertex_report(EvidenceLevel.CONVERGED_DFT))
+    ledger = open_campaign_ledger(campaign, tmp_path)
+    [first] = sync_stability_evidence(ledger, campaign)
+    assert sync_stability_evidence(ledger, campaign) == []
+    report = campaign.stability_reports["NbTaO4"]
+    shifted = report.ground_state.model_copy(update={"energy_above_hull_eV_per_atom": 0.02})
+    campaign.stability_reports["NbTaO4"] = report.model_copy(
+        update={"ground_state": shifted, "ranking": [shifted]}
+    )
+    [second] = sync_stability_evidence(ledger, campaign)
+    assert ledger.get(second).parent_record_ids == [first]

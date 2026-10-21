@@ -14,6 +14,7 @@ from matsim_agents.campaign.acquisition import (
     select_formula_batch,
     update_adaptive_lambda,
 )
+from matsim_agents.campaign.evidence import open_campaign_ledger, record_formula_evidence
 from matsim_agents.campaign.registry import formula_acquisition_metrics, ingest_exploration_result
 from matsim_agents.campaign.state import CampaignReviewRecord, CampaignState, FormulaRunRecord
 from matsim_agents.discovery.formula import enumerate_formulas
@@ -27,6 +28,7 @@ from matsim_agents.discovery.stability import (
     recalibrate_hull_reports,
 )
 from matsim_agents.execution.contracts import WorkflowStatus
+from matsim_agents.execution.ledger import DecisionRecord, HypothesisRecord
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
@@ -56,7 +58,11 @@ class CampaignReviewDecision(BaseModel):
     deactivate_formulas: list[str] = Field(default_factory=list)
     reactivate_formulas: list[str] = Field(default_factory=list)
     formula_proposals: list[LLMFormulaProposal] = Field(default_factory=list)
-    hypothesis_revisions: list[dict[str, str | list[str]]] = Field(default_factory=list)
+    evidence_ids: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Ledger evidence each deactivation or reactivation rests on, by formula.",
+    )
+    hypothesis_revisions: list[HypothesisRecord] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
 
@@ -354,16 +360,79 @@ def _scientific_stop_reason(
     return None
 
 
+def _record_review_decisions(
+    campaign: CampaignState, decision: CampaignReviewDecision
+) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Append the decisions that cite ledger evidence; the others are not applied."""
+    ledger = campaign.ledger
+    actor = f"debate:{decision.debate_run_id}" if decision.debate_run_id else "review"
+    applied: dict[str, list[str]] = {"deactivate_formula": [], "reactivate_formula": []}
+    decision_ids: list[str] = []
+    notes: list[str] = []
+    for action, formulas in (
+        ("deactivate_formula", decision.deactivate_formulas),
+        ("reactivate_formula", decision.reactivate_formulas),
+    ):
+        for formula in formulas:
+            record = DecisionRecord(
+                campaign_id=campaign.campaign_id,
+                iteration=campaign.iteration,
+                action=action,
+                subject=formula,
+                evidence_ids=decision.evidence_ids.get(formula, []),
+                rationale="; ".join(note for note in decision.notes if formula in note),
+                actor=actor,
+            )
+            problems = ledger.problems(record)
+            if problems:
+                notes.append(f"not applied: {action} {formula}: {'; '.join(problems)}")
+                continue
+            decision_ids.append(ledger.append(record).decision_id)  # type: ignore[union-attr]
+            applied[action].append(formula)
+    return applied["deactivate_formula"], applied["reactivate_formula"], decision_ids, notes
+
+
+def _record_hypothesis_revisions(
+    campaign: CampaignState, revisions: list[HypothesisRecord]
+) -> tuple[list[str], list[str]]:
+    """Append revisions in order; each follows the hypothesis's latest revision."""
+    ledger = campaign.ledger
+    appended: list[str] = []
+    notes: list[str] = []
+    for revision in revisions:
+        history = ledger.history(revision.hypothesis_id)
+        rebased = HypothesisRecord.model_validate(
+            {
+                **revision.model_dump(exclude={"revision_id", "recorded_at"}),
+                "prior_revision_id": history[-1].revision_id if history else None,
+            }
+        )
+        problems = ledger.problems(rebased)
+        if problems:
+            notes.append(
+                f"rejected hypothesis revision {revision.hypothesis_id}: {'; '.join(problems)}"
+            )
+            continue
+        appended.append(ledger.append(rebased).revision_id)  # type: ignore[union-attr]
+    return appended, notes
+
+
 def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> None:
     unknown = (set(decision.deactivate_formulas) | set(decision.reactivate_formulas)) - set(
         campaign.formulas
     )
     if unknown:
         raise ValueError(f"review references unknown formulas: {sorted(unknown)}")
-    for formula in decision.deactivate_formulas:
+    deactivate, reactivate, decision_ids, decision_notes = _record_review_decisions(
+        campaign, decision
+    )
+    revision_ids, revision_notes = _record_hypothesis_revisions(
+        campaign, decision.hypothesis_revisions
+    )
+    for formula in deactivate:
         campaign.formulas[formula].active = False
         campaign.formulas[formula].rejection_reason = "deactivated by campaign evidence review"
-    for formula in decision.reactivate_formulas:
+    for formula in reactivate:
         campaign.formulas[formula].active = True
         campaign.formulas[formula].rejection_reason = None
     if decision.debate_run_id and decision.debate_run_id not in campaign.debate_run_ids:
@@ -380,10 +449,10 @@ def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> 
         CampaignReviewRecord(
             iteration=campaign.iteration,
             debate_run_id=decision.debate_run_id,
-            deactivate_formulas=decision.deactivate_formulas,
-            reactivate_formulas=decision.reactivate_formulas,
-            notes=decision.notes,
-            metadata={"hypothesis_revisions": decision.hypothesis_revisions},
+            deactivate_formulas=deactivate,
+            reactivate_formulas=reactivate,
+            notes=decision.notes + decision_notes + revision_notes,
+            metadata={"decision_ids": decision_ids, "hypothesis_revision_ids": revision_ids},
         )
     )
 
@@ -769,6 +838,7 @@ def run_campaign(
         campaign = saved
 
     root.mkdir(parents=True, exist_ok=True)
+    ledger = open_campaign_ledger(campaign, root)
     campaign.status = WorkflowStatus.RUNNING
     campaign.save(state_path)
     completed: list[str] = []
@@ -876,6 +946,7 @@ def run_campaign(
                     raise
             finally:
                 campaign.formula_runs[formula] = record
+                record_formula_evidence(ledger, campaign, record)
                 campaign.save(state_path)
             iteration_records.append(record)
 

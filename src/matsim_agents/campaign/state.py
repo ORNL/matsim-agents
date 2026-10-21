@@ -17,9 +17,9 @@ import copy
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from matsim_agents.campaign.acquisition import CampaignAcquisitionState
 from matsim_agents.campaign.registry import CandidateRegistry
@@ -38,8 +38,11 @@ from matsim_agents.execution.contracts import (
     WorkflowStatus,
 )
 
+if TYPE_CHECKING:
+    from matsim_agents.execution.ledger import EvidenceLedger
+
 # Version of the saved campaign state; migrate_campaign_state upgrades older ones.
-CAMPAIGN_STATE_SCHEMA_VERSION = 2
+CAMPAIGN_STATE_SCHEMA_VERSION = 3
 
 
 def migrate_campaign_state(data: dict[str, Any]) -> dict[str, Any]:
@@ -48,6 +51,9 @@ def migrate_campaign_state(data: dict[str, Any]) -> dict[str, Any]:
     Version 1 (no ``schema_version``) predates stability-report fidelity. Its
     convex-hull reports came only from DFT refinement, so they become
     ``converged_dft``; relative rankings came from MLIP relaxations.
+    Version 2 predates the evidence ledger: ``evidence_ledger_file`` stays
+    unset, and the campaign's ledger is backfilled from the saved state when
+    it is next opened (:func:`matsim_agents.campaign.evidence.open_campaign_ledger`).
     """
     data = copy.deepcopy(data)
     version = data.get("schema_version", 1)
@@ -64,7 +70,9 @@ def migrate_campaign_state(data: dict[str, Any]) -> dict[str, Any]:
         for hull in [data.get("current_hull"), *(data.get("hull_history") or [])]:
             if isinstance(hull, dict):
                 hull.setdefault("evidence_level", EvidenceLevel.CONVERGED_DFT.value)
-        data["schema_version"] = 2
+        data["schema_version"] = version = 2
+    if version == 2:
+        data["schema_version"] = 3
     return data
 
 
@@ -143,6 +151,35 @@ class CampaignState(BaseModel):
     iteration: int = 0
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
     status: WorkflowStatus = WorkflowStatus.PLANNED
+    evidence_ledger_file: str | None = Field(
+        None,
+        description="Ledger file in the campaign's output directory; unset until the ledger "
+        "is opened (and, for older states, backfilled).",
+    )
+    _ledger: EvidenceLedger | None = PrivateAttr(None)
+
+    def attach_ledger(self, ledger: EvidenceLedger) -> None:
+        self._ledger = ledger
+
+    def __eq__(self, other: object) -> bool:
+        # The attached ledger is a runtime handle, not part of the saved state.
+        return (
+            isinstance(other, CampaignState)
+            and self.__dict__ == other.__dict__
+            and self.__pydantic_extra__ == other.__pydantic_extra__
+        )
+
+    __hash__ = None  # type: ignore[assignment]
+
+    @property
+    def ledger(self) -> EvidenceLedger:
+        """The campaign's evidence ledger, attached by run_campaign."""
+        if self._ledger is None:
+            raise RuntimeError(
+                "campaign has no evidence ledger attached; open it with "
+                "matsim_agents.campaign.evidence.open_campaign_ledger"
+            )
+        return self._ledger
 
     @model_validator(mode="before")
     @classmethod

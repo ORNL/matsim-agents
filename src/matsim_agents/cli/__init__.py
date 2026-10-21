@@ -8,6 +8,7 @@ from matsim_agents.cli import (  # noqa: F401, I001  (register commands)
     composition,
     active_learning,
     resources,
+    ledger,
 )
 from matsim_agents.cli._app import app
 

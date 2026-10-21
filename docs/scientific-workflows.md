@@ -927,10 +927,13 @@ stability in a [characterization](characterization.md).
 
 Every failed or rejected result must include a reason. Unconverged jobs remain
 in the run record and are excluded from rankings rather than silently dropped.
+Campaigns and characterizations also append each result, failure, hypothesis
+revision, and review decision to an [evidence ledger](evidence-ledger.md).
 
 Related documentation:
 
 - [Characterization contracts](characterization.md)
+- [Evidence ledger](evidence-ledger.md)
 - [Distributed DFT dispatch](distributed-dft-dispatch.md)
 - [Run artifacts and restarts](run-artifacts-and-restarts.md)
 - [Cross-facility portability benchmark](../benchmarks/portability/README.md)

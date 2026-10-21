@@ -61,6 +61,15 @@ from matsim_agents.execution.contracts import (
     ObservableValue,
     at_least,
 )
+from matsim_agents.execution.ledger import (
+    EvidenceLedger,
+    EvidenceOutcome,
+    EvidenceRecord,
+    LedgerQuantity,
+    MethodRecord,
+    hashes_of,
+    software_versions,
+)
 from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
 from matsim_agents.workflows.relaxation import (
     DFTBackendConfig,
@@ -139,6 +148,7 @@ MAX_RECIPE_EVIDENCE = EvidenceLevel.CONVERGED_DFT
 # keeps the run's completed calculations.
 OPERATIONAL_FIELDS = {"budget", "approvals", "dft_approved", "output_root"}
 STATE_FILE = "characterization-state.json"
+LEDGER_FILE = "evidence-ledger.jsonl"
 REPORT_FILE = "characterization-report.json"
 
 
@@ -585,19 +595,155 @@ def _preflight(
 
 
 def run_characterization(
-    contract: CharacterizationContract, *, relax: Relax = run_relaxation
+    contract: CharacterizationContract,
+    *,
+    relax: Relax = run_relaxation,
+    ledger: EvidenceLedger | None = None,
 ) -> CharacterizationReport:
     """Run the outstanding steps of the contract's recipe and assess the evidence.
 
     Relaxations stop at the contract's budget and, for DFT, at its approval; the
     report then says which evidence is missing. ``relax`` runs one relaxation
-    (the provenance-tracked relaxation workflow by default).
+    (the provenance-tracked relaxation workflow by default). Every relaxation,
+    failed or not, and every conclusive assessment is appended to ``ledger``
+    (by default ``evidence-ledger.jsonl`` in the run directory); the report
+    cites the ledger's evidence identifiers.
     """
     with _Run(contract) as run:
-        return _execute(contract, run, relax)
+        return _execute(contract, run, relax, ledger or EvidenceLedger(run.directory / LEDGER_FILE))
 
 
-def _execute(contract: CharacterizationContract, run: _Run, relax: Relax) -> CharacterizationReport:
+def _method_record(contract: CharacterizationContract, fidelity: str) -> MethodRecord:
+    if fidelity == "dft":
+        dft = contract.methods.dft
+        assert dft is not None
+        directories = {"pseudo_dir": dft.pseudo_dir, "potcar_dir": dft.potcar_dir}
+        return MethodRecord(
+            backend=dft.backend,
+            method_signature=contract.methods.dft_method_signature,
+            settings={**dft.settings, **{k: v for k, v in directories.items() if v}},
+            software_versions=software_versions("ase"),
+        )
+    mlip = contract.methods.mlip
+    return MethodRecord(
+        backend=str(mlip.get("mlip_backend", "hydragnn")),
+        model=next(
+            (str(mlip[key]) for key in ("uma_model_name", "mace_model", "logdir") if mlip.get(key)),
+            None,
+        ),
+        settings=dict(mlip),
+        software_versions=software_versions("ase", "fairchem-core", "mace-torch"),
+    )
+
+
+def _relaxation_evidence(
+    contract: CharacterizationContract, step: RecipeStep, outcome: dict[str, Any]
+) -> EvidenceRecord:
+    """The ledger record of one relaxation attempt: a result or a failure to compute it."""
+    fidelity = step.fidelity or "mlip"
+    tolerance = contract.tolerances.force_tolerance_eV_per_A
+    common: dict[str, Any] = {
+        "kind": "relaxation",
+        "subject": contract.formula,
+        "characterization_contract_id": contract.contract_id,
+        "calculation_id": step.step_id,
+        "task_id": f"attempt-{outcome['attempt']}",
+        "run_id": outcome.get("run_id"),
+        "method": _method_record(contract, fidelity),
+        "input_sha256": hashes_of([step.structure]),
+        "physical_assumptions": [
+            f"relax_atoms={contract.geometry.relax_atoms}, "
+            f"relax_cell={contract.geometry.relax_cell}, "
+            f"pressure_GPa={contract.geometry.pressure_GPa}"
+        ],
+    }
+    if outcome["status"] != "done":
+        return EvidenceRecord(
+            **common,
+            evidence_level=(
+                EvidenceLevel.LOW_FIDELITY_DFT
+                if fidelity == "dft"
+                else EvidenceLevel.MLIP_RELAXATION
+            ),
+            outcome=EvidenceOutcome.FAILED_TO_COMPUTE,
+            failure_reason=outcome["failure_reason"],
+        )
+    from ase.io import read
+
+    force = float(outcome["max_force_eV_per_A"])
+    converged = bool(outcome["converged"]) and force <= tolerance
+    n_atoms = len(read(outcome["optimized_structure_path"]))
+    return EvidenceRecord(
+        **common,
+        evidence_level=EvidenceLevel(outcome["evidence_level"]),
+        outcome=EvidenceOutcome.MEASURED if converged else EvidenceOutcome.NOT_CONVERGED,
+        failure_reason=None
+        if converged
+        else outcome.get("failure_reason") or f"residual force above {tolerance} eV/A",
+        values=[
+            LedgerQuantity(name="total_energy", value=float(outcome["energy_eV"]), unit="eV"),
+            LedgerQuantity(
+                name="energy_per_atom", value=float(outcome["energy_eV"]) / n_atoms, unit="eV/atom"
+            ),
+            LedgerQuantity(name="residual_max_force", value=force, unit="eV/A"),
+        ],
+        numerical_convergence={
+            "converged": converged,
+            "max_force_eV_per_A": force,
+            "force_tolerance_eV_per_A": tolerance,
+            "steps": outcome.get("steps"),
+            "max_steps": contract.tolerances.max_relaxation_steps,
+        },
+        output_artifact_sha256={
+            outcome["optimized_structure_path"]: outcome["optimized_structure_sha256"]
+        },
+    )
+
+
+_ASSESSMENT_KIND = {
+    "relaxation": "characterization",
+    "energy_ranking": "energy_ranking",
+    "thermodynamic_stability": "stability",
+}
+
+
+def _assessment_evidence(
+    contract: CharacterizationContract, report: CharacterizationReport, run: _Run
+) -> EvidenceRecord:
+    """The ledger record of a sufficiently characterized answer, citing its relaxations."""
+    relaxed = [
+        outcome
+        for step in plan_recipe(contract)
+        if step.operator == "relax" and (outcome := run.done(step.step_id)) is not None
+    ]
+    stability = contract.recipe == "thermodynamic_stability"
+    return EvidenceRecord(
+        kind=_ASSESSMENT_KIND[contract.recipe],
+        subject=contract.formula,
+        characterization_contract_id=contract.contract_id,
+        calculation_id=contract.recipe,
+        method=_method_record(contract, "dft" if contract.needs_dft() else "mlip"),
+        evidence_level=min(
+            (EvidenceLevel(o["evidence_level"]) for o in relaxed), key=list(EvidenceLevel).index
+        ),
+        outcome=EvidenceOutcome.MEASURED,
+        values=[
+            LedgerQuantity(name=v.name, value=v.value, unit=v.unit, structure=v.structure)
+            for v in report.observables
+            if v.unit != "structure"
+        ],
+        numerical_convergence={"characterization_status": report.status.value},
+        reference_set_id=_references(contract).identifier if stability else None,
+        reference_complete=True if stability else None,
+        input_sha256=hashes_of([contract.reference_energies]) if stability else {},
+        physical_assumptions=report.limitations,
+        parent_record_ids=[o["evidence_id"] for o in relaxed],
+    )
+
+
+def _execute(
+    contract: CharacterizationContract, run: _Run, relax: Relax, ledger: EvidenceLedger
+) -> CharacterizationReport:
     problem = _preflight(contract)
     if problem is not None:
         status, missing = problem
@@ -645,7 +791,9 @@ def _execute(contract: CharacterizationContract, run: _Run, relax: Relax) -> Cha
             )
         except Exception as exc:  # noqa: BLE001 - a failed tool is not evidence
             outcome = {"status": "failed", "failure_reason": f"{type(exc).__name__}: {exc}"}
-        run.record(step, {**outcome, "structure": step.structure})
+        outcome = {**outcome, "structure": step.structure, "attempt": run.attempts(fidelity)}
+        evidence = ledger.append(_relaxation_evidence(contract, step, outcome))
+        run.record(step, {**outcome, "evidence_id": evidence.evidence_id})  # type: ignore[union-attr]
     final = steps[-1] if steps[-1].operator != "relax" else None
     report_path = run.directory / REPORT_FILE
     if final is not None and run.done(final.step_id) is not None and report_path.is_file():
@@ -653,6 +801,8 @@ def _execute(contract: CharacterizationContract, run: _Run, relax: Relax) -> Cha
     report = _assess(contract, steps, run, blockers)
     report_path.write_text(report.model_dump_json(indent=2) + "\n")
     inputs_done = all(run.done(step.step_id) for step in steps if step.operator == "relax")
+    if report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED:
+        ledger.append(_assessment_evidence(contract, report, run))
     if final is not None and inputs_done:
         # Assessed from complete inputs, whatever the answer: not repeated on resume.
         run.record(final, {"status": "done", "characterization_status": report.status.value})
@@ -687,7 +837,7 @@ def _verify_completed_artifacts(run: _Run, steps: list[RecipeStep]) -> None:
 
 def _evidence_item(contract: CharacterizationContract, step_id: str, outcome: dict) -> EvidenceItem:
     return EvidenceItem(
-        evidence_id=f"{contract.contract_id}/{step_id}",
+        evidence_id=outcome["evidence_id"],
         kind="relaxation",
         evidence_level=EvidenceLevel(outcome["evidence_level"]),
         method=outcome.get("run_id", ""),
@@ -757,9 +907,9 @@ def _assess(
         )
     tolerance = contract.tolerances.force_tolerance_eV_per_A
     observables = []
-    for step_id, outcome in relaxed:
+    for _step_id, outcome in relaxed:
         level = EvidenceLevel(outcome["evidence_level"])
-        cite = [f"{contract.contract_id}/{step_id}"]
+        cite = [outcome["evidence_id"]]
         structure = outcome["structure"]
         observables += [
             ObservableValue(
@@ -829,7 +979,7 @@ def _energy_observables(
     from ase.io import read
 
     values = []
-    for step_id, outcome in relaxed:
+    for _step_id, outcome in relaxed:
         n_atoms = len(read(outcome["optimized_structure_path"]))
         values.append(
             ObservableValue(
@@ -838,7 +988,7 @@ def _energy_observables(
                 unit="eV/atom",
                 evidence_level=EvidenceLevel(outcome["evidence_level"]),
                 structure=outcome["structure"],
-                evidence_ids=[f"{contract.contract_id}/{step_id}"],
+                evidence_ids=[outcome["evidence_id"]],
             )
         )
     return values
@@ -914,7 +1064,7 @@ def _assess_ranking(contract, relaxed, observables, base) -> CharacterizationRep
 def _ranking_values(
     contract: CharacterizationContract, relaxed: list[tuple[str, dict]], report: StabilityReport
 ) -> list[ObservableValue]:
-    step_by_input = {outcome["structure"]: step_id for step_id, outcome in relaxed}
+    evidence_by_input = {outcome["structure"]: outcome["evidence_id"] for _s, outcome in relaxed}
     return [
         ObservableValue(
             name="relative_energy_per_atom",
@@ -922,7 +1072,7 @@ def _ranking_values(
             unit="eV/atom",
             evidence_level=report.evidence_level,
             structure=phase.structure_path,
-            evidence_ids=[f"{contract.contract_id}/{step_by_input[phase.structure_path]}"],
+            evidence_ids=[evidence_by_input[phase.structure_path]],
         )
         for phase in report.ranking
     ]
@@ -957,8 +1107,8 @@ def _assess_stability(contract, relaxed, observables, base) -> CharacterizationR
     )
     ground = report.ground_state
     cite = [
-        f"{contract.contract_id}/{step_id}"
-        for step_id, outcome in relaxed
+        outcome["evidence_id"]
+        for _step_id, outcome in relaxed
         if outcome["structure"] == ground.structure_path
     ]
     observables = (

@@ -152,6 +152,11 @@ Only one execution of a contract runs at a time: it holds a lock on the run
 directory while it reads, executes, and saves, and a concurrent execution is
 refused before it calculates anything.
 
+Every relaxation attempt, failed ones included, and every concluded answer is
+also appended to `evidence-ledger.jsonl` in the run directory; the report's
+evidence identifiers are ledger identifiers. See
+[Evidence ledger](evidence-ledger.md).
+
 ## Stability fidelity in campaigns
 
 `StabilityReport.evidence_level` records the fidelity of every stability
