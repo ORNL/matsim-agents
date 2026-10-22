@@ -22,7 +22,7 @@ run_tests() {
 run_coverage() {
     python -m pytest tests/ -v --tb=short -m "not gpu" \
         --cov=matsim_agents --cov-report=term-missing \
-        --cov-report=xml:coverage.xml -p no:warnings
+        --cov-report=xml:coverage.xml --cov-fail-under=80 -p no:warnings
 }
 
 case "${MODE}" in
