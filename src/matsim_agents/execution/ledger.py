@@ -297,7 +297,8 @@ class EvidenceLedger:
         self._written = len(data)
         tip = _GENESIS
         hashes: list[str] = []
-        for number, line in enumerate(data.decode("utf-8").splitlines(), 1):
+        # Not splitlines(): U+0085, U+2028 and U+2029 are legal inside JSON strings.
+        for number, line in enumerate(data.decode("utf-8").split("\n"), 1):
             if not line.strip():
                 continue
             try:

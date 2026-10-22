@@ -60,6 +60,18 @@ def test_identifiers_are_content_hashes_and_appends_are_idempotent(tmp_path):
         EvidenceRecord.model_validate({**first.model_dump(), "subject": "Si"})
 
 
+@pytest.mark.parametrize("separator", ["\u0085", "\u2028", "\u2029", "\r"])
+def test_unicode_line_separators_in_text_round_trip(tmp_path, separator):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    evidence = ledger.append(_evidence())
+    text = f"line one{separator}two"
+    claim = ledger.append(_claim([evidence.evidence_id], scientific_claim=text))
+    reopened = EvidenceLedger(path)
+    assert len(reopened) == 2
+    assert reopened.history("hyp-sic")[-1].scientific_claim == claim.scientific_claim
+
+
 def test_a_failure_to_compute_carries_no_values_and_a_reason():
     with pytest.raises(ValueError, match="needs a failure_reason"):
         _evidence(outcome=EvidenceOutcome.FAILED_TO_COMPUTE, values=[])
