@@ -733,6 +733,37 @@ def test_relative_and_absolute_contract_paths_resume_the_same_run(system, monkey
     assert again.calls == []
 
 
+def test_default_output_root_is_next_to_the_contract_file(system, monkeypatch):
+    import yaml
+
+    from matsim_agents.campaign.characterization import load_contract
+
+    tmp_path, structures, _references = system
+    path = tmp_path / "contract.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "contract_id": "default-root",
+                "objective": "Relax NbO2.",
+                "formula": "NbO2",
+                "recipe": "relaxation",
+                "structures": [structures[0].name],
+            }
+        )
+    )
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    contract = load_contract(path)
+    assert Path(contract.output_root) == tmp_path / "runs"
+    run_characterization(contract, relax=FakeRelax({"NbO2-a.extxyz": -21.0}))
+    monkeypatch.chdir(tmp_path)
+    again = FakeRelax({})
+    run_characterization(load_contract("contract.yaml"), relax=again)
+    assert again.calls == []
+    assert not (elsewhere / "runs").exists()
+
+
 @pytest.mark.parametrize("where", ["set", "phase", "element"])
 def test_references_from_another_dft_backend_are_invalid_protocols(system, where):
     from matsim_agents.discovery.stability import ElementalReferenceEntry, ReferencePhaseEntry

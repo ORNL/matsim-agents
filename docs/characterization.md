@@ -48,7 +48,7 @@ recipe does, and only from converged DFT.
 | `reference_energies` | A `ReferenceEnergySet` JSON (`thermodynamic_stability`). |
 | `budget` | `max_mlip_relaxations` and `max_dft_calculations`: calculations attempted over the whole contract, failed ones and resumed runs included. |
 | `approvals`, `dft_approved` | DFT waits for `dft_approved: true` when `approvals.before_dft` is set (the default). |
-| `output_root` | Where the run directory is created (default `./runs`). |
+| `output_root` | Where the run directory is created (default `runs/` next to the contract file). |
 
 Relative paths in a contract file (structures, `reference_energies`,
 `output_root`, `methods.dft.pseudo_dir`, `methods.dft.potcar_dir`) are relative

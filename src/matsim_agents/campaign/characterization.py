@@ -1186,6 +1186,7 @@ def load_contract(path: str | Path) -> CharacterizationContract:
         return str(path.parent / value) if isinstance(value, str) else value
 
     data["structures"] = [resolve(item) for item in data.get("structures") or []]
+    data.setdefault("output_root", "runs")
     for key in ("reference_energies", "output_root"):
         if key in data:
             data[key] = resolve(data[key])
