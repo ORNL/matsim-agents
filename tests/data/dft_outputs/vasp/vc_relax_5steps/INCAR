@@ -1,0 +1,28 @@
+# matsim-agents vasp_relax: vc-relax
+SYSTEM = matsim-agents
+
+# --- electronic ---
+PREC   = Accurate
+ENCUT  = 520.0
+EDIFF  = 1.0e-06
+ALGO   = Normal
+NELM   = 100
+NELMIN = 4
+ISPIN  = 1
+LREAL  = Auto
+LWAVE  = .FALSE.
+LCHARG = .FALSE.
+
+# --- ionic ---
+IBRION = 2
+ISIF   = 3
+NSW    = 100
+EDIFFG = -0.01
+
+# --- smearing ---
+ISMEAR = 0
+SIGMA  = 0.05
+
+# --- k-points (KSPACING in 1/Å, Γ-centered) ---
+KSPACING = 0.2
+KGAMMA   = .TRUE.

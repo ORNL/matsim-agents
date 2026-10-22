@@ -1,0 +1,79 @@
+WARNING: KPOINTS not present in /global/cfs/cdirs/m5216/mlupopa/runs/characterization-qualification-60053777/dft/characterization-reference-Si-diamond/relax-dft-000/2026-10-20T21-31-56Z_5b0a8654/calculations/vasp — VASP will likely fail
+Using from-source build toolchain (PrgEnv-gnu + cudatoolkit/12.9)
+✓ Perlmutter NVIDIA/CUDA modules configured
+  nvfortran: /opt/nvidia/hpc_sdk/Linux_x86_64/25.5/compilers/bin/nvfortran
+  CUDA_HOME: /opt/nvidia/hpc_sdk/Linux_x86_64/25.5/cuda/12.9
+==========================================
+VASP GPU run on Perlmutter
+Date:        Tue Oct 20 02:32:06 PM PDT 2026
+Host:        nid002416
+WorkDir:     /global/cfs/cdirs/m5216/mlupopa/runs/characterization-qualification-60053777/dft/characterization-reference-Si-diamond/relax-dft-000/2026-10-20T21-31-56Z_5b0a8654/calculations/vasp
+vasp bin:    /global/cfs/cdirs/m5216/mlupopa/matsim-agents/external/vasp6/src/vasp.6.6.1/bin/vasp_std
+Variant:     std
+MPI ranks:   4    OMP threads/rank: 16
+GPUs/node:   4
+==========================================
+ running    4 mpi-ranks, with   16 threads/rank, on    1 nodes
+ distrk:  each k-point on    4 cores,    1 groups
+ distr:  one band on    1 cores,    4 groups
+ Offloading initialized ...    4 GPUs detected
+ vasp.6.6.1 17Jul2026 (build Sep  4 2026 14:33:53) complex                       
+ POSCAR found type information on POSCAR Si
+ POSCAR found :  1 types and       2 ions
+ scaLAPACK will be used selectively (only on CPU)
+ -----------------------------------------------------------------------------
+|                                                                             |
+|               ----> ADVICE to this user running VASP <----                  |
+|                                                                             |
+|     You have a (more or less) 'small supercell' and for smaller cells       |
+|     it is recommended to use the reciprocal-space projection scheme!        |
+|     The real-space optimization is not efficient for small cells and it     |
+|     is also less accurate ...                                               |
+|     Therefore, set LREAL=.FALSE. in the INCAR file.                         |
+|                                                                             |
+ -----------------------------------------------------------------------------
+
+Warning: ieee_invalid is signaling
+Warning: ieee_divide_by_zero is signaling
+Warning: ieee_underflow is signaling
+Warning: ieee_inexact is signaling
+FORTRAN STOP
+Warning: ieee_invalid is signaling
+Warning: ieee_divide_by_zero is signaling
+Warning: ieee_underflow is signaling
+Warning: ieee_inexact is signaling
+FORTRAN STOP
+Warning: ieee_invalid is signaling
+Warning: ieee_divide_by_zero is signaling
+Warning: ieee_underflow is signaling
+Warning: ieee_inexact is signaling
+FORTRAN STOP
+Warning: ieee_invalid is signaling
+Warning: ieee_divide_by_zero is signaling
+Warning: ieee_underflow is signaling
+Warning: ieee_inexact is signaling
+FORTRAN STOP
+ LDA part: xc-table for (Slater+PW92), standard interpolation
+ POSCAR, INCAR and KPOINTS ok, starting setup
+ FFT: planning ... GRIDC
+ FFT: planning ... GRID_SOFT
+ FFT: planning ... GRID
+ WAVECAR not read
+ entering main loop
+       N       E                     dE             d eps       ncg     rms          rms(c)
+DAV:   1     0.717052678041E+01    0.71705E+01   -0.33050E+03   752   0.777E+02
+DAV:   2    -0.107768827685E+02   -0.17947E+02   -0.17356E+02  1192   0.841E+01
+DAV:   3    -0.110168432492E+02   -0.23996E+00   -0.23996E+00   976   0.120E+01
+DAV:   4    -0.110177810114E+02   -0.93776E-03   -0.93776E-03  1200   0.849E-01
+DAV:   5    -0.110177817035E+02   -0.69204E-06   -0.69203E-06  1032   0.216E-02    0.475E+00
+DAV:   6    -0.109021403679E+02    0.11564E+00   -0.75492E-02   912   0.144E+00    0.290E+00
+DAV:   7    -0.108486281908E+02    0.53512E-01   -0.14515E-01   936   0.213E+00    0.173E-01
+DAV:   8    -0.108497327308E+02   -0.11045E-02   -0.38477E-03   872   0.468E-01    0.740E-02
+DAV:   9    -0.108499305584E+02   -0.19783E-03   -0.19532E-04  1088   0.110E-01    0.550E-02
+DAV:  10    -0.108499565710E+02   -0.26013E-04   -0.30794E-05   912   0.416E-02    0.836E-03
+DAV:  11    -0.108499563601E+02    0.21097E-06   -0.54178E-07  1032   0.524E-03
+   1 F= -.10849956E+02 E0= -.10849956E+02  d E =-.108500E+02
+ curvature:   0.00 expect dE= 0.000E+00 dE for cont linesearch  0.000E+00
+ trial: gam= 0.00000 g(F)=  0.377E-50 g(S)=  0.893E-05 ort = 0.000E+00 (trialstep = 0.100E+01)
+ search vector abs. value=  0.893E-05
+ reached required accuracy - stopping structural energy minimisation

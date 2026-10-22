@@ -222,7 +222,8 @@ def prepare_vasp_workdir(
 # --------------------------------------------------------------------------- #
 
 
-_OSZICAR_E_RE = re.compile(r"E0\s*=\s*([-+]?\d+\.\d+E[-+]?\d+|[-+]?\d+\.\d+)")
+# OSZICAR omits the leading zero: "E0= -.30112240E+02".
+_OSZICAR_E_RE = re.compile(r"E0\s*=\s*([-+]?\d*\.\d+(?:E[-+]?\d+)?)")
 
 
 def _parse_walltime_outcar(outcar_path: str) -> float | None:
