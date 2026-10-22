@@ -164,6 +164,39 @@ def test_an_unfinished_line_the_checkpoint_covers_is_refused(tmp_path):
         EvidenceLedger(path)
 
 
+def test_a_stale_writer_cannot_overwrite_a_same_size_replacement(tmp_path):
+    # A torn tail replaced by another writer's complete entry of the same length.
+    path = tmp_path / "ledger.jsonl"
+    EvidenceLedger(path).append(_evidence())
+    complete = path.read_bytes()
+    record = _evidence(subject="Si")
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / "ledger.jsonl").write_bytes(complete)
+    EvidenceLedger(scratch / "ledger.jsonl").append(record)
+    line = (scratch / "ledger.jsonl").read_bytes()[len(complete) :]
+    path.write_bytes(complete + line[:-1] + b" ")
+    stale = EvidenceLedger(path)
+    EvidenceLedger(path).append(record)
+    assert path.stat().st_size == stale._written
+    with pytest.raises(LedgerIntegrityError, match="changed since it was read"):
+        stale.append(_evidence(subject="C"))
+    assert [r.subject for r in EvidenceLedger(path).evidence()] == ["SiC", "Si"]
+
+
+def test_a_stale_writer_cannot_hide_a_truncation_back_to_its_size(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    EvidenceLedger(path).append(_evidence())
+    original = path.read_bytes()
+    stale = EvidenceLedger(path)
+    EvidenceLedger(path).append(_evidence(subject="Si"))
+    path.write_bytes(original)
+    with pytest.raises(LedgerIntegrityError, match="changed since it was read"):
+        stale.append(_evidence(subject="C"))
+    with pytest.raises(LedgerIntegrityError, match="truncated or replaced"):
+        EvidenceLedger(path)
+
+
 def test_an_appending_ledger_stays_usable_and_in_step(tmp_path):
     path = tmp_path / "ledger.jsonl"
     ledger = EvidenceLedger(path)

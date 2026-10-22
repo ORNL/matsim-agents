@@ -287,16 +287,20 @@ class EvidenceLedger:
         self._tip = _GENESIS
         self._written = 0
         self._unfinished = 0
+        self._digest = hashlib.sha256(b"").hexdigest()
+        self._head: tuple[int, str] | None = None
         self._load()
 
     # ------------------------------------------------------------------ io --
     def _load(self) -> None:
         # The checkpoint is read before the file and written after each append,
-        # so it never runs ahead of the bytes read. The size kept is that of the
-        # bytes parsed, so an append racing the read is caught by ``append``.
+        # so it never runs ahead of the bytes read. The bytes and checkpoint seen
+        # are kept, so ``append`` catches any writer that ran since.
         head = self._read_head()
         data = self.path.read_bytes() if self.path.is_file() else b""
+        self._head = head
         self._written = len(data)
+        self._digest = hashlib.sha256(data).hexdigest()
         complete = data[: data.rfind(b"\n") + 1]
         self._unfinished = len(data) - len(complete)
         tip = _GENESIS
@@ -382,14 +386,21 @@ class EvidenceLedger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # A lock file, not flock: flock is unsupported on NERSC CFS compute nodes.
         with exclusive_lock(f"{self.path}.lock", timeout=60, poll_interval=0.05):
-            size = self.path.stat().st_size if self.path.exists() else 0
-            if size != self._written:
+            # A size check alone misses same-size rewrites and truncation back to the loaded size.
+            data = self.path.read_bytes() if self.path.exists() else b""
+            if (
+                len(data) != self._written
+                or hashlib.sha256(data).hexdigest() != self._digest
+                or self._read_head() != self._head
+            ):
                 raise LedgerIntegrityError(
                     f"{self.path} changed since it was read; reopen the ledger"
                 )
+            size = len(data)
             if self._unfinished:
                 size -= self._unfinished
                 os.truncate(self.path, size)
+                data = data[:size]
                 self._unfinished = 0
             entry_hash = _sha256_text(self._tip + _canonical(payload))
             entry = {
@@ -407,7 +418,9 @@ class EvidenceLedger:
             self._tip = entry_hash
             self._index(record)
             self._written = size + len(line)
+            self._digest = hashlib.sha256(data + line).hexdigest()
             self._write_head()
+            self._head = (len(self._order), self._tip)
         return record
 
     # ---------------------------------------------------------- validation --
