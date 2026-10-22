@@ -1,0 +1,56 @@
+"""Regenerate the pw.x fixtures in this directory from small Si runs.
+
+Usage (Perlmutter): python regenerate.py PW_X PSEUDO_DIR
+for example /global/common/software/nersc9/espresso/7.5-libxc-7.0.0-cpu/bin/pw.x
+and a directory holding Si_r.upf. Each case runs serially in a few seconds.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from ase.build import bulk
+
+from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
+
+HERE = Path(__file__).resolve().parent
+
+
+def main(pw_x: str, pseudo_dir: str) -> None:
+    atoms = bulk("Si", "diamond", a=5.50)
+    atoms.positions[1] += (0.05, -0.03, 0.02)
+    base = dict(
+        pseudo_dir=pseudo_dir,
+        ecutwfc_ry=20.0,
+        ecutrho_ry=160.0,
+        occupations="fixed",
+        kpts=(2, 2, 2),
+        pseudopotentials={"Si": "Si_r.upf"},
+    )
+    cases = {
+        "relax_converged": QESettings(calculation="relax", **base),
+        "relax_step_limited": QESettings(calculation="relax", nstep=1, **base),
+        "vc_relax_converged": QESettings(calculation="vc-relax", **base),
+        "scf_not_converged": QESettings(
+            calculation="relax", extra_electrons={"electron_maxstep": 2}, **base
+        ),
+    }
+    # Cray MPICH aborts on a login node unless GPU support is off.
+    env = {**os.environ, "MPICH_GPU_SUPPORT_ENABLED": "0", "OMP_NUM_THREADS": "4"}
+    for name, settings in cases.items():
+        work = HERE / name
+        work.mkdir(exist_ok=True)
+        write_pw_input(atoms, settings, str(work / "pw.in"))
+        with (work / "pw.out").open("w") as out:
+            subprocess.run([pw_x, "-in", "pw.in"], cwd=work, stdout=out, env=env, check=True)
+        shutil.rmtree(work / "tmp", ignore_errors=True)
+        pw_in = work / "pw.in"
+        pw_in.write_text(pw_in.read_text().replace(pseudo_dir, "PSEUDO_DIR"))
+
+
+if __name__ == "__main__":
+    main(*sys.argv[1:3])
