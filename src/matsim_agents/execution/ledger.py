@@ -274,7 +274,8 @@ class EvidenceLedger:
     A checkpoint beside the ledger (``<ledger>.head``) records the sequence
     number and hash of the last entry written; opening a ledger that no longer
     reaches it (a truncated suffix, an emptied or deleted file) is an integrity
-    error.
+    error. A final line without its newline is an append that crashed before
+    returning; it is ignored and trimmed by the next append.
     """
 
     def __init__(self, path: str | Path) -> None:
@@ -285,6 +286,7 @@ class EvidenceLedger:
         self._heads: dict[str, str] = {}
         self._tip = _GENESIS
         self._written = 0
+        self._unfinished = 0
         self._load()
 
     # ------------------------------------------------------------------ io --
@@ -295,10 +297,12 @@ class EvidenceLedger:
         head = self._read_head()
         data = self.path.read_bytes() if self.path.is_file() else b""
         self._written = len(data)
+        complete = data[: data.rfind(b"\n") + 1]
+        self._unfinished = len(data) - len(complete)
         tip = _GENESIS
         hashes: list[str] = []
         # Not splitlines(): U+0085, U+2028 and U+2029 are legal inside JSON strings.
-        for number, line in enumerate(data.decode("utf-8").split("\n"), 1):
+        for number, line in enumerate(complete.decode("utf-8").split("\n"), 1):
             if not line.strip():
                 continue
             try:
@@ -383,6 +387,10 @@ class EvidenceLedger:
                 raise LedgerIntegrityError(
                     f"{self.path} changed since it was read; reopen the ledger"
                 )
+            if self._unfinished:
+                size -= self._unfinished
+                os.truncate(self.path, size)
+                self._unfinished = 0
             entry_hash = _sha256_text(self._tip + _canonical(payload))
             entry = {
                 "schema_version": LEDGER_SCHEMA_VERSION,

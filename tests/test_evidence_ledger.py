@@ -138,6 +138,32 @@ def test_entries_past_the_checkpoint_are_accepted(tmp_path):
     assert len(EvidenceLedger(path)) == 3
 
 
+def test_an_unfinished_final_line_is_ignored_and_trimmed(tmp_path):
+    # An append that crashed mid-write, before its checkpoint update.
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    ledger.append(_evidence())
+    complete = path.read_bytes()
+    checkpoint = (tmp_path / "ledger.jsonl.head").read_text()
+    ledger.append(_evidence(subject="Si"))
+    second = path.read_bytes()[len(complete) :]
+    path.write_bytes(complete + second[:-1])
+    (tmp_path / "ledger.jsonl.head").write_text(checkpoint)
+    reopened = EvidenceLedger(path)
+    assert len(reopened) == 1
+    reopened.append(_evidence(subject="C"))
+    assert [r.subject for r in EvidenceLedger(path).evidence()] == ["SiC", "C"]
+
+
+def test_an_unfinished_line_the_checkpoint_covers_is_refused(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    ledger.append(_evidence())
+    path.write_bytes(path.read_bytes()[:-1])
+    with pytest.raises(LedgerIntegrityError, match="truncated or replaced"):
+        EvidenceLedger(path)
+
+
 def test_an_appending_ledger_stays_usable_and_in_step(tmp_path):
     path = tmp_path / "ledger.jsonl"
     ledger = EvidenceLedger(path)
