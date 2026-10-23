@@ -66,6 +66,31 @@ def test_check_passes_with_launcher_on_path(monkeypatch):
     assert caps.check(caps.get_capability("vasp"), environ=env).available
 
 
+def _fake_venv(tmp_path: Path, exit_code: int) -> Path:
+    python = tmp_path / "venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text(f"#!/bin/sh\nexit {exit_code}\n", encoding="utf-8")
+    python.chmod(0o755)
+    return python.parents[1]
+
+
+def test_check_finds_mlip_modules_in_companion_venv(monkeypatch, tmp_path):
+    monkeypatch.setattr(caps, "_module_found", lambda module: False)
+    venv = _fake_venv(tmp_path, 0)
+    uma = caps.check(caps.get_capability("uma"), environ={"MATSIM_FAIRCHEM_VENV": str(venv)})
+    assert uma.available and uma.python == str(venv / "bin" / "python")
+
+
+def test_check_reports_companion_venv_without_the_modules(monkeypatch, tmp_path):
+    monkeypatch.setattr(caps, "_module_found", lambda module: False)
+    venv = _fake_venv(tmp_path, 1)
+    mace = caps.check(caps.get_capability("mace"), environ={"MATSIM_MACE_VENV": str(venv)})
+    assert mace.missing == (
+        "python module mace.calculators",
+        "venv $MATSIM_MACE_VENV or .venv-mace",
+    )
+
+
 def test_check_all_filters_by_kind():
     assert {r.kind for r in caps.check_all(["mlip"], environ={})} == {"mlip"}
     assert len(caps.check_all(environ={})) == len(caps.CAPABILITIES)

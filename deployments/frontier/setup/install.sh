@@ -10,11 +10,13 @@ HYDRAGNN_REF="${HYDRAGNN_REF:-main}"
 INSTALL_ROOT="${INSTALL_ROOT:-${MATSIM_DIR}/.hpc-build/frontier}"
 VENV_PATH="${VENV_PATH:-${MATSIM_DIR}/.venv}"
 MATSIM_EXTRAS="${MATSIM_EXTRAS:-hydragnn,dev,openai,ollama,anthropic,huggingface}"
-INSTALL_UMA="${INSTALL_UMA:-0}"
+INSTALL_UMA="${INSTALL_UMA:-1}"
 UMA_VENV_PATH="${UMA_VENV_PATH:-${MATSIM_DIR}/.venv-uma}"
-INSTALL_MACE="${INSTALL_MACE:-0}"
+INSTALL_MACE="${INSTALL_MACE:-1}"
 MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"
 RECREATE_ENV="${RECREATE_ENV:-0}"
+RECREATE_UMA_ENV="${RECREATE_UMA_ENV:-${RECREATE_ENV}}"
+RECREATE_MACE_ENV="${RECREATE_MACE_ENV:-${RECREATE_ENV}}"
 SKIP_VLLM="${SKIP_VLLM:-1}"
 
 log() { printf '\033[1;34m[frontier-install]\033[0m %s\n' "$*"; }
@@ -62,14 +64,15 @@ log "Installing HydraGNN and matsim-agents wheels into the same environment"
 if [[ "${INSTALL_UMA}" == "1" ]]; then
     log "Installing UMA in its Torch-compatible matsim-owned environment"
     MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" UMA_VENV_PATH="${UMA_VENV_PATH}" \
-        RECREATE_UMA_ENV="${RECREATE_ENV}" \
+        FACILITY=frontier RECREATE_UMA_ENV="${RECREATE_UMA_ENV}" \
         bash "${MATSIM_DIR}/deployments/common/setup/install-uma-compat.sh"
 fi
 if [[ "${INSTALL_MACE}" == "1" ]]; then
     log "Installing MACE in its e3nn-compatible matsim-owned environment"
     MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" MACE_VENV_PATH="${MACE_VENV_PATH}" \
-        FACILITY=frontier RECREATE_MACE_ENV="${RECREATE_ENV}" \
+        FACILITY=frontier RECREATE_MACE_ENV="${RECREATE_MACE_ENV}" \
         bash "${MATSIM_DIR}/deployments/common/setup/install-mace-compat.sh"
 fi
 
-log "Complete. Activate with: source ${VENV_PATH}/bin/activate"
+log "Complete. Activate with: source ${SCRIPT_DIR}/setup_matsim_frontier.sh"
+log "Then verify backends with: matsim-agents capabilities check"

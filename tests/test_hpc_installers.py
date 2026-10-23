@@ -215,6 +215,62 @@ def test_aurora_runs_perlmutter_style_phases_without_switching_checkout(tmp_path
     assert "selected checkout will not be switched automatically" in failed.stderr
 
 
+def _source_runtime_env(root: Path, env: dict[str, str]) -> dict[str, str]:
+    script = ROOT / "deployments" / "common" / "setup" / "matsim-runtime-env.sh"
+    names = (
+        "MATSIM_QE_LAUNCHER",
+        "MATSIM_QE_PSEUDO_DIR",
+        "MATSIM_VASP_LAUNCHER",
+        "MATSIM_VASP_POTCAR_DIR",
+        "MATSIM_FAIRCHEM_VENV",
+        "MATSIM_MACE_VENV",
+    )
+    dump = "; ".join(f'echo "{n}=${{{n}:-}}"' for n in names)
+    clean = {k: v for k, v in os.environ.items() if not k.startswith("MATSIM_")}
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'set -euo pipefail; source "{script}" perlmutter "{root}" >/dev/null; {dump}',
+        ],
+        env={**clean, **env},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return dict(line.split("=", 1) for line in result.stdout.splitlines())
+
+
+def test_runtime_env_exports_only_existing_targets(tmp_path: Path) -> None:
+    assert set(_source_runtime_env(tmp_path, {}).values()) == {""}
+    pw = tmp_path / "external" / "quantum-espresso" / "install-gpu" / "bin" / "pw.x"
+    pw.parent.mkdir(parents=True)
+    pw.write_text("", encoding="utf-8")
+    pw.chmod(0o755)
+    (tmp_path / "external" / "quantum-espresso" / "src" / "pseudo").mkdir(parents=True)
+    (tmp_path / ".venv-mace").mkdir()
+    launcher = tmp_path / "deployments" / "perlmutter" / "launchers" / "run-pw-gpu-perlmutter.sh"
+    launcher.parent.mkdir(parents=True)
+    launcher.write_text("", encoding="utf-8")
+    got = _source_runtime_env(tmp_path, {"MATSIM_FAIRCHEM_VENV": "/custom/uma"})
+    assert got["MATSIM_QE_LAUNCHER"] == str(launcher)
+    assert got["MATSIM_QE_PSEUDO_DIR"] == str(
+        tmp_path / "external" / "quantum-espresso" / "src" / "pseudo"
+    )
+    assert got["MATSIM_VASP_LAUNCHER"] == ""
+    assert got["MATSIM_FAIRCHEM_VENV"] == "/custom/uma"
+    assert got["MATSIM_MACE_VENV"] == str(tmp_path / ".venv-mace")
+
+
+def test_facility_setup_scripts_source_runtime_env() -> None:
+    for facility in INSTALLERS:
+        setup = ROOT / "deployments" / facility / "setup" / f"setup_matsim_{facility}.sh"
+        text = setup.read_text(encoding="utf-8")
+        assert f'deployments/common/setup/matsim-runtime-env.sh" {facility} ' in text
+        launcher = ROOT / "deployments" / facility / "launchers" / f"run-pw-gpu-{facility}.sh"
+        assert launcher.is_file()
+
+
 def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
     for facility, hydragnn_path in INSTALLERS.items():
         installer = ROOT / "deployments" / facility / "setup" / "install.sh"
@@ -226,9 +282,9 @@ def test_facilities_have_one_canonical_current_hydragnn_installer() -> None:
         assert "${MATSIM_DIR}/.hpc-build/" in text
         assert "${HYDRAGNN_DIR}/installation_DOE_supercomputers" not in text
         assert "hf_transfer" in text
-        assert 'INSTALL_UMA="${INSTALL_UMA:-0}"' in text
+        assert 'INSTALL_UMA="${INSTALL_UMA:-1}"' in text
         assert 'UMA_VENV_PATH="${UMA_VENV_PATH:-${MATSIM_DIR}/.venv-uma}"' in text
-        assert 'INSTALL_MACE="${INSTALL_MACE:-0}"' in text
+        assert 'INSTALL_MACE="${INSTALL_MACE:-1}"' in text
         assert 'MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"' in text
         assert "deployments/common/setup/install-mace-compat.sh" in text
         assert "deployments/common/setup/install-uma-compat.sh" in text

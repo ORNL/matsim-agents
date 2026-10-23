@@ -8,8 +8,8 @@ Run `matsim-agents capabilities check` to see what is available locally.
 | dft | `qe` | scf, relax, vc-relax | converged_dft, low_fidelity_dft | - | no | `$MATSIM_QE_LAUNCHER` | Quantum ESPRESSO pw.x; needs a pseudopotential directory. |
 | dft | `vasp` | scf, relax, vc-relax, vc-relax-shape | converged_dft, low_fidelity_dft | - | no | `$MATSIM_VASP_LAUNCHER` | Licensed; needs a POTCAR directory. |
 | mlip | `hydragnn` | energy-forces, relax, vc-relax, md | mlip_relaxation, mlip_prediction | ensemble, mc-dropout | yes | `torch`, `torch_geometric`, `hydragnn`, extra `hydragnn` | Native MC dropout; new-head fine-tuning. |
-| mlip | `uma` | energy-forces, relax, vc-relax, md | mlip_relaxation, mlip_prediction | ensemble, mc-dropout | yes | `fairchem.core`, extra `uma` | Injected MC dropout; separate .venv-uma. |
-| mlip | `mace` | energy-forces, relax, vc-relax, md | mlip_relaxation, mlip_prediction | ensemble, mc-dropout | yes | `mace.calculators`, extra `mace` | Injected MC dropout; separate .venv-mace. |
+| mlip | `uma` | energy-forces, relax, vc-relax, md | mlip_relaxation, mlip_prediction | ensemble, mc-dropout | yes | `fairchem.core`, extra `uma`, or `$MATSIM_FAIRCHEM_VENV` | Injected MC dropout; separate .venv-uma. |
+| mlip | `mace` | energy-forces, relax, vc-relax, md | mlip_relaxation, mlip_prediction | ensemble, mc-dropout | yes | `mace.calculators`, extra `mace`, or `$MATSIM_MACE_VENV` | Injected MC dropout; separate .venv-mace. |
 | llm | `ollama` | chat | hypothesis | - | no | `langchain_ollama` | Local Ollama server. |
 | llm | `vllm` | chat | hypothesis | - | no | `openai` | OpenAI-compatible vLLM server. |
 | llm | `openai` | chat | hypothesis | - | no | `langchain_openai`, `$OPENAI_API_KEY` | - |

@@ -37,10 +37,10 @@ The delegated HydraGNN recipes are
 `scripts/hpc/nersc/perlmutter/installation/install.sh` in the HydraGNN checkout.
 
 Common overrides are `HYDRAGNN_DIR`, `HYDRAGNN_REF`, `INSTALL_ROOT`,
-`VENV_PATH`, and `MATSIM_EXTRAS`. Set `INSTALL_UMA=1` to install
-`fairchem-core` through the matsim-agents `uma` extra and verify its calculator
-API in the matsim-owned `.venv-uma` compatibility environment. Set
-`INSTALL_MACE=1` to have the same canonical
+`VENV_PATH`, and `MATSIM_EXTRAS`. By default (`INSTALL_UMA=1`) the installer installs
+`fairchem-core` through the matsim-agents `uma` extra and verifies its calculator
+API in the matsim-owned `.venv-uma` compatibility environment. By default
+(`INSTALL_MACE=1`) the same canonical
 installer create `matsim-agents/.venv-mace`. Frontier also accepts HydraGNN's
 `SKIP_VLLM` setting. Set `RECREATE_ENV=1` on Frontier or Aurora to request a
 clean rebuild; HydraGNN's current Perlmutter recipe always recreates its target

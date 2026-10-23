@@ -40,6 +40,8 @@ def capabilities_check(
         for r in results:
             status = "[green]available[/green]" if r.available else "[yellow]missing[/yellow]"
             detail = f" ({'; '.join(r.missing)})" if r.missing else ""
+            if r.python:
+                detail = f" (via {r.python})"
             console.print(f"{r.kind:4} {r.name:12} {status}{detail}")
     unavailable = [r.name for r in required if not r.available]
     if unavailable:

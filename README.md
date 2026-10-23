@@ -717,9 +717,9 @@ Environment overrides accepted by the installer:
 | `INSTALL_ROOT` | Compiled HydraGNN dependency build root | `.hpc-build/<facility>` |
 | `VENV_PATH` | Override the matsim-owned Python environment | `.venv` |
 | `MATSIM_EXTRAS` | matsim-agents extras installed in the target environment | `hydragnn,dev,openai,ollama,anthropic,huggingface` |
-| `INSTALL_UMA` | Create and verify the matsim-owned UMA compatibility environment | `0` |
+| `INSTALL_UMA` | Create and verify the matsim-owned UMA compatibility environment (HPC installers; `0` skips) | `1` |
 | `UMA_VENV_PATH` | Override the UMA compatibility environment | `.venv-uma` |
-| `INSTALL_MACE` | Create and verify the matsim-owned MACE compatibility environment | `0` |
+| `INSTALL_MACE` | Create and verify the matsim-owned MACE compatibility environment (HPC installers; `0` skips) | `1` |
 | `MACE_VENV_PATH` | Override the MACE compatibility environment | `.venv-mace` |
 | `BOOTSTRAP_OLLAMA` | Set to `1` to install the Ollama daemon, start it, and pull `OLLAMA_MODELS` (workstation only) | `0` |
 | `OLLAMA_MODELS` | Space-separated list of models to pull when `BOOTSTRAP_OLLAMA=1` | `qwen2.5:14b` |
