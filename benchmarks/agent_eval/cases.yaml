@@ -1,0 +1,176 @@
+# Agent-evaluation suite: claims about Si and SiC with fixed evidence records.
+# Each case asks an agent whether the evidence supports, contradicts, or leaves
+# the claim unresolved; the rule grader (matsim-agents benchmark agent-eval)
+# applies the evidence ledger's claim rules. Values are representative PBE and
+# MLIP results, not recorded runs.
+suite_id: si-sic-agent-eval-v1
+
+x-methods:
+  qe: &qe
+    backend: qe
+    method_signature: qe-pbe-pslibrary-ecut45-smearing
+    software_versions: {pw.x: "7.2"}
+  qe-hard: &qe-hard
+    backend: qe
+    method_signature: qe-pbe-pslibrary-ecut80-tetrahedra
+    software_versions: {pw.x: "7.2"}
+  mace: &mace
+    backend: mace
+    model: mace-mp-0-medium
+    method_signature: mace-mp-0-medium-fire-fmax0.02
+    software_versions: {mace-torch: "0.3.10"}
+
+cases:
+  - case_id: sic-3c-on-hull
+    category: supported
+    subject: SiC
+    claim: 3C-SiC lies on the Si-C convex hull in PBE at 0 K.
+    claim_type: thermodynamic_stability
+    expected_status: supported
+    decisive_evidence: [hull]
+    dft_request_justified: false
+    evidence:
+      hull:
+        kind: stability
+        subject: SiC
+        method: *qe
+        evidence_level: converged_dft
+        outcome: measured
+        reference_complete: true
+        values:
+          - {name: energy_above_hull, value: 0.0, unit: eV/atom, structure: SiC-3C.vasp}
+          - {name: formation_energy_per_atom, value: -0.27, unit: eV/atom, structure: SiC-3C.vasp}
+
+  - case_id: sic-rocksalt-on-hull
+    category: contradicted
+    subject: SiC
+    claim: Rocksalt SiC lies on the Si-C convex hull in PBE at 0 GPa.
+    claim_type: thermodynamic_stability
+    expected_status: contradicted
+    decisive_evidence: [hull]
+    dft_request_justified: false
+    evidence:
+      hull:
+        kind: stability
+        subject: SiC
+        method: *qe
+        evidence_level: converged_dft
+        outcome: measured
+        reference_complete: true
+        values:
+          - {name: energy_above_hull, value: 0.62, unit: eV/atom, structure: SiC-rocksalt.vasp}
+
+  - case_id: si-diamond-below-beta-tin
+    category: supported
+    subject: Si
+    claim: Diamond Si is lower in energy than beta-tin Si.
+    claim_type: energy_ranking
+    expected_status: supported
+    decisive_evidence: [ranking]
+    dft_request_justified: false
+    evidence:
+      ranking:
+        kind: energy_ranking
+        subject: Si
+        method: *mace
+        evidence_level: mlip_relaxation
+        outcome: measured
+        values:
+          - {name: relative_energy_per_atom, value: 0.0, unit: eV/atom, structure: Si-diamond.vasp}
+          - {name: relative_energy_per_atom, value: 0.26, unit: eV/atom, structure: Si-beta-tin.vasp}
+
+  - case_id: sic-2h-mlip-only
+    category: inadmissible_evidence
+    subject: SiC
+    claim: 2H-SiC lies on the Si-C convex hull in PBE at 0 K.
+    claim_type: thermodynamic_stability
+    expected_status: unresolved
+    dft_request_justified: true
+    evidence:
+      surrogate-hull:
+        kind: stability
+        subject: SiC
+        method: *mace
+        evidence_level: mlip_relaxation
+        outcome: measured
+        reference_complete: true
+        values:
+          - {name: energy_above_hull, value: 0.0, unit: eV/atom, structure: SiC-2H.vasp}
+
+  - case_id: si2c-no-evidence
+    category: missing_evidence
+    subject: Si2C
+    claim: Si2C in the anti-fluorite structure lies on the Si-C convex hull in PBE.
+    claim_type: thermodynamic_stability
+    expected_status: unresolved
+    dft_request_justified: true
+
+  - case_id: sic-4h-failed-dft
+    category: failed_evidence
+    subject: SiC
+    claim: 4H-SiC lies on the Si-C convex hull in PBE at 0 K.
+    claim_type: thermodynamic_stability
+    expected_status: unresolved
+    dft_request_justified: true
+    evidence:
+      crashed:
+        kind: stability
+        subject: SiC
+        method: *qe
+        evidence_level: converged_dft
+        outcome: failed_to_compute
+        failure_reason: pw.x exited with status 137 (out of memory) during the SCF.
+      unconverged:
+        kind: relaxation
+        subject: SiC
+        method: *qe
+        evidence_level: low_fidelity_dft
+        outcome: not_converged
+        failure_reason: BFGS stopped after 50 steps with residual force 0.11 eV/A.
+        values:
+          - {name: residual_max_force, value: 0.11, unit: eV/A, structure: SiC-4H.vasp}
+
+  - case_id: sic-6h-incomplete-references
+    category: ambiguous
+    subject: SiC
+    claim: 6H-SiC lies on the Si-C convex hull in PBE at 0 K.
+    claim_type: thermodynamic_stability
+    expected_status: unresolved
+    dft_request_justified: true
+    evidence:
+      partial-hull:
+        kind: stability
+        subject: SiC
+        method: *qe
+        evidence_level: converged_dft
+        outcome: measured
+        reference_complete: false
+        values:
+          - {name: energy_above_hull, value: 0.0, unit: eV/atom, structure: SiC-6H.vasp}
+
+  - case_id: sic-zincblende-conflicting-dft
+    category: contradictory_evidence
+    subject: SiC
+    claim: Zinc-blende SiC with the strained cell lies on the Si-C convex hull in PBE.
+    claim_type: thermodynamic_stability
+    expected_status: unresolved
+    dft_request_justified: true
+    evidence:
+      hull-soft:
+        kind: stability
+        subject: SiC
+        method: *qe
+        evidence_level: converged_dft
+        outcome: measured
+        reference_complete: true
+        values:
+          - {name: energy_above_hull, value: 0.0, unit: eV/atom, structure: SiC-strained.vasp}
+      hull-hard:
+        kind: stability
+        subject: SiC
+        method: *qe-hard
+        evidence_level: converged_dft
+        outcome: measured
+        reference_complete: true
+        values:
+          - {name: energy_above_hull, value: 0.08, unit: eV/atom, structure: SiC-strained.vasp}
