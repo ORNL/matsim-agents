@@ -99,6 +99,9 @@ def main() -> None:
     )
     parser.add_argument("--pw-x", default="pw.x")
     args = parser.parse_args()
+    # The suite is copied into the work directory, so it must not contain it.
+    if args.work_dir.resolve().is_relative_to(SUITE):
+        sys.exit(f"WORK_DIR {args.work_dir} is inside the suite {SUITE}; choose another directory")
     args.work_dir.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="record-", dir=args.work_dir.resolve()))
     print(f"Recording in {work}")

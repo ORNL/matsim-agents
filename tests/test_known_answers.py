@@ -204,6 +204,19 @@ def test_suite_rejects_duplicate_case_ids():
         KnownAnswerSuite(suite_id="dup", cases=[case, case])
 
 
+@pytest.mark.parametrize("work_dir", [".", "runs/nested"])
+def test_recorder_rejects_a_work_directory_inside_the_suite(work_dir):
+    proc = subprocess.run(
+        [sys.executable, str(SUITE / "record.py"), work_dir, "--pw-x", "/nonexistent/pw.x"],
+        cwd=SUITE,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode != 0 and "is inside the suite" in proc.stderr
+    assert not (SUITE / "runs").exists()
+
+
 def test_replayer_rejects_a_changed_input(tmp_path):
     recorded = next((SUITE / "replay" / "si-lattice-constant").glob("relax-*"))
     work = tmp_path / recorded.name / "calculations" / "qe"
