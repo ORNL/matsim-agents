@@ -370,7 +370,7 @@ class EvidenceLedger:
         """Validate and append a record; an identical record already present is returned."""
         identifier = record_id(record)
         if identifier in self._records:
-            return self._records[identifier]
+            return self._existing(identifier)
         if isinstance(record, HypothesisRecord):
             record = record.model_copy(
                 update={"support_level": self.support_level(record.evidence_ids)}
@@ -378,7 +378,7 @@ class EvidenceLedger:
             record = HypothesisRecord.model_validate(record.model_dump(exclude={"revision_id"}))
             identifier = record.revision_id
             if identifier in self._records:
-                return self._records[identifier]
+                return self._existing(identifier)
         problems = self.problems(record)
         if problems:
             raise LedgerValidationError(problems)
@@ -386,16 +386,7 @@ class EvidenceLedger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # A lock file, not flock: flock is unsupported on NERSC CFS compute nodes.
         with exclusive_lock(f"{self.path}.lock", timeout=60, poll_interval=0.05):
-            # A size check alone misses same-size rewrites and truncation back to the loaded size.
-            data = self.path.read_bytes() if self.path.exists() else b""
-            if (
-                len(data) != self._written
-                or hashlib.sha256(data).hexdigest() != self._digest
-                or self._read_head() != self._head
-            ):
-                raise LedgerIntegrityError(
-                    f"{self.path} changed since it was read; reopen the ledger"
-                )
+            data = self._unchanged_bytes()
             size = len(data)
             if self._unfinished:
                 size -= self._unfinished
@@ -422,6 +413,27 @@ class EvidenceLedger:
             self._write_head()
             self._head = (len(self._order), self._tip)
         return record
+
+    def _unchanged_bytes(self) -> bytes:
+        """The ledger's bytes, provided no writer ran since it was read; call under the lock."""
+        # A size check alone misses same-size rewrites and truncation back to the loaded size.
+        data = self.path.read_bytes() if self.path.exists() else b""
+        if (
+            len(data) != self._written
+            or hashlib.sha256(data).hexdigest() != self._digest
+            or self._read_head() != self._head
+        ):
+            raise LedgerIntegrityError(f"{self.path} changed since it was read; reopen the ledger")
+        return data
+
+    def _existing(self, identifier: str) -> LedgerRecord:
+        """A record already present; entries recovered past the checkpoint get covered by it."""
+        if self._head != (len(self._order), self._tip):
+            with exclusive_lock(f"{self.path}.lock", timeout=60, poll_interval=0.05):
+                self._unchanged_bytes()
+                self._write_head()
+                self._head = (len(self._order), self._tip)
+        return self._records[identifier]
 
     # ---------------------------------------------------------- validation --
     def support_level(self, evidence_ids: list[str]) -> EvidenceLevel | None:

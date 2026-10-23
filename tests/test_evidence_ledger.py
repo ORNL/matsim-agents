@@ -138,6 +138,25 @@ def test_entries_past_the_checkpoint_are_accepted(tmp_path):
     assert len(EvidenceLedger(path)) == 3
 
 
+@pytest.mark.parametrize("kind", ["evidence", "hypothesis"])
+def test_retrying_a_recovered_append_checkpoints_it(tmp_path, kind):
+    # The writer stopped before the checkpoint; its retry must protect the entry.
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    first = ledger.append(_evidence())
+    checkpoint = (tmp_path / "ledger.jsonl.head").read_text()
+    record = _evidence(subject="Si") if kind == "evidence" else _claim([first.evidence_id])
+    ledger.append(record)
+    (tmp_path / "ledger.jsonl.head").write_text(checkpoint)
+
+    reopened = EvidenceLedger(path)
+    reopened.append(record)
+    assert json.loads((tmp_path / "ledger.jsonl.head").read_text())["seq"] == 2
+    path.write_text(path.read_text().splitlines(keepends=True)[0])
+    with pytest.raises(LedgerIntegrityError, match="truncated or replaced"):
+        EvidenceLedger(path)
+
+
 def test_an_unfinished_final_line_is_ignored_and_trimmed(tmp_path):
     # An append that crashed mid-write, before its checkpoint update.
     path = tmp_path / "ledger.jsonl"
