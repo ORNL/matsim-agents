@@ -512,6 +512,7 @@ class _Run:
                 "attempts": {"mlip": 0, "dft": 0},
                 "steps": {},
             }
+        self.state.setdefault("recovery", {})
         self._save()
 
     def _save(self) -> None:
@@ -535,17 +536,33 @@ class _Run:
         outcome = self.state["steps"].get(step_id)
         return outcome if outcome is not None and outcome["status"] == "done" else None
 
+    def pending(self, step_id: str) -> dict[str, Any] | None:
+        """The next recovery attempt of a step that the budget stopped, if any."""
+        return self.state["recovery"].get(step_id)
+
+    def set_pending(self, step_id: str, recovery: dict[str, Any] | None) -> None:
+        if recovery is None:
+            self.state["recovery"].pop(step_id, None)
+        else:
+            self.state["recovery"][step_id] = recovery
+        self._save()
+
+    def forget(self, step_id: str) -> None:
+        self.state["steps"].pop(step_id, None)
+        self._save()
+
 
 def outstanding_steps(contract: CharacterizationContract) -> list[RecipeStep]:
     """Steps of the contract's recipe that have no completed outcome yet."""
     state_path = (
         Path(contract.output_root) / f"characterization-{contract.contract_id}" / STATE_FILE
     )
-    steps = json.loads(state_path.read_text())["steps"] if state_path.is_file() else {}
+    state = json.loads(state_path.read_text()) if state_path.is_file() else {}
+    steps, recovery = state.get("steps", {}), state.get("recovery", {})
     return [
         step
         for step in plan_recipe(contract)
-        if steps.get(step.step_id, {}).get("status") != "done"
+        if steps.get(step.step_id, {}).get("status") != "done" or step.step_id in recovery
     ]
 
 
@@ -849,6 +866,13 @@ def _attempt(
         outcome["converged"] = False
         outcome["evidence_level"] = EvidenceLevel.LOW_FIDELITY_DFT.value
         outcome["failure_reason"] = outcome.get("failure_reason") or "SCF did not converge"
+    # A run killed after its last ionic step (e.g. a timeout) can leave finite results.
+    if outcome["status"] == "done" and outcome.get("return_code") not in (None, 0):
+        outcome["converged"] = False
+        outcome["evidence_level"] = EvidenceLevel.LOW_FIDELITY_DFT.value
+        outcome["failure_reason"] = (
+            outcome.get("failure_reason") or f"exited with return code {outcome['return_code']}"
+        )
     tolerance = contract.tolerances.force_tolerance_eV_per_A
     if not (
         outcome["status"] == "done"
@@ -869,10 +893,18 @@ def _relax_with_recovery(
     ledger: EvidenceLedger,
     budget: int | None,
 ) -> None:
-    """Relax one step; a failed DFT attempt is retried as the recovery policy directs."""
+    """Relax one step; a failed DFT attempt is retried as the recovery policy directs.
+
+    A retry the budget stopped is saved, and resumed with its settings and counters.
+    """
     structure = str(step.structure)
     dft = contract.methods.dft if step.fidelity == "dft" else None
     retries: dict[FailureClass, int] = {}
+    if (pending := run.pending(step.step_id)) is not None:
+        structure = pending["structure"]
+        dft = DFTBackendConfig.model_validate(pending["dft"])
+        retries = {FailureClass(k): v for k, v in pending["retries"].items()}
+        run.set_pending(step.step_id, None)
     while True:
         outcome = _attempt(contract, step, run, relax, structure, dft)
         evidence = ledger.append(_relaxation_evidence(contract, step, outcome))
@@ -883,11 +915,8 @@ def _relax_with_recovery(
         rule = DEFAULT_POLICY.rule(failure)
         used = retries.get(failure, 0)
         within_budget = budget is None or run.attempts("dft") < budget
-        retry = (
-            can_retry(failure, timeout_sec=dft.timeout_sec)
-            and used < rule.max_retries
-            and within_budget
-        )
+        allowed = can_retry(failure, timeout_sec=dft.timeout_sec) and used < rule.max_retries
+        retry = allowed and within_budget
         if retry:
             rationale = f"retry {used + 1} of {rule.max_retries}: {rule.action}"
         elif not can_retry(failure, timeout_sec=dft.timeout_sec) or rule.max_retries == 0:
@@ -914,13 +943,23 @@ def _relax_with_recovery(
                 expected_cost=CostRecord(dft_calculations=1) if retry else None,
             )
         )
-        if not retry:
+        if not allowed:
             return
         retries[failure] = used + 1
         if failure == FailureClass.IONIC_STEP_LIMIT and outcome.get("optimized_structure_path"):
             structure = outcome["optimized_structure_path"]
         settings, timeout = adjusted_settings(failure, dft.backend, dft.settings, dft.timeout_sec)
         dft = dft.model_copy(update={"settings": settings, "timeout_sec": timeout})
+        if not retry:
+            run.set_pending(
+                step.step_id,
+                {
+                    "structure": structure,
+                    "dft": dft.model_dump(mode="json"),
+                    "retries": {k.value: v for k, v in retries.items()},
+                },
+            )
+            return
 
 
 def _execute(
@@ -951,11 +990,13 @@ def _execute(
         "mlip": contract.budget.max_mlip_relaxations,
         "dft": contract.budget.max_dft_calculations,
     }
+    final = steps[-1] if steps[-1].operator != "relax" else None
     for step in steps:
         if step.operator != "relax":
             continue
         fidelity = step.fidelity or "mlip"
-        if run.done(step.step_id) is not None:
+        recovering = run.pending(step.step_id) is not None
+        if run.done(step.step_id) is not None and not recovering:
             continue
         if step.needs_dft_approval and not contract.dft_approved:
             blockers.append(f"{step.step_id}: DFT is required but not approved (dft_approved)")
@@ -966,8 +1007,9 @@ def _execute(
                 f"({run.attempts(fidelity)} attempted)"
             )
             continue
+        if recovering and final is not None:
+            run.forget(final.step_id)
         _relax_with_recovery(contract, step, run, relax, ledger, budget[fidelity])
-    final = steps[-1] if steps[-1].operator != "relax" else None
     report_path = run.directory / REPORT_FILE
     if final is not None and run.done(final.step_id) is not None and report_path.is_file():
         return CharacterizationReport.model_validate_json(report_path.read_text())
