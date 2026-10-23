@@ -43,6 +43,7 @@ multidataset_hpo-*/
 !tests/integration/data/*.xyz
 !benchmarks/portability/structures/*.vasp
 !examples/characterization/structures/*.vasp
+!benchmarks/known_answers/structures/*.vasp
 mlp_branch_weights.pt
 runs/
 outputs/

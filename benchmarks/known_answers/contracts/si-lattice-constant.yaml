@@ -1,0 +1,36 @@
+# Known-answer case si-lattice-constant; see benchmarks/known_answers/README.md.
+contract_id: known-answer-si-lattice-constant
+objective: Relax diamond Si from a perturbed geometry; what is its PBE lattice constant?
+formula: Si
+recipe: relaxation
+structures:
+- ../structures/Si-diamond-perturbed.vasp
+observables:
+- name: relaxed_structure
+  unit: structure
+  minimum_evidence_level: converged_dft
+- name: energy_per_atom
+  unit: eV/atom
+  minimum_evidence_level: converged_dft
+- name: residual_max_force
+  unit: eV/A
+  minimum_evidence_level: converged_dft
+methods:
+  dft:
+    backend: qe
+    launcher: [pw.x, -in, "{input}"]
+    pseudo_dir: /global/common/software/nersc9/espresso/pseudo
+    settings:
+      ecutwfc_ry: 45
+      ecutrho_ry: 360
+      occupations: smearing
+      pseudopotentials:
+        Si: Si.pbe-nl-rrkjus_psl.1.0.0.UPF
+        C: C.pbe-n-kjpaw_psl.1.0.0.UPF
+  dft_method_signature: qe-pbe-pslibrary-ecut45-smearing
+tolerances:
+  force_tolerance_eV_per_A: 0.02
+  max_relaxation_steps: 100
+budget:
+  max_dft_calculations: 1
+dft_approved: true

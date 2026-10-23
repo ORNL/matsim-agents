@@ -1,0 +1,62 @@
+# Known-answer suite: Si and SiC questions with established PBE answers.
+# Each case runs its contract through the characterization pipeline and the
+# deterministic grader checks the report (matsim-agents benchmark known-answers).
+# Windows are wide enough for any converged PBE setup and narrow enough to
+# catch a wrong structure, unit, or sign.
+suite_id: si-sic-known-answers-v1
+cases:
+  - case_id: si-lattice-constant
+    question: What is the PBE lattice constant of diamond Si?
+    contract: contracts/si-lattice-constant.yaml
+    expected_status: sufficiently_characterized
+    observables:
+      # PBE gives 5.46-5.48 A (experiment 5.431 A); PBE overestimates it.
+      - name: relaxed_structure
+        lattice_constant: true
+        minimum: 5.44
+        maximum: 5.50
+      - name: residual_max_force
+        maximum: 0.02
+
+  - case_id: si-diamond-vs-beta-tin
+    question: Is diamond Si lower in energy than beta-tin Si?
+    contract: contracts/si-diamond-vs-beta-tin.yaml
+    expected_status: sufficiently_characterized
+    expected_ground_state: Si-diamond.vasp
+    observables:
+      # PBE puts beta-tin 0.2-0.3 eV/atom above diamond.
+      - name: relative_energy_per_atom
+        structure: Si-beta-tin.vasp
+        minimum: 0.15
+        maximum: 0.40
+
+  - case_id: sic-3c-on-hull
+    question: Is 3C-SiC on the Si-C convex hull?
+    contract: contracts/sic-3c-on-hull.yaml
+    expected_status: sufficiently_characterized
+    expected_ground_state: SiC-3C.vasp
+    observables:
+      # 3C and 2H are within a few meV/atom; either may be lower in PBE.
+      - name: energy_above_hull
+        minimum: 0.0
+        maximum: 0.005
+      - name: formation_energy_per_atom
+        minimum: -0.40
+        maximum: -0.15
+
+  - case_id: sic-rocksalt-above-hull
+    question: Is rocksalt SiC on the Si-C convex hull?
+    contract: contracts/sic-rocksalt-above-hull.yaml
+    expected_status: sufficiently_characterized
+    expected_ground_state: SiC-rocksalt.vasp
+    observables:
+      # The high-pressure rocksalt phase lies well above the hull at 0 GPa.
+      - name: energy_above_hull
+        minimum: 0.3
+
+  - case_id: si-step-limited
+    question: A one-step relaxation must be reported as not converged, not as an answer.
+    contract: contracts/si-step-limited.yaml
+    expected_status: inconclusive
+    missing_contains:
+      - not converged

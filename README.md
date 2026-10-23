@@ -1256,6 +1256,7 @@ matsim-agents relax   CONFIG.yaml           # provenance-tracked MLIP/DFT relaxa
 matsim-agents characterize CONTRACT.yaml   # answer a characterization contract (resumable)
 matsim-agents ledger  verify LEDGER.jsonl    # check the evidence ledger's hash chain and artifacts
 matsim-agents ledger  show LEDGER.jsonl      # evidence counts and current hypothesis revisions
+matsim-agents benchmark known-answers [--tier replay|live]  # grade the Si/SiC known-answer suite
 matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
 matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
 matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)

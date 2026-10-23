@@ -1,0 +1,74 @@
+{
+  "identifier": "known-answer-si-c",
+  "method_signature": "qe-pbe-pslibrary-ecut45-smearing",
+  "backend": "qe",
+  "elemental_energies_eV_per_atom": {
+    "Si": -139.03404654861322,
+    "C": -250.80041193537275
+  },
+  "elemental_entries": {
+    "Si": {
+      "element": "Si",
+      "phase_id": "Si-diamond",
+      "reference_formula": "Si",
+      "energy_eV_per_atom": -139.03404654861322,
+      "method_signature": "qe-pbe-pslibrary-ecut45-smearing",
+      "backend": "qe",
+      "structure_path": "structures/Si-diamond.vasp",
+      "structure_hash": "594627e8ba13069d62db80fe376906ed79bc2a6c6d2e09fa647b3b7a93d448ac",
+      "total_energy_eV": null,
+      "source": "computed",
+      "provenance": {
+        "code": "Program PWSCF v.7.5 starts on 22Oct2026 at 18:39:48",
+        "ledger_evidence_id": "ev-3493813443fb4fb761ccee06",
+        "recorded_by": "record.py"
+      },
+      "corrections": {}
+    },
+    "C": {
+      "element": "C",
+      "phase_id": "C-diamond",
+      "reference_formula": "C",
+      "energy_eV_per_atom": -250.80041193537275,
+      "method_signature": "qe-pbe-pslibrary-ecut45-smearing",
+      "backend": "qe",
+      "structure_path": "structures/C-diamond.vasp",
+      "structure_hash": "ef5f189b097453be7b9624fa95819ef3ac977158d1e37237daf015fd7a387383",
+      "total_energy_eV": null,
+      "source": "computed",
+      "provenance": {
+        "code": "Program PWSCF v.7.5 starts on 22Oct2026 at 18:39:48",
+        "ledger_evidence_id": "ev-f9a3cf9cba3fdf911f21c78e",
+        "recorded_by": "record.py"
+      },
+      "corrections": {}
+    }
+  },
+  "elemental_reference_candidates": [],
+  "competing_phases": {},
+  "phase_entries": [
+    {
+      "phase_id": "SiC-2H",
+      "formula": "SiC",
+      "formation_energy_eV_per_atom": -0.27438652342490855,
+      "method_signature": "qe-pbe-pslibrary-ecut45-smearing",
+      "backend": "qe",
+      "structure_path": "structures/SiC-2H.vasp",
+      "structure_hash": "0c3ef4dc7e7ca9e2b256f6f9ba73a5da56b78b00ec8a995b3b4d0f7f18f9528c",
+      "total_energy_eV": null,
+      "energy_per_atom_eV": -195.19161576541788,
+      "source": "computed",
+      "provenance": {
+        "code": "Program PWSCF v.7.5 starts on 22Oct2026 at 18:39:48",
+        "ledger_evidence_id": "ev-0bd76f9911413f8a100d9066",
+        "recorded_by": "record.py"
+      },
+      "corrections": {}
+    }
+  ],
+  "completeness_policy": {
+    "required_formulas": [],
+    "require_binary_subsystems": true,
+    "require_ternary_competitor": false
+  }
+}
