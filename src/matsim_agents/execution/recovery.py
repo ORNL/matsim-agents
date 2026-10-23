@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict
 
 RECOVERY_POLICY_VERSION = "recovery-v1"
 WALLTIME_RETURN_CODE = 124
+COMMAND_NOT_FOUND_RETURN_CODE = 127
 
 _QE_MIXING_BETA = 0.4
 _QE_ELECTRON_MAXSTEP = 200
@@ -73,7 +74,12 @@ def classify_failure(outcome: dict[str, Any], *, max_steps: int | None = None) -
     reason = str(outcome.get("failure_reason") or "").lower()
     if outcome.get("return_code") == WALLTIME_RETURN_CODE or "timed out" in reason:
         return FailureClass.WALLTIME
-    if error in _LAUNCHER_ERRORS or "not found" in reason or "no such file" in reason:
+    if (
+        error in _LAUNCHER_ERRORS
+        or outcome.get("return_code") == COMMAND_NOT_FOUND_RETURN_CODE
+        or "not found" in reason
+        or "no such file" in reason
+    ):
         return FailureClass.LAUNCHER
     if error in _INPUT_ERRORS:
         return FailureClass.APPROVAL_OR_INPUT

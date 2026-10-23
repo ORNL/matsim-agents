@@ -241,6 +241,10 @@ class HypothesisRecord(_Record):
     )
 
 
+# A review's own cost record; it changes no workflow state, so it need cite no evidence.
+REVIEW_ACTION = "review"
+
+
 class DecisionRecord(_Record):
     """A workflow action and the evidence it rests on."""
 
@@ -492,7 +496,7 @@ class EvidenceLedger:
             problems.append(f"cites evidence that is not in the ledger: {unknown}")
         evidence = [r for i in cited if isinstance(r := self._records.get(i), EvidenceRecord)]
         if isinstance(record, DecisionRecord):
-            if record.imported_from is None and not evidence:
+            if record.imported_from is None and not evidence and record.action != REVIEW_ACTION:
                 problems.append(f"decision {record.action} on {record.subject} cites no evidence")
             return problems
         head = self._heads.get(record.hypothesis_id)
@@ -657,6 +661,7 @@ __all__ = [
     "LedgerRecord",
     "LedgerValidationError",
     "MethodRecord",
+    "REVIEW_ACTION",
     "file_sha256",
     "hashes_of",
     "record_id",

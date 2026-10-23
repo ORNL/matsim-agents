@@ -18,6 +18,10 @@ from matsim_agents.execution.recovery import (
         ({"status": "failed", "return_code": 124, "failure_reason": "x"}, "walltime"),
         ({"status": "failed", "failure_type": "FileNotFoundError"}, "launcher"),
         ({"status": "failed", "failure_reason": "pw.x: command not found"}, "launcher"),
+        (
+            {"status": "failed", "return_code": 127, "failure_reason": "did not converge"},
+            "launcher",
+        ),
         ({"status": "failed", "failure_type": "PermissionError"}, "approval_or_input"),
         ({"status": "failed", "scf_converged": False, "return_code": 2}, "scf_not_converged"),
         ({"status": "failed", "failure_reason": "non-finite output"}, "non_finite_output"),

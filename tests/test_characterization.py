@@ -24,7 +24,7 @@ from matsim_agents.execution.contracts import (
     EvidenceLevel,
     ObservableRequirement,
 )
-from matsim_agents.execution.ledger import EvidenceLedger
+from matsim_agents.execution.ledger import EvidenceLedger, EvidenceOutcome
 from matsim_agents.workflows.relaxation import (
     RelaxationMode,
     RelaxationStageResult,
@@ -47,10 +47,13 @@ def _structure(path: Path, symbols: str, shift: float = 0.0) -> Path:
 class FakeRelax:
     """Stands in for run_relaxation: energies per structure, and optional failures."""
 
-    def __init__(self, energies, *, unconverged=(), broken=(), silent=(), level=None):
+    def __init__(
+        self, energies, *, unconverged=(), broken=(), silent=(), scf_failed=(), level=None
+    ):
         self.energies = energies
         self.level = level
         self.silent = set(silent)
+        self.scf_failed = set(scf_failed)
         self.unconverged = set(unconverged)
         self.broken = set(broken)
         self.calls = []
@@ -84,6 +87,7 @@ class FakeRelax:
             max_force_eV_per_A=None if name in self.silent else (0.001 if converged else 0.5),
             steps=10,
             converged=converged,
+            scf_converged=False if name in self.scf_failed else None,
         )
         return ScientificRelaxationResult(
             run_id=f"run-{name}",
@@ -969,3 +973,17 @@ def test_a_missing_launcher_is_not_retried(system):
     assert [n for n, _ in relax.calls] == ["NbO2-a.extxyz", "NbO2-b.extxyz"]
     [decision] = _ledger(contract).decisions()
     assert decision.action == "give_up:launcher" and decision.subject == "relax-dft-000"
+
+
+def test_an_explicit_scf_failure_is_not_converged_evidence(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    relax = FakeRelax(energies, scf_failed={"NbO2-a.extxyz"})
+    run_characterization(contract, relax=relax)
+    ledger = _ledger(contract)
+    first = [e for e in ledger.evidence() if e.calculation_id == "relax-dft-000"][0]
+    assert first.outcome == EvidenceOutcome.NOT_CONVERGED
+    assert first.evidence_level == EvidenceLevel.LOW_FIDELITY_DFT
+    assert first.numerical_convergence["failure_class"] == "scf_not_converged"
+    assert ledger.decisions()[0].action == "recover:scf_not_converged"

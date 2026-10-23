@@ -844,6 +844,11 @@ def _attempt(
         outcome["input_structure"] = structure
     if dft is not None and dft != contract.methods.dft:
         outcome["dft_settings"] = dft.settings
+    # QE's ionic convergence message can precede a failed final SCF.
+    if outcome["status"] == "done" and outcome.get("scf_converged") is False:
+        outcome["converged"] = False
+        outcome["evidence_level"] = EvidenceLevel.LOW_FIDELITY_DFT.value
+        outcome["failure_reason"] = outcome.get("failure_reason") or "SCF did not converge"
     tolerance = contract.tolerances.force_tolerance_eV_per_A
     if not (
         outcome["status"] == "done"
