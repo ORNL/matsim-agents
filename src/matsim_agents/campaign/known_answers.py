@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import math
 import sys
+import tempfile
 from pathlib import Path
 from typing import Literal
 
@@ -29,6 +30,10 @@ from matsim_agents.execution.ledger import DecisionRecord, EvidenceLedger
 CASES_FILE = "cases.yaml"
 ACTOR = "benchmark:known-answer"
 REPLAYER = Path(__file__).with_name("_replay_pw.py")
+TIERS = ("replay", "live")
+# The phrases the thermodynamic_stability recipe uses for each answer.
+ON_HULL = "is on the convex hull"
+ABOVE_HULL = "above the convex hull"
 
 
 class ObservableExpectation(BaseModel):
@@ -61,6 +66,9 @@ class KnownAnswerCase(BaseModel):
     expected_status: CharacterizationStatus
     expected_ground_state: str | None = Field(
         None, description="Input file name of the structure the conclusion must name."
+    )
+    expected_on_hull: bool | None = Field(
+        None, description="Whether the conclusion must place the structure on the hull."
     )
     observables: list[ObservableExpectation] = Field(default_factory=list)
     missing_contains: list[str] = Field(
@@ -102,6 +110,7 @@ class KnownAnswerVerdict(BaseModel):
 class KnownAnswerResult(BaseModel):
     suite_id: str
     tier: Literal["replay", "live"]
+    run_dir: str
     verdicts: list[KnownAnswerVerdict]
 
     @property
@@ -154,6 +163,18 @@ def grade_case(case: KnownAnswerCase, report: CharacterizationReport) -> KnownAn
                 passed=ground == case.expected_ground_state
                 and case.expected_ground_state in conclusion,
                 detail=f"ground state {ground}, expected {case.expected_ground_state}",
+            )
+        )
+    if case.expected_on_hull is not None:
+        conclusion = report.conclusion or ""
+        on, above = ON_HULL in conclusion, ABOVE_HULL in conclusion
+        expected = "on" if case.expected_on_hull else "above"
+        checks.append(
+            KnownAnswerCheck(
+                name="hull_relation",
+                passed=(on and not above) if case.expected_on_hull else (above and not on),
+                detail=f"conclusion places the structure on the hull: {on}, above it: "
+                f"{above}; expected {expected} the hull",
             )
         )
     for expectation in case.observables:
@@ -211,31 +232,43 @@ def run_known_answers(
     output_dir: str | Path,
     ledger: EvidenceLedger | None = None,
     cases: list[str] | None = None,
+    launcher: list[str] | None = None,
 ) -> KnownAnswerResult:
-    """Run and grade the suite's cases; record each evidence-backed verdict in ``ledger``."""
+    """Run and grade the suite's cases; record each evidence-backed verdict in ``ledger``.
+
+    Each call runs in a new directory under ``output_dir`` so no step is reused
+    from an earlier run. ``launcher`` replaces the contracts' DFT launcher on the
+    live tier.
+    """
+    if tier not in TIERS:
+        raise ValueError(f"tier must be one of {TIERS}, not {tier!r}")
+    if launcher is not None and tier != "live":
+        raise ValueError("launcher applies to the live tier only")
     suite_dir = Path(suite_dir).resolve()
     suite = load_suite(suite_dir)
-    output_dir = Path(output_dir).resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    if ledger is None:
-        ledger = EvidenceLedger(output_dir / "known-answer-ledger.jsonl")
     unknown = sorted(set(cases or []) - {case.case_id for case in suite.cases})
     if unknown:
         raise ValueError(f"unknown known-answer cases {unknown}")
+    output_dir = Path(output_dir).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = Path(tempfile.mkdtemp(prefix=f"{tier}-", dir=output_dir))
+    if ledger is None:
+        ledger = EvidenceLedger(run_dir / "known-answer-ledger.jsonl")
     verdicts = []
     for case in suite.cases:
         if cases and case.case_id not in cases:
             continue
         contract = load_contract(suite_dir / case.contract)
-        update: dict = {"output_root": output_dir / case.case_id}
+        update: dict = {"output_root": run_dir / case.case_id}
         if tier == "replay":
-            assert contract.methods.dft is not None, f"{case.case_id}: replay needs a DFT method"
             replay = str(suite_dir / "replay" / case.case_id)
-            dft = contract.methods.dft.model_copy(
-                update={
-                    "launcher": [sys.executable, str(REPLAYER), replay, "{work_dir}", "{input}"]
-                }
-            )
+            launcher_override = [sys.executable, str(REPLAYER), replay, "{work_dir}", "{input}"]
+        else:
+            launcher_override = launcher
+        if launcher_override is not None:
+            if contract.methods.dft is None:
+                raise ValueError(f"{case.case_id}: the contract has no DFT method")
+            dft = contract.methods.dft.model_copy(update={"launcher": launcher_override})
             update["methods"] = contract.methods.model_copy(update={"dft": dft})
         contract = contract.model_copy(update=update)
         report = run_characterization(contract, ledger=ledger)
@@ -252,7 +285,9 @@ def run_known_answers(
             )
             verdict = verdict.model_copy(update={"decision_id": decision.decision_id})
         verdicts.append(verdict)
-    return KnownAnswerResult(suite_id=suite.suite_id, tier=tier, verdicts=verdicts)
+    return KnownAnswerResult(
+        suite_id=suite.suite_id, tier=tier, run_dir=str(run_dir), verdicts=verdicts
+    )
 
 
 __all__ = [

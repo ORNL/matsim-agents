@@ -35,6 +35,7 @@ cases:
     contract: contracts/sic-3c-on-hull.yaml
     expected_status: sufficiently_characterized
     expected_ground_state: SiC-3C.vasp
+    expected_on_hull: true
     observables:
       # 3C and 2H are within a few meV/atom; either may be lower in PBE.
       - name: energy_above_hull
@@ -49,6 +50,7 @@ cases:
     contract: contracts/sic-rocksalt-above-hull.yaml
     expected_status: sufficiently_characterized
     expected_ground_state: SiC-rocksalt.vasp
+    expected_on_hull: false
     observables:
       # The high-pressure rocksalt phase lies well above the hull at 0 GPa.
       - name: energy_above_hull

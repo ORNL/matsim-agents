@@ -30,7 +30,10 @@ def known_answers(
         help="replay: recorded pw.x outputs, no DFT runs; live: run pw.x for every case.",
     ),
     output: Path = typer.Option(
-        Path("known-answer-runs"), "--output", "-o", help="Directory for the case runs."
+        Path("known-answer-runs"),
+        "--output",
+        "-o",
+        help="Each invocation runs in a new subdirectory of this directory.",
     ),
     ledger: Path | None = typer.Option(
         None, help="Evidence ledger for evidence and verdicts (default: in --output)."
@@ -60,5 +63,6 @@ def known_answers(
             console.print(f"    {reason}")
     passed = sum(verdict.passed for verdict in result.verdicts)
     console.print(f"{passed}/{len(result.verdicts)} known-answer cases passed ({result.tier}).")
+    console.print(f"Runs: {result.run_dir}")
     if not result.passed:
         raise typer.Exit(code=1)

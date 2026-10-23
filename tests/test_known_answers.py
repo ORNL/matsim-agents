@@ -82,10 +82,79 @@ def test_grader_fails_a_wrong_answer(tmp_path):
     (verdict,) = result.verdicts
     assert not result.passed
     assert any("ground state Si-diamond.vasp" in reason for reason in verdict.reasons)
-    ledger = EvidenceLedger(tmp_path / "out" / "known-answer-ledger.jsonl")
+    ledger = EvidenceLedger(Path(result.run_dir) / "known-answer-ledger.jsonl")
     assert [d.action for d in ledger.decisions() if d.subject == verdict.case_id] == [
         "known_answer_fail"
     ]
+
+
+@pytest.mark.parametrize("case_id", ["sic-3c-on-hull", "sic-rocksalt-above-hull"])
+def test_grader_checks_the_hull_answer(tmp_path, case_id):
+    suite = _copy_suite(tmp_path)
+    data = yaml.safe_load((suite / "cases.yaml").read_text())
+    case = next(c for c in data["cases"] if c["case_id"] == case_id)
+    case["expected_on_hull"] = not case["expected_on_hull"]
+    (suite / "cases.yaml").write_text(yaml.safe_dump(data, sort_keys=False))
+
+    (verdict,) = run_known_answers(
+        suite, tier="replay", output_dir=tmp_path / "out", cases=[case_id]
+    ).verdicts
+    assert not verdict.passed
+    assert [r for r in verdict.reasons if r.endswith("the hull")]
+
+
+def test_grader_fails_a_conclusion_with_the_wrong_hull_relation(tmp_path, monkeypatch):
+    from matsim_agents.campaign import known_answers
+
+    real = known_answers.run_characterization
+
+    def on_hull_conclusion(contract, **kwargs):
+        report = real(contract, **kwargs)
+        wrong = "SiC (SiC-rocksalt.vasp) is on the convex hull of the declared phases."
+        return report.model_copy(update={"conclusion": wrong})
+
+    monkeypatch.setattr(known_answers, "run_characterization", on_hull_conclusion)
+    (verdict,) = run_known_answers(
+        SUITE, tier="replay", output_dir=tmp_path, cases=["sic-rocksalt-above-hull"]
+    ).verdicts
+    assert verdict.reasons == [
+        "conclusion places the structure on the hull: True, above it: False; "
+        "expected above the hull"
+    ]
+
+
+def test_each_run_uses_a_fresh_directory(tmp_path):
+    first = run_known_answers(SUITE, tier="replay", output_dir=tmp_path, cases=["si-step-limited"])
+    second = run_known_answers(SUITE, tier="replay", output_dir=tmp_path, cases=["si-step-limited"])
+    assert first.run_dir != second.run_dir
+    assert Path(first.run_dir).parent == Path(second.run_dir).parent == tmp_path.resolve()
+    assert second.passed
+
+
+def test_invalid_tier_is_rejected_before_running(tmp_path):
+    with pytest.raises(ValueError, match="tier"):
+        run_known_answers(SUITE, tier="cloud", output_dir=tmp_path / "out")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="live tier only"):
+        run_known_answers(SUITE, tier="replay", output_dir=tmp_path / "out", launcher=["x"])
+    assert not (tmp_path / "out").exists()
+
+
+def test_live_tier_uses_the_launcher_override(tmp_path):
+    fake = tmp_path / "fake_pw.py"
+    replay = SUITE / "replay" / "si-step-limited"
+    fake.write_text(
+        "import runpy, sys\n"
+        f"sys.argv = [sys.argv[0], {str(replay)!r}, *sys.argv[1:]]\n"
+        f"runpy.run_path({str(REPLAYER)!r}, run_name='__main__')\n"
+    )
+    result = run_known_answers(
+        SUITE,
+        tier="live",
+        output_dir=tmp_path / "out",
+        cases=["si-step-limited"],
+        launcher=[sys.executable, str(fake), "{work_dir}", "{input}"],
+    )
+    assert result.tier == "live" and result.passed
 
 
 def test_out_of_window_observable_fails(tmp_path):
@@ -140,6 +209,23 @@ def test_replayer_rejects_a_changed_input(tmp_path):
     )
     assert proc.returncode == 0
     assert proc.stdout == recorded.joinpath("pw.out").read_text()
+
+
+def test_replayer_uses_the_nearest_step_directory(tmp_path):
+    recorded = SUITE / "replay" / "si-diamond-vs-beta-tin"
+    work = tmp_path / "relax-dft-000" / "run" / "relax-dft-001" / "calculations" / "qe"
+    work.mkdir(parents=True)
+    pw_in = work / "pw.in"
+    pw_in.write_text((recorded / "relax-dft-001" / "pw.in").read_text())
+
+    proc = subprocess.run(
+        [sys.executable, str(REPLAYER), str(recorded), str(work), str(pw_in)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == (recorded / "relax-dft-001" / "pw.out").read_text()
 
 
 def test_cli_exit_codes(tmp_path):

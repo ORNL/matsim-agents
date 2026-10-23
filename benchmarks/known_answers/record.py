@@ -2,12 +2,16 @@
 
     python benchmarks/known_answers/record.py [WORK_DIR] [--pw-x PATH]
 
-WORK_DIR defaults to the repository's git-ignored runs/known-answer-record.
+WORK_DIR defaults to the repository's git-ignored runs/known-answer-record;
+each invocation records into a new subdirectory of it.
 
 1. Relaxes the reference phases (diamond Si, diamond C, 2H-SiC) with the
-   suite's DFT method and writes ``references.json`` from their energies.
-2. Runs every case live through the characterization pipeline and copies each
-   relaxation's ``pw.in``/``pw.out`` to ``replay/<case_id>/<step_id>/``.
+   suite's DFT method and writes ``references.json`` from their energies into
+   a copy of the suite.
+2. Runs every case live on that copy through the characterization pipeline.
+3. Only if every case passes, replaces the suite's ``references.json`` and
+   ``replay/<case_id>/<step_id>/`` (each relaxation's ``pw.in``/``pw.out``);
+   otherwise exits 1 and leaves the suite untouched.
 
 Run it on a node with pw.x (serial runs of a few seconds to a minute each).
 """
@@ -17,9 +21,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
+import re
 import shutil
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -45,6 +51,10 @@ def _pw_version(pw_x: str) -> str:
         [pw_x], input="", capture_output=True, text=True, timeout=60, check=False
     ).stdout
     return next((line.strip() for line in out.splitlines() if "Program PWSCF" in line), "unknown")
+
+
+def _step(path: Path) -> str:
+    return next(p for p in reversed(path.parts) if re.fullmatch(r"relax-\w+-\d{3}", p))
 
 
 def _relax_reference(name: str, formula: str, template: dict, work: Path, pw_x: str) -> dict:
@@ -89,8 +99,9 @@ def main() -> None:
     )
     parser.add_argument("--pw-x", default="pw.x")
     args = parser.parse_args()
-    work = args.work_dir.resolve()
-    work.mkdir(parents=True, exist_ok=True)
+    args.work_dir.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="record-", dir=args.work_dir.resolve()))
+    print(f"Recording in {work}")
 
     template = yaml.safe_load((SUITE / "contracts" / "sic-3c-on-hull.yaml").read_text())
     signature = template["methods"]["dft_method_signature"]
@@ -101,7 +112,11 @@ def main() -> None:
     }
 
     def provenance(ref: dict) -> dict[str, str]:
-        return {"code": version, "ledger_evidence_id": ref["evidence_id"], "recorded_by": "record.py"}
+        return {
+            "code": version,
+            "ledger_evidence_id": ref["evidence_id"],
+            "recorded_by": "record.py",
+        }
 
     def digest(path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -143,22 +158,38 @@ def main() -> None:
             )
         ],
     )
-    (SUITE / "references.json").write_text(references.model_dump_json(indent=2) + "\n")
+    staged = work / "suite"
+    shutil.copytree(SUITE, staged, ignore=shutil.ignore_patterns("replay", "__pycache__"))
+    (staged / "references.json").write_text(references.model_dump_json(indent=2) + "\n")
 
-    suite = load_suite(SUITE)
-    live = work / "live"
-    os.environ["PATH"] = f"{Path(args.pw_x).parent}{os.pathsep}{os.environ['PATH']}"
-    result = run_known_answers(SUITE, tier="live", output_dir=live)
-    for case in suite.cases:
-        replay = SUITE / "replay" / case.case_id
-        shutil.rmtree(replay, ignore_errors=True)
-        for pw_out in sorted((live / case.case_id).glob("**/relax-*/**/pw.out")):
-            step = next(p for p in pw_out.parts if p.startswith("relax-"))
-            (replay / step).mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(pw_out, replay / step / "pw.out")
-            shutil.copyfile(pw_out.with_name("pw.in"), replay / step / "pw.in")
+    suite = load_suite(staged)
+    result = run_known_answers(
+        staged, tier="live", output_dir=work / "live", launcher=[args.pw_x, "-in", "{input}"]
+    )
     for verdict in result.verdicts:
         print(f"{verdict.case_id}: {'PASS' if verdict.passed else 'FAIL'} {verdict.reasons}")
+    if not result.passed:
+        sys.exit(f"Not all cases passed; {SUITE} is unchanged. Runs: {result.run_dir}")
+
+    recordings = {}
+    for case in suite.cases:
+        steps: dict[str, Path] = {}
+        for pw_out in sorted((Path(result.run_dir) / case.case_id).glob("**/relax-*/**/pw.out")):
+            step = _step(pw_out.parent)
+            if step in steps:
+                sys.exit(f"{case.case_id}: two recordings for {step}; {SUITE} is unchanged")
+            steps[step] = pw_out
+        if not steps:
+            sys.exit(f"{case.case_id}: no pw.x runs recorded; {SUITE} is unchanged")
+        recordings[case.case_id] = steps
+    for case_id, steps in recordings.items():
+        replay = SUITE / "replay" / case_id
+        shutil.rmtree(replay, ignore_errors=True)
+        for step, pw_out in steps.items():
+            (replay / step).mkdir(parents=True)
+            shutil.copyfile(pw_out, replay / step / "pw.out")
+            shutil.copyfile(pw_out.with_name("pw.in"), replay / step / "pw.in")
+    shutil.copyfile(staged / "references.json", SUITE / "references.json")
 
 
 if __name__ == "__main__":

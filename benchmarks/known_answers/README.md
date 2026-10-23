@@ -3,7 +3,8 @@
 Five characterization questions with established PBE answers. Each case runs
 its contract through the real characterization pipeline. A deterministic
 grader (the benchmark's NO_LLM arm) checks the report's status, ground state,
-observables and missing evidence against [cases.yaml](cases.yaml). Each
+whether the conclusion places it on or above the hull, observables and missing
+evidence against [cases.yaml](cases.yaml). Each
 verdict is written to the evidence ledger as a `known_answer_pass` or
 `known_answer_fail` decision that cites the run's evidence.
 
@@ -30,9 +31,10 @@ matsim-agents benchmark known-answers --tier replay
 matsim-agents benchmark known-answers --tier live -o runs/known-answers-live
 ```
 
-The command exits 1 if any case fails. `--case ID` selects cases. `--ledger`
-appends to an existing ledger. The default ledger is
-`<output>/known-answer-ledger.jsonl`.
+The command exits 1 if any case fails. `--case ID` selects cases. Each
+invocation runs in a new `<output>/<tier>-*` directory, so no step is reused
+from an earlier run. `--ledger` appends to an existing ledger. The default
+ledger is `known-answer-ledger.jsonl` in that run directory.
 
 On the replay tier the launcher is replaced by
 `matsim_agents/campaign/_replay_pw.py`. It returns the recorded `pw.out` only
@@ -48,8 +50,11 @@ export MPICH_GPU_SUPPORT_ENABLED=0 OMP_NUM_THREADS=8
 python benchmarks/known_answers/record.py --pw-x /path/to/pw.x
 ```
 
-This relaxes the references, rewrites `references.json`, runs the live tier
-under `runs/known-answer-record` (git-ignored), and copies each relaxation's
-`pw.in`/`pw.out` to `replay/<case_id>/<step_id>/`. The runs are serial and
+Each invocation works in a new directory under `runs/known-answer-record`
+(git-ignored). It relaxes the references and runs the live tier with `--pw-x`
+on a copy of the suite. Only if every case passes does it replace
+`references.json` and copy each relaxation's `pw.in`/`pw.out` to
+`replay/<case_id>/<step_id>/`; otherwise it exits 1 and leaves the suite
+unchanged. The runs are serial and
 take a few minutes in total. On another machine, change `pseudo_dir` in the
 contracts first; the recorded inputs contain it.
