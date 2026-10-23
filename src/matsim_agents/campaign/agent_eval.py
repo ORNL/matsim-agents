@@ -142,7 +142,11 @@ class AgentEvalConfig(BaseModel):
         default_factory=lambda: {"temperature": 0.0},
         description="Passed to the model factory for every call.",
     )
-    random_seeds: list[int] = Field(default_factory=lambda: [0], min_length=1)
+    random_seeds: list[int] = Field(
+        default_factory=lambda: [0],
+        min_length=1,
+        description="Labels of repeated runs; put a provider seed in decoding to fix sampling.",
+    )
     comparisons: list[tuple[BenchmarkArm, BenchmarkArm]] = Field(
         default_factory=lambda: list(_DEFAULT_COMPARISONS),
         description="(treatment, control) pairs; pairs with an unconfigured arm are skipped.",

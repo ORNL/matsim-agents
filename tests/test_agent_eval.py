@@ -167,6 +167,14 @@ def test_arms_share_one_completion_budget():
         AgentEvalConfig(participants=_participants(2), arms=[BenchmarkArm.RANDOM])
 
 
+def test_example_config_is_valid():
+    import yaml
+
+    with open(SUITE / "example-config.yaml", encoding="utf-8") as stream:
+        config = AgentEvalConfig.model_validate(yaml.safe_load(stream))
+    assert len(config.arms) == 4
+
+
 def test_case_prompt_lists_ids_and_rules(tmp_path):
     case, records, _ = _ledger(tmp_path, "sic-6h-incomplete-references")
     prompt = case_prompt(case, records)
