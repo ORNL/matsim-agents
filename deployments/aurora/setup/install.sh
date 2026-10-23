@@ -201,5 +201,5 @@ if [[ "${RUN_MODEL_TESTS}" == "1" ]]; then
     )
 fi
 
-log "Complete. Activate with: module load ${FRAMEWORKS_MODULE} && MATSIM_AURORA_VENV=${VENV_PATH} MATSIM_FAIRCHEM_VENV=${UMA_VENV_PATH} MATSIM_MACE_VENV=${MACE_VENV_PATH} source ${SCRIPT_DIR}/setup_matsim_aurora.sh"
+log "Complete. Activate with: module load ${FRAMEWORKS_MODULE} && export MATSIM_AURORA_VENV=${VENV_PATH} MATSIM_FAIRCHEM_VENV=${UMA_VENV_PATH} MATSIM_MACE_VENV=${MACE_VENV_PATH} && source ${SCRIPT_DIR}/setup_matsim_aurora.sh"
 log "Then verify backends with: matsim-agents capabilities check"

@@ -72,5 +72,5 @@ if [[ "${INSTALL_VLLM}" == "1" ]]; then
         bash "${MATSIM_DIR}/deployments/common/setup/install-vllm-compat.sh"
 fi
 
-log "Complete. Activate with: MATSIM_PERLMUTTER_VENV=${VENV_PATH} MATSIM_FAIRCHEM_VENV=${UMA_VENV_PATH} MATSIM_MACE_VENV=${MACE_VENV_PATH} source ${SCRIPT_DIR}/setup_matsim_perlmutter.sh --gpu"
+log "Complete. Activate with: export MATSIM_PERLMUTTER_VENV=${VENV_PATH} MATSIM_FAIRCHEM_VENV=${UMA_VENV_PATH} MATSIM_MACE_VENV=${MACE_VENV_PATH} && source ${SCRIPT_DIR}/setup_matsim_perlmutter.sh --gpu"
 log "Then verify backends with: matsim-agents capabilities check"

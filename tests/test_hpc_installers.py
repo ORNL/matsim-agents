@@ -295,6 +295,27 @@ def test_installers_print_activation_with_the_installed_venvs() -> None:
             assert "--rocm72" in hint
 
 
+@pytest.mark.parametrize("facility", list(INSTALLERS))
+def test_activation_hint_keeps_venv_overrides_after_setup_returns(facility, tmp_path):
+    text = (ROOT / "deployments" / facility / "setup" / "install.sh").read_text(encoding="utf-8")
+    hint = next(line for line in text.splitlines() if "Activate with" in line)
+    command = hint.split("Activate with: ", 1)[1].rstrip('"')
+    command = re.sub(r"^module load \S+ && ", "", command)
+    stub = tmp_path / "setup.sh"
+    stub.write_text("export MATSIM_FAIRCHEM_VENV MATSIM_MACE_VENV\n", encoding="utf-8")
+    command = command.replace(f"${{SCRIPT_DIR}}/setup_matsim_{facility}.sh", str(stub))
+    values = {"VENV_PATH": "/x/main", "UMA_VENV_PATH": "/x/uma", "MACE_VENV_PATH": "/x/mace"}
+    command = re.sub(r"\$\{(\w+)\}", lambda m: values[m.group(1)], command)
+    out = subprocess.run(
+        ["bash", "-c", f'{command}; echo "$MATSIM_FAIRCHEM_VENV|$MATSIM_MACE_VENV"'],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={"PATH": os.environ["PATH"]},
+    )
+    assert out.stdout.strip().splitlines()[-1] == "/x/uma|/x/mace"
+
+
 def test_facility_setup_scripts_source_runtime_env() -> None:
     for facility in INSTALLERS:
         setup = ROOT / "deployments" / facility / "setup" / f"setup_matsim_{facility}.sh"
