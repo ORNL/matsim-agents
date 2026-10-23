@@ -140,8 +140,12 @@ python -m matsim_agents.datasets.splits --dataset dataset.extxyz \
 
 In the active-learning loop, model promotion uses the held-out validation
 labels only (`trainer.validation_set` or `trainer.validation_fraction`); the loop
-has no test partition. Its validation labels are held out frame by frame, so they
-are correlated with training frames of the same trajectories.
+has no test partition. With `trainer.validation_fraction`, each MD trajectory
+(`trajectory_id`) is held out whole or not at all, so validation frames share no
+trajectory with training frames. They can still share a seed structure from a
+different iteration, so this measures interpolation, not transfer. With
+`trainer.validation_set`, new labels that duplicate a validation geometry are
+dropped before they reach the training set.
 
 ## Reports
 
@@ -209,9 +213,11 @@ relation is empirical.
 
 ## Migration
 
-- `finetune_eval` without `--evaluation-config` uses `random_frame` with
-  `--test-fraction` and `--seed`, and selects the same test frames for the same
-  dataset, fraction, and seed as before. Its partitions are now
+- `finetune_eval` requires `--evaluation-config`; `--test-fraction` is gone and
+  there is no default split, because a random-frame split tests only
+  interpolation. To reproduce an earlier run, use a `random_frame` split with
+  `train_fraction: 0.8`, `test_fraction: 0.2` and the old `--seed` as
+  `split.seed`; it selects the same test frames. Its partitions are
   `split/train.extxyz` and `split/test.extxyz` (the held-out file was
   `split/test_set.extxyz` and was labelled `validation` in its sidecar).
 - Splits now reject identical configurations in two roles; deduplicate datasets

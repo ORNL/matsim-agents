@@ -210,7 +210,9 @@ def test_stopping_the_server_stops_workers_before_the_head(stub_tools, request_b
         start_new_session=True,
     )
     deadline = time.monotonic() + 30
-    while "vllm serve" not in (record.read_text() if record.exists() else ""):
+    # Both Ray nodes must be up: the GPU probe stub stops waiting after a few seconds.
+    started = ("vllm serve", "ray start --head", "ray start --address")
+    while not all(s in (record.read_text() if record.exists() else "") for s in started):
         assert time.monotonic() < deadline and process.poll() is None
         time.sleep(0.2)
     if request_by == "stop_file":

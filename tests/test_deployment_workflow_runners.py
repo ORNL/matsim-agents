@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,51 @@ from matsim_agents.backends.dft.vasp_io import resolve_potcar_paths
 from matsim_agents.workflows.relaxation import ScientificRelaxationConfig
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_finetune_eval_job_passes_an_absolute_evaluation_config(tmp_path):
+    """A config named relative to the submission directory survives the job's cd."""
+    repo = tmp_path / "repo"
+    launchers = repo / "deployments/perlmutter/launchers"
+    setup = repo / "deployments/perlmutter/setup"
+    launchers.mkdir(parents=True)
+    setup.mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("")
+    job = launchers / "job-finetune-eval-perlmutter.sh"
+    shutil.copy(ROOT / "deployments/perlmutter/launchers/job-finetune-eval-perlmutter.sh", job)
+    (setup / "perlmutter-module-stack.sh").write_text("load_perlmutter_modules_gpu() { :; }\n")
+    (setup / "model-artifacts-perlmutter.sh").write_text(
+        "configure_mace_model_artifacts() { :; }\n"
+    )
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    args_file = tmp_path / "args"
+    python = venv / "bin/python"
+    python.write_text(f'#!/bin/bash\nprintf "%s\\n" "$@" > {args_file}\n')
+    python.chmod(0o755)
+    (venv / "bin/activate").write_text(f'export PATH="{venv}/bin:$PATH"\n')
+    case = tmp_path / "runs" / "case"
+    case.mkdir(parents=True)
+    (case / "dataset.extxyz").write_text("")
+    (case / "elemental_references.json").write_text("{}")
+    submit_dir = tmp_path / "submit"
+    submit_dir.mkdir()
+    (submit_dir / "evaluation.yaml").write_text("objective: interpolation\n")
+    env = {
+        **os.environ,
+        "PROJECT_ROOT": str(repo),
+        "RUNS_ROOT": str(tmp_path / "runs"),
+        "BACKEND": "mace",
+        "CASE": "case",
+        "MATSIM_MACE_VENV": str(venv),
+        "EVALUATION_CONFIG": "evaluation.yaml",
+    }
+    proc = subprocess.run(
+        ["bash", str(job)], cwd=submit_dir, env=env, capture_output=True, text=True, check=False
+    )
+    assert proc.returncode == 0, proc.stderr
+    args = args_file.read_text().splitlines()
+    assert args[args.index("--evaluation-config") + 1] == str(submit_dir / "evaluation.yaml")
 
 
 @pytest.mark.parametrize(

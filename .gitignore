@@ -43,6 +43,7 @@ multidataset_hpo-*/
 !tests/integration/data/*.xyz
 !benchmarks/portability/structures/*.vasp
 !examples/characterization/structures/*.vasp
+!benchmarks/known_answers/structures/*.vasp
 mlp_branch_weights.pt
 runs/
 outputs/
@@ -85,6 +86,10 @@ external/vasp6/potcar/
 **/CHGCAR
 **/CHG
 **/vasprun.xml
+# Small Si/SiC parser-test runs, not competition labels.
+!tests/data/dft_outputs/vasp/*/OUTCAR
+!tests/data/dft_outputs/vasp/*/CONTCAR
+!tests/data/dft_outputs/vasp/*/vasprun.xml
 # Structure anonymisation mapping — MUST stay in the private repo only.
 # If this file ever appears here it means someone accidentally copied it from
 # matsim-agents-dft-reference/; block it to prevent accidental exposure.

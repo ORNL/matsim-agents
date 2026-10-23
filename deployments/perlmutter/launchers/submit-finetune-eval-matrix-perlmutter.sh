@@ -7,7 +7,8 @@
 # job-finetune-eval-perlmutter.sh. Each (backend, variant, case) writes to its
 # own output dir, so jobs never collide and can be resubmitted individually.
 #
-# Usage:
+# Usage (EVALUATION_CONFIG is required; templates in examples/evaluation/):
+#   export EVALUATION_CONFIG=examples/evaluation/random-frame-interpolation.yaml
 #   bash deployments/perlmutter/launchers/submit-finetune-eval-matrix-perlmutter.sh
 #
 #   # restrict backends and/or cases (comma-separated):
@@ -64,6 +65,9 @@ PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 JOB="${SCRIPT_DIR}/job-finetune-eval-perlmutter.sh"
 [[ ! -f "${JOB}" ]] && { echo "ERROR: missing per-job script ${JOB}" >&2; exit 2; }
+EVALUATION_CONFIG="${EVALUATION_CONFIG:?set EVALUATION_CONFIG=<evaluation YAML>, see examples/evaluation/}"
+[[ ! -r "${EVALUATION_CONFIG}" ]] && { echo "ERROR: evaluation config not readable: ${EVALUATION_CONFIG}" >&2; exit 2; }
+EVALUATION_CONFIG="$(realpath "${EVALUATION_CONFIG}")"
 
 # ── the 5 datasets and their UMA task (HydraGNN ignores UMA_TASK) ─────────────
 #   case                         uma_task
@@ -171,6 +175,7 @@ for backend in "${BACKEND_LIST[@]}"; do
         # env passed through to the per-job script
         exports="ALL,BACKEND=${backend},CASE=${case},UMA_TASK=${uma_task}"
         exports+=",ELEMENTAL_REFERENCE_MANIFEST=${reference_manifest}"
+        exports+=",EVALUATION_CONFIG=${EVALUATION_CONFIG}"
         [[ "${backend}" == "hydragnn" ]] && exports+=",HYDRAGNN_STRATEGY=${strategy}"
         if [[ "${backend}" == "mace" ]]; then
           exports+=",MACE_FAMILY=${MACE_FAMILY},MACE_MODEL=${mace_model}"

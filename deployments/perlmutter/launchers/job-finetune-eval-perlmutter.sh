@@ -24,6 +24,7 @@
 # Submit the whole 2x5 matrix with the companion wrapper:
 #   deployments/perlmutter/launchers/submit-finetune-eval-matrix-perlmutter.sh
 # or a single campaign directly, e.g.:
+#   export EVALUATION_CONFIG=$PWD/examples/evaluation/random-frame-interpolation.yaml
 #   BACKEND=hydragnn CASE=lifepo4-al-001 \
 #     sbatch deployments/perlmutter/launchers/job-finetune-eval-perlmutter.sh
 #   BACKEND=uma CASE=zn-formate-mof-uma-al-001 UMA_TASK=omol \
@@ -37,6 +38,9 @@
 #   ELEMENTAL_REFERENCE_MANIFEST  DFT-labelled pure-element JSON manifest
 #                                 (default $RUNS_ROOT/$CASE/elemental_references.json;
 #                                  this file must exist)
+#   EVALUATION_CONFIG  evaluation YAML: objective, split strategy, test domains,
+#                      repetitions, selection (docs/mlip-evaluation.md;
+#                      templates in examples/evaluation/)
 # Optional env (with defaults):
 #   UMA_TASK      omat | omol | oc20 | odac | omc   (uma only; default omat)
 #   UMA_LORA      1 = LoRA fine-tune of UMA backbone scalar linears (default 0)
@@ -50,9 +54,6 @@
 #   EPOCHS        fine-tune epochs                  (default 20)
 #   BATCH_SIZE    training batch size               (default 4)
 #   DEVICE        override torch device             (default: auto = cuda)
-#   EVALUATION_CONFIG  evaluation YAML: objective, split strategy, test domains,
-#                 repetitions, selection (docs/mlip-evaluation.md); default is a
-#                 seeded random-frame 80/20 split
 #   HYDRAGNN_STRATEGY  routed | unfrozen | frozen | scratch (hydragnn only;
 #                      default routed = branch-MLP head reuse. The other three
 #                      drop all 16 heads and grow one fresh head.)
@@ -86,6 +87,13 @@ ELEMENTAL_REFERENCE_MANIFEST="${ELEMENTAL_REFERENCE_MANIFEST:-${RUNS_ROOT}/${CAS
   echo "ERROR: DFT-labelled elemental reference manifest not found: ${ELEMENTAL_REFERENCE_MANIFEST}" >&2
   exit 2
 }
+EVALUATION_CONFIG="${EVALUATION_CONFIG:?set EVALUATION_CONFIG=<evaluation YAML>, see examples/evaluation/}"
+[[ ! -r "${EVALUATION_CONFIG}" ]] && {
+  echo "ERROR: evaluation config not readable: ${EVALUATION_CONFIG}" >&2
+  exit 2
+}
+# The job later changes into the repository.
+EVALUATION_CONFIG="$(realpath "${EVALUATION_CONFIG}")"
 
 # ── knobs ────────────────────────────────────────────────────────────────────
 UMA_TASK="${UMA_TASK:-omat}"
@@ -221,7 +229,7 @@ fi
 # Optional explicit device override; default leaves detection to torch, which
 # picks the Slurm-bound GPU.
 [[ -n "${DEVICE:-}" ]] && EXTRA_ARGS+=(--device "${DEVICE}")
-[[ -n "${EVALUATION_CONFIG:-}" ]] && EXTRA_ARGS+=(--evaluation-config "${EVALUATION_CONFIG}")
+EXTRA_ARGS+=(--evaluation-config "${EVALUATION_CONFIG}")
 
 # Leakage-free RE-SCORE mode: skip training, reuse the existing split +
 # fine-tuned checkpoint, and re-score both endpoints using fixed elemental

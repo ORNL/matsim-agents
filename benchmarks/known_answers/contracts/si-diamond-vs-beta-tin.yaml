@@ -1,0 +1,32 @@
+# Known-answer case si-diamond-vs-beta-tin; see benchmarks/known_answers/README.md.
+contract_id: known-answer-si-diamond-vs-beta-tin
+objective: Which Si polymorph, diamond or beta-tin, is lower in PBE energy?
+formula: Si
+recipe: energy_ranking
+structures:
+- ../structures/Si-diamond.vasp
+- ../structures/Si-beta-tin.vasp
+observables:
+- name: relative_energy_per_atom
+  unit: eV/atom
+  minimum_evidence_level: converged_dft
+methods:
+  dft:
+    backend: qe
+    launcher: [pw.x, -in, "{input}"]
+    pseudo_dir: /global/common/software/nersc9/espresso/pseudo
+    settings:
+      ecutwfc_ry: 45
+      ecutrho_ry: 360
+      occupations: smearing
+      pseudopotentials:
+        Si: Si.pbe-nl-rrkjus_psl.1.0.0.UPF
+        C: C.pbe-n-kjpaw_psl.1.0.0.UPF
+  dft_method_signature: qe-pbe-pslibrary-ecut45-smearing
+tolerances:
+  force_tolerance_eV_per_A: 0.02
+  max_relaxation_steps: 100
+  degeneracy_tolerance_eV_per_atom: 0.01
+budget:
+  max_dft_calculations: 2
+dft_approved: true

@@ -25,10 +25,12 @@
 # Inputs (env)
 # ------------
 #   BACKEND   hydragnn | uma | mace   (shared by all campaigns on this node)
+#   EVALUATION_CONFIG  evaluation YAML shared by all campaigns (examples/evaluation/)
 #   SPECS     up to 4 campaigns separated by ';'. Each campaign is a
 #             space-separated list of VAR=VAL overrides passed to the single
 #             launcher (CASE=... plus any variant knobs). Example:
 #
+#     EVALUATION_CONFIG=$PWD/examples/evaluation/random-frame-interpolation.yaml \
 #     BACKEND=mace SPECS="\
 #       CASE=lifepo4-al-001 MACE_MODEL=medium; \
 #       CASE=hea-bcc-al-001 MACE_MODEL=medium; \
@@ -53,6 +55,9 @@ SINGLE="${REPO}/deployments/perlmutter/launchers/job-finetune-eval-perlmutter.sh
 
 BACKEND="${BACKEND:?set BACKEND=hydragnn|uma|mace}"
 SPECS="${SPECS:?set SPECS='CASE=...; CASE=...; ...' (up to 4, ';'-separated)}"
+EVALUATION_CONFIG="${EVALUATION_CONFIG:?set EVALUATION_CONFIG=<evaluation YAML>, see examples/evaluation/}"
+[[ ! -r "${EVALUATION_CONFIG}" ]] && { echo "ERROR: evaluation config not readable: ${EVALUATION_CONFIG}" >&2; exit 2; }
+export EVALUATION_CONFIG
 LOGDIR="${SLURM_SUBMIT_DIR:-$PWD}"
 
 # Split SPECS on ';' into an array (trim surrounding whitespace per entry).

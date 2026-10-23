@@ -543,7 +543,7 @@ class PWResult:
 
 _RE_TOTAL_ENERGY = re.compile(r"!\s*total energy\s*=\s*(-?\d+\.\d+)\s*Ry")
 _RE_ITER = re.compile(r"iteration #\s*(\d+)\s+ecut")
-_RE_BFGS_STEP = re.compile(r"number of scf cycles\s*=\s*(\d+)")
+_RE_FINAL_COORDINATES = re.compile(r"End final coordinates")
 _RE_BFGS_CONV = re.compile(r"bfgs converged in\s*(\d+)\s*scf cycles")
 _RE_FORCE_MAX = re.compile(r"Total force\s*=\s*(-?\d+\.\d+)\s*Total SCF correction")
 _RE_WALL = re.compile(r"PWSCF\s*:.*?CPU\s+(?:[\d:.h ms]+)\s+WALL")
@@ -558,26 +558,18 @@ def parse_pw_stdout(stdout_path: str, return_code: int = 0) -> PWResult:
     """Parse a ``pw.x`` stdout produced by a ``relax`` / ``vc-relax`` run."""
     text = Path(stdout_path).read_text(errors="replace")
 
-    # SCF iterations grouped by BFGS step. pw.x prints "iteration #" inside
-    # each electronic SCF cycle; the boundary between geometry steps is the
-    # "number of scf cycles" line (printed once at the start of each ionic
-    # iteration except possibly the first). We split on those boundaries.
-    iter_matches = list(_RE_ITER.finditer(text))
-    bfgs_boundaries = [m.start() for m in _RE_BFGS_STEP.finditer(text)]
-
+    # Each SCF cycle restarts the "iteration #" counter at 1. Cycles after
+    # "End final coordinates" are the vc-relax final SCF: they cost
+    # iterations but are not geometry steps.
+    final = _RE_FINAL_COORDINATES.search(text)
+    end_of_steps = final.start() if final is not None else len(text)
     scf_per_step: list[int] = []
-    if not bfgs_boundaries:
-        scf_per_step.append(len(iter_matches))
-    else:
-        # First ionic step covers iterations before the first boundary.
-        first = sum(1 for m in iter_matches if m.start() < bfgs_boundaries[0])
-        scf_per_step.append(first)
-        for i, b in enumerate(bfgs_boundaries):
-            nxt = bfgs_boundaries[i + 1] if i + 1 < len(bfgs_boundaries) else len(text)
-            scf_per_step.append(sum(1 for m in iter_matches if b <= m.start() < nxt))
-
-    scf_total = sum(scf_per_step)
-    bfgs_steps = max(1, len(scf_per_step))
+    for match in _RE_ITER.finditer(text, 0, end_of_steps):
+        if int(match.group(1)) == 1 or not scf_per_step:
+            scf_per_step.append(0)
+        scf_per_step[-1] += 1
+    scf_total = len(_RE_ITER.findall(text))
+    bfgs_steps = len(scf_per_step)
 
     energies_ry = [float(m.group(1)) for m in _RE_TOTAL_ENERGY.finditer(text)]
     final_e_ry = energies_ry[-1] if energies_ry else float("nan")
@@ -586,8 +578,6 @@ def parse_pw_stdout(stdout_path: str, return_code: int = 0) -> PWResult:
     final_force = forces[-1] if forces else None
 
     bfgs_done = _RE_BFGS_CONV.search(text)
-    if bfgs_done:
-        bfgs_steps = int(bfgs_done.group(1))
 
     job_done = bool(_RE_JOB_DONE.search(text))
     # QE always prints "JOB DONE." even when BFGS did not converge (e.g. SCF

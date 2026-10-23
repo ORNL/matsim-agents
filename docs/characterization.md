@@ -43,12 +43,12 @@ recipe does, and only from converged DFT.
 | `observables` | Optional. Overrides the recipe's defaults (for example a higher `minimum_evidence_level`). Units are fixed per observable and validated; an observable the recipe does not produce, or a level above `converged_dft` (the most a recipe produces), is rejected. |
 | `methods.mlip` | MLIP settings, as for `matsim-agents relax`. |
 | `methods.dft`, `methods.dft_method_signature` | The DFT backend, and the scientific signature of its method. `methods.dft.settings` keys are checked against the backend's settings (`QESettings`, `VASPSettings`), excluding those the relaxation sets itself; raw overrides (`extra_control`, `extra_system`, `extra_electrons`, `extra_cell`, `extra_incar`) may not set what the geometry, convergence, or a settings field controls (for example `calculation`, `cell_dofree`, `ISIF`, `ENCUT`). |
-| `geometry` | Degrees of freedom of every relaxation (`GeometryControls`); atoms and cell by default. Cell-only relaxation (`relax_atoms: false`) is rejected, because the relaxations cannot yet hold the atoms fixed. |
+| `geometry` | Degrees of freedom of every relaxation (`GeometryControls`); atoms and cell by default. Cell-only relaxation (`relax_atoms: false`) is rejected, because the relaxations cannot yet hold the atoms fixed. A nonzero `pressure_GPa` is also rejected, because the relaxations run at zero pressure. |
 | `tolerances` | Residual force, relaxation steps, degeneracy tolerance for rankings, and hull tolerance. |
 | `reference_energies` | A `ReferenceEnergySet` JSON (`thermodynamic_stability`). |
 | `budget` | `max_mlip_relaxations` and `max_dft_calculations`: calculations attempted over the whole contract, failed ones and resumed runs included. |
 | `approvals`, `dft_approved` | DFT waits for `dft_approved: true` when `approvals.before_dft` is set (the default). |
-| `output_root` | Where the run directory is created (default `./runs`). |
+| `output_root` | Where the run directory is created (default `runs/` next to the contract file). |
 
 Relative paths in a contract file (structures, `reference_energies`,
 `output_root`, `methods.dft.pseudo_dir`, `methods.dft.potcar_dir`) are relative

@@ -24,6 +24,7 @@ from matsim_agents.execution.contracts import (
     EvidenceLevel,
     ObservableRequirement,
 )
+from matsim_agents.execution.ledger import EvidenceLedger
 from matsim_agents.workflows.relaxation import (
     RelaxationMode,
     RelaxationStageResult,
@@ -451,6 +452,34 @@ def test_cell_only_relaxation_is_rejected(system):
         )
 
 
+def test_relaxation_under_pressure_is_rejected(system):
+    tmp_path, structures, _references = system
+    with pytest.raises(ValidationError, match="relaxation under pressure"):
+        _contract(
+            tmp_path,
+            structures,
+            "relaxation",
+            geometry={"relax_atoms": True, "relax_cell": True, "pressure_GPa": 5.0},
+        )
+    _contract(
+        tmp_path,
+        structures,
+        "relaxation",
+        geometry={"relax_atoms": True, "relax_cell": True, "pressure_GPa": 0.0},
+    )
+
+
+def test_an_empty_ledger_passed_in_is_the_one_written(system):
+    tmp_path, structures, _references = system
+    ledger = EvidenceLedger(tmp_path / "elsewhere" / "ledger.jsonl")
+    assert len(ledger) == 0
+    contract = _contract(tmp_path, structures[:1], "relaxation")
+    run_characterization(contract, relax=FakeRelax({"NbO2-a.extxyz": -21.0}), ledger=ledger)
+    assert len(ledger) > 0
+    assert len(EvidenceLedger(tmp_path / "elsewhere" / "ledger.jsonl")) == len(ledger)
+    assert not list(tmp_path.rglob("evidence-ledger.jsonl"))
+
+
 @pytest.mark.parametrize(
     ("energy", "force"),
     [(float("nan"), 0.001), (float("inf"), 0.001), (-21.0, float("nan")), (-21.0, float("inf"))],
@@ -702,6 +731,37 @@ def test_relative_and_absolute_contract_paths_resume_the_same_run(system, monkey
     again = FakeRelax({})
     run_characterization(absolute, relax=again)
     assert again.calls == []
+
+
+def test_default_output_root_is_next_to_the_contract_file(system, monkeypatch):
+    import yaml
+
+    from matsim_agents.campaign.characterization import load_contract
+
+    tmp_path, structures, _references = system
+    path = tmp_path / "contract.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "contract_id": "default-root",
+                "objective": "Relax NbO2.",
+                "formula": "NbO2",
+                "recipe": "relaxation",
+                "structures": [structures[0].name],
+            }
+        )
+    )
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    contract = load_contract(path)
+    assert Path(contract.output_root) == tmp_path / "runs"
+    run_characterization(contract, relax=FakeRelax({"NbO2-a.extxyz": -21.0}))
+    monkeypatch.chdir(tmp_path)
+    again = FakeRelax({})
+    run_characterization(load_contract("contract.yaml"), relax=again)
+    assert again.calls == []
+    assert not (elsewhere / "runs").exists()
 
 
 @pytest.mark.parametrize("where", ["set", "phase", "element"])

@@ -18,6 +18,17 @@ from matsim_agents.datasets.energy_references import (
 )
 
 
+def _random_frame():
+    from matsim_agents.active_learning.finetune_eval import EvaluationConfig
+
+    return EvaluationConfig.model_validate(
+        {
+            "objective": "interpolation among random frames",
+            "split": {"strategy": "random_frame", "train_fraction": 0.8, "test_fraction": 0.2},
+        }
+    )
+
+
 class OffsetCalculator(Calculator):
     implemented_properties = ["energy", "forces"]
 
@@ -280,6 +291,7 @@ def test_energy_comparison_rejects_unverified_method_before_inference(
                 backend="uma",
                 device="cpu",
                 elemental_reference_manifest=reference,
+                evaluation=_random_frame(),
             )
 
 
@@ -329,6 +341,7 @@ def test_finetune_split_preserves_verified_method(
         backend="uma",
         device="cpu",
         elemental_reference_manifest=reference,
+        evaluation=_random_frame(),
     )
     with pytest.raises(StopBeforeTraining):
         finetune_eval.run_finetune_endpoints(str(dataset), output, **kwargs)
@@ -399,6 +412,7 @@ def test_non_hydragnn_finetune_accepts_minimal_method_sidecar(
             backend=backend,
             device="cpu",
             elemental_reference_manifest=reference,
+            evaluation=_random_frame(),
         )
 
 
@@ -460,6 +474,7 @@ def test_finetune_campaign_checks_reference_coverage_before_training(
             backend="uma",
             device="cpu",
             elemental_reference_manifest=elemental_manifest({"Nb": -10.0}),
+            evaluation=_random_frame(),
         )
     assert not (tmp_path / "campaign/ft").exists()
     assert not (tmp_path / "campaign/split/train.extxyz").exists()

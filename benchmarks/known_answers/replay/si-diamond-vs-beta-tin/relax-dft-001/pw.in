@@ -1,0 +1,47 @@
+&CONTROL
+  calculation   = 'vc-relax'
+  prefix        = 'pwscf'
+  pseudo_dir    = '/global/common/software/nersc9/espresso/pseudo'
+  outdir        = './tmp'
+  tprnfor       = .true.
+  tstress       = .true.
+  verbosity     = 'high'
+  etot_conv_thr = 1.00000000d-04
+  forc_conv_thr = 7.77875869d-04
+  nstep         = 100
+/
+&SYSTEM
+  ibrav       = 0
+  nat         = 2
+  ntyp        = 1
+  ecutwfc     = 45
+  ecutrho     = 360
+  occupations = 'smearing'
+  smearing    = 'gaussian'
+  degauss     = 1.00000000d-02
+/
+&ELECTRONS
+  conv_thr         = 1.00000000d-08
+  mixing_beta      = 4.00000000d-01
+  electron_maxstep = 200
+/
+&IONS
+  ion_dynamics = 'bfgs'
+/
+&CELL
+  cell_dynamics = 'bfgs'
+/
+ATOMIC_SPECIES
+  Si  28.0850  Si.pbe-nl-rrkjus_psl.1.0.0.UPF
+
+CELL_PARAMETERS angstrom
+       -2.4000000000       2.4000000000       1.3250000000
+        2.4000000000      -2.4000000000       1.3250000000
+        2.4000000000       2.4000000000      -1.3250000000
+
+ATOMIC_POSITIONS angstrom
+  Si        0.0000000000       0.0000000000       0.0000000000
+  Si        0.0000000000       2.4000000000       0.6625000000
+
+K_POINTS automatic
+  6 6 6  0 0 0

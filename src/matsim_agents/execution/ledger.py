@@ -263,50 +263,101 @@ CLAIM_REQUIREMENTS: dict[str, tuple[EvidenceLevel, frozenset[str]]] = {
     "thermodynamic_stability": (EvidenceLevel.CONVERGED_DFT, frozenset({"stability"})),
     "energy_ranking": (
         EvidenceLevel.MLIP_RELAXATION,
-        frozenset({"energy_ranking", "stability", "characterization"}),
+        frozenset({"energy_ranking", "stability"}),
     ),
 }
 
 
 class EvidenceLedger:
-    """Hash-chained JSON-lines ledger, read fully and verified when opened."""
+    """Hash-chained JSON-lines ledger, read fully and verified when opened.
+
+    A checkpoint beside the ledger (``<ledger>.head``) records the sequence
+    number and hash of the last entry written; opening a ledger that no longer
+    reaches it (a truncated suffix, an emptied or deleted file) is an integrity
+    error. A final line without its newline is an append that crashed before
+    returning; it is ignored and trimmed by the next append.
+    """
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
+        self.head_path = self.path.with_name(self.path.name + ".head")
         self._records: dict[str, LedgerRecord] = {}
         self._order: list[str] = []
         self._heads: dict[str, str] = {}
         self._tip = _GENESIS
+        self._written = 0
+        self._unfinished = 0
+        self._digest = hashlib.sha256(b"").hexdigest()
+        self._head: tuple[int, str] | None = None
         self._load()
-        self._written = self.path.stat().st_size if self.path.is_file() else 0
 
     # ------------------------------------------------------------------ io --
     def _load(self) -> None:
-        if not self.path.is_file():
-            return
+        # The checkpoint is read before the file and written after each append,
+        # so it never runs ahead of the bytes read. The bytes and checkpoint seen
+        # are kept, so ``append`` catches any writer that ran since.
+        head = self._read_head()
+        data = self.path.read_bytes() if self.path.is_file() else b""
+        self._head = head
+        self._written = len(data)
+        self._digest = hashlib.sha256(data).hexdigest()
+        complete = data[: data.rfind(b"\n") + 1]
+        self._unfinished = len(data) - len(complete)
         tip = _GENESIS
-        with self.path.open(encoding="utf-8") as stream:
-            for number, line in enumerate(stream, 1):
-                if not line.strip():
-                    continue
-                try:
-                    entry = json.loads(line)
-                    if entry["seq"] != len(self._order) or entry["prev_hash"] != tip:
-                        raise LedgerIntegrityError(
-                            f"{self.path}:{number}: entry out of sequence or chain broken"
-                        )
-                    if _sha256_text(tip + _canonical(entry["record"])) != entry["entry_hash"]:
-                        raise LedgerIntegrityError(f"{self.path}:{number}: entry hash mismatch")
-                    record = _RECORD_TYPES[entry["record"]["record_type"]].model_validate(
-                        entry["record"]
+        hashes: list[str] = []
+        # Not splitlines(): U+0085, U+2028 and U+2029 are legal inside JSON strings.
+        for number, line in enumerate(complete.decode("utf-8").split("\n"), 1):
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+                if entry["seq"] != len(self._order) or entry["prev_hash"] != tip:
+                    raise LedgerIntegrityError(
+                        f"{self.path}:{number}: entry out of sequence or chain broken"
                     )
-                except LedgerIntegrityError:
-                    raise
-                except (KeyError, TypeError, ValueError) as exc:
-                    raise LedgerIntegrityError(f"{self.path}:{number}: {exc}") from exc
-                self._index(record)
-                tip = entry["entry_hash"]
+                if _sha256_text(tip + _canonical(entry["record"])) != entry["entry_hash"]:
+                    raise LedgerIntegrityError(f"{self.path}:{number}: entry hash mismatch")
+                record = _RECORD_TYPES[entry["record"]["record_type"]].model_validate(
+                    entry["record"]
+                )
+            except LedgerIntegrityError:
+                raise
+            except (KeyError, TypeError, ValueError) as exc:
+                raise LedgerIntegrityError(f"{self.path}:{number}: {exc}") from exc
+            self._index(record)
+            tip = entry["entry_hash"]
+            hashes.append(tip)
         self._tip = tip
+        self._check_head(head, hashes)
+
+    def _read_head(self) -> tuple[int, str] | None:
+        if not self.head_path.is_file():
+            return None
+        try:
+            head = json.loads(self.head_path.read_text(encoding="utf-8"))
+            return int(head["seq"]), str(head["tip"])
+        except (OSError, KeyError, TypeError, ValueError) as exc:
+            raise LedgerIntegrityError(f"{self.head_path}: unreadable checkpoint: {exc}") from exc
+
+    def _check_head(self, head: tuple[int, str] | None, hashes: list[str]) -> None:
+        if head is None:
+            return
+        seq, tip = head
+        # Entries past the checkpoint are allowed: a writer may stop between
+        # appending and updating the checkpoint.
+        if seq > len(hashes) or (seq > 0 and hashes[seq - 1] != tip):
+            raise LedgerIntegrityError(
+                f"{self.path} holds {len(hashes)} entries but its checkpoint records "
+                f"{seq}; entries were truncated or replaced"
+            )
+
+    def _write_head(self) -> None:
+        temporary = self.head_path.with_name(self.head_path.name + ".tmp")
+        with temporary.open("w", encoding="utf-8") as stream:
+            stream.write(_canonical({"seq": len(self._order), "tip": self._tip}) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, self.head_path)
 
     def _index(self, record: LedgerRecord) -> None:
         identifier = record_id(record)
@@ -319,7 +370,7 @@ class EvidenceLedger:
         """Validate and append a record; an identical record already present is returned."""
         identifier = record_id(record)
         if identifier in self._records:
-            return self._records[identifier]
+            return self._existing(identifier)
         if isinstance(record, HypothesisRecord):
             record = record.model_copy(
                 update={"support_level": self.support_level(record.evidence_ids)}
@@ -327,7 +378,7 @@ class EvidenceLedger:
             record = HypothesisRecord.model_validate(record.model_dump(exclude={"revision_id"}))
             identifier = record.revision_id
             if identifier in self._records:
-                return self._records[identifier]
+                return self._existing(identifier)
         problems = self.problems(record)
         if problems:
             raise LedgerValidationError(problems)
@@ -335,11 +386,13 @@ class EvidenceLedger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # A lock file, not flock: flock is unsupported on NERSC CFS compute nodes.
         with exclusive_lock(f"{self.path}.lock", timeout=60, poll_interval=0.05):
-            size = self.path.stat().st_size if self.path.exists() else 0
-            if size != self._written:
-                raise LedgerIntegrityError(
-                    f"{self.path} changed since it was read; reopen the ledger"
-                )
+            data = self._unchanged_bytes()
+            size = len(data)
+            if self._unfinished:
+                size -= self._unfinished
+                os.truncate(self.path, size)
+                data = data[:size]
+                self._unfinished = 0
             entry_hash = _sha256_text(self._tip + _canonical(payload))
             entry = {
                 "schema_version": LEDGER_SCHEMA_VERSION,
@@ -348,14 +401,39 @@ class EvidenceLedger:
                 "entry_hash": entry_hash,
                 "record": payload,
             }
-            with self.path.open("a", encoding="utf-8") as stream:
-                stream.write(_canonical(entry) + "\n")
+            line = (_canonical(entry) + "\n").encode("utf-8")
+            with self.path.open("ab") as stream:
+                stream.write(line)
                 stream.flush()
                 os.fsync(stream.fileno())
-        self._tip = entry_hash
-        self._index(record)
-        self._written = self.path.stat().st_size
+            self._tip = entry_hash
+            self._index(record)
+            self._written = size + len(line)
+            self._digest = hashlib.sha256(data + line).hexdigest()
+            self._write_head()
+            self._head = (len(self._order), self._tip)
         return record
+
+    def _unchanged_bytes(self) -> bytes:
+        """The ledger's bytes, provided no writer ran since it was read; call under the lock."""
+        # A size check alone misses same-size rewrites and truncation back to the loaded size.
+        data = self.path.read_bytes() if self.path.exists() else b""
+        if (
+            len(data) != self._written
+            or hashlib.sha256(data).hexdigest() != self._digest
+            or self._read_head() != self._head
+        ):
+            raise LedgerIntegrityError(f"{self.path} changed since it was read; reopen the ledger")
+        return data
+
+    def _existing(self, identifier: str) -> LedgerRecord:
+        """A record already present; entries recovered past the checkpoint get covered by it."""
+        if self._head != (len(self._order), self._tip):
+            with exclusive_lock(f"{self.path}.lock", timeout=60, poll_interval=0.05):
+                self._unchanged_bytes()
+                self._write_head()
+                self._head = (len(self._order), self._tip)
+        return self._records[identifier]
 
     # ---------------------------------------------------------- validation --
     def support_level(self, evidence_ids: list[str]) -> EvidenceLevel | None:

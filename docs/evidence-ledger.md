@@ -22,6 +22,15 @@ The implementation is in `matsim_agents.execution.ledger`.
   or reordering a line is detected when the ledger is opened
   (`LedgerIntegrityError`). `verify_artifacts()` re-hashes the recorded input
   and output files.
+- **Truncation evidence.** Each append also rewrites a checkpoint beside the
+  ledger, `<ledger>.head`, with the sequence number and hash of the last
+  entry. Opening a ledger that no longer reaches its checkpoint is an
+  integrity error. This covers a dropped suffix and an emptied or deleted
+  file. Copy the checkpoint along with the ledger. A ledger without a
+  checkpoint is read without this check. Deleting both files is not detected.
+- **Concurrent writers.** An append holds `<ledger>.lock`. It is refused if the
+  file changed after this process read it, including an append that raced the
+  read: reopen the ledger and retry.
 - **Immutable history.** A revision of a hypothesis names the revision it
   follows, which must be the latest one. Status changes add revisions; earlier
   revisions are never rewritten (`history(hypothesis_id)` returns all of them).

@@ -150,19 +150,6 @@ class EvaluationConfig(BaseModel):
         return cls.model_validate(data.get("evaluation", data))
 
 
-def random_frame_evaluation(test_fraction: float, seed: int) -> EvaluationConfig:
-    """The random-frame split earlier versions always used (interpolation only)."""
-    return EvaluationConfig(
-        objective="within-distribution interpolation among similar frames (random frames)",
-        split=SplitConfig(
-            strategy="random_frame",
-            train_fraction=1.0 - test_fraction,
-            test_fraction=test_fraction,
-            seed=seed,
-        ),
-    )
-
-
 # --------------------------------------------------------------------------- #
 # MLIP config builders                                                        #
 # --------------------------------------------------------------------------- #
@@ -560,6 +547,7 @@ def run_finetune_endpoints(
     *,
     backend: str,
     elemental_reference_manifest: str | Path,
+    evaluation: EvaluationConfig,
     # UMA
     uma_base_model: str = "uma-s-1p1",
     uma_task_name: str = "omat",
@@ -602,22 +590,21 @@ def run_finetune_endpoints(
     epochs: int = 20,
     lr: float | None = None,
     batch_size: int = 4,
-    test_fraction: float = 0.2,
     seed: int = 0,
     device: str | None = None,
     max_parity_points: int = 20000,
     eval_only: bool = False,
-    evaluation: EvaluationConfig | None = None,
 ) -> Path:
     """Fine-tune one backend on one dataset and evaluate it with explicit data roles.
 
     ``evaluation`` declares the objective, the split, test domains, repetitions,
-    and the selection rule (module docstring); without it, the random-frame
-    split of ``test_fraction`` with ``seed`` is used, as in earlier versions.
-    ``seed`` is also the fine-tuning seed unless ``evaluation.repetitions``
-    lists training seeds. With ``eval_only`` the existing split and fine-tuned
-    checkpoint are re-scored and evaluations are written with a ``_formation``
-    suffix, leaving the original ones untouched.
+    and the selection rule (module docstring). There is no default split: a
+    random-frame split only tests interpolation, so it must be chosen explicitly
+    (``examples/evaluation/random-frame-interpolation.yaml``). ``seed`` is the
+    fine-tuning seed unless ``evaluation.repetitions`` lists training seeds. With
+    ``eval_only`` the existing split and fine-tuned checkpoint are re-scored and
+    evaluations are written with a ``_formation`` suffix, leaving the original
+    ones untouched.
     """
     # Apply the GPU-visibility policy *before* any torch/HydraGNN import happens
     # downstream, so an explicit CPU request is actually honoured.
@@ -627,7 +614,6 @@ def run_finetune_endpoints(
     output_dir = Path(output_dir).expanduser().resolve()
     dev = device or _default_device()
     reference_manifest = Path(elemental_reference_manifest)
-    evaluation = evaluation or random_frame_evaluation(test_fraction, seed)
     frames, validate_method = _dataset_method_check(dataset_path, reference_manifest)
     n_iters = _num_al_iterations(frames)
 
@@ -1145,13 +1131,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--evaluation-config",
         type=Path,
-        default=None,
+        required=True,
         help="YAML evaluation config (objective, split, test domains, repetitions, "
-        "selection); see docs/mlip-evaluation.md. Without it a random-frame split of "
-        "--test-fraction is used.",
+        "selection); see docs/mlip-evaluation.md and examples/evaluation/.",
     )
-    parser.add_argument("--test-fraction", type=float, default=0.2)
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=0, help="Fine-tuning seed.")
     parser.add_argument("--device", default=None)
     parser.add_argument("--max-parity-points", type=int, default=20000)
     parser.add_argument(
@@ -1204,16 +1188,11 @@ def main(argv: list[str] | None = None) -> int:
         epochs=args.epochs,
         lr=args.lr,
         batch_size=args.batch_size,
-        test_fraction=args.test_fraction,
         seed=args.seed,
         device=args.device,
         max_parity_points=args.max_parity_points,
         eval_only=args.eval_only,
-        evaluation=(
-            EvaluationConfig.from_yaml(args.evaluation_config)
-            if args.evaluation_config is not None
-            else None
-        ),
+        evaluation=EvaluationConfig.from_yaml(args.evaluation_config),
     )
     return 0
 

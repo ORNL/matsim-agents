@@ -60,6 +60,18 @@ def test_identifiers_are_content_hashes_and_appends_are_idempotent(tmp_path):
         EvidenceRecord.model_validate({**first.model_dump(), "subject": "Si"})
 
 
+@pytest.mark.parametrize("separator", ["\u0085", "\u2028", "\u2029", "\r"])
+def test_unicode_line_separators_in_text_round_trip(tmp_path, separator):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    evidence = ledger.append(_evidence())
+    text = f"line one{separator}two"
+    claim = ledger.append(_claim([evidence.evidence_id], scientific_claim=text))
+    reopened = EvidenceLedger(path)
+    assert len(reopened) == 2
+    assert reopened.history("hyp-sic")[-1].scientific_claim == claim.scientific_claim
+
+
 def test_a_failure_to_compute_carries_no_values_and_a_reason():
     with pytest.raises(ValueError, match="needs a failure_reason"):
         _evidence(outcome=EvidenceOutcome.FAILED_TO_COMPUTE, values=[])
@@ -93,6 +105,158 @@ def test_concurrent_writers_cannot_fork_the_chain(tmp_path):
     with pytest.raises(LedgerIntegrityError, match="changed since it was read"):
         two.append(_evidence(level=EvidenceLevel.MLIP_RELAXATION, kind="energy_ranking"))
     assert len(EvidenceLedger(path)) == 1
+
+
+@pytest.mark.parametrize("truncate", ["suffix", "empty", "deleted"])
+def test_truncating_the_ledger_is_detected(tmp_path, truncate):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    first = ledger.append(_evidence())
+    ledger.append(_claim([first.evidence_id]))
+    lines = path.read_text().splitlines(keepends=True)
+    if truncate == "suffix":
+        path.write_text(lines[0])
+    elif truncate == "empty":
+        path.write_text("")
+    else:
+        path.unlink()
+    with pytest.raises(LedgerIntegrityError, match="truncated or replaced"):
+        EvidenceLedger(path)
+
+
+def test_entries_past_the_checkpoint_are_accepted(tmp_path):
+    # A writer that stopped between appending and updating the checkpoint.
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    ledger.append(_evidence())
+    checkpoint = (tmp_path / "ledger.jsonl.head").read_text()
+    ledger.append(_evidence(level=EvidenceLevel.MLIP_RELAXATION, kind="energy_ranking"))
+    (tmp_path / "ledger.jsonl.head").write_text(checkpoint)
+    reopened = EvidenceLedger(path)
+    assert len(reopened) == 2
+    reopened.append(_evidence(subject="Si"))
+    assert len(EvidenceLedger(path)) == 3
+
+
+@pytest.mark.parametrize("kind", ["evidence", "hypothesis"])
+def test_retrying_a_recovered_append_checkpoints_it(tmp_path, kind):
+    # The writer stopped before the checkpoint; its retry must protect the entry.
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    first = ledger.append(_evidence())
+    checkpoint = (tmp_path / "ledger.jsonl.head").read_text()
+    record = _evidence(subject="Si") if kind == "evidence" else _claim([first.evidence_id])
+    ledger.append(record)
+    (tmp_path / "ledger.jsonl.head").write_text(checkpoint)
+
+    reopened = EvidenceLedger(path)
+    reopened.append(record)
+    assert json.loads((tmp_path / "ledger.jsonl.head").read_text())["seq"] == 2
+    path.write_text(path.read_text().splitlines(keepends=True)[0])
+    with pytest.raises(LedgerIntegrityError, match="truncated or replaced"):
+        EvidenceLedger(path)
+
+
+def test_an_unfinished_final_line_is_ignored_and_trimmed(tmp_path):
+    # An append that crashed mid-write, before its checkpoint update.
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    ledger.append(_evidence())
+    complete = path.read_bytes()
+    checkpoint = (tmp_path / "ledger.jsonl.head").read_text()
+    ledger.append(_evidence(subject="Si"))
+    second = path.read_bytes()[len(complete) :]
+    path.write_bytes(complete + second[:-1])
+    (tmp_path / "ledger.jsonl.head").write_text(checkpoint)
+    reopened = EvidenceLedger(path)
+    assert len(reopened) == 1
+    reopened.append(_evidence(subject="C"))
+    assert [r.subject for r in EvidenceLedger(path).evidence()] == ["SiC", "C"]
+
+
+def test_an_unfinished_line_the_checkpoint_covers_is_refused(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    ledger.append(_evidence())
+    path.write_bytes(path.read_bytes()[:-1])
+    with pytest.raises(LedgerIntegrityError, match="truncated or replaced"):
+        EvidenceLedger(path)
+
+
+def test_a_stale_writer_cannot_overwrite_a_same_size_replacement(tmp_path):
+    # A torn tail replaced by another writer's complete entry of the same length.
+    path = tmp_path / "ledger.jsonl"
+    EvidenceLedger(path).append(_evidence())
+    complete = path.read_bytes()
+    record = _evidence(subject="Si")
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / "ledger.jsonl").write_bytes(complete)
+    EvidenceLedger(scratch / "ledger.jsonl").append(record)
+    line = (scratch / "ledger.jsonl").read_bytes()[len(complete) :]
+    path.write_bytes(complete + line[:-1] + b" ")
+    stale = EvidenceLedger(path)
+    EvidenceLedger(path).append(record)
+    assert path.stat().st_size == stale._written
+    with pytest.raises(LedgerIntegrityError, match="changed since it was read"):
+        stale.append(_evidence(subject="C"))
+    assert [r.subject for r in EvidenceLedger(path).evidence()] == ["SiC", "Si"]
+
+
+def test_a_stale_writer_cannot_hide_a_truncation_back_to_its_size(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    EvidenceLedger(path).append(_evidence())
+    original = path.read_bytes()
+    stale = EvidenceLedger(path)
+    EvidenceLedger(path).append(_evidence(subject="Si"))
+    path.write_bytes(original)
+    with pytest.raises(LedgerIntegrityError, match="changed since it was read"):
+        stale.append(_evidence(subject="C"))
+    with pytest.raises(LedgerIntegrityError, match="truncated or replaced"):
+        EvidenceLedger(path)
+
+
+def test_an_appending_ledger_stays_usable_and_in_step(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    ledger = EvidenceLedger(path)
+    for subject in ("Si", "C", "SiC"):
+        ledger.append(_evidence(subject=subject))
+    assert ledger._written == path.stat().st_size
+    assert json.loads((tmp_path / "ledger.jsonl.head").read_text())["seq"] == 3
+    assert [r.subject for r in EvidenceLedger(path).evidence()] == ["Si", "C", "SiC"]
+
+
+def test_an_append_racing_the_read_is_detected(tmp_path, monkeypatch):
+    path = tmp_path / "ledger.jsonl"
+    EvidenceLedger(path).append(_evidence())
+    original = EvidenceLedger._check_head
+
+    def race(self, head, hashes):
+        # Another writer appends after this ledger read the file.
+        if not getattr(race, "done", False):
+            race.done = True
+            EvidenceLedger(path).append(_evidence(subject="Si"))
+        original(self, head, hashes)
+
+    monkeypatch.setattr(EvidenceLedger, "_check_head", race)
+    stale = EvidenceLedger(path)
+    assert len(stale) == 1
+    with pytest.raises(LedgerIntegrityError, match="changed since it was read"):
+        stale.append(_evidence(subject="C"))
+
+
+def test_characterization_evidence_does_not_support_an_energy_ranking(tmp_path):
+    ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
+    relaxed = ledger.append(_evidence(level=EvidenceLevel.MLIP_RELAXATION, kind="characterization"))
+    with pytest.raises(LedgerValidationError, match="needs evidence of kind"):
+        ledger.append(
+            _claim(
+                [relaxed.evidence_id],
+                hypothesis_id="hyp-rank",
+                claim_type="energy_ranking",
+                scientific_claim="3C is below 2H",
+            )
+        )
 
 
 def test_claims_must_cite_existing_measured_evidence(tmp_path):
