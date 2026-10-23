@@ -1,0 +1,10 @@
+# matsim-agents benchmark agent-eval benchmarks/agent_eval/example-config.yaml
+# Edit models and base_url for your endpoints; every arm gets the same token budget per case.
+participants:
+  - {name: alpha, provider: vllm, model: Qwen/Qwen3-32B, base_url: http://localhost:8000/v1}
+  - {name: beta, provider: vllm, model: meta-llama/Llama-3.3-70B-Instruct, base_url: http://localhost:8001/v1}
+arms: [no_llm, single_llm, multi_llm_no_critique, multi_llm_cross_critique]
+rounds: 2
+completion_tokens_per_case: 16384
+decoding: {temperature: 0.0}
+random_seeds: [0, 1, 2]
