@@ -171,6 +171,9 @@ class RelaxationStageResult(BaseModel):
     steps: int = 0
     converged: bool = False
     failure_reason: str | None = None
+    return_code: int | None = None
+    scf_converged: bool | None = None
+    wall_time_sec: float | None = None
     artifacts: dict[str, str] = Field(default_factory=dict)
 
 
@@ -183,6 +186,7 @@ class ScientificRelaxationResult(BaseModel):
     final_structure_path: str | None = None
     validations: list[ValidationRecord] = Field(default_factory=list)
     failure_reason: str | None = None
+    failure_type: str | None = None
 
 
 def _apply_constraints(path: str, destination: Path, controls: GeometryControls) -> str:
@@ -289,6 +293,9 @@ def _dft_stage(
             failure_reason=None
             if result.converged
             else f"VASP did not converge (return code {result.return_code})",
+            return_code=result.return_code,
+            scf_converged=not any(n >= settings.nelm for n in result.scf_iterations_per_step),
+            wall_time_sec=result.wall_time_sec,
             artifacts={"work_dir": str(work_dir)},
         )
 
@@ -321,6 +328,10 @@ def _dft_stage(
         if result.final_max_force_ry_au is not None
         else None
     )
+    try:
+        stdout = Path(result.stdout_path).read_text(errors="replace")
+    except OSError:
+        stdout = ""
     return RelaxationStageResult(
         stage="dft_relaxation",
         backend="qe",
@@ -336,6 +347,9 @@ def _dft_stage(
         failure_reason=None
         if result.converged
         else f"QE did not converge (return code {result.return_code})",
+        return_code=result.return_code,
+        scf_converged="convergence NOT achieved" not in stdout,
+        wall_time_sec=result.wall_time_sec,
         artifacts={"input": input_file, "stdout": result.stdout_path},
     )
 
@@ -422,6 +436,7 @@ def run_relaxation(
             stages=stages,
             validations=validations,
             failure_reason=str(exc),
+            failure_type=type(exc).__name__,
         )
     run.write_json("results.json", result)
     run.append_event(

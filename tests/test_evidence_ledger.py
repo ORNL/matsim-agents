@@ -353,3 +353,47 @@ def test_cli_verifies_and_shows_the_ledger(tmp_path):
     path.write_text(path.read_text().replace('"value":0.0', '"value":1.0'))
     result = runner.invoke(app, ["ledger", "verify", str(path)])
     assert result.exit_code == 1 and "tampered" in result.output
+
+
+def test_records_written_before_cost_fields_keep_their_identifiers():
+    from matsim_agents.execution.ledger import CostRecord
+
+    failed = EvidenceRecord(
+        kind="relaxation",
+        subject="Si",
+        method=MethodRecord(backend="qe", method_signature="pbe"),
+        evidence_level=EvidenceLevel.LOW_FIDELITY_DFT,
+        outcome=EvidenceOutcome.FAILED_TO_COMPUTE,
+        failure_reason="x",
+    )
+    decision = DecisionRecord(
+        action="promote", subject="Si", evidence_ids=[failed.evidence_id], actor="review"
+    )
+    # Identifiers computed by the code before policy and cost fields existed.
+    assert failed.evidence_id == "ev-e511d7395ade158e179d37c9"
+    assert decision.decision_id == "dc-7ba4b1538167015a8f5dc43e"
+    costed = decision.model_copy(update={"decision_id": "", "observed_cost": CostRecord()})
+    assert DecisionRecord.model_validate(costed.model_dump()).decision_id != decision.decision_id
+
+
+def test_the_ledger_sums_observed_cost_by_category(tmp_path):
+    from matsim_agents.execution.ledger import CostRecord
+
+    ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
+    dft = ledger.append(_evidence(cost=CostRecord(dft_calculations=1, dft_seconds=30.0)))
+    ledger.append(_evidence(kind="relaxation", subject="Si", cost=CostRecord(failed_jobs=1)))
+    ledger.append(
+        DecisionRecord(
+            action="promote",
+            subject="SiC",
+            evidence_ids=[dft.evidence_id],
+            actor="debate:run-1",
+            policy_version="review-v1",
+            thresholds={"energy_above_hull_eV_per_atom": 0.05},
+            observed_cost=CostRecord(llm_prompt_tokens=100, llm_completion_tokens=20),
+        )
+    )
+    cost = EvidenceLedger(tmp_path / "ledger.jsonl").summary()["cost"]
+    assert cost["dft_calculations"] == 1 and cost["dft_seconds"] == 30.0
+    assert cost["failed_jobs"] == 1
+    assert cost["llm_prompt_tokens"] == 100 and cost["llm_completion_tokens"] == 20

@@ -28,7 +28,7 @@ from matsim_agents.discovery.stability import (
     recalibrate_hull_reports,
 )
 from matsim_agents.execution.contracts import WorkflowStatus
-from matsim_agents.execution.ledger import DecisionRecord, HypothesisRecord
+from matsim_agents.execution.ledger import CostRecord, DecisionRecord, HypothesisRecord
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
@@ -64,6 +64,9 @@ class CampaignReviewDecision(BaseModel):
     )
     hypothesis_revisions: list[HypothesisRecord] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    policy_version: str | None = None
+    thresholds: dict[str, float] = Field(default_factory=dict)
+    cost: CostRecord | None = Field(None, description="What the review itself cost (LLM).")
 
 
 class CampaignRunResult(BaseModel):
@@ -382,6 +385,10 @@ def _record_review_decisions(
                 evidence_ids=decision.evidence_ids.get(formula, []),
                 rationale="; ".join(note for note in decision.notes if formula in note),
                 actor=actor,
+                policy_version=decision.policy_version,
+                thresholds=decision.thresholds,
+                # The review's cost is counted once, on its first decision.
+                observed_cost=None if decision_ids else decision.cost,
             )
             problems = ledger.problems(record)
             if problems:
