@@ -166,10 +166,10 @@ anywhere from ~3.5 to 8+ hours depending on which compute node is assigned.
 - HydraGNN runtime dependencies (`scikit-learn==1.7.2`, `vesin==0.4.2`)
 - `huggingface_hub` (includes `hf` CLI for resumable model downloads)
 - `transformers` + `accelerate`
-- Optional: `fairchem-core` (UMA MLIP backend) in `$MATSIM_DIR/.venv-uma` when
-  `INSTALL_UMA=1`
-- Optional: `mace-torch==0.3.16` in `$MATSIM_DIR/.venv-mace` when
-  `INSTALL_MACE=1`
+- `fairchem-core` (UMA MLIP backend) in `$MATSIM_DIR/.venv-uma` unless
+  `INSTALL_UMA=0`
+- `mace-torch==0.3.16` in `$MATSIM_DIR/.venv-mace` unless
+  `INSTALL_MACE=0`
 - Optional: `vllm` in `$MATSIM_DIR/venv_vllm` when `INSTALL_VLLM=1`
 
 **Install root + environment path (default):**

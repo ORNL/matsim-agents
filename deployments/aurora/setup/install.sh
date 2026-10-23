@@ -10,9 +10,9 @@ HYDRAGNN_REF="${HYDRAGNN_REF:-}"
 INSTALL_ROOT="${INSTALL_ROOT:-${MATSIM_DIR}/.hpc-build/aurora}"
 VENV_PATH="${VENV_PATH:-${MATSIM_DIR}/.venv}"
 MATSIM_EXTRAS="${MATSIM_EXTRAS:-hydragnn,dev,openai,ollama,anthropic,huggingface}"
-INSTALL_UMA="${INSTALL_UMA:-0}"
+INSTALL_UMA="${INSTALL_UMA:-1}"
 UMA_VENV_PATH="${UMA_VENV_PATH:-${MATSIM_DIR}/.venv-uma}"
-INSTALL_MACE="${INSTALL_MACE:-0}"
+INSTALL_MACE="${INSTALL_MACE:-1}"
 MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"
 RECREATE_ENV="${RECREATE_ENV:-0}"
 REUSE_HYDRAGNN_DEPENDENCIES="${REUSE_HYDRAGNN_DEPENDENCIES:-0}"
@@ -201,4 +201,5 @@ if [[ "${RUN_MODEL_TESTS}" == "1" ]]; then
     )
 fi
 
-log "Complete. Activate with: module load ${FRAMEWORKS_MODULE} && source ${VENV_PATH}/bin/activate"
+log "Complete. Activate with: module load ${FRAMEWORKS_MODULE} && export MATSIM_AURORA_VENV=${VENV_PATH} MATSIM_FAIRCHEM_VENV=${UMA_VENV_PATH} MATSIM_MACE_VENV=${MACE_VENV_PATH} && source ${SCRIPT_DIR}/setup_matsim_aurora.sh"
+log "Then verify backends with: matsim-agents capabilities check"

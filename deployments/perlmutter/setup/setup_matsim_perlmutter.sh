@@ -97,6 +97,10 @@ if [[ -f "${HYDRAGNN_SC26_DIR}/inference_fused.py" ]]; then
 fi
 
 echo ""
+echo "Runtime defaults:"
+source "${MATSIM_AGENTS_DIR}/deployments/common/setup/matsim-runtime-env.sh" perlmutter "${MATSIM_AGENTS_DIR}"
+
+echo ""
 echo "✓ Environment setup complete!"
 echo "  - Python: $(which python)"
 echo "  - CUDA: $(which nvcc || echo 'not found')"

@@ -13,6 +13,10 @@ relaxation
 
 ## Capability and execution status
 
+Per-backend tasks, evidence levels and requirements are in
+[capabilities.md](capabilities.md); `matsim-agents capabilities check` reports
+which backends can run in the current environment.
+
 | Workflow | Public implementation | Current execution status |
 | --- | --- | --- |
 | Structure relaxation | `matsim-agents relax CONFIG.yaml` | End-to-end for configured MLIP, QE, and VASP environments |

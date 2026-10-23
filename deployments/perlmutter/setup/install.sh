@@ -10,12 +10,14 @@ HYDRAGNN_REF="${HYDRAGNN_REF:-main}"
 INSTALL_ROOT="${INSTALL_ROOT:-${MATSIM_DIR}/.hpc-build/perlmutter}"
 VENV_PATH="${VENV_PATH:-${MATSIM_DIR}/.venv}"
 MATSIM_EXTRAS="${MATSIM_EXTRAS:-hydragnn,dev,openai,ollama,anthropic,huggingface}"
-INSTALL_UMA="${INSTALL_UMA:-0}"
+INSTALL_UMA="${INSTALL_UMA:-1}"
 UMA_VENV_PATH="${UMA_VENV_PATH:-${MATSIM_DIR}/.venv-uma}"
-INSTALL_MACE="${INSTALL_MACE:-0}"
+RECREATE_UMA_ENV="${RECREATE_UMA_ENV:-0}"
+INSTALL_MACE="${INSTALL_MACE:-1}"
 MACE_VENV_PATH="${MACE_VENV_PATH:-${MATSIM_DIR}/.venv-mace}"
 RECREATE_MACE_ENV="${RECREATE_MACE_ENV:-0}"
 INSTALL_VLLM="${INSTALL_VLLM:-0}"
+RECREATE_VLLM_ENV="${RECREATE_VLLM_ENV:-0}"
 VLLM_VENV_PATH="${VLLM_VENV_PATH:-${MATSIM_DIR}/venv_vllm}"
 EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
 
@@ -54,7 +56,7 @@ log "Installing HydraGNN and matsim-agents wheels into the same environment"
 if [[ "${INSTALL_UMA}" == "1" ]]; then
     log "Installing UMA in its Torch-compatible matsim-owned environment"
     MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" UMA_VENV_PATH="${UMA_VENV_PATH}" \
-        RECREATE_UMA_ENV="${RECREATE_MACE_ENV}" \
+        RECREATE_UMA_ENV="${RECREATE_UMA_ENV}" \
         bash "${MATSIM_DIR}/deployments/common/setup/install-uma-compat.sh"
 fi
 if [[ "${INSTALL_MACE}" == "1" ]]; then
@@ -66,8 +68,9 @@ fi
 if [[ "${INSTALL_VLLM}" == "1" ]]; then
     log "Installing vLLM in its own torch-incompatible matsim-owned environment"
     MATSIM_DIR="${MATSIM_DIR}" BASE_VENV="${VENV_PATH}" VLLM_VENV_PATH="${VLLM_VENV_PATH}" \
-        RECREATE_VLLM_ENV="${RECREATE_MACE_ENV}" \
+        RECREATE_VLLM_ENV="${RECREATE_VLLM_ENV}" \
         bash "${MATSIM_DIR}/deployments/common/setup/install-vllm-compat.sh"
 fi
 
-log "Complete. Activate with: source ${VENV_PATH}/bin/activate"
+log "Complete. Activate with: export MATSIM_PERLMUTTER_VENV=${VENV_PATH} MATSIM_FAIRCHEM_VENV=${UMA_VENV_PATH} MATSIM_MACE_VENV=${MACE_VENV_PATH} && source ${SCRIPT_DIR}/setup_matsim_perlmutter.sh --gpu"
+log "Then verify backends with: matsim-agents capabilities check"
