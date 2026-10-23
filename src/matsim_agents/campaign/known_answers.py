@@ -16,6 +16,7 @@ the ledger as a decision citing that evidence.
 from __future__ import annotations
 
 import math
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -143,8 +144,16 @@ def grade_case(case: KnownAnswerCase, report: CharacterizationReport) -> KnownAn
     ]
     if case.expected_ground_state is not None:
         # The ranked structure at zero relative energy, or the structure a hull
-        # assessment reports on; the conclusion must name it too.
+        # assessment reports on; the conclusion must name it and no other structure.
         conclusion = report.conclusion or ""
+        named = sorted(
+            {
+                Path(value.structure).name
+                for value in report.observables
+                if value.structure
+                and re.search(rf"(?<![\w.-]){re.escape(Path(value.structure).name)}", conclusion)
+            }
+        )
         ground = next(
             (
                 Path(value.structure).name
@@ -161,8 +170,9 @@ def grade_case(case: KnownAnswerCase, report: CharacterizationReport) -> KnownAn
             KnownAnswerCheck(
                 name="ground_state",
                 passed=ground == case.expected_ground_state
-                and case.expected_ground_state in conclusion,
-                detail=f"ground state {ground}, expected {case.expected_ground_state}",
+                and named == [case.expected_ground_state],
+                detail=f"ground state {ground}, conclusion names {named}, "
+                f"expected {case.expected_ground_state}",
             )
         )
     if case.expected_on_hull is not None:

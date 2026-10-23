@@ -123,6 +123,26 @@ def test_grader_fails_a_conclusion_with_the_wrong_hull_relation(tmp_path, monkey
     ]
 
 
+def test_grader_fails_a_conclusion_that_ranks_the_wrong_structure_lowest(tmp_path, monkeypatch):
+    from matsim_agents.campaign import known_answers
+
+    real = known_answers.run_characterization
+
+    def inverted_conclusion(contract, **kwargs):
+        report = real(contract, **kwargs)
+        wrong = "Si-beta-tin.vasp is the lowest-energy phase, below Si-diamond.vasp."
+        return report.model_copy(update={"conclusion": wrong})
+
+    monkeypatch.setattr(known_answers, "run_characterization", inverted_conclusion)
+    (verdict,) = run_known_answers(
+        SUITE, tier="replay", output_dir=tmp_path, cases=["si-diamond-vs-beta-tin"]
+    ).verdicts
+    assert verdict.reasons == [
+        "ground state Si-diamond.vasp, conclusion names ['Si-beta-tin.vasp', "
+        "'Si-diamond.vasp'], expected Si-diamond.vasp"
+    ]
+
+
 def test_each_run_uses_a_fresh_directory(tmp_path):
     first = run_known_answers(SUITE, tier="replay", output_dir=tmp_path, cases=["si-step-limited"])
     second = run_known_answers(SUITE, tier="replay", output_dir=tmp_path, cases=["si-step-limited"])

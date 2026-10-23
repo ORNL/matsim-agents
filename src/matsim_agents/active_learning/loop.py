@@ -162,6 +162,11 @@ def _split_training_validation_frames(
     held out only if it fits the remaining target, so a long trajectory waits
     for the cumulative target to grow.
     """
+    if shared := existing_training_trajectories & existing_validation_trajectories:
+        raise ValueError(
+            f"persisted training and validation datasets share trajectories {sorted(shared)}; "
+            "repartition them by trajectory_id before resuming"
+        )
     if validation_fraction <= 0.0:
         return frames, []
     total = existing_training_count + existing_validation_count + len(frames)

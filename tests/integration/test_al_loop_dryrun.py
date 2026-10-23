@@ -860,6 +860,49 @@ def test_retried_iteration_keeps_trajectories_on_their_persisted_side(tmp_path):
         assert [f.atoms.info["trajectory_id"] for f in validation] == ["t1"]
 
 
+def test_resuming_a_framewise_split_requires_repartitioning(
+    tmp_path, monkeypatch, elemental_manifest
+):
+    from ase.io import read
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.trainer = TrainerConfig(
+        enabled=False,
+        train_script=cfg.trainer.train_script,
+        validation_fraction=0.5,
+        validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
+    )
+    _patch_runtime(loop_mod, monkeypatch)
+    # The legacy framewise splitter put frames of one trajectory on both sides.
+    split = loop_mod._split_training_validation_frames
+    monkeypatch.setattr(
+        loop_mod,
+        "_split_training_validation_frames",
+        lambda frames, **_kwargs: (frames[:-1], frames[-1:]),
+    )
+    one_trajectory = [_make_candidate(i) for i in range(3)]
+    for candidate in one_trajectory:
+        candidate.seed_path = "/dummy.vasp"
+    monkeypatch.setattr(loop_mod, "sample_md_candidates", lambda *_a, **_k: one_trajectory)
+    loop_mod.run_active_learning(cfg)
+    training, validation = (
+        read(cfg.loop.out_dir / name, index=":") for name in ("dataset.extxyz", "validation.extxyz")
+    )
+    assert loop_mod._trajectory_ids(training) & loop_mod._trajectory_ids(validation)
+    monkeypatch.setattr(loop_mod, "_split_training_validation_frames", split)
+    cfg.loop.resume = True
+    cfg.loop.n_iterations = 2
+    monkeypatch.setattr(
+        loop_mod,
+        "sample_md_candidates",
+        lambda *_args, **_kwargs: [_make_candidate(i) for i in range(10, 13)],
+    )
+    with pytest.raises(ValueError, match="share trajectories.*repartition"):
+        loop_mod.run_active_learning(cfg)
+
+
 def test_external_validation_frames_never_enter_training(
     tmp_path, monkeypatch, elemental_manifest, dataset_method_sidecar
 ):
