@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
+import inspect
 import os
 import shutil
 import subprocess
@@ -168,15 +168,26 @@ def get_capability(name: str) -> BackendCapability:
 
 
 def _module_found(module: str) -> bool:
+    # Walks package paths instead of find_spec("a.b"), which would run a/__init__.py.
+    import importlib.machinery
+    import importlib.util
+
+    top, *rest = module.split(".")
     try:
-        return importlib.util.find_spec(module) is not None
+        spec = importlib.util.find_spec(top)
+        for part in rest:
+            path = spec.submodule_search_locations if spec else None
+            if not path:
+                return False
+            spec = importlib.machinery.PathFinder.find_spec(part, list(path))
     except (ImportError, ValueError):
         return False
+    return spec is not None
 
 
 _PROBE = (
-    "import importlib.util as u, sys\n"
-    "sys.exit(0 if all(u.find_spec(m) for m in sys.argv[1:]) else 1)"
+    inspect.getsource(_module_found)
+    + "import sys\nsys.exit(0 if all(map(_module_found, sys.argv[1:])) else 1)\n"
 )
 
 

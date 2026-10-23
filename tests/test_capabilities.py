@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import typing
 from pathlib import Path
 
@@ -91,6 +92,28 @@ def test_check_reports_companion_venv_without_the_modules(monkeypatch, tmp_path)
     )
 
 
+def _boobytrapped_package(tmp_path: Path) -> str:
+    pkg = tmp_path / "trapped_pkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("raise RuntimeError('parent ran')\n", encoding="utf-8")
+    (pkg / "calculators.py").write_text("", encoding="utf-8")
+    return str(tmp_path)
+
+
+def test_dotted_module_lookup_does_not_run_parent_package(monkeypatch, tmp_path):
+    monkeypatch.syspath_prepend(_boobytrapped_package(tmp_path))
+    assert caps._module_found("trapped_pkg.calculators")
+    assert not caps._module_found("trapped_pkg.missing")
+    assert "trapped_pkg" not in sys.modules
+
+
+def test_venv_probe_does_not_run_parent_package(monkeypatch, tmp_path):
+    monkeypatch.setenv("PYTHONPATH", _boobytrapped_package(tmp_path))
+    python = Path(sys.executable)
+    assert caps._venv_has_modules(python, ["trapped_pkg.calculators"])
+    assert not caps._venv_has_modules(python, ["trapped_pkg.missing"])
+
+
 def test_check_all_filters_by_kind():
     assert {r.kind for r in caps.check_all(["mlip"], environ={})} == {"mlip"}
     assert len(caps.check_all(environ={})) == len(caps.CAPABILITIES)
@@ -109,6 +132,16 @@ def test_cli_check_json_and_require(monkeypatch):
     assert {r["name"] for r in json.loads(result.output)} == _names("llm")
     assert runner.invoke(app, ["capabilities", "check", "--require", "openai"]).exit_code == 1
     assert runner.invoke(app, ["capabilities", "check", "--require", "castep"]).exit_code == 2
+
+
+def test_cli_check_json_stays_parseable_when_a_required_backend_is_missing(monkeypatch):
+    monkeypatch.setattr(caps, "_module_found", lambda module: False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    args = ["capabilities", "check", "--kind", "llm", "--json", "--require", "openai"]
+    result = CliRunner().invoke(app, args)
+    assert result.exit_code == 1
+    assert {r["name"] for r in json.loads(result.stdout)} == _names("llm")
+    assert "openai" in result.stderr
 
 
 def test_cli_matrix_writes_the_markdown(tmp_path):

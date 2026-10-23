@@ -31,7 +31,7 @@ def capabilities_check(
     try:
         required = [check(get_capability(name)) for name in require or ()]
     except KeyError as exc:
-        console.print(f"[red]{exc.args[0]}[/red]")
+        typer.echo(exc.args[0], err=True)
         raise typer.Exit(code=2) from None
     results = check_all(kind)
     if as_json:
@@ -45,7 +45,7 @@ def capabilities_check(
             console.print(f"{r.kind:4} {r.name:12} {status}{detail}")
     unavailable = [r.name for r in required if not r.available]
     if unavailable:
-        console.print(f"[red]required backend(s) unavailable[/red]: {', '.join(unavailable)}")
+        typer.echo(f"required backend(s) unavailable: {', '.join(unavailable)}", err=True)
         raise typer.Exit(code=1)
 
 
