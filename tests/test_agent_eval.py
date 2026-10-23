@@ -96,7 +96,7 @@ def test_an_mlip_only_stability_claim_is_wrong_however_argued(tmp_path):
     grade = grade_answer(
         case, records, ledger, AgentAnswer(status="supported", evidence_ids=[surrogate])
     )
-    assert not grade.correct
+    assert not grade.correct and not grade.evidence_attribution
     assert any("converged_dft" in p for p in grade.problems)
     grade = grade_answer(case, records, ledger, AgentAnswer(status="unresolved", request_dft=True))
     assert grade.correct and grade.correctly_inconclusive and grade.dft_request_correct
@@ -109,6 +109,7 @@ def test_failed_evidence_and_invented_ids_are_not_attribution(tmp_path):
         case, records, ledger, AgentAnswer(status="contradicted", evidence_ids=[crashed])
     )
     assert not grade.correct and grade.correctly_inconclusive is False
+    assert not grade.evidence_attribution
     assert any("not evidence for or against" in p for p in grade.problems)
     case, records, ledger = _ledger(tmp_path, "sic-3c-on-hull")
     grade = grade_answer(
@@ -129,6 +130,21 @@ def test_a_decisive_answer_must_cite_the_deciding_evidence(tmp_path):
     assert not grade_answer(case, records, ledger, None).correct
 
 
+def test_a_conclusion_needing_several_records_must_cite_them_all(tmp_path):
+    case, records, ledger = _ledger(tmp_path, "sic-zincblende-conflicting-dft")
+    case = case.model_copy(
+        update={"expected_status": "supported", "decisive_evidence": ["hull-soft", "hull-hard"]}
+    )
+    soft, hard = records["hull-soft"].evidence_id, records["hull-hard"].evidence_id
+    partial = grade_answer(
+        case, records, ledger, AgentAnswer(status="supported", evidence_ids=[soft])
+    )
+    assert not partial.correct and not partial.evidence_attribution
+    assert grade_answer(
+        case, records, ledger, AgentAnswer(status="supported", evidence_ids=[soft, hard])
+    ).correct
+
+
 def test_conflicting_admissible_evidence_is_unresolved(tmp_path):
     case, records, ledger = _ledger(tmp_path, "sic-zincblende-conflicting-dft")
     soft = records["hull-soft"].evidence_id
@@ -147,6 +163,11 @@ def test_panel_majority_and_ties():
     tie = aggregate_answers([yes, no])
     assert tie.status == "unresolved" and tie.evidence_ids == []
     assert aggregate_answers([]) is None
+    # Unparsed replies abstain but still count toward the majority.
+    lone = aggregate_answers([yes, None, None])
+    assert lone.status == "unresolved" and not lone.request_dft
+    assert aggregate_answers([no, None, None]).request_dft is False
+    assert aggregate_answers([None, None]) is None
 
 
 def test_parse_answer_takes_the_last_valid_object():
@@ -165,6 +186,42 @@ def test_arms_share_one_completion_budget():
         AgentEvalConfig(participants=_participants(2), completion_tokens_per_case=1000)
     with pytest.raises(ValueError, match="must be among"):
         AgentEvalConfig(participants=_participants(2), arms=[BenchmarkArm.RANDOM])
+
+
+@pytest.mark.parametrize(
+    ("provider", "decoding"),
+    [
+        ("ollama", {"num_predict": 8192}),
+        ("vllm", {"max_tokens": 8192}),
+        ("anthropic", {"seed": 1}),
+        ("huggingface", {"top_p": 0.9}),
+    ],
+)
+def test_decoding_that_would_be_ignored_or_lift_the_budget_is_rejected(provider, decoding):
+    participants = [DebateParticipant(name="a", provider=provider, model="m")]
+    with pytest.raises(ValueError, match="would not be applied"):
+        AgentEvalConfig(
+            participants=participants, arms=[BenchmarkArm.SINGLE_LLM], decoding=decoding
+        )
+
+
+def test_vllm_requests_carry_the_decoding_controls():
+    from unittest.mock import MagicMock, patch
+
+    from langchain_core.messages import HumanMessage
+
+    from matsim_agents.backends.llm.provider import get_chat_model
+
+    client = MagicMock()
+    client.chat.completions.create.return_value.choices[0].message.content = "ok"
+    model = get_chat_model(
+        provider="vllm", model="m", max_tokens=300, temperature=0.2, top_p=0.5, seed=7
+    )
+    with patch("openai.OpenAI", return_value=client):
+        model.invoke([HumanMessage(content="hi")])
+    sent = client.chat.completions.create.call_args.kwargs
+    assert (sent["temperature"], sent["top_p"], sent["seed"]) == (0.2, 0.5, 7)
+    assert sent["max_completion_tokens"] == 300
 
 
 def test_example_config_is_valid():
@@ -226,6 +283,26 @@ def test_run_compares_arms_at_equal_budget_and_keeps_an_audit_trail(tmp_path):
     saved = json.loads((run_dir / "summary.json").read_text())
     assert saved["protocol_digest"] == result.protocol_digest
     assert saved["config"]["decoding"] == {"temperature": 0.3}
+
+
+def test_repeats_do_not_add_pairs(tmp_path):
+    config = AgentEvalConfig(
+        participants=_participants(1),
+        arms=[BenchmarkArm.NO_LLM, BenchmarkArm.SINGLE_LLM],
+        completion_tokens_per_case=1024,
+        random_seeds=[0, 1, 2],
+    )
+    cases = ["sic-3c-on-hull", "si2c-no-evidence", "sic-rocksalt-on-hull"]
+    result = run_agent_eval(
+        SUITE,
+        config,
+        output_dir=tmp_path,
+        model_factory=lambda **_: _Model(_oracle),
+        cases=cases,
+    )
+    assert {c.n_pairs for c in result.comparisons} == {len(cases)}
+    single = next(s for s in result.summaries if s.arm == BenchmarkArm.SINGLE_LLM)
+    assert single.answers == 3 * len(cases)
 
 
 def test_unparseable_replies_are_graded_wrong(tmp_path):

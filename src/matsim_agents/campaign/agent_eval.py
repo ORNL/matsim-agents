@@ -65,6 +65,14 @@ METRICS = (
     BenchmarkMetric(name="dft_request_correct", direction="maximize"),
     BenchmarkMetric(name="completion_tokens", direction="minimize", unit="tokens"),
 )
+# Decoding controls each provider applies to its requests; output limits are the benchmark's.
+_DECODING_CONTROLS = {
+    "vllm": {"temperature", "top_p", "seed"},
+    "openai": {"temperature", "top_p", "seed"},
+    "ollama": {"temperature", "top_p", "seed"},
+    "anthropic": {"temperature", "top_p"},
+}
+_DEFAULT_DECODING_CONTROLS = {"temperature"}
 _DEFAULT_COMPARISONS = (
     (BenchmarkArm.SINGLE_LLM, BenchmarkArm.NO_LLM),
     (BenchmarkArm.MULTI_LLM_NO_CRITIQUE, BenchmarkArm.SINGLE_LLM),
@@ -140,12 +148,13 @@ class AgentEvalConfig(BaseModel):
     )
     decoding: dict[str, float | int | str | bool] = Field(
         default_factory=lambda: {"temperature": 0.0},
-        description="Passed to the model factory for every call.",
+        description="temperature, top_p, seed: only controls every participant's provider applies.",
     )
     random_seeds: list[int] = Field(
         default_factory=lambda: [0],
         min_length=1,
-        description="Labels of repeated runs; put a provider seed in decoding to fix sampling.",
+        description="Labels of repeated runs, averaged per case before arms are compared; "
+        "put a provider seed in decoding to fix sampling.",
     )
     comparisons: list[tuple[BenchmarkArm, BenchmarkArm]] = Field(
         default_factory=lambda: list(_DEFAULT_COMPARISONS),
@@ -169,6 +178,14 @@ class AgentEvalConfig(BaseModel):
         multi = {BenchmarkArm.MULTI_LLM_NO_CRITIQUE, BenchmarkArm.MULTI_LLM_CROSS_CRITIQUE}
         if multi & set(self.arms) and len(self.participants) < 2:
             raise ValueError("multi-LLM arms need at least two participants")
+        for participant in self.participants:
+            applied = _DECODING_CONTROLS.get(participant.provider, _DEFAULT_DECODING_CONTROLS)
+            if ignored := sorted(set(self.decoding) - applied):
+                raise ValueError(
+                    f"decoding {ignored} would not be applied to {participant.name} "
+                    f"({participant.provider} applies {sorted(applied)}); output limits "
+                    "come from completion_tokens_per_case"
+                )
         for arm in self.arms:
             if (calls := self.calls(arm)) and self.completion_tokens_per_case // calls < (
                 MIN_TOKENS_PER_CALL
@@ -337,17 +354,11 @@ def grade_answer(
                 evidence_ids=answer.evidence_ids,
             )
         )
-        if decisive and not decisive & set(answer.evidence_ids):
-            problems.append("does not cite the evidence that decides the claim")
+        if missing := sorted(decisive - set(answer.evidence_ids)):
+            problems.append(f"does not cite the evidence that decides the claim: {missing}")
+    attribution = not problems
     if answer.status != case.expected_status:
         problems.append(f"answered {answer.status}; expected {case.expected_status}")
-    attribution = not invented and (
-        answer.status == "unresolved"
-        or (
-            bool(answer.evidence_ids)
-            and (not decisive or bool(decisive & set(answer.evidence_ids)))
-        )
-    )
     return AgentEvalGrade(
         correct=not problems,
         evidence_attribution=attribution,
@@ -357,32 +368,36 @@ def grade_answer(
     )
 
 
-def aggregate_answers(answers: list[AgentAnswer]) -> AgentAnswer | None:
-    """Majority verdict; without a strict majority the panel is unresolved."""
-    if not answers:
+def aggregate_answers(answers: list[AgentAnswer | None]) -> AgentAnswer | None:
+    """Strict majority of the whole panel; unparsed replies (None) abstain."""
+    valid = [a for a in answers if a is not None]
+    if not valid:
         return None
-    status, votes = Counter(a.status for a in answers).most_common(1)[0]
+    status, votes = Counter(a.status for a in valid).most_common(1)[0]
     if votes * 2 <= len(answers):
         status = "unresolved"
-    majority = [a for a in answers if a.status == status]
+    majority = [a for a in valid if a.status == status]
     return AgentAnswer(
         status=status,
         evidence_ids=list(dict.fromkeys(i for a in majority for i in a.evidence_ids)),
-        request_dft=sum(a.request_dft for a in answers) * 2 > len(answers),
+        request_dft=sum(a.request_dft for a in valid) * 2 > len(answers),
         rationale="\n\n".join(a.rationale for a in majority),
     )
 
 
 def _debate_answers(
     cfg: ScientificDebateConfig, model_factory: Callable[..., Any]
-) -> tuple[list[AgentAnswer], ArmAnswer]:
+) -> tuple[list[AgentAnswer | None], ArmAnswer]:
+    """One answer per participant; None where its reply did not parse."""
     result = run_scientific_debate(cfg, model_factory=model_factory)
-    answers, failures = [], 0
+    answers: list[AgentAnswer | None] = []
     for verdict in result.verdicts:
         try:
             answers.append(parse_answer(verdict.response))
         except ValueError:
-            failures += 1
+            answers.append(None)
+    answers += [None] * (len(cfg.participants) - len(answers))
+    failures = answers.count(None)
     with open(result.contributions_path, encoding="utf-8") as stream:
         contributions = [json.loads(line) for line in stream if line.strip()]
     return answers, ArmAnswer(
@@ -443,7 +458,7 @@ def run_arm(
 
     if arm == BenchmarkArm.SINGLE_LLM:
         answers, part = _debate_answers(single(participants[0]), factory)
-        return _merge([part], answers[0] if answers else None)
+        return _merge([part], answers[0])
     if arm == BenchmarkArm.MULTI_LLM_NO_CRITIQUE:
         runs = [_debate_answers(single(p), factory) for p in participants]
         answers = [a for found, _ in runs for a in found]
@@ -509,32 +524,44 @@ def _summaries(records: list[AgentEvalRecord], arms: list[BenchmarkArm]) -> list
 
 
 def _observations(
-    records: list[AgentEvalRecord], digest: str, case_ids: list[str], seeds: list[int]
+    records: list[AgentEvalRecord], digest: str, case_ids: list[str], arms: list[BenchmarkArm]
 ) -> list[BenchmarkObservation]:
+    """One observation per (arm, case), averaging repeats so cases are the paired units."""
     observations = []
-    for record in records:
-        metrics = {
-            "correct": float(record.grade.correct),
-            "evidence_attribution": float(record.grade.evidence_attribution),
-            "dft_request_correct": float(record.grade.dft_request_correct),
-            "completion_tokens": float(record.completion_tokens),
-        }
-        if record.grade.correctly_inconclusive is not None:
-            metrics["correctly_inconclusive"] = float(record.grade.correctly_inconclusive)
-        observations.append(
-            BenchmarkObservation(
-                protocol_digest=digest,
-                arm=record.arm,
-                # Arms are paired case by case: one pair per (seed, case).
-                random_seed=seeds.index(record.random_seed) * len(case_ids)
-                + case_ids.index(record.case_id),
-                metrics=metrics,
-                dft_calculations_attempted=0,
-                node_hours_consumed=0.0,
-                completed=True,
+    for arm in arms:
+        for index, case_id in enumerate(case_ids):
+            repeats = [r for r in records if r.arm == arm and r.case_id == case_id]
+            if not repeats:
+                continue
+            values: dict[str, list[float]] = {}
+            for r in repeats:
+                for name, value in (
+                    ("correct", r.grade.correct),
+                    ("evidence_attribution", r.grade.evidence_attribution),
+                    ("dft_request_correct", r.grade.dft_request_correct),
+                    ("completion_tokens", r.completion_tokens),
+                    ("correctly_inconclusive", r.grade.correctly_inconclusive),
+                ):
+                    if value is not None:
+                        values.setdefault(name, []).append(float(value))
+            observations.append(
+                _observation(digest, arm, index, {k: sum(v) / len(v) for k, v in values.items()})
             )
-        )
     return observations
+
+
+def _observation(
+    digest: str, arm: BenchmarkArm, case_index: int, metrics: dict[str, float]
+) -> BenchmarkObservation:
+    return BenchmarkObservation(
+        protocol_digest=digest,
+        arm=arm,
+        random_seed=case_index,
+        metrics=metrics,
+        dft_calculations_attempted=0,
+        node_hours_consumed=0.0,
+        completed=True,
+    )
 
 
 def run_agent_eval(
@@ -594,9 +621,7 @@ def run_agent_eval(
                     answers_file.write(record.model_dump_json() + "\n")
                     answers_file.flush()
                     records.append(record)
-    observations = _observations(
-        records, digest, [case.case_id for case in selected], config.random_seeds
-    )
+    observations = _observations(records, digest, [case.case_id for case in selected], config.arms)
     comparisons = []
     for treatment, control in config.comparisons:
         if treatment not in config.arms or control not in config.arms:

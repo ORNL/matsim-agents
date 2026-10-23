@@ -57,12 +57,21 @@ class ChatVLLM(BaseChatModel):
     base_url: str = "http://localhost:8000/v1"
     api_key: str = "EMPTY"
     temperature: float = 0.0
+    top_p: float | None = None
+    seed: int | None = None
     max_completion_tokens: int = Field(default=4096, gt=0)
     request_timeout: float = Field(default=3600.0, gt=0, allow_inf_nan=False)
 
     @property
     def _llm_type(self) -> str:
         return "vllm"
+
+    def _sampling(self) -> dict[str, Any]:
+        return {
+            name: value
+            for name, value in (("top_p", self.top_p), ("seed", self.seed))
+            if value is not None
+        }
 
     def _convert_messages(self, messages: list[BaseMessage]) -> list[dict]:
         role_map = {
@@ -97,7 +106,7 @@ class ChatVLLM(BaseChatModel):
             temperature=self.temperature,
             max_completion_tokens=self.max_completion_tokens,
             stop=stop,
-            **kwargs,
+            **{**self._sampling(), **kwargs},
         )
         choice = response.choices[0]
         # With a reasoning parser vLLM returns the reasoning separately
@@ -157,7 +166,7 @@ class ChatVLLM(BaseChatModel):
             max_completion_tokens=self.max_completion_tokens,
             stop=stop,
             stream=True,
-            **kwargs,
+            **{**self._sampling(), **kwargs},
         )
         for chunk in stream:
             delta = chunk.choices[0].delta.content or ""
@@ -356,6 +365,8 @@ def get_chat_model(
             api_key=key,
             max_completion_tokens=max_tokens,
             request_timeout=request_timeout,
+            top_p=kwargs.get("top_p"),
+            seed=kwargs.get("seed"),
         )
 
     if provider == "openai":
