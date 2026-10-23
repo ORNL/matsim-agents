@@ -61,6 +61,12 @@ def test_check_reports_missing_launcher_modules_and_keys(monkeypatch):
     assert openai.missing == ("python module langchain_openai", "env OPENAI_API_KEY")
 
 
+def test_huggingface_check_requires_accelerate(monkeypatch):
+    monkeypatch.setattr(caps, "_module_found", lambda module: module != "accelerate")
+    hf = caps.check(caps.get_capability("huggingface"), environ={})
+    assert not hf.available and hf.missing == ("python module accelerate",)
+
+
 def test_check_passes_with_launcher_on_path(monkeypatch):
     monkeypatch.setattr(caps.shutil, "which", lambda exe, path=None: f"/usr/bin/{exe}")
     env = {"MATSIM_VASP_LAUNCHER": "srun -n 4 vasp_std"}
@@ -150,6 +156,17 @@ def test_cli_check_json_and_require(monkeypatch):
     assert {r["name"] for r in json.loads(result.output)} == _names("llm")
     assert runner.invoke(app, ["capabilities", "check", "--require", "openai"]).exit_code == 1
     assert runner.invoke(app, ["capabilities", "check", "--require", "castep"]).exit_code == 2
+
+
+@pytest.mark.parametrize("kinds", [["dftt"], ["llm", "dftt"]])
+def test_cli_check_rejects_unknown_kinds(kinds):
+    args = ["capabilities", "check", "--json"]
+    for kind in kinds:
+        args += ["--kind", kind]
+    result = CliRunner().invoke(app, args)
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert "dftt" in result.stderr
 
 
 def test_cli_check_json_stays_parseable_when_a_required_backend_is_missing(monkeypatch):

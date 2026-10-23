@@ -14,4 +14,4 @@ Run `matsim-agents capabilities check` to see what is available locally.
 | llm | `vllm` | chat | hypothesis | - | no | `openai` | OpenAI-compatible vLLM server. |
 | llm | `openai` | chat | hypothesis | - | no | `langchain_openai`, `$OPENAI_API_KEY` | - |
 | llm | `anthropic` | chat | hypothesis | - | no | `langchain_anthropic`, `$ANTHROPIC_API_KEY` | - |
-| llm | `huggingface` | chat | hypothesis | - | no | `langchain_huggingface`, `transformers`, `torch` | In-process transformers pipeline. |
+| llm | `huggingface` | chat | hypothesis | - | no | `langchain_huggingface`, `transformers`, `accelerate`, `torch` | In-process transformers pipeline. |

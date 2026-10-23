@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import typing
 from pathlib import Path
 
 import typer
@@ -26,8 +27,17 @@ def capabilities_check(
 ):
     """Report which backends have their modules, launchers and env vars present."""
 
-    from matsim_agents.execution.capabilities import check, check_all, get_capability
+    from matsim_agents.execution.capabilities import (
+        BackendKind,
+        check,
+        check_all,
+        get_capability,
+    )
 
+    unknown = sorted(set(kind or ()) - set(typing.get_args(BackendKind)))
+    if unknown:
+        typer.echo(f"unknown kind(s): {', '.join(unknown)} (expected dft, mlip or llm)", err=True)
+        raise typer.Exit(code=2)
     try:
         required = [check(get_capability(name)) for name in require or ()]
     except KeyError as exc:

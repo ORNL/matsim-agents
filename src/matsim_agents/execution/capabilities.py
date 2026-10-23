@@ -151,7 +151,7 @@ CAPABILITIES: tuple[BackendCapability, ...] = (
         name="huggingface",
         tasks=("chat",),
         evidence_levels=(EvidenceLevel.HYPOTHESIS,),
-        python_modules=("langchain_huggingface", "transformers", "torch"),
+        python_modules=("langchain_huggingface", "transformers", "accelerate", "torch"),
         optional_env=("MATSIM_HF_MODEL_PATH",),
         notes="In-process transformers pipeline.",
     ),
