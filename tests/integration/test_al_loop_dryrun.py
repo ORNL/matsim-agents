@@ -220,7 +220,7 @@ def _make_candidate(idx: int) -> Candidate:
     return Candidate(
         candidate_id=f"cand_{idx:03d}",
         atoms=atoms,
-        seed_path="/dummy.vasp",
+        seed_path=f"/dummy-{idx}.vasp",
         md_step=idx,
     )
 
@@ -300,7 +300,7 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert dataset.stat().st_size > 0
     # Each label records its trajectory and MD step for grouped dataset splits.
     for frame in ase_read(dataset, index=":"):
-        assert frame.info["trajectory_id"] == "iteration-0000/dummy"
+        assert frame.info["trajectory_id"] == f"iteration-0000/dummy-{frame.info['time_index']}"
         assert frame.info["config_id"] == f"iteration-0000/{frame.info['candidate_id']}"
         assert frame.info["time_index"] in {0, 1, 2}
         assert frame.info["al_iteration"] == 0
@@ -789,6 +789,69 @@ def test_cumulative_split_never_moves_existing_frames():
     )
     assert training == []
     assert validation == ["new"]
+
+
+def test_holdout_split_keeps_each_trajectory_in_one_partition():
+    from types import SimpleNamespace
+
+    from matsim_agents.active_learning.loop import _split_training_validation_frames
+
+    frames = [
+        SimpleNamespace(atoms=SimpleNamespace(info={"trajectory_id": f"t{index // 3}"}))
+        for index in range(12)
+    ]
+    for seed in range(20):
+        training, validation = _split_training_validation_frames(
+            frames,
+            validation_fraction=0.25,
+            seed=seed,
+            existing_training_count=0,
+            existing_validation_count=0,
+        )
+        assert len(validation) == 3
+        assert len(training) == 9
+        assert {f.atoms.info["trajectory_id"] for f in training}.isdisjoint(
+            {f.atoms.info["trajectory_id"] for f in validation}
+        )
+    # A trajectory larger than the remaining target waits for later iterations.
+    training, validation = _split_training_validation_frames(
+        frames[:3],
+        validation_fraction=0.25,
+        seed=0,
+        existing_training_count=0,
+        existing_validation_count=0,
+    )
+    assert (len(training), len(validation)) == (3, 0)
+
+
+def test_external_validation_frames_never_enter_training(
+    tmp_path, monkeypatch, elemental_manifest, dataset_method_sidecar
+):
+    from ase.calculators.singlepoint import SinglePointCalculator
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    cfg.acquisition.n_select = 3
+    validation_set = tmp_path / "held-out.extxyz"
+    held_out = _make_candidate(1).atoms.copy()
+    held_out.calc = SinglePointCalculator(held_out, energy=-1.0, forces=np.zeros((2, 3)))
+    ase_write(validation_set, held_out)
+    cfg.trainer = TrainerConfig(
+        enabled=False,
+        train_script=cfg.trainer.train_script,
+        validation_set=validation_set,
+        validation_reference_set=_campaign_elemental_manifest(cfg, elemental_manifest),
+    )
+    dataset_method_sidecar(validation_set, cfg.trainer.validation_reference_set)
+    _patch_runtime(loop_mod, monkeypatch)
+    loop_mod.run_active_learning(cfg)
+    training_ids = {
+        structure_identity(atoms)
+        for atoms in ase_read(cfg.loop.out_dir / "dataset.extxyz", index=":")
+    }
+    assert structure_identity(held_out) not in training_ids
+    assert len(training_ids) == 2
 
 
 @pytest.mark.parametrize("promote", [False, True])

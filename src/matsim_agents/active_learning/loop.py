@@ -152,15 +152,26 @@ def _split_training_validation_frames(
     existing_training_count: int = 0,
     existing_validation_count: int = 0,
 ) -> tuple[list[Any], list[Any]]:
-    """Assign only new frames to meet the cumulative held-out target."""
+    """Assign only new frames to meet the cumulative held-out target.
+
+    Frames of one MD trajectory are correlated, so a trajectory is held out whole
+    or not at all. A trajectory is held out only if it fits the remaining
+    target, so a long trajectory waits for the cumulative target to grow.
+    """
     if validation_fraction <= 0.0:
         return frames, []
     total = existing_training_count + existing_validation_count + len(frames)
     target = max(1, int(round(total * validation_fraction)))
     n_validation = min(len(frames), max(0, target - existing_validation_count))
-    validation_indices = set(
-        np.random.default_rng(seed).permutation(len(frames))[:n_validation].tolist()
-    )
+    groups: dict[Any, list[int]] = {}
+    for index, frame in enumerate(frames):
+        info = getattr(getattr(frame, "atoms", None), "info", {})
+        groups.setdefault(info.get("trajectory_id", ("frame", index)), []).append(index)
+    members = list(groups.values())
+    validation_indices: set[int] = set()
+    for group in np.random.default_rng(seed).permutation(len(members)):
+        if len(validation_indices) + len(members[group]) <= n_validation:
+            validation_indices.update(members[group])
     training = [frame for index, frame in enumerate(frames) if index not in validation_indices]
     validation = [frame for index, frame in enumerate(frames) if index in validation_indices]
     return training, validation
@@ -434,9 +445,15 @@ def _append_labelled_frames(
     expected_atomic_numbers = {
         int(number) for candidate in selected for number in candidate.atoms.get_atomic_numbers()
     }
+    # Frames of an external validation set never enter training.
+    external_validation_frames = []
+    if cfg.trainer.validation_set is not None and cfg.trainer.validation_fraction <= 0:
+        from ase.io import read as ase_read
+
+        external_validation_frames = list(ase_read(cfg.trainer.validation_set, index=":"))
     frames, validation = validate_labelled_frames(
         frames,
-        existing_frames=existing_frames,
+        existing_frames=existing_frames + external_validation_frames,
         expected_atomic_numbers=expected_atomic_numbers,
     )
     training_frames, validation_frames = _split_training_validation_frames(

@@ -159,13 +159,31 @@ def test_without_validation_the_finetuned_model_is_reported_unselected(inputs, t
     dataset, _domain, reference, calls = inputs
     output = tmp_path / "random"
     finetune_eval.run_finetune_endpoints(
-        dataset, output, backend="uma", device="cpu", elemental_reference_manifest=reference
+        dataset,
+        output,
+        backend="uma",
+        device="cpu",
+        elemental_reference_manifest=reference,
+        evaluation=finetune_eval.EvaluationConfig.model_validate(
+            {
+                "objective": "interpolation among random frames",
+                "split": {"strategy": "random_frame", "train_fraction": 0.8, "test_fraction": 0.2},
+            }
+        ),
     )
     selection = json.loads((output / "selection.json").read_text())
     assert selection["selected"] == "finetuned" and selection["decided_on"] is None
     report = json.loads((output / "eval" / "report.json").read_text())
     assert report["split"]["strategy"] == "random_frame"
     assert any("interpolation" in note for note in report["split"]["limitations"])
+
+
+def test_cli_requires_an_evaluation_config(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        finetune_eval.main(
+            ["--backend", "uma", "--dataset", "d.extxyz", "--output-dir", str(tmp_path)]
+        )
+    assert "--evaluation-config" in capsys.readouterr().err
 
 
 def test_repetitions_reuse_one_split_per_split_seed(inputs, tmp_path):
