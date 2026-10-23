@@ -824,6 +824,42 @@ def test_holdout_split_keeps_each_trajectory_in_one_partition():
     assert (len(training), len(validation)) == (3, 0)
 
 
+def test_retried_iteration_keeps_trajectories_on_their_persisted_side(tmp_path):
+    from types import SimpleNamespace
+
+    from ase import Atoms
+    from ase.io import read, write
+
+    from matsim_agents.active_learning.loop import (
+        _split_training_validation_frames,
+        _trajectory_ids,
+    )
+
+    # A failed iteration appended two t0 frames to training and one t1 frame to
+    # validation before its directory was removed; the retry reuses both IDs.
+    persisted = {}
+    for name, ids in (("train", ["t0", "t0"]), ("val", ["t1"])):
+        atoms = [Atoms("H", info={"trajectory_id": tid}) for tid in ids]
+        write(tmp_path / f"{name}.extxyz", atoms)
+        persisted[name] = read(tmp_path / f"{name}.extxyz", index=":")
+    new = [
+        SimpleNamespace(atoms=SimpleNamespace(info={"trajectory_id": tid}))
+        for tid in ("t0", "t1", "t2", "t2")
+    ]
+    for seed in range(20):
+        training, validation = _split_training_validation_frames(
+            new,
+            validation_fraction=0.25,
+            seed=seed,
+            existing_training_count=2,
+            existing_validation_count=1,
+            existing_training_trajectories=_trajectory_ids(persisted["train"]),
+            existing_validation_trajectories=_trajectory_ids(persisted["val"]),
+        )
+        assert [f.atoms.info["trajectory_id"] for f in training] == ["t0", "t2", "t2"]
+        assert [f.atoms.info["trajectory_id"] for f in validation] == ["t1"]
+
+
 def test_external_validation_frames_never_enter_training(
     tmp_path, monkeypatch, elemental_manifest, dataset_method_sidecar
 ):

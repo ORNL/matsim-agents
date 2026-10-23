@@ -15,7 +15,8 @@
 # --export) so the ';'-separated, space-containing SPECS string survives
 # sbatch's comma-delimited --export parser intact.
 #
-# Usage:
+# Usage (EVALUATION_CONFIG is required; templates in examples/evaluation/):
+#   export EVALUATION_CONFIG=examples/evaluation/random-frame-interpolation.yaml
 #   bash deployments/perlmutter/launchers/submit-finetune-eval-pack4-hydragnn-perlmutter.sh
 #   QOS=regular  bash .../submit-finetune-eval-pack4-hydragnn-perlmutter.sh
 #   CASES=lifepo4-al-001,hea-bcc-al-001  bash .../submit-...   # subset
@@ -31,6 +32,9 @@ PROJ="$(dirname "${REPO}")"
 RUNS_ROOT="${RUNS_ROOT:-${PROJ}/runs}"
 JOB="${SCRIPT_DIR}/job-finetune-eval-pack4-perlmutter.sh"
 [[ ! -f "${JOB}" ]] && { echo "ERROR: missing pack4 job script ${JOB}" >&2; exit 2; }
+EVALUATION_CONFIG="${EVALUATION_CONFIG:?set EVALUATION_CONFIG=<evaluation YAML>, see examples/evaluation/}"
+[[ ! -r "${EVALUATION_CONFIG}" ]] && { echo "ERROR: evaluation config not readable: ${EVALUATION_CONFIG}" >&2; exit 2; }
+EVALUATION_CONFIG="$(realpath "${EVALUATION_CONFIG}")"
 
 QOS="${QOS:-premium}"
 STRATEGIES="${HYDRAGNN_STRATEGIES:-routed,unfrozen,frozen,scratch}"
@@ -70,10 +74,11 @@ for case in "${CASE_LIST[@]}"; do
 
   jobname="fte-pack4-hg-${case}"
   if [[ -n "${DRY_RUN:-}" ]]; then
-    echo "ELEMENTAL_REFERENCE_MANIFEST='${reference_manifest}' BACKEND=hydragnn SPECS='${specs}' sbatch -q ${QOS} -J ${jobname} ${JOB}"
+    echo "ELEMENTAL_REFERENCE_MANIFEST='${reference_manifest}' EVALUATION_CONFIG='${EVALUATION_CONFIG}' BACKEND=hydragnn SPECS='${specs}' sbatch -q ${QOS} -J ${jobname} ${JOB}"
     continue
   fi
-  if JID=$(ELEMENTAL_REFERENCE_MANIFEST="${reference_manifest}" BACKEND=hydragnn SPECS="${specs}" \
+  if JID=$(ELEMENTAL_REFERENCE_MANIFEST="${reference_manifest}" EVALUATION_CONFIG="${EVALUATION_CONFIG}" \
+             BACKEND=hydragnn SPECS="${specs}" \
              sbatch --parsable -q "${QOS}" -J "${jobname}" "${JOB}"); then
     echo "[submitted] ${JID}  ${jobname}  (${QOS}; strategies: ${STRATEGIES})"
     nsub=$((nsub + 1))
