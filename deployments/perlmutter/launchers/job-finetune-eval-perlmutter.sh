@@ -92,6 +92,8 @@ EVALUATION_CONFIG="${EVALUATION_CONFIG:?set EVALUATION_CONFIG=<evaluation YAML>,
   echo "ERROR: evaluation config not readable: ${EVALUATION_CONFIG}" >&2
   exit 2
 }
+# The job later changes into the repository.
+EVALUATION_CONFIG="$(realpath "${EVALUATION_CONFIG}")"
 
 # ── knobs ────────────────────────────────────────────────────────────────────
 UMA_TASK="${UMA_TASK:-omat}"

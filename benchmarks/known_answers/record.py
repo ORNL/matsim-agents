@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -44,6 +45,14 @@ REFERENCE_PHASES = {
     "C": ("C-diamond", "C"),
     "SiC-2H": ("SiC-2H", "SiC"),
 }
+
+
+def resolve_executable(command: str) -> str:
+    """Absolute path of ``command``: a path from the current directory, else a PATH lookup."""
+    found = shutil.which(command) if os.sep not in command else command
+    if not found or not os.access(found, os.X_OK) or Path(found).is_dir():
+        sys.exit(f"pw.x executable not found: {command}")
+    return str(Path(found).resolve())
 
 
 def _pw_version(pw_x: str) -> str:
@@ -102,15 +111,16 @@ def main() -> None:
     # The suite is copied into the work directory, so it must not contain it.
     if args.work_dir.resolve().is_relative_to(SUITE):
         sys.exit(f"WORK_DIR {args.work_dir} is inside the suite {SUITE}; choose another directory")
+    pw_x = resolve_executable(args.pw_x)
     args.work_dir.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="record-", dir=args.work_dir.resolve()))
     print(f"Recording in {work}")
 
     template = yaml.safe_load((SUITE / "contracts" / "sic-3c-on-hull.yaml").read_text())
     signature = template["methods"]["dft_method_signature"]
-    version = _pw_version(args.pw_x)
+    version = _pw_version(pw_x)
     refs = {
-        key: _relax_reference(name, formula, json.loads(json.dumps(template)), work, args.pw_x)
+        key: _relax_reference(name, formula, json.loads(json.dumps(template)), work, pw_x)
         for key, (name, formula) in REFERENCE_PHASES.items()
     }
 
@@ -167,7 +177,7 @@ def main() -> None:
 
     suite = load_suite(staged)
     result = run_known_answers(
-        staged, tier="live", output_dir=work / "live", launcher=[args.pw_x, "-in", "{input}"]
+        staged, tier="live", output_dir=work / "live", launcher=[pw_x, "-in", "{input}"]
     )
     for verdict in result.verdicts:
         print(f"{verdict.case_id}: {'PASS' if verdict.passed else 'FAIL'} {verdict.reasons}")

@@ -20,7 +20,17 @@ from matsim_agents.backends.dft.qe_relax import QESettings, write_pw_input
 HERE = Path(__file__).resolve().parent
 
 
+def resolve_executable(command: str) -> str:
+    """Absolute path of ``command``: a path from the current directory, else a PATH lookup."""
+    found = shutil.which(command) if os.sep not in command else command
+    if not found or not os.access(found, os.X_OK) or Path(found).is_dir():
+        raise SystemExit(f"pw.x executable not found: {command}")
+    return str(Path(found).resolve())
+
+
 def main(pw_x: str, pseudo_dir: str) -> None:
+    # pw.x runs from each fixture directory, and its pw.out is truncated before launch.
+    pw_x = resolve_executable(pw_x)
     atoms = bulk("Si", "diamond", a=5.50)
     atoms.positions[1] += (0.05, -0.03, 0.02)
     base = dict(

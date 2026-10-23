@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -215,6 +216,21 @@ def test_recorder_rejects_a_work_directory_inside_the_suite(work_dir):
     )
     assert proc.returncode != 0 and "is inside the suite" in proc.stderr
     assert not (SUITE / "runs").exists()
+
+
+def test_recorder_resolves_a_relative_pw_x_from_the_invocation_directory(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location("record", SUITE / "record.py")
+    record = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(record)
+    (tmp_path / "bin").mkdir()
+    exe = tmp_path / "bin" / "pw.x"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    monkeypatch.chdir(tmp_path)
+    assert record.resolve_executable("./bin/pw.x") == str(exe.resolve())
+    assert record.resolve_executable("sh") == str(Path(shutil.which("sh")).resolve())
+    with pytest.raises(SystemExit, match="not found"):
+        record.resolve_executable("./bin/missing")
 
 
 def test_replayer_rejects_a_changed_input(tmp_path):

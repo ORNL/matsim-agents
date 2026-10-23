@@ -5,7 +5,9 @@ Regenerate them with tests/data/dft_outputs/qe/regenerate.py.
 
 from __future__ import annotations
 
+import importlib.util
 import math
+import shutil
 from pathlib import Path
 
 import pytest
@@ -40,3 +42,23 @@ def test_real_pw_outputs(case, per_step, total, converged, energy_ry):
     else:
         assert result.final_energy_ry == pytest.approx(energy_ry)
         assert result.final_max_force_ry_au is not None
+
+
+def test_regenerate_resolves_pw_x_before_touching_fixtures(tmp_path, monkeypatch):
+    pytest.importorskip("ase")
+    spec = importlib.util.spec_from_file_location("regenerate", QE / "regenerate.py")
+    regenerate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(regenerate)
+
+    before = {p: p.read_bytes() for p in QE.glob("*/pw.out")}
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit, match="not found"):
+        regenerate.main("./bin/pw.x", str(tmp_path))
+    assert {p: p.read_bytes() for p in QE.glob("*/pw.out")} == before
+
+    (tmp_path / "bin").mkdir()
+    exe = tmp_path / "bin" / "pw.x"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    assert regenerate.resolve_executable("./bin/pw.x") == str(exe.resolve())
+    assert regenerate.resolve_executable("sh") == str(Path(shutil.which("sh")).resolve())
