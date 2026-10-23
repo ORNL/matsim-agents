@@ -73,6 +73,27 @@ _DECODING_CONTROLS = {
     "anthropic": {"temperature", "top_p"},
 }
 _DEFAULT_DECODING_CONTROLS = {"temperature"}
+
+
+def _unapplied(decoding: dict[str, Any], provider: str | None) -> list[str]:
+    """Decoding keys the provider would ignore; with no provider, keys no provider applies."""
+    if provider is None:
+        applied = set().union(*_DECODING_CONTROLS.values())
+    else:
+        applied = _DECODING_CONTROLS.get(provider.lower(), _DEFAULT_DECODING_CONTROLS)
+    return sorted(set(decoding) - applied)
+
+
+def _checked_factory(
+    model_factory: Callable[..., Any], decoding: dict[str, Any], **kwargs: Any
+) -> Any:
+    if ignored := _unapplied(decoding, kwargs.get("provider")):
+        raise ValueError(
+            f"decoding {ignored} would not be applied by provider {kwargs.get('provider')!r}"
+        )
+    return model_factory(**kwargs, **decoding)
+
+
 _DEFAULT_COMPARISONS = (
     (BenchmarkArm.SINGLE_LLM, BenchmarkArm.NO_LLM),
     (BenchmarkArm.MULTI_LLM_NO_CRITIQUE, BenchmarkArm.SINGLE_LLM),
@@ -179,12 +200,13 @@ class AgentEvalConfig(BaseModel):
         if multi & set(self.arms) and len(self.participants) < 2:
             raise ValueError("multi-LLM arms need at least two participants")
         for participant in self.participants:
-            applied = _DECODING_CONTROLS.get(participant.provider, _DEFAULT_DECODING_CONTROLS)
-            if ignored := sorted(set(self.decoding) - applied):
+            # A server participant's provider is known once its endpoint resolves.
+            provider = participant.provider
+            if ignored := _unapplied(self.decoding, provider):
                 raise ValueError(
                     f"decoding {ignored} would not be applied to {participant.name} "
-                    f"({participant.provider} applies {sorted(applied)}); output limits "
-                    "come from completion_tokens_per_case"
+                    f"({provider or 'any provider'}); output limits come from "
+                    "completion_tokens_per_case"
                 )
         for arm in self.arms:
             if (calls := self.calls(arm)) and self.completion_tokens_per_case // calls < (
@@ -443,7 +465,7 @@ def run_arm(
     participants = [
         p.model_copy(update={"max_completion_tokens": None}) for p in config.participants
     ]
-    factory = partial(model_factory, **config.decoding)
+    factory = partial(_checked_factory, model_factory, config.decoding)
 
     def single(participant: DebateParticipant) -> ScientificDebateConfig:
         return ScientificDebateConfig(

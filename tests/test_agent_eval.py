@@ -205,6 +205,32 @@ def test_decoding_that_would_be_ignored_or_lift_the_budget_is_rejected(provider,
         )
 
 
+def test_decoding_check_ignores_provider_case():
+    participants = [
+        DebateParticipant(name="a", provider="VLLM", model="m"),
+        DebateParticipant(name="b", provider="OpenAI", model="m"),
+    ]
+    AgentEvalConfig(
+        participants=participants,
+        arms=[BenchmarkArm.SINGLE_LLM],
+        decoding={"seed": 1, "top_p": 0.9},
+    )
+
+
+def test_server_participants_defer_the_provider_check_to_their_endpoint():
+    from matsim_agents.campaign.agent_eval import _checked_factory
+
+    participants = [DebateParticipant(name="w", server="worker")]
+    AgentEvalConfig(participants=participants, arms=[BenchmarkArm.SINGLE_LLM], decoding={"seed": 1})
+    with pytest.raises(ValueError, match="would not be applied"):
+        AgentEvalConfig(
+            participants=participants, arms=[BenchmarkArm.SINGLE_LLM], decoding={"max_tokens": 9}
+        )
+    with pytest.raises(ValueError, match="would not be applied"):
+        _checked_factory(dict, {"seed": 1}, provider="anthropic", model="m")
+    assert _checked_factory(dict, {"seed": 1}, provider="vllm", model="m")["seed"] == 1
+
+
 def test_vllm_requests_carry_the_decoding_controls():
     from unittest.mock import MagicMock, patch
 
