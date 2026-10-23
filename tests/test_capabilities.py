@@ -62,9 +62,27 @@ def test_check_reports_missing_launcher_modules_and_keys(monkeypatch):
 
 
 def test_check_passes_with_launcher_on_path(monkeypatch):
-    monkeypatch.setattr(caps.shutil, "which", lambda exe: f"/usr/bin/{exe}")
+    monkeypatch.setattr(caps.shutil, "which", lambda exe, path=None: f"/usr/bin/{exe}")
     env = {"MATSIM_VASP_LAUNCHER": "srun -n 4 vasp_std"}
     assert caps.check(caps.get_capability("vasp"), environ=env).available
+
+
+def test_check_resolves_launcher_on_the_target_path(monkeypatch, tmp_path):
+    target, caller = tmp_path / "target", tmp_path / "caller"
+    for d in (target, caller):
+        d.mkdir()
+    exe = target / "pw-wrapper"
+    exe.write_text("#!/bin/sh\n", encoding="utf-8")
+    exe.chmod(0o755)
+    monkeypatch.setenv("PATH", str(caller))
+    qe = caps.get_capability("qe")
+    env = {"MATSIM_QE_LAUNCHER": "pw-wrapper"}
+    assert caps.check(qe, environ={**env, "PATH": str(target)}).available
+    monkeypatch.setenv("PATH", str(target))
+    assert caps.check(qe, environ={**env, "PATH": str(caller)}).missing == (
+        "executable pw-wrapper",
+    )
+    assert not caps.check(qe, environ={**env, "PATH": ""}).available
 
 
 def _fake_venv(tmp_path: Path, exit_code: int) -> Path:

@@ -74,5 +74,5 @@ if [[ "${INSTALL_MACE}" == "1" ]]; then
         bash "${MATSIM_DIR}/deployments/common/setup/install-mace-compat.sh"
 fi
 
-log "Complete. Activate with: source ${SCRIPT_DIR}/setup_matsim_frontier.sh"
+log "Complete. Activate with: MATSIM_FRONTIER_VENV=${VENV_PATH} MATSIM_FAIRCHEM_VENV=${UMA_VENV_PATH} MATSIM_MACE_VENV=${MACE_VENV_PATH} source ${SCRIPT_DIR}/setup_matsim_frontier.sh --rocm72"
 log "Then verify backends with: matsim-agents capabilities check"

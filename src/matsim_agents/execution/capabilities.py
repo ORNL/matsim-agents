@@ -226,7 +226,7 @@ def check(
         launcher = env.get(capability.launcher_env, "").split()
         if not launcher:
             missing.append(f"env {capability.launcher_env}")
-        elif shutil.which(launcher[0]) is None:
+        elif shutil.which(launcher[0], path=env.get("PATH", os.defpath)) is None:
             missing.append(f"executable {launcher[0]}")
     missing += [f"env {var}" for var in capability.required_env if not env.get(var)]
     return CapabilityCheck(

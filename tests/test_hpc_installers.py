@@ -215,7 +215,9 @@ def test_aurora_runs_perlmutter_style_phases_without_switching_checkout(tmp_path
     assert "selected checkout will not be switched automatically" in failed.stderr
 
 
-def _source_runtime_env(root: Path, env: dict[str, str]) -> dict[str, str]:
+def _source_runtime_env(
+    root: Path, env: dict[str, str], facility: str = "perlmutter"
+) -> dict[str, str]:
     script = ROOT / "deployments" / "common" / "setup" / "matsim-runtime-env.sh"
     names = (
         "MATSIM_QE_LAUNCHER",
@@ -231,7 +233,7 @@ def _source_runtime_env(root: Path, env: dict[str, str]) -> dict[str, str]:
         [
             "bash",
             "-c",
-            f'set -euo pipefail; source "{script}" perlmutter "{root}" >/dev/null; {dump}',
+            f'set -euo pipefail; source "{script}" {facility} "{root}" >/dev/null; {dump}',
         ],
         env={**clean, **env},
         capture_output=True,
@@ -260,6 +262,37 @@ def test_runtime_env_exports_only_existing_targets(tmp_path: Path) -> None:
     assert got["MATSIM_VASP_LAUNCHER"] == ""
     assert got["MATSIM_FAIRCHEM_VENV"] == "/custom/uma"
     assert got["MATSIM_MACE_VENV"] == str(tmp_path / ".venv-mace")
+
+
+@pytest.mark.parametrize("facility", sorted(INSTALLERS))
+def test_runtime_env_defaults_the_facility_vasp_launcher(tmp_path: Path, facility: str) -> None:
+    vasp = tmp_path / "external" / "vasp6" / "src" / "vasp.6.6.1" / "bin" / "vasp_std"
+    vasp.parent.mkdir(parents=True)
+    vasp.write_text("", encoding="utf-8")
+    vasp.chmod(0o755)
+    launchers = tmp_path / "deployments" / facility / "launchers"
+    launchers.mkdir(parents=True)
+    real = ROOT / "deployments" / facility / "launchers" / f"run-vasp-gpu-{facility}.sh"
+    (launchers / real.name).symlink_to(real)
+    got = _source_runtime_env(tmp_path, {}, facility)
+    assert got["MATSIM_VASP_LAUNCHER"] == str(launchers / real.name)
+    assert real.stat().st_mode & 0o111
+    text = real.read_text(encoding="utf-8")
+    assert f"_vasp-step-{facility}.sh" in text or facility == "perlmutter"
+    assert '"$1"' not in text and "$#" not in text
+
+
+def test_installers_print_activation_with_the_installed_venvs() -> None:
+    for facility in INSTALLERS:
+        text = (ROOT / "deployments" / facility / "setup" / "install.sh").read_text(
+            encoding="utf-8"
+        )
+        hint = next(line for line in text.splitlines() if "Activate with" in line)
+        assert f"MATSIM_{facility.upper()}_VENV=${{VENV_PATH}}" in hint
+        assert "MATSIM_FAIRCHEM_VENV=${UMA_VENV_PATH}" in hint
+        assert "MATSIM_MACE_VENV=${MACE_VENV_PATH}" in hint
+        if facility == "frontier":
+            assert "--rocm72" in hint
 
 
 def test_facility_setup_scripts_source_runtime_env() -> None:
