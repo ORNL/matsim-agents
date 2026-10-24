@@ -264,6 +264,34 @@ class TestMessageHistory:
         assert "42" in response
 
 
+class TestResumableSession:
+    def test_resume_restores_conversation_and_discovery_state(self, discovery_config, monkeypatch):
+        session, _ = _make_session(
+            discovery_config, responses=["Try Li2MnO3."], monkeypatch=monkeypatch
+        )
+        chat_once(session, "Suggest a cathode.")
+        directory = session.transcript.directory
+        assert (directory / "session.json").is_file()
+
+        _, mock_explore = _make_session(
+            discovery_config, responses=["Li2MnO3 again, or LiCoO2."], monkeypatch=monkeypatch
+        )
+        resumed = DiscoveryChatSession.resume(discovery_config, directory.name)
+        assert [m.content for m in resumed.messages] == [m.content for m in session.messages]
+        assert resumed.seen_compositions == session.seen_compositions
+        assert len(resumed.explorations) == 1
+        assert resumed.transcript.count == session.transcript.count
+
+        chat_once(resumed, "Anything else?")
+        assert mock_explore.call_count == 1  # only LiCoO2; Li2MnO3 was already seen
+        assert len(resumed.explorations) == 2
+        assert resumed.transcript.directory == directory
+
+    def test_resume_of_missing_session_fails(self, discovery_config):
+        with pytest.raises(FileNotFoundError, match="no saved chat session"):
+            DiscoveryChatSession.resume(discovery_config, "does-not-exist")
+
+
 # ── multi-LLM critique / panel mode ──────────────────────────────────────────
 
 
