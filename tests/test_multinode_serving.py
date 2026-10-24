@@ -227,6 +227,7 @@ def test_stopping_the_server_stops_workers_before_the_head(stub_tools, request_b
         os.killpg(process.pid, signal.SIGTERM)
     output, _ = process.communicate(timeout=60)
     calls = record.read_text().splitlines()
+    assert {"stopped n0", "stopped n1"} <= set(calls), f"{output}\n{calls}"
     assert calls.index("stopped n1") < calls.index("stopped n0"), output
     logs = Path(env["MATSIM_SERVER_LOG_DIR"])
     for host in ("n0", "n1"):
