@@ -822,6 +822,9 @@ def _chat_turn(
         system_prompt = f"{system_prompt.rstrip()}\n\n{LLM_ONLY_MODE_INSTRUCTION}"
     if not session.messages:
         session.messages.append(SystemMessage(content=system_prompt))
+    elif isinstance(session.messages[0], SystemMessage):
+        # A resumed session may have switched between LLM-only and --with-mlip.
+        session.messages[0] = SystemMessage(content=system_prompt)
     session.record("user", "user", user_text)
 
     # Direct command: /clear resets the conversation and discovery state.

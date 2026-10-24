@@ -287,6 +287,28 @@ class TestResumableSession:
         assert len(resumed.explorations) == 2
         assert resumed.transcript.directory == directory
 
+    @pytest.mark.parametrize("saved_llm_only", [True, False])
+    def test_resume_uses_the_current_capabilities(
+        self, discovery_config, monkeypatch, saved_llm_only
+    ):
+        from matsim_agents.orchestration.interactive_chat import LLM_ONLY_MODE_INSTRUCTION
+
+        llm_only = DiscoveryChatConfig(llm_only=True, output_dir=discovery_config.output_dir)
+        saved, current = (
+            (llm_only, discovery_config) if saved_llm_only else (discovery_config, llm_only)
+        )
+        session, _ = _make_session(saved, responses=["Hypothesis."], monkeypatch=monkeypatch)
+        chat_once(session, "Discuss materials")
+        assert (LLM_ONLY_MODE_INSTRUCTION in session.messages[0].content) is saved_llm_only
+
+        _make_session(current, responses=["More."], monkeypatch=monkeypatch)
+        resumed = DiscoveryChatSession.resume(current, session.transcript.directory)
+        chat_once(resumed, "Continue")
+        assert (LLM_ONLY_MODE_INSTRUCTION in resumed.messages[0].content) is not saved_llm_only
+        assert [m.content for m in resumed.messages[1:3]] == [
+            m.content for m in session.messages[1:3]
+        ]
+
     def test_resume_of_missing_session_fails(self, discovery_config):
         with pytest.raises(FileNotFoundError, match="no saved chat session"):
             DiscoveryChatSession.resume(discovery_config, "does-not-exist")

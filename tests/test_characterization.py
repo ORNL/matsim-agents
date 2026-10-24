@@ -24,7 +24,7 @@ from matsim_agents.execution.contracts import (
     EvidenceLevel,
     ObservableRequirement,
 )
-from matsim_agents.execution.ledger import EvidenceLedger, EvidenceOutcome
+from matsim_agents.execution.ledger import EvidenceLedger, EvidenceOutcome, hashes_of
 from matsim_agents.workflows.relaxation import (
     RelaxationMode,
     RelaxationStageResult,
@@ -57,9 +57,12 @@ class FakeRelax:
         scf_failed=(),
         killed=None,
         level=None,
+        step_limited=(),
     ):
         self.energies = energies
         self.level = level
+        self.step_limited = set(step_limited)
+        self.structures = []
         self.killed = killed or {}
         self.silent = set(silent)
         self.scf_failed = set(scf_failed)
@@ -71,6 +74,7 @@ class FakeRelax:
     def __call__(self, cfg):
         name = Path(cfg.structure_path).name
         self.calls.append((name, cfg.mode))
+        self.structures.append(cfg.structure_path)
         self.geometries.append(cfg.geometry)
         if name in self.broken:
             raise FileNotFoundError("pw.x not found")
@@ -79,7 +83,8 @@ class FakeRelax:
         optimized = out / f"relaxed-{name}"
         optimized.write_text(Path(cfg.structure_path).read_text())
         dft = cfg.mode == RelaxationMode.DFT
-        converged = name not in self.unconverged
+        limited = name in self.step_limited
+        converged = name not in self.unconverged and not limited
         level = (
             (EvidenceLevel.CONVERGED_DFT if converged else EvidenceLevel.LOW_FIDELITY_DFT)
             if dft
@@ -94,7 +99,7 @@ class FakeRelax:
             optimized_structure_path=str(optimized),
             energy_eV=None if name in self.silent else self.energies[name],
             max_force_eV_per_A=None if name in self.silent else (0.001 if converged else 0.5),
-            steps=10,
+            steps=cfg.max_steps if limited else 10,
             converged=converged,
             scf_converged=False if name in self.scf_failed else None,
             return_code=self.killed.get(name, 0 if dft else None),
@@ -1035,4 +1040,47 @@ def test_a_retry_stopped_by_the_budget_resumes_with_its_recovery(system):
     assert retried.method.settings["mixing_beta"] == 0.2
     [*_, last] = [d for d in ledger.decisions() if d.subject == "relax-dft-001"]
     assert "budget" in last.rationale
+    assert outstanding_steps(raised) == []
+
+
+def test_an_ionic_step_limit_restarts_from_the_last_optimized_structure(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0, "relaxed-NbO2-a.extxyz": -21.4}
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    relax = FakeRelax(energies, step_limited={"NbO2-a.extxyz"})
+    report = run_characterization(contract, relax=relax)
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    first, restart = relax.structures[:2]
+    assert first == str(structures[0])
+    assert Path(restart).name == "relaxed-NbO2-a.extxyz" and restart != first
+    ledger = _ledger(contract)
+    [decision, *_] = [d for d in ledger.decisions() if d.subject == "relax-dft-000"]
+    assert decision.action == "recover:ionic_step_limit"
+    attempts = [e for e in ledger.evidence() if e.calculation_id == "relax-dft-000"]
+    assert attempts[0].input_sha256 == hashes_of([first])
+    assert attempts[-1].input_sha256 == hashes_of([restart])
+
+
+def test_a_budget_stopped_ionic_restart_resumes_from_the_same_structure(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0, "relaxed-NbO2-b.extxyz": -21.1}
+    data = _dft(references, budget={"max_dft_calculations": 2})
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    stopped = FakeRelax(energies, step_limited={"NbO2-b.extxyz"})
+    run_characterization(contract, relax=stopped)
+    assert [s.step_id for s in outstanding_steps(contract)] == ["relax-dft-001"]
+    [limited] = [e for e in _ledger(contract).evidence() if e.calculation_id == "relax-dft-001"]
+    raised = _contract(
+        tmp_path,
+        structures,
+        "thermodynamic_stability",
+        **{**data, "budget": {"max_dft_calculations": 5}},
+    )
+    relax = FakeRelax(energies)
+    report = run_characterization(raised, relax=relax)
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    [resumed] = relax.structures
+    assert {resumed: hashes_of([resumed])[resumed]} == limited.output_artifact_sha256
+    retried = [e for e in _ledger(raised).evidence() if e.calculation_id == "relax-dft-001"][-1]
+    assert retried.input_sha256 == hashes_of([resumed])
     assert outstanding_steps(raised) == []
