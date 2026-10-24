@@ -294,7 +294,8 @@ def _dft_stage(
             if result.converged
             else f"VASP did not converge (return code {result.return_code})",
             return_code=result.return_code,
-            scf_converged=not any(n >= settings.nelm for n in result.scf_iterations_per_step),
+            scf_converged=not result.scf_iterations_per_step
+            or result.scf_iterations_per_step[-1] < settings.nelm,
             wall_time_sec=result.wall_time_sec,
             artifacts={"work_dir": str(work_dir)},
         )

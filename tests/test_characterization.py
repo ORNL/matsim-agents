@@ -1010,6 +1010,7 @@ def test_a_killed_dft_run_is_not_converged_evidence(system):
     assert first.outcome == EvidenceOutcome.NOT_CONVERGED
     assert first.evidence_level == EvidenceLevel.LOW_FIDELITY_DFT
     assert first.numerical_convergence["failure_class"] == "walltime"
+    assert first.cost.failed_jobs == 1 and first.cost.dft_calculations == 0
 
 
 def test_a_retry_stopped_by_the_budget_resumes_with_its_recovery(system):

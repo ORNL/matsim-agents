@@ -715,7 +715,7 @@ def _relaxation_evidence(
     fidelity = step.fidelity or "mlip"
     tolerance = contract.tolerances.force_tolerance_eV_per_A
     seconds = float(outcome.get("wall_seconds") or 0.0)
-    failed = outcome["status"] != "done"
+    failed = outcome["status"] != "done" or outcome.get("return_code") not in (None, 0)
     cost = (
         CostRecord(failed_jobs=1, failed_seconds=seconds)
         if failed
