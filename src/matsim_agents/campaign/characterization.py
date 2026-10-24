@@ -33,6 +33,7 @@ import hashlib
 import json
 import logging
 import math
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
@@ -63,6 +64,8 @@ from matsim_agents.execution.contracts import (
     at_least,
 )
 from matsim_agents.execution.ledger import (
+    CostRecord,
+    DecisionRecord,
     EvidenceLedger,
     EvidenceOutcome,
     EvidenceRecord,
@@ -72,6 +75,13 @@ from matsim_agents.execution.ledger import (
     software_versions,
 )
 from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
+from matsim_agents.execution.recovery import (
+    DEFAULT_POLICY,
+    FailureClass,
+    adjusted_settings,
+    can_retry,
+    classify_failure,
+)
 from matsim_agents.workflows.relaxation import (
     DFTBackendConfig,
     GeometryControls,
@@ -335,7 +345,11 @@ class RecipeStep(BaseModel):
     requires: list[str] = Field(default_factory=list)
     produces: list[str]
     needs_dft_approval: bool = False
-    max_attempts: int = Field(1, description="No automatic recovery: one attempt per run.")
+    max_attempts: int = Field(
+        1,
+        description="Attempts before recovery; failed DFT attempts are retried per "
+        "execution.recovery.DEFAULT_POLICY within the budget.",
+    )
 
 
 def plan_recipe(contract: CharacterizationContract) -> list[RecipeStep]:
@@ -376,15 +390,20 @@ Relax = Callable[[ScientificRelaxationConfig], ScientificRelaxationResult]
 
 
 def _relaxation_config(
-    contract: CharacterizationContract, step: RecipeStep, work_dir: Path
+    contract: CharacterizationContract,
+    step: RecipeStep,
+    work_dir: Path,
+    *,
+    structure: str | None = None,
+    dft: DFTBackendConfig | None = None,
 ) -> ScientificRelaxationConfig:
     return ScientificRelaxationConfig(
         mode=RelaxationMode.DFT if step.fidelity == "dft" else RelaxationMode.MLIP,
-        structure_path=str(step.structure),
+        structure_path=str(structure or step.structure),
         output_root=str(work_dir),
         geometry=contract.geometry,
         mlip=contract.methods.mlip,
-        dft=contract.methods.dft if step.fidelity == "dft" else None,
+        dft=(dft or contract.methods.dft) if step.fidelity == "dft" else None,
         approvals=contract.approvals,
         dft_approved=contract.dft_approved,
         max_steps=contract.tolerances.max_relaxation_steps,
@@ -396,7 +415,13 @@ def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
     """What a relaxation step contributes: a numerical outcome or an infrastructure failure."""
     stage = result.stages[-1] if result.stages else None
     if result.status == "failed" or stage is None:
-        return {"status": "failed", "failure_reason": result.failure_reason or "no stage result"}
+        return {
+            "status": "failed",
+            "failure_reason": result.failure_reason or "no stage result",
+            "failure_type": result.failure_type,
+            "return_code": stage.return_code if stage else None,
+        }
+    diagnostics = {"return_code": stage.return_code, "scf_converged": stage.scf_converged}
     if (
         stage.energy_eV is None
         or stage.max_force_eV_per_A is None
@@ -408,6 +433,7 @@ def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
             "failure_reason": stage.failure_reason
             or "the relaxation produced no energy, force, or structure",
             "run_directory": result.run_directory,
+            **diagnostics,
         }
     if not (math.isfinite(stage.energy_eV) and math.isfinite(stage.max_force_eV_per_A)):
         return {
@@ -417,6 +443,7 @@ def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
                 f"max force {stage.max_force_eV_per_A} eV/A"
             ),
             "run_directory": result.run_directory,
+            **diagnostics,
         }
     return {
         "status": "done",
@@ -431,6 +458,7 @@ def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
         "optimized_structure_path": stage.optimized_structure_path,
         "optimized_structure_sha256": sha256_file(stage.optimized_structure_path),
         "failure_reason": stage.failure_reason,
+        **diagnostics,
     }
 
 
@@ -484,6 +512,7 @@ class _Run:
                 "attempts": {"mlip": 0, "dft": 0},
                 "steps": {},
             }
+        self.state.setdefault("recovery", {})
         self._save()
 
     def _save(self) -> None:
@@ -507,17 +536,33 @@ class _Run:
         outcome = self.state["steps"].get(step_id)
         return outcome if outcome is not None and outcome["status"] == "done" else None
 
+    def pending(self, step_id: str) -> dict[str, Any] | None:
+        """The next recovery attempt of a step that the budget stopped, if any."""
+        return self.state["recovery"].get(step_id)
+
+    def set_pending(self, step_id: str, recovery: dict[str, Any] | None) -> None:
+        if recovery is None:
+            self.state["recovery"].pop(step_id, None)
+        else:
+            self.state["recovery"][step_id] = recovery
+        self._save()
+
+    def forget(self, step_id: str) -> None:
+        self.state["steps"].pop(step_id, None)
+        self._save()
+
 
 def outstanding_steps(contract: CharacterizationContract) -> list[RecipeStep]:
     """Steps of the contract's recipe that have no completed outcome yet."""
     state_path = (
         Path(contract.output_root) / f"characterization-{contract.contract_id}" / STATE_FILE
     )
-    steps = json.loads(state_path.read_text())["steps"] if state_path.is_file() else {}
+    state = json.loads(state_path.read_text()) if state_path.is_file() else {}
+    steps, recovery = state.get("steps", {}), state.get("recovery", {})
     return [
         step
         for step in plan_recipe(contract)
-        if steps.get(step.step_id, {}).get("status") != "done"
+        if steps.get(step.step_id, {}).get("status") != "done" or step.step_id in recovery
     ]
 
 
@@ -635,7 +680,9 @@ def run_characterization(
         return _execute(contract, run, relax, ledger)
 
 
-def _method_record(contract: CharacterizationContract, fidelity: str) -> MethodRecord:
+def _method_record(
+    contract: CharacterizationContract, fidelity: str, dft_settings: dict | None = None
+) -> MethodRecord:
     if fidelity == "dft":
         dft = contract.methods.dft
         assert dft is not None
@@ -643,7 +690,10 @@ def _method_record(contract: CharacterizationContract, fidelity: str) -> MethodR
         return MethodRecord(
             backend=dft.backend,
             method_signature=contract.methods.dft_method_signature,
-            settings={**dft.settings, **{k: v for k, v in directories.items() if v}},
+            settings={
+                **(dft.settings if dft_settings is None else dft_settings),
+                **{k: v for k, v in directories.items() if v},
+            },
             software_versions=software_versions("ase"),
         )
     mlip = contract.methods.mlip
@@ -664,6 +714,16 @@ def _relaxation_evidence(
     """The ledger record of one relaxation attempt: a result or a failure to compute it."""
     fidelity = step.fidelity or "mlip"
     tolerance = contract.tolerances.force_tolerance_eV_per_A
+    seconds = float(outcome.get("wall_seconds") or 0.0)
+    failed = outcome["status"] != "done" or outcome.get("return_code") not in (None, 0)
+    cost = (
+        CostRecord(failed_jobs=1, failed_seconds=seconds)
+        if failed
+        else CostRecord(dft_calculations=1, dft_seconds=seconds)
+        if fidelity == "dft"
+        else CostRecord(mlip_relaxations=1, mlip_seconds=seconds)
+    )
+    diagnosis = {"failure_class": outcome["failure_class"]} if outcome.get("failure_class") else {}
     common: dict[str, Any] = {
         "kind": "relaxation",
         "subject": contract.formula,
@@ -671,8 +731,9 @@ def _relaxation_evidence(
         "calculation_id": step.step_id,
         "task_id": f"attempt-{outcome['attempt']}",
         "run_id": outcome.get("run_id"),
-        "method": _method_record(contract, fidelity),
-        "input_sha256": hashes_of([step.structure]),
+        "method": _method_record(contract, fidelity, outcome.get("dft_settings")),
+        "input_sha256": hashes_of([outcome.get("input_structure") or step.structure]),
+        "cost": cost,
         "physical_assumptions": [
             f"relax_atoms={contract.geometry.relax_atoms}, "
             f"relax_cell={contract.geometry.relax_cell}, "
@@ -689,6 +750,7 @@ def _relaxation_evidence(
             ),
             outcome=EvidenceOutcome.FAILED_TO_COMPUTE,
             failure_reason=outcome["failure_reason"],
+            numerical_convergence=diagnosis,
         )
     from ase.io import read
 
@@ -715,6 +777,7 @@ def _relaxation_evidence(
             "force_tolerance_eV_per_A": tolerance,
             "steps": outcome.get("steps"),
             "max_steps": contract.tolerances.max_relaxation_steps,
+            **diagnosis,
         },
         output_artifact_sha256={
             outcome["optimized_structure_path"]: outcome["optimized_structure_sha256"]
@@ -763,6 +826,142 @@ def _assessment_evidence(
     )
 
 
+def _attempt(
+    contract: CharacterizationContract,
+    step: RecipeStep,
+    run: _Run,
+    relax: Relax,
+    structure: str,
+    dft: DFTBackendConfig | None,
+) -> dict[str, Any]:
+    fidelity = step.fidelity or "mlip"
+    run.charge(fidelity)
+    attempt = run.attempts(fidelity)
+    work_dir = run.directory / step.step_id
+    if attempt > 1:
+        work_dir = work_dir / f"attempt-{attempt}"
+    started = time.monotonic()
+    try:
+        outcome = _relax_record(
+            relax(_relaxation_config(contract, step, work_dir, structure=structure, dft=dft))
+        )
+    except Exception as exc:  # noqa: BLE001 - a failed tool is not evidence
+        outcome = {
+            "status": "failed",
+            "failure_reason": f"{type(exc).__name__}: {exc}",
+            "failure_type": type(exc).__name__,
+        }
+    outcome = {
+        **outcome,
+        "structure": step.structure,
+        "attempt": attempt,
+        "wall_seconds": time.monotonic() - started,
+    }
+    if structure != step.structure:
+        outcome["input_structure"] = structure
+    if dft is not None and dft != contract.methods.dft:
+        outcome["dft_settings"] = dft.settings
+    # QE's ionic convergence message can precede a failed final SCF.
+    if outcome["status"] == "done" and outcome.get("scf_converged") is False:
+        outcome["converged"] = False
+        outcome["evidence_level"] = EvidenceLevel.LOW_FIDELITY_DFT.value
+        outcome["failure_reason"] = outcome.get("failure_reason") or "SCF did not converge"
+    # A run killed after its last ionic step (e.g. a timeout) can leave finite results.
+    if outcome["status"] == "done" and outcome.get("return_code") not in (None, 0):
+        outcome["converged"] = False
+        outcome["evidence_level"] = EvidenceLevel.LOW_FIDELITY_DFT.value
+        outcome["failure_reason"] = (
+            outcome.get("failure_reason") or f"exited with return code {outcome['return_code']}"
+        )
+    tolerance = contract.tolerances.force_tolerance_eV_per_A
+    if not (
+        outcome["status"] == "done"
+        and outcome["converged"]
+        and float(outcome["max_force_eV_per_A"]) <= tolerance
+    ):
+        outcome["failure_class"] = classify_failure(
+            outcome, max_steps=contract.tolerances.max_relaxation_steps
+        ).value
+    return outcome
+
+
+def _relax_with_recovery(
+    contract: CharacterizationContract,
+    step: RecipeStep,
+    run: _Run,
+    relax: Relax,
+    ledger: EvidenceLedger,
+    budget: int | None,
+) -> None:
+    """Relax one step; a failed DFT attempt is retried as the recovery policy directs.
+
+    A retry the budget stopped is saved, and resumed with its settings and counters.
+    """
+    structure = str(step.structure)
+    dft = contract.methods.dft if step.fidelity == "dft" else None
+    retries: dict[FailureClass, int] = {}
+    if (pending := run.pending(step.step_id)) is not None:
+        structure = pending["structure"]
+        dft = DFTBackendConfig.model_validate(pending["dft"])
+        retries = {FailureClass(k): v for k, v in pending["retries"].items()}
+        run.set_pending(step.step_id, None)
+    while True:
+        outcome = _attempt(contract, step, run, relax, structure, dft)
+        evidence = ledger.append(_relaxation_evidence(contract, step, outcome))
+        run.record(step, {**outcome, "evidence_id": evidence.evidence_id})  # type: ignore[union-attr]
+        if dft is None or "failure_class" not in outcome:
+            return
+        failure = FailureClass(outcome["failure_class"])
+        rule = DEFAULT_POLICY.rule(failure)
+        used = retries.get(failure, 0)
+        within_budget = budget is None or run.attempts("dft") < budget
+        allowed = can_retry(failure, timeout_sec=dft.timeout_sec) and used < rule.max_retries
+        retry = allowed and within_budget
+        if retry:
+            rationale = f"retry {used + 1} of {rule.max_retries}: {rule.action}"
+        elif not can_retry(failure, timeout_sec=dft.timeout_sec) or rule.max_retries == 0:
+            rationale = f"no recovery for {failure.value}"
+        elif not within_budget:
+            rationale = f"the DFT budget ({budget}) is spent"
+        else:
+            rationale = f"{rule.max_retries} retries for {failure.value} exhausted"
+        ledger.append(
+            DecisionRecord(
+                campaign_id=contract.contract_id,
+                iteration=outcome["attempt"],
+                action=f"{'recover' if retry else 'give_up'}:{failure.value}",
+                subject=step.step_id,
+                evidence_ids=[evidence.evidence_id],  # type: ignore[union-attr]
+                rationale=rationale,
+                actor=f"recovery-policy:{DEFAULT_POLICY.version}",
+                policy_version=DEFAULT_POLICY.version,
+                thresholds={
+                    "max_retries": float(rule.max_retries),
+                    "retries_used": float(used),
+                    **({"dft_budget": float(budget)} if budget is not None else {}),
+                },
+                expected_cost=CostRecord(dft_calculations=1) if retry else None,
+            )
+        )
+        if not allowed:
+            return
+        retries[failure] = used + 1
+        if failure == FailureClass.IONIC_STEP_LIMIT and outcome.get("optimized_structure_path"):
+            structure = outcome["optimized_structure_path"]
+        settings, timeout = adjusted_settings(failure, dft.backend, dft.settings, dft.timeout_sec)
+        dft = dft.model_copy(update={"settings": settings, "timeout_sec": timeout})
+        if not retry:
+            run.set_pending(
+                step.step_id,
+                {
+                    "structure": structure,
+                    "dft": dft.model_dump(mode="json"),
+                    "retries": {k.value: v for k, v in retries.items()},
+                },
+            )
+            return
+
+
 def _execute(
     contract: CharacterizationContract, run: _Run, relax: Relax, ledger: EvidenceLedger
 ) -> CharacterizationReport:
@@ -791,11 +990,13 @@ def _execute(
         "mlip": contract.budget.max_mlip_relaxations,
         "dft": contract.budget.max_dft_calculations,
     }
+    final = steps[-1] if steps[-1].operator != "relax" else None
     for step in steps:
         if step.operator != "relax":
             continue
         fidelity = step.fidelity or "mlip"
-        if run.done(step.step_id) is not None:
+        recovering = run.pending(step.step_id) is not None
+        if run.done(step.step_id) is not None and not recovering:
             continue
         if step.needs_dft_approval and not contract.dft_approved:
             blockers.append(f"{step.step_id}: DFT is required but not approved (dft_approved)")
@@ -806,17 +1007,9 @@ def _execute(
                 f"({run.attempts(fidelity)} attempted)"
             )
             continue
-        run.charge(fidelity)
-        try:
-            outcome = _relax_record(
-                relax(_relaxation_config(contract, step, run.directory / step.step_id))
-            )
-        except Exception as exc:  # noqa: BLE001 - a failed tool is not evidence
-            outcome = {"status": "failed", "failure_reason": f"{type(exc).__name__}: {exc}"}
-        outcome = {**outcome, "structure": step.structure, "attempt": run.attempts(fidelity)}
-        evidence = ledger.append(_relaxation_evidence(contract, step, outcome))
-        run.record(step, {**outcome, "evidence_id": evidence.evidence_id})  # type: ignore[union-attr]
-    final = steps[-1] if steps[-1].operator != "relax" else None
+        if recovering and final is not None:
+            run.forget(final.step_id)
+        _relax_with_recovery(contract, step, run, relax, ledger, budget[fidelity])
     report_path = run.directory / REPORT_FILE
     if final is not None and run.done(final.step_id) is not None and report_path.is_file():
         return CharacterizationReport.model_validate_json(report_path.read_text())

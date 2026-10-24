@@ -211,8 +211,14 @@ def test_stopping_the_server_stops_workers_before_the_head(stub_tools, request_b
     )
     deadline = time.monotonic() + 30
     # Both Ray nodes must be up: the GPU probe stub stops waiting after a few seconds.
+    # Match line starts: the srun line also names `ray start --address`.
     started = ("vllm serve", "ray start --head", "ray start --address")
-    while not all(s in (record.read_text() if record.exists() else "") for s in started):
+
+    def calls_started() -> bool:
+        lines = record.read_text().splitlines() if record.exists() else []
+        return all(any(line.startswith(s) for line in lines) for s in started)
+
+    while not calls_started():
         assert time.monotonic() < deadline and process.poll() is None
         time.sleep(0.2)
     if request_by == "stop_file":
@@ -221,6 +227,7 @@ def test_stopping_the_server_stops_workers_before_the_head(stub_tools, request_b
         os.killpg(process.pid, signal.SIGTERM)
     output, _ = process.communicate(timeout=60)
     calls = record.read_text().splitlines()
+    assert {"stopped n0", "stopped n1"} <= set(calls), f"{output}\n{calls}"
     assert calls.index("stopped n1") < calls.index("stopped n0"), output
     logs = Path(env["MATSIM_SERVER_LOG_DIR"])
     for host in ("n0", "n1"):

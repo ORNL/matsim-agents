@@ -17,7 +17,9 @@ The implementation is in `matsim_agents.execution.ledger`.
 - **Content identifiers.** A record's identifier is the hash of its content,
   excluding the time it was recorded. Replaying a workflow with the same
   outputs produces the same identifiers, and appending an existing record does
-  nothing.
+  nothing. Fields added later (`cost`, `policy_version`, `thresholds`,
+  `expected_cost`, `observed_cost`) are left out of the hash when unset, so
+  older ledgers keep their identifiers.
 - **Tamper evidence.** The file is a JSON-lines hash chain. Editing, deleting,
   or reordering a line is detected when the ledger is opened
   (`LedgerIntegrityError`). `verify_artifacts()` re-hashes the recorded input
@@ -94,6 +96,17 @@ Campaign state schema 3 adds `evidence_ledger_file`. A campaign saved before it
 
 The backfill is idempotent and deterministic: replaying it gives the same
 identifiers.
+
+## Cost accounting
+
+`CostRecord` splits resources into LLM tokens and seconds, MLIP relaxations
+and seconds, DFT calculations and seconds, fine-tuning seconds, and failed
+jobs and seconds. Characterization stores each attempt's cost as
+`EvidenceRecord.cost`; a failed attempt counts only under failed jobs. A debate
+review stores the debate's token usage as the `observed_cost` of its first
+decision, along with `policy_version` and the agreement `thresholds`. A
+recovery decision to retry has `expected_cost` set to one DFT calculation.
+`ledger show` reports the totals under `cost`.
 
 ## Command line
 

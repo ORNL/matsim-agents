@@ -161,6 +161,15 @@ def chat(
         "Optional JSONL artifact path for discovery->AL handoff audit records "
         "(UQ metrics, trigger rationale, action)."
     ),
+    resume: str | None = typer.Option(
+        None,
+        "--resume",
+        help=(
+            "Continue a saved session: its id under <output-dir>/chat/ or its directory. "
+            "The conversation and discovery state are restored; models and tools come "
+            "from this command line."
+        ),
+    ),
 ):
     """Interactive hypothesis-generation chat that triggers atomistic exploration.
 
@@ -215,7 +224,7 @@ def chat(
         uq_min_relaxations_for_handoff=uq_min_relaxations_for_handoff,
         al_handoff_audit_path=path_or_none(al_handoff_audit_path),
     )
-    session = run_chat(cfg)
+    session = run_chat(cfg, resume=resume)
     console.print(
         f"\n[bold]Session finished.[/bold] {len(session.explorations)} composition(s) explored."
     )

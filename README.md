@@ -1081,7 +1081,11 @@ replies, critiques and revisions when the hypothesis debate is on, and command
 and exploration results) including each model's reasoning, finish reason, and
 token counts, and `prompts/<id>.json` with the messages sent for each model
 reply. The proposer and critics see each other's answers only, never their
-reasoning.
+reasoning. After every turn the session state (conversation, compositions
+already explored, and their results) is saved atomically to `session.json` in
+the same directory; `matsim-agents chat --resume <session id or directory>`
+continues it, appending to the same transcript and skipping compositions that
+were already explored. Models and tools come from the new command line.
 
 Output artifacts per composition (under `--output-dir`):
 
@@ -1321,6 +1325,7 @@ force inference.
 | `--uq-min-unreliable-fraction FLOAT` | Trigger handoff when the low-confidence fraction exceeds this value. |
 | `--uq-min-relaxations-for-handoff INT` | Minimum number of relaxations before evaluating handoff policy. |
 | `--al-handoff-audit-path PATH` | Optional JSONL path for UQ and handoff audit artifacts. |
+| `--resume ID_OR_PATH` | Continue a saved session (its id under `<output-dir>/chat/`, or its directory). |
 
 `run`-specific:
 

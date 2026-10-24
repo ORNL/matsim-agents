@@ -94,3 +94,17 @@ def test_converged_vasp_cell_relaxation(tmp_path, potcar_dir):
     assert "ISIF" in (work_dir / "INCAR").read_text()
     assert (work_dir / "POTCAR").read_text().startswith("ENMAX")
     assert len(read(stage.optimized_structure_path)) == 4
+
+
+@pytest.mark.parametrize(("nelm", "scf_converged"), [(13, True), (4, False)])
+def test_vasp_scf_limit_applies_to_the_final_ionic_step(tmp_path, potcar_dir, nelm, scf_converged):
+    # The recorded run took [13, 7, 6, 4, 4] SCF iterations per ionic step.
+    result = _relax(
+        tmp_path,
+        "vasp",
+        "vasp/vc_relax_5steps",
+        relax_cell=True,
+        potcar_dir=str(potcar_dir),
+        settings={"nelm": nelm},
+    )
+    assert result.stages[0].scf_converged is scf_converged
