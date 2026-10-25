@@ -12,10 +12,10 @@ def test_run_pw_expands_launcher_placeholders(tmp_path, monkeypatch) -> None:
 
     def fake_run(argv, **kwargs):
         observed["argv"] = argv
-        return SimpleNamespace(returncode=0)
+        return 0
 
     result = SimpleNamespace(wall_time_sec=None)
-    monkeypatch.setattr(qe_relax.subprocess, "run", fake_run)
+    monkeypatch.setattr(qe_relax, "run_launcher", fake_run)
     monkeypatch.setattr(qe_relax, "parse_pw_stdout", lambda *_args, **_kwargs: result)
 
     qe_relax.run_pw(
@@ -43,10 +43,10 @@ def test_run_pw_expands_work_dir_without_input_placeholder(tmp_path, monkeypatch
 
     def fake_run(argv, **kwargs):
         observed["argv"] = argv
-        return SimpleNamespace(returncode=0)
+        return 0
 
     result = SimpleNamespace(wall_time_sec=None)
-    monkeypatch.setattr(qe_relax.subprocess, "run", fake_run)
+    monkeypatch.setattr(qe_relax, "run_launcher", fake_run)
     monkeypatch.setattr(qe_relax, "parse_pw_stdout", lambda *_args, **_kwargs: result)
 
     qe_relax.run_pw(
