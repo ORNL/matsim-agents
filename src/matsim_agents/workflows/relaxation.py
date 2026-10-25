@@ -239,6 +239,22 @@ def _mlip_stage(
     )
 
 
+def _read_text(path: str | Path) -> str:
+    try:
+        return Path(path).read_text(errors="replace")
+    except OSError:
+        return ""
+
+
+def _not_converged(code: str, return_code: int, output: str, started: bool) -> str:
+    reason = f"{code} did not converge (return code {return_code})"
+    if started or return_code == 0:
+        return reason
+    # The code never ran: the launcher's last line is the only diagnostic.
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    return f"{reason}: {lines[-1][:300]}" if lines else reason
+
+
 def _dft_stage(
     input_path: str, run: ScientificRunDirectory, cfg: ScientificRelaxationConfig
 ) -> RelaxationStageResult:
@@ -292,7 +308,12 @@ def _dft_stage(
             converged=result.converged,
             failure_reason=None
             if result.converged
-            else f"VASP did not converge (return code {result.return_code})",
+            else _not_converged(
+                "VASP",
+                result.return_code,
+                _read_text(work_dir / "vasp.out"),
+                bool(result.energies_eV) or any(result.scf_iterations_per_step),
+            ),
             return_code=result.return_code,
             scf_converged=not result.scf_iterations_per_step
             or result.scf_iterations_per_step[-1] < settings.nelm,
@@ -329,10 +350,7 @@ def _dft_stage(
         if result.final_max_force_ry_au is not None
         else None
     )
-    try:
-        stdout = Path(result.stdout_path).read_text(errors="replace")
-    except OSError:
-        stdout = ""
+    stdout = _read_text(result.stdout_path)
     return RelaxationStageResult(
         stage="dft_relaxation",
         backend="qe",
@@ -347,7 +365,7 @@ def _dft_stage(
         converged=result.converged,
         failure_reason=None
         if result.converged
-        else f"QE did not converge (return code {result.return_code})",
+        else _not_converged("QE", result.return_code, stdout, result.scf_iterations_total > 0),
         return_code=result.return_code,
         scf_converged="convergence NOT achieved" not in stdout,
         wall_time_sec=result.wall_time_sec,

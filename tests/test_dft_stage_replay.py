@@ -108,3 +108,38 @@ def test_vasp_scf_limit_applies_to_the_final_ionic_step(tmp_path, potcar_dir, ne
         settings={"nelm": nelm},
     )
     assert result.stages[0].scf_converged is scf_converged
+
+
+@pytest.mark.parametrize("backend", ["qe", "vasp"])
+def test_a_launcher_that_never_started_the_code_keeps_its_diagnostic(
+    tmp_path, pseudo_dir, potcar_dir, backend
+):
+    from matsim_agents.execution.recovery import FailureClass, classify_failure
+
+    structure = tmp_path / "Si.extxyz"
+    write(structure, bulk("Si", "diamond", a=5.43))
+    message = "pw.x not found or not executable: /opt/qe/bin/pw.x"
+    cfg = ScientificRelaxationConfig(
+        structure_path=str(structure),
+        mode=RelaxationMode.DFT,
+        output_root=str(tmp_path / "runs"),
+        dft=DFTBackendConfig(
+            backend=backend,
+            launcher=["sh", "-c", f"echo 'ERROR: {message}' >&2; exit 2", "wrapper"],
+            pseudo_dir=str(pseudo_dir),
+            potcar_dir=str(potcar_dir),
+        ),
+        dft_approved=True,
+        geometry={"relax_cell": False},
+    )
+    (stage,) = run_relaxation(cfg).stages
+    assert stage.failure_reason.endswith(message)
+    outcome = {"status": "failed", "return_code": 2, "failure_reason": stage.failure_reason}
+    assert classify_failure(outcome) == FailureClass.LAUNCHER
+
+
+def test_a_code_failure_reason_carries_no_output_tail(tmp_path, pseudo_dir):
+    result = _relax(
+        tmp_path, "qe", "qe/relax_step_limited", relax_cell=False, pseudo_dir=str(pseudo_dir)
+    )
+    assert result.stages[0].failure_reason == "QE did not converge (return code 0)"
