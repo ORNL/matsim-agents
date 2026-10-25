@@ -22,6 +22,19 @@ from matsim_agents.execution.recovery import (
             {"status": "failed", "return_code": 127, "failure_reason": "did not converge"},
             "launcher",
         ),
+        (
+            {"status": "failed", "return_code": 126, "failure_reason": "did not converge"},
+            "launcher",
+        ),
+        (
+            {
+                "status": "failed",
+                "return_code": 2,
+                "failure_reason": "VASP did not converge (return code 2): "
+                "ERROR: vasp binary not executable: /opt/vasp/bin/vasp_std",
+            },
+            "launcher",
+        ),
         ({"status": "failed", "failure_type": "PermissionError"}, "approval_or_input"),
         ({"status": "failed", "scf_converged": False, "return_code": 2}, "scf_not_converged"),
         ({"status": "failed", "failure_reason": "non-finite output"}, "non_finite_output"),

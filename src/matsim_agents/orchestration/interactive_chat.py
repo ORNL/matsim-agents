@@ -940,7 +940,14 @@ def _chat_turn(
                 "Run surrogate-based phase exploration?",
                 auto=cfg.auto_confirm,
             ):
-                exploration = _kickoff_exploration(comp, cfg, mlip_pool=session.relaxation_pool())
+                try:
+                    exploration = _kickoff_exploration(
+                        comp, cfg, mlip_pool=session.relaxation_pool()
+                    )
+                except BaseException:
+                    # Not explored: a resumed session offers it again.
+                    session.seen_compositions.discard(comp.formula)
+                    raise
                 session.explorations.append(exploration)
                 if cfg.trigger_active_learning_on_high_uq:
                     should_handoff, handoff_reason = _should_handoff_to_active_learning(

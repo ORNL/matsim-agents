@@ -224,6 +224,29 @@ class TestExplorationErrors:
         with pytest.raises(RuntimeError, match="Relaxation failed"):
             chat_once(session, "Suggest cathode")
 
+    def test_an_interrupted_exploration_is_offered_again_on_resume(
+        self, discovery_config, monkeypatch
+    ):
+        import matsim_agents.orchestration.interactive_chat as chat_mod
+
+        session, _ = _make_session(
+            discovery_config, responses=["Try Li2MnO3."], monkeypatch=monkeypatch
+        )
+        monkeypatch.setattr(
+            chat_mod, "_kickoff_exploration", MagicMock(side_effect=KeyboardInterrupt)
+        )
+        with pytest.raises(KeyboardInterrupt):
+            chat_once(session, "Suggest a cathode.")
+        assert "Li2MnO3" not in session.seen_compositions
+
+        _, mock_explore = _make_session(
+            discovery_config, responses=["Li2MnO3 again."], monkeypatch=monkeypatch
+        )
+        resumed = DiscoveryChatSession.resume(discovery_config, session.transcript.directory)
+        chat_once(resumed, "Retry.")
+        assert [c.args[0].formula for c in mock_explore.call_args_list] == ["Li2MnO3"]
+        assert len(resumed.explorations) == 1
+
 
 # ── message history ───────────────────────────────────────────────────────────
 

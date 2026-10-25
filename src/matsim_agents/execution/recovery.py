@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict
 
 RECOVERY_POLICY_VERSION = "recovery-v1"
 WALLTIME_RETURN_CODE = 124
+COMMAND_NOT_EXECUTABLE_RETURN_CODE = 126
 COMMAND_NOT_FOUND_RETURN_CODE = 127
 
 _QE_MIXING_BETA = 0.4
@@ -76,8 +77,10 @@ def classify_failure(outcome: dict[str, Any], *, max_steps: int | None = None) -
         return FailureClass.WALLTIME
     if (
         error in _LAUNCHER_ERRORS
-        or outcome.get("return_code") == COMMAND_NOT_FOUND_RETURN_CODE
+        or outcome.get("return_code")
+        in {COMMAND_NOT_EXECUTABLE_RETURN_CODE, COMMAND_NOT_FOUND_RETURN_CODE}
         or "not found" in reason
+        or "not executable" in reason
         or "no such file" in reason
     ):
         return FailureClass.LAUNCHER
