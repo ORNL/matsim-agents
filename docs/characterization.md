@@ -188,8 +188,13 @@ versioned policy `recovery-v1`:
 Every retry counts against `max_dft_calculations`. Each attempt is a ledger
 record whose `numerical_convergence.failure_class` names the class. The
 choice to retry or give up is a `DecisionRecord`: action
-`recover:<class>` or `give_up:<class>`, actor `recovery-policy:recovery-v1`,
-`policy_version`, and `thresholds` (retries allowed and used, budget). The
+`recover:<class>`, `defer:<class>` (a retry the budget stopped), or
+`give_up:<class>`, actor `recovery-policy:recovery-v1`, `policy_version`,
+and `thresholds` (retries allowed and used, budget). A retry, with its
+structure, settings, and counters, is saved in the run state before it
+starts and kept until an attempt with no further retry is saved, so an
+interrupted or deferred retry runs on the next execution; a deferred retry
+first records its `recover:<class>` decision. The
 adjusted settings are part of the retry's method record and do not change the
 contract. MLIP relaxations are not retried: a rerun repeats the failure.
 

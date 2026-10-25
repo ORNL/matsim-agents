@@ -975,7 +975,7 @@ def test_recovery_stops_at_the_policy_limit_and_the_budget(system):
     report = run_characterization(capped, relax=relax)
     assert [n for n, _ in relax.calls] == ["NbO2-a.extxyz"] * 2
     [*_, last] = _ledger(capped).decisions()
-    assert last.action == "give_up:scf_not_converged" and "budget" in last.rationale
+    assert last.action == "defer:scf_not_converged" and "budget" in last.rationale
     assert any("beyond the dft relaxation budget" in m for m in report.missing)
 
 
@@ -1038,8 +1038,12 @@ def test_a_retry_stopped_by_the_budget_resumes_with_its_recovery(system):
     ledger = _ledger(raised)
     retried = [e for e in ledger.evidence() if e.calculation_id == "relax-dft-001"][-1]
     assert retried.method.settings["mixing_beta"] == 0.2
-    [*_, last] = [d for d in ledger.decisions() if d.subject == "relax-dft-001"]
-    assert "budget" in last.rationale
+    decisions = [d for d in ledger.decisions() if d.subject == "relax-dft-001"]
+    assert [d.action for d in decisions] == ["defer:scf_not_converged", "recover:scf_not_converged"]
+    assert decisions[1].evidence_ids == decisions[0].evidence_ids
+    assert decisions[1].expected_cost.dft_calculations == 1
+    assert decisions[1].thresholds["dft_budget"] == 5
+    assert "budget" in decisions[1].rationale
     assert outstanding_steps(raised) == []
 
 
@@ -1084,3 +1088,75 @@ def test_a_budget_stopped_ionic_restart_resumes_from_the_same_structure(system):
     retried = [e for e in _ledger(raised).evidence() if e.calculation_id == "relax-dft-001"][-1]
     assert retried.input_sha256 == hashes_of([resumed])
     assert outstanding_steps(raised) == []
+
+
+class Interrupted(FakeRelax):
+    """Raises KeyboardInterrupt on the given call, as a killed run would stop."""
+
+    def __init__(self, energies, *, at, **kwargs):
+        super().__init__(energies, **kwargs)
+        self.at = at
+        self.settings = []
+
+    def __call__(self, cfg):
+        self.settings.append(dict(cfg.dft.settings))
+        if len(self.calls) + 1 == self.at:
+            self.calls.append((Path(cfg.structure_path).name, cfg.mode))
+            raise KeyboardInterrupt
+        return super().__call__(cfg)
+
+
+@pytest.mark.parametrize(
+    ("failure", "failure_class", "structure", "setting"),
+    [
+        ("scf_failed", "scf_not_converged", "NbO2-a.extxyz", ("mixing_beta", 0.2)),
+        ("step_limited", "ionic_step_limit", "relaxed-NbO2-a.extxyz", None),
+    ],
+)
+def test_an_interrupted_retry_runs_again_on_resume(
+    system, failure, failure_class, structure, setting
+):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0, "relaxed-NbO2-a.extxyz": -21.4}
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    first = Interrupted(energies, at=2, **{failure: {"NbO2-a.extxyz"}})
+    with pytest.raises(KeyboardInterrupt):
+        run_characterization(contract, relax=first)
+    assert [s.step_id for s in outstanding_steps(contract)] == [
+        "relax-dft-000",
+        "relax-dft-001",
+        "hull",
+    ]
+    relax = Interrupted(energies, at=0)
+    report = run_characterization(contract, relax=relax)
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    assert [Path(s).name for s in relax.structures] == [structure, "NbO2-b.extxyz"]
+    if setting is not None:
+        assert relax.settings[0][setting[0]] == setting[1]
+    decisions = [d for d in _ledger(contract).decisions() if d.subject == "relax-dft-000"]
+    assert [d.action for d in decisions] == [f"recover:{failure_class}"]
+    assert outstanding_steps(contract) == []
+
+
+def test_an_interrupted_budget_deferred_retry_runs_again_on_resume(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    data = _dft(references, budget={"max_dft_calculations": 2})
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    run_characterization(contract, relax=FakeRelax(energies, scf_failed={"NbO2-b.extxyz"}))
+    raised = _contract(
+        tmp_path,
+        structures,
+        "thermodynamic_stability",
+        **{**data, "budget": {"max_dft_calculations": 5}},
+    )
+    with pytest.raises(KeyboardInterrupt):
+        run_characterization(raised, relax=Interrupted(energies, at=1))
+    assert [s.step_id for s in outstanding_steps(raised)] == ["relax-dft-001", "hull"]
+    relax = Interrupted(energies, at=0)
+    report = run_characterization(raised, relax=relax)
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    assert [n for n, _ in relax.calls] == ["NbO2-b.extxyz"]
+    assert relax.settings[0]["mixing_beta"] == 0.2
+    actions = [d.action for d in _ledger(raised).decisions() if d.subject == "relax-dft-001"]
+    assert actions == ["defer:scf_not_converged", "recover:scf_not_converged"]

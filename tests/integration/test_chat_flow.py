@@ -247,6 +247,24 @@ class TestExplorationErrors:
         assert [c.args[0].formula for c in mock_explore.call_args_list] == ["Li2MnO3"]
         assert len(resumed.explorations) == 1
 
+    def test_an_interrupted_confirmation_is_offered_again(self, discovery_config, monkeypatch):
+        import builtins
+
+        discovery_config.auto_confirm = False
+        session, mock_explore = _make_session(
+            discovery_config, responses=["Try Li2MnO3."], monkeypatch=monkeypatch
+        )
+
+        def interrupt(_prompt):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(builtins, "input", interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            chat_once(session, "Suggest a cathode.")
+        mock_explore.assert_not_called()
+        resumed = DiscoveryChatSession.resume(discovery_config, session.transcript.directory)
+        assert "Li2MnO3" not in resumed.seen_compositions
+
 
 # ── message history ───────────────────────────────────────────────────────────
 

@@ -547,6 +547,13 @@ class _Run:
             self.state["recovery"][step_id] = recovery
         self._save()
 
+    def record_attempt(
+        self, step: RecipeStep, outcome: dict[str, Any], recovery: dict[str, Any] | None
+    ) -> None:
+        """Save an attempt's outcome and the step's next retry (None once terminal) together."""
+        self.state["steps"][step.step_id] = outcome
+        self.set_pending(step.step_id, recovery)
+
     def forget(self, step_id: str) -> None:
         self.state["steps"].pop(step_id, None)
         self._save()
@@ -885,6 +892,67 @@ def _attempt(
     return outcome
 
 
+def _recovery_decision(
+    contract: CharacterizationContract,
+    step: RecipeStep,
+    *,
+    attempt: int,
+    evidence_id: str,
+    failure: FailureClass,
+    action: str,
+    rationale: str,
+    used: int,
+    budget: int | None,
+) -> DecisionRecord:
+    rule = DEFAULT_POLICY.rule(failure)
+    return DecisionRecord(
+        campaign_id=contract.contract_id,
+        iteration=attempt,
+        action=f"{action}:{failure.value}",
+        subject=step.step_id,
+        evidence_ids=[evidence_id],
+        rationale=rationale,
+        actor=f"recovery-policy:{DEFAULT_POLICY.version}",
+        policy_version=DEFAULT_POLICY.version,
+        thresholds={
+            "max_retries": float(rule.max_retries),
+            "retries_used": float(used),
+            **({"dft_budget": float(budget)} if budget is not None else {}),
+        },
+        expected_cost=CostRecord(dft_calculations=1) if action == "recover" else None,
+    )
+
+
+def _resume_recovery(
+    contract: CharacterizationContract,
+    step: RecipeStep,
+    run: _Run,
+    ledger: EvidenceLedger,
+    pending: dict[str, Any],
+    budget: int | None,
+) -> None:
+    """Record the decision to run a saved retry; a decision already recorded is not repeated."""
+    decision = pending.get("decision")
+    if decision is None:
+        failure = FailureClass(pending["failure"])
+        rule = DEFAULT_POLICY.rule(failure)
+        used = pending["retries"][failure.value] - 1
+        decision = _recovery_decision(
+            contract,
+            step,
+            attempt=pending["attempt"],
+            evidence_id=pending["evidence_id"],
+            failure=failure,
+            action="recover",
+            rationale=f"retry {used + 1} of {rule.max_retries}, deferred by the budget: "
+            f"{rule.action}",
+            used=used,
+            budget=budget,
+        ).model_dump(mode="json", exclude={"decision_id", "recorded_at"})
+        run.set_pending(step.step_id, {**pending, "decision": decision})
+    ledger.append(DecisionRecord.model_validate(decision))
+
+
 def _relax_with_recovery(
     contract: CharacterizationContract,
     step: RecipeStep,
@@ -895,7 +963,9 @@ def _relax_with_recovery(
 ) -> None:
     """Relax one step; a failed DFT attempt is retried as the recovery policy directs.
 
-    A retry the budget stopped is saved, and resumed with its settings and counters.
+    Every retry is saved before it runs and kept until an outcome without a further
+    retry is saved, so an interrupted or budget-stopped retry resumes with its
+    structure, settings, and counters.
     """
     structure = str(step.structure)
     dft = contract.methods.dft if step.fidelity == "dft" else None
@@ -904,12 +974,14 @@ def _relax_with_recovery(
         structure = pending["structure"]
         dft = DFTBackendConfig.model_validate(pending["dft"])
         retries = {FailureClass(k): v for k, v in pending["retries"].items()}
-        run.set_pending(step.step_id, None)
+        _resume_recovery(contract, step, run, ledger, pending, budget)
     while True:
         outcome = _attempt(contract, step, run, relax, structure, dft)
         evidence = ledger.append(_relaxation_evidence(contract, step, outcome))
-        run.record(step, {**outcome, "evidence_id": evidence.evidence_id})  # type: ignore[union-attr]
+        evidence_id = evidence.evidence_id  # type: ignore[union-attr]
+        recorded = {**outcome, "evidence_id": evidence_id}
         if dft is None or "failure_class" not in outcome:
+            run.record_attempt(step, recorded, None)
             return
         failure = FailureClass(outcome["failure_class"])
         rule = DEFAULT_POLICY.rule(failure)
@@ -922,43 +994,43 @@ def _relax_with_recovery(
         elif not can_retry(failure, timeout_sec=dft.timeout_sec) or rule.max_retries == 0:
             rationale = f"no recovery for {failure.value}"
         elif not within_budget:
-            rationale = f"the DFT budget ({budget}) is spent"
+            rationale = f"the DFT budget ({budget}) is spent; the retry is saved"
         else:
             rationale = f"{rule.max_retries} retries for {failure.value} exhausted"
-        ledger.append(
-            DecisionRecord(
-                campaign_id=contract.contract_id,
-                iteration=outcome["attempt"],
-                action=f"{'recover' if retry else 'give_up'}:{failure.value}",
-                subject=step.step_id,
-                evidence_ids=[evidence.evidence_id],  # type: ignore[union-attr]
-                rationale=rationale,
-                actor=f"recovery-policy:{DEFAULT_POLICY.version}",
-                policy_version=DEFAULT_POLICY.version,
-                thresholds={
-                    "max_retries": float(rule.max_retries),
-                    "retries_used": float(used),
-                    **({"dft_budget": float(budget)} if budget is not None else {}),
-                },
-                expected_cost=CostRecord(dft_calculations=1) if retry else None,
-            )
+        decision = _recovery_decision(
+            contract,
+            step,
+            attempt=outcome["attempt"],
+            evidence_id=evidence_id,
+            failure=failure,
+            action="recover" if retry else "defer" if allowed else "give_up",
+            rationale=rationale,
+            used=used,
+            budget=budget,
         )
-        if not allowed:
-            return
-        retries[failure] = used + 1
-        if failure == FailureClass.IONIC_STEP_LIMIT and outcome.get("optimized_structure_path"):
-            structure = outcome["optimized_structure_path"]
-        settings, timeout = adjusted_settings(failure, dft.backend, dft.settings, dft.timeout_sec)
-        dft = dft.model_copy(update={"settings": settings, "timeout_sec": timeout})
-        if not retry:
-            run.set_pending(
-                step.step_id,
-                {
-                    "structure": structure,
-                    "dft": dft.model_dump(mode="json"),
-                    "retries": {k.value: v for k, v in retries.items()},
-                },
+        checkpoint = None
+        if allowed:
+            retries[failure] = used + 1
+            if failure == FailureClass.IONIC_STEP_LIMIT and outcome.get("optimized_structure_path"):
+                structure = outcome["optimized_structure_path"]
+            settings, timeout = adjusted_settings(
+                failure, dft.backend, dft.settings, dft.timeout_sec
             )
+            dft = dft.model_copy(update={"settings": settings, "timeout_sec": timeout})
+            checkpoint = {
+                "structure": structure,
+                "dft": dft.model_dump(mode="json"),
+                "retries": {k.value: v for k, v in retries.items()},
+                "attempt": outcome["attempt"],
+                "evidence_id": evidence_id,
+                "failure": failure.value,
+                "decision": decision.model_dump(mode="json", exclude={"decision_id", "recorded_at"})
+                if retry
+                else None,
+            }
+        run.record_attempt(step, recorded, checkpoint)
+        ledger.append(decision)
+        if not retry:
             return
 
 

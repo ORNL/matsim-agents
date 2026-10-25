@@ -935,19 +935,21 @@ def _chat_turn(
             if comp.formula in session.seen_compositions:
                 continue
             session.seen_compositions.add(comp.formula)
-            if _confirm(
-                f"\nProposed composition detected: {comp.formula}. "
-                "Run surrogate-based phase exploration?",
-                auto=cfg.auto_confirm,
-            ):
-                try:
-                    exploration = _kickoff_exploration(
-                        comp, cfg, mlip_pool=session.relaxation_pool()
+            try:
+                exploration = (
+                    _kickoff_exploration(comp, cfg, mlip_pool=session.relaxation_pool())
+                    if _confirm(
+                        f"\nProposed composition detected: {comp.formula}. "
+                        "Run surrogate-based phase exploration?",
+                        auto=cfg.auto_confirm,
                     )
-                except BaseException:
-                    # Not explored: a resumed session offers it again.
-                    session.seen_compositions.discard(comp.formula)
-                    raise
+                    else None
+                )
+            except BaseException:
+                # Not explored: a resumed session offers it again.
+                session.seen_compositions.discard(comp.formula)
+                raise
+            if exploration is not None:
                 session.explorations.append(exploration)
                 if cfg.trigger_active_learning_on_high_uq:
                     should_handoff, handoff_reason = _should_handoff_to_active_learning(
