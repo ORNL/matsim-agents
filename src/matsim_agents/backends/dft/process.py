@@ -60,8 +60,10 @@ def run_launcher(
 ) -> int:
     """The launcher's return code, or 124 once a timed-out launch has fully stopped.
 
-    The launcher runs in its own session, so signals to the workflow do not reach it;
-    SIGTERM to the workflow (in the main thread) stops the launch group before exiting.
+    The launcher runs in its own session, so signals to the workflow do not reach it.
+    SIGTERM or Ctrl-C to the workflow (in the main thread) stops and reaps the launch
+    group, then exits or raises ``KeyboardInterrupt``; a signal during that cleanup
+    waits for it to finish.
     """
     proc = subprocess.Popen(
         argv,
@@ -71,39 +73,50 @@ def run_launcher(
         env=None if env is None else dict(env),
         start_new_session=True,
     )
-    stopping = False
-    deferred: list[int] = []
-
-    def on_sigterm(signum: int, _frame: object) -> None:
-        if stopping:
-            deferred.append(signum)
-        else:
-            raise SystemExit(128 + signum)
-
-    restore = _handle_sigterm(on_sigterm)
+    received: list[int] = []
+    restore = _handle_signals(lambda signum, _frame: received.append(signum))
     try:
         try:
-            return proc.wait(timeout=timeout_sec)
-        except subprocess.TimeoutExpired:
-            stopping = True
-            stop_process_group(proc, grace_sec)
-            if deferred:
-                raise SystemExit(128 + deferred[0]) from None
-            return TIMEOUT_RETURN_CODE
-        except BaseException:
-            stopping = True
-            stop_process_group(proc, grace_sec)
-            raise
+            returncode = _wait_unless_signalled(proc, timeout_sec, received)
+        finally:
+            if proc.returncode is None:
+                stop_process_group(proc, grace_sec)
     finally:
         restore()
+    if received:
+        if received[0] == signal.SIGINT:
+            raise KeyboardInterrupt
+        raise SystemExit(128 + received[0])
+    return TIMEOUT_RETURN_CODE if returncode is None else returncode
 
 
-def _handle_sigterm(handler: Callable[[int, object], None]) -> Callable[[], None]:
-    """Install ``handler`` for SIGTERM; returns the call that restores the previous one."""
+def _wait_unless_signalled(
+    proc: subprocess.Popen, timeout_sec: float | None, received: list[int]
+) -> int | None:
+    """The launcher's return code, or ``None`` once it times out or the workflow is signalled."""
+    deadline = None if timeout_sec is None else time.monotonic() + timeout_sec
+    while proc.poll() is None and not received:
+        if deadline is not None and time.monotonic() >= deadline:
+            return None
+        time.sleep(0.05)
+    return proc.returncode
+
+
+def _handle_signals(handler: Callable[[int, object], None]) -> Callable[[], None]:
+    """Install ``handler`` for SIGTERM and a default SIGINT; returns the restoring call."""
     if threading.current_thread() is not threading.main_thread():
         return lambda: None
-    previous = signal.signal(signal.SIGTERM, handler)
-    return lambda: signal.signal(signal.SIGTERM, signal.SIG_DFL if previous is None else previous)
+    signums = [signal.SIGTERM]
+    # An ignored or application-owned SIGINT keeps its handler.
+    if signal.getsignal(signal.SIGINT) is signal.default_int_handler:
+        signums.append(signal.SIGINT)
+    previous = {signum: signal.signal(signum, handler) for signum in signums}
+
+    def restore() -> None:
+        for signum, old in previous.items():
+            signal.signal(signum, signal.SIG_DFL if old is None else old)
+
+    return restore
 
 
 __all__ = ["TERMINATE_GRACE_SEC", "TIMEOUT_RETURN_CODE", "run_launcher", "stop_process_group"]
