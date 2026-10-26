@@ -65,17 +65,18 @@ def run_launcher(
     group, then exits or raises ``KeyboardInterrupt``; a signal during that cleanup
     waits for it to finish.
     """
-    proc = subprocess.Popen(
-        argv,
-        cwd=cwd,
-        stdout=stdout,
-        stderr=subprocess.STDOUT,
-        env=None if env is None else dict(env),
-        start_new_session=True,
-    )
     received: list[int] = []
+    # Handlers first: a signal while the launcher starts must not escape before it is tracked.
     restore = _handle_signals(lambda signum, _frame: received.append(signum))
     try:
+        proc = subprocess.Popen(
+            argv,
+            cwd=cwd,
+            stdout=stdout,
+            stderr=subprocess.STDOUT,
+            env=None if env is None else dict(env),
+            start_new_session=True,
+        )
         try:
             returncode = _wait_unless_signalled(proc, timeout_sec, received)
         finally:
