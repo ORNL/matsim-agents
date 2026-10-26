@@ -195,6 +195,15 @@ class ProcessLaunch(_StrictModel):
     def node_count(self) -> int:
         return len(self.hosts)
 
+    def allocation(self) -> dict[str, int | float | str | None]:
+        """Nodes, devices, device kind, and physical GPUs of this launch, for cost accounting."""
+        return {
+            "nodes": self.node_count,
+            "devices": self.device_count,
+            "device_kind": self.device_kind,
+            "gpus": self.gpu_count,
+        }
+
     @property
     def device_count(self) -> int:
         return self.node_count * len(self.devices)

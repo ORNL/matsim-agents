@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import tempfile
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
@@ -1042,6 +1043,6 @@ def run_chat(
             _print(f"[dim]Transcript: {session.transcript.markdown_path}[/dim]")
             _print(
                 f"[dim]Resume with: matsim-agents chat --resume "
-                f"{session.transcript.directory.name}[/dim]"
+                f"{shlex.quote(str(session.transcript.directory.resolve()))}[/dim]"
             )
     return session

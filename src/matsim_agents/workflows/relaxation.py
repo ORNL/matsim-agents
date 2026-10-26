@@ -281,16 +281,7 @@ def _dft_stage(
         placement = cfg.resources.place(run.path)
         dft = dft.model_copy(update={"launch": placement.pool("dft").launches[0]})
     work_dir = run.path / "calculations" / dft.backend
-    allocation = (
-        {
-            "nodes": dft.launch.node_count,
-            "devices": dft.launch.device_count,
-            "device_kind": dft.launch.device_kind,
-            "gpus": dft.launch.gpu_count,
-        }
-        if dft.launch is not None
-        else {}
-    )
+    allocation = dft.launch.allocation() if dft.launch is not None else {}
     atoms = read(input_path)
     calculation = "vc-relax" if cfg.geometry.relax_cell else "relax"
     if dft.backend == "vasp":

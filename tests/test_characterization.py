@@ -977,6 +977,18 @@ def test_recovery_stops_at_the_policy_limit_and_the_budget(system):
     [*_, last] = _ledger(capped).decisions()
     assert last.action == "defer:scf_not_converged" and "budget" in last.rationale
     assert any("beyond the dft relaxation budget" in m for m in report.missing)
+    # The last permitted retry also spends the budget: nothing is saved to resume.
+    data = {**_dft(references, budget={"max_dft_calculations": 3}), "contract_id": "spent"}
+    spent = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    run_characterization(spent, relax=FlakySCF(energies, failures=5))
+    [*_, last] = _ledger(spent).decisions()
+    assert last.action == "give_up:scf_not_converged" and "exhausted" in last.rationale
+    state = json.loads(
+        (
+            Path(spent.output_root) / "characterization-spent" / "characterization-state.json"
+        ).read_text()
+    )
+    assert state["recovery"] == {}
 
 
 def test_a_missing_launcher_is_not_retried(system):
@@ -1002,6 +1014,29 @@ def test_an_explicit_scf_failure_is_not_converged_evidence(system):
     assert first.evidence_level == EvidenceLevel.LOW_FIDELITY_DFT
     assert first.numerical_convergence["failure_class"] == "scf_not_converged"
     assert ledger.decisions()[0].action == "recover:scf_not_converged"
+
+
+def test_a_failed_placed_attempt_keeps_its_allocation_cost(system):
+    tmp_path, structures, references = system
+    data = _dft(references)
+    data["methods"]["dft"]["launch"] = {
+        "hosts": ["nid001"],
+        "devices": [0, 1, 2, 3, 4, 5, 6, 7],
+        "ranks_per_node": 8,
+        "threads_per_rank": 7,
+        "device_kind": "rocm-gcd",
+        "devices_per_gpu": 2,
+    }
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    relax = FakeRelax({"NbO2-b.extxyz": -21.0}, broken={"NbO2-a.extxyz"})
+    run_characterization(contract, relax=relax)
+    [failed] = [e for e in _ledger(contract).evidence() if e.calculation_id == "relax-dft-000"]
+    assert failed.cost.failed_jobs == 1
+    assert (failed.cost.nodes, failed.cost.devices, failed.cost.gpus) == (
+        1,
+        {"rocm-gcd": 8},
+        4.0,
+    )
 
 
 def test_attempt_costs_record_the_nodes_and_gpus_of_their_placement(system):

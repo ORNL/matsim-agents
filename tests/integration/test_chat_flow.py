@@ -354,6 +354,28 @@ class TestResumableSession:
         with pytest.raises(FileNotFoundError, match="no saved chat session"):
             DiscoveryChatSession.resume(discovery_config, "does-not-exist")
 
+    def test_the_resume_hint_works_from_another_output_directory(
+        self, discovery_config, monkeypatch, tmp_path
+    ):
+        import builtins
+        import shlex
+        from dataclasses import replace
+
+        import matsim_agents.orchestration.interactive_chat as chat_mod
+
+        _make_session(discovery_config, responses=["Hello."], monkeypatch=monkeypatch)
+        printed = []
+        monkeypatch.setattr(chat_mod, "_print", lambda text, *_a, **_k: printed.append(text))
+        replies = iter(["Hi.", "exit"])
+        monkeypatch.setattr(builtins, "input", lambda _prompt: next(replies))
+        session = chat_mod.run_chat(discovery_config)
+        [hint] = [text for text in printed if "Resume with" in text]
+        [argument] = shlex.split(hint.split("--resume ", 1)[1].removesuffix("[/dim]"))
+        assert Path(argument) == session.transcript.directory.resolve()
+        elsewhere = replace(discovery_config, output_dir=str(tmp_path / "elsewhere"))
+        resumed = DiscoveryChatSession.resume(elsewhere, argument)
+        assert resumed.transcript.directory == Path(argument)
+
 
 # ── multi-LLM critique / panel mode ──────────────────────────────────────────
 

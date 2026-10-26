@@ -878,6 +878,11 @@ def _attempt(
             "attempt": attempt,
             "wall_seconds": time.monotonic() - started,
         }
+        # An attempt that failed before reporting a stage still held its placement.
+        if dft is not None and dft.launch is not None:
+            for name, value in dft.launch.allocation().items():
+                if outcome.get(name) is None:
+                    outcome[name] = value
         if structure != step.structure:
             outcome["input_structure"] = structure
         if dft is not None and dft != contract.methods.dft:
@@ -1029,7 +1034,7 @@ def _relax_with_recovery(
             rationale = f"retry {used + 1} of {rule.max_retries}: {rule.action}"
         elif not can_retry(failure, timeout_sec=dft.timeout_sec) or rule.max_retries == 0:
             rationale = f"no recovery for {failure.value}"
-        elif not within_budget:
+        elif allowed and not within_budget:
             rationale = f"the DFT budget ({budget}) is spent; the retry is saved"
         else:
             rationale = f"{rule.max_retries} retries for {failure.value} exhausted"
