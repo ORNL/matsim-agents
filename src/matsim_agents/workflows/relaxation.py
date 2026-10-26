@@ -174,6 +174,8 @@ class RelaxationStageResult(BaseModel):
     return_code: int | None = None
     scf_converged: bool | None = None
     wall_time_sec: float | None = None
+    nodes: int | None = Field(None, description="Nodes the placement gave the calculation.")
+    gpus: int | None = Field(None, description="GPUs the placement gave the calculation.")
     artifacts: dict[str, str] = Field(default_factory=dict)
 
 
@@ -275,6 +277,11 @@ def _dft_stage(
         placement = cfg.resources.place(run.path)
         dft = dft.model_copy(update={"launch": placement.pool("dft").launches[0]})
     work_dir = run.path / "calculations" / dft.backend
+    allocation = (
+        {"nodes": dft.launch.node_count, "gpus": dft.launch.node_count * len(dft.launch.devices)}
+        if dft.launch is not None
+        else {}
+    )
     atoms = read(input_path)
     calculation = "vc-relax" if cfg.geometry.relax_cell else "relax"
     if dft.backend == "vasp":
@@ -328,6 +335,7 @@ def _dft_stage(
             or result.scf_iterations_per_step[-1] < settings.nelm,
             wall_time_sec=result.wall_time_sec,
             artifacts={"work_dir": str(work_dir)},
+            **allocation,
         )
 
     from matsim_agents.backends.dft.qe_relax import QESettings, run_pw, write_pw_input
@@ -379,6 +387,7 @@ def _dft_stage(
         scf_converged=_qe_scf_converged(stdout),
         wall_time_sec=result.wall_time_sec,
         artifacts={"input": input_file, "stdout": result.stdout_path},
+        **allocation,
     )
 
 

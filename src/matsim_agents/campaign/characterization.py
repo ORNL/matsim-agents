@@ -420,8 +420,14 @@ def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
             "failure_reason": result.failure_reason or "no stage result",
             "failure_type": result.failure_type,
             "return_code": stage.return_code if stage else None,
+            **({"nodes": stage.nodes, "gpus": stage.gpus} if stage else {}),
         }
-    diagnostics = {"return_code": stage.return_code, "scf_converged": stage.scf_converged}
+    diagnostics = {
+        "return_code": stage.return_code,
+        "scf_converged": stage.scf_converged,
+        "nodes": stage.nodes,
+        "gpus": stage.gpus,
+    }
     if (
         stage.energy_eV is None
         or stage.max_force_eV_per_A is None
@@ -723,12 +729,18 @@ def _relaxation_evidence(
     tolerance = contract.tolerances.force_tolerance_eV_per_A
     seconds = float(outcome.get("wall_seconds") or 0.0)
     failed = outcome["status"] != "done" or outcome.get("return_code") not in (None, 0)
+    nodes, gpus = int(outcome.get("nodes") or 0), int(outcome.get("gpus") or 0)
     cost = (
         CostRecord(failed_jobs=1, failed_seconds=seconds)
         if failed
         else CostRecord(dft_calculations=1, dft_seconds=seconds)
         if fidelity == "dft"
         else CostRecord(mlip_relaxations=1, mlip_seconds=seconds)
+    ) + CostRecord(
+        nodes=nodes,
+        gpus=gpus,
+        node_hours=nodes * seconds / 3600,
+        gpu_hours=gpus * seconds / 3600,
     )
     diagnosis = {"failure_class": outcome["failure_class"]} if outcome.get("failure_class") else {}
     common: dict[str, Any] = {

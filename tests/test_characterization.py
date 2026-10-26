@@ -1004,6 +1004,25 @@ def test_an_explicit_scf_failure_is_not_converged_evidence(system):
     assert ledger.decisions()[0].action == "recover:scf_not_converged"
 
 
+def test_attempt_costs_record_the_nodes_and_gpus_of_their_placement(system):
+    tmp_path, structures, references = system
+    fake = FakeRelax({"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0})
+
+    def relax(cfg):
+        result = fake(cfg)
+        result.stages[-1].nodes, result.stages[-1].gpus = 2, 8
+        return result
+
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    run_characterization(contract, relax=relax)
+    attempts = [e for e in _ledger(contract).evidence() if e.kind == "relaxation"]
+    assert [(e.cost.nodes, e.cost.gpus) for e in attempts] == [(2, 8), (2, 8)]
+    cost = _ledger(contract).summary()["cost"]
+    assert cost["nodes"] == 4 and cost["gpus"] == 16
+    assert cost["node_hours"] == pytest.approx(2 * cost["dft_seconds"] / 3600)
+    assert cost["gpu_hours"] == pytest.approx(8 * cost["dft_seconds"] / 3600)
+
+
 def test_a_killed_dft_run_is_not_converged_evidence(system):
     tmp_path, structures, references = system
     energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}

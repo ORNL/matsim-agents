@@ -186,3 +186,31 @@ def test_qe_scf_convergence_follows_the_last_cycle(markers, converged):
     from matsim_agents.workflows.relaxation import _qe_scf_converged
 
     assert _qe_scf_converged("\n".join(f"     {m} in 7 iterations" for m in markers)) is converged
+
+
+@pytest.mark.parametrize("placed", [True, False])
+def test_a_calculation_reports_the_nodes_and_gpus_it_was_placed_on(tmp_path, pseudo_dir, placed):
+    from matsim_agents.execution.placement import ProcessLaunch
+
+    structure = tmp_path / "Si.extxyz"
+    write(structure, bulk("Si", "diamond", a=5.43))
+    recorded = str(DATA / "qe" / "relax_step_limited")
+    launcher = [sys.executable, LAUNCHER, recorded]
+    launch = None
+    if placed:
+        launcher += ["{nodes}", "{ranks_per_node}", "{threads_per_rank}"]
+        launch = ProcessLaunch(
+            hosts=("nid001", "nid002"), devices=(0, 1, 2, 3), ranks_per_node=4, threads_per_rank=8
+        )
+    cfg = ScientificRelaxationConfig(
+        structure_path=str(structure),
+        mode=RelaxationMode.DFT,
+        output_root=str(tmp_path / "runs"),
+        dft=DFTBackendConfig(
+            backend="qe", launcher=launcher, pseudo_dir=str(pseudo_dir), launch=launch
+        ),
+        dft_approved=True,
+        geometry={"relax_cell": False},
+    )
+    (stage,) = run_relaxation(cfg).stages
+    assert (stage.nodes, stage.gpus) == ((2, 8) if placed else (None, None))

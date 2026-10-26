@@ -32,7 +32,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from matsim_agents.execution.contracts import DFT_EVIDENCE, EvidenceLevel, at_least
 from matsim_agents.execution.locking import exclusive_lock
@@ -148,7 +148,11 @@ class _Record(BaseModel):
 
 
 class CostRecord(BaseModel):
-    """Resources spent (observed) or forecast (expected), split by category."""
+    """Resources spent (observed) or forecast (expected), split by category.
+
+    ``nodes`` and ``gpus`` are a job's allocation, so their totals are node and GPU
+    allocations summed over jobs; ``node_hours`` and ``gpu_hours`` weight them by time.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -162,6 +166,25 @@ class CostRecord(BaseModel):
     fine_tuning_seconds: float = 0.0
     failed_jobs: int = 0
     failed_seconds: float = 0.0
+    nodes: int = 0
+    gpus: int = 0
+    node_hours: float = 0.0
+    gpu_hours: float = 0.0
+
+    # Added after costs were first hashed: left out when zero so earlier identifiers hold.
+    _LATER_FIELDS: ClassVar[tuple[str, ...]] = ("nodes", "gpus", "node_hours", "gpu_hours")
+
+    @model_serializer(mode="wrap")
+    def _omit_unused_later_fields(self, handler: Any) -> dict[str, Any]:
+        data = handler(self)
+        for name in self._LATER_FIELDS:
+            if not data.get(name):
+                data.pop(name, None)
+        return data
+
+    def totals(self) -> dict[str, float | int]:
+        """Every category, including those left out of the serialized record when zero."""
+        return {name: getattr(self, name) for name in CostRecord.model_fields}
 
     def __add__(self, other: CostRecord) -> CostRecord:
         return CostRecord(
@@ -596,7 +619,7 @@ class EvidenceLedger:
         for decision in self.decisions():
             if decision.observed_cost is not None:
                 total = total + decision.observed_cost
-        return total.model_dump()
+        return total.totals()
 
     def summary(self) -> dict[str, Any]:
         return {

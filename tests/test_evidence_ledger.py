@@ -397,3 +397,36 @@ def test_the_ledger_sums_observed_cost_by_category(tmp_path):
     assert cost["dft_calculations"] == 1 and cost["dft_seconds"] == 30.0
     assert cost["failed_jobs"] == 1
     assert cost["llm_prompt_tokens"] == 100 and cost["llm_completion_tokens"] == 20
+    assert cost["nodes"] == 0 and cost["gpu_hours"] == 0.0
+
+
+def test_node_and_gpu_costs_keep_earlier_identifiers_and_round_trip(tmp_path):
+    from matsim_agents.execution.ledger import CostRecord
+
+    def failed(cost):
+        return EvidenceRecord(
+            kind="relaxation",
+            subject="Si",
+            method=MethodRecord(backend="qe", method_signature="pbe"),
+            evidence_level=EvidenceLevel.LOW_FIDELITY_DFT,
+            outcome=EvidenceOutcome.FAILED_TO_COMPUTE,
+            failure_reason="x",
+            cost=cost,
+        )
+
+    # Identifier computed by the code before node and GPU fields existed.
+    earlier = failed(CostRecord(failed_jobs=1, failed_seconds=12.5))
+    assert earlier.evidence_id == "ev-2e8ddc3f65b71d8d821275d6"
+    assert "nodes" not in earlier.model_dump()["cost"]
+    placed = failed(
+        CostRecord(
+            failed_jobs=1, failed_seconds=3600.0, nodes=2, gpus=8, node_hours=2.0, gpu_hours=8.0
+        )
+    )
+    assert placed.evidence_id != earlier.evidence_id
+    ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
+    ledger.append(placed)
+    reread = EvidenceLedger(tmp_path / "ledger.jsonl")
+    assert reread.get(placed.evidence_id).cost == placed.cost
+    cost = reread.summary()["cost"]
+    assert (cost["nodes"], cost["gpus"], cost["node_hours"], cost["gpu_hours"]) == (2, 8, 2.0, 8.0)

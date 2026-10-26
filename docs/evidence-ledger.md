@@ -101,7 +101,11 @@ identifiers.
 
 `CostRecord` splits resources into LLM tokens and seconds, MLIP relaxations
 and seconds, DFT calculations and seconds, fine-tuning seconds, and failed
-jobs and seconds. Characterization stores each attempt's cost as
+jobs and seconds. When a calculation's placement is known (a DFT method with a
+resolved `launch`), its cost also records the nodes and GPUs it was given and
+the node-hours and GPU-hours (allocation times elapsed seconds); totals of
+`nodes` and `gpus` are allocations summed over jobs, not distinct hardware.
+Characterization stores each attempt's cost as
 `EvidenceRecord.cost`; a failed attempt counts only under failed jobs. A debate
 review stores the debate's token usage as the `observed_cost` of its first
 decision, along with `policy_version` and the agreement `thresholds`. A
