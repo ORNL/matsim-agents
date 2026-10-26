@@ -118,7 +118,9 @@ wait_for_exit() {
 VLLM_PID= HEAD_PID=
 WORKER_PIDS=()
 cleanup() {
-  trap - EXIT INT TERM
+  # A further stop request must not cut cleanup short and leave Ray nodes running.
+  trap '' INT TERM
+  trap - EXIT
   echo "[vllm-server] stopping vLLM and the Ray cluster"
   # vLLM first; then the workers while the head still runs, so they leave the
   # cluster at once and save their logs; then the head.
