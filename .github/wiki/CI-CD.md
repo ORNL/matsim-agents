@@ -93,15 +93,15 @@ This job collects the results of all four upstream jobs. It exits with code 1 if
 
 ## Branch protection rules
 
-The `main` branch is protected by rules configured via [`.github/workflows/branch-protection.yml`](https://github.com/ORNL/matsim-agents/blob/main/.github/workflows/branch-protection.yml), which applies the following settings automatically via the GitHub API when either workflow file changes:
+The `main` branch is protected by rules set in the repository settings (Settings → Branches):
 
 | Rule | Setting |
 |---|---|
 | Required status check | `CI passed` must be green |
 | Branch must be up to date | Yes (`strict: true`) — rebase or merge `main` before merging your PR |
-| Required approving reviews | 1 |
+| Required approving reviews | 1; admins can bypass the rules and merge without approval |
 | Dismiss stale reviews | No |
-| Conversation resolution required | Yes — all PR review comments must be resolved |
+| Conversation resolution required | Yes — all PR review comments, including Copilot's, must be resolved |
 | Force-push to `main` | Blocked |
 | Deletion of `main` | Blocked |
 
