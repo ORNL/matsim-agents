@@ -255,8 +255,10 @@ def _not_converged(code: str, return_code: int, output: str, started: bool) -> s
     # The code never ran: its own error, or else the launcher's last line, is the diagnostic.
     lines = [line.strip() for line in output.splitlines() if line.strip()]
     for index, line in enumerate(lines):
-        if line.startswith("Error in routine"):
+        if line.startswith("Error in routine"):  # QE: the routine, then its message
             return f"{reason}: {' '.join(lines[index : index + 2])[:300]}"
+        if "Error reading item" in line:  # VASP's INCAR parser, possibly inside a box
+            return f"{reason}: {line.strip('| ')[:300]}"
     return f"{reason}: {lines[-1][:300]}" if lines else reason
 
 

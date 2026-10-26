@@ -145,30 +145,51 @@ def test_a_code_failure_reason_carries_no_output_tail(tmp_path, pseudo_dir):
     assert result.stages[0].failure_reason == "QE did not converge (return code 0)"
 
 
-def test_a_qe_input_error_is_not_retried(tmp_path, pseudo_dir):
+@pytest.mark.parametrize(
+    ("backend", "output", "diagnostic"),
+    [
+        (
+            "qe",
+            " %%%%%%%%\n     Error in routine read_namelists (1):\n"
+            '     bad line in namelist &electrons: "  mixing_bet = 0.4"\n %%%%%%%%\n\n'
+            "     stopping ...\n",
+            "Error in routine read_namelists (1): bad line in namelist",
+        ),
+        (
+            "vasp",
+            " ---------------------------------------------\n"
+            "|     EEEEEEE  RRRRRR   RRRRRR   OOOOOOO  RRRRRR  |\n"
+            "|     Error reading item 'NELM' from file INCAR.  |\n"
+            " ---------------------------------------------\n"
+            "srun: error: nid001: task 0: Exited with exit code 1\n",
+            "Error reading item 'NELM' from file INCAR.",
+        ),
+    ],
+)
+def test_an_input_error_of_the_code_is_not_retried(
+    tmp_path, pseudo_dir, potcar_dir, backend, output, diagnostic
+):
     from matsim_agents.execution.recovery import FailureClass, classify_failure
 
     structure = tmp_path / "Si.extxyz"
     write(structure, bulk("Si", "diamond", a=5.43))
-    output = (
-        " %%%%%%%%\n     Error in routine read_namelists (1):\n"
-        '     bad line in namelist &electrons: "  mixing_bet = 0.4"\n %%%%%%%%\n\n'
-        "     stopping ...\n"
-    )
+    recorded = tmp_path / "output.txt"
+    recorded.write_text(output)
     cfg = ScientificRelaxationConfig(
         structure_path=str(structure),
         mode=RelaxationMode.DFT,
         output_root=str(tmp_path / "runs"),
         dft=DFTBackendConfig(
-            backend="qe",
-            launcher=["sh", "-c", f"printf '{output}'; exit 1", "wrapper"],
+            backend=backend,
+            launcher=["sh", "-c", f"cat {recorded}; exit 1", "wrapper"],
             pseudo_dir=str(pseudo_dir),
+            potcar_dir=str(potcar_dir),
         ),
         dft_approved=True,
         geometry={"relax_cell": False},
     )
     (stage,) = run_relaxation(cfg).stages
-    assert "Error in routine read_namelists (1): bad line in namelist" in stage.failure_reason
+    assert diagnostic in stage.failure_reason
     outcome = {"status": "failed", "return_code": 1, "failure_reason": stage.failure_reason}
     assert classify_failure(outcome) == FailureClass.APPROVAL_OR_INPUT
 
