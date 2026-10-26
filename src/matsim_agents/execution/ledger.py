@@ -32,7 +32,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.execution.contracts import DFT_EVIDENCE, EvidenceLevel, at_least
 from matsim_agents.execution.locking import exclusive_lock
@@ -124,14 +124,9 @@ class _Record(BaseModel):
 
     ID_FIELD: ClassVar[str] = ""
     ID_PREFIX: ClassVar[str] = ""
-    # Fields added after records were first written: left out of the identifier when unset.
-    OPTIONAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
     def content_id(self) -> str:
         payload = self.model_dump(mode="json", exclude={self.ID_FIELD, "recorded_at"})
-        for name in self.OPTIONAL_FIELDS:
-            if payload.get(name) in (None, {}, []):
-                payload.pop(name, None)
         return f"{self.ID_PREFIX}-{_sha256_text(_canonical(payload))[:24]}"
 
     @model_validator(mode="after")
@@ -175,28 +170,6 @@ class CostRecord(BaseModel):
     gpus: float = 0.0
     gpu_hours: float = 0.0
 
-    # Added after costs were first hashed: left out when unused so earlier identifiers hold.
-    _LATER_FIELDS: ClassVar[tuple[str, ...]] = (
-        "nodes",
-        "node_hours",
-        "devices",
-        "device_hours",
-        "gpus",
-        "gpu_hours",
-    )
-
-    @model_serializer(mode="wrap")
-    def _omit_unused_later_fields(self, handler: Any) -> dict[str, Any]:
-        data = handler(self)
-        for name in self._LATER_FIELDS:
-            if not data.get(name):
-                data.pop(name, None)
-        return data
-
-    def totals(self) -> dict[str, Any]:
-        """Every category, including those left out of the serialized record when unused."""
-        return {name: getattr(self, name) for name in CostRecord.model_fields}
-
     def __add__(self, other: CostRecord) -> CostRecord:
         summed: dict[str, Any] = {}
         for name in CostRecord.model_fields:
@@ -213,7 +186,6 @@ class EvidenceRecord(_Record):
 
     ID_FIELD: ClassVar[str] = "evidence_id"
     ID_PREFIX: ClassVar[str] = "ev"
-    OPTIONAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"cost"})
 
     record_type: Literal["evidence"] = "evidence"
     evidence_id: str = ""
@@ -273,11 +245,6 @@ class HypothesisRecord(_Record):
     scientific_rationale: str = ""
     proposed_tests: list[str] = Field(default_factory=list)
     agent_model_id: str | None = None
-    imported_from: str | None = Field(
-        None,
-        description="Set by explicit migrations of records that predate the ledger; such "
-        "revisions may lack evidence identifiers.",
-    )
 
 
 # A review's own cost record; it changes no workflow state, so it need cite no evidence.
@@ -289,9 +256,6 @@ class DecisionRecord(_Record):
 
     ID_FIELD: ClassVar[str] = "decision_id"
     ID_PREFIX: ClassVar[str] = "dc"
-    OPTIONAL_FIELDS: ClassVar[frozenset[str]] = frozenset(
-        {"policy_version", "thresholds", "expected_cost", "observed_cost"}
-    )
 
     record_type: Literal["decision"] = "decision"
     decision_id: str = ""
@@ -302,7 +266,6 @@ class DecisionRecord(_Record):
     evidence_ids: list[str] = Field(default_factory=list)
     rationale: str = ""
     actor: str = Field(min_length=1, description="Who decided, e.g. 'debate:<run id>'.")
-    imported_from: str | None = None
     policy_version: str | None = Field(None, description="Version of the rule that decided.")
     thresholds: dict[str, float] = Field(default_factory=dict)
     expected_cost: CostRecord | None = None
@@ -535,7 +498,7 @@ class EvidenceLedger:
             problems.append(f"cites evidence that is not in the ledger: {unknown}")
         evidence = [r for i in cited if isinstance(r := self._records.get(i), EvidenceRecord)]
         if isinstance(record, DecisionRecord):
-            if record.imported_from is None and not evidence and record.action != REVIEW_ACTION:
+            if not evidence and record.action != REVIEW_ACTION:
                 problems.append(f"decision {record.action} on {record.subject} cites no evidence")
             return problems
         head = self._heads.get(record.hypothesis_id)
@@ -544,8 +507,6 @@ class EvidenceLedger:
                 f"revision of {record.hypothesis_id} must follow its latest revision {head!r}, "
                 f"not {record.prior_revision_id!r}"
             )
-        if record.imported_from is not None:
-            return problems
         if record.status in {HypothesisStatus.SUPPORTED, HypothesisStatus.CONTRADICTED}:
             if not cited:
                 problems.append(f"a {record.status.value} claim must cite evidence")
@@ -635,7 +596,7 @@ class EvidenceLedger:
         for decision in self.decisions():
             if decision.observed_cost is not None:
                 total = total + decision.observed_cost
-        return total.totals()
+        return total.model_dump()
 
     def summary(self) -> dict[str, Any]:
         return {

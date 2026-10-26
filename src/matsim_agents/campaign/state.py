@@ -13,11 +13,10 @@ any of that.
 
 from __future__ import annotations
 
-import copy
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
@@ -40,40 +39,6 @@ from matsim_agents.execution.contracts import (
 
 if TYPE_CHECKING:
     from matsim_agents.execution.ledger import EvidenceLedger
-
-# Version of the saved campaign state; migrate_campaign_state upgrades older ones.
-CAMPAIGN_STATE_SCHEMA_VERSION = 3
-
-
-def migrate_campaign_state(data: dict[str, Any]) -> dict[str, Any]:
-    """Upgrade a saved campaign state to the current schema, explicitly.
-
-    Version 1 (no ``schema_version``) predates stability-report fidelity. Its
-    convex-hull reports came only from DFT refinement, so they become
-    ``converged_dft``; relative rankings came from MLIP relaxations.
-    Version 2 predates the evidence ledger: ``evidence_ledger_file`` stays
-    unset, and the campaign's ledger is backfilled from the saved state when
-    it is next opened (:func:`matsim_agents.campaign.evidence.open_campaign_ledger`).
-    """
-    data = copy.deepcopy(data)
-    version = data.get("schema_version", 1)
-    if version > CAMPAIGN_STATE_SCHEMA_VERSION:
-        raise ValueError(f"campaign state schema {version} is newer than this code")
-    if version == 1:
-        for report in (data.get("stability_reports") or {}).values():
-            if isinstance(report, dict) and "evidence_level" not in report:
-                report["evidence_level"] = (
-                    EvidenceLevel.CONVERGED_DFT.value
-                    if report.get("ranking_mode") == RankingMode.CONVEX_HULL.value
-                    else EvidenceLevel.MLIP_RELAXATION.value
-                )
-        for hull in [data.get("current_hull"), *(data.get("hull_history") or [])]:
-            if isinstance(hull, dict):
-                hull.setdefault("evidence_level", EvidenceLevel.CONVERGED_DFT.value)
-        data["schema_version"] = version = 2
-    if version == 2:
-        data["schema_version"] = 3
-    return data
 
 
 class FormulaRunRecord(BaseModel):
@@ -134,7 +99,7 @@ class HullState(BaseModel):
 class CampaignState(BaseModel):
     """Persistent record of a multi-formula discovery campaign."""
 
-    schema_version: int = CAMPAIGN_STATE_SCHEMA_VERSION
+    schema_version: Literal[3] = 3
     campaign_id: str
     element_set: list[str]
     formula_policy: FormulaGenerationPolicy
@@ -151,11 +116,6 @@ class CampaignState(BaseModel):
     iteration: int = 0
     budget: ComputeBudget = Field(default_factory=ComputeBudget)
     status: WorkflowStatus = WorkflowStatus.PLANNED
-    evidence_ledger_file: str | None = Field(
-        None,
-        description="Ledger file in the campaign's output directory; unset until the ledger "
-        "is opened (and, for older states, backfilled).",
-    )
     _ledger: EvidenceLedger | None = PrivateAttr(None)
 
     def attach_ledger(self, ledger: EvidenceLedger) -> None:
@@ -180,11 +140,6 @@ class CampaignState(BaseModel):
                 "matsim_agents.campaign.evidence.open_campaign_ledger"
             )
         return self._ledger
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate(cls, data: Any) -> Any:
-        return migrate_campaign_state(data) if isinstance(data, dict) else data
 
     @model_validator(mode="after")
     def _validate_element_set(self) -> CampaignState:

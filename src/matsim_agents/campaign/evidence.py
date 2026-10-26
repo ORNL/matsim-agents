@@ -16,12 +16,9 @@ from typing import TYPE_CHECKING, Any
 from matsim_agents.discovery.stability import RankingMode, StabilityReport
 from matsim_agents.execution.contracts import DFT_EVIDENCE, EvidenceLevel, WorkflowStatus
 from matsim_agents.execution.ledger import (
-    DecisionRecord,
     EvidenceLedger,
     EvidenceOutcome,
     EvidenceRecord,
-    HypothesisRecord,
-    HypothesisStatus,
     LedgerQuantity,
     MethodRecord,
     hashes_of,
@@ -32,7 +29,6 @@ if TYPE_CHECKING:
     from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
 
 LEDGER_FILE = "evidence-ledger.jsonl"
-LEGACY_REVIEW = "campaign_state.review_history"
 
 
 def new_hypothesis_id(campaign_id: str, claim: str) -> str:
@@ -236,73 +232,9 @@ def evidence_for_review(ledger: EvidenceLedger, formula: str) -> list[dict[str, 
     ]
 
 
-def migrate_campaign_to_ledger(campaign: CampaignState, ledger: EvidenceLedger) -> int:
-    """Backfill the ledger of a campaign saved before it had one (explicit, idempotent).
-
-    Stability reports and failed runs become evidence records. Review history
-    becomes imported decisions and hypothesis revisions; those cited free-text
-    evidence, which is kept in the rationale, so they carry ``imported_from``
-    and no evidence identifiers.
-    """
-    before = len(ledger)
-    # Predecessors come from the order of the review history, not the ledger's
-    # current head, so a repeated or interrupted backfill reproduces the same
-    # revision identifiers and appends only what is missing.
-    imported_heads: dict[str, str | None] = {}
-    for record in campaign.formula_runs.values():
-        if record.status in {WorkflowStatus.COMPLETE, WorkflowStatus.FAILED}:
-            record_formula_evidence(ledger, campaign, record)
-    for review in campaign.review_history:
-        actor = f"debate:{review.debate_run_id}" if review.debate_run_id else "review"
-        for action, formulas in (
-            ("deactivate_formula", review.deactivate_formulas),
-            ("reactivate_formula", review.reactivate_formulas),
-        ):
-            for formula in formulas:
-                ledger.append(
-                    DecisionRecord(
-                        campaign_id=campaign.campaign_id,
-                        iteration=review.iteration,
-                        action=action,
-                        subject=formula,
-                        actor=actor,
-                        rationale="; ".join(note for note in review.notes if formula in note),
-                        imported_from=LEGACY_REVIEW,
-                    )
-                )
-        for revision in review.metadata.get("hypothesis_revisions", []):
-            claim = str(revision.get("claim", "")).strip()
-            if not claim:
-                continue
-            hypothesis_id = new_hypothesis_id(campaign.campaign_id, claim)
-            evidence = revision.get("evidence") or []
-            appended = ledger.append(
-                HypothesisRecord(
-                    hypothesis_id=hypothesis_id,
-                    prior_revision_id=imported_heads.get(hypothesis_id),
-                    campaign_id=campaign.campaign_id,
-                    scientific_claim=claim,
-                    status=HypothesisStatus(str(revision.get("status", "unresolved"))),
-                    scientific_rationale="Free-text evidence: " + "; ".join(map(str, evidence))
-                    if evidence
-                    else "",
-                    proposed_tests=[str(revision["proposed_test"])]
-                    if revision.get("proposed_test")
-                    else [],
-                    agent_model_id=str(revision.get("participant") or "") or None,
-                    imported_from=LEGACY_REVIEW,
-                )
-            )
-            imported_heads[hypothesis_id] = appended.revision_id  # type: ignore[union-attr]
-    return len(ledger) - before
-
-
 def open_campaign_ledger(campaign: CampaignState, output_dir: str | Path) -> EvidenceLedger:
-    """Open and attach the campaign's ledger; an older campaign is backfilled into it first."""
-    ledger = EvidenceLedger(Path(output_dir) / (campaign.evidence_ledger_file or LEDGER_FILE))
-    if campaign.evidence_ledger_file is None:
-        migrate_campaign_to_ledger(campaign, ledger)
-        campaign.evidence_ledger_file = LEDGER_FILE
+    """Open the campaign's ledger and attach it to the campaign."""
+    ledger = EvidenceLedger(Path(output_dir) / LEDGER_FILE)
     campaign.attach_ledger(ledger)
     return ledger
 
@@ -311,7 +243,6 @@ __all__ = [
     "LEDGER_FILE",
     "evidence_for_review",
     "formula_failure_evidence",
-    "migrate_campaign_to_ledger",
     "new_hypothesis_id",
     "open_campaign_ledger",
     "record_formula_evidence",

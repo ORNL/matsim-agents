@@ -166,10 +166,7 @@ evidence identifiers are ledger identifiers. See
 `StabilityReport.evidence_level` records the fidelity of every stability
 report. Campaigns only admit convex-hull reports from DFT into their hull and
 reference set (`CampaignState.record_stability`), and hull recalibration only
-reuses DFT reports. Campaign states saved before this field existed (schema 1)
-are migrated explicitly when loaded: their convex-hull reports came from DFT
-refinement and become `converged_dft`, and relative rankings came from MLIP
-relaxations and become `mlip_relaxation`.
+reuses DFT reports.
 
 ## Failure recovery
 
