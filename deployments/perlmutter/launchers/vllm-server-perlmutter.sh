@@ -103,8 +103,8 @@ stop_processes() {
   kill -TERM "$@" 2>/dev/null || true
   for pid in "$@"; do
     while kill -0 "$pid" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+    # No `wait`: in an EXIT trap, bash 5.2 can block on a child it already reaped.
     kill -KILL "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
   done
 }
 # Wait up to $1 seconds for processes to exit on their own.
