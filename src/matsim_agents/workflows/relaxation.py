@@ -175,7 +175,9 @@ class RelaxationStageResult(BaseModel):
     scf_converged: bool | None = None
     wall_time_sec: float | None = None
     nodes: int | None = Field(None, description="Nodes the placement gave the calculation.")
-    gpus: int | None = Field(None, description="GPUs the placement gave the calculation.")
+    devices: int | None = Field(None, description="Accelerator devices it was given.")
+    device_kind: str | None = Field(None, description="What a device is, e.g. 'rocm-gcd'.")
+    gpus: float | None = Field(None, description="Physical GPU packages it was given.")
     artifacts: dict[str, str] = Field(default_factory=dict)
 
 
@@ -280,7 +282,12 @@ def _dft_stage(
         dft = dft.model_copy(update={"launch": placement.pool("dft").launches[0]})
     work_dir = run.path / "calculations" / dft.backend
     allocation = (
-        {"nodes": dft.launch.node_count, "gpus": dft.launch.node_count * len(dft.launch.devices)}
+        {
+            "nodes": dft.launch.node_count,
+            "devices": dft.launch.device_count,
+            "device_kind": dft.launch.device_kind,
+            "gpus": dft.launch.gpu_count,
+        }
         if dft.launch is not None
         else {}
     )

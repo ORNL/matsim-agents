@@ -150,8 +150,10 @@ class _Record(BaseModel):
 class CostRecord(BaseModel):
     """Resources spent (observed) or forecast (expected), split by category.
 
-    ``nodes`` and ``gpus`` are a job's allocation, so their totals are node and GPU
-    allocations summed over jobs; ``node_hours`` and ``gpu_hours`` weight them by time.
+    Placement counts are a job's allocation, summed over jobs: ``nodes``, ``devices``
+    per device kind (``cuda-gpu``, ``rocm-gcd``, ``xpu-tile``), and ``gpus`` as
+    physical GPU packages, comparable across machines. The ``*_hours`` fields weight
+    them by elapsed time.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -167,12 +169,21 @@ class CostRecord(BaseModel):
     failed_jobs: int = 0
     failed_seconds: float = 0.0
     nodes: int = 0
-    gpus: int = 0
     node_hours: float = 0.0
+    devices: dict[str, int] = Field(default_factory=dict)
+    device_hours: dict[str, float] = Field(default_factory=dict)
+    gpus: float = 0.0
     gpu_hours: float = 0.0
 
-    # Added after costs were first hashed: left out when zero so earlier identifiers hold.
-    _LATER_FIELDS: ClassVar[tuple[str, ...]] = ("nodes", "gpus", "node_hours", "gpu_hours")
+    # Added after costs were first hashed: left out when unused so earlier identifiers hold.
+    _LATER_FIELDS: ClassVar[tuple[str, ...]] = (
+        "nodes",
+        "node_hours",
+        "devices",
+        "device_hours",
+        "gpus",
+        "gpu_hours",
+    )
 
     @model_serializer(mode="wrap")
     def _omit_unused_later_fields(self, handler: Any) -> dict[str, Any]:
@@ -182,14 +193,19 @@ class CostRecord(BaseModel):
                 data.pop(name, None)
         return data
 
-    def totals(self) -> dict[str, float | int]:
-        """Every category, including those left out of the serialized record when zero."""
+    def totals(self) -> dict[str, Any]:
+        """Every category, including those left out of the serialized record when unused."""
         return {name: getattr(self, name) for name in CostRecord.model_fields}
 
     def __add__(self, other: CostRecord) -> CostRecord:
-        return CostRecord(
-            **{name: getattr(self, name) + getattr(other, name) for name in CostRecord.model_fields}
-        )
+        summed: dict[str, Any] = {}
+        for name in CostRecord.model_fields:
+            mine, theirs = getattr(self, name), getattr(other, name)
+            if isinstance(mine, dict):
+                summed[name] = {k: mine.get(k, 0) + theirs.get(k, 0) for k in {*mine, *theirs}}
+            else:
+                summed[name] = mine + theirs
+        return CostRecord(**summed)
 
 
 class EvidenceRecord(_Record):

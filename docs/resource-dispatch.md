@@ -450,7 +450,10 @@ Choices made while implementing, relative to sections 4–8:
   `deployments/`. There is no `local` preset: a workstation plan sets
   `geometry:` explicitly (`vendor`, `devices_per_node`, `cores_per_node`) and,
   optionally, `launcher: local`. CPU-only nodes use `vendor: cpu` with
-  `devices_per_node: 0`; pools then claim whole nodes.
+  `devices_per_node: 0`; pools then claim whole nodes. `device_unit` and
+  `devices_per_gpu` say what one device is (Frontier: `gcd`, 2; Aurora in FLAT
+  mode: `tile`, 2; default `gpu`, 1), so cost accounting can count physical
+  GPUs.
 - **One geometry per plan.** All nodes of an allocation share one geometry, so
   decision 11.1 holds by construction. Precedence is preset, then the GPU count
   reported by the scheduler, then explicit `geometry:` fields; an explicit

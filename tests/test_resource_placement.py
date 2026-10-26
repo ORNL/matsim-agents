@@ -428,6 +428,40 @@ def test_dft_derives_ranks_threads_and_groups():
     assert dft.max_concurrent == 2
 
 
+@pytest.mark.parametrize(
+    ("preset", "gpus", "kind", "devices", "physical"),
+    [
+        ("perlmutter-gpu", 4, "cuda-gpu", 4, 4.0),
+        ("frontier", 8, "rocm-gcd", 8, 4.0),
+        ("aurora", 12, "xpu-tile", 12, 6.0),
+    ],
+)
+def test_launches_count_devices_and_physical_gpus_per_facility(
+    preset, gpus, kind, devices, physical
+):
+    launch = _plan({"dft": {}}, preset=preset).resolve(_alloc(gpus=gpus)).pool("dft").launches[0]
+    assert (launch.device_kind, launch.device_count, launch.gpu_count) == (
+        kind,
+        devices,
+        physical,
+    )
+
+
+def test_a_geometry_can_declare_what_a_device_is():
+    plan = _plan(
+        {"dft": {}},
+        preset=None,
+        geometry={
+            "vendor": "xpu",
+            "devices_per_node": 6,
+            "cores_per_node": 104,
+            "device_unit": "gpu",
+        },
+    )
+    launch = plan.resolve(_alloc()).pool("dft").launches[0]
+    assert (launch.device_kind, launch.gpu_count) == ("xpu-gpu", 6.0)
+
+
 def test_dft_nodes_per_job_must_divide_pool():
     plan = _plan({"dft": {"nodes": "all", "nodes_per_job": 2}})
     with pytest.raises(ValueError, match="nodes_per_job=2 does not divide its 3"):

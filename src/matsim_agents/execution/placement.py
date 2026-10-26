@@ -55,6 +55,8 @@ class GeometryOverride(_StrictModel):
     devices_per_node: int | None = Field(default=None, ge=0)
     cores_per_node: int | None = Field(default=None, ge=1)
     device_memory_gb: float | None = Field(default=None, gt=0)
+    device_unit: str | None = Field(default=None, min_length=1)
+    devices_per_gpu: int | None = Field(default=None, ge=1)
 
 
 class LLMServerSpec(_StrictModel):
@@ -186,10 +188,21 @@ class ProcessLaunch(_StrictModel):
     threads_per_rank: int
     env: dict[str, str] = Field(default_factory=dict)
     node_devices: int = Field(0, ge=0, description="Devices per node of the geometry.")
+    device_kind: str | None = Field(None, description="Vendor and unit, e.g. 'rocm-gcd'.")
+    devices_per_gpu: int = Field(1, ge=1, description="Devices per physical GPU package.")
 
     @property
     def node_count(self) -> int:
         return len(self.hosts)
+
+    @property
+    def device_count(self) -> int:
+        return self.node_count * len(self.devices)
+
+    @property
+    def gpu_count(self) -> float:
+        """Physical GPU packages (a Frontier GCD or an Aurora tile is half of one)."""
+        return self.device_count / self.devices_per_gpu
 
     @property
     def total_ranks(self) -> int:
@@ -612,6 +625,8 @@ class _Resolver:
             threads_per_rank=threads,
             env=env,
             node_devices=self.geometry.devices_per_node,
+            device_kind=self.geometry.device_kind if devices else None,
+            devices_per_gpu=self.geometry.devices_per_gpu,
         )
 
     def _finish_dft(self, spec: DFTPoolSpec, placement: PoolPlacement) -> None:

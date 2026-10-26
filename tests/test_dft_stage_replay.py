@@ -221,7 +221,12 @@ def test_a_calculation_reports_the_nodes_and_gpus_it_was_placed_on(tmp_path, pse
     if placed:
         launcher += ["{nodes}", "{ranks_per_node}", "{threads_per_rank}"]
         launch = ProcessLaunch(
-            hosts=("nid001", "nid002"), devices=(0, 1, 2, 3), ranks_per_node=4, threads_per_rank=8
+            hosts=("nid001", "nid002"),
+            devices=tuple(range(8)),
+            ranks_per_node=8,
+            threads_per_rank=7,
+            device_kind="rocm-gcd",
+            devices_per_gpu=2,
         )
     cfg = ScientificRelaxationConfig(
         structure_path=str(structure),
@@ -234,4 +239,5 @@ def test_a_calculation_reports_the_nodes_and_gpus_it_was_placed_on(tmp_path, pse
         geometry={"relax_cell": False},
     )
     (stage,) = run_relaxation(cfg).stages
-    assert (stage.nodes, stage.gpus) == ((2, 8) if placed else (None, None))
+    allocation = (stage.nodes, stage.devices, stage.device_kind, stage.gpus)
+    assert allocation == ((2, 16, "rocm-gcd", 8.0) if placed else (None,) * 4)

@@ -1010,17 +1010,22 @@ def test_attempt_costs_record_the_nodes_and_gpus_of_their_placement(system):
 
     def relax(cfg):
         result = fake(cfg)
-        result.stages[-1].nodes, result.stages[-1].gpus = 2, 8
+        stage = result.stages[-1]
+        stage.nodes, stage.devices, stage.device_kind, stage.gpus = 2, 24, "xpu-tile", 12.0
         return result
 
     contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
     run_characterization(contract, relax=relax)
     attempts = [e for e in _ledger(contract).evidence() if e.kind == "relaxation"]
-    assert [(e.cost.nodes, e.cost.gpus) for e in attempts] == [(2, 8), (2, 8)]
+    assert [(e.cost.nodes, e.cost.devices, e.cost.gpus) for e in attempts] == [
+        (2, {"xpu-tile": 24}, 12.0)
+    ] * 2
     cost = _ledger(contract).summary()["cost"]
-    assert cost["nodes"] == 4 and cost["gpus"] == 16
-    assert cost["node_hours"] == pytest.approx(2 * cost["dft_seconds"] / 3600)
-    assert cost["gpu_hours"] == pytest.approx(8 * cost["dft_seconds"] / 3600)
+    assert cost["nodes"] == 4 and cost["devices"] == {"xpu-tile": 48} and cost["gpus"] == 24.0
+    hours = cost["dft_seconds"] / 3600
+    assert cost["node_hours"] == pytest.approx(2 * hours)
+    assert cost["device_hours"]["xpu-tile"] == pytest.approx(24 * hours)
+    assert cost["gpu_hours"] == pytest.approx(12 * hours)
 
 
 def test_a_killed_dft_run_is_not_converged_evidence(system):

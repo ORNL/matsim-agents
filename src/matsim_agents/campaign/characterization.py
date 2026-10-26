@@ -411,6 +411,9 @@ def _relaxation_config(
     )
 
 
+_ALLOCATION = ("nodes", "devices", "device_kind", "gpus")
+
+
 def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
     """What a relaxation step contributes: a numerical outcome or an infrastructure failure."""
     stage = result.stages[-1] if result.stages else None
@@ -420,13 +423,12 @@ def _relax_record(result: ScientificRelaxationResult) -> dict[str, Any]:
             "failure_reason": result.failure_reason or "no stage result",
             "failure_type": result.failure_type,
             "return_code": stage.return_code if stage else None,
-            **({"nodes": stage.nodes, "gpus": stage.gpus} if stage else {}),
+            **({name: getattr(stage, name) for name in _ALLOCATION} if stage else {}),
         }
     diagnostics = {
         "return_code": stage.return_code,
         "scf_converged": stage.scf_converged,
-        "nodes": stage.nodes,
-        "gpus": stage.gpus,
+        **{name: getattr(stage, name) for name in _ALLOCATION},
     }
     if (
         stage.energy_eV is None
@@ -729,7 +731,12 @@ def _relaxation_evidence(
     tolerance = contract.tolerances.force_tolerance_eV_per_A
     seconds = float(outcome.get("wall_seconds") or 0.0)
     failed = outcome["status"] != "done" or outcome.get("return_code") not in (None, 0)
-    nodes, gpus = int(outcome.get("nodes") or 0), int(outcome.get("gpus") or 0)
+    nodes, devices = int(outcome.get("nodes") or 0), int(outcome.get("devices") or 0)
+    gpus, kind, hours = (
+        float(outcome.get("gpus") or 0.0),
+        outcome.get("device_kind"),
+        seconds / 3600,
+    )
     cost = (
         CostRecord(failed_jobs=1, failed_seconds=seconds)
         if failed
@@ -738,9 +745,11 @@ def _relaxation_evidence(
         else CostRecord(mlip_relaxations=1, mlip_seconds=seconds)
     ) + CostRecord(
         nodes=nodes,
+        node_hours=nodes * hours,
+        devices={kind: devices} if kind and devices else {},
+        device_hours={kind: devices * hours} if kind and devices else {},
         gpus=gpus,
-        node_hours=nodes * seconds / 3600,
-        gpu_hours=gpus * seconds / 3600,
+        gpu_hours=gpus * hours,
     )
     diagnosis = {"failure_class": outcome["failure_class"]} if outcome.get("failure_class") else {}
     common: dict[str, Any] = {

@@ -420,13 +420,34 @@ def test_node_and_gpu_costs_keep_earlier_identifiers_and_round_trip(tmp_path):
     assert "nodes" not in earlier.model_dump()["cost"]
     placed = failed(
         CostRecord(
-            failed_jobs=1, failed_seconds=3600.0, nodes=2, gpus=8, node_hours=2.0, gpu_hours=8.0
+            failed_jobs=1,
+            failed_seconds=3600.0,
+            nodes=2,
+            node_hours=2.0,
+            devices={"rocm-gcd": 16},
+            device_hours={"rocm-gcd": 16.0},
+            gpus=8.0,
+            gpu_hours=8.0,
         )
     )
     assert placed.evidence_id != earlier.evidence_id
     ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
     ledger.append(placed)
+    ledger.append(
+        _evidence(
+            kind="relaxation",
+            subject="Si",
+            cost=CostRecord(nodes=1, devices={"cuda-gpu": 4}, gpus=4.0),
+        )
+    )
     reread = EvidenceLedger(tmp_path / "ledger.jsonl")
     assert reread.get(placed.evidence_id).cost == placed.cost
     cost = reread.summary()["cost"]
-    assert (cost["nodes"], cost["gpus"], cost["node_hours"], cost["gpu_hours"]) == (2, 8, 2.0, 8.0)
+    assert (cost["nodes"], cost["node_hours"], cost["gpus"], cost["gpu_hours"]) == (
+        3,
+        2.0,
+        12.0,
+        8.0,
+    )
+    assert cost["devices"] == {"rocm-gcd": 16, "cuda-gpu": 4}
+    assert cost["device_hours"] == {"rocm-gcd": 16.0}

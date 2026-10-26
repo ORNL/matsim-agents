@@ -102,9 +102,14 @@ identifiers.
 `CostRecord` splits resources into LLM tokens and seconds, MLIP relaxations
 and seconds, DFT calculations and seconds, fine-tuning seconds, and failed
 jobs and seconds. When a calculation's placement is known (a DFT method with a
-resolved `launch`), its cost also records the nodes and GPUs it was given and
-the node-hours and GPU-hours (allocation times elapsed seconds); totals of
-`nodes` and `gpus` are allocations summed over jobs, not distinct hardware.
+resolved `launch`), its cost also records the nodes, the accelerator devices
+per kind, and the physical GPUs it was given, each with hours (allocation
+times elapsed time). A device is what the placement addresses: an A100 on
+Perlmutter (`cuda-gpu`), a GCD on Frontier (`rocm-gcd`, two per MI250X), a
+tile on Aurora (`xpu-tile`, two per Ponte Vecchio). `gpus` and `gpu_hours`
+count physical GPU packages, so they compare across machines; node-hours are
+what the facilities charge. Totals are allocations summed over jobs, not
+distinct hardware.
 Characterization stores each attempt's cost as
 `EvidenceRecord.cost`; a failed attempt counts only under failed jobs. A debate
 review stores the debate's token usage as the `observed_cost` of its first
