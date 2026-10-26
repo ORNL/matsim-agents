@@ -28,7 +28,12 @@ from matsim_agents.discovery.stability import (
     recalibrate_hull_reports,
 )
 from matsim_agents.execution.contracts import WorkflowStatus
-from matsim_agents.execution.ledger import DecisionRecord, HypothesisRecord
+from matsim_agents.execution.ledger import (
+    REVIEW_ACTION,
+    CostRecord,
+    DecisionRecord,
+    HypothesisRecord,
+)
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
@@ -64,6 +69,9 @@ class CampaignReviewDecision(BaseModel):
     )
     hypothesis_revisions: list[HypothesisRecord] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    policy_version: str | None = None
+    thresholds: dict[str, float] = Field(default_factory=dict)
+    cost: CostRecord | None = Field(None, description="What the review itself cost (LLM).")
 
 
 class CampaignRunResult(BaseModel):
@@ -382,6 +390,8 @@ def _record_review_decisions(
                 evidence_ids=decision.evidence_ids.get(formula, []),
                 rationale="; ".join(note for note in decision.notes if formula in note),
                 actor=actor,
+                policy_version=decision.policy_version,
+                thresholds=decision.thresholds,
             )
             problems = ledger.problems(record)
             if problems:
@@ -429,6 +439,20 @@ def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> 
     revision_ids, revision_notes = _record_hypothesis_revisions(
         campaign, decision.hypothesis_revisions
     )
+    metadata = {"decision_ids": decision_ids, "hypothesis_revision_ids": revision_ids}
+    if decision.cost is not None:
+        review = DecisionRecord(
+            campaign_id=campaign.campaign_id,
+            iteration=campaign.iteration,
+            action=REVIEW_ACTION,
+            subject=decision.debate_run_id or f"iteration-{campaign.iteration}",
+            rationale="; ".join(decision.notes),
+            actor=f"debate:{decision.debate_run_id}" if decision.debate_run_id else "review",
+            policy_version=decision.policy_version,
+            thresholds=decision.thresholds,
+            observed_cost=decision.cost,
+        )
+        metadata["review_decision_id"] = campaign.ledger.append(review).decision_id  # type: ignore[union-attr]
     for formula in deactivate:
         campaign.formulas[formula].active = False
         campaign.formulas[formula].rejection_reason = "deactivated by campaign evidence review"
@@ -452,7 +476,7 @@ def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> 
             deactivate_formulas=deactivate,
             reactivate_formulas=reactivate,
             notes=decision.notes + decision_notes + revision_notes,
-            metadata={"decision_ids": decision_ids, "hypothesis_revision_ids": revision_ids},
+            metadata=metadata,
         )
     )
 

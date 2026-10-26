@@ -29,6 +29,16 @@ class NodeGeometry(BaseModel):
     devices_per_node: int = Field(ge=0)
     cores_per_node: int = Field(ge=1)
     device_memory_gb: float | None = Field(default=None, gt=0)
+    device_unit: str = Field(
+        default="gpu", min_length=1, description="What one device is: a gpu, gcd, or tile."
+    )
+    devices_per_gpu: int = Field(
+        default=1, ge=1, description="Devices that make up one physical GPU package."
+    )
+
+    @property
+    def device_kind(self) -> str:
+        return f"{self.vendor}-{self.device_unit}"
 
     def device_mask_environment(self, devices: tuple[int, ...]) -> dict[str, str]:
         """Return the variables that restrict a process to *devices*."""
@@ -76,7 +86,12 @@ PRESETS: dict[str, FacilityPreset] = {
             description="Frontier node: 8 MI250X GCDs (64 GB each), 56 usable cores",
             launcher="srun",
             geometry=NodeGeometry(
-                vendor="rocm", devices_per_node=8, cores_per_node=56, device_memory_gb=64
+                vendor="rocm",
+                devices_per_node=8,
+                cores_per_node=56,
+                device_memory_gb=64,
+                device_unit="gcd",
+                devices_per_gpu=2,
             ),
         ),
         FacilityPreset(
@@ -84,7 +99,12 @@ PRESETS: dict[str, FacilityPreset] = {
             description="Aurora node in FLAT mode: 12 PVC tiles (64 GB each), 104 cores",
             launcher="mpiexec",
             geometry=NodeGeometry(
-                vendor="xpu", devices_per_node=12, cores_per_node=104, device_memory_gb=64
+                vendor="xpu",
+                devices_per_node=12,
+                cores_per_node=104,
+                device_memory_gb=64,
+                device_unit="tile",
+                devices_per_gpu=2,
             ),
         ),
     )

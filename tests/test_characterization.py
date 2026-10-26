@@ -24,7 +24,7 @@ from matsim_agents.execution.contracts import (
     EvidenceLevel,
     ObservableRequirement,
 )
-from matsim_agents.execution.ledger import EvidenceLedger
+from matsim_agents.execution.ledger import EvidenceLedger, EvidenceOutcome, hashes_of
 from matsim_agents.workflows.relaxation import (
     RelaxationMode,
     RelaxationStageResult,
@@ -47,10 +47,25 @@ def _structure(path: Path, symbols: str, shift: float = 0.0) -> Path:
 class FakeRelax:
     """Stands in for run_relaxation: energies per structure, and optional failures."""
 
-    def __init__(self, energies, *, unconverged=(), broken=(), silent=(), level=None):
+    def __init__(
+        self,
+        energies,
+        *,
+        unconverged=(),
+        broken=(),
+        silent=(),
+        scf_failed=(),
+        killed=None,
+        level=None,
+        step_limited=(),
+    ):
         self.energies = energies
         self.level = level
+        self.step_limited = set(step_limited)
+        self.structures = []
+        self.killed = killed or {}
         self.silent = set(silent)
+        self.scf_failed = set(scf_failed)
         self.unconverged = set(unconverged)
         self.broken = set(broken)
         self.calls = []
@@ -59,6 +74,7 @@ class FakeRelax:
     def __call__(self, cfg):
         name = Path(cfg.structure_path).name
         self.calls.append((name, cfg.mode))
+        self.structures.append(cfg.structure_path)
         self.geometries.append(cfg.geometry)
         if name in self.broken:
             raise FileNotFoundError("pw.x not found")
@@ -67,7 +83,8 @@ class FakeRelax:
         optimized = out / f"relaxed-{name}"
         optimized.write_text(Path(cfg.structure_path).read_text())
         dft = cfg.mode == RelaxationMode.DFT
-        converged = name not in self.unconverged
+        limited = name in self.step_limited
+        converged = name not in self.unconverged and not limited
         level = (
             (EvidenceLevel.CONVERGED_DFT if converged else EvidenceLevel.LOW_FIDELITY_DFT)
             if dft
@@ -82,8 +99,10 @@ class FakeRelax:
             optimized_structure_path=str(optimized),
             energy_eV=None if name in self.silent else self.energies[name],
             max_force_eV_per_A=None if name in self.silent else (0.001 if converged else 0.5),
-            steps=10,
+            steps=cfg.max_steps if limited else 10,
             converged=converged,
+            scf_converged=False if name in self.scf_failed else None,
+            return_code=self.killed.get(name, 0 if dft else None),
         )
         return ScientificRelaxationResult(
             run_id=f"run-{name}",
@@ -878,3 +897,364 @@ def test_every_attempt_and_the_answer_enter_the_evidence_ledger(system):
     with pytest.raises(LedgerValidationError, match="needs evidence of kind"):
         ledger.append(HypothesisRecord(**claim, evidence_ids=[relaxations[0].evidence_id]))
     ledger.append(HypothesisRecord(**claim, evidence_ids=[answer.evidence_id]))
+
+
+class FlakySCF(FakeRelax):
+    """The first DFT attempt per structure fails to converge its SCF."""
+
+    def __init__(self, energies, *, failures=1):
+        super().__init__(energies)
+        self.failures = failures
+        self.settings = []
+
+    def __call__(self, cfg):
+        self.settings.append(dict(cfg.dft.settings))
+        name = Path(cfg.structure_path).name
+        if sum(1 for n, _ in self.calls if n == name) < self.failures:
+            self.calls.append((name, cfg.mode))
+            stage = RelaxationStageResult(
+                stage="dft",
+                backend="qe",
+                evidence_level=EvidenceLevel.LOW_FIDELITY_DFT,
+                input_structure_path=cfg.structure_path,
+                failure_reason="QE did not converge (return code 2)",
+                return_code=2,
+                scf_converged=False,
+            )
+            return ScientificRelaxationResult(
+                run_id=f"run-{name}",
+                run_directory=cfg.output_root,
+                mode=cfg.mode,
+                status="partial",
+                stages=[stage],
+            )
+        return super().__call__(cfg)
+
+
+def _ledger(contract):
+    run = Path(contract.output_root) / f"characterization-{contract.contract_id}"
+    return EvidenceLedger(run / "evidence-ledger.jsonl")
+
+
+def test_an_unconverged_scf_is_retried_with_softer_mixing(system):
+    tmp_path, structures, references = system
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    relax = FlakySCF({"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0})
+    report = run_characterization(contract, relax=relax)
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    assert len(relax.calls) == 4
+    assert "mixing_beta" not in relax.settings[0]
+    assert relax.settings[1]["mixing_beta"] == 0.2
+    assert relax.settings[1]["extra_electrons"]["electron_maxstep"] == 400
+    ledger = _ledger(contract)
+    [first, *_] = [d for d in ledger.decisions() if d.subject == "relax-dft-000"]
+    assert first.action == "recover:scf_not_converged"
+    assert first.policy_version == "recovery-v1" and first.actor == "recovery-policy:recovery-v1"
+    failed = [e for e in ledger.evidence() if e.outcome == "failed_to_compute"]
+    assert first.evidence_ids == [failed[0].evidence_id]
+    assert failed[0].numerical_convergence["failure_class"] == "scf_not_converged"
+    retried = [e for e in ledger.evidence() if e.calculation_id == "relax-dft-000"][-1]
+    assert retried.method.settings["mixing_beta"] == 0.2
+    cost = ledger.summary()["cost"]
+    assert cost["failed_jobs"] == 2 and cost["dft_calculations"] == 2
+
+
+def test_recovery_stops_at_the_policy_limit_and_the_budget(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    relax = FlakySCF(energies, failures=5)
+    report = run_characterization(contract, relax=relax)
+    assert [n for n, _ in relax.calls] == ["NbO2-a.extxyz"] * 3 + ["NbO2-b.extxyz"] * 3
+    assert report.status == CharacterizationStatus.FAILED_INFRASTRUCTURE
+    actions = [d.action for d in _ledger(contract).decisions() if d.subject == "relax-dft-000"]
+    assert actions == ["recover:scf_not_converged"] * 2 + ["give_up:scf_not_converged"]
+    data = {**_dft(references, budget={"max_dft_calculations": 2}), "contract_id": "capped"}
+    capped = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    relax = FlakySCF(energies, failures=5)
+    report = run_characterization(capped, relax=relax)
+    assert [n for n, _ in relax.calls] == ["NbO2-a.extxyz"] * 2
+    [*_, last] = _ledger(capped).decisions()
+    assert last.action == "defer:scf_not_converged" and "budget" in last.rationale
+    assert any("beyond the dft relaxation budget" in m for m in report.missing)
+    # The last permitted retry also spends the budget: nothing is saved to resume.
+    data = {**_dft(references, budget={"max_dft_calculations": 3}), "contract_id": "spent"}
+    spent = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    run_characterization(spent, relax=FlakySCF(energies, failures=5))
+    [*_, last] = _ledger(spent).decisions()
+    assert last.action == "give_up:scf_not_converged" and "exhausted" in last.rationale
+    state = json.loads(
+        (
+            Path(spent.output_root) / "characterization-spent" / "characterization-state.json"
+        ).read_text()
+    )
+    assert state["recovery"] == {}
+
+
+def test_a_missing_launcher_is_not_retried(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    relax = FakeRelax(energies, broken={"NbO2-a.extxyz"})
+    run_characterization(contract, relax=relax)
+    assert [n for n, _ in relax.calls] == ["NbO2-a.extxyz", "NbO2-b.extxyz"]
+    [decision] = _ledger(contract).decisions()
+    assert decision.action == "give_up:launcher" and decision.subject == "relax-dft-000"
+
+
+def test_an_explicit_scf_failure_is_not_converged_evidence(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    relax = FakeRelax(energies, scf_failed={"NbO2-a.extxyz"})
+    run_characterization(contract, relax=relax)
+    ledger = _ledger(contract)
+    first = [e for e in ledger.evidence() if e.calculation_id == "relax-dft-000"][0]
+    assert first.outcome == EvidenceOutcome.NOT_CONVERGED
+    assert first.evidence_level == EvidenceLevel.LOW_FIDELITY_DFT
+    assert first.numerical_convergence["failure_class"] == "scf_not_converged"
+    assert ledger.decisions()[0].action == "recover:scf_not_converged"
+
+
+def test_a_failed_placed_attempt_keeps_its_allocation_cost(system):
+    tmp_path, structures, references = system
+    data = _dft(references)
+    data["methods"]["dft"]["launch"] = {
+        "hosts": ["nid001"],
+        "devices": [0, 1, 2, 3, 4, 5, 6, 7],
+        "ranks_per_node": 8,
+        "threads_per_rank": 7,
+        "device_kind": "rocm-gcd",
+        "devices_per_gpu": 2,
+    }
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    relax = FakeRelax({"NbO2-b.extxyz": -21.0}, broken={"NbO2-a.extxyz"})
+    run_characterization(contract, relax=relax)
+    [failed] = [e for e in _ledger(contract).evidence() if e.calculation_id == "relax-dft-000"]
+    assert failed.cost.failed_jobs == 1
+    assert (failed.cost.nodes, failed.cost.devices, failed.cost.gpus) == (
+        1,
+        {"rocm-gcd": 8},
+        4.0,
+    )
+
+
+def test_attempt_costs_record_the_nodes_and_gpus_of_their_placement(system):
+    tmp_path, structures, references = system
+    fake = FakeRelax({"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0})
+
+    def relax(cfg):
+        result = fake(cfg)
+        stage = result.stages[-1]
+        stage.nodes, stage.devices, stage.device_kind, stage.gpus = 2, 24, "xpu-tile", 12.0
+        return result
+
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    run_characterization(contract, relax=relax)
+    attempts = [e for e in _ledger(contract).evidence() if e.kind == "relaxation"]
+    assert [(e.cost.nodes, e.cost.devices, e.cost.gpus) for e in attempts] == [
+        (2, {"xpu-tile": 24}, 12.0)
+    ] * 2
+    cost = _ledger(contract).summary()["cost"]
+    assert cost["nodes"] == 4 and cost["devices"] == {"xpu-tile": 48} and cost["gpus"] == 24.0
+    hours = cost["dft_seconds"] / 3600
+    assert cost["node_hours"] == pytest.approx(2 * hours)
+    assert cost["device_hours"]["xpu-tile"] == pytest.approx(24 * hours)
+    assert cost["gpu_hours"] == pytest.approx(12 * hours)
+
+
+def test_a_killed_dft_run_is_not_converged_evidence(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    relax = FakeRelax(energies, killed={"NbO2-a.extxyz": 124})
+    run_characterization(contract, relax=relax)
+    ledger = _ledger(contract)
+    first = [e for e in ledger.evidence() if e.calculation_id == "relax-dft-000"][0]
+    assert first.outcome == EvidenceOutcome.NOT_CONVERGED
+    assert first.evidence_level == EvidenceLevel.LOW_FIDELITY_DFT
+    assert first.numerical_convergence["failure_class"] == "walltime"
+    assert first.cost.failed_jobs == 1 and first.cost.dft_calculations == 0
+
+
+def test_a_retry_stopped_by_the_budget_resumes_with_its_recovery(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    data = _dft(references, budget={"max_dft_calculations": 2})
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    run_characterization(contract, relax=FakeRelax(energies, scf_failed={"NbO2-b.extxyz"}))
+    assert [s.step_id for s in outstanding_steps(contract)] == ["relax-dft-001"]
+    raised = _contract(
+        tmp_path,
+        structures,
+        "thermodynamic_stability",
+        **{**data, "budget": {"max_dft_calculations": 5}},
+    )
+    relax = FakeRelax(energies)
+    report = run_characterization(raised, relax=relax)
+    assert [n for n, _ in relax.calls] == ["NbO2-b.extxyz"]
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    ledger = _ledger(raised)
+    retried = [e for e in ledger.evidence() if e.calculation_id == "relax-dft-001"][-1]
+    assert retried.method.settings["mixing_beta"] == 0.2
+    decisions = [d for d in ledger.decisions() if d.subject == "relax-dft-001"]
+    assert [d.action for d in decisions] == ["defer:scf_not_converged", "recover:scf_not_converged"]
+    assert decisions[1].evidence_ids == decisions[0].evidence_ids
+    assert decisions[1].expected_cost.dft_calculations == 1
+    assert decisions[1].thresholds["dft_budget"] == 5
+    assert "budget" in decisions[1].rationale
+    assert outstanding_steps(raised) == []
+
+
+def test_an_ionic_step_limit_restarts_from_the_last_optimized_structure(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0, "relaxed-NbO2-a.extxyz": -21.4}
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    relax = FakeRelax(energies, step_limited={"NbO2-a.extxyz"})
+    report = run_characterization(contract, relax=relax)
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    first, restart = relax.structures[:2]
+    assert first == str(structures[0])
+    assert Path(restart).name == "relaxed-NbO2-a.extxyz" and restart != first
+    ledger = _ledger(contract)
+    [decision, *_] = [d for d in ledger.decisions() if d.subject == "relax-dft-000"]
+    assert decision.action == "recover:ionic_step_limit"
+    attempts = [e for e in ledger.evidence() if e.calculation_id == "relax-dft-000"]
+    assert attempts[0].input_sha256 == hashes_of([first])
+    assert attempts[-1].input_sha256 == hashes_of([restart])
+
+
+def test_a_budget_stopped_ionic_restart_resumes_from_the_same_structure(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0, "relaxed-NbO2-b.extxyz": -21.1}
+    data = _dft(references, budget={"max_dft_calculations": 2})
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    stopped = FakeRelax(energies, step_limited={"NbO2-b.extxyz"})
+    run_characterization(contract, relax=stopped)
+    assert [s.step_id for s in outstanding_steps(contract)] == ["relax-dft-001"]
+    [limited] = [e for e in _ledger(contract).evidence() if e.calculation_id == "relax-dft-001"]
+    raised = _contract(
+        tmp_path,
+        structures,
+        "thermodynamic_stability",
+        **{**data, "budget": {"max_dft_calculations": 5}},
+    )
+    relax = FakeRelax(energies)
+    report = run_characterization(raised, relax=relax)
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    [resumed] = relax.structures
+    assert {resumed: hashes_of([resumed])[resumed]} == limited.output_artifact_sha256
+    retried = [e for e in _ledger(raised).evidence() if e.calculation_id == "relax-dft-001"][-1]
+    assert retried.input_sha256 == hashes_of([resumed])
+    assert outstanding_steps(raised) == []
+
+
+class Interrupted(FakeRelax):
+    """Raises KeyboardInterrupt on the given call, as a killed run would stop."""
+
+    def __init__(self, energies, *, at, **kwargs):
+        super().__init__(energies, **kwargs)
+        self.at = at
+        self.settings = []
+
+    def __call__(self, cfg):
+        self.settings.append(dict(cfg.dft.settings))
+        if len(self.calls) + 1 == self.at:
+            self.calls.append((Path(cfg.structure_path).name, cfg.mode))
+            raise KeyboardInterrupt
+        return super().__call__(cfg)
+
+
+@pytest.mark.parametrize(
+    ("failure", "failure_class", "structure", "setting"),
+    [
+        ("scf_failed", "scf_not_converged", "NbO2-a.extxyz", ("mixing_beta", 0.2)),
+        ("step_limited", "ionic_step_limit", "relaxed-NbO2-a.extxyz", None),
+    ],
+)
+def test_an_interrupted_retry_runs_again_on_resume(
+    system, failure, failure_class, structure, setting
+):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0, "relaxed-NbO2-a.extxyz": -21.4}
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references))
+    first = Interrupted(energies, at=2, **{failure: {"NbO2-a.extxyz"}})
+    with pytest.raises(KeyboardInterrupt):
+        run_characterization(contract, relax=first)
+    [interrupted] = [e for e in _ledger(contract).evidence() if e.task_id == "attempt-2"]
+    assert interrupted.failure_reason == "interrupted by KeyboardInterrupt"
+    assert interrupted.cost.failed_jobs == 1 and interrupted.cost.failed_seconds >= 0
+    assert [s.step_id for s in outstanding_steps(contract)] == [
+        "relax-dft-000",
+        "relax-dft-001",
+        "hull",
+    ]
+    relax = Interrupted(energies, at=0)
+    report = run_characterization(contract, relax=relax)
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    assert [Path(s).name for s in relax.structures] == [structure, "NbO2-b.extxyz"]
+    if setting is not None:
+        assert relax.settings[0][setting[0]] == setting[1]
+    decisions = [d for d in _ledger(contract).decisions() if d.subject == "relax-dft-000"]
+    assert [d.action for d in decisions] == [f"recover:{failure_class}"]
+    assert outstanding_steps(contract) == []
+
+
+def test_an_interrupted_budget_deferred_retry_runs_again_on_resume(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+    data = _dft(references, budget={"max_dft_calculations": 2})
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    run_characterization(contract, relax=FakeRelax(energies, scf_failed={"NbO2-b.extxyz"}))
+    raised = _contract(
+        tmp_path,
+        structures,
+        "thermodynamic_stability",
+        **{**data, "budget": {"max_dft_calculations": 5}},
+    )
+    with pytest.raises(KeyboardInterrupt):
+        run_characterization(raised, relax=Interrupted(energies, at=1))
+    assert [s.step_id for s in outstanding_steps(raised)] == ["relax-dft-001", "hull"]
+    relax = Interrupted(energies, at=0)
+    report = run_characterization(raised, relax=relax)
+    assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
+    assert [n for n, _ in relax.calls] == ["NbO2-b.extxyz"]
+    assert relax.settings[0]["mixing_beta"] == 0.2
+    actions = [d.action for d in _ledger(raised).decisions() if d.subject == "relax-dft-001"]
+    assert actions == ["defer:scf_not_converged", "recover:scf_not_converged"]
+
+
+def test_a_changed_restart_structure_is_not_resumed(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+
+    class RestartFails(FakeRelax):
+        def __call__(self, cfg):
+            if Path(cfg.structure_path).name == "relaxed-NbO2-a.extxyz":
+                self.scf_failed = self.silent = {"relaxed-NbO2-a.extxyz"}
+            return super().__call__(cfg)
+
+    data = _dft(references, budget={"max_dft_calculations": 2})
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    run_characterization(contract, relax=RestartFails(energies, step_limited={"NbO2-a.extxyz"}))
+    state = json.loads(
+        (
+            Path(contract.output_root)
+            / "characterization-thermodynamic_stability-test"
+            / "characterization-state.json"
+        ).read_text()
+    )
+    assert state["steps"]["relax-dft-000"]["status"] == "failed"
+    restart = Path(state["recovery"]["relax-dft-000"]["structure"])
+    assert restart.name == "relaxed-NbO2-a.extxyz"
+    _structure(restart, "NbOO", shift=0.7)
+    raised = _contract(
+        tmp_path,
+        structures,
+        "thermodynamic_stability",
+        **{**data, "budget": {"max_dft_calculations": 5}},
+    )
+    relax = FakeRelax(energies)
+    with pytest.raises(ValueError, match="retry structure .* has changed"):
+        run_characterization(raised, relax=relax)
+    assert relax.calls == []

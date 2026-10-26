@@ -64,11 +64,11 @@ echo "MPICH GPU-aware MPI: MPICH_GPU_SUPPORT_ENABLED=${MPICH_GPU_SUPPORT_ENABLED
 echo "=========================================="
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-  srun -n "${NRANKS}" --ntasks-per-node="${NRANKS}" -c "${OMP_NUM_THREADS}" \
+  exec srun -n "${NRANKS}" --ntasks-per-node="${NRANKS}" -c "${OMP_NUM_THREADS}" \
        --gpus-per-task=1 --gpu-bind=closest --cpu-bind=cores \
        "${PW_BIN}" -in "${INPUT}" "$@"
 else
-  srun -N1 -n "${NRANKS}" --ntasks-per-node="${NRANKS}" -c "${OMP_NUM_THREADS}" \
+  exec srun -N1 -n "${NRANKS}" --ntasks-per-node="${NRANKS}" -c "${OMP_NUM_THREADS}" \
        --gpus-per-task=1 --gpu-bind=closest --cpu-bind=cores \
        "${PW_BIN}" -in "${INPUT}" "$@"
 fi

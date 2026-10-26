@@ -32,7 +32,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from matsim_agents.execution.contracts import DFT_EVIDENCE, EvidenceLevel, at_least
 from matsim_agents.execution.locking import exclusive_lock
@@ -124,9 +124,14 @@ class _Record(BaseModel):
 
     ID_FIELD: ClassVar[str] = ""
     ID_PREFIX: ClassVar[str] = ""
+    # Fields added after records were first written: left out of the identifier when unset.
+    OPTIONAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
     def content_id(self) -> str:
         payload = self.model_dump(mode="json", exclude={self.ID_FIELD, "recorded_at"})
+        for name in self.OPTIONAL_FIELDS:
+            if payload.get(name) in (None, {}, []):
+                payload.pop(name, None)
         return f"{self.ID_PREFIX}-{_sha256_text(_canonical(payload))[:24]}"
 
     @model_validator(mode="after")
@@ -142,11 +147,73 @@ class _Record(BaseModel):
         return self
 
 
+class CostRecord(BaseModel):
+    """Resources spent (observed) or forecast (expected), split by category.
+
+    Placement counts are a job's allocation, summed over jobs: ``nodes``, ``devices``
+    per device kind (``cuda-gpu``, ``rocm-gcd``, ``xpu-tile``), and ``gpus`` as
+    physical GPU packages, comparable across machines. The ``*_hours`` fields weight
+    them by elapsed time.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    llm_prompt_tokens: int = 0
+    llm_completion_tokens: int = 0
+    llm_seconds: float = 0.0
+    mlip_relaxations: int = 0
+    mlip_seconds: float = 0.0
+    dft_calculations: int = 0
+    dft_seconds: float = 0.0
+    fine_tuning_seconds: float = 0.0
+    failed_jobs: int = 0
+    failed_seconds: float = 0.0
+    nodes: int = 0
+    node_hours: float = 0.0
+    devices: dict[str, int] = Field(default_factory=dict)
+    device_hours: dict[str, float] = Field(default_factory=dict)
+    gpus: float = 0.0
+    gpu_hours: float = 0.0
+
+    # Added after costs were first hashed: left out when unused so earlier identifiers hold.
+    _LATER_FIELDS: ClassVar[tuple[str, ...]] = (
+        "nodes",
+        "node_hours",
+        "devices",
+        "device_hours",
+        "gpus",
+        "gpu_hours",
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_unused_later_fields(self, handler: Any) -> dict[str, Any]:
+        data = handler(self)
+        for name in self._LATER_FIELDS:
+            if not data.get(name):
+                data.pop(name, None)
+        return data
+
+    def totals(self) -> dict[str, Any]:
+        """Every category, including those left out of the serialized record when unused."""
+        return {name: getattr(self, name) for name in CostRecord.model_fields}
+
+    def __add__(self, other: CostRecord) -> CostRecord:
+        summed: dict[str, Any] = {}
+        for name in CostRecord.model_fields:
+            mine, theirs = getattr(self, name), getattr(other, name)
+            if isinstance(mine, dict):
+                summed[name] = {k: mine.get(k, 0) + theirs.get(k, 0) for k in {*mine, *theirs}}
+            else:
+                summed[name] = mine + theirs
+        return CostRecord(**summed)
+
+
 class EvidenceRecord(_Record):
     """One numerical result, or a failure to compute it, with its full provenance."""
 
     ID_FIELD: ClassVar[str] = "evidence_id"
     ID_PREFIX: ClassVar[str] = "ev"
+    OPTIONAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"cost"})
 
     record_type: Literal["evidence"] = "evidence"
     evidence_id: str = ""
@@ -172,6 +239,7 @@ class EvidenceRecord(_Record):
     uncertainties: dict[str, float] = Field(default_factory=dict)
     failure_reason: str | None = None
     parent_record_ids: list[str] = Field(default_factory=list)
+    cost: CostRecord | None = None
 
     @model_validator(mode="after")
     def _consistent_outcome(self) -> EvidenceRecord:
@@ -212,11 +280,18 @@ class HypothesisRecord(_Record):
     )
 
 
+# A review's own cost record; it changes no workflow state, so it need cite no evidence.
+REVIEW_ACTION = "review"
+
+
 class DecisionRecord(_Record):
     """A workflow action and the evidence it rests on."""
 
     ID_FIELD: ClassVar[str] = "decision_id"
     ID_PREFIX: ClassVar[str] = "dc"
+    OPTIONAL_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"policy_version", "thresholds", "expected_cost", "observed_cost"}
+    )
 
     record_type: Literal["decision"] = "decision"
     decision_id: str = ""
@@ -228,6 +303,10 @@ class DecisionRecord(_Record):
     rationale: str = ""
     actor: str = Field(min_length=1, description="Who decided, e.g. 'debate:<run id>'.")
     imported_from: str | None = None
+    policy_version: str | None = Field(None, description="Version of the rule that decided.")
+    thresholds: dict[str, float] = Field(default_factory=dict)
+    expected_cost: CostRecord | None = None
+    observed_cost: CostRecord | None = None
 
 
 LedgerRecord = EvidenceRecord | HypothesisRecord | DecisionRecord
@@ -456,7 +535,7 @@ class EvidenceLedger:
             problems.append(f"cites evidence that is not in the ledger: {unknown}")
         evidence = [r for i in cited if isinstance(r := self._records.get(i), EvidenceRecord)]
         if isinstance(record, DecisionRecord):
-            if record.imported_from is None and not evidence:
+            if record.imported_from is None and not evidence and record.action != REVIEW_ACTION:
                 problems.append(f"decision {record.action} on {record.subject} cites no evidence")
             return problems
         head = self._heads.get(record.hypothesis_id)
@@ -547,12 +626,24 @@ class EvidenceLedger:
                     problems.append(f"{record.evidence_id}: {path} changed since it was recorded")
         return problems
 
+    def cost_summary(self) -> dict[str, Any]:
+        """Observed cost: evidence costs plus decision costs (e.g. LLM review), by category."""
+        total = CostRecord()
+        for record in self.evidence():
+            if record.cost is not None:
+                total = total + record.cost
+        for decision in self.decisions():
+            if decision.observed_cost is not None:
+                total = total + decision.observed_cost
+        return total.totals()
+
     def summary(self) -> dict[str, Any]:
         return {
             "path": str(self.path),
             "records": len(self),
             "evidence": len(self.evidence()),
             "decisions": len(self.decisions()),
+            "cost": self.cost_summary(),
             "hypotheses": {
                 h: {
                     "revision_id": r.revision_id,
@@ -596,6 +687,7 @@ def hashes_of(paths: list[str | Path | None]) -> dict[str, str]:
 
 __all__ = [
     "CLAIM_REQUIREMENTS",
+    "CostRecord",
     "DecisionRecord",
     "EvidenceKind",
     "EvidenceLedger",
@@ -608,6 +700,7 @@ __all__ = [
     "LedgerRecord",
     "LedgerValidationError",
     "MethodRecord",
+    "REVIEW_ACTION",
     "file_sha256",
     "hashes_of",
     "record_id",

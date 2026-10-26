@@ -224,6 +224,47 @@ class TestExplorationErrors:
         with pytest.raises(RuntimeError, match="Relaxation failed"):
             chat_once(session, "Suggest cathode")
 
+    def test_an_interrupted_exploration_is_offered_again_on_resume(
+        self, discovery_config, monkeypatch
+    ):
+        import matsim_agents.orchestration.interactive_chat as chat_mod
+
+        session, _ = _make_session(
+            discovery_config, responses=["Try Li2MnO3."], monkeypatch=monkeypatch
+        )
+        monkeypatch.setattr(
+            chat_mod, "_kickoff_exploration", MagicMock(side_effect=KeyboardInterrupt)
+        )
+        with pytest.raises(KeyboardInterrupt):
+            chat_once(session, "Suggest a cathode.")
+        assert "Li2MnO3" not in session.seen_compositions
+
+        _, mock_explore = _make_session(
+            discovery_config, responses=["Li2MnO3 again."], monkeypatch=monkeypatch
+        )
+        resumed = DiscoveryChatSession.resume(discovery_config, session.transcript.directory)
+        chat_once(resumed, "Retry.")
+        assert [c.args[0].formula for c in mock_explore.call_args_list] == ["Li2MnO3"]
+        assert len(resumed.explorations) == 1
+
+    def test_an_interrupted_confirmation_is_offered_again(self, discovery_config, monkeypatch):
+        import builtins
+
+        discovery_config.auto_confirm = False
+        session, mock_explore = _make_session(
+            discovery_config, responses=["Try Li2MnO3."], monkeypatch=monkeypatch
+        )
+
+        def interrupt(_prompt):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(builtins, "input", interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            chat_once(session, "Suggest a cathode.")
+        mock_explore.assert_not_called()
+        resumed = DiscoveryChatSession.resume(discovery_config, session.transcript.directory)
+        assert "Li2MnO3" not in resumed.seen_compositions
+
 
 # ── message history ───────────────────────────────────────────────────────────
 
@@ -262,6 +303,78 @@ class TestMessageHistory:
         response = chat_once(session, "What is the answer?")
         assert response is not None
         assert "42" in response
+
+
+class TestResumableSession:
+    def test_resume_restores_conversation_and_discovery_state(self, discovery_config, monkeypatch):
+        session, _ = _make_session(
+            discovery_config, responses=["Try Li2MnO3."], monkeypatch=monkeypatch
+        )
+        chat_once(session, "Suggest a cathode.")
+        directory = session.transcript.directory
+        assert (directory / "session.json").is_file()
+
+        _, mock_explore = _make_session(
+            discovery_config, responses=["Li2MnO3 again, or LiCoO2."], monkeypatch=monkeypatch
+        )
+        resumed = DiscoveryChatSession.resume(discovery_config, directory.name)
+        assert [m.content for m in resumed.messages] == [m.content for m in session.messages]
+        assert resumed.seen_compositions == session.seen_compositions
+        assert len(resumed.explorations) == 1
+        assert resumed.transcript.count == session.transcript.count
+
+        chat_once(resumed, "Anything else?")
+        assert mock_explore.call_count == 1  # only LiCoO2; Li2MnO3 was already seen
+        assert len(resumed.explorations) == 2
+        assert resumed.transcript.directory == directory
+
+    @pytest.mark.parametrize("saved_llm_only", [True, False])
+    def test_resume_uses_the_current_capabilities(
+        self, discovery_config, monkeypatch, saved_llm_only
+    ):
+        from matsim_agents.orchestration.interactive_chat import LLM_ONLY_MODE_INSTRUCTION
+
+        llm_only = DiscoveryChatConfig(llm_only=True, output_dir=discovery_config.output_dir)
+        saved, current = (
+            (llm_only, discovery_config) if saved_llm_only else (discovery_config, llm_only)
+        )
+        session, _ = _make_session(saved, responses=["Hypothesis."], monkeypatch=monkeypatch)
+        chat_once(session, "Discuss materials")
+        assert (LLM_ONLY_MODE_INSTRUCTION in session.messages[0].content) is saved_llm_only
+
+        _make_session(current, responses=["More."], monkeypatch=monkeypatch)
+        resumed = DiscoveryChatSession.resume(current, session.transcript.directory)
+        chat_once(resumed, "Continue")
+        assert (LLM_ONLY_MODE_INSTRUCTION in resumed.messages[0].content) is not saved_llm_only
+        assert [m.content for m in resumed.messages[1:3]] == [
+            m.content for m in session.messages[1:3]
+        ]
+
+    def test_resume_of_missing_session_fails(self, discovery_config):
+        with pytest.raises(FileNotFoundError, match="no saved chat session"):
+            DiscoveryChatSession.resume(discovery_config, "does-not-exist")
+
+    def test_the_resume_hint_works_from_another_output_directory(
+        self, discovery_config, monkeypatch, tmp_path
+    ):
+        import builtins
+        import shlex
+        from dataclasses import replace
+
+        import matsim_agents.orchestration.interactive_chat as chat_mod
+
+        _make_session(discovery_config, responses=["Hello."], monkeypatch=monkeypatch)
+        printed = []
+        monkeypatch.setattr(chat_mod, "_print", lambda text, *_a, **_k: printed.append(text))
+        replies = iter(["Hi.", "exit"])
+        monkeypatch.setattr(builtins, "input", lambda _prompt: next(replies))
+        session = chat_mod.run_chat(discovery_config)
+        [hint] = [text for text in printed if "Resume with" in text]
+        [argument] = shlex.split(hint.split("--resume ", 1)[1].removesuffix("[/dim]"))
+        assert Path(argument) == session.transcript.directory.resolve()
+        elsewhere = replace(discovery_config, output_dir=str(tmp_path / "elsewhere"))
+        resumed = DiscoveryChatSession.resume(elsewhere, argument)
+        assert resumed.transcript.directory == Path(argument)
 
 
 # ── multi-LLM critique / panel mode ──────────────────────────────────────────

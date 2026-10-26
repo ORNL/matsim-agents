@@ -14,12 +14,21 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    messages_from_dict,
+    messages_to_dict,
+)
 
 from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.llm.replies import ModelReply, invoke_model
@@ -210,17 +219,8 @@ class DiscoveryChatSession:
     ) -> None:
         """Append one message (a person's turn, a model reply, or a tool result)."""
         if self.transcript is None:
-            cfg = self.config
-            critics = ", ".join(cfg.critic_panel_models) or cfg.critic_llm_model or "none"
-            self.transcript = Transcript(
-                Path(cfg.output_dir) / "chat" / make_run_id(),
-                title="Discovery chat",
-                preamble=(
-                    f"Proposer: {cfg.llm_provider} `{cfg.llm_model}`. "
-                    f"Hypothesis debate: {'on' if cfg.enable_hypothesis_debate else 'off'} "
-                    f"(critics: {critics}). LLM-only: {'yes' if cfg.llm_only else 'no'}."
-                ),
-            )
+            self._open_transcript(Path(self.config.output_dir) / "chat" / make_run_id())
+        assert self.transcript is not None
         fields = {
             "id": f"{self.transcript.count + 1:04d}-{kind}",
             "kind": kind,
@@ -234,6 +234,68 @@ class DiscoveryChatSession:
             else Contribution(text=text, **fields)
         )
         self.transcript.add(contribution, prompt=prompt)
+
+    def _open_transcript(self, directory: Path) -> None:
+        cfg = self.config
+        critics = ", ".join(cfg.critic_panel_models) or cfg.critic_llm_model or "none"
+        self.transcript = Transcript(
+            directory,
+            title="Discovery chat",
+            preamble=(
+                f"Proposer: {cfg.llm_provider} `{cfg.llm_model}`. "
+                f"Hypothesis debate: {'on' if cfg.enable_hypothesis_debate else 'off'} "
+                f"(critics: {critics}). LLM-only: {'yes' if cfg.llm_only else 'no'}."
+            ),
+        )
+
+    def save(self) -> Path | None:
+        """Atomically write ``session.json`` beside the transcript, so ``--resume`` can continue."""
+        if self.transcript is None:
+            return None
+        directory = self.transcript.directory
+        state = {
+            "session_id": directory.name,
+            "config": asdict(self.config),
+            "messages": messages_to_dict(self.messages),
+            "seen_compositions": sorted(self.seen_compositions),
+            "explorations": [item.model_dump(mode="json") for item in self.explorations],
+        }
+        destination = directory / "session.json"
+        fd, temporary = tempfile.mkstemp(prefix=".session.json.", dir=directory)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(state, stream, indent=2, default=str)
+                stream.write("\n")
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        return destination
+
+    @classmethod
+    def resume(cls, config: DiscoveryChatConfig, session: str | Path) -> DiscoveryChatSession:
+        """Continue a saved session: a directory, or a session id under ``<output_dir>/chat/``.
+
+        The conversation and discovery state come from ``session.json``; the
+        models and tools come from ``config``.
+        """
+        directory = Path(session)
+        if not (directory / "session.json").is_file():
+            directory = Path(config.output_dir) / "chat" / str(session)
+        path = directory / "session.json"
+        if not path.is_file():
+            raise FileNotFoundError(f"no saved chat session at {path}")
+        state = json.loads(path.read_text(encoding="utf-8"))
+        restored = cls(
+            config=config,
+            messages=messages_from_dict(state["messages"]),
+            seen_compositions=set(state["seen_compositions"]),
+            explorations=[
+                CompositionExplorationResult.model_validate(item) for item in state["explorations"]
+            ],
+        )
+        restored._open_transcript(directory)
+        return restored
 
     def relaxation_pool(self) -> MLIPWorkerPool:
         """Workers for the plan's mlip pool, or in-process relaxations reusing the model."""
@@ -741,6 +803,18 @@ def chat_once(
     on_assistant: Callable[[str], None] | None = None,
 ) -> str:
     """Send one user turn, get the assistant reply, and run discovery hooks."""
+    try:
+        return _chat_turn(session, user_text, on_assistant=on_assistant)
+    finally:
+        session.save()
+
+
+def _chat_turn(
+    session: DiscoveryChatSession,
+    user_text: str,
+    *,
+    on_assistant: Callable[[str], None] | None = None,
+) -> str:
     cfg = session.config
     system_prompt = cfg.system_prompt
     if cfg.llm_only:
@@ -749,6 +823,9 @@ def chat_once(
         system_prompt = f"{system_prompt.rstrip()}\n\n{LLM_ONLY_MODE_INSTRUCTION}"
     if not session.messages:
         session.messages.append(SystemMessage(content=system_prompt))
+    elif isinstance(session.messages[0], SystemMessage):
+        # A resumed session may have switched between LLM-only and --with-mlip.
+        session.messages[0] = SystemMessage(content=system_prompt)
     session.record("user", "user", user_text)
 
     # Direct command: /clear resets the conversation and discovery state.
@@ -859,12 +936,21 @@ def chat_once(
             if comp.formula in session.seen_compositions:
                 continue
             session.seen_compositions.add(comp.formula)
-            if _confirm(
-                f"\nProposed composition detected: {comp.formula}. "
-                "Run surrogate-based phase exploration?",
-                auto=cfg.auto_confirm,
-            ):
-                exploration = _kickoff_exploration(comp, cfg, mlip_pool=session.relaxation_pool())
+            try:
+                exploration = (
+                    _kickoff_exploration(comp, cfg, mlip_pool=session.relaxation_pool())
+                    if _confirm(
+                        f"\nProposed composition detected: {comp.formula}. "
+                        "Run surrogate-based phase exploration?",
+                        auto=cfg.auto_confirm,
+                    )
+                    else None
+                )
+            except BaseException:
+                # Not explored: a resumed session offers it again.
+                session.seen_compositions.discard(comp.formula)
+                raise
+            if exploration is not None:
                 session.explorations.append(exploration)
                 if cfg.trigger_active_learning_on_high_uq:
                     should_handoff, handoff_reason = _should_handoff_to_active_learning(
@@ -915,12 +1001,24 @@ def chat_once(
     return assistant_text
 
 
-def run_chat(config: DiscoveryChatConfig) -> DiscoveryChatSession:
+def run_chat(
+    config: DiscoveryChatConfig, *, resume: str | Path | None = None
+) -> DiscoveryChatSession:
     """Blocking REPL. Type ``exit`` / ``quit`` / Ctrl-D to leave."""
-    session = DiscoveryChatSession(config=config)
+    session = (
+        DiscoveryChatSession(config=config)
+        if resume is None
+        else DiscoveryChatSession.resume(config, resume)
+    )
     try:
         session.open()
         config = session.config
+        if session.transcript is not None:
+            _print(
+                f"[dim]Resumed {session.transcript.directory.name}: "
+                f"{len(session.messages)} message(s), "
+                f"{len(session.explorations)} exploration(s).[/dim]"
+            )
         _print(
             f"[bold]matsim-agents discovery chat[/bold]  "
             f"(provider={config.llm_provider}, model={config.llm_model}, "
@@ -943,4 +1041,8 @@ def run_chat(config: DiscoveryChatConfig) -> DiscoveryChatSession:
         session.close()
         if session.transcript is not None:
             _print(f"[dim]Transcript: {session.transcript.markdown_path}[/dim]")
+            _print(
+                f"[dim]Resume with: matsim-agents chat --resume "
+                f"{shlex.quote(str(session.transcript.directory.resolve()))}[/dim]"
+            )
     return session

@@ -18,6 +18,7 @@ from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.formula_merge import LLMFormulaProposal
 from matsim_agents.execution.ledger import (
     ClaimType,
+    CostRecord,
     EvidenceLedger,
     EvidenceOutcome,
     EvidenceRecord,
@@ -30,6 +31,8 @@ from matsim_agents.workflows.debate import (
     ScientificDebateResult,
     run_scientific_debate,
 )
+
+REVIEW_POLICY_VERSION = "debate-review-v1"
 
 
 class CampaignDebateReviewConfig(BaseModel):
@@ -297,6 +300,19 @@ def _hypothesis_record(
     return "; ".join(problems) if problems else record
 
 
+def _debate_cost(debate: ScientificDebateResult) -> CostRecord | None:
+    try:
+        with open(debate.contributions_path, encoding="utf-8") as stream:
+            contributions = [json.loads(line) for line in stream if line.strip()]
+    except OSError:
+        return None
+    return CostRecord(
+        llm_prompt_tokens=sum(c.get("prompt_tokens") or 0 for c in contributions),
+        llm_completion_tokens=sum(c.get("completion_tokens") or 0 for c in contributions),
+        llm_seconds=sum(c.get("latency_s") or 0.0 for c in contributions),
+    )
+
+
 def run_campaign_debate_review(
     campaign: CampaignState,
     records: list[FormulaRunRecord],
@@ -418,6 +434,12 @@ def run_campaign_debate_review(
         },
         hypothesis_revisions=revisions,
         notes=notes,
+        policy_version=REVIEW_POLICY_VERSION,
+        thresholds={
+            "minimum_agreement_fraction": config.minimum_agreement_fraction,
+            "votes_required": float(threshold),
+        },
+        cost=_debate_cost(debate),
     )
 
 

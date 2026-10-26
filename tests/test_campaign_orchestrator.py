@@ -30,7 +30,7 @@ from matsim_agents.discovery.stability import (
 )
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.contracts import ComputeBudget, EvidenceLevel, WorkflowStatus
-from matsim_agents.execution.ledger import EvidenceLedger
+from matsim_agents.execution.ledger import REVIEW_ACTION, CostRecord, EvidenceLedger
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
 
@@ -306,6 +306,26 @@ def test_campaign_applies_review_decision_before_next_iteration(tmp_path):
     [decision] = ledger.decisions()
     assert decision.subject == "NbO" and decision.evidence_ids == cited
     assert decision.decision_id == review_record.metadata["decision_ids"][0]
+
+
+def test_a_review_that_changes_nothing_still_records_its_cost(tmp_path):
+    cost = CostRecord(llm_prompt_tokens=100, llm_completion_tokens=20)
+
+    def review(campaign, records):
+        return CampaignReviewDecision(debate_run_id=f"review-{records[0].formula}", cost=cost)
+
+    result = run_campaign(
+        _campaign(max_candidates=1),
+        output_dir=tmp_path,
+        formula_runner=lambda formula, output_dir: _result(formula, output_dir),
+        review_runner=review,
+    )
+
+    [decision] = EvidenceLedger(tmp_path / "evidence-ledger.jsonl").decisions()
+    assert decision.action == REVIEW_ACTION and decision.observed_cost == cost
+    assert result.campaign.review_history[0].metadata["review_decision_id"] == (
+        decision.decision_id
+    )
 
 
 def test_adaptive_acquisition_reserves_branches_updates_lambda_and_persists(tmp_path):

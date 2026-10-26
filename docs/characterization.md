@@ -171,15 +171,42 @@ are migrated explicitly when loaded: their convex-hull reports came from DFT
 refinement and become `converged_dft`, and relative rankings came from MLIP
 relaxations and become `mlip_relaxation`.
 
+## Failure recovery
+
+A failed or unconverged DFT relaxation is classified
+(`matsim_agents.execution.recovery.classify_failure`) and handled by the
+versioned policy `recovery-v1`:
+
+| Failure class | Detected by | Recovery |
+| --- | --- | --- |
+| `scf_not_converged` | QE "convergence NOT achieved"; VASP at `NELM` | Up to 2 retries: QE halves `mixing_beta` and doubles `electron_maxstep`; VASP doubles `NELM` and sets `ALGO = All`. |
+| `ionic_step_limit` | Finished at `max_relaxation_steps` above the force tolerance | Up to 2 retries from the last structure. |
+| `walltime` | Return code 124 | 1 retry with twice the `timeout_sec`, when one is set. |
+| `non_finite_output`, `no_result` | NaN/inf, or no energy or structure | 1 retry, unchanged. |
+| `launcher`, `approval_or_input`, `unknown` | Missing executable, refused approval, invalid input | None. |
+
+Every retry counts against `max_dft_calculations`. Each attempt is a ledger
+record whose `numerical_convergence.failure_class` names the class. The
+choice to retry or give up is a `DecisionRecord`: action
+`recover:<class>`, `defer:<class>` (a retry the budget stopped), or
+`give_up:<class>`, actor `recovery-policy:recovery-v1`, `policy_version`,
+and `thresholds` (retries allowed and used, budget). A retry, with its
+structure, settings, and counters, is saved in the run state before it
+starts and kept until an attempt with no further retry is saved, so an
+interrupted or deferred retry runs on the next execution; a deferred retry
+first records its `recover:<class>` decision. The
+adjusted settings are part of the retry's method record and do not change the
+contract. MLIP relaxations are not retried: a rerun repeats the failure.
+
 ## Limitations
 
 - Stability is relative to the declared reference phases at 0 K, without
   zero-point or finite-temperature contributions; it is not a global
   ground-state search.
-- An exception inside a relaxation, including a DFT SCF failure, is reported
-  as `failed_infrastructure`; whether it was numerical or an environment
-  problem is in `failure_reason`.
-- A step is attempted once per run; there is no automatic recovery.
+- An exception inside a relaxation is reported as `failed_infrastructure`;
+  its failure class (see Failure recovery) is in the ledger record.
+- Only DFT attempts are recovered, and only by the fixed rules below; a
+  failure the policy does not recognise is not retried.
 - The energy is the final energy of the relaxation; there is no separate
   static calculation at the relaxed cell (Pulay stress is not corrected).
 - Recipes cover relaxation, ranking, and hull stability. Phonons, elastic

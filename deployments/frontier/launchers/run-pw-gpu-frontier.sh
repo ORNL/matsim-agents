@@ -86,13 +86,13 @@ echo "=========================================="
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
   # Inside an allocation: srun directly.
-  srun -n "${NRANKS}" -c "${OMP_NUM_THREADS}" --threads-per-core=1 --cpu-bind=cores \
+  exec srun -n "${NRANKS}" -c "${OMP_NUM_THREADS}" --threads-per-core=1 --cpu-bind=cores \
        --gpus-per-node=8 --gpu-bind=closest \
        "${PW_BIN}" -in "${INPUT}" "$@"
 else
   # Stand-alone invocation outside an allocation: assume the caller already
   # acquired one (e.g. `salloc -N1 -p batch -A mat746 ...`).
-  srun -N1 -n "${NRANKS}" -c "${OMP_NUM_THREADS}" --threads-per-core=1 --cpu-bind=cores \
+  exec srun -N1 -n "${NRANKS}" -c "${OMP_NUM_THREADS}" --threads-per-core=1 --cpu-bind=cores \
        --gpus-per-node=8 --gpu-bind=closest \
        "${PW_BIN}" -in "${INPUT}" "$@"
 fi

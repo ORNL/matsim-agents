@@ -171,6 +171,13 @@ class RelaxationStageResult(BaseModel):
     steps: int = 0
     converged: bool = False
     failure_reason: str | None = None
+    return_code: int | None = None
+    scf_converged: bool | None = None
+    wall_time_sec: float | None = None
+    nodes: int | None = Field(None, description="Nodes the placement gave the calculation.")
+    devices: int | None = Field(None, description="Accelerator devices it was given.")
+    device_kind: str | None = Field(None, description="What a device is, e.g. 'rocm-gcd'.")
+    gpus: float | None = Field(None, description="Physical GPU packages it was given.")
     artifacts: dict[str, str] = Field(default_factory=dict)
 
 
@@ -183,6 +190,7 @@ class ScientificRelaxationResult(BaseModel):
     final_structure_path: str | None = None
     validations: list[ValidationRecord] = Field(default_factory=list)
     failure_reason: str | None = None
+    failure_type: str | None = None
 
 
 def _apply_constraints(path: str, destination: Path, controls: GeometryControls) -> str:
@@ -235,6 +243,33 @@ def _mlip_stage(
     )
 
 
+def _read_text(path: str | Path) -> str:
+    try:
+        return Path(path).read_text(errors="replace")
+    except OSError:
+        return ""
+
+
+def _not_converged(code: str, return_code: int, output: str, started: bool) -> str:
+    reason = f"{code} did not converge (return code {return_code})"
+    if started or return_code == 0:
+        return reason
+    # The code never ran: its own error, or else the launcher's last line, is the diagnostic.
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        if line.startswith("Error in routine"):  # QE: the routine, then its message
+            return f"{reason}: {' '.join(lines[index : index + 2])[:300]}"
+        if "Error reading item" in line:  # VASP's INCAR parser, possibly inside a box
+            return f"{reason}: {line.strip('| ')[:300]}"
+    return f"{reason}: {lines[-1][:300]}" if lines else reason
+
+
+def _qe_scf_converged(output: str) -> bool:
+    """Whether the last SCF cycle converged; an earlier one may fail (scf_must_converge off)."""
+    failed = output.rfind("convergence NOT achieved")
+    return failed < 0 or output.rfind("convergence has been achieved") > failed
+
+
 def _dft_stage(
     input_path: str, run: ScientificRunDirectory, cfg: ScientificRelaxationConfig
 ) -> RelaxationStageResult:
@@ -246,6 +281,7 @@ def _dft_stage(
         placement = cfg.resources.place(run.path)
         dft = dft.model_copy(update={"launch": placement.pool("dft").launches[0]})
     work_dir = run.path / "calculations" / dft.backend
+    allocation = dft.launch.allocation() if dft.launch is not None else {}
     atoms = read(input_path)
     calculation = "vc-relax" if cfg.geometry.relax_cell else "relax"
     if dft.backend == "vasp":
@@ -288,8 +324,18 @@ def _dft_stage(
             converged=result.converged,
             failure_reason=None
             if result.converged
-            else f"VASP did not converge (return code {result.return_code})",
+            else _not_converged(
+                "VASP",
+                result.return_code,
+                _read_text(work_dir / "vasp.out"),
+                bool(result.energies_eV) or any(result.scf_iterations_per_step),
+            ),
+            return_code=result.return_code,
+            scf_converged=not result.scf_iterations_per_step
+            or result.scf_iterations_per_step[-1] < settings.nelm,
+            wall_time_sec=result.wall_time_sec,
             artifacts={"work_dir": str(work_dir)},
+            **allocation,
         )
 
     from matsim_agents.backends.dft.qe_relax import QESettings, run_pw, write_pw_input
@@ -321,6 +367,7 @@ def _dft_stage(
         if result.final_max_force_ry_au is not None
         else None
     )
+    stdout = _read_text(result.stdout_path)
     return RelaxationStageResult(
         stage="dft_relaxation",
         backend="qe",
@@ -335,8 +382,12 @@ def _dft_stage(
         converged=result.converged,
         failure_reason=None
         if result.converged
-        else f"QE did not converge (return code {result.return_code})",
+        else _not_converged("QE", result.return_code, stdout, result.scf_iterations_total > 0),
+        return_code=result.return_code,
+        scf_converged=_qe_scf_converged(stdout),
+        wall_time_sec=result.wall_time_sec,
         artifacts={"input": input_file, "stdout": result.stdout_path},
+        **allocation,
     )
 
 
@@ -422,6 +473,7 @@ def run_relaxation(
             stages=stages,
             validations=validations,
             failure_reason=str(exc),
+            failure_type=type(exc).__name__,
         )
     run.write_json("results.json", result)
     run.append_event(

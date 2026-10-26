@@ -17,7 +17,6 @@ import math
 import os
 import re
 import shutil
-import subprocess
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -26,6 +25,7 @@ from typing import Any
 
 import numpy as np
 
+from matsim_agents.backends.dft.process import run_launcher
 from matsim_agents.execution.devices import apply_mask_environment
 
 # --------------------------------------------------------------------------- #
@@ -665,19 +665,9 @@ def run_pw(
 
     t0 = time.time()
     with open(stdout_path, "w") as out:
-        try:
-            proc = subprocess.run(
-                argv,
-                cwd=work_dir,
-                stdout=out,
-                stderr=subprocess.STDOUT,
-                timeout=timeout_sec,
-                check=False,
-                env=_child_environment(env),
-            )
-            rc = proc.returncode
-        except subprocess.TimeoutExpired:
-            rc = 124
+        rc = run_launcher(
+            argv, cwd=work_dir, stdout=out, timeout_sec=timeout_sec, env=_child_environment(env)
+        )
     elapsed = time.time() - t0
 
     result = parse_pw_stdout(stdout_path, return_code=rc)
