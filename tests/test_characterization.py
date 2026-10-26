@@ -1122,6 +1122,9 @@ def test_an_interrupted_retry_runs_again_on_resume(
     first = Interrupted(energies, at=2, **{failure: {"NbO2-a.extxyz"}})
     with pytest.raises(KeyboardInterrupt):
         run_characterization(contract, relax=first)
+    [interrupted] = [e for e in _ledger(contract).evidence() if e.task_id == "attempt-2"]
+    assert interrupted.failure_reason == "interrupted by KeyboardInterrupt"
+    assert interrupted.cost.failed_jobs == 1 and interrupted.cost.failed_seconds >= 0
     assert [s.step_id for s in outstanding_steps(contract)] == [
         "relax-dft-000",
         "relax-dft-001",
@@ -1160,3 +1163,39 @@ def test_an_interrupted_budget_deferred_retry_runs_again_on_resume(system):
     assert relax.settings[0]["mixing_beta"] == 0.2
     actions = [d.action for d in _ledger(raised).decisions() if d.subject == "relax-dft-001"]
     assert actions == ["defer:scf_not_converged", "recover:scf_not_converged"]
+
+
+def test_a_changed_restart_structure_is_not_resumed(system):
+    tmp_path, structures, references = system
+    energies = {"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0}
+
+    class RestartFails(FakeRelax):
+        def __call__(self, cfg):
+            if Path(cfg.structure_path).name == "relaxed-NbO2-a.extxyz":
+                self.scf_failed = self.silent = {"relaxed-NbO2-a.extxyz"}
+            return super().__call__(cfg)
+
+    data = _dft(references, budget={"max_dft_calculations": 2})
+    contract = _contract(tmp_path, structures, "thermodynamic_stability", **data)
+    run_characterization(contract, relax=RestartFails(energies, step_limited={"NbO2-a.extxyz"}))
+    state = json.loads(
+        (
+            Path(contract.output_root)
+            / "characterization-thermodynamic_stability-test"
+            / "characterization-state.json"
+        ).read_text()
+    )
+    assert state["steps"]["relax-dft-000"]["status"] == "failed"
+    restart = Path(state["recovery"]["relax-dft-000"]["structure"])
+    assert restart.name == "relaxed-NbO2-a.extxyz"
+    _structure(restart, "NbOO", shift=0.7)
+    raised = _contract(
+        tmp_path,
+        structures,
+        "thermodynamic_stability",
+        **{**data, "budget": {"max_dft_calculations": 5}},
+    )
+    relax = FakeRelax(energies)
+    with pytest.raises(ValueError, match="retry structure .* has changed"):
+        run_characterization(raised, relax=relax)
+    assert relax.calls == []

@@ -250,9 +250,18 @@ def _not_converged(code: str, return_code: int, output: str, started: bool) -> s
     reason = f"{code} did not converge (return code {return_code})"
     if started or return_code == 0:
         return reason
-    # The code never ran: the launcher's last line is the only diagnostic.
+    # The code never ran: its own error, or else the launcher's last line, is the diagnostic.
     lines = [line.strip() for line in output.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        if line.startswith("Error in routine"):
+            return f"{reason}: {' '.join(lines[index : index + 2])[:300]}"
     return f"{reason}: {lines[-1][:300]}" if lines else reason
+
+
+def _qe_scf_converged(output: str) -> bool:
+    """Whether the last SCF cycle converged; an earlier one may fail (scf_must_converge off)."""
+    failed = output.rfind("convergence NOT achieved")
+    return failed < 0 or output.rfind("convergence has been achieved") > failed
 
 
 def _dft_stage(
@@ -367,7 +376,7 @@ def _dft_stage(
         if result.converged
         else _not_converged("QE", result.return_code, stdout, result.scf_iterations_total > 0),
         return_code=result.return_code,
-        scf_converged="convergence NOT achieved" not in stdout,
+        scf_converged=_qe_scf_converged(stdout),
         wall_time_sec=result.wall_time_sec,
         artifacts={"input": input_file, "stdout": result.stdout_path},
     )

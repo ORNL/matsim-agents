@@ -67,6 +67,16 @@ DEFAULT_POLICY = RecoveryPolicy(
 
 _LAUNCHER_ERRORS = {"FileNotFoundError", "NotADirectoryError"}
 _INPUT_ERRORS = {"PermissionError", "ValueError", "ValidationError", "KeyError", "TypeError"}
+# Diagnostics of the DFT codes' own input readers (QE routines, VASP's INCAR parser).
+_INPUT_DIAGNOSTICS = (
+    "error in routine read_namelists",
+    "error in routine read_cards",
+    "error in routine card_",
+    "error in routine iosys",
+    "error in routine readpp",
+    "bad line in namelist",
+    "error reading item",
+)
 
 
 def classify_failure(outcome: dict[str, Any], *, max_steps: int | None = None) -> FailureClass:
@@ -75,6 +85,8 @@ def classify_failure(outcome: dict[str, Any], *, max_steps: int | None = None) -
     reason = str(outcome.get("failure_reason") or "").lower()
     if outcome.get("return_code") == WALLTIME_RETURN_CODE or "timed out" in reason:
         return FailureClass.WALLTIME
+    if any(marker in reason for marker in _INPUT_DIAGNOSTICS):
+        return FailureClass.APPROVAL_OR_INPUT
     if (
         error in _LAUNCHER_ERRORS
         or outcome.get("return_code")

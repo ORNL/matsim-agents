@@ -36,6 +36,24 @@ from matsim_agents.execution.recovery import (
             "launcher",
         ),
         ({"status": "failed", "failure_type": "PermissionError"}, "approval_or_input"),
+        (
+            {
+                "status": "failed",
+                "return_code": 1,
+                "failure_reason": "QE did not converge (return code 1): Error in routine "
+                "read_namelists (1): bad line in namelist &electrons",
+            },
+            "approval_or_input",
+        ),
+        (
+            {
+                "status": "failed",
+                "return_code": 1,
+                "failure_reason": "VASP did not converge (return code 1): Error reading item "
+                "'NELM' from file INCAR.",
+            },
+            "approval_or_input",
+        ),
         ({"status": "failed", "scf_converged": False, "return_code": 2}, "scf_not_converged"),
         ({"status": "failed", "failure_reason": "non-finite output"}, "non_finite_output"),
         ({"status": "failed", "failure_reason": "produced no energy, force"}, "no_result"),

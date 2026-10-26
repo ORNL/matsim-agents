@@ -1,4 +1,4 @@
-"""Run a DFT launcher so that a timeout stops everything it started."""
+"""Run a DFT launcher so that a timeout or termination stops everything it started."""
 
 from __future__ import annotations
 
@@ -6,8 +6,9 @@ import contextlib
 import os
 import signal
 import subprocess
+import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import IO
 
 TIMEOUT_RETURN_CODE = 124
@@ -57,7 +58,11 @@ def run_launcher(
     env: Mapping[str, str] | None,
     grace_sec: float = TERMINATE_GRACE_SEC,
 ) -> int:
-    """The launcher's return code, or 124 once a timed-out launch has fully stopped."""
+    """The launcher's return code, or 124 once a timed-out launch has fully stopped.
+
+    The launcher runs in its own session, so signals to the workflow do not reach it;
+    SIGTERM to the workflow (in the main thread) stops the launch group before exiting.
+    """
     proc = subprocess.Popen(
         argv,
         cwd=cwd,
@@ -66,14 +71,39 @@ def run_launcher(
         env=None if env is None else dict(env),
         start_new_session=True,
     )
+    stopping = False
+    deferred: list[int] = []
+
+    def on_sigterm(signum: int, _frame: object) -> None:
+        if stopping:
+            deferred.append(signum)
+        else:
+            raise SystemExit(128 + signum)
+
+    restore = _handle_sigterm(on_sigterm)
     try:
-        return proc.wait(timeout=timeout_sec)
-    except subprocess.TimeoutExpired:
-        stop_process_group(proc, grace_sec)
-        return TIMEOUT_RETURN_CODE
-    except BaseException:
-        stop_process_group(proc, grace_sec)
-        raise
+        try:
+            return proc.wait(timeout=timeout_sec)
+        except subprocess.TimeoutExpired:
+            stopping = True
+            stop_process_group(proc, grace_sec)
+            if deferred:
+                raise SystemExit(128 + deferred[0]) from None
+            return TIMEOUT_RETURN_CODE
+        except BaseException:
+            stopping = True
+            stop_process_group(proc, grace_sec)
+            raise
+    finally:
+        restore()
+
+
+def _handle_sigterm(handler: Callable[[int, object], None]) -> Callable[[], None]:
+    """Install ``handler`` for SIGTERM; returns the call that restores the previous one."""
+    if threading.current_thread() is not threading.main_thread():
+        return lambda: None
+    previous = signal.signal(signal.SIGTERM, handler)
+    return lambda: signal.signal(signal.SIGTERM, signal.SIG_DFL if previous is None else previous)
 
 
 __all__ = ["TERMINATE_GRACE_SEC", "TIMEOUT_RETURN_CODE", "run_launcher", "stop_process_group"]

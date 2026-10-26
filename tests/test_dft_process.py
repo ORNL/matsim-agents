@@ -45,3 +45,35 @@ def test_a_finished_launch_returns_its_exit_code(tmp_path):
         )
     assert rc == 3
     assert (tmp_path / "out.log").read_text() == "done\n"
+
+
+def test_sigterm_to_the_workflow_stops_the_launch(tmp_path):
+    import signal
+    import subprocess
+    import sys
+    import textwrap
+    from pathlib import Path
+
+    from matsim_agents.backends.dft import process
+
+    code = textwrap.dedent(
+        f"""
+        from matsim_agents.backends.dft.process import run_launcher
+        with open({str(tmp_path / "out.log")!r}, "w") as out:
+            run_launcher(
+                ["sh", "-c", "sleep 60 & echo $! > child.pid; wait"],
+                cwd={str(tmp_path)!r}, stdout=out, timeout_sec=None, env=None, grace_sec=1,
+            )
+        """
+    )
+    source = str(Path(process.__file__).parents[3])
+    env = {**os.environ, "PYTHONPATH": source}
+    workflow = subprocess.Popen([sys.executable, "-c", code], env=env)
+    pid_file = tmp_path / "child.pid"
+    deadline = time.monotonic() + 30
+    while not (pid_file.is_file() and pid_file.read_text().strip()):
+        assert time.monotonic() < deadline and workflow.poll() is None
+        time.sleep(0.05)
+    workflow.send_signal(signal.SIGTERM)
+    assert workflow.wait(timeout=30) == 128 + signal.SIGTERM
+    assert not _alive(int(pid_file.read_text()))

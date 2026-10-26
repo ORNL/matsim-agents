@@ -838,6 +838,7 @@ def _attempt(
     step: RecipeStep,
     run: _Run,
     relax: Relax,
+    ledger: EvidenceLedger,
     structure: str,
     dft: DFTBackendConfig | None,
 ) -> dict[str, Any]:
@@ -848,6 +849,20 @@ def _attempt(
     if attempt > 1:
         work_dir = work_dir / f"attempt-{attempt}"
     started = time.monotonic()
+
+    def finished(outcome: dict[str, Any]) -> dict[str, Any]:
+        outcome = {
+            **outcome,
+            "structure": step.structure,
+            "attempt": attempt,
+            "wall_seconds": time.monotonic() - started,
+        }
+        if structure != step.structure:
+            outcome["input_structure"] = structure
+        if dft is not None and dft != contract.methods.dft:
+            outcome["dft_settings"] = dft.settings
+        return outcome
+
     try:
         outcome = _relax_record(
             relax(_relaxation_config(contract, step, work_dir, structure=structure, dft=dft))
@@ -858,16 +873,16 @@ def _attempt(
             "failure_reason": f"{type(exc).__name__}: {exc}",
             "failure_type": type(exc).__name__,
         }
-    outcome = {
-        **outcome,
-        "structure": step.structure,
-        "attempt": attempt,
-        "wall_seconds": time.monotonic() - started,
-    }
-    if structure != step.structure:
-        outcome["input_structure"] = structure
-    if dft is not None and dft != contract.methods.dft:
-        outcome["dft_settings"] = dft.settings
+    except BaseException as exc:
+        # The charged attempt's cost is recorded; the step and its saved retry are kept.
+        interrupted = {
+            "status": "failed",
+            "failure_reason": f"interrupted by {type(exc).__name__}",
+            "failure_type": type(exc).__name__,
+        }
+        ledger.append(_relaxation_evidence(contract, step, finished(interrupted)))
+        raise
+    outcome = finished(outcome)
     # QE's ionic convergence message can precede a failed final SCF.
     if outcome["status"] == "done" and outcome.get("scf_converged") is False:
         outcome["converged"] = False
@@ -976,7 +991,7 @@ def _relax_with_recovery(
         retries = {FailureClass(k): v for k, v in pending["retries"].items()}
         _resume_recovery(contract, step, run, ledger, pending, budget)
     while True:
-        outcome = _attempt(contract, step, run, relax, structure, dft)
+        outcome = _attempt(contract, step, run, relax, ledger, structure, dft)
         evidence = ledger.append(_relaxation_evidence(contract, step, outcome))
         evidence_id = evidence.evidence_id  # type: ignore[union-attr]
         recorded = {**outcome, "evidence_id": evidence_id}
@@ -1019,6 +1034,11 @@ def _relax_with_recovery(
             dft = dft.model_copy(update={"settings": settings, "timeout_sec": timeout})
             checkpoint = {
                 "structure": structure,
+                **(
+                    {"structure_sha256": sha256_file(structure)}
+                    if structure != step.structure
+                    else {}
+                ),
                 "dft": dft.model_dump(mode="json"),
                 "retries": {k.value: v for k, v in retries.items()},
                 "attempt": outcome["attempt"],
@@ -1097,9 +1117,17 @@ def _execute(
 
 
 def _verify_completed_artifacts(run: _Run, steps: list[RecipeStep]) -> None:
-    """Refuse to resume from completed relaxations whose saved structure has changed."""
+    """Refuse to resume from relaxation outputs, completed or saved for a retry, that changed."""
     changed = []
     for step in steps:
+        pending = run.pending(step.step_id) if step.operator == "relax" else None
+        if pending is not None and pending["structure"] != step.structure:
+            path = Path(pending["structure"])
+            recorded = pending.get("structure_sha256")
+            if not path.is_file():
+                changed.append(f"{step.step_id}: retry structure {path} no longer exists")
+            elif recorded is None or sha256_file(path) != recorded:
+                changed.append(f"{step.step_id}: retry structure {path} has changed")
         outcome = run.done(step.step_id) if step.operator == "relax" else None
         if outcome is None:
             continue
