@@ -5,10 +5,9 @@ nodes, so the lock is an atomically created lock file (``O_CREAT | O_EXCL``),
 which is supported on CFS, Lustre, GPFS, and local disks. The file records the
 holder's host and PID. A lock left by a crashed process on the same host is
 reclaimed; a lock held from another host is never broken automatically. A lock
-file without holder metadata (for example one left behind by the former
-``fcntl.flock`` implementation) is reclaimed once it is older than
-``UNOWNED_LOCK_GRACE_SECONDS``, which leaves time for a new holder to record
-itself.
+file without holder metadata (its creator died before writing it) is reclaimed
+once it is older than ``UNOWNED_LOCK_GRACE_SECONDS``, which leaves time for a
+new holder to record itself.
 """
 
 from __future__ import annotations

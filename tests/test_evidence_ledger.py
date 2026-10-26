@@ -355,27 +355,6 @@ def test_cli_verifies_and_shows_the_ledger(tmp_path):
     assert result.exit_code == 1 and "tampered" in result.output
 
 
-def test_records_written_before_cost_fields_keep_their_identifiers():
-    from matsim_agents.execution.ledger import CostRecord
-
-    failed = EvidenceRecord(
-        kind="relaxation",
-        subject="Si",
-        method=MethodRecord(backend="qe", method_signature="pbe"),
-        evidence_level=EvidenceLevel.LOW_FIDELITY_DFT,
-        outcome=EvidenceOutcome.FAILED_TO_COMPUTE,
-        failure_reason="x",
-    )
-    decision = DecisionRecord(
-        action="promote", subject="Si", evidence_ids=[failed.evidence_id], actor="review"
-    )
-    # Identifiers computed by the code before policy and cost fields existed.
-    assert failed.evidence_id == "ev-e511d7395ade158e179d37c9"
-    assert decision.decision_id == "dc-7ba4b1538167015a8f5dc43e"
-    costed = decision.model_copy(update={"decision_id": "", "observed_cost": CostRecord()})
-    assert DecisionRecord.model_validate(costed.model_dump()).decision_id != decision.decision_id
-
-
 def test_the_ledger_sums_observed_cost_by_category(tmp_path):
     from matsim_agents.execution.ledger import CostRecord
 
@@ -400,26 +379,17 @@ def test_the_ledger_sums_observed_cost_by_category(tmp_path):
     assert cost["nodes"] == 0 and cost["gpu_hours"] == 0.0
 
 
-def test_node_and_gpu_costs_keep_earlier_identifiers_and_round_trip(tmp_path):
+def test_node_and_gpu_costs_round_trip(tmp_path):
     from matsim_agents.execution.ledger import CostRecord
 
-    def failed(cost):
-        return EvidenceRecord(
-            kind="relaxation",
-            subject="Si",
-            method=MethodRecord(backend="qe", method_signature="pbe"),
-            evidence_level=EvidenceLevel.LOW_FIDELITY_DFT,
-            outcome=EvidenceOutcome.FAILED_TO_COMPUTE,
-            failure_reason="x",
-            cost=cost,
-        )
-
-    # Identifier computed by the code before node and GPU fields existed.
-    earlier = failed(CostRecord(failed_jobs=1, failed_seconds=12.5))
-    assert earlier.evidence_id == "ev-2e8ddc3f65b71d8d821275d6"
-    assert "nodes" not in earlier.model_dump()["cost"]
-    placed = failed(
-        CostRecord(
+    placed = EvidenceRecord(
+        kind="relaxation",
+        subject="Si",
+        method=MethodRecord(backend="qe", method_signature="pbe"),
+        evidence_level=EvidenceLevel.LOW_FIDELITY_DFT,
+        outcome=EvidenceOutcome.FAILED_TO_COMPUTE,
+        failure_reason="x",
+        cost=CostRecord(
             failed_jobs=1,
             failed_seconds=3600.0,
             nodes=2,
@@ -428,9 +398,8 @@ def test_node_and_gpu_costs_keep_earlier_identifiers_and_round_trip(tmp_path):
             device_hours={"rocm-gcd": 16.0},
             gpus=8.0,
             gpu_hours=8.0,
-        )
+        ),
     )
-    assert placed.evidence_id != earlier.evidence_id
     ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
     ledger.append(placed)
     ledger.append(

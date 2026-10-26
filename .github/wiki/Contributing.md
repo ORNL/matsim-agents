@@ -40,7 +40,7 @@ bash scripts/check.sh           # lint, docs/deployments, and non-GPU tests
    - `Integration tests (agent graph + chat)`
    - `Full test suite + coverage`
    - **`CI passed`** — the gate job that summarises all of the above
-5. **At least 1 approving review** is required.
+5. **At least 1 approving review** is required (admins can bypass this deliberately).
 6. **All PR conversations must be resolved** before merging.
 7. **The branch must be up to date with `main`** at merge time (`strict` branch protection is on — rebase or use the "Update branch" button).
 

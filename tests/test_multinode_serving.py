@@ -193,7 +193,7 @@ def test_launcher_builds_a_ray_cluster_before_serving(stub_tools):
     assert calls.index("stopped n1") < calls.index("stopped n0")
 
 
-@pytest.mark.parametrize("request_by", ["stop_file", "signal"])
+@pytest.mark.parametrize("request_by", ["stop_file", "signal", "repeated_signal"])
 def test_stopping_the_server_stops_workers_before_the_head(stub_tools, request_by):
     """matsim-agents asks through the stop file; a signal works too (local heads)."""
     env, record = stub_tools
@@ -223,6 +223,11 @@ def test_stopping_the_server_stops_workers_before_the_head(stub_tools, request_b
         time.sleep(0.2)
     if request_by == "stop_file":
         stop_file.touch()
+    elif request_by == "repeated_signal":
+        # A second request reaches the launcher while it is already cleaning up.
+        os.kill(process.pid, signal.SIGTERM)
+        time.sleep(1)
+        os.killpg(process.pid, signal.SIGTERM)
     else:
         os.killpg(process.pid, signal.SIGTERM)
     output, _ = process.communicate(timeout=60)

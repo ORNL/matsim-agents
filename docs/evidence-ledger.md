@@ -17,9 +17,7 @@ The implementation is in `matsim_agents.execution.ledger`.
 - **Content identifiers.** A record's identifier is the hash of its content,
   excluding the time it was recorded. Replaying a workflow with the same
   outputs produces the same identifiers, and appending an existing record does
-  nothing. Fields added later (`cost`, `policy_version`, `thresholds`,
-  `expected_cost`, `observed_cost`) are left out of the hash when unset, so
-  older ledgers keep their identifiers.
+  nothing.
 - **Tamper evidence.** The file is a JSON-lines hash chain. Editing, deleting,
   or reordering a line is detected when the ledger is opened
   (`LedgerIntegrityError`). `verify_artifacts()` re-hashes the recorded input
@@ -79,23 +77,6 @@ evidence identifiers:
 Reviewers revise an existing hypothesis by its `hypothesis_id`; a new claim gets
 an identifier derived from the campaign and the claim. The LLM text is
 recorded as given and never regenerated on replay.
-
-## Migration
-
-Campaign state schema 3 adds `evidence_ledger_file`. A campaign saved before it
-(schema 2) is migrated explicitly the first time its ledger is opened
-(`open_campaign_ledger`):
-
-- stability reports become evidence records, and failed formula runs become
-  `failed_to_compute` records;
-- review deactivations and reactivations become decisions, and review
-  hypothesis revisions become hypothesis revisions; both carry
-  `imported_from: campaign_state.review_history`. The old revisions cited
-  free text rather than evidence identifiers, so that text is kept in the
-  rationale and they have no evidence identifiers.
-
-The backfill is idempotent and deterministic: replaying it gives the same
-identifiers.
 
 ## Cost accounting
 

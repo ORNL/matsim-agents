@@ -301,113 +301,18 @@ def test_mlip_hull_reports_never_enter_the_campaign_hull():
     assert campaign.current_hull is None
 
 
-def test_version_1_campaign_state_migrates_explicitly():
-    campaign = _campaign()
-    campaign.record_stability(_vertex_report(EvidenceLevel.CONVERGED_DFT))
-    saved = campaign.model_dump(mode="json")
-    saved.pop("schema_version")
-    del saved["stability_reports"]["NbTaO4"]["evidence_level"]
-    del saved["current_hull"]["evidence_level"]
-    for hull in saved["hull_history"]:
-        del hull["evidence_level"]
-    original = json.loads(json.dumps(saved))
-    restored = CampaignState.model_validate(saved)
-    assert saved == original
-    assert restored.schema_version == 3
-    assert restored.stability_reports["NbTaO4"].evidence_level == EvidenceLevel.CONVERGED_DFT
-    assert restored.current_hull.evidence_level == EvidenceLevel.CONVERGED_DFT
-    with pytest.raises(ValidationError, match="newer than this code"):
-        CampaignState.model_validate({**saved, "schema_version": 4})
-
-
-def _version_2_state() -> dict:
-    from matsim_agents.campaign.state import CampaignReviewRecord, FormulaRunRecord
-
-    campaign = _campaign()
-    campaign.record_stability(_vertex_report(EvidenceLevel.CONVERGED_DFT))
-    campaign.formula_runs["NbTaO4"] = FormulaRunRecord(
-        formula="NbTaO4",
-        status=WorkflowStatus.COMPLETE,
-        output_dir="formulas/NbTaO4",
-        evidence={"dft_refinement": {"backend": "qe", "method_signature": "pbe-v1"}},
-    )
-    campaign.formula_runs["Nb2O5"] = FormulaRunRecord(
-        formula="Nb2O5", status=WorkflowStatus.FAILED, failure_reason="RuntimeError('pw.x')"
-    )
-    campaign.review_history.append(
-        CampaignReviewRecord(
-            iteration=0,
-            debate_run_id="review-001",
-            deactivate_formulas=["Nb2O5"],
-            notes=["[a] Nb2O5: deactivate - no converged candidates"],
-            metadata={
-                "hypothesis_revisions": [
-                    {
-                        "participant": "model-a",
-                        "claim": "NbTaO4 is a new hull vertex",
-                        "status": "supported",
-                        "evidence": ["DFT hull distance 0.0"],
-                        "proposed_test": "phonons",
-                    }
-                ]
-            },
-        )
-    )
-    saved = campaign.model_dump(mode="json")
-    saved["schema_version"] = 2
-    del saved["evidence_ledger_file"]
-    return saved
-
-
-def test_version_2_campaign_is_backfilled_into_its_ledger(tmp_path):
-    from matsim_agents.campaign.evidence import open_campaign_ledger
-    from matsim_agents.execution.ledger import EvidenceOutcome
-
-    campaign = CampaignState.model_validate(_version_2_state())
-    assert campaign.schema_version == 3 and campaign.evidence_ledger_file is None
-    ledger = open_campaign_ledger(campaign, tmp_path / "one")
-    assert campaign.evidence_ledger_file == "evidence-ledger.jsonl"
-    [hull] = ledger.evidence(subject="NbTaO4")
-    assert hull.kind == "stability" and hull.evidence_level == EvidenceLevel.CONVERGED_DFT
-    assert hull.method.method_signature == "pbe-v1"
-    [failure] = ledger.evidence(subject="Nb2O5")
-    assert failure.outcome == EvidenceOutcome.FAILED_TO_COMPUTE
-    [decision] = ledger.decisions()
-    assert decision.subject == "Nb2O5" and decision.imported_from
-    [claim] = ledger.current_hypotheses().values()
-    assert claim.imported_from and claim.evidence_ids == []
-    assert "DFT hull distance 0.0" in claim.scientific_rationale
-    # Opening again does not backfill twice; replaying the saved state gives the same IDs.
-    assert len(open_campaign_ledger(campaign, tmp_path / "one")) == len(ledger)
-    replay = open_campaign_ledger(
-        CampaignState.model_validate(_version_2_state()), tmp_path / "two"
-    )
-    assert [r.model_dump(exclude={"recorded_at"}) for r in replay.records()] == [
-        r.model_dump(exclude={"recorded_at"}) for r in ledger.records()
-    ]
-
-
-def test_repeating_or_resuming_a_backfill_appends_nothing_new(tmp_path):
-    from matsim_agents.campaign.evidence import migrate_campaign_to_ledger
-    from matsim_agents.execution.ledger import EvidenceLedger, record_id
-
-    saved = _version_2_state()
-    [revision] = saved["review_history"][0]["metadata"]["hypothesis_revisions"]
-    saved["review_history"][0]["metadata"]["hypothesis_revisions"].append(
-        {**revision, "status": "contradicted", "evidence": ["phonons unstable"]}
-    )
-    campaign = CampaignState.model_validate(saved)
-    ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
-    added = migrate_campaign_to_ledger(campaign, ledger)
-    [claim] = ledger.current_hypotheses()
-    assert len(ledger.history(claim)) == 2
-    assert migrate_campaign_to_ledger(campaign, ledger) == 0
-    # An interrupted backfill, resumed from a fresh copy of the saved state.
-    partial = EvidenceLedger(tmp_path / "partial.jsonl")
-    for record in list(ledger.records())[: added - 1]:
-        partial.append(record)
-    assert migrate_campaign_to_ledger(CampaignState.model_validate(saved), partial) == 1
-    assert [record_id(r) for r in partial.records()] == [record_id(r) for r in ledger.records()]
+def test_campaign_states_of_other_schema_versions_are_rejected(tmp_path):
+    saved = _campaign().model_dump(mode="json")
+    for version in (2, 4):
+        with pytest.raises(ValidationError, match="schema_version"):
+            CampaignState.model_validate({**saved, "schema_version": version})
+    path = tmp_path / "campaign.json"
+    _campaign().save(path)
+    assert CampaignState.load(path) == _campaign()
+    del saved["schema_version"]
+    path.write_text(json.dumps(saved))
+    with pytest.raises(ValueError, match="no schema_version"):
+        CampaignState.load(path)
 
 
 def test_recalibrated_reports_become_new_evidence_with_their_parent(tmp_path):
