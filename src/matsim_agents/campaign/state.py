@@ -151,7 +151,10 @@ class CampaignState(BaseModel):
 
     @classmethod
     def load(cls, path: str | Path) -> CampaignState:
-        return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or "schema_version" not in data:
+            raise ValueError(f"{path} has no schema_version; it is not a current campaign state")
+        return cls.model_validate(data)
 
     def save(self, path: str | Path) -> None:
         destination = Path(path)

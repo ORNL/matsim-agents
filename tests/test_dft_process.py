@@ -120,3 +120,31 @@ def test_ctrl_c_during_timeout_cleanup_still_kills_and_reaps_the_launch(tmp_path
     assert workflow.wait(timeout=30) == -signal.SIGINT
     assert time.monotonic() - interrupted > 2
     assert not _alive(int((tmp_path / "child.pid").read_text()))
+
+
+def test_a_launcher_exiting_as_the_workflow_is_interrupted_leaves_no_children(tmp_path):
+    import signal
+    import subprocess
+    import sys
+    import textwrap
+    from pathlib import Path
+
+    from matsim_agents.backends.dft import process
+
+    # The launcher interrupts the workflow and exits at once, leaving its child running.
+    script = "sleep 60 & echo $! > child.pid; kill -INT $PPID; exit 0"
+    code = textwrap.dedent(
+        f"""
+        from matsim_agents.backends.dft.process import run_launcher
+        with open({str(tmp_path / "out.log")!r}, "w") as out:
+            run_launcher(
+                ["sh", "-c", {script!r}],
+                cwd={str(tmp_path)!r}, stdout=out, timeout_sec=None, env=None, grace_sec=1,
+            )
+        """
+    )
+    source = str(Path(process.__file__).parents[3])
+    env = {**os.environ, "PYTHONPATH": source}
+    workflow = subprocess.Popen([sys.executable, "-c", code], env=env)
+    assert workflow.wait(timeout=30) == -signal.SIGINT
+    assert not _alive(int((tmp_path / "child.pid").read_text()))

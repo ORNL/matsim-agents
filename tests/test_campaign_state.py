@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -299,11 +301,18 @@ def test_mlip_hull_reports_never_enter_the_campaign_hull():
     assert campaign.current_hull is None
 
 
-def test_campaign_states_of_other_schema_versions_are_rejected():
+def test_campaign_states_of_other_schema_versions_are_rejected(tmp_path):
     saved = _campaign().model_dump(mode="json")
     for version in (2, 4):
         with pytest.raises(ValidationError, match="schema_version"):
             CampaignState.model_validate({**saved, "schema_version": version})
+    path = tmp_path / "campaign.json"
+    _campaign().save(path)
+    assert CampaignState.load(path) == _campaign()
+    del saved["schema_version"]
+    path.write_text(json.dumps(saved))
+    with pytest.raises(ValueError, match="no schema_version"):
+        CampaignState.load(path)
 
 
 def test_recalibrated_reports_become_new_evidence_with_their_parent(tmp_path):

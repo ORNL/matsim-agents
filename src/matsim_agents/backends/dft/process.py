@@ -79,7 +79,8 @@ def run_launcher(
         try:
             returncode = _wait_unless_signalled(proc, timeout_sec, received)
         finally:
-            if proc.returncode is None:
+            # A launcher that exits as the signal arrives may leave children behind.
+            if proc.returncode is None or received:
                 stop_process_group(proc, grace_sec)
     finally:
         restore()
