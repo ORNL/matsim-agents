@@ -349,9 +349,11 @@ def test_campaign_executor_rejects_legacy_or_invalid_reference_manifests(
     al_config.touch()
     reference_manifest = tmp_path / "references.json"
     reference_manifest.write_text(json.dumps(manifest), encoding="utf-8")
-    monkeypatch.setattr(CampaignState, "load", lambda _path: SimpleNamespace(
-        budget=SimpleNamespace(), reference_energies=None
-    ))
+    monkeypatch.setattr(
+        CampaignState,
+        "load",
+        lambda _path: SimpleNamespace(budget=SimpleNamespace(), reference_energies=None),
+    )
     monkeypatch.setattr(
         ALConfig,
         "from_yaml",
@@ -367,12 +369,20 @@ def test_campaign_executor_rejects_legacy_or_invalid_reference_manifests(
     with pytest.raises(SystemExit) as error:
         executor.main(
             [
-                "--campaign-state", str(campaign_state),
-                "--al-config", str(al_config),
-                "--model", "reviewer", "openai", "model", "",
+                "--campaign-state",
+                str(campaign_state),
+                "--al-config",
+                str(al_config),
+                "--model",
+                "reviewer",
+                "openai",
+                "model",
+                "",
                 "--approve-dft",
-                "--dft-reference-structures", str(reference_manifest),
-                "--dft-method-signature", "qe-test-v1",
+                "--dft-reference-structures",
+                str(reference_manifest),
+                "--dft-method-signature",
+                "qe-test-v1",
             ]
         )
     assert error.value.code == 2

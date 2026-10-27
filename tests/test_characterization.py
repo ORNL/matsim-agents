@@ -205,8 +205,9 @@ def test_a_phase_above_the_hull_reports_its_decomposition(system):
     assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
     hull = next(v for v in report.observables if v.name == "energy_above_hull")
     assert hull.value == pytest.approx(1 / 6, abs=1e-6)
-    assert "decomposes to NbO-reference, O2" in report.conclusion or "decomposes to O2, NbO-reference" in (
-        report.conclusion
+    assert (
+        "decomposes to NbO-reference, O2" in report.conclusion
+        or "decomposes to O2, NbO-reference" in report.conclusion
     )
 
 

@@ -854,15 +854,18 @@ def _rebase_compound_references(
             raise ValueError(
                 f"cannot rebase persisted reference {entry.phase_id!r} without raw energy"
             )
-        baseline = sum(
-            amount
-            * (
-                new_energy
-                if symbol == element
-                else references.elemental_energies_eV_per_atom[symbol]
+        baseline = (
+            sum(
+                amount
+                * (
+                    new_energy
+                    if symbol == element
+                    else references.elemental_energies_eV_per_atom[symbol]
+                )
+                for symbol, amount in composition.elements.items()
             )
-            for symbol, amount in composition.elements.items()
-        ) / composition.total_atoms
+            / composition.total_atoms
+        )
         updates.append(
             (
                 entry,
@@ -1029,8 +1032,9 @@ def _generate_reference_energies(
 
 def _pending_reference_calculation_count(refinement: CampaignDFTRefinementConfig) -> int:
     references = refinement.reference_energies
-    elemental = references.elemental_energies_eV_per_atom if references is not None else {}
-    phase_ids = {entry.phase_id for entry in references.phase_entries} if references is not None else set()
+    phase_ids = (
+        {entry.phase_id for entry in references.phase_entries} if references is not None else set()
+    )
     known_elemental_reference_ids = (
         {entry.phase_id for entry in references.elemental_reference_candidates}
         if references is not None

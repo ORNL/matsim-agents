@@ -68,9 +68,7 @@ def test_converged_qe_relaxation(tmp_path, pseudo_dir):
     assert "&CONTROL" in Path(stage.artifacts["input"]).read_text().upper()
 
 
-def test_dft_relaxation_requires_approval_before_starting_stage(
-    tmp_path, pseudo_dir, monkeypatch
-):
+def test_dft_relaxation_requires_approval_before_starting_stage(tmp_path, pseudo_dir, monkeypatch):
     structure = tmp_path / "Si.extxyz"
     write(structure, bulk("Si", "diamond", a=5.43))
     cfg = ScientificRelaxationConfig(

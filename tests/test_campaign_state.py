@@ -299,9 +299,7 @@ def test_mlip_hull_reports_never_enter_the_campaign_hull():
     campaign = _campaign()
     campaign.record_stability(_vertex_report(EvidenceLevel.MLIP_RELAXATION))
     assert "NbTaO4" in campaign.stability_reports
-    assert not any(
-        entry.formula == "NbTaO4" for entry in campaign.reference_energies.phase_entries
-    )
+    assert not any(entry.formula == "NbTaO4" for entry in campaign.reference_energies.phase_entries)
     assert campaign.current_hull is None
 
 

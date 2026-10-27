@@ -725,8 +725,7 @@ def _ingest_formula_outcome(
                     entry
                     for entry in references.phase_entries
                     if not (
-                        entry.source == "campaign_ground_state"
-                        and entry.formula == report.formula
+                        entry.source == "campaign_ground_state" and entry.formula == report.formula
                     )
                 ]
             campaign.stability_reports[report.formula] = report

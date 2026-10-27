@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from pydantic import ValidationError
 from ase import Atoms
 from ase.io import read, write
+from pydantic import ValidationError
 
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
