@@ -68,6 +68,34 @@ def test_converged_qe_relaxation(tmp_path, pseudo_dir):
     assert "&CONTROL" in Path(stage.artifacts["input"]).read_text().upper()
 
 
+def test_dft_relaxation_requires_approval_before_starting_stage(tmp_path, pseudo_dir, monkeypatch):
+    structure = tmp_path / "Si.extxyz"
+    write(structure, bulk("Si", "diamond", a=5.43))
+    cfg = ScientificRelaxationConfig(
+        structure_path=str(structure),
+        mode=RelaxationMode.DFT,
+        output_root=str(tmp_path / "runs"),
+        dft=DFTBackendConfig(
+            backend="qe",
+            launcher=[sys.executable, "unused"],
+            pseudo_dir=str(pseudo_dir),
+        ),
+        dft_approved=False,
+    )
+
+    def unexpected_dft_stage(*args, **kwargs):
+        pytest.fail("DFT stage must not start without explicit approval")
+
+    monkeypatch.setattr("matsim_agents.workflows.relaxation._dft_stage", unexpected_dft_stage)
+
+    result = run_relaxation(cfg)
+
+    assert result.status == "failed"
+    assert result.failure_type == "PermissionError"
+    assert "dft_approved=true" in result.failure_reason
+    assert result.stages == []
+
+
 def test_step_limited_qe_relaxation_is_partial(tmp_path, pseudo_dir):
     result = _relax(
         tmp_path, "qe", "qe/relax_step_limited", relax_cell=False, pseudo_dir=str(pseudo_dir)

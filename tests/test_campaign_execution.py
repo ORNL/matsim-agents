@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 from ase.io import read, write
+from pydantic import ValidationError
 
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
@@ -1192,8 +1193,22 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
 
     refinement = CampaignDFTRefinementConfig(
         method_signature="qe-test-v1",
-        reference_structures={"Nb": structures["Nb"], "O2": structures["O2"]},
         reference_phases=[
+            ReferenceStructureSpec(
+                phase_id="Nb",
+                formula="Nb",
+                structure_path=structures["Nb"],
+            ),
+            ReferenceStructureSpec(
+                phase_id="O2",
+                formula="O2",
+                structure_path=structures["O2"],
+                relax_cell=False,
+                settings={
+                    "kpts": (1, 1, 1),
+                    "extra_system": {"nspin": 2, "starting_magnetization(1)": 1.0},
+                },
+            ),
             ReferenceStructureSpec(
                 phase_id="NbO2-reference",
                 formula="NbO2",
@@ -1205,13 +1220,6 @@ def test_formula_execution_refines_with_dft_and_builds_hull_references(tmp_path,
                 structure_path=structures["Nb_alt"],
             ),
         ],
-        reference_relax_cell={"O2": False},
-        reference_settings={
-            "O2": {
-                "kpts": (1, 1, 1),
-                "extra_system": {"nspin": 2, "starting_magnetization(1)": 1.0},
-            }
-        },
     )
     with pytest.raises(PermissionError, match="requires explicit DFT approval"):
         run_formula_with_active_learning(
@@ -1392,7 +1400,6 @@ def test_resumed_lower_unary_endpoint_rebases_persisted_compounds(tmp_path):
         method_signature="qe-test",
         backend="qe",
         elemental_energies_eV_per_atom={"Nb": -10.0, "O": -4.0},
-        competing_phases={"NbO2": -1.0},
         phase_entries=[
             ReferencePhaseEntry(
                 phase_id="compound",
@@ -1405,9 +1412,11 @@ def test_resumed_lower_unary_endpoint_rebases_persisted_compounds(tmp_path):
                 corrections={"energy_correction_eV_per_atom": 1.0},
             ),
             ReferencePhaseEntry(
-                phase_id="legacy-compound",
+                phase_id="NbO2-reference",
                 formula="NbO2",
-                formation_energy_eV_per_atom=-1.0,
+                formation_energy_eV_per_atom=-2.0,
+                energy_per_atom_eV=-8.0,
+                total_energy_eV=-24.0,
                 method_signature="qe-test",
                 backend="qe",
             ),
@@ -1424,11 +1433,6 @@ def test_resumed_lower_unary_endpoint_rebases_persisted_compounds(tmp_path):
                 formula="Nb",
                 structure_path=unary_path,
                 energy_correction_eV_per_atom=-1.0,
-            ),
-            ReferenceStructureSpec(
-                phase_id="compound",
-                formula="Nb2O4",
-                structure_path=tmp_path / "not-needed",
             ),
         ],
     )
@@ -1460,10 +1464,8 @@ def test_resumed_lower_unary_endpoint_rebases_persisted_compounds(tmp_path):
     )
     assert calculations == 1
     assert result.elemental_energies_eV_per_atom["Nb"] == -13.0
-    assert all(
-        entry.formation_energy_eV_per_atom == pytest.approx(0.0) for entry in result.phase_entries
-    )
-    assert result.competing_phases["NbO2"] == pytest.approx(0.0)
+    assert result.phase_entries[0].formation_energy_eV_per_atom == pytest.approx(0.0)
+    assert result.phase_entries[1].formation_energy_eV_per_atom == pytest.approx(-1.0)
     assert result.phase_entries[0].total_energy_eV == -48.0
     assert result.phase_entries[0].corrections == {"energy_correction_eV_per_atom": 1.0}
     persisted = ReferenceEnergySet.model_validate_json(result.model_dump_json())
@@ -1474,7 +1476,6 @@ def test_resumed_lower_unary_endpoint_rebases_persisted_compounds(tmp_path):
     assert calculations == 0
     assert len(calls) == 1
     assert again.phase_entries == persisted.phase_entries
-    assert again.competing_phases == persisted.competing_phases
 
 
 def test_formula_execution_rejects_missing_pseudopotential_mapping(tmp_path):
@@ -1617,9 +1618,15 @@ def test_formula_execution_supports_vasp_refinement(tmp_path):
                     backend="vasp",
                     elemental_energies_eV_per_atom={"Nb": -10.0},
                 ),
-                reference_structures={"O2": oxygen},
-                reference_relax_cell={"O2": False},
-                reference_settings={"O2": {"ispin": 2, "extra_incar": {"MAGMOM": "2*1.0"}}},
+                reference_phases=[
+                    ReferenceStructureSpec(
+                        phase_id="O2",
+                        formula="O2",
+                        structure_path=oxygen,
+                        relax_cell=False,
+                        settings={"ispin": 2, "extra_incar": {"MAGMOM": "2*1.0"}},
+                    )
+                ],
             ),
         ),
         phase_runner=phase_runner,
@@ -1924,7 +1931,30 @@ def test_dft_refinement_rejects_missing_reference_structure(tmp_path):
     with pytest.raises(ValueError, match="reference structures do not exist"):
         CampaignDFTRefinementConfig(
             method_signature="qe-test-v1",
-            reference_structures={"Nb": tmp_path / "missing.extxyz"},
+            reference_phases=[
+                ReferenceStructureSpec(
+                    phase_id="Nb",
+                    formula="Nb",
+                    structure_path=tmp_path / "missing.extxyz",
+                )
+            ],
+        )
+
+
+def test_dft_refinement_rejects_legacy_reference_inputs():
+    with pytest.raises(ValidationError, match="reference_structures"):
+        CampaignDFTRefinementConfig(
+            method_signature="qe-test-v1",
+            reference_structures={},
+        )
+    with pytest.raises(ValidationError, match="reference_relax_cell"):
+        CampaignDFTRefinementConfig(
+            method_signature="qe-test-v1",
+            reference_relax_cell={},
+        )
+    with pytest.raises(ValidationError, match="path"):
+        ReferenceStructureSpec.model_validate(
+            {"phase_id": "Nb", "formula": "Nb", "path": "/tmp/Nb.extxyz"}
         )
 
 

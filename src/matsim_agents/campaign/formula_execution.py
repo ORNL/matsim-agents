@@ -14,7 +14,7 @@ from typing import Any, Literal
 import numpy as np
 from ase.io import read as ase_read
 from ase.io import write as ase_write
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import ALConfig
@@ -497,6 +497,8 @@ class CampaignRetrainingConfig(BaseModel):
 class ReferenceStructureSpec(BaseModel):
     """A structure that must be calculated as part of the reference hull."""
 
+    model_config = ConfigDict(extra="forbid")
+
     phase_id: str = Field(pattern=r"^[A-Za-z0-9_.:-]+$")
     formula: str
     structure_path: Path
@@ -510,11 +512,9 @@ class ReferenceStructureSpec(BaseModel):
 class CampaignDFTRefinementConfig(BaseModel):
     """DFT relaxation and compatible reference generation for hull ranking."""
 
+    model_config = ConfigDict(extra="forbid")
+
     method_signature: str
-    # TODO(#15): replace with typed reference_phases from the preparation script.
-    reference_structures: dict[str, Path] = Field(default_factory=dict)
-    reference_relax_cell: dict[str, bool] = Field(default_factory=dict)
-    reference_settings: dict[str, dict[str, Any]] = Field(default_factory=dict)
     reference_phases: list[ReferenceStructureSpec] = Field(default_factory=list)
     reference_completeness_policy: ReferenceCompletenessPolicy = Field(
         default_factory=ReferenceCompletenessPolicy
@@ -530,16 +530,13 @@ class CampaignDFTRefinementConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_references(self) -> CampaignDFTRefinementConfig:
-        missing = [str(path) for path in self.reference_structures.values() if not path.is_file()]
+        missing = [
+            str(spec.structure_path)
+            for spec in self.reference_phases
+            if not spec.structure_path.is_file()
+        ]
         if missing:
             raise ValueError(f"reference structures do not exist: {missing}")
-        unknown_controls = set(self.reference_relax_cell) - set(self.reference_structures)
-        unknown_settings = set(self.reference_settings) - set(self.reference_structures)
-        if unknown_controls or unknown_settings:
-            raise ValueError(
-                "reference controls lack structures for "
-                f"{sorted(unknown_controls | unknown_settings)}"
-            )
         if (
             self.reference_energies is not None
             and self.reference_energies.method_signature != self.method_signature
@@ -845,55 +842,40 @@ def _converged_dft_relaxation(
 def _rebase_compound_references(
     references: ReferenceEnergySet, element: str, new_energy: float
 ) -> None:
-    """Keep persisted compound energies consistent when a unary endpoint changes."""
-    old_energy = references.elemental_energies_eV_per_atom.get(element)
-
-    def rebased(
-        formula: str, formation_energy: float, raw_energy: float | None, correction: float = 0.0
-    ) -> float:
-        composition = parse_composition(formula)
+    """Recompute formation energies from raw DFT energies after a unary update."""
+    updates: list[tuple[ReferencePhaseEntry, float]] = []
+    for entry in references.phase_entries:
+        composition = parse_composition(entry.formula)
         if composition is None:
-            raise ValueError(f"Could not parse persisted reference formula {formula!r}")
+            raise ValueError(f"Could not parse persisted reference formula {entry.formula!r}")
         if element not in composition.elements:
-            return formation_energy
-        if raw_energy is not None:
-            baseline = (
-                sum(
-                    amount
-                    * (
-                        new_energy
-                        if symbol == element
-                        else references.elemental_energies_eV_per_atom[symbol]
-                    )
-                    for symbol, amount in composition.elements.items()
-                )
-                / composition.total_atoms
-            )
-            return raw_energy - baseline + correction
-        if old_energy is None:
+            continue
+        if entry.energy_per_atom_eV is None:
             raise ValueError(
-                f"cannot rebase persisted reference {formula!r} without its old elemental baseline"
+                f"cannot rebase persisted reference {entry.phase_id!r} without raw energy"
             )
-        # Formula-keyed records have only formation energies; this is the exact baseline change.
-        fraction = composition.elements[element] / composition.total_atoms
-        return formation_energy + fraction * (old_energy - new_energy)
-
-    phase_updates = [
-        rebased(
-            entry.formula,
-            entry.formation_energy_eV_per_atom,
-            entry.energy_per_atom_eV,
-            entry.corrections.get("energy_correction_eV_per_atom", 0.0),
+        baseline = (
+            sum(
+                amount
+                * (
+                    new_energy
+                    if symbol == element
+                    else references.elemental_energies_eV_per_atom[symbol]
+                )
+                for symbol, amount in composition.elements.items()
+            )
+            / composition.total_atoms
         )
-        for entry in references.phase_entries
-    ]
-    formula_updates = {
-        formula: rebased(formula, energy, None)
-        for formula, energy in references.competing_phases.items()
-    }
-    for entry, energy in zip(references.phase_entries, phase_updates, strict=True):
+        updates.append(
+            (
+                entry,
+                entry.energy_per_atom_eV
+                - baseline
+                + entry.corrections.get("energy_correction_eV_per_atom", 0.0),
+            )
+        )
+    for entry, energy in updates:
         entry.formation_energy_eV_per_atom = energy
-    references.competing_phases = formula_updates
 
 
 def _generate_reference_energies(
@@ -914,26 +896,13 @@ def _generate_reference_energies(
             f"reference energies use {references.backend}, but refinement uses {al_cfg.dft.backend}"
         )
     if references.backend is None and (
-        references.elemental_energies_eV_per_atom
-        or references.competing_phases
-        or references.phase_entries
+        references.elemental_energies_eV_per_atom or references.phase_entries
     ):
         raise ValueError(
             "populated reference energies lack backend provenance; regenerate or migrate them"
         )
     references.backend = al_cfg.dft.backend
-    manifest_specs = [
-        ReferenceStructureSpec(
-            phase_id=formula,
-            formula=formula,
-            structure_path=path,
-            relax_cell=refinement.reference_relax_cell.get(formula),
-            settings=refinement.reference_settings.get(formula, {}),
-            source="reference_structures",
-        )
-        for formula, path in refinement.reference_structures.items()
-    ]
-    specs = [*manifest_specs, *refinement.reference_phases]
+    specs = refinement.reference_phases
     phase_ids = [spec.phase_id for spec in specs]
     if len(phase_ids) != len(set(phase_ids)):
         raise ValueError("reference structure phase IDs must be unique")
@@ -952,9 +921,7 @@ def _generate_reference_energies(
         if len(composition.elements) == 1:
             if spec.phase_id in known_elemental_reference_ids:
                 continue
-        elif spec.phase_id in existing_phase_ids or (
-            spec.source == "reference_structures" and spec.formula in references.competing_phases
-        ):
+        elif spec.phase_id in existing_phase_ids:
             continue
         pending.append((spec, composition))
     pending.sort(key=lambda item: len(item[1].elements))
@@ -1065,31 +1032,27 @@ def _generate_reference_energies(
 
 def _pending_reference_calculation_count(refinement: CampaignDFTRefinementConfig) -> int:
     references = refinement.reference_energies
-    elemental = references.elemental_energies_eV_per_atom if references is not None else {}
-    competing = references.competing_phases if references is not None else {}
     phase_ids = (
         {entry.phase_id for entry in references.phase_entries} if references is not None else set()
     )
-    manifest_specs = [
-        ReferenceStructureSpec(
-            phase_id=formula,
-            formula=formula,
-            structure_path=path,
-            source="reference_structures",
+    known_elemental_reference_ids = (
+        {entry.phase_id for entry in references.elemental_reference_candidates}
+        if references is not None
+        else set()
+    )
+    if references is not None:
+        known_elemental_reference_ids.update(
+            entry.phase_id for entry in references.elemental_entries.values()
         )
-        for formula, path in refinement.reference_structures.items()
-    ]
     pending = 0
-    for spec in [*manifest_specs, *refinement.reference_phases]:
+    for spec in refinement.reference_phases:
         composition = parse_composition(spec.formula)
         if composition is None:
             raise ValueError(f"Could not parse reference formula {spec.formula!r}")
         if len(composition.elements) == 1:
-            if next(iter(composition.elements)) not in elemental:
+            if spec.phase_id not in known_elemental_reference_ids:
                 pending += 1
-        elif spec.phase_id not in phase_ids and not (
-            spec.source == "reference_structures" and spec.formula in competing
-        ):
+        elif spec.phase_id not in phase_ids:
             pending += 1
     return pending
 
@@ -1653,21 +1616,13 @@ def _run_independent_dft_ranking(
     ]
     reference_inputs = [
         {
-            "structure_path": str(path),
-            "structure_sha256": structure_content_hash(path),
-            "phase_id": phase_id,
-        }
-        for phase_id, path in refinement.reference_structures.items()
-    ]
-    reference_inputs.extend(
-        {
             "structure_path": str(spec.structure_path),
             "structure_sha256": structure_content_hash(spec.structure_path),
             "phase_id": spec.phase_id,
             "source": spec.source,
         }
         for spec in refinement.reference_phases
-    )
+    ]
     references, reference_calculations, reference_seconds = _generate_reference_energies(
         al_cfg,
         refinement,

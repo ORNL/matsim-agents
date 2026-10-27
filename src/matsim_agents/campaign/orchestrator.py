@@ -128,12 +128,6 @@ def _merge_reference_energy_sets(
         phases[entry.phase_id] = entry
     merged.phase_entries = list(phases.values())
 
-    for formula, energy in incoming.competing_phases.items():
-        previous = merged.competing_phases.get(formula)
-        if previous is None:
-            merged.competing_phases[formula] = energy
-        else:
-            merged.competing_phases[formula] = min(previous, energy)
     merged.completeness_policy.required_formulas = sorted(
         set(merged.completeness_policy.required_formulas)
         | set(incoming.completeness_policy.required_formulas)
@@ -726,13 +720,14 @@ def _ingest_formula_outcome(
             and report.ranking_mode.value == "convex_hull_ranking"
             and report.reference_set_id == references.identifier
         ):
-            if (
-                previous_references is not None
-                and incoming_references is not None
-                and report.formula in previous_references.competing_phases
-                and report.formula not in incoming_references.competing_phases
-            ):
-                references.competing_phases.pop(report.formula, None)
+            if previous_references is not None and incoming_references is not None:
+                references.phase_entries = [
+                    entry
+                    for entry in references.phase_entries
+                    if not (
+                        entry.source == "campaign_ground_state" and entry.formula == report.formula
+                    )
+                ]
             campaign.stability_reports[report.formula] = report
             recalibrate_hull_reports(
                 campaign.stability_reports.values(),

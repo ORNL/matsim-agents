@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from ase import Atoms
 from ase.io import write
+from pydantic import ValidationError
 
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.stability import (
@@ -70,6 +71,18 @@ def test_reference_registry_rejects_incompatible_phase_method() -> None:
                     backend="qe",
                 )
             ],
+        )
+
+
+def test_reference_registry_rejects_legacy_formula_map() -> None:
+    with pytest.raises(ValidationError, match="competing_phases"):
+        ReferenceEnergySet.model_validate(
+            {
+                "identifier": "legacy",
+                "method_signature": "pbe-v1",
+                "elemental_energies_eV_per_atom": {"Nb": 0.0},
+                "competing_phases": {"NbO": -1.0},
+            }
         )
 
 
@@ -163,7 +176,7 @@ def test_supercell_composition_survives_hull_recalibration(tmp_path: Path) -> No
     assert report.ground_state.composition == {"Nb": 2.0, "O": 4.0}
     assert report.ground_state.formation_energy_eV_per_atom == pytest.approx(-2.0)
 
-    references.competing_phases["NbO"] = -1.0
+    references.phase_entries.append(_phase("NbO-reference", "NbO", -1.0))
     recalibrate_hull_reports([report], references)
 
     assert report.ground_state.formation_energy_eV_per_atom == pytest.approx(-2.0)
