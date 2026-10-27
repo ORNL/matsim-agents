@@ -90,6 +90,52 @@ def test_baselines_load_as_distinct_modules() -> None:
     assert mace is not hydragnn
 
 
+@pytest.mark.parametrize(
+    ("device", "expected_device"),
+    [("cpu", "cpu"), ("cuda", "cuda"), ("xpu", "xpu"), ("XPU", "xpu")],
+)
+def test_codabench_hydragnn_adapter_forwards_device(monkeypatch, device, expected_device) -> None:
+    from matsim_agents.backends.mlip import calculator as mlip_calculator
+    from matsim_agents.backends.mlip import config as mlip_config
+
+    calls = []
+    inner = SimpleNamespace()
+
+    class HydraGNNConfig:
+        def __init__(self, **kwargs):
+            calls.append(("config", kwargs))
+
+    def build_calculator(config):
+        calls.append(("build", config))
+        return inner
+
+    monkeypatch.setattr(mlip_config, "HydraGNNConfig", HydraGNNConfig)
+    monkeypatch.setattr(mlip_calculator, "build_hydragnn_calculator", build_calculator)
+    adapter = _load(
+        "codabench_hydragnn_adapter",
+        CODEBENCH / "baselines" / "hydragnn" / "model.py",
+    ).AtomisticCalculator
+
+    calculator = adapter.from_checkpoint("model-logdir", device=device)
+
+    assert calls[0] == (
+        "config",
+        {"logdir": "model-logdir", "mlp_device": expected_device},
+    )
+    assert calls[1][0] == "build"
+    assert calculator._inner is inner
+
+
+def test_codabench_hydragnn_adapter_rejects_unknown_device() -> None:
+    adapter = _load(
+        "codabench_hydragnn_invalid_device_adapter",
+        CODEBENCH / "baselines" / "hydragnn" / "model.py",
+    ).AtomisticCalculator
+
+    with pytest.raises(ValueError, match="cpu, cuda, xpu"):
+        adapter.from_checkpoint("model-logdir", device="tpu")
+
+
 def test_codabench_mace_catalog_matches_workflow() -> None:
     runner = _load("codabench_mace_catalog", CODEBENCH / "run_baselines.py")
     from matsim_agents.training.finetune_mace import MACE_MODELS
