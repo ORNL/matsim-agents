@@ -36,7 +36,7 @@ def _phase(phase_id, formula, energy):
     )
 
 
-def _set(elements, *, phases=(), candidates=(), competing=None, policy=None, **fields):
+def _set(elements, *, phases=(), candidates=(), policy=None, **fields):
     return ReferenceEnergySet(
         identifier=fields.get("identifier", "campaign"),
         method_signature=fields.get("method_signature", SIG),
@@ -45,7 +45,6 @@ def _set(elements, *, phases=(), candidates=(), competing=None, policy=None, **f
         elemental_entries={e: _element(e, v) for e, v in elements.items()},
         elemental_reference_candidates=list(candidates),
         phase_entries=list(phases),
-        competing_phases=competing or {},
         completeness_policy=policy or ReferenceCompletenessPolicy(),
     )
 
@@ -60,14 +59,16 @@ def test_merge_takes_the_union_and_keeps_the_lowest_competing_energy():
         {"Si": -5.4, "C": -9.2},
         phases=[_phase("SiC-3C", "SiC", -0.30)],
         candidates=[_element("Si", -5.4, "Si-diamond")],
-        competing={"SiC": -0.30},
         policy=ReferenceCompletenessPolicy(required_formulas=["SiC"]),
     )
     incoming = _set(
         {"Si": -5.4, "Ge": -4.5},
-        phases=[_phase("SiC-3C", "SiC", -0.30), _phase("SiGe-zb", "SiGe", -0.01)],
+        phases=[
+            _phase("SiC-3C", "SiC", -0.30),
+            _phase("SiC-2H", "SiC", -0.35),
+            _phase("SiGe-zb", "SiGe", -0.01),
+        ],
         candidates=[_element("Si", -5.4, "Si-diamond"), _element("Ge", -4.5, "Ge-diamond")],
-        competing={"SiC": -0.35, "SiGe": -0.01},
         policy=ReferenceCompletenessPolicy(
             required_formulas=["SiGe"],
             require_binary_subsystems=False,
@@ -78,16 +79,20 @@ def test_merge_takes_the_union_and_keeps_the_lowest_competing_energy():
 
     assert merged.elemental_energies_eV_per_atom == {"Si": -5.4, "C": -9.2, "Ge": -4.5}
     assert set(merged.elemental_entries) == {"Si", "C", "Ge"}
-    assert [e.phase_id for e in merged.phase_entries] == ["SiC-3C", "SiGe-zb"]
+    assert [e.phase_id for e in merged.phase_entries] == ["SiC-3C", "SiC-2H", "SiGe-zb"]
     assert [e.phase_id for e in merged.elemental_reference_candidates] == [
         "Si-diamond",
         "Ge-diamond",
     ]
-    assert merged.competing_phases == {"SiC": -0.35, "SiGe": -0.01}
+    assert [entry.formation_energy_eV_per_atom for entry in merged.phase_entries] == [
+        -0.30,
+        -0.35,
+        -0.01,
+    ]
     assert merged.completeness_policy.required_formulas == ["SiC", "SiGe"]
     assert merged.completeness_policy.require_binary_subsystems
     assert merged.completeness_policy.require_ternary_competitor
-    assert existing.competing_phases == {"SiC": -0.30}
+    assert [entry.phase_id for entry in existing.phase_entries] == ["SiC-3C"]
 
 
 @pytest.mark.parametrize(

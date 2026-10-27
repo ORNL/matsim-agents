@@ -35,6 +35,10 @@ Campaign reference manifests support multiple polymorphs of the same formula:
 }
 ```
 
+Each item under `phases` is a typed structure spec with a stable phase ID,
+explicit formula, and path. The executor rejects path-only entries and
+unversioned manifests rather than adapting them into formula-keyed references.
+
 Each phase is relaxed with the campaign DFT backend. Its registry entry records the phase ID, formula, structure path and hash, total and formation energies, backend, method signature, provenance, and corrections. Entries with incompatible method signatures or backends are rejected.
 
 New campaign-generated reference sets are named `campaign-<DFT-method-signature>`;
@@ -56,10 +60,10 @@ collision-prone naming convention.
 If a resumed DFT reference search finds a lower unary endpoint, persisted
 compound formation energies are rebased before the endpoint is replaced.
 Typed records are recomputed from their stored raw per-atom energies and
-retain their compound corrections. Formula-keyed formation-only records receive the
-exact composition-weighted old-to-new baseline change; they require the old
-elemental baseline to be known. Previously completed compounds need not be
-rerun, and a subsequent resume does not apply the same change twice.
+retain their compound corrections. A persisted phase without raw energy cannot
+be rebased and is rejected; previously completed compounds with auditable raw
+energies need not be rerun, and a subsequent resume does not apply the same
+change twice.
 
 ## Completeness and provisional hulls
 

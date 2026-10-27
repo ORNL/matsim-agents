@@ -17,7 +17,7 @@ from matsim_agents.campaign.characterization import (
     plan_recipe,
     run_characterization,
 )
-from matsim_agents.discovery.stability import ReferenceEnergySet
+from matsim_agents.discovery.stability import ReferenceEnergySet, ReferencePhaseEntry
 from matsim_agents.execution.contracts import (
     CharacterizationReport,
     CharacterizationStatus,
@@ -121,7 +121,15 @@ def system(tmp_path):
         identifier="nb-o",
         method_signature=SIGNATURE,
         elemental_energies_eV_per_atom={"Nb": -10.0, "O": -5.0},
-        competing_phases={"NbO": -0.5},
+        phase_entries=[
+            ReferencePhaseEntry(
+                phase_id="NbO-reference",
+                formula="NbO",
+                formation_energy_eV_per_atom=-0.5,
+                method_signature=SIGNATURE,
+                backend="qe",
+            )
+        ],
     )
     path = tmp_path / "references.json"
     path.write_text(references.model_dump_json())
@@ -197,7 +205,7 @@ def test_a_phase_above_the_hull_reports_its_decomposition(system):
     assert report.status == CharacterizationStatus.SUFFICIENTLY_CHARACTERIZED
     hull = next(v for v in report.observables if v.name == "energy_above_hull")
     assert hull.value == pytest.approx(1 / 6, abs=1e-6)
-    assert "decomposes to NbO, O" in report.conclusion or "decomposes to O, NbO" in (
+    assert "decomposes to NbO-reference, O2" in report.conclusion or "decomposes to O2, NbO-reference" in (
         report.conclusion
     )
 
@@ -529,7 +537,7 @@ def test_changed_input_files_invalidate_the_saved_run(system):
     _structure(structures[1], "NbOO", shift=0.3)
     run_characterization(contract, relax=relax)
     edited = ReferenceEnergySet.model_validate_json(references.read_text())
-    edited.competing_phases["NbO"] = -0.6
+    edited.phase_entries[0].formation_energy_eV_per_atom = -0.6
     references.write_text(edited.model_dump_json())
     with pytest.raises(ValueError, match="different input files"):
         run_characterization(contract, relax=relax)
@@ -711,7 +719,15 @@ def test_unreadable_structures_and_uncovered_phases_are_invalid_protocols(system
     assert report.status == CharacterizationStatus.INVALID_PROTOCOL
     assert "is not a readable structure" in report.missing[0] and relax.calls == []
     broken = ReferenceEnergySet.model_validate_json(references.read_text())
-    broken.competing_phases["TaO"] = -0.4
+    broken.phase_entries.append(
+        ReferencePhaseEntry(
+            phase_id="TaO-reference",
+            formula="TaO",
+            formation_energy_eV_per_atom=-0.4,
+            method_signature=SIGNATURE,
+            backend="qe",
+        )
+    )
     references.write_text(broken.model_dump_json())
     report = run_characterization(
         _contract(tmp_path, structures, "thermodynamic_stability", **_dft(references)),
@@ -719,7 +735,7 @@ def test_unreadable_structures_and_uncovered_phases_are_invalid_protocols(system
     )
     assert report.status == CharacterizationStatus.INVALID_PROTOCOL and relax.calls == []
     assert report.missing == [
-        "elemental energies for ['Ta'], needed by competing phase formula:TaO"
+        "elemental energies for ['Ta'], needed by competing phase TaO-reference"
     ]
 
 
@@ -791,6 +807,15 @@ def test_references_from_another_dft_backend_are_invalid_protocols(system, where
     foreign = ReferenceEnergySet.model_validate_json(references.read_text())
     if where == "set":
         foreign.backend = "vasp"
+        foreign.phase_entries = [
+            ReferencePhaseEntry(
+                phase_id="NbO-vasp",
+                formula="NbO",
+                formation_energy_eV_per_atom=-0.5,
+                method_signature=SIGNATURE,
+                backend="vasp",
+            )
+        ]
     elif where == "phase":
         foreign.phase_entries = [
             ReferencePhaseEntry(
@@ -825,7 +850,24 @@ def test_references_from_another_dft_backend_are_invalid_protocols(system, where
 def test_fractional_and_grouped_reference_formulas_are_accepted(system):
     tmp_path, structures, references = system
     extended = ReferenceEnergySet.model_validate_json(references.read_text())
-    extended.competing_phases.update({"Nb0.5O": -0.3, "Nb3(O2)2": -0.2})
+    extended.phase_entries.extend(
+        [
+            ReferencePhaseEntry(
+                phase_id="Nb0.5O-reference",
+                formula="Nb0.5O",
+                formation_energy_eV_per_atom=-0.3,
+                method_signature=SIGNATURE,
+                backend="qe",
+            ),
+            ReferencePhaseEntry(
+                phase_id="Nb3(O2)2-reference",
+                formula="Nb3(O2)2",
+                formation_energy_eV_per_atom=-0.2,
+                method_signature=SIGNATURE,
+                backend="qe",
+            ),
+        ]
+    )
     references.write_text(extended.model_dump_json())
     relax = FakeRelax({"NbO2-a.extxyz": -21.3, "NbO2-b.extxyz": -21.0})
     report = run_characterization(

@@ -305,6 +305,79 @@ def test_perlmutter_campaign_requires_held_out_validation_for_promotion() -> Non
     assert "promotion_approved=args.approve_model_promotion" in phase_policy
 
 
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        {"phases": {"Nb": "/tmp/Nb.extxyz"}},
+        {"schema_version": 2, "phases": {"Nb": "/tmp/Nb.extxyz"}},
+        {
+            "schema_version": 2,
+            "phases": {"Nb": {"formula": "Nb", "path": "/tmp/Nb.extxyz"}},
+        },
+        {
+            "schema_version": 2,
+            "phases": {
+                "Nb": {
+                    "phase_id": "Nb",
+                    "formula": "Nb",
+                    "path": "/tmp/Nb.extxyz",
+                    "legacy": True,
+                }
+            },
+        },
+    ],
+)
+def test_campaign_executor_rejects_legacy_or_invalid_reference_manifests(
+    tmp_path, monkeypatch, manifest
+) -> None:
+    import json
+    from types import SimpleNamespace
+
+    from matsim_agents.active_learning.config import ALConfig
+    from matsim_agents.campaign.state import CampaignState
+
+    root = Path(__file__).resolve().parents[1]
+    executor_path = root / "deployments/perlmutter/jobs/campaign_execute.py"
+    spec = importlib.util.spec_from_file_location("campaign_execute_manifest_test", executor_path)
+    assert spec and spec.loader
+    executor = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(executor)
+
+    campaign_state = tmp_path / "campaign.json"
+    campaign_state.touch()
+    al_config = tmp_path / "al.yaml"
+    al_config.touch()
+    reference_manifest = tmp_path / "references.json"
+    reference_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(CampaignState, "load", lambda _path: SimpleNamespace(
+        budget=SimpleNamespace(), reference_energies=None
+    ))
+    monkeypatch.setattr(
+        ALConfig,
+        "from_yaml",
+        lambda _path: SimpleNamespace(
+            dft=SimpleNamespace(backend="qe"),
+            trainer=SimpleNamespace(
+                validation_reference_set=None,
+                training_references=None,
+            ),
+        ),
+    )
+
+    with pytest.raises(SystemExit) as error:
+        executor.main(
+            [
+                "--campaign-state", str(campaign_state),
+                "--al-config", str(al_config),
+                "--model", "reviewer", "openai", "model", "",
+                "--approve-dft",
+                "--dft-reference-structures", str(reference_manifest),
+                "--dft-method-signature", "qe-test-v1",
+            ]
+        )
+    assert error.value.code == 2
+
+
 def test_bounded_campaign_settings_cover_all_scientific_stages(monkeypatch) -> None:
     from matsim_agents.active_learning.config import ALConfig
 

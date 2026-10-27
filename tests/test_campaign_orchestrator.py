@@ -709,8 +709,14 @@ def test_sequential_formula_refinements_preserve_campaign_hull_vertices(tmp_path
 
     assert result.formulas_completed == ["NbO", "NbO2"]
     assert result.campaign.reference_energies is not None
-    assert result.campaign.reference_energies.competing_phases["NbO"] == pytest.approx(-0.5)
-    assert "NbO2" not in result.campaign.reference_energies.competing_phases
+    assert any(
+        entry.source == "campaign_ground_state" and entry.formula == "NbO"
+        for entry in result.campaign.reference_energies.phase_entries
+    )
+    assert not any(
+        entry.source == "campaign_ground_state" and entry.formula == "NbO2"
+        for entry in result.campaign.reference_energies.phase_entries
+    )
     nb_o2_report = result.campaign.stability_reports["NbO2"]
     assert nb_o2_report.ground_state.energy_above_hull_eV_per_atom == pytest.approx(0.7 / 3.0)
 

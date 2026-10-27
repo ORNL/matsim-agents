@@ -105,7 +105,9 @@ def test_record_stability_feeds_hull_reference_set():
     )
     campaign.record_stability(report)
     assert campaign.stability_reports["NbTaO4"] is report
-    assert campaign.reference_energies.competing_phases["NbTaO4"] == -0.45
+    assert campaign.reference_energies.phase_entries[0].phase_id == "campaign:NbTaO4"
+    assert campaign.reference_energies.phase_entries[0].total_energy_eV == -62.56
+    assert campaign.reference_energies.phase_entries[0].energy_per_atom_eV == -7.82
     assert campaign.current_hull is not None
     assert campaign.current_hull.version == 1
     assert campaign.current_hull.new_hull_vertices == ["NbTaO4"]
@@ -145,7 +147,7 @@ def test_record_stability_admits_near_degenerate_hull_vertex():
 
     campaign.record_stability(report)
 
-    assert campaign.reference_energies.competing_phases["NbTaO4"] == -0.45
+    assert campaign.reference_energies.phase_entries[0].phase_id == "campaign:NbTaO4"
     assert campaign.stability_reports["NbTaO4"].chemically_stable_proxy is False
 
 
@@ -221,7 +223,7 @@ def test_hull_snapshot_excludes_incompatible_reports(reference_set_id, energy_ab
     incompatible.ground_state.decomposition = {"Nb": 0.5, "O": 0.5}
     campaign.record_stability(incompatible)
     assert campaign.current_hull is None
-    assert "NbO" not in campaign.reference_energies.competing_phases
+    assert not any(entry.formula == "NbO" for entry in campaign.reference_energies.phase_entries)
 
     compatible = _hull_report("Nb2O", -4.8, -1.6)
     compatible.reference_set_id = campaign.reference_energies.identifier
@@ -264,7 +266,7 @@ def test_record_stability_does_not_admit_above_hull_phase():
 
     campaign.record_stability(report)
 
-    assert "NbO" not in campaign.reference_energies.competing_phases
+    assert not any(entry.formula == "NbO" for entry in campaign.reference_energies.phase_entries)
 
 
 def _vertex_report(level: EvidenceLevel) -> StabilityReport:
@@ -297,7 +299,9 @@ def test_mlip_hull_reports_never_enter_the_campaign_hull():
     campaign = _campaign()
     campaign.record_stability(_vertex_report(EvidenceLevel.MLIP_RELAXATION))
     assert "NbTaO4" in campaign.stability_reports
-    assert "NbTaO4" not in campaign.reference_energies.competing_phases
+    assert not any(
+        entry.formula == "NbTaO4" for entry in campaign.reference_energies.phase_entries
+    )
     assert campaign.current_hull is None
 
 
