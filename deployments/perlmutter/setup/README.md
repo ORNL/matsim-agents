@@ -13,6 +13,22 @@ bash deployments/perlmutter/setup/install.sh
 It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current Perlmutter installer,
 then installs and verifies matsim-agents in that environment.
 
+## GPU Primitive Qualification
+
+Submit the shared Torch/PyG device smoke test from a Perlmutter GPU allocation:
+
+```bash
+PROJECT_ROOT="$PWD" sbatch -A <allocation> \
+  deployments/perlmutter/jobs/job-qualify-torch-pyg-perlmutter.sh
+```
+
+It exercises Torch arithmetic, PyG scatter/pooling and gradients, and
+`torch_scatter` add/sum/mean on CUDA GPUs. This is a backend primitive check;
+Perlmutter's checkpoint-backed model qualifications provide a separate
+model-level tier. The report is saved to
+`.hpc-build/perlmutter/qualification/<job-id>/torch-pyg.json` by default; set
+`QUALIFICATION_OUTPUT` to choose another location.
+
 ## Model Download Safety Policy
 
 See the canonical cross-platform policy in `docs/model-download-safety.md`.

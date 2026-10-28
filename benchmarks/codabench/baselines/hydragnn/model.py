@@ -33,12 +33,17 @@ class AtomisticCalculator(Calculator):
 
         Args:
             checkpoint_path: Path to the HydraGNN logdir (must contain config.json).
-            device: "cpu", "cuda", "xpu", etc.
+            device: Routing-MLP device (cpu, cuda, or xpu). The GNN device is
+                selected by HydraGNN based on runtime availability.
         """
+        device = device.strip().lower()
+        if device not in {"cpu", "cuda", "xpu"}:
+            raise ValueError("HydraGNN device must be one of: cpu, cuda, xpu")
+
         from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
         from matsim_agents.backends.mlip.config import HydraGNNConfig
 
-        cfg = HydraGNNConfig(logdir=checkpoint_path)
+        cfg = HydraGNNConfig(logdir=checkpoint_path, mlp_device=device)
         inner = build_hydragnn_calculator(cfg)
 
         instance = cls()

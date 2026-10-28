@@ -121,6 +121,24 @@ they have not yet been run on Aurora.
 
 ## Single-Node XPU Qualification
 
+To check the framework Torch build and PyG operations without model checkpoints,
+submit the focused smoke test:
+
+```bash
+qsub -A <active-allocation> -v PROJECT_ROOT="$PWD" \
+  deployments/aurora/jobs/job-qualify-torch-pyg-xpu-aurora.sh
+```
+
+It runs the shared `deployments/common/qualify_torch_pyg_device.py` suite, which
+checks XPU arithmetic, PyG scatter and graph pooling, gradients, and the
+`torch_scatter` add/sum/mean APIs used by HydraGNN's MACE path. Run it on a
+compute node; login-node XPU visibility is not a valid qualification. The same
+suite is available on Frontier and Perlmutter through their matching
+`job-qualify-torch-pyg-*.sh` launchers. It does not qualify optional
+CPU-compiled custom `torch_scatter` max/min/mul kernels. The JSON report is
+saved to `.hpc-build/aurora/qualification/<job-id>/torch-pyg.json` by default;
+set `QUALIFICATION_OUTPUT` to choose another location.
+
 From the repository root, submit a bounded checkpoint-inference job:
 
 ```bash
