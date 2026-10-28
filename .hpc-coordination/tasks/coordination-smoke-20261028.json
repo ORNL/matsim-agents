@@ -19,14 +19,20 @@
       "actor": "local-pilot-worker",
       "at_utc": "2026-10-28T15:22:07.212692+00:00",
       "event": "heartbeat"
+    },
+    {
+      "actor": "local-pilot-worker",
+      "at_utc": "2026-10-28T15:22:14.046701+00:00",
+      "event": "completed"
     }
   ],
   "facility": "local-test",
-  "lease_expires_utc": "2026-10-28T15:32:07.212692+00:00",
+  "lease_expires_utc": null,
   "owner": "local-pilot-worker",
+  "result_note": "Read-only coordination smoke test completed in a separate checkout; no compute submitted.",
   "schema_version": 1,
-  "status": "running",
+  "status": "completed",
   "task_id": "coordination-smoke-20261028",
   "title": "Coordination-only read-only pilot",
-  "updated_utc": "2026-10-28T15:22:07.212692+00:00"
+  "updated_utc": "2026-10-28T15:22:14.046701+00:00"
 }
