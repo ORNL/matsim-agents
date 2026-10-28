@@ -12,6 +12,7 @@ from matsim_agents.cli import (  # noqa: F401, I001  (register commands)
     benchmark,
     capabilities,
     coordination,
+    inventory,
 )
 from matsim_agents.cli._app import app
 
