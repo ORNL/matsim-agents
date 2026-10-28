@@ -11,6 +11,12 @@ UMA_MATSIM_EXTRAS="${UMA_MATSIM_EXTRAS:-uma,dev,openai,ollama,anthropic,huggingf
 RECREATE_UMA_ENV="${RECREATE_UMA_ENV:-0}"
 FACILITY="${FACILITY:-unknown}"
 AURORA_FAIRCHEM_VERSION="${AURORA_FAIRCHEM_VERSION:-2.23.0}"
+TORCH_INSTALL_ARGS=()
+TORCH_INDEX_ARGS=()
+if [[ "${FACILITY}" == "frontier" ]]; then
+    TORCH_INSTALL_ARGS=("torch==2.13.0+rocm7.2")
+    TORCH_INDEX_ARGS=(--index-url https://download.pytorch.org/whl/rocm7.2 --extra-index-url https://pypi.org/simple)
+fi
 
 log() { printf '\033[1;34m[uma-compat]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[uma-compat]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -66,7 +72,8 @@ fi
 # --no-build-isolation: avoids pip's PEP 517 isolated build env, which needs
 # network/TLS to fetch hatchling; it is pre-installed above instead.
 "${PYTHON}" -m pip install --no-build-isolation --upgrade-strategy only-if-needed \
-    "${MATSIM_DIR}[${UMA_MATSIM_EXTRAS}]" "${FAIRCHEM_ARGS[@]}"
+    "${MATSIM_DIR}[${UMA_MATSIM_EXTRAS}]" "${FAIRCHEM_ARGS[@]}" \
+    "${TORCH_INSTALL_ARGS[@]}" "${TORCH_INDEX_ARGS[@]}"
 if [[ "${FACILITY}" == "aurora" ]]; then
     "${PYTHON}" -m pip install --force-reinstall --no-deps "${COMPAT_WHEEL}"
     "${PYTHON}" -m pip check || log "Full pip check reported inherited conflicts; checking UMA runtime next"
@@ -82,6 +89,23 @@ if pathlib.Path(torch.__file__).resolve() != pathlib.Path(sys.argv[1]).resolve()
 PY
 else
     "${PYTHON}" -m pip check
+fi
+if [[ "${FACILITY}" == "frontier" ]]; then
+    "${PYTHON}" - <<'PY'
+import pathlib
+import sysconfig
+import torch
+
+torch_path = pathlib.Path(torch.__file__).resolve()
+uma_site = pathlib.Path(sysconfig.get_path("purelib")).resolve()
+if not torch_path.is_relative_to(uma_site):
+    raise SystemExit(f"UMA Torch must be isolated in {uma_site}, found {torch_path}")
+if torch.__version__ != "2.13.0+rocm7.2" or torch.version.hip is None:
+    raise SystemExit(
+        f"Frontier UMA requires Torch 2.13.0+rocm7.2, found {torch.__version__} "
+        f"(HIP {torch.version.hip})"
+    )
+PY
 fi
 "${PYTHON}" - <<'PY'
 import dscribe
