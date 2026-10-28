@@ -270,6 +270,61 @@ requires no DFT allocation.
 
 ## Decisions and Authorization Gates
 
+### Current decision record
+
+- **Design scale selected:** 36 questions, with 18 development/selection and
+	18 held-out questions. This selects the design size only; the draft questions,
+	evidence packets, independence, and split still require domain review and
+	approval before any inference.
+- **Candidate screening scope selected:** all nine debate-enabled entries in
+	the model catalog. Catalog membership is not authorization, serving
+	feasibility, or scientific qualification; document evidence-based exclusions.
+- **Intended facility supplied:** ALCF Aurora; project ID `HydraGNN` confirmed
+	by the user. The user confirms approval to use this allocation for a bounded
+	E1 serving qualification; facility-side authorization has not been
+	independently verified.
+- **Bounded serving qualification:** one Aurora compute node, one locally
+	available Mistral Small 24B checkpoint, four PVC tiles with tensor parallel
+	size 4, one request at a time, temperature 0, and at most 60 minutes (1
+	node-hour by requested reservation). The planned vLLM `max_model_len` is
+	32,768, matching the local checkpoint's `max_position_embeddings`; runtime
+	compatibility and memory fit still require compute-node verification. The
+	maximum generated output is 16,384 tokens for one separate long-context
+	stress request only. The tokenizer targets a 16,384-token prompt; the six
+	standard readiness/load/generation/structured/discussion/distributed checks
+	remain short. `startup_timeout_s` is 2,700 seconds; the managed-server and
+	qualification workflow has a 3,300-second deadline from job start, reserving
+	up to five minutes for interruption, shutdown, and artifact collection. This
+	leaves at most 10 minutes after a full-length startup for qualification work;
+	the bounded run will establish whether that is sufficient before any request
+	to extend the allocation.
+- **Queue and allocation gate:** the inspected `debug` execution queue accepts
+	1-2 nodes and up to 60 minutes, matching this first bounded run. Queue
+	visibility is not proof that project `HydraGNN` is eligible. PBS reports
+	`allow_account_check_failure=True` and `allow_negative_allocation=True`, so
+	successful `qsub` validation cannot establish adequate balance. Facility or
+	allocation-owner confirmation of project authorization, `debug` access,
+	available balance, and actual chargeable reservation is still required.
+- **Submission state:** configuration preview is valid for one node and
+	resolves the local model path, four devices, TP=4, 32,768 context, and 2,700 s
+	startup timeout. The job is marked non-rerunnable and has a 60-minute PBS
+	walltime, a workflow deadline bounded to leave cleanup time, no automatic resubmission,
+	and no node-count escalation. These configuration checks do not authorize
+	submission. Do not submit until facility-side project/queue/balance checks
+	are documented and the user separately approves the specific submission.
+- **Measurements and stop rules:** save startup duration (including failed
+	starts), request prompt/completion token counts, finish/truncation status,
+	latency and output tokens/s, best-effort per-tile XPU memory samples, script
+	elapsed time, scheduler-reported allocation walltime, and PBS final
+	accounting output. Facility charge remains
+	unreported until verified from facility accounting. Stop after the bounded
+	qualification succeeds, on unrecoverable deployment failure, after 45
+	minutes without model readiness, or at the 60-minute allocation cap; always
+	stop the server and preserve artifacts. No DFT is part of this qualification.
+- **Current shell readiness:** none of the nine catalog endpoint environment
+	variables is set in the inspected shell. This is an environment observation,
+	not evidence that endpoints are unavailable elsewhere.
+
 Before candidate inference, approve: (1) 36-question preferred design or
 24-question pilot; (2) exact six-material prompts, evidence packets, sources,
 question independence, and split/hash; (3) rubric anchors, reviewer assignments,
@@ -285,11 +340,59 @@ the archive has not been extracted into or substituted for
 four-condition E1 design, while its proposed question bank still requires
 independent domain authoring/review and its budget-matching claim requires
 measured token/resource confirmation. Preserve all pending results as planned,
-not completed. No inference, DFT, large HPC job, or held-out inspection is
-authorized by this preparation draft.
+not completed. No scientific E1 inference, DFT, large HPC job, or held-out
+inspection is authorized by this preparation draft. The user has approved only
+the bounded serving qualification above; its job submission still requires
+the separate facility-side verification and explicit submission approval
+recorded above.
 
 ## Results Ledger
 
 | Candidate | Question ID | Run / model revision | Prompt hash | Response artifact | Parse status | Reviewer scores | Tokens / latency | Serving resources | Failures / notes |
 |---|---|---|---|---|---|---|---|---|---|
 | Not run | Not run | Not run | Not run | Not run | Not assessed | Not assessed | Unmeasured | Unmeasured | No inference authorized |
+
+## Development Runner and Readiness Gates
+
+The repository now contains a development-only runner, exposed as
+`matsim-agents e1-development MANIFEST.json --output RUN_DIR`. The strict JSON
+manifest accepts only `partition: "development"` and question IDs beginning
+with `D-`; it has no held-out input or path. It requires unique question IDs,
+one candidate identity/revision, and deterministic temperature zero with a
+maximum of 16,384 output tokens. A run executes its pending questions
+sequentially through one model session. The checked-in synthetic tests cover
+held-out rejection, duplicate IDs, response reuse after restart, incomplete
+trailing JSONL recovery, and refusal to reuse an output directory with a
+different manifest. These are software integrity checks, not evidence of model
+readiness or scientific competence.
+
+For an approved development packet, create a separate manifest containing only
+the reviewed development prompts and invoke the command above inside the
+approved serving environment. The output directory records the exact manifest,
+run metadata, and append-only response ledger. A changed manifest requires a
+new output directory. Do not put credentials or private endpoints in the
+manifest. No production candidate manifest has been approved or run.
+
+Candidate readiness statuses must be evidence-based and distinguish at least:
+**not assessed** (no facility-specific check), **blocked** (a documented
+missing authorization, artifact, dependency, or resource), **failed** (a
+recorded qualification attempt did not pass), **qualified** (all predeclared
+operational criteria passed for the exact revision and serving stack), and
+**excluded** (a documented panel-rule or eligibility reason). Keep scientific
+competence separate from operational qualification; neither catalog presence
+nor a successful health check establishes competence. Current candidate rows
+remain not assessed except where the inventory records a narrower observation.
+At least three candidates must pass the approved competence threshold before
+panel selection; do not lower the threshold if fewer qualify.
+
+The Aurora job file is a non-submitting template only. It requests one node and
+caps its workflow budget at 90 minutes (1.5 node-hours), but the inspected
+`debug` queue allows only 60 minutes. The template therefore does not select a
+queue; before any submission, independently verify a queue that permits the
+full walltime, confirm the allocation/account and one-node resource plan, and
+record explicit authorization for the exact manifest, candidate, and job. No
+eligible 90-minute queue has been verified here. Do not submit the template or
+start inference until the protocol, prompts/evidence, candidate/panel rule,
+rubric thresholds, serving revision, resource ceiling, data handling, budget,
+stop condition, and cost-accounting procedure are approved. Held-out A-D
+execution remains unimplemented and unauthorized.

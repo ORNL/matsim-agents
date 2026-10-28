@@ -139,6 +139,10 @@ def test_server_that_exits_reports_its_log(stub, tmp_path, monkeypatch):
     plan = _plan([_managed(script)])
     with pytest.raises(RuntimeError, match="(?s)exited with code 3.*out of memory"):
         LLMServices.start(_local(plan), log_dir=tmp_path, poll_interval_s=0.2)
+    lifecycle = json.loads((tmp_path / "server-lifecycle.json").read_text())
+    assert lifecycle["proposer"]["state"] == "failed"
+    assert lifecycle["proposer"]["startup_seconds"] is not None
+    assert lifecycle["proposer"]["process_exit_code"] == 3
 
 
 def test_server_that_never_becomes_ready_times_out_and_is_stopped(tmp_path):
@@ -154,6 +158,9 @@ def test_server_that_never_becomes_ready_times_out_and_is_stopped(tmp_path):
     with pytest.raises(TimeoutError, match="did not list 'Qwen2.5-14B-Instruct'"):
         LLMServices.start(_local(plan), log_dir=tmp_path, poll_interval_s=0.2)
     assert time.monotonic() - started < 60
+    lifecycle = json.loads((tmp_path / "server-lifecycle.json").read_text())
+    assert lifecycle["proposer"]["state"] == "failed"
+    assert lifecycle["proposer"]["startup_seconds"] >= 1
 
 
 def test_two_servers_on_one_node_and_external_endpoint(stub, tmp_path):

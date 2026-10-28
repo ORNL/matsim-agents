@@ -22,6 +22,7 @@ import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -97,6 +98,34 @@ def _tail(path: Path, lines: int = 40) -> str:
         return "(no log)"
 
 
+def _write_server_lifecycle(
+    log_dir: Path, managed: list[_ManagedServer], *, failure: str | None = None
+) -> None:
+    records = {}
+    for process in managed:
+        elapsed = (
+            round(time.monotonic() - process.started_monotonic, 3)
+            if process.started_monotonic is not None
+            else None
+        )
+        records[process.server.name] = {
+            "model": process.server.model,
+            "tensor_parallel_size": process.server.tensor_parallel_size,
+            "max_model_len": process.server.max_model_len,
+            "startup_timeout_s": process.server.startup_timeout_s,
+            "started_at_utc": process.started_at_utc,
+            "ready_at_utc": process.ready_at_utc,
+            "startup_seconds": process.startup_seconds or elapsed,
+            "state": "ready" if process.ready else "failed" if failure else "not_started",
+            "process_exit_code": process.process.returncode if process.process else None,
+            "failure": failure,
+        }
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / "server-lifecycle.json").write_text(
+        json.dumps(records, indent=2) + "\n", encoding="utf-8"
+    )
+
+
 def served_models(base_url: str, timeout: float = 5.0, api_key: str | None = None) -> list[str]:
     """Return the model ids an OpenAI-compatible server lists, or raise ``OSError``."""
 
@@ -153,6 +182,10 @@ class _ManagedServer:
         self.env = self._environment()
         self.process: subprocess.Popen | None = None
         self.ready = False
+        self.started_at_utc: str | None = None
+        self.started_monotonic: float | None = None
+        self.ready_at_utc: str | None = None
+        self.startup_seconds: float | None = None
 
     def _serve_args(self, bind: str) -> list[str]:
         server = self.server
@@ -250,6 +283,8 @@ class _ManagedServer:
         if self.stop_file is not None:
             self.stop_file.unlink(missing_ok=True)
         log.info("Starting LLM server %s: %s", self.server.name, " ".join(self.command))
+        self.started_at_utc = datetime.now(UTC).isoformat()
+        self.started_monotonic = time.monotonic()
         with self.log_path.open("w") as log_file:
             self.process = subprocess.Popen(
                 self.command,
@@ -273,6 +308,10 @@ class _ManagedServer:
             )
         except (OSError, ValueError):
             self.ready = False
+        if self.ready and self.ready_at_utc is None:
+            self.ready_at_utc = datetime.now(UTC).isoformat()
+            if self.started_monotonic is not None:
+                self.startup_seconds = round(time.monotonic() - self.started_monotonic, 3)
         return self.ready
 
     def stop(self, grace_s: float = 30.0) -> None:
@@ -360,7 +399,9 @@ class LLMServices:
             for process in managed:
                 process.start()
             services._wait_ready(poll_interval_s)
-        except BaseException:
+            _write_server_lifecycle(log_dir, managed)
+        except BaseException as exc:
+            _write_server_lifecycle(log_dir, managed, failure=str(exc))
             services.close()
             raise
         return services

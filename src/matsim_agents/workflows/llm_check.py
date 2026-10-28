@@ -51,6 +51,10 @@ class LLMCheckConfig(BaseModel):
     )
     context_length: int | None = Field(None, ge=1)
     concurrent_requests: int = Field(1, ge=1)
+    long_context_output_tokens: int | None = Field(None, ge=1)
+    long_context_prompt_tokens: int = Field(16_384, ge=1)
+    long_context_tokenizer_path: str | None = None
+    long_context_min_output_fraction: float = Field(0.95, gt=0.0, le=1.0)
     deterministic_prompt: str = "Return exactly the token PORTABILITY_OK and no additional text."
     scientific_objective: str = "Propose a testable hypothesis for stable elemental silicon."
     server: str | None = Field(
@@ -75,6 +79,20 @@ class LLMCheckConfig(BaseModel):
                     "llm-check takes its model from the plan's server; remove "
                     + ", ".join(set_fields)
                 )
+            if self.long_context_output_tokens is not None:
+                if not self.long_context_tokenizer_path:
+                    raise ValueError(
+                        "long-context output check requires long_context_tokenizer_path"
+                    )
+                if self.context_length is None:
+                    raise ValueError("long-context output check requires context_length")
+                if (
+                    self.long_context_prompt_tokens + self.long_context_output_tokens
+                    > self.context_length
+                ):
+                    raise ValueError(
+                        "long-context prompt and output limits exceed context_length"
+                    )
             return self
         self.provider = self.provider.lower()
         if self.provider not in PROVIDERS:
@@ -84,6 +102,18 @@ class LLMCheckConfig(BaseModel):
             self.base_url = self.base_url or "http://localhost:8000/v1"
             if not self.base_url.rstrip("/").endswith("/v1"):
                 raise ValueError("vLLM base_url must identify the OpenAI-compatible /v1 root")
+        if self.long_context_output_tokens is not None:
+            if self.provider != "vllm":
+                raise ValueError("long-context output qualification is currently vLLM-only")
+            if not self.long_context_tokenizer_path:
+                raise ValueError("long-context output check requires long_context_tokenizer_path")
+            if self.context_length is None:
+                raise ValueError("long-context output check requires context_length")
+            if (
+                self.long_context_prompt_tokens + self.long_context_output_tokens
+                > self.context_length
+            ):
+                raise ValueError("long-context prompt and output limits exceed context_length")
         return self
 
 
@@ -95,6 +125,7 @@ class LLMCheckResult(BaseModel):
     model: str
     stages: dict[str, bool]
     failure_reason: str | None = None
+    long_context_output_passed: bool | None = None
     incomplete_replies: list[str] = Field(
         default_factory=list,
         description="Replies the token limit cut off or that contain no answer (see transcript).",
@@ -218,6 +249,48 @@ def _raise_setup_failure(reason: str, _cfg: LLMCheckConfig) -> dict[str, Any]:
     raise RuntimeError(reason)
 
 
+def _long_context_prompt(tokenizer_path: str, target_tokens: int) -> tuple[str, int]:
+    """Build the longest local-tokenizer prompt that fits the requested context budget."""
+
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_path, local_files_only=True, trust_remote_code=True
+    )
+    instruction = (
+        "Continue by outputting only QUAL_OK repeated with spaces until the response reaches "
+        "the generation limit. Do not explain or stop early. Context:\n"
+    )
+    unit = "QUALIFICATION_CONTEXT "
+
+    def token_count(repetitions: int) -> int:
+        messages = [{"role": "user", "content": instruction + unit * repetitions}]
+        if getattr(tokenizer, "chat_template", None):
+            return len(
+                tokenizer.apply_chat_template(
+                    messages, tokenize=True, add_generation_prompt=True
+                )
+            )
+        return len(tokenizer.encode(messages[0]["content"], add_special_tokens=True))
+
+    low, high = 0, target_tokens
+    best_repetitions, best_count = 0, token_count(0)
+    while low <= high:
+        middle = (low + high) // 2
+        count = token_count(middle)
+        if count <= target_tokens:
+            best_repetitions, best_count = middle, count
+            low = middle + 1
+        else:
+            high = middle - 1
+    if best_count < target_tokens - 32:
+        raise RuntimeError(
+            f"tokenizer could only construct {best_count} of {target_tokens} "
+            "requested prompt tokens"
+        )
+    return instruction + unit * best_repetitions, best_count
+
+
 def run_llm_check(
     cfg: LLMCheckConfig,
     *,
@@ -302,9 +375,15 @@ def _run_llm_check(
     }
     transcript = Transcript(run.path, title=f"LLM check: {cfg.provider} `{cfg.model}`")
     model: Any = None
+    long_context_output_passed = None
 
-    def ask(contribution_id: str, kind: str, messages: list[Any]) -> str:
-        reply = invoke_model(model, messages)
+    def ask(
+        contribution_id: str,
+        kind: str,
+        messages: list[Any],
+        request_model: Any = None,
+    ) -> str:
+        reply = invoke_model(request_model or model, messages)
         transcript.add(
             Contribution.from_reply(
                 reply,
@@ -433,6 +512,82 @@ def _run_llm_check(
                     f"{accelerator.get('accelerator_count', 0)}"
                 )
         stages["distributed"] = True
+
+        if cfg.long_context_output_tokens is not None:
+            long_context_output_passed = False
+            stress_prompt, measured_prompt_tokens = _long_context_prompt(
+                cfg.long_context_tokenizer_path or "", cfg.long_context_prompt_tokens
+            )
+            stress_model = model_factory(
+                provider=cfg.provider,
+                model=cfg.model,
+                temperature=cfg.temperature,
+                base_url=cfg.base_url,
+                api_key=cfg.api_key,
+                max_tokens=cfg.long_context_output_tokens,
+            )
+            stress_messages = [HumanMessage(content=stress_prompt)]
+            stress_reply = invoke_model(stress_model, stress_messages)
+            transcript.add(
+                Contribution.from_reply(
+                    stress_reply,
+                    id="long-context-output",
+                    kind="long_context_output",
+                    speaker=cfg.model or cfg.provider,
+                    provider=cfg.provider,
+                    model=cfg.model,
+                ),
+                prompt=stress_messages,
+            )
+            expected_minimum = int(
+                cfg.long_context_output_tokens * cfg.long_context_min_output_fraction
+            )
+            context_tokens = (
+                stress_reply.prompt_tokens + stress_reply.completion_tokens
+                if stress_reply.prompt_tokens is not None
+                and stress_reply.completion_tokens is not None
+                else None
+            )
+            stress_result = {
+                "requested_prompt_tokens": cfg.long_context_prompt_tokens,
+                "tokenizer_prompt_tokens": measured_prompt_tokens,
+                "requested_max_output_tokens": cfg.long_context_output_tokens,
+                "minimum_output_tokens": expected_minimum,
+                "prompt_tokens": stress_reply.prompt_tokens,
+                "completion_tokens": stress_reply.completion_tokens,
+                "total_context_tokens": context_tokens,
+                "context_length": cfg.context_length,
+                "latency_s": stress_reply.latency_s,
+                "tokens_per_second": (
+                    stress_reply.completion_tokens / stress_reply.latency_s
+                    if stress_reply.completion_tokens is not None
+                    and stress_reply.latency_s
+                    else None
+                ),
+                "finish_reason": stress_reply.finish_reason,
+                "truncated": stress_reply.truncated,
+            }
+            run.write_json("long-context-output.json", stress_result)
+            if stress_reply.prompt_tokens is None:
+                raise RuntimeError("long-context output response did not report prompt tokens")
+            if stress_reply.completion_tokens is None:
+                raise RuntimeError("long-context output response did not report completion tokens")
+            if abs(stress_reply.prompt_tokens - measured_prompt_tokens) > 32:
+                raise RuntimeError(
+                    "server-reported prompt tokens differ from the tokenizer target by more than 32"
+                )
+            if stress_reply.completion_tokens > cfg.long_context_output_tokens:
+                raise RuntimeError("long-context output exceeded the configured output token cap")
+            if stress_reply.completion_tokens < expected_minimum:
+                raise RuntimeError(
+                    "long-context output ended before the configured output qualification target"
+                )
+            if context_tokens is None:
+                raise RuntimeError("long-context output response did not report total token usage")
+            if context_tokens > (cfg.context_length or 0):
+                raise RuntimeError("reported prompt and completion tokens exceed context_length")
+            long_context_output_passed = True
+
         after_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         run.write_json(
             "performance.json",
@@ -457,6 +612,7 @@ def _run_llm_check(
         model=cfg.model or "",
         stages=stages,
         failure_reason=failure,
+        long_context_output_passed=long_context_output_passed,
         incomplete_replies=[item.id for item in transcript.contributions() if item.incomplete],
     )
     run.write_json("result.json", result)
