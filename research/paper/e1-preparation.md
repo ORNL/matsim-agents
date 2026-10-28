@@ -342,22 +342,37 @@ requires no DFT allocation.
 	one-node, 90-minute E1 ceiling. The enabled `capacity` queue reports a
 	1-node minimum, 16-node maximum, and 168-hour maximum walltime, with no queue
 	ACL listed; its scheduler limits therefore fit the requested shape. This is
-	only a queue-level candidate: HydraGNN project/account eligibility, available
-	balance, and allocation-owner approval have not been verified. Other visible
-	queues were either disabled, required at least 256 nodes, or showed ACL
-	restrictions. No PBS job was submitted as part of this check.
+	more than a queue-level candidate: a one-node, five-minute `/bin/true` probe
+	with `qsub -A HydraGNN -q capacity -l filesystems=home:flare` was accepted as
+	job `8979590.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov`. It was
+	cancelled immediately; `qstat -x -f` subsequently reported final state `F`.
+	This verifies scheduler acceptance of that minimal request, not available
+	balance, allocation-owner approval for E1, or authorization for inference.
+	Other visible queues were either disabled, required at least 256 nodes, or
+	showed ACL restrictions. No model work was started.
 - These observations update operational readiness only. They do not approve
 	candidate inference, change competence thresholds, authorize model downloads,
 	or open the held-out partition.
 
-Before candidate inference, approve: (1) 36-question preferred design or
-24-question pilot; (2) exact six-material prompts, evidence packets, sources,
-question independence, and split/hash; (3) rubric anchors, reviewer assignments,
-adjudication, competence thresholds, and complementarity weights; (4) candidate
-eligibility and panel-shortlist rule; (5) deterministic B aggregation and C's
-self-revision schedule; (6) model revisions, decoding, serving stack, response
-schema, and provenance; (7) facility/account, candidate scope, resource ceiling,
-data handling, budget, and stop condition; and (8) cost-accounting procedure.
+### E1 Protocol Freeze Register
+
+The 36-question design and nine-candidate screening scope are selected for
+planning, not scientifically approved or authorized for execution. The entries
+below remain pending until the named evidence is recorded and the relevant
+reviewers approve it.
+
+| Gate | Required freeze evidence | Status |
+|---|---|---|
+| Question set and split | Final independently authored prompts for all six materials; evidence and provenance for every factual claim; documented D/H independence; partition manifest and content hashes; held-out access controls | Pending domain review |
+| Scoring and reviewers | Frozen rubric weights and task-specific anchors; reviewer assignments and blinding; written adjudication and agreement procedure; competence thresholds, complementarity weights, and sensitivity rule | Pending domain review |
+| Panel and conditions | Candidate eligibility and shortlist rule; deterministic B aggregation; C critique/revision schedule; response reuse rules; repeatability policy; confirmation of A-D call accounting | Pending protocol approval |
+| Candidate and serving | Approved candidate IDs, revisions and licenses; decoding and seed policy; serving stack/version and hardware placement; response schema, parser, and provenance requirements | Pending candidate approval |
+| Facility and execution | Approved account/project, queue, candidate scope, node/walltime and cost ceiling; data handling, stop/retry rules, accounting method, and explicit submission authorization | Pending facility and user approval |
+
+Do not run candidate inference until these gates are approved, the development
+manifest and protocol hashes are frozen, and the specific run's resource request
+and submission are authorized. Held-out prompts and annotations remain sealed
+until the development-based panel and all held-out procedures are frozen.
 
 The revised E1 manuscript is available in the uploaded package identified above;
 the archive has not been extracted into or substituted for
