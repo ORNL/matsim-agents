@@ -69,6 +69,23 @@ def _set_remote_lease_expired(remote: Path, task_id: str) -> None:
     _git(clone, "push", "--quiet", "origin", _BRANCH)
 
 
+def _synchronize_first_checkout(boards: list[TaskBoard], barrier: Barrier) -> None:
+    for candidate in boards:
+        checkout_latest = candidate._checkout_latest
+        first_checkout = [True]
+
+        def synchronized_checkout(
+            root, *, allow_missing, checkout=checkout_latest, first=first_checkout
+        ):
+            found = checkout(root, allow_missing=allow_missing)
+            if first[0]:
+                first[0] = False
+                barrier.wait(timeout=10)
+            return found
+
+        candidate._checkout_latest = synchronized_checkout
+
+
 def test_board_uses_current_branch_and_namespaced_records(git_remote):
     board = _board(git_remote)
     board.initialize()
@@ -127,26 +144,31 @@ def test_task_lifecycle_enforces_owner_and_expiring_lease(git_remote):
     assert board.list_tasks()[0]["status"] == "completed"
 
 
+def test_heartbeat_renews_lease_and_expired_owner_cannot_mutate(git_remote):
+    board = _board(git_remote)
+    _add_task(board)
+
+    claimed = board.claim("task-1", worker="worker-a", lease_minutes=5)
+    original_expiry = datetime.fromisoformat(claimed["lease_expires_utc"])
+    renewed = board.heartbeat("task-1", worker="worker-a", lease_minutes=30)
+
+    assert datetime.fromisoformat(renewed["lease_expires_utc"]) > original_expiry
+    assert renewed["events"][-1]["event"] == "heartbeat"
+    _set_remote_lease_expired(git_remote[1], "task-1")
+
+    with pytest.raises(TaskBoardError, match="lease.*expired"):
+        board.heartbeat("task-1", worker="worker-a")
+    with pytest.raises(TaskBoardError, match="lease.*expired"):
+        board.finish("task-1", worker="worker-a", success=True)
+
+
 def test_competing_claims_serialize_on_latest_remote_tip(git_remote):
     board = _board(git_remote)
     _add_task(board)
     barrier = Barrier(2)
     boards = [board, _board(git_remote)]
 
-    for candidate in boards:
-        checkout_latest = candidate._checkout_latest
-        first_checkout = [True]
-
-        def synchronized_checkout(
-            root, *, allow_missing, checkout=checkout_latest, first=first_checkout
-        ):
-            found = checkout(root, allow_missing=allow_missing)
-            if first[0]:
-                first[0] = False
-                barrier.wait(timeout=10)
-            return found
-
-        candidate._checkout_latest = synchronized_checkout
+    _synchronize_first_checkout(boards, barrier)
 
     def claim(candidate: TaskBoard, worker: str) -> str:
         try:
@@ -167,3 +189,24 @@ def test_competing_claims_serialize_on_latest_remote_tip(git_remote):
     task = board.list_tasks()[0]
     assert task["status"] == "running"
     assert task["owner"] in {"worker-a", "worker-b"}
+
+
+def test_concurrent_updates_to_different_tasks_survive_remote_retry(git_remote):
+    board = _board(git_remote)
+    _add_task(board, "task-1")
+    _add_task(board, "task-2")
+    boards = [board, _board(git_remote)]
+    _synchronize_first_checkout(boards, Barrier(2))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        claimed = list(
+            pool.map(
+                lambda args: args[0].claim(args[1], worker=args[2]),
+                zip(boards, ("task-1", "task-2"), ("worker-a", "worker-b"), strict=True),
+            )
+        )
+
+    assert {task["task_id"] for task in claimed} == {"task-1", "task-2"}
+    remote_tasks = {task["task_id"]: task for task in board.list_tasks()}
+    assert remote_tasks["task-1"]["owner"] == "worker-a"
+    assert remote_tasks["task-2"]["owner"] == "worker-b"
