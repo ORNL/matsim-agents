@@ -56,11 +56,12 @@ def test_gpu_qualification_cpu_operations(tmp_path: Path) -> None:
     result = json.loads(output.read_text(encoding="utf-8"))
     assert result["status"] == "PASSED"
     assert result["device"] == "cpu"
-    assert {
+    required_operations = {
         "pyg_scatter_sum_and_backward",
         "pyg_global_add_pool",
         "torch_scatter_add",
         "torch_scatter_sum",
         "torch_scatter_mean",
         "torch_scatter_reductions_backward",
-    }.issubset(result["operations"])
+    }
+    assert required_operations.issubset(result["operations"])
