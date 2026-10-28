@@ -1,6 +1,6 @@
 {
   "artifact_uri": null,
-  "attempts": 0,
+  "attempts": 1,
   "command": "git status --short --branch",
   "created_utc": "2026-10-28T15:21:31.949993+00:00",
   "details": "Harmless coordination pilot only. Command is metadata and will not be dispatched. No scheduler, DFT, or HPC work authorized.",
@@ -9,14 +9,19 @@
       "actor": "coordinator",
       "at_utc": "2026-10-28T15:21:31.949993+00:00",
       "event": "created"
+    },
+    {
+      "actor": "local-pilot-worker",
+      "at_utc": "2026-10-28T15:22:01.333505+00:00",
+      "event": "claimed"
     }
   ],
   "facility": "local-test",
-  "lease_expires_utc": null,
-  "owner": null,
+  "lease_expires_utc": "2026-10-28T15:32:01.333505+00:00",
+  "owner": "local-pilot-worker",
   "schema_version": 1,
-  "status": "pending",
+  "status": "running",
   "task_id": "coordination-smoke-20261028",
   "title": "Coordination-only read-only pilot",
-  "updated_utc": "2026-10-28T15:21:31.949993+00:00"
+  "updated_utc": "2026-10-28T15:22:01.333505+00:00"
 }
