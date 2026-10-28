@@ -61,17 +61,17 @@ bash deployments/frontier/setup/install-vllm-rocm72.sh
 
 ### UMA MLIP Backend (fairchem-core)
 
-HydraGNN main and matsim-agents now use NumPy 2.4.6, SciPy 1.17.1,
-PyTorch 2.14, torchvision 0.29, and e3nn 0.5.1. FairChem cannot yet share
-that environment: FairChem 2.22 requires Torch 2.13. Request the matsim-owned
-`.venv-uma` environment with:
+HydraGNN main and matsim-agents use NumPy 2.4.6, SciPy 1.17.1, PyTorch 2.14,
+torchvision 0.29, and e3nn 0.5.1. FairChem requires Torch 2.13, so the
+matsim-owned `.venv-uma` installs the ROCm 7.2 Torch 2.13 wheel separately:
 
 ```bash
 INSTALL_UMA=1 bash deployments/frontier/setup/install.sh
 ```
 
-The installer verifies FairChem imports. UMA on ROCm remains unqualified until
-the resulting environment passes a model inference smoke test on Frontier.
+The installer verifies FairChem imports and rejects a CUDA or non-ROCm Torch
+installation. UMA model inference on Frontier remains unqualified until it
+passes a model inference smoke test on a Frontier GPU.
 
 ### MACE compatibility environment
 
