@@ -1263,6 +1263,8 @@ matsim-agents capabilities check [--kind K] [--require NAME]  # which backends c
 matsim-agents capabilities matrix [-o FILE] # backend capability matrix (docs/capabilities.md)
 matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
 matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
+matsim-agents coordination list [--repo PATH] [--remote NAME]  # read shared HPC task board
+matsim-agents inventory dft ROOT [--output FILE]  # inventory retained DFT run artifacts
 matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
 matsim-agents resources plan CONFIG.yaml [--nodes N]   # preview LLM/MLIP/DFT placement
