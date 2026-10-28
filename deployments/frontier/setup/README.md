@@ -10,6 +10,22 @@ It clones/updates `ORNL/HydraGNN`, runs HydraGNN's current ROCm 7.2 installer,
 then installs and verifies matsim-agents in the resulting environment. There is
 no second general-purpose installer or legacy alias.
 
+## GPU Primitive Qualification
+
+Submit the shared Torch/PyG device smoke test from a Frontier allocation:
+
+```bash
+PROJECT_ROOT="$PWD" sbatch -A <allocation> \
+  deployments/frontier/jobs/job-qualify-torch-pyg-frontier.sh
+```
+
+It exercises Torch arithmetic, PyG scatter/pooling and gradients, and
+`torch_scatter` add/sum/mean on ROCm GPUs. This is a backend primitive check,
+not checkpoint-backed model qualification; the compute-qualified portability
+workflow provides a separate model-level tier. The report is saved to
+`.hpc-build/frontier/qualification/<job-id>/torch-pyg.json` by default; set
+`QUALIFICATION_OUTPUT` to choose another location.
+
 ## Model Download Safety Policy
 
 See the canonical cross-platform policy in `docs/model-download-safety.md`.
