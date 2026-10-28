@@ -34,6 +34,13 @@ class E1Candidate(_StrictModel):
     model_id: str = Field(min_length=1)
     revision: str = Field(min_length=1)
     provider: str = Field(min_length=1)
+    mag_provider: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_mag_provider(self) -> E1Candidate:
+        if self.mag_provider is not None and self.provider.lower() != "mag":
+            raise ValueError("mag_provider is only valid for MAG candidates")
+        return self
 
 
 class E1Decoding(_StrictModel):
@@ -77,6 +84,8 @@ def _model_session(
         kwargs["top_p"] = decoding.top_p
     if decoding.seed is not None:
         kwargs["seed"] = decoding.seed
+    if candidate.provider.lower() == "mag":
+        kwargs["mag_provider"] = candidate.mag_provider
     yield model_factory(**kwargs)
 
 

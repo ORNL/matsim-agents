@@ -50,6 +50,7 @@ class ModelReply(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     latency_s: float | None = None
+    provider_metadata: dict[str, str] | None = None
 
     @computed_field
     @property
@@ -90,6 +91,7 @@ def reply_from_message(message: Any, *, latency_s: float | None = None) -> Model
         metadata.get("finish_reason") or metadata.get("stop_reason") or metadata.get("done_reason")
     )
     usage = getattr(message, "usage_metadata", None) or {}
+    provider_metadata = metadata.get("provider_metadata")
     return ModelReply(
         text=text,
         reasoning=reasoning,
@@ -97,6 +99,7 @@ def reply_from_message(message: Any, *, latency_s: float | None = None) -> Model
         prompt_tokens=usage.get("input_tokens"),
         completion_tokens=usage.get("output_tokens"),
         latency_s=latency_s,
+        provider_metadata=provider_metadata if isinstance(provider_metadata, dict) else None,
     )
 
 

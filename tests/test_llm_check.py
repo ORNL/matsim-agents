@@ -5,7 +5,7 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage
 
-from matsim_agents.workflows.llm_check import LLMCheckConfig, run_llm_check
+from matsim_agents.workflows.llm_check import LLMCheckConfig, probe_readiness, run_llm_check
 
 
 class _FakeModel:
@@ -86,6 +86,67 @@ def test_llm_check_persists_readiness_failure(tmp_path):
     assert result.stages["readiness"] is False
     assert "not served" in result.failure_reason
     assert (Path(result.run_directory) / "result.json").is_file()
+
+
+def test_mag_readiness_requires_token_and_verifies_catalog_model(monkeypatch):
+    import pytest
+
+    import matsim_agents.workflows.llm_check as llm_check
+
+    monkeypatch.delenv("AMSC_TOKEN", raising=False)
+    cfg = LLMCheckConfig(provider="mag", model="account-model", mag_provider="openai")
+    with pytest.raises(RuntimeError, match="requires AMSC_TOKEN"):
+        probe_readiness(cfg)
+
+    monkeypatch.setenv("AMSC_TOKEN", "test-token")
+    calls = []
+
+    def get_json(url, timeout, api_key=None):
+        calls.append((url, timeout, api_key))
+        return {"data": [{"id": "account-model"}]}
+
+    monkeypatch.setattr(llm_check, "_get_json", get_json)
+    readiness = probe_readiness(cfg)
+    assert calls == [
+        ("https://mag.genesis.americansciencecloud.org/v1/models", 120, "test-token")
+    ]
+    assert readiness["served_models"] == ["account-model"]
+    assert readiness["mag_provider"] == "openai"
+
+
+def test_mag_config_requires_catalog_model():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="explicit model ID"):
+        LLMCheckConfig(provider="mag")
+
+
+def test_mag_llm_check_routes_provider_without_persisting_token(tmp_path):
+    calls = []
+
+    def model_factory(**kwargs):
+        calls.append(kwargs)
+        return _RoutingFakeModel()
+
+    cfg = LLMCheckConfig(
+        provider="mag",
+        model="account-model",
+        api_key="test-token",
+        mag_provider="openai",
+        output_root=str(tmp_path),
+    )
+    result = run_llm_check(
+        cfg,
+        model_factory=model_factory,
+        readiness_probe=lambda _cfg: {"served_models": [cfg.model]},
+    )
+
+    assert result.status == "complete"
+    assert calls[0]["provider"] == "mag"
+    assert calls[0]["mag_provider"] == "openai"
+    for artifact in Path(result.run_directory).rglob("*.json"):
+        assert "test-token" not in artifact.read_text()
 
 
 def test_llm_check_exercises_configured_concurrency(tmp_path):

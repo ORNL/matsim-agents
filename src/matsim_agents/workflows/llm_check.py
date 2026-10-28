@@ -19,7 +19,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.backends.llm.provider import DEFAULT_MODELS, get_chat_model
+from matsim_agents.backends.llm.provider import DEFAULT_MODELS, SUPPORTED_PROVIDERS, get_chat_model
 from matsim_agents.backends.llm.replies import invoke_model
 from matsim_agents.backends.llm.servers import llm_endpoints
 from matsim_agents.backends.llm.transcript import Contribution, Transcript
@@ -28,7 +28,7 @@ from matsim_agents.execution.placement import ResourcePlan
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.workflows.investigation import ScientificHypothesis
 
-PROVIDERS = frozenset(DEFAULT_MODELS)
+PROVIDERS = SUPPORTED_PROVIDERS
 
 
 class LLMCheckConfig(BaseModel):
@@ -36,6 +36,7 @@ class LLMCheckConfig(BaseModel):
     model: str | None = None
     base_url: str | None = None
     api_key: str | None = None
+    mag_provider: str | None = Field(default=None, min_length=1)
     output_root: str = "./runs/llm-check"
     temperature: float = 0.0
     timeout_sec: int = Field(120, ge=1)
@@ -97,7 +98,18 @@ class LLMCheckConfig(BaseModel):
         self.provider = self.provider.lower()
         if self.provider not in PROVIDERS:
             raise ValueError(f"provider must be one of {sorted(PROVIDERS)}")
-        self.model = self.model or DEFAULT_MODELS[self.provider]
+        if self.provider == "mag":
+            self.model = self.model or os.environ.get("MATSIM_MAG_MODEL")
+            if not self.model:
+                raise ValueError(
+                    "MAG requires an explicit model ID from the account's /models catalog"
+                )
+            self.base_url = self.base_url or os.environ.get(
+                "MATSIM_MAG_BASE_URL", "https://mag.genesis.americansciencecloud.org/v1"
+            )
+            self.mag_provider = self.mag_provider or os.environ.get("MATSIM_MAG_PROVIDER")
+        else:
+            self.model = self.model or DEFAULT_MODELS[self.provider]
         if self.provider == "vllm":
             self.base_url = self.base_url or "http://localhost:8000/v1"
             if not self.base_url.rstrip("/").endswith("/v1"):
@@ -169,6 +181,21 @@ def probe_readiness(cfg: LLMCheckConfig) -> dict[str, Any]:
                 raise RuntimeError(f"incomplete local Hugging Face model: missing {missing}")
             return {"model_path": str(location.resolve()), "local": True}
         return {"model_id": cfg.model, "local": False}
+    if cfg.provider == "mag":
+        token = cfg.api_key or os.environ.get("AMSC_TOKEN")
+        if not token:
+            raise RuntimeError("mag readiness requires AMSC_TOKEN")
+        payload = _get_json(f"{cfg.base_url.rstrip('/')}/models", cfg.timeout_sec, token)
+        models = [entry.get("id") for entry in payload.get("data", [])]
+        if cfg.model not in models:
+            raise RuntimeError(
+                f"configured MAG model {cfg.model!r} unavailable; available={models}"
+            )
+        return {
+            "endpoint": cfg.base_url,
+            "served_models": models,
+            "mag_provider": cfg.mag_provider,
+        }
     credential = "OPENAI_API_KEY" if cfg.provider == "openai" else "ANTHROPIC_API_KEY"
     if not (cfg.api_key or os.environ.get(credential)):
         raise RuntimeError(f"{cfg.provider} readiness requires {credential}")
@@ -236,6 +263,7 @@ def _model_identity(cfg: LLMCheckConfig, readiness: dict[str, Any]) -> dict[str,
         "provider": cfg.provider,
         "model": cfg.model,
         "base_url": cfg.base_url,
+        "mag_provider": cfg.mag_provider,
         "temperature": cfg.temperature,
         "tensor_parallel_size": cfg.tensor_parallel_size,
         "pipeline_parallel_size": cfg.pipeline_parallel_size,
@@ -416,6 +444,7 @@ def _run_llm_check(
             temperature=cfg.temperature,
             base_url=cfg.base_url,
             api_key=cfg.api_key,
+            mag_provider=cfg.mag_provider,
         )
         construction_seconds = time.perf_counter() - load_start
         stages["load"] = True
@@ -524,6 +553,7 @@ def _run_llm_check(
                 temperature=cfg.temperature,
                 base_url=cfg.base_url,
                 api_key=cfg.api_key,
+                mag_provider=cfg.mag_provider,
                 max_tokens=cfg.long_context_output_tokens,
             )
             stress_messages = [HumanMessage(content=stress_prompt)]

@@ -127,3 +127,27 @@ def test_development_runner_rejects_manifest_mismatch_and_recovers_partial_tail(
     with pytest.raises(ValueError, match="different manifest"):
         run_e1_development(changed_manifest, tmp_path, model_factory=unexpected_factory)
     assert calls == []
+
+
+def test_mag_candidate_route_is_part_of_manifest_and_factory_args(tmp_path):
+    manifest_data = _manifest().model_dump(mode="json")
+    manifest_data["candidate"].update(
+        {"provider": "mag", "mag_provider": "openai", "model_id": "account-model"}
+    )
+    manifest = E1DevelopmentManifest.model_validate(manifest_data)
+    factory_calls = []
+
+    class FakeModel:
+        def invoke(self, _messages):
+            return AIMessage(content="response")
+
+    def model_factory(**kwargs):
+        factory_calls.append(kwargs)
+        return FakeModel()
+
+    run_e1_development(manifest, tmp_path, model_factory=model_factory)
+
+    assert factory_calls[0]["provider"] == "mag"
+    assert factory_calls[0]["mag_provider"] == "openai"
+    candidate = json.loads((tmp_path / "manifest.json").read_text())["candidate"]
+    assert candidate["mag_provider"] == "openai"

@@ -5,6 +5,7 @@ Supported providers (set ``MATSIM_LLM_PROVIDER`` or pass ``provider=...``):
 
     ollama       - local Ollama daemon (default for local development)
     vllm         - vLLM server with an OpenAI-compatible /v1 endpoint
+    mag          - Genesis Mission Model Access Gateway
     openai       - hosted OpenAI API
     anthropic    - hosted Anthropic API
     huggingface  - local HuggingFace transformers pipeline (no server needed)
@@ -61,6 +62,8 @@ class ChatVLLM(BaseChatModel):
     seed: int | None = None
     max_completion_tokens: int = Field(default=4096, gt=0)
     request_timeout: float = Field(default=3600.0, gt=0, allow_inf_nan=False)
+    default_headers: dict[str, str] = Field(default_factory=dict)
+    capture_response_headers: bool = False
 
     @property
     def _llm_type(self) -> str:
@@ -95,12 +98,20 @@ class ChatVLLM(BaseChatModel):
     ) -> ChatResult:
         import openai
 
-        client = openai.OpenAI(
-            base_url=self.base_url,
-            api_key=self.api_key,
-            timeout=self.request_timeout,
+        client_kwargs = {
+            "base_url": self.base_url,
+            "api_key": self.api_key,
+            "timeout": self.request_timeout,
+        }
+        if self.default_headers:
+            client_kwargs["default_headers"] = self.default_headers
+        client = openai.OpenAI(**client_kwargs)
+        create = (
+            client.chat.completions.with_raw_response.create
+            if self.capture_response_headers
+            else client.chat.completions.create
         )
-        response = client.chat.completions.create(
+        raw_response = create(
             model=self.model,
             messages=self._convert_messages(messages),
             temperature=self.temperature,
@@ -108,6 +119,7 @@ class ChatVLLM(BaseChatModel):
             stop=stop,
             **{**self._sampling(), **kwargs},
         )
+        response = raw_response.parse() if self.capture_response_headers else raw_response
         choice = response.choices[0]
         # With a reasoning parser vLLM returns the reasoning separately
         # (`reasoning`, formerly `reasoning_content`); without one it precedes
@@ -132,7 +144,13 @@ class ChatVLLM(BaseChatModel):
         message = AIMessage(
             content=content,
             additional_kwargs={"reasoning_content": reasoning} if reasoning else {},
-            response_metadata={"finish_reason": finish, "model_name": self.model},
+            response_metadata={
+                "finish_reason": finish,
+                "model_name": self.model,
+                **self._provider_metadata(
+                    raw_response.headers if self.capture_response_headers else None
+                ),
+            },
             usage_metadata=(
                 {
                     "input_tokens": tokens[0],
@@ -145,6 +163,10 @@ class ChatVLLM(BaseChatModel):
         )
         return ChatResult(generations=[ChatGeneration(message=message)])
 
+    def _provider_metadata(self, headers: Any) -> dict[str, Any]:
+        applied = headers.get("x-amsc-mag-applied") if headers is not None else None
+        return {"provider_metadata": {"mag_applied": applied}} if applied else {}
+
     def _stream(
         self,
         messages: list[BaseMessage],
@@ -154,12 +176,20 @@ class ChatVLLM(BaseChatModel):
     ) -> Iterator[ChatGenerationChunk]:
         import openai
 
-        client = openai.OpenAI(
-            base_url=self.base_url,
-            api_key=self.api_key,
-            timeout=self.request_timeout,
+        client_kwargs = {
+            "base_url": self.base_url,
+            "api_key": self.api_key,
+            "timeout": self.request_timeout,
+        }
+        if self.default_headers:
+            client_kwargs["default_headers"] = self.default_headers
+        client = openai.OpenAI(**client_kwargs)
+        create = (
+            client.chat.completions.with_raw_response.create
+            if self.capture_response_headers
+            else client.chat.completions.create
         )
-        stream = client.chat.completions.create(
+        raw_stream = create(
             model=self.model,
             messages=self._convert_messages(messages),
             temperature=self.temperature,
@@ -168,10 +198,22 @@ class ChatVLLM(BaseChatModel):
             stream=True,
             **{**self._sampling(), **kwargs},
         )
+        stream = raw_stream.parse() if self.capture_response_headers else raw_stream
         for chunk in stream:
             delta = chunk.choices[0].delta.content or ""
             if delta:
                 yield ChatGenerationChunk(message=AIMessageChunk(content=delta))
+
+
+class ChatMAG(ChatVLLM):
+    """LangChain chat model for the OpenAI-compatible Genesis Mission MAG API."""
+
+    base_url: str = "https://mag.genesis.americansciencecloud.org/v1"
+    capture_response_headers: bool = True
+
+    @property
+    def _llm_type(self) -> str:
+        return "mag"
 
 
 # Loaded in-process models keyed by model path, load options, and assigned
@@ -300,6 +342,7 @@ DEFAULT_MODELS = {
     "anthropic": "claude-3-5-sonnet-latest",
     "huggingface": "Qwen/Qwen2.5-72B-Instruct",
 }
+SUPPORTED_PROVIDERS = frozenset((*DEFAULT_MODELS, "mag"))
 
 
 def get_chat_model(
@@ -322,9 +365,9 @@ def get_chat_model(
         Provider-specific model identifier. Sensible defaults are used
         when omitted.
     base_url:
-        Override the server URL (Ollama or vLLM).
+        Override the server URL (Ollama, vLLM, or MAG).
     api_key:
-        Override the API key (OpenAI, Anthropic, or a secured vLLM server).
+        Override the API key (OpenAI, Anthropic, MAG, or a secured vLLM server).
     max_tokens:
         Most tokens one reply may generate, including a reasoning model's
         reasoning; the provider's default when omitted.
@@ -367,6 +410,36 @@ def get_chat_model(
             request_timeout=request_timeout,
             top_p=kwargs.get("top_p"),
             seed=kwargs.get("seed"),
+        )
+
+    if provider == "mag":
+        if not model:
+            raise ValueError("MAG requires an explicit model ID from the account's /models catalog")
+        key = api_key or os.environ.get("AMSC_TOKEN")
+        if not key:
+            raise ValueError("MAG requires AMSC_TOKEN or an explicit api_key")
+        url = base_url or os.environ.get(
+            "MATSIM_MAG_BASE_URL", "https://mag.genesis.americansciencecloud.org/v1"
+        )
+        route = (
+            kwargs.pop("mag_provider")
+            if "mag_provider" in kwargs
+            else os.environ.get("MATSIM_MAG_PROVIDER")
+        )
+        headers = {"X-AmSC-MAG-Provider": route} if route else {}
+        request_timeout = kwargs.pop("request_timeout", 3600)
+        if max_tokens is None:
+            max_tokens = kwargs.pop("max_completion_tokens", 4096)
+        return ChatMAG(
+            model=model,
+            temperature=temperature,
+            base_url=url,
+            api_key=key,
+            max_completion_tokens=max_tokens,
+            request_timeout=request_timeout,
+            top_p=kwargs.get("top_p"),
+            seed=kwargs.get("seed"),
+            default_headers=headers,
         )
 
     if provider == "openai":
@@ -412,5 +485,5 @@ def get_chat_model(
         return ChatHuggingFace(llm=llm, tokenizer=loaded.pipeline.tokenizer)
 
     raise ValueError(
-        f"Unknown LLM provider: {provider!r}. Expected one of: {sorted(DEFAULT_MODELS)}."
+        f"Unknown LLM provider: {provider!r}. Expected one of: {sorted(SUPPORTED_PROVIDERS)}."
     )
