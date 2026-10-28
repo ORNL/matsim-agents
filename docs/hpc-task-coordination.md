@@ -2,6 +2,11 @@
 
 The current Git branch is the shared task channel for coordinating independent work on Perlmutter, Frontier, Aurora, and other HPC facilities. Task metadata is isolated under `.hpc-coordination/`; updates appear as ordinary commits in the current branch history. The tool does not dispatch jobs or modify scientific source files.
 
+For the Aurora login-node read-only connectivity check, follow
+[`docs/aurora-task-board-check.md`](aurora-task-board-check.md). It verifies
+remote read access and visibility of the completed coordination smoke-test
+record; it does not claim a task or submit compute.
+
 ## One-Time Setup
 
 The remote must be accessible from each facility through an approved Git credential method. Initialize the board from a checkout with the same remote:
