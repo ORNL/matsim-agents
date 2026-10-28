@@ -14,14 +14,19 @@
       "actor": "local-pilot-worker",
       "at_utc": "2026-10-28T15:22:01.333505+00:00",
       "event": "claimed"
+    },
+    {
+      "actor": "local-pilot-worker",
+      "at_utc": "2026-10-28T15:22:07.212692+00:00",
+      "event": "heartbeat"
     }
   ],
   "facility": "local-test",
-  "lease_expires_utc": "2026-10-28T15:32:01.333505+00:00",
+  "lease_expires_utc": "2026-10-28T15:32:07.212692+00:00",
   "owner": "local-pilot-worker",
   "schema_version": 1,
   "status": "running",
   "task_id": "coordination-smoke-20261028",
   "title": "Coordination-only read-only pilot",
-  "updated_utc": "2026-10-28T15:22:01.333505+00:00"
+  "updated_utc": "2026-10-28T15:22:07.212692+00:00"
 }
