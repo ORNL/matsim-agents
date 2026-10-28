@@ -28,7 +28,7 @@ from collections.abc import Iterable, Sequence
 from enum import StrEnum
 from itertools import combinations
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.seeds import PhaseCandidate
@@ -72,6 +72,8 @@ class RankingMode(StrEnum):
 
 class ReferencePhaseEntry(BaseModel):
     """One method-compatible competing polymorph with auditable provenance."""
+
+    model_config = ConfigDict(extra="forbid")
 
     phase_id: str = Field(min_length=1)
     formula: str = Field(min_length=1)
@@ -126,17 +128,14 @@ class ReferenceCompletenessReport(BaseModel):
 class ReferenceEnergySet(BaseModel):
     """Compatible elemental/competing-phase references for hull analysis."""
 
+    model_config = ConfigDict(extra="forbid")
+
     identifier: str
     method_signature: str
     backend: str | None = None
     elemental_energies_eV_per_atom: dict[str, float]
     elemental_entries: dict[str, ElementalReferenceEntry] = Field(default_factory=dict)
     elemental_reference_candidates: list[ElementalReferenceEntry] = Field(default_factory=list)
-    # TODO(#15): replace with typed phase_entries written by the campaign.
-    competing_phases: dict[str, float] = Field(
-        default_factory=dict,
-        description="Formation energies in eV/atom keyed by composition formula.",
-    )
     phase_entries: list[ReferencePhaseEntry] = Field(default_factory=list)
     completeness_policy: ReferenceCompletenessPolicy = Field(
         default_factory=ReferenceCompletenessPolicy
@@ -195,10 +194,6 @@ class ReferenceEnergySet(BaseModel):
             (entry.phase_id, entry.formula, entry.formation_energy_eV_per_atom)
             for entry in self.phase_entries
         ]
-        records.extend(
-            (f"formula:{formula}", formula, energy)
-            for formula, energy in self.competing_phases.items()
-        )
         return records
 
     def audit_completeness(self, target_elements: Iterable[str]) -> ReferenceCompletenessReport:

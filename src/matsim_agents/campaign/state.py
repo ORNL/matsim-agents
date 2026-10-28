@@ -21,12 +21,13 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from matsim_agents.campaign.acquisition import CampaignAcquisitionState
-from matsim_agents.campaign.registry import CandidateRegistry
+from matsim_agents.campaign.registry import CandidateRegistry, structure_content_hash
 from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationPolicy
 from matsim_agents.discovery.stability import (
     RankingMode,
     ReferenceCompletenessReport,
     ReferenceEnergySet,
+    ReferencePhaseEntry,
     StabilityReport,
     recalibrate_hull_reports,
 )
@@ -191,8 +192,33 @@ class CampaignState(BaseModel):
             and self.reference_energies is not None
             and report.reference_set_id == self.reference_energies.identifier
         ):
-            self.reference_energies.competing_phases[report.formula] = (
-                ground_state.formation_energy_eV_per_atom
+            structure_path = ground_state.optimized_structure_path
+            self.reference_energies.phase_entries = [
+                entry
+                for entry in self.reference_energies.phase_entries
+                if entry.phase_id != f"campaign:{report.formula}"
+            ]
+            self.reference_energies.phase_entries.append(
+                ReferencePhaseEntry(
+                    phase_id=f"campaign:{report.formula}",
+                    formula=report.formula,
+                    formation_energy_eV_per_atom=ground_state.formation_energy_eV_per_atom,
+                    method_signature=self.reference_energies.method_signature,
+                    backend=self.reference_energies.backend,
+                    structure_path=structure_path,
+                    structure_hash=(
+                        structure_content_hash(structure_path)
+                        if Path(structure_path).is_file()
+                        else None
+                    ),
+                    total_energy_eV=ground_state.final_energy_eV,
+                    energy_per_atom_eV=ground_state.energy_per_atom_eV,
+                    source="campaign_ground_state",
+                    provenance={
+                        "reference_set_id": self.reference_energies.identifier,
+                        "evidence_level": report.evidence_level.value,
+                    },
+                )
             )
         if (
             report.ranking_mode == RankingMode.CONVEX_HULL

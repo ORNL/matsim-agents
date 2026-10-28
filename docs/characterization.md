@@ -67,7 +67,16 @@ The `reference_energies` file is a `ReferenceEnergySet`:
   "identifier": "mg-o-qe-pbe-v1",
   "method_signature": "qe-pbe-sssp-efficiency-ecut60",
   "elemental_energies_eV_per_atom": {"Mg": "<DFT energy per atom of Mg>", "O": "<...>"},
-  "competing_phases": {"MgO2": "<formation energy per atom, eV/atom>"}
+  "phase_entries": [
+    {
+      "phase_id": "MgO2-rutile",
+      "formula": "MgO2",
+      "formation_energy_eV_per_atom": "<eV/atom>",
+      "method_signature": "<DFT method signature>",
+      "backend": "<DFT backend>",
+      "energy_per_atom_eV": "<raw DFT energy per atom>"
+    }
+  ]
 }
 ```
 

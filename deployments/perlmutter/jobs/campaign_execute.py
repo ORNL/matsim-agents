@@ -239,39 +239,42 @@ def main(argv: list[str] | None = None) -> int:
     refinement = None
     if args.dft_reference_structures:
         raw_references = json.loads(args.dft_reference_structures.read_text(encoding="utf-8"))
-        if not isinstance(raw_references, dict) or not raw_references:
-            parser.error("DFT reference structure manifest must be a non-empty JSON object")
-        if "phases" in raw_references:
-            raw_phases = raw_references["phases"]
-            raw_completeness = raw_references.get("completeness", {})
-        else:
-            raw_phases = raw_references
-            raw_completeness = {}
+        if not isinstance(raw_references, dict) or raw_references.get("schema_version") != 2:
+            parser.error("DFT reference manifest must use schema_version 2")
+        raw_phases = raw_references.get("phases")
+        raw_completeness = raw_references.get("completeness", {})
         if not isinstance(raw_phases, dict) or not raw_phases:
             parser.error("DFT reference manifest 'phases' must be a non-empty object")
         try:
             completeness_policy = ReferenceCompletenessPolicy.model_validate(raw_completeness)
         except ValueError as exc:
             parser.error(f"invalid reference completeness policy: {exc}")
-        reference_paths = {}
-        reference_relax_cell = {}
-        reference_settings = {}
         reference_phases = []
         for phase_id, spec in raw_phases.items():
-            if isinstance(spec, str):
-                reference_paths[str(phase_id)] = Path(spec).expanduser().resolve()
-                continue
-            if not isinstance(spec, dict) or "path" not in spec:
+            required_spec_keys = {"phase_id", "formula", "path"}
+            allowed_spec_keys = required_spec_keys | {
+                "relax_cell",
+                "settings",
+                "source",
+                "provenance",
+                "energy_correction_eV_per_atom",
+            }
+            if (
+                not isinstance(spec, dict)
+                or not required_spec_keys.issubset(spec)
+                or set(spec) - allowed_spec_keys
+            ):
                 parser.error(
-                    f"reference {phase_id!r} must be a path or an object containing 'path'"
+                    f"reference {phase_id!r} must contain phase_id, formula, and path, "
+                    "and no unsupported fields"
                 )
             path = Path(spec["path"]).expanduser().resolve()
             if not path.is_file():
                 parser.error(f"reference structure does not exist: {path}")
             reference_phases.append(
                 ReferenceStructureSpec(
-                    phase_id=str(spec.get("phase_id", phase_id)),
-                    formula=str(spec.get("formula", phase_id)),
+                    phase_id=str(spec["phase_id"]),
+                    formula=str(spec["formula"]),
                     structure_path=path,
                     relax_cell=bool(spec.get("relax_cell", True)),
                     settings=dict(spec.get("settings", {})),
@@ -295,9 +298,6 @@ def main(argv: list[str] | None = None) -> int:
         references.completeness_policy = completeness_policy
         refinement = CampaignDFTRefinementConfig(
             method_signature=args.dft_method_signature,
-            reference_structures=reference_paths,
-            reference_relax_cell=reference_relax_cell,
-            reference_settings=reference_settings,
             reference_phases=reference_phases,
             reference_completeness_policy=completeness_policy,
             reference_energies=references,
