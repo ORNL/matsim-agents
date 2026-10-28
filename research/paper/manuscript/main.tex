@@ -120,7 +120,7 @@ The functional properties of materials are closely related to their chemical com
 
 \Acp{LLM} provide a different capability: they can formulate candidate scientific hypotheses, synthesize domain knowledge and organize computational investigations. Coscientist and SciAgents exemplify tool-supported scientific planning and multi-agent hypothesis formulation~\cite{boiko2023coscientist,ghafarollahi2025sciagents}. These capabilities do not turn language-generated hypotheses into quantitative physical evidence. A plausible explanation may conflict with numerical observations, and an incomplete or failed calculation may leave the scientific question unresolved. The difficulty is thus not only to execute a requested tool, but also to identify which observables are relevant, evaluate the strength of their support and decide what additional calculation is informative.
 
-Existing scientific workflow and agentic systems address complementary portions of this problem. Materials Informatics for Structure--Property Relationships (MISPR) automates prescribed density-functional and molecular-simulation workflows with provenance and error handling~\cite{atwi2022mispr}. ChemGraph supports language-model-driven chemical tool orchestration and benchmarks computational task completion~\cite{chemgraph2026}; El Agente Potente emphasizes structured, reproducible atomistic execution~\cite{potente2026}. MASTER and MAESTRO couple agentic reasoning to numerical calculations in catalyst discovery and optimization~\cite{master2026,maestro2026}. Together, these approaches have advanced scientific automation by enabling reproducible simulation workflows and incorporating computational evidence into materials exploration. However, because their evaluations primarily address workflow execution or the discovery and optimization of catalysts, they provide limited insight into the role of language-model reasoning in the characterization of a given material. In particular, it remains unclear whether using language models to select calculations and interpret their outcomes improves characterization reliability relative to an adaptive numerical workflow equipped with the same computational methods.
+Materials-science LLM agents now span several complementary tasks. HoneyComb combines a curated materials knowledge base with a tool hub and adaptive retrieval~\cite{zhang2024honeycomb}; ChatMOF uses an agent, toolkit and evaluator for MOF retrieval, property prediction and structure generation~\cite{kang2024chatmof}; and MatSciAgent presents modular LLM agents for multi-task computational materials science~\cite{chaudhari2026matsciagent}. Other scientific workflow and agentic systems address complementary portions of the problem: MISPR automates prescribed density-functional and molecular-simulation workflows with provenance and error handling~\cite{atwi2022mispr}; ChemGraph supports language-model-driven chemical tool orchestration and benchmarks computational task completion~\cite{chemgraph2026}; and El Agente Potente emphasizes structured, reproducible atomistic execution~\cite{potente2026}. MASTER and MAESTRO couple agentic reasoning to numerical calculations in catalyst discovery and optimization~\cite{master2026,maestro2026}. These contributions establish important precedents in materials-science agents, workflow automation and computational discovery. The narrower question evaluated here is whether language-model-guided interpretation and follow-up calculation selection improve characterization reliability or efficiency relative to a capability-matched adaptive numerical workflow using the same computational methods.
 
 Unlike materials discovery or optimization, where the objective is to identify candidates with desirable properties, materials characterization focuses on establishing the physical properties and behavior of a given material. This process often requires combining complementary computational methods, evaluating the reliability of their predictions, and determining whether the available numerical evidence is sufficient to support a scientific conclusion. These considerations motivate computational approaches capable of coordinating atomistic simulations with the formulation and assessment of scientific hypotheses.
 
@@ -153,6 +153,9 @@ El Agente Potente~\cite{potente2026} & High-throughput MLIP-based atomistic simu
 MASTER~\cite{master2026} & Hierarchical reasoning for catalyst discovery & LLM design/review strategies coupled to validated DFT and evaluated against agentic and heuristic baselines. & Evaluation is centered on catalyst-search performance and simulation efficiency; general characterization completeness, scientific abstention and three-layer backend substitution are not the measured objectives. \\
 \addlinespace
 MAESTRO~\cite{maestro2026} & Iterative single-atom catalyst optimization & Specialized design, calculation, reflection, and history-summary agents; simulation-informed candidate modification. & Published objective is optimization of single-atom catalysts; a task-independent characterization benchmark and interchangeable DFT/MLIP/LLM validation are outside its reported primary evaluation. \\
+HoneyComb~\cite{zhang2024honeycomb} & Materials-science knowledge retrieval and tool use & Curated materials knowledge base, materials tool hub, and adaptive retrieval across knowledge and tools. & Evaluates materials-science tasks; the present capability-matched characterization comparison is a distinct question. \\
+ChatMOF~\cite{kang2024chatmof} & MOF retrieval, property prediction, and structure generation & Agent, toolkit, and evaluator for natural-language-driven MOF tasks. & Evaluates retrieval, prediction, and generation; not the capability-matched characterization comparison studied here. \\
+MatSciAgent~\cite{chaudhari2026matsciagent} & Multi-task computational materials science & Modular LLM agents for computational materials-science tasks. & Addresses a distinct task suite; this work evaluates iterative characterization against a matched adaptive numerical policy. \\
 \addlinespace
 \textbf{MATSIM-AGENTS (this work)} & \textbf{Automated atomistic materials characterization as a foundation for discovery} & Configurable LLMs, HydraGNN/UMA/MACE MLIPs, VASP/QE DFT interfaces; MLIP exploration, labeling, fine-tuning, structured evidence review, persistent execution, and HPC deployment. & Reported: unattended Perlmutter campaigns, numerical labeling throughput, allocation-boundary restart. \textbf{To validate:} independent-test decisions, agent value, complete backend substitution, and cross-facility numerical execution. \\
 \bottomrule
@@ -262,7 +265,7 @@ multi-\ac{LLM} peer review, and slash commands (\texttt{/relax}, \texttt{/al},
 \subsection{Candidate structures, atomistic characterization and scientific backends}
 
 \paragraph{Structure provenance and acquisition.}
-Composition proposals are converted to candidate configurations through the existing crystallographic-seed and symmetry-constrained generation interfaces, including AFLOW-based structure retrieval and PyXtal-based generation where configured. \texttt{matsim\_agents.campaign.registry} maintains \texttt{StructureCandidateRecord} entries with candidate identifiers, composition, origin, prototype or space-group metadata, random seed, parent identifier and structure hashes. \texttt{CandidateEvaluationRecord} stores the chosen backend, checkpoint identity, convergence, energy, force and uncertainty or novelty descriptors. Candidate equivalence after relaxation is treated separately from equivalence of starting structures: relaxed-family clustering can prevent multiple structurally equivalent candidates from consuming the same acquisition budget. The registry also implements structure-content hashing and structure-averaged \ac{SOAP} descriptors for structural novelty. Policy parameters for random, exploitation, exploration and adaptive acquisition are explicit and include exploration/exploitation quotas and limits on repeated selection from the same relaxed family. These choices are testable numerical selection policies, not proof that the selected configurations are novel phases.
+Composition proposals are converted to candidate configurations through the existing crystallographic-seed and symmetry-constrained generation interfaces, including AFLOW-based structure retrieval~\cite{curtarolo2012aflow} and PyXtal-based generation~\cite{fredericks2021pyxtal} where configured. \texttt{matsim\_agents.campaign.registry} maintains \texttt{StructureCandidateRecord} entries with candidate identifiers, composition, origin, prototype or space-group metadata, random seed, parent identifier and structure hashes. \texttt{CandidateEvaluationRecord} stores the chosen backend, checkpoint identity, convergence, energy, force and uncertainty or novelty descriptors. Candidate equivalence after relaxation is treated separately from equivalence of starting structures: relaxed-family clustering can prevent multiple structurally equivalent candidates from consuming the same acquisition budget. The registry also implements structure-content hashing and structure-averaged \ac{SOAP} descriptors~\cite{bartok2013soap} for structural novelty. Policy parameters for random, exploitation, exploration and adaptive acquisition are explicit and include exploration/exploitation quotas and limits on repeated selection from the same relaxed family. These choices are testable numerical selection policies, not proof that the selected configurations are novel phases.
 The third layer performs the scientific computations by evaluating energies and forces with a
 configuration-selected \ac{MLIP} backend and escalates flagged structures to
 \ac{DFT} through the \ac{AL} and warm-start protocols. Three pretrained
@@ -288,11 +291,11 @@ a warm-start pre-relaxer, or the initial model for \ac{AL}.
 \subsubsection{Active learning and DFT evidence acquisition}
 
 \paragraph{Acquisition, labeling and validation software.}
-The acquisition loop resides in \texttt{matsim\_agents.active\_learning.loop}, with candidate production, uncertainty estimation, \ac{DFT} protocol definition and training delegated to corresponding modules in \texttt{matsim\_agents.active\_learning}. Ensemble disagreement and Monte Carlo dropout provide alternative uncertainty indicators; these scores motivate acquisition but are not interpreted as calibrated physical errors without validation. DFT label preparation preserves numerical protocol information, and the loop retains per-configuration provenance including candidate, seed structure, trajectory, time index, active-learning iteration and physical conditions. Labels from failed or unconverged calculations are tracked distinctly from admissible converged labels.
+The acquisition loop resides in \texttt{matsim\_agents.active\_learning.loop}, with candidate production, uncertainty estimation, \ac{DFT} protocol definition and training delegated to corresponding modules in \texttt{matsim\_agents.active\_learning}. Ensemble disagreement and Monte Carlo dropout provide alternative uncertainty indicators~\cite{lakshminarayanan2017,gal2016,schran2020}; these scores motivate acquisition but are not interpreted as calibrated physical errors without validation. DFT label preparation preserves numerical protocol information, and the loop retains per-configuration provenance including candidate, seed structure, trajectory, time index, active-learning iteration and physical conditions. Labels from failed or unconverged calculations are tracked distinctly from admissible converged labels.
 
 \paragraph{Independent adaptation assessment.}
 \texttt{matsim\_agents.datasets.splits} constructs explicit training, validation and test partitions using frame, temporal-block, trajectory, structure-family, composition, condition, active-learning-iteration or declared group criteria. It writes content-addressed split manifests, hashes, membership lists and leakage diagnostics; missing metadata for a required grouping rule raises an error rather than invoking a silent frame-level fallback. The fine-tuning evaluator \texttt{matsim\_agents.active\_learning.finetune\_eval} requires such an evaluation configuration. HydraGNN, UMA and MACE can therefore be compared against identical partitions. Model selection or promotion is based on validation performance; the test partition is evaluated only after that decision is saved. \texttt{matsim\_agents.active\_learning.eval\_report} supports per-frame and per-group error summaries, paired differences, independent-group bootstrap intervals and comparisons across splits, training seeds and acquisition iterations. These tools establish a reproducible evaluation protocol; measured model improvements must still be obtained from the specified training campaigns.
-When the validation gate escalates a structure, \textsc{matsim-agents} can execute a configurable number of active-learning iterations. Figure~\ref{fig:acquisition_schematic} summarizes the numerical loop: short MLIP-driven molecular-dynamics trajectories generate off-equilibrium candidates; filtering and acquisition policies select snapshots; the selected structures are evaluated with a user-selected DFT solver; and converged labels are retained for optional backend-dependent MLIP adaptation. Each iteration records candidate counts, DFT convergence, timing, and other execution metadata in persistent state. Retraining and promotion are distinct decisions: adding DFT labels does not automatically authorize replacement of the deployed model. The detailed candidate-scoring methods and experimentally measured adaptation outcomes are provided in Section~\ref{sec:scientific_results}.
+When the validation gate escalates a structure, \textsc{matsim-agents} can execute a configurable number of active-learning iterations, following established uncertainty-guided and concurrent-learning approaches~\cite{smith2018,vandermause2020,vandermause2022,zhang2020dpgen,podryabinkin2017}. Figure~\ref{fig:acquisition_schematic} summarizes the numerical loop: short MLIP-driven molecular-dynamics trajectories generate off-equilibrium candidates; filtering and acquisition policies select snapshots; the selected structures are evaluated with a user-selected DFT solver; and converged labels are retained for optional backend-dependent MLIP adaptation. Each iteration records candidate counts, DFT convergence, timing, and other execution metadata in persistent state. Retraining and promotion are distinct decisions: adding DFT labels does not automatically authorize replacement of the deployed model. The detailed candidate-scoring methods and experimentally measured adaptation outcomes are provided in Section~\ref{sec:scientific_results}.
 
 \begin{figure}[tb]
 \centering
@@ -657,6 +660,100 @@ across the three alloy fixtures.}
 \bottomrule
 \end{tabular}
 \end{table*}
+
+\subsection{Material-specific VASP reference parameterization for E3}
+\label{sec:results:e3_vasp_parameterization}
+The settings below define a proposed protocol for future E3 reference generation;
+they are not settings or results of the historical campaign described above.
+E3 will use VASP with PBE-family PAW datasets for all six systems. The historical
+PBE single-point calculations and the separate historical Nb--Ta--O Quantum
+ESPRESSO records retain their original provenance and are not relabeled or
+pooled with these references. Numerical values below are starting specifications
+for author review and representative convergence qualification, not evidence of
+convergence. PAW datasets define the core--valence representation, whereas PBE
+specifies the exchange--correlation approximation; Hubbard $+U$ and dispersion
+are additional modeling choices, applied only where physically justified.
+Energies from different backends or method signatures (including changes to
+functional, PAW dataset, spin setup, $U$, or dispersion) must not be pooled in
+an uncorrected reference set or convex hull.
+
+\begin{table*}[htbp]
+\centering
+\caption{Prospective material-specific VASP reference branches and starting inputs for E3. All settings are candidates for qualification, not completed or converged calculations.}
+\label{tab:e3_vasp_parameters}
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabularx}{\textwidth}{@{}>{\RaggedRight\arraybackslash}p{0.13\textwidth}>{\RaggedRight\arraybackslash}p{0.22\textwidth}>{\RaggedRight\arraybackslash}p{0.30\textwidth}>{\RaggedRight\arraybackslash}X@{}}
+\toprule
+Material & Method and correction & Candidate PAW and starting inputs & Required qualification \\
+\midrule
+LiFePO$_4$ & Spin-polarized PBE+$U$ (Dudarev); Fe $3d$, $U_{\mathrm{eff}}=4.3$\,eV candidate, with 3.5 and 5.0\,eV sensitivity branches. & Li\_sv/Fe\_pv/P/O; \texttt{ENCUT}=650\,eV, \texttt{KSPACING}=0.20\,\AA$^{-1}$, \texttt{ISPIN}=2, Gaussian smearing ($\sigma=0.05$\,eV). & Compare collinear antiferromagnetic orderings and ferromagnetic initialization in a representative cell; retain initial and final site moments. Ground the $U$ choice in independent redox, magnetic, and structural evidence and compare a linear-response estimate where feasible. \\
+Cantor FCC alloy & Spin-polarized PBE; no automatic $+U$. & Cr\_pv/Mn\_pv/Fe\_pv/Co\_pv/Ni\_pv; \texttt{ENCUT}=480\,eV, \texttt{KSPACING}=0.20\,\AA$^{-1}$, \texttt{ISPIN}=2, metallic smearing (\texttt{ISMEAR}=1, $\sigma=0.20$\,eV). & Compare magnetic initializations, chemically distinct ordered cells and special quasirandom structures; assess cell-size, volume, and relaxation dependence. \\
+NbTaVHfZrTi BCC alloy & PBE baseline without default $+U$; qualify semicore choices for Nb, Ta and other transition metals. & Nb\_pv/Ta\_pv/V\_pv/Hf\_pv/Zr\_sv/Ti\_pv; \texttt{ENCUT}=345\,eV, \texttt{KSPACING}=0.20\,\AA$^{-1}$, nonmagnetic baseline with metallic smearing (\texttt{ISMEAR}=1, $\sigma=0.20$\,eV). & Compare chemical orderings, supercell sizes, and semicore choices. Test spin-polarized starts when moments or independent evidence warrant them; do not constrain relaxations to remain BCC if unstable. \\
+Phosphorene & PBE; nonmagnetic baseline unless evidence indicates otherwise. & P; \texttt{ENCUT}=335\,eV, in-plane \texttt{KSPACING}=0.15\,\AA$^{-1}$ and one point normal to the sheet, \texttt{ISPIN}=1, Gaussian smearing ($\sigma=0.05$\,eV). & Qualify vacuum lengths of 18/20/22/25\,\AA and in-plane sampling. Fix the out-of-plane cell during ionic relaxation; compare unstrained structures and $\pm1\%$/$\pm2\%$ in-plane strains. \\
+Zn(HCOO)$_2$ metal--organic framework & PBE-D3(BJ) proposed as the reference; verify the meaning of VASP \texttt{IVDW}=12 for the pinned executable version. & Zn/C/H/O; \texttt{ENCUT}=520\,eV, \texttt{KSPACING}=0.20\,\AA$^{-1}$, \texttt{ISPIN}=1, Gaussian smearing ($\sigma=0.05$\,eV). & Compare with PBE without dispersion on a representative subset, but do not mix those energies into the selected reference set. Verify proton orientations, guest occupancy, framework geometry, force/stress and cell-size dependence. \\
+Nb--Ta--O & Establish the declared domain with converged PBE and no $+U$; a separate $+U$ branch requires independent physical justification. & Nb\_pv/Ta\_pv/O; \texttt{ENCUT}=520\,eV, \texttt{KSPACING}=0.20\,\AA$^{-1}$; use phase-appropriate spin and smearing, including a triplet oxygen reference. & Qualify standard versus semicore Nb/Ta, reduced-oxide states, magnetic starts, and all predeclared unary/binary/ternary formulas and polymorphs. Never tune $U$ to stabilize a preferred phase. A qualified hull supports stability only within its predeclared, method-compatible domain, not globally exhaustive thermodynamic stability. \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+The LiFePO$_4$ $U$ candidate is literature-motivated but not validated for this
+campaign; compare it with independent redox, magnetic, and structural evidence
+and, where feasible, a linear-response estimate
+\cite{dudarev1998,cococcioni2005,wang2006,zhou2004}. D3(BJ) denotes the proposed
+Grimme D3 dispersion correction with Becke--Johnson damping
+\cite{grimme2010,grimme2011}. Hubbard $+U$ and dispersion are separate
+modeling choices, not universal improvements. Changes in functional, PAW
+dataset, spin setup, $U$, or dispersion define distinct method signatures;
+energies from different signatures or backends must not be pooled in an
+uncorrected reference set or convex hull.
+
+\paragraph{Shared controls and convergence qualification.}
+For each chosen PAW set, begin cutoff qualification at 1.0, 1.15, 1.30, and
+1.40 times the largest component \texttt{ENMAX}; the final cutoff is the lowest
+value passing the frozen energy, force, and stress tolerances for every phase
+class in that method-specific reference set. Do not carry forward
+\texttt{ENCUT}=520\,eV by assumption. Start reciprocal-space qualification at
+\texttt{KSPACING}=0.30, 0.25, 0.20, and 0.15\,\AA$^{-1}$ (with a single
+point normal to the phosphorene sheet), and test electronic thresholds of
+\texttt{EDIFF}=10$^{-5}$, 10$^{-6}$, and 10$^{-7}$\,eV. Compare smearing type
+and width for metals and small-gap systems, magnetic initial states where
+applicable, and relaxed geometries under successively tighter ionic-force and
+residual-stress limits. Proposed acceptance targets are energy changes below
+1\,meV/atom, maximum residual force below 0.01\,eV/\AA, and residual stress
+below 0.2\,GPa, with stricter hull-energy checks if needed to resolve the
+nearest competing phases. These targets must be reviewed and then tested; they
+are not achieved results.
+
+The shared explicit starting relaxation inputs are \texttt{GGA=PE},
+\texttt{PREC=Accurate}, \texttt{ALGO=Normal}, \texttt{NELM=120},
+\texttt{EDIFF}$=10^{-6}$\,eV, \texttt{EDIFFG}$=-0.01$\,eV/\AA,
+\texttt{NSW=200}, \texttt{IBRION=2}, \texttt{LASPH=.TRUE.},
+\texttt{LREAL=.FALSE.}, and \texttt{ISYM=0}; use \texttt{ISIF=3} for bulk
+ion-and-cell relaxation and \texttt{ISIF=2} for phosphorene with the vacuum-axis
+cell fixed. Use the per-material spin and smearing starts in
+Table~\ref{tab:e3_vasp_parameters}, and record structure-specific
+\texttt{MAGMOM}; use
+\texttt{LMAXMIX=4} for transition-metal calculations. For fixed-geometry
+single-point labels use \texttt{NSW=0} and \texttt{IBRION=-1} with the same
+qualified energy-affecting settings. The LiFePO$_4$ Dudarev branch uses
+\texttt{LDAU=.TRUE.}, \texttt{LDAUTYPE=2}, and species-ordered
+\texttt{LDAUL}, \texttt{LDAUU}, and \texttt{LDAUJ}; the MOF branch uses
+\texttt{IVDW=12} only after confirming its meaning for the pinned VASP version.
+The rounded starting cutoffs in Table~\ref{tab:e3_vasp_parameters} are
+approximately 1.3 times the largest proposed component \texttt{ENMAX} in each
+set. They are qualification candidates, not converged values.
+
+Generate geometry-converged structures for reference phases before separate
+fixed-geometry single-point labels. Record the full input, ordered species,
+PAW component hashes, VASP version, convergence history, magnetic initialization,
+and a method signature. The local PAW inventory inspected for planning has no
+verified library-release identifier and contains mixed component dates; its
+component identities and hashes are an audit snapshot, not authorization or a
+claim that the library is homogeneous. The corresponding proposed selections,
+component metadata, compatibility rules, and resource-estimation gate are
+specified in the run plan. Do not commit or redistribute licensed PAW files.
 
 The completed matrix reveals a clear dependence on the selected backend. On the disordered \ac{BCC}
 alloys, UMA-relaxed geometries reduce total \ac{DFT} \ac{SCF} work across

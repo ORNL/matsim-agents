@@ -87,6 +87,89 @@ The provisional former pilot cap of 8 DFT requests per policy/material is **not 
 
 **Reviewer-facing coverage test:** all six systems must appear in E3a when a supported model and valid independent evidence are available; report unsupported cells and data gaps separately. Every failing supported combination must have a documented E3 outcome: retained pretrained model if it meets criteria, completed adaptation when justified, bounded unsuccessful adaptation, scientifically valid inability to train, or explicit resource/data limitation. For Nb-Ta-O, report the fresh convex-hull result, energy-above-hull values, hull vertices/decompositions, reference completeness, and limitations; do not claim completeness beyond the frozen coverage contract. Eighteen baseline evaluations do not imply eighteen adaptations.
 
+### Proposed material-specific VASP reference parameterization for E3
+
+This is a prospective protocol, not a record of completed calculations. It preserves the historical five-system PBE single-point settings and separate Nb-Ta-O QE provenance without retroactively changing either. All E3 DFT references are to be generated with VASP and PBE-family PAW potentials. Exact method signatures must include VASP version, functional, PAW component hashes and POSCAR species order, all energy-affecting INCAR/KPOINTS controls, magnetic initialization, and any Hubbard or dispersion convention. Any change creates a distinct reference set.
+
+| System | Proposed method branch | Structural and electronic controls to qualify |
+|---|---|---|
+| LiFePO4 | Spin-polarized PBE+U, Dudarev `LDAUTYPE=2`; Fe 3d `U_eff=4.3 eV` central candidate, sensitivity branches at 3.5 and 5.0 eV. For POSCAR order Li Fe P O: `LDAUL=-1 2 -1 -1`, `LDAUU=0 4.3 0 0`, `LDAUJ=0 0 0 0`. | Compare distinct collinear AFM orderings and FM initialization in a cell that represents them; preserve `MAGMOM` and final site moments. Use linear-response U where feasible and compare redox, magnetic, and structural observables to independent evidence. These U values are candidates, not validated settings. |
+| Cantor FCC CrMnFeCoNi | Spin-polarized PBE, no automatic `+U`. | Compare multiple magnetic initializations, chemically distinct ordered cells, and special quasirandom structures; assess cell/volume and relaxation dependence. |
+| NbTaVHfZrTi BCC | PBE without default `+U`; compare Nb/Ta and other transition-metal semicore PAW variants. | Compare chemical orderings/SQS, cell sizes, and structural relaxations. Test magnetism where relaxed moments or independent evidence support it; do not constrain a relaxation to remain BCC if it is unstable. |
+| Phosphorene | PBE, nonmagnetic baseline unless evidence indicates otherwise. | One k-point normal to the sheet; qualify vacuum 18/20/22/25 A and in-plane `KSPACING` 0.20/0.15/0.12 A^-1. Hold out-of-plane cell length fixed for ionic relaxation and compare unstrained and +/-1%, +/-2% in-plane strains. |
+| Zn(HCOO)2 MOF | PBE-D3(BJ), VASP `IVDW=12` subject to executable-version verification. PBE without dispersion is a qualification comparator, not mixable with the selected reference set. | Verify proton orientations, guest occupancy, framework geometry, and cell relaxation. Compare dispersion effect on a representative subset and qualify force, stress, and cell-size dependence before freezing one convention. |
+| Nb-Ta-O | First establish the declared domain with converged PBE, no `+U`. A separate PBE+U branch is allowed only if reduced-phase localization and independent physical evidence justify it. | Include O2 triplet, all frozen unary/binary/ternary formula and polymorph requirements, relevant magnetic starts, and standard-versus-semicore Nb/Ta sensitivity. Never choose U to stabilize a preferred phase. |
+
+The explicit starting relaxation input candidate is `GGA=PE`, `PREC=Accurate`, `ALGO=Normal`, `NELM=120`, `EDIFF=1E-6`, `EDIFFG=-0.01`, `NSW=200`, `IBRION=2`, `LASPH=.TRUE.`, `LREAL=.FALSE.`, and `ISYM=0`; use `ISIF=3` for bulk ion+cell relaxations and `ISIF=2` for phosphorene with the vacuum-axis lattice fixed. Start with the per-system `ENCUT` and `KSPACING` below. Use `ISMEAR=1, SIGMA=0.20` for metallic phases and `ISMEAR=0, SIGMA=0.05` for insulating/semiconducting phases; qualify both where phase character is uncertain. Set and record structure-specific `MAGMOM`; use `LMAXMIX=4` for transition-metal calculations. Use `LDAU=.TRUE., LDAUTYPE=2` only for the LiFePO4 +U branch. `IVDW=12` is only the proposed MOF PBE-D3(BJ) branch and must be verified against the pinned VASP version. For fixed-geometry single-point labels, use `NSW=0`, `IBRION=-1`, and the same qualified energy-affecting parameters as the separately converged geometry.
+
+| System | Starting ENCUT (eV) from proposed local ENMAX | Starting KSPACING (A^-1) | Spin/smearing starting point | Additional tags |
+|---|---:|---:|---|---|
+| LiFePO4 | 650 | 0.20 | `ISPIN=2`; `ISMEAR=0`, `SIGMA=0.05` | Dudarev `LDAUL=-1 2 -1 -1`, `LDAUU=0 4.3 0 0`, `LDAUJ=0 0 0 0`; `LMAXMIX=4` |
+| Cantor FCC | 480 | 0.20 | `ISPIN=2`; `ISMEAR=1`, `SIGMA=0.20` | Multiple FM/AFM/ferrimagnetic `MAGMOM` initializations |
+| NbTaVHfZrTi BCC | 345 | 0.20 | `ISPIN=1` baseline; metallic `ISMEAR=1`, `SIGMA=0.20`; test spin-polarized starts when justified | `ISIF=3`; symmetry-unconstrained relaxations |
+| Phosphorene | 335 | 0.15 in-plane; one point normal | `ISPIN=1`; `ISMEAR=0`, `SIGMA=0.05` | `ISIF=2`; fix vacuum-axis lattice, explicitly set strained in-plane cell |
+| Zn(HCOO)2 MOF | 520 | 0.20 | `ISPIN=1`; `ISMEAR=0`, `SIGMA=0.05` | `IVDW=12` for frozen PBE-D3(BJ) signature |
+| Nb-Ta-O | 520 | 0.20 | `ISPIN=2` for relevant reduced oxides/O2 triplet; phase-specific smearing as above | `ISIF=3`; compare relevant magnetic/nonmagnetic initializations; baseline `+U` off |
+
+These rounded starting cutoffs are approximately 1.3 times the largest local ENMAX in each proposed component set (LiFePO4 650, Cantor 480, BCC 345, phosphorene 335, MOF 520, Nb-Ta-O 520 eV). These are qualification candidates, not converged values. Freeze KPOINTS centering and mesh parity explicitly for composition/polymorph comparisons; do not rely on implicit defaults when signatures are compared.
+
+#### PAW selection manifest: local audit snapshot
+
+The following variants are proposed for qualification, not yet frozen production inputs. The ignored local directory `external/vasp6/potcar` has 314 component directories, mixed component dates, and no verified parent release/version marker. The library release is therefore **unknown**; the local inventory does not establish a homogeneous official VASP release. `VRHFIN`/electron configurations below describe valence channels; hashes identify local components without including licensed contents. Verify against the authorized frozen library before use. Never commit or redistribute POTCAR files.
+
+| System | POSCAR element order and proposed POTCAR variants |
+|---|---|
+| LiFePO4 | Li `Li_sv`, Fe `Fe_pv`, P `P`, O `O` |
+| Cantor FCC | Cr `Cr_pv`, Mn `Mn_pv`, Fe `Fe_pv`, Co `Co_pv`, Ni `Ni_pv` |
+| NbTaVHfZrTi BCC | Nb `Nb_pv`, Ta `Ta_pv`, V `V_pv`, Hf `Hf_pv`, Zr `Zr_sv`, Ti `Ti_pv` |
+| Phosphorene | P `P` |
+| Zn(HCOO)2 MOF | Zn `Zn`, C `C`, H `H`, O `O` |
+| Nb-Ta-O | Nb `Nb_pv`, Ta `Ta_pv`, O `O` |
+
+| Variant | Local TITEL | Valence configuration; ZVAL | ENMAX (eV) | Component SHA-256 |
+|---|---|---:|---:|---|
+| Li_sv | `PAW_PBE Li_sv 10Sep2004` | 1s2 2s1; 3 | 499.034 | `201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b` |
+| Fe_pv | `PAW_PBE Fe_pv 02Aug2007` | 3p6 3d7 4s1; 14 | 293.238 | `e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5` |
+| P | `PAW_PBE P 06Sep2000` | 3s2 3p3; 5 | 255.040 | `ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8` |
+| O | `PAW_PBE O 08Apr2002` | 2s2 2p4; 6 | 400.000 | `8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64` |
+| Cr_pv | `PAW_PBE Cr_pv 02Aug2007` | 3p6 3d5 4s1; 12 | 265.681 | `836672959fc86f3b167531577dbf63d7fb0b8d96aaf8b40fb3c4265879bd744b` |
+| Mn_pv | `PAW_PBE Mn_pv 02Aug2007` | 3p6 3d5 4s2; 13 | 269.864 | `5da6f925d338804d4244b231b43927f3fccb021320fc01db0f865b4eda5a756d` |
+| Co_pv | `PAW_PBE Co_pv 23Apr2009` | 3p6 3d8 4s1; 15 | 271.042 | `bb6cd0e09b76151a386fa1d59cf5b7f0bf2b7d9de470b65fc1e1b9431ab4e9bd` |
+| Ni_pv | `PAW_PBE Ni_pv 06Sep2000` | 3p6 3d9 4s1; 16 | 367.986 | `298ae0c75c9017ac7c19a9201530db0621deb288a6cb951496859d69da6505eb` |
+| Nb_pv | `PAW_PBE Nb_pv 08Apr2002` | 4p6 4d4 5s1; 11 | 208.608 | `086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114` |
+| Ta_pv | `PAW_PBE Ta_pv 07Sep2000` | 5p6 5d3 6s2; 11 | 223.667 | `ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa` |
+| V_pv | `PAW_PBE V_pv 07Sep2000` | 3p6 3d3 4s2; 11 | 263.673 | `7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0` |
+| Hf_pv | `PAW_PBE Hf_pv 06Sep2000` | 5p6 5d2 6s2; 10 | 220.334 | `db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84` |
+| Zr_sv | `PAW_PBE Zr_sv 04Jan2005` | 4s2 4p6 4d2 5s2; 12 | 229.898 | `e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0` |
+| Ti_pv | `PAW_PBE Ti_pv 07Sep2000` | 3p6 3d2 4s2; 10 | 222.335 | `1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba` |
+| Zn | `PAW_PBE Zn 06Sep2000` | 3d10 4s2; 12 | 276.723 | `a9e75569c74432b6efe4f522da7317143f7ca230c1076b8adbff8e3ef9494c0b` |
+| C | `PAW_PBE C 08Apr2002` | 2s2 2p2; 4 | 400.000 | `e324f39f282d3fd6b99a7bff390f4b2441edd3dd3eac607d1f1c01376f3d0dc0` |
+| H | `PAW_PBE H 15Jun2001` | 1s1; 1 | 250.000 | `c7c1440066f80b3689496d8a45f8df6af183c40e59b514734edddfaa6840a3be` |
+
+Nb/Ta sensitivity candidates are Nb_pv versus Nb_sv, and Ta_pv versus standard Ta; select neither by label alone. Local Nb standard is absent; Nb_pv and Nb_sv are available. The local Nb_sv metadata are `PAW_PBE Nb_sv 25May2007`, ZVAL 13, ENMAX 293.235 eV, SHA-256 `6bc08b216e11c48e1663f63de7bbb5c7f96f184a6467d89e3bbffbc0a9d365ac`. Standard Ta is `PAW_PBE Ta 17Jan2003`, ZVAL 5, ENMAX 223.667 eV, SHA-256 `75c5a08bd44bb348e7da4ead769cdc9edbc7cc8f8aefe4bb662c56e29b0eb2ec`. For Cantor, `*_pv` is a candidate set, not an assumption that semicore is superior to standard Cr/Mn/Fe/Co/Ni. Compare on representative structures, then freeze a consistent set and requalify the cutoff.
+
+#### Convergence and sensitivity protocol
+
+1. **Cutoff:** test 1.00, 1.15, 1.30, and 1.40 times the largest component ENMAX for each method/PAW signature, including the hardest selected variant. Freeze the minimum passing cutoff separately for each compatible method family; changing PAWs restarts this test.
+2. **Reciprocal sampling:** test `KSPACING` 0.30, 0.25, 0.20, and 0.15 A^-1 for bulk systems. For phosphorene also test 0.20, 0.15, and 0.12 A^-1 in-plane, one point normal to the layer, and vacuum 18/20/22/25 A. Check mesh parity and equivalent density across compared cells.
+3. **Electronic and ionic convergence:** test `EDIFF` 1e-5, 1e-6, and 1e-7 eV; compare smearing method and widths 0.05/0.10/0.20 eV for metals and near-metallic phases. Relax reference geometries to maximum force <0.01 eV/A and residual stress <0.2 GPa (2D systems: in-plane stress; vacuum-direction cell fixed). Recheck tighter settings for near-degenerate hull phases.
+4. **Acceptance:** target changes below 1 meV/atom in relative energies after cutoff/k-point refinement and stable phase ordering within numerical uncertainty. Tighten further if this cannot resolve nearest hull competitors; otherwise report ambiguity. Retain failed attempts; SCF success alone is not geometry convergence.
+5. **Distinct tasks:** label fixed, predeclared geometries with `NSW=0`; generate hull/reference energies from separately relaxed and converged structures under the same final signature. Record relaxation and static signatures separately, including any one-time correction.
+6. **Material sensitivities:** LiFePO4 tests U branches, magnetic ordering, local Fe moments, redox energies, and structural response. Cantor/BCC test magnetic starts and chemical order/SQS; BCC adds PAW semicore comparisons. Phosphorene tests vacuum, in-plane sampling, fixed-c versus relaxed-c, and +/-1% and +/-2% strain. MOF tests PBE versus PBE-D3(BJ) on a representative subset, proton/guest/framework alternatives, and cell/force/stress convergence; only the frozen qualified dispersion method enters its E3 references. Nb-Ta-O tests standard/semicore Nb/Ta and localization under baseline PBE; a +U branch requires independent evidence and its own compatible reference set.
+
+#### Energy compatibility and hull rules
+
+- A method signature includes backend/code version, XC functional, PAW component hashes/order, energy-affecting INCAR controls, Hubbard site/orbital/U/J and double-counting convention, dispersion implementation/parameters, spin treatment, and energy correction/normalization convention. Store raw totals with signatures. Do not pool PBE, PBE+U, PBE-D3(BJ), QE, or different PAW hashes as interchangeable energies.
+- LiFePO4 +U target and comparison phases require consistent Fe PAW, U, projector, and double-counting convention. Keep PBE and every U branch separate; never combine energies across U branches.
+- Every MOF phase entering the selected reference set uses the same frozen PBE-D3(BJ) convention. PBE-only results are sensitivity data, not substitute phases.
+- The Nb-Ta-O baseline hull uses only fresh, geometry-converged VASP PBE references under the same PAW set, cutoff policy, magnetic rules, O2 correction convention, and frozen elemental/binary/ternary formula and polymorph domain. Apply formula, polymorph, and convergence/compatibility gates independently. A finite domain permits only a domain-qualified hull, not globally exhaustive stability.
+- If Nb/Ta +U is physically justified, keep it as a separate branch. Do not add selectively corrected reduced oxides to the PBE hull. A corrected hull requires a defensible, consistent correction convention and complete compatible elemental/competing references; otherwise report phase-level U sensitivity without a corrected hull.
+- Matched C and D use the same frozen VASP signature, candidate universe, evidence contract, and attempted-label budget. Ledger evidence-mandated DFT separately from MLIP-training acquisitions. No production work is authorized here.
+
+#### Additional resource cost
+
+Additional production resource cost is **unknown and presently unquantifiable**. The PAW release, final structure/formula counts, selected cutoffs, magnetic/convergence workload, retry rate, intended concurrency, approved facility/account cap, and billable units are not frozen. Historical QE timings and unrelated qualification runs cannot estimate this six-material VASP workload. After explicit approval, time representative structures spanning actual method signatures; join application timers to scheduler parent/child allocations; retain failures and restarts; and estimate distributions by material/workload. Calculate node-hours and physical accelerator-hours from reserved resources and elapsed time; calculate monetary cost only from verified facility billing rules. Add declared setup/recovery headroom and hard stage caps. No pilot or production jobs are authorized by this estimate.
+
 ### E4: Matched three-facility characterization
 | Parameter | Working setup | Status / decision needed |
 |---|---|---|
