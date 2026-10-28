@@ -325,6 +325,31 @@ requires no DFT allocation.
 	variables is set in the inspected shell. This is an environment observation,
 	not evidence that endpoints are unavailable elsewhere.
 
+### Facility Readiness Snapshot (2026-10-28)
+
+- The nine endpoint variables for the debate-enabled catalog candidates were
+	checked by name only; all are unset in this shell. No endpoint values or
+	credentials were read or recorded. This does not establish whether a service
+	is available through another environment.
+- The local `Mistral-Small-24B-Instruct-2501` checkpoint occupies about 44 GB,
+	and all ten weight shards referenced by its safetensors index are present.
+	It is not one of the nine E1 screening candidates: the catalog marks
+	`mistral-large-3` as debate-disabled due to the documented serving-stack
+	incompatibility. The local checkpoint is not evidence of access to or
+	readiness of any E1 candidate.
+- `qstat -Qf debug` reports `resources_max.walltime = 01:00:00` and
+	`resources_max.nodect = 2`. Thus `debug` cannot satisfy the proposed
+	one-node, 90-minute E1 ceiling. The enabled `capacity` queue reports a
+	1-node minimum, 16-node maximum, and 168-hour maximum walltime, with no queue
+	ACL listed; its scheduler limits therefore fit the requested shape. This is
+	only a queue-level candidate: HydraGNN project/account eligibility, available
+	balance, and allocation-owner approval have not been verified. Other visible
+	queues were either disabled, required at least 256 nodes, or showed ACL
+	restrictions. No PBS job was submitted as part of this check.
+- These observations update operational readiness only. They do not approve
+	candidate inference, change competence thresholds, authorize model downloads,
+	or open the held-out partition.
+
 Before candidate inference, approve: (1) 36-question preferred design or
 24-question pilot; (2) exact six-material prompts, evidence packets, sources,
 question independence, and split/hash; (3) rubric anchors, reviewer assignments,
