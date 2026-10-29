@@ -91,6 +91,7 @@ echo "=========================================="
 
 # ---- Load modules -----------------------------------------------------------
 module reset
+module load Core/25.03
 
 # Switch to PrgEnv-cray (needed for OpenMP target offload to AMD GPUs).
 # NOTE: We deliberately stay on the Frontier-default cce/18.0.1 stack.
@@ -313,7 +314,8 @@ run_make_with_ice_workaround() {
 # Fortran does provide and which returns the same kind of wall-time timer
 # (CPU seconds, real(8)). The patch is idempotent (a marker comment is added).
 PIMD_F="${SRC_DIR}/PIOUD/src/pimd_subrout.f90"
-if [[ -f "${PIMD_F}" ]] && ! grep -q 'patched-by-frontier-build-script' "${PIMD_F}"; then
+if [[ -f "${PIMD_F}" ]] && grep -qi 'etime' "${PIMD_F}" \
+  && ! grep -q 'patched-by-frontier-build-script' "${PIMD_F}"; then
   echo "--- Patching ${PIMD_F#${SRC_DIR}/} (etime -> cpu_time) ---"
   python3 - "${PIMD_F}" <<'PY'
 import re, sys, pathlib
@@ -346,7 +348,29 @@ p.write_text(text.replace(old, new))
 print("  scnd() rewritten")
 PY
 else
-  echo "--- pimd_subrout.f90 already patched (or missing); skipping ---"
+  echo "--- No legacy etime() call in pimd_subrout.f90; skipping compatibility patch ---"
+fi
+
+# ---- Source patch: malformed non-advancing XSF write -----------------------
+# QE develop briefly placed a comma between the WRITE control list and its
+# output list in xsf_fast_datagrid_3d. Remove it when present; newer revisions
+# may already contain the valid Fortran syntax.
+XSF_F="${SRC_DIR}/Modules/xsf.f90"
+if [[ -f "${XSF_F}" ]] && grep -Fq 'WRITE(ounit, '\''(1e14.6)'\'', advance="no"), rho(ix,iy,iz)' "${XSF_F}"; then
+  echo "--- Fixing malformed non-advancing WRITE in Modules/xsf.f90 ---"
+  python3 - "${XSF_F}" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+text = p.read_text()
+old = '''WRITE(ounit, '(1e14.6)', advance="no"), rho(ix,iy,iz)'''
+new = '''WRITE(ounit, '(1e14.6)', advance="no") rho(ix,iy,iz)'''
+if text.count(old) != 1:
+    print("Expected exactly one malformed XSF WRITE statement", file=sys.stderr)
+    sys.exit(1)
+p.write_text(text.replace(old, new))
+PY
+else
+  echo "--- XSF non-advancing WRITE syntax already valid; skipping patch ---"
 fi
 
 # ---- Source patch: cce-18.0.1 uninitialized-descriptor segfault fix --------

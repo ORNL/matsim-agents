@@ -26,6 +26,20 @@ workflow provides a separate model-level tier. The report is saved to
 `.hpc-build/frontier/qualification/<job-id>/torch-pyg.json` by default; set
 `QUALIFICATION_OUTPUT` to choose another location.
 
+## Quantum ESPRESSO GPU Smoke Test
+
+Build and install the QE GPU executables, then submit a small Si SCF calculation
+with OpenMP offload required (so it fails rather than silently running on CPU):
+
+```bash
+bash deployments/frontier/setup/build-qe-gpu-frontier.sh
+sbatch deployments/frontier/jobs/job-qe-gpu-smoke-frontier.sh
+```
+
+The smoke job requires the installed `external/quantum-espresso/install-gpu/bin/pw.x`
+and uses the bundled `Si_r.upf` pseudopotential. Results are written under
+`.hpc-build/frontier/qe-smoke/<job-id>/`.
+
 ## Model Download Safety Policy
 
 See the canonical cross-platform policy in `docs/model-download-safety.md`.
@@ -49,10 +63,15 @@ bash deployments/frontier/setup/install.sh
 
 ### install-vllm-rocm72.sh
 
-Optional vLLM deployment workflow. Run `install.sh` first; this script then
-validates the existing `.venv`, prepares pinned vLLM/Ray/Triton dependencies
-on the login node, and submits `build-vllm-rocm72.sh` for the GPU build. It
-does not recreate or reinstall the base HydraGNN/matsim environment.
+Optional isolated vLLM deployment workflow. Run `install.sh` first; HydraGNN's
+official installer creates the Conda environment at `.venv` (despite the path
+name). This script creates a separate standard Python `venv` at `.venv-vllm`,
+installs a matching ROCm 7.2 PyTorch runtime and the pinned vLLM/Ray/Triton
+dependencies there, then submits `build-vllm-rocm72.sh` for the GPU build. It
+leaves the HydraGNN Conda environment untouched. The server launcher uses
+`.venv-vllm` by default; override it with `MATSIM_VLLM_VENV`. The build is
+submitted with Slurm account `lrn110` by default; set `SLURM_ACCOUNT` to another
+account associated with your user if needed.
 
 ```bash
 bash deployments/frontier/setup/install.sh

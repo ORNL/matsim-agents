@@ -885,8 +885,24 @@ def test_frontier_install_entry_points_are_unambiguous() -> None:
 
     vllm = (setup / "install-vllm-rocm72.sh").read_text(encoding="utf-8")
     assert 'bash "${REPO}/deployments/frontier/setup/install.sh"' not in vllm
-    assert '[[ -x "${VENV}/bin/python" ]]' in vllm
+    assert '[[ -x "${BASE_VENV}/bin/python" ]]' in vllm
+    assert 'VENV="${VLLM_VENV_PATH:-$REPO/.venv-vllm}"' in vllm
+    assert '"${BASE_VENV}/bin/python" -m venv "${VENV}"' in vllm
+    assert '"torch==2.14.0" "torchvision==0.29.0"' in vllm
+    assert 'export VLLM_VENV_PATH="$VENV"' in vllm
+    assert 'source "${VENV}/bin/activate"' in vllm
+    assert "conda deactivate" not in vllm
+    assert 'SLURM_ACCOUNT="${SLURM_ACCOUNT:-lrn110}"' in vllm
+    assert 'sbatch -A "$SLURM_ACCOUNT"' in vllm
+    assert "import hydragnn, matsim_agents" not in vllm
     assert "build-vllm-rocm72.sh" in vllm
+
+    build = (setup / "build-vllm-rocm72.sh").read_text(encoding="utf-8")
+    launcher = (ROOT / "deployments/frontier/launchers/vllm-server-frontier.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'VENV="${VLLM_VENV_PATH:-$REPO/.venv-vllm}"' in build
+    assert 'VENV="${MATSIM_VLLM_VENV:-$REPO/.venv-vllm}"' in launcher
 
 
 def test_installation_guidance_has_no_obsolete_environment_contracts() -> None:

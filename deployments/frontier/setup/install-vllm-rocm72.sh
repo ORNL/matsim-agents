@@ -5,8 +5,8 @@
 # verified the matsim-agents/HydraGNN environment. This script deliberately
 # does not rebuild that base environment.
 #
-# Phase 1: Validate the base environment and apply vLLM compatibility pins.
-# Phase 2: Pre-download vLLM build dependencies into the existing venv so the
+# Phase 1: Create an isolated vLLM environment with the matching ROCm Torch.
+# Phase 2: Pre-download vLLM build dependencies into that environment so the
 #          compute job can run fully offline.
 #
 # Phase 3: Submit build-vllm-rocm72.sh as a compute batch job.
@@ -20,40 +20,51 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV="${VENV_PATH:-$REPO/.venv}"
+BASE_VENV="${BASE_VENV:-$REPO/.venv}"
+VENV="${VLLM_VENV_PATH:-$REPO/.venv-vllm}"
+SLURM_ACCOUNT="${SLURM_ACCOUNT:-lrn110}"
 VLLM_SRC="${VLLM_SRC:-${REPO}/external/vllm/src}"
 TRITON_SRC="${TRITON_SRC:-${REPO}/external/triton/src}"
 PROTECTED_REQS=$REPO/deployments/frontier/setup/vllm-rocm72-protected-requirements.txt
 
-# ── Phase 1: Validate the base environment and prepare compatibility pins ────
-[[ -x "${VENV}/bin/python" ]] || {
-    echo "ERROR: matsim environment not found: ${VENV}" >&2
+[[ -x "${BASE_VENV}/bin/python" ]] || {
+    echo "ERROR: HydraGNN/matsim environment not found: ${BASE_VENV}" >&2
     echo "Run first: bash ${REPO}/deployments/frontier/setup/install.sh" >&2
     exit 1
 }
-echo "=== Phase 1: Validate existing HydraGNN/matsim environment ==="
+if [[ ! -x "${VENV}/bin/python" ]]; then
+    echo "Creating isolated vLLM environment: ${VENV}"
+    "${BASE_VENV}/bin/python" -m venv "${VENV}"
+fi
 
-# Pin to versions satisfying both HydraGNN Phase 1 AND vLLM Phase 2 constraints.
-# Done here so Phase 2 never needs to reassert them.
-#   setuptools: torch needs <82; vLLM needs >=77.0.3,<80.0.0  → 79.0.1
-#   grpcio:     tensorflow needs >=1.24.3,<2.0; vLLM pins ==1.78.0 → 1.78.0
-#   grpcio-reflection: vLLM pins ==1.78.0; not in Phase 1 at all → install now
-#   protobuf:   Phase 1 installs 7.x (via tensorflow); vLLM needs >=5.29.6 → already fine
-echo "=== Phase 1 post-step: vLLM compatibility pins ==="
+echo "=== Phase 1: Install ROCm Torch into isolated vLLM environment ==="
 module load miniforge3/23.11.0-0 2>/dev/null || true
-source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
-conda activate "$VENV"
-pip install --force-reinstall \
+source "${VENV}/bin/activate"
+pip install --index-url https://download.pytorch.org/whl/rocm7.2 \
+    --extra-index-url https://pypi.org/simple \
+    "torch==2.14.0" "torchvision==0.29.0"
+python - <<'PY'
+import torch
+
+assert torch.__version__.startswith("2.14.0+rocm7.2"), torch.__version__
+assert torch.version.hip and torch.version.hip.startswith("7.2"), torch.version.hip
+print("isolated ROCm Torch verified", torch.__version__, torch.version.hip)
+PY
+
+# ── Phase 2: Pre-download vLLM build deps into its isolated venv ─────────────
+echo "=== Phase 2: Pre-install vLLM build dependencies ==="
+pip install --upgrade \
     "setuptools==79.0.1" \
     "grpcio==1.78.0" \
     "grpcio-reflection==1.78.0"
-
-python -c "import hydragnn, matsim_agents, torch; print('base environment verified', torch.__version__)"
-conda deactivate
-
-# ── Phase 2: Pre-download vLLM build deps into the venv ──────────────────────
-echo "=== Phase 2: Pre-install vLLM build dependencies ==="
-conda activate "$VENV"
+pip install \
+    "cmake>=3.26.1,<4" \
+    ninja \
+    "packaging>=24.2" \
+    pybind11 \
+    setuptools-scm \
+    wheel \
+    "jinja2>=3.1.6"
 
 # Pre-clone vLLM source if not already present
 VLLM_REF="${VLLM_REF:-v0.20.0}"
@@ -66,8 +77,8 @@ else
     echo "vLLM source already at $VLLM_SRC"
 fi
 
-# Install vLLM requirements, filtering only packages with NO compatible
-# intersection with Phase 1 (numpy and triton).
+# Install vLLM requirements, filtering only numpy and Triton because Frontier's
+# ROCm builds use pinned replacements for both.
 if [[ -f "$VLLM_SRC/requirements/rocm.txt" ]]; then
     echo "Installing vLLM ROCm requirements (numpy + triton excluded)..."
     grep -viE '^[[:space:]]*(numpy|triton)([<>=!~[:space:]].*)?$|^[[:space:]]*-r[[:space:]]' "$VLLM_SRC/requirements/rocm.txt" > "$PROTECTED_REQS"
@@ -100,10 +111,11 @@ else
     echo "triton source already at $TRITON_SRC ($(cd $TRITON_SRC && git describe --tags))"
 fi
 
-# Reassert the HydraGNN NumPy contract and the ROCm Triton build.
-echo "Reasserting numpy and triton-rocm..."
+# Pin NumPy and the ROCm Triton build in the isolated vLLM environment.
+echo "Pinning numpy and triton-rocm..."
 pip uninstall -y triton || true
-pip install --no-deps --force-reinstall numpy==2.4.6 \
+pip install --no-deps --force-reinstall numpy==2.4.6
+pip install --no-deps --force-reinstall \
     --extra-index-url https://download.pytorch.org/whl/rocm7.2 triton-rocm==3.6.0
 python - <<'PY'
 import importlib.metadata as md
@@ -123,7 +135,7 @@ PY
 
 # ── Install Ray (multi-node vLLM backend) with explicit pinned deps ───────────
 # All packages installed with --no-deps to avoid disturbing the frozen vLLM /
-# PyTorch / HydraGNN dependency set. Versions verified against venv 2026-05-06.
+# PyTorch dependency set. Versions verified against vLLM v0.20.0 on 2026-05-06.
 echo "=== Installing Ray 2.55.1 and dependencies (pinned, --no-deps) ==="
 pip install --no-deps \
     "ray==2.55.1" \
@@ -139,10 +151,14 @@ pip install --no-deps \
     "virtualenv==21.3.1" \
     "distlib==0.4.0"
 
+python -c "import torch; print('isolated vLLM environment ready', torch.__version__, torch.version.hip)"
+
 # ── Phase 3: Submit vLLM compute build job ────────────────────────────────────
 echo "=== Phase 3: Submitting vLLM build job ==="
 # sbatch runs the script from a spooled copy, so BASH_SOURCE-based REPO
 # detection fails on the compute node; pass REPO through explicitly.
 export PROJECT_ROOT="$REPO"
-sbatch "$REPO/deployments/frontier/setup/build-vllm-rocm72.sh"
+export VLLM_VENV_PATH="$VENV"
+sbatch -A "$SLURM_ACCOUNT" --export=ALL,PROJECT_ROOT,VLLM_VENV_PATH \
+    "$REPO/deployments/frontier/setup/build-vllm-rocm72.sh"
 echo "Done. Monitor with: tail -f $PROJ/runs/build-vllm-rocm72-<jobid>.out"

@@ -10,7 +10,7 @@
 # Compute-node job: build vLLM from source against ROCm 7.2.
 #
 # Prerequisites (must be done on the login node first via install-vllm-rocm72.sh):
-#   - HydraGNN ROCm 7.2 venv already exists at $VENV
+#   - Isolated vLLM ROCm 7.2 venv already exists at $VENV
 #   - vLLM source already cloned at $VLLM_SRC
 #   - vLLM ROCm build deps already pip-installed into the venv
 
@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV=$REPO/.venv
+VENV="${VLLM_VENV_PATH:-$REPO/.venv-vllm}"
 VLLM_SRC="${VLLM_SRC:-${REPO}/external/vllm/src}"
 TRITON_SRC="${TRITON_SRC:-${REPO}/external/triton/src}"
 
@@ -29,7 +29,7 @@ source "$REPO/deployments/frontier/setup/frontier-module-stack.sh"
 load_frontier_rocm72_modules
 module load miniforge3/23.11.0-0 2>/dev/null || true
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
-conda activate "$VENV"
+source "$VENV/bin/activate"
 
 [[ -d "$VLLM_SRC/.git" ]] || { echo "ERROR: vLLM source not found at $VLLM_SRC"; exit 1; }
 [[ -d "$VENV/bin" ]]       || { echo "ERROR: venv not found at $VENV"; exit 1; }

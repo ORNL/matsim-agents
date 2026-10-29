@@ -15,13 +15,13 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
-VENV="${MATSIM_VLLM_VENV:-$REPO/.venv}"
+VENV="${MATSIM_VLLM_VENV:-$REPO/.venv-vllm}"
 PLACED="${ROCR_VISIBLE_DEVICES:?matsim-agents sets ROCR_VISIBLE_DEVICES from the placement}"
 
 source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 source "${REPO}/deployments/frontier/setup/frontier-module-stack.sh"
 load_frontier_rocm72_modules
-source activate "${VENV}"
+source "${VENV}/bin/activate"
 [[ -x "${VENV}/bin/vllm" ]] || { echo "vllm not found in ${VENV}" >&2; exit 2; }
 
 export PYTHONUNBUFFERED=1 PYTHONNOUSERSITE=1

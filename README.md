@@ -699,8 +699,8 @@ in the scripts and what you should expect at runtime:
 
 | Backend | Module | Why this version |
 |---|---|---|
-| **HydraGNN venv** (used by every Frontier launcher: vLLM, HF, downloaders, smoke tests, six-model bench) | `rocm/7.2.0` | Current Frontier-supported PyTorch + ROCm path; built once into `matsim-agents/.venv/` |
-| **vLLM model server** | `rocm/7.2.0` | Shares the HydraGNN ROCm 7.2 venv; built from source via [`deployments/frontier/setup/build-vllm-rocm72.sh`](deployments/frontier/setup/build-vllm-rocm72.sh) |
+| **HydraGNN Conda environment** | `rocm/7.2.0` | Current Frontier-supported PyTorch + ROCm path; created by HydraGNN's installer at `matsim-agents/.venv/` |
+| **vLLM model server** | `rocm/7.2.0` | Isolated Python `venv` at `matsim-agents/.venv-vllm/`; built from source via [`deployments/frontier/setup/build-vllm-rocm72.sh`](deployments/frontier/setup/build-vllm-rocm72.sh) |
 | **Quantum ESPRESSO GPU** | `rocm/6.2.4` *(forced)* | Frontier's `cray-mpich/8.1.31` GTL `libmpi_gtl_hsa.so` is hard-linked against `libamdhip64.so.6` (rocm 6.x SONAME). rocm/7.x ships `.so.7` and breaks the MPI Fortran link probe at CMake configure. Pin documented in [`docs/quantum-espresso-frontier.md`](docs/quantum-espresso-frontier.md). |
 
 QE and the Python/ML stacks are deliberately never co-loaded in the same
