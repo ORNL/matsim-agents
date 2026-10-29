@@ -26,6 +26,20 @@ workflow provides a separate model-level tier. The report is saved to
 `.hpc-build/frontier/qualification/<job-id>/torch-pyg.json` by default; set
 `QUALIFICATION_OUTPUT` to choose another location.
 
+## Quantum ESPRESSO GPU Smoke Test
+
+Build and install the QE GPU executables, then submit a small Si SCF calculation
+with OpenMP offload required (so it fails rather than silently running on CPU):
+
+```bash
+bash deployments/frontier/setup/build-qe-gpu-frontier.sh
+sbatch deployments/frontier/jobs/job-qe-gpu-smoke-frontier.sh
+```
+
+The smoke job requires the installed `external/quantum-espresso/install-gpu/bin/pw.x`
+and uses the bundled `Si_r.upf` pseudopotential. Results are written under
+`.hpc-build/frontier/qe-smoke/<job-id>/`.
+
 ## Model Download Safety Policy
 
 See the canonical cross-platform policy in `docs/model-download-safety.md`.
