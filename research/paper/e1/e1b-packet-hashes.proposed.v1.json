@@ -5,11 +5,11 @@
   "artifacts": {
     "questions": {
       "path": "research/paper/e1/e1b-generalization-questions.proposed.v1.json",
-      "sha256": "0260e5311f3920c74211425c05d54a7bc0cbbc39f8fc2a5f087e53134c2ed71b"
+      "sha256": "e8b6e2f82d5f06feaa9554b1028e2cbebe94c37ef92429bf6bb5251ad03bb9a8"
     },
     "protocol": {
       "path": "research/paper/e1/e1b-generalization-protocol.proposed.v1.md",
-      "sha256": "2d504cb0d398ca6497fdb64e26c961d80a1e22f4d691860e5be20ec943c3a7af"
+      "sha256": "95c8aeab750760e8086ae8ef161cdde9c536a25dd2d54c71fcea5559760e256e"
     },
     "shared_response_schema_reference_only": {
       "path": "research/paper/e1/response-schema.v1.json",

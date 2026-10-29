@@ -65,32 +65,32 @@
       "prompt": "Consider this explicitly hypothetical dossier: a relaxed structure has no reported imaginary harmonic phonons at the sampled wavevectors, but no free-energy comparison, competing phases, anharmonic sampling, or decomposition analysis is available. State what harmonic dynamical information could support and what it cannot establish about thermodynamic or finite-temperature stability. Design a temperature- and composition-scoped follow-up that distinguishes local dynamical stability from phase stability, and state how missing competitor coverage should limit the conclusion. Do not claim stability from the phonon result alone."
     },
     {
-      "question_id": "E1B-ELECTROCHEM-01",
-      "domain": "electrochemical voltage and reaction kinetics",
-      "material_context": "Hypothetical insertion electrode with two composition states",
-      "evidence_status": "explicitly-hypothetical-qualitative; no balanced reaction energies or voltage data supplied",
-      "prompt": "Consider this explicitly hypothetical battery-material comparison: two endpoint compositions have calculated total energies, but the reaction is not shown to be atom-balanced, reference chemical potentials and phase separation are unspecified, and no kinetic barriers are given. Explain what must be established before an equilibrium voltage can be inferred from a free-energy difference per transferred charge, distinguish that thermodynamic quantity from charge/discharge kinetics, and propose checks for stoichiometry, compatible references, competing phases, and finite-temperature contributions. State which missing evidence could change the voltage or mechanism interpretation; do not invent a voltage."
+      "question_id": "E1B-FERRO-01",
+      "domain": "ferroelectric and structural transitions",
+      "material_context": "Hypothetical polar perovskite with a temperature-dependent structural anomaly",
+      "evidence_status": "explicitly-hypothetical-qualitative; no polarization, diffraction, or free-energy data supplied",
+      "prompt": "Consider this explicitly hypothetical report: a polar perovskite is said to undergo a temperature-dependent ferroelectric-to-structural transition based only on relaxed zero-temperature structures. No symmetry-mode amplitudes, polarization path, temperature-dependent structure, or competing phases are supplied. Formulate at least two plausible interpretations, such as a change in polar distortion versus a competing nonpolar or antipolar structural transition. Identify order parameters and symmetry evidence that distinguish them, then propose matched calculations or measurements that address finite-temperature behavior, domains, and convergence. State what outcomes would weaken each interpretation; do not claim that a transition or phase is established."
     },
     {
-      "question_id": "E1B-ELECTROCHEM-02",
-      "domain": "electrochemical voltage and reaction kinetics",
-      "material_context": "Hypothetical electrode with hysteresis and a proposed conversion reaction",
-      "evidence_status": "explicitly-hypothetical-qualitative; no voltage curve, phase fractions, or activation barriers supplied",
-      "prompt": "Audit this explicitly hypothetical interpretation: voltage hysteresis is attributed to a conversion reaction because two endpoint structures differ, but intermediate phases, nucleation, transport limitations, and protocol-dependent measurements have not been examined. Give at least two plausible competing explanations, identify observations that could discriminate them, and outline a balanced thermodynamic and kinetic investigation with appropriate controls. Explain why endpoint energies alone cannot establish the operating mechanism; do not assert a conversion pathway."
+      "question_id": "E1B-FERRO-02",
+      "domain": "ferroelectric and structural transitions",
+      "material_context": "Hypothetical polarization assignment across a symmetry-changing path",
+      "evidence_status": "explicitly-hypothetical-qualitative; no structures, polarization branches, or switching measurements supplied",
+      "prompt": "Audit this explicitly hypothetical claim: a Berry-phase polarization difference between two relaxed structures is called spontaneous ferroelectric polarization, but the connecting path, insulating character, symmetry relation, polarization branch, and domain/electrode conditions are not reported. Explain which distinctions are needed between formal polarization, a switchable spontaneous polarization, and a structural or polar discontinuity. Propose the minimum symmetry, path, and measurement or calculation checks that could support or falsify the claim, including how a gap closure or branch ambiguity changes the interpretation. Do not infer a switchable polarization from endpoint values alone."
     },
     {
-      "question_id": "E1B-ENTROPY-01",
-      "domain": "configurational entropy and finite-temperature alloy stability",
-      "material_context": "Hypothetical multicomponent alloy with a low-energy ordered cell",
-      "evidence_status": "explicitly-hypothetical-qualitative; no configurational ensemble or finite-temperature free energies supplied",
-      "prompt": "Consider this explicitly hypothetical alloy study: one ordered cell has lower zero-temperature energy than a small set of other ordered cells, and the authors infer that it is the equilibrium phase at service temperature. Explain the limits of that inference, distinguish a finite-cell energy ranking from configurationally averaged free energy, and propose a composition-controlled sampling and thermodynamic approach that treats chemical order, vibrational contributions where relevant, and temperature. State what outcomes could change the phase interpretation; do not infer an ordering temperature."
+      "question_id": "E1B-MECH-01",
+      "domain": "mechanical and elastic stability",
+      "material_context": "Hypothetical low-symmetry crystal with an incomplete elastic tensor",
+      "evidence_status": "explicitly-hypothetical-qualitative; no elastic constants, stress state, or strain data supplied",
+      "prompt": "Consider this explicitly hypothetical report: a relaxed low-symmetry crystal is called mechanically stable because its bulk and shear moduli are positive, but several independent elastic-tensor components, the residual stress, and the tensor symmetrization/convergence checks are not reported. Explain why aggregate moduli alone may not establish elastic stability for the stated symmetry. Specify the full stress-corrected stability test and numerical checks needed at a declared pressure, and distinguish local elastic stability from finite-strain failure, fracture, or thermodynamic phase stability. State outcomes that would change the conclusion; do not invent elastic constants."
     },
     {
-      "question_id": "E1B-ENTROPY-02",
-      "domain": "configurational entropy and finite-temperature alloy stability",
-      "material_context": "Hypothetical disordered solid solution compared with competing ordered phases",
-      "evidence_status": "explicitly-hypothetical-qualitative; no entropy model, phase boundary, or equilibrium data supplied",
-      "prompt": "Audit this explicitly hypothetical claim: a disordered alloy is declared thermodynamically favored because it has more possible atomic arrangements, but no composition-specific energy distribution, entropy model, competing phase set, or temperature-dependent free energy is supplied. Explain why configurational multiplicity alone is insufficient, identify the data and assumptions needed to compare ordered and disordered states, and propose a test with explicit scope and falsifying outcomes. Distinguish equilibrium thermodynamics from kinetic persistence; do not claim a stable solid solution."
+      "question_id": "E1B-MECH-02",
+      "domain": "mechanical and elastic stability",
+      "material_context": "Hypothetical ductility claim based on isotropic elastic averages",
+      "evidence_status": "explicitly-hypothetical-qualitative; no single-crystal response, defects, or failure observations supplied",
+      "prompt": "Audit this explicitly hypothetical claim: a material is described as ductile and mechanically robust because isotropic averages of its elastic constants are favorable, although the single-crystal elastic anisotropy, ideal stress-strain response, defects, and failure observations are not examined. Separate small-strain elastic stability from ductility, strength, fracture resistance, and kinetic persistence. Propose a staged, symmetry- and direction-aware set of elastic, finite-strain, and defect-sensitive tests, and identify results that could falsify the claim. Explain what can be concluded from elastic constants alone; do not infer ductility from an empirical modulus ratio without supporting evidence."
     }
   ]
 }

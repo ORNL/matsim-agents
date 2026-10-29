@@ -93,7 +93,12 @@ held-out situations must differ scientifically, not by paraphrase. The H packet
 is stored outside this repository with owner-only permissions; keep its content
 inaccessible to candidate selection and serve it only after panel freeze.
 
-### 36-question matrix (preferred)
+### 36-question matrix (preferred; design summary)
+
+The versioned D packet is canonical for exact model-facing text. The matrix
+below is a planning summary retained for partition design; where its quoted
+wording differs from `e1/d-questions.v1.json`, the versioned packet controls.
+Scientific review annotations and prompt-specific anchors follow the matrix.
 
 IDs use `D` for development and `H` for held-out, followed by material and task
 type (`A` comparison, `B` evidence audit, `C` open hypothesis generation).
@@ -113,6 +118,65 @@ physical conclusion. Type C accepts multiple defensible mechanisms; its packet
 defines constraints and scoring criteria, not one uniquely correct hypothesis.
 No E1 question substitutes for E2's controlled interpretation of complete,
 fixed numerical evidence.
+
+### E1a question review key (proposed)
+
+This key is a reviewer aid, not a gold-answer set, verified evidence packet,
+or scientific approval. Exact model-facing wording is owned by
+[`e1/d-questions.v1.json`](e1/d-questions.v1.json); the file hash is recorded in
+[`e1/packet-hashes.v1.json`](e1/packet-hashes.v1.json). No prompt includes
+verified empirical or computed results. A and C ask qualitative comparisons or
+hypothesis generation without supplied results; B presents explicitly
+hypothetical audit evidence. Reviewers must not expect a preferred physical
+result where none is supplied. For each item, approve scope and assumptions,
+check that response paths are scientifically defensible, and record citations
+or source identifiers before any factual evidence is added. The anchors identify
+high-value reasoning and critical errors for blinded scoring; they do not
+prescribe one answer.
+
+| Question IDs | Task type | Supplied evidence and provenance |
+|---|---|---|
+| `D-LFP-A`, `D-CANTOR-A`, `D-REFRACTORY-A`, `D-PHOS-A`, `D-MOF-A`, `D-NBTAO-A` | A: qualitative controlled comparison | No empirical/computed results or external source cited; assumptions and comparison targets are stated in the canonical prompt. |
+| `D-LFP-B`, `D-CANTOR-B`, `D-REFRACTORY-B`, `D-PHOS-B`, `D-MOF-B`, `D-NBTAO-B` | B: hypothetical evidence audit | Qualitative scenario facts are explicitly hypothetical; no numerical result, source, dataset, or real calculation is supplied. |
+| `D-LFP-C`, `D-CANTOR-C`, `D-REFRACTORY-C`, `D-PHOS-C`, `D-MOF-C`, `D-NBTAO-C` | C: open hypothesis generation | No empirical/computed results or external source cited; prompts state a hypothetical objective/constraints and request falsifiable alternatives. |
+
+The category and wording alignment below was checked against all 18 IDs in
+the canonical JSON. The prompt text in that file remains authoritative if this
+review aid is later edited. Any cited evidence or non-hypothetical result added
+to a future packet requires independently traceable provenance and a new
+versioned review; do not retrospectively treat these qualitative briefs as
+validated evidence packets.
+
+| Question | Objective, assumptions, evidence status, and defensible reasoning anchors | Critical errors to flag |
+|---|---|---|
+| `D-LFP-A` | Compare localized Fe-centered oxidation with a distributed hole in a neutral, spin-polarized Li-vacancy cell. Assume fixed composition and controlled magnetic order/starting moments. No results are supplied. Accept charge-density, local-moment, and matched electronic-structure routes that distinguish labels from observables. | Treating formal oxidation labels as proof; changing electron count or magnetic setup between alternatives; asserting a preferred state without evidence. |
+| `D-LFP-B` | Audit two hypothetical vacancy configurations initialized with different magnetic states and no final moments/charge analysis. No energies are supplied. Strong responses limit conclusions and propose same-composition, same-protocol magnetic and charge-density comparisons. | Attributing an energy or localization difference to vacancy geometry while magnetic initialization is confounded; inventing moments or energies. |
+| `D-LFP-C` | Generate multiple hypotheses at one fixed Li-deficient composition. State supercell, composition, and magnetic assumptions; separate vacancy ordering from size, finite-size interactions, and magnetic state. No reference calculations exist in the prompt. | Changing composition between candidates; treating finite-cell ordering as bulk ordering; presenting hypotheses as established behavior. |
+| `D-CANTOR-A` | Distinguish chemical short-range-order effects from magnetic-initialization effects in equiatomic FCC CrMnFeCoNi. Assume matched composition, cell size/shape, spin treatment, method, and relaxation; sample independent arrangements and multiple magnetic initializations. Accept a local-order descriptor and within/across-arrangement analysis. | Inferring order effects from one configuration; conflating magnetic and chemical sampling; claiming a universal ranking from the proposed design. |
+| `D-CANTOR-B` | Audit a small, non-independent arrangement sample with one magnetic initialization per configuration. No numerical energies are supplied. Accept a bounded statement about the described sample plus a follow-up that adds independent arrangements and magnetic-state checks. | Treating one initialization as a converged magnetic ground state; claiming configurational or phase statistics from a small biased sample. |
+| `D-CANTOR-C` | Propose competing links between local-neighbor statistics and the relaxed-energy distribution at fixed equiatomic FCC composition. A valid plan defines a descriptor, energy statistic, independent arrangements, and consistent spin treatment. | Assuming short-range order lowers energy; failing to separate arrangement-level observations from thermodynamic claims. |
+| `D-REFRACTORY-A` | Compare BCC/FCC/HCP prototypes for equiatomic Nb-Ta-V-Hf-Zr-Ti while separating prototype effects from finite-cell ordering. Require composition/atom-count matching, multiple arrangements represented across prototypes, and a common method/relaxation protocol. | Claiming bulk phase stability from one ordered cell or unmatched compositions/cell sizes; ignoring arrangement variance. |
+| `D-REFRACTORY-B` | Audit one ordered cell per prototype with differing chemical arrangements and no independent sampling or finite-temperature data. The dossier supports only a comparison of those particular relaxed cells if its method is indeed matched. | Calling a prototype ranking a phase-stability result; fabricating energies, convergence, or temperature evidence. |
+| `D-REFRACTORY-C` | Form competing local-neighborhood hypotheses for distortion or configuration energy within an explicitly declared prototype. Accept independent arrangement sampling and consistent relaxation, with configuration-level conclusions kept distinct from bulk claims. | Changing prototype while attributing the effect to local chemistry; inferring bulk stability from configuration-level evidence. |
+| `D-PHOS-A` | Compare black and blue phosphorus monolayers at zero in-plane strain using like-for-like relaxed energy per atom, electronic-structure settings, vacuum, and in-plane sampling. Scope conclusions to the monolayers, not bulk phosphorus. | Assuming an energy order; extrapolating monolayer results to bulk phases; neglecting vacuum or convergence controls. |
+| `D-PHOS-B` | Audit a nominally matched monolayer comparison with untested vacuum and out-of-plane electrostatic convergence; geometries and energies are absent. Accept a scoped uncertainty statement plus convergence tests that could alter the comparison. | Inferring a ranking from missing values; treating nominally identical methods as proof of convergence. |
+| `D-PHOS-C` | Develop multiple hypotheses across the stated biaxial strain series relative to each structure's relaxed reference. Define structural/electronic observables and distinguish strain response from vacuum or k-point artifacts. | Calling a transition without evidence; using inconsistent strain references; confusing numerical artifacts with physical response. |
+| `D-MOF-A` | Compare two explicitly hypothetical, guest-free, stoichiometric Zn(HCOO)2 configurations with fixed connectivity/protonation but differing formate orientation. Make hydrogen/proton policy, cell-shape policy, composition, and dispersion treatment comparable; separate orientation order from framework breathing. | Treating hypothetical structures as observed phases; changing guest/proton content or dispersion inconsistently; assigning a ranking without structures/results. |
+| `D-MOF-B` | Audit missing hydrogen coordinates, guest occupancy, and dispersion provenance in a hypothetical framework comparison. The strongest answer identifies which structural/energy claims are underdetermined and requests minimum records or matched calculations. | Inventing framework details; claiming energetic comparability from stoichiometry/connectivity alone. |
+| `D-MOF-C` | Form competing hypotheses for formate-orientation order versus framework breathing in the stated hypothetical guest-free framework. Define response, hydrogen treatment, cell constraints, and dispersion-aware matched tests. | Treating a hypothetical configuration as an experimentally realized phase; omitting proton/cell assumptions; claiming an unsupported dominant mechanism. |
+| `D-NBTAO-A` | Compare a target compound with decomposition only within the declared finite Nb-Ta-O domain and compatible formation-energy references. Accept a domain-relative convex-hull test and an explicit account of missing phases that could change the result. | Claiming global stability from an incomplete competitor domain; using incompatible references or inventing energies. |
+| `D-NBTAO-B` | Audit a hypothetical hull missing a polymorph family required by its predeclared domain contract. It fails that coverage contract; the strongest claim is limited to listed entries until the required phase and compatibility checks are added. | Calling the hull complete or the target stable/unstable despite the specified coverage gap. |
+| `D-NBTAO-C` | Contrast ordered-compound and disordered/solid-solution-like hypotheses at zero temperature in a declared finite domain. Separate ordered-cell energies from finite-temperature configurational entropy; identify compatible formation energies, ordering evidence, tests, and falsifiers. | Inferring finite-temperature stability from zero-temperature ordered cells; asserting global stability without a complete reference domain. |
+
+**Prompt change log.** The canonical D packet is version `e1-questions-v1`.
+Five prompts were tightened to fix controls and scope: `D-LFP-A` states the
+neutral spin-polarized cell and separates oxidation labels from charge/moment
+evidence; `D-LFP-C` fixes composition and separates ordering, cell-size, and
+magnetic effects; `D-CANTOR-A` requires replicated chemical arrangements and
+magnetic initializations; `D-MOF-A` fixes the hypothetical guest-free framework,
+connectivity, protonation, and cell policy; and `D-MOF-C` fixes stoichiometry,
+protonation, connectivity, and hydrogen/cell assumptions. This change log does
+not replace independent scientific review.
 
 ### 24-question pilot mapping
 
@@ -358,7 +422,7 @@ requires no DFT allocation.
 
 ### Facility Readiness Snapshot (2026-10-28)
 
-- The nine endpoint variables for the debate-enabled catalog candidates were
+- The nine local endpoint variables for the debate-enabled catalog candidates were
 	checked by name only; all are unset in this shell. No endpoint values or
 	credentials were read or recorded. This does not establish whether a service
 	is available through another environment. Mixtral is outside this catalog;
@@ -385,6 +449,43 @@ requires no DFT allocation.
 - These observations update operational readiness only. They do not approve
 	candidate inference, change competence thresholds, authorize model downloads,
 	or open the held-out partition.
+
+### Remote API Readiness Snapshot (2026-10-29)
+
+- Credential/configuration variable names were checked without reading values:
+	`AMSC_TOKEN` is set; `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+	`MATSIM_MAG_BASE_URL`, and `MATSIM_MAG_PROVIDER` are unset. The documented
+	MAG default endpoint was used; the token was not printed or stored.
+- A metadata-only authenticated `GET /v1/models` returned HTTP 200 and 1,375
+	catalog records. It includes `gpt-6.1-sol@openai` and `gpt-6-luna@openai`
+	(and bare aliases); records report chat mode and token limits but no price or
+	immutable serving revision. This establishes catalog visibility at request
+	time only, not inference entitlement, allocation balance, charge rate, or
+	scientific approval. No prompt or completion request was sent.
+- Local `o200k_base` tokenization of the runner's exact system prompt/schema
+	plus each canonical D prompt and 16 tokens of framing gave 514-551 estimated
+	input tokens. A 1,024-token per-question input cap provides margin; use the
+	runner's existing 16,384-token output cap and one attempt per question for an
+	initial cost envelope. Provider-side tokenization and billing remain
+	authoritative and may differ.
+- Public standard OpenAI API prices observed on 2026-10-29 were $2/$10 per
+	million input/output tokens for GPT-6.1 Sol and $0.10/$0.50 for GPT-6 Luna.
+	At the proposed 1,024-input/16,384-output caps, 18 questions, and one attempt,
+	the corresponding direct-API reference ceilings are $2.985984 and
+	$0.1492992, respectively, before taxes or nonstandard pricing. These are
+	scenario calculations, not MAG rates or approved spending ceilings: MAG
+	documentation says usage is charged to the project allocation, and its
+	applicable charge rate/balance has not been verified. Direct provider keys
+	are unset.
+- The MAG route's exact backend revision, allocation charge rate, remaining
+	balance, project inference authorization, and applicable data-retention/use
+	terms remain unverified. Public OpenAI API data-use statements do not by
+	themselves establish which terms govern a MAG-routed request. Therefore no
+	E1-R candidate manifest or inference is approved. Do not send prompts until
+	the PI/allocation owner confirms authorization, the applicable data terms and
+	accounting rate are documented, an immutable revision is pinned, and an
+	explicit USD ceiling and retry policy are approved. A catalog lookup is not
+	that approval.
 
 ### E1 Protocol Freeze Register
 
@@ -455,9 +556,10 @@ containing only the reviewed development prompts and invoke each command in its
 approved environment, independently. The output directory records the exact
 manifest, run metadata, and append-only response ledger. A changed manifest
 requires a new output directory. Do not put credentials or private endpoints in
-the manifest. No production candidate manifest has been approved or run; the
-current shell has no inspected API credentials or provider configuration, and
-no API or local model call has been made.
+the manifest. No production candidate manifest has been approved or run. A
+metadata-only MAG catalog request succeeded as recorded above; no prompt,
+completion, local model call, or inference request has been made. Direct
+OpenAI/Anthropic credentials and explicit MAG provider overrides are unset.
 
 Candidate readiness statuses must be evidence-based and distinguish at least:
 **not assessed** (no facility-specific check), **blocked** (a documented
@@ -472,13 +574,17 @@ At least three candidates must pass the approved competence threshold before
 panel selection; do not lower the threshold if fewer qualify.
 
 The Aurora job file is a non-submitting template only. It requests one node and
-caps its workflow budget at 90 minutes (1.5 node-hours), but the inspected
-`debug` queue allows only 60 minutes. The template therefore does not select a
-queue; before any submission, independently verify a queue that permits the
-full walltime, confirm the allocation/account and one-node resource plan, and
-record explicit authorization for the exact manifest, candidate, and job. No
-eligible 90-minute queue has been verified here. Do not submit the template or
-start inference until the protocol, prompts/evidence, candidate/panel rule,
-rubric thresholds, serving revision, resource ceiling, data handling, budget,
-stop condition, and cost-accounting procedure are approved. Held-out A-D
-execution remains unimplemented and unauthorized.
+caps its workflow budget at 90 minutes (1.5 node-hours). `debug` is limited to
+60 minutes and cannot run that request, though its limit matches the proposed
+one-hour qualification shape. `capacity` has scheduler limits compatible with
+one node and 90 minutes, and a separate minimal five-minute `/bin/true` probe
+was accepted and cancelled; the exact 90-minute request has not been submitted
+or tested. Thus `capacity` is the scheduler-compatible candidate, not verified
+project eligibility or charge authorization. Before any submission, confirm
+allocation/account eligibility, balance and charge rules, the one-node resource
+plan, and explicit authorization for the exact manifest, candidate, and job.
+Do not submit the template or start inference until the protocol,
+prompts/evidence, candidate/panel rule, rubric thresholds, serving revision,
+resource ceiling, data handling, budget, stop condition, and cost-accounting
+procedure are approved. Held-out A-D execution remains unimplemented and
+unauthorized.

@@ -1,14 +1,14 @@
 {
   "packet_version": "e1-questions-v1",
   "partition": "development",
-  "source": "research/paper/e1-preparation.md 36-question matrix",
+  "source": "E1a development prompt packet; scientific review annotations and evidence policy are recorded in research/paper/e1-preparation.md",
   "runner_question_schema": "matsim_agents.workflows.e1.E1Question",
   "questions": [
     {
       "question_id": "D-LFP-A",
       "material": "LiFePO4",
       "category": "A",
-      "prompt": "For a neutral olivine LiFePO4 supercell with one Li atom removed, compare localized Fe-centered oxidation with a more spatially distributed compensating hole. Treat these as hypotheses, not established outcomes. Explain the charge and magnetic assumptions, then specify a matched electronic-structure comparison and observations that would support or weaken each interpretation. Do not assert a preferred result without supplied calculations."
+      "prompt": "For a neutral, spin-polarized olivine LiFePO4 supercell with one Li atom removed, compare localized Fe-centered oxidation with a more spatially distributed compensating hole. Treat these as hypotheses, not established outcomes. State how the neutral-cell electron count, magnetic order and starting moments are controlled; distinguish oxidation-state labels from charge-density and local-moment evidence. Specify matched electronic-structure calculations and observables that would support or weaken each interpretation. No calculations or numerical results are supplied; do not assert a preferred result."
     },
     {
       "question_id": "D-LFP-B",
@@ -20,13 +20,13 @@
       "question_id": "D-LFP-C",
       "material": "LiFePO4",
       "category": "C",
-      "prompt": "At fixed Li-deficient composition in olivine LiFePO4, propose two or more hypotheses for how vacancy arrangement affects local structure or relative energy. Separate vacancy-ordering effects from cell-size and magnetic-state effects. For each hypothesis, give assumptions, a measurable structural or energetic observable, a feasible matched MLIP/DFT investigation, and an outcome that would weaken it. Do not present a hypothesis as established fact."
+      "prompt": "At one explicitly fixed Li-deficient composition in olivine LiFePO4, propose two or more hypotheses for how Li-vacancy arrangement affects local structure or relative energy. State the chosen supercell/composition and magnetic-state assumptions; separate vacancy-ordering effects from cell-size, finite-size interaction and magnetic-state effects. For each hypothesis, give a measurable structural or energetic observable, a feasible matched MLIP/DFT investigation, and an outcome that would weaken it. No reference calculations are supplied; do not present a hypothesis as established fact."
     },
     {
       "question_id": "D-CANTOR-A",
       "material": "Cantor FCC alloy",
       "category": "A",
-      "prompt": "For equiatomic CrMnFeCoNi configurations constrained to the FCC prototype, compare two hypotheses for a relative-energy difference: chemical short-range order is important, or the difference is mainly due to magnetic initialization. Hold composition, atom count, electronic-structure method, and relaxation criteria fixed in the proposed comparison. Explain how to sample chemical arrangements and magnetic starts, and what outcomes would distinguish the hypotheses. Do not claim a measured ranking."
+      "prompt": "For equiatomic CrMnFeCoNi configurations constrained to the FCC prototype, compare two hypotheses for a relative-energy difference: chemical short-range order is important, or the difference is mainly due to magnetic initialization. Hold composition, atom count, cell shape/size, electronic-structure method, spin-polarized treatment and relaxation criteria fixed; sample multiple independent chemical arrangements and multiple magnetic initializations per arrangement. Identify a local-order descriptor and compare within- and across-arrangement energy variation. Explain outcomes that distinguish the hypotheses. No numerical data are supplied; do not claim a measured ranking."
     },
     {
       "question_id": "D-CANTOR-B",
@@ -80,7 +80,7 @@
       "question_id": "D-MOF-A",
       "material": "Zn(HCOO)2 MOF",
       "category": "A",
-      "prompt": "Compare two guest-free, stoichiometric Zn(HCOO)2 framework configurations with the same framework connectivity but different formate orientations. Propose a controlled comparison that separates orientation-order effects from framework breathing, including a common dispersion-treatment choice, matched relaxation constraints, and structural/energetic observables. Explain outcomes that distinguish the effects. Do not assume the configurations are experimentally realized or rank them without data."
+      "prompt": "Compare two hypothetical, guest-free, stoichiometric Zn(HCOO)2 framework configurations with identical connectivity and protonation state but different formate orientations. Hold hydrogen/proton positions or relaxation policy, guest occupancy (zero), composition and cell contents consistent; state whether the cell shape is fixed or relaxed. Propose a controlled comparison that separates orientation-order effects from framework breathing, including one common dispersion-treatment choice and structural/energetic observables. Explain outcomes that distinguish the effects. No structures or measurements are supplied; do not assume the configurations are experimentally realized or rank them."
     },
     {
       "question_id": "D-MOF-B",
@@ -92,7 +92,7 @@
       "question_id": "D-MOF-C",
       "material": "Zn(HCOO)2 MOF",
       "category": "C",
-      "prompt": "For a guest-free Zn(HCOO)2 framework with fixed stoichiometry and connectivity, propose at least two hypotheses for whether formate-orientation order or framework breathing dominates a chosen structural response. Define the response observable and structural constraints, state uncertainties, and propose feasible dispersion-aware MLIP/DFT comparisons with outcomes that would weaken each hypothesis. Do not treat hypothetical configurations as observed phases."
+      "prompt": "For a hypothetical guest-free Zn(HCOO)2 framework with fixed stoichiometry, protonation state and connectivity, propose at least two hypotheses for whether formate-orientation order or framework breathing dominates a chosen structural response. Define the response observable, hydrogen/proton treatment and cell constraints; state uncertainties; and propose feasible dispersion-aware MLIP/DFT comparisons with outcomes that would weaken each hypothesis. No structural evidence is supplied. Do not treat hypothetical configurations as observed phases."
     },
     {
       "question_id": "D-NBTAO-A",
