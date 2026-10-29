@@ -111,4 +111,18 @@ def invoke_model(model: Any, messages: Sequence[Any]) -> ModelReply:
     return reply_from_message(message, latency_s=round(time.perf_counter() - start, 3))
 
 
-__all__ = ["ModelReply", "invoke_model", "reply_from_message", "split_reasoning"]
+def invoke_model_with_raw(model: Any, messages: Sequence[Any]) -> tuple[Any, ModelReply]:
+    """Send a request and return both the provider message and normalized reply."""
+
+    start = time.perf_counter()
+    message = model.invoke(list(messages))
+    return message, reply_from_message(message, latency_s=round(time.perf_counter() - start, 3))
+
+
+__all__ = [
+    "ModelReply",
+    "invoke_model",
+    "invoke_model_with_raw",
+    "reply_from_message",
+    "split_reasoning",
+]

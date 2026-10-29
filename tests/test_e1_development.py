@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -12,10 +14,28 @@ from matsim_agents.workflows.e1 import (
 )
 
 
+def _scientific_response() -> str:
+    return json.dumps(
+        {
+            "conclusion": "The evidence is insufficient to distinguish the hypotheses.",
+            "hypotheses": ["H1", "H2"],
+            "reasoning_summary": "The prompt supplies no comparative measurements.",
+            "assumptions": [],
+            "supporting_evidence": [],
+            "missing_or_conflicting_evidence": ["Comparative measurements"],
+            "falsifiable_predictions": [],
+            "proposed_tests": ["Measure both samples under matched conditions."],
+            "outcome_interpretation": [],
+            "confidence": "low",
+        }
+    )
+
+
 def _manifest() -> E1DevelopmentManifest:
     return E1DevelopmentManifest.model_validate(
         {
             "protocol_version": "e1-dev-v1",
+            "cohort": "E1-L",
             "candidate": {
                 "catalog_name": "test-model",
                 "model_id": "org/test-model",
@@ -38,6 +58,28 @@ def _manifest() -> E1DevelopmentManifest:
             ],
         }
     )
+
+
+def _remote_manifest(**approval_overrides) -> E1DevelopmentManifest:
+    manifest_data = _manifest().model_dump(mode="json")
+    manifest_data["cohort"] = "E1-R"
+    manifest_data["candidate"].update(
+        {"provider": "openai", "model_id": "test-remote-model"}
+    )
+    manifest_data["remote_approval"] = {
+        "approval_reference": "test-only",
+        "approved_by": "test",
+        "provider": "openai",
+        "mag_provider": None,
+        "model_id": "test-remote-model",
+        "revision": manifest_data["candidate"]["revision"],
+        "spending_ceiling_usd": 1.0,
+        "max_input_tokens_per_question": 1000,
+        "input_usd_per_million_tokens": 2.0,
+        "output_usd_per_million_tokens": 8.0,
+        **approval_overrides,
+    }
+    return E1DevelopmentManifest.model_validate(manifest_data)
 
 
 def test_development_runner_is_restart_safe_and_excludes_held_out(tmp_path):
@@ -69,7 +111,11 @@ def test_development_runner_is_restart_safe_and_excludes_held_out(tmp_path):
     assert len(factory_calls) == 1
     assert calls == [question.prompt for question in manifest.questions]
     assert all(record["question_id"].startswith("D-") for record in records)
-    assert json.loads((tmp_path / "run.json").read_text())["partition"] == "development"
+    run_metadata = json.loads((tmp_path / "run.json").read_text())
+    assert run_metadata["partition"] == "development"
+    assert run_metadata["protocol_artifact_hashes"]["development_questions"] == hashlib.sha256(
+        Path("research/paper/e1/d-questions.v1.json").read_bytes()
+    ).hexdigest()
 
     with pytest.raises(ValidationError):
         E1DevelopmentManifest.model_validate(
@@ -131,9 +177,22 @@ def test_development_runner_rejects_manifest_mismatch_and_recovers_partial_tail(
 
 def test_mag_candidate_route_is_part_of_manifest_and_factory_args(tmp_path):
     manifest_data = _manifest().model_dump(mode="json")
+    manifest_data["cohort"] = "E1-R"
     manifest_data["candidate"].update(
         {"provider": "mag", "mag_provider": "openai", "model_id": "account-model"}
     )
+    manifest_data["remote_approval"] = {
+        "approval_reference": "test-only",
+        "approved_by": "test",
+        "provider": "mag",
+        "mag_provider": "openai",
+        "model_id": "account-model",
+        "revision": manifest_data["candidate"]["revision"],
+        "spending_ceiling_usd": 1.0,
+        "max_input_tokens_per_question": 1000,
+        "input_usd_per_million_tokens": 0.0,
+        "output_usd_per_million_tokens": 0.0,
+    }
     manifest = E1DevelopmentManifest.model_validate(manifest_data)
     factory_calls = []
 
@@ -151,3 +210,107 @@ def test_mag_candidate_route_is_part_of_manifest_and_factory_args(tmp_path):
     assert factory_calls[0]["mag_provider"] == "openai"
     candidate = json.loads((tmp_path / "manifest.json").read_text())["candidate"]
     assert candidate["mag_provider"] == "openai"
+
+
+def test_remote_manifest_binds_approval_and_enforces_worst_case_ceiling():
+    with pytest.raises(ValidationError, match="spending ceiling"):
+        _remote_manifest(spending_ceiling_usd=0.001)
+
+    manifest_data = _remote_manifest().model_dump(mode="json")
+    manifest_data["remote_approval"]["model_id"] = "different-model"
+    with pytest.raises(ValidationError, match="approval must match"):
+        E1DevelopmentManifest.model_validate(manifest_data)
+
+
+def test_remote_runner_preserves_responses_and_writes_separate_cost_ledger(tmp_path):
+    captured_messages = []
+
+    class FakeModel:
+        def invoke(self, messages):
+            captured_messages.append(messages)
+            return AIMessage(
+                content=_scientific_response(),
+                usage_metadata={
+                    "input_tokens": 10,
+                    "output_tokens": 20,
+                    "total_tokens": 30,
+                },
+            )
+
+    manifest = _remote_manifest()
+    result = run_e1_development(
+        manifest,
+        tmp_path,
+        model_factory=lambda **_kwargs: FakeModel(),
+    )
+
+    response_records = [
+        json.loads(line)
+        for line in (tmp_path / "responses.jsonl").read_text().splitlines()
+    ]
+    cost_records = [
+        json.loads(line) for line in (tmp_path / "costs.jsonl").read_text().splitlines()
+    ]
+    assert result["state"] == "complete"
+    assert all(record["raw_response"]["content"] == _scientific_response() for record in response_records)
+    assert all(record["parsed_response"]["confidence"] == "low" for record in response_records)
+    assert all(record["schema_error"] is None for record in response_records)
+    assert len(cost_records) == len(manifest.questions)
+    assert cost_records[0]["estimated_cost_usd"] == pytest.approx(0.00018)
+    assert cost_records[0]["provider_reported_cost_usd"] is None
+    assert all(record["cohort"] == "E1-R" for record in cost_records)
+    assert '"required"' in captured_messages[0][0].content
+    assert "E1ScientificResponse" in captured_messages[0][0].content
+
+
+def test_remote_runner_records_errors_and_retries_only_when_requested(tmp_path):
+    class FlakyModel:
+        def __init__(self):
+            self.calls = 0
+
+        def invoke(self, _messages):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("temporary transport error")
+            return AIMessage(content=_scientific_response())
+
+    model = FlakyModel()
+    manifest = _remote_manifest(max_attempts_per_question=2)
+    first = run_e1_development(
+        manifest,
+        tmp_path,
+        model_factory=lambda **_kwargs: model,
+    )
+    records = [
+        json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()
+    ]
+    assert first["state"] == "complete_with_errors"
+    assert records[0]["status"] == "error"
+    assert records[0]["attempt"] == 1
+    assert "temporary transport error" in records[0]["error_message"]
+    cost_records = [
+        json.loads(line) for line in (tmp_path / "costs.jsonl").read_text().splitlines()
+    ]
+    assert cost_records[0]["status"] == "error"
+    assert cost_records[0]["estimated_cost_usd"] is None
+
+    calls_before_restart = model.calls
+    run_e1_development(
+        manifest,
+        tmp_path,
+        model_factory=lambda **_kwargs: model,
+    )
+    assert model.calls == calls_before_restart
+
+    retried = run_e1_development(
+        manifest,
+        tmp_path,
+        model_factory=lambda **_kwargs: model,
+        retry_errors=True,
+    )
+    all_records = [
+        json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()
+    ]
+    assert retried["state"] == "complete"
+    assert all_records[-1]["status"] == "complete"
+    assert all_records[-1]["attempt"] == 2

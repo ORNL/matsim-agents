@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "partition": "development",
+  "cohort": "E1-L",
+  "candidate": {
+    "catalog_name": "SCHEMA-FIXTURE-ONLY-NOT-A-CANDIDATE",
+    "model_id": "SCHEMA-FIXTURE-ONLY-NOT-A-MODEL",
+    "revision": "fixture-only",
+    "provider": "fixture-only"
+  },
+  "decoding": {
+    "temperature": 0.0,
+    "max_tokens": 16384,
+    "top_p": null,
+    "seed": null
+  },
+  "protocol_version": "e1-development-protocol-v1",
+  "questions": [
+    {
+      "question_id": "D-LFP-A",
+      "material": "LiFePO4",
+      "category": "A",
+      "prompt": "Consider a Li-vacancy in olivine LiFePO4. Compare localized and delocalized Fe/electronic charge-compensation explanations. What mechanisms and magnetic/charge assumptions control this comparison, and what matched calculation and possible outcomes would distinguish the explanations?"
+    },
+    {
+      "question_id": "D-LFP-B",
+      "material": "LiFePO4",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical report: two Li-vacancy configurations were compared, but their magnetic initializations differ and the report omits how charge compensation was checked. State what is supported, what is not, which missing evidence matters most, and a test that could change the interpretation."
+    },
+    {
+      "question_id": "D-LFP-C",
+      "material": "LiFePO4",
+      "category": "C",
+      "prompt": "For LiFePO4 under a Li-vacancy objective, propose at least two physically plausible vacancy-accommodation hypotheses. For each, give a mechanism, assumptions, an observable, a feasible MLIP/DFT investigation, and a result that would falsify it. Do not present a hypothesis as an established result."
+    },
+    {
+      "question_id": "D-CANTOR-A",
+      "material": "Cantor FCC alloy",
+      "category": "A",
+      "prompt": "For equimolar CrMnFeCoNi FCC configurations, compare the explanation that chemical short-range order controls an energy difference with the explanation that magnetic initialization controls it. State the assumptions and propose a composition- and protocol-matched calculation; explain outcomes that distinguish the effects."
+    },
+    {
+      "question_id": "D-CANTOR-B",
+      "material": "Cantor FCC alloy",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical packet: several FCC configurations have reported energies, but only a small and non-independent sample of chemical arrangements was examined; magnetic initializations are stated but no convergence comparison is provided. Identify supported conclusions, limitations, and the next discriminating test."
+    },
+    {
+      "question_id": "D-CANTOR-C",
+      "material": "Cantor FCC alloy",
+      "category": "C",
+      "prompt": "For an equimolar Cantor-alloy objective focused on local order and a nominated structural or energetic observable, formulate at least two plausible mechanisms. State assumptions, predicted observables, feasible MLIP/DFT tests, and outcomes that would falsify each mechanism."
+    },
+    {
+      "question_id": "D-REFRACTORY-A",
+      "material": "NbTaVHfZrTi BCC alloy",
+      "category": "A",
+      "prompt": "For one fixed Nb-Ta-V-Hf-Zr-Ti composition, compare BCC, FCC, and HCP structural prototypes while separating prototype effects from the particular chemical arrangement in each finite cell. Specify a matched comparison and explain which outcomes distinguish those factors."
+    },
+    {
+      "question_id": "D-REFRACTORY-B",
+      "material": "NbTaVHfZrTi BCC alloy",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical packet: one BCC cell and a small number of competing-prototype cells have relaxed energies, but independent chemical orderings are incomplete. State what the calculations establish, what they do not establish about a phase, and the most informative next comparison."
+    },
+    {
+      "question_id": "D-REFRACTORY-C",
+      "material": "NbTaVHfZrTi BCC alloy",
+      "category": "C",
+      "prompt": "For a specified refractory-alloy composition and a local-environment objective, generate at least two hypotheses linking chemical neighborhoods to a structural or energetic response. Give mechanisms, uncertainties, observables, feasible MLIP/DFT tests, and falsifying outcomes."
+    },
+    {
+      "question_id": "D-PHOS-A",
+      "material": "Phosphorene",
+      "category": "A",
+      "prompt": "Compare black and blue phosphorus monolayers under the same explicitly defined in-plane strain convention. Which structural or energetic observable would discriminate a proposed ordering, and what matched calculation and outcomes would support or contradict it? Do not infer a bulk-phase ranking."
+    },
+    {
+      "question_id": "D-PHOS-B",
+      "material": "Phosphorene",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical monolayer report: two phosphorene structures are compared at stated geometries, but a convergence check for the out-of-plane setup is missing. State the supported scope, what remains uncertain, and the most discriminating check."
+    },
+    {
+      "question_id": "D-PHOS-C",
+      "material": "Phosphorene",
+      "category": "C",
+      "prompt": "For a phosphorene monolayer under a specified strain-response objective, propose at least two plausible mechanisms for a structural or electronic change. State assumptions, predicted observables, feasible MLIP/DFT investigations, and a result that would falsify each hypothesis."
+    },
+    {
+      "question_id": "D-MOF-A",
+      "material": "Zn(HCOO)2 MOF",
+      "category": "A",
+      "prompt": "Compare two chemically complete Zn(HCOO)2 framework configurations with different linker or proton arrangements. How would you separate ordering effects from framework breathing in a controlled comparison? State assumptions, observables, and outcomes that distinguish the explanations."
+    },
+    {
+      "question_id": "D-MOF-B",
+      "material": "Zn(HCOO)2 MOF",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical framework packet: stoichiometry is reported, but proton positions and guest occupancy are incomplete. State which structural conclusions are supportable, what cannot be compared, and what information or test would change that assessment."
+    },
+    {
+      "question_id": "D-MOF-C",
+      "material": "Zn(HCOO)2 MOF",
+      "category": "C",
+      "prompt": "For a Zn(HCOO)2 framework with a specified proton- or linker-ordering constraint, formulate at least two plausible hypotheses for a framework observable. State mechanisms and uncertainties, then propose feasible MLIP/DFT investigations and outcomes that would falsify each."
+    },
+    {
+      "question_id": "D-NBTAO-A",
+      "material": "Nb-Ta-O",
+      "category": "A",
+      "prompt": "Within an explicitly declared but incomplete Nb-Ta-O competitor domain, compare two possible explanations for composition-dependent oxide formation. State what the available domain can test, what assumptions affect the comparison, and which calculation or phase evidence could distinguish the explanations. Do not claim global stability."
+    },
+    {
+      "question_id": "D-NBTAO-B",
+      "material": "Nb-Ta-O",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical coverage manifest: a candidate Nb-Ta-O hull includes computed entries, but one required formula or declared polymorph family is missing. Is the hull qualified under its declared contract? Explain the gap, the strongest allowed claim, and what must be added."
+    },
+    {
+      "question_id": "D-NBTAO-C",
+      "material": "Nb-Ta-O",
+      "category": "C",
+      "prompt": "For a stated Nb-Ta-O composition objective, propose at least two distinct hypotheses for oxide formation, including ordered-phase and disordered/solid-solution possibilities where appropriate. Identify assumptions, required phase/ordering evidence, observables, feasible calculations, and falsifiers; do not assert an unsupported stable phase."
+    }
+  ]
+}

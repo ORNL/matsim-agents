@@ -6,13 +6,17 @@ expert-reviewed final questions, and are not validated gold answers. No held-out
 question may be used for panel selection. Do not start model inference until
 the candidate access, serving, and resource authorization gates are approved.
 
-Manuscript reconciliation source: `origin/research/numerical-results-refresh`
-at commit `0aa40cfa3d887a4677d4be604fcd469bd02e462b`, archive
-`docs/paper/new-manuscript.zip`, containing `MATSIM_AGENTS/main.tex` (archive
-SHA-256 `c6c400ab8c2d1ad4baa8edf4828a9f8d471c90013ada4dee0c7d601910ee42a5`).
-The uploaded LaTeX specifies four held-out conditions and treats the 24- and
-36-question designs as exploratory feasibility studies, not evidence of a
-generally winning strategy.
+Manuscript source of record: `research/paper/manuscript/main.tex`. The tracked
+editable source postdates `origin/research/numerical-results-refresh` at commit
+`0aa40cfa3d887a4677d4be604fcd469bd02e462b` and the earlier archive
+`docs/paper/new-manuscript.zip` (historical archive SHA-256
+`c6c400ab8c2d1ad4baa8edf4828a9f8d471c90013ada4dee0c7d601910ee42a5`). Do not
+extract that archive over the live source. The manuscript specifies four E1a
+held-out conditions and treats the 24- and 36-question designs as exploratory
+feasibility studies, not evidence of a generally winning strategy. E1b is a
+separate proposed supplementary assessment; see the E1b proposal files listed
+in the run plan. Its questions and outcomes must not feed back into E1a panel,
+prompt, or held-out-set revisions.
 
 The governing design and gates are in
 [`docs/numerical-results-run-plan.md`](../../docs/numerical-results-run-plan.md).
@@ -36,6 +40,30 @@ catalog presence or another facility's run.
 | `gemma-4-31b-it` | `google/gemma-4-31B-it` | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Unmeasured |
 | `gemma-4-26b-a4b-it` | `google/gemma-4-26B-A4B-it` | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Unmeasured |
 | `devstral-2` | `mistralai/Devstral-2-123B-Instruct-2512` | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Unmeasured |
+| `mixtral-8x22b-instruct-v0.1` | `mistralai/Mixtral-8x22B-Instruct-v0.1` | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Unmeasured |
+
+Mixtral is an additional development-screening candidate requested by the user;
+it is not in the debate-enabled catalog. The Aurora and Perlmutter open-model
+download scripts list its model ID, but no complete local checkpoint or
+immutable revision was found in the inspected project model roots. Its stated
+operability is user-reported but is not yet tied to a facility, provider,
+serving revision, license approval, or E1 authorization. Keep it in the
+screening inventory as **not assessed**, not unavailable; establish an approved
+local or remote route and immutable revision before creating its candidate-bound
+run manifest.
+
+The versioned development packet is
+[`e1/d-questions.v1.json`](e1/d-questions.v1.json). The separate H packet is
+stored outside this repository with owner-only permissions; its path and digest
+are recorded in [`e1/packet-hashes.v1.json`](e1/packet-hashes.v1.json). H prompt
+content appeared in tracked history, so the current copy is not eligible as an
+uncontaminated held-out set and must be replaced and independently reviewed
+before held-out use. The runner has not served H. The full-shape runner fixture at
+[`e1/d-manifest.schema-fixture.v1.json`](e1/d-manifest.schema-fixture.v1.json)
+uses a deliberately unsupported provider and is for offline schema validation
+only; it is not a candidate manifest and must not be executed. Proposed
+scoring, qualification, adjudication, execution, budget, and readiness details
+are in [`e1/development-protocol.v1.md`](e1/development-protocol.v1.md).
 
 Record evidence links or artifact identifiers for every status transition.
 Document exclusion reasons rather than deleting candidates. Store no tokens,
@@ -61,9 +89,9 @@ packet must turn its brief into an exact model-facing prompt with verified
 sources/evidence or explicitly hypothetical qualitative evidence. Do not invent
 numerical reference values, assert a phase ranking without compatible evidence,
 or use development annotations to cue held-out reasoning. The development and
-held-out situations must differ scientifically, not by paraphrase. Held-out
-prompts and annotations must be access-controlled from candidate selection; only
-the approved prompt set is served after panel freeze.
+held-out situations must differ scientifically, not by paraphrase. The H packet
+is stored outside this repository with owner-only permissions; keep its content
+inaccessible to candidate selection and serve it only after panel freeze.
 
 ### 36-question matrix (preferred)
 
@@ -72,12 +100,12 @@ type (`A` comparison, `B` evidence audit, `C` open hypothesis generation).
 
 | Material | A: controlled comparison (D / H) | B: evidence audit (D / H) | C: open hypothesis generation (D / H) |
 |---|---|---|---|
-| LiFePO4 | `D-LFP-A`: “Consider a Li-vacancy in olivine LiFePO4. Compare localized and delocalized Fe/electronic charge-compensation explanations. What mechanisms and magnetic/charge assumptions control this comparison, and what matched calculation and possible outcomes would distinguish the explanations?” `H-LFP-A`: “Compare olivine and maricite LiFePO4 as candidate structures under a specified Li chemical-potential window. What compatible evidence is required before preferring either, and which numerical outcomes would support or contradict that preference? Do not assume a ranking.” | `D-LFP-B`: “Audit this explicitly hypothetical report: two Li-vacancy configurations were compared, but their magnetic initializations differ and the report omits how charge compensation was checked. State what is supported, what is not, which missing evidence matters most, and a test that could change the interpretation.” `H-LFP-B`: “Audit this explicitly hypothetical olivine/maricite comparison: reported energies use different reference conventions and the Li chemical-potential limits are not supplied. What, if anything, can be concluded? Identify the evidence needed to make a valid comparison and how its outcomes would affect your conclusion.” | `D-LFP-C`: “For LiFePO4 under a Li-vacancy objective, propose at least two physically plausible vacancy-accommodation hypotheses. For each, give a mechanism, assumptions, an observable, a feasible MLIP/DFT investigation, and a result that would falsify it. Do not present a hypothesis as an established result.” `H-LFP-C`: “Suppose the objective is to understand how a specified change in Li content affects an electronic or structural response in LiFePO4. Develop at least two distinct hypotheses, state uncertainties, predict observables, and propose feasible discriminating calculations and falsifiers. Do not assume either hypothesis is correct.” |
-| Cantor FCC alloy | `D-CANTOR-A`: “For equimolar CrMnFeCoNi FCC configurations, compare the explanation that chemical short-range order controls an energy difference with the explanation that magnetic initialization controls it. State the assumptions and propose a composition- and protocol-matched calculation; explain outcomes that distinguish the effects.” `H-CANTOR-A`: “Assess a proposed FCC-versus-HCP comparison for composition-matched CrMnFeCoNi configurations. What must be controlled in chemical arrangement, magnetic treatment, and relaxation before interpreting relative energies? Give a falsifying result for the proposed interpretation.” | `D-CANTOR-B`: “Audit this explicitly hypothetical packet: several FCC configurations have reported energies, but only a small and non-independent sample of chemical arrangements was examined; magnetic initializations are stated but no convergence comparison is provided. Identify supported conclusions, limitations, and the next discriminating test.” `H-CANTOR-B`: “Audit this explicitly hypothetical packet: one set of calculations favors one chemical ordering while a second magnetic initialization changes the ordering of two configurations. Explain what is and is not identifiable, which controls are missing, and what evidence would resolve the disagreement.” | `D-CANTOR-C`: “For an equimolar Cantor-alloy objective focused on local order and a nominated structural or energetic observable, formulate at least two plausible mechanisms. State assumptions, predicted observables, feasible MLIP/DFT tests, and outcomes that would falsify each mechanism.” `H-CANTOR-C`: “Suppose the objective is to determine whether a small composition change alters a local-environment response in the Cantor alloy. Propose at least two hypotheses that distinguish composition effects from configuration effects, with observable predictions, feasible tests, and falsifiers.” |
-| NbTaVHfZrTi BCC alloy | `D-REFRACTORY-A`: “For one fixed Nb-Ta-V-Hf-Zr-Ti composition, compare BCC, FCC, and HCP structural prototypes while separating prototype effects from the particular chemical arrangement in each finite cell. Specify a matched comparison and explain which outcomes distinguish those factors.” `H-REFRACTORY-A`: “A finite-cell study compares BCC and competing prototypes at a stated composition but samples different chemical orderings and magnetic initializations. What conclusions are warranted, what confounding remains, and what cell/order control could reverse the apparent ranking?” | `D-REFRACTORY-B`: “Audit this explicitly hypothetical packet: one BCC cell and a small number of competing-prototype cells have relaxed energies, but independent chemical orderings are incomplete. State what the calculations establish, what they do not establish about a phase, and the most informative next comparison.” `H-REFRACTORY-B`: “Audit this explicitly hypothetical packet: prototype energies are reported, but some structures did not reach the same relaxation criteria and magnetic initialization was not matched. Identify whether any relative ranking is admissible, list key limitations, and propose a falsification test.” | `D-REFRACTORY-C`: “For a specified refractory-alloy composition and a local-environment objective, generate at least two hypotheses linking chemical neighborhoods to a structural or energetic response. Give mechanisms, uncertainties, observables, feasible MLIP/DFT tests, and falsifying outcomes.” `H-REFRACTORY-C`: “Suppose the objective is to explain a composition-dependent tendency toward chemical ordering in NbTaVHfZrTi. Propose competing hypotheses that distinguish local-order effects from structural-prototype effects, and specify feasible observables, tests, and falsifiers.” |
-| Phosphorene | `D-PHOS-A`: “Compare black and blue phosphorus monolayers under the same explicitly defined in-plane strain convention. Which structural or energetic observable would discriminate a proposed ordering, and what matched calculation and outcomes would support or contradict it? Do not infer a bulk-phase ranking.” `H-PHOS-A`: “Assess a proposed strain-dependent stability comparison between two phosphorene monolayers. Explain how in-plane strain, vacuum separation, and numerical convergence must be controlled, and identify a result that would change the interpretation.” | `D-PHOS-B`: “Audit this explicitly hypothetical monolayer report: two phosphorene structures are compared at stated geometries, but a convergence check for the out-of-plane setup is missing. State the supported scope, what remains uncertain, and the most discriminating check.” `H-PHOS-B`: “Audit this explicitly hypothetical energy comparison: the structures have different strain conventions and k-point sampling, while vacuum dimensions are reported. Is the energy difference interpretable? Identify the minimum metadata/control needed and explain how the conclusion could change.” | `D-PHOS-C`: “For a phosphorene monolayer under a specified strain-response objective, propose at least two plausible mechanisms for a structural or electronic change. State assumptions, predicted observables, feasible MLIP/DFT investigations, and a result that would falsify each hypothesis.” `H-PHOS-C`: “Suppose the objective is to understand whether a dimensionality or strain constraint changes a nominated phosphorene response. Generate at least two distinct hypotheses, separate physical mechanisms from convergence artifacts, and give feasible tests and falsifiers.” |
-| Zn(HCOO)2 MOF | `D-MOF-A`: “Compare two chemically complete Zn(HCOO)2 framework configurations with different linker or proton arrangements. How would you separate ordering effects from framework breathing in a controlled comparison? State assumptions, observables, and outcomes that distinguish the explanations.” `H-MOF-A`: “Compare two stated Zn-formate framework configurations that differ in guest or proton state under a common computational method. What controls are needed before interpreting an energy difference, and what result would weaken the proposed structural explanation?” | `D-MOF-B`: “Audit this explicitly hypothetical framework packet: stoichiometry is reported, but proton positions and guest occupancy are incomplete. State which structural conclusions are supportable, what cannot be compared, and what information or test would change that assessment.” `H-MOF-B`: “Audit these explicitly hypothetical Zn-formate structure/energy records: the framework labels match, but guest state, hydrogen placement, and method equivalence are not all documented. Identify admissible conclusions, essential missing evidence, and a falsification or validation test.” | `D-MOF-C`: “For a Zn(HCOO)2 framework with a specified proton- or linker-ordering constraint, formulate at least two plausible hypotheses for a framework observable. State mechanisms and uncertainties, then propose feasible MLIP/DFT investigations and outcomes that would falsify each.” `H-MOF-C`: “Suppose the objective is to determine whether guest occupancy or framework breathing drives a specified response in Zn(HCOO)2. Propose competing hypotheses that distinguish these effects from proton ordering, with predicted observables, feasible tests, and falsifiers.” |
-| Nb-Ta-O | `D-NBTAO-A`: “Within an explicitly declared but incomplete Nb-Ta-O competitor domain, compare two possible explanations for composition-dependent oxide formation. State what the available domain can test, what assumptions affect the comparison, and which calculation or phase evidence could distinguish the explanations. Do not claim global stability.” `H-NBTAO-A`: “Given a frozen, declared-domain Nb-Ta-O phase packet, compare a target-phase interpretation with a decomposition interpretation. Identify the evidence required, explain which outcomes change the domain-relative conclusion, and distinguish that conclusion from global thermodynamic stability.” | `D-NBTAO-B`: “Audit this explicitly hypothetical coverage manifest: a candidate Nb-Ta-O hull includes computed entries, but one required formula or declared polymorph family is missing. Is the hull qualified under its declared contract? Explain the gap, the strongest allowed claim, and what must be added.” `H-NBTAO-B`: “Audit this explicitly hypothetical result: every formula and polymorph required by a declared Nb-Ta-O domain contract has converged compatible energies and a convex hull has been computed. Does this establish globally exhaustive thermodynamic stability? Explain the scope, remaining out-of-domain possibilities, and a test or evidence source that could revise the claim.” | `D-NBTAO-C`: “For a stated Nb-Ta-O composition objective, propose at least two distinct hypotheses for oxide formation, including ordered-phase and disordered/solid-solution possibilities where appropriate. Identify assumptions, required phase/ordering evidence, observables, feasible calculations, and falsifiers; do not assert an unsupported stable phase.” `H-NBTAO-C`: “Suppose the objective is to determine whether an Nb-Ta-O composition is better described by an ordered compound or a solid-solution-like arrangement within a bounded reference domain. Formulate competing hypotheses, predicted observables, feasible MLIP/DFT tests, domain limitations, and falsifying outcomes.” |
+| LiFePO4 | `D-LFP-A`: “Consider a Li-vacancy in olivine LiFePO4. Compare localized and delocalized Fe/electronic charge-compensation explanations. What mechanisms and magnetic/charge assumptions control this comparison, and what matched calculation and possible outcomes would distinguish the explanations?” `H-LFP-A`: [sealed prompt; held-out packet stored outside repository] | `D-LFP-B`: “Audit this explicitly hypothetical report: two Li-vacancy configurations were compared, but their magnetic initializations differ and the report omits how charge compensation was checked. State what is supported, what is not, which missing evidence matters most, and a test that could change the interpretation.” `H-LFP-B`: [sealed prompt; held-out packet stored outside repository] | `D-LFP-C`: “For LiFePO4 under a Li-vacancy objective, propose at least two physically plausible vacancy-accommodation hypotheses. For each, give a mechanism, assumptions, an observable, a feasible MLIP/DFT investigation, and a result that would falsify it. Do not present a hypothesis as an established result.” `H-LFP-C`: [sealed prompt; held-out packet stored outside repository] |
+| Cantor FCC alloy | `D-CANTOR-A`: “For equimolar CrMnFeCoNi FCC configurations, compare the explanation that chemical short-range order controls an energy difference with the explanation that magnetic initialization controls it. State the assumptions and propose a composition- and protocol-matched calculation; explain outcomes that distinguish the effects.” `H-CANTOR-A`: [sealed prompt; held-out packet stored outside repository] | `D-CANTOR-B`: “Audit this explicitly hypothetical packet: several FCC configurations have reported energies, but only a small and non-independent sample of chemical arrangements was examined; magnetic initializations are stated but no convergence comparison is provided. Identify supported conclusions, limitations, and the next discriminating test.” `H-CANTOR-B`: [sealed prompt; held-out packet stored outside repository] | `D-CANTOR-C`: “For an equimolar Cantor-alloy objective focused on local order and a nominated structural or energetic observable, formulate at least two plausible mechanisms. State assumptions, predicted observables, feasible MLIP/DFT tests, and outcomes that would falsify each mechanism.” `H-CANTOR-C`: [sealed prompt; held-out packet stored outside repository] |
+| NbTaVHfZrTi BCC alloy | `D-REFRACTORY-A`: “For one fixed Nb-Ta-V-Hf-Zr-Ti composition, compare BCC, FCC, and HCP structural prototypes while separating prototype effects from the particular chemical arrangement in each finite cell. Specify a matched comparison and explain which outcomes distinguish those factors.” `H-REFRACTORY-A`: [sealed prompt; held-out packet stored outside repository] | `D-REFRACTORY-B`: “Audit this explicitly hypothetical packet: one BCC cell and a small number of competing-prototype cells have relaxed energies, but independent chemical orderings are incomplete. State what the calculations establish, what they do not establish about a phase, and the most informative next comparison.” `H-REFRACTORY-B`: [sealed prompt; held-out packet stored outside repository] | `D-REFRACTORY-C`: “For a specified refractory-alloy composition and a local-environment objective, generate at least two hypotheses linking chemical neighborhoods to a structural or energetic response. Give mechanisms, uncertainties, observables, feasible MLIP/DFT tests, and falsifying outcomes.” `H-REFRACTORY-C`: [sealed prompt; held-out packet stored outside repository] |
+| Phosphorene | `D-PHOS-A`: “Compare black and blue phosphorus monolayers under the same explicitly defined in-plane strain convention. Which structural or energetic observable would discriminate a proposed ordering, and what matched calculation and outcomes would support or contradict it? Do not infer a bulk-phase ranking.” `H-PHOS-A`: [sealed prompt; held-out packet stored outside repository] | `D-PHOS-B`: “Audit this explicitly hypothetical monolayer report: two phosphorene structures are compared at stated geometries, but a convergence check for the out-of-plane setup is missing. State the supported scope, what remains uncertain, and the most discriminating check.” `H-PHOS-B`: [sealed prompt; held-out packet stored outside repository] | `D-PHOS-C`: “For a phosphorene monolayer under a specified strain-response objective, propose at least two plausible mechanisms for a structural or electronic change. State assumptions, predicted observables, feasible MLIP/DFT investigations, and a result that would falsify each hypothesis.” `H-PHOS-C`: [sealed prompt; held-out packet stored outside repository] |
+| Zn(HCOO)2 MOF | `D-MOF-A`: “Compare two chemically complete Zn(HCOO)2 framework configurations with different linker or proton arrangements. How would you separate ordering effects from framework breathing in a controlled comparison? State assumptions, observables, and outcomes that distinguish the explanations.” `H-MOF-A`: [sealed prompt; held-out packet stored outside repository] | `D-MOF-B`: “Audit this explicitly hypothetical framework packet: stoichiometry is reported, but proton positions and guest occupancy are incomplete. State which structural conclusions are supportable, what cannot be compared, and what information or test would change that assessment.” `H-MOF-B`: [sealed prompt; held-out packet stored outside repository] | `D-MOF-C`: “For a Zn(HCOO)2 framework with a specified proton- or linker-ordering constraint, formulate at least two plausible hypotheses for a framework observable. State mechanisms and uncertainties, then propose feasible MLIP/DFT investigations and outcomes that would falsify each.” `H-MOF-C`: [sealed prompt; held-out packet stored outside repository] |
+| Nb-Ta-O | `D-NBTAO-A`: “Within an explicitly declared but incomplete Nb-Ta-O competitor domain, compare two possible explanations for composition-dependent oxide formation. State what the available domain can test, what assumptions affect the comparison, and which calculation or phase evidence could distinguish the explanations. Do not claim global stability.” `H-NBTAO-A`: [sealed prompt; held-out packet stored outside repository] | `D-NBTAO-B`: “Audit this explicitly hypothetical coverage manifest: a candidate Nb-Ta-O hull includes computed entries, but one required formula or declared polymorph family is missing. Is the hull qualified under its declared contract? Explain the gap, the strongest allowed claim, and what must be added.” `H-NBTAO-B`: [sealed prompt; held-out packet stored outside repository] | `D-NBTAO-C`: “For a stated Nb-Ta-O composition objective, propose at least two distinct hypotheses for oxide formation, including ordered-phase and disordered/solid-solution possibilities where appropriate. Identify assumptions, required phase/ordering evidence, observables, feasible calculations, and falsifiers; do not assert an unsupported stable phase.” `H-NBTAO-C`: [sealed prompt; held-out packet stored outside repository] |
 
 For Type B, the packet owner must supply provenance and the actual evidence or
 mark the scenario explicitly hypothetical. A hypothesis is not a validated
@@ -203,14 +231,15 @@ superiority.
 
 These are exact planned call-count estimates under one response per
 candidate/question, no retries, and no repeatability replicates. They are not
-GPU-hour, node-hour, or dollar estimates. Nine debate-enabled catalog entries
-are currently listed, but authorization, complete checkpoints, serving
-compatibility, and facility feasibility remain unassessed.
+GPU-hour, node-hour, or dollar estimates. The screening set now contains the
+nine debate-enabled catalog entries plus Mixtral-8x22B-Instruct-v0.1 as a
+requested supplemental candidate. Authorization, complete checkpoints,
+serving compatibility, and facility feasibility remain unassessed.
 
-| Design | Candidate qualification (9 × development items) | Held-out B (3/item) | Held-out C (9 condition calls/item; 6 additional unique if B reused) | Held-out D (9/item) | Held-out A extra | Total unique calls with B-to-C reuse |
+| Design | Candidate qualification (10 × development items) | Held-out B (3/item) | Held-out C (9 condition calls/item; 6 additional unique if B reused) | Held-out D (9/item) | Held-out A extra | Total unique calls with B-to-C reuse |
 |---|---:|---:|---:|---:|---:|---:|
-| 24 questions (12 D + 12 H) | 108 | 36 | 108 condition calls; 72 additional unique | 108 | 0-12 | 324-336 |
-| 36 questions (18 D + 18 H) | 162 | 54 | 162 condition calls; 108 additional unique | 162 | 0-18 | 486-504 |
+| 24 questions (12 D + 12 H) | 120 | 36 | 108 condition calls; 72 additional unique | 108 | 0-12 | 336-348 |
+| 36 questions (18 D + 18 H) | 180 | 54 | 162 condition calls; 108 additional unique | 162 | 0-18 | 504-522 |
 
 Totals count C's initial independent answers as reused from B when the complete
 request is identical; otherwise add up to three C calls per held-out item.
@@ -224,7 +253,7 @@ described above.
 
 | Phase | 24-question design | 36-question design |
 |---|---|---|
-| Development qualification | 12 questions × 9 candidates = 108 calls; 12 calls per candidate | 18 × 9 = 162; 18 per candidate |
+| Development qualification | 12 questions × 10 candidates = 120 calls; 12 calls per candidate | 18 × 10 = 180; 18 per candidate |
 | Held-out A, strongest single | 0 additional if reused from B; otherwise 12 | 0 additional if reused from B; otherwise 18 |
 | Held-out B, independent panel | 12 × 3 = 36; 12 per selected model | 18 × 3 = 54; 18 per selected model |
 | Held-out C, private independent reasoning | 12 × 9 = 108 condition calls; after reusing B's initial answer, 72 new calls (24 per selected model) | 18 × 9 = 162 condition calls; after reusing B's initial answer, 108 new calls (36 per selected model) |
@@ -277,8 +306,10 @@ requires no DFT allocation.
 	evidence packets, independence, and split still require domain review and
 	approval before any inference.
 - **Candidate screening scope selected:** all nine debate-enabled entries in
-	the model catalog. Catalog membership is not authorization, serving
-	feasibility, or scientific qualification; document evidence-based exclusions.
+	the model catalog plus the user-requested Mixtral-8x22B-Instruct-v0.1
+	supplemental candidate. Catalog/deployment-script presence is not
+	authorization, serving feasibility, or scientific qualification; document
+	evidence-based exclusions.
 - **Intended facility supplied:** ALCF Aurora; project ID `HydraGNN` confirmed
 	by the user. The user confirms approval to use this allocation for a bounded
 	E1 serving qualification; facility-side authorization has not been
@@ -330,7 +361,8 @@ requires no DFT allocation.
 - The nine endpoint variables for the debate-enabled catalog candidates were
 	checked by name only; all are unset in this shell. No endpoint values or
 	credentials were read or recorded. This does not establish whether a service
-	is available through another environment.
+	is available through another environment. Mixtral is outside this catalog;
+	its user-reported operability has not been independently routed or verified.
 - The local `Mistral-Small-24B-Instruct-2501` checkpoint occupies about 44 GB,
 	and all ten weight shards referenced by its safetensors index are present.
 	It is not one of the nine E1 screening candidates: the catalog marks
@@ -356,35 +388,40 @@ requires no DFT allocation.
 
 ### E1 Protocol Freeze Register
 
-The 36-question design and nine-candidate screening scope are selected for
-planning, not scientifically approved or authorized for execution. The entries
-below remain pending until the named evidence is recorded and the relevant
-reviewers approve it.
+The 36-question design is selected; ten candidates is an upper bound, not a
+minimum screening requirement. The
+question wording and proposed rubric remain pending scientific review; neither
+selection nor offline validation authorizes inference. Development execution
+does not require completing the held-out comparison protocol, but it does
+require the development-specific evidence and approvals listed in the versioned
+development protocol. The entries below remain pending until the named evidence
+is recorded and the relevant reviewers approve it.
 
 | Gate | Required freeze evidence | Status |
 |---|---|---|
-| Question set and split | Final independently authored prompts for all six materials; evidence and provenance for every factual claim; documented D/H independence; partition manifest and content hashes; held-out access controls | Pending domain review |
-| Scoring and reviewers | Frozen rubric weights and task-specific anchors; reviewer assignments and blinding; written adjudication and agreement procedure; competence thresholds, complementarity weights, and sensitivity rule | Pending domain review |
+| Question set and split | Review the exact versioned D packet for scientific adequacy and provenance; confirm the 18/18 split; replace the H packet because its prompt content appeared in tracked history, then verify D/H scientific independence and packet digests; maintain owner-only access before any held-out workflow | Pending domain review |
+| Scoring and reviewers | Approve the proposed v1 anchors, thresholds, reviewer assignments/blinding, and adjudication rule before candidate responses are inspected | Pending domain review |
 | Panel and conditions | Candidate eligibility and shortlist rule; deterministic B aggregation; C critique/revision schedule; response reuse rules; repeatability policy; confirmation of A-D call accounting | Pending protocol approval |
 | Candidate and serving | Approved candidate IDs, revisions and licenses; decoding and seed policy; serving stack/version and hardware placement; response schema, parser, and provenance requirements | Pending candidate approval |
 | Facility and execution | Approved account/project, queue, candidate scope, node/walltime and cost ceiling; data handling, stop/retry rules, accounting method, and explicit submission authorization | Pending facility and user approval |
 
 Do not run candidate inference until these gates are approved, the development
 manifest and protocol hashes are frozen, and the specific run's resource request
-and submission are authorized. Held-out prompts and annotations remain sealed
-until the development-based panel and all held-out procedures are frozen.
+and submission are authorized. Do not begin held-out A-D comparison until cohort
+selection and the complete held-out evaluation protocol are both frozen. The
+current H packet must also be replaced before held-out use.
 
-The revised E1 manuscript is available in the uploaded package identified above;
-the archive has not been extracted into or substituted for
-`research/paper/manuscript/main.tex`. The planning documents are aligned to its
-four-condition E1 design, while its proposed question bank still requires
-independent domain authoring/review and its budget-matching claim requires
-measured token/resource confirmation. Preserve all pending results as planned,
-not completed. No scientific E1 inference, DFT, large HPC job, or held-out
-inspection is authorized by this preparation draft. The user has approved only
-the bounded serving qualification above; its job submission still requires
-the separate facility-side verification and explicit submission approval
-recorded above.
+The live E1a design remains in `research/paper/manuscript/main.tex`; the older
+archive has not been extracted over it. E1a's proposed question bank still
+requires independent domain authoring/review, and its budget-matching claim
+requires measured token/resource confirmation. The separate E1b proposal is
+pending independent scientific review and has no inference authorization.
+Preserve all pending results as planned, not completed. No scientific E1
+inference, DFT, large HPC job, or held-out inspection is authorized by this
+preparation draft. The user has approved only the bounded serving qualification
+above; its job submission still requires the separate facility-side
+verification and explicit submission approval recorded above. These E1b
+preparation notes must not delay independently approved E1a development work.
 
 ## Results Ledger
 
@@ -394,24 +431,33 @@ recorded above.
 
 ## Development Runner and Readiness Gates
 
-The repository now contains a development-only runner, exposed as
+The repository contains a development-only runner, exposed as
 `matsim-agents e1-development MANIFEST.json --output RUN_DIR`. The strict JSON
 manifest accepts only `partition: "development"` and question IDs beginning
 with `D-`; it has no held-out input or path. It requires unique question IDs,
 one candidate identity/revision, and deterministic temperature zero with a
-maximum of 16,384 output tokens. A run executes its pending questions
-sequentially through one model session. The checked-in synthetic tests cover
-held-out rejection, duplicate IDs, response reuse after restart, incomplete
-trailing JSONL recovery, and refusal to reuse an output directory with a
-different manifest. These are software integrity checks, not evidence of model
-readiness or scientific competence.
+maximum of 16,384 output tokens. It defines independent E1-L local and E1-R
+approved-remote cohorts; neither waits for Aurora or for the other cohort. Both
+receive the identical frozen D prompts, JSON response schema, rubric, and
+provenance contract. Each candidate has a separate manifest and output
+directory. E1-R requires explicit approval bound to provider/model/revision,
+pricing, token and attempt caps, and a numerical spending ceiling; its
+`costs.jsonl` records token-derived estimates separately from provider-reported
+charges. Errors are retained and retries are opt-in and bounded by the approved
+attempt count. A run executes sequentially through one model session. Six
+offline synthetic tests cover schema/route gates, spend rejection, response
+preservation, cost logging, restart recovery, and retry behavior. These are
+software integrity checks, not evidence of model readiness or scientific
+competence.
 
-For an approved development packet, create a separate manifest containing only
-the reviewed development prompts and invoke the command above inside the
-approved serving environment. The output directory records the exact manifest,
-run metadata, and append-only response ledger. A changed manifest requires a
-new output directory. Do not put credentials or private endpoints in the
-manifest. No production candidate manifest has been approved or run.
+For an approved development packet, create separate candidate manifests
+containing only the reviewed development prompts and invoke each command in its
+approved environment, independently. The output directory records the exact
+manifest, run metadata, and append-only response ledger. A changed manifest
+requires a new output directory. Do not put credentials or private endpoints in
+the manifest. No production candidate manifest has been approved or run; the
+current shell has no inspected API credentials or provider configuration, and
+no API or local model call has been made.
 
 Candidate readiness statuses must be evidence-based and distinguish at least:
 **not assessed** (no facility-specific check), **blocked** (a documented
