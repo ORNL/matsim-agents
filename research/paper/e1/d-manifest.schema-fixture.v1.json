@@ -10,7 +10,7 @@
   },
   "decoding": {
     "temperature": 0.0,
-    "max_tokens": 16384,
+    "max_tokens": 32768,
     "top_p": null,
     "seed": null
   },

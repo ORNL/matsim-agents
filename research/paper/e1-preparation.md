@@ -42,6 +42,10 @@ catalog presence or another facility's run.
 | `devstral-2` | `mistralai/Devstral-2-123B-Instruct-2512` | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Unmeasured |
 | `mixtral-8x22b-instruct-v0.1` | `mistralai/Mixtral-8x22B-Instruct-v0.1` | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Not assessed | Unmeasured |
 
+Claude Fable is retained only as a pending placeholder: N/A - not evaluated,
+excluded from aggregates. This does not establish a candidate ID, serving
+route, revision, authorization, inference, or scientific assessment.
+
 Mixtral is an additional development-screening candidate requested by the user;
 it is not in the debate-enabled catalog. The Aurora and Perlmutter open-model
 download scripts list its model ID, but no complete local checkpoint or
@@ -536,20 +540,21 @@ The repository contains a development-only runner, exposed as
 `matsim-agents e1-development MANIFEST.json --output RUN_DIR`. The strict JSON
 manifest accepts only `partition: "development"` and question IDs beginning
 with `D-`; it has no held-out input or path. It requires unique question IDs,
-one candidate identity/revision, and deterministic temperature zero with a
-maximum of 16,384 output tokens. It defines independent E1-L local and E1-R
-approved-remote cohorts; neither waits for Aurora or for the other cohort. Both
-receive the identical frozen D prompts, JSON response schema, rubric, and
-provenance contract. Each candidate has a separate manifest and output
-directory. E1-R requires explicit approval bound to provider/model/revision,
-pricing, token and attempt caps, and a numerical spending ceiling; its
-`costs.jsonl` records token-derived estimates separately from provider-reported
-charges. Errors are retained and retries are opt-in and bounded by the approved
-attempt count. A run executes sequentially through one model session. Six
-offline synthetic tests cover schema/route gates, spend rejection, response
-preservation, cost logging, restart recovery, and retry behavior. These are
-software integrity checks, not evidence of model readiness or scientific
-competence.
+one candidate identity/revision, and temperature zero with a maximum of 32,768
+output tokens, further bounded by `candidate.max_output_tokens_supported` when
+provided. The separately versioned execution amendment records this ceiling;
+the frozen scientific protocol remains unchanged. Retries are disabled by
+default. Independent E1-L local and E1-R approved-remote cohorts use separate
+candidate manifests and output directories. E1-R still requires explicit
+route-, model-, data-use-, retention-, request-, and allocation-bound approval
+before inference; the example candidate configuration is explicitly
+non-dispatchable. The completed GPT-6 Luna original screen and its separately
+authorized five-request recovery are recorded in
+`runs/e1/e1-r-mag-gpt-6-luna-scoring-2026-10-29/evaluation-record.json`:
+13/18 original first-attempt responses and 18/18 recovery-assisted complete
+responses across 23 requests. Scientific scoring remains pending independent
+blinded review. Software checks and schema validity are not evidence of
+scientific competence.
 
 For an approved development packet, create separate candidate manifests
 containing only the reviewed development prompts and invoke each command in its

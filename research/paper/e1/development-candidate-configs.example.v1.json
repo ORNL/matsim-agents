@@ -1,0 +1,59 @@
+{
+  "example_only_not_dispatchable": true,
+  "protocol_version": "e1-development-protocol-v1",
+  "execution_amendment": "development-execution-amendment.v1.md",
+  "retry_policy": "disabled; additional attempts require separate explicit approval",
+  "decoding": {
+    "temperature": 0.0,
+    "max_tokens": 32768,
+    "top_p": null,
+    "seed": null
+  },
+  "local_candidate_template": {
+    "cohort": "E1-L",
+    "candidate": {
+      "catalog_name": "REPLACE_WITH_AUTHORIZED_LOCAL_CANDIDATE",
+      "model_id": "REPLACE_WITH_IMMUTABLE_MODEL_ID",
+      "revision": "REPLACE_WITH_CHECKPOINT_REVISION_OR_DIGEST",
+      "max_output_tokens_supported": 32768,
+      "revision_semantics": "immutable",
+      "provider": "vllm"
+    },
+    "authorization_required": "Confirm license, project authorization, facility allocation, model provenance, and the selected server's effective output-token mapping before creating an executable manifest. Set max_output_tokens_supported to a verified limit; lower decoding.max_tokens if required."
+  },
+  "frontier_candidate_template": {
+    "cohort": "E1-R",
+    "candidate": {
+      "catalog_name": "REPLACE_WITH_APPROVED_CATALOG_ENTRY",
+      "model_id": "REPLACE_WITH_APPROVED_MODEL_ID",
+      "revision": "REPLACE_WITH_MODEL_VERSION_OR_ALIAS",
+      "max_output_tokens_supported": 32768,
+      "revision_semantics": "immutable",
+      "provider": "mag",
+      "mag_provider": "REPLACE_WITH_UPSTREAM_PROVIDER"
+    },
+    "remote_approval": {
+      "approval_reference": "REQUIRED_PROJECT_APPROVAL_REFERENCE",
+      "approved_by": "REQUIRED_APPROVER",
+      "provider": "mag",
+      "mag_provider": "REPLACE_WITH_UPSTREAM_PROVIDER",
+      "model_id": "REPLACE_WITH_APPROVED_MODEL_ID",
+      "revision": "REPLACE_WITH_APPROVED_MODEL_VERSION_OR_ALIAS",
+      "revision_semantics": "immutable",
+      "mutable_alias_accepted": false,
+      "endpoint": "REQUIRED_APPROVED_ENDPOINT",
+      "project_authorization_reference": "REQUIRED_PROJECT_AUTHORIZATION_REFERENCE",
+      "allocation_limit_reference": "REQUIRED_ALLOCATION_LIMIT_REFERENCE",
+      "allocation_charge_description": "REQUIRED_CHARGE_DESCRIPTION",
+      "data_use_conditions": "REQUIRED_DATA_USE_TERMS",
+      "retention_conditions": "REQUIRED_RETENTION_TERMS",
+      "max_input_message_bytes_per_question": 3000,
+      "max_input_message_bytes_campaign": 50000,
+      "max_total_requests": 18,
+      "max_attempts_per_question": 1,
+      "max_output_tokens_per_response": 32768,
+      "max_output_tokens_campaign": 589824
+    },
+    "authorization_required": "Do not dispatch until a route- and model-bound approval exists, model capability and request mapping are verified, and the campaign allocation limits are explicitly authorized."
+  }
+}

@@ -19,11 +19,22 @@ def e1_development(
         "--retry-errors",
         help="Retry recorded errors only within the manifest's approved attempt limit.",
     ),
+    max_new_requests: int | None = typer.Option(
+        None,
+        "--max-new-requests",
+        min=1,
+        help="Dispatch at most this many unrecorded requests in this invocation.",
+    ),
 ) -> None:
     """Run development questions for one candidate; held-out questions are not accepted."""
     from matsim_agents.workflows.e1 import E1DevelopmentManifest, run_e1_development
 
     document = json.loads(manifest.read_text(encoding="utf-8"))
     config = E1DevelopmentManifest.model_validate(document)
-    result = run_e1_development(config, output, retry_errors=retry_errors)
+    result = run_e1_development(
+        config,
+        output,
+        retry_errors=retry_errors,
+        max_new_requests=max_new_requests,
+    )
     console.print_json(json.dumps(result, sort_keys=True))

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -47,6 +48,8 @@ class E1Candidate(_StrictModel):
     catalog_name: str = Field(min_length=1)
     model_id: str = Field(min_length=1)
     revision: str = Field(min_length=1)
+    max_output_tokens_supported: int | None = Field(default=None, gt=0)
+    revision_semantics: Literal["immutable", "mutable_alias"] = "immutable"
     provider: str = Field(min_length=1)
     mag_provider: str | None = Field(default=None, min_length=1)
 
@@ -59,7 +62,7 @@ class E1Candidate(_StrictModel):
 
 class E1Decoding(_StrictModel):
     temperature: Literal[0.0] = 0.0
-    max_tokens: int = Field(default=16384, gt=0, le=16384)
+    max_tokens: int = Field(default=32768, gt=0, le=32768)
     top_p: float | None = Field(default=None, gt=0.0, le=1.0)
     seed: int | None = None
 
@@ -71,11 +74,26 @@ class E1RemoteApproval(_StrictModel):
     mag_provider: str | None = Field(default=None, min_length=1)
     model_id: str = Field(min_length=1)
     revision: str = Field(min_length=1)
-    spending_ceiling_usd: float = Field(gt=0.0, allow_inf_nan=False)
-    max_input_tokens_per_question: int = Field(gt=0)
-    max_attempts_per_question: int = Field(default=1, gt=0)
-    input_usd_per_million_tokens: float = Field(ge=0.0, allow_inf_nan=False)
-    output_usd_per_million_tokens: float = Field(ge=0.0, allow_inf_nan=False)
+    revision_semantics: Literal["immutable", "mutable_alias"]
+    mutable_alias_accepted: bool = False
+    endpoint: str = Field(min_length=1)
+    project_authorization_reference: str = Field(min_length=1)
+    allocation_limit_reference: str = Field(min_length=1)
+    allocation_charge_description: str = Field(min_length=1)
+    data_use_conditions: str = Field(min_length=1)
+    retention_conditions: str = Field(min_length=1)
+    max_input_message_bytes_per_question: int = Field(gt=0)
+    max_input_message_bytes_campaign: int = Field(gt=0)
+    max_total_requests: int = Field(gt=0)
+    max_attempts_per_question: int = Field(gt=0)
+    max_output_tokens_per_response: int = Field(gt=0)
+    max_output_tokens_campaign: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_alias_approval(self) -> E1RemoteApproval:
+        if self.revision_semantics == "mutable_alias" and not self.mutable_alias_accepted:
+            raise ValueError("mutable MAG alias requires explicit mutable_alias_accepted approval")
+        return self
 
 
 class E1DevelopmentManifest(_StrictModel):
@@ -93,6 +111,11 @@ class E1DevelopmentManifest(_StrictModel):
         ids = [question.question_id for question in self.questions]
         if len(ids) != len(set(ids)):
             raise ValueError("E1 question IDs must be unique")
+        if (
+            self.candidate.max_output_tokens_supported is not None
+            and self.decoding.max_tokens > self.candidate.max_output_tokens_supported
+        ):
+            raise ValueError("E1 decoding exceeds the candidate model output-token limit")
         local_providers = {"vllm", "huggingface", "ollama"}
         remote_providers = {"openai", "anthropic", "mag"}
         provider = self.candidate.provider.lower()
@@ -107,27 +130,35 @@ class E1DevelopmentManifest(_StrictModel):
                 self.remote_approval.mag_provider,
                 self.remote_approval.model_id,
                 self.remote_approval.revision,
+                self.remote_approval.revision_semantics,
             )
             candidate_route = (
                 provider,
                 self.candidate.mag_provider,
                 self.candidate.model_id,
                 self.candidate.revision,
+                self.candidate.revision_semantics,
             )
             if approved_route != candidate_route:
                 raise ValueError("E1-R approval must match the candidate provider, model, and revision")
-            worst_case_usd = len(self.questions) * self.remote_approval.max_attempts_per_question * (
-                self.remote_approval.max_input_tokens_per_question
-                * self.remote_approval.input_usd_per_million_tokens
-                + self.decoding.max_tokens
-                * self.remote_approval.output_usd_per_million_tokens
-            ) / 1_000_000
-            if worst_case_usd > self.remote_approval.spending_ceiling_usd:
-                raise ValueError(
-                    "E1-R worst-case token spend exceeds the approved spending ceiling "
-                    f"(${worst_case_usd:.6f} > "
-                    f"${self.remote_approval.spending_ceiling_usd:.6f})"
-                )
+            if self.remote_approval.max_total_requests < len(self.questions):
+                raise ValueError("E1-R request limit must cover every development question")
+            if self.remote_approval.max_total_requests > (
+                len(self.questions) * self.remote_approval.max_attempts_per_question
+            ):
+                raise ValueError("E1-R request limit exceeds the approved per-question attempt limit")
+            if (
+                self.candidate.revision_semantics == "mutable_alias"
+                and not self.remote_approval.mutable_alias_accepted
+            ):
+                raise ValueError("E1-R mutable alias use requires explicit owner approval")
+            if self.decoding.max_tokens > self.remote_approval.max_output_tokens_per_response:
+                raise ValueError("E1-R decoding exceeds the approved per-response output limit")
+            if (
+                self.remote_approval.max_total_requests * self.decoding.max_tokens
+                > self.remote_approval.max_output_tokens_campaign
+            ):
+                raise ValueError("E1-R worst-case output exceeds the approved campaign output limit")
         elif self.remote_approval is not None:
             raise ValueError("remote_approval is only valid for E1-R")
         return self
@@ -227,6 +258,17 @@ def _response_attempts(path: Path) -> dict[str, tuple[str, int]]:
     return latest
 
 
+def _request_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    _completed_response_keys(path)
+    return sum(
+        1
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if (record := json.loads(line)).get("status") in {"complete", "error"}
+    )
+
+
 def _validate_output_identity(manifest_path: Path, ledger_path: Path, manifest_hash: str) -> None:
     if ledger_path.exists() and not manifest_path.exists():
         raise ValueError("E1 response ledger exists without its manifest; refusing to mix runs")
@@ -251,6 +293,7 @@ def run_e1_development(
     model_factory: ModelFactory = get_chat_model,
     session_factory: SessionFactory = _model_session,
     retry_errors: bool = False,
+    max_new_requests: int | None = None,
 ) -> dict[str, Any]:
     """Run only manifest-supplied development questions for one candidate.
 
@@ -258,6 +301,14 @@ def run_e1_development(
     are skipped on restart; failures are only retried when explicitly requested.
     """
 
+    system_prompt = _e1_system_prompt()
+    input_preflight = _preflight_remote_inputs(manifest, system_prompt)
+    endpoint = _provider_endpoint(manifest.candidate.provider)
+    if manifest.cohort == "E1-R" and manifest.remote_approval.endpoint != endpoint:
+        raise ValueError(
+            "E1-R configured endpoint does not match the approved endpoint: "
+            f"{endpoint!r} != {manifest.remote_approval.endpoint!r}"
+        )
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     ledger_path = output / "responses.jsonl"
@@ -276,27 +327,29 @@ def run_e1_development(
     )
     attempts = _response_attempts(ledger_path)
     completed = {key for key, (status, _) in attempts.items() if status == "complete"}
+    previous_request_count = _request_count(ledger_path)
     if manifest.cohort == "E1-R" and ledger_path.exists():
         for line in ledger_path.read_text(encoding="utf-8").splitlines():
             record = json.loads(line)
             if record.get("status") in {"complete", "error"}:
-                _append_cost_record(output / "costs.jsonl", manifest, record)
+                _append_allocation_record(output / "allocation-usage.jsonl", manifest, record)
     metadata: dict[str, Any] = {
         "schema_version": 1,
         "partition": "development",
         "cohort": manifest.cohort,
         "candidate": manifest.candidate.model_dump(mode="json"),
+        "endpoint": endpoint,
         "manifest_hash": manifest_hash,
         "protocol_hash": protocol_hash,
         "protocol_artifact_hashes": protocol_artifact_hashes,
         "question_ids": [question.question_id for question in manifest.questions],
+        "input_preflight": input_preflight,
         "state": "running",
         "started_at_utc": datetime.now(UTC).isoformat(),
     }
     metadata_path = output / "run.json"
 
     pending = []
-    system_prompt = _e1_system_prompt()
     for question in manifest.questions:
         prompt_hash = _sha256(
             {
@@ -326,6 +379,20 @@ def run_e1_development(
                 raise ValueError("E1-R retry exceeds the approved max_attempts_per_question")
             pending.append((question, prompt_hash, response_key, attempt))
 
+    if max_new_requests is not None:
+        if max_new_requests <= 0:
+            raise ValueError("max_new_requests must be positive")
+        pending = pending[:max_new_requests]
+
+    if manifest.cohort == "E1-R" and pending:
+        approval = manifest.remote_approval
+        request_count = previous_request_count + len(pending)
+        if request_count > approval.max_total_requests:
+            raise ValueError(
+                "E1-R dispatch exceeds approved total request limit: "
+                f"{request_count} > {approval.max_total_requests}"
+            )
+
     _write_manifest(manifest_path, manifest_data)
     _write_run_metadata(metadata_path, metadata)
 
@@ -340,6 +407,8 @@ def run_e1_development(
                         SystemMessage(content=system_prompt),
                         HumanMessage(content=question.prompt),
                     ]
+                    request_started = time.perf_counter()
+                    request_started_at = datetime.now(UTC).isoformat()
                     try:
                         raw_message, reply = invoke_model_with_raw(model, messages)
                     except Exception as error:
@@ -354,6 +423,12 @@ def run_e1_development(
                             "manifest_hash": manifest_hash,
                             "protocol_hash": protocol_hash,
                             "prompt_hash": prompt_hash,
+                            "endpoint": endpoint,
+                            "requested_model_id": manifest.candidate.model_id,
+                            "request_started_at_utc": request_started_at,
+                            "latency_s": round(time.perf_counter() - request_started, 3),
+                            "provider_response_metadata": {},
+                            "input_preflight": input_preflight.get(question.question_id),
                             "error_type": type(error).__name__,
                             "error_message": _safe_error_message(str(error)),
                             "completed_at_utc": datetime.now(UTC).isoformat(),
@@ -363,7 +438,7 @@ def run_e1_development(
                         os.fsync(ledger.fileno())
                         attempts[response_key] = ("error", attempt)
                         if manifest.cohort == "E1-R":
-                            _append_cost_record(output / "costs.jsonl", manifest, record)
+                            _append_allocation_record(output / "allocation-usage.jsonl", manifest, record)
                         continue
                     raw_response = (
                         raw_message.model_dump(mode="json")
@@ -377,9 +452,15 @@ def run_e1_development(
                     except Exception as error:
                         parsed_data = None
                         schema_error = f"{type(error).__name__}: {_safe_error_message(str(error))}"
+                    response_status = (
+                        "complete"
+                        if manifest.cohort != "E1-R"
+                        or (schema_error is None and not reply.truncated)
+                        else "error"
+                    )
                     record = {
                         "schema_version": 1,
-                        "status": "complete",
+                        "status": response_status,
                         "attempt": attempt,
                         "response_key": response_key,
                         "question_id": question.question_id,
@@ -390,19 +471,40 @@ def run_e1_development(
                         "manifest_hash": manifest_hash,
                         "protocol_hash": protocol_hash,
                         "prompt_hash": prompt_hash,
+                        "endpoint": endpoint,
+                        "requested_model_id": manifest.candidate.model_id,
+                        "request_started_at_utc": request_started_at,
+                        "latency_s": reply.latency_s,
+                        "input_preflight": input_preflight.get(question.question_id),
                         "raw_response": raw_response,
+                        "provider_response_metadata": raw_response.get("response_metadata", {}),
+                        "provider_usage_metadata": raw_response.get("usage_metadata", {}),
+                        "reasoning_tokens_reported": _reasoning_tokens_reported(raw_response),
                         "response": reply.model_dump(mode="json"),
                         "parsed_response": parsed_data,
                         "schema_error": schema_error,
+                        "scientific_reviewability": (
+                            "reviewable"
+                            if response_status == "complete"
+                            else "nonreviewable_technical_output"
+                        ),
+                        "nonreviewable_reason": (
+                            "truncated_by_output_limit"
+                            if reply.truncated
+                            else "schema_validation_failed"
+                            if schema_error is not None
+                            else None
+                        ),
                         "completed_at_utc": datetime.now(UTC).isoformat(),
                     }
                     ledger.write(json.dumps(record, sort_keys=True) + "\n")
                     ledger.flush()
                     os.fsync(ledger.fileno())
-                    completed.add(response_key)
-                    attempts[response_key] = ("complete", attempt)
+                    if response_status == "complete":
+                        completed.add(response_key)
+                    attempts[response_key] = (response_status, attempt)
                     if manifest.cohort == "E1-R":
-                        _append_cost_record(output / "costs.jsonl", manifest, record)
+                        _append_allocation_record(output / "allocation-usage.jsonl", manifest, record)
         error_count = sum(status == "error" for status, _ in attempts.values())
         metadata["state"] = "complete_with_errors" if error_count else "complete"
     except Exception as error:
@@ -436,12 +538,82 @@ def _safe_error_message(message: str) -> str:
     return message[:1000]
 
 
-def _append_cost_record(
+def _reasoning_tokens_reported(raw_response: dict[str, Any]) -> int | None:
+    usage = raw_response.get("usage_metadata") or {}
+    details = usage.get("output_token_details") or usage.get("completion_tokens_details") or {}
+    value = details.get("reasoning") or details.get("reasoning_tokens") or usage.get("reasoning_tokens")
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _preflight_remote_inputs(
+    manifest: E1DevelopmentManifest, system_prompt: str
+) -> dict[str, dict[str, Any]]:
+    if manifest.cohort != "E1-R":
+        return {}
+    approval = manifest.remote_approval
+    if approval is None:
+        raise ValueError("E1-R input preflight requires remote approval")
+
+    counts: dict[str, dict[str, Any]] = {}
+    campaign_total = 0
+    for question in manifest.questions:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question.prompt},
+        ]
+        count = len(
+            json.dumps(messages, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        )
+        method = "serialized-messages-utf8-bytes"
+        unit = "utf8_bytes"
+        question_limit = approval.max_input_message_bytes_per_question
+        campaign_limit = approval.max_input_message_bytes_campaign
+
+        campaign_total += count
+        if count > question_limit:
+            raise ValueError(
+                f"E1 input preflight exceeds {unit} limit for {question.question_id}: "
+                f"{count} > {question_limit}"
+            )
+        if campaign_total > campaign_limit:
+            raise ValueError(
+                f"E1 input preflight exceeds campaign {unit} limit: "
+                f"{campaign_total} > {campaign_limit}"
+            )
+        counts[question.question_id] = {"count": count, "method": method, "unit": unit}
+    worst_case_campaign_bytes = sum(
+        count["count"] * approval.max_attempts_per_question for count in counts.values()
+    )
+    if worst_case_campaign_bytes > approval.max_input_message_bytes_campaign:
+        raise ValueError(
+            "E1 input preflight exceeds worst-case campaign utf8_bytes limit: "
+            f"{worst_case_campaign_bytes} > {approval.max_input_message_bytes_campaign}"
+        )
+    return counts
+
+
+def _provider_endpoint(provider: str) -> str | None:
+    provider = provider.lower()
+    environment_defaults = {
+        "mag": ("MATSIM_MAG_BASE_URL", "https://mag.genesis.americansciencecloud.org/v1"),
+        "vllm": ("MATSIM_VLLM_BASE_URL", "http://localhost:8000/v1"),
+        "ollama": ("MATSIM_OLLAMA_BASE_URL", "http://localhost:11434"),
+        "openai": ("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+        "anthropic": ("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+    }
+    environment_default = environment_defaults.get(provider)
+    if environment_default is None:
+        return None
+    environment_name, default = environment_default
+    return os.environ.get(environment_name, default)
+
+
+def _append_allocation_record(
     path: Path, manifest: E1DevelopmentManifest, response: dict[str, Any]
 ) -> None:
     approval = manifest.remote_approval
     if approval is None:
-        raise ValueError("E1-R cost ledger requires remote approval data")
+        raise ValueError("E1-R allocation ledger requires remote approval data")
     existing_keys = set()
     if path.exists():
         existing_keys = {
@@ -452,14 +624,6 @@ def _append_cost_record(
     if identity in existing_keys:
         return
     reply = response.get("response") or {}
-    prompt_tokens = reply.get("prompt_tokens")
-    completion_tokens = reply.get("completion_tokens")
-    estimated_cost = None
-    if prompt_tokens is not None and completion_tokens is not None:
-        estimated_cost = (
-            prompt_tokens * approval.input_usd_per_million_tokens
-            + completion_tokens * approval.output_usd_per_million_tokens
-        ) / 1_000_000
     cost_record = {
         "response_key": response["response_key"],
         "question_id": response["question_id"],
@@ -467,11 +631,14 @@ def _append_cost_record(
         "cohort": "E1-R",
         "attempt": response["attempt"],
         "status": response["status"],
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "estimated_cost_usd": estimated_cost,
-        "provider_reported_cost_usd": None,
-        "pricing_approval_reference": approval.approval_reference,
+        "prompt_tokens_reported": reply.get("prompt_tokens"),
+        "completion_tokens_reported": reply.get("completion_tokens"),
+        "reasoning_tokens_reported": response.get("reasoning_tokens_reported"),
+        "finish_reason": reply.get("finish_reason"),
+        "latency_s": reply.get("latency_s"),
+        "billing_basis": "project_allocation",
+        "approval_reference": approval.approval_reference,
+        "allocation_limit_reference": approval.allocation_limit_reference,
         "recorded_at_utc": datetime.now(UTC).isoformat(),
     }
     with path.open("a", encoding="utf-8") as ledger:
