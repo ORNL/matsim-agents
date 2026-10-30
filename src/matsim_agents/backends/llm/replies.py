@@ -50,6 +50,7 @@ class ModelReply(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     latency_s: float | None = None
+    provider_metadata: dict[str, str] | None = None
 
     @computed_field
     @property
@@ -90,6 +91,7 @@ def reply_from_message(message: Any, *, latency_s: float | None = None) -> Model
         metadata.get("finish_reason") or metadata.get("stop_reason") or metadata.get("done_reason")
     )
     usage = getattr(message, "usage_metadata", None) or {}
+    provider_metadata = metadata.get("provider_metadata")
     return ModelReply(
         text=text,
         reasoning=reasoning,
@@ -97,6 +99,7 @@ def reply_from_message(message: Any, *, latency_s: float | None = None) -> Model
         prompt_tokens=usage.get("input_tokens"),
         completion_tokens=usage.get("output_tokens"),
         latency_s=latency_s,
+        provider_metadata=provider_metadata if isinstance(provider_metadata, dict) else None,
     )
 
 
@@ -108,4 +111,18 @@ def invoke_model(model: Any, messages: Sequence[Any]) -> ModelReply:
     return reply_from_message(message, latency_s=round(time.perf_counter() - start, 3))
 
 
-__all__ = ["ModelReply", "invoke_model", "reply_from_message", "split_reasoning"]
+def invoke_model_with_raw(model: Any, messages: Sequence[Any]) -> tuple[Any, ModelReply]:
+    """Send a request and return both the provider message and normalized reply."""
+
+    start = time.perf_counter()
+    message = model.invoke(list(messages))
+    return message, reply_from_message(message, latency_s=round(time.perf_counter() - start, 3))
+
+
+__all__ = [
+    "ModelReply",
+    "invoke_model",
+    "invoke_model_with_raw",
+    "reply_from_message",
+    "split_reasoning",
+]

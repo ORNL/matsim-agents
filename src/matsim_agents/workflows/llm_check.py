@@ -19,7 +19,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.backends.llm.provider import DEFAULT_MODELS, get_chat_model
+from matsim_agents.backends.llm.provider import DEFAULT_MODELS, SUPPORTED_PROVIDERS, get_chat_model
 from matsim_agents.backends.llm.replies import invoke_model
 from matsim_agents.backends.llm.servers import llm_endpoints
 from matsim_agents.backends.llm.transcript import Contribution, Transcript
@@ -28,7 +28,7 @@ from matsim_agents.execution.placement import ResourcePlan
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.workflows.investigation import ScientificHypothesis
 
-PROVIDERS = frozenset(DEFAULT_MODELS)
+PROVIDERS = SUPPORTED_PROVIDERS
 
 
 class LLMCheckConfig(BaseModel):
@@ -36,6 +36,7 @@ class LLMCheckConfig(BaseModel):
     model: str | None = None
     base_url: str | None = None
     api_key: str | None = None
+    mag_provider: str | None = Field(default=None, min_length=1)
     output_root: str = "./runs/llm-check"
     temperature: float = 0.0
     timeout_sec: int = Field(120, ge=1)
@@ -51,6 +52,10 @@ class LLMCheckConfig(BaseModel):
     )
     context_length: int | None = Field(None, ge=1)
     concurrent_requests: int = Field(1, ge=1)
+    long_context_output_tokens: int | None = Field(None, ge=1)
+    long_context_prompt_tokens: int = Field(16_384, ge=1)
+    long_context_tokenizer_path: str | None = None
+    long_context_min_output_fraction: float = Field(0.95, gt=0.0, le=1.0)
     deterministic_prompt: str = "Return exactly the token PORTABILITY_OK and no additional text."
     scientific_objective: str = "Propose a testable hypothesis for stable elemental silicon."
     server: str | None = Field(
@@ -75,15 +80,52 @@ class LLMCheckConfig(BaseModel):
                     "llm-check takes its model from the plan's server; remove "
                     + ", ".join(set_fields)
                 )
+            if self.long_context_output_tokens is not None:
+                if not self.long_context_tokenizer_path:
+                    raise ValueError(
+                        "long-context output check requires long_context_tokenizer_path"
+                    )
+                if self.context_length is None:
+                    raise ValueError("long-context output check requires context_length")
+                if (
+                    self.long_context_prompt_tokens + self.long_context_output_tokens
+                    > self.context_length
+                ):
+                    raise ValueError(
+                        "long-context prompt and output limits exceed context_length"
+                    )
             return self
         self.provider = self.provider.lower()
         if self.provider not in PROVIDERS:
             raise ValueError(f"provider must be one of {sorted(PROVIDERS)}")
-        self.model = self.model or DEFAULT_MODELS[self.provider]
+        if self.provider == "mag":
+            self.model = self.model or os.environ.get("MATSIM_MAG_MODEL")
+            if not self.model:
+                raise ValueError(
+                    "MAG requires an explicit model ID from the account's /models catalog"
+                )
+            self.base_url = self.base_url or os.environ.get(
+                "MATSIM_MAG_BASE_URL", "https://mag.genesis.americansciencecloud.org/v1"
+            )
+            self.mag_provider = self.mag_provider or os.environ.get("MATSIM_MAG_PROVIDER")
+        else:
+            self.model = self.model or DEFAULT_MODELS[self.provider]
         if self.provider == "vllm":
             self.base_url = self.base_url or "http://localhost:8000/v1"
             if not self.base_url.rstrip("/").endswith("/v1"):
                 raise ValueError("vLLM base_url must identify the OpenAI-compatible /v1 root")
+        if self.long_context_output_tokens is not None:
+            if self.provider != "vllm":
+                raise ValueError("long-context output qualification is currently vLLM-only")
+            if not self.long_context_tokenizer_path:
+                raise ValueError("long-context output check requires long_context_tokenizer_path")
+            if self.context_length is None:
+                raise ValueError("long-context output check requires context_length")
+            if (
+                self.long_context_prompt_tokens + self.long_context_output_tokens
+                > self.context_length
+            ):
+                raise ValueError("long-context prompt and output limits exceed context_length")
         return self
 
 
@@ -95,6 +137,7 @@ class LLMCheckResult(BaseModel):
     model: str
     stages: dict[str, bool]
     failure_reason: str | None = None
+    long_context_output_passed: bool | None = None
     incomplete_replies: list[str] = Field(
         default_factory=list,
         description="Replies the token limit cut off or that contain no answer (see transcript).",
@@ -138,6 +181,21 @@ def probe_readiness(cfg: LLMCheckConfig) -> dict[str, Any]:
                 raise RuntimeError(f"incomplete local Hugging Face model: missing {missing}")
             return {"model_path": str(location.resolve()), "local": True}
         return {"model_id": cfg.model, "local": False}
+    if cfg.provider == "mag":
+        token = cfg.api_key or os.environ.get("AMSC_TOKEN")
+        if not token:
+            raise RuntimeError("mag readiness requires AMSC_TOKEN")
+        payload = _get_json(f"{cfg.base_url.rstrip('/')}/models", cfg.timeout_sec, token)
+        models = [entry.get("id") for entry in payload.get("data", [])]
+        if cfg.model not in models:
+            raise RuntimeError(
+                f"configured MAG model {cfg.model!r} unavailable; available={models}"
+            )
+        return {
+            "endpoint": cfg.base_url,
+            "served_models": models,
+            "mag_provider": cfg.mag_provider,
+        }
     credential = "OPENAI_API_KEY" if cfg.provider == "openai" else "ANTHROPIC_API_KEY"
     if not (cfg.api_key or os.environ.get(credential)):
         raise RuntimeError(f"{cfg.provider} readiness requires {credential}")
@@ -205,6 +263,7 @@ def _model_identity(cfg: LLMCheckConfig, readiness: dict[str, Any]) -> dict[str,
         "provider": cfg.provider,
         "model": cfg.model,
         "base_url": cfg.base_url,
+        "mag_provider": cfg.mag_provider,
         "temperature": cfg.temperature,
         "tensor_parallel_size": cfg.tensor_parallel_size,
         "pipeline_parallel_size": cfg.pipeline_parallel_size,
@@ -216,6 +275,48 @@ def _model_identity(cfg: LLMCheckConfig, readiness: dict[str, Any]) -> dict[str,
 
 def _raise_setup_failure(reason: str, _cfg: LLMCheckConfig) -> dict[str, Any]:
     raise RuntimeError(reason)
+
+
+def _long_context_prompt(tokenizer_path: str, target_tokens: int) -> tuple[str, int]:
+    """Build the longest local-tokenizer prompt that fits the requested context budget."""
+
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_path, local_files_only=True, trust_remote_code=True
+    )
+    instruction = (
+        "Continue by outputting only QUAL_OK repeated with spaces until the response reaches "
+        "the generation limit. Do not explain or stop early. Context:\n"
+    )
+    unit = "QUALIFICATION_CONTEXT "
+
+    def token_count(repetitions: int) -> int:
+        messages = [{"role": "user", "content": instruction + unit * repetitions}]
+        if getattr(tokenizer, "chat_template", None):
+            return len(
+                tokenizer.apply_chat_template(
+                    messages, tokenize=True, add_generation_prompt=True
+                )
+            )
+        return len(tokenizer.encode(messages[0]["content"], add_special_tokens=True))
+
+    low, high = 0, target_tokens
+    best_repetitions, best_count = 0, token_count(0)
+    while low <= high:
+        middle = (low + high) // 2
+        count = token_count(middle)
+        if count <= target_tokens:
+            best_repetitions, best_count = middle, count
+            low = middle + 1
+        else:
+            high = middle - 1
+    if best_count < target_tokens - 32:
+        raise RuntimeError(
+            f"tokenizer could only construct {best_count} of {target_tokens} "
+            "requested prompt tokens"
+        )
+    return instruction + unit * best_repetitions, best_count
 
 
 def run_llm_check(
@@ -302,9 +403,15 @@ def _run_llm_check(
     }
     transcript = Transcript(run.path, title=f"LLM check: {cfg.provider} `{cfg.model}`")
     model: Any = None
+    long_context_output_passed = None
 
-    def ask(contribution_id: str, kind: str, messages: list[Any]) -> str:
-        reply = invoke_model(model, messages)
+    def ask(
+        contribution_id: str,
+        kind: str,
+        messages: list[Any],
+        request_model: Any = None,
+    ) -> str:
+        reply = invoke_model(request_model or model, messages)
         transcript.add(
             Contribution.from_reply(
                 reply,
@@ -337,6 +444,7 @@ def _run_llm_check(
             temperature=cfg.temperature,
             base_url=cfg.base_url,
             api_key=cfg.api_key,
+            mag_provider=cfg.mag_provider,
         )
         construction_seconds = time.perf_counter() - load_start
         stages["load"] = True
@@ -433,6 +541,83 @@ def _run_llm_check(
                     f"{accelerator.get('accelerator_count', 0)}"
                 )
         stages["distributed"] = True
+
+        if cfg.long_context_output_tokens is not None:
+            long_context_output_passed = False
+            stress_prompt, measured_prompt_tokens = _long_context_prompt(
+                cfg.long_context_tokenizer_path or "", cfg.long_context_prompt_tokens
+            )
+            stress_model = model_factory(
+                provider=cfg.provider,
+                model=cfg.model,
+                temperature=cfg.temperature,
+                base_url=cfg.base_url,
+                api_key=cfg.api_key,
+                mag_provider=cfg.mag_provider,
+                max_tokens=cfg.long_context_output_tokens,
+            )
+            stress_messages = [HumanMessage(content=stress_prompt)]
+            stress_reply = invoke_model(stress_model, stress_messages)
+            transcript.add(
+                Contribution.from_reply(
+                    stress_reply,
+                    id="long-context-output",
+                    kind="long_context_output",
+                    speaker=cfg.model or cfg.provider,
+                    provider=cfg.provider,
+                    model=cfg.model,
+                ),
+                prompt=stress_messages,
+            )
+            expected_minimum = int(
+                cfg.long_context_output_tokens * cfg.long_context_min_output_fraction
+            )
+            context_tokens = (
+                stress_reply.prompt_tokens + stress_reply.completion_tokens
+                if stress_reply.prompt_tokens is not None
+                and stress_reply.completion_tokens is not None
+                else None
+            )
+            stress_result = {
+                "requested_prompt_tokens": cfg.long_context_prompt_tokens,
+                "tokenizer_prompt_tokens": measured_prompt_tokens,
+                "requested_max_output_tokens": cfg.long_context_output_tokens,
+                "minimum_output_tokens": expected_minimum,
+                "prompt_tokens": stress_reply.prompt_tokens,
+                "completion_tokens": stress_reply.completion_tokens,
+                "total_context_tokens": context_tokens,
+                "context_length": cfg.context_length,
+                "latency_s": stress_reply.latency_s,
+                "tokens_per_second": (
+                    stress_reply.completion_tokens / stress_reply.latency_s
+                    if stress_reply.completion_tokens is not None
+                    and stress_reply.latency_s
+                    else None
+                ),
+                "finish_reason": stress_reply.finish_reason,
+                "truncated": stress_reply.truncated,
+            }
+            run.write_json("long-context-output.json", stress_result)
+            if stress_reply.prompt_tokens is None:
+                raise RuntimeError("long-context output response did not report prompt tokens")
+            if stress_reply.completion_tokens is None:
+                raise RuntimeError("long-context output response did not report completion tokens")
+            if abs(stress_reply.prompt_tokens - measured_prompt_tokens) > 32:
+                raise RuntimeError(
+                    "server-reported prompt tokens differ from the tokenizer target by more than 32"
+                )
+            if stress_reply.completion_tokens > cfg.long_context_output_tokens:
+                raise RuntimeError("long-context output exceeded the configured output token cap")
+            if stress_reply.completion_tokens < expected_minimum:
+                raise RuntimeError(
+                    "long-context output ended before the configured output qualification target"
+                )
+            if context_tokens is None:
+                raise RuntimeError("long-context output response did not report total token usage")
+            if context_tokens > (cfg.context_length or 0):
+                raise RuntimeError("reported prompt and completion tokens exceed context_length")
+            long_context_output_passed = True
+
         after_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         run.write_json(
             "performance.json",
@@ -457,6 +642,7 @@ def _run_llm_check(
         model=cfg.model or "",
         stages=stages,
         failure_reason=failure,
+        long_context_output_passed=long_context_output_passed,
         incomplete_replies=[item.id for item in transcript.contributions() if item.incomplete],
     )
     run.write_json("result.json", result)

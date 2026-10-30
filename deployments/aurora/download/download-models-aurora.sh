@@ -16,6 +16,8 @@
 # Submit a subset:
 #   qsub -v MODEL_IDS="Qwen/Qwen2.5-14B-Instruct meta-llama/Llama-3.1-8B-Instruct" \
 #        deployments/aurora/download/download-models-aurora.sh
+# Submit the opt-in experimental model set:
+#   qsub -v MODEL_SET=experimental deployments/aurora/download/download-models-aurora.sh
 #
 # Alternate destination:
 #   qsub -v MODEL_ROOT=/path/to/project/models \
@@ -108,6 +110,17 @@ DEFAULT_MODELS=(
   "HuggingFaceTB/SmolLM3-3B"
 )
 
+# Large or newly released checkpoints are intentionally excluded from defaults.
+EXPERIMENTAL_MODELS=(
+  "openai/gpt-oss-20b"
+  "openai/gpt-oss-120b"
+  "moonshotai/Kimi-K2.6"
+  "moonshotai/Kimi-K3"
+  "zai-org/GLM-5.2"
+  "zai-org/GLM-5.3"
+  "zai-org/GLM-5.3-Flash"
+)
+
 GATED_MODELS=(
   "deepseek-ai/DeepSeek-V4-Pro"
 )
@@ -115,6 +128,11 @@ GATED_MODELS=(
 if [[ -n "${MODEL_IDS:-}" ]]; then
   # shellcheck disable=SC2206
   MODELS=( ${MODEL_IDS} )
+elif [[ "${MODEL_SET:-default}" == "experimental" ]]; then
+  MODELS=("${EXPERIMENTAL_MODELS[@]}")
+elif [[ "${MODEL_SET:-default}" != "default" ]]; then
+  echo "ERROR: MODEL_SET must be 'default' or 'experimental'." >&2
+  exit 2
 else
   MODELS=("${DEFAULT_MODELS[@]}")
   if [[ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]]; then

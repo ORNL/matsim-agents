@@ -22,10 +22,8 @@ if [[ ! -d "${AURORA_VENV}" ]]; then
     return 1 2>/dev/null || exit 1
 fi
 
-# shellcheck disable=SC1091
-source "${AURORA_VENV}/bin/activate"
-
-export PYTHONPATH="${MATSIM_AGENTS_ROOT}/src:${PYTHONPATH:-}"
+source "${SCRIPT_DIR}/aurora-python-env.sh"
+activate_matsim_aurora_python "${MATSIM_AGENTS_ROOT}" "${AURORA_VENV}"
 
 echo "================================"
 echo "matsim-agents Aurora Setup"

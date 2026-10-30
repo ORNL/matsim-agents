@@ -6,6 +6,10 @@ categories proposed by Zekun Chen (2026-06-10).
 Every system has an **active-learning** configuration, `al_<name>.yaml`: the
 full discovery → uncertainty acquisition → DFT labeling → retrain loop.
 
+For a quick MLIP-only feasibility pass over the checked-in seed structures, use
+`singlepass.py`. It runs the core relaxation graph once and does not launch DFT
+or retrain a model.
+
 All paths use `$PROJ_ROOT` = repo root and `$RUNS_ROOT` = scratch directory.
 Promotion-enabled AL cases also require
 `ELEMENTAL_REFERENCE_MANIFEST=/path/to/elemental_references.json`. Supply real
@@ -44,14 +48,14 @@ flowchart LR
 
 ## Coverage matrix
 
-| # | System | Dim | Active learning |
-|---|--------|-----|-----------------|
-| 1 | LiFePO₄ olivine | 3D | `al_lifepo4.yaml` |
-| 2a | NbTaVHfZrTi BCC HEA | 3D | `al_hea_bcc.yaml` |
-| 2b | CrMnFeCoNi Cantor FCC HEA | 3D | `al_hea_fcc_cantor.yaml` |
-| 3 | Phosphorene (black-P / blue-P) | 2D | `al_phosphorene.yaml` |
-| 4 | Cu-BHT conductive MOF | 2D | `al_cu_bht_2d.yaml` † |
-| 5 | Zn(HCOO)₂ MOF | 3D | `al_zn_formate.yaml` |
+| # | System | Dim | Single pass | Active learning |
+|---|--------|-----|-------------|-----------------|
+| 1 | LiFePO₄ olivine | 3D | `singlepass.py --case lifepo4` | `al_lifepo4.yaml` |
+| 2a | NbTaVHfZrTi BCC HEA | 3D | `singlepass.py --case hea_bcc` | `al_hea_bcc.yaml` |
+| 2b | CrMnFeCoNi Cantor FCC HEA | 3D | `singlepass.py --case hea_fcc` | `al_hea_fcc_cantor.yaml` |
+| 3 | Phosphorene (black-P / blue-P) | 2D | `singlepass.py --case phosphorene` | `al_phosphorene.yaml` |
+| 4 | Cu-BHT conductive MOF | 2D | `singlepass.py --case cu_bht` † | `al_cu_bht_2d.yaml` † |
+| 5 | Zn(HCOO)₂ MOF | 3D | `singlepass.py --case zn_formate` | `al_zn_formate.yaml` |
 
 † Cu-BHT requires a supplied CIF at `examples/paper_cases/seeds/cu_bht_monolayer.cif`;
 the inorganic prototype enumerator cannot build the organic BHT ligand. The
@@ -65,6 +69,8 @@ their compositions.
 ```
 examples/paper_cases/
 ├── README.md                     ← this file
+│
+├── singlepass.py                 ← one-pass MLIP runner
 │
 ├── al_lifepo4.yaml               ← Case 1
 ├── al_hea_bcc.yaml               ← Case 2a
@@ -94,14 +100,23 @@ export PROJ_ROOT=$PWD
 export RUNS_ROOT=/global/cfs/projectdirs/m5216/mlupopa/runs
 export MLIP_LOGDIR=$RUNS_ROOT/al-models/iter0_logdir
 
-# 1) active learning on one system:
+# 1) stage seeds without running a model:
+python examples/paper_cases/singlepass.py --all --seeds-only
+
+# 2) one-pass MLIP feasibility run:
+python examples/paper_cases/singlepass.py --case lifepo4
+
+# 3) use UMA instead of HydraGNN:
+python examples/paper_cases/singlepass.py --case lifepo4 --mlip-backend uma
+
+# 4) active learning on one system:
 matsim-agents al validate-config examples/paper_cases/al_lifepo4.yaml
 matsim-agents al run            examples/paper_cases/al_lifepo4.yaml
 
-# 1b) same AL config, UMA surrogate backend:
+# 4b) same AL config, UMA surrogate backend:
 MLIP_BACKEND=uma matsim-agents al run examples/paper_cases/al_lifepo4.yaml
 
-# 2) supervisor-driven discovery -> optional AL handoff:
+# 5) supervisor-driven discovery -> optional AL handoff:
 matsim-agents supervisor-run LiFePO4 \
   --logdir $MLIP_LOGDIR \
   --hydragnn-branch-mlp-checkpoint best_model.pt \

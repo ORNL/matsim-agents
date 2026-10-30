@@ -1,0 +1,116 @@
+{
+  "packet_version": "e1-questions-v1",
+  "partition": "development",
+  "source": "E1a development prompt packet; scientific review annotations and evidence policy are recorded in research/paper/e1-preparation.md",
+  "runner_question_schema": "matsim_agents.workflows.e1.E1Question",
+  "questions": [
+    {
+      "question_id": "D-LFP-A",
+      "material": "LiFePO4",
+      "category": "A",
+      "prompt": "For a neutral, spin-polarized olivine LiFePO4 supercell with one Li atom removed, compare localized Fe-centered oxidation with a more spatially distributed compensating hole. Treat these as hypotheses, not established outcomes. State how the neutral-cell electron count, magnetic order and starting moments are controlled; distinguish oxidation-state labels from charge-density and local-moment evidence. Specify matched electronic-structure calculations and observables that would support or weaken each interpretation. No calculations or numerical results are supplied; do not assert a preferred result."
+    },
+    {
+      "question_id": "D-LFP-B",
+      "material": "LiFePO4",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical report on neutral olivine LiFePO4 supercells, each with one Li atom removed: two vacancy configurations were relaxed from different magnetic initializations, and no final site moments or charge-density analysis are reported. No energies or other results are supplied. State what can and cannot be concluded, identify the most consequential missing controls, and propose a matched test with outcomes that would change the interpretation. Do not invent measurements."
+    },
+    {
+      "question_id": "D-LFP-C",
+      "material": "LiFePO4",
+      "category": "C",
+      "prompt": "At one explicitly fixed Li-deficient composition in olivine LiFePO4, propose two or more hypotheses for how Li-vacancy arrangement affects local structure or relative energy. State the chosen supercell/composition and magnetic-state assumptions; separate vacancy-ordering effects from cell-size, finite-size interaction and magnetic-state effects. For each hypothesis, give a measurable structural or energetic observable, a feasible matched MLIP/DFT investigation, and an outcome that would weaken it. No reference calculations are supplied; do not present a hypothesis as established fact."
+    },
+    {
+      "question_id": "D-CANTOR-A",
+      "material": "Cantor FCC alloy",
+      "category": "A",
+      "prompt": "For equiatomic CrMnFeCoNi configurations constrained to the FCC prototype, compare two hypotheses for a relative-energy difference: chemical short-range order is important, or the difference is mainly due to magnetic initialization. Hold composition, atom count, cell shape/size, electronic-structure method, spin-polarized treatment and relaxation criteria fixed; sample multiple independent chemical arrangements and multiple magnetic initializations per arrangement. Identify a local-order descriptor and compare within- and across-arrangement energy variation. Explain outcomes that distinguish the hypotheses. No numerical data are supplied; do not claim a measured ranking."
+    },
+    {
+      "question_id": "D-CANTOR-B",
+      "material": "Cantor FCC alloy",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical CrMnFeCoNi FCC study: several configurations have energies from a small, non-independent sample of chemical arrangements; all calculations used spin polarization, but only one magnetic initialization per configuration was tried and final magnetic states are not compared. No numerical energies are supplied. State the strongest supportable conclusion, the sampling and magnetic limitations, and the next discriminating calculation. Do not invent results."
+    },
+    {
+      "question_id": "D-CANTOR-C",
+      "material": "Cantor FCC alloy",
+      "category": "C",
+      "prompt": "For equiatomic CrMnFeCoNi in the FCC prototype, formulate at least two hypotheses for how local chemical-neighbor statistics affect the distribution of relaxed energies across configurations. State assumptions and a local-order descriptor and energy statistic you would measure. Propose a feasible fixed-composition, consistently spin-treated MLIP/DFT sampling study and results that would weaken each hypothesis. Do not assume short-range order lowers energy."
+    },
+    {
+      "question_id": "D-REFRACTORY-A",
+      "material": "NbTaVHfZrTi BCC alloy",
+      "category": "A",
+      "prompt": "For the equiatomic Nb-Ta-V-Hf-Zr-Ti alloy, compare BCC, FCC, and HCP prototypes while separating prototype effects from finite-cell chemical ordering. Specify a composition- and atom-count-matched set with multiple chemical arrangements represented consistently across prototypes, a common electronic-structure and relaxation protocol, and the relative-energy analysis. Explain outcomes that would or would not support a prototype preference; do not infer bulk phase stability from a single ordered cell."
+    },
+    {
+      "question_id": "D-REFRACTORY-B",
+      "material": "NbTaVHfZrTi BCC alloy",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical equiatomic Nb-Ta-V-Hf-Zr-Ti study: one ordered BCC cell and one ordered cell for each of FCC and HCP were relaxed with the same nominal method, but the chemical arrangements differ and no independent orderings were sampled. No energies, convergence data, or finite-temperature results are supplied. State what this design can establish, what it cannot establish about phase stability, and the most informative controlled follow-up. Do not invent a ranking."
+    },
+    {
+      "question_id": "D-REFRACTORY-C",
+      "material": "NbTaVHfZrTi BCC alloy",
+      "category": "C",
+      "prompt": "For equiatomic Nb-Ta-V-Hf-Zr-Ti, propose at least two hypotheses linking local chemical neighborhoods to either relaxed local distortion or configuration energy within a declared prototype. State the prototype and assumptions, predict an observable for each, and propose a feasible study that samples independent chemical arrangements under a consistent relaxation protocol. Give a result that would weaken each hypothesis and distinguish configuration-level evidence from a bulk phase claim."
+    },
+    {
+      "question_id": "D-PHOS-A",
+      "material": "Phosphorene",
+      "category": "A",
+      "prompt": "Compare black- and blue-phosphorus monolayers at zero applied in-plane strain. Propose a like-for-like comparison of their relaxed in-plane energy per atom using the same exchange-correlation method, convergence standards, and adequately converged vacuum separation and in-plane sampling. Explain what the comparison could establish for these monolayer structures, what it cannot establish about bulk phosphorus, and what convergence or relaxation outcome could change the interpretation. Do not assume an energy ordering."
+    },
+    {
+      "question_id": "D-PHOS-B",
+      "material": "Phosphorene",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical black-/blue-phosphorus monolayer comparison: both structures were evaluated with the same nominal density-functional method, but vacuum separation and out-of-plane electrostatic convergence were not tested. The reported geometries and numerical energies are not supplied. State what the setup description supports, what remains unresolved, and the most discriminating convergence check. Do not infer a ranking or invent values."
+    },
+    {
+      "question_id": "D-PHOS-C",
+      "material": "Phosphorene",
+      "category": "C",
+      "prompt": "For a phosphorene monolayer under biaxial in-plane strains of -2%, -1%, 0%, +1%, and +2% relative to its own relaxed reference cell, propose at least two hypotheses for changes in relaxed geometry or electronic structure. State assumptions and specific observables, separate physical strain response from vacuum or k-point artifacts, and propose feasible calculations with outcomes that would weaken each hypothesis. Do not claim a transition without evidence."
+    },
+    {
+      "question_id": "D-MOF-A",
+      "material": "Zn(HCOO)2 MOF",
+      "category": "A",
+      "prompt": "Compare two hypothetical, guest-free, stoichiometric Zn(HCOO)2 framework configurations with identical connectivity and protonation state but different formate orientations. Hold hydrogen/proton positions or relaxation policy, guest occupancy (zero), composition and cell contents consistent; state whether the cell shape is fixed or relaxed. Propose a controlled comparison that separates orientation-order effects from framework breathing, including one common dispersion-treatment choice and structural/energetic observables. Explain outcomes that distinguish the effects. No structures or measurements are supplied; do not assume the configurations are experimentally realized or rank them."
+    },
+    {
+      "question_id": "D-MOF-B",
+      "material": "Zn(HCOO)2 MOF",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical Zn(HCOO)2 framework comparison: the nominal stoichiometry and connectivity are given, but hydrogen coordinates, guest occupancy, and whether dispersion corrections were used are missing. No structures or energies are supplied. State which structural or energetic conclusions are supportable, what cannot be compared, and the minimum records or controlled test needed to change that assessment. Do not invent framework details."
+    },
+    {
+      "question_id": "D-MOF-C",
+      "material": "Zn(HCOO)2 MOF",
+      "category": "C",
+      "prompt": "For a hypothetical guest-free Zn(HCOO)2 framework with fixed stoichiometry, protonation state and connectivity, propose at least two hypotheses for whether formate-orientation order or framework breathing dominates a chosen structural response. Define the response observable, hydrogen/proton treatment and cell constraints; state uncertainties; and propose feasible dispersion-aware MLIP/DFT comparisons with outcomes that would weaken each hypothesis. No structural evidence is supplied. Do not treat hypothetical configurations as observed phases."
+    },
+    {
+      "question_id": "D-NBTAO-A",
+      "material": "Nb-Ta-O",
+      "category": "A",
+      "prompt": "Consider a hypothetical, explicitly bounded Nb-Ta-O reference domain containing a target composition and only the unary/binary/ternary phases named in its domain contract. Compare a target-compound interpretation with decomposition into the included competing phases using internally compatible formation energies. State the required references and convex-hull test, what conclusions are domain-relative, and what additional evidence could change them. Do not claim global stability or infer a result without energies."
+    },
+    {
+      "question_id": "D-NBTAO-B",
+      "material": "Nb-Ta-O",
+      "category": "B",
+      "prompt": "Audit this explicitly hypothetical Nb-Ta-O hull dossier: all listed energies are converged and use a common method, but one polymorph family required by the predeclared domain contract is absent. No numerical energies or missing-phase identity are supplied. Decide whether the dossier satisfies its own coverage contract, state the strongest permitted claim, and specify the minimum addition and compatibility checks needed. Do not assert a stable or unstable phase."
+    },
+    {
+      "question_id": "D-NBTAO-C",
+      "material": "Nb-Ta-O",
+      "category": "C",
+      "prompt": "At zero temperature within a declared finite Nb-Ta-O composition domain, propose competing hypotheses that a target composition is better represented by an ordered compound or by a disordered/solid-solution-like arrangement. State what the zero-temperature ordered-cell calculations can and cannot say about configurational entropy at finite temperature, identify compatible formation-energy and ordering evidence, and propose feasible tests and falsifiers. Do not claim a globally stable phase without a complete reference domain."
+    }
+  ]
+}

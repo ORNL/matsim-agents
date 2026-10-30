@@ -1,0 +1,21 @@
+{
+  "register_version": "e1b-packet-hashes-proposed-v1",
+  "status": "proposed-pending-independent-scientific-review",
+  "hash_algorithm": "sha256",
+  "artifacts": {
+    "questions": {
+      "path": "research/paper/e1/e1b-generalization-questions.proposed.v1.json",
+      "sha256": "e8b6e2f82d5f06feaa9554b1028e2cbebe94c37ef92429bf6bb5251ad03bb9a8"
+    },
+    "protocol": {
+      "path": "research/paper/e1/e1b-generalization-protocol.proposed.v1.md",
+      "sha256": "95c8aeab750760e8086ae8ef161cdde9c536a25dd2d54c71fcea5559760e256e"
+    },
+    "shared_response_schema_reference_only": {
+      "path": "research/paper/e1/response-schema.v1.json",
+      "sha256": "9eab3b993777b864af11e0f0a9919227e7b8fccb5ae5f0ceffe3eb33adc11129",
+      "note": "E1a schema referenced conceptually only; no E1b runtime integration or E1a packet change is implied."
+    }
+  },
+  "e1a_separation": "This register is separate from research/paper/e1/packet-hashes.v1.json. E1b hashes do not authorize execution or establish scientific validity, independence, or approval."
+}

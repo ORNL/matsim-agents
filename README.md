@@ -753,11 +753,14 @@ code. Local/open-source backends are the default.
 For a detailed comparison of the two open-source local backends (vLLM vs
 HuggingFace Transformers + Accelerate) — including pros, cons, and guidance
 for Frontier (ROCm) — see [docs/llm-backends-comparison.md](docs/llm-backends-comparison.md).
+For Genesis Mission hosted models through the Model Access Gateway, see the
+[MAG setup and usage guide](docs/model-access-gateway.md).
 
 | Provider | Install | Typical model | Notes |
 |---|---|---|---|
 | **`ollama`** *(library default)* | `brew install ollama && ollama pull llama3.1:8b` | `llama3.1:8b` *(default)*; `qwen2.5:14b`, `deepseek-r1:14b` are examples | Fully local, CPU/GPU/Metal. |
 | **`vllm`** | Run a vLLM server (`vllm serve <model> --port 8000`) | `meta-llama/Llama-3.1-8B-Instruct` | OpenAI-compatible; great for HPC. |
+| **`mag`** | `pip install matsim-agents[mag]` | Explicit ID from authenticated MAG `/v1/models` | Genesis Mission hosted models; set `AMSC_TOKEN`. Optional upstream route via `mag_provider` or `MATSIM_MAG_PROVIDER`. |
 | **`openai`** | `pip install matsim-agents[openai]` | `gpt-4o-mini` | Hosted. Set `OPENAI_API_KEY`. |
 | **`anthropic`** | `pip install matsim-agents[anthropic]` | `claude-3-5-sonnet-latest` | Hosted. Set `ANTHROPIC_API_KEY`. |
 | **`huggingface`** | `pip install matsim-agents[huggingface]` | `Qwen/Qwen2.5-72B-Instruct` | Direct HF Transformers + Accelerate; no server needed. Ideal as fallback on HPC when vLLM is unavailable. Set `MATSIM_HF_MODEL_PATH` to a local model directory. |
@@ -1263,6 +1266,9 @@ matsim-agents capabilities check [--kind K] [--require NAME]  # which backends c
 matsim-agents capabilities matrix [-o FILE] # backend capability matrix (docs/capabilities.md)
 matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
 matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
+matsim-agents e1-development MANIFEST.json --output DIR [--max-new-requests N] [--retry-errors]  # run one candidate's E1 development questions; held-out questions are not accepted
+matsim-agents coordination list [--repo PATH] [--remote NAME]  # read shared HPC task board
+matsim-agents inventory dft ROOT [--output FILE]  # inventory retained DFT run artifacts
 matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)
 matsim-agents al      validate-config CONFIG.yaml   # parse + dump resolved config as JSON
 matsim-agents resources plan CONFIG.yaml [--nodes N]   # preview LLM/MLIP/DFT placement

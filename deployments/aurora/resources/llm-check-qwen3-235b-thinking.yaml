@@ -1,0 +1,19 @@
+preview: {nodes: 1}
+resources:
+  preset: aurora
+  pools:
+    llm:
+      nodes: 1
+      devices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+      servers:
+        - name: model
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Qwen3-235B-A22B-Thinking-2507
+          served_name: Qwen3-235B-A22B-Thinking-2507
+          tensor_parallel_size: 12
+          max_model_len: 16384
+          startup_timeout_s: 2700
+          launcher:
+            - bash
+            - ${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/aurora/launchers/vllm-server-aurora.sh
+          extra_args: [--enforce-eager, --max-num-seqs, "1"]
