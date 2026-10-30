@@ -904,6 +904,36 @@ def test_frontier_install_entry_points_are_unambiguous() -> None:
     assert 'VENV="${VLLM_VENV_PATH:-$REPO/.venv-vllm}"' in build
     assert 'VENV="${MATSIM_VLLM_VENV:-$REPO/.venv-vllm}"' in launcher
 
+    frontier = ROOT / "deployments/frontier"
+    for relative in (
+        "jobs/job-serve-multinode-frontier.sh",
+        "smoke-tests/smoke-vllm-singlenode-frontier.sh",
+        "smoke-tests/smoke-vllm-multinode-frontier.sh",
+    ):
+        text = (frontier / relative).read_text(encoding="utf-8")
+        assert "MATSIM_VLLM_VENV:-$REPO/.venv-vllm" in text
+        assert 'source "$VENV/bin/activate"' in text
+
+    for relative in (
+        "jobs/job-discovery-chat-vllm-frontier.sh",
+        "jobs/job-heterogeneous-llm-debate-frontier.sh",
+        "jobs/job-sequential-benchmark-frontier.sh",
+    ):
+        text = (frontier / relative).read_text(encoding="utf-8")
+        assert ".venv-vllm" in text
+        assert "require_tvm_ffi_artifact" in text
+
+    prebuild = (frontier / "setup/prebuild-tvm-ffi-frontier.sh").read_text(encoding="utf-8")
+    assert "VLLM_VENV_PATH:-$REPO/.venv-vllm" in prebuild
+
+    benchmark = (frontier / "jobs/job-six-model-benchmark-frontier.sh").read_text(encoding="utf-8")
+    assert "VENV=$REPO/.venv" in benchmark
+    assert "require_tvm_ffi_artifact" not in benchmark
+
+    frontier_docs = (frontier / "docs/README-frontier.md").read_text(encoding="utf-8")
+    assert "`$REPO/.venv-vllm`" in frontier_docs
+    assert "Then activates the vLLM-on-ROCm-7.2 venv at:\n`$REPO/.venv`" not in frontier_docs
+
 
 def test_installation_guidance_has_no_obsolete_environment_contracts() -> None:
     obsolete = (

@@ -29,6 +29,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 VENV=$REPO/.venv
+VLLM_VENV="${MATSIM_VLLM_VENV:-$REPO/.venv-vllm}"
 HYDRAGNN_EXAMPLE=$PROJ/HydraGNN/examples/multidataset_hpo_sc26
 LOGDIR=${MATSIM_HYDRAGNN_LOGDIR:-$HYDRAGNN_EXAMPLE/multidataset_hpo-BEST6-fp64}
 HYDRAGNN_BRANCH_MLP_CHECKPOINT=${HYDRAGNN_BRANCH_MLP_CHECKPOINT:-$HYDRAGNN_EXAMPLE/mlp_branch_weights.pt}
@@ -65,7 +66,7 @@ export HF_DATASETS_OFFLINE=1
 # ROCm / vLLM env vars established during smoke tests
 export VLLM_CUDART_SO_PATH=/opt/rocm-7.2.0/lib/libamdhip64.so
 export VLLM_NCCL_SO_PATH=/opt/rocm-7.2.0/lib/librccl.so.1
-TORCH_LIB=$VENV/lib/python3.11/site-packages/torch/lib
+TORCH_LIB=$VLLM_VENV/lib/python3.11/site-packages/torch/lib
 export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
 export HSA_NO_SCRATCH_RECLAIM=1
 export PYTORCH_ROCM_ARCH=gfx90a
@@ -77,7 +78,7 @@ export RCCL_P2P_BATCH_THRESHOLD=0
 
 # Durable tvm_ffi addon plus disposable per-job kernel caches.
 source "$REPO/deployments/frontier/setup/tvm-ffi-artifact.sh"
-require_tvm_ffi_artifact "$REPO" "$VENV"
+require_tvm_ffi_artifact "$REPO" "$VLLM_VENV"
 JIT_TMP="/tmp/vllm-jit.${USER}.${SLURM_JOB_ID:-$$}"
 export VLLM_CACHE_ROOT="${JIT_TMP}/vllm"
 export TRITON_CACHE_DIR="${JIT_TMP}/triton"
@@ -96,7 +97,7 @@ fi
 
 echo "[$(date)] Starting vLLM server (TP=8, model=$MODEL_NAME) ..."
 srun -N1 -n1 -c56 --gpus-per-task=8 --gpu-bind=closest \
-    python -m vllm.entrypoints.openai.api_server \
+    "$VLLM_VENV/bin/python" -m vllm.entrypoints.openai.api_server \
         --model "$MODEL_DIR" \
         --served-model-name "$MODEL_NAME" \
         --tensor-parallel-size 8 \

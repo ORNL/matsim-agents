@@ -73,6 +73,11 @@ leaves the HydraGNN Conda environment untouched. The server launcher uses
 submitted with Slurm account `lrn110` by default; set `SLURM_ACCOUNT` to another
 account associated with your user if needed.
 
+Frontier jobs that start a vLLM server (including the vLLM smoke tests and
+multi-node server) use `.venv-vllm`; jobs that only call a server continue to
+use the HydraGNN `.venv`. The `tvm_ffi` prebuild is keyed to `.venv-vllm` and
+accepts `VLLM_VENV_PATH` when using a non-default location.
+
 ```bash
 bash deployments/frontier/setup/install.sh
 bash deployments/frontier/setup/install-vllm-rocm72.sh

@@ -32,8 +32,8 @@
 #
 # Why is this needed at all?
 # --------------------------
-# Without this prebuild, every vLLM job pays the ~5 min JIT cost on first
-# tvm_ffi import — and during that compile the job appears silently hung.
+# Without this prebuild, every vLLM server job pays the ~5 min JIT cost on
+# first tvm_ffi import — and during that compile the job appears silently hung.
 # Worse: tvm-ffi guards the build with a FileLock; a job killed mid-compile
 # leaves a stale lock that deadlocks every subsequent job sharing the cache.
 # Doing the compile once, here, in a job we control, eliminates both issues.
@@ -73,14 +73,13 @@ fi
 }
 SCRIPT_DIR="${REPO}/deployments/frontier/setup"
 PROJ="$(dirname "${REPO}")"
-VENV=$REPO/.venv
+VENV="${VLLM_VENV_PATH:-$REPO/.venv-vllm}"
 source "${SCRIPT_DIR}/tvm-ffi-artifact.sh"
 ARTIFACT_DIR="${TVM_FFI_ARTIFACT_DIR:-${REPO}/external/tvm-ffi/lib}"
 
 mkdir -p "$ARTIFACT_DIR" "$PROJ/runs"
 
 # ── conda + modules (must mirror install-time exactly) ──────────────────────
-source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 source "$REPO/deployments/frontier/setup/frontier-module-stack.sh"
 load_frontier_rocm72_modules
 # Cray's PrgEnv-gnu loads gcc-native/13.2 but ONLY exposes Cray's `cc`/`CC`
@@ -89,7 +88,7 @@ load_frontier_rocm72_modules
 # `gcc-native` explicitly puts /opt/cray/pe/gcc-native/13/bin first in PATH,
 # overriding the SLES system /usr/bin/gcc (GCC 7.5) which PyTorch rejects.
 ml gcc-native
-source activate "$VENV"
+source "$VENV/bin/activate"
 
 # torch's cpp_extension.include_paths() demands CUDA_HOME, even for ROCm.
 export CUDA_HOME="${ROCM_PATH:-/opt/rocm-7.2.0}"
