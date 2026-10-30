@@ -63,6 +63,10 @@ def test_torchcomms_patch_adds_cpu_backend_for_xccl_initialization():
 
     def new_group(ranks=None, backend=None):
         calls.append(("new_group", backend))
+        return C10d.split_group(backend=backend)
+
+    def split_group(parent_pg=None, split_ranks=None, backend=None):
+        calls.append(("split_group", backend))
         return backend
 
     class C10d:
@@ -75,20 +79,35 @@ def test_torchcomms_patch_adds_cpu_backend_for_xccl_initialization():
 
     C10d.init_process_group = staticmethod(init_process_group)
     C10d.new_group = staticmethod(new_group)
+    C10d.split_group = staticmethod(split_group)
     Distributed.init_process_group = staticmethod(init_process_group)
     Distributed.new_group = staticmethod(new_group)
+    Distributed.split_group = staticmethod(split_group)
 
     patch_module.install_torchcomms_group_rank_patch(C10d, Distributed)
 
     assert Distributed.init_process_group(backend="xccl") == "cpu:gloo,xpu:xccl"
     assert Distributed.new_group([0, 1], backend="xccl") == "cpu:gloo,xpu:xccl"
+    assert Distributed.split_group(backend="xpu:xccl") == "cpu:gloo,xpu:xccl"
+    assert (
+        Distributed.split_group(backend="cpu:gloo,xpu:xccl")
+        == "cpu:gloo,xpu:xccl"
+    )
+    assert C10d.split_group(backend="xccl") == "cpu:gloo,xpu:xccl"
     assert C10d.init_process_group(backend="gloo") == "gloo"
     assert C10d.new_group([0, 1], backend="gloo") == "gloo"
+    assert C10d.split_group(backend="cpu:gloo") == "cpu:gloo"
     assert calls == [
         ("init", "cpu:gloo,xpu:xccl"),
         ("new_group", "cpu:gloo,xpu:xccl"),
+        ("split_group", "cpu:gloo,xpu:xccl"),
+        ("split_group", "cpu:gloo,xpu:xccl"),
+        ("split_group", "cpu:gloo,xpu:xccl"),
+        ("split_group", "cpu:gloo,xpu:xccl"),
         ("init", "gloo"),
         ("new_group", "gloo"),
+        ("split_group", "gloo"),
+        ("split_group", "cpu:gloo"),
     ]
 
 

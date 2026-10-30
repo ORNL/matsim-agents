@@ -92,6 +92,35 @@ def install_torchcomms_group_rank_patch(
         return original_new_group(*bound.args, **bound.kwargs)
 
     c10d_module.new_group = with_cpu_group_backend
+
+    if hasattr(c10d_module, "split_group"):
+        original_split_group = c10d_module.split_group
+        split_group_signature = inspect.signature(original_split_group)
+
+        def with_cpu_split_backend(*args: Any, **kwargs: Any) -> Any:
+            bound = split_group_signature.bind_partial(*args, **kwargs)
+            backend = bound.arguments.get("backend")
+            if backend is not None:
+                backend_text = str(backend).lower()
+                backend_parts = [part.strip() for part in backend_text.split(",")]
+                requests_xccl = backend_text == "xccl" or "xpu:xccl" in backend_parts
+                requests_cpu = any(part.startswith("cpu:") for part in backend_parts)
+                if requests_xccl and not requests_cpu:
+                    bound.arguments["backend"] = (
+                        "cpu:gloo,xpu:xccl" if backend_text == "xccl" else f"cpu:gloo,{backend}"
+                    )
+                if trace:
+                    print(
+                        "[torchcomms-patch] split_group backend "
+                        f"{backend} -> {bound.arguments.get('backend')}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+            return original_split_group(*bound.args, **bound.kwargs)
+
+        c10d_module.split_group = with_cpu_split_backend
     if distributed_module is not None:
         distributed_module.init_process_group = with_cpu_backend
         distributed_module.new_group = with_cpu_group_backend
+        if hasattr(c10d_module, "split_group"):
+            distributed_module.split_group = with_cpu_split_backend
