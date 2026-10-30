@@ -30,6 +30,7 @@ def test_torchcomms_patch_uses_each_process_groups_local_rank(monkeypatch):
 
     class C10d:
         _new_process_group_helper = staticmethod(create_group)
+        init_process_group = staticmethod(lambda backend=None: backend)
 
     monkeypatch.setenv("TORCHCOMM_RANK", "parent-rank")
     monkeypatch.delenv("TORCHCOMM_SIZE", raising=False)
@@ -46,6 +47,37 @@ def test_torchcomms_patch_uses_each_process_groups_local_rank(monkeypatch):
     assert "TORCHCOMM_SIZE" not in os.environ
 
 
+def test_torchcomms_patch_adds_cpu_backend_for_xccl_initialization():
+    patch_path = AURORA / "smoke-tests/torchcomms_rank_patch.py"
+    spec = importlib.util.spec_from_file_location("torchcomms_backend_patch", patch_path)
+    assert spec is not None and spec.loader is not None
+    patch_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(patch_module)
+
+    calls = []
+
+    def init_process_group(backend=None):
+        calls.append(backend)
+        return backend
+
+    class C10d:
+        _new_process_group_helper = staticmethod(
+            lambda group_size, group_rank: (group_rank, group_size)
+        )
+
+    class Distributed:
+        pass
+
+    C10d.init_process_group = staticmethod(init_process_group)
+    Distributed.init_process_group = staticmethod(init_process_group)
+
+    patch_module.install_torchcomms_group_rank_patch(C10d, Distributed)
+
+    assert Distributed.init_process_group(backend="xccl") == "cpu:gloo,xpu:xccl"
+    assert C10d.init_process_group(backend="gloo") == "gloo"
+    assert calls == ["cpu:gloo,xpu:xccl", "gloo"]
+
+
 def test_aurora_vllm_smoke_startup_only_skips_completion_request():
     script = (AURORA / "smoke-tests/smoke-vllm-singlenode-aurora.sh").read_text()
     startup_only = script.index('if [[ "${SMOKE_STARTUP_ONLY:-0}" == "1" ]]')
@@ -59,7 +91,7 @@ def test_aurora_torchcomms_sitecustomize_is_on_server_pythonpath():
     sitecustomize = (AURORA / "smoke-tests/sitecustomize.py").read_text()
     assert 'export PYTHONPATH="${SMOKE_TEST_DIR}${PYTHONPATH:+:${PYTHONPATH}}"' in launcher
     assert 'os.environ.get("TORCH_DISTRIBUTED_USE_TORCHCOMMS") == "1"' in sitecustomize
-    assert "install_torchcomms_group_rank_patch(c10d)" in sitecustomize
+    assert "install_torchcomms_group_rank_patch(c10d, dist)" in sitecustomize
 
 
 def test_aurora_model_downloaders_expose_experimental_set_opt_in():

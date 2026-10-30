@@ -9,8 +9,10 @@ from threading import RLock
 from typing import Any
 
 
-def install_torchcomms_group_rank_patch(c10d_module: Any) -> None:
-    """Set TorchComms rank variables while PyTorch creates each process group."""
+def install_torchcomms_group_rank_patch(
+    c10d_module: Any, distributed_module: Any | None = None
+) -> None:
+    """Apply Aurora's TorchComms process-group compatibility patches."""
     trace = os.environ.get("MATSIM_TORCHCOMMS_TRACE") == "1"
     original = c10d_module._new_process_group_helper
     signature = inspect.signature(original)
@@ -59,3 +61,24 @@ def install_torchcomms_group_rank_patch(c10d_module: Any) -> None:
                         os.environ[name] = value
 
     c10d_module._new_process_group_helper = with_group_rank
+
+    original_init = c10d_module.init_process_group
+    init_signature = inspect.signature(original_init)
+
+    def with_cpu_backend(*args: Any, **kwargs: Any) -> Any:
+        bound = init_signature.bind_partial(*args, **kwargs)
+        backend = bound.arguments.get("backend")
+        if backend is not None and str(backend).lower() == "xccl":
+            bound.arguments["backend"] = "cpu:gloo,xpu:xccl"
+            if trace:
+                print(
+                    "[torchcomms-patch] init backend "
+                    f"{backend} -> {bound.arguments['backend']}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        return original_init(*bound.args, **bound.kwargs)
+
+    c10d_module.init_process_group = with_cpu_backend
+    if distributed_module is not None:
+        distributed_module.init_process_group = with_cpu_backend
