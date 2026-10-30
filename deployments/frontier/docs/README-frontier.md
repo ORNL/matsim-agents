@@ -29,8 +29,10 @@ Frontier-specific assets are split by intent:
 
 The Torch DLPack addon is installed under
 `<repo>/external/tvm-ffi/lib/` on project-shared Lustre. Its filename includes
-the full Torch version, ROCm backend, and C++ ABI hash. Every Frontier vLLM job
-resolves and validates that exact artifact before starting the server.
+the full Torch version, ROCm backend, and C++ ABI hash. Every Frontier job that
+starts a vLLM server resolves and validates the artifact against `.venv-vllm`
+before starting the server. Client-only jobs that call an existing endpoint do
+not need the artifact.
 
 ### Symptoms
 
@@ -66,11 +68,12 @@ ls -la external/tvm-ffi/lib/
 
 ### How it's prevented
 
-Every vLLM job sources the shared resolver and requires the installed artifact:
+Every job that starts a vLLM server sources the shared resolver and requires
+the installed artifact, keyed to the isolated vLLM environment:
 
 ```bash
 source "$REPO/deployments/frontier/setup/tvm-ffi-artifact.sh"
-require_tvm_ffi_artifact "$REPO" "$VENV"
+require_tvm_ffi_artifact "$REPO" "$VLLM_VENV"
 ```
 
 `TVM_FFI_CACHE_DIR` is set internally because that is the variable name required
@@ -80,6 +83,19 @@ not an expendable cache.
 **Do not remove these lines from any vLLM job script.**
 
 ---
+
+## Python environments
+
+Frontier keeps two Python environments separate:
+
+- `$REPO/.venv` is HydraGNN's Conda environment. Use it for matsim-agents
+  clients, HydraGNN inference/training, and jobs that call a vLLM endpoint.
+- `$REPO/.venv-vllm` is a standard Python `venv` containing the ROCm 7.2 vLLM
+  server stack. Use it for vLLM, Ray, and the matching `tvm_ffi` artifact.
+
+Server scripts default to `.venv-vllm`; set `MATSIM_VLLM_VENV` to override it.
+The `tvm_ffi` prebuild defaults to `.venv-vllm` and accepts `VLLM_VENV_PATH`.
+Do not install vLLM dependencies into or replace the HydraGNN `.venv`.
 
 ## Required environment
 
@@ -91,8 +107,9 @@ All Frontier scripts source `frontier-module-stack.sh` which loads:
 - `PrgEnv-gnu`
 - `miniforge3/23.11.0-0`
 
-Then activates the vLLM-on-ROCm-7.2 venv at:
-`$REPO/.venv`
+The vLLM server jobs activate the isolated vLLM-on-ROCm-7.2 environment at:
+`$REPO/.venv-vllm`. Client-side matsim-agents commands continue to use the
+HydraGNN Conda environment at `$REPO/.venv`.
 
 ## Network policy
 
@@ -126,7 +143,7 @@ vLLM must be launched via `srun` (not bare `python`) for proper GPU binding:
 
 ```bash
 srun -N1 -n1 -c56 --gpus-per-task=${GPUS_PER_NODE} --gpu-bind=closest \
-  "$VENV/bin/python" -m vllm.entrypoints.openai.api_server ...
+  "$VLLM_VENV/bin/python" -m vllm.entrypoints.openai.api_server ...
 ```
 
 Bare `python` will not see GPUs correctly even with `ROCR_VISIBLE_DEVICES`.
@@ -175,7 +192,7 @@ Add this to a script to dump all-thread stack traces after 45 seconds:
 
 ```bash
 timeout --signal=ABRT --kill-after=10 60 srun ... \
-  "$VENV/bin/python" -u -X faulthandler -c "
+  "$VLLM_VENV/bin/python" -u -X faulthandler -c "
 import faulthandler, sys
 faulthandler.dump_traceback_later(45, repeat=False, file=sys.stderr)
 import vllm.entrypoints.openai.api_server  # or whatever import is suspected

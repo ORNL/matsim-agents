@@ -79,10 +79,6 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_prox
 export no_proxy='*'
 export NO_PROXY='*'
 
-source "$REPO/deployments/frontier/setup/tvm-ffi-artifact.sh"
-require_tvm_ffi_artifact "$REPO" "$VENV"
-rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true
-
 OUTPUT_PREFIX=${BENCHMARK_OUTPUT_PREFIX:-$RUN_DIR/six-model-benchmark}
 SPEC_FILE=${BENCHMARK_SPEC_FILE:-}
 KEYWORDS=${BENCHMARK_KEYWORDS:-stability,band gap,formation energy,synthesis}

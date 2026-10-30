@@ -16,6 +16,7 @@ source "${RUNTIME_ENV}"
 REPO="$(resolve_repo_root "${SCRIPT_DIR}")"
 PROJ="$(dirname "${REPO}")"
 VENV="${REPO}/.venv"
+VLLM_VENV="${MATSIM_VLLM_VENV:-${REPO}/.venv-vllm}"
 MODELS_ROOT="${MODEL_ROOT:-${PROJ}/models}"
 CATALOG="${REPO}/deployments/frontier/config/heterogeneous-debate-models.json"
 init_run_dirs "${PROJ}" "heterogeneous-llm-debate-frontier" "${SLURM_JOB_ID:-$$}"
@@ -34,7 +35,7 @@ export VLLM_NO_USAGE_STATS=1
 export DO_NOT_TRACK=1
 export VLLM_CUDART_SO_PATH=/opt/rocm-7.2.0/lib/libamdhip64.so
 export VLLM_NCCL_SO_PATH=/opt/rocm-7.2.0/lib/librccl.so.1
-export LD_LIBRARY_PATH="${VENV}/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${VLLM_VENV}/lib/python3.11/site-packages/torch/lib:${LD_LIBRARY_PATH:-}"
 export HSA_NO_SCRATCH_RECLAIM=1
 export PYTORCH_ROCM_ARCH=gfx90a
 export ROCM_ARCH=gfx90a
@@ -46,7 +47,7 @@ export no_proxy='*'
 export NO_PROXY='*'
 
 source "${REPO}/deployments/frontier/setup/tvm-ffi-artifact.sh"
-require_tvm_ffi_artifact "${REPO}" "${VENV}"
+require_tvm_ffi_artifact "${REPO}" "${VLLM_VENV}"
 
 MAX_MODEL_LEN="${MATSIM_VLLM_MAXLEN:-4096}"
 GPU_UTIL="${MATSIM_VLLM_GPU_UTIL:-0.85}"
@@ -73,7 +74,7 @@ launch_server() {
     export TMPDIR="${jit}/tmp"
     export MIOPEN_DISABLE_CACHE=1
     export MIOPEN_USER_DB_PATH="${jit}/miopen"
-    exec "${VENV}/bin/vllm" serve "${model_dir}" \
+    exec "${VLLM_VENV}/bin/vllm" serve "${model_dir}" \
       --served-model-name "${model_name}" \
       --host 127.0.0.1 \
       --port "${port}" \

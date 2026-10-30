@@ -506,13 +506,11 @@ Design principles that keep the code portable:
 
 > **⚠️ Frontier users — read this first:**
 > See [`deployments/frontier/docs/README-frontier.md`](deployments/frontier/docs/README-frontier.md)
-> for required setup and known issues. **Critically: a prebuilt `tvm_ffi`
-> shared library must exist at
-> `$PROJ/cache/tvm-ffi/libtorch_c_dlpack_addon_torch211-rocm.so`
-> (where `$PROJ` is your project's proj-shared directory) or every vLLM job
-> will silently hang forever** (the script preflight check will fail-fast in
-> 2 seconds with a clear error message). If missing, rebuild with
-> `sbatch deployments/frontier/setup/prebuild-tvm-ffi-frontier.sh`.
+> for required setup and known issues. vLLM server jobs use the isolated
+> `$REPO/.venv-vllm`; matsim-agents clients and HydraGNN continue to use
+> `$REPO/.venv`. A matching prebuilt `tvm_ffi` shared library must exist under
+> `$REPO/external/tvm-ffi/lib/` before starting a vLLM server. If it is missing,
+> rebuild it with `sbatch deployments/frontier/setup/prebuild-tvm-ffi-frontier.sh`.
 
 ### Quantum ESPRESSO (DFT) backend on Frontier
 
