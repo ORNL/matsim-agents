@@ -16,6 +16,8 @@
 # Submit a subset:
 #   qsub -v MODEL_IDS="Qwen/Qwen2.5-14B-Instruct mistralai/Mixtral-8x22B-Instruct-v0.1" \
 #        deployments/aurora/download/download-open-models-aurora.sh
+# Submit the opt-in experimental model set:
+#   qsub -v MODEL_SET=experimental deployments/aurora/download/download-open-models-aurora.sh
 # Submit one model at an immutable Hub commit:
 #   qsub -v MODEL_IDS="google/gemma-4-26B-A4B-it",MODEL_REVISION=<40-character-commit> \
 #        deployments/aurora/download/download-open-models-aurora.sh
@@ -103,9 +105,25 @@ DEFAULT_MODELS=(
   "HuggingFaceTB/SmolLM3-3B"
 )
 
+# Large or newly released checkpoints are intentionally excluded from defaults.
+EXPERIMENTAL_MODELS=(
+  "openai/gpt-oss-20b"
+  "openai/gpt-oss-120b"
+  "moonshotai/Kimi-K2.6"
+  "moonshotai/Kimi-K3"
+  "zai-org/GLM-5.2"
+  "zai-org/GLM-5.3"
+  "zai-org/GLM-5.3-Flash"
+)
+
 if [[ -n "${MODEL_IDS:-}" ]]; then
   # shellcheck disable=SC2206
   MODELS=( ${MODEL_IDS} )
+elif [[ "${MODEL_SET:-default}" == "experimental" ]]; then
+  MODELS=("${EXPERIMENTAL_MODELS[@]}")
+elif [[ "${MODEL_SET:-default}" != "default" ]]; then
+  echo "ERROR: MODEL_SET must be 'default' or 'experimental'." >&2
+  exit 2
 else
   MODELS=("${DEFAULT_MODELS[@]}")
 fi

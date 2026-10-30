@@ -62,6 +62,29 @@ def test_aurora_torchcomms_sitecustomize_is_on_server_pythonpath():
     assert "install_torchcomms_group_rank_patch(c10d)" in sitecustomize
 
 
+def test_aurora_model_downloaders_expose_experimental_set_opt_in():
+    experimental_ids = (
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b",
+        "moonshotai/Kimi-K2.6",
+        "moonshotai/Kimi-K3",
+        "zai-org/GLM-5.2",
+        "zai-org/GLM-5.3",
+        "zai-org/GLM-5.3-Flash",
+    )
+    for name in (
+        "download-models-aurora.sh",
+        "download-open-models-aurora.sh",
+    ):
+        script = (AURORA / "download" / name).read_text()
+        experimental = script.split("EXPERIMENTAL_MODELS=(", 1)[1].split(")", 1)[0]
+        defaults = script.split("DEFAULT_MODELS=(", 1)[1].split(")", 1)[0]
+        assert all(model_id in experimental for model_id in experimental_ids)
+        assert all(model_id not in defaults for model_id in experimental_ids)
+        assert '"${MODEL_SET:-default}" == "experimental"' in script
+        assert "MODEL_SET must be 'default' or 'experimental'" in script
+
+
 def _stub(bin_dir: Path, name: str, body: str) -> None:
     path = bin_dir / name
     path.write_text("#!/bin/bash\n" + body)
