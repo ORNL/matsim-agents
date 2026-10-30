@@ -23,6 +23,7 @@
 #   MATSIM_RESOURCES           layout with one server (default:
 #                              deployments/aurora/resources/llm-check.yaml)
 #   MODEL_ROOT                 directory of model snapshots (default: $PROJ/models)
+#   MODEL_DIR                  checkpoint directory name under MODEL_ROOT
 #   MATSIM_LLM_CONCURRENCY     simultaneous qualification requests (fixed at 1)
 #
 # Preview the placement first. The debug queue allows one node for up to 60 min;
@@ -45,7 +46,8 @@ VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
 init_run_dirs "${PROJ}" "llm-check-aurora" "${PBS_JOBID:-$$}"
 export PROJECT_ROOT="${REPO}" MODEL_ROOT="${MODEL_ROOT:-${PROJ}/models}"
 RESOURCES="${MATSIM_RESOURCES:-${REPO}/deployments/aurora/resources/llm-check.yaml}"
-MODEL_PATH="${MODEL_ROOT}/Mistral-Small-24B-Instruct-2501"
+MODEL_DIR="${MODEL_DIR:-Mistral-Small-24B-Instruct-2501}"
+MODEL_PATH="${MODEL_ROOT}/${MODEL_DIR}"
 [[ -f "${MODEL_PATH}/config.json" ]] || { echo "ERROR: local model snapshot not found: ${MODEL_PATH}" >&2; exit 2; }
 [[ -f "${RESOURCES}" ]] || { echo "ERROR: resource layout not found: ${RESOURCES}" >&2; exit 2; }
 
@@ -58,9 +60,15 @@ export PYTHONUNBUFFERED=1 PYTHONNOUSERSITE=1
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY
 export no_proxy='*' NO_PROXY='*'
 export MATSIM_LLM_CONCURRENCY=1
-export MATSIM_LONG_CONTEXT_OUTPUT_TOKENS=16384
-export MATSIM_LONG_CONTEXT_PROMPT_TOKENS=16384
-export MATSIM_LONG_CONTEXT_TOKENIZER_PATH="${MODEL_PATH}"
+LONG_CONTEXT_DEFAULT=8192
+if [[ "${MODEL_DIR}" == "Mistral-Small-24B-Instruct-2501" ]]; then
+  LONG_CONTEXT_DEFAULT=16384
+elif [[ "${MODEL_DIR}" == "Gemma-4-26B-A4B-it" || "${MODEL_DIR}" == "Gemma-4-31B-it" ]]; then
+  LONG_CONTEXT_DEFAULT=32768
+fi
+export MATSIM_LONG_CONTEXT_OUTPUT_TOKENS="${MATSIM_LONG_CONTEXT_OUTPUT_TOKENS:-${LONG_CONTEXT_DEFAULT}}"
+export MATSIM_LONG_CONTEXT_PROMPT_TOKENS="${MATSIM_LONG_CONTEXT_PROMPT_TOKENS:-${LONG_CONTEXT_DEFAULT}}"
+export MATSIM_LONG_CONTEXT_TOKENIZER_PATH="${MATSIM_LONG_CONTEXT_TOKENIZER_PATH:-${MODEL_PATH}}"
 
 MEMORY_LOG="${RUN_DIR}/xpu-memory-samples.jsonl"
 MEMORY_PID=""

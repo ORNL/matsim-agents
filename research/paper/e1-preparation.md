@@ -56,6 +56,30 @@ screening inventory as **not assessed**, not unavailable; establish an approved
 local or remote route and immutable revision before creating its candidate-bound
 run manifest.
 
+### Platform-Blocked Models and Requalification Record
+
+The models below are not E1 candidates on Aurora and have not been served or
+scientifically assessed for this study. Their exclusion is a current-platform
+readiness decision, not a claim that the weights are unusable on all hardware.
+Keep the checkpoint identity, quantization, download route, and inference
+instructions together so a future HOC platform with validated FP8/FP4 hardware
+and kernels can requalify them without treating staging as approval.
+
+| Model | Immutable source / license | Checkpoint format | Aurora study disposition | Staging and inference provenance |
+|---|---|---|---|---|
+| Mistral Large 3 675B Instruct | `mistralai/Mistral-Large-3-675B-Instruct-2512` at `383ffea2c7d60dfd44ca960e8e691709d4fdb9cd`; Apache-2.0 | `compressed-tensors` FP8_BLOCK, 128x128 weight blocks | Not qualified on Aurora's Intel PVC / vLLM-XPU 0.15.0 stack: no supported FP8 kernel or successful model-serving qualification is recorded. Separately, the project vLLM 0.29.0 + Transformers 5.17.0 stack has a known Pixtral import incompatibility; the catalog therefore disables it for debate on that stack. | Listed in the Aurora, Frontier, and Perlmutter model download scripts. Aurora can stage this exact revision with `MODEL_IDS="mistralai/Mistral-Large-3-675B-Instruct-2512"` and `MODEL_REVISION=383ffea2c7d60dfd44ca960e8e691709d4fdb9cd` using [`download-open-models-aurora.sh`](../../deployments/aurora/download/download-open-models-aurora.sh). The expected local leaf is `Mistral-Large-3-675B-Instruct-2512`; it was absent from the inspected `../models` root. For future GPU serving, Perlmutter already documents a 4-node native-format vLLM invocation in [`job-serve-multinode-perlmutter.sh`](../../deployments/perlmutter/jobs/job-serve-multinode-perlmutter.sh) and the isolated vLLM environment in [`setup/README.md`](../../deployments/perlmutter/setup/README.md); this is a route to re-test, not evidence of successful qualification. Aurora's stack setup/verification route is [`install-vllm-xpu-aurora.sh`](../../deployments/aurora/setup/install-vllm-xpu-aurora.sh) and [`vllm-aurora.md`](../../docs/vllm-aurora.md); neither establishes FP8 compatibility. |
+| DeepSeek V4.1-Flash-1017 | `deepseek-ai/DeepSeek-V4.1-Flash-1017` at `1bae0e1088993b9b82de08f59de5be5a34e42170`; MIT | FP8 dynamic quantization, 32x32 blocks, with FP4 experts | Not qualified on Aurora: the current XPU stack has no recorded FP8/FP4 kernel or model-serving validation. It also needs protocol-aware prompt encoding: the snapshot has no Jinja chat template and points to the DeepSeek encoding implementation / `deepseek-recipe`. | Not in current downloader defaults. Pin and stage with `hf download deepseek-ai/DeepSeek-V4.1-Flash-1017 --revision 1bae0e1088993b9b82de08f59de5be5a34e42170 --local-dir ../models/DeepSeek-V4.1-Flash-1017` (or add that exact ID and revision to a future platform-specific staging job). The inspected root contains a 48-shard, approximately 476 GiB snapshot; the final aggregate SHA-256 audit was not captured, so do not label it integrity-verified. The snapshot's `inference/README.md` is the current reference install/run path: install its `requirements.txt`, convert per tensor-parallel rank with `convert.py --expert-dtype fp4`, then run with `torchrun`. This is reference inference, not an Aurora vLLM integration. No platform-specific scheduler serving job or runtime qualification has been recorded. |
+
+For either model, future-HOC requalification requires recording the actual GPU
+generation, framework and serving versions, supported FP8/FP4 kernels and
+weight-loading path, immutable checkpoint revision and completed integrity
+audit, tokenizer/prompt-encoding behavior, and a bounded serving smoke test
+before any E1 candidate approval. Preserve Mistral's known Pixtral/Transformers
+issue as a separate software-stack blocker; resolving it would not establish
+Aurora FP8 support. DeepSeek-R1-Distill-Qwen-32B is a separate BF16 checkpoint,
+and DeepSeek-V3.2 is a separate FP8 checkpoint; neither inherits V4.1's status
+or is qualified by this record.
+
 The versioned development packet is
 [`e1/d-questions.v1.json`](e1/d-questions.v1.json). The separate H packet is
 stored outside this repository with owner-only permissions; its path and digest
