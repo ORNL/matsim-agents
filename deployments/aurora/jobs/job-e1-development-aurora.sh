@@ -39,7 +39,8 @@ export PROJECT_ROOT="${REPO}" MODEL_ROOT="${MODEL_ROOT:-${PROJ}/models}"
 
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
-source "${VENV}/bin/activate"
+source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
+activate_matsim_aurora_python "${REPO}" "${VENV}"
 cd "${REPO}"
 export PYTHONUNBUFFERED=1 PYTHONNOUSERSITE=1 MATSIM_VLLM_TIMEOUT_SECONDS=300
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY

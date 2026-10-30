@@ -67,7 +67,8 @@ source "$REPO/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
 [[ -f "$VENV/bin/activate" ]] || { echo "ERROR: venv not found: $VENV" >&2; exit 2; }
 # shellcheck disable=SC1091
-source "$VENV/bin/activate"
+source "$REPO/deployments/aurora/setup/aurora-python-env.sh"
+activate_matsim_aurora_python "$REPO" "$VENV"
 cd "$REPO"
 
 PYTHON=python

@@ -54,7 +54,8 @@ MODEL_PATH="${MODEL_ROOT}/${MODEL_DIR}"
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
 [[ -f "${VENV}/bin/activate" ]] || { echo "ERROR: client environment not found: ${VENV}" >&2; exit 2; }
-source "${VENV}/bin/activate"
+source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
+activate_matsim_aurora_python "${REPO}" "${VENV}"
 cd "${REPO}"
 export PYTHONUNBUFFERED=1 PYTHONNOUSERSITE=1
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY

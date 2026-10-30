@@ -5,11 +5,12 @@ from __future__ import annotations
 import importlib.util
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 AURORA = ROOT / "deployments" / "aurora"
 
 
@@ -87,27 +88,32 @@ def test_torchcomms_patch_adds_cpu_backend_for_xccl_initialization():
     patch_module.install_torchcomms_group_rank_patch(C10d, Distributed)
 
     assert Distributed.init_process_group(backend="xccl") == "cpu:gloo,xpu:xccl"
-    assert Distributed.new_group([0, 1], backend="xccl") == "cpu:gloo,xpu:xccl"
-    assert Distributed.split_group(backend="xpu:xccl") == "cpu:gloo,xpu:xccl"
+    assert Distributed.new_group([0, 1], backend="xccl") is None
+    assert Distributed.new_group([0, 1], backend="gloo") is None
+    assert Distributed.split_group(backend="xpu:xccl") is None
     assert (
         Distributed.split_group(backend="cpu:gloo,xpu:xccl")
-        == "cpu:gloo,xpu:xccl"
+        is None
     )
-    assert C10d.split_group(backend="xccl") == "cpu:gloo,xpu:xccl"
+    assert C10d.split_group(backend="xccl") is None
     assert C10d.init_process_group(backend="gloo") == "gloo"
-    assert C10d.new_group([0, 1], backend="gloo") == "gloo"
+    assert C10d.new_group([0, 1], backend="gloo") is None
     assert C10d.split_group(backend="cpu:gloo") == "cpu:gloo"
+    assert C10d.split_group(backend="gloo") is None
     assert calls == [
         ("init", "cpu:gloo,xpu:xccl"),
         ("new_group", "cpu:gloo,xpu:xccl"),
-        ("split_group", "cpu:gloo,xpu:xccl"),
-        ("split_group", "cpu:gloo,xpu:xccl"),
-        ("split_group", "cpu:gloo,xpu:xccl"),
-        ("split_group", "cpu:gloo,xpu:xccl"),
+        ("split_group", None),
+        ("new_group", "cpu:gloo,xpu:xccl"),
+        ("split_group", None),
+        ("split_group", None),
+        ("split_group", None),
+        ("split_group", None),
         ("init", "gloo"),
-        ("new_group", "gloo"),
-        ("split_group", "gloo"),
+        ("new_group", "cpu:gloo,xpu:xccl"),
+        ("split_group", None),
         ("split_group", "cpu:gloo"),
+        ("split_group", None),
     ]
 
 
@@ -127,6 +133,21 @@ def test_aurora_torchcomms_sitecustomize_is_on_server_pythonpath():
     assert 'PYTHONPATH="${REPO}/deployments/aurora/smoke-tests${PYTHONPATH:+:${PYTHONPATH}}"' in smoke
     assert 'os.environ.get("TORCH_DISTRIBUTED_USE_TORCHCOMMS") == "1"' in sitecustomize
     assert "install_torchcomms_group_rank_patch(c10d, dist)" in sitecustomize
+
+
+def test_aurora_matsim_jobs_use_shared_python_environment():
+    setup = (AURORA / "setup/setup_matsim_aurora.sh").read_text()
+    helper = (AURORA / "setup/aurora-python-env.sh").read_text()
+    assert 'activate_matsim_aurora_python "${MATSIM_AGENTS_ROOT}" "${AURORA_VENV}"' in setup
+    assert 'export PYTHONPATH="${repo}/src${PYTHONPATH:+:${PYTHONPATH}}"' in helper
+    for job in (
+        "jobs/job-e1-development-aurora.sh",
+        "jobs/job-llm-check-aurora.sh",
+        "jobs/job-discovery-chat-aurora.sh",
+        "jobs/job-discovery-chat-vllm-aurora.sh",
+        "jobs/job-sequential-benchmark-aurora.sh",
+    ):
+        assert "activate_matsim_aurora_python" in (AURORA / job).read_text()
 
 
 def test_aurora_model_downloaders_expose_experimental_set_opt_in():
@@ -170,12 +191,19 @@ source "{AURORA}/launchers/aurora-vllm.sh"
 aurora_vllm_env "{tmp_path}/run" 4
 echo "MASK=$ZE_AFFINITY_MASK TMPDIR=$TMPDIR FLAT=$ZE_FLAT_DEVICE_HIERARCHY"
 aurora_vllm_start /models/a org/model-a 4 8123 4096 "{tmp_path}/vllm.log"
+for attempt in {{1..50}}; do
+    [[ -f "{args_file}" ]] && break
+    sleep 0.1
+done
 aurora_vllm_wait 8123 org/model-a 30
 aurora_vllm_stop
 """
     result = subprocess.run(
         ["bash", "-c", script],
-        env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
+        },
         capture_output=True,
         text=True,
         timeout=60,
@@ -308,7 +336,7 @@ def test_aurora_resume_launcher_honors_model_whitelist(tmp_path):
 @pytest.mark.parametrize(
     ("script", "env", "message"),
     [
-        ("jobs/job-llm-check-aurora.sh", {"MODEL_ROOT": "/nonexistent"}, "model directory"),
+        ("jobs/job-llm-check-aurora.sh", {"MODEL_ROOT": "/nonexistent"}, "model snapshot"),
         ("jobs/job-sequential-benchmark-aurora.sh", {}, "BENCHMARK_PROMPT is required"),
         ("smoke-tests/smoke-transformers-aurora.sh", {"MATSIM_MODEL_DIR": "/nonexistent"}, "model"),
     ],

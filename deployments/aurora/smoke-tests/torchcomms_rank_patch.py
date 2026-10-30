@@ -89,6 +89,9 @@ def install_torchcomms_group_rank_patch(
     def with_cpu_group_backend(*args: Any, **kwargs: Any) -> Any:
         bound = new_group_signature.bind_partial(*args, **kwargs)
         rewrite_xccl_backend(bound.arguments, "new_group")
+        backend = bound.arguments.get("backend")
+        if backend is not None and str(backend).lower() == "gloo":
+            bound.arguments["backend"] = "cpu:gloo,xpu:xccl"
         return original_new_group(*bound.args, **bound.kwargs)
 
     c10d_module.new_group = with_cpu_group_backend
@@ -103,12 +106,20 @@ def install_torchcomms_group_rank_patch(
             if backend is not None:
                 backend_text = str(backend).lower()
                 backend_parts = [part.strip() for part in backend_text.split(",")]
+                if backend_text == "gloo":
+                    bound.arguments["backend"] = "cpu:gloo,xpu:xccl"
+                    backend_text = "cpu:gloo,xpu:xccl"
+                    backend_parts = ["cpu:gloo", "xpu:xccl"]
                 requests_xccl = backend_text == "xccl" or "xpu:xccl" in backend_parts
                 requests_cpu = any(part.startswith("cpu:") for part in backend_parts)
                 if requests_xccl and not requests_cpu:
                     bound.arguments["backend"] = (
                         "cpu:gloo,xpu:xccl" if backend_text == "xccl" else f"cpu:gloo,{backend}"
                     )
+                    backend_text = str(bound.arguments["backend"]).lower()
+                    backend_parts = [part.strip() for part in backend_text.split(",")]
+                if set(backend_parts) == {"cpu:gloo", "xpu:xccl"}:
+                    bound.arguments["backend"] = None
                 if trace:
                     print(
                         "[torchcomms-patch] split_group backend "
