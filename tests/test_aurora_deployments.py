@@ -31,6 +31,7 @@ def test_torchcomms_patch_uses_each_process_groups_local_rank(monkeypatch):
     class C10d:
         _new_process_group_helper = staticmethod(create_group)
         init_process_group = staticmethod(lambda backend=None: backend)
+        new_group = staticmethod(lambda ranks=None, backend=None: backend)
 
     monkeypatch.setenv("TORCHCOMM_RANK", "parent-rank")
     monkeypatch.delenv("TORCHCOMM_SIZE", raising=False)
@@ -57,7 +58,11 @@ def test_torchcomms_patch_adds_cpu_backend_for_xccl_initialization():
     calls = []
 
     def init_process_group(backend=None):
-        calls.append(backend)
+        calls.append(("init", backend))
+        return backend
+
+    def new_group(ranks=None, backend=None):
+        calls.append(("new_group", backend))
         return backend
 
     class C10d:
@@ -69,13 +74,22 @@ def test_torchcomms_patch_adds_cpu_backend_for_xccl_initialization():
         pass
 
     C10d.init_process_group = staticmethod(init_process_group)
+    C10d.new_group = staticmethod(new_group)
     Distributed.init_process_group = staticmethod(init_process_group)
+    Distributed.new_group = staticmethod(new_group)
 
     patch_module.install_torchcomms_group_rank_patch(C10d, Distributed)
 
     assert Distributed.init_process_group(backend="xccl") == "cpu:gloo,xpu:xccl"
+    assert Distributed.new_group([0, 1], backend="xccl") == "cpu:gloo,xpu:xccl"
     assert C10d.init_process_group(backend="gloo") == "gloo"
-    assert calls == ["cpu:gloo,xpu:xccl", "gloo"]
+    assert C10d.new_group([0, 1], backend="gloo") == "gloo"
+    assert calls == [
+        ("init", "cpu:gloo,xpu:xccl"),
+        ("new_group", "cpu:gloo,xpu:xccl"),
+        ("init", "gloo"),
+        ("new_group", "gloo"),
+    ]
 
 
 def test_aurora_vllm_smoke_startup_only_skips_completion_request():

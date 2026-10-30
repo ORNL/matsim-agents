@@ -62,23 +62,36 @@ def install_torchcomms_group_rank_patch(
 
     c10d_module._new_process_group_helper = with_group_rank
 
+    def rewrite_xccl_backend(arguments: dict[str, Any], operation: str) -> None:
+        backend = arguments.get("backend")
+        if backend is not None and str(backend).lower() == "xccl":
+            arguments["backend"] = "cpu:gloo,xpu:xccl"
+            if trace:
+                print(
+                    f"[torchcomms-patch] {operation} backend "
+                    f"{backend} -> {arguments['backend']}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
     original_init = c10d_module.init_process_group
     init_signature = inspect.signature(original_init)
 
     def with_cpu_backend(*args: Any, **kwargs: Any) -> Any:
         bound = init_signature.bind_partial(*args, **kwargs)
-        backend = bound.arguments.get("backend")
-        if backend is not None and str(backend).lower() == "xccl":
-            bound.arguments["backend"] = "cpu:gloo,xpu:xccl"
-            if trace:
-                print(
-                    "[torchcomms-patch] init backend "
-                    f"{backend} -> {bound.arguments['backend']}",
-                    file=sys.stderr,
-                    flush=True,
-                )
+        rewrite_xccl_backend(bound.arguments, "init")
         return original_init(*bound.args, **bound.kwargs)
 
     c10d_module.init_process_group = with_cpu_backend
+    original_new_group = c10d_module.new_group
+    new_group_signature = inspect.signature(original_new_group)
+
+    def with_cpu_group_backend(*args: Any, **kwargs: Any) -> Any:
+        bound = new_group_signature.bind_partial(*args, **kwargs)
+        rewrite_xccl_backend(bound.arguments, "new_group")
+        return original_new_group(*bound.args, **bound.kwargs)
+
+    c10d_module.new_group = with_cpu_group_backend
     if distributed_module is not None:
         distributed_module.init_process_group = with_cpu_backend
+        distributed_module.new_group = with_cpu_group_backend
