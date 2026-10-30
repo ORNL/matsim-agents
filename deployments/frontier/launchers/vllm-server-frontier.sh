@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run `vllm serve` (ROCm build in the client environment) on a Frontier node.
+# Run `vllm serve` from the isolated ROCm environment on a Frontier node.
 #
 # matsim-agents starts this for every managed-vllm server whose `launcher` names
 # it (see deployments/frontier/resources/*.yaml) and appends the model and the

@@ -1,6 +1,8 @@
 # Six-Model Local Benchmark on Frontier
 
 This workflow uses only local model weights and vLLM endpoints (no Ollama).
+Run the vLLM servers from the isolated `.venv-vllm` environment. The benchmark
+job itself is a client and uses the HydraGNN Conda environment in `.venv`.
 
 ## 1) Download models locally
 

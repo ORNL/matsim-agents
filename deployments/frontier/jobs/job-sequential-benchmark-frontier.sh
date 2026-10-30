@@ -46,6 +46,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
 VENV=$REPO/.venv
+VLLM_VENV="${MATSIM_VLLM_VENV:-$REPO/.venv-vllm}"
 MODEL_ROOT=$PROJ/models
 RUN_DIR=$PROJ/runs/seq-model-bench-$SLURM_JOB_ID
 mkdir -p "$RUN_DIR"
@@ -88,7 +89,7 @@ export no_proxy='*'
 export NO_PROXY='*'
 
 source "$REPO/deployments/frontier/setup/tvm-ffi-artifact.sh"
-require_tvm_ffi_artifact "$REPO" "$VENV"
+require_tvm_ffi_artifact "$REPO" "$VLLM_VENV"
 rm -f ~/.cache/tvm-ffi/*.lock 2>/dev/null || true
 
 cd "$REPO"
@@ -251,7 +252,7 @@ for entry in "${MODEL_LIST[@]}"; do
   export MATSIM_VLLM_BASE_URL="$VLLM_BASE_URL"
   export MATSIM_VLLM_API_KEY="EMPTY"
 
-  "$VENV/bin/vllm" serve "$LOCAL_PATH" \
+  "$VLLM_VENV/bin/vllm" serve "$LOCAL_PATH" \
     --served-model-name "$HF_ID" \
     --tensor-parallel-size "$TP_SIZE" \
     --port "$VLLM_PORT" \

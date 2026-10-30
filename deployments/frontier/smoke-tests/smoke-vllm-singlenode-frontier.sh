@@ -35,7 +35,7 @@ REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 PROJ="$(dirname "${REPO}")"
 # Under sbatch BASH_SOURCE is wrong; anchor to the repo instead.
 UTILS_DIR="$REPO/deployments/frontier/utils"
-VENV=$REPO/.venv
+VENV="${MATSIM_VLLM_VENV:-$REPO/.venv-vllm}"
 # Default: small model that loads quickly
 SMOKE_MODEL_PATH=${SMOKE_MODEL_PATH:-$PROJ/models/Llama-3.1-8B-Instruct}
 SMOKE_MODEL_NAME=${SMOKE_MODEL_NAME:-meta-llama/Llama-3.1-8B-Instruct}
@@ -59,10 +59,9 @@ echo "Run dir: $RUN_DIR"
 echo "=========================================="
 
 # ── Environment ─────────────────────────────────────────────────────────────
-source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
 source "$REPO/deployments/frontier/setup/frontier-module-stack.sh"
 load_frontier_rocm72_modules
-source activate "$VENV"
+source "$VENV/bin/activate"
 
 module load rocm/7.2.0
 

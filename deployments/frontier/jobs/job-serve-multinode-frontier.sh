@@ -47,7 +47,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 REPO="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd)"
 [[ ! -f "${REPO}/pyproject.toml" ]] && REPO=${PROJECT_ROOT:?export PROJECT_ROOT}
 PROJ="$(dirname "${REPO}")"
-VENV=$REPO/.venv
+VENV="${MATSIM_VLLM_VENV:-$REPO/.venv-vllm}"
 RUN_DIR=$PROJ/runs/vllm-multinode-$SLURM_JOB_ID
 mkdir -p "$RUN_DIR"
 
@@ -94,8 +94,7 @@ echo "=========================================="
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
-source /sw/frontier/miniforge3/23.11.0-0/etc/profile.d/conda.sh
-source activate "$VENV"
+source "$VENV/bin/activate"
 
 module load rocm/7.2.0
 
