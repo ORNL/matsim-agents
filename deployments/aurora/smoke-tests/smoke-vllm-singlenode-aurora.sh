@@ -102,6 +102,7 @@ export NO_PROXY='*'
 export FI_MR_CACHE_MONITOR=userfaultfd
 export FI_CXI_RX_MATCH_MODE=hybrid
 export TORCH_DISTRIBUTED_USE_TORCHCOMMS=1
+export MATSIM_TORCHCOMMS_TRACE=1
 
 # Restrict to first $TP_SIZE PVC tiles via Level Zero affinity mask.
 # Use FLAT hierarchy: each tile becomes its own root device, so
@@ -286,6 +287,7 @@ mpiexec -n 1 --ppn 1 \
       -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR \
       -u MPI_LOCALRANKID -u MPI_LOCALNRANKS \
       -u OMPI_COMM_WORLD_RANK -u OMPI_COMM_WORLD_SIZE \
+      PYTHONPATH="${SCRIPT_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
   python "$REPO/deployments/aurora/smoke-tests/aurora_vllm_entrypoint.py" \
     --model "$SMOKE_MODEL_PATH" \
     --served-model-name "$SMOKE_MODEL_NAME" \
@@ -326,6 +328,13 @@ if [[ $ready -ne 1 ]]; then
   echo "Last 80 lines of vllm.log:" >&2
   tail -80 "$RUN_DIR/vllm.log" >&2
   exit 1
+fi
+
+if [[ "${SMOKE_STARTUP_ONLY:-0}" == "1" ]]; then
+  echo "[probe] Startup-only validation passed; skipping chat completion."
+  kill "$VLLM_PID" 2>/dev/null || true
+  wait "$VLLM_PID" 2>/dev/null || true
+  exit 0
 fi
 
 # ── Issue one chat completion ───────────────────────────────────────────────

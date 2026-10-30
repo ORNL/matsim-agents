@@ -34,7 +34,6 @@ Usage::
 import os
 import pickle
 import subprocess
-import sys
 import tempfile
 
 
@@ -89,10 +88,11 @@ _patch_registry_subprocess()
 # Run the API server as __main__ so that its ``if __name__ == '__main__':``
 # block executes normally.  alter_sys=True updates sys.argv[0] to the module
 # file path, preserving the remaining argv entries for argparse.
-import runpy
+if __name__ == "__main__":
+    import runpy
 
-runpy.run_module(
-    "vllm.entrypoints.openai.api_server",
-    run_name="__main__",
-    alter_sys=True,
-)
+    runpy.run_module(
+        "vllm.entrypoints.openai.api_server",
+        run_name="__main__",
+        alter_sys=True,
+    )

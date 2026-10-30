@@ -15,6 +15,7 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENTRYPOINT="$(cd "${SCRIPT_DIR}/../smoke-tests" && pwd)/aurora_vllm_entrypoint.py"
+SMOKE_TEST_DIR="$(cd "${SCRIPT_DIR}/../smoke-tests" && pwd)"
 [[ $# -ge 1 ]] || { echo "usage: $0 <model> [vllm serve arguments]" >&2; exit 2; }
 MODEL="$1"
 shift
@@ -29,6 +30,7 @@ export no_proxy='*' NO_PROXY='*'
 # vLLM's multiproc TP workers are not MPI ranks: keep oneCCL on its default KVS.
 export FI_MR_CACHE_MONITOR=userfaultfd FI_CXI_RX_MATCH_MODE=hybrid
 export TORCH_DISTRIBUTED_USE_TORCHCOMMS=1
+export PYTHONPATH="${SMOKE_TEST_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
 export ZE_FLAT_DEVICE_HIERARCHY=FLAT
 # PBS TMPDIR paths exceed the Unix-socket length limit used by vLLM's ZMQ IPC.
 export TMPDIR=/tmp

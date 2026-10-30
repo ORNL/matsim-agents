@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 from pathlib import Path
@@ -10,6 +11,55 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 AURORA = ROOT / "deployments" / "aurora"
+
+
+def test_torchcomms_patch_uses_each_process_groups_local_rank(monkeypatch):
+    patch_path = AURORA / "smoke-tests/torchcomms_rank_patch.py"
+    spec = importlib.util.spec_from_file_location("torchcomms_rank_patch", patch_path)
+    assert spec is not None and spec.loader is not None
+    patch_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(patch_module)
+
+    observed = []
+
+    def create_group(group_size, group_rank):
+        if group_size == 99:
+            raise RuntimeError("backend initialization failed")
+        observed.append((os.environ.get("TORCHCOMM_RANK"), os.environ.get("TORCHCOMM_SIZE")))
+        return group_rank, group_size
+
+    class C10d:
+        _new_process_group_helper = staticmethod(create_group)
+
+    monkeypatch.setenv("TORCHCOMM_RANK", "parent-rank")
+    monkeypatch.delenv("TORCHCOMM_SIZE", raising=False)
+    patch_module.install_torchcomms_group_rank_patch(C10d)
+
+    assert C10d._new_process_group_helper(8, 5) == (5, 8)
+    assert C10d._new_process_group_helper(3, 1) == (1, 3)
+    assert observed == [("5", "8"), ("1", "3")]
+    assert os.environ["TORCHCOMM_RANK"] == "parent-rank"
+    assert "TORCHCOMM_SIZE" not in os.environ
+    with pytest.raises(RuntimeError, match="backend initialization failed"):
+        C10d._new_process_group_helper(99, 4)
+    assert os.environ["TORCHCOMM_RANK"] == "parent-rank"
+    assert "TORCHCOMM_SIZE" not in os.environ
+
+
+def test_aurora_vllm_smoke_startup_only_skips_completion_request():
+    script = (AURORA / "smoke-tests/smoke-vllm-singlenode-aurora.sh").read_text()
+    startup_only = script.index('if [[ "${SMOKE_STARTUP_ONLY:-0}" == "1" ]]')
+    completion_request = script.index('echo "[probe] Sending one chat-completion request ..."')
+    assert startup_only < completion_request
+    assert 'echo "[probe] Startup-only validation passed; skipping chat completion."' in script
+
+
+def test_aurora_torchcomms_sitecustomize_is_on_server_pythonpath():
+    launcher = (AURORA / "launchers/vllm-server-aurora.sh").read_text()
+    sitecustomize = (AURORA / "smoke-tests/sitecustomize.py").read_text()
+    assert 'export PYTHONPATH="${SMOKE_TEST_DIR}${PYTHONPATH:+:${PYTHONPATH}}"' in launcher
+    assert 'os.environ.get("TORCH_DISTRIBUTED_USE_TORCHCOMMS") == "1"' in sitecustomize
+    assert "install_torchcomms_group_rank_patch(c10d)" in sitecustomize
 
 
 def _stub(bin_dir: Path, name: str, body: str) -> None:
