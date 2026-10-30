@@ -1266,6 +1266,7 @@ matsim-agents capabilities check [--kind K] [--require NAME]  # which backends c
 matsim-agents capabilities matrix [-o FILE] # backend capability matrix (docs/capabilities.md)
 matsim-agents debate  CONFIG.yaml           # persisted multi-model scientific debate
 matsim-agents llm-check CONFIG.yaml         # qualify an LLM deployment
+matsim-agents e1-development MANIFEST.json --output DIR [--max-new-requests N] [--retry-errors]  # run one candidate's E1 development questions; held-out questions are not accepted
 matsim-agents coordination list [--repo PATH] [--remote NAME]  # read shared HPC task board
 matsim-agents inventory dft ROOT [--output FILE]  # inventory retained DFT run artifacts
 matsim-agents al      run CONFIG.yaml       # active-learning loop (HydraGNN <-> DFT)
