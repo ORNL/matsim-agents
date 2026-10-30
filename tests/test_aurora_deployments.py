@@ -88,8 +88,10 @@ def test_aurora_vllm_smoke_startup_only_skips_completion_request():
 
 def test_aurora_torchcomms_sitecustomize_is_on_server_pythonpath():
     launcher = (AURORA / "launchers/vllm-server-aurora.sh").read_text()
+    smoke = (AURORA / "smoke-tests/smoke-vllm-singlenode-aurora.sh").read_text()
     sitecustomize = (AURORA / "smoke-tests/sitecustomize.py").read_text()
     assert 'export PYTHONPATH="${SMOKE_TEST_DIR}${PYTHONPATH:+:${PYTHONPATH}}"' in launcher
+    assert 'PYTHONPATH="${REPO}/deployments/aurora/smoke-tests${PYTHONPATH:+:${PYTHONPATH}}"' in smoke
     assert 'os.environ.get("TORCH_DISTRIBUTED_USE_TORCHCOMMS") == "1"' in sitecustomize
     assert "install_torchcomms_group_rank_patch(c10d, dist)" in sitecustomize
 

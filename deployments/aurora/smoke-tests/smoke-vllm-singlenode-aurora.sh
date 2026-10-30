@@ -287,7 +287,7 @@ mpiexec -n 1 --ppn 1 \
       -u PALS_APID -u PALS_RANKID -u PALS_NODEID -u PALS_SPOOL_DIR \
       -u MPI_LOCALRANKID -u MPI_LOCALNRANKS \
       -u OMPI_COMM_WORLD_RANK -u OMPI_COMM_WORLD_SIZE \
-      PYTHONPATH="${SCRIPT_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
+      PYTHONPATH="${REPO}/deployments/aurora/smoke-tests${PYTHONPATH:+:${PYTHONPATH}}" \
   python "$REPO/deployments/aurora/smoke-tests/aurora_vllm_entrypoint.py" \
     --model "$SMOKE_MODEL_PATH" \
     --served-model-name "$SMOKE_MODEL_NAME" \
