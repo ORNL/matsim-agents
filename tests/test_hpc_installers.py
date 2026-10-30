@@ -911,7 +911,7 @@ def test_frontier_install_entry_points_are_unambiguous() -> None:
         "smoke-tests/smoke-vllm-multinode-frontier.sh",
     ):
         text = (frontier / relative).read_text(encoding="utf-8")
-        assert 'MATSIM_VLLM_VENV:-$REPO/.venv-vllm' in text
+        assert "MATSIM_VLLM_VENV:-$REPO/.venv-vllm" in text
         assert 'source "$VENV/bin/activate"' in text
 
     for relative in (
@@ -924,10 +924,10 @@ def test_frontier_install_entry_points_are_unambiguous() -> None:
         assert "require_tvm_ffi_artifact" in text
 
     prebuild = (frontier / "setup/prebuild-tvm-ffi-frontier.sh").read_text(encoding="utf-8")
-    assert 'VLLM_VENV_PATH:-$REPO/.venv-vllm' in prebuild
+    assert "VLLM_VENV_PATH:-$REPO/.venv-vllm" in prebuild
 
     benchmark = (frontier / "jobs/job-six-model-benchmark-frontier.sh").read_text(encoding="utf-8")
-    assert 'VENV=$REPO/.venv' in benchmark
+    assert "VENV=$REPO/.venv" in benchmark
     assert "require_tvm_ffi_artifact" not in benchmark
 
     frontier_docs = (frontier / "docs/README-frontier.md").read_text(encoding="utf-8")
