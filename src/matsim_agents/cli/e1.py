@@ -38,3 +38,5 @@ def e1_development(
         max_new_requests=max_new_requests,
     )
     console.print_json(json.dumps(result, sort_keys=True))
+    if result.get("state") == "complete_with_errors":
+        raise typer.Exit(code=1)

@@ -184,6 +184,8 @@ def _model_session(
         kwargs["seed"] = decoding.seed
     if candidate.provider.lower() == "mag":
         kwargs["mag_provider"] = candidate.mag_provider
+    elif candidate.provider.lower() == "vllm":
+        kwargs["max_retries"] = 0
     model = model_factory(**kwargs)
     if candidate.provider.lower() == "vllm" and callable(getattr(model, "bind", None)):
         model = model.bind(

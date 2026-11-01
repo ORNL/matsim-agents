@@ -105,13 +105,19 @@ def test_vllm_session_binds_e1_json_schema():
             return self
 
     model = BindableModel()
+
+    def model_factory(**kwargs):
+        captured["factory_kwargs"] = kwargs
+        return model
+
     with _model_session(
         manifest.candidate,
         manifest.decoding,
-        lambda **_kwargs: model,
+        model_factory,
     ) as session_model:
         assert session_model is model
 
+    assert captured["factory_kwargs"]["max_retries"] == 0
     response_format = captured["response_format"]
     assert response_format["type"] == "json_schema"
     assert response_format["json_schema"]["name"] == "E1ScientificResponse"
@@ -434,7 +440,10 @@ def test_development_invalid_reply_is_failed_and_nonreviewable(
     assert result["completed_responses"] == 0
     assert result["failed_responses"] == len(records)
     assert all(record["status"] == "error" for record in records)
-    assert all(record["scientific_reviewability"] == "nonreviewable_technical_output" for record in records)
+    assert all(
+        record["scientific_reviewability"] == "nonreviewable_technical_output"
+        for record in records
+    )
     assert all(record["nonreviewable_reason"] == nonreviewable_reason for record in records)
 
 
@@ -460,6 +469,33 @@ def test_development_runner_parses_whole_response_json_fences(tmp_path):
     assert all(record["parsed_response"]["confidence"] == "low" for record in records)
     assert all(record["response"]["text"] == fenced_response for record in records)
     assert all(record["schema_error"] is None for record in records)
+
+
+def test_e1_cli_exits_nonzero_for_complete_with_errors(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    import matsim_agents.workflows.e1 as e1_workflow
+    from matsim_agents.cli import app
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(_manifest().model_dump_json(), encoding="utf-8")
+    monkeypatch.setattr(
+        e1_workflow,
+        "run_e1_development",
+        lambda *_args, **_kwargs: {
+            "state": "complete_with_errors",
+            "completed_responses": 0,
+            "failed_responses": 2,
+        },
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["e1-development", str(manifest_path), "--output", str(tmp_path / "out")],
+    )
+
+    assert result.exit_code == 1
+    assert "complete_with_errors" in result.output
 
 
 def test_remote_truncated_reply_is_recorded_as_failed_attempt(tmp_path):
