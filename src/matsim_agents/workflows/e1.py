@@ -184,7 +184,18 @@ def _model_session(
         kwargs["seed"] = decoding.seed
     if candidate.provider.lower() == "mag":
         kwargs["mag_provider"] = candidate.mag_provider
-    yield model_factory(**kwargs)
+    model = model_factory(**kwargs)
+    if candidate.provider.lower() == "vllm" and callable(getattr(model, "bind", None)):
+        model = model.bind(
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "E1ScientificResponse",
+                    "schema": E1ScientificResponse.model_json_schema(),
+                },
+            }
+        )
+    yield model
 
 
 def _canonical_json(value: Any) -> bytes:
@@ -446,7 +457,9 @@ def run_e1_development(
                         else {"content": getattr(raw_message, "content", str(raw_message))}
                     )
                     try:
-                        parsed_response = E1ScientificResponse.model_validate_json(reply.text)
+                        parsed_response = E1ScientificResponse.model_validate_json(
+                            _unwrap_json_fence(reply.text)
+                        )
                         parsed_data = parsed_response.model_dump(mode="json")
                         schema_error = None
                     except Exception as error:
@@ -454,8 +467,7 @@ def run_e1_development(
                         schema_error = f"{type(error).__name__}: {_safe_error_message(str(error))}"
                     response_status = (
                         "complete"
-                        if manifest.cohort != "E1-R"
-                        or (schema_error is None and not reply.truncated)
+                        if schema_error is None and not reply.truncated
                         else "error"
                     )
                     record = {
@@ -526,6 +538,16 @@ _E1_SYSTEM_PROMPT = """Answer the supplied materials-science question using only
 
 def _e1_system_prompt() -> str:
     return f"{_E1_SYSTEM_PROMPT}\n\nRequired JSON Schema:\n{json.dumps(E1ScientificResponse.model_json_schema(), sort_keys=True)}"
+
+
+def _unwrap_json_fence(text: str) -> str:
+    stripped = text.strip()
+    match = re.fullmatch(
+        r"```(?:json)?[ \t]*\r?\n(.*?)\r?\n```[ \t]*",
+        stripped,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return match.group(1).strip() if match else text
 
 
 def _safe_error_message(message: str) -> str:

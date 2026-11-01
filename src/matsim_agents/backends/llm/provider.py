@@ -62,6 +62,7 @@ class ChatVLLM(BaseChatModel):
     seed: int | None = None
     max_completion_tokens: int = Field(default=4096, gt=0)
     request_timeout: float = Field(default=3600.0, gt=0, allow_inf_nan=False)
+    max_retries: int = Field(default=0, ge=0)
     default_headers: dict[str, str] = Field(default_factory=dict)
     capture_response_headers: bool = False
 
@@ -102,6 +103,7 @@ class ChatVLLM(BaseChatModel):
             "base_url": self.base_url,
             "api_key": self.api_key,
             "timeout": self.request_timeout,
+            "max_retries": self.max_retries,
         }
         if self.default_headers:
             client_kwargs["default_headers"] = self.default_headers
@@ -180,6 +182,7 @@ class ChatVLLM(BaseChatModel):
             "base_url": self.base_url,
             "api_key": self.api_key,
             "timeout": self.request_timeout,
+            "max_retries": self.max_retries,
         }
         if self.default_headers:
             client_kwargs["default_headers"] = self.default_headers
@@ -401,6 +404,11 @@ def get_chat_model(
             if "request_timeout" in kwargs
             else os.environ.get("MATSIM_VLLM_TIMEOUT_SECONDS", 3600)
         )
+        max_retries = (
+            kwargs.pop("max_retries")
+            if "max_retries" in kwargs
+            else os.environ.get("MATSIM_VLLM_MAX_RETRIES", 0)
+        )
         return ChatVLLM(
             model=model,
             temperature=temperature,
@@ -408,6 +416,7 @@ def get_chat_model(
             api_key=key,
             max_completion_tokens=max_tokens,
             request_timeout=request_timeout,
+            max_retries=max_retries,
             top_p=kwargs.get("top_p"),
             seed=kwargs.get("seed"),
         )

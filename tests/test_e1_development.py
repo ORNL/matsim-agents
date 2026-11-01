@@ -10,6 +10,8 @@ from pydantic import ValidationError
 
 from matsim_agents.workflows.e1 import (
     E1DevelopmentManifest,
+    E1ScientificResponse,
+    _model_session,
     run_e1_development,
 )
 
@@ -93,13 +95,38 @@ def _remote_manifest(**approval_overrides) -> E1DevelopmentManifest:
     return E1DevelopmentManifest.model_validate(manifest_data)
 
 
+def test_vllm_session_binds_e1_json_schema():
+    manifest = _manifest()
+    captured = {}
+
+    class BindableModel:
+        def bind(self, **kwargs):
+            captured.update(kwargs)
+            return self
+
+    model = BindableModel()
+    with _model_session(
+        manifest.candidate,
+        manifest.decoding,
+        lambda **_kwargs: model,
+    ) as session_model:
+        assert session_model is model
+
+    response_format = captured["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "E1ScientificResponse"
+    assert response_format["json_schema"]["schema"]["required"] == list(
+        E1ScientificResponse.model_fields
+    )
+
+
 def test_development_runner_is_restart_safe_and_excludes_held_out(tmp_path):
     calls = []
 
     class FakeModel:
         def invoke(self, messages):
             calls.append(messages[-1].content)
-            return AIMessage(content=f"response {len(calls)}")
+            return AIMessage(content=_scientific_response())
 
     factory_calls = []
 
@@ -374,6 +401,65 @@ def test_remote_runner_preserves_responses_and_writes_allocation_ledger(tmp_path
     assert all(record["requested_model_id"] == "test-remote-model" for record in response_records)
     assert '"required"' in captured_messages[0][0].content
     assert "E1ScientificResponse" in captured_messages[0][0].content
+
+
+@pytest.mark.parametrize(
+    ("content", "finish_reason", "nonreviewable_reason"),
+    [
+        ("not JSON", "stop", "schema_validation_failed"),
+        ("not JSON", "length", "truncated_by_output_limit"),
+    ],
+)
+def test_development_invalid_reply_is_failed_and_nonreviewable(
+    tmp_path, content, finish_reason, nonreviewable_reason
+):
+    class InvalidModel:
+        def invoke(self, _messages):
+            return AIMessage(
+                content=content,
+                response_metadata={"finish_reason": finish_reason},
+            )
+
+    result = run_e1_development(
+        _manifest(),
+        tmp_path,
+        model_factory=lambda **_kwargs: InvalidModel(),
+    )
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "responses.jsonl").read_text().splitlines()
+    ]
+
+    assert result["state"] == "complete_with_errors"
+    assert result["completed_responses"] == 0
+    assert result["failed_responses"] == len(records)
+    assert all(record["status"] == "error" for record in records)
+    assert all(record["scientific_reviewability"] == "nonreviewable_technical_output" for record in records)
+    assert all(record["nonreviewable_reason"] == nonreviewable_reason for record in records)
+
+
+def test_development_runner_parses_whole_response_json_fences(tmp_path):
+    fenced_response = f"```json\n{_scientific_response()}\n```"
+
+    class FencedModel:
+        def invoke(self, _messages):
+            return AIMessage(content=fenced_response)
+
+    result = run_e1_development(
+        _manifest(),
+        tmp_path,
+        model_factory=lambda **_kwargs: FencedModel(),
+    )
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "responses.jsonl").read_text().splitlines()
+    ]
+
+    assert result["state"] == "complete"
+    assert result["completed_responses"] == len(records)
+    assert all(record["parsed_response"]["confidence"] == "low" for record in records)
+    assert all(record["response"]["text"] == fenced_response for record in records)
+    assert all(record["schema_error"] is None for record in records)
 
 
 def test_remote_truncated_reply_is_recorded_as_failed_attempt(tmp_path):

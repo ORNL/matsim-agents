@@ -49,6 +49,7 @@ class TestGetChatModelInstantiation:
         assert result.base_url == "http://localhost:8000/v1"
         assert result.max_completion_tokens == 4096
         assert result.request_timeout == 3600
+        assert result.max_retries == 0
 
     def test_vllm_completion_tokens_from_environment(self, monkeypatch):
         from matsim_agents.backends.llm.provider import get_chat_model
@@ -78,6 +79,14 @@ class TestGetChatModelInstantiation:
         result = get_chat_model(provider="vllm", model="test-model")
 
         assert result.request_timeout == 7200
+
+    def test_vllm_retries_from_environment(self, monkeypatch):
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        monkeypatch.setenv("MATSIM_VLLM_MAX_RETRIES", "2")
+        result = get_chat_model(provider="vllm", model="test-model")
+
+        assert result.max_retries == 2
 
     @pytest.mark.parametrize("environment", ["7200", "invalid"])
     def test_vllm_explicit_timeout_overrides_environment(self, monkeypatch, environment):
@@ -157,6 +166,7 @@ class TestGetChatModelInstantiation:
             base_url="http://localhost:8000/v1",
             api_key="EMPTY",
             timeout=3600,
+            max_retries=0,
         )
         assert result.content == "local response"
 
@@ -184,6 +194,7 @@ class TestGetChatModelInstantiation:
             base_url="https://mag.genesis.americansciencecloud.org/v1",
             api_key="test-token",
             timeout=3600,
+            max_retries=0,
             default_headers={"X-AmSC-MAG-Provider": "openai"},
         )
         assert result.content == "gateway response"
