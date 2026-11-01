@@ -50,6 +50,8 @@ def make_objective(case: str, seed_paths: list[Path]) -> str:
 def _energy_per_atom_ranking(results: list[object]) -> list[dict[str, object]]:
     ranking = []
     for result in results:
+        if not result.converged:
+            continue
         optimized_path = Path(result.optimized_structure_path)
         atom_count = len(read(optimized_path))
         if atom_count == 0:

@@ -70,8 +70,10 @@ def test_run_case_persists_energy_per_atom_ranking(tmp_path, monkeypatch) -> Non
     monkeypatch.setattr(singlepass, "SEED_ROOT", seed)
     four_atom_path = tmp_path / "four.extxyz"
     two_atom_path = tmp_path / "two.extxyz"
+    one_atom_path = tmp_path / "one.extxyz"
     write(four_atom_path, Atoms("Al4", positions=[[i, 0, 0] for i in range(4)]))
     write(two_atom_path, Atoms("Al2", positions=[[0, 0, 0], [1, 0, 0]]))
+    write(one_atom_path, Atoms("Al", positions=[[0, 0, 0]]))
 
     class FakeGraph:
         def invoke(self, state, config):
@@ -79,10 +81,19 @@ def test_run_case_persists_energy_per_atom_ranking(tmp_path, monkeypatch) -> Non
                 "analysis": "Graph summary.",
                 "results": [
                     SimpleNamespace(
-                        optimized_structure_path=str(two_atom_path), final_energy_eV=3.0
+                        optimized_structure_path=str(two_atom_path),
+                        final_energy_eV=3.0,
+                        converged=True,
                     ),
                     SimpleNamespace(
-                        optimized_structure_path=str(four_atom_path), final_energy_eV=4.0
+                        optimized_structure_path=str(four_atom_path),
+                        final_energy_eV=4.0,
+                        converged=True,
+                    ),
+                    SimpleNamespace(
+                        optimized_structure_path=str(one_atom_path),
+                        final_energy_eV=-100.0,
+                        converged=False,
                     ),
                 ],
             }
