@@ -145,6 +145,33 @@ def test_server_that_exits_reports_its_log(stub, tmp_path, monkeypatch):
     assert lifecycle["proposer"]["process_exit_code"] == 3
 
 
+def test_server_is_stopped_when_lifecycle_failure_record_cannot_be_written(
+    stub, tmp_path, monkeypatch
+):
+    from matsim_agents.backends.llm import servers as llm_servers
+
+    script, _record = stub
+    plan = _plan([_managed(script)])
+    stopped = []
+    original_stop = _ManagedServer.stop
+
+    def track_stop(server, *args, **kwargs):
+        stopped.append(server)
+        return original_stop(server, *args, **kwargs)
+
+    def fail_write(*_args, **_kwargs):
+        raise OSError("filesystem full")
+
+    monkeypatch.setattr(_ManagedServer, "stop", track_stop)
+    monkeypatch.setattr(llm_servers, "_write_server_lifecycle", fail_write)
+
+    with pytest.raises(OSError, match="filesystem full"):
+        LLMServices.start(_local(plan), log_dir=tmp_path, poll_interval_s=0.2)
+
+    assert len(stopped) == 1
+    assert stopped[0].process.poll() is not None
+
+
 def test_server_that_never_becomes_ready_times_out_and_is_stopped(tmp_path):
     sleeper = tmp_path / "sleep.py"
     sleeper.write_text("import time\ntime.sleep(600)\n")

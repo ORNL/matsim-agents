@@ -149,6 +149,30 @@ def test_mag_llm_check_routes_provider_without_persisting_token(tmp_path):
         assert "test-token" not in artifact.read_text()
 
 
+def test_non_mag_llm_check_does_not_pass_mag_provider(tmp_path):
+    calls = []
+
+    def model_factory(**kwargs):
+        calls.append(kwargs)
+        return _RoutingFakeModel()
+
+    cfg = LLMCheckConfig(
+        provider="openai",
+        api_key="test-key",
+        mag_provider="ignored-route",
+        output_root=str(tmp_path),
+    )
+    result = run_llm_check(
+        cfg,
+        model_factory=model_factory,
+        readiness_probe=lambda _cfg: {"configured": True},
+    )
+
+    assert result.status == "complete"
+    assert calls
+    assert all("mag_provider" not in kwargs for kwargs in calls)
+
+
 def test_llm_check_exercises_configured_concurrency(tmp_path):
     cfg = LLMCheckConfig(
         provider="vllm",

@@ -79,6 +79,57 @@ def test_inventory_leaves_allocation_unknown_without_explicit_record(tmp_path):
     assert run["dft_stages"][0]["application_wall_seconds"] is None
 
 
+def test_inventory_resolves_launch_relative_run_and_work_paths(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / "runs" / "run-1"
+    work_dir = run_dir / "calculations" / "qe"
+    work_dir.mkdir(parents=True)
+    (work_dir / "pw.out").write_text("PWSCF : 1m CPU 12s WALL\n")
+    (run_dir / "results.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-1",
+                "run_directory": "runs/run-1",
+                "stages": [
+                    {
+                        "backend": "qe",
+                        "artifacts": {"work_dir": "runs/run-1/calculations/qe"},
+                    }
+                ],
+            }
+        )
+    )
+
+    report = inventory_dft_runs(tmp_path / "runs")
+
+    assert report["runs"][0]["run_directory"] == str(run_dir.resolve())
+    assert report["runs"][0]["dft_stages"][0]["application_wall_seconds"] == 12
+
+
+def test_inventory_defaults_missing_work_dir_to_backend_calculations(tmp_path):
+    run_dir = tmp_path / "run-1"
+    work_dir = run_dir / "calculations" / "qe"
+    work_dir.mkdir(parents=True)
+    (work_dir / "pw.out").write_text("PWSCF : 2m CPU 17s WALL\n")
+    (run_dir / "results.json").write_text(
+        json.dumps(
+            {
+                "run_directory": str(run_dir),
+                "stages": [
+                    {
+                        "backend": "qe",
+                        "artifacts": {"input": "calculations/qe/pw.in", "stdout": "calculations/qe/pw.out"},
+                    }
+                ],
+            }
+        )
+    )
+
+    report = inventory_dft_runs(tmp_path)
+
+    assert report["runs"][0]["dft_stages"][0]["application_wall_seconds"] == 17
+
+
 def test_accounting_csv_requires_explicit_join_schema(tmp_path):
     accounting = tmp_path / "accounting.csv"
     accounting.write_text("job_id,elapsed\n1,60\n")

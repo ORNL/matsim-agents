@@ -102,21 +102,37 @@ def inventory_dft_runs(
         if not dft_stages:
             continue
 
-        run_directory = Path(str(result.get("run_directory") or result_path.parent)).expanduser()
-        if not run_directory.is_absolute():
-            run_directory = result_path.parent / run_directory
+        recorded_run_directory = Path(
+            str(result.get("run_directory") or result_path.parent)
+        ).expanduser()
+        run_directory = (
+            recorded_run_directory
+            if recorded_run_directory.is_absolute()
+            else result_path.parent
+        )
         run_directory = run_directory.resolve()
         stage_records = []
         for stage in dft_stages:
             backend = str(stage["backend"])
             artifacts = stage.get("artifacts") if isinstance(stage.get("artifacts"), dict) else {}
-            work_dir = Path(str(artifacts.get("work_dir") or ""))
-            if not work_dir.is_absolute():
-                work_dir = (
-                    run_directory / work_dir
-                    if str(work_dir)
-                    else run_directory / "calculations" / backend
-                )
+            recorded_work_dir = artifacts.get("work_dir")
+            if recorded_work_dir:
+                work_dir = Path(str(recorded_work_dir)).expanduser()
+                if not work_dir.is_absolute():
+                    relative_to_run = None
+                    if not recorded_run_directory.is_absolute():
+                        try:
+                            relative_to_run = work_dir.relative_to(recorded_run_directory)
+                        except ValueError:
+                            pass
+                    if relative_to_run is not None:
+                        work_dir = run_directory / relative_to_run
+                    else:
+                        launch_relative = work_dir.resolve()
+                        run_relative = (run_directory / work_dir).resolve()
+                        work_dir = launch_relative if launch_relative.exists() else run_relative
+            else:
+                work_dir = run_directory / "calculations" / backend
             timers = _parse_application_timers(work_dir, backend)
             stage_records.append(
                 {

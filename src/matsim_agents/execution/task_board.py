@@ -315,7 +315,12 @@ class TaskBoard:
             check=False,
         )
         if check and result.returncode:
-            stderr = result.stderr.replace(self.remote_url, "<remote>").strip()
+            remote_url = getattr(self, "remote_url", None)
+            stderr = (
+                result.stderr.replace(remote_url, "<remote>").strip()
+                if remote_url
+                else result.stderr.strip()
+            )
             raise TaskBoardError(stderr or f"git {args[0]} failed")
         return result
 

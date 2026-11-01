@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
+
+from ase.io import read
 
 from matsim_agents.orchestration.objective_graph import build_graph
 from matsim_agents.orchestration.state import MatSimState
@@ -44,6 +47,28 @@ def make_objective(case: str, seed_paths: list[Path]) -> str:
     )
 
 
+def _energy_per_atom_ranking(results: list[object]) -> list[dict[str, object]]:
+    ranking = []
+    for result in results:
+        optimized_path = Path(result.optimized_structure_path)
+        atom_count = len(read(optimized_path))
+        if atom_count == 0:
+            raise ValueError(f"optimized structure has no atoms: {optimized_path}")
+        total_energy = float(result.final_energy_eV)
+        ranking.append(
+            {
+                "optimized_structure_path": str(optimized_path),
+                "atom_count": atom_count,
+                "total_energy_eV": total_energy,
+                "energy_per_atom_eV": total_energy / atom_count,
+            }
+        )
+    ranking.sort(key=lambda row: row["energy_per_atom_eV"])
+    for rank, row in enumerate(ranking, start=1):
+        row["rank"] = rank
+    return ranking
+
+
 def run_case(case: str, run_dir: Path, args: argparse.Namespace) -> None:
     case_dir = run_dir / case
     seed_paths = stage_seeds(case, case_dir / "seeds")
@@ -63,6 +88,20 @@ def run_case(case: str, run_dir: Path, args: argparse.Namespace) -> None:
     }
     final = build_graph().invoke(MatSimState(objective=objective), config=config)
     analysis = str(final.get("analysis") or "")
+    ranking = _energy_per_atom_ranking(final.get("results") or [])
+    (case_dir / "energy_ranking.json").write_text(
+        json.dumps(ranking, indent=2) + "\n", encoding="utf-8"
+    )
+    if ranking:
+        ranking_text = "\n".join(
+            f"{item['rank']}. {Path(item['optimized_structure_path']).name}: "
+            f"{item['energy_per_atom_eV']:.6f} eV/atom "
+            f"({item['total_energy_eV']:.6f} eV; {item['atom_count']} atoms)"
+            for item in ranking
+        )
+        analysis = (
+            f"{analysis}\n\nEnergy-per-atom ranking (normalized by atom count):\n{ranking_text}"
+        )
     (case_dir / "objective.txt").write_text(objective + "\n", encoding="utf-8")
     (case_dir / "analysis.txt").write_text(analysis + "\n", encoding="utf-8")
     print(f"\n=== {case}: {len(final.get('results', []))} relaxation(s) ===")

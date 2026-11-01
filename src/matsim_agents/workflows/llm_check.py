@@ -438,14 +438,16 @@ def _run_llm_check(
 
         before_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         load_start = time.perf_counter()
-        model = model_factory(
+        model_kwargs = dict(
             provider=cfg.provider,
             model=cfg.model,
             temperature=cfg.temperature,
             base_url=cfg.base_url,
             api_key=cfg.api_key,
-            mag_provider=cfg.mag_provider,
         )
+        if cfg.provider == "mag":
+            model_kwargs["mag_provider"] = cfg.mag_provider
+        model = model_factory(**model_kwargs)
         construction_seconds = time.perf_counter() - load_start
         stages["load"] = True
         identity = _model_identity(cfg, readiness)
@@ -548,13 +550,7 @@ def _run_llm_check(
                 cfg.long_context_tokenizer_path or "", cfg.long_context_prompt_tokens
             )
             stress_model = model_factory(
-                provider=cfg.provider,
-                model=cfg.model,
-                temperature=cfg.temperature,
-                base_url=cfg.base_url,
-                api_key=cfg.api_key,
-                mag_provider=cfg.mag_provider,
-                max_tokens=cfg.long_context_output_tokens,
+                **model_kwargs, max_tokens=cfg.long_context_output_tokens
             )
             stress_messages = [HumanMessage(content=stress_prompt)]
             stress_reply = invoke_model(stress_model, stress_messages)

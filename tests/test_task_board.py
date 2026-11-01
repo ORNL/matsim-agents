@@ -123,6 +123,15 @@ def test_mutation_refuses_to_create_missing_remote_branch(git_remote):
     assert not _git(remote, "branch", "--list", "unpublished-work")
 
 
+def test_missing_remote_is_reported_as_task_board_error(tmp_path):
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init", "--quiet", str(repository)], check=True)
+
+    with pytest.raises(TaskBoardError, match="No such remote 'origin'"):
+        TaskBoard(repository)
+
+
 def test_task_lifecycle_enforces_owner_and_expiring_lease(git_remote):
     board = _board(git_remote)
     _add_task(board)

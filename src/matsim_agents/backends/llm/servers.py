@@ -401,8 +401,12 @@ class LLMServices:
             services._wait_ready(poll_interval_s)
             _write_server_lifecycle(log_dir, managed)
         except BaseException as exc:
-            _write_server_lifecycle(log_dir, managed, failure=str(exc))
-            services.close()
+            try:
+                _write_server_lifecycle(log_dir, managed, failure=str(exc))
+            except Exception:
+                log.exception("Could not record LLM server startup failure")
+            finally:
+                services.close()
             raise
         return services
 

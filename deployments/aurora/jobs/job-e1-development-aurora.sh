@@ -38,6 +38,40 @@ export PROJECT_ROOT="${REPO}" MODEL_ROOT="${MODEL_ROOT:-${PROJ}/models}"
 [[ -f "${E1_MANIFEST:-}" ]] || { echo "ERROR: set E1_MANIFEST to an approved development manifest" >&2; exit 2; }
 [[ -f "${MATSIM_RESOURCES:-}" ]] || { echo "ERROR: set MATSIM_RESOURCES to an approved one-server plan" >&2; exit 2; }
 [[ -f "${VENV}/bin/activate" ]] || { echo "ERROR: client environment not found: ${VENV}" >&2; exit 2; }
+
+finalize_job() {
+  local status=$?
+  trap - EXIT
+  if [[ -n "${PBS_JOBID:-}" ]] && command -v qstat >/dev/null 2>&1; then
+    qstat -fx "${PBS_JOBID}" >"${RUN_DIR}/qstat-final.txt" 2>&1 || true
+  fi
+  if ! JOB_START_EPOCH="${JOB_START_EPOCH}" JOB_STATUS="${status}" python3 - "${RUN_DIR}/allocation-runtime.json" <<'PY'
+import json, os, pathlib, re, sys, time
+started = int(os.environ["JOB_START_EPOCH"])
+accounting = pathlib.Path(sys.argv[1]).with_name("qstat-final.txt")
+text = accounting.read_text(errors="replace") if accounting.exists() else ""
+match = re.search(r"resources_used\.walltime\s*=\s*(\d+):(\d+):(\d+)", text)
+walltime = int(match.group(1)) * 3600 + int(match.group(2)) * 60 + int(match.group(3)) if match else None
+pathlib.Path(sys.argv[1]).write_text(json.dumps({
+    "job_id": os.environ.get("PBS_JOBID"),
+    "queue": os.environ.get("PBS_O_QUEUE", "unknown"),
+    "requested_nodes": 1,
+    "maximum_walltime_seconds": 5400,
+    "maximum_node_hours": 1.5,
+    "job_script_elapsed_seconds": max(0, int(time.time()) - started),
+    "pbs_reported_walltime_seconds": walltime,
+    "job_script_status": int(os.environ["JOB_STATUS"]),
+    "facility_charge": None,
+}, indent=2) + "\n")
+PY
+  then
+    echo "WARNING: failed to write allocation runtime record" >&2
+    if (( status == 0 )); then status=1; fi
+  fi
+  exit "${status}"
+}
+trap finalize_job EXIT
+
 E1_COMMAND=(matsim-agents e1-development "${E1_MANIFEST}" --output "${OUTPUT_DIR}")
 if [[ -n "${E1_RETRY_OUTPUT:-}" ]]; then
   [[ -f "${E1_RETRY_OUTPUT}/manifest.json" ]] || { echo "ERROR: retry output has no manifest.json: ${E1_RETRY_OUTPUT}" >&2; exit 2; }
@@ -70,17 +104,3 @@ FACILITY=aurora RUN_DIR="${RUN_DIR}" \
   matsim-agents resources serve "${MATSIM_RESOURCES}" \
     --output "${RUN_DIR}/llm-servers" -- \
     "${E1_COMMAND[@]}"
-
-JOB_START_EPOCH="${JOB_START_EPOCH}" python3 - "${RUN_DIR}/allocation-runtime.json" <<'PY'
-import json, os, pathlib, time
-started = int(os.environ["JOB_START_EPOCH"])
-pathlib.Path(__import__("sys").argv[1]).write_text(json.dumps({
-    "job_id": os.environ.get("PBS_JOBID"),
-    "queue": os.environ.get("PBS_O_QUEUE", "unknown"),
-    "requested_nodes": 1,
-    "maximum_walltime_seconds": 5400,
-    "maximum_node_hours": 1.5,
-    "job_script_elapsed_seconds": max(0, int(time.time()) - started),
-    "facility_charge": None,
-}, indent=2) + "\n")
-PY

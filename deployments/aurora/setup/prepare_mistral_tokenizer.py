@@ -11,22 +11,28 @@ from pathlib import Path
 def prepare_tokenizer(model_dir: Path, output_dir: Path) -> None:
     model_dir = model_dir.expanduser().resolve()
     output_dir = output_dir.expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if model_dir == output_dir:
+        raise ValueError("tokenizer overlay directory must differ from the model snapshot")
 
+    assets = {}
     for name in ("tokenizer.json", "special_tokens_map.json"):
         source = model_dir / name
         if not source.is_file():
             raise FileNotFoundError(f"Missing tokenizer asset: {source}")
-        link = output_dir / name
-        if link.exists() or link.is_symlink():
-            link.unlink()
-        link.symlink_to(source)
+        assets[name] = source
 
     config_path = model_dir / "tokenizer_config.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
     chat_template = config.get("chat_template")
     if not isinstance(chat_template, str) or not chat_template:
         raise ValueError(f"Tokenizer config has no string chat_template: {config_path}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for name, source in assets.items():
+        link = output_dir / name
+        if link.exists() or link.is_symlink():
+            link.unlink()
+        link.symlink_to(source)
 
     config["tokenizer_class"] = "PreTrainedTokenizerFast"
     (output_dir / "tokenizer_config.json").write_text(

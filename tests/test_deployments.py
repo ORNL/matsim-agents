@@ -21,6 +21,39 @@ def test_deployment_assets_are_portable() -> None:
     assert module.validate() == []
 
 
+def test_mistral_tokenizer_preparation_rejects_source_as_overlay(tmp_path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = root / "deployments/aurora/setup/prepare_mistral_tokenizer.py"
+    spec = importlib.util.spec_from_file_location("prepare_mistral_tokenizer", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    model = tmp_path / "snapshot"
+    model.mkdir()
+    config = '{"tokenizer_class":"LlamaTokenizer","chat_template":"template"}\n'
+    (model / "tokenizer_config.json").write_text(config)
+    (model / "tokenizer.json").write_text("tokenizer\n")
+    (model / "special_tokens_map.json").write_text("{}\n")
+
+    with pytest.raises(ValueError, match="must differ"):
+        module.prepare_tokenizer(model, model.resolve())
+
+    assert (model / "tokenizer_config.json").read_text() == config
+    assert (model / "tokenizer.json").read_text() == "tokenizer\n"
+    assert not (model / "chat_template.jinja").exists()
+
+
+def test_aurora_engineering_jobs_disable_scientific_portability_and_record_e1_failures() -> None:
+    root = Path(__file__).resolve().parents[1]
+    llm_check = (root / "deployments/aurora/jobs/job-llm-check-aurora.sh").read_text()
+    assert "unset MATSIM_RUN_PORTABILITY" in llm_check
+
+    e1 = (root / "deployments/aurora/jobs/job-e1-development-aurora.sh").read_text()
+    assert "trap finalize_job EXIT" in e1
+    assert e1.index("trap finalize_job EXIT") < e1.index("matsim-agents resources serve")
+    assert '"job_script_status": int(os.environ["JOB_STATUS"])' in e1
+
+
 @pytest.mark.parametrize(
     "case",
     [
