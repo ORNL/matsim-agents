@@ -15,6 +15,8 @@
 # Required at submission:
 #   PROJECT_ROOT, E1_MANIFEST, MATSIM_RESOURCES
 #   MODEL_ROOT may be required by the selected resource plan.
+#   E1_RETRY_OUTPUT optionally names a prior outputs/ directory whose failed
+#   responses should be retried into this job's new, separate artifact directory.
 #
 # Select only a queue that currently allows 90 minutes. The Aurora debug queue
 # is capped at 60 minutes and is not eligible for this template. The requested
@@ -36,13 +38,22 @@ export PROJECT_ROOT="${REPO}" MODEL_ROOT="${MODEL_ROOT:-${PROJ}/models}"
 [[ -f "${E1_MANIFEST:-}" ]] || { echo "ERROR: set E1_MANIFEST to an approved development manifest" >&2; exit 2; }
 [[ -f "${MATSIM_RESOURCES:-}" ]] || { echo "ERROR: set MATSIM_RESOURCES to an approved one-server plan" >&2; exit 2; }
 [[ -f "${VENV}/bin/activate" ]] || { echo "ERROR: client environment not found: ${VENV}" >&2; exit 2; }
+E1_COMMAND=(matsim-agents e1-development "${E1_MANIFEST}" --output "${OUTPUT_DIR}")
+if [[ -n "${E1_RETRY_OUTPUT:-}" ]]; then
+  [[ -f "${E1_RETRY_OUTPUT}/manifest.json" ]] || { echo "ERROR: retry output has no manifest.json: ${E1_RETRY_OUTPUT}" >&2; exit 2; }
+  [[ -f "${E1_RETRY_OUTPUT}/responses.jsonl" ]] || { echo "ERROR: retry output has no responses.jsonl: ${E1_RETRY_OUTPUT}" >&2; exit 2; }
+  cp -- "${E1_RETRY_OUTPUT}/manifest.json" "${OUTPUT_DIR}/manifest.json"
+  cp -- "${E1_RETRY_OUTPUT}/responses.jsonl" "${OUTPUT_DIR}/responses.jsonl"
+  E1_COMMAND+=(--retry-errors)
+fi
 
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
 source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
 activate_matsim_aurora_python "${REPO}" "${VENV}"
 cd "${REPO}"
-export PYTHONUNBUFFERED=1 PYTHONNOUSERSITE=1 MATSIM_VLLM_TIMEOUT_SECONDS=300
+export PYTHONUNBUFFERED=1 PYTHONNOUSERSITE=1
+export MATSIM_VLLM_TIMEOUT_SECONDS="${MATSIM_VLLM_TIMEOUT_SECONDS:-300}"
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY
 export no_proxy='*' NO_PROXY='*'
 
@@ -58,7 +69,7 @@ FACILITY=aurora RUN_DIR="${RUN_DIR}" \
   timeout --signal=INT --kill-after=120s "${WORKFLOW_TIMEOUT_SECONDS}s" \
   matsim-agents resources serve "${MATSIM_RESOURCES}" \
     --output "${RUN_DIR}/llm-servers" -- \
-    matsim-agents e1-development "${E1_MANIFEST}" --output "${OUTPUT_DIR}"
+    "${E1_COMMAND[@]}"
 
 JOB_START_EPOCH="${JOB_START_EPOCH}" python3 - "${RUN_DIR}/allocation-runtime.json" <<'PY'
 import json, os, pathlib, time

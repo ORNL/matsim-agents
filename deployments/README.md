@@ -81,6 +81,18 @@ Use `RUNS_ROOT` to place output on the site's scratch filesystem. Site scripts
 must fail fast when required binaries, environments, checkpoints, or model
 weights are absent; they must not silently fall back to another user's paths.
 
+For Mistral Small 24B on Aurora, prepare its HF tokenizer overlay from the local
+model snapshot and pass that directory to the tracked resource plan:
+
+```bash
+python deployments/aurora/setup/prepare_mistral_tokenizer.py \
+	"$MODEL_ROOT/Mistral-Small-24B-Instruct-2501" \
+	"$PWD/runs/mistral-small-24b-tokenizer"
+qsub -A "$ALLOCATION" \
+	-v "PROJECT_ROOT=$PWD,MODEL_ROOT=$MODEL_ROOT,E1_MANIFEST=$E1_MANIFEST,MATSIM_RESOURCES=$PWD/deployments/aurora/resources/mistral-small-24b.yaml,MISTRAL_TOKENIZER_DIR=$PWD/runs/mistral-small-24b-tokenizer" \
+deployments/aurora/jobs/job-e1-development-aurora.sh
+```
+
 ## Validation status
 
 `python scripts/diagnostics/validate_deployments.py` performs the portable
