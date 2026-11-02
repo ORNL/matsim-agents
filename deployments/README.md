@@ -93,6 +93,21 @@ qsub -A "$ALLOCATION" \
 deployments/aurora/jobs/job-e1-development-aurora.sh
 ```
 
+For Qwen3-235B Instruct on Aurora, the graph-enabled resource plan omits
+`--enforce-eager` and keeps tensor parallelism at 8. Pass the XPU Graph setting
+to the server through the PBS job environment:
+
+```bash
+qsub -A "$ALLOCATION" \
+	-v "PROJECT_ROOT=$PWD,MODEL_ROOT=$MODEL_ROOT,E1_MANIFEST=$E1_MANIFEST,MATSIM_RESOURCES=$PWD/deployments/aurora/resources/qwen3-235b-instruct-xpu-graph.yaml,MATSIM_VLLM_TIMEOUT_SECONDS=3600,MATSIM_VLLM_MAX_RETRIES=0,VLLM_XPU_ENABLE_XPU_GRAPH=1" \
+deployments/aurora/jobs/job-e1-development-aurora.sh
+```
+
+Use this profile for a bounded canary first; graph initialization can increase
+server startup time. The 2,048-token E1 canary completed with valid structured
+output and substantially higher observed decode throughput than the eager
+baseline on the tested Aurora software stack.
+
 ## Validation status
 
 `python scripts/diagnostics/validate_deployments.py` performs the portable
