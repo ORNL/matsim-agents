@@ -96,9 +96,11 @@ deployments/aurora/jobs/job-e1-development-aurora.sh
 For Qwen3-235B E1 collections on Aurora, use the dedicated runner. It selects
 the graph-enabled resource plan from `E1_MODEL_KEY`, rejects eager-mode plans,
 and sets `VLLM_XPU_ENABLE_XPU_GRAPH=1`. Both Instruct and Thinking use TP=8 and
-`--max-num-seqs 1` with PIECEWISE-only graph capture. The Nov 3 Thinking run
-captured graphs but hit a native Intel runtime abort during full decode graph
-replay, so the plans avoid that path while retaining piecewise XPU graphs.
+`--max-num-seqs 1` with PIECEWISE-only graph capture. An earlier Thinking run
+using FULL_AND_PIECEWISE captured graphs but native-aborted during full decode
+graph replay; the current plans avoid that path while retaining piecewise XPU
+graphs. Old plans containing `--enforce-eager` silently disabled graph use, so
+the dedicated runner now rejects them.
 
 ```bash
 qsub -A "$ALLOCATION" \
@@ -106,13 +108,15 @@ qsub -A "$ALLOCATION" \
 	deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh
 ```
 
-For a first bounded canary, point `E1_MANIFEST` at the one-question,
-2,048-token Instruct canary manifest. Graph initialization can increase server
-startup time. That canary completed with valid structured output and
-substantially higher observed decode throughput than the eager baseline on the
-tested Aurora software stack. Revalidate both models with a canary after the
-PIECEWISE-only change; the recorded throughput result is for Instruct using the
-prior graph mode.
+Point `E1_MANIFEST` at the one-question, 2,048-token Instruct canary manifest
+first; promote to the full manifest only after checking the run artifacts and
+PBS status. Instruct PIECEWISE canary job `9036264` completed on Nov 3, 2026
+with one response, zero failures, and PBS exit status 0. At the recorded
+checkpoint, Thinking PIECEWISE canary `9036266` and the 18-question Instruct
+campaign `9036469` were still running, so they are not yet qualified results.
+See [`docs/vllm-aurora.md`](../docs/vllm-aurora.md#qwen3-235b-e1-with-xpu-graphs)
+for the tested module stack, reproducible submission commands, log checks, and
+incident history.
 
 ## Validation status
 
