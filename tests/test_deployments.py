@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -52,6 +53,67 @@ def test_aurora_engineering_jobs_disable_scientific_portability_and_record_e1_fa
     assert "trap finalize_job EXIT" in e1
     assert e1.index("trap finalize_job EXIT") < e1.index("matsim-agents resources serve")
     assert '"job_script_status": int(os.environ["JOB_STATUS"])' in e1
+
+
+def test_qwen_e1_runner_enables_xpu_graph_and_uses_graph_resource_plans() -> None:
+    root = Path(__file__).resolve().parents[1]
+    runner = (root / "deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh").read_text()
+
+    assert "export VLLM_XPU_ENABLE_XPU_GRAPH=1" in runner
+    assert "--enforce-eager" in runner
+    assert "qwen3-235b-instruct-xpu-graph.yaml" in runner
+    assert "qwen3-235b-thinking-xpu-graph.yaml" in runner
+
+    for model in ("instruct", "thinking"):
+        resources = yaml.safe_load(
+            (root / f"deployments/aurora/resources/qwen3-235b-{model}-xpu-graph.yaml").read_text()
+        )
+        server = resources["resources"]["pools"]["llm"]["servers"][0]
+        assert server["tensor_parallel_size"] == 8
+        assert "--enforce-eager" not in server["extra_args"]
+        graph_config_index = server["extra_args"].index("--compilation-config")
+        graph_config = json.loads(server["extra_args"][graph_config_index + 1])
+        assert graph_config["cudagraph_mode"] == "PIECEWISE"
+
+
+def test_qwen_e1_runner_rejects_eager_resource_override(tmp_path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    runner = root / "deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh"
+    resources = tmp_path / "eager.yaml"
+    resources.write_text("extra_args: [--enforce-eager]\n")
+    env = {
+        **os.environ,
+        "PROJECT_ROOT": str(root),
+        "E1_MODEL_KEY": "qwen3-235b-instruct-2507",
+        "E1_MANIFEST": str(root / "README.md"),
+        "MATSIM_RESOURCES": str(resources),
+    }
+
+    result = subprocess.run(["bash", str(runner)], env=env, capture_output=True, text=True)
+
+    assert result.returncode == 2
+    assert "cannot use an eager-mode resource plan" in result.stderr
+
+
+def test_qwen_e1_runner_rejects_full_graph_resource_override(tmp_path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    runner = root / "deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh"
+    resources = tmp_path / "full-graph.yaml"
+    resources.write_text(
+        'extra_args: [--compilation-config, \'{"cudagraph_mode":"FULL_AND_PIECEWISE"}\']\n'
+    )
+    env = {
+        **os.environ,
+        "PROJECT_ROOT": str(root),
+        "E1_MODEL_KEY": "qwen3-235b-instruct-2507",
+        "E1_MANIFEST": str(root / "README.md"),
+        "MATSIM_RESOURCES": str(resources),
+    }
+
+    result = subprocess.run(["bash", str(runner)], env=env, capture_output=True, text=True)
+
+    assert result.returncode == 2
+    assert "require PIECEWISE XPU Graphs" in result.stderr
 
 
 @pytest.mark.parametrize(

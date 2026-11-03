@@ -16,4 +16,4 @@ resources:
           launcher:
             - bash
             - ${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/aurora/launchers/vllm-server-aurora.sh
-          extra_args: [--max-num-seqs, "1"]
+          extra_args: [--max-num-seqs, "1", --compilation-config, '{"cudagraph_mode":"PIECEWISE"}']

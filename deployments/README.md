@@ -93,20 +93,26 @@ qsub -A "$ALLOCATION" \
 deployments/aurora/jobs/job-e1-development-aurora.sh
 ```
 
-For Qwen3-235B Instruct on Aurora, the graph-enabled resource plan omits
-`--enforce-eager` and keeps tensor parallelism at 8. Pass the XPU Graph setting
-to the server through the PBS job environment:
+For Qwen3-235B E1 collections on Aurora, use the dedicated runner. It selects
+the graph-enabled resource plan from `E1_MODEL_KEY`, rejects eager-mode plans,
+and sets `VLLM_XPU_ENABLE_XPU_GRAPH=1`. Both Instruct and Thinking use TP=8 and
+`--max-num-seqs 1` with PIECEWISE-only graph capture. The Nov 3 Thinking run
+captured graphs but hit a native Intel runtime abort during full decode graph
+replay, so the plans avoid that path while retaining piecewise XPU graphs.
 
 ```bash
 qsub -A "$ALLOCATION" \
-	-v "PROJECT_ROOT=$PWD,MODEL_ROOT=$MODEL_ROOT,E1_MANIFEST=$E1_MANIFEST,MATSIM_RESOURCES=$PWD/deployments/aurora/resources/qwen3-235b-instruct-xpu-graph.yaml,MATSIM_VLLM_TIMEOUT_SECONDS=3600,MATSIM_VLLM_MAX_RETRIES=0,VLLM_XPU_ENABLE_XPU_GRAPH=1" \
-deployments/aurora/jobs/job-e1-development-aurora.sh
+	-v "PROJECT_ROOT=$PWD,MODEL_ROOT=$MODEL_ROOT,E1_MODEL_KEY=qwen3-235b-instruct-2507,E1_MANIFEST=$E1_MANIFEST" \
+	deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh
 ```
 
-Use this profile for a bounded canary first; graph initialization can increase
-server startup time. The 2,048-token E1 canary completed with valid structured
-output and substantially higher observed decode throughput than the eager
-baseline on the tested Aurora software stack.
+For a first bounded canary, point `E1_MANIFEST` at the one-question,
+2,048-token Instruct canary manifest. Graph initialization can increase server
+startup time. That canary completed with valid structured output and
+substantially higher observed decode throughput than the eager baseline on the
+tested Aurora software stack. Revalidate both models with a canary after the
+PIECEWISE-only change; the recorded throughput result is for Instruct using the
+prior graph mode.
 
 ## Validation status
 
