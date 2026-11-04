@@ -1,0 +1,32 @@
+{
+  "phase": "static",
+  "vasprun_xml": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/nbtao5-q1-fixed-kmesh-v1-20261104TJHFN69/cases/NbTaO5-ordering-01-baseline/runs/9040072.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov/static/vasprun.xml",
+  "converged_electronic": true,
+  "converged_ionic": null,
+  "ionic_steps": 1,
+  "final_energy_eV": -261.82281757,
+  "final_energy_per_atom_eV": -9.350814913214284,
+  "max_force_eV_per_A": 0.008834657067447495,
+  "force_criterion_eV_per_A": 0.01,
+  "force_criterion_passed": true,
+  "stress_kbar": [
+    [
+      0.04843016,
+      -0.08623797,
+      0.00028847
+    ],
+    [
+      -0.08624345,
+      -0.27898859,
+      0.00096115
+    ],
+    [
+      0.00028969,
+      0.0009612,
+      -0.06707037
+    ]
+  ],
+  "max_abs_principal_stress_kbar": 0.3003192484210536,
+  "stress_criterion_kbar": 2.0,
+  "stress_criterion_passed": true
+}
