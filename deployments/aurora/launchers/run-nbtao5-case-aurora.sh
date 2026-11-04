@@ -264,7 +264,7 @@ run_vasp() {
 }
 
 summarize_vasprun() {
-  "${REPO}/.venv/bin/python" - "$1" "$2" "$3" <<'PY'
+  "${REPO}/.venv/bin/python" - "$1" "$2" "$3" "$4" <<'PY'
 import json
 import sys
 import numpy as np
@@ -298,7 +298,7 @@ summary = {
     "converged_ionic": bool(run.converged_ionic) if phase == "relax" else None,
     "ionic_steps": len(run.ionic_steps),
     "final_energy_eV": run.final_energy,
-    "final_energy_per_atom_eV": run.final_energy_per_atom,
+    "final_energy_per_atom_eV": run.final_energy / len(run.final_structure),
     "max_force_eV_per_A": max_force,
     "force_criterion_eV_per_A": force_limit,
     "force_criterion_passed": force_passed,
