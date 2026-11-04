@@ -1,0 +1,107 @@
+{
+  "directory": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/nbtao5-q1-fixed-kmesh-v1-20261104TJHFN69/cases/Nb-bcc-baseline/runs/9040436.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov/static",
+  "phase": "static",
+  "qualified": true,
+  "checks": {
+    "normal_termination": {
+      "passed": true
+    },
+    "scf_converged_every_ionic_step": {
+      "passed": true,
+      "ionic_steps": 1,
+      "nelm": 200,
+      "max_scf_steps": 11,
+      "unconverged_ionic_steps": []
+    },
+    "incar_ENCUT": {
+      "passed": true,
+      "expected": "600",
+      "actual": "600"
+    },
+    "incar_EDIFF": {
+      "passed": true,
+      "expected": "1E-06",
+      "actual": "1.0E-06"
+    },
+    "incar_PREC": {
+      "passed": true,
+      "expected": "Accurate",
+      "actual": "Accurate"
+    },
+    "incar_ISPIN": {
+      "passed": true,
+      "expected": "1",
+      "actual": "1"
+    },
+    "paw_datasets": {
+      "passed": true,
+      "expected": [
+        "Nb_pv"
+      ],
+      "actual": [
+        "Nb_pv"
+      ]
+    }
+  },
+  "values": {
+    "nions": 1,
+    "final_free_energy_eV": -10.09349223,
+    "final_energy_sigma0_eV": -10.09309961,
+    "energy_sigma0_per_atom_eV": -10.09309961,
+    "max_force_eV_per_A": 0.0,
+    "stress_kbar": [
+      [
+        -0.42297,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        -0.42297,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        -0.42297
+      ]
+    ],
+    "max_abs_principal_stress_kbar": 0.42297,
+    "final_total_magnetization_muB": null,
+    "irreducible_kpoints": 195
+  },
+  "method": {
+    "vasp_header": "vasp.6.6.1 17Jul2026 (build Oct 15 2026 18:33:52) complex",
+    "paw_titels": [
+      "Nb_pv"
+    ],
+    "incar": {
+      "ALGO": "Normal",
+      "EDIFF": "1.0E-06",
+      "ENCUT": "600",
+      "IBRION": "-1",
+      "ISMEAR": "1",
+      "ISPIN": "1",
+      "ISYM": "2",
+      "KPAR": "12",
+      "LASPH": ".TRUE.",
+      "LCHARG": ".FALSE.",
+      "LREAL": ".FALSE.",
+      "LWAVE": ".TRUE.",
+      "NELM": "200",
+      "NSW": "0",
+      "PREC": "Accurate",
+      "SIGMA": "0.20",
+      "SYSTEM": "Nb-Ta-O Nb-bcc-baseline static"
+    }
+  },
+  "provenance_sha256": {
+    "INCAR": "add98183c45f69de6dd296c9d57f32eb183872921dfe10a464bd6e74787605b3",
+    "KPOINTS": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+    "POSCAR": "855cf8fbb4b49cffa85ebfe491cfd2880ba37b9a5d3f740a38baa5223f5cedae",
+    "POTCAR": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+    "CONTCAR": "855cf8fbb4b49cffa85ebfe491cfd2880ba37b9a5d3f740a38baa5223f5cedae",
+    "OUTCAR": "eb627e8b2e21ddab14ead192b5c9ec49ccdeac8305d61eb5c25e70baea09f822",
+    "vasprun.xml": "5a596755b42ae9983033601d45440830ca29fc0a9c123678b6cf66f004e5e1c8"
+  }
+}

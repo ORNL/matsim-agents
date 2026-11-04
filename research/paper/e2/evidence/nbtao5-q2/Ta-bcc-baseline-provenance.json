@@ -1,0 +1,109 @@
+{
+  "case_id": "Ta-bcc-baseline",
+  "protocol_id": "nbtao5-fixed-kmesh-v1",
+  "stage": "qualification",
+  "pbs_job_id": "9040437.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+  "host": "x4006c1s1b0n0",
+  "runner_environment_loaded_modules": "gcc/14.3.0:oneapi/release/2026.1.0:mpich/prd/5.0.0.aurora_test.87e2045:libfabric/2.3.1:cray-pals/1.8.0:cray-libpals/1.8.0",
+  "configured_module_stack": [
+    "oneapi/release/2026.1.0",
+    "intel_gpu_umd_aicoe"
+  ],
+  "started_at_utc": "2026-11-04T23:12:14Z",
+  "input_manifest_sha256": "bd031ee34862d6fa503e7942490dab15388187c88f11cd23f33dc9f7eaa1e430",
+  "vasp_executable_sha256": "ebd284027717ff564abf7ceaf93c3aca3261b129d7b60b3f2e3e2aa82d04c552",
+  "paw_component_sha256": {
+    "Nb_pv": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+    "Ta_pv": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+    "O": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64"
+  },
+  "assembled_potcar_sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+  "input_hashes": {
+    "POSCAR": "dc79e55cee37db43f9610c4495189e3717f1bbf96cd521b847cb1eddbee762e6",
+    "INCAR": "38d29d3dfc434563c08c3807472c72cc9c08c80866ec34e7ef153d6ffca819a0",
+    "INCAR.static": "9c56772c4339dada4d961d80174937381002d9bf532e075445d92ed0fe9709e6",
+    "KPOINTS": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+    "KPOINTS.json": "24d6000031c9bd46ba428d614f5119d5a4285833ad37cb09a922b38b588f9f43",
+    "POTCAR.order": "952f8b45d009fa58150664e29e63ff6b7b2dd6d2d0d05984583f33f5f95aa684"
+  },
+  "scientific_settings": {
+    "encut_eV": 600,
+    "kpoint_spacing_A^-1": 0.15,
+    "ediff_eV": 1e-06,
+    "ediffg_eV_A": -0.01
+  },
+  "effective_incar_sha256": {
+    "relax": "8a9e64814b908766caed3f1951e9a1ff5577427c9062dce341b6edc963379fd7",
+    "static": "174b520ae1c56db4d0c943373279312b53a017194087872a3fe72ad8c30dae10"
+  },
+  "calculation_kpoints": {
+    "relax": {
+      "policy": "gamma_centered_target_spacing",
+      "center": "Gamma",
+      "target_spacing_A^-1": 0.15,
+      "mesh_dimensions": [
+        18,
+        18,
+        18
+      ],
+      "source_structure_sha256": "dc79e55cee37db43f9610c4495189e3717f1bbf96cd521b847cb1eddbee762e6",
+      "kpoints_sha256": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+      "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+    },
+    "static": {
+      "policy": "gamma_centered_target_spacing",
+      "center": "Gamma",
+      "target_spacing_A^-1": 0.15,
+      "mesh_dimensions": [
+        18,
+        18,
+        18
+      ],
+      "source_structure_sha256": "45b118267c8cbc80fae3debd664a2936e0c0f61a88d14fc56c2ae36b1eff0041",
+      "kpoints_sha256": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+      "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+    }
+  },
+  "runtime_only_input_change": "LWAVE=.TRUE. to retain restart WAVECAR files; KPAR=12 to avoid a multi-rank Davidson hang on Aurora (parallelization only); staged scientific inputs are unchanged",
+  "completed_at_utc": "2026-11-04T23:13:01.885719+00:00",
+  "output_sha256": {
+    "relax/KPOINTS.json": "24d6000031c9bd46ba428d614f5119d5a4285833ad37cb09a922b38b588f9f43",
+    "relax/summary.json": "40cae5cd842f892eaf51bcfbc0f68998c8b35e61267a6fc89859c22151bc2e29",
+    "relax/PCDAT": "a334b65470a51960626718c7f07abe39e46c711bbed9eea97ca777a6643e5ffa",
+    "relax/EIGENVAL": "86f51a43e269e21396cdf1703cfb673b2e07c35e332c646484a2119e70e49dce",
+    "relax/launcher.stdout.log": "e4120f6c1103d7bbc0c592e43f8446530ee814650af4e6b9c6364bb408a67f44",
+    "relax/CONTCAR": "45b118267c8cbc80fae3debd664a2936e0c0f61a88d14fc56c2ae36b1eff0041",
+    "relax/vasprun.xml": "e8794d8d6e2c2f2f7ec50ad64298e4fbaa9812f08512c678b3912954bfd86714",
+    "relax/OUTCAR": "23bc61ce9d91649e5ba7f37e3a887ded35a985143434ed1fa6c90540f6994852",
+    "relax/WAVECAR": "688e9d98f243c2c736fb00813d33b750067e115cb5012fd80e89ccba6688c170",
+    "relax/KPOINTS": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+    "relax/IBZKPT": "6713d5f3e28c750d0042d7bc406b85494a43bc4bfab91292eef781edd5d12116",
+    "relax/INCAR": "8a9e64814b908766caed3f1951e9a1ff5577427c9062dce341b6edc963379fd7",
+    "relax/XDATCAR": "f3156e86e3a8b25690caf7971dac9b6fb62d2ff9dc47d805f9f98133c90ca61f",
+    "relax/OSZICAR": "40d7a8d1265529d8523286410477e1adc61142e0a26e3dec1ca48e0d2e1bb13a",
+    "relax/DOSCAR": "5b838ff846b32d15b9f33363da113051eef4b0dfec4883bf0d9b4c7a744660b8",
+    "relax/launcher.stderr.log": "408e6349087d3fd2843a06f9d5fe872b2b40e3bfd21739b013df2e972997f3f5",
+    "relax/REPORT": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "relax/CHG": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "relax/POSCAR": "dc79e55cee37db43f9610c4495189e3717f1bbf96cd521b847cb1eddbee762e6",
+    "static/KPOINTS.json": "c2d0d7fd6d4d5fcae8576f9cf34785f502362d926ad3498031af65364bb29fa5",
+    "static/summary.json": "4706844e94fb27b0ed22971dcf1acd5f0823e4ac5558b7fa6cfcf0eb18ebeaaa",
+    "static/PCDAT": "7d3b80f564c66735b2bc809edc29f7370f4ddb24406767b82d3462f608c612c5",
+    "static/EIGENVAL": "4afce7e3a0c77286559993aa69b5a8e04eb956e921c14f6d7a559a66b4b0022e",
+    "static/launcher.stdout.log": "f2ead97f37fc8e948528d4f09ef52b3fac73f655bea06579f5eab41063c4275b",
+    "static/CONTCAR": "45b118267c8cbc80fae3debd664a2936e0c0f61a88d14fc56c2ae36b1eff0041",
+    "static/vasprun.xml": "b778569f85e0728a8a5a82aa9b1bb6cd7cc43376fa833390bb0a7cce10deac63",
+    "static/OUTCAR": "6bcc99ff0b66e8807516fe6cd2e3639adf4dc6b4732ea12e72bd31de92e51b67",
+    "static/WAVECAR": "db59df063a205cb3e67803074fefb040127d0f5f10ca8ce6a9cb2391b3f81599",
+    "static/KPOINTS": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+    "static/IBZKPT": "6713d5f3e28c750d0042d7bc406b85494a43bc4bfab91292eef781edd5d12116",
+    "static/INCAR": "174b520ae1c56db4d0c943373279312b53a017194087872a3fe72ad8c30dae10",
+    "static/XDATCAR": "51faefd57019b9d8936bd20ce4f327aa54daa4aff88028ac06c192400e4fbb9f",
+    "static/OSZICAR": "94eae57a4cf738ff16c5bc008b71d282b7568014ea0a838665aea543db4e3391",
+    "static/DOSCAR": "dc98ad78a697211bba8cb6f0065764024ab952f6ceb229c9bf95aab0ff41730f",
+    "static/launcher.stderr.log": "408e6349087d3fd2843a06f9d5fe872b2b40e3bfd21739b013df2e972997f3f5",
+    "static/REPORT": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "static/CHG": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "static/POSCAR": "45b118267c8cbc80fae3debd664a2936e0c0f61a88d14fc56c2ae36b1eff0041"
+  }
+}
