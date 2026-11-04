@@ -225,7 +225,6 @@ def validate_preflight(record_path: Path, repo: Path, case_dir: Path) -> dict:
         "status": "PASS",
         "exit_code": 0,
         "repo_real": str(repo),
-        "case_dir": str(case_dir),
         "protocol_id": PROTOCOL_ID,
         "protocol_manifest_sha256": sha256(manifest_path),
         "runtime_manifest_sha256": sha256(runtime_path),
@@ -239,6 +238,9 @@ def validate_preflight(record_path: Path, repo: Path, case_dir: Path) -> dict:
     for key, value in required.items():
         if record.get(key) != value:
             raise GateError(f"preflight record is missing or incompatible: {key}")
+    # The preflight checks the runtime, so any case of this attempt may reuse it.
+    if Path(record.get("case_dir", "")).parent != case_dir.parent:
+        raise GateError("preflight record belongs to a different attempt")
     if record.get("failure") is not None or not record.get("gpu_devices"):
         raise GateError("preflight record lacks successful failure/GPU evidence")
     if not record.get("pbs_job_id") or record["pbs_job_id"] == "unknown":

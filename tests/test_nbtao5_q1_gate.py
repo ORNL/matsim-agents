@@ -394,6 +394,22 @@ def test_preflight_accounting_must_bind_the_recorded_stdout(tmp_path, monkeypatc
         gate.submit_q1(dry_run=True)
 
 
+def test_preflight_record_covers_other_cases_in_the_same_attempt(tmp_path, monkeypatch):
+    fixture = make_fixture(tmp_path, monkeypatch)
+    sibling = fixture["case"].parent / "Nb-bcc-baseline"
+    sibling.mkdir()
+    gate.validate_preflight(fixture["record"], fixture["repo"], sibling)
+
+
+def test_preflight_record_from_another_attempt_is_rejected(tmp_path, monkeypatch):
+    fixture = make_fixture(tmp_path, monkeypatch)
+    record = json.loads(fixture["record"].read_text())
+    record["case_dir"] = str(tmp_path / "other-attempt/cases" / Q1_CASE_ID)
+    _write_json(fixture["record"], record)
+    with pytest.raises(gate.GateError, match="different attempt"):
+        gate.validate_preflight(fixture["record"], fixture["repo"], fixture["case"])
+
+
 def test_q1_submission_rejects_production_case_and_gates_remain_separate():
     launcher = (ROOT / "deployments/aurora/launchers/run-nbtao5-case-aurora.sh").read_text()
     q1_wrapper = (ROOT / "deployments/aurora/jobs/job-nbtao5-qualification-aurora.pbs").read_text()
