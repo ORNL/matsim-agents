@@ -27,14 +27,16 @@
   "resource_limit": {
     "platform": "Aurora",
     "max_nodes_per_workflow": 1,
-    "max_walltime_per_workflow_minutes": 30,
+    "max_walltime_per_workflow_minutes": 120,
     "max_concurrent_workflows": 1,
     "qualification_workflows": 4,
-    "qualification_max_node_hours": 2.0,
-    "walltime_scope": "30 minutes per PBS workflow, including its relaxation and static VASP invocations",
+    "qualification_max_node_hours": 8.0,
+    "walltime_scope": "120 minutes per PBS workflow, including its relaxation and static VASP invocations",
+    "walltime_basis": "Raised from 30 min: job 9039526 ran 18 ionic steps (~80 s each, 28-atom NbTaO5, 1 node) without converging before its 25-min soft stop.",
+    "queue": "capacity",
     "soft_stop_seconds_before_walltime": 300,
     "pilot_ordering_workflows": 5,
-    "pilot_ordering_max_node_hours": 2.5
+    "pilot_ordering_max_node_hours": 10.0
   },
   "qualification_case_counts": {
     "Nb_bcc": 1,
@@ -52,9 +54,9 @@
       ],
       "depends_on": [],
       "max_nodes_per_workflow": 1,
-      "max_walltime_per_workflow_minutes": 30,
+      "max_walltime_per_workflow_minutes": 120,
       "max_concurrent_workflows": 1,
-      "node_hours_cap": 0.5,
+      "node_hours_cap": 2.0,
       "pass_conditions": [
         "Approved executable and homogeneous PAW component hashes match the frozen manifest.",
         "Relaxation and static VASP runs complete with electronic convergence.",
@@ -73,9 +75,9 @@
         "Q1-runtime-and-workflow-smoke"
       ],
       "max_nodes_per_workflow": 1,
-      "max_walltime_per_workflow_minutes": 30,
+      "max_walltime_per_workflow_minutes": 120,
       "max_concurrent_workflows": 1,
-      "node_hours_cap": 1.0,
+      "node_hours_cap": 4.0,
       "pass_conditions": [
         "Both Nb and Ta baseline workflows complete with electronic and ionic convergence.",
         "Final forces and residual stress pass the frozen crystalline criteria."
@@ -92,9 +94,9 @@
         "Q2-elemental-baselines"
       ],
       "max_nodes_per_workflow": 1,
-      "max_walltime_per_workflow_minutes": 30,
+      "max_walltime_per_workflow_minutes": 120,
       "max_concurrent_workflows": 1,
-      "node_hours_cap": 0.5,
+      "node_hours_cap": 2.0,
       "pass_conditions": [
         "O2 remains triplet and passes electronic and ionic-force criteria in its fixed cell."
       ],

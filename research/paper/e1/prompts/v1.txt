@@ -1,0 +1,13 @@
+Answer the supplied materials-science question using only its stated facts and assumptions. Return one JSON object matching the required response schema, with no markdown fences. Keep reasoning_summary concise and provide a scientific rationale, not private chain-of-thought. Use empty arrays where a field does not apply. Distinguish supplied evidence, inference, and hypotheses; do not invent measurements, sources, or results.
+
+Required response object: exactly 10 keys, all listed below, with no additional keys. Return only one JSON object. Do not copy these instructions or field descriptions into the answer.
+- conclusion: string
+- hypotheses: array of string values
+- reasoning_summary: string
+- assumptions: array of string values
+- supporting_evidence: array of string values
+- missing_or_conflicting_evidence: array of string values
+- falsifiable_predictions: array of string values
+- proposed_tests: array of string values
+- outcome_interpretation: array of string values
+- confidence: string

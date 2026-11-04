@@ -9,6 +9,9 @@ TOTAL_RANKS=$((NNODES * RANKS_PER_NODE))
 HOSTS=${MATSIM_ASSIGNED_NODES:?dispatcher must assign disjoint Aurora nodes}
 
 export OMP_NUM_THREADS=${THREADS_PER_RANK}
+# VASP OpenMP regions (e.g. SETDIJ) overflow the small default worker stack.
+export OMP_STACKSIZE=${OMP_STACKSIZE:-512m}
+ulimit -s unlimited 2>/dev/null || true
 export MPICH_GPU_SUPPORT_ENABLED=1
 export ONEAPI_DEVICE_SELECTOR=${ONEAPI_DEVICE_SELECTOR:-level_zero:gpu}
 cd "${WORK_DIR}"

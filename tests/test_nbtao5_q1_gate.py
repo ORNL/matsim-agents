@@ -44,7 +44,7 @@ def make_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, P
     (repo / "pyproject.toml").write_text("synthetic fixture\n", encoding="ascii")
     pbs = repo / "deployments/aurora/jobs/job-nbtao5-qualification-aurora.pbs"
     pbs.write_text(
-        "#PBS -l select=1\n#PBS -l walltime=00:30:00\n#PBS -q debug\n#PBS -j oe\n",
+        "#PBS -l select=1\n#PBS -l walltime=02:00:00\n#PBS -q capacity\n#PBS -j oe\n",
         encoding="ascii",
     )
     preflight_pbs = repo / "deployments/aurora/jobs/job-nbtao5-preflight-aurora.pbs"
@@ -199,7 +199,7 @@ def test_authorized_valid_fixture_dry_run_does_not_call_qsub(tmp_path, monkeypat
     assert gate.submit_q1(dry_run=True) == 0
     output = capsys.readouterr().out
     assert "all Q1 prerequisites validated" in output
-    assert "-A HydraGNN" in output and "walltime=00:30:00" in output
+    assert "-A HydraGNN" in output and "walltime=02:00:00" in output
     assert not fixture["qsub_marker"].exists()
 
 

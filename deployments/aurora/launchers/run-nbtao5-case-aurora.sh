@@ -225,9 +225,12 @@ write_status "running" "workflow_started"
 WATCHDOG_PID=$!
 trap 'kill "${WATCHDOG_PID}" 2>/dev/null || true; wait "${WATCHDOG_PID}" 2>/dev/null || true' EXIT
 
+# Davidson (ALGO=Normal) hangs on Aurora when bands are split across ranks; KPAR=ranks avoids it.
+VASP_RANKS=12
+
 make_restartable_incar() {
-  awk '!/^[[:space:]]*[Ll][Ww][Aa][Vv][Ee][[:space:]]*=/ { print }
-       END { print "LWAVE = .TRUE." }' "$1" >"$2"
+  awk '!/^[[:space:]]*([Ll][Ww][Aa][Vv][Ee]|[Kk][Pp][Aa][Rr])[[:space:]]*=/ { print }
+       END { print "LWAVE = .TRUE."; print "KPAR = '"${VASP_RANKS}"'" }' "$1" >"$2"
 }
 
 run_vasp() {
@@ -336,14 +339,17 @@ record["calculation_kpoints"] = {
   phase: json.loads((work_dir / phase / "KPOINTS.json").read_text())
   for phase in ("relax",)
 }
-record["runtime_only_input_change"] = "LWAVE=.TRUE. to retain restart WAVECAR files; staged scientific inputs are unchanged"
+record["runtime_only_input_change"] = (
+  "LWAVE=.TRUE. to retain restart WAVECAR files; KPAR=12 to avoid a multi-rank Davidson "
+  "hang on Aurora (parallelization only); staged scientific inputs are unchanged"
+)
 provenance_path.write_text(json.dumps(record, indent=2) + "\n")
 PY
 
 export VASP_ROOT="${REPO}/external/vasp6/src/vasp.6.6.1"
 export VASP_BIN
 export VASP_VARIANT=std
-export NRANKS=12
+export NRANKS="${VASP_RANKS}"
 export OMP_NUM_THREADS=8
 LAUNCHER="${REPO}/deployments/aurora/launchers/run-vasp-gpu-aurora.sh"
 if run_vasp "${WORK_DIR}/relax"; then

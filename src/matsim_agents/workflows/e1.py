@@ -10,11 +10,12 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from functools import cache
 from pathlib import Path
 from typing import Any, Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.llm.replies import invoke_model_with_raw
@@ -58,6 +59,11 @@ class E1Candidate(_StrictModel):
         if self.mag_provider is not None and self.provider.lower() != "mag":
             raise ValueError("mag_provider is only valid for MAG candidates")
         return self
+
+
+PromptVariant = Literal["v1", "v2-field-guidance"]
+# New manifests use this; a manifest without prompt_variant is an archived v1 run.
+CURRENT_PROMPT_VARIANT: PromptVariant = "v2-field-guidance"
 
 
 class E1Decoding(_StrictModel):
@@ -104,6 +110,8 @@ class E1DevelopmentManifest(_StrictModel):
     decoding: E1Decoding = E1Decoding()
     remote_approval: E1RemoteApproval | None = None
     protocol_version: str = Field(min_length=1)
+    # Omitted from v1 dumps so archived manifest hashes are unchanged.
+    prompt_variant: PromptVariant = Field(default="v1", exclude_if=lambda value: value == "v1")
     questions: tuple[E1Question, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -140,13 +148,17 @@ class E1DevelopmentManifest(_StrictModel):
                 self.candidate.revision_semantics,
             )
             if approved_route != candidate_route:
-                raise ValueError("E1-R approval must match the candidate provider, model, and revision")
+                raise ValueError(
+                    "E1-R approval must match the candidate provider, model, and revision"
+                )
             if self.remote_approval.max_total_requests < len(self.questions):
                 raise ValueError("E1-R request limit must cover every development question")
             if self.remote_approval.max_total_requests > (
                 len(self.questions) * self.remote_approval.max_attempts_per_question
             ):
-                raise ValueError("E1-R request limit exceeds the approved per-question attempt limit")
+                raise ValueError(
+                    "E1-R request limit exceeds the approved per-question attempt limit"
+                )
             if (
                 self.candidate.revision_semantics == "mutable_alias"
                 and not self.remote_approval.mutable_alias_accepted
@@ -158,7 +170,9 @@ class E1DevelopmentManifest(_StrictModel):
                 self.remote_approval.max_total_requests * self.decoding.max_tokens
                 > self.remote_approval.max_output_tokens_campaign
             ):
-                raise ValueError("E1-R worst-case output exceeds the approved campaign output limit")
+                raise ValueError(
+                    "E1-R worst-case output exceeds the approved campaign output limit"
+                )
         elif self.remote_approval is not None:
             raise ValueError("remote_approval is only valid for E1-R")
         return self
@@ -187,7 +201,8 @@ def _model_session(
     elif candidate.provider.lower() == "vllm":
         kwargs["max_retries"] = 0
     model = model_factory(**kwargs)
-    if candidate.provider.lower() == "vllm" and callable(getattr(model, "bind", None)):
+    response_format_mode = _response_format_mode(candidate.provider, candidate.mag_provider)
+    if response_format_mode == "json_schema" and callable(getattr(model, "bind", None)):
         model = model.bind(
             response_format={
                 "type": "json_schema",
@@ -198,6 +213,57 @@ def _model_session(
             }
         )
     yield model
+
+
+def _response_format_mode(provider: str, mag_provider: str | None = None) -> str:
+    provider = provider.lower()
+    if provider == "vllm" or (provider == "mag" and (mag_provider or "").lower() == "cborg"):
+        return "json_schema"
+    return "prompt_schema"
+
+
+def _served_model_metadata(raw_response: dict[str, Any]) -> tuple[str | None, str | None]:
+    response_metadata = raw_response.get("response_metadata", {})
+    if not isinstance(response_metadata, dict):
+        return None, None
+    served_model_id = next(
+        (
+            response_metadata[key]
+            for key in ("model_name", "model_id", "model")
+            if isinstance(response_metadata.get(key), str)
+        ),
+        None,
+    )
+    provider_metadata = response_metadata.get("provider_metadata")
+    applied_route = (
+        provider_metadata.get("mag_applied")
+        if isinstance(provider_metadata, dict)
+        and isinstance(provider_metadata.get("mag_applied"), str)
+        else None
+    )
+    return served_model_id, applied_route
+
+
+def _validation_issues(error: ValidationError) -> list[dict[str, Any]]:
+    return [
+        {
+            "location": list(issue["loc"]),
+            "type": issue["type"],
+            "message": issue["msg"],
+        }
+        for issue in error.errors(include_input=False, include_url=False)
+    ]
+
+
+def _schema_failure_category(issues: list[dict[str, Any]]) -> str:
+    issue_types = {issue["type"] for issue in issues}
+    if "json_invalid" in issue_types:
+        return "invalid_json"
+    if "extra_forbidden" in issue_types:
+        return "unexpected_fields"
+    if "missing" in issue_types:
+        return "missing_fields"
+    return "schema_validation_failed"
 
 
 def _canonical_json(value: Any) -> bytes:
@@ -267,7 +333,10 @@ def _response_attempts(path: Path) -> dict[str, tuple[str, int]]:
         record = json.loads(line)
         if record.get("status") in {"complete", "error"}:
             key = record["response_key"]
-            latest[key] = (record["status"], max(record.get("attempt", 1), latest.get(key, ("", 0))[1]))
+            latest[key] = (
+                record["status"],
+                max(record.get("attempt", 1), latest.get(key, ("", 0))[1]),
+            )
     return latest
 
 
@@ -278,7 +347,7 @@ def _request_count(path: Path) -> int:
     return sum(
         1
         for line in path.read_text(encoding="utf-8").splitlines()
-        if (record := json.loads(line)).get("status") in {"complete", "error"}
+        if json.loads(line).get("status") in {"complete", "error"}
     )
 
 
@@ -314,7 +383,7 @@ def run_e1_development(
     are skipped on restart; failures are only retried when explicitly requested.
     """
 
-    system_prompt = _e1_system_prompt()
+    system_prompt = _e1_system_prompt(manifest.prompt_variant)
     input_preflight = _preflight_remote_inputs(manifest, system_prompt)
     endpoint = _provider_endpoint(manifest.candidate.provider)
     if manifest.cohort == "E1-R" and manifest.remote_approval.endpoint != endpoint:
@@ -330,10 +399,15 @@ def run_e1_development(
     manifest_hash = _sha256(manifest_data)
     _validate_output_identity(manifest_path, ledger_path, manifest_hash)
     protocol_artifact_hashes = _protocol_artifact_hashes()
+    response_format_mode = _response_format_mode(
+        manifest.candidate.provider, manifest.candidate.mag_provider
+    )
     protocol_hash = _sha256(
         {
             "protocol_version": manifest.protocol_version,
             "decoding": manifest.decoding.model_dump(),
+            "response_format_mode": response_format_mode,
+            "system_prompt_hash": _sha256(system_prompt),
             "response_schema": E1ScientificResponse.model_json_schema(),
             "artifact_hashes": protocol_artifact_hashes,
         }
@@ -352,6 +426,9 @@ def run_e1_development(
         "cohort": manifest.cohort,
         "candidate": manifest.candidate.model_dump(mode="json"),
         "endpoint": endpoint,
+        "response_format_mode": response_format_mode,
+        "prompt_variant": manifest.prompt_variant,
+        "system_prompt_hash": _sha256(system_prompt),
         "manifest_hash": manifest_hash,
         "protocol_hash": protocol_hash,
         "protocol_artifact_hashes": protocol_artifact_hashes,
@@ -438,12 +515,15 @@ def run_e1_development(
                             "prompt_hash": prompt_hash,
                             "endpoint": endpoint,
                             "requested_model_id": manifest.candidate.model_id,
+                            "served_model_id": None,
+                            "provider_applied_route": None,
                             "request_started_at_utc": request_started_at,
                             "latency_s": round(time.perf_counter() - request_started, 3),
                             "provider_response_metadata": {},
                             "input_preflight": input_preflight.get(question.question_id),
                             "error_type": type(error).__name__,
                             "error_message": _safe_error_message(str(error)),
+                            "technical_failure_category": "provider_request_error",
                             "completed_at_utc": datetime.now(UTC).isoformat(),
                         }
                         ledger.write(json.dumps(record, sort_keys=True) + "\n")
@@ -451,13 +531,17 @@ def run_e1_development(
                         os.fsync(ledger.fileno())
                         attempts[response_key] = ("error", attempt)
                         if manifest.cohort == "E1-R":
-                            _append_allocation_record(output / "allocation-usage.jsonl", manifest, record)
+                            _append_allocation_record(
+                                output / "allocation-usage.jsonl", manifest, record
+                            )
                         continue
                     raw_response = (
                         raw_message.model_dump(mode="json")
                         if hasattr(raw_message, "model_dump")
                         else {"content": getattr(raw_message, "content", str(raw_message))}
                     )
+                    reported_model_id, applied_route = _served_model_metadata(raw_response)
+                    validation_issues = None
                     try:
                         parsed_response = E1ScientificResponse.model_validate_json(
                             _unwrap_json_fence(reply.text)
@@ -467,10 +551,21 @@ def run_e1_development(
                     except Exception as error:
                         parsed_data = None
                         schema_error = f"{type(error).__name__}: {_safe_error_message(str(error))}"
+                        if isinstance(error, ValidationError):
+                            validation_issues = _validation_issues(error)
+                    technical_ok = not reply.truncated
+                    schema_ok = schema_error is None
+                    semantic = assess_semantic_validity(parsed_data)
+                    semantic_ok = semantic["semantic_validity"] == "valid"
+                    semantic_failure = (
+                        None
+                        if semantic_ok or not (technical_ok and schema_ok)
+                        else "placeholder_only_response"
+                        if semantic["semantic_validity"] == "placeholder_only"
+                        else "schema_placeholder_values"
+                    )
                     response_status = (
-                        "complete"
-                        if schema_error is None and not reply.truncated
-                        else "error"
+                        "complete" if technical_ok and schema_ok and semantic_ok else "error"
                     )
                     record = {
                         "schema_version": 1,
@@ -484,9 +579,17 @@ def run_e1_development(
                         "cohort": manifest.cohort,
                         "manifest_hash": manifest_hash,
                         "protocol_hash": protocol_hash,
+                        "prompt_variant": manifest.prompt_variant,
                         "prompt_hash": prompt_hash,
                         "endpoint": endpoint,
                         "requested_model_id": manifest.candidate.model_id,
+                        "provider_reported_model_id": reported_model_id,
+                        "provider_reported_model_matches_request": (
+                            reported_model_id == manifest.candidate.model_id
+                            if reported_model_id is not None
+                            else None
+                        ),
+                        "provider_applied_route": applied_route,
                         "request_started_at_utc": request_started_at,
                         "latency_s": reply.latency_s,
                         "input_preflight": input_preflight.get(question.question_id),
@@ -497,9 +600,29 @@ def run_e1_development(
                         "response": reply.model_dump(mode="json"),
                         "parsed_response": parsed_data,
                         "schema_error": schema_error,
+                        "schema_failure_category": (
+                            _schema_failure_category(validation_issues)
+                            if validation_issues is not None
+                            else None
+                        ),
+                        "schema_validation_issues": validation_issues,
+                        "technical_failure_category": (
+                            "truncated_output"
+                            if reply.truncated
+                            else _schema_failure_category(validation_issues)
+                            if validation_issues is not None
+                            else None
+                        ),
+                        "technical_completion": "completed" if technical_ok else "truncated",
+                        "schema_compliance": "compliant" if schema_ok else "noncompliant",
+                        "semantic_validity": semantic["semantic_validity"],
+                        "semantic_issues": semantic["semantic_issues"],
+                        "semantic_failure_category": semantic_failure,
                         "scientific_reviewability": (
                             "reviewable"
                             if response_status == "complete"
+                            else "nonreviewable_semantic_output"
+                            if semantic_failure is not None
                             else "nonreviewable_technical_output"
                         ),
                         "nonreviewable_reason": (
@@ -507,7 +630,7 @@ def run_e1_development(
                             if reply.truncated
                             else "schema_validation_failed"
                             if schema_error is not None
-                            else None
+                            else semantic_failure
                         ),
                         "completed_at_utc": datetime.now(UTC).isoformat(),
                     }
@@ -518,7 +641,9 @@ def run_e1_development(
                         completed.add(response_key)
                     attempts[response_key] = (response_status, attempt)
                     if manifest.cohort == "E1-R":
-                        _append_allocation_record(output / "allocation-usage.jsonl", manifest, record)
+                        _append_allocation_record(
+                            output / "allocation-usage.jsonl", manifest, record
+                        )
         error_count = sum(status == "error" for status, _ in attempts.values())
         metadata["state"] = "complete_with_errors" if error_count else "complete"
     except Exception as error:
@@ -527,19 +652,160 @@ def run_e1_development(
         raise
     finally:
         metadata["completed_responses"] = len(completed)
-        metadata["failed_responses"] = sum(
-            status == "error" for status, _ in attempts.values()
-        )
+        metadata["failed_responses"] = sum(status == "error" for status, _ in attempts.values())
+        metadata["prompt_variant"] = manifest.prompt_variant
+        metadata["requested_model_id"] = manifest.candidate.model_id
+        metadata["requested_revision"] = manifest.candidate.revision
+        metadata["revision_semantics"] = manifest.candidate.revision_semantics
+        metadata["configured_provider_route"] = manifest.candidate.mag_provider
+        if ledger_path.is_file():
+            records = [
+                json.loads(line)
+                for line in ledger_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            metadata["provider_reported_model_ids_observed"] = sorted(
+                {
+                    record["provider_reported_model_id"]
+                    for record in records
+                    if record.get("provider_reported_model_id")
+                }
+            )
+            metadata["provider_applied_routes_observed"] = sorted(
+                {
+                    record["provider_applied_route"]
+                    for record in records
+                    if record.get("provider_applied_route")
+                }
+            )
         metadata["updated_at_utc"] = datetime.now(UTC).isoformat()
         _write_run_metadata(metadata_path, metadata)
     return metadata
 
 
-_E1_SYSTEM_PROMPT = """Answer the supplied materials-science question using only its stated facts and assumptions. Return one JSON object matching the required response schema, with no markdown fences. Keep reasoning_summary concise and provide a scientific rationale, not private chain-of-thought. Use empty arrays where a field does not apply. Distinguish supplied evidence, inference, and hypotheses; do not invent measurements, sources, or results."""
+_E1_SYSTEM_PROMPT = (
+    "Answer the supplied materials-science question using only its stated facts and assumptions. "
+    "Return one JSON object matching the required response schema, with no markdown fences. "
+    "Keep reasoning_summary concise and provide a scientific rationale, not "
+    "private chain-of-thought. "
+    "Use empty arrays where a field does not apply. Distinguish supplied evidence, inference, "
+    "and hypotheses; do not invent measurements, sources, or results."
+)
 
 
-def _e1_system_prompt() -> str:
-    return f"{_E1_SYSTEM_PROMPT}\n\nRequired JSON Schema:\n{json.dumps(E1ScientificResponse.model_json_schema(), sort_keys=True)}"
+# v1 renders a "key: type" list that greedy decoding can copy verbatim as values.
+_E1_FIELD_GUIDANCE = {
+    "conclusion": "your overall answer to the question, in one or more sentences",
+    "hypotheses": "each competing hypothesis you considered, one per item",
+    "reasoning_summary": (
+        "a concise scientific rationale linking the supplied facts to the conclusion"
+    ),
+    "assumptions": "each assumption your answer depends on",
+    "supporting_evidence": "each supplied fact that supports your reasoning",
+    "missing_or_conflicting_evidence": "each piece of absent or conflicting evidence that matters",
+    "falsifiable_predictions": "each prediction that could show a hypothesis to be wrong",
+    "proposed_tests": "each calculation or experiment that would discriminate between hypotheses",
+    "outcome_interpretation": "how each possible test outcome would change the conclusion",
+    "confidence": "your confidence in the conclusion and the main reason for it",
+}
+
+
+def _e1_system_prompt(variant: PromptVariant = "v1") -> str:
+    schema = E1ScientificResponse.model_json_schema()
+    if variant == "v2-field-guidance":
+        field_lines = [
+            f"- {field_name}: {_E1_FIELD_GUIDANCE[field_name]}"
+            for field_name in schema["properties"]
+        ]
+        return (
+            f"{_E1_SYSTEM_PROMPT}\n\nRequired response object: exactly {len(field_lines)} keys, "
+            "all listed below, with no additional keys. Return only one JSON object. "
+            "Every value must be your own substantive scientific content about the supplied "
+            "question. Never use a type name such as \"string\", a key name, or text copied "
+            "from this list as a value. The list states what each key must contain:\n"
+            + "\n".join(field_lines)
+        )
+    field_lines = []
+    for field_name, field_schema in schema["properties"].items():
+        field_type = field_schema["type"]
+        if field_type == "array":
+            field_type = f"array of {field_schema['items']['type']} values"
+        field_lines.append(f"- {field_name}: {field_type}")
+    return (
+        f"{_E1_SYSTEM_PROMPT}\n\nRequired response object: exactly {len(field_lines)} keys, "
+        "all listed below, with no additional keys. Return only one JSON object. "
+        "Do not copy these instructions or field descriptions into the answer.\n"
+        + "\n".join(field_lines)
+    )
+
+
+_GENERIC_PLACEHOLDERS = frozenset(
+    {
+        "string",
+        "str",
+        "text",
+        "array",
+        "list",
+        "array of string values",
+        "array of strings",
+        "list of strings",
+        "string values",
+        "number",
+        "integer",
+        "float",
+        "boolean",
+        "null",
+        "object",
+        "value",
+        "placeholder",
+        "mathematical expression",
+        "...",
+        "\u2026",
+        "tbd",
+        "todo",
+    }
+)
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip().strip("\"'`.,;:()[]{}<>").strip().lower()
+
+
+@cache
+def _placeholder_texts() -> frozenset[str]:
+    texts = set(_GENERIC_PLACEHOLDERS)
+    for name, field in E1ScientificResponse.model_json_schema()["properties"].items():
+        texts.update({name, name.replace("_", " "), field.get("title", "")})
+    for variant in ("v1", "v2-field-guidance"):
+        for line in _e1_system_prompt(variant).splitlines():
+            if line.startswith("- "):
+                texts.update({line[2:], line[2:].split(":", 1)[-1]})
+    return frozenset(_normalize_text(text) for text in texts)
+
+
+def assess_semantic_validity(parsed: dict[str, Any] | None) -> dict[str, Any]:
+    """Flag schema-valid answers whose values are type names, key names, or prompt text."""
+    if parsed is None:
+        return {"semantic_validity": "not_evaluated", "semantic_issues": []}
+    placeholders = _placeholder_texts()
+    issues: list[dict[str, Any]] = []
+    substantive = 0
+    for field in E1ScientificResponse.model_fields:
+        value = parsed.get(field)
+        items = value if isinstance(value, list) else [value]
+        for index, item in enumerate(items):
+            text = _normalize_text(item) if isinstance(item, str) else ""
+            location: dict[str, Any] = {"field": field}
+            if isinstance(value, list):
+                location["index"] = index
+            if not text:
+                issues.append({**location, "issue": "empty_text"})
+            elif text in placeholders:
+                issues.append({**location, "issue": "schema_placeholder"})
+            else:
+                substantive += 1
+    validity = "valid" if not issues else "placeholder_only" if substantive == 0 else "invalid"
+    return {"semantic_validity": validity, "semantic_issues": issues}
 
 
 def _unwrap_json_fence(text: str) -> str:
@@ -565,7 +831,9 @@ def _safe_error_message(message: str) -> str:
 def _reasoning_tokens_reported(raw_response: dict[str, Any]) -> int | None:
     usage = raw_response.get("usage_metadata") or {}
     details = usage.get("output_token_details") or usage.get("completion_tokens_details") or {}
-    value = details.get("reasoning") or details.get("reasoning_tokens") or usage.get("reasoning_tokens")
+    value = (
+        details.get("reasoning") or details.get("reasoning_tokens") or usage.get("reasoning_tokens")
+    )
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
@@ -585,9 +853,7 @@ def _preflight_remote_inputs(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question.prompt},
         ]
-        count = len(
-            json.dumps(messages, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        )
+        count = len(json.dumps(messages, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
         method = "serialized-messages-utf8-bytes"
         unit = "utf8_bytes"
         question_limit = approval.max_input_message_bytes_per_question
@@ -642,7 +908,9 @@ def _append_allocation_record(
     if path.exists():
         existing_keys = {
             (record["response_key"], record["attempt"])
-            for record in (json.loads(line) for line in path.read_text(encoding="utf-8").splitlines())
+            for record in (
+                json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+            )
         }
     identity = (response["response_key"], response.get("attempt", 1))
     if identity in existing_keys:

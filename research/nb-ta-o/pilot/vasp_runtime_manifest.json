@@ -49,7 +49,7 @@
     "storage_and_assembly_policy": "Keep source components under the gitignored external/vasp6/potcar tree; assemble and stage POTCAR only in the external Flare run directory. Never commit or publish POTCAR contents.",
     "potcar_payload_disclosed_or_copied": false,
     "administrator_confirmation_required": [
-      "Confirm the account/project may consume the proposed 14.5 node-hour qualification ceiling with the stated one-node, serial, 30-minute-per-workflow cap.",
+      "Confirm the account/project may consume the 8 node-hour qualification ceiling (4 workflows) and 10 node-hour pilot ceiling (5 workflows) with the stated one-node, serial, 120-minute-per-workflow cap.",
       "Confirm the Aurora PBS termination signal and grace behavior supports the five-minute soft-stop window and that the external Flare run directory survives job termination."
     ]
   },

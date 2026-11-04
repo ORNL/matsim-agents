@@ -16,6 +16,9 @@ from pymatgen.io.vasp import Poscar
 PROTOCOL_ID = "nbtao5-fixed-kmesh-v1"
 Q1_CASE_ID = "NbTaO5-ordering-01-baseline"
 Q1_JOB = "deployments/aurora/jobs/job-nbtao5-qualification-aurora.pbs"
+# 28-atom relaxations take ~80 s/ionic step on one node; 30 min was too short (job 9039526).
+Q1_WALLTIME = "02:00:00"
+Q1_QUEUE = "capacity"
 
 
 class GateError(Exception):
@@ -352,8 +355,8 @@ def submit_q1(dry_run: bool) -> int:
     pbs_text = pbs_script.read_text(encoding="ascii")
     directives = (
         "#PBS -l select=1",
-        "#PBS -l walltime=00:30:00",
-        "#PBS -q debug",
+        f"#PBS -l walltime={Q1_WALLTIME}",
+        f"#PBS -q {Q1_QUEUE}",
         "#PBS -j oe",
     )
     for directive in directives:
@@ -371,8 +374,8 @@ def submit_q1(dry_run: bool) -> int:
     ]
     exported = ",".join(f"{name}={os.environ[name]}" for name in variables)
     command = [
-        "qsub", "-A", "HydraGNN", "-l", "select=1", "-l", "walltime=00:30:00",
-        "-q", "debug", "-o", str(stdout_path), "-v", exported, str(pbs_script),
+        "qsub", "-A", "HydraGNN", "-l", "select=1", "-l", f"walltime={Q1_WALLTIME}",
+        "-q", Q1_QUEUE, "-o", str(stdout_path), "-v", exported, str(pbs_script),
     ]
     if dry_run:
         print("DRY RUN: all Q1 prerequisites validated; qsub was not invoked")

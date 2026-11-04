@@ -297,9 +297,9 @@ def main() -> None:
             "workflow_ids": workflow_ids,
             "depends_on": depends_on,
             "max_nodes_per_workflow": 1,
-            "max_walltime_per_workflow_minutes": 30,
+            "max_walltime_per_workflow_minutes": 120,
             "max_concurrent_workflows": 1,
-            "node_hours_cap": len(workflow_ids) * 0.5,
+            "node_hours_cap": len(workflow_ids) * 2.0,
             "pass_conditions": pass_conditions,
             "progression_requires_review_and_explicit_stage_authorization": True,
         }
@@ -377,16 +377,21 @@ def main() -> None:
         "resource_limit": {
             "platform": "Aurora",
             "max_nodes_per_workflow": 1,
-            "max_walltime_per_workflow_minutes": 30,
+            "max_walltime_per_workflow_minutes": 120,
             "max_concurrent_workflows": 1,
             "qualification_workflows": 4,
-            "qualification_max_node_hours": 2.0,
+            "qualification_max_node_hours": 8.0,
             "walltime_scope": (
-                "30 minutes per PBS workflow, including its relaxation and static VASP invocations"
+                "120 minutes per PBS workflow, including its relaxation and static VASP invocations"
             ),
+            "walltime_basis": (
+                "Raised from 30 min: job 9039526 ran 18 ionic steps (~80 s each, 28-atom "
+                "NbTaO5, 1 node) without converging before its 25-min soft stop."
+            ),
+            "queue": "capacity",
             "soft_stop_seconds_before_walltime": 300,
             "pilot_ordering_workflows": 5,
-            "pilot_ordering_max_node_hours": 2.5,
+            "pilot_ordering_max_node_hours": 10.0,
         },
         "qualification_case_counts": {
             "Nb_bcc": 1,

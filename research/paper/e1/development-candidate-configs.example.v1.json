@@ -2,6 +2,8 @@
   "example_only_not_dispatchable": true,
   "protocol_version": "e1-development-protocol-v1",
   "execution_amendment": "development-execution-amendment.v1.md",
+  "prompt_amendment": "development-prompt-amendment.v2.md",
+  "prompt_variant": "v2-field-guidance",
   "retry_policy": "disabled; additional attempts require separate explicit approval",
   "decoding": {
     "temperature": 0.0,

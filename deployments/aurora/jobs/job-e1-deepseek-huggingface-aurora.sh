@@ -15,7 +15,8 @@ REPO="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 PROJ="$(dirname "${REPO}")"
 VENV="${MATSIM_AURORA_VENV:-${REPO}/.venv}"
 MODEL_PATH="${MODEL_ROOT:-${PROJ}/models}/DeepSeek-R1-Distill-Qwen-32B"
-RUN_DIR="${REPO}/runs/e1/local-2026-11-02/deepseek-r1-distill-qwen-32b-hf"
+RUN_DIR="${E1_RUN_DIR:-${REPO}/runs/e1/local-2026-11-02/deepseek-r1-distill-qwen-32b-hf}"
+OUTPUT_DIR="${RUN_DIR}/outputs"
 MANIFEST="${RUN_DIR}/manifest.json"
 
 [[ -f "${REPO}/pyproject.toml" ]] || { echo "ERROR: invalid PROJECT_ROOT: ${REPO}" >&2; exit 2; }
@@ -35,7 +36,7 @@ export ZE_FLAT_DEVICE_HIERARCHY=FLAT
 unset ZE_AFFINITY_MASK http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY
 export no_proxy='*' NO_PROXY='*'
 export MATSIM_LLM_PROVIDER=huggingface MATSIM_HF_MODEL_PATH="${MODEL_PATH}"
-mkdir -p "${RUN_DIR}"
+mkdir -p "${RUN_DIR}" "${OUTPUT_DIR}"
 
 finalize_job() {
   local status=$?
@@ -70,6 +71,6 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 echo "[$(date)] Running E1 DeepSeek collection on ${MODEL_PATH}"
-echo "[$(date)] Output: ${RUN_DIR}/responses.jsonl"
-mpiexec -n 1 --ppn 1 matsim-agents e1-development "${MANIFEST}" --output "${RUN_DIR}"
+echo "[$(date)] Output: ${OUTPUT_DIR}/responses.jsonl"
+mpiexec -n 1 --ppn 1 matsim-agents e1-development "${MANIFEST}" --output "${OUTPUT_DIR}"
 echo "[$(date)] E1 DeepSeek collection finished"

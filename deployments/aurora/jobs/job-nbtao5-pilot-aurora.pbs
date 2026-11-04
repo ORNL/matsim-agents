@@ -2,14 +2,14 @@
 #PBS -N nbtao5-pilot
 #PBS -l select=1
 #PBS -l place=scatter
-#PBS -l walltime=00:30:00
+#PBS -l walltime=02:00:00
 #PBS -l filesystems=home:flare
-#PBS -q debug
+#PBS -q capacity
 #PBS -k doe
 #PBS -j oe
 
 set -eo pipefail
-export NBTAO5_SOFT_STOP_SECONDS=1500
+export NBTAO5_SOFT_STOP_SECONDS=6900
 REPO="${NBTAO5_REPO_ROOT:?pass NBTAO5_REPO_ROOT as the absolute checkout path with qsub -v}"
 REPO="$(realpath -e "${REPO}")"
 [[ -f "${REPO}/pyproject.toml" ]] || { echo "Invalid NBTAO5_REPO_ROOT: ${REPO}" >&2; exit 2; }

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -11,7 +11,10 @@ from pydantic import ValidationError
 from matsim_agents.workflows.e1 import (
     E1DevelopmentManifest,
     E1ScientificResponse,
+    _e1_system_prompt,
     _model_session,
+    _sha256,
+    assess_semantic_validity,
     run_e1_development,
 )
 
@@ -65,9 +68,7 @@ def _manifest() -> E1DevelopmentManifest:
 def _remote_manifest(**approval_overrides) -> E1DevelopmentManifest:
     manifest_data = _manifest().model_dump(mode="json")
     manifest_data["cohort"] = "E1-R"
-    manifest_data["candidate"].update(
-        {"provider": "openai", "model_id": "test-remote-model"}
-    )
+    manifest_data["candidate"].update({"provider": "openai", "model_id": "test-remote-model"})
     manifest_data["remote_approval"] = {
         "approval_reference": "test-only",
         "approved_by": "test",
@@ -126,6 +127,185 @@ def test_vllm_session_binds_e1_json_schema():
     )
 
 
+def test_mag_session_binds_e1_json_schema():
+    manifest = _manifest()
+    candidate = manifest.candidate.model_copy(
+        update={"provider": "mag", "model_id": "test-mag-model", "mag_provider": "cborg"}
+    )
+    captured = {}
+
+    class BindableModel:
+        def bind(self, **kwargs):
+            captured.update(kwargs)
+            return self
+
+    model = BindableModel()
+
+    def model_factory(**kwargs):
+        captured["factory_kwargs"] = kwargs
+        return model
+
+    with _model_session(candidate, manifest.decoding, model_factory) as session_model:
+        assert session_model is model
+
+    assert captured["factory_kwargs"]["provider"] == "mag"
+    assert captured["factory_kwargs"]["mag_provider"] == "cborg"
+    response_format = captured["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "E1ScientificResponse"
+    assert response_format["json_schema"]["schema"]["required"] == list(
+        E1ScientificResponse.model_fields
+    )
+
+
+def test_google_mag_session_uses_prompt_schema():
+    manifest = _manifest()
+    candidate = manifest.candidate.model_copy(
+        update={"provider": "mag", "model_id": "test-mag-model", "mag_provider": "google"}
+    )
+    captured = {}
+
+    class BindableModel:
+        def bind(self, **kwargs):
+            captured.update(kwargs)
+            return self
+
+    model = BindableModel()
+
+    def model_factory(**kwargs):
+        captured["factory_kwargs"] = kwargs
+        return model
+
+    with _model_session(candidate, manifest.decoding, model_factory) as session_model:
+        assert session_model is model
+
+    assert captured["factory_kwargs"]["mag_provider"] == "google"
+    assert "response_format" not in captured
+
+
+def test_e1_prompt_requires_exact_schema_keys():
+    prompt = _e1_system_prompt()
+
+    assert "exactly 10 keys" in prompt
+    assert all(f"- {field_name}:" in prompt for field_name in E1ScientificResponse.model_fields)
+    assert "additionalProperties" not in prompt
+    assert "Do not copy these instructions" in prompt
+
+
+ARCHIVED_V1_SYSTEM_PROMPT_HASH = "21cb5454f4f0a9780519abc84eabad5dba9d8c4d317cd15540cac32af971b314"
+
+
+def test_v1_prompt_and_manifest_hash_are_unchanged_by_prompt_variant():
+    assert _sha256(_e1_system_prompt()) == ARCHIVED_V1_SYSTEM_PROMPT_HASH
+    dumped = _manifest().model_dump(mode="json")
+    assert "prompt_variant" not in dumped
+
+
+def test_v2_prompt_describes_content_without_type_labels():
+    prompt = _e1_system_prompt("v2-field-guidance")
+
+    assert "exactly 10 keys" in prompt
+    assert all(f"- {field_name}:" in prompt for field_name in E1ScientificResponse.model_fields)
+    assert "- conclusion: string" not in prompt
+    assert "array of string values" not in prompt
+    assert _sha256(prompt) != ARCHIVED_V1_SYSTEM_PROMPT_HASH
+    manifest_data = _manifest().model_dump(mode="json")
+    manifest_data["prompt_variant"] = "v2-field-guidance"
+    manifest = E1DevelopmentManifest.model_validate(manifest_data)
+    assert manifest.model_dump(mode="json")["prompt_variant"] == "v2-field-guidance"
+
+
+def _placeholder_response(scalar: str, item: str, confidence: str = "string") -> dict:
+    data = {
+        field: [item] if field_info.annotation == list[str] else scalar
+        for field, field_info in E1ScientificResponse.model_fields.items()
+    }
+    data["confidence"] = confidence
+    return data
+
+
+@pytest.mark.parametrize(
+    "parsed",
+    [
+        _placeholder_response("string", "array of string values"),
+        _placeholder_response("string", "string", confidence="mathematical expression"),
+    ],
+)
+def test_archived_qwen_placeholder_shapes_are_placeholder_only(parsed):
+    result = assess_semantic_validity(parsed)
+
+    assert result["semantic_validity"] == "placeholder_only"
+    assert {issue["issue"] for issue in result["semantic_issues"]} == {"schema_placeholder"}
+
+
+def test_substantive_answers_with_empty_arrays_are_semantically_valid():
+    result = assess_semantic_validity(json.loads(_scientific_response()))
+
+    assert result == {"semantic_validity": "valid", "semantic_issues": []}
+
+
+def test_partly_placeholder_answer_is_semantically_invalid():
+    parsed = json.loads(_scientific_response())
+    parsed["reasoning_summary"] = "string"
+    result = assess_semantic_validity(parsed)
+
+    assert result["semantic_validity"] == "invalid"
+    assert result["semantic_issues"] == [
+        {"field": "reasoning_summary", "issue": "schema_placeholder"}
+    ]
+
+
+def test_placeholder_only_reply_is_schema_compliant_but_not_reviewable(tmp_path):
+    content = json.dumps(_placeholder_response("string", "array of string values"))
+
+    class PlaceholderModel:
+        def invoke(self, _messages):
+            return AIMessage(content=content, response_metadata={"finish_reason": "stop"})
+
+    result = run_e1_development(
+        _manifest(),
+        tmp_path,
+        model_factory=lambda **_kwargs: PlaceholderModel(),
+    )
+    records = [json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()]
+
+    assert result["state"] == "complete_with_errors"
+    assert result["completed_responses"] == 0
+    for record in records:
+        assert record["status"] == "error"
+        assert record["technical_completion"] == "completed"
+        assert record["schema_compliance"] == "compliant"
+        assert record["schema_error"] is None
+        assert record["parsed_response"] is not None
+        assert record["semantic_validity"] == "placeholder_only"
+        assert record["scientific_reviewability"] == "nonreviewable_semantic_output"
+        assert record["nonreviewable_reason"] == "placeholder_only_response"
+        assert record["raw_response"]["content"] == content
+
+
+def test_v2_manifest_sends_v2_prompt_and_records_variant(tmp_path):
+    captured = []
+
+    class FakeModel:
+        def invoke(self, messages):
+            captured.append(messages)
+            return AIMessage(content=_scientific_response())
+
+    manifest_data = _manifest().model_dump(mode="json")
+    manifest_data["prompt_variant"] = "v2-field-guidance"
+    manifest = E1DevelopmentManifest.model_validate(manifest_data)
+    result = run_e1_development(manifest, tmp_path, model_factory=lambda **_kwargs: FakeModel())
+    records = [json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()]
+
+    assert result["state"] == "complete"
+    assert result["prompt_variant"] == "v2-field-guidance"
+    assert captured[0][0].content == _e1_system_prompt("v2-field-guidance")
+    assert result["system_prompt_hash"] == _sha256(_e1_system_prompt("v2-field-guidance"))
+    assert all(record["prompt_variant"] == "v2-field-guidance" for record in records)
+    assert all(record["semantic_validity"] == "valid" for record in records)
+    assert all(record["scientific_reviewability"] == "reviewable" for record in records)
+
+
 def test_development_runner_is_restart_safe_and_excludes_held_out(tmp_path):
     calls = []
 
@@ -158,9 +338,10 @@ def test_development_runner_is_restart_safe_and_excludes_held_out(tmp_path):
     assert all(record["question_id"].startswith("D-") for record in records)
     run_metadata = json.loads((tmp_path / "run.json").read_text())
     assert run_metadata["partition"] == "development"
-    assert run_metadata["protocol_artifact_hashes"]["development_questions"] == hashlib.sha256(
-        Path("research/paper/e1/d-questions.v1.json").read_bytes()
-    ).hexdigest()
+    assert (
+        run_metadata["protocol_artifact_hashes"]["development_questions"]
+        == hashlib.sha256(Path("research/paper/e1/d-questions.v1.json").read_bytes()).hexdigest()
+    )
 
     with pytest.raises(ValidationError):
         E1DevelopmentManifest.model_validate(
@@ -384,15 +565,15 @@ def test_remote_runner_preserves_responses_and_writes_allocation_ledger(tmp_path
     )
 
     response_records = [
-        json.loads(line)
-        for line in (tmp_path / "responses.jsonl").read_text().splitlines()
+        json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()
     ]
     allocation_records = [
-        json.loads(line)
-        for line in (tmp_path / "allocation-usage.jsonl").read_text().splitlines()
+        json.loads(line) for line in (tmp_path / "allocation-usage.jsonl").read_text().splitlines()
     ]
     assert result["state"] == "complete"
-    assert all(record["raw_response"]["content"] == _scientific_response() for record in response_records)
+    assert all(
+        record["raw_response"]["content"] == _scientific_response() for record in response_records
+    )
     assert all(record["parsed_response"]["confidence"] == "low" for record in response_records)
     assert all(record["schema_error"] is None for record in response_records)
     assert len(allocation_records) == len(manifest.questions)
@@ -405,8 +586,85 @@ def test_remote_runner_preserves_responses_and_writes_allocation_ledger(tmp_path
     assert all(record["cohort"] == "E1-R" for record in allocation_records)
     assert all(record["endpoint"] == "https://api.openai.com/v1" for record in response_records)
     assert all(record["requested_model_id"] == "test-remote-model" for record in response_records)
-    assert '"required"' in captured_messages[0][0].content
-    assert "E1ScientificResponse" in captured_messages[0][0].content
+    assert "exactly 10 keys" in captured_messages[0][0].content
+    assert "- conclusion: string" in captured_messages[0][0].content
+
+
+def test_runner_records_provider_reported_model_and_route(tmp_path):
+    class IdentifiedModel:
+        def invoke(self, _messages):
+            return AIMessage(
+                content=_scientific_response(),
+                response_metadata={
+                    "model_name": "served-model-revision-7",
+                    "provider_metadata": {
+                        "mag_applied": "model=served-model-revision-7; provider=google"
+                    },
+                },
+            )
+
+    manifest = _remote_manifest()
+    result = run_e1_development(
+        manifest,
+        tmp_path,
+        model_factory=lambda **_kwargs: IdentifiedModel(),
+    )
+    records = [json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()]
+    run_metadata = json.loads((tmp_path / "run.json").read_text())
+
+    assert result["state"] == "complete"
+    assert all(record["requested_model_id"] == "test-remote-model" for record in records)
+    assert all(
+        record["provider_reported_model_id"] == "served-model-revision-7" for record in records
+    )
+    assert all(record["provider_reported_model_matches_request"] is False for record in records)
+    assert all(
+        record["provider_applied_route"] == "model=served-model-revision-7; provider=google"
+        for record in records
+    )
+    assert run_metadata["provider_reported_model_ids_observed"] == ["served-model-revision-7"]
+    assert run_metadata["revision_semantics"] == "immutable"
+
+
+@pytest.mark.parametrize(
+    ("content", "category"),
+    [
+        ("not JSON", "invalid_json"),
+        (
+            json.dumps({**json.loads(_scientific_response()), "unexpected": "value"}),
+            "unexpected_fields",
+        ),
+        (
+            json.dumps(
+                {
+                    key: value
+                    for key, value in json.loads(_scientific_response()).items()
+                    if key != "supporting_evidence"
+                }
+            ),
+            "missing_fields",
+        ),
+    ],
+)
+def test_schema_failures_are_classified_but_remain_nonreviewable(tmp_path, content, category):
+    class InvalidModel:
+        def invoke(self, _messages):
+            return AIMessage(content=content)
+
+    result = run_e1_development(
+        _manifest(),
+        tmp_path,
+        model_factory=lambda **_kwargs: InvalidModel(),
+    )
+    records = [json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()]
+
+    assert result["state"] == "complete_with_errors"
+    assert all(record["status"] == "error" for record in records)
+    assert all(record["parsed_response"] is None for record in records)
+    assert all(record["technical_failure_category"] == category for record in records)
+    assert all(
+        record["scientific_reviewability"] == "nonreviewable_technical_output" for record in records
+    )
 
 
 @pytest.mark.parametrize(
@@ -431,18 +689,14 @@ def test_development_invalid_reply_is_failed_and_nonreviewable(
         tmp_path,
         model_factory=lambda **_kwargs: InvalidModel(),
     )
-    records = [
-        json.loads(line)
-        for line in (tmp_path / "responses.jsonl").read_text().splitlines()
-    ]
+    records = [json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()]
 
     assert result["state"] == "complete_with_errors"
     assert result["completed_responses"] == 0
     assert result["failed_responses"] == len(records)
     assert all(record["status"] == "error" for record in records)
     assert all(
-        record["scientific_reviewability"] == "nonreviewable_technical_output"
-        for record in records
+        record["scientific_reviewability"] == "nonreviewable_technical_output" for record in records
     )
     assert all(record["nonreviewable_reason"] == nonreviewable_reason for record in records)
 
@@ -459,10 +713,7 @@ def test_development_runner_parses_whole_response_json_fences(tmp_path):
         tmp_path,
         model_factory=lambda **_kwargs: FencedModel(),
     )
-    records = [
-        json.loads(line)
-        for line in (tmp_path / "responses.jsonl").read_text().splitlines()
-    ]
+    records = [json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()]
 
     assert result["state"] == "complete"
     assert result["completed_responses"] == len(records)
@@ -517,10 +768,7 @@ def test_remote_truncated_reply_is_recorded_as_failed_attempt(tmp_path):
         tmp_path,
         model_factory=lambda **_kwargs: TruncatedModel(),
     )
-    records = [
-        json.loads(line)
-        for line in (tmp_path / "responses.jsonl").read_text().splitlines()
-    ]
+    records = [json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()]
 
     assert result["state"] == "complete_with_errors"
     assert all(record["status"] == "error" for record in records)
@@ -551,16 +799,13 @@ def test_remote_runner_records_errors_and_retries_only_when_requested(tmp_path):
         tmp_path,
         model_factory=lambda **_kwargs: model,
     )
-    records = [
-        json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()
-    ]
+    records = [json.loads(line) for line in (tmp_path / "responses.jsonl").read_text().splitlines()]
     assert first["state"] == "complete_with_errors"
     assert records[0]["status"] == "error"
     assert records[0]["attempt"] == 1
     assert "temporary transport error" in records[0]["error_message"]
     allocation_records = [
-        json.loads(line)
-        for line in (tmp_path / "allocation-usage.jsonl").read_text().splitlines()
+        json.loads(line) for line in (tmp_path / "allocation-usage.jsonl").read_text().splitlines()
     ]
     assert allocation_records[0]["status"] == "error"
     assert allocation_records[0]["billing_basis"] == "project_allocation"
