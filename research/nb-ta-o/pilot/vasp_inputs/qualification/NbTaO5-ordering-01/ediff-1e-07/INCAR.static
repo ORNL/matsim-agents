@@ -1,0 +1,16 @@
+SYSTEM = Nb-Ta-O NbTaO5-ordering-01-ediff-1e-07 static
+PREC = Accurate
+ENCUT = 520
+EDIFF = 1.0E-07
+ALGO = Normal
+NELM = 200
+ISPIN = 1
+ISMEAR = 0
+SIGMA = 0.05
+LREAL = .FALSE.
+LASPH = .TRUE.
+ISYM = 0
+LWAVE = .FALSE.
+LCHARG = .FALSE.
+NSW = 0
+IBRION = -1

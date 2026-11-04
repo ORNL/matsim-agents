@@ -1,0 +1,28 @@
+{
+  "case_id": "O2-triplet-box-25",
+  "category": "oxygen_reference_qualification",
+  "status": "input_candidate_not_authorized_for_execution",
+  "species_order": [
+    "O"
+  ],
+  "species_counts": {
+    "O": 2
+  },
+  "settings": {
+    "encut_eV": 520,
+    "kspacing_A^-1": 0.2,
+    "ediff_eV": 1e-06,
+    "ediffg_eV_A": -0.01
+  },
+  "gamma_only": true,
+  "input_hashes": {
+    "POSCAR": "c4d11974c1e6074a4a86bdb9b0f0f1b39696dfc00cc20272b938ea13ae2159ee",
+    "INCAR": "7c660667986f3be6065a4a577146cd5553fce203d7d563070c0e4326b6ad6ce4",
+    "INCAR.static": "a99bea7af63af26ee42e0b0b36038c229e224885c6b363e4bf6581623ed78cb7",
+    "KPOINTS": "173c9cb84af61f0b5aed93201a38a212749e02ef03767ca67a4313bfb1d56930",
+    "POTCAR.order": "aa773ac15fbffa806e80746b0b1c93f1deb5eb98dfa8ac08bdb3d5a8eb56451b"
+  },
+  "potcar_required_components": [
+    "O"
+  ]
+}

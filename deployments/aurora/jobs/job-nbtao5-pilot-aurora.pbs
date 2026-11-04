@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#PBS -N nbtao5-pilot
+#PBS -l select=1
+#PBS -l place=scatter
+#PBS -l walltime=00:30:00
+#PBS -l filesystems=home:flare
+#PBS -q debug
+#PBS -k doe
+#PBS -j oe
+
+set -eo pipefail
+export NBTAO5_SOFT_STOP_SECONDS=1500
+REPO="${NBTAO5_REPO_ROOT:?pass NBTAO5_REPO_ROOT as the absolute checkout path with qsub -v}"
+REPO="$(realpath -e "${REPO}")"
+[[ -f "${REPO}/pyproject.toml" ]] || { echo "Invalid NBTAO5_REPO_ROOT: ${REPO}" >&2; exit 2; }
+RUNNER="${REPO}/deployments/aurora/launchers/run-nbtao5-case-aurora.sh"
+[[ -x "${RUNNER}" ]] || { echo "Missing or non-executable Nb-Ta-O runner: ${RUNNER}" >&2; exit 127; }
+exec bash "${RUNNER}" production

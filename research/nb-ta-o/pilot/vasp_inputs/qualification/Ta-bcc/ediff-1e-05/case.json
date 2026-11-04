@@ -1,0 +1,28 @@
+{
+  "case_id": "Ta-bcc-ediff-1e-05",
+  "category": "crystalline_numerical_qualification",
+  "status": "input_candidate_not_authorized_for_execution",
+  "species_order": [
+    "Ta"
+  ],
+  "species_counts": {
+    "Ta": 1
+  },
+  "settings": {
+    "encut_eV": 520,
+    "kspacing_A^-1": 0.2,
+    "ediff_eV": 1e-05,
+    "ediffg_eV_A": -0.01
+  },
+  "gamma_only": false,
+  "input_hashes": {
+    "POSCAR": "dc79e55cee37db43f9610c4495189e3717f1bbf96cd521b847cb1eddbee762e6",
+    "INCAR": "5e08d5b583ca6557e6c6a4854d813bfd9a5af73c8df641879febe060a31e29e1",
+    "INCAR.static": "766fa25372b30433cb47a121a4e33b097344a566a946c9606252303ff2208c32",
+    "KPOINTS": "122e7696057e86a1097ded957e898ff26dcb16e2c8e247113553555e6f96cc8f",
+    "POTCAR.order": "952f8b45d009fa58150664e29e63ff6b7b2dd6d2d0d05984583f33f5f95aa684"
+  },
+  "potcar_required_components": [
+    "Ta_pv"
+  ]
+}

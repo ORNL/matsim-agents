@@ -410,3 +410,74 @@ def test_aurora_scripts_load_modules_through_the_shared_helper():
     }
     # The vLLM serve job reloads frameworks inside a per-node `bash -c` worker command.
     assert inline == {"deployments/aurora/jobs/job-serve-multinode-vllm-aurora.sh"}
+
+
+@pytest.mark.parametrize(
+    ("job_script", "expected_stage"),
+    [
+        ("job-nbtao5-qualification-aurora.pbs", "qualification"),
+        ("job-nbtao5-pilot-aurora.pbs", "production"),
+    ],
+)
+def test_nbtao5_pbs_jobs_use_explicit_checkout_root(tmp_path, job_script, expected_stage):
+    repo = tmp_path / "checkout"
+    runner = repo / "deployments/aurora/launchers/run-nbtao5-case-aurora.sh"
+    runner.parent.mkdir(parents=True)
+    python = repo / ".venv/bin/python"
+    python.parent.mkdir(parents=True)
+    python.write_text("#!/bin/bash\nexit 0\n", encoding="ascii")
+    python.chmod(0o755)
+    (repo / "pyproject.toml").write_text("", encoding="ascii")
+    marker = tmp_path / "runner-argument"
+    (tmp_path / "case").mkdir()
+    runner.write_text('printf "%s\\n" "$1" >"$NBTAO5_TEST_MARKER"\n', encoding="ascii")
+    runner.chmod(0o755)
+    environment = {
+        **os.environ,
+        "PBS_O_WORKDIR": "/var/spool",
+        "NBTAO5_REPO_ROOT": str(repo),
+        "NBTAO5_CASE_DIR": str(tmp_path / "case"),
+        "NBTAO5_PREFLIGHT_RECORD": str(tmp_path / "preflight.json"),
+        "NBTAO5_QUALIFICATION_AUTHORIZED": "YES",
+        "NBTAO5_RESOURCE_APPROVED": "YES",
+        "NBTAO5_PAW_RELEASE_APPROVED": "YES",
+        "NBTAO5_TEST_MARKER": str(marker),
+    }
+    result = subprocess.run(
+        ["bash", str(AURORA / "jobs" / job_script)],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert marker.read_text().strip() == expected_stage
+
+
+def test_nbtao5_qualification_job_rejects_non_executable_runner(tmp_path):
+    repo = tmp_path / "checkout"
+    runner = repo / "deployments/aurora/launchers/run-nbtao5-case-aurora.sh"
+    runner.parent.mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("", encoding="ascii")
+    runner.write_text("exit 0\n", encoding="ascii")
+    result = subprocess.run(
+        ["bash", str(AURORA / "jobs/job-nbtao5-qualification-aurora.pbs")],
+        cwd=tmp_path,
+        env={**os.environ, "NBTAO5_REPO_ROOT": str(repo)},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 127
+    assert "non-executable Nb-Ta-O runner" in result.stderr
+
+
+def test_nbtao5_preflight_requires_resource_approval():
+    script = (AURORA / "jobs/job-nbtao5-preflight-aurora.pbs").read_text()
+    assert 'NBTAO5_RESOURCE_APPROVED:-' in script
+    assert 'NBTAO5_PREFLIGHT_RESULT=${PREFLIGHT_STATUS}' in script
+    assert 'ldd "${VASP_BIN}"' in script
+    assert 'sycl-ls' in script
+    assert 'mpiexec --version' in script
+    assert 'mpiexec' in script and 'exec "${VASP_BIN}"' not in script

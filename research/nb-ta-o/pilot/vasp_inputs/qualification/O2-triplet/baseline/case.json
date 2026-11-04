@@ -1,0 +1,48 @@
+{
+  "protocol_id": "nbtao5-fixed-kmesh-v1",
+  "case_id": "O2-triplet-baseline",
+  "category": "oxygen_reference_qualification",
+  "status": "input_candidate_not_authorized_for_execution",
+  "species_order": [
+    "O"
+  ],
+  "species_counts": {
+    "O": 2
+  },
+  "settings": {
+    "encut_eV": 600,
+    "ediff_eV": 1e-06,
+    "ediffg_eV_A": -0.01
+  },
+  "gamma_only": true,
+  "kpoints": {
+    "policy": "gamma_only",
+    "center": "Gamma",
+    "target_spacing_A^-1": null,
+    "mesh_dimensions": [
+      1,
+      1,
+      1
+    ],
+    "source_structure_sha256": "7c6a047ce580872489e49767f7a2b42b46db6a8559fe3fd7f610889043334291",
+    "kpoints_sha256": "b63444fd67d0624c82d266f68e41c3ea00b4f4487ac8c59b2492f4961e918e95",
+    "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+  },
+  "acceptance_criteria": {
+    "electronic_convergence_required": true,
+    "ionic_convergence_required_for_relaxation": true,
+    "max_force_eV_A": 0.01,
+    "max_abs_principal_stress_kbar": null
+  },
+  "input_hashes": {
+    "POSCAR": "7c6a047ce580872489e49767f7a2b42b46db6a8559fe3fd7f610889043334291",
+    "INCAR": "73da42691eeefc56577ee77548305f8a1c7ec8318840758cd9732dcf68ef751c",
+    "INCAR.static": "2e3df8215e55b6cb2fc091c3fbd9ccada804e102da79dece9f1d5e732d82bab3",
+    "KPOINTS": "b63444fd67d0624c82d266f68e41c3ea00b4f4487ac8c59b2492f4961e918e95",
+    "KPOINTS.json": "30ca0f2014601ad0278f2f6b4c90b932337e604217444b5450920160eac1ba81",
+    "POTCAR.order": "aa773ac15fbffa806e80746b0b1c93f1deb5eb98dfa8ac08bdb3d5a8eb56451b"
+  },
+  "potcar_required_components": [
+    "O"
+  ]
+}

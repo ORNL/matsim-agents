@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "manifest_kind": "planning_inventory_not_executor_input",
+  "reference_role": "elemental_endpoints",
+  "method_status": "PBE candidate; homogeneous authorized PAW release unresolved",
+  "phases": {
+    "Nb-bcc": {
+      "formula": "Nb",
+      "structure_path": "research/nb-ta-o/pilot/elemental_candidates/Nb-bcc.vasp",
+      "structure_sha256": "653bbefa1b107eb2b70fe3af7e56bad1d9ed4c220fdafe87c4b6083a0b89d730",
+      "geometry_source": "ASE candidate geometry; not an approved or calculated reference",
+      "status": "geometry_candidate_pending_method_and_PAW_approval"
+    },
+    "Ta-bcc": {
+      "formula": "Ta",
+      "structure_path": "research/nb-ta-o/pilot/elemental_candidates/Ta-bcc.vasp",
+      "structure_sha256": "dc79e55cee37db43f9610c4495189e3717f1bbf96cd521b847cb1eddbee762e6",
+      "geometry_source": "ASE candidate geometry; not an approved or calculated reference",
+      "status": "geometry_candidate_pending_method_and_PAW_approval"
+    },
+    "O2-triplet": {
+      "formula": "O2",
+      "structure_path": "research/nb-ta-o/pilot/elemental_candidates/O2-triplet.vasp",
+      "structure_sha256": "6c3d023061d9f331f3a32a4fbc9df33a9a5f95e919eef094a2c5879675b8f1fb",
+      "geometry_source": "ASE candidate geometry; not an approved or calculated reference",
+      "status": "geometry_candidate_pending_method_and_PAW_approval"
+    }
+  },
+  "completeness": {
+    "complete": false,
+    "reason": "No VASP qualification or energy exists."
+  }
+}

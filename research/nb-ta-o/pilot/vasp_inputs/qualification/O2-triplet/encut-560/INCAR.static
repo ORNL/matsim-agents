@@ -1,0 +1,17 @@
+SYSTEM = Nb-Ta-O O2-triplet-encut-560 static
+PREC = Accurate
+ENCUT = 560
+EDIFF = 1.0E-06
+ALGO = Normal
+NELM = 200
+ISPIN = 2
+ISMEAR = 0
+SIGMA = 0.05
+LREAL = .FALSE.
+LASPH = .TRUE.
+ISYM = 0
+LWAVE = .FALSE.
+LCHARG = .FALSE.
+MAGMOM = 2*1.0
+NSW = 0
+IBRION = -1

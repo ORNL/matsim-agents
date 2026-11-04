@@ -1,0 +1,28 @@
+{
+  "case_id": "Ta-bcc-kspacing-0.25",
+  "category": "crystalline_numerical_qualification",
+  "status": "input_candidate_not_authorized_for_execution",
+  "species_order": [
+    "Ta"
+  ],
+  "species_counts": {
+    "Ta": 1
+  },
+  "settings": {
+    "encut_eV": 520,
+    "kspacing_A^-1": 0.25,
+    "ediff_eV": 1e-06,
+    "ediffg_eV_A": -0.01
+  },
+  "gamma_only": false,
+  "input_hashes": {
+    "POSCAR": "dc79e55cee37db43f9610c4495189e3717f1bbf96cd521b847cb1eddbee762e6",
+    "INCAR": "36ed6e7d723d4f696824a9c928853cb9dc1199e6d0c223dab5766868d139e369",
+    "INCAR.static": "9574e22eba2a2686022596b95a2c4aa49776587a3798a1cb5160fa92ad9cdf9c",
+    "KPOINTS": "ea0fcda706a62573010c9a6227f1cfd45c889bd74736509e5318861e54190e8c",
+    "POTCAR.order": "952f8b45d009fa58150664e29e63ff6b7b2dd6d2d0d05984583f33f5f95aa684"
+  },
+  "potcar_required_components": [
+    "Ta_pv"
+  ]
+}

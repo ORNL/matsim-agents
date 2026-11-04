@@ -106,10 +106,11 @@ def test_aurora_steps_bind_rank_cores_and_placed_tiles(tmp_path, name):
 
 
 @pytest.mark.parametrize("name", sorted(AURORA))
-def test_aurora_whole_node_steps_bind_nearest_tile(tmp_path, name):
+def test_aurora_whole_node_steps_bind_one_tile_per_rank(tmp_path, name):
     mask = ",".join(str(index) for index in range(12))
     args = _run_aurora(tmp_path, AURORA[name], mask, ranks_per_node=12, threads=1)
-    assert "--gpu-bind=closest" in args and "--depth=1" in args
+    assert "--gpu-bind=list:0:1:2:3:4:5:6:7:8:9:10:11" in args and "--depth=1" in args
+    assert not any("closest" in arg for arg in args)
 
 
 def _run_aurora_vllm(tmp_path, in_step):

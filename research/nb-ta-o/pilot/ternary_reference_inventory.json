@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "manifest_kind": "planning_inventory_not_executor_input",
+  "reference_role": "ternary_competitors",
+  "method_status": "proposed VASP PBE; all candidate energies absent",
+  "phases": [
+    {
+      "phase_id": "NbTaO5-parent-ordering-family",
+      "formula": "NbTaO5",
+      "candidate_manifest": "ordering_manifest.json",
+      "candidate_count": 14,
+      "source_status": "generated from experimental zeta-Nb2O5; structures are hypotheses, not observed NbTaO5 polymorphs",
+      "status": "candidate_family_pending_domain_approval_and_vasp"
+    },
+    {
+      "phase_id": "Nb4Ta2O15-diffraction-lead",
+      "formula": "Nb4Ta2O15",
+      "source_records": ["2022 mixed Nb2O5/Ta2O5 powder study"],
+      "source_status": "diffraction component reported; refined coordinates and CIF not recovered",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "blocking_unresolved_structure_lead"
+    },
+    {
+      "phase_id": "NbTaO4-hypothetical",
+      "formula": "NbTaO4",
+      "source_records": [],
+      "source_status": "proposed exact composition without verified structure source",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "exclude_from_evidence_based_hull_until_sourced"
+    },
+    {
+      "phase_id": "hexagonal-delta-and-orthorhombic-gamma-solid-solutions",
+      "formula": "Nb2O5-Ta2O5 solid solutions",
+      "source_records": ["Yamaguchi et al. 1988", "Zafrir et al. 1976"],
+      "source_status": "experimentally reported solid-solution families; exact composition-specific structures not recovered",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "outside_parent_ordering_family_pending_structure_search"
+    }
+  ],
+  "completeness": {
+    "complete": false,
+    "required_ternary_competitor": true,
+    "blocking_gaps": ["Nb4Ta2O15 coordinates", "bounded-domain decision", "all 14 ordering energies", "solid-solution structures are outside the 14-parent-ordering set"]
+  }
+}
