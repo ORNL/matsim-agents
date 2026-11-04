@@ -223,7 +223,8 @@ write_status "running" "workflow_started"
   done
 ) &
 WATCHDOG_PID=$!
-trap 'kill "${WATCHDOG_PID}" 2>/dev/null || true; wait "${WATCHDOG_PID}" 2>/dev/null || true' EXIT
+# Replaces the earlier lock-only EXIT trap, so it must also release the lock.
+trap 'kill "${WATCHDOG_PID}" 2>/dev/null || true; wait "${WATCHDOG_PID}" 2>/dev/null || true; rmdir "${LOCK_DIR}" 2>/dev/null || true' EXIT
 
 # Davidson (ALGO=Normal) hangs on Aurora when bands are split across ranks; KPAR=ranks avoids it.
 VASP_RANKS=12
