@@ -1,0 +1,29 @@
+#!/bin/bash
+#PBS -N e2-dft
+#PBS -l select=9
+#PBS -l place=scatter
+#PBS -l walltime=24:00:00
+#PBS -A HydraGNN
+#PBS -l filesystems=home:flare
+#PBS -q capacity
+#PBS -k doe
+#PBS -j oe
+# One node per staged E2 case. Pass E2_REPO and E2_CASES_ROOT with qsub -v.
+# Resubmitting resumes every unaccepted case from its last relaxation geometry.
+set -uo pipefail
+REPO="$(realpath -e "${E2_REPO:?}")"
+CASES_ROOT="$(realpath -e "${E2_CASES_ROOT:?}")"
+RUNNER="${REPO}/deployments/aurora/launchers/run-e2-dft-case-aurora.sh"
+mapfile -t NODES < <(sort -u "${PBS_NODEFILE}")
+mapfile -t CASES < <(find "${CASES_ROOT}" -mindepth 1 -maxdepth 1 -type d | sort)
+echo "[e2-dft] job=${PBS_JOBID} nodes=${#NODES[@]} cases=${#CASES[@]}"
+i=0
+for case in "${CASES[@]}"; do
+  if grep -q '"accepted"' "${case}/status.json" 2>/dev/null; then echo "[e2-dft] skip accepted $(basename "${case}")"; continue; fi
+  ((i < ${#NODES[@]})) || { echo "[e2-dft] no node left for $(basename "${case}")"; continue; }
+  MATSIM_ASSIGNED_NODES="${NODES[i]}" bash "${RUNNER}" "${case}" >"${case}/runner-${PBS_JOBID%%.*}.log" 2>&1 &
+  echo "[e2-dft] $(basename "${case}") -> ${NODES[i]} pid=$!"
+  i=$((i + 1))
+done
+wait
+for case in "${CASES[@]}"; do echo "[e2-dft] $(basename "${case}"): $(cat "${case}/status.json" 2>/dev/null)"; done

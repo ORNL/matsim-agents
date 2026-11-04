@@ -1,0 +1,12 @@
+participants:
+  - name: claude-sonnet
+    provider: mag
+    model: claude-sonnet-5-5@google
+  - name: gemini-flash
+    provider: mag
+    model: gemini-2.5-flash@google
+arms: [no_llm, single_llm, multi_llm_no_critique, multi_llm_cross_critique]
+rounds: 2
+completion_tokens_per_case: 24576
+decoding: {temperature: 0.0}
+random_seeds: [0]
