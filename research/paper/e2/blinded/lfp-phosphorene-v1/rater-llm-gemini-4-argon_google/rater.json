@@ -1,0 +1,7 @@
+{
+  "rater_id": "gemini-4-argon@google",
+  "type": "llm",
+  "independence": "vendor distinct from assessor panel (Anthropic, Google)",
+  "saw_unblinded_results": false,
+  "date": "2026-11-04"
+}

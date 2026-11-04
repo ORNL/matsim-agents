@@ -1,0 +1,46 @@
+{
+ "request_sha256_inputs": "phos-uc-force-criterion",
+ "latency_s": 7.7,
+ "mag_applied": "model=gemini-4-argon@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "ILjraoSFHJinsbwPwoy3uAI",
+  "created": 1793832992,
+  "model": "gemini-4-argon@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\"scores\": [{\"item_id\": \"item-002\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 0, \"evidence_attribution\": 1, \"uncertainty\": 0, \"follow_up\": 2, \"notes\": \"The rationale is a single generic sentence ('Admissible evidence meets the declared decision criterion.') with no physical reasoning, no specific values cited from the record, and no discussion of caveats or assumptions.\"}, {\"item_id\": \"item-020\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Thorough and accurate analysis of the force values, VASP EDIFFG settings, and internal consistency.\"}, {\"item_id\": \"item-022\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Concise, complete, and well-grounded in the provided evidence record.\"}, {\"item_id\": \"item-028\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Well-reasoned, includes helpful physical observation regarding ISIF=2 vs ionic force relaxation.\"}], \"correct_verdict_in_your_judgement\": \"supported\", \"case_notes\": \"The claim is directly supported by the single converged_dft relaxation record, which shows ediffg_eV_per_A = -0.01 (0.01 eV/A force stopping criterion), ionic_accuracy_marker = 'reached required accuracy', and final_max_force = 0.003948 eV/A <= 0.01 eV/A.\"}",
+     "role": "assistant",
+     "images": [],
+     "thinking_blocks": [],
+     "provider_specific_fields": {
+      "thought_signatures": [
+       "AY89a18Gp8GcEeazq1bKk2A1MT02QYHM5SZVq1dM1ymBnjmo0jEy+SPhtoMtoadZZ5h20zJSddfUAoELZuTa1pHzWc7ZU5QwBgC89acQj7Kge8IUOA=="
+      ]
+     }
+    },
+    "provider_specific_fields": {
+     "native_finish_reason": "STOP"
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 430,
+   "prompt_tokens": 3752,
+   "total_tokens": 4182,
+   "completion_tokens_details": {
+    "text_tokens": 430
+   },
+   "prompt_tokens_details": {
+    "text_tokens": 3752
+   }
+  },
+  "vertex_ai_grounding_metadata": [],
+  "vertex_ai_url_context_metadata": [],
+  "vertex_ai_safety_results": [],
+  "vertex_ai_citation_metadata": []
+ }
+}
