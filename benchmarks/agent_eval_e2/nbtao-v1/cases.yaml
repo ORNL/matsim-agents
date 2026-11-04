@@ -1,0 +1,216 @@
+# E2 fixed-evidence suite: Nb-Ta-O, from qualified fixed-protocol VASP runs (nbtao5-fixed-kmesh-v1).
+# Every record was qualified by scripts/verify_vasp_run.py from raw OUTCAR/OSZICAR/INCAR
+# (records: research/paper/e2/evidence/nbtao5-q1, nbtao5-q2). Expected statuses were fixed
+# before any assessor saw the packets; assessors receive only gold-free packets.
+suite_id: e2-nbtao-v1
+
+x-methods:
+  nbtao: &nbtao
+    backend: vasp
+    backend_version: 6.6.1
+    method_signature: vasp6.6.1-pbe-nonspin-encut600-ediff1e-6-ediffg0.01-gamma0.15
+    settings:
+      functional: PBE
+      potcars: [PAW_PBE Nb_pv 08Apr2002, PAW_PBE Ta_pv 07Sep2000, PAW_PBE O 08Apr2002]
+      encut_eV: 600
+      prec: Accurate
+      ispin: 1
+      ediff_eV: 1.0e-6
+      ediffg_eV_per_A: -0.01
+      kpoints: explicit Gamma-centred mesh at 0.15 1/A spacing
+      protocol_id: nbtao5-fixed-kmesh-v1
+      convergence_testing: none; fixed signature not independently convergence-tested
+
+x-records:
+  q1-relax: &q1-relax
+    kind: relaxation
+    subject: NbTaO5
+    method:
+      <<: *nbtao
+      settings:
+        <<: *nbtao
+        calculation: NbTaO5-ordering-01-baseline relax (Aurora job 9040072)
+        outcar_sha256: a8bbe557c0acd0b8d813b765d0c62e58ac0fe1ad8b320b199ffc4e1dc1a2b8f3
+        isif: 3
+        ismear: 0
+        sigma_eV: 0.05
+        kpoints_mesh: 4x8x9
+        ionic_accuracy_marker: "reached required accuracy"
+    evidence_level: converged_dft
+    outcome: measured
+    values:
+      - {name: total_energy, value: -261.77969682, unit: eV, structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms)}
+      - {name: energy_per_atom, value: -9.34927489, unit: eV/atom, structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms)}
+      - {name: final_max_force, value: 0.00846, unit: eV/A, structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms)}
+      - {name: final_max_abs_principal_stress, value: 0.636, unit: kbar, structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms)}
+      - {name: ionic_steps, value: 50, unit: count, structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms)}
+      - {name: volume_per_atom, value: 12.5548, unit: A^3/atom, structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms)}
+  q1-static: &q1-static
+    kind: relaxation
+    subject: NbTaO5
+    method:
+      <<: *nbtao
+      settings:
+        <<: *nbtao
+        calculation: NbTaO5-ordering-01-baseline static at relaxed geometry (Aurora job 9040072)
+        outcar_sha256: e4193558d5dfc6d59f08469705e9a2af405d071f0ddfdb0f52eee44814a58689
+        nsw: 0
+        ismear: 0
+        sigma_eV: 0.05
+        kpoints: regenerated from relaxed cell at 0.15 1/A
+    evidence_level: converged_dft
+    outcome: measured
+    values:
+      - {name: total_energy, value: -261.82281757, unit: eV, structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms)}
+      - {name: energy_per_atom, value: -9.35081491, unit: eV/atom, structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms)}
+      - {name: final_max_force, value: 0.00883, unit: eV/A, structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms)}
+      - {name: final_max_abs_principal_stress, value: 0.300, unit: kbar, structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms)}
+  nb-bcc: &nb-bcc
+    kind: relaxation
+    subject: Nb
+    method:
+      <<: *nbtao
+      settings:
+        <<: *nbtao
+        calculation: Nb-bcc-baseline relax (ISIF=7) + static (Aurora job 9040436)
+        outcar_sha256_relax: 7272f1b31a74e1908e21d90be514d20634729e33ad0b4bb8ecccc325ee23e06d
+        outcar_sha256_static: eb627e8b2e21ddab14ead192b5c9ec49ccdeac8305d61eb5c25e70baea09f822
+        ismear: 1
+        sigma_eV: 0.20
+        irreducible_kpoints: 195
+    evidence_level: converged_dft
+    outcome: measured
+    values:
+      - {name: energy_per_atom, value: -10.09309961, unit: eV/atom, structure: Nb-bcc (1 atom)}
+      - {name: lattice_constant, value: 3.3237, unit: A, structure: Nb-bcc (1 atom)}
+      - {name: final_max_abs_principal_stress, value: 0.423, unit: kbar, structure: Nb-bcc (1 atom)}
+  ta-bcc: &ta-bcc
+    kind: relaxation
+    subject: Ta
+    method:
+      <<: *nbtao
+      settings:
+        <<: *nbtao
+        calculation: Ta-bcc-baseline relax (ISIF=7) + static (Aurora job 9040437)
+        outcar_sha256_relax: 23bc61ce9d91649e5ba7f37e3a887ded35a985143434ed1fa6c90540f6994852
+        outcar_sha256_static: 6bcc99ff0b66e8807516fe6cd2e3639adf4dc6b4732ea12e72bd31de92e51b67
+        ismear: 1
+        sigma_eV: 0.20
+        irreducible_kpoints: 195
+    evidence_level: converged_dft
+    outcome: measured
+    values:
+      - {name: energy_per_atom, value: -11.8134321, unit: eV/atom, structure: Ta-bcc (1 atom)}
+      - {name: lattice_constant, value: 3.3192, unit: A, structure: Ta-bcc (1 atom)}
+      - {name: final_max_abs_principal_stress, value: 0.112, unit: kbar, structure: Ta-bcc (1 atom)}
+
+cases:
+  - case_id: nbtao-q1-force-criterion
+    category: supported
+    subject: NbTaO5
+    claim: >-
+      The fixed-protocol relaxation of NbTaO5 ordering 01 ended with every atomic force at or
+      below the protocol's 0.01 eV/A acceptance criterion.
+    claim_type: structure
+    criterion: {quantity: final_max_force, unit: eV/A, target_structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms), threshold: 0.01}
+    expected_status: supported
+    decisive_evidence: [relax]
+    dft_request_justified: false
+    follow_up_tests:
+      nonconverged_calculation: rerun-relaxation-from-final-geometry
+    evidence:
+      relax: *q1-relax
+
+  - case_id: nbtao-relax-energy-usable-as-reference
+    category: contradicted
+    subject: NbTaO5
+    claim: >-
+      The final energy of the ordering-01 cell relaxation can stand in for the static
+      single-point reference energy: the two agree to within 1 meV/atom.
+    claim_type: property
+    criterion: {quantity: energy_per_atom_difference_abs, unit: eV/atom, target_structure: NbTaO5-ordering-01 relax vs static, threshold: 0.001}
+    expected_status: contradicted
+    decisive_evidence: [comparison]
+    dft_request_justified: false
+    follow_up_tests:
+      missing_measurement: static-single-point-at-relaxed-geometry
+    evidence:
+      relax: *q1-relax
+      static: *q1-static
+      comparison:
+        kind: characterization
+        subject: NbTaO5
+        method:
+          backend: arithmetic
+          method_signature: energy-per-atom-difference-same-structure
+          settings:
+            formula: "|E_relax/28 - E_static/28|"
+            inputs_outcar_sha256: [a8bbe557c0acd0b8d813b765d0c62e58ac0fe1ad8b320b199ffc4e1dc1a2b8f3, e4193558d5dfc6d59f08469705e9a2af405d071f0ddfdb0f52eee44814a58689]
+        evidence_level: converged_dft
+        outcome: measured
+        values:
+          - {name: energy_per_atom_difference_abs, value: 0.00154, unit: eV/atom, structure: NbTaO5-ordering-01 relax vs static}
+
+  - case_id: nbtao-nb-ta-size-match
+    category: supported
+    subject: Nb-Ta
+    claim: >-
+      Under the fixed protocol, bcc Nb and bcc Ta have lattice constants equal to within
+      0.01 A, consistent with Nb/Ta being size-matched for mixed-cation site ordering.
+    claim_type: structure
+    criterion: {quantity: lattice_constant_difference_abs, unit: A, target_structure: Nb-bcc vs Ta-bcc, threshold: 0.01}
+    expected_status: supported
+    decisive_evidence: [comparison]
+    dft_request_justified: false
+    follow_up_tests:
+      missing_measurement: relax-nb-and-ta-bcc-same-protocol
+    evidence:
+      nb: *nb-bcc
+      ta: *ta-bcc
+      comparison:
+        kind: characterization
+        subject: Nb-Ta
+        method:
+          backend: arithmetic
+          method_signature: lattice-constant-difference-same-protocol
+          settings:
+            formula: "|a(Nb) - a(Ta)|, a = (2 V_atom)^(1/3) from relaxed CONTCAR"
+            inputs_outcar_sha256: [7272f1b31a74e1908e21d90be514d20634729e33ad0b4bb8ecccc325ee23e06d, 23bc61ce9d91649e5ba7f37e3a887ded35a985143434ed1fa6c90540f6994852]
+        evidence_level: converged_dft
+        outcome: measured
+        values:
+          - {name: lattice_constant_difference_abs, value: 0.0045, unit: A, structure: Nb-bcc vs Ta-bcc}
+
+  - case_id: nbtao-formation-energy-negative
+    category: unresolved
+    subject: NbTaO5
+    claim: >-
+      NbTaO5 ordering 01 has a negative PBE formation energy relative to bcc Nb, bcc Ta and
+      triplet O2 computed with the same protocol.
+    claim_type: thermodynamic_stability
+    criterion: {quantity: formation_energy_per_atom, unit: eV/atom, target_structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms), threshold: 0.0}
+    expected_status: unresolved
+    decisive_evidence: []
+    dft_request_justified: true
+    follow_up_tests:
+      incomplete_references: o2-triplet-reference-same-protocol
+    evidence:
+      static: *q1-static
+      nb: *nb-bcc
+      ta: *ta-bcc
+
+  - case_id: nbtao-ordering-01-lowest
+    category: unresolved
+    subject: NbTaO5
+    claim: >-
+      Ordering 01 is the lowest-energy of the five selected NbTaO5 cation orderings under the
+      fixed protocol.
+    claim_type: energy_ranking
+    criterion: {quantity: energy_per_atom_above_lowest_pilot_ordering, unit: eV/atom, target_structure: NbTaO5-ordering-01 (Nb4Ta4O20, 28 atoms), threshold: 0.0}
+    expected_status: unresolved
+    decisive_evidence: []
+    dft_request_justified: true
+    follow_up_tests:
+      missing_measurement: relax-five-pilot-orderings-same-protocol
+    evidence:
+      static: *q1-static
