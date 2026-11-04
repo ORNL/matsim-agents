@@ -94,9 +94,24 @@ out["accepted"] = bool(out["relax"]["relax_accuracy_marker"] and out["relax"]["c
 print(json.dumps({"case": case.name, "accepted": out["accepted"], "E_per_atom": out["static"]["energy_per_atom_eV"]}))
 PY
 if [[ $? -ne 0 ]]; then status summary_failed "summary parse error"; exit 1; fi
-if "${PY}" -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))["accepted"] else 1)' "${CASE}/summary.json"; then
-  status accepted "relax accuracy reached; static SCF converged"
+mapfile -t EXPECT < <("${PY}" - "${CASE}/case.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1]))
+s = c["settings"]["relax"]
+for tag in ("ENCUT", "EDIFF", "PREC", "ISPIN", "IVDW", "ISMEAR", "SIGMA"):
+    if tag in s:
+        print("--expect"); print(f"{tag}={s[tag]}")
+print("--expect-paw"); print(",".join(c["backend"]["paw"].values()))
+PY
+)
+verified=1
+"${PY}" "${REPO}/scripts/verify_vasp_run.py" "${CASE}/relax" --phase relax --max-force 0.02 "${EXPECT[@]}" \
+  -o "${CASE}/verify-relax.json" || verified=0
+"${PY}" "${REPO}/scripts/verify_vasp_run.py" "${CASE}/static" --phase static "${EXPECT[@]}" \
+  -o "${CASE}/verify-static.json" || verified=0
+if ((verified)); then
+  status accepted "raw OUTCAR/OSZICAR verification passed for relax and static"
 else
-  status rejected "see summary.json"
+  status rejected "raw verification failed; see verify-relax.json and verify-static.json"
   exit 1
 fi

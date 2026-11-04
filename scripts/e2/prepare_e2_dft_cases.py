@@ -66,7 +66,7 @@ def write_incar(path: Path, title: str, tags: dict[str, str]) -> None:
 
 
 def stage(case_dir: Path, name: str, family: str, poscar_src: Path, source: dict, paw_root: Path,
-          walltime: str, repo: Path) -> dict:
+          walltime: str, repo: Path, kmesh: tuple[int, int, int] | None = None) -> dict:
     fam = FAMILIES[family]
     case_dir.mkdir(parents=True, exist_ok=False)
     poscar = case_dir / "POSCAR"
@@ -77,7 +77,7 @@ def stage(case_dir: Path, name: str, family: str, poscar_src: Path, source: dict
         incar["MAGMOM"] = " ".join(f"{n}*{FCC_MAGMOM[s]:.1f}" for s, n in counts)
     write_incar(case_dir / "INCAR.relax", f"{name} relax", {**incar, **RELAX})
     write_incar(case_dir / "INCAR.static", f"{name} static", {**incar, **STATIC})
-    k = fam["kmesh"]
+    k = kmesh or fam["kmesh"]
     (case_dir / "KPOINTS").write_text(f"Gamma-centred\n0\nGamma\n{k[0]} {k[1]} {k[2]}\n0 0 0\n")
     potcar = b"".join((paw_root / PAW[s] / "POTCAR").read_bytes() for s, _ in counts)
     (case_dir / "POTCAR").write_bytes(potcar)
@@ -106,15 +106,26 @@ def stage(case_dir: Path, name: str, family: str, poscar_src: Path, source: dict
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", type=Path, required=True)
-    ap.add_argument("--archive", type=Path, required=True, help="matsim-agents-dft-reference checkout")
-    ap.add_argument("--archive-commit", required=True)
-    ap.add_argument("--zn-cif-poscar", type=Path, required=True)
-    ap.add_argument("--zn-cif-sha256", required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--walltime", default="12:00:00")
+    ap.add_argument("--anhydrous", nargs=3, action="append", metavar=("NAME", "POSCAR", "SOURCE_JSON"),
+                    help="stage only anhydrous Zn formate frameworks (repeatable)")
+    ap.add_argument("--archive", type=Path, help="matsim-agents-dft-reference checkout")
+    ap.add_argument("--archive-commit")
+    ap.add_argument("--zn-cif-poscar", type=Path)
+    ap.add_argument("--zn-cif-sha256")
     args = ap.parse_args()
     paw_root = (args.repo / "external/vasp6/potcar").resolve()
     records = []
+    if args.anhydrous:
+        for name, poscar, source in args.anhydrous:
+            src = json.loads(source)
+            kmesh = tuple(src.pop("kmesh"))
+            records.append(stage(args.out / "cases" / name, name, "mof", Path(poscar), src, paw_root,
+                                 args.walltime, args.repo, kmesh))
+        (args.out / "manifest.json").write_text(json.dumps(records, indent=2) + "\n")
+        print(f"staged {len(records)} cases under {args.out / 'cases'}")
+        return
     for family, prefix in (("fcc", "fcc_hea_CrMnFeCoNi_Cantor_108_"), ("bcc", "bcc_hea_NbTaVHfZrTi_equiatomic_128_")):
         for tag in ("ideal", "random1", "random2", "random3"):
             name = prefix + tag

@@ -1,0 +1,9 @@
+{
+  "suite_id": "e2-lfp-phosphorene-v1",
+  "source_run": "research/paper/e2/raw/lfp-phosphorene-v1-hvk5dot2",
+  "answers_sha256": "4c410d2ecdac8253217a99a75acd594799267d7ede9873ed1b025eecff357924",
+  "shuffle_seed": 20261104,
+  "unblinding_key_sha256": "9b27ef9535b73b111e19b45836790d5e38d1676ef9f98a47a2577adc8017e5ce",
+  "redaction": "model names replaced by [participant]; arm, model, grade and answer key removed",
+  "residual_unblinding_risk": "template-style deterministic rationales and references to peers or critique rounds can reveal the arm family"
+}

@@ -56,3 +56,27 @@ Findings:
    - consistent Li–Fe–P–O hull references.
 
    These are recommendations; none has been run.
+
+## Addendum 2026-11-04: cross-critique cost and its error
+
+Derived from the frozen raw contributions; no outputs changed.
+
+**Cost structure.** Each case makes 6 calls: 2 panellists × 2 argument rounds, plus 2 final verdicts. No-critique makes 2 calls.
+- Prompt tokens grow with the transcript: 24–45k per case, compared with 3.7–9.8k without critique.
+- Completion tokens: 8.8–15.7k per case, compared with 1.4–9.6k without critique.
+- Gemini-flash emits about 1.3–2.3× Claude's tokens per round-1 turn.
+- Total: 5.6× the prompt tokens, 4.0× the completion tokens and 4.0× the latency of no-critique.
+- On 7/8 cases, critique produced exactly the same verdict pair as independent answering.
+
+**The one error (phos-supercell-consistency).**
+- Independent answers were [contradicted, contradicted]. After critique they were [contradicted (Claude), unresolved (Gemini)].
+- Gemini moved from a correct, decidable verdict to "unresolved". It reinterpreted the 1.0175 eV/atom gap as "the premise is violated" and invoked the unspecified-scope rule.
+- `aggregate_answers` requires a strict majority, so a 1–1 split in a two-member panel becomes "unresolved".
+- The arm-level error therefore came from one panellist's critique-induced reversal plus a tie rule that gives the hedge the casting vote.
+
+**What this does and does not show.**
+- It is n = 1 from a single temperature-0 seed. It is a mechanism case study, not an error rate.
+- Testable implications:
+  - Per-panellist verdict transitions before and after critique, measured over more cases and seeds.
+  - Whether an odd-sized panel, or recording ties as "split" rather than "unresolved", changes outcomes.
+- Neither change is applied to this frozen run.
