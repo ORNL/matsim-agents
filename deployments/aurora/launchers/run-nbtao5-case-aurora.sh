@@ -227,7 +227,12 @@ WATCHDOG_PID=$!
 trap 'kill "${WATCHDOG_PID}" 2>/dev/null || true; wait "${WATCHDOG_PID}" 2>/dev/null || true; rmdir "${LOCK_DIR}" 2>/dev/null || true' EXIT
 
 # Davidson (ALGO=Normal) hangs on Aurora when bands are split across ranks; KPAR=ranks avoids it.
-VASP_RANKS=12
+# Gamma-only cases (one k-point) therefore run on a single rank.
+if [[ "$("${REPO}/.venv/bin/python" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("gamma_only"))' "${CASE_DIR}/case.json")" == "True" ]]; then
+  VASP_RANKS=1
+else
+  VASP_RANKS=12
+fi
 
 make_restartable_incar() {
   awk '!/^[[:space:]]*([Ll][Ww][Aa][Vv][Ee]|[Kk][Pp][Aa][Rr])[[:space:]]*=/ { print }
@@ -324,13 +329,14 @@ cp "${CASE_DIR}/POSCAR" "${CASE_DIR}/KPOINTS" "${CASE_DIR}/KPOINTS.json" "${CASE
 make_restartable_incar "${CASE_DIR}/INCAR" "${WORK_DIR}/relax/INCAR"
 cp "${CASE_DIR}/POTCAR" "${WORK_DIR}/static/"
 make_restartable_incar "${CASE_DIR}/INCAR.static" "${WORK_DIR}/static/INCAR"
-  "${REPO}/.venv/bin/python" - "${WORK_DIR}/provenance.json" "${WORK_DIR}" <<'PY'
+  "${REPO}/.venv/bin/python" - "${WORK_DIR}/provenance.json" "${WORK_DIR}" "${VASP_RANKS}" <<'PY'
 import hashlib
 import json
 import sys
 from pathlib import Path
 
-provenance_path, work_dir = map(Path, sys.argv[1:])
+provenance_path, work_dir = Path(sys.argv[1]), Path(sys.argv[2])
+ranks = sys.argv[3]
 record = json.loads(provenance_path.read_text())
 record["effective_incar_sha256"] = {
   phase: hashlib.sha256((work_dir / phase / "INCAR").read_bytes()).hexdigest()
@@ -341,8 +347,8 @@ record["calculation_kpoints"] = {
   for phase in ("relax",)
 }
 record["runtime_only_input_change"] = (
-  "LWAVE=.TRUE. to retain restart WAVECAR files; KPAR=12 to avoid a multi-rank Davidson "
-  "hang on Aurora (parallelization only); staged scientific inputs are unchanged"
+  f"LWAVE=.TRUE. to retain restart WAVECAR files; KPAR={ranks} on {ranks} rank(s) to avoid a "
+  "multi-rank Davidson hang on Aurora (parallelization only); staged scientific inputs are unchanged"
 )
 provenance_path.write_text(json.dumps(record, indent=2) + "\n")
 PY
