@@ -47,7 +47,10 @@ for case in dict.fromkeys(i["case"] for i in items):
         raw_path.write_text(json.dumps({"request_sha256_inputs": case, "latency_s": round(time.time() - t0, 1),
                                         "mag_applied": applied, "response": payload}, indent=1))
     data = json.loads(raw_path.read_text())["response"]
-    parsed = json.loads(data["choices"][0]["message"]["content"])
+    content = data["choices"][0]["message"]["content"].strip()
+    if content.startswith("```"):
+        content = content.split("\n", 1)[1].rsplit("```", 1)[0]
+    parsed = json.loads(content)
     for s in parsed["scores"]:
         scores[s["item_id"]] = s
     print(case, "->", parsed.get("correct_verdict_in_your_judgement"), flush=True)

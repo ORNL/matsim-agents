@@ -1,0 +1,40 @@
+{
+  "backend": null,
+  "backend_version": null,
+  "created_at_utc": "2026-11-04T23:37:09.724210Z",
+  "energy_reference": null,
+  "evidence_level": "hypothesis",
+  "model_checkpoint_hash": null,
+  "model_identifier": null,
+  "numerical_settings": {
+    "participants": [
+      {
+        "api_key_env": null,
+        "base_url": null,
+        "max_completion_tokens": null,
+        "model": "claude-sonnet-5-5@google",
+        "name": "claude-sonnet",
+        "provider": "mag",
+        "role": "independent scientific reviewer",
+        "server": null
+      },
+      {
+        "api_key_env": null,
+        "base_url": null,
+        "max_completion_tokens": null,
+        "model": "gemini-2.5-flash@google",
+        "name": "gemini-flash",
+        "provider": "mag",
+        "role": "independent scientific reviewer",
+        "server": null
+      }
+    ],
+    "rounds": 2
+  },
+  "parent_dataset_id": null,
+  "parent_run_id": null,
+  "random_seed": null,
+  "software_versions": {},
+  "units": {},
+  "workflow": "scientific_hypothesis_debate"
+}
