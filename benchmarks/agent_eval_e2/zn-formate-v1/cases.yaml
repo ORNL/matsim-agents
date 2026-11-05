@@ -1,0 +1,168 @@
+suite_id: e2-zn-formate-v1
+
+x-common-settings: &common-settings
+  functional: PBE-D3(BJ)
+  paw: [Zn, H, C, O]
+  encut_eV: 520
+  prec: Accurate
+  ediff_eV: 1.0e-6
+  ispin: 1
+  ismear: 0
+  sigma_eV: 0.05
+  ivdw: 12
+  relax: {ibrion: 2, isif: 3, nsw: 200, ediffg_eV_A: -0.02}
+  acceptance: {max_force_eV_A: 0.02}
+  software_build: Aurora Intel GPU build
+
+x-method:
+  backend: vasp
+  backend_version: 6.6.1
+  method_signature: vasp6.6.1-pbe-d3bj-encut520-ediff1e-6-gamma-mof-v1
+
+x-records:
+  alpha-relax: &alpha-relax
+    kind: relaxation
+    subject: Zn3(HCOO)6 alpha framework
+    method:
+      backend: vasp
+      backend_version: 6.6.1
+      method_signature: vasp6.6.1-pbe-d3bj-encut520-ediff1e-6-gamma-mof-v1
+      settings:
+        <<: *common-settings
+        calculation: COD 4515120 alpha, relaxation
+        job_id: 9040323
+        kpoints: Gamma 3x4x3
+        natoms: 108
+        energy_eV: -670.85347085
+        max_force_eV_A: 0.0198301694
+        max_abs_principal_stress_kbar: 0.300641
+        ionic_steps: 65
+        qualification_record: e2-dft-znformate-anhydrous-v1-20261104/cases/zn_formate_alpha_Zn3HCOO6_COD4515120/verify-relax.json
+    evidence_level: converged_dft
+    outcome: measured
+    values:
+      - {name: max_force, value: 0.0198301694, unit: eV/A, structure: Zn3(HCOO)6-alpha-COD4515120-relax}
+
+  pbcn-relax: &pbcn-relax
+    kind: relaxation
+    subject: Zn(HCOO)2 Pbcn framework
+    method:
+      backend: vasp
+      backend_version: 6.6.1
+      method_signature: vasp6.6.1-pbe-d3bj-encut520-ediff1e-6-gamma-mof-v1
+      settings:
+        <<: *common-settings
+        calculation: COD 7205949 Pbcn, relaxation
+        job_id: 9040323
+        kpoints: Gamma 4x2x2
+        natoms: 216
+        energy_eV: -1341.76370045
+        max_force_eV_A: 0.0197717654
+        max_abs_principal_stress_kbar: 0.4816
+        ionic_steps: 107
+        qualification_record: e2-dft-znformate-anhydrous-v1-20261104/cases/zn_formate_lonsdaleite_Pbcn_COD7205949/verify-relax.json
+    evidence_level: converged_dft
+    outcome: measured
+    values:
+      - {name: max_force, value: 0.0197717654, unit: eV/A, structure: Zn(HCOO)2-Pbcn-COD7205949-relax}
+
+  dihydrate-relax: &dihydrate-relax
+    kind: relaxation
+    subject: Zn(HCOO)2.2H2O dihydrate
+    method:
+      backend: vasp
+      backend_version: 6.6.1
+      method_signature: vasp6.6.1-pbe-d3bj-encut520-ediff1e-6-gamma-mof-v1
+      settings:
+        <<: *common-settings
+        calculation: COD 7102783 dihydrate, relaxation
+        job_id: 9040206
+        kpoints: Gamma 3x4x3
+        natoms: 60
+        energy_eV: -344.15531870
+        max_force_eV_A: 0.0169179773
+        max_abs_principal_stress_kbar: 0.220681
+        qualification_record: e2-dft-v1-20261104/cases/zn_formate_dihydrate_COD7102783/verify-relax.json
+    evidence_level: converged_dft
+    outcome: measured
+    values:
+      - {name: max_force, value: 0.0169179773, unit: eV/A, structure: Zn(HCOO)2-2H2O-COD7102783-relax}
+
+  polymorph-energy-comparison: &polymorph-energy-comparison
+    kind: characterization
+    subject: Zn(HCOO)2 guest-free anhydrous polymorphs
+    method:
+      backend: arithmetic
+      method_signature: static-energy-per-atom-comparison-v1
+      settings:
+        calculation: Static sigma-zero energies normalized by atom count
+        functional: PBE-D3(BJ)
+        alpha_total_energy_eV: -670.89296251
+        alpha_natoms: 108
+        alpha_kpoints: Gamma 3x4x3
+        pbcn_total_energy_eV: -1341.77791177
+        pbcn_natoms: 216
+        pbcn_kpoints: Gamma 4x2x2
+        absolute_difference_eV_per_atom: 0.0000370989
+        qualification_records:
+          - e2-dft-znformate-anhydrous-v1-20261104/cases/zn_formate_alpha_Zn3HCOO6_COD4515120/verify-static.json
+          - e2-dft-znformate-anhydrous-v1-20261104/cases/zn_formate_lonsdaleite_Pbcn_COD7205949/verify-static.json
+        interpretation_limit: Computed finite-mesh ordering only; not a convergence-qualified polymorph stability ranking.
+    evidence_level: converged_dft
+    outcome: measured
+    values:
+      - {name: static_energy_per_atom, value: -6.2119718751, unit: eV/atom, structure: Zn3(HCOO)6-alpha-COD4515120-static}
+      - {name: static_energy_per_atom, value: -6.2119347767, unit: eV/atom, structure: Zn(HCOO)2-Pbcn-COD7205949-static}
+
+cases:
+  - case_id: zn-alpha-force-criterion
+    category: supported
+    subject: Zn3(HCOO)6 alpha framework
+    claim: The recorded COD 4515120 alpha-framework relaxation ended with maximum atomic force at or below 0.02 eV/A.
+    claim_type: property
+    criterion: {quantity: max_force, unit: eV/A, target_structure: Zn3(HCOO)6-alpha-COD4515120-relax, threshold: 0.02}
+    expected_status: supported
+    decisive_evidence: [relax]
+    dft_request_justified: false
+    scope_sufficient: true
+    scope_description: This is only the recorded relaxation criterion for the guest-free COD 4515120 model; it makes no polymorph-stability claim.
+    evidence: {relax: *alpha-relax}
+
+  - case_id: zn-pbcn-force-criterion
+    category: supported
+    subject: Zn(HCOO)2 Pbcn framework
+    claim: The recorded COD 7205949 Pbcn relaxation ended with maximum atomic force at or below 0.02 eV/A.
+    claim_type: property
+    criterion: {quantity: max_force, unit: eV/A, target_structure: Zn(HCOO)2-Pbcn-COD7205949-relax, threshold: 0.02}
+    expected_status: supported
+    decisive_evidence: [relax]
+    dft_request_justified: false
+    scope_sufficient: true
+    scope_description: This is only the recorded relaxation criterion for the guest-free COD 7205949 model; it makes no polymorph-stability claim.
+    evidence: {relax: *pbcn-relax}
+
+  - case_id: zn-dihydrate-force-criterion
+    category: supported
+    subject: Zn(HCOO)2.2H2O dihydrate
+    claim: The recorded COD 7102783 dihydrate relaxation ended with maximum atomic force at or below 0.02 eV/A.
+    claim_type: property
+    criterion: {quantity: max_force, unit: eV/A, target_structure: Zn(HCOO)2-2H2O-COD7102783-relax, threshold: 0.02}
+    expected_status: supported
+    decisive_evidence: [relax]
+    dft_request_justified: false
+    scope_sufficient: true
+    scope_description: This is only the recorded relaxation criterion for COD 7102783; it is not an anhydrous-polymorph comparison.
+    evidence: {relax: *dihydrate-relax}
+
+  - case_id: zn-alpha-pbcn-static-energy-order
+    category: supported
+    subject: Zn(HCOO)2 guest-free anhydrous polymorphs
+    claim: For the two recorded static calculations, the alpha COD 4515120 model has a lower sigma-zero energy per atom than the Pbcn COD 7205949 model.
+    claim_type: property
+    criterion: {quantity: static_energy_per_atom, unit: eV/atom, target_structure: Zn3(HCOO)6-alpha-COD4515120-static, comparison_structure: Zn(HCOO)2-Pbcn-COD7205949-static}
+    expected_status: supported
+    decisive_evidence: [comparison]
+    dft_request_justified: false
+    scope_sufficient: true
+    scope_description: The claim concerns only the computed energies from these two finite meshes. The difference is 0.037 meV/atom and is not a robust stability or convergence-qualified ranking.
+    evidence: {comparison: *polymorph-energy-comparison}

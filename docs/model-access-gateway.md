@@ -138,6 +138,17 @@ resolved config, run metadata, or manifests. Responses retain MAG's
 manifest-supplied development questions; this integration does not authorize
 or launch the study.
 
+E1 uses provider-specific structured-output handling: vLLM and MAG/CBORG receive
+the strict JSON Schema as a response-format parameter; prompt-only routes receive
+an equivalent compact field/type contract because schema binding has caused
+incompatible requests on some routes. Every response is still validated against the exact
+ten-field E1 schema, and malformed, extra-field, missing-field, or truncated
+output remains a technical failure rather than being normalized into a scientific
+pass. Run records separate the requested model alias from the model and applied
+route reported by the provider, when supplied. Provider-reported metadata can
+help detect route changes but does not establish an immutable backend revision;
+mutable aliases remain identified as such in the manifest.
+
 ## Official resources
 
 - [MAG overview](https://amsc-docs-d762d2.gitlab.io/model-access-gateway/)

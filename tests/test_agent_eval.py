@@ -10,15 +10,28 @@ from langchain_core.messages import AIMessage
 from matsim_agents.campaign.agent_eval import (
     AgentAnswer,
     AgentEvalConfig,
+    AgentEvalPacket,
+    DecisionCriterion,
     aggregate_answers,
+    assessment_packet,
     case_prompt,
+    deterministic_evidence_assessment,
     grade_answer,
     load_suite,
     parse_answer,
     run_agent_eval,
 )
 from matsim_agents.campaign.benchmark import BenchmarkArm
-from matsim_agents.execution.ledger import EvidenceLedger
+from matsim_agents.execution.contracts import EvidenceLevel
+from matsim_agents.execution.ledger import (
+    EvidenceLedger,
+    EvidenceOutcome,
+    EvidenceRecord,
+    HypothesisRecord,
+    HypothesisStatus,
+    LedgerQuantity,
+    MethodRecord,
+)
 from matsim_agents.workflows.debate import DebateParticipant
 
 SUITE = Path(__file__).resolve().parents[1] / "benchmarks" / "agent_eval"
@@ -75,6 +88,66 @@ def _ledger(tmp_path, case_id):
         for label, spec in case.evidence.items()
     }
     return case, records, ledger
+
+
+def _synthetic_packet(
+    tmp_path,
+    *,
+    value=0.0,
+    reference_complete=True,
+    outcome=EvidenceOutcome.MEASURED,
+    scope_sufficient=True,
+    quantity="energy_above_hull",
+    follow_up_tests=None,
+):
+    ledger = EvidenceLedger(tmp_path / "synthetic-evidence.jsonl")
+    record = ledger.append(
+        EvidenceRecord(
+            kind="stability",
+            subject="synthetic-SiC",
+            campaign_id="synthetic-dea-test-only",
+            task_id="synthetic-case",
+            method=MethodRecord(
+                backend="synthetic",
+                method_signature="synthetic-pbe-test-fixture",
+                settings={"functional": "PBE", "encut_eV": 500},
+            ),
+            evidence_level=EvidenceLevel.CONVERGED_DFT,
+            outcome=outcome,
+            values=(
+                [
+                    LedgerQuantity(
+                        name=quantity,
+                        value=value,
+                        unit="eV/atom",
+                        structure="synthetic-SiC-3C",
+                    )
+                ]
+                if value is not None
+                else []
+            ),
+            reference_complete=reference_complete,
+            failure_reason="synthetic geometry did not converge"
+            if outcome != EvidenceOutcome.MEASURED
+            else None,
+        )
+    )
+    packet = AgentEvalPacket(
+        subject="synthetic-SiC",
+        claim="Synthetic 3C-SiC is on the declared PBE hull.",
+        claim_type="thermodynamic_stability",
+        criterion=DecisionCriterion(
+            quantity="energy_above_hull",
+            unit="eV/atom",
+            target_structure="synthetic-SiC-3C",
+            threshold=0.0,
+        ),
+        scope_sufficient=scope_sufficient,
+        scope_description="Synthetic fixture only; not scientific E2 evidence.",
+        follow_up_tests=follow_up_tests or {},
+        evidence={"synthetic-hull": record},
+    )
+    return packet, record, ledger
 
 
 def test_bundled_suite_covers_every_category_and_enters_a_ledger(tmp_path):
@@ -260,9 +333,135 @@ def test_example_config_is_valid():
 
 def test_case_prompt_lists_ids_and_rules(tmp_path):
     case, records, _ = _ledger(tmp_path, "sic-6h-incomplete-references")
-    prompt = case_prompt(case, records)
+    packet = assessment_packet(case, records)
+    prompt = case_prompt(packet)
     assert records["partial-hull"].evidence_id in prompt
     assert "complete reference phases" in prompt and case.claim in prompt
+    assert "expected_status" not in prompt and "dft_request_justified" not in prompt
+
+
+def test_deterministic_assessor_uses_only_admissible_packet_evidence(tmp_path):
+    suite = load_suite(SUITE)
+    for case in suite.cases:
+        case, records, ledger = _ledger(tmp_path, case.case_id)
+        packet = assessment_packet(case, records)
+        assert not {"expected_status", "decisive_evidence", "dft_request_justified"} & set(
+            packet.model_dump()
+        )
+        answer = deterministic_evidence_assessment(packet, ledger)
+        assert answer.status == case.expected_status, case.case_id
+        assert answer.request_dft == case.dft_request_justified, case.case_id
+
+
+@pytest.mark.parametrize(("value", "expected"), [(0.0, "supported"), (0.12, "contradicted")])
+def test_synthetic_dea_decides_supported_and_contradicted_hulls(tmp_path, value, expected):
+    packet, record, ledger = _synthetic_packet(tmp_path, value=value)
+
+    answer = deterministic_evidence_assessment(packet, ledger)
+
+    assert answer.status == expected
+    assert answer.evidence_ids == [record.evidence_id]
+
+
+def test_synthetic_incomplete_hull_is_unresolved_after_shared_validation(tmp_path):
+    packet, record, ledger = _synthetic_packet(
+        tmp_path,
+        value=0.0,
+        reference_complete=False,
+        follow_up_tests={"incomplete_references": "add-missing-reference-phases"},
+    )
+    raw_numeric_predicate = packet.criterion.threshold >= 0.0
+    validator_problems = ledger.problems(
+        HypothesisRecord(
+            hypothesis_id="synthetic-raw-assessment",
+            claim_type=packet.claim_type,
+            scientific_claim=packet.claim,
+            status=HypothesisStatus.SUPPORTED,
+            evidence_ids=[record.evidence_id],
+        )
+    )
+
+    answer = deterministic_evidence_assessment(packet, ledger)
+
+    assert raw_numeric_predicate
+    assert any("complete reference phases" in problem for problem in validator_problems)
+    assert answer.status == "unresolved"
+    assert answer.proposed_test_ids == ["add-missing-reference-phases"]
+
+
+def test_synthetic_failed_geometry_is_unresolved_not_contradicted(tmp_path):
+    packet, _, ledger = _synthetic_packet(
+        tmp_path,
+        value=0.12,
+        outcome=EvidenceOutcome.NOT_CONVERGED,
+        follow_up_tests={"nonconverged_calculation": "repeat-relaxation-to-force-threshold"},
+    )
+
+    answer = deterministic_evidence_assessment(packet, ledger)
+
+    assert answer.status == "unresolved"
+    assert answer.evidence_ids == []
+    assert answer.proposed_test_ids == ["repeat-relaxation-to-force-threshold"]
+
+
+def test_synthetic_scope_exceeding_claim_is_unresolved(tmp_path):
+    packet, _, ledger = _synthetic_packet(
+        tmp_path,
+        value=0.0,
+        scope_sufficient=False,
+        follow_up_tests={"scope_gap": "expand-declared-reference-domain"},
+    )
+
+    answer = deterministic_evidence_assessment(packet, ledger)
+
+    assert answer.status == "unresolved"
+    assert answer.evidence_ids == []
+    assert answer.proposed_test_ids == ["expand-declared-reference-domain"]
+
+
+def test_synthetic_missing_measurement_selects_specific_discriminating_test(tmp_path):
+    packet, _, ledger = _synthetic_packet(
+        tmp_path,
+        value=None,
+        quantity="other_reported_quantity",
+        follow_up_tests={"missing_measurement": "compute-target-energy-above-hull"},
+    )
+
+    answer = deterministic_evidence_assessment(packet, ledger)
+
+    assert answer.status == "unresolved"
+    assert answer.proposed_test_ids == ["compute-target-energy-above-hull"]
+
+
+def test_synthetic_measured_evidence_does_not_select_missing_measurement_test(tmp_path):
+    packet, _, ledger = _synthetic_packet(
+        tmp_path,
+        follow_up_tests={"missing_measurement": "compute-target-energy-above-hull"},
+    )
+
+    answer = deterministic_evidence_assessment(packet, ledger)
+
+    assert answer.status == "supported"
+    assert answer.proposed_test_ids == []
+
+
+def test_synthetic_packet_and_llm_prompt_exclude_grading_labels(tmp_path):
+    packet, _, _ = _synthetic_packet(
+        tmp_path,
+        follow_up_tests={"missing_measurement": "compute-target-energy-above-hull"},
+    )
+    serialized = packet.model_dump(mode="json")
+    prompt = case_prompt(packet)
+
+    assert not {
+        "expected_status",
+        "decisive_evidence",
+        "dft_request_justified",
+    } & set(serialized)
+    assert "expected_status" not in prompt
+    assert "decisive_evidence" not in prompt
+    assert "dft_request_justified" not in prompt
+    assert "compute-target-energy-above-hull" in prompt
 
 
 def test_run_compares_arms_at_equal_budget_and_keeps_an_audit_trail(tmp_path):
@@ -280,8 +479,7 @@ def test_run_compares_arms_at_equal_budget_and_keeps_an_audit_trail(tmp_path):
     result = run_agent_eval(SUITE, config, output_dir=tmp_path, model_factory=factory)
     summary = {s.arm: s for s in result.summaries}
     n_cases = len(load_suite(SUITE).cases)
-    n_unresolved = sum(c.expected_status == "unresolved" for c in load_suite(SUITE).cases)
-    assert summary[BenchmarkArm.NO_LLM].metrics["correct"] == pytest.approx(n_unresolved / n_cases)
+    assert summary[BenchmarkArm.NO_LLM].metrics["correct"] == 1.0
     assert summary[BenchmarkArm.NO_LLM].llm_cost["calls"] == 0
     for arm in config.arms[1:]:
         assert summary[arm].metrics["correct"] == 1.0, arm
@@ -297,7 +495,7 @@ def test_run_compares_arms_at_equal_budget_and_keeps_an_audit_trail(tmp_path):
         for c in result.comparisons
         if c.metric == "correct" and c.treatment == BenchmarkArm.SINGLE_LLM
     )
-    assert comparison.n_pairs == n_cases and comparison.mean_difference > 0
+    assert comparison.n_pairs == n_cases and comparison.mean_difference == 0
     run_dir = Path(result.run_dir)
     answers = [json.loads(line) for line in (run_dir / "answers.jsonl").read_text().splitlines()]
     assert len(answers) == n_cases * len(config.arms)
@@ -383,4 +581,4 @@ def test_cli_reports_arms_and_comparisons(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert "single_llm: correct 1.00" in result.output
-    assert "single_llm - no_llm correct: +0.500" in result.output
+    assert "single_llm - no_llm correct: +0.000" in result.output

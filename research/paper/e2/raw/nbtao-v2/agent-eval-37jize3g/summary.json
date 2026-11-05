@@ -1,0 +1,145 @@
+{
+  "config": {
+    "participants": [
+      {
+        "name": "claude-sonnet",
+        "provider": "mag",
+        "model": "claude-sonnet-5-5@google",
+        "base_url": null,
+        "server": null,
+        "role": "independent scientific reviewer",
+        "max_completion_tokens": null,
+        "api_key_env": null
+      },
+      {
+        "name": "gemini-flash",
+        "provider": "mag",
+        "model": "gemini-2.5-flash@google",
+        "base_url": null,
+        "server": null,
+        "role": "independent scientific reviewer",
+        "max_completion_tokens": null,
+        "api_key_env": null
+      }
+    ],
+    "arms": [
+      "no_llm",
+      "single_llm",
+      "multi_llm_no_critique",
+      "multi_llm_cross_critique"
+    ],
+    "rounds": 2,
+    "completion_tokens_per_case": 24576,
+    "decoding": {
+      "temperature": 0.0
+    },
+    "random_seeds": [
+      0
+    ],
+    "comparisons": [
+      [
+        "single_llm",
+        "no_llm"
+      ],
+      [
+        "multi_llm_no_critique",
+        "single_llm"
+      ],
+      [
+        "multi_llm_cross_critique",
+        "multi_llm_no_critique"
+      ]
+    ],
+    "confidence_level": 0.95
+  },
+  "suite_id": "e2-nbtao-v2",
+  "protocol_digest": "3f12af633ee9c1e118a3c695ad0d1e6ec6df013ef9ed254765186dd7cfa20604",
+  "run_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/research/paper/e2/raw/nbtao-v2/agent-eval-37jize3g",
+  "summaries": [
+    {
+      "arm": "no_llm",
+      "answers": 1,
+      "metrics": {
+        "correct": 1.0,
+        "evidence_attribution": 1.0,
+        "correctly_inconclusive": 0.0,
+        "dft_request_correct": 1.0
+      },
+      "llm_cost": {
+        "calls": 0.0,
+        "prompt_tokens": 0.0,
+        "completion_tokens": 0.0,
+        "latency_s": 0.0,
+        "parse_failures": 0.0
+      },
+      "numerical_cost": {
+        "dft_calculations": 0,
+        "dft_requests": 0
+      }
+    },
+    {
+      "arm": "single_llm",
+      "answers": 1,
+      "metrics": {
+        "correct": 1.0,
+        "evidence_attribution": 1.0,
+        "correctly_inconclusive": 0.0,
+        "dft_request_correct": 1.0
+      },
+      "llm_cost": {
+        "calls": 1.0,
+        "prompt_tokens": 2059.0,
+        "completion_tokens": 1080.0,
+        "latency_s": 12.568,
+        "parse_failures": 0.0
+      },
+      "numerical_cost": {
+        "dft_calculations": 0,
+        "dft_requests": 0
+      }
+    },
+    {
+      "arm": "multi_llm_no_critique",
+      "answers": 1,
+      "metrics": {
+        "correct": 1.0,
+        "evidence_attribution": 1.0,
+        "correctly_inconclusive": 0.0,
+        "dft_request_correct": 1.0
+      },
+      "llm_cost": {
+        "calls": 2.0,
+        "prompt_tokens": 3622.0,
+        "completion_tokens": 1630.0,
+        "latency_s": 12.267,
+        "parse_failures": 0.0
+      },
+      "numerical_cost": {
+        "dft_calculations": 0,
+        "dft_requests": 0
+      }
+    },
+    {
+      "arm": "multi_llm_cross_critique",
+      "answers": 1,
+      "metrics": {
+        "correct": 1.0,
+        "evidence_attribution": 1.0,
+        "correctly_inconclusive": 0.0,
+        "dft_request_correct": 1.0
+      },
+      "llm_cost": {
+        "calls": 6.0,
+        "prompt_tokens": 24563.0,
+        "completion_tokens": 10886.0,
+        "latency_s": 72.126,
+        "parse_failures": 0.0
+      },
+      "numerical_cost": {
+        "dft_calculations": 0,
+        "dft_requests": 0
+      }
+    }
+  ],
+  "comparisons": []
+}

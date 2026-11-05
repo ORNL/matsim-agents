@@ -51,6 +51,9 @@ from matsim_agents.workflows.debate import (
 )
 
 Verdict = Literal["supported", "contradicted", "unresolved"]
+FollowUpReason = Literal[
+    "scope_gap", "incomplete_references", "nonconverged_calculation", "missing_measurement"
+]
 AGENT_ARMS = (
     BenchmarkArm.NO_LLM,
     BenchmarkArm.SINGLE_LLM,
@@ -119,17 +122,37 @@ class CaseEvidence(BaseModel):
         )
 
 
+class DecisionCriterion(BaseModel):
+    """Machine-readable proposition predicate shared by every evaluation arm."""
+
+    quantity: str
+    unit: str
+    target_structure: str
+    threshold: float | None = None
+    comparison_structure: str | None = None
+
+    @model_validator(mode="after")
+    def _one_comparison_mode(self) -> DecisionCriterion:
+        if (self.threshold is None) == (self.comparison_structure is None):
+            raise ValueError("criterion needs either a threshold or a comparison_structure")
+        return self
+
+
 class AgentEvalCase(BaseModel):
     case_id: str
     category: str
     subject: str
     claim: str
     claim_type: ClaimType
+    criterion: DecisionCriterion
     expected_status: Verdict
     decisive_evidence: list[str] = Field(
         default_factory=list, description="Labels of evidence a decisive answer must cite."
     )
     dft_request_justified: bool
+    scope_sufficient: bool | None = None
+    scope_description: str | None = None
+    follow_up_tests: dict[FollowUpReason, str] = Field(default_factory=dict)
     evidence: dict[str, CaseEvidence] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -151,6 +174,34 @@ class AgentEvalSuite(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("agent-eval case_ids must be unique")
         return self
+
+
+class AgentEvalPacket(BaseModel):
+    """Gold-free assessment input; intentionally excludes expected labels and scoring fields."""
+
+    subject: str
+    claim: str
+    claim_type: ClaimType
+    criterion: DecisionCriterion
+    scope_sufficient: bool | None = None
+    scope_description: str | None = None
+    follow_up_tests: dict[FollowUpReason, str] = Field(default_factory=dict)
+    evidence: dict[str, EvidenceRecord] = Field(default_factory=dict)
+
+
+def assessment_packet(
+    case: AgentEvalCase, records: dict[str, EvidenceRecord]
+) -> AgentEvalPacket:
+    return AgentEvalPacket(
+        subject=case.subject,
+        claim=case.claim,
+        claim_type=case.claim_type,
+        criterion=case.criterion,
+        scope_sufficient=case.scope_sufficient,
+        scope_description=case.scope_description,
+        follow_up_tests=case.follow_up_tests,
+        evidence=records,
+    )
 
 
 def load_suite(suite_dir: str | Path) -> AgentEvalSuite:
@@ -233,6 +284,7 @@ class AgentAnswer(BaseModel):
     status: Verdict
     evidence_ids: list[str] = Field(default_factory=list)
     request_dft: bool = False
+    proposed_test_ids: list[str] = Field(default_factory=list)
     rationale: str = ""
 
 
@@ -286,9 +338,10 @@ class AgentEvalResult(BaseModel):
 
 ANSWER_FORMAT = """Return JSON only, with this exact structure:
 {"status": "supported|contradicted|unresolved", "evidence_ids": ["ev-..."],
- "request_dft": true|false, "rationale": "..."}
+ "request_dft": true|false, "proposed_test_ids": ["test-id"], "rationale": "..."}
 Cite evidence only by the evidence_id values given. "supported" or "contradicted" must cite the
-evidence that decides the claim. Do not wrap the JSON in Markdown."""
+evidence that decides the claim. Select follow-up tests only from the provided options. Do not wrap
+the JSON in Markdown."""
 
 _RULES = """Rules for judging the claim:
 - A failed_to_compute or not_converged record is not evidence for or against a material.
@@ -297,33 +350,112 @@ _RULES = """Rules for judging the claim:
 - An energy_ranking claim needs at least MLIP relaxation evidence of kind energy_ranking or
   stability.
 - When admissible records disagree, the claim is unresolved.
+- Evidence that does not cover the claim's stated scope cannot support a decisive verdict.
 - Answer unresolved when the evidence does not decide the claim, and request DFT only when a DFT
-  calculation could decide it."""
+    calculation could decide it. Select a follow-up test only when it addresses a visible evidence
+    gap, and only from the provided options."""
 
 
-def case_prompt(case: AgentEvalCase, records: dict[str, EvidenceRecord]) -> str:
+def case_prompt(packet: AgentEvalPacket) -> str:
     """The question put to every arm: the claim, its evidence, and the rules."""
     evidence = [
         record.model_dump(
             mode="json",
-            include={
-                "evidence_id",
-                "kind",
-                "subject",
-                "method",
-                "evidence_level",
-                "outcome",
-                "values",
-                "reference_complete",
-                "failure_reason",
-            },
         )
-        for record in records.values()
+        for record in packet.evidence.values()
     ]
     return (
-        f"Claim ({case.claim_type}) about {case.subject}: {case.claim}\n\n"
+        f"Claim ({packet.claim_type}) about {packet.subject}: {packet.claim}\n"
+        f"Decision criterion: {packet.criterion.model_dump_json()}\n\n"
+        f"Scope sufficient: {packet.scope_sufficient}; scope: "
+        f"{packet.scope_description or 'not specified'}\n"
+        f"Available follow-up tests: {json.dumps(packet.follow_up_tests, sort_keys=True)}\n\n"
         f"Evidence records:\n{json.dumps(evidence, indent=1) if evidence else 'none'}\n\n"
         f"{_RULES}\n\nDoes the evidence support, contradict, or leave the claim unresolved?"
+    )
+
+
+def deterministic_evidence_assessment(
+    packet: AgentEvalPacket, ledger: EvidenceLedger
+) -> AgentAnswer:
+    """Classify admissible packet evidence without consulting gold labels."""
+    criterion = packet.criterion
+    decisions: dict[Verdict, list[str]] = {"supported": [], "contradicted": []}
+    unresolved_reasons: set[FollowUpReason] = set()
+    criterion_observed = False
+    if packet.scope_sufficient is False:
+        unresolved_reasons.add("scope_gap")
+    for record in packet.evidence.values():
+        if record.outcome.value != "measured":
+            unresolved_reasons.add("nonconverged_calculation")
+        if record.kind == "stability" and record.reference_complete is False:
+            unresolved_reasons.add("incomplete_references")
+    for record in packet.evidence.values() if packet.scope_sufficient is not False else []:
+        values = [
+            value
+            for value in record.values
+            if value.name == criterion.quantity and value.unit == criterion.unit
+        ]
+        target = [value for value in values if value.structure == criterion.target_structure]
+        result: bool | None = None
+        if criterion.threshold is not None and target and isinstance(target[0].value, (int, float)):
+            result = float(target[0].value) <= criterion.threshold
+        elif criterion.comparison_structure is not None:
+            comparison = [
+                value for value in values if value.structure == criterion.comparison_structure
+            ]
+            if (
+                target
+                and comparison
+                and isinstance(target[0].value, (int, float))
+                and isinstance(comparison[0].value, (int, float))
+            ):
+                result = float(target[0].value) < float(comparison[0].value)
+        if result is None:
+            continue
+        criterion_observed = True
+        status: Verdict = "supported" if result else "contradicted"
+        hypothesis = HypothesisRecord(
+            hypothesis_id=f"dea:{record.evidence_id}",
+            claim_type=packet.claim_type,
+            scientific_claim=packet.claim,
+            status=HypothesisStatus(status),
+            evidence_ids=[record.evidence_id],
+        )
+        if not ledger.problems(hypothesis):
+            decisions[status].append(record.evidence_id)
+
+    if not criterion_observed and packet.scope_sufficient is not False:
+        unresolved_reasons.add("missing_measurement")
+
+    has_support = bool(decisions["supported"])
+    has_contradiction = bool(decisions["contradicted"])
+    if has_support == has_contradiction:
+        status: Verdict = "unresolved"
+        evidence_ids = decisions["supported"] + decisions["contradicted"]
+        rationale = (
+            "Admissible evidence supports and contradicts the criterion."
+            if has_support
+            else "No admissible measured evidence decides the criterion."
+        )
+    elif has_support:
+        status = "supported"
+        evidence_ids = decisions["supported"]
+        rationale = "Admissible evidence meets the declared decision criterion."
+    else:
+        status = "contradicted"
+        evidence_ids = decisions["contradicted"]
+        rationale = "Admissible evidence does not meet the declared decision criterion."
+    return AgentAnswer(
+        status=status,
+        evidence_ids=evidence_ids,
+        request_dft=status == "unresolved" and packet.claim_type == "thermodynamic_stability",
+        proposed_test_ids=[
+            test_id
+            for reason, test_id in packet.follow_up_tests.items()
+            if reason in unresolved_reasons
+        ],
+        rationale=rationale,
     )
 
 
@@ -451,16 +583,17 @@ def _merge(parts: list[ArmAnswer], answer: AgentAnswer | None) -> ArmAnswer:
 
 def run_arm(
     arm: BenchmarkArm,
-    prompt: str,
+    packet: AgentEvalPacket,
+    ledger: EvidenceLedger,
     config: AgentEvalConfig,
     *,
     output_root: Path,
     model_factory: Callable[..., Any],
 ) -> ArmAnswer:
     """Ask one arm about one case."""
+    prompt = case_prompt(packet)
     if arm == BenchmarkArm.NO_LLM:
-        # The baseline every LLM arm must beat: never decide, always ask for DFT.
-        return ArmAnswer(answer=AgentAnswer(status="unresolved", request_dft=True))
+        return ArmAnswer(answer=deterministic_evidence_assessment(packet, ledger))
     tokens = config.completion_tokens_per_case // config.calls(arm)
     participants = [
         p.model_copy(update={"max_completion_tokens": None}) for p in config.participants
@@ -623,11 +756,12 @@ def run_agent_eval(
         for seed in config.random_seeds:
             for case in selected:
                 found = case_records[case.case_id]
-                prompt = case_prompt(case, found)
+                packet = assessment_packet(case, found)
                 for arm in config.arms:
                     answer = run_arm(
                         arm,
-                        prompt,
+                        packet,
+                        ledgers[case.case_id],
                         config,
                         output_root=run_dir / "arms" / arm.value / f"seed-{seed}" / case.case_id,
                         model_factory=model_factory,

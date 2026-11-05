@@ -26,6 +26,7 @@ cases:
     subject: SiC
     claim: 3C-SiC lies on the Si-C convex hull in PBE at 0 K.
     claim_type: thermodynamic_stability
+    criterion: {quantity: energy_above_hull, unit: eV/atom, target_structure: SiC-3C.vasp, threshold: 0.0}
     expected_status: supported
     decisive_evidence: [hull]
     dft_request_justified: false
@@ -46,6 +47,7 @@ cases:
     subject: SiC
     claim: Rocksalt SiC lies on the Si-C convex hull in PBE at 0 GPa.
     claim_type: thermodynamic_stability
+    criterion: {quantity: energy_above_hull, unit: eV/atom, target_structure: SiC-rocksalt.vasp, threshold: 0.0}
     expected_status: contradicted
     decisive_evidence: [hull]
     dft_request_justified: false
@@ -65,6 +67,7 @@ cases:
     subject: Si
     claim: Diamond Si is lower in energy than beta-tin Si.
     claim_type: energy_ranking
+    criterion: {quantity: relative_energy_per_atom, unit: eV/atom, target_structure: Si-diamond.vasp, comparison_structure: Si-beta-tin.vasp}
     expected_status: supported
     decisive_evidence: [ranking]
     dft_request_justified: false
@@ -84,6 +87,7 @@ cases:
     subject: SiC
     claim: 2H-SiC lies on the Si-C convex hull in PBE at 0 K.
     claim_type: thermodynamic_stability
+    criterion: {quantity: energy_above_hull, unit: eV/atom, target_structure: SiC-2H.vasp, threshold: 0.0}
     expected_status: unresolved
     dft_request_justified: true
     evidence:
@@ -102,6 +106,7 @@ cases:
     subject: Si2C
     claim: Si2C in the anti-fluorite structure lies on the Si-C convex hull in PBE.
     claim_type: thermodynamic_stability
+    criterion: {quantity: energy_above_hull, unit: eV/atom, target_structure: Si2C-antifluorite.vasp, threshold: 0.0}
     expected_status: unresolved
     dft_request_justified: true
 
@@ -110,6 +115,7 @@ cases:
     subject: SiC
     claim: 4H-SiC lies on the Si-C convex hull in PBE at 0 K.
     claim_type: thermodynamic_stability
+    criterion: {quantity: energy_above_hull, unit: eV/atom, target_structure: SiC-4H.vasp, threshold: 0.0}
     expected_status: unresolved
     dft_request_justified: true
     evidence:
@@ -135,6 +141,7 @@ cases:
     subject: SiC
     claim: 6H-SiC lies on the Si-C convex hull in PBE at 0 K.
     claim_type: thermodynamic_stability
+    criterion: {quantity: energy_above_hull, unit: eV/atom, target_structure: SiC-6H.vasp, threshold: 0.0}
     expected_status: unresolved
     dft_request_justified: true
     evidence:
@@ -153,6 +160,7 @@ cases:
     subject: SiC
     claim: Zinc-blende SiC with the strained cell lies on the Si-C convex hull in PBE.
     claim_type: thermodynamic_stability
+    criterion: {quantity: energy_above_hull, unit: eV/atom, target_structure: SiC-strained.vasp, threshold: 0.0}
     expected_status: unresolved
     dft_request_justified: true
     evidence:

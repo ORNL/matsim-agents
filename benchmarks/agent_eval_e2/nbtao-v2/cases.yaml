@@ -1,0 +1,43 @@
+suite_id: e2-nbtao-v2
+
+cases:
+  - case_id: nbtao-formation-energy-negative-v2
+    category: supported
+    subject: NbTaO5 ordering-01
+    claim: Using the qualified fixed-protocol static energies for NbTaO5 ordering-01, bcc Nb, bcc Ta, and triplet O2, the uncorrected PBE formation energy of NbTaO5 is negative relative to the elements.
+    claim_type: property
+    criterion: {quantity: formation_energy_per_atom, unit: eV/atom, target_structure: NbTaO5-ordering-01-Nb4Ta4O20, threshold: 0.0}
+    expected_status: supported
+    decisive_evidence: [formation-energy]
+    dft_request_justified: false
+    scope_sufficient: true
+    scope_description: This decides only the elemental-reference formation-energy sign for ordering-01. No O2 correction is applied. It is not a convex-hull or phase-stability result, and it does not rank NbTaO5 orderings.
+    evidence:
+      formation-energy:
+        kind: reference_energies
+        subject: NbTaO5 ordering-01 relative to bcc Nb, bcc Ta, and triplet O2
+        method:
+          backend: arithmetic
+          backend_version: "1"
+          method_signature: nbtao5-fixed-kmesh-v1-elemental-formation-energy-v1
+          settings:
+            formula: "(E_Nb4Ta4O20 - 4*mu_Nb - 4*mu_Ta - 20*mu_O)/28"
+            protocol_id: nbtao5-fixed-kmesh-v1
+            functional: PBE
+            o2_correction_applied: false
+            E_Nb4Ta4O20_static_eV: -261.82281757
+            mu_Nb_bcc_eV_per_atom: -10.09309961
+            mu_Ta_bcc_eV_per_atom: -11.81343210
+            E_O2_triplet_static_eV: -9.89030470
+            mu_O_eV_per_atom: -4.94515235
+            source_records:
+              - research/paper/e2/evidence/nbtao5-q1/q1-verify-static.json
+              - research/paper/e2/evidence/nbtao5-q2/q2-verify-Nb-bcc-baseline-static.json
+              - research/paper/e2/evidence/nbtao5-q2/q2-verify-Ta-bcc-baseline-static.json
+              - research/paper/e2/evidence/nbtao5-q3/q3-verify-static.json
+            reference_scope: elemental formation energy only; not a hull reference set
+        evidence_level: converged_dft
+        outcome: measured
+        values:
+          - {name: formation_energy_per_atom, value: -2.6890587046, unit: eV/atom, structure: NbTaO5-ordering-01-Nb4Ta4O20}
+          - {name: formation_energy_per_formula_unit, value: -18.8234109325, unit: eV/formula-unit, structure: NbTaO5-ordering-01}

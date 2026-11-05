@@ -1,0 +1,9 @@
+{
+  "suite_id": "e2-nbtao-v2",
+  "source_run": "research/paper/e2/raw/nbtao-v2/agent-eval-37jize3g",
+  "answers_sha256": "f8f74578818f1a43a38928bebb57e1aa1ec7e1c80672821892516928cb0dc6fe",
+  "shuffle_seed": 20261104,
+  "unblinding_key_sha256": "6129adbbb0d661b36e1e58df62c535486f87e4c58094bb5d95704be1f3af5adf",
+  "redaction": "model names replaced by [participant]; arm, model, grade and answer key removed",
+  "residual_unblinding_risk": "template-style deterministic rationales and references to peers or critique rounds can reveal the arm family"
+}
