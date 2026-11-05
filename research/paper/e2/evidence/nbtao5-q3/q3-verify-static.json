@@ -1,0 +1,133 @@
+{
+  "directory": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/nbtao5-q1-fixed-kmesh-v1-20261104TJHFN69/cases/O2-triplet-baseline/runs/9041264.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov/static",
+  "phase": "static",
+  "qualified": true,
+  "checks": {
+    "normal_termination": {
+      "passed": true
+    },
+    "scf_converged_every_ionic_step": {
+      "passed": true,
+      "ionic_steps": 1,
+      "nelm": 200,
+      "max_scf_steps": 24,
+      "unconverged_ionic_steps": []
+    },
+    "max_force": {
+      "passed": true,
+      "value_eV_per_A": 0.001012,
+      "criterion": 0.01
+    },
+    "incar_ENCUT": {
+      "passed": true,
+      "expected": "600",
+      "actual": "600"
+    },
+    "incar_EDIFF": {
+      "passed": true,
+      "expected": "1.0E-06",
+      "actual": "1.0E-06"
+    },
+    "incar_PREC": {
+      "passed": true,
+      "expected": "Accurate",
+      "actual": "Accurate"
+    },
+    "incar_ISPIN": {
+      "passed": true,
+      "expected": "2",
+      "actual": "2"
+    },
+    "incar_ISMEAR": {
+      "passed": true,
+      "expected": "0",
+      "actual": "0"
+    },
+    "incar_SIGMA": {
+      "passed": true,
+      "expected": "0.05",
+      "actual": "0.05"
+    },
+    "incar_ISYM": {
+      "passed": true,
+      "expected": "0",
+      "actual": "0"
+    },
+    "incar_KPAR": {
+      "passed": true,
+      "expected": "1",
+      "actual": "1"
+    },
+    "paw_datasets": {
+      "passed": true,
+      "expected": [
+        "O"
+      ],
+      "actual": [
+        "O"
+      ]
+    }
+  },
+  "values": {
+    "nions": 2,
+    "final_free_energy_eV": -9.8903047,
+    "final_energy_sigma0_eV": -9.8903047,
+    "energy_sigma0_per_atom_eV": -4.94515235,
+    "max_force_eV_per_A": 0.001012,
+    "stress_kbar": [
+      [
+        -0.03298,
+        -0.0,
+        0.0
+      ],
+      [
+        -0.0,
+        -0.03298,
+        -0.0
+      ],
+      [
+        0.0,
+        -0.0,
+        -0.0471
+      ]
+    ],
+    "max_abs_principal_stress_kbar": 0.0471,
+    "final_total_magnetization_muB": 2.0,
+    "irreducible_kpoints": 1
+  },
+  "method": {
+    "vasp_header": "vasp.6.6.1 17Jul2026 (build Oct 15 2026 18:33:52) complex",
+    "paw_titels": [
+      "O"
+    ],
+    "incar": {
+      "ALGO": "Normal",
+      "EDIFF": "1.0E-06",
+      "ENCUT": "600",
+      "IBRION": "-1",
+      "ISMEAR": "0",
+      "ISPIN": "2",
+      "ISYM": "0",
+      "KPAR": "1",
+      "LASPH": ".TRUE.",
+      "LCHARG": ".FALSE.",
+      "LREAL": ".FALSE.",
+      "LWAVE": ".TRUE.",
+      "MAGMOM": "2*1.0",
+      "NELM": "200",
+      "NSW": "0",
+      "PREC": "Accurate",
+      "SIGMA": "0.05",
+      "SYSTEM": "Nb-Ta-O O2-triplet-baseline static"
+    }
+  },
+  "provenance_sha256": {
+    "INCAR": "e6c87a520c4c4b6794d3cecfd19620939381e1b90544255c75cca91ec556d737",
+    "KPOINTS": "b63444fd67d0624c82d266f68e41c3ea00b4f4487ac8c59b2492f4961e918e95",
+    "POSCAR": "8fb57e87b5ef50af3a0645be5cbcf27bf0e590933e4a2c76f84b4598dd5f7aa8",
+    "POTCAR": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
+    "CONTCAR": "71d8904d427387a583b58e79ec4b903d2c3386bac4aac7eb407dd173e7a95bd6",
+    "OUTCAR": "b74c327e35c6b5be84870d22c6c4003cd2052e0c392a502b4e0b181f058203c3",
+    "vasprun.xml": "ccd9d18568b9992d4cd041e94aa010366725e08c4cd8f7aadfcee15cb3e2dba4"
+  }
+}
