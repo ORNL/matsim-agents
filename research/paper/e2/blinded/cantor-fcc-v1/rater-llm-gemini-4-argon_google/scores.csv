@@ -1,0 +1,13 @@
+item_id,case,verdict_correct,physical_reasoning,evidence_attribution,uncertainty,follow_up,notes
+item-001,cantor-random1-static-force-criterion,Y,2,2,2,2,"Complete, accurate, and quantitatively grounded assessment."
+item-002,cantor-random1-static-force-criterion,Y,2,1,1,2,"Hallucinates a difference between static_poscar_sha256 and matched_relax_contcar_sha256 (which are identical in the packet, confusing it with evidence_id), though it does not derail the final verdict."
+item-003,cantor-sampled-ranking-adequacy,Y,2,2,2,2,"Accurate, comprehensive, and properly structured. Lists only admissible measured records in evidence_ids while discussing the unconverged/failed records in the text."
+item-004,cantor-random1-static-force-criterion,Y,2,2,2,2,"Thorough and accurate across all rubric dimensions, despite some repetition in the text."
+item-005,cantor-sampled-ranking-adequacy,Y,0,0,0,1,"Rationale is a single generic sentence with no physical reasoning, no evidence citations, and no uncertainty discussion. Follow-up puts the description text instead of the key 'scope_gap' and contradicts request_dft=false."
+item-006,cantor-random1-static-force-criterion,Y,0,1,0,2,"Extremely terse; cites the evidence ID in metadata and gets the verdict/follow-up right, but provides no physical reasoning, specific values, or discussion of caveats in the rationale."
+item-007,cantor-sampled-ranking-adequacy,Y,2,2,2,1,"Strong physical reasoning and attribution, noting even the matched geometry hash between relax and static for random1. However, the rationale explicitly states 'DFT could decide this, so I request it' and selects 'scope_gap', while the JSON fields have request_dft=false and proposed_test_ids=[]."
+item-008,cantor-ideal-static-force-criterion,N,1,2,0,2,"Overstates a generic schema ambiguity (component vs magnitude of max_force) to render a clearly decidable claim unresolved, despite the decision criterion explicitly mapping to the 'max_force' quantity."
+item-009,cantor-ideal-static-force-criterion,Y,2,2,2,2,"Thorough and accurate evaluation of the static record, scope exclusions, and numerical criterion."
+item-010,cantor-ideal-static-force-criterion,Y,2,2,2,2,"Complete and well-grounded assessment of the evidence, settings, and scope."
+item-011,cantor-ideal-static-force-criterion,Y,0,1,0,2,"Correct verdict and record ID, but rationale contains no specific physical values, checks, or discussion of caveats."
+item-012,cantor-sampled-ranking-adequacy,Y,2,2,2,1,"Thorough and accurate reasoning, attribution, and uncertainty analysis. Deducted 1 point on follow_up because the rationale explicitly selects the 'scope_gap' test, but proposed_test_ids is left empty in the structured output."

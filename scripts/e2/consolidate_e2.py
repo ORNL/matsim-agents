@@ -34,15 +34,17 @@ SUITES = [
     ("nbtao-v2", "raw/nbtao-v2/agent-eval-37jize3g", "manifest-frozen"),
     ("zn-formate-v1", "raw/zn-formate-v1/agent-eval-vhjqyznq", "manifest-frozen"),
     ("nbtavhfrz-bcc-v1", "raw/nbtavhfrz-bcc-v1/agent-eval-bj8rbngk", "manifest-frozen"),
+    ("cantor-fcc-v1", "raw/cantor-fcc-v1", "manifest-frozen"),
 ]
 MATERIAL = {"lfp": "LiFePO4", "phos": "phosphorene", "nbtao": "Nb-Ta-O",
-            "zn": "Zn-formate", "bcc": "NbTaVHfZrTi BCC"}
+            "zn": "Zn-formate", "bcc": "NbTaVHfZrTi BCC", "cantor": "Cantor FCC"}
 QUALIFICATION = {
     "lfp-phosphorene-v1": "archived VASP 6.6.0 OUTCAR values (private archive 4e18697); raw OUTCARs not mounted here",
     "nbtao-v1": "raw-output verified (scripts/verify_vasp_run.py), evidence/nbtao5-q1,q2",
     "nbtao-v2": "raw-output verified Q1/Q2/Q3 static energies, evidence/nbtao5-q1..q3",
     "zn-formate-v1": "raw-output verified relax/static (verify-*.json), PBE-D3(BJ)",
     "nbtavhfrz-bcc-v1": "raw-output verified relax/static, ISPIN=1; no k-point or spin sensitivity test",
+    "cantor-fcc-v1": "qualified static force observables on ideal/random1; associated relaxations failed per-step SCF gate; random2 walltime, random3 MPI timeout",
 }
 LINKS = [("nbtao-formation-energy-negative", "nbtao-formation-energy-negative-v2")]
 
@@ -88,7 +90,14 @@ def main() -> None:
     structures: dict[str, set[str]] = {}
     for name, raw_rel, freeze in SUITES:
         suite_dir = ROOT / "benchmarks/agent_eval_e2" / name
-        raw, blind = E2 / raw_rel, E2 / "blinded" / name
+        raw_root, blind = E2 / raw_rel, E2 / "blinded" / name
+        if name == "cantor-fcc-v1":
+            candidates = sorted(p for p in raw_root.glob("agent-eval-*") if (p / "summary.json").is_file())
+            if len(candidates) != 1:
+                raise SystemExit(f"expected exactly one completed Cantor run under {raw_root}, found {len(candidates)}")
+            raw = candidates[0]
+        else:
+            raw = raw_root
         suite = load_suite(suite_dir)
         answers = [json.loads(line) for line in (raw / "answers.jsonl").read_text().splitlines()]
         prov = json.loads((blind / "provenance.json").read_text())
@@ -157,11 +166,10 @@ def main() -> None:
         parent[find(a)] = find(b)
     for row in coverage:
         row["dependency_cluster"] = find(row["case_id"])
-    coverage.append({"material": "Cantor FCC", "suite_id": "none", "case_id": "none",
-                     "evidence_qualification": "not qualified (PBS 9040206, 2026-11-06T02:49Z): ideal/random1/random2 relax "
-                     "in progress, Fmax 0.055/0.206/0.232 > 0.02 eV/A, some ionic steps at NELM=200; random3 killed "
-                     "(exit 143) at step 6; no static",
-                     "included_in_aggregate": False})
+    if not any(row["material"] == "Cantor FCC" for row in coverage):
+        coverage.append({"material": "Cantor FCC", "suite_id": "none", "case_id": "none",
+                         "evidence_qualification": "not qualified; no included E2 suite",
+                         "included_in_aggregate": False})
     with (OUT / "e2-six-material-coverage.csv").open("w", newline="") as f:
         cols = list(dict.fromkeys(k for r in coverage for k in r))
         w = csv.DictWriter(f, fieldnames=cols)
@@ -196,7 +204,7 @@ def main() -> None:
                      "latency_s_per_case": round(c["latency_s"] / n, 3)})
     for arm in ARMS:
         rows = [r for r in comp if r["arm"] == arm]
-        macro = {"material": "MACRO (5 materials, equal weight)", "arm": arm, "cases": sum(r["cases"] for r in rows)}
+        macro = {"material": f"MACRO ({len(rows)} materials, equal weight)", "arm": arm, "cases": sum(r["cases"] for r in rows)}
         for k in rows[0]:
             if k not in macro and k not in ("unresolved_reference_cases",):
                 vals = [r[k] for r in rows if r[k] != ""]

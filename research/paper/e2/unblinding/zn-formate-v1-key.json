@@ -1,0 +1,98 @@
+[
+ {
+  "item_id": "item-001",
+  "case_id": "zn-dihydrate-force-criterion",
+  "arm": "multi_llm_cross_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-002",
+  "case_id": "zn-alpha-force-criterion",
+  "arm": "multi_llm_no_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-003",
+  "case_id": "zn-alpha-force-criterion",
+  "arm": "single_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-004",
+  "case_id": "zn-alpha-pbcn-static-energy-order",
+  "arm": "no_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-005",
+  "case_id": "zn-dihydrate-force-criterion",
+  "arm": "no_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-006",
+  "case_id": "zn-pbcn-force-criterion",
+  "arm": "no_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-007",
+  "case_id": "zn-alpha-pbcn-static-energy-order",
+  "arm": "single_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-008",
+  "case_id": "zn-dihydrate-force-criterion",
+  "arm": "multi_llm_no_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-009",
+  "case_id": "zn-alpha-pbcn-static-energy-order",
+  "arm": "multi_llm_cross_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-010",
+  "case_id": "zn-alpha-force-criterion",
+  "arm": "multi_llm_cross_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-011",
+  "case_id": "zn-alpha-force-criterion",
+  "arm": "no_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-012",
+  "case_id": "zn-dihydrate-force-criterion",
+  "arm": "single_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-013",
+  "case_id": "zn-pbcn-force-criterion",
+  "arm": "multi_llm_cross_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-014",
+  "case_id": "zn-alpha-pbcn-static-energy-order",
+  "arm": "multi_llm_no_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-015",
+  "case_id": "zn-pbcn-force-criterion",
+  "arm": "single_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-016",
+  "case_id": "zn-pbcn-force-criterion",
+  "arm": "multi_llm_no_critique",
+  "random_seed": 0
+ }
+]

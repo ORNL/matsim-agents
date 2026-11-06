@@ -1,4 +1,8 @@
 material,arm,cases,responses,calls,prompt_tokens,completion_tokens,latency_s,parse_failures,total_tokens,tokens_per_case,latency_s_per_case
+Cantor FCC,multi_llm_cross_critique,3,3,18,144783,41066,284.608,1,185849,61949.666666666664,94.869
+Cantor FCC,multi_llm_no_critique,3,3,6,30965,6666,45.72,0,37631,12543.666666666666,15.24
+Cantor FCC,no_llm,3,3,0,0,0,0.0,0,0,0.0,0.0
+Cantor FCC,single_llm,3,3,3,16207,2137,22.006999999999998,0,18344,6114.666666666667,7.336
 LiFePO4,multi_llm_cross_critique,4,4,24,110282,40798,280.452,0,151080,37770.0,70.113
 LiFePO4,multi_llm_no_critique,4,4,8,18122,7183,50.712,0,25305,6326.25,12.678
 LiFePO4,no_llm,4,4,0,0,0,0.0,0,0,0.0,0.0
@@ -19,7 +23,7 @@ phosphorene,multi_llm_cross_critique,4,4,24,135860,56931,365.792,0,192791,48197.
 phosphorene,multi_llm_no_critique,4,4,8,26130,17346,112.473,0,43476,10869.0,28.118
 phosphorene,no_llm,4,4,0,0,0,0.0,0,0,0.0,0.0
 phosphorene,single_llm,4,4,4,14251,5184,93.284,0,19435,4858.75,23.321
-ALL,no_llm,20,20,0,0,0,0.0,0,0,,
-ALL,single_llm,20,20,20,56021,16190,209.865,0,72211,,
-ALL,multi_llm_no_critique,20,20,40,101407,43221,300.616,0,144628,,
-ALL,multi_llm_cross_critique,20,20,120,579864,226616,1501.857,1,806480,,
+ALL,no_llm,23,23,0,0,0,0.0,0,0,,
+ALL,single_llm,23,23,23,72228,18327,231.872,0,90555,,
+ALL,multi_llm_no_critique,23,23,46,132372,49887,346.336,0,182259,,
+ALL,multi_llm_cross_critique,23,23,138,724647,267682,1786.465,2,992329,,

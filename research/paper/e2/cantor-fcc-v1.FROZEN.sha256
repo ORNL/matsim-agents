@@ -1,0 +1,7 @@
+# Frozen 2026-11-06T16:40:19Z before any E2 assessor access.
+# Suite includes 3 claims and explicit static/failed-attempt evidence; all 28 embedded raw-record hashes verified.
+# Reference labels and dft_request_justified values are part of the frozen suite hash.
+# Shared four-arm, seed-0, 2-round MAG config hash follows.
+source_commit 7e85bf41e39816b02214bf7726957e3553f06a78
+suite_sha256 e81a9b8e304b090d9bbbf045b891d6ea2eb66c594e6fd6ce1fc3e408e1030f05 config benchmarks/agent_eval_e2/cantor-fcc-v1/cases.yaml
+config_sha256 35513b44efd63e894c59b57e4e8c10f16632f8aac3ac9021250e0178668a268e config research/paper/e2/configs/lgea-dea-mag-v1.yaml
