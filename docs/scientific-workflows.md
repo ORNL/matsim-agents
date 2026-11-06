@@ -895,10 +895,31 @@ any model-changing side effects; the campaign adapter rejects mismatched control
 before invoking AL. A post-call guard additionally rejects unauthorized promotion
 reported by the callback.
 
-`relative_phase_ranking` compares converged candidates within one exploration.
-It is not a convex-hull claim. `convex_hull_ranking` additionally requires
-method-compatible elemental and competing-phase references. Residual forces
-filter unconverged structures; they are not added to formation energies.
+`PhaseExplorationPolicy` currently supports only `relative_phase_ranking`, which
+compares converged candidates within one composition exploration and is not a
+convex-hull claim. Requests for `convex_hull_ranking` are rejected by this
+policy; use the `thermodynamic_stability` characterization recipe to calculate
+energy above hull with method-compatible elemental and competing-phase
+references. Residual forces filter unconverged structures; they are not added
+to formation energies.
+
+Each invocation creates a uniquely named registered run directory beneath the
+configured output root. `request.json`, `resolved_config.json`, and
+`provenance.json` capture the request, policy, effective exploration options
+(including wrapper defaults and policy-enforced limits), and evidence level.
+`results.json` stores the outcome, scientific context, candidate and relaxation
+results, omitted runtime-only options, and SHA256 hashes for generated and
+relaxed structures. `hull-follow-up.json` records whether the evidence warrants
+human review for a separate thermodynamic-stability campaign, the reasons, and
+the remaining prerequisites. It never launches that campaign. Failures after
+run registration are also stored as terminal `failed` results and events, with
+any completed exploration stage and available structure hashes retained.
+
+The same registered-run envelope is useful across modalities, but its evidence
+fields should remain domain-specific: relaxation records numerical stages and
+convergence; investigations retain hypotheses and child runs; debate and LLM
+checks retain prompts, model identity, and outputs. Hull follow-up assessment
+belongs only to workflows where it is scientifically meaningful.
 Relaxed DFT references, including unary endpoints, must match the declared
 reduced composition before their energies enter the hull.
 Campaign hull snapshots include only convex-hull reports matching the active

@@ -1,0 +1,49 @@
+{
+  "protocol_id": "nbtao5-fixed-kmesh-v1",
+  "case_id": "Nb-bcc-baseline",
+  "category": "crystalline_numerical_qualification",
+  "status": "input_candidate_not_authorized_for_execution",
+  "species_order": [
+    "Nb"
+  ],
+  "species_counts": {
+    "Nb": 1
+  },
+  "settings": {
+    "encut_eV": 600,
+    "kpoint_spacing_A^-1": 0.15,
+    "ediff_eV": 1e-06,
+    "ediffg_eV_A": -0.01
+  },
+  "gamma_only": false,
+  "kpoints": {
+    "policy": "gamma_centered_target_spacing",
+    "center": "Gamma",
+    "target_spacing_A^-1": 0.15,
+    "mesh_dimensions": [
+      18,
+      18,
+      18
+    ],
+    "source_structure_sha256": "653bbefa1b107eb2b70fe3af7e56bad1d9ed4c220fdafe87c4b6083a0b89d730",
+    "kpoints_sha256": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+    "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+  },
+  "acceptance_criteria": {
+    "electronic_convergence_required": true,
+    "ionic_convergence_required_for_relaxation": true,
+    "max_force_eV_A": 0.01,
+    "max_abs_principal_stress_kbar": 2.0
+  },
+  "input_hashes": {
+    "POSCAR": "653bbefa1b107eb2b70fe3af7e56bad1d9ed4c220fdafe87c4b6083a0b89d730",
+    "INCAR": "109781a6eac7bc1bb47aa31c3b59046f32afb39466c820ed81818f227755e276",
+    "INCAR.static": "f337eae905bed47cbbd837b196b2aa08c1a64b1ffa704fc8cb8caa5a2d3ef995",
+    "KPOINTS": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+    "KPOINTS.json": "235d894600249c49ec1afa1ebe68fd350a8e524fbc2925e4162b9c14692e87ca",
+    "POTCAR.order": "a855adbf2ed90ba78aed2bddac6aafe0ee98f143d525f4ab4f19262fa154f39a"
+  },
+  "potcar_required_components": [
+    "Nb_pv"
+  ]
+}

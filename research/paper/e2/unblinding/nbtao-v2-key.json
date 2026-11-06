@@ -1,0 +1,26 @@
+[
+ {
+  "item_id": "item-001",
+  "case_id": "nbtao-formation-energy-negative-v2",
+  "arm": "no_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-002",
+  "case_id": "nbtao-formation-energy-negative-v2",
+  "arm": "multi_llm_no_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-003",
+  "case_id": "nbtao-formation-energy-negative-v2",
+  "arm": "multi_llm_cross_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-004",
+  "case_id": "nbtao-formation-energy-negative-v2",
+  "arm": "single_llm",
+  "random_seed": 0
+ }
+]

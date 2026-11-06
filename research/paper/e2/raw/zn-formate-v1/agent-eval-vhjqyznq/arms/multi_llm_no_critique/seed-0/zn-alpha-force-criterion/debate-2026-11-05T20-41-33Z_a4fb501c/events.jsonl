@@ -1,0 +1,2 @@
+{"event": "run_created", "payload": {"workflow": "scientific_hypothesis_debate"}, "timestamp_utc": "2026-11-05T20:41:33.744950+00:00"}
+{"event": "contribution_completed", "payload": {"id": "round-001-turn-0001"}, "timestamp_utc": "2026-11-05T20:41:37.301018+00:00"}

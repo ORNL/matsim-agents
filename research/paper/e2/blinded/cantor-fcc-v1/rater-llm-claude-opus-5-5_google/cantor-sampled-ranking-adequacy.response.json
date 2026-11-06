@@ -1,0 +1,60 @@
+{
+ "request_sha256_inputs": "cantor-sampled-ranking-adequacy",
+ "latency_s": 16.8,
+ "mag_applied": "model=claude-opus-5-5@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "chatcmpl-ffadf416-2d9d-430f-b121-7ad80da0662c",
+  "created": 1793983689,
+  "model": "claude-opus-5-5@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\"scores\": [{\"item_id\": \"item-003\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Correct unresolved verdict. Cites the right values: 0.192 meV/atom gap, 0.466 vs 0.012 eV/A residual forces, and the 62.22\u219263.78 muB moment shift. Correctly treats the not_converged and failed records as inadmissible. request_dft=true with scope_gap is consistent. Minor gap: it does not note that the random1 static and relaxation share the same geometry hash yet report very different forces.\"}, {\"item_id\": \"item-005\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 0, \"evidence_attribution\": 0, \"uncertainty\": 0, \"follow_up\": 1, \"notes\": \"Verdict is correct, but the one-line rationale has no physics and cites no evidence IDs. Saying no admissible measured evidence exists is inaccurate, because two converged statics are present. No specific caveats are given. The test is pasted as free text rather than the scope_gap ID, and request_dft=false contradicts proposing a DFT test.\"}, {\"item_id\": \"item-007\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 1, \"notes\": \"Strong analysis. It spots the identical geometry hash with 0.466 vs 0.0178 eV/A forces, considers a magnetic-solution explanation, and correctly converts 0.192 meV/atom \u00d7 108 atoms to about 21 meV/cell. Caveats are correctly weighted. However, the structured fields contradict the text: request_dft=false and proposed_test_ids is empty, while the rationale requests scope_gap DFT.\"}, {\"item_id\": \"item-012\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 1, \"notes\": \"Correct unresolved verdict with accurate values and attribution. It correctly argues the claim is not contradicted because the admissible statics do not disagree. request_dft=true is correct, but proposed_test_ids is empty even though the text selects scope_gap.\"}], \"correct_verdict_in_your_judgement\": \"unresolved\", \"case_notes\": \"Only two converged statics (ideal and random1) exist, differing by 0.192 meV/atom. Neither has a qualified relaxation: both have SCF-capped ionic steps. Random1 carries 0.466 eV/A residual force and a changed magnetic moment. Random2 and random3 have no statics. Scope is insufficient, so the evidence cannot support the claim, and no admissible records disagree, so it is not contradicted. DFT (the scope_gap test) could decide the claim, so the correct answer is request_dft=true with scope_gap selected.\"}",
+     "role": "assistant",
+     "reasoning_content": "",
+     "thinking_blocks": [
+      {
+       "type": "thinking",
+       "thinking": "",
+       "signature": "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"
+      }
+     ],
+     "provider_specific_fields": {
+      "citations": null,
+      "thinking_blocks": [
+       {
+        "type": "thinking",
+        "thinking": "",
+        "signature": "CAQSpxIKEggTEAIYAjgBQgh0aGlua2luZxIMwjeRl17wmHDL/Y+8Ggx/YjlF/aM4Ac3FGHsiMKAC141M9/Cdt69s8J7iq/0neIwT4C7URJeNYGWKuZId5cWEk3k/cYi5jOWfhckQ1yrCEdjgDOJ8TaEZB4Bh+ENdurE8eQiToH5EWuqiJh2CHABIZ553H2tr7RGL4X13HhZUxWvIVGF1dnsfWVJGKN2EHS8unW6jjIDaK5EpzY2Y1KRxhgoyhoEkjQZW30Z7NdzMZIzcjpcqi77rzUHAw4tXBJx4wlBOEGP55M76aU4hJev7GHUQj3NcHcVvUkCBbnsyoWTVb/ix3QXmyRhtO56z+wTDfJewvVIPQTixbksj0UqHYmOZ+tTtjO3ZdrGdSgTm9RHbf3MYG9zlgU8Ihq4ZpQ+iqABcWuYlUsrwJE4tKb/BSp0RtjGY9xcH0drjXHo8VDQyoB6Qi5+QeSg8odRFv7X1QEslB4KeRLPpF04LDrTpyA5CrYfjaGV0m0rNEQz6p5WnLUvMHA+Gh2/y6bICYy08PwlFq6pHoI7x5X3oVqsU1Ed/G8T6Y7NvDK8wLpp4XwL1HV3z4DrOIFZm8L05WskT6WTbmPtF/STcw1Zvp81wmb81V5KU6U0oi9Oxq1Xz6O9ABWnz9QolPgLqEljjEvLTx4K7gRNYku2NQ93hcbbuIgoKMZFDpinelPSYPXdSHUsREzP+KmUoEghCPWD6LmuHQKiIKxSbimJX+4yV1j6nme9VdqpP/74BdKUCwWCiW6l8YiRsW3CeM3FrbsbGOwu7RonRFWRmLCAiCL9mkqk6lRzs1HZx8uo8rWwLbXNPOHIvani40OjDmB2b2fWquX8hNc0Mw4ovliJobtwFFpLAMgRzg4BQpt2Nyet2MydaN1IDJaLHSNkqda6nUs5EounNgcaa0yliHf8LymqCNJviKsy6E0JqSaiwXNChAa99PAki+baiyz6l9fWIEHCPsBw/1fMq3pDh2Iaotnx/PUhZW3VY0AWgZUucEwekEIWUJRoV8OH4TQ+tayAxXlNLqQKXFucvdYG6FSYjA0kqnU/AERNkCMI+FwMeut/OAfzrS9Hlzq6VfLD60imqtkPdMQovUJksja/Cghps4hbGDa2Up11EOzdoWk/aXrZ7DGOuTxqWWXjWC5AWKnxl01UHnBCwuKSUFR/Z+cjS6npPnqNfHublA5eD1vXEX4lqVmQvKdJwpc8Qk04W1ayH8WIyQj3cR1Cjim9Id3LgWOtp29ltxpOupL945hYnDoxfuviZlGIfrlf389BOX7gncWI1aVThWL7UEmXB1qzG3R2TA+cm3vqKBJvIg1vQkPKxNhXYzMFOEl4tTpn4rknzfjStEo5PebA3E7kipxz8DXhC36D/lNijIXgOK7/9FP+jdfVNHs0FvyMhCdQJsvsSAItLy9a3bU3Ux2Y1xXA+9l7M+v4mg0tqh5ik4oBDWlQ4c+5uLmNjo323vwOY8BKMJGO9OgK6WLk6qA1O3znNgTEswZ+R7PSeBDaiMoNqs8He9vtgRYy4NzJGcqqnSwa8jUsWAZqeRWL4bFLHr403HWm01ZOuuFObQJDK4IYQI0pXnSnRNYCxiA1VSgP84pVjKLdmIeQLJj6y/bDGTZbG2AJJOVONHsuPhtAd0Z3XWN9YsdFF4crMkDnvoJi/pnTBX9cml8Yl6x/WDomEk50HfCszhWNsw1Gj0riPFQzIE82w6sDoYQyvCcCd36XU603mXgvUMjBiI40VOpc73hhP2t9OiyQCNgoILov68dEgWxOpE4V4XC3RLhJP/BQh0yaswDlNHgRmtHvkfM/pfEdpbR9UQ0VfP/Hi4N5HF8SY2BQ3KLdwlH4XCCaiCRgERuzyEKZEdT97oXxoAYSohN1uloBH6qBvhxTPWVnWjeY521Ud9lP+Br05NEsqpxPdR2f4+qth4Bdo6sb/6BhmEj+/9LM2Ivqt0WpL43lQbH+1PLwnDsRkICVIoTpYg7I0ZZf94Y4EcB8cTrzAtGsyXXunIxWCyygfFaogHagxM5EWfcgl0C/jziV4lEFzhhGCtQSB+1O8O5HgrzgjE+SDKMy44OWdJ5272F/6oSseAkcfCB88WvRbf2OlW/RVXqZH9Nfay0ubkUpEl19ACG4Po2XI+YIViFZSoIQCStipBx71RQB1LH6y6YBaiIcj6cxjMzCjxYu3ncsZS/clJRwq7ETZD9TfQiTApFKQCFut2oGuY1dm71MwvahYAQe4kQG5n4SEg9IDkHTUaaNz7FiKENTtIyGLf8D/GdoJgrFCTghlVgYLNVZR7cHoQ/fU7guwF5a/pfHUlm2n3YpMNwIl19DkmYzKOG0Jq0Vex5Grh9qZP0hEXL9TjuY2eZieCLHI7C3mIY950fgPxffqM5//I8bOgbO4rW9EYuWTmPxwTQmZHDro92bXfNgWunoB4gkkaA8ppSMBYPkqiZw+DBMq2q8Tmra6lPf0im6aRS/VZI1yAr0/KPGX/VURSqRO2yhU2MdZzoqheka9/ksTeKJ8oQBOzGTRsRF2knKsE5gj+z4ysFh7wO2qhKlwA4CvnsooSJm8Ga2rWixor8CAnSJ+uEZnM9xeU5hQLchZHHXAKnVOIHVJJBRQrirRLYk6cVNdrhVwvipNQVZilxnfdVB4w9og1cwOwC8fT/U3KtzQOFbSm51iepUCeZqtc9QxvqOTArygJmU5iCmQv0yir0K5AjTY56oUZ902hWfxYbDTWpVJUHev9P4z7/zxkE2ywcQt7Wj51GKFQhNd6yYK8nJ7MklPkqmfnnirEsfTh8iBQ2jCj66bs+bDIlvSsaCN5u4sGP2NQ8fAFkl5QSgnHLT8PTf6dXg8162bZH8z9ay2b2uaPpmyuX/3kVVR8LzPTUhGIFnRX6OanG3KULUyGB406tGzpce1jxNSrQhixF8JMNdrBNsL6usegzXF3q0VRwmOf8gIXB5peyWFqyQQNFGQ7EZ8GsNxRLId9NAFTtAUYq47qItajV/pf6WfPSbBR0hKms5LsdnCBSFxdwky2TvQv8x8q509VrdiI5Uqnc1WSoQobFWT5XbzCxRErDmgucgMAooDTK/2k8Ep4E1qcI+hbwt+MrljGOs4sOYYAQ=="
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1752,
+   "prompt_tokens": 14444,
+   "total_tokens": 16196,
+   "completion_tokens_details": {
+    "reasoning_tokens": 753,
+    "text_tokens": 999
+   },
+   "prompt_tokens_details": {
+    "cached_tokens": 0,
+    "text_tokens": 4,
+    "cache_write_tokens": 14440,
+    "cache_creation_tokens": 14440,
+    "cache_creation_token_details": {
+     "ephemeral_5m_input_tokens": 14440,
+     "ephemeral_1h_input_tokens": 0
+    }
+   },
+   "cache_creation_input_tokens": 14440,
+   "cache_read_input_tokens": 0
+  }
+ }
+}

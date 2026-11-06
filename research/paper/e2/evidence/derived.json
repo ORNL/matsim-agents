@@ -1,0 +1,32 @@
+{
+ "critical_minerals_LiFePO4_olivine_ideal": {
+  "outcar_sha256": "062d690a73085a6b5965c1ffb1a64d1c05013950f720c415be4e7122d962d036",
+  "natoms": 28
+ },
+ "critical_minerals_LiFePO4_olivine_Li_vacancy": {
+  "outcar_sha256": "6ee9ebbd5a0db75602e76af4c6d09f3c7d5d9982bffa34f215b96e4f1329c783",
+  "natoms": 27
+ },
+ "critical_minerals_LiFePO4_olivine_FeLi_antisite": {
+  "outcar_sha256": "b3cb8f6974194571b7c1bf8244e9f7df0a8b4b830380cdc7969f135260bc9b81",
+  "natoms": 28
+ },
+ "2d_monolayer_P_ideal_UC": {
+  "outcar_sha256": "bc3c32cbcdcb77253d6c1f5a4f7cfccb27767057a17b661ab7d9e8380ebe92d2",
+  "natoms": 4
+ },
+ "2d_monolayer_P_ideal_3x3": {
+  "outcar_sha256": "5a6ed305d86db7ecfbb1f56112f7287c2678bd69012aca747c6d5bd03af88ba4",
+  "natoms": 36
+ },
+ "2d_monolayer_P_vacancy_3x3": {
+  "outcar_sha256": "08d87bcaecee9f6d71e4fd4ceee1083ce38bf7b3be13ea426960139496e9c2a2",
+  "natoms": 35
+ },
+ "derived": {
+  "E_atom_UC": -4.9441609275,
+  "E_atom_3x3": -3.926663594444444,
+  "diff_3x3_minus_UC": 1.0174973330555557,
+  "naive_vacancy_formation_UC_ref": -1.0959898375000137
+ }
+}

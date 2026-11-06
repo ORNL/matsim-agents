@@ -48,22 +48,45 @@ def _phase_result(composition, _policy, _directory):
     )
 
 
-def test_agentic_investigation_can_use_single_llm_discussion(tmp_path):
+def test_agentic_investigation_can_use_single_llm_discussion(tmp_path, monkeypatch):
+    monkeypatch.setenv("FRONTIER_API_KEY", "test-secret")
+    factory_calls = []
+
+    def model_factory(**kwargs):
+        factory_calls.append(kwargs)
+        return _ProposalModel("SnSe")
+
     config = InvestigationConfig(
         objective="Find a high-ZT material.",
         output_root=str(tmp_path),
         hypothesis_discussion=HypothesisDiscussionConfig(
             mode="single_llm",
-            single_llm=SingleLLMDiscussionConfig(provider="vllm", model="single"),
+            single_llm=SingleLLMDiscussionConfig(
+                provider="openai",
+                model="frontier-model",
+                base_url="https://api.example/v1",
+                max_completion_tokens=2048,
+                api_key_env="FRONTIER_API_KEY",
+            ),
         ),
     )
     result = run_investigation(
         config,
         phase_runner=_phase_result,
-        model_factory=lambda **_: _ProposalModel("SnSe"),
+        model_factory=model_factory,
     )
     assert result.hypothesis.discussion_mode == "single_llm"
     assert result.hypothesis.proposed_compositions == ["SnSe"]
+    assert factory_calls == [
+        {
+            "provider": "openai",
+            "model": "frontier-model",
+            "base_url": "https://api.example/v1",
+            "api_key": "test-secret",
+            "max_tokens": 2048,
+        }
+    ]
+    assert "test-secret" not in result.model_dump_json()
     assert [exploration.composition for exploration in result.explorations] == ["SnSe"]
 
 

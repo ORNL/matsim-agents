@@ -1,0 +1,7 @@
+{"event": "run_created", "payload": {"workflow": "scientific_hypothesis_debate"}, "timestamp_utc": "2026-11-06T16:45:26.975266+00:00"}
+{"event": "contribution_completed", "payload": {"id": "round-001-turn-0001"}, "timestamp_utc": "2026-11-06T16:45:43.084184+00:00"}
+{"event": "contribution_completed", "payload": {"id": "round-001-turn-0002"}, "timestamp_utc": "2026-11-06T16:46:06.882625+00:00"}
+{"event": "contribution_completed", "payload": {"id": "round-002-turn-0003"}, "timestamp_utc": "2026-11-06T16:46:26.830184+00:00"}
+{"event": "contribution_completed", "payload": {"id": "round-002-turn-0004"}, "timestamp_utc": "2026-11-06T16:46:43.678026+00:00"}
+{"event": "contribution_completed", "payload": {"id": "verdict-001-turn-0005"}, "timestamp_utc": "2026-11-06T16:46:53.328532+00:00"}
+{"event": "contribution_completed", "payload": {"id": "verdict-002-turn-0006"}, "timestamp_utc": "2026-11-06T16:47:09.006514+00:00"}

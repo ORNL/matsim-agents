@@ -90,10 +90,11 @@ SERVE_TP_SIZE="${SERVE_TP_SIZE:-$(( NNODES * TILES_PER_NODE ))}"
 # ── Modules ─────────────────────────────────────────────────────────────
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
+source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
 if [[ -f "$VENV_PATH/bin/activate" ]]; then
-  # shellcheck disable=SC1091
-  source "$VENV_PATH/bin/activate"
+  activate_matsim_aurora_python "${REPO}" "${VENV_PATH}"
 else
+  configure_matsim_aurora_source "${REPO}"
   echo "WARN: $VENV_PATH/bin/activate not found; using bare frameworks Python" >&2
 fi
 RAY="$(command -v ray)"

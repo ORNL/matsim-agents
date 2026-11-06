@@ -139,6 +139,37 @@ def test_server_that_exits_reports_its_log(stub, tmp_path, monkeypatch):
     plan = _plan([_managed(script)])
     with pytest.raises(RuntimeError, match="(?s)exited with code 3.*out of memory"):
         LLMServices.start(_local(plan), log_dir=tmp_path, poll_interval_s=0.2)
+    lifecycle = json.loads((tmp_path / "server-lifecycle.json").read_text())
+    assert lifecycle["proposer"]["state"] == "failed"
+    assert lifecycle["proposer"]["startup_seconds"] is not None
+    assert lifecycle["proposer"]["process_exit_code"] == 3
+
+
+def test_server_is_stopped_when_lifecycle_failure_record_cannot_be_written(
+    stub, tmp_path, monkeypatch
+):
+    from matsim_agents.backends.llm import servers as llm_servers
+
+    script, _record = stub
+    plan = _plan([_managed(script)])
+    stopped = []
+    original_stop = _ManagedServer.stop
+
+    def track_stop(server, *args, **kwargs):
+        stopped.append(server)
+        return original_stop(server, *args, **kwargs)
+
+    def fail_write(*_args, **_kwargs):
+        raise OSError("filesystem full")
+
+    monkeypatch.setattr(_ManagedServer, "stop", track_stop)
+    monkeypatch.setattr(llm_servers, "_write_server_lifecycle", fail_write)
+
+    with pytest.raises(OSError, match="filesystem full"):
+        LLMServices.start(_local(plan), log_dir=tmp_path, poll_interval_s=0.2)
+
+    assert len(stopped) == 1
+    assert stopped[0].process.poll() is not None
 
 
 def test_server_that_never_becomes_ready_times_out_and_is_stopped(tmp_path):
@@ -154,6 +185,9 @@ def test_server_that_never_becomes_ready_times_out_and_is_stopped(tmp_path):
     with pytest.raises(TimeoutError, match="did not list 'Qwen2.5-14B-Instruct'"):
         LLMServices.start(_local(plan), log_dir=tmp_path, poll_interval_s=0.2)
     assert time.monotonic() - started < 60
+    lifecycle = json.loads((tmp_path / "server-lifecycle.json").read_text())
+    assert lifecycle["proposer"]["state"] == "failed"
+    assert lifecycle["proposer"]["startup_seconds"] >= 1
 
 
 def test_two_servers_on_one_node_and_external_endpoint(stub, tmp_path):

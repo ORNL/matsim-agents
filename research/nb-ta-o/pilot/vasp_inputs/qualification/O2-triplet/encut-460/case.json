@@ -1,0 +1,28 @@
+{
+  "case_id": "O2-triplet-encut-460",
+  "category": "oxygen_reference_qualification",
+  "status": "input_candidate_not_authorized_for_execution",
+  "species_order": [
+    "O"
+  ],
+  "species_counts": {
+    "O": 2
+  },
+  "settings": {
+    "encut_eV": 460,
+    "kspacing_A^-1": 0.2,
+    "ediff_eV": 1e-06,
+    "ediffg_eV_A": -0.01
+  },
+  "gamma_only": true,
+  "input_hashes": {
+    "POSCAR": "7c6a047ce580872489e49767f7a2b42b46db6a8559fe3fd7f610889043334291",
+    "INCAR": "3d6400d00f13afc486f8090a9558e6305338fbccefcbe4ec85e4bb5efd0e6339",
+    "INCAR.static": "3553616438c71a7a05f2837ff0c7d94de094f9c82b6f40c80e1367c0809c3cac",
+    "KPOINTS": "173c9cb84af61f0b5aed93201a38a212749e02ef03767ca67a4313bfb1d56930",
+    "POTCAR.order": "aa773ac15fbffa806e80746b0b1c93f1deb5eb98dfa8ac08bdb3d5a8eb56451b"
+  },
+  "potcar_required_components": [
+    "O"
+  ]
+}

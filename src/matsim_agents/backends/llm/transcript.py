@@ -41,6 +41,7 @@ class Contribution(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     latency_s: float | None = None
+    provider_metadata: dict[str, str] | None = None
     context: list[str] = Field(
         default_factory=list, description="Earlier contributions the model was shown."
     )
@@ -60,6 +61,7 @@ class Contribution(BaseModel):
             prompt_tokens=reply.prompt_tokens,
             completion_tokens=reply.completion_tokens,
             latency_s=reply.latency_s,
+            provider_metadata=reply.provider_metadata,
             **fields,
         )
 

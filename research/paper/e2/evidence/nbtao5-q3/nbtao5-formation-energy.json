@@ -1,0 +1,19 @@
+{
+  "quantity": "uncorrected PBE formation energy of NbTaO5 (ordering-01) vs bcc Nb, bcc Ta, triplet O2",
+  "protocol_id": "nbtao5-fixed-kmesh-v1",
+  "inputs_eV": {
+    "E_NbTaO5_static_28atoms": -261.82281757,
+    "mu_Nb": -10.09309961,
+    "mu_Ta": -11.8134321,
+    "E_O2_static": -9.8903047,
+    "mu_O": -4.94515235
+  },
+  "formation_energy_eV_per_cell": -75.29364373,
+  "formation_energy_eV_per_atom": -2.689058704642857,
+  "formation_energy_eV_per_formula_unit": -18.8234109325,
+  "caveats": [
+    "No O2 overbinding/anion correction applied (raw PBE).",
+    "Formation energy below zero does not establish thermodynamic stability; hull requires Nb2O5/Ta2O5/other competing phases.",
+    "Only ordering-01 evaluated; other orderings pending pilot stage."
+  ]
+}

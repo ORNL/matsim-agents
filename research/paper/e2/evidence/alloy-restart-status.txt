@@ -1,0 +1,8 @@
+fcc_hea_CrMnFeCoNi_Cantor_108_ideal: 49 OUTCARs, none with forces
+fcc_hea_CrMnFeCoNi_Cantor_108_random1: 39 OUTCARs, none with forces
+fcc_hea_CrMnFeCoNi_Cantor_108_random2: 11 OUTCARs, none with forces
+fcc_hea_CrMnFeCoNi_Cantor_108_random3: 2 OUTCARs, none with forces
+bcc_hea_NbTaVHfZrTi_equiatomic_128_ideal: 1 OUTCARs; latest-with-forces=0.OUTCAR steps_in_file=1 maxF first/last=1.478/1.478 eV/A E_last=-1198.1741 scf_unconverged=True mag=28.4804856 contcar=no
+bcc_hea_NbTaVHfZrTi_equiatomic_128_random1: 1 OUTCARs; latest-with-forces=0.OUTCAR steps_in_file=1 maxF first/last=1.478/1.478 eV/A E_last=-1197.3170 scf_unconverged=True mag=28.0859474 contcar=no
+bcc_hea_NbTaVHfZrTi_equiatomic_128_random2: 1 OUTCARs; latest-with-forces=0.OUTCAR steps_in_file=1 maxF first/last=1.418/1.418 eV/A E_last=-1197.3355 scf_unconverged=True mag=30.8770394 contcar=no
+bcc_hea_NbTaVHfZrTi_equiatomic_128_random3: 1 OUTCARs; latest-with-forces=0.OUTCAR steps_in_file=1 maxF first/last=1.501/1.501 eV/A E_last=-1197.3850 scf_unconverged=True mag=30.0701358 contcar=no

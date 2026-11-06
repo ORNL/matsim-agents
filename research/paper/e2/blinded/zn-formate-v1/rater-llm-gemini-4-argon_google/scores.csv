@@ -1,0 +1,17 @@
+item_id,case,verdict_correct,physical_reasoning,evidence_attribution,uncertainty,follow_up,notes
+item-001,zn-dihydrate-force-criterion,Y,2,2,2,2,"Thorough quantitative comparison, exact record attribution, and well-weighted caveats regarding provenance and scope."
+item-002,zn-alpha-force-criterion,Y,2,2,2,2,Accurate quantitative comparison and appropriate framing of provenance caveats without letting them overturn the decidable recorded-value claim.
+item-003,zn-alpha-force-criterion,Y,2,2,2,2,Strong physical reasoning including note on ISIF=3 / Pulay stress as a robustness caveat rather than a contradiction of the recorded value.
+item-004,zn-alpha-pbcn-static-energy-order,Y,0,1,0,2,"Correct verdict and record ID, but the rationale is a generic boilerplate phrase with zero physical reasoning, no numerical values cited, and no caveats mentioned."
+item-005,zn-dihydrate-force-criterion,Y,0,1,0,2,"Correct verdict, evidence ID, and follow-up decision, but the rationale is a single generic sentence lacking any physical reasoning, specific values, or uncertainty discussion."
+item-006,zn-pbcn-force-criterion,Y,0,1,0,2,"Rationale is a single boilerplate sentence with no physical reasoning, specific record values, or uncertainty analysis."
+item-007,zn-alpha-pbcn-static-energy-order,Y,2,2,2,2,"Thorough quantitative verification of per-atom energies, clear attribution to record values, and exact physical caveats regarding finite k-mesh differences versus the stated scope."
+item-008,zn-dihydrate-force-criterion,Y,2,2,2,2,"Complete and accurate assessment checking the force criterion, VASP settings, residual stress, and scope limitations."
+item-009,zn-alpha-pbcn-static-energy-order,Y,2,2,2,2,"Complete numerical verification, precise citation of evidence fields, and well-weighted discussion of numerical convergence limits vs. the narrow literal claim."
+item-010,zn-alpha-force-criterion,Y,2,2,2,2,"Thorough check of internal consistency (NSW vs ionic_steps, EDIFFG, residual stress) and well-calibrated uncertainty discussion."
+item-011,zn-alpha-force-criterion,Y,0,1,0,2,"Correct verdict and evidence_id in metadata, but the rationale is a single generic sentence containing no physical reasoning, no specific values from the record, and no discussion of caveats or uncertainty."
+item-012,zn-dihydrate-force-criterion,Y,2,2,2,2,"Well-grounded assessment citing exact record values, appropriate caveats (provenance hashes, dynamical stability vs force convergence), and correct follow-up handling."
+item-013,zn-pbcn-force-criterion,Y,2,2,2,2,"Thorough quantitative verification against record values, physical consistency checks (EDIFFG, NSW, stress), and appropriate caveats."
+item-014,zn-alpha-pbcn-static-energy-order,Y,2,2,2,2,"Accurate arithmetic check, full attribution to the evidence record, and appropriate distinction between finite-mesh comparison and physical polymorph stability."
+item-015,zn-pbcn-force-criterion,Y,2,2,2,2,"Clear, specific quantitative mapping to the record, solid physical consistency checks, and well-weighted caveats."
+item-016,zn-pbcn-force-criterion,Y,2,2,2,2,"Accurate citation of values, appropriate physical checks on relaxation settings, and reasonable caveats."

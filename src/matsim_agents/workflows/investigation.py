@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.llm.replies import invoke_model
+from matsim_agents.backends.llm.servers import api_key_from_env
 from matsim_agents.execution.contracts import (
     ComputeBudget,
     EvidenceLevel,
@@ -65,6 +66,8 @@ class SingleLLMDiscussionConfig(BaseModel):
     provider: str = "ollama"
     model: str | None = None
     base_url: str | None = None
+    max_completion_tokens: int | None = Field(None, gt=0)
+    api_key_env: str | None = Field(None, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class MultiLLMDebateDiscussionConfig(BaseModel):
@@ -150,7 +153,18 @@ def build_hypothesis_from_discussion(
     context = f"\n\nPrevious investigation evidence:\n{json.dumps(previous)}" if previous else ""
     if discussion.mode == "single_llm":
         spec = discussion.single_llm
-        model = model_factory(provider=spec.provider, model=spec.model, base_url=spec.base_url)
+        api_key = api_key_from_env(spec.api_key_env, owner="single-LLM hypothesis generation")
+        model = model_factory(
+            provider=spec.provider,
+            model=spec.model,
+            base_url=spec.base_url,
+            **({"api_key": api_key} if api_key is not None else {}),
+            **(
+                {"max_tokens": spec.max_completion_tokens}
+                if spec.max_completion_tokens is not None
+                else {}
+            ),
+        )
         reply = invoke_model(
             model,
             [

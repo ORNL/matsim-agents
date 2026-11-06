@@ -1,0 +1,60 @@
+{
+ "request_sha256_inputs": "lfp-antisite-energy-ranking",
+ "latency_s": 12.5,
+ "mag_applied": "model=claude-opus-5-5@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "chatcmpl-cb255bb7-ade2-4415-8ea4-9ea478d6a563",
+  "created": 1793832921,
+  "model": "claude-opus-5-5@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\"scores\": [{\"item_id\": \"item-004\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Correctly excludes the not_converged antisite record (81.4 eV/A force, 237 kbar stress, no accuracy marker). Flags the ~50 eV gap as implausible for a single swap. Requests DFT and selects complete-antisite-ionic-relaxation, consistent with request_dft.\"}, {\"item_id\": \"item-011\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 0, \"evidence_attribution\": 0, \"uncertainty\": 0, \"follow_up\": 1, \"notes\": \"Verdict is right but gives no physics and cites no records. It wrongly implies there is no admissible evidence, although the ideal record is converged and admissible. States no caveats. Lists both tests while setting request_dft=false, which is inconsistent because a DFT relaxation could decide the claim.\"}, {\"item_id\": \"item-030\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 1, \"notes\": \"Thorough analysis. Correctly treats the ideal record as the only admissible one and explains why the 50 eV gap is an artifact. Notes the missing k-point info on the antisite record and gives explicit falsification criteria. The rationale chooses complete-antisite-ionic-relaxation, but proposed_test_ids is empty, so the structured follow-up does not match the text.\"}, {\"item_id\": \"item-031\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 1, \"notes\": \"Correct and specific, with a quantitative falsification threshold (-195.772 eV). Caveats are well weighted: the PBE-noU limitation is noted but stays within the claim's archived-PBE scope. The rationale names complete-antisite-ionic-relaxation, but proposed_test_ids is empty, which is inconsistent.\"}], \"correct_verdict_in_your_judgement\": \"unresolved\", \"case_notes\": \"The ideal olivine record is converged and admissible (E = -195.772 eV, max force 0.0096 eV/A, accuracy marker reached). The antisite record is not_converged (max force 81.4 eV/A, 237 kbar stress, run stopped after SCF) and is inadmissible under the rules. Its ~50 eV energy offset is unphysical for a single Fe/Li antisite. With only one admissible energy, no ranking can be formed. The correct response is unresolved, request_dft=true, with complete-antisite-ionic-relaxation as the decisive follow-up.\"}",
+     "role": "assistant",
+     "reasoning_content": "",
+     "thinking_blocks": [
+      {
+       "type": "thinking",
+       "thinking": "",
+       "signature": "CAQSwgsKEggTEAIYAjgBQgh0aGlua2luZxIMEyLIbVU2koqDcuBUGgw58QmnWfyPvl6k//wiMG/PLoUgvfb7UBon2yHu7yOYMbc9zNv4rhwpEYfzlBTnpTfTgg3KuzYMMAHhKKwnXCrdCgESrRk0EUyeaZRXhgf7H08k94kuIq4PwAjde7g91fUuNYh/9kHEgvBa7aZ4+0JVDBPPcfRPBPiReRbURFrlBYNMGW7kFHNzL/tzI5zBWUmB2BzZL+wzX8LgPYaRheIl6Jvdz57Jb/t8WCtg/RKe4ScykdkKdBJPowIE/gPXWzemZSvj2gaY38KT1QkIxVUpQwsYMGwVsIGINzCIuZeZEdFip8DQYGJRMXY1nTvHismsEGsP4bajeBLTaqavMAXIuF0mxNM4GEzl1bQH9YiLSmeZsHreG4BaMMRRNFElJTizhV6KQrcxQErUFbgXLOIsr/Hf4mKYwRR1+7kD8SrupO8bBj7aTIyrCA7a6DB/Ru3vp2j/OIHL8oCRsu6cspltIdWUPFXwvKOg6mJYLLOXJzfcj5GvrIzvkB3gJyu1Eo+ZuSyFlnPs7JTs9SWd0CkvjBpIctFfPWGva3jKuumuYbn2FvjO0I9y/E9os+Ll8pwACxi4O8kTNTpKKo00k1wvx/+Voy7pyakeB5Zqx7oxTStT49bfQn0bquaYY1r7GYi22faJgH4JQ/34mcO/dHmSm2t5KkBcvaorscZeRiA9ypKUcD5UFbBqaBltl6xZ+LLTuC4h5VR5cIxibHUapKLqKLVFQ0hTI3k5clt3r28Epm7rwLtZBeYvehW70zOn75fI5bhjQOhe79e+TKOMKQxH10C4jgV9FaomqfuvfraAA6UIAWordI6Qfc/Ts5xNjWCHWjeBJ2BeaysQrjVTX3Gy+DL69cqFB1qOgdOX4piyrMMvNS8YCGXIjWcuBC4bDb87cjtTrQPrGX2hi+foETV0WNuPLsejQ8avzzYVfLLagi8bxb/muF5jYSmzouB47V/AAExpnhgdeX9Hecblf3dmSHnawnaUyfe6aEutONCmwT4WzXxL0WsHoEpGNpYPm+8q8sAPClbt5nlnpmzMPIo4rlVR25oEKUlfry1NPqWvj44DuVAXeiSTaYEDqNRmQ2RgkfnrT6Sy/vP4lHXcEsVbVblZ0Z+ns2RIprtx7lYYMn8BStsUQRDg/Az1s2tAtw/G7z6oy5VFAzUYcE0ghfaMGXY2NuhpRKHaXnjZnfRfO41UUgZ6ImqFJHSHcTZV7PDEOxW6Ap2T2d1I/IYhKmt1idFwB0X9mHAp/Y1lvTMkiM3xtvF/4yilDTEVLxOx/YQ64QueCTWgLm8gElX+2L3nGaTkgNWJ8mA64HrwGdrlitXejHsnkqKPYchN8iauz4kK0YJIsbSlZPDWJVVU7g7cnMA31k0q9HRkFLtz23pxd/RoDox7HL4ll4RjBrOZpkjov5+lXyE5H3Apso5TSb/ffQbE6IqsPqVSecSOuT5upfQQi5fACmmhyfInh2L+ZCHUj2+2UHG/ebUieyatrHuzY6frKQh6AGa80QbMvcXu01IrfqFiUV02/JCYY+tqGiW181fcHAyFj7sQ7DoGmw827dGSMSoS5PqLuUSL/HxdGg/4HXkXJE6GQr952JeqfU4LUvyZUUavqLyBol6QsGVUvYQRzhJdV46rZfNl5UPZl34QP8POPJrESucP3mj+sQbzuXMFrhnV+MeRNtWMB7n/cx8SzSPHkMxIhwm1mQyYlM+ZnToL4YoWmk5fgZ7ixOVBI4TnWRrA8nPt4OVADhjTdinl2QDfMuXNjUDH5/NM5u5C23Ac4nMdZYrZSMsGampc4tcb5kjHLray1X8vOAvJnIRWOvdmMvqrofANZJEKY4sbvAye50Pkc/1slthpFYZLITruqgAced9u6qAJh9iIhWSnBlTznXcyo6ymmeWboFtmP+K1aRnJSB8vePctGAE="
+      }
+     ],
+     "provider_specific_fields": {
+      "citations": null,
+      "thinking_blocks": [
+       {
+        "type": "thinking",
+        "thinking": "",
+        "signature": "CAQSwgsKEggTEAIYAjgBQgh0aGlua2luZxIMEyLIbVU2koqDcuBUGgw58QmnWfyPvl6k//wiMG/PLoUgvfb7UBon2yHu7yOYMbc9zNv4rhwpEYfzlBTnpTfTgg3KuzYMMAHhKKwnXCrdCgESrRk0EUyeaZRXhgf7H08k94kuIq4PwAjde7g91fUuNYh/9kHEgvBa7aZ4+0JVDBPPcfRPBPiReRbURFrlBYNMGW7kFHNzL/tzI5zBWUmB2BzZL+wzX8LgPYaRheIl6Jvdz57Jb/t8WCtg/RKe4ScykdkKdBJPowIE/gPXWzemZSvj2gaY38KT1QkIxVUpQwsYMGwVsIGINzCIuZeZEdFip8DQYGJRMXY1nTvHismsEGsP4bajeBLTaqavMAXIuF0mxNM4GEzl1bQH9YiLSmeZsHreG4BaMMRRNFElJTizhV6KQrcxQErUFbgXLOIsr/Hf4mKYwRR1+7kD8SrupO8bBj7aTIyrCA7a6DB/Ru3vp2j/OIHL8oCRsu6cspltIdWUPFXwvKOg6mJYLLOXJzfcj5GvrIzvkB3gJyu1Eo+ZuSyFlnPs7JTs9SWd0CkvjBpIctFfPWGva3jKuumuYbn2FvjO0I9y/E9os+Ll8pwACxi4O8kTNTpKKo00k1wvx/+Voy7pyakeB5Zqx7oxTStT49bfQn0bquaYY1r7GYi22faJgH4JQ/34mcO/dHmSm2t5KkBcvaorscZeRiA9ypKUcD5UFbBqaBltl6xZ+LLTuC4h5VR5cIxibHUapKLqKLVFQ0hTI3k5clt3r28Epm7rwLtZBeYvehW70zOn75fI5bhjQOhe79e+TKOMKQxH10C4jgV9FaomqfuvfraAA6UIAWordI6Qfc/Ts5xNjWCHWjeBJ2BeaysQrjVTX3Gy+DL69cqFB1qOgdOX4piyrMMvNS8YCGXIjWcuBC4bDb87cjtTrQPrGX2hi+foETV0WNuPLsejQ8avzzYVfLLagi8bxb/muF5jYSmzouB47V/AAExpnhgdeX9Hecblf3dmSHnawnaUyfe6aEutONCmwT4WzXxL0WsHoEpGNpYPm+8q8sAPClbt5nlnpmzMPIo4rlVR25oEKUlfry1NPqWvj44DuVAXeiSTaYEDqNRmQ2RgkfnrT6Sy/vP4lHXcEsVbVblZ0Z+ns2RIprtx7lYYMn8BStsUQRDg/Az1s2tAtw/G7z6oy5VFAzUYcE0ghfaMGXY2NuhpRKHaXnjZnfRfO41UUgZ6ImqFJHSHcTZV7PDEOxW6Ap2T2d1I/IYhKmt1idFwB0X9mHAp/Y1lvTMkiM3xtvF/4yilDTEVLxOx/YQ64QueCTWgLm8gElX+2L3nGaTkgNWJ8mA64HrwGdrlitXejHsnkqKPYchN8iauz4kK0YJIsbSlZPDWJVVU7g7cnMA31k0q9HRkFLtz23pxd/RoDox7HL4ll4RjBrOZpkjov5+lXyE5H3Apso5TSb/ffQbE6IqsPqVSecSOuT5upfQQi5fACmmhyfInh2L+ZCHUj2+2UHG/ebUieyatrHuzY6frKQh6AGa80QbMvcXu01IrfqFiUV02/JCYY+tqGiW181fcHAyFj7sQ7DoGmw827dGSMSoS5PqLuUSL/HxdGg/4HXkXJE6GQr952JeqfU4LUvyZUUavqLyBol6QsGVUvYQRzhJdV46rZfNl5UPZl34QP8POPJrESucP3mj+sQbzuXMFrhnV+MeRNtWMB7n/cx8SzSPHkMxIhwm1mQyYlM+ZnToL4YoWmk5fgZ7ixOVBI4TnWRrA8nPt4OVADhjTdinl2QDfMuXNjUDH5/NM5u5C23Ac4nMdZYrZSMsGampc4tcb5kjHLray1X8vOAvJnIRWOvdmMvqrofANZJEKY4sbvAye50Pkc/1slthpFYZLITruqgAced9u6qAJh9iIhWSnBlTznXcyo6ymmeWboFtmP+K1aRnJSB8vePctGAE="
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1379,
+   "prompt_tokens": 7431,
+   "total_tokens": 8810,
+   "completion_tokens_details": {
+    "reasoning_tokens": 430,
+    "text_tokens": 949
+   },
+   "prompt_tokens_details": {
+    "cached_tokens": 0,
+    "text_tokens": 4,
+    "cache_write_tokens": 7427,
+    "cache_creation_tokens": 7427,
+    "cache_creation_token_details": {
+     "ephemeral_5m_input_tokens": 7427,
+     "ephemeral_1h_input_tokens": 0
+    }
+   },
+   "cache_creation_input_tokens": 7427,
+   "cache_read_input_tokens": 0
+  }
+ }
+}

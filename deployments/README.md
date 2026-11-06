@@ -81,6 +81,43 @@ Use `RUNS_ROOT` to place output on the site's scratch filesystem. Site scripts
 must fail fast when required binaries, environments, checkpoints, or model
 weights are absent; they must not silently fall back to another user's paths.
 
+For Mistral Small 24B on Aurora, prepare its HF tokenizer overlay from the local
+model snapshot and pass that directory to the tracked resource plan:
+
+```bash
+python deployments/aurora/setup/prepare_mistral_tokenizer.py \
+	"$MODEL_ROOT/Mistral-Small-24B-Instruct-2501" \
+	"$PWD/runs/mistral-small-24b-tokenizer"
+qsub -A "$ALLOCATION" \
+	-v "PROJECT_ROOT=$PWD,MODEL_ROOT=$MODEL_ROOT,E1_MANIFEST=$E1_MANIFEST,MATSIM_RESOURCES=$PWD/deployments/aurora/resources/mistral-small-24b.yaml,MISTRAL_TOKENIZER_DIR=$PWD/runs/mistral-small-24b-tokenizer" \
+deployments/aurora/jobs/job-e1-development-aurora.sh
+```
+
+For Qwen3-235B E1 collections on Aurora, use the dedicated runner. It selects
+the graph-enabled resource plan from `E1_MODEL_KEY`, rejects eager-mode plans,
+and sets `VLLM_XPU_ENABLE_XPU_GRAPH=1`. Both Instruct and Thinking use TP=8 and
+`--max-num-seqs 1` with PIECEWISE-only graph capture. An earlier Thinking run
+using FULL_AND_PIECEWISE captured graphs but native-aborted during full decode
+graph replay; the current plans avoid that path while retaining piecewise XPU
+graphs. Old plans containing `--enforce-eager` silently disabled graph use, so
+the dedicated runner now rejects them.
+
+```bash
+qsub -A "$ALLOCATION" \
+	-v "PROJECT_ROOT=$PWD,MODEL_ROOT=$MODEL_ROOT,E1_MODEL_KEY=qwen3-235b-instruct-2507,E1_MANIFEST=$E1_MANIFEST" \
+	deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh
+```
+
+Point `E1_MANIFEST` at the one-question, 2,048-token Instruct canary manifest
+first; promote to the full manifest only after checking the run artifacts and
+PBS status. Instruct PIECEWISE canary job `9036264` completed on Nov 3, 2026
+with one response, zero failures, and PBS exit status 0. At the recorded
+checkpoint, Thinking PIECEWISE canary `9036266` and the 18-question Instruct
+campaign `9036469` were still running, so they are not yet qualified results.
+See [`docs/vllm-aurora.md`](../docs/vllm-aurora.md#qwen3-235b-e1-with-xpu-graphs)
+for the tested module stack, reproducible submission commands, log checks, and
+incident history.
+
 ## Validation status
 
 `python scripts/diagnostics/validate_deployments.py` performs the portable

@@ -1,0 +1,46 @@
+{
+ "request_sha256_inputs": "zn-dihydrate-force-criterion",
+ "latency_s": 9.0,
+ "mag_applied": "model=gemini-4-argon@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "Wjjtar6pBMO5l7oPkuOkoQw",
+  "created": 1793931354,
+  "model": "gemini-4-argon@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\n  \"scores\": [\n    {\n      \"item_id\": \"item-001\",\n      \"verdict_correct\": \"Y\",\n      \"physical_reasoning\": 2,\n      \"evidence_attribution\": 2,\n      \"uncertainty\": 2,\n      \"follow_up\": 2,\n      \"notes\": \"Thorough quantitative comparison, exact record attribution, and well-weighted caveats regarding provenance and scope.\"\n    },\n    {\n      \"item_id\": \"item-005\",\n      \"verdict_correct\": \"Y\",\n      \"physical_reasoning\": 0,\n      \"evidence_attribution\": 1,\n      \"uncertainty\": 0,\n      \"follow_up\": 2,\n      \"notes\": \"Correct verdict, evidence ID, and follow-up decision, but the rationale is a single generic sentence lacking any physical reasoning, specific values, or uncertainty discussion.\"\n    },\n    {\n      \"item_id\": \"item-008\",\n      \"verdict_correct\": \"Y\",\n      \"physical_reasoning\": 2,\n      \"evidence_attribution\": 2,\n      \"uncertainty\": 2,\n      \"follow_up\": 2,\n      \"notes\": \"Complete and accurate assessment checking the force criterion, VASP settings, residual stress, and scope limitations.\"\n    },\n    {\n      \"item_id\": \"item-012\",\n      \"verdict_correct\": \"Y\",\n      \"physical_reasoning\": 2,\n      \"evidence_attribution\": 2,\n      \"uncertainty\": 2,\n      \"follow_up\": 2,\n      \"notes\": \"Well-grounded assessment citing exact record values, appropriate caveats (provenance hashes, dynamical stability vs force convergence), and correct follow-up handling.\"\n    }\n  ],\n  \"correct_verdict_in_your_judgement\": \"supported\",\n  \"case_notes\": \"Straightforward property check: the single converged DFT relaxation record reports max_force = 0.0169179773 eV/A for the target structure, which satisfies the <= 0.02 eV/A threshold.\"\n}",
+     "role": "assistant",
+     "images": [],
+     "thinking_blocks": [],
+     "provider_specific_fields": {
+      "thought_signatures": [
+       "AY89a180BzSpIKYZ99QrzQsqt/dJr1E2yv6h5bGPzqt1cAbnMH0D57q8qke8c3vVGfsd3OeYXZ4Vc+h4ovPp5T8yd+Y9ZiBjxTuhyfduL0UBYFQW4w=="
+      ]
+     }
+    },
+    "provider_specific_fields": {
+     "native_finish_reason": "STOP"
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 495,
+   "prompt_tokens": 3904,
+   "total_tokens": 4399,
+   "completion_tokens_details": {
+    "text_tokens": 495
+   },
+   "prompt_tokens_details": {
+    "text_tokens": 3904
+   }
+  },
+  "vertex_ai_grounding_metadata": [],
+  "vertex_ai_url_context_metadata": [],
+  "vertex_ai_safety_results": [],
+  "vertex_ai_citation_metadata": []
+ }
+}

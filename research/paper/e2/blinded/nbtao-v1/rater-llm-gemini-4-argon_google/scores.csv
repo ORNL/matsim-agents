@@ -1,0 +1,21 @@
+item_id,case,verdict_correct,physical_reasoning,evidence_attribution,uncertainty,follow_up,notes
+item-001,nbtao-relax-energy-usable-as-reference,Y,2,2,2,2,"Complete and rigorous quantitative check, good physical insight on Pulay/basis-set effects, and appropriate treatment of caveats and follow-up."
+item-002,nbtao-relax-energy-usable-as-reference,Y,0,1,0,2,"Verdict and follow-up fields are correct, but the one-sentence rationale provides no physical reasoning, no numerical check, and no discussion of caveats/uncertainties."
+item-003,nbtao-q1-force-criterion,Y,2,2,2,2,"Accurate, comprehensive, and directly traces all values and caveats to the evidence record."
+item-004,nbtao-ordering-01-lowest,Y,2,2,2,2,"Correctly identifies the missing comparator energies, cites exact record values, notes lack of convergence testing, and selects the decisive follow-up test consistent with request_dft."
+item-005,nbtao-formation-energy-negative,Y,2,2,2,2,"Complete and accurate assessment, checking stoichiometry and arithmetic, noting protocol caveats (ISMEAR, ISPIN=1 vs triplet O2), and selecting the correct follow-up test."
+item-006,nbtao-formation-energy-negative,Y,0,0,0,0,"Completely boilerplate response; cites no evidence records, provides no physical reasoning or caveats, and omits the required proposed_test_id."
+item-007,nbtao-formation-energy-negative,Y,2,2,2,1,"Good physical reasoning, evidence attribution, and discussion of caveats, and correctly identifies the incomplete_references test in the rationale, but fails to populate proposed_test_ids."
+item-008,nbtao-relax-energy-usable-as-reference,Y,2,2,2,2,"Thorough quantitative verification, strong physical reasoning regarding EDIFF, residual forces, and ISIF=3 basis effects, and clear justification for no follow-up."
+item-009,nbtao-q1-force-criterion,Y,2,2,2,2,Well-reasoned and well-attributed response with appropriate weighting of caveats.
+item-010,nbtao-nb-ta-size-match,Y,2,2,2,2,"Complete, accurate quantitative verification, proper attribution, and insightful discussion of caveats and falsification."
+item-011,nbtao-nb-ta-size-match,Y,0,1,0,2,"Rationale is a single generic sentence lacking any physical reasoning, quantitative checks, or uncertainty analysis, and omits the underlying relaxation records."
+item-012,nbtao-ordering-01-lowest,Y,1,2,2,1,"Correctly identifies the missing four orderings, though makes a minor arithmetic error on atom count (Nb4Ta4O20 is 28 atoms, not 32). Leaves proposed_test_ids empty despite discussing the follow-up test and setting request_dft=true."
+item-013,nbtao-ordering-01-lowest,Y,0,0,0,1,"Boilerplate one-line response with no physical reasoning, no cited evidence IDs, and no uncertainty discussion. Sets request_dft=false despite proposing the DFT relaxation follow-up test."
+item-014,nbtao-ordering-01-lowest,Y,2,2,2,1,"Strong physical reasoning, accurate citation of evidence values, and thorough discussion of protocol uncertainties. Leaves proposed_test_ids empty in the structured output despite naming the exact test in the text and setting request_dft=true."
+item-015,nbtao-q1-force-criterion,Y,2,2,2,2,Thorough analysis with exact attribution and proper handling of methodological caveats.
+item-016,nbtao-q1-force-criterion,Y,0,1,0,2,"The rationale is a single generic sentence without any physical reasoning, quantitative check of the force value against the threshold, or statement of uncertainties/caveats. Correct evidence ID is listed in metadata."
+item-017,nbtao-formation-energy-negative,Y,2,2,2,1,"Excellent quantitative physical reasoning and uncertainty discussion, and identifies the incomplete_references test in the text, but sets request_dft=false and leaves proposed_test_ids empty in contradiction to its own rationale."
+item-018,nbtao-nb-ta-size-match,Y,2,2,2,2,"Thorough quantitative verification, exact record citations, and strong physical caveats regarding convergence and oxide proxy limitations."
+item-019,nbtao-nb-ta-size-match,Y,2,2,2,2,"Well-grounded quantitative check, proper attribution to all records, and appropriate discussion of caveats and follow-up tests."
+item-020,nbtao-relax-energy-usable-as-reference,Y,2,2,2,2,"Accurate recomputation of energy differences, clear attribution to all three records, well-weighted caveats, and sound physical reasoning on fixed-basis relaxation vs static run."

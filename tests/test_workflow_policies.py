@@ -1,6 +1,9 @@
+import json
+
 import numpy as np
 import pytest
 from ase import Atoms
+from ase.io import write
 
 from matsim_agents.active_learning.config import TrainerConfig
 from matsim_agents.active_learning.trainer import LabelledFrame
@@ -257,6 +260,18 @@ def test_phase_reevaluation_requires_retraining():
         PhaseExplorationPolicy(reevaluate_after_retraining=True)
 
 
+@pytest.mark.parametrize("ranking_mode", ["convex_hull_ranking", "relative_phase_rankng"])
+def test_phase_ranking_mode_rejects_unsupported_values(ranking_mode):
+    policy = PhaseExplorationPolicy()
+    assert policy.ranking_mode == "relative_phase_ranking"
+    assert PhaseExplorationPolicy(ranking_mode="relative_phase_ranking").ranking_mode == (
+        "relative_phase_ranking"
+    )
+
+    with pytest.raises(ValueError, match="use thermodynamic_stability characterization"):
+        PhaseExplorationPolicy(ranking_mode=ranking_mode)
+
+
 def test_phase_model_promotion_requires_retraining():
     with pytest.raises(ValueError, match="promote_model requires retrain_mlip"):
         PhaseExplorationPolicy(promote_model=True)
@@ -414,7 +429,9 @@ def test_phase_passes_promotion_controls_before_al(tmp_path, monkeypatch, contro
         output_dir=str(tmp_path),
         active_learning_runner=active_learning_runner,
     )
-    assert calls == [("Si", str(tmp_path), True, *controls)]
+    assert calls == [
+        ("Si", str(tmp_path / result.run_id / "calculations"), True, *controls)
+    ]
     assert not result.model_promoted
 
 
@@ -435,6 +452,99 @@ def test_seed_only_phase_is_not_a_usable_minimum(tmp_path, monkeypatch):
     )
 
     assert result.initial.outcome_class == "seed_only"
+
+
+def test_phase_run_persists_hull_follow_up_evidence_without_starting_campaign(
+    tmp_path, monkeypatch
+):
+    parsed = parse_composition("Si")
+    assert parsed is not None
+    candidate_path = tmp_path / "random-seed.extxyz"
+    relaxed_path = tmp_path / "relaxed.extxyz"
+    write(candidate_path, Atoms("Si", positions=[[0, 0, 0]], cell=[4, 4, 4], pbc=True))
+    write(relaxed_path, Atoms("Si", positions=[[0, 0, 0]], cell=[4, 4, 4], pbc=True))
+    candidate = PhaseCandidate(
+        formula="Si",
+        candidate_id="Si-R0000",
+        structure_path=str(candidate_path),
+        source="random",
+        random_seed=12,
+        needs_dft_verification=True,
+    )
+    initial = CompositionExplorationResult(
+        composition=parsed,
+        phase_candidates=[candidate],
+        relaxations=[
+            RelaxationResult(
+                structure_path=str(candidate_path),
+                optimized_structure_path=str(relaxed_path),
+                trajectory_path="",
+                log_csv_path="",
+                final_energy_eV=-5.0,
+                final_max_force_eV_per_A=0.01,
+                num_steps=5,
+                converged=True,
+            )
+        ],
+        outcome_class="usable_minimum",
+    )
+    monkeypatch.setattr(
+        "matsim_agents.workflows.phase_exploration.explore_composition",
+        lambda *_args, **_kwargs: initial,
+    )
+    policy = PhaseExplorationPolicy(
+        study_context={
+            "objective": "Assess whether Si is stable against decomposition",
+            "thermodynamic_stability_required": True,
+            "known_competing_phases": ["SiO2"],
+        }
+    )
+
+    result = run_phase_exploration("Si", policy=policy, output_dir=str(tmp_path / "runs"))
+
+    assert result.run_id
+    assert result.record_path == str(tmp_path / "runs" / result.run_id / "results.json")
+    assert result.hull_follow_up is not None
+    assert result.hull_follow_up.status == "review_required"
+    assert result.hull_follow_up.campaign_started is False
+    assert any("pyXtal" in reason for reason in result.hull_follow_up.reasons)
+    record = json.loads((tmp_path / "runs" / result.run_id / "results.json").read_text())
+    assert record["result"]["initial"]["phase_candidates"][0]["candidate_id"] == "Si-R0000"
+    assert record["structure_sha256"][str(candidate_path)]
+    assert record["structure_sha256"][str(relaxed_path)]
+    assert record["exploration_options"]["n_random"] == 50
+    assert record["exploration_options"]["optimizer"] == "FIRE"
+    assert record["status"] == "complete"
+
+
+def test_phase_exploration_persists_failure_after_registration(tmp_path, monkeypatch):
+    parsed = parse_composition("Si")
+    assert parsed is not None
+    initial = CompositionExplorationResult(composition=parsed, phase_candidates=[])
+    monkeypatch.setattr(
+        "matsim_agents.workflows.phase_exploration.explore_composition",
+        lambda *_args, **_kwargs: initial,
+    )
+
+    with pytest.raises(ValueError, match="requires active_learning_runner"):
+        run_phase_exploration(
+            "Si",
+            policy=PhaseExplorationPolicy(active_learning=True, dft_approved=True),
+            output_dir=str(tmp_path / "runs"),
+        )
+
+    run_directories = list((tmp_path / "runs").iterdir())
+    assert len(run_directories) == 1
+    record = json.loads((run_directories[0] / "results.json").read_text())
+    events = [
+        json.loads(line)
+        for line in (run_directories[0] / "events.jsonl").read_text().splitlines()
+    ]
+    assert record["status"] == "failed"
+    assert record["failure_type"] == "ValueError"
+    assert record["result"]["initial"]["composition"]
+    assert events[-1]["event"] == "run_finished"
+    assert events[-1]["payload"]["status"] == "failed"
 
 
 def test_formula_budget_does_not_truncate_random_structure_quota(tmp_path, monkeypatch):

@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "status": "fingerprinted_owner_attested_vasp_portal_release_and_aurora_license",
+  "platform": {
+    "intended_hpc": "Aurora",
+    "observed_login_host": "aurora-uan-0012",
+    "hardware_build_target": "Intel Data Center GPU Max / PVC",
+    "scheduler": "PBS Pro",
+    "queue_for_bounded_jobs": "debug",
+    "module_stack": ["oneapi/release/2026.1.0", "intel_gpu_umd_aicoe"],
+    "launcher": "deployments/aurora/launchers/run-vasp-gpu-aurora.sh"
+  },
+  "executable": {
+    "version_source": "VASP source/build path and tracked recipe; executable was not run to query its version",
+    "vasp_version": "6.6.1",
+    "variant": "vasp_std",
+    "path": "external/vasp6/src/vasp.6.6.1/bin/vasp_std",
+    "sha256": "ebd284027717ff564abf7ceaf93c3aca3261b129d7b60b3f2e3e2aa82d04c552",
+    "elf_build_id": "c5b42590e997f741d6c32cf8ed0ef4f7c06e17c1",
+    "build_recipe": "deployments/aurora/setup/makefile.include.aurora-gpu",
+    "execution_performed": false
+  },
+  "paw_library": {
+    "local_root": "external/vasp6/potcar",
+    "component_count": 314,
+    "gitignored": true,
+    "release_identifier": "VASP 6.6.1 VASP Portal release",
+    "homogeneous_release_verified": true,
+    "license_authorization_verified": true,
+    "verification_basis": "VASP license owner attests that the source and Nb_pv, Ta_pv, and O POTCAR components were downloaded from the VASP Portal using their account, that the listed component hashes match the authoritative release checksum manifest, and that the license authorizes this project's intended Aurora use.",
+    "reason": "Release identity, authoritative component hashes, and Aurora license authorization are recorded from the license owner's attestation; they have not been independently audited."
+  },
+  "local_source_use_approval": {
+    "approved": true,
+    "approved_by": "user (VASP license owner)",
+    "approval_date": "2026-11-04",
+    "scope": "Use the exact listed VASP Portal components for this private Aurora campaign; keep source components under the gitignored external/vasp6/potcar tree and assemble/stage POTCAR only in the external Flare run directory; do not publish or commit POTCAR contents.",
+    "official_release_identity_verified": true,
+    "license_metadata_independently_verified": false
+  },
+  "paw_provenance_assessment": {
+    "local_component_identity": "verified by exact local SHA-256 and parsed TITEL/ENMAX header metadata",
+    "locally_verified_header_fields": ["TITEL", "ENMAX"],
+    "zval_field_verified_from_local_metadata": false,
+    "release_identity": "VASP 6.6.1 VASP Portal release; owner attested",
+    "homogeneous_release_membership": "owner attests Nb_pv, Ta_pv, and O are from the same authorized release and match its checksum manifest",
+    "license_authorization_for_user_account_and_Aurora": "owner confirms the VASP/PAW license authorizes this project’s intended Aurora use",
+    "verification_basis": "Owner attestation recorded 2026-11-04; not independently audited.",
+    "storage_and_assembly_policy": "Keep source components under the gitignored external/vasp6/potcar tree; assemble and stage POTCAR only in the external Flare run directory. Never commit or publish POTCAR contents.",
+    "potcar_payload_disclosed_or_copied": false,
+    "administrator_confirmation_required": [
+      "Confirm the account/project may consume the 8 node-hour qualification ceiling (4 workflows) and 10 node-hour pilot ceiling (5 workflows) with the stated one-node, serial, 120-minute-per-workflow cap.",
+      "Confirm the Aurora PBS termination signal and grace behavior supports the five-minute soft-stop window and that the external Flare run directory survives job termination."
+    ]
+  },
+  "proposed_potcar_order": ["Nb_pv", "Ta_pv", "O"],
+  "available_variants_by_element": {
+    "Nb": ["Nb_pv", "Nb_sv", "Nb_sv_GW"],
+    "Ta": ["Ta", "Ta_pv", "Ta_sv_GW"],
+    "O": ["O", "O_GW", "O_GW_new", "O_h", "O_h_GW", "O_s", "O_s_GW"]
+  },
+  "proposed_components": {
+    "Nb_pv": {
+      "path": "external/vasp6/potcar/Nb_pv/POTCAR",
+      "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+      "local_titel_metadata": "PAW_PBE Nb_pv 08Apr2002",
+      "enmax_eV": 208.608,
+      "mtime_utc": "2010-03-02T11:59:32Z"
+    },
+    "Ta_pv": {
+      "path": "external/vasp6/potcar/Ta_pv/POTCAR",
+      "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+      "local_titel_metadata": "PAW_PBE Ta_pv 07Sep2000",
+      "enmax_eV": 223.667,
+      "mtime_utc": "2010-03-02T12:02:10Z"
+    },
+    "O": {
+      "path": "external/vasp6/potcar/O/POTCAR",
+      "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
+      "local_titel_metadata": "PAW_PBE O 08Apr2002",
+      "enmax_eV": 400.0,
+      "mtime_utc": "2012-03-28T12:16:33Z"
+    }
+  },
+  "available_relevant_alternatives": {
+    "Nb_sv": {
+      "path": "external/vasp6/potcar/Nb_sv/POTCAR",
+      "sha256": "6bc08b216e11c48e1663f63de7bbb5c7f96f184a6467d89e3bbffbc0a9d365ac",
+      "local_titel_metadata": "PAW_PBE Nb_sv 25May2007",
+      "zval": 13,
+      "enmax_eV": 293.235
+    },
+    "Ta": {
+      "path": "external/vasp6/potcar/Ta/POTCAR",
+      "sha256": "75c5a08bd44bb348e7da4ead769cdc9edbc7cc8f8aefe4bb662c56e29b0eb2ec",
+      "local_titel_metadata": "PAW_PBE Ta 17Jan2003",
+      "zval": 5,
+      "enmax_eV": 223.667
+    },
+    "O_h": {
+      "path": "external/vasp6/potcar/O_h/POTCAR",
+      "sha256": "7a36b172f62fa90b08bea2212b9dc3daf274e045d9c21ca4f271af665e656513"
+    },
+    "O_s": {
+      "path": "external/vasp6/potcar/O_s/POTCAR",
+      "sha256": "94fe26abe09a48e41def71fc9d85bae7c4ba729ec333f3b797098416de7f91e3"
+    }
+  },
+  "potcar_policy": "No POTCAR bytes are tracked. Assemble only from an approved homogeneous release, in the exact POSCAR order, using the guarded helper and an external run directory."
+}

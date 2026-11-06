@@ -1,0 +1,113 @@
+{
+  "directory": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/nbtao5-q1-fixed-kmesh-v1-20261104TJHFN69/cases/NbTaO5-ordering-01-baseline/runs/9040072.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov/static",
+  "phase": "static",
+  "qualified": true,
+  "checks": {
+    "normal_termination": {
+      "passed": true
+    },
+    "scf_converged_every_ionic_step": {
+      "passed": true,
+      "ionic_steps": 1,
+      "nelm": 200,
+      "max_scf_steps": 17,
+      "unconverged_ionic_steps": []
+    },
+    "incar_ENCUT": {
+      "passed": true,
+      "expected": "600",
+      "actual": "600"
+    },
+    "incar_EDIFF": {
+      "passed": true,
+      "expected": "1E-06",
+      "actual": "1.0E-06"
+    },
+    "incar_PREC": {
+      "passed": true,
+      "expected": "Accurate",
+      "actual": "Accurate"
+    },
+    "incar_ISPIN": {
+      "passed": true,
+      "expected": "1",
+      "actual": "1"
+    },
+    "paw_datasets": {
+      "passed": true,
+      "expected": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "actual": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ]
+    }
+  },
+  "values": {
+    "nions": 28,
+    "final_free_energy_eV": -261.82281757,
+    "final_energy_sigma0_eV": -261.82281757,
+    "energy_sigma0_per_atom_eV": -9.350814913214284,
+    "max_force_eV_per_A": 0.008834513965125643,
+    "stress_kbar": [
+      [
+        0.04843,
+        -0.08624,
+        0.00029
+      ],
+      [
+        -0.08624,
+        -0.27899,
+        0.00096
+      ],
+      [
+        0.00029,
+        0.00096,
+        -0.06707
+      ]
+    ],
+    "max_abs_principal_stress_kbar": 0.3003202475459167,
+    "final_total_magnetization_muB": null,
+    "irreducible_kpoints": 146
+  },
+  "method": {
+    "vasp_header": "vasp.6.6.1 17Jul2026 (build Oct 15 2026 18:33:52) complex",
+    "paw_titels": [
+      "Nb_pv",
+      "Ta_pv",
+      "O"
+    ],
+    "incar": {
+      "ALGO": "Normal",
+      "EDIFF": "1.0E-06",
+      "ENCUT": "600",
+      "IBRION": "-1",
+      "ISMEAR": "0",
+      "ISPIN": "1",
+      "ISYM": "0",
+      "KPAR": "12",
+      "LASPH": ".TRUE.",
+      "LCHARG": ".FALSE.",
+      "LREAL": ".FALSE.",
+      "LWAVE": ".TRUE.",
+      "NELM": "200",
+      "NSW": "0",
+      "PREC": "Accurate",
+      "SIGMA": "0.05",
+      "SYSTEM": "Nb-Ta-O NbTaO5-ordering-01-baseline static"
+    }
+  },
+  "provenance_sha256": {
+    "INCAR": "09291c920f3f0a2bff7838dcafb7a81762421a90605adc2d5a43936b1d219289",
+    "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+    "POSCAR": "317c922005fd56589cc73e0976d488c5e12c6129c9035ef551627fec68a02a77",
+    "POTCAR": "6044c1b454b2d82b7442db5f270384615b6354e561cf9860ced87aa086bd7602",
+    "CONTCAR": "b2b6fc606d9351c4259ee62528c24c52890904342e61c19294cf2e52030a311b",
+    "OUTCAR": "e4193558d5dfc6d59f08469705e9a2af405d071f0ddfdb0f52eee44814a58689",
+    "vasprun.xml": "2b0735e18fa32886dbb7c820c046a0da49f45847dbfff3443cf6a5966159c087"
+  }
+}

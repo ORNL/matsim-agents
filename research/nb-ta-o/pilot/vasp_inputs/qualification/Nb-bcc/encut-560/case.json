@@ -1,0 +1,28 @@
+{
+  "case_id": "Nb-bcc-encut-560",
+  "category": "crystalline_numerical_qualification",
+  "status": "input_candidate_not_authorized_for_execution",
+  "species_order": [
+    "Nb"
+  ],
+  "species_counts": {
+    "Nb": 1
+  },
+  "settings": {
+    "encut_eV": 560,
+    "kspacing_A^-1": 0.2,
+    "ediff_eV": 1e-06,
+    "ediffg_eV_A": -0.01
+  },
+  "gamma_only": false,
+  "input_hashes": {
+    "POSCAR": "653bbefa1b107eb2b70fe3af7e56bad1d9ed4c220fdafe87c4b6083a0b89d730",
+    "INCAR": "c969bfc0421ed02ddd27bcf5cceb9c8f270a6aef22b44661e4690d6bc77704ff",
+    "INCAR.static": "92514721f3426cad3ad1cb4d6550ba5c34eb093427f369c56f80653b1434e906",
+    "KPOINTS": "122e7696057e86a1097ded957e898ff26dcb16e2c8e247113553555e6f96cc8f",
+    "POTCAR.order": "a855adbf2ed90ba78aed2bddac6aafe0ee98f143d525f4ab4f19262fa154f39a"
+  },
+  "potcar_required_components": [
+    "Nb_pv"
+  ]
+}

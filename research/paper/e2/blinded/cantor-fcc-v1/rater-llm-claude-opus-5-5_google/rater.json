@@ -1,0 +1,10 @@
+{
+  "rater_id": "claude-opus-5-5@google",
+  "type": "llm",
+  "model_version": "claude-opus-5-5@google",
+  "provider": "MAG",
+  "vendor_independent": false,
+  "independence": "Not vendor-independent; rater models share model vendors with the assessor panel.",
+  "saw_unblinded_results": false,
+  "date": "2026-11-06"
+}

@@ -1,0 +1,81 @@
+# Nb-Ta-O Staged Pilot Proposal
+
+**Status:** fixed numerical inputs are prepared, not convergence-qualified. PBS job `9037133` was submitted using the superseded input deck and exited 127 after one second because the spooled job script could not locate the checkout; VASP did not start and no calculation result exists. Its external case directory remains unchanged. Do not treat it as qualification or rerun the revised method without separate authorization. The JSON files under `research/nb-ta-o/pilot/` remain input/planning manifests, not a qualified hull.
+
+## Structure Audit and Pilot Selection
+
+Run `python scripts/prepare_nbtao5_orderings.py` first, then `python scripts/prepare_nbtao5_pilot.py`. The second script checks the 70-substitution orbit partition, composition/site correspondence, unchanged parent lattice and coordinates, parent symmetry at six `symprec` values, and pairwise periodic matching with species preserved. Matching uses `ltol=1e-4`, `stol=1e-4`, `angle_tol=1e-3` degrees, no cell scaling, and supercell matching enabled. These stringent settings test exact duplicates and basis/origin representations of the generated cells; they do not prove equivalence under relaxed geometry or a different parent structure.
+
+The audit selects five structures without energy assumptions. It seeds the set with the minimum and maximum first-shell periodic Ta-Ta pair counts, then greedily chooses maximin points over six Ta-Ta radial-shell counts, the Ta first-shell neighbor-degree histogram, and oxygen-centered Nb/Ta motifs. For each O, the periodic cation neighbors within 2.8 A are classified by coordination number and Ta count: `(2,0..2)` and `(3,0..3)`. Descriptor columns are min-max scaled over the 14 candidates; ties resolve by ordering ID. The 8 A periodic cation neighbor list is grouped into radial shells using 0.12 A. All descriptors and selection metadata are written to `ordering_manifest.json`; the script is the source of truth if outputs are regenerated.
+
+The first five selected using Ta-Ta descriptors alone omitted both fully Nb-coordinated and fully Ta-coordinated three-cation oxygen motifs. That is a demonstrated structural gap, so the five are revised to `NbTaO5_ordering_01`, `_09`, `_14`, `_12`, and `_06`, in selection order. `_01` is the least and `_09` a most-clustered first-shell endpoint. `_14` contains four O sites with three Nb neighbors and four O sites with three Ta neighbors, covering the missing `(3,0)` and `(3,3)` motifs. `_12` and `_06` add maximin diversity in other oxygen motifs and farther cation shells. These are geometric representatives only, not low-energy candidates.
+
+All 14 CIFs retain the parent geometry. The five selected POSCARs have one-to-one species-preserving periodic site maps to their source CIFs, unchanged lattice and 28 sites, and zero coordinate displacement at serialization precision. Their minimum periodic cation-O distances are 1.8143 A, minimum O-O is 2.6049 A, and the shortest cation-cation contact is 3.4041 A; no ordering-specific relaxation or chemistry-dependent bond-length assessment has been done. Every Ta site has the same six-O parent shell at 1.8143, 1.9083, 1.9428, 2.0603, 2.1232, and 2.1903 A because the parent cation sites are symmetry-equivalent. O-centered motifs do vary with ordering and are now included in the selection. The audit emits POSCARs for all 14 structures; only the revised five are in the initial calculation pilot. POSCAR is the canonical computational structure format, with fixed species order `Nb Ta O`; the manifest records counts, parent-site substitutions, source-CIF hash, POSCAR hash, periodic minimum contacts, and local-environment descriptors. CIFs remain archived as source/provenance and are not passed directly to VASP.
+
+This avoids CIF occupancy/label ambiguity at the VASP boundary, but POSCAR is not self-describing: it has no occupancy model, oxidation state, source identity, or element labels in the coordinate rows. Therefore every POSCAR must travel with its manifest entry, and its species order must match the concatenated POTCAR order exactly. Convert a source CIF only after checking full occupancy, composition, site mapping, and structure hash; do not silently turn a disordered CIF into an ordered POSCAR.
+
+## Parent and Reference Domain
+
+The zeta-Nb2O5 parent is the best-supported compact starting cell: experimental, fully occupied, 28 sites, and exactly divisible into eight cation sites for four Nb/four Ta substitution. The alternatives have different scope or preparation constraints:
+
+| Parent candidate | Audit | Pilot decision |
+|---|---|---|
+| COD 1528723 M-Nb2O5 | Experimental Nb32O80, 112 fully occupied sites; four times the atom count of zeta | Valuable alternative parent family, but not a compact first pilot; Ta substitutions would require a separate enumeration and manifest |
+| COD 1534156 N-Nb2O5 | 112 sites and fully occupied, but the source reports LiF preparation | Exclude as pure binary reference until the additive's structural role is resolved |
+| COD 2107337 h-Nb2O5 | 99 listed sites, Nb28O70 formula, partially occupied sites | Do not substitute directly; resolve disorder and construct an explicit ordered/supercell model first |
+| COD 2310581 high-temperature Nb2O5 | Nb28O70, 98 fully occupied sites | Plausible distinct parent family, but relation to h-Nb2O5 must be resolved; a separate 14-of-28-Ta enumeration is required |
+
+The binary and ternary inventories identify structures and evidence gaps separately from the ordering manifest. The NbO/NbO2 COD records include related reports and theoretical entries and must be deduplicated and source-classified. The Ta2O5 L experimental coordinates are missing; available H-family Ta-sublattice data do not provide a complete experimental oxygen sublattice. Nb4Ta2O15 has diffraction evidence but no recovered refined coordinates. Nb-Ta-O is therefore not ready for a complete equilibrium-hull calculation. A future finite-domain hull must name its exclusions and remain provisional when required references are absent.
+
+## Proposed Calculation Sequence
+
+The orderings, reference phases, and energies must use a single frozen method signature. The user approved the exact local PAW component hashes and POSCAR/POTCAR order for private use; this does not establish an official homogeneous release identifier. Hash every component, preserve that provenance caveat, and approve the finite chemical-potential domain before any run.
+
+| Stage | Proposed work | Gate and non-overlapping count |
+|---|---|---|
+| Q1. Runtime/workflow check | Ordering 01 baseline relax + static under the fixed settings | 1 workflow, 2 VASP invocations, 2.0 node-hours. The previous Q1 submission failed before VASP and does not pass this gate |
+| Q2. Elemental baselines | Nb bcc and Ta bcc baseline relax + static | 2 workflows, 4 invocations, 4.0 node-hours; requires reviewed Q1 pass and separate stage authorization |
+| Q3. Oxygen reference | Fixed-cell O2 triplet relax + static, Gamma-only | 1 workflow, 2 invocations, 2.0 node-hours; requires reviewed Q1/Q2 pass and separate stage authorization |
+| 2. Ordering pilot | Relax and statically label the five revised descriptor-selected structures under the fixed signature | 5 workflows, 10 invocations, 10.0 node-hours. Separate production authorization remains required |
+| 3. Candidate-family expansion | To claim the minimum among all 14 parent-derived orderings, evaluate the remaining nine under the same signature | 9 workflows, 18 additional invocations, 18.0 node-hours, separately authorized |
+| 4. Additional hull references | Relax and statically label each distinct, source-approved binary/ternary polymorph not already in the 14-ordering family | `2R` invocations for `R` approved additional structures. `R` is currently unresolved; do not turn missing structures into guessed coordinates. Nb/Ta/O elemental endpoints are accounted separately above |
+
+The fixed qualification deck contains four workflows / eight VASP invocations, capped at 8.0 node-hours. Each 120-minute PBS walltime (`capacity` queue) is per complete workflow and covers its serial relaxation plus static invocation; it was raised from 30 minutes after job 9039526 ran 18 ionic steps (~80 s each) without converging. Workflows run one at a time. At 115 minutes the runner requests a normal VASP stop, preserves the external run directory, and records interruption separately from physical nonconvergence. The qualification stages require numerical review and separate authorization before progression. No ENCUT or k-point convergence sweeps remain in this plan; the selected fixed values are not represented as independently convergence-tested. Retries, spin branches, PAW sensitivity branches, and failed/unstable structures require new approval.
+
+### Runtime and Licensed Inputs
+
+The intended platform is Aurora PBS on Intel Data Center GPU Max/PVC. The exact configured executable is `external/vasp6/src/vasp.6.6.1/bin/vasp_std`, SHA-256 `ebd284027717ff564abf7ceaf93c3aca3261b129d7b60b3f2e3e2aa82d04c552`, ELF Build ID `c5b42590e997f741d6c32cf8ed0ef4f7c06e17c1`. It was fingerprinted but not executed. The launcher loads `oneapi/release/2026.1.0` and `intel_gpu_umd_aicoe`. See [vasp_runtime_manifest.json](../research/nb-ta-o/pilot/vasp_runtime_manifest.json) for the hash record.
+
+The selected POSCAR/POTCAR component order is `Nb_pv`, `Ta_pv`, `O`, with local component hashes respectively `086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114`, `ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa`, and `8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64`. The user approved using these exact files from the VASP source tree. The approval and local hashes do not independently establish a homogeneous official release identifier; do not claim that provenance is verified. No POTCAR bytes are tracked in Git; assembled copies remain only in external run directories.
+
+Regenerate POSCAR-linked decks with `python scripts/prepare_nbtao5_pilot.py` followed by `python scripts/prepare_nbtao5_vasp_inputs.py`. The selected PAW metadata has maximum `ENMAX=400.000 eV`, so `ENCUT=max(600,1.3*400)=600 eV`. All five pilot POSCARs share the same parent cell; the explicit Gamma-centered mesh at 0.15 A^-1 is `4x8x9` for each. The same rule is applied to every other periodic POSCAR, including Nb/Ta elemental candidates and the nine pending orderings. O2 has its own Gamma-only `1x1x1` mesh in a fixed 15 A cell. The relaxation KPOINTS is generated from the initial POSCAR; before the static step, the runner regenerates KPOINTS from the relaxed CONTCAR and records dimensions and hashes for each calculation. INCAR may not contain `KSPACING` or `KGAMMA`. The generator stages 18 input candidates: four qualification workflows, five selected pilots, and nine separately gated ordering-family inputs. It does not create POTCARs or perform convergence sweeps.
+
+Each case has `POTCAR.order` with required component names and hashes. After the separately authorized fixed-protocol execution, stage the case outside the Git worktree and run `NBTAO5_PAW_RELEASE_APPROVED=YES bash deployments/aurora/jobs/assemble-nbtao5-potcar.sh <approved-source-paw-root> <external-case-dir>`. The helper rechecks each component hash and refuses to write POTCAR content inside the repository. Never commit or attach a POTCAR. Local component headers identify the PBE variants and hashes, but do not identify an official homogeneous release.
+
+PBS output for job 9037133 records `bash: /var/spool/deployments/aurora/launchers/run-nbtao5-case-aurora.sh: No such file or directory`; the PBS handoff resolved the checkout beneath the spool directory, so the case launcher and its checks never ran. Both PBS wrappers now require an explicit absolute `NBTAO5_REPO_ROOT` passed with `qsub -v`, resolve it with `realpath`, and check the runner path before execution. They still request one node, `debug`, and 30 minutes per complete workflow. Qualification requires `NBTAO5_QUALIFICATION_AUTHORIZED=YES`, `NBTAO5_RESOURCE_APPROVED=YES`, and PAW-use approval. Production additionally requires `NBTAO5_PRODUCTION_AUTHORIZED=YES` and a reviewed JSON qualification record bound to `protocol_id=nbtao5-fixed-kmesh-v1`, the exact current manifest hash, executable and PAW hashes, and candidate settings. The runner rejects stale protocol IDs and INCAR files containing `KSPACING` or `KGAMMA`. A missing executable/POTCAR, hash mismatch, incomplete run, failed SCF, force or stress criterion stops the case; it does not retry.
+
+After separate authorization for the revised fixed protocol, a single qualification case can be staged and submitted with this pattern (not executed):
+
+```bash
+cd /absolute/path/to/matsim-agents
+qsub -v NBTAO5_REPO_ROOT="$PWD",NBTAO5_CASE_DIR=/external/run/case,NBTAO5_LOCK_ROOT=/external/run/locks,NBTAO5_PAW_ROOT=/authorized/potcar,NBTAO5_PAW_RELEASE_APPROVED=YES,NBTAO5_QUALIFICATION_AUTHORIZED=YES,NBTAO5_RESOURCE_APPROVED=YES deployments/aurora/jobs/job-nbtao5-qualification-aurora.pbs
+```
+
+The production script additionally needs `NBTAO5_PRODUCTION_AUTHORIZED=YES` and `NBTAO5_QUALIFICATION_RECORD=/external/review/qualification.json`. Do not use it until that record is reviewed and the explicit production authorization is granted.
+
+### Qualification Gates
+
+The fixed signature is `PREC=Accurate`, `ENCUT=600 eV`, `EDIFF=1e-6 eV`, `EDIFFG=-0.01 eV/A`, and explicit Gamma-centered KPOINTS at 0.15 A^-1 for periodic solids. No cutoff or k-point sweeps are proposed, so this signature has not been independently convergence-tested. The four baseline workflows are ordering 01 (Q1), Nb bcc and Ta bcc (Q2), and fixed-cell O2 triplet (Q3). Each uses one relaxation followed by one static calculation; the static mesh is regenerated from the final relaxed cell.
+
+Each ionic step must reach electronic convergence. The final relaxation must reach ionic convergence and maximum force <=0.01 eV/A. For bulk cells, the maximum absolute principal residual stress must be <=2 kbar (0.2 GPa). O2 remains spin-polarized triplet in a fixed cell and is checked for electronic/ionic convergence and the force criterion, not a cell-stress gate. The static calculation must converge electronically. Results include settings, per-phase KPOINTS dimensions/hash, SCF/ionic status, force, stress, energy, and provenance. These checks do not prove numerical convergence of the chosen fixed parameters. Freeze the O2 correction convention separately before any hull claim.
+
+Stop the qualification sequence on a PAW/executable hash mismatch, SCF nonconvergence, ionic/stress failure, structural collapse or unexpected phase change, exceeded 120-minute cap, or failure of any numerical tolerance. Preserve all outputs and report the failed gate; no automatic retry, parameter expansion, pilot relaxation, or hull calculation follows. A failed gate requires protocol review and renewed authorization. A passing gate still does not authorize the five production candidates by itself; the separate production authorization is mandatory. Since all 14 candidate orderings share the same parent cell, only the five descriptor-selected candidates are in the bounded pilot. The all-14 evaluation and any additional hull structures remain separately gated.
+
+## Claims and Stop Rules
+
+- Five pilot calculations can compare representative local orderings; they cannot establish the minimum over the 14 candidates.
+- The minimum within this enumerated family requires all 14 ordering relaxations and final static energies at common qualified settings.
+- Even all 14 do not establish a disordered-solid-solution free energy or an unrestricted Nb-Ta-O equilibrium hull.
+- A hull is provisional until the chosen domain's elemental references, binary subsystems, and required ternary competitors have compatible, converged entries. Current Ta2O5 and mixed-oxide gaps block that gate.
+- Do not use any generated ordering as an experimental phase label. Do not mix historical QE energies with the proposed VASP references.
+- The prior Q1 authorization applied to the superseded 520 eV/0.20 A^-1 case only. The revised fixed protocol requires separate execution authorization; job `9037133` failed before VASP and is not a qualification result.

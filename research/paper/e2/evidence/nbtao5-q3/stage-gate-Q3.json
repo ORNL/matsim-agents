@@ -1,0 +1,25 @@
+{
+  "protocol_id": "nbtao5-fixed-kmesh-v1",
+  "status": "stage_passed_and_next_stage_authorized",
+  "authorized_stage_id": "Q3-oxygen-reference",
+  "completed_stage_ids": [
+    "Q1-runtime-and-workflow-smoke",
+    "Q2-elemental-baselines"
+  ],
+  "q2_raw_verification_sha256": {
+    "q2-verify-Nb-bcc-baseline-relax.json": "c32f9d79b06b3bca703a8051653664d3e86fcc40ea0f56712d64c130899207f0",
+    "q2-verify-Nb-bcc-baseline-static.json": "55c1356c61a0ed3dc774295dff0a2f772829429514a709d9aed3294a1c175ee8",
+    "q2-verify-Ta-bcc-baseline-relax.json": "b19f97b7661839bd6e59b0ac89823462bdda943f0178afeebaeaf88173d96cb8",
+    "q2-verify-Ta-bcc-baseline-static.json": "38e159731ebf855bdb4ee61442aca39952f3d71d8101da1b02baf685e8dd9f3b"
+  },
+  "protocol_manifest_sha256": "bd031ee34862d6fa503e7942490dab15388187c88f11cd23f33dc9f7eaa1e430",
+  "vasp_executable_sha256": "ebd284027717ff564abf7ceaf93c3aca3261b129d7b60b3f2e3e2aa82d04c552",
+  "paw_component_sha256": {
+    "Nb_pv": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+    "Ta_pv": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+    "O": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64"
+  },
+  "authorized_budget_node_hours": 2.0,
+  "reviewer": "user (explicit Q3 authorization in chat 2026-11-05, budget 2.0 node-hours); Q2 Nb/Ta relax+static raw OUTCAR/OSZICAR verified (scripts/verify_vasp_run.py)",
+  "reviewed_at_utc": "2026-11-05T03:55:42.120093+00:00"
+}

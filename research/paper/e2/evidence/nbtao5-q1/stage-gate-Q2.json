@@ -1,0 +1,22 @@
+{
+  "protocol_id": "nbtao5-fixed-kmesh-v1",
+  "status": "stage_passed_and_next_stage_authorized",
+  "authorized_stage_id": "Q2-elemental-baselines",
+  "completed_stage_ids": [
+    "Q1-runtime-and-workflow-smoke"
+  ],
+  "q1_run_directory": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/nbtao5-q1-fixed-kmesh-v1-20261104TJHFN69/cases/NbTaO5-ordering-01-baseline/runs/9040072.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+  "q1_raw_verification_sha256": {
+    "q1-verify-relax.json": "2ebe76b5c0a7d68a889d045db25bcacb469e669c7ca167f902442ac9bd35e5e2",
+    "q1-verify-static.json": "b1c04e820ec6fd000559ac84cb23e900b34ebd856272108c8c72d8ffb22a70e4"
+  },
+  "protocol_manifest_sha256": "bd031ee34862d6fa503e7942490dab15388187c88f11cd23f33dc9f7eaa1e430",
+  "vasp_executable_sha256": "ebd284027717ff564abf7ceaf93c3aca3261b129d7b60b3f2e3e2aa82d04c552",
+  "paw_component_sha256": {
+    "Nb_pv": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+    "Ta_pv": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+    "O": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64"
+  },
+  "reviewer": "user (Q2 authorized in chat 2026-11-04); Q1 summaries and raw OUTCAR/OSZICAR verified (scripts/verify_vasp_run.py)",
+  "reviewed_at_utc": "2026-11-04T22:54:00.003488+00:00"
+}

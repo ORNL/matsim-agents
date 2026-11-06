@@ -9,6 +9,8 @@ matsim-agents llm-check examples/llm_check/llm_check.example.yaml
 This separation makes failures actionable. A model-download, endpoint,
 credential, accelerator, or model-loading failure is reported as an LLM
 deployment failure rather than as a relaxation or active-learning failure.
+For Genesis Mission hosted frontier models, see the separate
+[Model Access Gateway (MAG) guide](model-access-gateway.md).
 
 ## Stages
 
@@ -74,6 +76,49 @@ API keys are excluded from resolved configuration and provenance artifacts.
 | `huggingface` | Local paths contain `config.json`; remote IDs are validated when loading |
 | `openai` | `OPENAI_API_KEY` or `api_key` is configured |
 | `anthropic` | `ANTHROPIC_API_KEY` or `api_key` is configured |
+| `mag` | `AMSC_TOKEN` or `api_key` is configured; MAG `/v1/models` contains the explicit model ID |
+
+For MAG, set `provider: mag`, `model` to an ID returned by the authenticated
+catalog, and optionally `mag_provider` to select an upstream provider. The
+endpoint defaults to `https://mag.genesis.americansciencecloud.org/v1` and can
+be overridden with `base_url` or `MATSIM_MAG_BASE_URL`. Set `AMSC_TOKEN` in the
+runtime environment; it is excluded from saved run configuration. See the
+[MAG integration guide](model-access-gateway.md) for setup and E1 manifest
+configuration.
+
+## External API access from ALCF and OLCF
+
+When a client running on ALCF or OLCF needs to reach an external frontier-model
+API, configure the facility's outbound proxy variables in the shell that runs
+the client. These settings provide network routing only; configure API
+credentials separately, and never put tokens in this file or in run manifests.
+
+ALCF proxy settings:
+
+```bash
+export HTTP_PROXY="http://proxy.alcf.anl.gov:3128"
+export HTTPS_PROXY="http://proxy.alcf.anl.gov:3128"
+export http_proxy="http://proxy.alcf.anl.gov:3128"
+export https_proxy="http://proxy.alcf.anl.gov:3128"
+export ftp_proxy="http://proxy.alcf.anl.gov:3128"
+```
+
+OLCF proxy settings:
+
+```bash
+export http_proxy=http://ornl.gov
+export https_proxy=http://ornl.gov
+export ftp_proxy=http://ornl.gov
+export all_proxy=socks://proxy.ccs.ornl.gov:3128/
+export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
+```
+
+The OLCF `http://ornl.gov` values are recorded as supplied; verify with current
+OLCF network documentation or support that they are the intended HTTP/HTTPS/FTP
+proxy endpoints before relying on them. Proxy availability and outbound access
+can differ between login and compute nodes. Keep credentials out of shell
+history and logs, and use only the network path permitted by the facility and
+project.
 
 For a multi-node vLLM service, set `expected_accelerators`,
 `tensor_parallel_size`, and `context_length` to the deployed topology. Server

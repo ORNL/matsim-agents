@@ -1,0 +1,375 @@
+# Scientific debate
+
+Run `debate-2026-11-04T23-32-17Z_8010e370`.
+
+**Hypothesis.** Claim (property) about NbTaO5: The final energy of the ordering-01 cell relaxation can stand in for the static single-point reference energy: the two agree to within 1 meV/atom.
+Decision criterion: {"quantity":"energy_per_atom_difference_abs","unit":"eV/atom","target_structure":"NbTaO5-ordering-01 relax vs static","threshold":0.001,"comparison_structure":null}
+
+Scope sufficient: None; scope: not specified
+Available follow-up tests: {"missing_measurement": "static-single-point-at-relaxed-geometry"}
+
+Evidence records:
+[
+ {
+  "recorded_at": "2026-11-04T23:30:17.027926+00:00",
+  "record_type": "evidence",
+  "evidence_id": "ev-dadce256758219b69e6c3eb4",
+  "kind": "relaxation",
+  "subject": "NbTaO5",
+  "campaign_id": "e2-nbtao-v1",
+  "characterization_contract_id": null,
+  "calculation_id": null,
+  "task_id": "nbtao-relax-energy-usable-as-reference:relax",
+  "run_id": null,
+  "method": {
+   "backend": "vasp",
+   "backend_version": "6.6.1",
+   "model": null,
+   "model_sha256": null,
+   "method_signature": "vasp6.6.1-pbe-nonspin-encut600-ediff1e-6-ediffg0.01-gamma0.15",
+   "settings": {
+    "backend": "vasp",
+    "backend_version": "6.6.1",
+    "method_signature": "vasp6.6.1-pbe-nonspin-encut600-ediff1e-6-ediffg0.01-gamma0.15",
+    "settings": {
+     "functional": "PBE",
+     "potcars": [
+      "PAW_PBE Nb_pv 08Apr2002",
+      "PAW_PBE Ta_pv 07Sep2000",
+      "PAW_PBE O 08Apr2002"
+     ],
+     "encut_eV": 600,
+     "prec": "Accurate",
+     "ispin": 1,
+     "ediff_eV": 1e-06,
+     "ediffg_eV_per_A": -0.01,
+     "kpoints": "explicit Gamma-centred mesh at 0.15 1/A spacing",
+     "protocol_id": "nbtao5-fixed-kmesh-v1",
+     "convergence_testing": "none; fixed signature not independently convergence-tested"
+    },
+    "calculation": "NbTaO5-ordering-01-baseline relax (Aurora job 9040072)",
+    "outcar_sha256": "a8bbe557c0acd0b8d813b765d0c62e58ac0fe1ad8b320b199ffc4e1dc1a2b8f3",
+    "isif": 3,
+    "ismear": 0,
+    "sigma_eV": 0.05,
+    "kpoints_mesh": "4x8x9",
+    "ionic_accuracy_marker": "reached required accuracy"
+   },
+   "software_versions": {}
+  },
+  "evidence_level": "converged_dft",
+  "outcome": "measured",
+  "values": [
+   {
+    "name": "total_energy",
+    "value": -261.77969682,
+    "unit": "eV",
+    "structure": "NbTaO5-ordering-01 (Nb4Ta4O20"
+   },
+   {
+    "name": "energy_per_atom",
+    "value": -9.34927489,
+    "unit": "eV/atom",
+    "structure": "NbTaO5-ordering-01 (Nb4Ta4O20"
+   },
+   {
+    "name": "final_max_force",
+    "value": 0.00846,
+    "unit": "eV/A",
+    "structure": "NbTaO5-ordering-01 (Nb4Ta4O20"
+   },
+   {
+    "name": "final_max_abs_principal_stress",
+    "value": 0.636,
+    "unit": "kbar",
+    "structure": "NbTaO5-ordering-01 (Nb4Ta4O20"
+   },
+   {
+    "name": "ionic_steps",
+    "value": 50.0,
+    "unit": "count",
+    "structure": "NbTaO5-ordering-01 (Nb4Ta4O20"
+   },
+   {
+    "name": "volume_per_atom",
+    "value": 12.5548,
+    "unit": "A^3/atom",
+    "structure": "NbTaO5-ordering-01 (Nb4Ta4O20"
+   }
+  ],
+  "numerical_convergence": {},
+  "reference_set_id": null,
+  "reference_complete": null,
+  "input_sha256": {},
+  "output_artifact_sha256": {},
+  "physical_assumptions": [],
+  "uncertainties": {},
+  "failure_reason": null,
+  "parent_record_ids": [],
+  "cost": null
+ },
+ {
+  "recorded_at": "2026-11-04T23:30:17.103910+00:00",
+  "record_type": "evidence",
+  "evidence_id": "ev-3a4a4ce15c52da1b779b82f2",
+  "kind": "relaxation",
+  "subject": "NbTaO5",
+  "campaign_id": "e2-nbtao-v1",
+  "characterization_contract_id": null,
+  "calculation_id": null,
+  "task_id": "nbtao-relax-energy-usable-as-reference:static",
+  "run_id": null,
+  "method": {
+   "backend": "vasp",
+   "backend_version": "6.6.1",
+   "model": null,
+   "model_sha256": null,
+   "method_signature": "vasp6.6.1-pbe-nonspin-encut600-ediff1e-6-ediffg0.01-gamma0.15",
+   "settings": {
+    "backend": "vasp",
+    "backend_version": "6.6.1",
+    "method_signature": "vasp6.6.1-pbe-nonspin-encut600-ediff1e-6-ediffg0.01-gamma0.15",
+    "settings": {
+     "functional": "PBE",
+     "potcars": [
+      "PAW_PBE Nb_pv 08Apr2002",
+      "PAW_PBE Ta_pv 07Sep2000",
+      "PAW_PBE O 08Apr2002"
+     ],
+     "encut_eV": 600,
+     "prec": "Accurate",
+     "ispin": 1,
+     "ediff_eV": 1e-06,
+     "ediffg_eV_per_A": -0.01,
+     "kpoints": "explicit Gamma-centred mesh at 0.15 1/A spacing",
+     "protocol_id": "nbtao5-fixed-kmesh-v1",
+     "convergence_testing": "none; fixed signature not independently convergence-tested"
+    },
+    "calculation": "NbTaO5-ordering-01-baseline static at relaxed geometry (Aurora job 9040072)",
+    "outcar_sha256": "e4193558d5dfc6d59f08469705e9a2af405d071f0ddfdb0f52eee44814a58689",
+    "nsw": 0,
+    "ismear": 0,
+    "sigma_eV": 0.05,
+    "kpoints": "regenerated from relaxed cell at 0.15 1/A"
+   },
+   "software_versions": {}
+  },
+  "evidence_level": "converged_dft",
+  "outcome": "measured",
+  "values": [
+   {
+    "name": "total_energy",
+    "value": -261.82281757,
+    "unit": "eV",
+    "structure": "NbTaO5-ordering-01 (Nb4Ta4O20"
+   },
+   {
+    "name": "energy_per_atom",
+    "value": -9.35081491,
+    "unit": "eV/atom",
+    "structure": "NbTaO5-ordering-01 (Nb4Ta4O20"
+   },
+   {
+    "name": "final_max_force",
+    "value": 0.00883,
+    "unit": "eV/A",
+    "structure": "NbTaO5-ordering-01 (Nb4Ta4O20"
+   },
+   {
+    "name": "final_max_abs_principal_stress",
+    "value": 0.3,
+    "unit": "kbar",
+    "structure": "NbTaO5-ordering-01 (Nb4Ta4O20"
+   }
+  ],
+  "numerical_convergence": {},
+  "reference_set_id": null,
+  "reference_complete": null,
+  "input_sha256": {},
+  "output_artifact_sha256": {},
+  "physical_assumptions": [],
+  "uncertainties": {},
+  "failure_reason": null,
+  "parent_record_ids": [],
+  "cost": null
+ },
+ {
+  "recorded_at": "2026-11-04T23:30:17.141142+00:00",
+  "record_type": "evidence",
+  "evidence_id": "ev-9a65001e4a086af6f63ecfb3",
+  "kind": "characterization",
+  "subject": "NbTaO5",
+  "campaign_id": "e2-nbtao-v1",
+  "characterization_contract_id": null,
+  "calculation_id": null,
+  "task_id": "nbtao-relax-energy-usable-as-reference:comparison",
+  "run_id": null,
+  "method": {
+   "backend": "arithmetic",
+   "backend_version": null,
+   "model": null,
+   "model_sha256": null,
+   "method_signature": "energy-per-atom-difference-same-structure",
+   "settings": {
+    "formula": "|E_relax/28 - E_static/28|",
+    "inputs_outcar_sha256": [
+     "a8bbe557c0acd0b8d813b765d0c62e58ac0fe1ad8b320b199ffc4e1dc1a2b8f3",
+     "e4193558d5dfc6d59f08469705e9a2af405d071f0ddfdb0f52eee44814a58689"
+    ]
+   },
+   "software_versions": {}
+  },
+  "evidence_level": "converged_dft",
+  "outcome": "measured",
+  "values": [
+   {
+    "name": "energy_per_atom_difference_abs",
+    "value": 0.00154,
+    "unit": "eV/atom",
+    "structure": "NbTaO5-ordering-01 relax vs static"
+   }
+  ],
+  "numerical_convergence": {},
+  "reference_set_id": null,
+  "reference_complete": null,
+  "input_sha256": {},
+  "output_artifact_sha256": {},
+  "physical_assumptions": [],
+  "uncertainties": {},
+  "failure_reason": null,
+  "parent_record_ids": [],
+  "cost": null
+ }
+]
+
+Rules for judging the claim:
+- A failed_to_compute or not_converged record is not evidence for or against a material.
+- A thermodynamic_stability claim is decided only by converged DFT stability (hull) evidence with
+  complete reference phases; MLIP evidence supports at most an energy_ranking claim.
+- An energy_ranking claim needs at least MLIP relaxation evidence of kind energy_ranking or
+  stability.
+- When admissible records disagree, the claim is unresolved.
+- Evidence that does not cover the claim's stated scope cannot support a decisive verdict.
+- Answer unresolved when the evidence does not decide the claim, and request DFT only when a DFT
+    calculation could decide it. Select a follow-up test only when it addresses a visible evidence
+    gap, and only from the provided options.
+
+Does the evidence support, contradict, or leave the claim unresolved?
+
+## Argument · claude-sonnet · round 1
+
+`round-001-turn-0001` · claude-sonnet-5-5@google · 1730 completion tokens · 14.7 s
+
+**Position: the evidence contradicts the claim.** The relaxation energy does not stand in for the static energy at the 1 meV/atom threshold.
+
+**Arithmetic check.** I recomputed both energies per atom for the 28-atom cell (Nb4Ta4O20).
+- Relax: −261.77969682 / 28 = −9.349275 eV/atom.
+- Static: −261.82281757 / 28 = −9.350815 eV/atom.
+- |Δ| = 1.54 meV/atom, which exceeds the 1.0 meV/atom threshold by about 50%. This matches the comparison record. The total-energy difference is about 43 meV per cell.
+
+**Admissibility.** Both calculations are converged-DFT records with outcome "measured". They share the same method signature, protocol ID, POTCARs, ENCUT, smearing and structure. The relax record reports "reached required accuracy". I see no failed or not_converged records, and the two energies do not disagree with each other. They are different quantities, and their difference is what the claim tests. So the "admissible records disagree → unresolved" rule does not apply.
+
+**Likely origin of the gap (speculation, not in the records).**
+- A VASP ISIF=3 relaxation holds the plane-wave basis fixed to the starting cell. The final-step energy therefore carries a Pulay-type basis-set error. A static run on the relaxed cell regenerates the basis and also regenerates the k-mesh, as the record states.
+- This is exactly why a relax-final energy is generally not a safe single-point reference. The 0.6 kbar residual stress is small, but it does not remove the basis-set effect after a large cell change over 50 ionic steps.
+- The protocol is stated to be "not independently convergence-tested", so I cannot say which of the two energies is closer to the converged value. That does not change the verdict, because the claim only asks whether one can substitute for the other.
+
+**Scope.** The scope is unspecified, but the claim names NbTaO5 ordering-01 and the evidence covers that structure directly. The verdict is therefore decisive for this ordering. It does not generalize to other orderings.
+
+**Follow-up test.** The offered option, a static single point at the relaxed geometry, has effectively been done already. The static record is NSW=0 at the relaxed geometry of the same job. Repeating it would add little. A more informative test would be a restart relaxation, or a static run with a larger ENCUT and a fixed k-mesh. That would show whether the 1.5 meV gap comes from the basis or from the k-mesh. It is not needed for this verdict, and it is not among the provided options.
+
+**Falsification.** The verdict would change only if the static energy were shown to be a faulty artifact, for example a mismatched mesh or POTCAR. The records show matching POTCARs and settings, so I find no such fault.
+
+**Challenge to peers.** Any "unresolved" verdict needs to name an admissible record that actually conflicts or a real scope gap. I see neither. Calling this unresolved because the 1.5 meV gap could be numerical noise would be a mistake. That noise is precisely what the claim says is below 1 meV.
+
+## Argument · gemini-flash · round 1
+
+`round-001-turn-0002` · gemini-2.5-flash@google · 3332 completion tokens · 15.1 s
+
+The evidence contradicts the claim. The absolute difference between the final energy per atom from the relaxation and the static single-point energy per atom at the relaxed geometry is 0.00154 eV/atom. This value exceeds the specified threshold of 0.001 eV/atom.
+
+I concur with claude-sonnet's numerical analysis and their conclusion that the evidence contradicts the claim. The arithmetic is straightforward and confirmed by the `ev-9a65001e4a086af6f63ecfb3` comparison record.
+
+**Admissibility and Scope:**
+Both the relaxation (`ev-dadce256758219b69e6c3eb4`) and the static calculation (`ev-3a4a4ce15c52da1b779b82f2`) are recorded as "converged_dft" and "measured". They share consistent method signatures, including functional, POTCARs, ENCUT, and smearing. The static calculation explicitly states `nsw=0` and is performed at the relaxed geometry, fulfilling the definition of a static single-point reference. Therefore, the evidence is admissible and directly addresses the claim for the NbTaO5-ordering-01 structure.
+
+**Assumptions and Technical Considerations:**
+The observed difference is not unexpected and highlights a common distinction in VASP calculations.
+1.  **Relaxation (ISIF=3):** When performing a relaxation with `ISIF=3` (allowing cell shape and volume changes), VASP typically keeps the plane-wave basis set fixed to the *initial* cell parameters throughout the ionic steps. The final energy reported in the OUTCAR is calculated with this potentially outdated basis set. This can lead to a residual Pulay stress and an energy that is not fully converged for the *final* cell geometry. The `final_max_abs_principal_stress` of 0.636 kbar for the relaxation supports this.
+2.  **Static Calculation:** The static calculation (`ev-3a4a4ce15c52da1b779b82f2`) is performed at the *relaxed geometry*. Crucially, its settings indicate "kpoints: regenerated from relaxed cell at 0.15 1/A". This implies that the basis set and k-mesh are re-evaluated and optimized for the *final* cell geometry. This typically yields a more accurate energy for that specific geometry. The lower `final_max_abs_principal_stress` of 0.3 kbar for the static run, compared to the relaxation, further suggests a more consistent calculation for the final geometry.
+
+The difference of 1.54 meV/atom is thus a real physical and computational distinction between the energy reported at the end of a relaxation (with a fixed initial basis) and a static calculation (with a basis optimized for the final geometry). The claim posits these two should agree within 1 meV/atom, which the evidence clearly refutes.
+
+**Follow-up Tests:**
+I agree with claude-sonnet that the `missing_measurement: static-single-point-at-relaxed-geometry` has effectively been performed by `ev-3a4a4ce15c52da1b779b82f2`. No other provided follow-up test would alter this verdict.
+
+**Falsification:**
+The claim would be supported if a re-evaluation of the static calculation, or a more rigorous relaxation protocol (e.g., a restart of the relaxation with a new basis set, or a relaxation with `ISIF=2` followed by `ISIF=3`), resulted in a difference below 1 meV/atom. However, based on the current evidence and standard VASP practices, the observed difference is a valid outcome.
+
+## Argument · gemini-flash · round 2
+
+`round-002-turn-0003` · gemini-2.5-flash@google · 2617 completion tokens · 12.1 s
+
+The evidence unequivocally contradicts the claim. The absolute difference between the final energy per atom from the relaxation and the static single-point energy per atom at the relaxed geometry is 0.00154 eV/atom (1.54 meV/atom). This value exceeds the specified threshold of 0.001 eV/atom (1 meV/atom) by 54%. The comparison record `ev-9a65001e4a086af6f63ecfb3` directly quantifies this difference, which is derived from two admissible and converged DFT calculations.
+
+I fully support claude-sonnet's and gemini-flash's conclusion that the evidence contradicts the claim. Their numerical analysis is accurate, and the observed difference is clearly above the threshold.
+
+I also agree with gemini-flash's detailed explanation of the technical reasons for this discrepancy. The distinction between the final energy of an `ISIF=3` relaxation (where the plane-wave basis set is typically fixed to the initial cell parameters) and a static calculation performed at the relaxed geometry (where the basis set and k-mesh are re-evaluated for the final cell) is a well-known aspect of VASP calculations. This difference is not merely numerical noise but reflects a real computational distinction in how the energies are calculated. The residual stress values reported for the relaxation (0.636 kbar) and the static run (0.3 kbar) further support this interpretation, indicating a more accurately determined energy for the static calculation at the final geometry.
+
+**Assumptions Exposed:**
+The hypothesis implicitly assumes that the final energy reported by a VASP `ISIF=3` relaxation is directly comparable to a static calculation at the relaxed geometry within a very tight tolerance (1 meV/atom). This assumption overlooks the computational details of how VASP handles basis sets and k-meshes during cell relaxations versus static calculations. The evidence demonstrates that this assumption does not hold for the given computational parameters and material.
+
+**Falsification Tests:**
+While the current evidence is decisive, the claim could be re-evaluated if:
+1.  The static calculation (`ev-3a4a4ce15c52da1b779b82f2`) were shown to be flawed in its setup, for instance, if its k-mesh generation or POTCARs were inconsistent with the relaxation in a way not captured by the method signature. However, the records indicate consistency.
+2.  A *restart* relaxation were performed from the final geometry of `ev-dadce2567558219b69e6c3eb4`, allowing VASP to re-initialize the basis set and k-mesh for the relaxed cell. If the energy from this restarted relaxation then agreed with the static energy within 1 meV/atom, it would suggest the initial relaxation's final energy was indeed affected by the fixed basis set. This would provide a more direct comparison of "relaxed energy" with "static energy at relaxed geometry" under conditions where both calculations properly account for the final cell. This is not among the provided follow-up options but is a scientifically sound test.
+3.  The initial relaxation (`ev-dadce256758219b69e6c3eb4`) were performed with a significantly tighter `EDIFG` criterion (e.g., 0.001 eV/A) to see if the final energy from the relaxation converges closer to the static energy. This would test the sensitivity of the relaxation's final energy to the force convergence threshold.
+
+My position remains that the evidence contradicts the claim.
+
+## Argument · claude-sonnet · round 2
+
+`round-002-turn-0004` · claude-sonnet-5-5@google · 1955 completion tokens · 16.1 s
+
+**Position: contradicts the claim.** I maintain this after reading both peers.
+
+**Arithmetic.** I recomputed both energies per atom for the 28-atom cell.
+- Relax: −261.77969682 / 28 = −9.349275 eV/atom.
+- Static: −261.82281757 / 28 = −9.350815 eV/atom.
+- |Δ| = 1.540 meV/atom, which matches the comparison record and exceeds the 1.0 meV/atom threshold.
+- The static energy is lower by about 43 meV per cell.
+
+**Why the margin is robust.**
+- The electronic convergence of the two runs (EDIFF 1e-6 eV) is about three orders of magnitude tighter than the gap.
+- The geometry mismatch is also negligible. The relax energy belongs to the last ionic step, and the static run uses the final CONTCAR. With forces of about 0.008 eV/Å, that mismatch changes the energy by microelectronvolts per atom, not millielectronvolts.
+- A 1.5 meV/atom gap therefore reflects a systematic difference between the two calculations, not noise.
+
+**Admissibility.** Both records are converged_dft, measured, and use the same method signature and POTCARs. The relax record reports that required accuracy was reached. No failed record is involved. The two energies are not conflicting measurements of one quantity. They are the two operands of the claim, so the "admissible records disagree → unresolved" rule does not apply. The scope is the specific ordering-01 structure, which the evidence covers directly. The verdict does not extend to other orderings.
+
+**Disagreements with peers.**
+- **Mechanism.** Both peers state the Pulay and fixed-basis explanation, and gemini-flash states it with more confidence than the records support. It is plausible, because the static record says its k-points were regenerated from the relaxed cell. But the records do not show the relax mesh differing from the static one, and they do not show how large the cell change was.
+- **Stress as support.** gemini-flash's claim that the 0.636 versus 0.3 kbar residual stress "supports" the Pulay explanation is weak. Both values are tiny, and stress differences of this size do not discriminate between mechanisms.
+- **Which energy is closer to truth.** The static energy is not demonstrably more accurate. The protocol states it was never convergence-tested. The verdict does not need that point, because the claim only asks about substitutability.
+- **Proposed tests.** gemini-flash's tighter-EDIFFG test would not address the gap. Both energies are already at essentially the same geometry, so force tolerance is not the lever. The useful discriminating tests are:
+  - A static run at the relaxed cell with the original k-mesh.
+  - A static run at the relaxed cell with a higher ENCUT, to separate the k-mesh effect from the basis effect.
+  - Restarting the relaxation, which re-initializes the basis for the final cell.
+
+  None of these can reverse the verdict for this protocol. They could only explain it.
+
+**Follow-up selection.** The only offered test is "static-single-point-at-relaxed-geometry". Record ev-3a4a… already provides it, so I do not select it. No visible evidence gap remains that DFT could close.
+
+**What would change my view.** I would revise only if the static run were shown to have a setup fault, such as a different POTCAR, a different functional, or a wrong structure. Matching hashes and signatures give no sign of this. A restart or tighter-ENCUT test that brought the two energies within 1 meV/atom would show the gap is protocol-dependent. It would not turn this protocol's measured 1.54 meV/atom into agreement.
+
+## Verdict · claude-sonnet
+
+`verdict-001-turn-0005` · claude-sonnet-5-5@google · 761 completion tokens · 6.0 s
+
+{"status":"contradicted","evidence_ids":["ev-9a65001e4a086af6f63ecfb3","ev-dadce256758219b69e6c3eb4","ev-3a4a4ce15c52da1b779b82f2"],"request_dft":false,"proposed_test_ids":[],"rationale":"The claim is that the relax-final energy and the static single-point energy agree within 1 meV/atom for NbTaO5 ordering-01. Both records are converged_dft, measured, and share the same method signature, POTCARs, ENCUT and smearing. They cover the claimed structure directly. I recomputed the energies for the 28-atom cell: relax -261.77969682/28 = -9.349275 eV/atom, static -261.82281757/28 = -9.350815 eV/atom. The difference is 1.54 meV/atom, matching comparison record ev-9a65001e4a086af6f63ecfb3, and it exceeds the 1.0 meV/atom threshold. The static run is about 43 meV per cell lower. The gap is about 1000 times larger than the EDIFF of 1e-6 eV, and the residual forces of about 0.008 eV/A shift the energy by only microelectronvolts. So it reflects a systematic difference between the two calculation types, not noise or geometry mismatch. No admissible records conflict, because the two energies are the two operands of the claim and not rival measurements of one quantity. The scope is unspecified, but the verdict is limited to this ordering and this protocol. The mechanism (Pulay or fixed-basis effects after an ISIF=3 cell change, and k-mesh regeneration) is plausible but not shown in the records. I do not rely on it. I also note that the protocol was not independently convergence-tested, so I cannot say which energy is closer to the converged value. That does not affect substitutability. The offered follow-up test, a static single point at the relaxed geometry, is already provided by ev-3a4a4ce15c52da1b779b82f2 (NSW=0 at the relaxed geometry of the same job). Repeating it would not close a gap, so I request no further DFT. The verdict would change only if the static run turned out to have a setup fault, such as a wrong POTCAR or structure, and the matching hashes and signatures show no sign of one."}
+
+## Verdict · gemini-flash
+
+`verdict-002-turn-0006` · gemini-2.5-flash@google · 2108 completion tokens · 9.1 s
+
+{"status": "contradicted", "evidence_ids": ["ev-9a65001e4a086af6f63ecfb3"], "request_dft": false, "proposed_test_ids": [], "rationale": "The hypothesis claims that the final energy of the ordering-01 cell relaxation and the static single-point reference energy agree to within 1 meV/atom (0.001 eV/atom). The decision criterion is an absolute energy difference per atom less than or equal to 0.001 eV/atom.\n\nEvidence record `ev-dadce256758219b69e6c3eb4` provides the energy per atom from the relaxation as -9.34927489 eV/atom. Evidence record `ev-3a4a4ce15c52da1b779b82f2` provides the energy per atom from the static calculation at the relaxed geometry as -9.35081491 eV/atom.\n\nEvidence record `ev-9a65001e4a086af6f63ecfb3` directly calculates the absolute difference between these two values, reporting it as 0.00154 eV/atom. This value (1.54 meV/atom) is greater than the specified threshold of 0.001 eV/atom (1 meV/atom).\n\nBoth the relaxation and static calculations are recorded as 'converged_dft' and 'measured', using consistent methods and parameters for NbTaO5-ordering-01. The static calculation explicitly performs a single point energy calculation (NSW=0) at the relaxed geometry, fulfilling the conditions for comparison. Therefore, the evidence is admissible and directly addresses the claim.\n\nThe observed difference of 1.54 meV/atom is a real and significant distinction, exceeding the 1 meV/atom threshold. This indicates that for the given computational protocol, the final energy from the relaxation cannot stand in for the static single-point reference energy within the specified tolerance. The claim is contradicted.\n\nNo follow-up tests are required to decide this claim, as the necessary comparison has been directly measured and reported. The 'static-single-point-at-relaxed-geometry' measurement is already provided by `ev-3a4a4ce15c52da1b779b82f2`."}
+

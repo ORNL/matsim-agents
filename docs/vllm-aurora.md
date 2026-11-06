@@ -28,21 +28,21 @@ qsub deployments/aurora/jobs/job-serve-multinode-vllm-aurora.sh
 
 ```bash
 module reset
-module load frameworks   # currently frameworks/2025.3.1
+module load frameworks/2026.1.0   # Qwen E1 PIECEWISE canary baseline (Nov 2026)
 ```
 
-`frameworks/2025.3.1` (as of May 2026) ships:
+The Qwen E1 XPU Graph runs documented below used `frameworks/2026.1.0` and
+reported these package versions on Nov 3, 2026:
 
 | Package | Version |
 |---|---|
 | Python | 3.12 |
-| PyTorch | 2.10.0a0+git449b176 (XPU backend) |
-| Intel Extension for PyTorch (IPEX) | 2.10.10 |
-| vLLM | 0.15.0+xpu |
-| Ray | 2.43.0 |
-| Triton-XPU | (bundled with frameworks) |
-| numpy | 2.2.6 |
-| pandas | 3.0.0 |
+| PyTorch | 2.13.0a0+gitcf30153 (XPU backend) |
+| vLLM | 0.26.1.dev0+g568afb3a1.d20260803.xpu |
+| Ray | 2.56.1 |
+| Triton-XPU | 3.7.2 |
+| numpy | 2.4.6 |
+| pandas | 2.3.3 |
 
 **No vLLM source build is required.**  Everything needed for single- and
 multi-node inference is bundled in the module.
@@ -265,6 +265,74 @@ safe and harmless).
 
 **Confirmed passing**: job `8506887` on Aurora, May 25 2026.
 Chat-completion response to `"2+2="` → `"4"`.
+
+---
+
+## Qwen3-235B E1 with XPU Graphs
+
+Use `deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh` for Qwen E1 runs.
+It selects the model-specific resource plan, exports
+`VLLM_XPU_ENABLE_XPU_GRAPH=1`, and rejects plans that contain `--enforce-eager`
+or do not request `cudagraph_mode=PIECEWISE`. The plans use one Aurora node,
+tensor parallelism 8 across devices 0-7, `max_model_len=16384`, and
+`--max-num-seqs 1`.
+
+PIECEWISE-only capture is intentional. Earlier run-specific resource plans
+included `--enforce-eager`, which disabled graph execution. A later Thinking
+run with the default FULL_AND_PIECEWISE mode captured graphs but native-aborted
+during full decode graph replay (`linear_stream.h:78` in the Intel runtime).
+That run implicates the full-graph replay path observed there; it does not
+establish a general Intel runtime defect. PIECEWISE preserves XPU Graph capture
+without requesting that full decode path.
+
+| PBS job | Configuration and observed result |
+|---|---|
+| `9033984` Instruct, `9033999` Thinking | Oct 30 resource overrides contained `--enforce-eager`, so graphs were disabled. Instruct returned 17/18 and exited 1; Thinking returned 1/18 and exited 137. |
+| `9035160` Thinking | FULL_AND_PIECEWISE graph run native-aborted during Intel runtime graph replay after 8/18 responses; exited 1. |
+| `9036264` Instruct | PIECEWISE canary completed 1/1 with zero failures; PBS exit status 0. |
+
+Set the project, model, and allocation paths in the login shell. Start with a
+one-question development manifest; after its artifacts pass the checks below,
+submit the full development manifest separately:
+
+```bash
+export PROJECT_ROOT="$PWD"
+export MODEL_ROOT="/path/to/model-snapshots"
+export ALLOCATION="<allocation>"
+export INSTRUCT_CANARY_MANIFEST="/path/to/one-question-instruct-canary.json"
+export INSTRUCT_FULL_MANIFEST="/path/to/full-instruct-development.json"
+
+qsub -q capacity -A "$ALLOCATION" \
+  -v "PROJECT_ROOT=$PROJECT_ROOT,MODEL_ROOT=$MODEL_ROOT,E1_MODEL_KEY=qwen3-235b-instruct-2507,E1_MANIFEST=$INSTRUCT_CANARY_MANIFEST" \
+  deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh
+
+# Only after the canary is complete and verified:
+qsub -q capacity -A "$ALLOCATION" \
+  -v "PROJECT_ROOT=$PROJECT_ROOT,MODEL_ROOT=$MODEL_ROOT,E1_MODEL_KEY=qwen3-235b-instruct-2507,E1_MANIFEST=$INSTRUCT_FULL_MANIFEST" \
+  deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh
+```
+
+Use `qwen3-235b-thinking-2507` as `E1_MODEL_KEY` and the matching Thinking
+manifest to validate that model independently. Do not pass an old
+`MATSIM_RESOURCES` override unless it retains the explicit PIECEWISE mode and
+contains no eager-mode flag. Run artifacts are written beneath
+`runs/e1/local-<date>/<model-key>-<PBS_JOBID>/`.
+
+For each canary, verify all of the following before scaling up:
+
+- The resource plan validates and shows the intended model and TP=8 geometry.
+- The server log reports `cudagraph_mode=PIECEWISE`, graph capture completion,
+  and a successful `POST /v1/chat/completions` response.
+- `outputs/run.json` has `state: complete`, the expected response count, and
+  `failed_responses: 0`; also check the PBS exit status is zero.
+
+**Validation record, Nov 3, 2026:** Instruct PIECEWISE canary job `9036264`
+completed one response with zero failures and PBS exit status 0. Its server
+log records graph capture in 18 seconds using 0.64 GiB and an HTTP 200 response.
+Thinking PIECEWISE canary `9036266` and the 18-question Instruct campaign
+`9036469` were running when checked; neither was yet counted as completed
+qualification at that snapshot. Recheck their saved `qstat-final.txt`, run
+artifacts, and PBS status before treating either as complete.
 
 ---
 

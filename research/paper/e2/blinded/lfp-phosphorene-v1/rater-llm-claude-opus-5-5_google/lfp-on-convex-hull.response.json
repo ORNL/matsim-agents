@@ -1,0 +1,60 @@
+{
+ "request_sha256_inputs": "lfp-on-convex-hull",
+ "latency_s": 10.5,
+ "mag_applied": "model=claude-opus-5-5@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "chatcmpl-4006ff54-790b-488c-893c-c8cf6ca2b19e",
+  "created": 1793832979,
+  "model": "claude-opus-5-5@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\"scores\":[{\"item_id\":\"item-018\",\"verdict_correct\":\"Y\",\"physical_reasoning\":2,\"evidence_attribution\":2,\"uncertainty\":2,\"follow_up\":1,\"notes\":\"Correct unresolved verdict. It correctly reads the null reference fields and the 16 muB ferromagnetic high-spin Fe2+ moment. Its caveats are specific (method-matched references). The rationale says it selects compute-li-fe-p-o-competing-phase-references, but proposed_test_ids is empty, so the follow-up field is inconsistent with request_dft=true.\"},{\"item_id\":\"item-025\",\"verdict_correct\":\"Y\",\"physical_reasoning\":0,\"evidence_attribution\":0,\"uncertainty\":0,\"follow_up\":2,\"notes\":\"The verdict and follow-up test are correct. The one-line rationale has no physics, cites no evidence record (evidence_ids is empty) and states no caveats.\"},{\"item_id\":\"item-029\",\"verdict_correct\":\"Y\",\"physical_reasoning\":2,\"evidence_attribution\":2,\"uncertainty\":2,\"follow_up\":1,\"notes\":\"Strong answer. It checks -195.77 eV / 28 atoms = -6.99 eV/atom, notes the fragility of the 0.0 eV/atom threshold, and requires matched settings for references. The rationale names the reference test, but proposed_test_ids is empty, so the follow-up field is inconsistent.\"},{\"item_id\":\"item-032\",\"verdict_correct\":\"Y\",\"physical_reasoning\":2,\"evidence_attribution\":2,\"uncertainty\":2,\"follow_up\":2,\"notes\":\"Correct and well grounded. It cites the record values and null reference fields, applies the hull rule, gives specific caveats (strict threshold, matched POTCARs and magnetic ordering), and selects the correct test with request_dft=true.\"}],\"correct_verdict_in_your_judgement\":\"unresolved\",\"case_notes\":\"The only record is a converged PBE (no U) single-phase total energy for olivine LiFePO4. It has no competing-phase energies and no energy_above_hull value, and reference_complete is null. The hull claim therefore cannot be decided. DFT of the competing-phase references could decide it, so the correct answer is request_dft=true with compute-li-fe-p-o-competing-phase-references.\"}",
+     "role": "assistant",
+     "reasoning_content": "",
+     "thinking_blocks": [
+      {
+       "type": "thinking",
+       "thinking": "",
+       "signature": "CAQSmAoKEggTEAIYAjgBQgh0aGlua2luZxIMpQRO+neEj4CC+dFZGgzYmY3A/NLMyT9uJ2wiMA5/ISdUUfBQZ+nr6RUa3cTCZGBYgK4jtcrZi6IxU1E10y2kjfXzoRno3gKd1AVJ/SqzCXCQ3h3BBhPcviBMfXbE0S60eoMqKJwoosh1lOXTr1JbOz+xBknFInlHWrpmURdIkCVYqq0DIjSthzQKwnDnfk2siew2/yZ/I0yD0hTXTDmobhHkXan9NMI8oAtkKjt8pqW8CUBV/+LgKLdaRkfR0oYl99w6aAE2eOkpTh4XZY3zk7tYBF6D0yFYE+JDA7GHcp7JlryYqIWcDOOYbYO+mEOrNLjRumv373tuD9GKKOmBOdVtr1flVVczId9FjfZUBCIn7OJG3nGsopMpgCXW0ai6ByFvNcrjowMZLRGn0KS3Lst9TTbTTNxlE9rX4RTXt+Sgi5nIY++Qlc9BnJYnZ7Zm2dVZ6WXMT/H8m4ep7IsBewlo446QYlp3K/XBLkfpGlRzMl8SxqdQ/YCF/cSyXUPCPmnfxAdtE0JwAw8B+SOz7V/bVE1P6TUtei7ZeWNBSm+FcrLQGDpxE8bm/Nz55jSMbe1Ojy//z6f4BdA8nldsGjJ6xF6k63mB6NvpfW1Oc0pKyYTk2kFGW2F8ps9/oKiknlQlSI9y05e9dVqNmNX/2HCyFK7hDzk+SqSLLGTmldTLDCfQrFB5pvh5uyhNySGUchmuCVmD2TgOkj91kHS6bztRJnXsevdNj9LMh1gXwXlExKH9qe7Xtb9VKtLnwqhnV0evENk4mW8r9/Fk2SkiIPAmVFuqQw2FUoGNnoArXm2Qpq80nTcQtRnLEb/IoexQiikZcD8Aju8bLcxwS0CV+0SgABYJBRwFARtIS71TPNKcUgff+82fa7+n75goHe3BNFn8Jb+0dXbIE/S3hvc4SAZghvTIcw07urJn2Hpagrxs48SjXJqw5vXLO+Y46d/EGXTyqg2exLrkoJEKVGlSrl7m+jBIfWWr4Oe7BlXyxbb18sdb+RQ3OQ6lnsF62Gv9UIziSzn5Nl7fikRk1RwUC/qMxbQVhouORfj9srbwD2+WrdI8mTDSyNc1XceMEfnAyluCaPGy6iIpw8ykn0cwRWEpx7C+kubgtwyDdFXk6ZNbXrBJ+qNSVbOJTTsbvCLPLWbBHdISDJ4AXaIpPgl9+dg5RUIsm/rIGv6xp1Fj6KuShP1yWsgBocM+mtD/nIEtxad8OmvWechGv9FkgrHN+Xm863e6q70n0tJQWOP5Su6mPqWhV/a39yWJfie3hy47dmC0+jTPuchUIIhcT+ExT2z4Ncn5jy7XNuXwPQXGh3SJcyF5vdskMKIvZhzpynd/DYSmgIQjHdGFxFgn+jTcqa1jP6mvaR2+9pmoDPEPnPS55kiU/ZBfg0gGocChOOTsUapd72KaibRyMZhAd2MKqhu1C+fVf/XgGo2YKe5wGo3tVjukncS2B715pIVWm+0zeZUPCvxnX6Ohdu6nOUU6WMTwdP5hCWmunFW+r8udQr7yKxuNFzK8uflj9ZQ6fbwikalhhUN5X4raQmaUUJl0wIaqLjRJdTifnK2/VS2c1NsttJa1CFuxqMf99JSv1L8Xi0TcbxyirJmUrlfziELRTKOwKc8c1FYp8fJW1FQWMRnu1FDzX1K/71K4Aa54rvI6Xs6COkSTJ73N0bSrEUtPdcbdN6XSdIFZzsNDG7NO4Ej5OxgB"
+      }
+     ],
+     "provider_specific_fields": {
+      "citations": null,
+      "thinking_blocks": [
+       {
+        "type": "thinking",
+        "thinking": "",
+        "signature": "CAQSmAoKEggTEAIYAjgBQgh0aGlua2luZxIMpQRO+neEj4CC+dFZGgzYmY3A/NLMyT9uJ2wiMA5/ISdUUfBQZ+nr6RUa3cTCZGBYgK4jtcrZi6IxU1E10y2kjfXzoRno3gKd1AVJ/SqzCXCQ3h3BBhPcviBMfXbE0S60eoMqKJwoosh1lOXTr1JbOz+xBknFInlHWrpmURdIkCVYqq0DIjSthzQKwnDnfk2siew2/yZ/I0yD0hTXTDmobhHkXan9NMI8oAtkKjt8pqW8CUBV/+LgKLdaRkfR0oYl99w6aAE2eOkpTh4XZY3zk7tYBF6D0yFYE+JDA7GHcp7JlryYqIWcDOOYbYO+mEOrNLjRumv373tuD9GKKOmBOdVtr1flVVczId9FjfZUBCIn7OJG3nGsopMpgCXW0ai6ByFvNcrjowMZLRGn0KS3Lst9TTbTTNxlE9rX4RTXt+Sgi5nIY++Qlc9BnJYnZ7Zm2dVZ6WXMT/H8m4ep7IsBewlo446QYlp3K/XBLkfpGlRzMl8SxqdQ/YCF/cSyXUPCPmnfxAdtE0JwAw8B+SOz7V/bVE1P6TUtei7ZeWNBSm+FcrLQGDpxE8bm/Nz55jSMbe1Ojy//z6f4BdA8nldsGjJ6xF6k63mB6NvpfW1Oc0pKyYTk2kFGW2F8ps9/oKiknlQlSI9y05e9dVqNmNX/2HCyFK7hDzk+SqSLLGTmldTLDCfQrFB5pvh5uyhNySGUchmuCVmD2TgOkj91kHS6bztRJnXsevdNj9LMh1gXwXlExKH9qe7Xtb9VKtLnwqhnV0evENk4mW8r9/Fk2SkiIPAmVFuqQw2FUoGNnoArXm2Qpq80nTcQtRnLEb/IoexQiikZcD8Aju8bLcxwS0CV+0SgABYJBRwFARtIS71TPNKcUgff+82fa7+n75goHe3BNFn8Jb+0dXbIE/S3hvc4SAZghvTIcw07urJn2Hpagrxs48SjXJqw5vXLO+Y46d/EGXTyqg2exLrkoJEKVGlSrl7m+jBIfWWr4Oe7BlXyxbb18sdb+RQ3OQ6lnsF62Gv9UIziSzn5Nl7fikRk1RwUC/qMxbQVhouORfj9srbwD2+WrdI8mTDSyNc1XceMEfnAyluCaPGy6iIpw8ykn0cwRWEpx7C+kubgtwyDdFXk6ZNbXrBJ+qNSVbOJTTsbvCLPLWbBHdISDJ4AXaIpPgl9+dg5RUIsm/rIGv6xp1Fj6KuShP1yWsgBocM+mtD/nIEtxad8OmvWechGv9FkgrHN+Xm863e6q70n0tJQWOP5Su6mPqWhV/a39yWJfie3hy47dmC0+jTPuchUIIhcT+ExT2z4Ncn5jy7XNuXwPQXGh3SJcyF5vdskMKIvZhzpynd/DYSmgIQjHdGFxFgn+jTcqa1jP6mvaR2+9pmoDPEPnPS55kiU/ZBfg0gGocChOOTsUapd72KaibRyMZhAd2MKqhu1C+fVf/XgGo2YKe5wGo3tVjukncS2B715pIVWm+0zeZUPCvxnX6Ohdu6nOUU6WMTwdP5hCWmunFW+r8udQr7yKxuNFzK8uflj9ZQ6fbwikalhhUN5X4raQmaUUJl0wIaqLjRJdTifnK2/VS2c1NsttJa1CFuxqMf99JSv1L8Xi0TcbxyirJmUrlfziELRTKOwKc8c1FYp8fJW1FQWMRnu1FDzX1K/71K4Aa54rvI6Xs6COkSTJ73N0bSrEUtPdcbdN6XSdIFZzsNDG7NO4Ej5OxgB"
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1163,
+   "prompt_tokens": 5663,
+   "total_tokens": 6826,
+   "completion_tokens_details": {
+    "reasoning_tokens": 377,
+    "text_tokens": 786
+   },
+   "prompt_tokens_details": {
+    "cached_tokens": 0,
+    "text_tokens": 4,
+    "cache_write_tokens": 5659,
+    "cache_creation_tokens": 5659,
+    "cache_creation_token_details": {
+     "ephemeral_5m_input_tokens": 5659,
+     "ephemeral_1h_input_tokens": 0
+    }
+   },
+   "cache_creation_input_tokens": 5659,
+   "cache_read_input_tokens": 0
+  }
+ }
+}

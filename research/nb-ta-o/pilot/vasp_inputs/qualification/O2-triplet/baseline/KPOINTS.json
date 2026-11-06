@@ -1,0 +1,13 @@
+{
+  "policy": "gamma_only",
+  "center": "Gamma",
+  "target_spacing_A^-1": null,
+  "mesh_dimensions": [
+    1,
+    1,
+    1
+  ],
+  "source_structure_sha256": "7c6a047ce580872489e49767f7a2b42b46db6a8559fe3fd7f610889043334291",
+  "kpoints_sha256": "b63444fd67d0624c82d266f68e41c3ea00b4f4487ac8c59b2492f4961e918e95",
+  "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+}

@@ -17,19 +17,37 @@ mkdir -p "${CHECK_ROOT}"
 cd "${REPO}"
 
 CHECK_ROOT="${CHECK_ROOT}" CHECK_CONFIG="${CHECK_CONFIG}" \
-CONCURRENCY="${MATSIM_LLM_CONCURRENCY:-2}" python3 - <<'PY'
+CONCURRENCY="${MATSIM_LLM_CONCURRENCY:-1}" \
+LONG_CONTEXT_OUTPUT_TOKENS="${MATSIM_LONG_CONTEXT_OUTPUT_TOKENS:-}" \
+LONG_CONTEXT_PROMPT_TOKENS="${MATSIM_LONG_CONTEXT_PROMPT_TOKENS:-16384}" \
+LONG_CONTEXT_TOKENIZER_PATH="${MATSIM_LONG_CONTEXT_TOKENIZER_PATH:-}" \
+python3 - <<'PY'
 import json, os, pathlib
 
 endpoints = json.loads(pathlib.Path(os.environ["MATSIM_LLM_ENDPOINTS"]).read_text())
 if len(endpoints) != 1:
     raise SystemExit(f"llm-check layouts serve exactly one model; got {sorted(endpoints)}")
+name, endpoint = next(iter(endpoints.items()))
 config = {
-    "server": next(iter(endpoints)),
+  "server": name,
     "output_root": os.environ["CHECK_ROOT"],
     "temperature": 0.0,
     "timeout_sec": 120,
     "concurrent_requests": int(os.environ["CONCURRENCY"]),
+  "context_length": endpoint.get("max_model_len"),
 }
+if os.environ["LONG_CONTEXT_OUTPUT_TOKENS"]:
+  tokenizer_path = os.environ["LONG_CONTEXT_TOKENIZER_PATH"]
+  if not tokenizer_path:
+    raise SystemExit("MATSIM_LONG_CONTEXT_TOKENIZER_PATH is required for the stress request")
+  config.update(
+    {
+      "long_context_output_tokens": int(os.environ["LONG_CONTEXT_OUTPUT_TOKENS"]),
+      "long_context_prompt_tokens": int(os.environ["LONG_CONTEXT_PROMPT_TOKENS"]),
+      "long_context_tokenizer_path": tokenizer_path,
+      "long_context_min_output_fraction": 0.95,
+    }
+  )
 pathlib.Path(os.environ["CHECK_CONFIG"]).write_text(json.dumps(config, indent=2) + "\n")
 PY
 

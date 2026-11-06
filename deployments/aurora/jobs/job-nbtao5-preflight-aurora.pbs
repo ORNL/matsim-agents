@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+#PBS -N nbtao5-preflight
+#PBS -l select=1
+#PBS -l place=scatter
+#PBS -l walltime=00:05:00
+#PBS -A HydraGNN
+#PBS -l filesystems=home:flare
+#PBS -q debug
+#PBS -k doe
+#PBS -j oe
+
+set -euo pipefail
+
+fail() {
+  PREFLIGHT_FAILURE="$*"
+  echo "NBTAO5 preflight failed: $*" >&2
+  exit 1
+}
+
+RECORD_PATH="${NBTAO5_PREFLIGHT_RECORD:?pass NBTAO5_PREFLIGHT_RECORD as an absolute output path}"
+[[ "${RECORD_PATH}" == /* && -d "$(dirname "${RECORD_PATH}")" ]] || {
+  echo "NBTAO5_PREFLIGHT_RECORD must be absolute and its parent directory must exist." >&2
+  exit 2
+}
+PREFLIGHT_FAILURE=""
+PREFLIGHT_STATUS="FAIL"
+REPO_REAL=""
+CASE_REAL=""
+RUNNER=""
+VASP_BIN=""
+PROTOCOL_SHA256=""
+RUNTIME_SHA256=""
+VASP_SHA256=""
+RUNNER_SHA256=""
+MODULES_LOADED=""
+EXPECTED_MODULES='[]'
+EXPECTED_MODULE_ARRAY=()
+MPIEXEC_PATH=""
+MPI_VERSION=""
+MPI_OPTIONS='{}'
+DEPENDENCIES_RESOLVED="false"
+GPU_VISIBLE="false"
+GPU_DEVICES=""
+PREFLIGHT_STDOUT="${NBTAO5_PREFLIGHT_STDOUT:-}"
+
+write_record() {
+  local exit_code="$1"
+  local temporary="${RECORD_PATH}.tmp.${PBS_JOBID:-$$}"
+  NBTAO5_PREFLIGHT_STATUS="${PREFLIGHT_STATUS}" \
+  NBTAO5_PREFLIGHT_EXIT_CODE="${exit_code}" \
+  NBTAO5_PREFLIGHT_FAILURE="${PREFLIGHT_FAILURE}" \
+  NBTAO5_PREFLIGHT_REPO="${REPO_REAL}" \
+  NBTAO5_PREFLIGHT_CASE="${CASE_REAL}" \
+  NBTAO5_PREFLIGHT_RUNNER="${RUNNER}" \
+  NBTAO5_PREFLIGHT_VASP="${VASP_BIN}" \
+  NBTAO5_PREFLIGHT_PROTOCOL_SHA="${PROTOCOL_SHA256}" \
+  NBTAO5_PREFLIGHT_RUNTIME_SHA="${RUNTIME_SHA256}" \
+  NBTAO5_PREFLIGHT_VASP_SHA="${VASP_SHA256}" \
+  NBTAO5_PREFLIGHT_RUNNER_SHA="${RUNNER_SHA256}" \
+  NBTAO5_PREFLIGHT_MODULES="${MODULES_LOADED}" \
+  NBTAO5_PREFLIGHT_EXPECTED_MODULES="${EXPECTED_MODULES}" \
+  NBTAO5_PREFLIGHT_MPIEXEC="${MPIEXEC_PATH}" \
+  NBTAO5_PREFLIGHT_MPI_VERSION="${MPI_VERSION}" \
+  NBTAO5_PREFLIGHT_MPI_OPTIONS="${MPI_OPTIONS}" \
+  NBTAO5_PREFLIGHT_DEPS="${DEPENDENCIES_RESOLVED}" \
+  NBTAO5_PREFLIGHT_GPU="${GPU_VISIBLE}" \
+  NBTAO5_PREFLIGHT_GPU_DEVICES="${GPU_DEVICES}" \
+  NBTAO5_PREFLIGHT_STDOUT="${PREFLIGHT_STDOUT}" \
+  python3 - "${temporary}" <<'PY'
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+record = {
+    "schema_version": 1,
+    "status": os.environ["NBTAO5_PREFLIGHT_STATUS"],
+    "exit_code": int(os.environ["NBTAO5_PREFLIGHT_EXIT_CODE"]),
+    "failure": os.environ["NBTAO5_PREFLIGHT_FAILURE"] or None,
+    "repo_real": os.environ["NBTAO5_PREFLIGHT_REPO"],
+    "case_dir": os.environ["NBTAO5_PREFLIGHT_CASE"],
+    "protocol_id": "nbtao5-fixed-kmesh-v1",
+    "protocol_manifest_sha256": os.environ["NBTAO5_PREFLIGHT_PROTOCOL_SHA"],
+    "runtime_manifest_sha256": os.environ["NBTAO5_PREFLIGHT_RUNTIME_SHA"],
+    "runner_path": os.environ["NBTAO5_PREFLIGHT_RUNNER"],
+    "runner_sha256": os.environ["NBTAO5_PREFLIGHT_RUNNER_SHA"],
+    "vasp_path": os.environ["NBTAO5_PREFLIGHT_VASP"],
+    "vasp_executable_sha256": os.environ["NBTAO5_PREFLIGHT_VASP_SHA"],
+    "modules_loaded": os.environ["NBTAO5_PREFLIGHT_MODULES"],
+    "expected_module_stack": json.loads(os.environ["NBTAO5_PREFLIGHT_EXPECTED_MODULES"]),
+    "mpi": {
+        "mpiexec_path": os.environ["NBTAO5_PREFLIGHT_MPIEXEC"],
+        "version": os.environ["NBTAO5_PREFLIGHT_MPI_VERSION"],
+        "required_options": json.loads(os.environ["NBTAO5_PREFLIGHT_MPI_OPTIONS"]),
+    },
+    "dependencies_resolved": os.environ["NBTAO5_PREFLIGHT_DEPS"] == "true",
+    "gpu_visible": os.environ["NBTAO5_PREFLIGHT_GPU"] == "true",
+    "gpu_devices": os.environ["NBTAO5_PREFLIGHT_GPU_DEVICES"],
+    "pbs_job_id": os.environ.get("PBS_JOBID", "unknown"),
+    "stdout_path": os.environ["NBTAO5_PREFLIGHT_STDOUT"],
+    "hostname": os.uname().nodename,
+    "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+}
+path = Path(sys.argv[1])
+path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+PY
+  mv -f "${temporary}" "${RECORD_PATH}"
+}
+
+finish() {
+  local code="$?"
+  trap - EXIT
+  if [[ "${code}" -eq 0 ]]; then
+    PREFLIGHT_STATUS="PASS"
+  elif [[ -z "${PREFLIGHT_FAILURE}" ]]; then
+    PREFLIGHT_FAILURE="preflight command exited ${code}"
+  fi
+  if ! write_record "${code}"; then
+    echo "NBTAO5 preflight failed: could not write audit record ${RECORD_PATH}" >&2
+    exit 1
+  fi
+  echo "NBTAO5_PREFLIGHT_RESULT=${PREFLIGHT_STATUS} RECORD=${RECORD_PATH} JOB=${PBS_JOBID:-unknown}"
+  if [[ "${PREFLIGHT_STATUS}" == "PASS" ]]; then
+    exit 0
+  fi
+  [[ "${code}" -ne 0 ]] || code=1
+  exit "${code}"
+}
+trap finish EXIT
+
+[[ "${NBTAO5_RESOURCE_APPROVED:-}" == "YES" ]] || fail "preflight requires NBTAO5_RESOURCE_APPROVED=YES after actual approval"
+REPO="${NBTAO5_REPO_ROOT:?pass NBTAO5_REPO_ROOT as the absolute checkout path with qsub -v}"
+[[ "${REPO}" == /* ]] || fail "NBTAO5_REPO_ROOT must be absolute"
+REPO_REAL="$(realpath -e "${REPO}")"
+case "${REPO_REAL}/" in
+  /lus/flare/*) ;;
+  *) fail "checkout is not on the requested Flare filesystem: ${REPO_REAL}" ;;
+esac
+[[ -f "${REPO_REAL}/pyproject.toml" ]] || fail "checkout marker missing under ${REPO_REAL}"
+[[ "$(git -C "${REPO_REAL}" rev-parse --show-toplevel)" == "${REPO_REAL}" ]] || fail "NBTAO5_REPO_ROOT is not the Git checkout root"
+CASE_DIR="${NBTAO5_CASE_DIR:?pass NBTAO5_CASE_DIR as the fresh external case}"
+CASE_REAL="$(realpath -e "${CASE_DIR}")"
+case "${CASE_REAL}/" in
+  "${REPO_REAL}/"*) fail "Q1 case must be outside the checkout" ;;
+esac
+[[ "${PREFLIGHT_STDOUT}" == /* && "$(dirname "${PREFLIGHT_STDOUT}")" == "$(dirname "${RECORD_PATH}")" ]] || fail "preflight stdout and record must share an absolute external logs directory"
+case "${RECORD_PATH}/" in
+  "${REPO_REAL}/"*) fail "preflight record must be outside the checkout" ;;
+esac
+
+RUNNER="${REPO_REAL}/deployments/aurora/launchers/run-nbtao5-case-aurora.sh"
+VASP_BIN="${REPO_REAL}/external/vasp6/src/vasp.6.6.1/bin/vasp_std"
+[[ -x "${RUNNER}" ]] || fail "Nb-Ta-O launcher is missing or not executable: ${RUNNER}"
+[[ -x "${VASP_BIN}" ]] || fail "VASP executable is missing or not executable: ${VASP_BIN}"
+PROTOCOL_SHA256="$(sha256sum "${REPO_REAL}/research/nb-ta-o/pilot/vasp_inputs/inputs_manifest.json" | awk '{print $1}')"
+RUNTIME_SHA256="$(sha256sum "${REPO_REAL}/research/nb-ta-o/pilot/vasp_runtime_manifest.json" | awk '{print $1}')"
+VASP_SHA256="$(sha256sum "${VASP_BIN}" | awk '{print $1}')"
+RUNNER_SHA256="$(sha256sum "${RUNNER}" | awk '{print $1}')"
+EXPECTED_VASP_SHA256="$(${REPO_REAL}/.venv/bin/python -c 'import json,sys; print(json.load(open(sys.argv[1]))["executable"]["sha256"])' "${REPO_REAL}/research/nb-ta-o/pilot/vasp_runtime_manifest.json")"
+[[ "${VASP_SHA256}" == "${EXPECTED_VASP_SHA256}" ]] || fail "VASP executable fingerprint mismatch"
+EXPECTED_MODULES="$(${REPO_REAL}/.venv/bin/python -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["platform"]["module_stack"]))' "${REPO_REAL}/research/nb-ta-o/pilot/vasp_runtime_manifest.json")"
+mapfile -t EXPECTED_MODULE_ARRAY < <(
+  "${REPO_REAL}/.venv/bin/python" -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["platform"]["module_stack"]))' \
+    "${REPO_REAL}/research/nb-ta-o/pilot/vasp_runtime_manifest.json"
+)
+
+if ! command -v module >/dev/null 2>&1; then
+  for init in /etc/profile.d/modules.sh /usr/share/lmod/lmod/init/bash; do
+    [[ -f "${init}" ]] && { source "${init}"; break; }
+  done
+fi
+command -v module >/dev/null 2>&1 || fail "environment-modules command is unavailable"
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+load_aurora_oneapi_modules
+
+MODULES="$(module -t list 2>&1 || true)"
+echo "[preflight] host=$(hostname) job=${PBS_JOBID:-unknown}"
+printf '%s\n' "${MODULES}"
+MODULES_LOADED="${MODULES}"
+for required_module in "${EXPECTED_MODULE_ARRAY[@]}"; do
+  grep -Fq "${required_module}" <<<"${MODULES}" || fail "required module is not loaded: ${required_module}"
+done
+grep -Eiq 'pals|mpich' <<<"${MODULES}" || fail "PALS/MPICH module family is not loaded"
+
+MPIEXEC="$(command -v mpiexec || true)"
+[[ -x "${MPIEXEC}" ]] || fail "mpiexec is unavailable"
+MPIEXEC_PATH="$(realpath -e "${MPIEXEC}")"
+MPI_VERSION="$(mpiexec --version 2>&1)" || fail "mpiexec --version failed"
+printf '%s\n' "${MPI_VERSION}"
+MPI_HELP="$(mpiexec --help 2>&1 || true)"
+MPI_OPTIONS="{}"
+for option in --hosts --ppn --cpu-bind --gpu-bind; do
+  if grep -Fq -- "${option}" <<<"${MPI_HELP}"; then
+    MPI_OPTIONS="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d[sys.argv[2]]=True; print(json.dumps(d))' "${MPI_OPTIONS}" "${option}")"
+  else
+    fail "mpiexec lacks expected option ${option}"
+  fi
+done
+
+DEPENDENCIES="$(ldd "${VASP_BIN}")" || fail "ldd could not inspect VASP dependencies"
+if grep -q 'not found' <<<"${DEPENDENCIES}"; then
+  fail "VASP has unresolved shared-library dependencies"
+fi
+DEPENDENCIES_RESOLVED="true"
+echo "[preflight] VASP shared-library dependencies resolved"
+
+SYCL_LS="$(command -v sycl-ls || true)"
+[[ -x "${SYCL_LS}" ]] || fail "sycl-ls is unavailable after loading the VASP modules"
+GPU_DEVICES="$(sycl-ls 2>&1)" || fail "SYCL device enumeration failed"
+printf '%s\n' "${GPU_DEVICES}"
+grep -Eiq 'level_zero:gpu|device.*gpu|\[gpu\]' <<<"${GPU_DEVICES}" || fail "no GPU device is visible to SYCL/Level Zero"
+GPU_VISIBLE="true"
+echo "[preflight] checkout, launcher, VASP runtime, PALS/MPI, and GPU visibility checks passed"
+echo "[preflight] no VASP executable or MPI ranks were launched"

@@ -1,0 +1,13 @@
+item_id,case,verdict_correct,physical_reasoning,evidence_attribution,uncertainty,follow_up,notes
+item-001,cantor-random1-static-force-criterion,,,,,,
+item-002,cantor-random1-static-force-criterion,,,,,,
+item-003,cantor-sampled-ranking-adequacy,,,,,,
+item-004,cantor-random1-static-force-criterion,,,,,,
+item-005,cantor-sampled-ranking-adequacy,,,,,,
+item-006,cantor-random1-static-force-criterion,,,,,,
+item-007,cantor-sampled-ranking-adequacy,,,,,,
+item-008,cantor-ideal-static-force-criterion,,,,,,
+item-009,cantor-ideal-static-force-criterion,,,,,,
+item-010,cantor-ideal-static-force-criterion,,,,,,
+item-011,cantor-ideal-static-force-criterion,,,,,,
+item-012,cantor-sampled-ranking-adequacy,,,,,,

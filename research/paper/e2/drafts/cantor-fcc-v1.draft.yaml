@@ -1,0 +1,107 @@
+# DRAFT, NOT A SUITE: Cantor FCC E2 cases staged before evidence qualification.
+# Kept outside benchmarks/agent_eval_e2/ and schema-invalid (expected_status: PENDING) so it cannot be run.
+# Freeze only after cases/fcc_hea_CrMnFeCoNi_Cantor_108_ideal has verify-relax.json and verify-static.json
+# with qualified=true: fill every null from those records, set expected_status from the filled evidence,
+# copy to benchmarks/agent_eval_e2/cantor-fcc-v1/cases.yaml, and record its SHA-256 before model access.
+suite_id: e2-cantor-fcc-v1
+
+x-method: &fcc-method
+  backend: vasp
+  backend_version: 6.6.1
+  method_signature: vasp6.6.1-pbe-spin-encut480-mp0.10-gamma2x2x2-fcc-v1
+  settings:
+    functional: PBE
+    paw: [Cr_pv, Mn_pv, Fe_pv, Co_pv, Ni_pv]
+    encut_eV: 480
+    prec: Accurate
+    ediff_eV: 1.0e-6
+    nelm: 200
+    ispin: 2
+    magmom_initial: "Cr 2, Mn 3, Fe 3, Co 3, Ni 1 muB (one collinear initialization)"
+    ismear: 1
+    sigma_eV: 0.10
+    kpoints: Gamma 2x2x2
+    relax: {ibrion: 2, isif: 3, nsw: 200, ediffg_eV_A: -0.02}
+    static: {nsw: 0, same_geometry_as_relax: true}
+    source_run: ../e2-dft-v1-20261104 (PBS 9040206)
+    qualification_protocol: VASP normal termination, SCF convergence on every accepted step, final max force <= 0.02 eV/A
+
+x-records:
+  fcc-ideal-relax: &fcc-ideal-relax
+    kind: relaxation
+    subject: Cantor FCC, exact archived configuration fcc_hea_CrMnFeCoNi_Cantor_108_ideal
+    method:
+      <<: *fcc-method
+      settings:
+        <<: *fcc-method
+        source_case: ../e2-dft-v1-20261104/cases/fcc_hea_CrMnFeCoNi_Cantor_108_ideal
+        qualification_record: verify-relax.json
+        source_structure_sha256: null
+        outcar_sha256: null
+        composition: null
+        ionic_accuracy_marker: null
+        final_energy_sigma0_eV: null
+        total_magnetization_muB: null
+    evidence_level: converged_dft
+    outcome: null
+    values:
+      - {name: final_max_force, value: null, unit: eV/A, structure: fcc-archive-ideal-CrMnFeCoNi-108}
+
+  # One entry per configuration; random1-3 enter as outcome not_converged unless they also qualify.
+  fcc-sampled-energies: &fcc-sampled-energies
+    kind: energy_ranking
+    subject: Four sampled Cantor FCC configurations
+    method: *fcc-method
+    evidence_level: converged_dft
+    outcome: null
+    values: []
+    reference_complete: false
+    failure_reason: >-
+      One collinear magnetic initialization and one Gamma 2x2x2 mesh; no k-point or
+      magnetic-state sensitivity data. Unqualified configurations carry no admissible energy.
+
+cases:
+  - case_id: fcc-ideal-force-criterion
+    category: PENDING
+    subject: Cantor FCC
+    claim: >-
+      The specified 108-atom archived Cantor FCC configuration
+      fcc_hea_CrMnFeCoNi_Cantor_108_ideal ended its recorded spin-polarized PBE
+      relaxation with every atomic force at or below its 0.02 eV/A criterion.
+    claim_type: structure
+    criterion: {quantity: final_max_force, unit: eV/A, target_structure: fcc-archive-ideal-CrMnFeCoNi-108, threshold: 0.02}
+    expected_status: PENDING
+    decisive_evidence: [ideal-relax]
+    dft_request_justified: false
+    scope_sufficient: true
+    scope_description: >-
+      One exact recorded relaxation and its own threshold. It does not establish the
+      magnetic ground state, an ordered reference, or any alloy property.
+    follow_up_tests:
+      nonconverged_calculation: none-required-for-recorded-force-criterion
+    evidence:
+      ideal-relax: *fcc-ideal-relax
+
+  - case_id: fcc-sampled-ranking-adequacy
+    category: PENDING
+    subject: Cantor FCC
+    claim: >-
+      The available calculations establish a physically reliable energy ranking
+      among the four named sampled Cantor FCC configurations, accounting for
+      numerical and magnetic-state uncertainty.
+    claim_type: energy_ranking
+    criterion: {quantity: energy_per_atom, unit: eV/atom, target_structure: fcc-random1-CrMnFeCoNi-108, comparison_structure: fcc-archive-ideal-CrMnFeCoNi-108}
+    expected_status: PENDING
+    decisive_evidence: []
+    dft_request_justified: true
+    scope_sufficient: false
+    scope_description: >-
+      Fill from qualified records only. One magnetic initialization and one 2x2x2 mesh;
+      random3 was killed at ionic step 6. The archive label "ideal" is not an ordered reference.
+      No global stability inference is allowed.
+    follow_up_tests:
+      scope_gap: >-
+        Matched 3x3x3 Gamma statics on the closest qualified pair and one alternative
+        collinear magnetic initialization; no broad convergence campaign.
+    evidence:
+      sampled-energies: *fcc-sampled-energies

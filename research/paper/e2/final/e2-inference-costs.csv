@@ -1,0 +1,29 @@
+material,arm,cases,responses,calls,prompt_tokens,completion_tokens,latency_s,parse_failures,total_tokens,tokens_per_case,latency_s_per_case
+Cantor FCC,multi_llm_cross_critique,3,3,18,144783,41066,284.608,1,185849,61949.666666666664,94.869
+Cantor FCC,multi_llm_no_critique,3,3,6,30965,6666,45.72,0,37631,12543.666666666666,15.24
+Cantor FCC,no_llm,3,3,0,0,0,0.0,0,0,0.0,0.0
+Cantor FCC,single_llm,3,3,3,16207,2137,22.006999999999998,0,18344,6114.666666666667,7.336
+LiFePO4,multi_llm_cross_critique,4,4,24,110282,40798,280.452,0,151080,37770.0,70.113
+LiFePO4,multi_llm_no_critique,4,4,8,18122,7183,50.712,0,25305,6326.25,12.678
+LiFePO4,no_llm,4,4,0,0,0,0.0,0,0,0.0,0.0
+LiFePO4,single_llm,4,4,4,10039,2400,24.909,0,12439,3109.75,6.227
+Nb-Ta-O,multi_llm_cross_critique,6,6,36,186865,69050,443.056,1,255915,42652.5,73.843
+Nb-Ta-O,multi_llm_no_critique,6,6,12,35215,9965,72.27499999999999,0,45180,7530.0,12.046
+Nb-Ta-O,no_llm,6,6,0,0,0,0.0,0,0,0.0,0.0
+Nb-Ta-O,single_llm,6,6,6,19394,4666,46.675,0,24060,4010.0,7.779
+NbTaVHfZrTi BCC,multi_llm_cross_critique,2,2,12,56046,23678,160.14800000000002,0,79724,39862.0,80.074
+NbTaVHfZrTi BCC,multi_llm_no_critique,2,2,4,8269,3820,27.664,0,12089,6044.5,13.832
+NbTaVHfZrTi BCC,no_llm,2,2,0,0,0,0.0,0,0,0.0,0.0
+NbTaVHfZrTi BCC,single_llm,2,2,2,4661,1400,17.028,0,6061,3030.5,8.514
+Zn-formate,multi_llm_cross_critique,4,4,24,90811,36159,252.409,0,126970,31742.5,63.102
+Zn-formate,multi_llm_no_critique,4,4,8,13671,4907,37.492000000000004,0,18578,4644.5,9.373
+Zn-formate,no_llm,4,4,0,0,0,0.0,0,0,0.0,0.0
+Zn-formate,single_llm,4,4,4,7676,2540,27.969,0,10216,2554.0,6.992
+phosphorene,multi_llm_cross_critique,4,4,24,135860,56931,365.792,0,192791,48197.75,91.448
+phosphorene,multi_llm_no_critique,4,4,8,26130,17346,112.473,0,43476,10869.0,28.118
+phosphorene,no_llm,4,4,0,0,0,0.0,0,0,0.0,0.0
+phosphorene,single_llm,4,4,4,14251,5184,93.284,0,19435,4858.75,23.321
+ALL,no_llm,23,23,0,0,0,0.0,0,0,,
+ALL,single_llm,23,23,23,72228,18327,231.872,0,90555,,
+ALL,multi_llm_no_critique,23,23,46,132372,49887,346.336,0,182259,,
+ALL,multi_llm_cross_critique,23,23,138,724647,267682,1786.465,2,992329,,

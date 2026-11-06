@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "manifest_kind": "planning_inventory_not_executor_input",
+  "reference_role": "binary_competitors",
+  "method_status": "proposed VASP PBE; PAW release and convergence unresolved",
+  "phases": [
+    {
+      "phase_id": "NbO-rocksalt-family",
+      "formula": "NbO",
+      "source_records": ["COD 1010410", "COD 9008782", "COD 9008684"],
+      "source_status": "experimental_records; vacancy/occupancy models and duplicate family relationships need review",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "not_admitted_pending_structure_audit"
+    },
+    {
+      "phase_id": "NbO2-I41a-family",
+      "formula": "NbO2",
+      "source_records": ["COD 1520791", "COD 1538348", "COD 1538349", "COD 1542078", "COD 2106754", "COD 9009093"],
+      "source_status": "experimental records; compare as one phase family before retaining polymorphs",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "not_admitted_pending_structure_deduplication"
+    },
+    {
+      "phase_id": "NbO2-rutile-theoretical",
+      "formula": "NbO2",
+      "source_records": ["COD 1548821"],
+      "source_status": "theoretical structure record",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "optional_theoretical_seed_not_experimental_evidence"
+    },
+    {
+      "phase_id": "Nb2O5-zeta",
+      "formula": "Nb2O5",
+      "source_records": ["COD 1528678"],
+      "source_status": "experimental; exact parent CIF preserved in source_cifs",
+      "structure_path": "../source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "structure_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "atom_count": 28,
+      "status": "source_available_candidate_pending_vasp"
+    },
+    {
+      "phase_id": "Nb2O5-M",
+      "formula": "Nb2O5",
+      "source_records": ["COD 1528723"],
+      "source_status": "experimental; fully occupied Nb32O80 conventional cell, 112 sites",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "source_candidate_not_staged"
+    },
+    {
+      "phase_id": "Nb2O5-N-LiF-prepared",
+      "formula": "Nb2O5",
+      "source_records": ["COD 1534156"],
+      "source_status": "experimental record prepared with LiF additive",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "exclude_unless_impurity_effect_is_resolved"
+    },
+    {
+      "phase_id": "Nb2O5-h",
+      "formula": "Nb2O5",
+      "source_records": ["COD 2107337"],
+      "source_status": "experimental record; 99 listed sites and partially occupied sites",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "not_admitted_until_disorder_is_resolved"
+    },
+    {
+      "phase_id": "Nb2O5-high-temperature",
+      "formula": "Nb2O5",
+      "source_records": ["COD 2310581"],
+      "source_status": "experimental high-temperature form; fully occupied Nb28O70, 98 sites; relation to h form unresolved",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "source_candidate_not_staged_and_deduplication_required"
+    },
+    {
+      "phase_id": "Ta2O5-L-experimental",
+      "formula": "Ta2O5",
+      "source_records": ["Lehovec 1964; Lee et al. 2013"],
+      "source_status": "experimental low-temperature family; complete atom list/CIF not recovered",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "blocking_missing_experimental_coordinates"
+    },
+    {
+      "phase_id": "Ta2O5-H-experimental",
+      "formula": "Ta2O5",
+      "source_records": ["Liu et al. 2007 and later experimental Ta-sublattice studies"],
+      "source_status": "experimental Ta sublattice reported; oxygen coordinates incomplete",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "blocking_missing_complete_experimental_structure"
+    },
+    {
+      "phase_id": "Ta4O9-predicted",
+      "formula": "Ta4O9",
+      "source_records": ["Zhao et al. 2020"],
+      "source_status": "predicted competitor; complete structure not staged",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "candidate_hypothesis_not_experimental_phase"
+    },
+    {
+      "phase_id": "Nb-shear-oxides",
+      "formula": "Nb12O29; Nb25O62",
+      "source_records": ["reported Nb-O shear-phase families; structures not recovered in this audit"],
+      "source_status": "nonstoichiometric competitors need source and phase-identity review",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "blocking_for_broad_hull_claim"
+    },
+    {
+      "phase_id": "unresolved-binary-oxides",
+      "formula": "Nb2O3; TaO; TaO2; Ta2O3",
+      "source_records": [],
+      "source_status": "no complete source structures recovered; database no-hit is not proof of nonexistence",
+      "structure_path": null,
+      "structure_sha256": null,
+      "status": "unresolved_domain_gaps"
+    }
+  ],
+  "completeness": {
+    "complete": false,
+    "required_formulas_pending": ["NbO", "NbO2", "Nb2O5", "TaO", "TaO2", "Ta2O3", "Ta2O5", "Nb2O3"],
+    "blocking_gaps": ["Ta2O5 experimental coordinates", "Nb-O shear structures", "phase-family deduplication", "homogeneous authorized PAW release"]
+  }
+}

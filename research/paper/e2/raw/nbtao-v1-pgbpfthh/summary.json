@@ -1,0 +1,356 @@
+{
+  "config": {
+    "participants": [
+      {
+        "name": "claude-sonnet",
+        "provider": "mag",
+        "model": "claude-sonnet-5-5@google",
+        "base_url": null,
+        "server": null,
+        "role": "independent scientific reviewer",
+        "max_completion_tokens": null,
+        "api_key_env": null
+      },
+      {
+        "name": "gemini-flash",
+        "provider": "mag",
+        "model": "gemini-2.5-flash@google",
+        "base_url": null,
+        "server": null,
+        "role": "independent scientific reviewer",
+        "max_completion_tokens": null,
+        "api_key_env": null
+      }
+    ],
+    "arms": [
+      "no_llm",
+      "single_llm",
+      "multi_llm_no_critique",
+      "multi_llm_cross_critique"
+    ],
+    "rounds": 2,
+    "completion_tokens_per_case": 24576,
+    "decoding": {
+      "temperature": 0.0
+    },
+    "random_seeds": [
+      0
+    ],
+    "comparisons": [
+      [
+        "single_llm",
+        "no_llm"
+      ],
+      [
+        "multi_llm_no_critique",
+        "single_llm"
+      ],
+      [
+        "multi_llm_cross_critique",
+        "multi_llm_no_critique"
+      ]
+    ],
+    "confidence_level": 0.95
+  },
+  "suite_id": "e2-nbtao-v1",
+  "protocol_digest": "b71710664fe03bd47ced2b4fe9d614474478e59b18520d9462cbc4611660a94b",
+  "run_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/runs/e2/results/nbtao-v1/agent-eval-pgbpfthh",
+  "summaries": [
+    {
+      "arm": "no_llm",
+      "answers": 5,
+      "metrics": {
+        "correct": 1.0,
+        "evidence_attribution": 1.0,
+        "correctly_inconclusive": 1.0,
+        "dft_request_correct": 0.8
+      },
+      "llm_cost": {
+        "calls": 0.0,
+        "prompt_tokens": 0.0,
+        "completion_tokens": 0.0,
+        "latency_s": 0.0,
+        "parse_failures": 0.0
+      },
+      "numerical_cost": {
+        "dft_calculations": 0,
+        "dft_requests": 1
+      }
+    },
+    {
+      "arm": "single_llm",
+      "answers": 5,
+      "metrics": {
+        "correct": 1.0,
+        "evidence_attribution": 1.0,
+        "correctly_inconclusive": 1.0,
+        "dft_request_correct": 1.0
+      },
+      "llm_cost": {
+        "calls": 5.0,
+        "prompt_tokens": 17335.0,
+        "completion_tokens": 3586.0,
+        "latency_s": 34.107,
+        "parse_failures": 0.0
+      },
+      "numerical_cost": {
+        "dft_calculations": 0,
+        "dft_requests": 2
+      }
+    },
+    {
+      "arm": "multi_llm_no_critique",
+      "answers": 5,
+      "metrics": {
+        "correct": 1.0,
+        "evidence_attribution": 1.0,
+        "correctly_inconclusive": 1.0,
+        "dft_request_correct": 1.0
+      },
+      "llm_cost": {
+        "calls": 10.0,
+        "prompt_tokens": 31593.0,
+        "completion_tokens": 8335.0,
+        "latency_s": 60.008,
+        "parse_failures": 0.0
+      },
+      "numerical_cost": {
+        "dft_calculations": 0,
+        "dft_requests": 2
+      }
+    },
+    {
+      "arm": "multi_llm_cross_critique",
+      "answers": 5,
+      "metrics": {
+        "correct": 1.0,
+        "evidence_attribution": 1.0,
+        "correctly_inconclusive": 1.0,
+        "dft_request_correct": 0.8
+      },
+      "llm_cost": {
+        "calls": 30.0,
+        "prompt_tokens": 162302.0,
+        "completion_tokens": 58164.0,
+        "latency_s": 370.93,
+        "parse_failures": 1.0
+      },
+      "numerical_cost": {
+        "dft_calculations": 0,
+        "dft_requests": 1
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "metric": "correct",
+      "treatment": "single_llm",
+      "control": "no_llm",
+      "n_pairs": 5,
+      "mean_difference": 0.0,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "evidence_attribution",
+      "treatment": "single_llm",
+      "control": "no_llm",
+      "n_pairs": 5,
+      "mean_difference": 0.0,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "correctly_inconclusive",
+      "treatment": "single_llm",
+      "control": "no_llm",
+      "n_pairs": 2,
+      "mean_difference": 0.0,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "dft_request_correct",
+      "treatment": "single_llm",
+      "control": "no_llm",
+      "n_pairs": 5,
+      "mean_difference": 0.2,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.6
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "completion_tokens",
+      "treatment": "single_llm",
+      "control": "no_llm",
+      "n_pairs": 5,
+      "mean_difference": 717.2,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        528.6,
+        956.8
+      ],
+      "two_sided_p_value": 0.0625,
+      "favorable": false
+    },
+    {
+      "metric": "correct",
+      "treatment": "multi_llm_no_critique",
+      "control": "single_llm",
+      "n_pairs": 5,
+      "mean_difference": 0.0,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "evidence_attribution",
+      "treatment": "multi_llm_no_critique",
+      "control": "single_llm",
+      "n_pairs": 5,
+      "mean_difference": 0.0,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "correctly_inconclusive",
+      "treatment": "multi_llm_no_critique",
+      "control": "single_llm",
+      "n_pairs": 2,
+      "mean_difference": 0.0,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "dft_request_correct",
+      "treatment": "multi_llm_no_critique",
+      "control": "single_llm",
+      "n_pairs": 5,
+      "mean_difference": 0.0,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "completion_tokens",
+      "treatment": "multi_llm_no_critique",
+      "control": "single_llm",
+      "n_pairs": 5,
+      "mean_difference": 949.8,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        765.8,
+        1156.2
+      ],
+      "two_sided_p_value": 0.0625,
+      "favorable": false
+    },
+    {
+      "metric": "correct",
+      "treatment": "multi_llm_cross_critique",
+      "control": "multi_llm_no_critique",
+      "n_pairs": 5,
+      "mean_difference": 0.0,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "evidence_attribution",
+      "treatment": "multi_llm_cross_critique",
+      "control": "multi_llm_no_critique",
+      "n_pairs": 5,
+      "mean_difference": 0.0,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "correctly_inconclusive",
+      "treatment": "multi_llm_cross_critique",
+      "control": "multi_llm_no_critique",
+      "n_pairs": 2,
+      "mean_difference": 0.0,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        0.0,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": true
+    },
+    {
+      "metric": "dft_request_correct",
+      "treatment": "multi_llm_cross_critique",
+      "control": "multi_llm_no_critique",
+      "n_pairs": 5,
+      "mean_difference": -0.2,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        -0.6,
+        0.0
+      ],
+      "two_sided_p_value": 1.0,
+      "favorable": false
+    },
+    {
+      "metric": "completion_tokens",
+      "treatment": "multi_llm_cross_critique",
+      "control": "multi_llm_no_critique",
+      "n_pairs": 5,
+      "mean_difference": 9965.8,
+      "confidence_level": 0.95,
+      "confidence_interval": [
+        8586.4,
+        11017.4
+      ],
+      "two_sided_p_value": 0.0625,
+      "favorable": false
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+SYSTEM = Nb-Ta-O Ta-bcc-kspacing-0.15 static
+PREC = Accurate
+ENCUT = 520
+EDIFF = 1.0E-06
+ALGO = Normal
+NELM = 200
+ISPIN = 1
+ISMEAR = 1
+SIGMA = 0.20
+LREAL = .FALSE.
+LASPH = .TRUE.
+ISYM = 2
+LWAVE = .FALSE.
+LCHARG = .FALSE.
+NSW = 0
+IBRION = -1

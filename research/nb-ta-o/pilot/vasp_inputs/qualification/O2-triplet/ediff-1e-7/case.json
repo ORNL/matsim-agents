@@ -1,0 +1,28 @@
+{
+  "case_id": "O2-triplet-ediff-1e-7",
+  "category": "oxygen_reference_qualification",
+  "status": "input_candidate_not_authorized_for_execution",
+  "species_order": [
+    "O"
+  ],
+  "species_counts": {
+    "O": 2
+  },
+  "settings": {
+    "encut_eV": 520,
+    "kspacing_A^-1": 0.2,
+    "ediff_eV": 1e-07,
+    "ediffg_eV_A": -0.01
+  },
+  "gamma_only": true,
+  "input_hashes": {
+    "POSCAR": "7c6a047ce580872489e49767f7a2b42b46db6a8559fe3fd7f610889043334291",
+    "INCAR": "de2bd8ddfe8bfedc689d6fa8b4dc8eab7ec8b692281dcb5d8b95c576d8343d5a",
+    "INCAR.static": "8a47148d197d09c65b535539ebd41cf639da76a18b4fad629f0d05d5bd598c6b",
+    "KPOINTS": "173c9cb84af61f0b5aed93201a38a212749e02ef03767ca67a4313bfb1d56930",
+    "POTCAR.order": "aa773ac15fbffa806e80746b0b1c93f1deb5eb98dfa8ac08bdb3d5a8eb56451b"
+  },
+  "potcar_required_components": [
+    "O"
+  ]
+}
