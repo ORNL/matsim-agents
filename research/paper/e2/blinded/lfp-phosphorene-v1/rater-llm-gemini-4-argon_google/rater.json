@@ -1,7 +1,11 @@
 {
   "rater_id": "gemini-4-argon@google",
   "type": "llm",
-  "independence": "vendor distinct from assessor panel (Anthropic, Google)",
+  "model_version": "gemini-4-argon@google",
+  "provider": "MAG",
+  "affiliation": "Google model accessed via MAG",
+  "vendor_independent": false,
+  "independence": "Not vendor-independent; the rater and assessor panel include Anthropic and Google models.",
   "saw_unblinded_results": false,
   "date": "2026-11-04"
 }

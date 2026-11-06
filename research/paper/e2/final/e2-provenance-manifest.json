@@ -1,0 +1,185 @@
+{
+ "suites": [
+  {
+   "suite_id": "e2-lfp-phosphorene-v1",
+   "cases": 8,
+   "responses": 32,
+   "cases_yaml_sha256": "c38766145da47af47c85ca3dddfdba652e2b93aa15df411855d7d4240168a48f",
+   "frozen_record": "research/paper/e2/lfp-phosphorene-v1.FROZEN.sha256",
+   "answer_key_freeze": "historical",
+   "protocol_digest": "974d24de286b4f15e05e0a206a049c5d691832fc0b22225c8ac8b4b2a996da77",
+   "run_dir": "research/paper/e2/raw/lfp-phosphorene-v1-hvk5dot2",
+   "answers_sha256": "4c410d2ecdac8253217a99a75acd594799267d7ede9873ed1b025eecff357924",
+   "summary_sha256": "142695fe33985228e31871f24e8690facf1209cc6e16215d7dbf345897e08d9f",
+   "blinded_package": "research/paper/e2/blinded/lfp-phosphorene-v1",
+   "blinded_answers_sha256_matches": true,
+   "unblinding_key_sha256": "9b27ef9535b73b111e19b45836790d5e38d1676ef9f98a47a2577adc8017e5ce",
+   "rater_scores_sha256": {
+    "opus": "486dbc0b2052a3315012cae896dd68f8f08f24b52ab5ee7f3998e6c13f5851c5",
+    "argon": "a26f196ca4c50e2d02d47016fdbf92dfe172ae9d69f9577069b0b575899fefc1"
+   },
+   "no_llm_reproduced_by_pinned_evaluator": "8/8",
+   "evidence_sources": [
+    "calculation=dft_reference/vasp/calculations/2d_monolayer_P_ideal_3x3",
+    "calculation=dft_reference/vasp/calculations/2d_monolayer_P_ideal_UC",
+    "calculation=dft_reference/vasp/calculations/2d_monolayer_P_vacancy_3x3",
+    "calculation=dft_reference/vasp/calculations/critical_minerals_LiFePO4_olivine_FeLi_antisite",
+    "calculation=dft_reference/vasp/calculations/critical_minerals_LiFePO4_olivine_ideal",
+    "inputs_outcar_sha256=5a6ed305d86db7ecfbb1f56112f7287c2678bd69012aca747c6d5bd03af88ba4",
+    "inputs_outcar_sha256=bc3c32cbcdcb77253d6c1f5a4f7cfccb27767057a17b661ab7d9e8380ebe92d2",
+    "outcar_sha256=062d690a73085a6b5965c1ffb1a64d1c05013950f720c415be4e7122d962d036",
+    "outcar_sha256=08d87bcaecee9f6d71e4fd4ceee1083ce38bf7b3be13ea426960139496e9c2a2",
+    "outcar_sha256=5a6ed305d86db7ecfbb1f56112f7287c2678bd69012aca747c6d5bd03af88ba4",
+    "outcar_sha256=b3cb8f6974194571b7c1bf8244e9f7df0a8b4b830380cdc7969f135260bc9b81",
+    "outcar_sha256=bc3c32cbcdcb77253d6c1f5a4f7cfccb27767057a17b661ab7d9e8380ebe92d2"
+   ]
+  },
+  {
+   "suite_id": "e2-nbtao-v1",
+   "cases": 5,
+   "responses": 20,
+   "cases_yaml_sha256": "a12e50b008205175f297a37ded6b90d96bb6a63eba0065bc57c7add598f4e1ae",
+   "frozen_record": "research/paper/e2/nbtao-v1.FROZEN.sha256",
+   "answer_key_freeze": "historical",
+   "protocol_digest": "b71710664fe03bd47ced2b4fe9d614474478e59b18520d9462cbc4611660a94b",
+   "run_dir": "research/paper/e2/raw/nbtao-v1-pgbpfthh",
+   "answers_sha256": "b1acc582690b3eb4e0caaa642443d222ae78bc3c4f7e330b7364e32ca9c03201",
+   "summary_sha256": "36aabdc8cb761cacd0d6d7fca10bc5e1acd3c6a1aaedc632a80da1cda9e9e093",
+   "blinded_package": "research/paper/e2/blinded/nbtao-v1",
+   "blinded_answers_sha256_matches": true,
+   "unblinding_key_sha256": "de0d4812e90d5eaf15c917c8b8f0ce26f168c7ac6fbbba211c4cb5c6702b2935",
+   "rater_scores_sha256": {
+    "opus": "f9bc87e7a8d65c0e78814f164c8ece3aece465ea0e25478d87d1be25ebf6ff92",
+    "argon": "c845d31eef79f050896da82b4f803122bd2ce316c4c2c4a4b9857db84919eff0"
+   },
+   "no_llm_reproduced_by_pinned_evaluator": "5/5",
+   "evidence_sources": [
+    "calculation=Nb-bcc-baseline relax (ISIF=7) + static (Aurora job 9040436)",
+    "calculation=NbTaO5-ordering-01-baseline relax (Aurora job 9040072)",
+    "calculation=NbTaO5-ordering-01-baseline static at relaxed geometry (Aurora job 9040072)",
+    "calculation=Ta-bcc-baseline relax (ISIF=7) + static (Aurora job 9040437)",
+    "inputs_outcar_sha256=23bc61ce9d91649e5ba7f37e3a887ded35a985143434ed1fa6c90540f6994852",
+    "inputs_outcar_sha256=7272f1b31a74e1908e21d90be514d20634729e33ad0b4bb8ecccc325ee23e06d",
+    "inputs_outcar_sha256=a8bbe557c0acd0b8d813b765d0c62e58ac0fe1ad8b320b199ffc4e1dc1a2b8f3",
+    "inputs_outcar_sha256=e4193558d5dfc6d59f08469705e9a2af405d071f0ddfdb0f52eee44814a58689",
+    "outcar_sha256=a8bbe557c0acd0b8d813b765d0c62e58ac0fe1ad8b320b199ffc4e1dc1a2b8f3",
+    "outcar_sha256=e4193558d5dfc6d59f08469705e9a2af405d071f0ddfdb0f52eee44814a58689",
+    "outcar_sha256_relax=23bc61ce9d91649e5ba7f37e3a887ded35a985143434ed1fa6c90540f6994852",
+    "outcar_sha256_relax=7272f1b31a74e1908e21d90be514d20634729e33ad0b4bb8ecccc325ee23e06d",
+    "outcar_sha256_static=6bcc99ff0b66e8807516fe6cd2e3639adf4dc6b4732ea12e72bd31de92e51b67",
+    "outcar_sha256_static=eb627e8b2e21ddab14ead192b5c9ec49ccdeac8305d61eb5c25e70baea09f822"
+   ]
+  },
+  {
+   "suite_id": "e2-nbtao-v2",
+   "cases": 1,
+   "responses": 4,
+   "cases_yaml_sha256": "4fa4c84c5781543e14f5d5b6b8cb2114c0c5153c1786541fc8875b3bbf5aa583",
+   "frozen_record": null,
+   "answer_key_freeze": "manifest-frozen",
+   "protocol_digest": "3f12af633ee9c1e118a3c695ad0d1e6ec6df013ef9ed254765186dd7cfa20604",
+   "run_dir": "research/paper/e2/raw/nbtao-v2/agent-eval-37jize3g",
+   "answers_sha256": "f8f74578818f1a43a38928bebb57e1aa1ec7e1c80672821892516928cb0dc6fe",
+   "summary_sha256": "6f5ec3b0829fcfa3c9b0f6aa1c049cf018bf25b0fb160de2029ae7c0b80082d0",
+   "blinded_package": "research/paper/e2/blinded/nbtao-v2",
+   "blinded_answers_sha256_matches": true,
+   "unblinding_key_sha256": "6129adbbb0d661b36e1e58df62c535486f87e4c58094bb5d95704be1f3af5adf",
+   "rater_scores_sha256": {
+    "opus": "d1124a6621479d5e6dd281a1a4c599867ff2d47208d19bad62570146a1c7c8a5",
+    "argon": "938e1753477f997cefa1f3f53dae0b2d6bd254be99715a8a18bb88f5029d8415"
+   },
+   "no_llm_reproduced_by_pinned_evaluator": "1/1",
+   "evidence_sources": [
+    "source_records=research/paper/e2/evidence/nbtao5-q1/q1-verify-static.json",
+    "source_records=research/paper/e2/evidence/nbtao5-q2/q2-verify-Nb-bcc-baseline-static.json",
+    "source_records=research/paper/e2/evidence/nbtao5-q2/q2-verify-Ta-bcc-baseline-static.json",
+    "source_records=research/paper/e2/evidence/nbtao5-q3/q3-verify-static.json"
+   ]
+  },
+  {
+   "suite_id": "e2-zn-formate-v1",
+   "cases": 4,
+   "responses": 16,
+   "cases_yaml_sha256": "57aece7ca4cf58b9c36e6450c6e278873fe8f7c8d735bc17c8dcb9de6d375f15",
+   "frozen_record": null,
+   "answer_key_freeze": "manifest-frozen",
+   "protocol_digest": "bab514b4fac5c97481a78c4ad57ef6753f6fd880c85a75a37a52213e25e85665",
+   "run_dir": "research/paper/e2/raw/zn-formate-v1/agent-eval-vhjqyznq",
+   "answers_sha256": "a7a699d112008e50eb5f94a418204ed22ecdbdcba38da55c673a8d082e369b82",
+   "summary_sha256": "9fbd393b35a186fa7efb8f0abf07ef8c42c1e9c15595b3b2b2c529ba607a2199",
+   "blinded_package": "research/paper/e2/blinded/zn-formate-v1",
+   "blinded_answers_sha256_matches": true,
+   "unblinding_key_sha256": "73a69848aeb42c9ddd2759c8cf999402fbbbf5ad2b24630a421f1c40d2fb8025",
+   "rater_scores_sha256": {
+    "opus": "ccccd8b5d5b7ca80408f5c36184a4041d3e0e4f066795f9dba9d3e9460c91833",
+    "argon": "b9c582107215e2107ca6fbc689e6e3167a25bcbf9a5d2c591433aed651404360"
+   },
+   "no_llm_reproduced_by_pinned_evaluator": "4/4",
+   "evidence_sources": [
+    "calculation=COD 4515120 alpha, relaxation",
+    "calculation=COD 7102783 dihydrate, relaxation",
+    "calculation=COD 7205949 Pbcn, relaxation",
+    "calculation=Static sigma-zero energies normalized by atom count",
+    "qualification_record=e2-dft-v1-20261104/cases/zn_formate_dihydrate_COD7102783/verify-relax.json",
+    "qualification_record=e2-dft-znformate-anhydrous-v1-20261104/cases/zn_formate_alpha_Zn3HCOO6_COD4515120/verify-relax.json",
+    "qualification_record=e2-dft-znformate-anhydrous-v1-20261104/cases/zn_formate_lonsdaleite_Pbcn_COD7205949/verify-relax.json",
+    "qualification_records=e2-dft-znformate-anhydrous-v1-20261104/cases/zn_formate_alpha_Zn3HCOO6_COD4515120/verify-static.json",
+    "qualification_records=e2-dft-znformate-anhydrous-v1-20261104/cases/zn_formate_lonsdaleite_Pbcn_COD7205949/verify-static.json"
+   ]
+  },
+  {
+   "suite_id": "e2-nbtavhfrz-bcc-v1",
+   "cases": 2,
+   "responses": 8,
+   "cases_yaml_sha256": "debe8160848c768c3ebeaf50c5a1b67300aa201820e035e288cfcc7f01fc757a",
+   "frozen_record": "research/paper/e2/nbtavhfrz-bcc-v1.FROZEN.sha256",
+   "answer_key_freeze": "manifest-frozen",
+   "protocol_digest": "278681d63b6c97ee3f64f6286dbd5c39bdf31bf1faa1f8fb1f235ee2bb7a8715",
+   "run_dir": "research/paper/e2/raw/nbtavhfrz-bcc-v1/agent-eval-bj8rbngk",
+   "answers_sha256": "42d3c7df1a0642358c365d0224d16c15ea36e4d3e09c972d9044a41e5f200b2c",
+   "summary_sha256": "88679f6d2a047741fb96009b1648995308237f4e250f9ab563275725cea7f116",
+   "blinded_package": "research/paper/e2/blinded/nbtavhfrz-bcc-v1",
+   "blinded_answers_sha256_matches": true,
+   "unblinding_key_sha256": "d2f6acf97763caff937af6ea59c26298672bd9974647db1429f718e7d8eb52b3",
+   "rater_scores_sha256": {
+    "opus": "db82f54026226bfeb97cbc79e66878f859cb26161ccba61f05e828cc30cba948",
+    "argon": "0fa218b0a5090757697f6a97d29bc19c65a38667ae135d339576c7a45b040962"
+   },
+   "no_llm_reproduced_by_pinned_evaluator": "2/2",
+   "evidence_sources": [
+    "outcar_sha256=9d938c65ee502b696a529d0002d12ce023fbe45c25e7892bcb48b8b23b688c59",
+    "qualification_record=verify-relax.json",
+    "source_structure_sha256=798e572ee9dd7c5a6a40a0a1c80989a0e1c259548f22d503a69ca1a1440044d7"
+   ]
+  }
+ ],
+ "config": "research/paper/e2/configs/lgea-dea-mag-v1.yaml",
+ "config_sha256": "35513b44efd63e894c59b57e4e8c10f16632f8aac3ac9021250e0178668a268e",
+ "consolidation_commit": "00de75c865b4cf29a9cf1363946824811aa93635",
+ "pinned_evaluator": "src/matsim_agents/campaign/agent_eval.py",
+ "pinned_evaluator_sha256": "4f91ff3debc7e7997b795d4059c14ba4747bdf22a138e2f141dbccf52c03cf87",
+ "historical_evaluator_note": "Raw runs record no evaluator revision. Commit 38110e2 hardcodes no_llm to unresolved/request_dft, contradicting stored lfp-phosphorene-v1 answers; stored no_llm answers are reproduced by the pinned evaluator (see no_llm_reproduced_by_pinned_evaluator). LLM-arm answers are historical outputs and are not re-executed.",
+ "decoding": {
+  "temperature": 0.0,
+  "random_seeds": [
+   0
+  ]
+ },
+ "models": {
+  "assessors": [
+   "claude-sonnet-5-5@google",
+   "gemini-2.5-flash@google"
+  ],
+  "raters": [
+   "claude-opus-5-5@google",
+   "gemini-4-argon@google"
+  ],
+  "rater_independence": "same vendors (Anthropic, Google) as assessor panel; served via MAG/Google"
+ },
+ "excluded": [
+  {
+   "material": "Cantor FCC",
+   "reason": "no qualified relaxation/static; job outputs incomplete"
+  }
+ ]
+}

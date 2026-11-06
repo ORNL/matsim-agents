@@ -61,7 +61,9 @@ with open(OUT / "scores.csv", "w", newline="") as f:
     for i in items:
         s = scores.get(i["item_id"], {})
         w.writerow([i["item_id"], i["case"]] + [s.get(k, "") for k in FIELDS])
-(OUT / "rater.json").write_text(json.dumps({"rater_id": MODEL, "type": "llm",
-                                            "independence": "vendor distinct from assessor panel (Anthropic, Google)",
-                                            "saw_unblinded_results": False, "date": time.strftime("%Y-%m-%d")}, indent=2) + "\n")
+(OUT / "rater.json").write_text(json.dumps({
+    "rater_id": MODEL, "type": "llm", "model_version": MODEL, "provider": "MAG",
+    "vendor_independent": False,
+    "independence": "Not vendor-independent; rater models share model vendors with the assessor panel.",
+    "saw_unblinded_results": False, "date": time.strftime("%Y-%m-%d")}, indent=2) + "\n")
 print(f"scored {len(scores)}/{len(items)} items -> {OUT}")

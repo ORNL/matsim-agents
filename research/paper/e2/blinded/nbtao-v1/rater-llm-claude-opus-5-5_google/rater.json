@@ -1,7 +1,11 @@
 {
   "rater_id": "claude-opus-5-5@google",
   "type": "llm",
-  "independence": "vendor distinct from assessor panel (Anthropic, Google)",
+  "model_version": "claude-opus-5-5@google",
+  "provider": "MAG",
+  "affiliation": "Anthropic model accessed via Google/MAG",
+  "vendor_independent": false,
+  "independence": "Not vendor-independent; the rater and assessor panel include Anthropic and Google models.",
   "saw_unblinded_results": false,
   "date": "2026-11-05"
 }

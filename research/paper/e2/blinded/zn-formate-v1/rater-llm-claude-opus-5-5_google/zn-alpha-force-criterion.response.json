@@ -1,0 +1,60 @@
+{
+ "request_sha256_inputs": "zn-alpha-force-criterion",
+ "latency_s": 14.9,
+ "mag_applied": "model=claude-opus-5-5@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "chatcmpl-cc45c9e8-f55c-423b-b2b9-2cbf95f0e43e",
+  "created": 1793931250,
+  "model": "claude-opus-5-5@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "```json\n{\"scores\": [\n{\"item_id\": \"item-002\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Compares max_force 0.01983 with the 0.02 threshold and notes that EDIFFG and the acceptance criterion match it. It flags the thin margin and the missing hashes without changing the verdict, and correctly requests nothing. The rationale contains a redundant duplicated paragraph, and the margin is stated as ~1% when it is ~0.85%; neither is a material error.\"},\n{\"item_id\": \"item-003\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Quantifies the margin correctly (0.0002 eV/A, 0.85%) and ties the value to the EDIFFG and acceptance settings. Its assumptions (final-step value, empty hashes) are specific. The Pulay-stress caveat is correctly weighted as a robustness issue, not a contradiction. It correctly declines DFT because the claim concerns an existing record.\"},\n{\"item_id\": \"item-010\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Thorough internal-consistency checks: 65 of 200 NSW steps, so not cut off; 0.30 kbar residual stress; EDIFFG matches the threshold. Caveats are specific (final step, constrained atoms, hashes) and the falsifiers are concrete. 'Unequivocally' is slightly strong, but the caveats are acknowledged. Correctly requests nothing.\"},\n{\"item_id\": \"item-011\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 0, \"evidence_attribution\": 1, \"uncertainty\": 0, \"follow_up\": 2, \"notes\": \"Correct verdict and evidence ID, but no physics or numbers: max_force and the threshold are never stated. No caveat about the very thin margin below threshold. Requesting no follow-up is correct, though unexplained.\"}\n],\n\"correct_verdict_in_your_judgement\": \"supported\",\n\"case_notes\": \"There is a single converged_dft relaxation record for the target structure. It reports max_force = 0.0198301694 eV/A, which is at or below the 0.02 eV/A threshold. The scope is limited to the recorded criterion, and no record conflicts. The ~0.85% margin and the empty hash/convergence fields are provenance caveats only; they do not change the verdict. No follow-up tests are available, and further DFT would not change what was recorded, so the correct choice is no request.\"}\n```",
+     "role": "assistant",
+     "reasoning_content": "",
+     "thinking_blocks": [
+      {
+       "type": "thinking",
+       "thinking": "",
+       "signature": "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"
+      }
+     ],
+     "provider_specific_fields": {
+      "citations": null,
+      "thinking_blocks": [
+       {
+        "type": "thinking",
+        "thinking": "",
+        "signature": "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"
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1424,
+   "prompt_tokens": 5303,
+   "total_tokens": 6727,
+   "completion_tokens_details": {
+    "reasoning_tokens": 482,
+    "text_tokens": 942
+   },
+   "prompt_tokens_details": {
+    "cached_tokens": 0,
+    "text_tokens": 4,
+    "cache_write_tokens": 5299,
+    "cache_creation_tokens": 5299,
+    "cache_creation_token_details": {
+     "ephemeral_5m_input_tokens": 5299,
+     "ephemeral_1h_input_tokens": 0
+    }
+   },
+   "cache_creation_input_tokens": 5299,
+   "cache_read_input_tokens": 0
+  }
+ }
+}

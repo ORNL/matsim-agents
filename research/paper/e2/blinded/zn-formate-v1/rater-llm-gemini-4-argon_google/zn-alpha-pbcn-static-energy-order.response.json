@@ -1,0 +1,46 @@
+{
+ "request_sha256_inputs": "zn-alpha-pbcn-static-energy-order",
+ "latency_s": 9.0,
+ "mag_applied": "model=gemini-4-argon@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "azjtauSTKcncsbwPlZWqqA8",
+  "created": 1793931371,
+  "model": "gemini-4-argon@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\"scores\": [{\"item_id\": \"item-004\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 0, \"evidence_attribution\": 1, \"uncertainty\": 0, \"follow_up\": 2, \"notes\": \"Correct verdict and record ID, but the rationale is a generic boilerplate phrase with zero physical reasoning, no numerical values cited, and no caveats mentioned.\"}, {\"item_id\": \"item-007\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Thorough quantitative verification of per-atom energies, clear attribution to record values, and exact physical caveats regarding finite k-mesh differences versus the stated scope.\"}, {\"item_id\": \"item-009\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Complete numerical verification, precise citation of evidence fields, and well-weighted discussion of numerical convergence limits vs. the narrow literal claim.\"}, {\"item_id\": \"item-014\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Accurate arithmetic check, full attribution to the evidence record, and appropriate distinction between finite-mesh comparison and physical polymorph stability.\"}], \"correct_verdict_in_your_judgement\": \"supported\", \"case_notes\": \"The claim is strictly scoped to comparing the numerical values of two recorded static calculations on their finite meshes. The single converged_dft record shows alpha (-6.2119718751 eV/atom) is lower than Pbcn (-6.2119347767 eV/atom) by 0.037 meV/atom, directly supporting the narrowly scoped claim despite not being a convergence-qualified thermodynamic ranking.\"}",
+     "role": "assistant",
+     "images": [],
+     "thinking_blocks": [],
+     "provider_specific_fields": {
+      "thought_signatures": [
+       "AY89a1+6fcAWDH1kQisa0XdAzbZpG5ObfyaPG3Pwz7YFn7U+N+83FJp9NoWpPo2xbhn6YmwEDu644DH5JYnJ0KcuMsgGa7cp3a0NaTb9//OQKA3L2w=="
+      ]
+     }
+    },
+    "provider_specific_fields": {
+     "native_finish_reason": "STOP"
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 457,
+   "prompt_tokens": 3908,
+   "total_tokens": 4365,
+   "completion_tokens_details": {
+    "text_tokens": 457
+   },
+   "prompt_tokens_details": {
+    "text_tokens": 3908
+   }
+  },
+  "vertex_ai_grounding_metadata": [],
+  "vertex_ai_url_context_metadata": [],
+  "vertex_ai_safety_results": [],
+  "vertex_ai_citation_metadata": []
+ }
+}
