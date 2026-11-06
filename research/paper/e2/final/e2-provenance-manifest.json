@@ -155,7 +155,7 @@
  ],
  "config": "research/paper/e2/configs/lgea-dea-mag-v1.yaml",
  "config_sha256": "35513b44efd63e894c59b57e4e8c10f16632f8aac3ac9021250e0178668a268e",
- "consolidation_commit": "00de75c865b4cf29a9cf1363946824811aa93635",
+ "consolidation_commit": "36da62d920e6b697f7c3bc193ef05125859de371",
  "pinned_evaluator": "src/matsim_agents/campaign/agent_eval.py",
  "pinned_evaluator_sha256": "4f91ff3debc7e7997b795d4059c14ba4747bdf22a138e2f141dbccf52c03cf87",
  "historical_evaluator_note": "Raw runs record no evaluator revision. Commit 38110e2 hardcodes no_llm to unresolved/request_dft, contradicting stored lfp-phosphorene-v1 answers; stored no_llm answers are reproduced by the pinned evaluator (see no_llm_reproduced_by_pinned_evaluator). LLM-arm answers are historical outputs and are not re-executed.",
@@ -179,7 +179,7 @@
  "excluded": [
   {
    "material": "Cantor FCC",
-   "reason": "no qualified relaxation/static; job outputs incomplete"
+   "reason": "no relaxation reached EDIFFG=-0.02 or produced a static; PBS 9040206 still running as of 2026-11-06T02:49Z; random3 killed (exit 143)"
   }
  ]
 }

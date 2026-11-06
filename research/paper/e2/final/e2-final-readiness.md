@@ -1,20 +1,31 @@
-# E2 final readiness: NOT COMPLETE
+# E2 publication readiness: NO-GO (one blocker)
 
-| Requirement | Status | Smallest action to resolve |
+Checked 2026-11-06T02:49Z.
+
+## Blocker
+
+| Item | Why it blocks | Smallest action |
 |---|---|---|
-| LiFePO4: 4 cases qualified, reproducible | PASS with limitation | Mount private archive 4e18697 to re-verify OUTCAR hashes |
-| Phosphorene: 4 cases, failure documented | PASS with limitation | Same archive check |
-| Nb-Ta-O: v1/v2 reconciled, 6 cases scored | PASS | — |
-| Zn-formate: 4 cases scored, qualified | PASS | — |
-| BCC: qualified case(s), 4 arms, scored | PASS (2 cases) | Optional: 3x3x3 static k-point and ISPIN=2 checks to decide the ranking case |
-| **Cantor FCC: case(s), 4 arms, scored** | **FAIL** | Finish the 3 running relaxations; qualify one with verify_vasp_run.py; freeze 1-2 cases; run 4 arms; score |
-| Rater metadata corrected (same vendors) | PASS | — |
-| Scoring complete for every response | PASS (80/80, two raters) | — |
-| Evaluator provenance | PARTIAL | Historical revision unrecoverable; disclosed. no_llm reproduced 20/20 under pinned evaluator |
-| Answer-key freeze chronology | PARTIAL | lfp-phosphorene-v1, nbtao-v1 lack pre-run freeze evidence; disclosed |
-| Inference costs consolidated | PASS | — |
-| Single-seed and dependency limits stated | PASS | — |
+| Cantor FCC has no E2 case | Six-material coverage is the stated E2 scope. No Cantor relaxation has met EDIFFG (Fmax 0.055-0.314 vs 0.02 eV/A), several ionic steps hit NELM=200, random3 was killed (exit 143), and no static exists. Partial energies are inadmissible. | Wait for PBS 9040206 (running; no resubmission needed yet). When `ideal` qualifies with its static: freeze 2 cases (force criterion; ranking-adequacy = unresolved), run 4 arms, score with both raters, rerun `scripts/e2/consolidate_e2.py`. If ideal does not finish by walltime, a restart of that one case needs your authorization. |
 
-**Blocker:** Cantor FCC coverage. Nothing else blocks; the remaining items are disclosed limitations.
+## Passed
 
-No HPC jobs were submitted. Cantor completion requires your authorization only if the running relaxations fail or a k-point/magnetic check is needed.
+| Requirement | Status |
+|---|---|
+| LiFePO4, phosphorene, Nb-Ta-O (v1+v2), Zn-formate, BCC: cases, 4 arms | PASS (20 cases, 80 responses) |
+| Two-rater blinded scoring for every response | PASS (160/160) |
+| Rater metadata (not vendor-independent) | PASS |
+| no_llm reproduced by pinned evaluator | PASS (20/20) |
+| Inference costs consolidated | PASS |
+| Aggregates by independent evidence groups (8 clusters) | PASS |
+
+## Disclosed limitations (not blockers)
+
+- Single seed; 8 evidence clusters; LLM-arm differences are within one case. No strategy superiority claim.
+- Historical evaluator revision for LLM arms unrecoverable; stored outputs used as-is.
+- lfp-phosphorene-v1 and nbtao-v1 lack independent pre-run answer-key freeze evidence.
+- LiFePO4/phosphorene raw OUTCARs are in a private archive not mounted here.
+- Raters are LLMs from the same vendors as the assessors; anonymized style can reveal arm family.
+- BCC ranking and Zn polymorph ordering are narrow by design (no k-point/spin sensitivity; 0.037 meV/atom gap).
+
+Decision: **GO** for the five completed materials as scoped, disclosed results. **NO-GO** for "six-material E2 complete" until Cantor is qualified.

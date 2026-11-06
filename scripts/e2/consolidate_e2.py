@@ -158,7 +158,9 @@ def main() -> None:
     for row in coverage:
         row["dependency_cluster"] = find(row["case_id"])
     coverage.append({"material": "Cantor FCC", "suite_id": "none", "case_id": "none",
-                     "evidence_qualification": "not qualified: 3 relaxations still running, 1 failed; no verified static",
+                     "evidence_qualification": "not qualified (PBS 9040206, 2026-11-06T02:49Z): ideal/random1/random2 relax "
+                     "in progress, Fmax 0.055/0.206/0.232 > 0.02 eV/A, some ionic steps at NELM=200; random3 killed "
+                     "(exit 143) at step 6; no static",
                      "included_in_aggregate": False})
     with (OUT / "e2-six-material-coverage.csv").open("w", newline="") as f:
         cols = list(dict.fromkeys(k for r in coverage for k in r))
@@ -203,6 +205,27 @@ def main() -> None:
         crows = [r for r in cost if r["arm"] == arm]
         cost.append({"material": "ALL", "arm": arm, **{k: sum(r[k] for r in crows) for k in
                      ("cases", "responses", "calls", "prompt_tokens", "completion_tokens", "total_tokens", "latency_s", "parse_failures")}})
+    cluster_of = {r["case_id"]: r["dependency_cluster"] for r in coverage if r.get("included_in_aggregate") is True}
+    n_clusters = len(set(cluster_of.values()))
+    for arm in ARMS:
+        by_cluster: dict[str, list] = defaultdict(list)
+        for r in records:
+            if r["arm"] == arm:
+                by_cluster[cluster_of[r["case_id"]]].append(r)
+
+        def cmean(fn):
+            return sum(sum(fn(r) for r in rs) / len(rs) for rs in by_cluster.values()) / len(by_cluster)
+
+        row = {"material": f"CLUSTER-WEIGHTED ({n_clusters} evidence groups)", "arm": arm,
+               "cases": sum(len(v) for v in by_cluster.values()),
+               "verdict_correct": cmean(lambda r: r["grade"]["correct"]),
+               "evidence_attribution": cmean(lambda r: r["grade"]["evidence_attribution"]),
+               "dft_request_correct": cmean(lambda r: r["grade"]["dft_request_correct"])}
+        for lab in RATERS:
+            row[f"{lab}_verdict_Y"] = cmean(lambda r: scores[(r["case_id"], arm)][lab]["verdict_correct"] == "Y")
+            for fld in FIELDS:
+                row[f"{lab}_{fld}"] = cmean(lambda r, f=fld: int(scores[(r["case_id"], arm)][lab][f]))
+        comp.append(row)
     for path, rows in (("e2-four-arm-comparison.csv", comp), ("e2-inference-costs.csv", cost)):
         with (OUT / path).open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(dict.fromkeys(k for r in rows for k in r)))
@@ -221,7 +244,8 @@ def main() -> None:
         "models": {"assessors": ["claude-sonnet-5-5@google", "gemini-2.5-flash@google"],
                    "raters": ["claude-opus-5-5@google", "gemini-4-argon@google"],
                    "rater_independence": "same vendors (Anthropic, Google) as assessor panel; served via MAG/Google"},
-        "excluded": [{"material": "Cantor FCC", "reason": "no qualified relaxation/static; job outputs incomplete"}],
+        "excluded": [{"material": "Cantor FCC", "reason": "no relaxation reached EDIFFG=-0.02 or produced a static; "
+                       "PBS 9040206 still running as of 2026-11-06T02:49Z; random3 killed (exit 143)"}],
     })
     (OUT / "e2-provenance-manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
     print(json.dumps({s["suite_id"]: s["no_llm_reproduced_by_pinned_evaluator"] for s in manifest["suites"]}))

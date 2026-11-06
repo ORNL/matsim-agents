@@ -37,6 +37,15 @@ Evidence attribution was 1.00 for every arm and material.
 | multi_llm_no_critique | 1.00 / 1.93 / 1.97 / 1.97 / 1.68 | 1.00 / 1.97 / 2.00 / 2.00 / 1.68 |
 | multi_llm_cross_critique | 0.95 / 1.95 / 1.92 / 1.90 / 1.58 | 0.95 / 1.95 / 2.00 / 1.90 / 1.63 |
 
+Evidence-group-weighted (8 independent clusters, each weighted equally):
+
+| Arm | Verdict | DFT-request | Opus: physics / evidence / uncertainty / follow-up | Argon: physics / evidence / uncertainty / follow-up |
+|---|---:|---:|---|---|
+| no_llm | 1.00 | 0.85 | 0.43 / 0.80 / 0.03 / 1.69 | 0.00 / 0.80 / 0.00 / 1.75 |
+| single_llm | 1.00 | 1.00 | 1.92 / 2.00 / 1.98 / 2.00 | 2.00 / 2.00 / 2.00 / 2.00 |
+| multi_llm_no_critique | 1.00 | 1.00 | 1.96 / 1.98 / 1.98 / 1.80 | 1.98 / 2.00 / 2.00 / 1.80 |
+| multi_llm_cross_critique | 0.97 | 0.98 | 1.97 / 1.95 / 1.94 / 1.74 | 1.97 / 2.00 / 1.94 / 1.77 |
+
 Per-material values are in `e2-four-arm-comparison.csv`. Raters agreed on every verdict (80/80). Raters are LLMs (claude-opus-5-5, gemini-4-argon) from the **same vendors** as the assessor panel; this is model-based scoring, not human expert review. Anonymized rationales can reveal arm family (template no_llm text, peer references).
 
 ## 4. Inference cost (all 20 cases)
@@ -73,4 +82,13 @@ Single seed (0); 20 cases in 8 dependency clusters; 5 materials. Differences bet
 
 ## 8. Excluded
 
-Cantor FCC: three relaxations still running and one failed; no verified static energy. No E2 case can be qualified yet.
+Cantor FCC (checked 2026-11-06T02:49Z, PBS 9040206 running, 10.6 h of 24 h; read-only): VASP 6.6.1, ISPIN=2, ENCUT 480 eV, ISMEAR=1/SIGMA 0.10, Gamma 2x2x2, EDIFFG -0.02 eV/A, NELM 200, same 108-atom composition.
+
+| Config | Ionic steps | Fmax now (eV/A) | Steps at NELM | Net moment (muB) | Status |
+|---|---:|---:|---:|---:|---|
+| ideal | 16 | 0.055 | 5/16 | 63.1 | relaxing |
+| random1 | 17 | 0.206 | 4/17 | 62.0 | relaxing |
+| random2 | 10 | 0.232 | 8/10 | 61.1 | relaxing |
+| random3 | 6 | 0.314 | 4/6 | 60.3 | killed, exit 143 |
+
+No relaxation reached the force criterion; several ionic steps used unconverged SCF; no static exists. The intermediate energies are not admissible evidence. A "criterion not yet met" case would test an in-progress snapshot and is not a scientifically meaningful claim. Smallest path: let 9040206 finish ideal (closest, 0.055 eV/A); if it qualifies with its static, freeze (1) ideal force criterion and (2) ranking-adequacy (unresolved: single magnetic initialization, Gamma 2x2x2 only, random configs unqualified).
