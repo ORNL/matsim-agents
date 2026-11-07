@@ -59,6 +59,7 @@ elif [[ -f /usr/share/lmod/lmod/init/bash ]]; then
   source /usr/share/lmod/lmod/init/bash
 fi
 
+if [[ -z "${VASP_ENV_SETUP:-}" ]]; then
 VASP_BIN_RESOLVED="$(readlink -f "${VASP_BIN}" 2>/dev/null || echo "${VASP_BIN}")"
 module reset
 if [[ "${VASP_BIN_RESOLVED}" == /sw/frontier/vasp/* ]]; then
@@ -76,6 +77,10 @@ else
   module load cray-fftw
 fi
 module unload darshan-runtime 2>/dev/null || true
+fi
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# shellcheck disable=SC1091
+source "${REPO}/deployments/common/vasp-runtime.sh"
 
 # Strip env vars that would perturb the VASP launch (set by the Python venv)
 unset LD_PRELOAD

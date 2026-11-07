@@ -7,6 +7,10 @@ set -euo pipefail
 WORK_DIR=$1; VASP_BIN=$2; NNODES=$3; RANKS_PER_NODE=$4; THREADS_PER_RANK=$5
 TOTAL_RANKS=$((NNODES * RANKS_PER_NODE))
 HOSTS=${MATSIM_ASSIGNED_NODES:?dispatcher must assign disjoint Aurora nodes}
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+VASP_ENV_SETUP="${VASP_ENV_SETUP:-${REPO}/deployments/aurora/setup/vasp-runtime-aurora.sh}"
+# shellcheck disable=SC1091
+source "${REPO}/deployments/common/vasp-runtime.sh"
 
 export OMP_NUM_THREADS=${THREADS_PER_RANK}
 # VASP OpenMP regions (e.g. SETDIJ) overflow the small default worker stack.

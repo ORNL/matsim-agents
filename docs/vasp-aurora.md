@@ -2,6 +2,11 @@
 
 This page records the VASP 6.6.1 build configuration and helper for Aurora.
 
+Building is optional. See [VASP installations and HPC execution](vasp-hpc-runtime.md)
+for selecting the ALCF-provided executable or a custom binary through the same
+launcher. Aurora launchers now load the compatible MPICH runtime in the VASP
+step rather than assuming it is inherited from the Python driver.
+
 ## Repository policy
 
 - The VASP source tree under `external/vasp6/src/vasp.6.6.1/` is gitignored.

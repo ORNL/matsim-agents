@@ -597,6 +597,8 @@ def _validate_dft_inputs(formula: str, cfg: ALConfig) -> None:
     if cfg.dft.backend == "vasp" and cfg.dft.vasp is not None:
         vasp = cfg.dft.vasp
         required_files = [vasp.vasp_bin, vasp.vasp_wrapper, vasp.incar_template]
+        if vasp.vasp_env_setup is not None:
+            required_files.append(vasp.vasp_env_setup)
         if vasp.kpoints_template is not None:
             required_files.append(vasp.kpoints_template)
         missing_files = [str(path) for path in required_files if not path.is_file()]
@@ -761,6 +763,7 @@ def _dft_relaxation_config(
                 potcar_dir=str(vasp.potcar_dir),
                 settings=settings,
                 timeout_sec=vasp.timeout_sec,
+                environment=vasp.runtime_environment(),
                 launch=launch,
             ),
             dft_approved=True,
