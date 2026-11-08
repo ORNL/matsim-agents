@@ -6,13 +6,88 @@ import argparse
 import importlib.metadata
 import json
 import subprocess
+from collections import Counter
 from pathlib import Path
 
-from ase.io import read
+import numpy as np
+from ase.io import read, write
 
 from benchmarks.e4_mlip.run import DEVICES, Structure, geometry_hash, load_inventory, sha256
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def generate_bcc_candidates(parent: Path, output: Path, *, seed: int = 20261108) -> Path:
+    """Freeze 120 reproducible site occupations, without asserting checkpoint coverage."""
+    from benchmarks.e4_mlip.inventory import family_for
+
+    atoms = read(parent)
+    composition = dict(Counter(atoms.get_chemical_symbols()))
+    if (
+        len(atoms) != 128
+        or family_for(composition) != "bcc_refractory"
+        or not atoms.pbc.all()
+        or atoms.get_volume() <= 0
+        or not np.isfinite(atoms.positions).all()
+        or not np.isfinite(atoms.cell.array).all()
+    ):
+        raise ValueError("Candidate parent must be a finite periodic 128-atom refractory alloy")
+    output.mkdir(parents=True, exist_ok=False)
+    seen = {geometry_hash(atoms)}
+    sources = []
+    for index in range(120):
+        rng = np.random.default_rng(seed + index)
+        candidate = atoms.copy()
+        candidate.calc = None
+        candidate.numbers = rng.permutation(atoms.numbers)
+        digest = geometry_hash(candidate)
+        if digest in seen:
+            raise ValueError(f"Duplicate occupation generated at index {index}")
+        seen.add(digest)
+        identifier = f"E4B-BCC-generated-{index + 1:04d}"
+        path = output / f"{identifier}.extxyz"
+        write(path, candidate, format="extxyz")
+        sources.append(
+            {
+                "structure_id": identifier,
+                "family": "bcc_refractory",
+                "path": str(path.resolve()),
+                "source": "Reproducible site permutation of staged E4 BCC parent; no DFT labels",
+                "initial_status": "initial",
+                "provenance": {
+                    "parent": str(parent.resolve()),
+                    "parent_sha256": sha256(parent),
+                    "parent_geometry_sha256": geometry_hash(atoms),
+                    "algorithm": "numpy.default_rng(seed).permutation(parent.numbers)",
+                    "numpy_version": np.__version__,
+                    "random_seed": seed + index,
+                    "cell_and_positions_preserved": True,
+                    "scientific_coverage": "unverified; candidate workload only",
+                },
+            }
+        )
+    source_path = output / "sources.json"
+    source_path.write_text(json.dumps(sources, indent=2) + "\n")
+    rows = freeze_inventory(source_path, output / "structures.json")
+    (output / "pilot-representatives.json").write_text(
+        json.dumps([rows[0].model_dump(mode="json")], indent=2) + "\n"
+    )
+    (output / "candidate-status.json").write_text(
+        json.dumps(
+            {
+                "status": "FROZEN_CANDIDATES_NOT_SCIENTIFICALLY_QUALIFIED",
+                "count": 120,
+                "composition": composition,
+                "source": str(parent.resolve()),
+                "checkpoint_coverage_established": False,
+                "production_execution_authorized": False,
+                "note": "Distinct site occupations; not a symmetry-canonical uniqueness proof.",
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    return output / "structures.json"
 
 
 def audit(example: Path, output: Path) -> dict:
@@ -57,6 +132,10 @@ def audit(example: Path, output: Path) -> dict:
         "species_verified": False,
         "species_evidence": None,
         "numerical_tolerances_approved": False,
+        "energy_convention_verified": False,
+        "energy_units": None,
+        "force_units": None,
+        "energy_reference_evidence": None,
         "proposed_tolerances": {"energy_eV": 1e-6, "force_eV_A": 1e-5, "position_A": 1e-4},
         "relaxation_interface": "relax_with_mlip, ASE FIRE, fixed cell",
         "hydragnn_revision": revision,
@@ -93,6 +172,9 @@ def freeze_inventory(sources: Path, output: Path) -> list[Structure]:
                 atom_count=len(atoms),
                 species=sorted(set(atoms.get_chemical_symbols())),
                 source=entry["source"],
+                composition=dict(Counter(atoms.get_chemical_symbols())),
+                initial_status=entry.get("initial_status", "unknown"),
+                provenance=entry.get("provenance", {}),
             ).model_dump(mode="json")
         )
     temporary = output.with_suffix(".pending.json")
@@ -123,9 +205,10 @@ def pbs_templates(output: Path) -> None:
 set -eo pipefail
 : "${{REPO:?}}" "${{MANIFEST:?}}" "${{MODEL_METADATA:?}}" "${{OUTPUT_ROOT:?}}"
 source "${{REPO}}/deployments/aurora/setup/aurora-module-stack.sh"
-load_aurora_frameworks_modules
+load_aurora_xpu_modules
 source "${{MATSIM_AURORA_VENV:-${{REPO}}/.venv}}/bin/activate"
-export PYTHONPATH="${{HYDRAGNN_EXAMPLE:?}}:${{HYDRAGNN_ROOT:?}}:${{REPO}}:${{PYTHONPATH:-}}"
+export PYTHONPATH="${{HYDRAGNN_EXAMPLE:?}}:${{HYDRAGNN_ROOT:?}}:"\\
+"${{REPO}}/src:${{REPO}}:${{PYTHONPATH:-}}"
 export PYTHONNOUSERSITE=1
 export ZE_FLAT_DEVICE_HIERARCHY=FLAT
 export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
@@ -137,8 +220,14 @@ git rev-parse HEAD
 sha256sum "${{MANIFEST}}" "${{MODEL_METADATA}}"
 python --version
 ARGS=()
-if [[ "${{E4B_EXECUTE:-0}}" == 1 ]]; then ARGS=(--execute); fi
-python -m benchmarks.e4_mlip.run --manifest "${{MANIFEST}}" --metadata "${{MODEL_METADATA}}" \\
+LAUNCH=()
+if [[ "${{E4B_EXECUTE:-0}}" == 1 ]]; then
+  : "${{PBS_JOBID:?Execution requires an approved PBS allocation}}"
+  ARGS=(--execute)
+  LAUNCH=(mpiexec -n 1 --ppn 1)
+fi
+"${{LAUNCH[@]}}" python -m benchmarks.e4_mlip.run \\
+  --manifest "${{MANIFEST}}" --metadata "${{MODEL_METADATA}}" \\
   --devices {devices} --mode "${{MODE:-inference}}" --repetition "${{REP:-1}}" \\
   --output "${{OUTPUT_ROOT}}/${{MODE:-inference}}-d{devices}-r${{REP:-1}}-${{PBS_JOBID:-dryrun}}" \\
   "${{ARGS[@]}}"
@@ -150,20 +239,32 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--example", type=Path, required=True)
     parser.add_argument("--sources", type=Path)
+    parser.add_argument(
+        "--bcc-parent",
+        type=Path,
+        help="Generate a provisional 120-case site-permutation workload from a staged BCC parent",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.sources and args.bcc_parent:
+        parser.error("--sources and --bcc-parent are mutually exclusive")
     args.output.mkdir(parents=True, exist_ok=False)
     metadata = audit(args.example, args.output / "model-metadata.json")
     pbs_templates(args.output)
     if args.sources:
         freeze_inventory(args.sources, args.output / "structures.json")
+    if args.bcc_parent:
+        generate_bcc_candidates(args.bcc_parent, args.output / "bcc-candidates")
     blockers = [
         "Checkpoint species support unverified",
         "Numerical consistency tolerances not approved",
+        "Energy/force units and energy-reference conventions unverified",
         "Real XPU memory and synchronized timing pilot not authorized",
     ]
-    if not args.sources:
+    if not args.sources and not args.bcc_parent:
         blockers.insert(0, "No reviewed 120-structure source list provided")
+    if args.bcc_parent:
+        blockers.insert(0, "Generated BCC inventory is provisional pending checkpoint coverage")
     if metadata.get("missing_checkpoint_files"):
         blockers.insert(0, "Frozen checkout awaits checkpoint upload")
     (args.output / "readiness.json").write_text(

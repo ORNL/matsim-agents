@@ -18,15 +18,19 @@ historical provenance for this work.
 |---|---|---:|---:|---:|
 | Refractory BCC, 4/5/6 elements from Nb-Ta-V-Hf-Zr-Ti | `HydraGNN` | 2,040 | 128 | 4 x 510 |
 | Cr-Mn-Fe-Co-Ni FCC | `GenesisHackathonOct26` | 510 | 128 | 2 x 255 |
-| LiFePO4 olivine | `GridAI` | Up to 510 | 112, proposed 2x2x1 | 2 x up to 255 |
+| LiFePO4 olivine | `GridAI` | 510 symmetry-distinct candidates | 112, 2x2x1 | 2 x 255 |
 
-These are not yet certified production counts. `manifests/candidate-inventory.jsonl`
-contains 3,060 deterministic candidate IDs and plans 1, 1, and 2-3 Li/Fe
-antisite exchanges. Structure hashes, occupations, LiFePO4 defect sites, and
-canonical symmetry IDs are deliberately empty: public archive overlap and parent
-geometries are not yet resolved. `run-manifests.jsonl` assigns every candidate
-ID once across 64 disjoint schedule slots, but those IDs are not approved
-production structure assignments.
+The planning inventory contains 3,060 deterministic candidate IDs but remains
+a planning artifact with placeholder structure identities. The materialized
+Stage 1 bundle is in `stage1-inputs-v2/`; its 16 cases have structure hashes,
+canonical identities, input checksums, and PAW references. The frozen
+LiFePO4-only inventory in `lifepo4-inventory-v1/` contains 510 112-atom
+symmetry-distinct structures: one pristine, eight one-pair, 496 two-pair, and
+five three-pair antisite configurations. External archive overlap remains
+unresolved; these candidates are not all cleared for production.
+`run-manifests.jsonl` assigns every candidate ID once across 64 disjoint
+schedule slots, but those IDs are not approved production structure
+assignments.
 
 ## Proposed numerical protocols
 
@@ -35,19 +39,22 @@ production structure assignments.
 Use VASP 6.6.1, PBE, non-spin-polarized (`ISPIN=1`), `ENCUT=350 eV`,
 Gamma-centered 2x2x2, `EDIFF=1e-6 eV`, and 128-atom disordered BCC cells.
 Published records describe `PREC=Normal`, energy tolerance `1e-6 eV`, and
-maximum force `0.01 eV/A`; exact staged relaxation inputs, `ISMEAR`, `SIGMA`,
-and PAW release/hash still require recovery. The 350 eV cutoff and
-semi-core-valence choices must match the published archive. Hf and Ti PAW
-compatibility is an explicit preproduction gate. Do not substitute the distinct
-345 eV E2 protocol.
+maximum force `0.01 eV/A`. The recovered E4 A/B input uses Low then Normal
+precision, `ISMEAR=1`, and `SIGMA=0.2 eV`; `EDIFFG` is absent, so the ionic
+force criterion is not explicit in that input. The six-component E4 A/B PAW
+set is available and its component payloads match the private library by
+element and release metadata. The 350 eV cutoff and semi-core-valence choices
+must still be checked against the published archive. Do not substitute the
+distinct 345 eV E2 protocol.
 
 ### Cr-Mn-Fe-Co-Ni FCC
 
 Use VASP 6.6.1, spin-polarized PBE, `ENCUT=480 eV`, Gamma-centered 2x2x2,
-`EDIFF=1e-6 eV`, and a fixed initialization recovered from Cantor E2. Keep the
-archived `ISMEAR=1`, `SIGMA=0.10 eV`, PAW set, and relaxation conventions only
-after matching the actual input bytes. Do not call off-equiatomic candidates
-equiatomic Cantor. The E2 relaxation failures prohibit scaling until a
+`EDIFF=1e-6 eV`, and a fixed initialization recovered from Cantor E2. The
+archived `ISMEAR=1`, `SIGMA=0.10 eV`, PAW set, and relaxation conventions have
+been matched to the accessible 108-atom source input. The 128-atom cases are
+derived candidates, not archived E4 structures. Do not call off-equiatomic
+candidates equiatomic Cantor. The E2 relaxation failures prohibit scaling until a
 separately approved qualification calculation demonstrates SCF convergence at
 every ionic step and acceptable ionic termination.
 
@@ -55,12 +62,13 @@ every ionic step and acceptable ionic termination.
 
 Use VASP 6.6.0-compatible PBE without U, `ENCUT=520 eV`, `PREC=Accurate`,
 `EDIFF=1e-6 eV`, spin-polarized with one fixed archived initialization, and
-112 atoms in a 2x2x1 olivine supercell. The mounted E2 extraction documents
+112 atoms in a 2x2x1 olivine supercell. The accessible 28-atom E2 reference
+input documents
 `ISMEAR=0`, `SIGMA=0.05 eV`, `EDIFFG=-0.01 eV/A`, `IBRION=2`, `ISIF=3`,
 `NSW=200`, Fe_pv/Li_sv/O/P PAWs, and a primitive-cell 4x7x8 mesh. A
-reciprocal-density-preserving 2x4x8 mesh is a candidate for 2x2x1, pending
-verification against the original KPOINTS and source geometry. Exact atomic
-ordering of `MAGMOM`, archived input hashes, and the parent cell are not mounted.
+reciprocal-density-preserving 2x4x8 mesh is used for 2x2x1. The source POSCAR,
+INCAR, KPOINTS, and combined POTCAR are mounted; the 112-atom input remains
+derived from the archived 28-atom parent and needs execution qualification.
 
 ## Scaling schedule
 

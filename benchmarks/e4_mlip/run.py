@@ -10,6 +10,8 @@ import socket
 import subprocess
 import sys
 import time
+from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -40,6 +42,9 @@ class Structure(BaseModel):
     atom_count: int = Field(gt=0)
     species: list[str]
     source: str
+    composition: dict[str, int] = Field(default_factory=dict)
+    initial_status: Literal["initial", "relaxed", "intermediate", "unknown"] = "unknown"
+    provenance: dict[str, Any] = Field(default_factory=dict)
 
 
 def geometry_hash(atoms) -> str:
@@ -56,6 +61,8 @@ def validate_structure(row: Structure):
     if sha256(row.path) != row.sha256:
         raise ValueError(f"{row.structure_id}: input hash mismatch")
     atoms = read(row.path)
+    if row.composition and row.composition != dict(Counter(atoms.get_chemical_symbols())):
+        raise ValueError(f"{row.structure_id}: composition mismatch")
     if (
         len(atoms) != row.atom_count
         or sorted(set(atoms.get_chemical_symbols())) != row.species
@@ -116,6 +123,13 @@ def verify_model(metadata: dict[str, Any], rows: list[Structure]) -> list[str]:
         blockers.append("Energy/force capability is not declared")
     if not metadata.get("numerical_tolerances_approved"):
         blockers.append("Numerical consistency tolerances require approval before execution")
+    if (
+        not metadata.get("energy_convention_verified")
+        or metadata.get("energy_units") != "eV"
+        or metadata.get("force_units") != "eV/angstrom"
+        or not metadata.get("energy_reference_evidence")
+    ):
+        blockers.append("Energy/force units and energy-reference conventions are unverified")
     return blockers
 
 
@@ -180,7 +194,9 @@ class PreparedCache:
         return self.entry
 
 
-def worker_task(payload: dict[str, Any]) -> dict[str, Any]:
+def worker_task(
+    payload: dict[str, Any], *, validate_checkpoint: Callable[[Any], int] | None = None
+) -> dict[str, Any]:
     start = time.perf_counter()
     device = _device()
     row = Structure.model_validate(payload["structure"])
@@ -195,6 +211,9 @@ def worker_task(payload: dict[str, Any]) -> dict[str, Any]:
     built = cache.get(args)
     device.synchronize()
     load_seconds = time.perf_counter() - load_start
+    matched_tensors = (
+        validate_checkpoint(built.calculator.model) if validate_checkpoint is not None else None
+    )
     if "energy" not in built.calculator.implemented_properties or (
         "forces" not in built.calculator.implemented_properties
     ):
@@ -261,6 +280,8 @@ def worker_task(payload: dict[str, Any]) -> dict[str, Any]:
         if payload.get("warmup")
         else None,
     }
+    if matched_tensors is not None:
+        output["model_tensors_matched"] = matched_tensors
     write_start = time.perf_counter()
     Path(payload["result_path"]).write_text(json.dumps(output, allow_nan=False) + "\n")
     output["result_write_seconds"] = time.perf_counter() - write_start

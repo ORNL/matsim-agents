@@ -94,3 +94,60 @@ def test_inference_restores_ddp_checkpoint_and_freezes_lazy_parameters(tmp_path)
     assert all(not parameter.requires_grad for parameter in rebuilt.parameters())
     for key, expected in trained.state_dict().items():
         torch.testing.assert_close(rebuilt.state_dict()[key], expected, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("ddp", [False, True])
+def test_fused_loader_strictly_restores_model_prefix_and_lazy_weights(tmp_path, monkeypatch, ddp):
+    import sys
+    from types import ModuleType
+
+    from benchmarks.e4_mlip.pilot import validate_checkpoint
+    from matsim_agents.backends.mlip.relaxation import _load_fused_stack
+
+    trained = torch.nn.ModuleDict({"model": LazyConditioning().double()})
+    trained["model"]._ensure_graph_concat_projector(2, 2, "cpu", torch.float64)
+    state = trained.state_dict()
+    path = tmp_path / "model.pk"
+    torch.save(
+        {"model_state_dict": {f"module.{k}" if ddp else k: v for k, v in state.items()}},
+        path,
+    )
+    before = path.read_bytes()
+    rebuilt = torch.nn.ModuleDict({"model": LazyConditioning().double()})
+    upstream = ModuleType("inference_fused")
+    upstream.load_fused_stack = lambda *args: (rebuilt, None, {}, torch.device("cpu"))
+    monkeypatch.setitem(sys.modules, "inference_fused", upstream)
+    stack = _load_fused_stack(tmp_path, path, "unused", "fp64", "fp64", "cpu")
+    assert stack[0] is rebuilt
+    assert validate_checkpoint(rebuilt) == len(state)
+    assert all(k.startswith("model.") for k in rebuilt._hydragnn_checkpoint_state_keys)
+    for key, expected in state.items():
+        torch.testing.assert_close(rebuilt.state_dict()[key], expected, rtol=0, atol=0)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("problem", ["missing", "unexpected", "shape", "double-ddp"])
+def test_fused_loader_rejects_invalid_state_before_inference(tmp_path, monkeypatch, problem):
+    import sys
+    from types import ModuleType
+
+    from matsim_agents.backends.mlip.relaxation import _load_fused_stack
+
+    model = torch.nn.ModuleDict({"model": torch.nn.Linear(2, 2)})
+    state = {f"module.{k}": v.clone() for k, v in model.state_dict().items()}
+    if problem == "missing":
+        state.pop("module.model.bias")
+    elif problem == "unexpected":
+        state["module.model.extra"] = torch.zeros(1)
+    elif problem == "shape":
+        state["module.model.weight"] = torch.zeros(3, 2)
+    else:
+        state = {f"module.{k}": v for k, v in state.items()}
+    path = tmp_path / "model.pk"
+    torch.save({"model_state_dict": state}, path)
+    upstream = ModuleType("inference_fused")
+    upstream.load_fused_stack = lambda *args: (model, None, {}, torch.device("cpu"))
+    monkeypatch.setitem(sys.modules, "inference_fused", upstream)
+    with pytest.raises(RuntimeError):
+        _load_fused_stack(tmp_path, path, "unused", "fp32", "fp32", "cpu")
+    assert not hasattr(model, "_hydragnn_checkpoint_state_keys")

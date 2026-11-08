@@ -156,11 +156,9 @@ def build_candidate_inventory() -> list[dict[str, Any]]:
                 }
             )
 
-    lifepo4_categories = [("pristine", 0)] + [
-        ("antisite", count)
-        for count, repetitions in ((1, 170), (2, 170), (3, 169))
-        for _ in range(repetitions)
-    ]
+    lifepo4_categories = (
+        [("pristine", 0)] + [("antisite", 1)] * 8 + [("antisite", 2)] * 496 + [("antisite", 3)] * 5
+    )
     for index, (category, exchange_count) in enumerate(lifepo4_categories, start=1):
         records.append(
             {
@@ -170,7 +168,7 @@ def build_candidate_inventory() -> list[dict[str, Any]]:
                 "elements": ["Li", "Fe", "P", "O"],
                 "composition": {"Li": 16, "Fe": 16, "P": 16, "O": 64},
                 "atom_count": 112,
-                "parent_structure": "LiFePO4 olivine 2x2x1; archived parent not mounted",
+                "parent_structure": "LiFePO4 olivine 2x2x1; derived from archived 28-atom parent",
                 "configuration_category": category,
                 "antisite_exchange_pairs": exchange_count,
                 "defect_site_indices": None,

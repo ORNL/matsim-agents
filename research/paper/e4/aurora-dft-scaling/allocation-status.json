@@ -1,8 +1,8 @@
 {
-  "as_of": "2026-11-06",
-  "verification_source": "Read-only sbank list projects/allocations/users and qstat -Qf on Aurora, plus current ALCF user-guide pages",
+  "as_of": "2026-11-08T08:03:23Z",
+  "verification_source": "Read-only sbank list projects/allocations/users and qstat -Qf on Aurora, refreshed 2026-11-08, plus current ALCF user-guide pages",
   "live_queue_snapshot": {
-    "observed_at": "2026-11-06",
+    "observed_at": "2026-11-08T08:03:23Z",
     "debug": {"enabled": true, "started": true, "nodes": [1, 2], "walltime": "00:05:00-01:00:00", "max_running_per_user": 1},
     "debug-scaling": {"enabled": true, "started": true, "live_qstat_nodes": [1, 256], "documented_nodes": [2, 256], "minimum_node_discrepancy": "Planning uses 2 nodes conservatively.", "walltime": "00:05:00-01:00:00", "max_running_per_user": 1},
     "capacity": {"enabled": true, "started": true, "nodes": [1, 16], "walltime": "00:05:00-168:00:00", "max_running_per_user": 2, "max_assigned_nodes_all_projects": 512},
@@ -25,7 +25,7 @@
       "active_status": true,
       "aurora_authorization": true,
       "user_access": "Verified: sbank lists mlupopa on the project (0 charges to date).",
-      "remaining_balance": 14824.7,
+      "remaining_balance": 12996.1,
       "accounting_units": "Aurora node-hours",
       "allocation_start": "2026-08-19",
       "expiration": "2027-02-19",
@@ -34,9 +34,9 @@
       "node_limits": {"debug": "1-2", "debug-scaling": "2-256 (conservative; live qstat minimum is 1)", "capacity": "1-16", "prod routing": "256-10624"},
       "walltime_limits": {"debug": "up to 1 hour", "debug-scaling": "up to 1 hour", "capacity": "up to 168 hours", "prod routing destinations": "small 12 hours; medium 18 hours; large 24 hours"},
       "reservation_restrictions": "Project-specific reservation and queue ACL eligibility not exposed by the checked queries.",
-      "project_specific_queue_authorization": "Not independently verified.",
+      "project_specific_queue_authorization": "Not independently verified; no project-specific submission probe.",
       "pbs_account_syntax": "-A GenesisHackathonOct26 (syntax documented; no submission probe)",
-      "readiness": "NO-GO: 32-128 node tiers have only a one-hour queue option; FCC relaxation qualification is unmet."
+      "readiness": "NO-GO: balance refreshed; project-specific capacity queue acceptance and 128-atom FCC execution/restart qualification remain unverified."
     },
     {
       "material_family": "lifepo4",
@@ -57,7 +57,7 @@
       "reservation_restrictions": "Project-specific reservation and queue ACL eligibility not exposed by the checked queries.",
       "project_specific_queue_authorization": "Not independently verified.",
       "pbs_account_syntax": "-A GridAI (syntax documented; no submission probe)",
-      "readiness": "NO-GO: 32-128 node tiers have only a one-hour queue option; distinct parent/defect structures are unavailable."
+      "readiness": "NO-GO: balance refreshed; project-specific capacity queue acceptance and 112-atom derived-input execution/restart qualification remain unverified."
     },
     {
       "material_family": "bcc_refractory",
@@ -67,7 +67,7 @@
       "active_status": true,
       "aurora_authorization": true,
       "user_access": "Verified: sbank lists mlupopa on the project (99 jobs charged to date).",
-      "remaining_balance": 36707.0,
+      "remaining_balance": 36674.7,
       "accounting_units": "Aurora node-hours",
       "allocation_start": "2026-06-12",
       "expiration": "2027-01-10",
@@ -76,9 +76,9 @@
       "node_limits": {"debug": "1-2", "debug-scaling": "2-256 (conservative; live qstat minimum is 1)", "capacity": "1-16", "prod routing": "256-10624"},
       "walltime_limits": {"debug": "up to 1 hour", "debug-scaling": "up to 1 hour", "capacity": "up to 168 hours", "prod routing destinations": "small 12 hours; medium 18 hours; large 24 hours"},
       "reservation_restrictions": "Project-specific reservation and queue ACL eligibility not exposed by the checked queries.",
-      "project_specific_queue_authorization": "Not independently verified.",
+      "project_specific_queue_authorization": "Historical HydraGNN capacity jobs 9047960-9047963 ran; current queue ACL is not exposed and must be rechecked.",
       "pbs_account_syntax": "-A HydraGNN (syntax documented and present in local Aurora PBS files; no submission probe)",
-      "readiness": "NO-GO: 32-128 node tiers have only a one-hour queue option; archive/PAW audit and Hf/Ti qualification remain incomplete."
+      "readiness": "NO-GO: balance refreshed; project-specific capacity queue acceptance, BCC restart qualification, and public archive duplicate screening remain incomplete."
     }
   ],
   "submission_authorized": false

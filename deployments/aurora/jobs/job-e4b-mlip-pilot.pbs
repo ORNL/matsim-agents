@@ -1,0 +1,40 @@
+#!/bin/bash
+#PBS -N e4b-mlip-pilot
+#PBS -A HydraGNN
+#PBS -q capacity
+#PBS -l select=1
+#PBS -l place=scatter
+#PBS -l walltime=00:15:00
+#PBS -l filesystems=home:flare
+#PBS -k doe
+#PBS -j oe
+set -eo pipefail
+: "${REPO:?}" "${MANIFEST:?}" "${MODEL_METADATA:?}" "${OUTPUT_ROOT:?}" "${HYDRAGNN_ROOT:?}"
+source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
+command -v module >/dev/null 2>&1 || { echo "Aurora modules unavailable" >&2; exit 2; }
+load_aurora_xpu_modules
+export HYDRAGNN_EXAMPLE="${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26"
+export PYTHONPATH="${HYDRAGNN_EXAMPLE}:${HYDRAGNN_ROOT}:${REPO}/src:${REPO}:${PYTHONPATH:-}"
+export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
+export ZE_FLAT_DEVICE_HIERARCHY=FLAT ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+export OMP_NUM_THREADS=8 MKL_NUM_THREADS=8
+export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
+ulimit -c 0
+cd "${REPO}"
+module -t list 2>&1
+git rev-parse HEAD
+sha256sum "${MANIFEST}" "${MODEL_METADATA}"
+: "${EXPECTED_MANIFEST_SHA256:?}" "${EXPECTED_METADATA_SHA256:?}"
+printf '%s  %s\n' "${EXPECTED_MANIFEST_SHA256}" "${MANIFEST}" \
+    "${EXPECTED_METADATA_SHA256}" "${MODEL_METADATA}" | sha256sum -c -
+PYTHON="${MATSIM_AURORA_VENV:-${REPO}/.venv}/bin/python"
+OUTPUT="${OUTPUT_ROOT}/pilot-${PBS_JOBID:-dryrun}"
+ARGS=(--manifest "${MANIFEST}" --metadata "${MODEL_METADATA}" --output "${OUTPUT}")
+if [[ "${E4B_EXECUTE:-0}" == 1 ]]; then
+    : "${PBS_JOBID:?Execution requires an approved PBS allocation}"
+    timeout --signal=TERM --kill-after=30s 840s mpiexec -n 1 --ppn 1 \
+        "${PYTHON}" -m benchmarks.e4_mlip.pilot "${ARGS[@]}" --execute
+else
+    "${PYTHON}" -m benchmarks.e4_mlip.pilot "${ARGS[@]}"
+fi

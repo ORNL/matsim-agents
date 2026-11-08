@@ -348,6 +348,13 @@ def test_fused_xpu_builder_moves_and_exposes_mlp(tmp_path, monkeypatch, mlp_prec
     )
     inference.run_fused_inference = lambda *args, **kwargs: None
     monkeypatch.setitem(sys.modules, "inference_fused", inference)
+    upstream = ModuleType("inference_random_structures")
+    upstream.find_checkpoint = lambda *args: "model.pk"
+    monkeypatch.setitem(sys.modules, "inference_random_structures", upstream)
+    monkeypatch.setattr(
+        "matsim_agents.backends.mlip.hydragnn_checkpoint.restore_hydragnn_checkpoint",
+        lambda *args, **kwargs: ("model.weight",),
+    )
     monkeypatch.setattr(torch.xpu, "is_available", lambda: True)
     contexts = []
     monkeypatch.setattr(
@@ -376,7 +383,7 @@ def test_fused_xpu_loader_rejects_unavailable_xpu_and_cpu_gnn(monkeypatch):
     inference.load_fused_stack = lambda *args: (
         calls.append(args)
         or (
-            None,
+            SimpleNamespace(),
             None,
             {},
             torch.device("cpu"),
@@ -391,6 +398,13 @@ def test_fused_xpu_loader_rejects_unavailable_xpu_and_cpu_gnn(monkeypatch):
         )
     )
     monkeypatch.setitem(sys.modules, "inference_fused", inference)
+    upstream = ModuleType("inference_random_structures")
+    upstream.find_checkpoint = lambda *args: "model.pk"
+    monkeypatch.setitem(sys.modules, "inference_random_structures", upstream)
+    monkeypatch.setattr(
+        "matsim_agents.backends.mlip.hydragnn_checkpoint.restore_hydragnn_checkpoint",
+        lambda *args, **kwargs: (),
+    )
     monkeypatch.setattr(torch.xpu, "is_available", lambda: False)
     with pytest.raises(RuntimeError, match="CPU fallback is forbidden"):
         _load_fused_stack("model", None, "mlp.pt", None, None, "xpu")

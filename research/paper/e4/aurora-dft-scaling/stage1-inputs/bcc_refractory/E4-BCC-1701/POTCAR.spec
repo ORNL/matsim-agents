@@ -1,0 +1,6 @@
+Hf Hf_pv
+Ta Ta_pv
+Ti Ti_pv
+V V_pv
+Zr Zr_sv
+assembled_potcar_sha256 afe5a8d80ca2663f34ee2038a20ed6b84fd3bb1cc2c711256ca02cf6a0be323a

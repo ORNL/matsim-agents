@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from collections import namedtuple
+from copy import deepcopy
 from types import SimpleNamespace
 
 import numpy as np
@@ -12,7 +13,9 @@ from ase.calculators.calculator import Calculator, all_changes
 from ase.io import write
 
 from benchmarks.e4_mlip.analyze import consistency, consolidate, plot
-from benchmarks.e4_mlip.prepare import freeze_inventory, pbs_templates
+from benchmarks.e4_mlip.inventory import family_for, inventory
+from benchmarks.e4_mlip.pilot import load_representatives, qualification
+from benchmarks.e4_mlip.prepare import freeze_inventory, generate_bcc_candidates, pbs_templates
 from benchmarks.e4_mlip.run import (
     Structure,
     geometry_hash,
@@ -117,7 +120,8 @@ def test_pbs_templates_are_single_node_and_default_dry_run(tmp_path):
         text = file.read_text()
         assert "#PBS -l select=1" in text
         assert "${E4B_EXECUTE:-0}" in text
-        assert "qsub" not in text and "mpiexec" not in text
+        assert "qsub" not in text
+        assert "LAUNCH=(mpiexec -n 1 --ppn 1)" in text
 
 
 @pytest.mark.parametrize(
@@ -150,6 +154,10 @@ def test_model_species_and_operations_are_gated(tmp_path):
         species_evidence="fixture",
         prediction_targets=["energy", "forces"],
         numerical_tolerances_approved=True,
+        energy_convention_verified=True,
+        energy_units="eV",
+        force_units="eV/angstrom",
+        energy_reference_evidence="CPU fixture convention",
     )
     assert verify_model(metadata, [row]) == []
 
@@ -262,6 +270,19 @@ def test_worker_times_cached_calculator_and_synchronizes(tmp_path, monkeypatch):
     assert second["force_evaluations"] == 1
     assert len(calls) >= 10 and second["synchronized"] is True
     assert second["positions_A"] == atoms.positions.tolist()
+    matched = worker_task(payload, validate_checkpoint=lambda model: 2)
+    assert matched["model_tensors_matched"] == 2
+    assert matched["cold_model"] is False
+    assert matched["cache_loads"] == 1
+
+    def reject(model):
+        raise ValueError("Checkpoint state mismatch")
+
+    monkeypatch.setattr(
+        ToyCalculator, "calculate", lambda *a, **k: pytest.fail("Inference before validation")
+    )
+    with pytest.raises(ValueError, match="Checkpoint state mismatch"):
+        worker_task(payload, validate_checkpoint=reject)
 
 
 def record(devices=1, seconds=10):
@@ -334,3 +355,227 @@ def test_missing_baseline_and_changed_workload_fail():
     changed["manifest_sha256"] = "changed"
     with pytest.raises(ValueError, match="setting"):
         consolidate([record(), changed], TOLERANCES)
+
+
+def test_generated_candidates_are_distinct_reproducible_and_unqualified(tmp_path):
+    atoms = Atoms(
+        "Nb64Ta64",
+        positions=np.indices((4, 4, 8)).reshape(3, -1).T * 2,
+        cell=[10, 10, 18],
+        pbc=True,
+    )
+    parent = tmp_path / "parent.extxyz"
+    write(parent, atoms)
+    manifests = [
+        generate_bcc_candidates(parent, tmp_path / directory, seed=7)
+        for directory in ("first", "second")
+    ]
+    first, second = (load_inventory(path) for path in manifests)
+    assert [row.geometry_sha256 for row in first] == [row.geometry_sha256 for row in second]
+    assert len({row.geometry_sha256 for row in first}) == 120
+    assert all(row.composition == {"Nb": 64, "Ta": 64} for row in first)
+    assert all(row.initial_status == "initial" for row in first)
+    assert first[0].provenance["random_seed"] == 7
+    assert load_representatives(manifests[0].parent / "pilot-representatives.json") == [first[0]]
+    status = json.loads((manifests[0].parent / "candidate-status.json").read_text())
+    assert status["checkpoint_coverage_established"] is False
+    first[0].composition["Nb"] = 63
+    from benchmarks.e4_mlip.run import validate_structure
+
+    with pytest.raises(ValueError, match="composition"):
+        validate_structure(first[0])
+
+
+def test_inventory_reports_duplicates_wrong_sizes_and_unreadable_files(tmp_path):
+    atoms = Atoms("NbTa", positions=[[0, 0, 0], [1, 1, 1]], cell=[3, 3, 3], pbc=True)
+    write(tmp_path / "a.extxyz", atoms)
+    write(tmp_path / "b.extxyz", atoms)
+    (tmp_path / "CONTCAR").write_text("")
+    report = inventory([tmp_path])
+    assert len(report["records"]) == 2
+    assert len(report["errors"]) == 1
+    assert report["summaries"][0]["unique_geometry_hashes"] == 1
+    assert report["summaries"][0]["size_suitable_unique"] == 0
+    assert family_for({"Li": 4, "Fe": 4, "P": 4, "O": 16}) == "lifepo4"
+    assert family_for({"Nb": 1, "O": 1}) is None
+
+
+def pilot_stages():
+    def worker(mask, pid):
+        records = []
+        for phase in ("cold-inference", "warm-inference-1", "warm-inference-2", "relaxation"):
+            row = deepcopy(record()["results"][0])
+            row.update(
+                phase=phase,
+                device_mask=mask,
+                visible_device_count=1,
+                cold_model=phase == "cold-inference",
+                converged=True if phase == "relaxation" else None,
+            )
+            records.append(row)
+        return {"mask": mask, "pid": pid, "device_total_memory_bytes": 100, "records": records}
+
+    return {"1": [worker("0", 10)], "2": [worker("0", 20), worker("1", 21)]}
+
+
+def test_pilot_qualification_accepts_consistent_independent_workers():
+    assert qualification(pilot_stages(), TOLERANCES) == []
+
+
+@pytest.mark.parametrize("problem", ["energy", "isolation", "memory", "reload", "missing", "nan"])
+def test_pilot_qualification_rejects_invalid_results(problem):
+    stages = pilot_stages()
+    worker = stages["2"][1]
+    if problem == "energy":
+        worker["records"][0]["energy_eV"] += 1
+    elif problem == "isolation":
+        worker["mask"] = "0"
+    elif problem == "memory":
+        worker["records"][0]["peak_allocated_bytes"] = 90
+    elif problem == "reload":
+        worker["records"][1]["cold_model"] = True
+    elif problem == "missing":
+        worker["records"].pop()
+    else:
+        worker["records"][0]["energy_eV"] = float("nan")
+    assert qualification(stages, TOLERANCES)
+
+
+def test_pilot_dry_run_does_not_execute_model(sources, tmp_path, monkeypatch):
+    from benchmarks.e4_mlip import pilot
+
+    manifest = tmp_path / "structures.json"
+    rows = freeze_inventory(sources, manifest)
+    representatives = tmp_path / "representatives.json"
+    representatives.write_text(json.dumps([rows[0].model_dump(mode="json")]))
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.write_text("CPU fixture")
+    file = {"path": str(checkpoint), "sha256": sha256(checkpoint)}
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text(
+        json.dumps(
+            {"checkpoint": file, "config": file, "branch_checkpoint": file, "backend": "hydragnn"}
+        )
+    )
+    monkeypatch.setattr(
+        pilot, "execute", lambda *args: pytest.fail("No pilot execution authorized")
+    )
+    output = tmp_path / "preflight"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pilot",
+            "--manifest",
+            str(representatives),
+            "--metadata",
+            str(metadata),
+            "--output",
+            str(output),
+        ],
+    )
+    assert pilot.main() == 0
+    report = json.loads((output / "pilot-preflight.json").read_text())
+    assert report["status"] == "NO-GO"
+    assert report["execution_requested"] is False
+    assert report["maximum_node_hours"] == 0.25
+
+
+def test_pilot_pbs_has_shared_resource_cap_and_execution_gate():
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "deployments/aurora/jobs/job-e4b-mlip-pilot.pbs"
+    script = path.read_text()
+    assert "#PBS -A HydraGNN" in script
+    assert "#PBS -l walltime=00:15:00" in script
+    assert "#PBS -l select=1" in script
+    assert "${E4B_EXECUTE:-0}" in script
+    assert "840s mpiexec -n 1 --ppn 1" in script
+    assert "qsub" not in script
+
+
+def test_pilot_resource_cap_retains_partial_relaxation(tmp_path, monkeypatch):
+    from benchmarks.e4_mlip import pilot
+
+    class Harmonic(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            self.results = {
+                "energy": float(np.sum(atoms.positions**2)),
+                "forces": -2 * atoms.positions,
+            }
+
+    device = SimpleNamespace(
+        synchronize=lambda: None,
+        reset_peak_memory_stats=lambda: None,
+        max_memory_allocated=lambda: 10,
+    )
+    monkeypatch.setattr(pilot, "_device", lambda: device)
+    monkeypatch.setattr(pilot, "validate_checkpoint", lambda model: 2)
+    Harmonic.model = SimpleNamespace()
+    monkeypatch.setattr(
+        pilot,
+        "_worker_calculators",
+        lambda: SimpleNamespace(get=lambda args: SimpleNamespace(calculator=Harmonic())),
+    )
+    monkeypatch.setenv("ZE_AFFINITY_MASK", "0")
+    path = tmp_path / "input.extxyz"
+    write(path, Atoms("Nb", positions=[[1, 0, 0]], cell=[5, 5, 5], pbc=True))
+    directory = tmp_path / "relax"
+    directory.mkdir()
+    result = pilot.bounded_relaxation(
+        {"path": str(path), "structure_id": "test"},
+        {"mlip_backend": "mace", "mlp_device": "xpu"},
+        directory,
+        deadline=0,
+    )
+    assert result["status"] == "INCOMPLETE_RESOURCE_CAP"
+    assert result["converged"] is None
+    assert result["steps"] == 0
+    assert (directory / "result.json").is_file()
+    assert (directory / "latest.extxyz").is_file()
+
+
+def test_systems_pilot_approval_does_not_assert_units(sources, tmp_path, monkeypatch):
+    from benchmarks.e4_mlip import pilot
+
+    rows = freeze_inventory(sources, tmp_path / "all.json")
+    manifest = tmp_path / "one.json"
+    manifest.write_text(json.dumps([rows[0].model_dump(mode="json")]))
+    weight = tmp_path / "weights"
+    weight.write_text("fixture")
+    file = {"path": str(weight), "sha256": sha256(weight)}
+    metadata = tmp_path / "model.json"
+    metadata.write_text(
+        json.dumps(
+            {
+                "backend": "hydragnn",
+                "pilot_scope": "approved_controlled_systems_only",
+                "checkpoint": file,
+                "branch_checkpoint": file,
+                "config": file,
+                "energy_convention_verified": False,
+            }
+        )
+    )
+    output = tmp_path / "preview"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pilot",
+            "--manifest",
+            str(manifest),
+            "--metadata",
+            str(metadata),
+            "--output",
+            str(output),
+        ],
+    )
+    assert pilot.main() == 0
+    report = json.loads((output / "pilot-preflight.json").read_text())
+    assert report["status"] == "PREPARED"
+    assert report["units_verified"] is False
+    assert report["systems_only"] is True

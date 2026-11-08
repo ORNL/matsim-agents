@@ -22,12 +22,13 @@ downloaded or enumerated here, so no structure-level duplicate conclusion is
 claimed. OSTI 3377969 is a correction/data bundle for NbZr/TaZr/VZr, not a
 structure inventory substitute.
 
-The public records confirm the high-level BCC protocol but not all production
-inputs. The OSTI landing pages point to Globus archive payloads whose per-case
-inputs have not been inspected. POTCAR component identifiers/checksums,
-`ISMEAR`, `SIGMA`, and exact staged relaxation settings therefore remain
-unverified. The requested 350 eV and PAW matching remain provisional,
-particularly for Hf and Ti.
+The public records confirm high-level BCC protocol context but do not expose
+the full production inputs. The local E4 A/B input deck and its six-component
+PAW payload are now available and have been compared to the private component
+library; this recovers local PAW labels, release metadata, checksums,
+`ISMEAR`, `SIGMA`, and the two-precision settings. It does not prove that the
+local A/B deck matches every published production case or resolve public
+archive overlap. `EDIFFG` is absent from the recovered deck.
 
 The Nature Scientific Data article [First-principles data for solid solution
 niobium-tantalum-vanadium alloys with body-centered-cubic
@@ -96,14 +97,20 @@ configuration decision, not grounds to replace or edit the preserved launcher.
 - The E2 Cantor suite concerns a 108-atom Cr-Mn-Fe-Co-Ni cell and the four
   named configurations (`ideal`, `random1`, `random2`, `random3`). It documents
   qualified statics only for ideal and random1; both ionic relaxations remain
-  unqualified and random2/random3 were interrupted. Their input geometries and
-  methods must be compared before any candidate is admitted.
+  unqualified and random2/random3 were interrupted. The selected E4 candidates
+  are 128 atoms, have differing compositions/occupations, and are not exact
+  duplicates or integer supercells of the accessible 108-atom cases. Public
+  archive overlap is still unresolved.
 - `research/paper/e2/evidence/archive-extract.json` indexes the prior LiFePO4
   ideal, Li-vacancy, and Fe/Li-antisite runs. It records output hashes,
-  VASP 6.6.0, 28-atom cell, PAW labels, and settings. The evidence report says
-  raw LiFePO4/phosphorene inputs reside in a private archive not mounted here.
-  Therefore the exact parent geometry, KPOINTS, MAGMOM order, and atom-level
-  overlap checks cannot be completed locally.
+  VASP 6.6.0, 28-atom cell, PAW labels, and settings. The LiFePO4 reference
+  POSCAR/INCAR/KPOINTS/POTCAR inputs are now mounted in
+  `matsim-agents-dft-reference/dft_reference/vasp/calculations/`. The frozen
+  pristine 112-atom candidate is an exact 2x2x1 periodic replication of the
+  archived ideal structure and should be excluded from new pristine
+  production. The selected antisite candidates do not match the accessible
+  28-atom antisite/vacancy occupations under the tested 2x2x1 comparison;
+  broader private/public archive uniqueness remains unresolved.
 - Existing NbTaV calculations and other mounted Nb-Ta-O work are not treated as
   equivalent to these proposed alloys, but were checked as context. No source
   structure archive for the ongoing NbTaV campaign is present in the E2
@@ -111,17 +118,18 @@ configuration decision, not grounds to replace or edit the preserved launcher.
 
 ## Findings and exclusions
 
-No candidate is certified unique against public or private archives. Exact E2
-cases listed above are explicit exclusions. The local E2 six-component BCC
-near-equiatomic composition and Cantor set are known overlap targets, not proof
-that new randomized arrangements are identical. A future audit must compare
-canonicalized occupations/coordinates and method signatures, not just formula
-or energy. The LiFePO4 proposed 2x2x1 cell must likewise be canonicalized against
-the archived 28-atom ideal and antisite geometries.
+The refreshed 16-case Stage 1 bundle has canonical identities and POSCAR/input
+hashes. The selected BCC candidates were compared against the local E2
+six-component cases and E4 A/B inputs; all eight are distinct from those
+accessible records. The selected 128-atom FCC cases are distinct from the
+accessible 108-atom E2 structures. The LiFePO4 pristine supercell is a
+confirmed structural reuse of the archived ideal calculation; the three
+selected antisite cases are distinct from the accessible 28-atom
+antisite/vacancy cases. No exact same-size qualified or prior-incomplete
+duplicate was found among the selected BCC/FCC cases or LiFePO4 antisites.
 
-Because public OSTI metadata and Globus payload listings were accessible but the
-public structure payloads were not mounted or enumerated, and the private
-LiFePO4 archive is unavailable, the stop condition for inaccessible overlap
-data applies. Candidate manifests remain blocked and their `structure_hash`
-and `canonical_structure_id` fields are null. No structure has been silently
-treated as new.
+These are local-screen conclusions only. Public OSTI/Globus structure payloads
+were not enumerated, and other private archives remain inaccessible. The
+Stage 1 manifest therefore retains an incomplete external-duplicate status
+and blocks execution; the planning inventory's placeholder hashes are not the
+same artifact as the populated materialized Stage 1 manifest.

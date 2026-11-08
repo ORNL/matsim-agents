@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -N e4-fcc
+#PBS -A GenesisHackathonOct26
+#PBS -q capacity
+#PBS -l select=1
+#PBS -l place=scatter
+#PBS -l walltime=24:00:00
+#PBS -l filesystems=home:flare
+#PBS -k doe
+#PBS -j oe
+set -euo pipefail
+
+: "${E4_CASE_DIR:?}" "${E4_CALCULATION_ID:?}"
+readonly REPO=/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents
+export REPO CASE_DIR="${E4_CASE_DIR}" VARIANT=alcf REPEAT=repeat-01
+export E4_CALCULATION_ID E4_STAGE_MODE=single E4_SINGLE_PRECISION=Accurate E4_SINGLE_PREFIX=A
+export E4_STAGE_NSW_MAX=200 E4_EDIFFG=-0.02
+export E4_MPI_RANKS=8 E4_OMP_THREADS=8
+export E4_REQUESTED_NODES=1 E4_REQUESTED_WALLTIME_SECONDS=86400
+export E4_SOFT_STOP_SECONDS=82800 E4_CHECKPOINT_SECONDS=3600
+exec bash "${REPO}/deployments/aurora/jobs/job-e4-vasp-ab-aurora.pbs"

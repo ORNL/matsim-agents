@@ -10,12 +10,27 @@
 #PBS -j oe
 # E4 VASP binary A/B pilot: one workflow (Low then Normal relaxation) for one
 # binary and one repetition. Submit with:
-#   qsub -v REPO=<repo>,CASE_DIR=<.../case-1>,VARIANT=custom|alcf,REPEAT=repeat-NN
+#   qsub -v REPO=<repo>,CASE_DIR=<.../case-1>,VARIANT=custom|alcf,REPEAT=repeat-NN,E4_CALCULATION_ID=<stable-id>
 # Add E4_RESUME=1 to resume a repetition created with this checkpoint policy.
 set -euo pipefail
 
 : "${REPO:?}" "${CASE_DIR:?}" "${VARIANT:?}" "${REPEAT:?}"
+: "${E4_CALCULATION_ID:?E4_CALCULATION_ID must identify the original calculation}"
+[[ "${E4_CALCULATION_ID}" =~ ^[[:alnum:]][[:alnum:]_.:-]*$ ]] || {
+  echo "E4_CALCULATION_ID contains unsupported characters" >&2; exit 2;
+}
+: "${PBS_JOBID:?PBS_JOBID must be supplied by PBS}"
+: "${PBS_NODEFILE:?PBS_NODEFILE must be supplied by PBS}"
+[[ -r "${PBS_NODEFILE}" ]] || { echo "PBS_NODEFILE is not readable" >&2; exit 2; }
 [[ "${REPEAT}" =~ ^repeat-[0-9]{2}$ ]] || { echo "bad REPEAT=${REPEAT}" >&2; exit 2; }
+STAGE_MODE="${E4_STAGE_MODE:-low-normal}"
+SINGLE_PRECISION="${E4_SINGLE_PRECISION:-Accurate}"
+SINGLE_PREFIX="${E4_SINGLE_PREFIX:-A}"
+case "${STAGE_MODE}" in
+  low-normal|single) ;;
+  *) echo "bad E4_STAGE_MODE=${STAGE_MODE}" >&2; exit 2 ;;
+esac
+[[ "${SINGLE_PREFIX}" =~ ^[A-Z]$ ]] || { echo "bad E4_SINGLE_PREFIX=${SINGLE_PREFIX}" >&2; exit 2; }
 case "${VARIANT}" in
   custom) VASP_BIN="${REPO}/external/vasp6/src/vasp.6.6.1/bin/vasp_std"
           VASP_SHA256=ebd284027717ff564abf7ceaf93c3aca3261b129d7b60b3f2e3e2aa82d04c552 ;;
@@ -24,21 +39,44 @@ case "${VARIANT}" in
   *) echo "bad VARIANT=${VARIANT}" >&2; exit 2 ;;
 esac
 MPICH_MODULE=mpich/prd/5.0.0.aurora_test.51a9474
-RANKS=8
-THREADS=8
+RANKS="${E4_MPI_RANKS:-8}"
+THREADS="${E4_OMP_THREADS:-8}"
 NSW_MAX="${E4_NSW:-30}"
+STAGE_NSW_MAX="${E4_STAGE_NSW_MAX:-240}"
+EDIFFG="${E4_EDIFFG:--0.01}"
 CHECKPOINT_SECONDS="${E4_CHECKPOINT_SECONDS:-3600}"
 RESUME="${E4_RESUME:-0}"
 [[ "${RESUME}" == 0 || "${RESUME}" == 1 ]] || { echo "bad E4_RESUME=${RESUME}" >&2; exit 2; }
 [[ "${CHECKPOINT_SECONDS}" =~ ^[1-9][0-9]*$ ]] || {
   echo "E4_CHECKPOINT_SECONDS must be a positive integer" >&2; exit 2;
 }
+REQUESTED_NODES="${E4_REQUESTED_NODES:-1}"
+REQUESTED_WALLTIME_SECONDS="${E4_REQUESTED_WALLTIME_SECONDS:-28800}"
 SOFT_STOP_SECONDS="${E4_SOFT_STOP_SECONDS:-27000}"
 JOB_START=$(date +%s)
+[[ "${RANKS}" =~ ^[1-9][0-9]*$ && "${THREADS}" =~ ^[1-9][0-9]*$ ]] || {
+  echo "E4_MPI_RANKS and E4_OMP_THREADS must be positive integers" >&2; exit 2;
+}
 [[ "${NSW_MAX}" =~ ^[1-9][0-9]*$ ]] || { echo "bad E4_NSW=${NSW_MAX}" >&2; exit 2; }
+[[ "${STAGE_NSW_MAX}" =~ ^[1-9][0-9]*$ ]] || {
+  echo "E4_STAGE_NSW_MAX must be a positive integer" >&2; exit 2;
+}
+(( STAGE_NSW_MAX <= 240 )) || {
+  echo "E4_STAGE_NSW_MAX cannot exceed the approved 240-step stage limit" >&2; exit 2;
+}
+[[ "${EDIFFG}" =~ ^-[0-9]+([.][0-9]+)?$ ]] || {
+  echo "E4_EDIFFG must be a negative force threshold" >&2; exit 2;
+}
+[[ -s "${CASE_DIR}/START" ]] || { echo "Missing relaxation input: ${CASE_DIR}/START" >&2; exit 2; }
+[[ "${REQUESTED_NODES}" =~ ^[1-9][0-9]*$ ]] || {
+  echo "E4_REQUESTED_NODES must be a positive integer" >&2; exit 2;
+}
+[[ "${REQUESTED_WALLTIME_SECONDS}" =~ ^[1-9][0-9]*$ ]] || {
+  echo "E4_REQUESTED_WALLTIME_SECONDS must be a positive integer" >&2; exit 2;
+}
 [[ "${SOFT_STOP_SECONDS}" =~ ^[1-9][0-9]*$ ]] &&
-  [[ "${SOFT_STOP_SECONDS}" -lt 28800 ]] || {
-    echo "E4_SOFT_STOP_SECONDS must be a positive integer below the 8-hour walltime" >&2
+  [[ "${SOFT_STOP_SECONDS}" -lt "${REQUESTED_WALLTIME_SECONDS}" ]] || {
+    echo "E4_SOFT_STOP_SECONDS must be a positive integer below the allocation walltime" >&2
     exit 2
   }
 SOFT_STOP_DEADLINE=$((JOB_START + SOFT_STOP_SECONDS))
@@ -73,8 +111,24 @@ stop_watchdog() {
 }
 cleanup() {
   local rc=$?
+  local job_end elapsed_seconds allocated_nodes elapsed_node_hours requested_node_hours
   stop_watchdog
-  log "EXIT status=${rc} final=${FINAL:-incomplete}"
+  job_end=$(date +%s)
+  elapsed_seconds=$((job_end - JOB_START))
+  allocated_nodes=unknown
+  if [[ -n "${PBS_NODEFILE:-}" && -r "${PBS_NODEFILE}" ]]; then
+    allocated_nodes=$(awk 'NF && !seen[$0]++ {count++} END {print count+0}' "${PBS_NODEFILE}")
+  fi
+  elapsed_node_hours=unknown
+  if [[ "${allocated_nodes}" =~ ^[1-9][0-9]*$ ]]; then
+    elapsed_node_hours=$(awk -v nodes="${allocated_nodes}" -v seconds="${elapsed_seconds}" \
+      'BEGIN {printf "%.6f", nodes * seconds / 3600}')
+  fi
+  requested_node_hours=$(awk -v nodes="${REQUESTED_NODES}" -v seconds="${REQUESTED_WALLTIME_SECONDS}" \
+    'BEGIN {printf "%.6f", nodes * seconds / 3600}')
+  log "allocation_accounting pbs_job_id=${PBS_JOBID:-unknown} calculation_id=${E4_CALCULATION_ID} allocated_nodes=${allocated_nodes} requested_nodes=${REQUESTED_NODES} walltime_limit_seconds=${REQUESTED_WALLTIME_SECONDS} requested_node_hours=${requested_node_hours} elapsed_seconds=${elapsed_seconds} elapsed_node_hours=${elapsed_node_hours}"
+  log "EXIT job=${PBS_JOBID:-unknown} calculation_id=${E4_CALCULATION_ID} status=${rc} final=${FINAL:-incomplete}"
+  return "${rc}"
 }
 request_stop() {
   printf '%s\n' "$1" > "${STOP_MARKER}"
@@ -87,8 +141,8 @@ trap cleanup EXIT
 trap 'request_stop scheduler-signal-TERM' TERM
 trap 'request_stop scheduler-signal-USR1' USR1
 
-log "job=${PBS_JOBID:-none} host=$(hostname) variant=${VARIANT} repeat=${REPEAT} root=${ROOT}"
-log "checkpoint_nsw=${NSW_MAX} checkpoint_seconds=${CHECKPOINT_SECONDS} soft_stop_seconds=${SOFT_STOP_SECONDS} resume=${RESUME} allocation=${ALLOCATION_DIR}"
+log "job=${PBS_JOBID:-none} host=$(hostname) calculation_id=${E4_CALCULATION_ID} variant=${VARIANT} repeat=${REPEAT} root=${ROOT}"
+log "segment_nsw_max=${NSW_MAX} stage_nsw_max=${STAGE_NSW_MAX} stage_mode=${STAGE_MODE} single_precision=${SINGLE_PRECISION} EDIFFG=${EDIFFG} checkpoint_seconds=${CHECKPOINT_SECONDS} soft_stop_seconds=${SOFT_STOP_SECONDS} resume=${RESUME} allocation=${ALLOCATION_DIR}"
 (cd "${CASE_DIR}" && sha256sum -c inputs.sha256) | tee -a "${RECORD}"
 echo "${VASP_SHA256}  ${VASP_BIN}" | sha256sum -c - | tee -a "${RECORD}"
 
@@ -121,9 +175,14 @@ initialize_recovery() {
   identity=$(
     {
       printf '%s\n' "$(realpath "${CASE_DIR}")" "${VARIANT}" "${REPEAT}" \
-        "${VASP_SHA256}" "${NSW_MAX}" "${CHECKPOINT_SECONDS}"
+        "${E4_CALCULATION_ID}" \
+        "${VASP_SHA256}" "${NSW_MAX}" "${STAGE_NSW_MAX}" "${EDIFFG}" \
+        "${STAGE_MODE}" "${SINGLE_PRECISION}" "${SINGLE_PREFIX}" "${CHECKPOINT_SECONDS}" \
+        "${VASP_MPICH_MODULE:-facility-default}" "${RANKS}" "${THREADS}" \
+        "${MATSIM_DEVICE_MASK:-0,1,2,3,4,5,6,7,8,9,10,11}" \
+        "${OMP_STACKSIZE:-512m}" "$(realpath "${VASP_STEP}")"
       (cd "${CASE_DIR}" && sha256sum START POSCAR KPOINTS POTCAR)
-      sha256sum "${VASP_ENV_SETUP}"
+      sha256sum "${VASP_ENV_SETUP}" "${VASP_STEP}"
     } | sha256sum | awk '{print $1}'
   )
   if [[ "${RESUME}" == 0 ]]; then
@@ -142,10 +201,10 @@ initialize_recovery() {
     log "resume rejected: case, inputs, binary or checkpoint policy changed"; exit 2;
   }
   read -r tag prec status digest extra < "${ROOT}/latest-checkpoint"
-  [[ "${tag}" =~ ^N?[0-9]+$ && -z "${extra}" &&
+  [[ "${tag}" =~ ^[A-Z]?[0-9]+$ && -z "${extra}" &&
      "${digest}" =~ ^[0-9a-f]{64}$ ]] || { log "invalid checkpoint metadata"; exit 2; }
-  case "${prec}:${tag}" in
-    Low:[0-9]*|Normal:N[0-9]*) ;;
+  case "${STAGE_MODE}:${prec}:${tag}" in
+    low-normal:Low:[0-9]*|low-normal:Normal:N[0-9]*|single:"${SINGLE_PRECISION}":"${SINGLE_PREFIX}"[0-9]*) ;;
     *) log "invalid checkpoint precision"; exit 2 ;;
   esac
   case "${status}" in
@@ -180,7 +239,7 @@ next_tag_number() {
   for path in "${ROOT}"/attempts/attempt-*/snapshot-tag; do
     [[ -f "${path}" ]] || continue
     read -r tag < "${path}"
-    [[ "${tag}" =~ ^N?[0-9]+$ ]] || { log "invalid snapshot tag ${path}" >&2; return 2; }
+    [[ "${tag}" =~ ^[A-Z]?[0-9]+$ ]] || { log "invalid snapshot tag ${path}" >&2; return 2; }
     [[ "${tag}" == "${prefix}"[0-9]* ]] || continue
     number="${tag#${prefix}}"
     number=$((10#${number}))
@@ -189,9 +248,71 @@ next_tag_number() {
   printf '%s\n' "$((max + 1))"
 }
 
-# run_vasp <tag> <PREC> <src-tag|-> ; "-" = fresh start from the case POSCAR.
+stage_ionic_steps() {
+  local prefix=$1 manifest tag count=0 steps
+  for manifest in "${ROOT}"/*.checkpoint.sha256; do
+    [[ -f "${manifest}" ]] || continue
+    tag=${manifest##*/}
+    tag=${tag%.checkpoint.sha256}
+    if [[ -n "${prefix}" ]]; then
+      [[ "${tag}" =~ ^${prefix}[0-9]+$ ]] || continue
+    else
+      [[ "${tag}" =~ ^[0-9]+$ ]] || continue
+    fi
+    (cd "${ROOT}" && sha256sum -c "${tag}.checkpoint.sha256" >/dev/null) || {
+      log "checkpoint rejected while counting ${prefix:-Low} ionic steps: ${tag}"
+      return 2
+    }
+    steps=$(grep -c 'F=' "${ROOT}/${tag}.OSZICAR" || true)
+    [[ "${steps}" =~ ^[0-9]+$ ]] || return 2
+    count=$((count + steps))
+  done
+  printf '%s\n' "${count}"
+}
+
+max_force_norm() {
+  awk '
+    function is_number(value) {
+      return value ~ /^[-+]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eEdD][-+]?[0-9]+)?$/
+    }
+    /NIONS[[:space:]]*=/ {
+      if (match($0, /NIONS[[:space:]]*=[[:space:]]*[0-9]+/)) {
+        expected=substr($0, RSTART, RLENGTH)
+        sub(/^.*=/, "", expected)
+        expected+=0
+      }
+    }
+    /TOTAL-FORCE[[:space:]]*[(]eV\/Angst[)]/ {
+      in_table=1
+      rows=0
+      max_norm=0
+      next
+    }
+    in_table {
+      if (NF >= 6 && is_number($1) && is_number($2) && is_number($3) &&
+          is_number($4) && is_number($5) && is_number($6)) {
+        fx=$4; fy=$5; fz=$6
+        gsub(/[dD]/, "E", fx); gsub(/[dD]/, "E", fy); gsub(/[dD]/, "E", fz)
+        norm=sqrt(fx*fx + fy*fy + fz*fz)
+        if (norm > max_norm) max_norm=norm
+        rows++
+        next
+      }
+      if (rows > 0) in_table=0
+      next
+    }
+    END {
+      if (rows < 1 || (expected > 0 && rows != expected)) exit 2
+      printf "%.10g\n", max_norm
+    }
+  ' "$1"
+}
+
+# run_vasp <tag> <PREC> <src-tag|-> <segment-NSW>
+# "-" = fresh start from the case POSCAR.
 run_vasp() {
-  local tag=$1 prec=$2 src=$3 w out err rc t0 t1 nion launcher_pid remaining f
+  local tag=$1 prec=$2 src=$3 segment_nsw=$4
+  local w out err rc t0 t1 nion launcher_pid remaining f force_norm
   if [[ -e "${STOP_MARKER}" ]] || (( $(date +%s) >= SOFT_STOP_DEADLINE )); then
     STATUS=interrupted:soft-stop-before-launch
     log "skip tag=${tag} status=${STATUS}"
@@ -205,8 +326,14 @@ run_vasp() {
   if [[ "${src}" == - ]]; then
     cp "${CASE_DIR}/POSCAR" "${w}/POSCAR"
     sed "s/PRECISION/${prec}/" "${CASE_DIR}/START" > "${w}/INCAR"
-    grep -qE '^ISTART *= *0' "${w}/INCAR"
-    grep -qE '^ICHARG *= *2' "${w}/INCAR"
+    if ! grep -qiE '^[[:space:]]*ISTART[[:space:]]*=' "${w}/INCAR"; then
+      printf '\nISTART = 0\n' >> "${w}/INCAR"
+    fi
+    if ! grep -qiE '^[[:space:]]*ICHARG[[:space:]]*=' "${w}/INCAR"; then
+      printf 'ICHARG = 2\n' >> "${w}/INCAR"
+    fi
+    grep -qiE '^[[:space:]]*ISTART[[:space:]]*=[[:space:]]*0([[:space:]#!]|$)' "${w}/INCAR"
+    grep -qiE '^[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*2([[:space:]#!]|$)' "${w}/INCAR"
   else
     for f in CONTCAR WAVECAR CHGCAR; do
       [[ -s "${ROOT}/${src}.${f}" ]] || {
@@ -219,10 +346,19 @@ run_vasp() {
     # Copies, not links: VASP rewrites WAVECAR/CHGCAR in place.
     cp "${ROOT}/${src}.WAVECAR" "${w}/WAVECAR"
     cp "${ROOT}/${src}.CHGCAR" "${w}/CHGCAR"
-    sed -e "s/PRECISION/${prec}/" -e 's/^ISTART *=.*/ISTART = 1/' \
-        -e 's/^ICHARG *=.*/ICHARG = 1/' "${CASE_DIR}/START" > "${w}/INCAR"
-    grep -qE '^ISTART = 1$' "${w}/INCAR"
-    grep -qE '^ICHARG = 1$' "${w}/INCAR"
+    sed "s/PRECISION/${prec}/" "${CASE_DIR}/START" |
+      awk '
+        /^[[:space:]]*#/ { print; next }
+        {
+          line=$0
+          if (match(line, /[#!]/)) line=substr(line, 1, RSTART-1)
+          if (toupper(line) ~ /^[[:space:]]*(ISTART|ICHARG)[[:space:]]*=/) next
+          print
+        }
+        END { print "ISTART = 1"; print "ICHARG = 1" }
+      ' > "${w}/INCAR"
+    grep -qiE '^[[:space:]]*ISTART[[:space:]]*=[[:space:]]*1([[:space:]#!]|$)' "${w}/INCAR"
+    grep -qiE '^[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1([[:space:]#!]|$)' "${w}/INCAR"
   fi
   # Replace output/segment tags, including semicolon-separated assignments.
   awk '
@@ -235,18 +371,32 @@ run_vasp() {
       }
       n = split(line, fields, ";")
       for (i = 1; i <= n; i++)
-        if (toupper(fields[i]) !~ /^[[:space:]]*(NSW|LWAVE|LCHARG|LH5)[[:space:]]*=/)
+        if (toupper(fields[i]) !~ /^[[:space:]]*(NSW|EDIFFG|LWAVE|LCHARG|LH5)[[:space:]]*=/)
           print fields[i]
       if (comment != "") print comment
     }
   ' "${w}/INCAR" > "${w}/INCAR.checkpoint"
-  printf 'NSW = %s\nLWAVE = .TRUE.\nLCHARG = .TRUE.\nLH5 = .FALSE.\n' \
-    "${NSW_MAX}" >> "${w}/INCAR.checkpoint"
+  printf 'NSW = %s\nEDIFFG = %s\nLWAVE = .TRUE.\nLCHARG = .TRUE.\nLH5 = .FALSE.\n' \
+    "${segment_nsw}" "${EDIFFG}" >> "${w}/INCAR.checkpoint"
   mv "${w}/INCAR.checkpoint" "${w}/INCAR"
   grep -qE "^PREC *= *${prec}\$" "${w}/INCAR"
-  grep -qE '^KPAR *= *8$' "${w}/INCAR"
+  kpar=$(awk 'toupper($1)=="KPAR" && $2=="=" {print $3}' "${w}/INCAR")
+  [[ "${kpar}" =~ ^[1-9][0-9]*$ ]] && (( RANKS % kpar == 0 )) || {
+    log "invalid KPAR=${kpar:-missing} for ${RANKS} MPI ranks"
+    STATUS=failed:invalid-kpar
+    return
+  }
+  ncore=$(awk 'toupper($1)=="NCORE" && $2=="=" {print $3}' "${w}/INCAR")
+  if [[ -n "${ncore}" ]] &&
+     { [[ ! "${ncore}" =~ ^[1-9][0-9]*$ ]] ||
+       (( (RANKS / kpar) % ncore != 0 )); }; then
+    log "invalid NCORE=${ncore} for $((RANKS / kpar)) MPI ranks per k-point group"
+    STATUS=failed:invalid-ncore
+    return
+  fi
   case "${tag}" in
     N0) out=rlx1.out; err=rlx2.out ;;
+    A0) out=rlx1.out; err=rlx2.out ;;
     *)  out="rlx1.${tag}.out"; err="rlx2.${tag}.out" ;;
   esac
   log "start tag=${tag} prec=${prec} from=${src} dir=${w}"
@@ -309,16 +459,22 @@ run_vasp() {
     STATUS=failed:invalid-checkpoint
   elif (( nion < 1 )); then
     STATUS=failed:no-completed-ionic-step
+  elif ! force_norm=$(max_force_norm "${w}/OUTCAR"); then
+    STATUS=failed:invalid-force-record
   elif grep -q 'reached required accuracy' "${w}/OUTCAR"; then
-    STATUS=converged
-  elif [[ -e "${w}/STOPCAR" ]]; then
-    if [[ ! -e "${STOP_MARKER}" && -s "${w}/stop-reason" ]] &&
-       [[ "$(cat "${w}/stop-reason")" == checkpoint-interval ]]; then
-      STATUS=checkpoint:time
+    force_threshold="${EDIFFG#-}"
+    if awk -v force="${force_norm}" -v threshold="${force_threshold}" \
+      'BEGIN {exit !(force <= threshold)}'; then
+      STATUS=converged
     else
-      STATUS=interrupted:stopcar
+      STATUS=failed:force-threshold-not-met
     fi
-  elif [[ "${nion}" -eq "${NSW_MAX}" ]]; then
+  elif [[ ! -e "${STOP_MARKER}" && -s "${w}/stop-reason" ]] &&
+       [[ "$(cat "${w}/stop-reason")" == checkpoint-interval ]]; then
+    STATUS=checkpoint:time
+  elif [[ -e "${w}/STOPCAR" || -e "${STOP_MARKER}" ]]; then
+    STATUS=interrupted:stopcar
+  elif [[ "${nion}" -eq "${segment_nsw}" ]]; then
     STATUS=nsw-exhausted
   else
     STATUS=failed:unrecognized-stop
@@ -335,17 +491,44 @@ run_vasp() {
       log "checkpoint tag=${tag} prec=${prec} manifest=${ROOT}/${tag}.checkpoint.sha256"
       ;;
   esac
-  log "end tag=${tag} rc=${rc} ionic_steps=${nion} seconds=$((t1 - t0)) status=${STATUS}"
+  log "end tag=${tag} rc=${rc} ionic_steps=${nion} max_force_eV_per_A=${force_norm:-unknown} seconds=$((t1 - t0)) status=${STATUS}"
 }
 
 # run_stage <PREC> <tag-prefix> <seed-tag|->
 run_stage() {
-  local prec=$1 pfx=$2 src=$3 k
+  local prec=$1 pfx=$2 src=$3 k completed remaining segment_nsw
+  completed=$(stage_ionic_steps "${pfx}") || {
+    STATUS=failed:checkpoint-step-count
+    FINAL="${prec}:${STATUS}"
+    exit 1
+  }
+  log "stage=${prec} completed_ionic_steps=${completed} maximum_ionic_steps=${STAGE_NSW_MAX}"
   k=$(next_tag_number "${pfx}")
-  run_vasp "${pfx}${k}" "${prec}" "${src}"
+  remaining=$((STAGE_NSW_MAX - completed))
+  if (( remaining <= 0 )); then
+    STATUS=failed:stage-step-limit
+    FINAL="${prec}:${STATUS}"
+    log "stage=${prec} reached cumulative ionic-step limit without convergence"
+    exit 1
+  fi
+  segment_nsw=${NSW_MAX}
+  (( segment_nsw > remaining )) && segment_nsw=${remaining}
+  run_vasp "${pfx}${k}" "${prec}" "${src}" "${segment_nsw}"
   while [[ "${STATUS}" == nsw-exhausted || "${STATUS}" == checkpoint:time ]]; do
+    completed=$(stage_ionic_steps "${pfx}") || {
+      STATUS=failed:checkpoint-step-count
+      break
+    }
+    remaining=$((STAGE_NSW_MAX - completed))
+    if (( remaining <= 0 )); then
+      STATUS=failed:stage-step-limit
+      log "stage=${prec} reached cumulative ionic-step limit without convergence"
+      break
+    fi
     k=$((k + 1))
-    run_vasp "${pfx}${k}" "${prec}" "${pfx}$((k - 1))"
+    segment_nsw=${NSW_MAX}
+    (( segment_nsw > remaining )) && segment_nsw=${remaining}
+    run_vasp "${pfx}${k}" "${prec}" "${pfx}$((k - 1))" "${segment_nsw}"
   done
   if [[ "${STATUS}" != converged ]]; then
     FINAL="${prec}:${STATUS}"
@@ -358,7 +541,15 @@ run_stage() {
 }
 
 initialize_recovery
-if [[ "${RESUME_PREC}" == Normal ]]; then
+if [[ "${STAGE_MODE}" == single ]]; then
+  if [[ "${RESUME_STATUS}" == converged ]]; then
+    FINAL="converged:${RESUME_TAG}"
+    log "already complete tag=${RESUME_TAG}; no launch"
+    exit 0
+  fi
+  run_stage "${SINGLE_PRECISION}" "${SINGLE_PREFIX}" "${RESUME_TAG}"
+  FINAL="converged:${LAST_TAG}"
+elif [[ "${RESUME_PREC}" == Normal ]]; then
   if [[ "${RESUME_STATUS}" == converged ]]; then
     FINAL="converged:${RESUME_TAG}"
     log "already complete tag=${RESUME_TAG}; no launch"
