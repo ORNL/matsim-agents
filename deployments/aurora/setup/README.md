@@ -9,6 +9,13 @@ The single full-install entry point is:
 bash deployments/aurora/setup/install.sh
 ```
 
+For E4-B and its HydraGNN model stack, explicitly select
+`HYDRAGNN_REPO=https://github.com/allaffa/HydraGNN.git` and
+`HYDRAGNN_REF=81d5b88304f20bb45c840571e2e26c490d1b19da`, using a separate
+`HYDRAGNN_DIR`. See [the frozen-source requirement](../../../docs/hydragnn-frozen-source.md)
+for clone-only preparation, the exact installer command, checkpoint upload
+layout and verification. Do not silently substitute the moving branch or main.
+
 It preserves an existing HydraGNN checkout unless `HYDRAGNN_REF` is explicitly
 set, runs HydraGNN's current Aurora installer, then installs and verifies
 matsim-agents wheels in that environment.

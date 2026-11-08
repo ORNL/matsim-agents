@@ -191,6 +191,26 @@ class MLIPWorkerPool:
         if executor is not None:
             executor.shutdown(wait=False, cancel_futures=True)
 
+    def on_each_worker(self, fn: Callable[[Any], Any], item: Any) -> list[WorkerOutcome]:
+        """Run one initialization/probe per slot before timing a steady-state workload."""
+        if not self.slots:
+            return [self._run_local(fn, item)]
+        futures = [self._executor(index).submit(fn, item) for index in range(len(self.slots))]
+        outcomes = []
+        for index, future in enumerate(futures):
+            try:
+                outcomes.append(WorkerOutcome(value=future.result()))
+            except BrokenProcessPool as exc:
+                log.error(
+                    "MLIP worker on device %s exited during initialization",
+                    self.slots[index].device,
+                )
+                self._replace(index)
+                outcomes.append(WorkerOutcome(error=exc))
+            except Exception as exc:  # noqa: BLE001 - retain explicit per-worker failures
+                outcomes.append(WorkerOutcome(error=exc))
+        return outcomes
+
     def map(self, fn: Callable[[Any], Any], items: Iterable[Any]) -> list[WorkerOutcome]:
         """Run ``fn(item)`` for every item; outcomes are in submission order.
 
