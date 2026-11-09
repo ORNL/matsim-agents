@@ -47,6 +47,14 @@ EDIFFG="${E4_EDIFFG:--0.01}"
 CHECKPOINT_SECONDS="${E4_CHECKPOINT_SECONDS:-3600}"
 RESUME="${E4_RESUME:-0}"
 [[ "${RESUME}" == 0 || "${RESUME}" == 1 ]] || { echo "bad E4_RESUME=${RESUME}" >&2; exit 2; }
+# Per-case approved staging deviation; deliberately excluded from the resume identity hash.
+LOW_LIMIT_DEVIATION="${E4_LOW_LIMIT_DEVIATION:-}"
+if [[ -n "${LOW_LIMIT_DEVIATION}" ]]; then
+  [[ "${RESUME}" == 1 && "${E4_STAGE_MODE:-low-normal}" == low-normal &&
+     "${LOW_LIMIT_DEVIATION}" =~ ^[[:alnum:]][[:alnum:]_.:-]*$ ]] || {
+    echo "E4_LOW_LIMIT_DEVIATION requires E4_RESUME=1, low-normal mode and an approval identifier" >&2; exit 2;
+  }
+fi
 [[ "${CHECKPOINT_SECONDS}" =~ ^[1-9][0-9]*$ ]] || {
   echo "E4_CHECKPOINT_SECONDS must be a positive integer" >&2; exit 2;
 }
@@ -558,6 +566,13 @@ elif [[ "${RESUME_PREC}" == Normal ]]; then
   run_stage Normal N "${RESUME_TAG}"
 else
   if [[ "${RESUME_STATUS}" == converged ]]; then
+    LAST_TAG="${RESUME_TAG}"
+  elif [[ -n "${LOW_LIMIT_DEVIATION}" ]]; then
+    low_completed=$(stage_ionic_steps "") || { FINAL="Low:failed:checkpoint-step-count"; exit 1; }
+    (( low_completed >= STAGE_NSW_MAX )) || {
+      log "staging deviation rejected: Low stage has ${low_completed}/${STAGE_NSW_MAX} steps"; exit 2;
+    }
+    log "staging_deviation approval=${LOW_LIMIT_DEVIATION} stage=Low status=unconverged completed_ionic_steps=${low_completed} maximum_ionic_steps=${STAGE_NSW_MAX} last_checkpoint=${RESUME_TAG} action=enter-Normal-from-last-Low-checkpoint"
     LAST_TAG="${RESUME_TAG}"
   else
     run_stage Low "" "${RESUME_TAG}"
