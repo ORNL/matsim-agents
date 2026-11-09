@@ -1,4 +1,5 @@
 """E3 adaptive workflow: ingestion, leakage guard, accounting, gate, reassessment, next round."""
+
 import json
 import shutil
 from pathlib import Path
@@ -83,7 +84,9 @@ def _seed_ledger(path: Path, requests: dict[str, str]) -> dict[str, str]:
     return ids
 
 
-def _run_log(repeat: Path, cid: str, normal: bool = True, normal_ok: bool = True, exited: bool = True):
+def _run_log(
+    repeat: Path, cid: str, normal: bool = True, normal_ok: bool = True, exited: bool = True
+):
     root = repeat / "attempts"
     lines = [
         f"job=900.pbs host=x calculation_id={cid} variant=alcf repeat=repeat-01 root={repeat}",
@@ -139,17 +142,29 @@ def campaign(tmp_path):
     test.info.update(candidate_id="E4-BCC-0070", e3_group="Nb-Ta-V-Hf/c18")
     write(source / "split" / "test.extxyz", [test])
     (source / "split" / "split-manifest.json").write_text(
-        json.dumps({"frames": [{"config_id": "x", "role": "validation", "group_id": "Nb-Ta-V-Ti/c9"}]})
+        json.dumps(
+            {"frames": [{"config_id": "x", "role": "validation", "group_id": "Nb-Ta-V-Ti/c9"}]}
+        )
     )
     (source / "prepare.json").write_text(
-        json.dumps({"references": {"roles": {"validation": ["ab-pilot:Nb22Ta22V21Hf21Zr21Ti21"], "test": []}}})
+        json.dumps(
+            {
+                "references": {
+                    "roles": {"validation": ["ab-pilot:Nb22Ta22V21Hf21Zr21Ti21"], "test": []}
+                }
+            }
+        )
     )
     roles = tmp_path / "roles.json"
-    roles.write_text(json.dumps({"assignments": [{"calculation_id": "E4-BCC-0561", "e3_role": "validation"}]}))
+    roles.write_text(
+        json.dumps({"assignments": [{"calculation_id": "E4-BCC-0561", "e3_role": "validation"}]})
+    )
 
     ledgers = tmp_path / "ledgers"
     decisions = {
-        RULE: _seed_ledger(ledgers / RULE / "ledger.jsonl", {"E4-BCC-0001": RULE, "E4-BCC-0003": RULE}),
+        RULE: _seed_ledger(
+            ledgers / RULE / "ledger.jsonl", {"E4-BCC-0001": RULE, "E4-BCC-0003": RULE}
+        ),
         LLM: _seed_ledger(ledgers / LLM / "ledger.jsonl", {"E4-BCC-0002": LLM, "E4-BCC-0003": LLM}),
     }
     pool = {a.info["frame_id"]: a for a in frames}
@@ -194,7 +209,13 @@ def campaign(tmp_path):
         pass
 
     c = Campaign()
-    c.root, c.manifest, c.ledgers, c.replay, c.roles = tmp_path, manifest, ledgers, tmp_path / "replay", roles
+    c.root, c.manifest, c.ledgers, c.replay, c.roles = (
+        tmp_path,
+        manifest,
+        ledgers,
+        tmp_path / "replay",
+        roles,
+    )
     c.state = tmp_path / "state.json"
     c.cases = cases
     c.pool = pool
@@ -256,7 +277,9 @@ def test_qualification_rejects_wrong_signature(campaign):
     wrong_paw = controller.qualify(attempt / "attempt-02", material, ["Nb_pv", "Si"])
     assert not wrong_paw["checks"]["paw_datasets"]["passed"]
     (attempt / "attempt-02" / "INCAR").write_text(NORMAL_INCAR.replace("LREAL = F", "LREAL = Auto"))
-    assert not controller.qualify(attempt / "attempt-02", material, ["C", "Si"])["checks"]["incar_LREAL"]["passed"]
+    assert not controller.qualify(attempt / "attempt-02", material, ["C", "Si"])["checks"][
+        "incar_LREAL"
+    ]["passed"]
 
 
 # ---------------------------------------------------------------- ingestion --
@@ -266,7 +289,9 @@ def test_ingest_writes_per_strategy_evidence_and_accounts_shared_cost(campaign):
     assert {c.state for c in record.calculations.values()} == {E3State.EVIDENCE_INGESTED}
     shared = record.calculations["E3-R1-BCC-0003"]
     assert set(shared.evidence_ids) == {LLM, RULE}
-    assert shared.evidence_ids[LLM] == shared.evidence_ids[RULE]  # identical content, one physical run
+    assert (
+        shared.evidence_ids[LLM] == shared.evidence_ids[RULE]
+    )  # identical content, one physical run
 
     for strategy in STRATEGIES:
         ledger = _ledger(campaign, strategy)
@@ -285,7 +310,10 @@ def test_ingest_writes_per_strategy_evidence_and_accounts_shared_cost(campaign):
     # three physical calculations at 1 node-hour each; the shared one counted once
     assert record.unique_physical_calculations == 3
     assert record.unique_physical_node_hours == 3.0
-    assert E3WorkflowState.load(campaign.state).round(1).calculations.keys() == record.calculations.keys()
+    assert (
+        E3WorkflowState.load(campaign.state).round(1).calculations.keys()
+        == record.calculations.keys()
+    )
 
 
 def test_reingest_is_idempotent(campaign):
@@ -318,7 +346,9 @@ def test_pending_job_leaves_no_record_and_blocks_next_round(campaign):
     assert state.round(1).state == E3State.AWAITING_DFT
     assert [e for e in _ledger(campaign, LLM).evidence() if e.subject == "E4-BCC-0002"] == []
     with pytest.raises(ValueError, match="awaiting DFT"):
-        controller.prepare_next_round(state, {RULE: ["E4-BCC-0004"]}, campaign.context(), campaign.root / "r2.json")
+        controller.prepare_next_round(
+            state, {RULE: ["E4-BCC-0004"]}, campaign.context(), campaign.root / "r2.json"
+        )
 
 
 def test_failed_normal_stage_is_recorded_without_values(campaign):
@@ -339,7 +369,10 @@ def test_unqualified_normal_stage_is_not_converged(campaign):
     state = campaign.ingest()
     calc = state.round(1).calculations["E3-R1-BCC-0001"]
     evidence = _ledger(campaign, RULE).get(calc.evidence_ids[RULE])
-    assert evidence.outcome == EvidenceOutcome.NOT_CONVERGED and "incar_ENCUT" in evidence.failure_reason
+    assert (
+        evidence.outcome == EvidenceOutcome.NOT_CONVERGED
+        and "incar_ENCUT" in evidence.failure_reason
+    )
 
 
 @pytest.mark.parametrize(
@@ -451,7 +484,9 @@ def _llm_reply(campaign, **override):
 def test_llm_reassessment_accepted_and_costed(campaign):
     state = campaign.ingest()
     chat = FakeChat(_llm_reply(campaign))
-    results = reassessment.reassess_round(state, campaign.context(), campaign.ledgers, chat=chat, llm_actor="llm:test")
+    results = reassessment.reassess_round(
+        state, campaign.context(), campaign.ledgers, chat=chat, llm_actor="llm:test"
+    )
     assert results[LLM].accepted and results[LLM].status == "unresolved"
     assert results[LLM].cost.llm_prompt_tokens == 100
     assert state.round(1).strategies[LLM].llm_prompt_tokens == 100
@@ -489,7 +524,9 @@ def test_llm_cannot_support_with_unconverged_evidence(campaign):
 
 def test_unparseable_llm_reply_rejected(campaign):
     state = campaign.ingest()
-    results = reassessment.reassess_round(state, campaign.context(), campaign.ledgers, chat=FakeChat("no json"))
+    results = reassessment.reassess_round(
+        state, campaign.context(), campaign.ledgers, chat=FakeChat("no json")
+    )
     assert not results[LLM].accepted and "unparseable" in results[LLM].problems[0]
 
 
@@ -502,7 +539,10 @@ def test_next_round_manifest_is_unauthorized_and_budgeted(campaign):
         state, {RULE: ["E4-BCC-0004"], LLM: ["E4-BCC-0004", "E4-BCC-0005"]}, ctx, out
     )
     assert manifest["execution_authorized"] is False and manifest["authorization"] is None
-    assert [r["calculation_id"] for r in manifest["requests"]] == ["E3-R2-BCC-0004", "E3-R2-BCC-0005"]
+    assert [r["calculation_id"] for r in manifest["requests"]] == [
+        "E3-R2-BCC-0004",
+        "E3-R2-BCC-0005",
+    ]
     assert manifest["requests"][0]["requested_by"] == [RULE, LLM]
     assert manifest["unique_physical_calculations"] == 2
     assert json.loads(out.read_text()) == manifest
@@ -523,7 +563,9 @@ def test_next_round_manifest_is_unauthorized_and_budgeted(campaign):
 def test_next_round_rejects_invalid_selection(campaign, selection, problem):
     state = campaign.ingest()
     with pytest.raises(ValueError, match=problem):
-        controller.prepare_next_round(state, selection, campaign.context(), campaign.root / "r2.json")
+        controller.prepare_next_round(
+            state, selection, campaign.context(), campaign.root / "r2.json"
+        )
 
 
 def test_next_round_respects_total_strategy_budget(campaign):
@@ -531,5 +573,8 @@ def test_next_round_respects_total_strategy_budget(campaign):
     state.round(1).strategies[RULE].remaining_attempts = 1
     with pytest.raises(ValueError, match="1 attempts remaining"):
         controller.prepare_next_round(
-            state, {RULE: ["E4-BCC-0004", "E4-BCC-0005"]}, campaign.context(), campaign.root / "r2.json"
+            state,
+            {RULE: ["E4-BCC-0004", "E4-BCC-0005"]},
+            campaign.context(),
+            campaign.root / "r2.json",
         )
