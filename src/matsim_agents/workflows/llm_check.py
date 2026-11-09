@@ -91,9 +91,7 @@ class LLMCheckConfig(BaseModel):
                     self.long_context_prompt_tokens + self.long_context_output_tokens
                     > self.context_length
                 ):
-                    raise ValueError(
-                        "long-context prompt and output limits exceed context_length"
-                    )
+                    raise ValueError("long-context prompt and output limits exceed context_length")
             return self
         self.provider = self.provider.lower()
         if self.provider not in PROVIDERS:
@@ -295,9 +293,7 @@ def _long_context_prompt(tokenizer_path: str, target_tokens: int) -> tuple[str, 
         messages = [{"role": "user", "content": instruction + unit * repetitions}]
         if getattr(tokenizer, "chat_template", None):
             return len(
-                tokenizer.apply_chat_template(
-                    messages, tokenize=True, add_generation_prompt=True
-                )
+                tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True)
             )
         return len(tokenizer.encode(messages[0]["content"], add_special_tokens=True))
 
@@ -549,9 +545,7 @@ def _run_llm_check(
             stress_prompt, measured_prompt_tokens = _long_context_prompt(
                 cfg.long_context_tokenizer_path or "", cfg.long_context_prompt_tokens
             )
-            stress_model = model_factory(
-                **model_kwargs, max_tokens=cfg.long_context_output_tokens
-            )
+            stress_model = model_factory(**model_kwargs, max_tokens=cfg.long_context_output_tokens)
             stress_messages = [HumanMessage(content=stress_prompt)]
             stress_reply = invoke_model(stress_model, stress_messages)
             transcript.add(
@@ -586,8 +580,7 @@ def _run_llm_check(
                 "latency_s": stress_reply.latency_s,
                 "tokens_per_second": (
                     stress_reply.completion_tokens / stress_reply.latency_s
-                    if stress_reply.completion_tokens is not None
-                    and stress_reply.latency_s
+                    if stress_reply.completion_tokens is not None and stress_reply.latency_s
                     else None
                 ),
                 "finish_reason": stress_reply.finish_reason,

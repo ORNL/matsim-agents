@@ -721,7 +721,7 @@ def _e1_system_prompt(variant: PromptVariant = "v1") -> str:
             f"{_E1_SYSTEM_PROMPT}\n\nRequired response object: exactly {len(field_lines)} keys, "
             "all listed below, with no additional keys. Return only one JSON object. "
             "Every value must be your own substantive scientific content about the supplied "
-            "question. Never use a type name such as \"string\", a key name, or text copied "
+            'question. Never use a type name such as "string", a key name, or text copied '
             "from this list as a value. The list states what each key must contain:\n"
             + "\n".join(field_lines)
         )

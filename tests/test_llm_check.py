@@ -107,9 +107,7 @@ def test_mag_readiness_requires_token_and_verifies_catalog_model(monkeypatch):
 
     monkeypatch.setattr(llm_check, "_get_json", get_json)
     readiness = probe_readiness(cfg)
-    assert calls == [
-        ("https://mag.genesis.americansciencecloud.org/v1/models", 120, "test-token")
-    ]
+    assert calls == [("https://mag.genesis.americansciencecloud.org/v1/models", 120, "test-token")]
     assert readiness["served_models"] == ["account-model"]
     assert readiness["mag_provider"] == "openai"
 

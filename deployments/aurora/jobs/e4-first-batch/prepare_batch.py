@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import stat
@@ -104,7 +105,12 @@ def install_potcar(spec: Path, poscar: Path, destination: Path) -> list[dict[str
             raise ValueError(f"PAW hash mismatch for {element}/{label}: {source}")
         chunks.append(source.read_bytes())
         components.append(
-            {"element": element, "label": label, "sha256": actual, "source": str(source)}
+            {
+                "element": element,
+                "label": label,
+                "sha256": actual,
+                "source": str(source.resolve().relative_to(REPO)),
+            }
         )
     assembled = b"".join(chunks)
     actual_assembled = hashlib.sha256(assembled).hexdigest()
@@ -291,8 +297,8 @@ def prepare_case(
         "composition": composition,
         "atom_count": sum(structure_counts),
         "allocation": allocation,
-        "pbs_script": str(Path(__file__).resolve().parent / pbs_script),
-        "case_dir": str(case_dir),
+        "pbs_script": str(Path("deployments/aurora/jobs/e4-first-batch") / pbs_script),
+        "case_dir": os.path.relpath(case_dir.resolve(), REPO),
         "repeat": "repeat-01",
         "walltime_seconds": WALLTIME_SECONDS,
         "nodes": 1,

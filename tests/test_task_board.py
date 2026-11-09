@@ -27,9 +27,7 @@ def git_remote(tmp_path: Path) -> tuple[Path, Path]:
     remote = tmp_path / "remote.git"
     repository = tmp_path / "checkout"
     subprocess.run(["git", "init", "--bare", "--quiet", str(remote)], check=True)
-    subprocess.run(
-        ["git", "init", "--quiet", "-b", _BRANCH, str(repository)], check=True
-    )
+    subprocess.run(["git", "init", "--quiet", "-b", _BRANCH, str(repository)], check=True)
     _git(repository, "config", "user.name", "Test User")
     _git(repository, "config", "user.email", "test@example.com")
     (repository / "README.md").write_text("project files stay in place\n", encoding="utf-8")

@@ -203,9 +203,7 @@ def test_authorized_valid_fixture_dry_run_does_not_call_qsub(tmp_path, monkeypat
     assert not fixture["qsub_marker"].exists()
 
 
-def test_resource_authorized_preflight_dry_run_does_not_call_qsub(
-    tmp_path, monkeypatch, capsys
-):
+def test_resource_authorized_preflight_dry_run_does_not_call_qsub(tmp_path, monkeypatch, capsys):
     fixture = make_fixture(tmp_path, monkeypatch)
     fixture["record"].unlink()
     fixture["stdout"].unlink()
@@ -413,7 +411,7 @@ def test_preflight_record_from_another_attempt_is_rejected(tmp_path, monkeypatch
 def test_q1_submission_rejects_production_case_and_gates_remain_separate():
     launcher = (ROOT / "deployments/aurora/launchers/run-nbtao5-case-aurora.sh").read_text()
     q1_wrapper = (ROOT / "deployments/aurora/jobs/job-nbtao5-qualification-aurora.pbs").read_text()
-    assert 'NBTAO5_PRODUCTION_AUTHORIZED:-' in launcher
-    assert 'NBTAO5_QUALIFICATION_AUTHORIZED:-' in launcher
-    assert 'NBTAO5_QUALIFICATION_AUTHORIZED' in q1_wrapper
-    assert 'NBTAO5_PRODUCTION_AUTHORIZED' not in q1_wrapper
+    assert "NBTAO5_PRODUCTION_AUTHORIZED:-" in launcher
+    assert "NBTAO5_QUALIFICATION_AUTHORIZED:-" in launcher
+    assert "NBTAO5_QUALIFICATION_AUTHORIZED" in q1_wrapper
+    assert "NBTAO5_PRODUCTION_AUTHORIZED" not in q1_wrapper

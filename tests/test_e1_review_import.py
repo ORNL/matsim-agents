@@ -156,9 +156,7 @@ def test_adjudication_stage_preserves_initial_import_and_emits_final_report(
     output = tmp_path / "import"
     _run(first, second, output)
     initial_bytes = (output / "review-import.json").read_bytes()
-    template = json.loads(
-        (output / "adjudication-form.template.json").read_text(encoding="utf-8")
-    )
+    template = json.loads((output / "adjudication-form.template.json").read_text(encoding="utf-8"))
     assert template["criterion_resolutions"]
     assert template["reviewability_resolutions"]
     assert template["integrity_resolutions"]

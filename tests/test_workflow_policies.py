@@ -429,9 +429,7 @@ def test_phase_passes_promotion_controls_before_al(tmp_path, monkeypatch, contro
         output_dir=str(tmp_path),
         active_learning_runner=active_learning_runner,
     )
-    assert calls == [
-        ("Si", str(tmp_path / result.run_id / "calculations"), True, *controls)
-    ]
+    assert calls == [("Si", str(tmp_path / result.run_id / "calculations"), True, *controls)]
     assert not result.model_promoted
 
 
@@ -537,8 +535,7 @@ def test_phase_exploration_persists_failure_after_registration(tmp_path, monkeyp
     assert len(run_directories) == 1
     record = json.loads((run_directories[0] / "results.json").read_text())
     events = [
-        json.loads(line)
-        for line in (run_directories[0] / "events.jsonl").read_text().splitlines()
+        json.loads(line) for line in (run_directories[0] / "events.jsonl").read_text().splitlines()
     ]
     assert record["status"] == "failed"
     assert record["failure_type"] == "ValueError"

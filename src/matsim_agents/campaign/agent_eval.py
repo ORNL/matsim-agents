@@ -189,9 +189,7 @@ class AgentEvalPacket(BaseModel):
     evidence: dict[str, EvidenceRecord] = Field(default_factory=dict)
 
 
-def assessment_packet(
-    case: AgentEvalCase, records: dict[str, EvidenceRecord]
-) -> AgentEvalPacket:
+def assessment_packet(case: AgentEvalCase, records: dict[str, EvidenceRecord]) -> AgentEvalPacket:
     return AgentEvalPacket(
         subject=case.subject,
         claim=case.claim,

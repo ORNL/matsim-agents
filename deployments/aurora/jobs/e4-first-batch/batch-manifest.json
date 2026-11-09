@@ -23,8 +23,8 @@
       },
       "atom_count": 128,
       "allocation": "HydraGNN",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-0001",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-0001",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -53,25 +53,25 @@
           "element": "Hf",
           "label": "Hf_pv",
           "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Hf_pv/POTCAR"
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
         },
         {
           "element": "Nb",
           "label": "Nb_pv",
           "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Nb_pv/POTCAR"
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
         },
         {
           "element": "Ta",
           "label": "Ta_pv",
           "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ta_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
         },
         {
           "element": "V",
           "label": "V_pv",
           "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/V_pv/POTCAR"
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
         }
       ],
       "potcar_sha256": "10a4727b2e4a00fb8089889b167e3f1a66d188ef1a38d71229eea6532e16930f",
@@ -97,8 +97,8 @@
       },
       "atom_count": 128,
       "allocation": "HydraGNN",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-0561",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-0561",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -127,25 +127,25 @@
           "element": "Hf",
           "label": "Hf_pv",
           "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Hf_pv/POTCAR"
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
         },
         {
           "element": "Nb",
           "label": "Nb_pv",
           "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Nb_pv/POTCAR"
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
         },
         {
           "element": "Ti",
           "label": "Ti_pv",
           "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ti_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
         },
         {
           "element": "V",
           "label": "V_pv",
           "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/V_pv/POTCAR"
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
         }
       ],
       "potcar_sha256": "a7b848aa508f0266294e9b1e45138623eeb961feb27c7695b3bc437b202aa9f2",
@@ -171,8 +171,8 @@
       },
       "atom_count": 128,
       "allocation": "HydraGNN",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-1121",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1121",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -201,25 +201,25 @@
           "element": "Hf",
           "label": "Hf_pv",
           "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Hf_pv/POTCAR"
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
         },
         {
           "element": "Ti",
           "label": "Ti_pv",
           "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ti_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
         },
         {
           "element": "V",
           "label": "V_pv",
           "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/V_pv/POTCAR"
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
         },
         {
           "element": "Zr",
           "label": "Zr_sv",
           "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Zr_sv/POTCAR"
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
         }
       ],
       "potcar_sha256": "42a3e2ae184ea34f2ba7173b8f347be9e31b09ec7605b6516f831eaa310108af",
@@ -246,8 +246,8 @@
       },
       "atom_count": 128,
       "allocation": "HydraGNN",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-1201",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1201",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -276,31 +276,31 @@
           "element": "Hf",
           "label": "Hf_pv",
           "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Hf_pv/POTCAR"
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
         },
         {
           "element": "Nb",
           "label": "Nb_pv",
           "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Nb_pv/POTCAR"
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
         },
         {
           "element": "Ta",
           "label": "Ta_pv",
           "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ta_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
         },
         {
           "element": "V",
           "label": "V_pv",
           "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/V_pv/POTCAR"
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
         },
         {
           "element": "Zr",
           "label": "Zr_sv",
           "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Zr_sv/POTCAR"
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
         }
       ],
       "potcar_sha256": "f6d9ae6e98a59244ed35420e2dabf8b66fa56bf7b55516f8952d134a2946b917",
@@ -327,8 +327,8 @@
       },
       "atom_count": 128,
       "allocation": "HydraGNN",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-1501",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1501",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -357,31 +357,31 @@
           "element": "Hf",
           "label": "Hf_pv",
           "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Hf_pv/POTCAR"
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
         },
         {
           "element": "Nb",
           "label": "Nb_pv",
           "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Nb_pv/POTCAR"
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
         },
         {
           "element": "Ta",
           "label": "Ta_pv",
           "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ta_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
         },
         {
           "element": "Ti",
           "label": "Ti_pv",
           "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ti_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
         },
         {
           "element": "Zr",
           "label": "Zr_sv",
           "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Zr_sv/POTCAR"
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
         }
       ],
       "potcar_sha256": "3485ba344693ce6c187230d913c618a66a75b2a1befd5fa090c434ac4280e973",
@@ -408,8 +408,8 @@
       },
       "atom_count": 128,
       "allocation": "HydraGNN",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-1701",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1701",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -438,31 +438,31 @@
           "element": "Hf",
           "label": "Hf_pv",
           "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Hf_pv/POTCAR"
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
         },
         {
           "element": "Ta",
           "label": "Ta_pv",
           "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ta_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
         },
         {
           "element": "Ti",
           "label": "Ti_pv",
           "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ti_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
         },
         {
           "element": "V",
           "label": "V_pv",
           "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/V_pv/POTCAR"
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
         },
         {
           "element": "Zr",
           "label": "Zr_sv",
           "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Zr_sv/POTCAR"
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
         }
       ],
       "potcar_sha256": "afe5a8d80ca2663f34ee2038a20ed6b84fd3bb1cc2c711256ca02cf6a0be323a",
@@ -490,8 +490,8 @@
       },
       "atom_count": 128,
       "allocation": "HydraGNN",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-1801",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1801",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -520,37 +520,37 @@
           "element": "Hf",
           "label": "Hf_pv",
           "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Hf_pv/POTCAR"
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
         },
         {
           "element": "Nb",
           "label": "Nb_pv",
           "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Nb_pv/POTCAR"
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
         },
         {
           "element": "Ta",
           "label": "Ta_pv",
           "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ta_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
         },
         {
           "element": "Ti",
           "label": "Ti_pv",
           "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ti_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
         },
         {
           "element": "V",
           "label": "V_pv",
           "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/V_pv/POTCAR"
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
         },
         {
           "element": "Zr",
           "label": "Zr_sv",
           "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Zr_sv/POTCAR"
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
         }
       ],
       "potcar_sha256": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d",
@@ -578,8 +578,8 @@
       },
       "atom_count": 128,
       "allocation": "HydraGNN",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-1805",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1805",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -608,37 +608,37 @@
           "element": "Hf",
           "label": "Hf_pv",
           "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Hf_pv/POTCAR"
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
         },
         {
           "element": "Nb",
           "label": "Nb_pv",
           "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Nb_pv/POTCAR"
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
         },
         {
           "element": "Ta",
           "label": "Ta_pv",
           "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ta_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
         },
         {
           "element": "Ti",
           "label": "Ti_pv",
           "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ti_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
         },
         {
           "element": "V",
           "label": "V_pv",
           "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/V_pv/POTCAR"
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
         },
         {
           "element": "Zr",
           "label": "Zr_sv",
           "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Zr_sv/POTCAR"
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
         }
       ],
       "potcar_sha256": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d",
@@ -665,8 +665,8 @@
       },
       "atom_count": 128,
       "allocation": "GenesisHackathonOct26",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-fcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-FCC-0001",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-fcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-FCC-0001",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -694,31 +694,31 @@
           "element": "Co",
           "label": "Co",
           "sha256": "3ae14252e5e27e2e5a5730c8d8131c6a7ea573dcc9d4d3d392959f07a3f519ee",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Co/POTCAR"
+          "source": "external/vasp6/potcar/Co/POTCAR"
         },
         {
           "element": "Cr",
           "label": "Cr_pv",
           "sha256": "836672959fc86f3b167531577dbf63d7fb0b8d96aaf8b40fb3c4265879bd744b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Cr_pv/POTCAR"
+          "source": "external/vasp6/potcar/Cr_pv/POTCAR"
         },
         {
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Mn",
           "label": "Mn_pv",
           "sha256": "5da6f925d338804d4244b231b43927f3fccb021320fc01db0f865b4eda5a756d",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Mn_pv/POTCAR"
+          "source": "external/vasp6/potcar/Mn_pv/POTCAR"
         },
         {
           "element": "Ni",
           "label": "Ni_pv",
           "sha256": "298ae0c75c9017ac7c19a9201530db0621deb288a6cb951496859d69da6505eb",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ni_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ni_pv/POTCAR"
         }
       ],
       "potcar_sha256": "c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918",
@@ -745,8 +745,8 @@
       },
       "atom_count": 128,
       "allocation": "GenesisHackathonOct26",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-fcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-FCC-0006",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-fcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-FCC-0006",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -774,31 +774,31 @@
           "element": "Co",
           "label": "Co",
           "sha256": "3ae14252e5e27e2e5a5730c8d8131c6a7ea573dcc9d4d3d392959f07a3f519ee",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Co/POTCAR"
+          "source": "external/vasp6/potcar/Co/POTCAR"
         },
         {
           "element": "Cr",
           "label": "Cr_pv",
           "sha256": "836672959fc86f3b167531577dbf63d7fb0b8d96aaf8b40fb3c4265879bd744b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Cr_pv/POTCAR"
+          "source": "external/vasp6/potcar/Cr_pv/POTCAR"
         },
         {
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Mn",
           "label": "Mn_pv",
           "sha256": "5da6f925d338804d4244b231b43927f3fccb021320fc01db0f865b4eda5a756d",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Mn_pv/POTCAR"
+          "source": "external/vasp6/potcar/Mn_pv/POTCAR"
         },
         {
           "element": "Ni",
           "label": "Ni_pv",
           "sha256": "298ae0c75c9017ac7c19a9201530db0621deb288a6cb951496859d69da6505eb",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ni_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ni_pv/POTCAR"
         }
       ],
       "potcar_sha256": "c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918",
@@ -825,8 +825,8 @@
       },
       "atom_count": 128,
       "allocation": "GenesisHackathonOct26",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-fcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-FCC-0011",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-fcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-FCC-0011",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -854,31 +854,31 @@
           "element": "Co",
           "label": "Co",
           "sha256": "3ae14252e5e27e2e5a5730c8d8131c6a7ea573dcc9d4d3d392959f07a3f519ee",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Co/POTCAR"
+          "source": "external/vasp6/potcar/Co/POTCAR"
         },
         {
           "element": "Cr",
           "label": "Cr_pv",
           "sha256": "836672959fc86f3b167531577dbf63d7fb0b8d96aaf8b40fb3c4265879bd744b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Cr_pv/POTCAR"
+          "source": "external/vasp6/potcar/Cr_pv/POTCAR"
         },
         {
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Mn",
           "label": "Mn_pv",
           "sha256": "5da6f925d338804d4244b231b43927f3fccb021320fc01db0f865b4eda5a756d",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Mn_pv/POTCAR"
+          "source": "external/vasp6/potcar/Mn_pv/POTCAR"
         },
         {
           "element": "Ni",
           "label": "Ni_pv",
           "sha256": "298ae0c75c9017ac7c19a9201530db0621deb288a6cb951496859d69da6505eb",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ni_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ni_pv/POTCAR"
         }
       ],
       "potcar_sha256": "c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918",
@@ -905,8 +905,8 @@
       },
       "atom_count": 128,
       "allocation": "GenesisHackathonOct26",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-fcc.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-FCC-0016",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-fcc.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-FCC-0016",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -934,31 +934,31 @@
           "element": "Co",
           "label": "Co",
           "sha256": "3ae14252e5e27e2e5a5730c8d8131c6a7ea573dcc9d4d3d392959f07a3f519ee",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Co/POTCAR"
+          "source": "external/vasp6/potcar/Co/POTCAR"
         },
         {
           "element": "Cr",
           "label": "Cr_pv",
           "sha256": "836672959fc86f3b167531577dbf63d7fb0b8d96aaf8b40fb3c4265879bd744b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Cr_pv/POTCAR"
+          "source": "external/vasp6/potcar/Cr_pv/POTCAR"
         },
         {
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Mn",
           "label": "Mn_pv",
           "sha256": "5da6f925d338804d4244b231b43927f3fccb021320fc01db0f865b4eda5a756d",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Mn_pv/POTCAR"
+          "source": "external/vasp6/potcar/Mn_pv/POTCAR"
         },
         {
           "element": "Ni",
           "label": "Ni_pv",
           "sha256": "298ae0c75c9017ac7c19a9201530db0621deb288a6cb951496859d69da6505eb",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ni_pv/POTCAR"
+          "source": "external/vasp6/potcar/Ni_pv/POTCAR"
         }
       ],
       "potcar_sha256": "c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918",
@@ -984,8 +984,8 @@
       },
       "atom_count": 112,
       "allocation": "GridAI",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-LFP-0002",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-LFP-0002",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -1014,25 +1014,25 @@
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Li",
           "label": "Li_sv",
           "sha256": "201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Li_sv/POTCAR"
+          "source": "external/vasp6/potcar/Li_sv/POTCAR"
         },
         {
           "element": "O",
           "label": "O",
           "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/O/POTCAR"
+          "source": "external/vasp6/potcar/O/POTCAR"
         },
         {
           "element": "P",
           "label": "P",
           "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/P/POTCAR"
+          "source": "external/vasp6/potcar/P/POTCAR"
         }
       ],
       "potcar_sha256": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
@@ -1058,8 +1058,8 @@
       },
       "atom_count": 112,
       "allocation": "GridAI",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-LFP-0003",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-LFP-0003",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -1088,25 +1088,25 @@
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Li",
           "label": "Li_sv",
           "sha256": "201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Li_sv/POTCAR"
+          "source": "external/vasp6/potcar/Li_sv/POTCAR"
         },
         {
           "element": "O",
           "label": "O",
           "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/O/POTCAR"
+          "source": "external/vasp6/potcar/O/POTCAR"
         },
         {
           "element": "P",
           "label": "P",
           "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/P/POTCAR"
+          "source": "external/vasp6/potcar/P/POTCAR"
         }
       ],
       "potcar_sha256": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
@@ -1132,8 +1132,8 @@
       },
       "atom_count": 112,
       "allocation": "GridAI",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-LFP-0010",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-LFP-0010",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -1162,25 +1162,25 @@
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Li",
           "label": "Li_sv",
           "sha256": "201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Li_sv/POTCAR"
+          "source": "external/vasp6/potcar/Li_sv/POTCAR"
         },
         {
           "element": "O",
           "label": "O",
           "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/O/POTCAR"
+          "source": "external/vasp6/potcar/O/POTCAR"
         },
         {
           "element": "P",
           "label": "P",
           "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/P/POTCAR"
+          "source": "external/vasp6/potcar/P/POTCAR"
         }
       ],
       "potcar_sha256": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
@@ -1206,8 +1206,8 @@
       },
       "atom_count": 112,
       "allocation": "GridAI",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-LFP-0025",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-LFP-0025",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -1236,25 +1236,25 @@
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Li",
           "label": "Li_sv",
           "sha256": "201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Li_sv/POTCAR"
+          "source": "external/vasp6/potcar/Li_sv/POTCAR"
         },
         {
           "element": "O",
           "label": "O",
           "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/O/POTCAR"
+          "source": "external/vasp6/potcar/O/POTCAR"
         },
         {
           "element": "P",
           "label": "P",
           "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/P/POTCAR"
+          "source": "external/vasp6/potcar/P/POTCAR"
         }
       ],
       "potcar_sha256": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
@@ -1280,8 +1280,8 @@
       },
       "atom_count": 112,
       "allocation": "GridAI",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-LFP-0050",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-LFP-0050",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -1310,25 +1310,25 @@
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Li",
           "label": "Li_sv",
           "sha256": "201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Li_sv/POTCAR"
+          "source": "external/vasp6/potcar/Li_sv/POTCAR"
         },
         {
           "element": "O",
           "label": "O",
           "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/O/POTCAR"
+          "source": "external/vasp6/potcar/O/POTCAR"
         },
         {
           "element": "P",
           "label": "P",
           "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/P/POTCAR"
+          "source": "external/vasp6/potcar/P/POTCAR"
         }
       ],
       "potcar_sha256": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
@@ -1354,8 +1354,8 @@
       },
       "atom_count": 112,
       "allocation": "GridAI",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-LFP-0100",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-LFP-0100",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -1384,25 +1384,25 @@
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Li",
           "label": "Li_sv",
           "sha256": "201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Li_sv/POTCAR"
+          "source": "external/vasp6/potcar/Li_sv/POTCAR"
         },
         {
           "element": "O",
           "label": "O",
           "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/O/POTCAR"
+          "source": "external/vasp6/potcar/O/POTCAR"
         },
         {
           "element": "P",
           "label": "P",
           "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/P/POTCAR"
+          "source": "external/vasp6/potcar/P/POTCAR"
         }
       ],
       "potcar_sha256": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
@@ -1428,8 +1428,8 @@
       },
       "atom_count": 112,
       "allocation": "GridAI",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-LFP-0505",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-LFP-0505",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -1458,25 +1458,25 @@
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Li",
           "label": "Li_sv",
           "sha256": "201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Li_sv/POTCAR"
+          "source": "external/vasp6/potcar/Li_sv/POTCAR"
         },
         {
           "element": "O",
           "label": "O",
           "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/O/POTCAR"
+          "source": "external/vasp6/potcar/O/POTCAR"
         },
         {
           "element": "P",
           "label": "P",
           "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/P/POTCAR"
+          "source": "external/vasp6/potcar/P/POTCAR"
         }
       ],
       "potcar_sha256": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",
@@ -1502,8 +1502,8 @@
       },
       "atom_count": 112,
       "allocation": "GridAI",
-      "pbs_script": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
-      "case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-LFP-0506",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-lifepo4.pbs",
+      "case_dir": "../e4-first-batch-01/inputs/E4-LFP-0506",
       "repeat": "repeat-01",
       "walltime_seconds": 86400,
       "nodes": 1,
@@ -1532,25 +1532,25 @@
           "element": "Fe",
           "label": "Fe_pv",
           "sha256": "e96179f13e87664e48aed485c2113db4b894f4702180a1840e8206974d0cd1f5",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Fe_pv/POTCAR"
+          "source": "external/vasp6/potcar/Fe_pv/POTCAR"
         },
         {
           "element": "Li",
           "label": "Li_sv",
           "sha256": "201875120238865c2f235e24081bce20639c4ae21bc4e97e31f9e3b7cc8fb95b",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Li_sv/POTCAR"
+          "source": "external/vasp6/potcar/Li_sv/POTCAR"
         },
         {
           "element": "O",
           "label": "O",
           "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/O/POTCAR"
+          "source": "external/vasp6/potcar/O/POTCAR"
         },
         {
           "element": "P",
           "label": "P",
           "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
-          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/P/POTCAR"
+          "source": "external/vasp6/potcar/P/POTCAR"
         }
       ],
       "potcar_sha256": "f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232",

@@ -11,7 +11,6 @@ from pymatgen.core import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_PARENT = ROOT / "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif"
 DEFAULT_OUTPUT = ROOT / "research/nb-ta-o/orderings"
 
 
@@ -63,7 +62,9 @@ def ordering_orbits(site_count: int, substitutions: int, permutations: set[tuple
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate NbTaO5 orderings from an Nb2O5 CIF")
-    parser.add_argument("--parent", type=Path, default=DEFAULT_PARENT)
+    parser.add_argument(
+        "--parent", type=Path, required=True, help="local copy of the COD 1528678 source CIF"
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 

@@ -26,6 +26,10 @@ BATCHES = {
         "caps": {"HydraGNN": 72},
     },
 }
+BATCH_DIRECTORIES = {
+    "E4-first-production-batch-01": "e4-first-batch-01",
+    "E3-round1-bcc-01": "e3-round1-bcc-01",
+}
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO = SCRIPT_DIR.parents[3]
 
@@ -40,6 +44,30 @@ def sha256(path: Path) -> str:
 
 def fail(message: str) -> None:
     raise SystemExit(f"submission validation failed: {message}")
+
+
+def resolve_repo_path(value: str, description: str) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        fail(f"{description} must be relative to the repository: {value}")
+    resolved = (REPO / path).resolve()
+    if not resolved.is_relative_to(REPO):
+        fail(f"{description} must resolve within the repository: {value}")
+    return resolved
+
+
+def resolve_case_dir(case: dict[str, Any], manifest: dict[str, Any]) -> Path:
+    batch_spec(manifest)
+    relative = (
+        Path("..") / BATCH_DIRECTORIES[manifest["batch_id"]] / "inputs" / case["calculation_id"]
+    )
+    if case.get("case_dir") != relative.as_posix():
+        fail(f"{case['calculation_id']} has an unexpected case directory")
+    batch_root = (REPO.parent / BATCH_DIRECTORIES[manifest["batch_id"]]).resolve()
+    case_dir = (REPO / relative).resolve()
+    if not case_dir.is_relative_to(batch_root):
+        fail(f"{case['calculation_id']} case directory escapes its batch root")
+    return case_dir
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -79,18 +107,17 @@ def validate_case(
         fail(f"{calc_id} exceeds or changes the one-node/24-hour per-job cap")
     if case.get("repeat") != "repeat-01":
         fail(f"{calc_id} has unexpected output repeat")
-    if case.get("pbs_script") != str(
-        (
-            SCRIPT_DIR
-            / {
-                "bcc": "job-bcc.pbs",
-                "fcc": "job-fcc.pbs",
-                "lifepo4": "job-lifepo4.pbs",
-            }[expected_family]
-        ).resolve()
-    ):
+    expected_pbs_script = (
+        Path("deployments/aurora/jobs/e4-first-batch")
+        / {
+            "bcc": "job-bcc.pbs",
+            "fcc": "job-fcc.pbs",
+            "lifepo4": "job-lifepo4.pbs",
+        }[expected_family]
+    )
+    if case.get("pbs_script") != expected_pbs_script.as_posix():
         fail(f"{calc_id} points to an unexpected PBS script")
-    pbs_script = Path(case["pbs_script"])
+    pbs_script = resolve_repo_path(case["pbs_script"], "PBS script")
     if not pbs_script.is_file():
         fail(f"missing PBS script: {pbs_script}")
     script_text = pbs_script.read_text()
@@ -102,7 +129,7 @@ def validate_case(
     )
     if any(line not in script_text.splitlines() for line in expected_header):
         fail(f"{calc_id} PBS resource/account directives do not match the manifest")
-    case_dir = Path(case["case_dir"])
+    case_dir = resolve_case_dir(case, manifest)
     if not case_dir.is_dir():
         fail(f"missing case directory: {case_dir}")
     for name in ("START", "POSCAR", "KPOINTS", "POTCAR"):
@@ -133,7 +160,14 @@ def validate_case(
         fail(f"{calc_id} is missing PAW component provenance")
     assembled = bytearray()
     for component in paw_components:
-        source = Path(component["source"])
+        if not isinstance(component.get("label"), str) or not re.fullmatch(
+            r"[A-Za-z0-9_+-]+", component["label"]
+        ):
+            fail(f"{calc_id} has an invalid PAW component label")
+        expected_source = Path("external/vasp6/potcar") / component["label"] / "POTCAR"
+        if component.get("source") != expected_source.as_posix():
+            fail(f"{calc_id} has an unexpected PAW component source")
+        source = resolve_repo_path(component["source"], "PAW component")
         if not source.is_file() or sha256(source) != component["sha256"]:
             fail(f"{calc_id} PAW component hash mismatch: {source}")
         assembled.extend(source.read_bytes())
@@ -284,18 +318,20 @@ def main() -> int:
 
     commands = []
     for case in cases:
+        case_dir = resolve_case_dir(case, manifest)
+        pbs_script = resolve_repo_path(case["pbs_script"], "PBS script")
         commands.append(
             [
                 "qsub",
                 "-N",
                 case["calculation_id"],
                 "-v",
-                f"E4_CASE_DIR={case['case_dir']},E4_CALCULATION_ID={case['calculation_id']}",
+                f"E4_CASE_DIR={case_dir},E4_CALCULATION_ID={case['calculation_id']}",
                 "-o",
-                str(Path(case["case_dir"]) / f"pbs-{case['calculation_id']}.out"),
+                str(case_dir / f"pbs-{case['calculation_id']}.out"),
                 "-e",
-                str(Path(case["case_dir"]) / f"pbs-{case['calculation_id']}.err"),
-                case["pbs_script"],
+                str(case_dir / f"pbs-{case['calculation_id']}.err"),
+                str(pbs_script),
             ]
         )
     if not args.submit:

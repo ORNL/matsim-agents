@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -106,9 +107,7 @@ def inventory_dft_runs(
             str(result.get("run_directory") or result_path.parent)
         ).expanduser()
         run_directory = (
-            recorded_run_directory
-            if recorded_run_directory.is_absolute()
-            else result_path.parent
+            recorded_run_directory if recorded_run_directory.is_absolute() else result_path.parent
         )
         run_directory = run_directory.resolve()
         stage_records = []
@@ -121,10 +120,8 @@ def inventory_dft_runs(
                 if not work_dir.is_absolute():
                     relative_to_run = None
                     if not recorded_run_directory.is_absolute():
-                        try:
+                        with suppress(ValueError):
                             relative_to_run = work_dir.relative_to(recorded_run_directory)
-                        except ValueError:
-                            pass
                     if relative_to_run is not None:
                         work_dir = run_directory / relative_to_run
                     else:

@@ -118,7 +118,10 @@ def test_inventory_defaults_missing_work_dir_to_backend_calculations(tmp_path):
                 "stages": [
                     {
                         "backend": "qe",
-                        "artifacts": {"input": "calculations/qe/pw.in", "stdout": "calculations/qe/pw.out"},
+                        "artifacts": {
+                            "input": "calculations/qe/pw.in",
+                            "stdout": "calculations/qe/pw.out",
+                        },
                     }
                 ],
             }

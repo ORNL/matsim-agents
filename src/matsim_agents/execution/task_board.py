@@ -133,9 +133,7 @@ class TaskBoard:
             lambda task, now: self._claim_update(task, worker, now, lease_minutes),
         )
 
-    def heartbeat(
-        self, task_id: str, *, worker: str, lease_minutes: int = 60
-    ) -> dict[str, Any]:
+    def heartbeat(self, task_id: str, *, worker: str, lease_minutes: int = 60) -> dict[str, Any]:
         """Extend the active worker's lease."""
 
         if lease_minutes < 1:
@@ -183,9 +181,7 @@ class TaskBoard:
             now = datetime.now(UTC)
             update(task, now)
             task["updated_utc"] = now.isoformat()
-            task["events"].append(
-                {"at_utc": now.isoformat(), "actor": actor, "event": event}
-            )
+            task["events"].append({"at_utc": now.isoformat(), "actor": actor, "event": event})
             self._write_task(path, task)
             result = task
 
@@ -193,9 +189,7 @@ class TaskBoard:
         return result
 
     @staticmethod
-    def _claim_update(
-        task: dict[str, Any], worker: str, now: datetime, lease_minutes: int
-    ) -> None:
+    def _claim_update(task: dict[str, Any], worker: str, now: datetime, lease_minutes: int) -> None:
         status = task["status"]
         lease = task.get("lease_expires_utc")
         expired = lease is not None and datetime.fromisoformat(lease) <= now

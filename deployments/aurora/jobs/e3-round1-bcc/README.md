@@ -19,7 +19,9 @@ allocation, for at most 24 h. The cap is **72 node-hours**. The distinct
 regenerated from the frozen E3 pool, staged with
 `benchmarks/e3/stage_round1.py`, and checked against the decision structure
 hashes. Private inputs, including POTCARs, live in
-`../../../../../e3-round1-bcc-01/inputs/` outside the repository.
+`../../../../../e3-round1-bcc-01/inputs/` outside the repository. The batch
+manifest stores repository-relative paths, including the sibling input
+directory, for resolution by the submission helper.
 
 ```bash
 # Validate (default; no qstat/qsub).

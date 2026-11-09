@@ -4,7 +4,11 @@
 
 ## 1. Concrete NbTaO5 Structures
 
-The parent is the experimental zeta-Nb2O5 record [COD 1528678](https://www.crystallography.net/cod/1528678.html), from Laves, Petter, and Wulf, *Naturwissenschaften* 51 (1964), 633-634. The COD CIF reports B 1 1 2/b (No. 15; standardized here as C2/c), a=12.73 A, b=5.56 A, c=4.88 A, beta=105.05 degrees, Z=4. It has 28 sites: Nb8O20, all fully occupied. The exact source CIF is preserved at [COD_1528678_zeta-Nb2O5.cif](../research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif).
+The parent is the experimental zeta-Nb2O5 record [COD 1528678](https://www.crystallography.net/cod/1528678.html), from Laves, Petter, and Wulf, *Naturwissenschaften* 51 (1964), 633-634. The COD CIF reports B 1 1 2/b (No. 15; standardized here as C2/c), a=12.73 A, b=5.56 A, c=4.88 A, beta=105.05 degrees, Z=4. It has 28 sites: Nb8O20, all fully occupied. The source CIF is available from the COD record; download a local copy before generating orderings:
+
+```bash
+python scripts/prepare_nbtao5_orderings.py --parent /path/to/1528678.cif
+```
 
 The parent conventional cell is already a valid equimolar substitution cell: replacing four of its eight Nb sites gives Nb4Ta4O20, i.e. four NbTaO5 formula units in the same 28-site cell. Exhaustive enumeration gives 70 raw half-substitutions and 14 inequivalent arrangements under the parent C2/c symmetry. The script [prepare_nbtao5_orderings.py](../scripts/prepare_nbtao5_orderings.py) reproduces the enumeration. Its [manifest](../research/nb-ta-o/orderings/manifest.csv) records the parent-site indices, symmetry orbit sizes, COD ID, and source-CIF SHA-256; the 14 output CIFs are in [research/nb-ta-o/orderings](../research/nb-ta-o/orderings).
 

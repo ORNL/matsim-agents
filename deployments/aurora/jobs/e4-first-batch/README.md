@@ -14,7 +14,9 @@ antisite supercells (GridAI). Each calculation gets one initial one-node,
 | `submissions.jsonl` | Append-only record of accepted PBS IDs and rejected `qsub` calls |
 
 POTCAR bytes are never stored here. Inputs reference PAWs by label, path, and
-SHA-256 hash only.
+SHA-256 hash only. Manifest paths are repository-relative; prepared case
+directories are stored as paths to sibling batch folders and resolved by the
+submission helper at runtime.
 
 ## Material protocols
 

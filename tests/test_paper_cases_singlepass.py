@@ -9,7 +9,6 @@ from types import SimpleNamespace
 from ase import Atoms
 from ase.io import write
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "examples" / "paper_cases" / "singlepass.py"
 SPEC = importlib.util.spec_from_file_location("paper_cases_singlepass", SCRIPT)
 assert SPEC and SPEC.loader

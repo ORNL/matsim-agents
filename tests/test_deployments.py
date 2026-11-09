@@ -22,6 +22,57 @@ def test_deployment_assets_are_portable() -> None:
     assert module.validate() == []
 
 
+def test_frozen_batch_manifest_paths_are_repository_relative() -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = root / "deployments/aurora/jobs/e4-first-batch/submit_batch.py"
+    spec = importlib.util.spec_from_file_location("submit_batch", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    for batch, directory in (
+        ("e3-round1-bcc", "e3-round1-bcc-01"),
+        ("e4-first-batch", "e4-first-batch-01"),
+    ):
+        manifest_path = root / f"deployments/aurora/jobs/{batch}/batch-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        for case in manifest["cases"]:
+            assert not Path(case["pbs_script"]).is_absolute()
+            assert module.resolve_repo_path(case["pbs_script"], "PBS script").is_file()
+            assert not Path(case["case_dir"]).is_absolute()
+            assert module.resolve_case_dir(case, manifest) == (
+                root.parent / directory / "inputs" / case["calculation_id"]
+            )
+            assert all(
+                not Path(component["source"]).is_absolute() for component in case["paw_components"]
+            )
+
+
+def test_batch_case_dir_rejects_symlink_escape(tmp_path, monkeypatch) -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = root / "deployments/aurora/jobs/e4-first-batch/submit_batch.py"
+    spec = importlib.util.spec_from_file_location("submit_batch", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    repository = tmp_path / "matsim-agents"
+    repository.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    batch_root = repository.parent / "e3-round1-bcc-01"
+    batch_root.mkdir()
+    (batch_root / "inputs").symlink_to(outside, target_is_directory=True)
+    monkeypatch.setattr(module, "REPO", repository)
+    case = {
+        "calculation_id": "E3-R1-BCC-0394",
+        "case_dir": "../e3-round1-bcc-01/inputs/E3-R1-BCC-0394",
+    }
+
+    with pytest.raises(SystemExit, match="escapes its batch root"):
+        module.resolve_case_dir(case, {"batch_id": "E3-round1-bcc-01"})
+
+
 def test_mistral_tokenizer_preparation_rejects_source_as_overlay(tmp_path) -> None:
     root = Path(__file__).resolve().parents[1]
     script = root / "deployments/aurora/setup/prepare_mistral_tokenizer.py"
