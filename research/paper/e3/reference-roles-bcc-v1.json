@@ -1,0 +1,58 @@
+{
+  "manifest": "e3-bcc-reference-roles",
+  "version": 1,
+  "frozen_at_utc": "2026-11-09T05:59:45+00:00",
+  "frozen_before_reading_results": true,
+  "basis": "assignment by calculation ID only; no E4 OSZICAR/OUTCAR/energy/force read for these structures",
+  "assignments": [
+    {
+      "calculation_id": "E4-BCC-0001",
+      "e3_role": "test",
+      "e3_group": "test-1",
+      "composition": {
+        "Hf": 32,
+        "Nb": 32,
+        "Ta": 32,
+        "V": 32
+      },
+      "input_poscar_sha256": "25ee70024b9dd1e2a39d1cd3c1091409e9c83aa5b7789e633df8b58ac044189c",
+      "e4_case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-0001",
+      "method_signature": "bcc-pbe-350eV-gamma222-nonspin-v1",
+      "qualification_rule": "ionically converged Normal-stage relaxation (EDIFFG -0.01 met by final forces) under the frozen signature; otherwise recorded as a reference shortfall, never replaced"
+    },
+    {
+      "calculation_id": "E4-BCC-0561",
+      "e3_role": "validation",
+      "e3_group": "validation-1",
+      "composition": {
+        "Hf": 32,
+        "Nb": 32,
+        "Ti": 32,
+        "V": 32
+      },
+      "input_poscar_sha256": "0c0dea4668d3788f8bf5a00e32231e4253e70b84a409d9857569bc6fa68f27b7",
+      "e4_case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-0561",
+      "method_signature": "bcc-pbe-350eV-gamma222-nonspin-v1",
+      "qualification_rule": "ionically converged Normal-stage relaxation (EDIFFG -0.01 met by final forces) under the frozen signature; otherwise recorded as a reference shortfall, never replaced"
+    },
+    {
+      "calculation_id": "E4-BCC-1121",
+      "e3_role": "validation",
+      "e3_group": "validation-2",
+      "composition": {
+        "Hf": 32,
+        "Ti": 32,
+        "V": 32,
+        "Zr": 32
+      },
+      "input_poscar_sha256": "3feecd1a60b7a465836a6e6108a3a2927eea39fc361cbbf04f58cf9c90e736e5",
+      "e4_case_dir": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-first-batch-01/inputs/E4-BCC-1121",
+      "method_signature": "bcc-pbe-350eV-gamma222-nonspin-v1",
+      "qualification_rule": "ionically converged Normal-stage relaxation (EDIFFG -0.01 met by final forces) under the frozen signature; otherwise recorded as a reference shortfall, never replaced"
+    }
+  ],
+  "exclusions": "excluded from E3 acquisition pools and from any E3 fine-tuning training set",
+  "preliminary_evidence": "the 54 A/B-pilot Normal-stage frames (one group) remain preliminary, not independent test data",
+  "replacement_policy": "no replacement selected on model error or scientific outcome",
+  "content_sha256": "aaac440bb28523a58f8311478898dac8c90759ab00f85f9155a4af171ad72682"
+}

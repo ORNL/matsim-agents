@@ -1,0 +1,249 @@
+# E3 unified six-material adaptive-acquisition protocol.
+#
+# Terminology follows the revised MATSIM-AGENTS manuscript. The two strategies are
+# "LLM-guided adaptation" and "Rule-based adaptation"; no other labels are used.
+# This file is a frozen design input: editing it changes protocol_sha256, which is
+# recorded in every ledger and accounting artifact.
+protocol_id: e3-unified-six-material-v1
+status: replay_only   # no DFT or training submission is authorized by this file
+
+strategies:
+  llm_guided_adaptation:
+    name: LLM-guided adaptation
+    selection: >-
+      Evidence-grounded scientific reasoning. The model receives the shared candidate
+      pool and only its own strategy's evidence ledger, and must cite ledger evidence
+      IDs for every selection. Selections outside the pool are rejected, not repaired.
+    llm:
+      # Frozen 2026-11-08 before any E3 LLM decision. Preferred HV-Luna was unavailable:
+      # no direct HV-Luna endpoint/credential exists in this environment and MAG lists no
+      # HV-Luna model; MAG Luna routes need the OpenAI/Amazon buckets project pipit lacks
+      # (gpt-6-luna@openai returned 403). Fallback: Gemini via the MAG Google allocation.
+      provider: mag
+      model: gemini-4-argon@google
+      mag_provider: google
+      endpoint: https://mag.genesis.americansciencecloud.org/v1
+      temperature: 0.0
+      max_tokens: 8192
+      prompt_template: e3-llm-guided-round-v2
+      superseded_route: gpt-6-luna@openai (403 no_provider_alloc; never retried)
+  rule_based_adaptation:
+    name: Rule-based adaptation
+    selection: >-
+      Frozen deterministic uncertainty/diversity acquisition: the existing
+      active_learning.uncertainty.select_candidates with strategy=ensemble (RMS over
+      atoms of the per-component force standard deviation across the frozen zero-shot
+      committee) and greedy farthest-point diversity on composition fingerprint plus
+      score. No randomness enters the ensemble strategy.
+    policy_version: score_ensemble[mace-mp-0-small,uma-s-1p1-omat]+soap-maxmin/v2
+    parameters:
+      committee: [mace-mp-0-small, uma-s-1p1-omat]
+      uncertainty: >-
+        active_learning.uncertainty.score_ensemble: RMS over atoms and components of the
+        per-component force standard deviation across the committee (eV/A)
+      eligible_top_fraction: 0.25   # only the top quarter by uncertainty is eligible
+      diversity: >-
+        campaign.registry.soap_descriptor (r_cut 6.0 A, n_max 8, l_max 6, inner average,
+        species = all pool and reference elements) and soap_novelty = min cosine
+        distance/2 to the qualified reference structures plus already-selected candidates
+      diversity_weight: 0.5         # value = u/u_max + 0.5 * novelty/novelty_max
+      duplicate_fraction_of_median_nn: 0.05  # novelty below this x median pool
+                                             # nearest-neighbour novelty = near-duplicate
+      tie_break: candidate_id
+    superseded: >-
+      v1 (select_candidates diversity_filter on composition fingerprints) degenerates for
+      identical compositions; its selections are kept as superseded diagnostics only
+
+# Budget per strategy per activated material-MLIP cell (identical for both strategies).
+budget:
+  rounds: 4
+  max_attempts_per_round: 2
+  max_attempts_per_strategy: 8
+  charge_failed_attempts: true      # a failed DFT calculation consumes its attempt
+  restart_consumes_selection: false # restarting the same calculation uses no new slot...
+  charge_restart_node_hours: true   # ...but its additional node-hours are accounted
+  early_stop_allowed: true          # a strategy may request fewer than 2 in a round
+
+# Identical for both strategies.
+shared:
+  initial_model: per-cell frozen pretrained checkpoint (hash recorded at activation)
+  candidate_pool: per-material frozen pool below, restricted to the acquisition role
+  reference_data: per-material frozen VASP method signature below
+  validation_requirement: validation-only acceptance thresholds frozen before activation
+  conditional_fine_tuning:  # all conditions must hold; identical for both strategies
+    validation_deficit: the cell fails its frozen validation criteria below
+    qualified_training_data: >-
+      acquired labels are ionically converged under the frozen signature and come from
+      at least two independent groups disjoint from validation/test groups
+    domain_coverage: >-
+      acquired groups span the validation domain's composition systems (BCC) or
+      antisite-pair categories (LiFePO4); otherwise report "insufficient coverage"
+    algorithm: same backend-specific fine-tuner and hyperparameters for both strategies
+    promotion: >-
+      promote only if every frozen validation metric improves or stays within its
+      criterion and at least one failing metric is corrected; test partition is used
+      once, after promotion decisions
+  evidence_only_arm: >-
+    each strategy's acquired DFT evidence is also assessed with the frozen pretrained
+    model (no fine-tuning), separating the value of acquisition from that of adaptation
+
+zero_shot_models:
+  mace-mp-0-small: {environment: .venv-mace, convention: MPtrj PBE/PBE+U, MP PAWs, eV and eV/A}
+  uma-s-1p1-omat: {environment: .venv-uma, convention: OMat24 PBE/PBE+U, eV and eV/A}
+  hydragnn-multidataset-hpo-best6-epoch97:
+    status: not_evaluated
+    reason: >-
+      XPU-only path; corrected strict-loading pilot 9052180 timed out (exit 124)
+      without results; energy/force unit convention unverified
+
+splits:
+  fractions: {train: 0.70, validation: 0.15, test: 0.15}
+  seed: 20261108
+  reference_roles: >-
+    qualified reference groups alternate validation/test in sorted group order; a cell
+    needs >= min_validation_groups and >= min_test_groups independent groups, otherwise
+    it is reported as insufficient validation evidence (never pass/fail)
+  min_validation_groups: 2
+  min_test_groups: 1
+  rules:
+    - Only the acquisition (train) role is visible to either strategy.
+    - Validation and test structures are withheld from prompts, rule inputs and caches.
+    - Grouping keeps correlated configurations (same composition system, same
+      canonical occupation) in one role; make_split leakage checks must pass.
+
+accounting:
+  logical_attempts: every DFT request a strategy makes, including failures and retries
+  unique_physical_calculations: distinct (structure_sha256, method_signature), executed once
+  total_expenditure: >-
+    measured node-hours/device-hours of unique physical calculations, LLM tokens and
+    seconds, MLIP inference and fine-tuning. Each strategy is also charged the full
+    counterfactual cost of its own requests even when the physical calculation is shared.
+
+# Exclusions protecting concurrent campaigns.
+exclusions:
+  e4_first_batch_manifest: deployments/aurora/jobs/e4-first-batch/batch-manifest.json
+
+materials:
+  lifepo4:
+    name: LiFePO4
+    priority: 1
+    split_unit: canonical antisite occupation (symmetry-distinct configuration)
+    pool:
+      kind: manifest_poscars
+      manifest: research/paper/e4/aurora-dft-scaling/lifepo4-inventory-v1/manifest.jsonl
+      group_field: canonical_structure_id
+      exclude_categories: [pristine]
+      limit: 120
+    method_signature: lifepo4-pbe-verified-v1  # = E4 production protocol
+    method:
+      vasp: ALCF 6.6.1
+      incar: {GGA: PE, ENCUT: 520, PREC: Accurate, EDIFF: 1.0e-6, EDIFFG: -0.01, ISMEAR: 0,
+              SIGMA: 0.05, ISPIN: 2, LDAU: false, IBRION: 2, ISIF: 3, ALGO: Normal}
+      magmom: "Fe 5.0, Li/O/P 0.6 (ferromagnetic initialization, POSCAR order Fe Li O P)"
+      kpoints: Monkhorst-Pack 2x4x8 for the 112-atom 2x2x1 supercell
+      paw: [Fe_pv, Li_sv, O, P]
+    accuracy_criteria:  # proposed, validation-only
+      force_component_mae_eV_A: 0.05
+      antisite_pair_energy_mae_eV: 0.10   # energy relative to the pristine reference
+      antisite_ranking_spearman_min: 0.8
+      convention_note: >-
+        MACE-MP and UMA-omat learn MP-style PBE+U energies for Fe oxides; absolute and
+        possibly relative energies differ from plain PBE, so a failure may reflect the
+        convention, not transferability
+    blockers:
+      - No qualified E3 reference labels (0); validation/test roles are empty.
+      - >-
+        Pretrained MACE/UMA energy convention (PBE+U on Fe) differs from the frozen
+        plain-PBE protocol.
+  bcc_refractory:
+    name: NbTaVHfZrTi-family BCC refractory alloys
+    priority: 1
+    split_unit: >-
+      composition system (elements and composition index); disorder realizations of one
+      composition stay together
+    pool:
+      kind: lattice_occupations
+      inventory: research/paper/e4/aurora-dft-scaling/manifests/candidate-inventory.jsonl
+      family: bcc_refractory
+      parent_poscar: research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0001/POSCAR
+      limit: 120
+    method_signature: bcc-pbe-350eV-gamma222-nonspin-v1  # = E4 production protocol
+    objective: >-
+      Establish whether pretrained interatomic potentials give reliable forces and
+      relative energies across 4-6-component refractory BCC alloys, and choose the DFT
+      labels that most efficiently test and improve that reliability.
+    hypothesis: >-
+      Pretrained UMA/MACE force and relative-energy predictions transfer across the
+      refractory BCC composition space within the provisional accuracy criteria. The
+      current qualified evidence (one Nb22Ta22V21Hf21Zr21Ti21 reference group) cannot
+      test this.
+    method:
+      vasp: ALCF 6.6.1
+      incar: {ENCUT: 350, PREC: Normal, EDIFF: 1.0e-6, EDIFFG: -0.01, ISPIN: 1, ISMEAR: 1,
+              SIGMA: 0.2, LREAL: false, ISYM: 0, IBRION: 2, ISIF: 3}
+      workflow: Low -> Normal; only Normal-stage frames are E3 labels
+      kpoints: Gamma 2x2x2
+      paw: [Nb_pv, Ta_pv, V_pv, Hf_pv, Zr_sv, Ti_pv]
+    reference_incar_check: {PREC: Normal, ENCUT: "350.0", ISPIN: "1", ISMEAR: "1",
+                            SIGMA: "0.2", LREAL: F}
+    accuracy_criteria:  # proposed, validation-only
+      force_component_mae_eV_A: 0.10
+      relative_energy_mae_meV_atom: 5.0   # energies relative to the group mean
+      convention_note: >-
+        absolute energies differ by PAW/cutoff/smearing convention; only relative
+        energies within one composition group and forces are compared
+    blockers:
+      - >-
+        Only one independent reference group (54 correlated Normal-stage frames from one
+        starting structure); no independent test group exists.
+  fcc_cantor:
+    name: Cantor CrMnFeCoNi FCC alloy
+    priority: 2
+    split_unit: composition index; disorder realizations stay together
+    pool:
+      kind: lattice_occupations
+      inventory: research/paper/e4/aurora-dft-scaling/manifests/candidate-inventory.jsonl
+      family: fcc_hea
+      parent_poscar: research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/fcc_hea/E4-FCC-0001/POSCAR
+      limit: 120
+    method_signature: null
+    blockers:
+      - E3 spin-polarized method and magnetic initializations are not frozen.
+      - No E3-qualified VASP reference labels; validation thresholds are not frozen.
+  phosphorene:
+    name: Phosphorene
+    priority: 3
+    split_unit: strain/vacancy family
+    pool:
+      kind: seeds_only
+      seeds:
+        - examples/paper_cases/seeds/phosphorene_black_P.extxyz
+        - examples/paper_cases/seeds/phosphorene_blue_P.extxyz
+    method_signature: null
+    blockers:
+      - Candidate pool not materialized (requires MLIP MD sampling from the seeds).
+      - Vacuum and in-plane k-spacing qualification not done; signature not frozen.
+  zn_formate_mof:
+    name: Zn(HCOO)2 MOF
+    priority: 3
+    split_unit: polymorph (alpha/beta) and guest/proton configuration
+    pool:
+      kind: seeds_only
+      seeds:
+        - examples/paper_cases/seeds/zn_formate_alpha.extxyz
+        - examples/paper_cases/seeds/zn_formate_beta.extxyz
+    method_signature: null
+    blockers:
+      - Candidate pool not materialized; no DFT labels of any kind exist.
+      - PBE-D3(BJ) (IVDW=12) support on the pinned VASP build is unverified.
+  nb_ta_o:
+    name: Nb-Ta-O oxides
+    priority: 3
+    split_unit: formula and polymorph/ordering family
+    pool:
+      kind: poscar_dir
+      path: research/nb-ta-o/pilot/poscars
+    method_signature: null
+    blockers:
+      - Reference domain (unary/binary/ternary phases) not frozen or computed with VASP.
+      - Historical QE labels are excluded from E3; no E3 VASP labels exist.

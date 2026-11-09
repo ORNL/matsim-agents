@@ -1,0 +1,326 @@
+[
+  {
+    "material": "lifepo4",
+    "protocol_sha256": "7cbb7016e6a80dd6da8a730a8687865ed61a2bc2ed9aaf3b4e1b83d375b70065",
+    "method_signature": "lifepo4-pbe-verified-v1",
+    "pool": {
+      "train": 84,
+      "validation": 18,
+      "test": 18
+    },
+    "split_checks": {
+      "configuration_ids_in_one_role": "pass",
+      "groups_in_one_role": "pass",
+      "independent_groups_train": "pass",
+      "independent_groups_validation": "pass",
+      "independent_groups_test": "pass",
+      "near_duplicates_across_roles": "warn",
+      "fitted_corrections_use_training_only": "pass"
+    },
+    "overlap": {
+      "reference_structures_in_pool": 0,
+      "reference_compositions_in_pool": 0,
+      "e4_first_batch_ids_in_pool": 0
+    },
+    "references": {
+      "admitted_frames": 0,
+      "independent_groups": 0,
+      "roles": {
+        "validation": [],
+        "test": []
+      },
+      "sha256": null,
+      "excluded_sources": [
+        {
+          "material": "lifepo4",
+          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-dft-reference/dft_reference/vasp/calculations/critical_minerals_LiFePO4_olivine_{ideal,Li_vacancy,FeLi_antisite}",
+          "records": 3,
+          "reason": "same INCAR/PAW labels but VASP 6.6.0 (not ALCF 6.6.1) and unit-cell k-mesh 4x7x8, not the 4x8x8 density of the frozen 2x4x8 supercell mesh"
+        },
+        {
+          "material": "lifepo4",
+          "source": "e4-first-batch-01 LiFePO4 cases",
+          "records": 0,
+          "reason": "no LiFePO4 calculation has executed (qsub rejected by per-user limit)"
+        }
+      ]
+    },
+    "reference_audit": [],
+    "zero_shot": {
+      "mace-mp-0-small": {
+        "frames": 0
+      },
+      "uma-s-1p1-omat": {
+        "frames": 0
+      },
+      "hydragnn-multidataset-hpo-best6-epoch97": {
+        "status": "not_evaluated",
+        "reason": "XPU-only path; corrected strict-loading pilot 9052180 timed out (exit 124) without results; energy/force unit convention unverified"
+      }
+    },
+    "cell_status": {
+      "mace-mp-0-small": "insufficient_validation_evidence",
+      "uma-s-1p1-omat": "insufficient_validation_evidence"
+    },
+    "logical_attempts": {
+      "llm_guided_adaptation": 0,
+      "rule_based_adaptation": 2
+    },
+    "unique_physical_calculations": 2,
+    "dft_executed": 0,
+    "rounds_completed": 1,
+    "rounds_pending": "2-4 require the DFT outcomes of round 1 (not authorized)",
+    "identical_initial_evidence_ids": [
+      "ev-dc4876368b0521718e7e76ea",
+      "ev-cee772e2037b1cd8c8668694",
+      "ev-3bb2c27962ed0aaa2ccf821c"
+    ],
+    "strategies": {
+      "llm_guided_adaptation": {
+        "name": "LLM-guided adaptation",
+        "status": "blocked_llm_unavailable",
+        "error": "PermissionDeniedError: Error code: 403 - {'error': {'message': \"Project pipit holds no spendable openai allocation for this model's provider; it holds: google. Request an allocation for openai from the project's administrator.\", 'type': 'amsc_provider_alloc_required', 'param': None, 'code': '403', 'provider_specific_fields': {'amsc_reason': 'no_provider_alloc', 'amsc_project': 'pipit', 'amsc_required_bucket': 'openai', 'amsc_available_buckets': ['google']}}}",
+        "logical_attempts": 0,
+        "decisions": [],
+        "ledger_records": 3
+      },
+      "rule_based_adaptation": {
+        "name": "Rule-based adaptation",
+        "logical_attempts": 2,
+        "decisions": [
+          {
+            "round": 1,
+            "candidate_id": "E4-LFP-0323",
+            "scientific_purpose": "committee force disagreement 0.1252 eV/A (rank 1 of 84); diversity-filtered",
+            "cited_evidence_ids": [
+              "ev-dc4876368b0521718e7e76ea",
+              "ev-cee772e2037b1cd8c8668694",
+              "ev-3bb2c27962ed0aaa2ccf821c"
+            ],
+            "shared_physical": false,
+            "features": {
+              "id": "E4-LFP-0323",
+              "group": "ddebe6930ec0c9a07a5a11914a90b91a27ae1d7bb82429f1444b2a24b6fea612",
+              "atoms": 112,
+              "mace-mp-0-small_energy_eV_atom": -6.8067,
+              "mace-mp-0-small_max_force_eV_A": 2.9609,
+              "uma-s-1p1-omat_energy_eV_atom": -6.77588,
+              "uma-s-1p1-omat_max_force_eV_A": 3.5449,
+              "committee_force_disagreement_eV_A": 0.12523
+            }
+          },
+          {
+            "round": 1,
+            "candidate_id": "E4-LFP-0155",
+            "scientific_purpose": "committee force disagreement 0.0516 eV/A (rank 84 of 84); diversity-filtered",
+            "cited_evidence_ids": [
+              "ev-dc4876368b0521718e7e76ea",
+              "ev-cee772e2037b1cd8c8668694",
+              "ev-3bb2c27962ed0aaa2ccf821c"
+            ],
+            "shared_physical": false,
+            "features": {
+              "id": "E4-LFP-0155",
+              "group": "0327b18fa7c149b80efc2e63e6fcdaaad11c9ef49958b9c7190a5a5484d3400e",
+              "atoms": 112,
+              "mace-mp-0-small_energy_eV_atom": -6.81751,
+              "mace-mp-0-small_max_force_eV_A": 2.237,
+              "uma-s-1p1-omat_energy_eV_atom": -6.79725,
+              "uma-s-1p1-omat_max_force_eV_A": 2.3783,
+              "committee_force_disagreement_eV_A": 0.05157
+            }
+          }
+        ],
+        "llm_cost": null,
+        "ledger_records": 5
+      }
+    }
+  },
+  {
+    "material": "bcc_refractory",
+    "protocol_sha256": "7cbb7016e6a80dd6da8a730a8687865ed61a2bc2ed9aaf3b4e1b83d375b70065",
+    "method_signature": "bcc-pbe-350eV-gamma222-nonspin-v1",
+    "pool": {
+      "train": 84,
+      "validation": 18,
+      "test": 18
+    },
+    "split_checks": {
+      "configuration_ids_in_one_role": "pass",
+      "groups_in_one_role": "pass",
+      "independent_groups_train": "pass",
+      "independent_groups_validation": "pass",
+      "independent_groups_test": "pass",
+      "near_duplicates_across_roles": "pass",
+      "fitted_corrections_use_training_only": "pass"
+    },
+    "overlap": {
+      "reference_structures_in_pool": 0,
+      "reference_compositions_in_pool": 0,
+      "e4_first_batch_ids_in_pool": 0
+    },
+    "references": {
+      "admitted_frames": 54,
+      "independent_groups": 1,
+      "roles": {
+        "validation": [
+          "ab-pilot:Nb22Ta22V21Hf21Zr21Ti21"
+        ],
+        "test": []
+      },
+      "sha256": "65587751028e9568397ec7c015f67215664973e02c035e578873ddaa93c05a8b",
+      "excluded_sources": [
+        {
+          "material": "bcc_refractory",
+          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-vasp-ab-pilot-inputs/Nb22Ta22V21Hf21Zr21Ti21/case-1/alcf/repeat-0[12]/attempts/attempt-01",
+          "records": 261,
+          "reason": "PREC=Low stage; the frozen reference stage is PREC=Normal"
+        },
+        {
+          "material": "bcc_refractory",
+          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-vasp-ab-pilot-inputs/Nb22Ta22V21Hf21Zr21Ti21/case-1/custom/repeat-0[12]",
+          "records": 280,
+          "reason": "custom VASP executable; frozen protocol pins ALCF VASP 6.6.1"
+        },
+        {
+          "material": "bcc_refractory",
+          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-vasp-ab-pilot-inputs/Nb22Ta22V21Hf21Zr21Ti21/case-1/alcf/repeat-03",
+          "records": 4,
+          "reason": "restart-qualification segments, PREC=Low only"
+        },
+        {
+          "material": "bcc_refractory",
+          "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e2-dft-v1-20261104/cases/bcc_hea_NbTaVHfZrTi_equiatomic_128_*",
+          "records": 4,
+          "reason": "E2 signature ENCUT 345 eV, SIGMA 0.10, EDIFFG -0.02 (not E4 350/0.20/-0.01)"
+        },
+        {
+          "material": "bcc_refractory",
+          "source": "e4-first-batch-01 (running jobs 9052129, 9052147, 9052148)",
+          "records": 0,
+          "reason": "incomplete; only PREC=Low frames so far; also excluded to protect E4"
+        }
+      ]
+    },
+    "reference_audit": [
+      {
+        "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-vasp-ab-pilot-inputs/Nb22Ta22V21Hf21Zr21Ti21/case-1/alcf/repeat-01/attempts/attempt-02",
+        "vasp_version": "6.6.1",
+        "incar_mismatches": {},
+        "ionic_frames": 22,
+        "max_scf_iterations": 36,
+        "scf_unconverged_frames": 0,
+        "admitted": true
+      },
+      {
+        "source": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-vasp-ab-pilot-inputs/Nb22Ta22V21Hf21Zr21Ti21/case-1/alcf/repeat-02/attempts/attempt-02",
+        "vasp_version": "6.6.1",
+        "incar_mismatches": {},
+        "ionic_frames": 32,
+        "max_scf_iterations": 36,
+        "scf_unconverged_frames": 0,
+        "admitted": true
+      }
+    ],
+    "zero_shot": {
+      "mace-mp-0-small": {
+        "frames": 54,
+        "force_component_mae_eV_A": 0.15673635450153825,
+        "force_component_rmse_eV_A": 0.20524659649416607,
+        "relative_energy_mae_meV_atom": 0.04040531441833966,
+        "absolute_energy_offset_eV_atom": -0.051500873112805344
+      },
+      "uma-s-1p1-omat": {
+        "frames": 54,
+        "force_component_mae_eV_A": 0.05276975734411773,
+        "force_component_rmse_eV_A": 0.06677643012762707,
+        "relative_energy_mae_meV_atom": 0.01298996144078941,
+        "absolute_energy_offset_eV_atom": 0.0018379876914379272
+      },
+      "hydragnn-multidataset-hpo-best6-epoch97": {
+        "status": "not_evaluated",
+        "reason": "XPU-only path; corrected strict-loading pilot 9052180 timed out (exit 124) without results; energy/force unit convention unverified"
+      }
+    },
+    "cell_status": {
+      "mace-mp-0-small": "insufficient_validation_evidence",
+      "uma-s-1p1-omat": "insufficient_validation_evidence"
+    },
+    "logical_attempts": {
+      "llm_guided_adaptation": 0,
+      "rule_based_adaptation": 2
+    },
+    "unique_physical_calculations": 2,
+    "dft_executed": 0,
+    "rounds_completed": 1,
+    "rounds_pending": "2-4 require the DFT outcomes of round 1 (not authorized)",
+    "identical_initial_evidence_ids": [
+      "ev-7137c5e692ee02e46c7133bc",
+      "ev-f3cd6793affa44e767abc280",
+      "ev-f21528d86f5447870eb398a1",
+      "ev-51c8b11005bdf160a6244e96"
+    ],
+    "strategies": {
+      "llm_guided_adaptation": {
+        "name": "LLM-guided adaptation",
+        "status": "blocked_llm_unavailable",
+        "error": "PermissionDeniedError: Error code: 403 - {'error': {'message': \"Project pipit holds no spendable openai allocation for this model's provider; it holds: google. Request an allocation for openai from the project's administrator.\", 'type': 'amsc_provider_alloc_required', 'param': None, 'code': '403', 'provider_specific_fields': {'amsc_reason': 'no_provider_alloc', 'amsc_project': 'pipit', 'amsc_required_bucket': 'openai', 'amsc_available_buckets': ['google']}}}",
+        "logical_attempts": 0,
+        "decisions": [],
+        "ledger_records": 4
+      },
+      "rule_based_adaptation": {
+        "name": "Rule-based adaptation",
+        "logical_attempts": 2,
+        "decisions": [
+          {
+            "round": 1,
+            "candidate_id": "E4-BCC-1077",
+            "scientific_purpose": "committee force disagreement 0.0973 eV/A (rank 1 of 84); diversity-filtered",
+            "cited_evidence_ids": [
+              "ev-7137c5e692ee02e46c7133bc",
+              "ev-f3cd6793affa44e767abc280",
+              "ev-f21528d86f5447870eb398a1",
+              "ev-51c8b11005bdf160a6244e96"
+            ],
+            "shared_physical": false,
+            "features": {
+              "id": "E4-BCC-1077",
+              "group": "Ta-Hf-Zr-Ti/c10",
+              "atoms": 128,
+              "mace-mp-0-small_energy_eV_atom": -9.55066,
+              "mace-mp-0-small_max_force_eV_A": 0.9095,
+              "uma-s-1p1-omat_energy_eV_atom": -9.45516,
+              "uma-s-1p1-omat_max_force_eV_A": 1.1328,
+              "committee_force_disagreement_eV_A": 0.09725
+            }
+          },
+          {
+            "round": 1,
+            "candidate_id": "E4-BCC-0053",
+            "scientific_purpose": "committee force disagreement 0.0616 eV/A (rank 81 of 84); diversity-filtered",
+            "cited_evidence_ids": [
+              "ev-7137c5e692ee02e46c7133bc",
+              "ev-f3cd6793affa44e767abc280",
+              "ev-f21528d86f5447870eb398a1",
+              "ev-51c8b11005bdf160a6244e96"
+            ],
+            "shared_physical": false,
+            "features": {
+              "id": "E4-BCC-0053",
+              "group": "Nb-Ta-V-Hf/c14",
+              "atoms": 128,
+              "mace-mp-0-small_energy_eV_atom": -9.15595,
+              "mace-mp-0-small_max_force_eV_A": 1.5256,
+              "uma-s-1p1-omat_energy_eV_atom": -9.02014,
+              "uma-s-1p1-omat_max_force_eV_A": 1.5356,
+              "committee_force_disagreement_eV_A": 0.06161
+            }
+          }
+        ],
+        "llm_cost": null,
+        "ledger_records": 6
+      }
+    }
+  }
+]

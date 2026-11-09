@@ -1,0 +1,224 @@
+{
+  "manifest": "e3-round1-frozen",
+  "material": "bcc_refractory",
+  "protocol_sha256": "2934207b61028c4afa07701dc68981db5a384041d8b533e4ffb5dfee8b194e58",
+  "method_signature": "bcc-pbe-350eV-gamma222-nonspin-v1",
+  "split_manifest_sha256": "fad87312754d162add162a2edbf5a656c3c717e292125341bb6dd6dadcbb59ee",
+  "llm": {
+    "provider": "mag",
+    "model": "gemini-4-argon@google",
+    "mag_provider": "google",
+    "endpoint": "https://mag.genesis.americansciencecloud.org/v1",
+    "temperature": 0.0,
+    "max_tokens": 8192,
+    "prompt_template": "e3-llm-guided-round-v2",
+    "superseded_route": "gpt-6-luna@openai (403 no_provider_alloc; never retried)"
+  },
+  "rule_policy_version": "score_ensemble[mace-mp-0-small,uma-s-1p1-omat]+soap-maxmin/v2",
+  "selections": {
+    "llm_guided_adaptation": [
+      "E4-BCC-1077",
+      "E4-BCC-0582"
+    ],
+    "rule_based_adaptation": [
+      "E4-BCC-1077",
+      "E4-BCC-0394"
+    ]
+  },
+  "overlap": [
+    "E4-BCC-1077"
+  ],
+  "unique_physical_calculations_requested": 3,
+  "dft_dispatched": 0,
+  "sha256": "b2089e8fbb3a5362c4d8deda7da87f4326aaaa4114dd1f353fe652df1aff7c8e",
+  "zero_shot": {
+    "mace-mp-0-small": {
+      "frames": 54,
+      "force_component_mae_eV_A": 0.15673635450153825,
+      "force_component_rmse_eV_A": 0.20524659649416607,
+      "relative_energy_mae_meV_atom": 0.04040531441833966,
+      "absolute_energy_offset_eV_atom": -0.051500873112805344
+    },
+    "uma-s-1p1-omat": {
+      "frames": 54,
+      "force_component_mae_eV_A": 0.05276975734411773,
+      "force_component_rmse_eV_A": 0.06677643012762707,
+      "relative_energy_mae_meV_atom": 0.01298996144078941,
+      "absolute_energy_offset_eV_atom": 0.0018379876914379272
+    }
+  },
+  "costs": {
+    "mlip_inference_seconds": {
+      "mace-mp-0-small": 67.55591143597849,
+      "uma-s-1p1-omat": 266.13280496397056
+    },
+    "uncertainty_seconds": 0.016,
+    "soap_seconds": 72.044,
+    "dft_node_hours": 0.0
+  },
+  "rule_diagnostics": {
+    "eligible": 21,
+    "duplicate_tolerance": 0.001947241928844175,
+    "median_nearest_neighbour_novelty": 0.038944838576883495
+  },
+  "strategies": {
+    "rule_based_adaptation": {
+      "name": "Rule-based adaptation",
+      "proposed": 2,
+      "validated": 2,
+      "rejected": 0,
+      "frozen_awaiting_dft": 2,
+      "dispatched": 0,
+      "logical_attempts_consumed": 0,
+      "remaining_logical_attempts": 8,
+      "round_rationale": "",
+      "decision_seconds": 72.464,
+      "llm_tokens": null,
+      "decisions": [
+        {
+          "candidate_id": "E4-BCC-1077",
+          "state": "frozen_awaiting_dft",
+          "decision_id": "dc-07636a2c9a62995a213ae1d1",
+          "composition": {
+            "Hf": 10,
+            "Ta": 46,
+            "Ti": 32,
+            "Zr": 40
+          },
+          "group": "Ta-Hf-Zr-Ti/c10",
+          "structure_sha256": "dc67a30700b285b34fd75416401043a9719066b28b577f07d65f89070dbf950d",
+          "committee_force_disagreement_eV_A": 0.09725,
+          "uncertainty_rank": 1,
+          "soap_novelty_to_references": 0.21187,
+          "shared_physical_calculation": false,
+          "cited_evidence_ids": [
+            "ev-99d94e0eee8385b1aabe9db2",
+            "ev-bda198a367a805d34a7e23b8",
+            "ev-da310d3c6eac03161ce0cf35",
+            "ev-5487fe4324d101f29b843e4a",
+            "ev-2ea1b22dead00739b1dbe3e4"
+          ],
+          "scientific_question": "largest committee disagreement not yet represented structurally by the qualified reference evidence",
+          "informativeness": "uncertainty rank 1 of 84",
+          "expected_effect": "tests force transfer where the committee disagrees most",
+          "uncertainty_diversity_considerations": "disagreement 0.097251 eV/A; SOAP novelty 0.21187; frozen value 1.5",
+          "rule_scores": {
+            "candidate_id": "E4-BCC-1077",
+            "uncertainty_eV_A": 0.097251,
+            "uncertainty_rank": 1,
+            "soap_novelty": 0.21187,
+            "value": 1.5
+          }
+        },
+        {
+          "candidate_id": "E4-BCC-0394",
+          "state": "frozen_awaiting_dft",
+          "decision_id": "dc-b2313d48e17efd1943dce28e",
+          "composition": {
+            "Hf": 40,
+            "Nb": 46,
+            "Ta": 10,
+            "Ti": 32
+          },
+          "group": "Nb-Ta-Hf-Ti/c19",
+          "structure_sha256": "629d3d1482e03d15459741149996c4e06c2bc7e8a9dfe68b9912b6e287ffd2e3",
+          "committee_force_disagreement_eV_A": 0.09569,
+          "uncertainty_rank": 2,
+          "soap_novelty_to_references": 0.20972,
+          "shared_physical_calculation": false,
+          "cited_evidence_ids": [
+            "ev-99d94e0eee8385b1aabe9db2",
+            "ev-bda198a367a805d34a7e23b8",
+            "ev-da310d3c6eac03161ce0cf35",
+            "ev-5487fe4324d101f29b843e4a",
+            "ev-2ea1b22dead00739b1dbe3e4"
+          ],
+          "scientific_question": "largest committee disagreement not yet represented structurally by the qualified reference evidence",
+          "informativeness": "uncertainty rank 2 of 84",
+          "expected_effect": "tests force transfer where the committee disagrees most",
+          "uncertainty_diversity_considerations": "disagreement 0.095689 eV/A; SOAP novelty 0.209719; frozen value 1.483935",
+          "rule_scores": {
+            "candidate_id": "E4-BCC-0394",
+            "uncertainty_eV_A": 0.095689,
+            "uncertainty_rank": 2,
+            "soap_novelty": 0.209719,
+            "value": 1.483935
+          }
+        }
+      ]
+    },
+    "llm_guided_adaptation": {
+      "name": "LLM-guided adaptation",
+      "proposed": 2,
+      "validated": 2,
+      "rejected": 0,
+      "frozen_awaiting_dft": 2,
+      "dispatched": 0,
+      "logical_attempts_consumed": 0,
+      "remaining_logical_attempts": 8,
+      "round_rationale": "With only one 6-component reference group currently available (ev-5487fe4324d101f29b843e4a) and a notable gap in baseline force MAE between the two pretrained potentials (0.156736 eV/A in ev-bda198a367a805d34a7e23b8 vs 0.05277 eV/A in ev-da310d3c6eac03161ce0cf35), Round 1 prioritizes maximum committee force disagreement (ev-2ea1b22dead00739b1dbe3e4) across chemically complementary 4-component subsystems. Selecting E4-BCC-1077 (Ta-Hf-Zr-Ti, max disagreement 0.09725 eV/A) and E4-BCC-0582 (Nb-V-Hf-Ti, disagreement 0.09238 eV/A) spans all six alloy elements across two distinct quaternary groups with high SOAP novelty, maximally stressing the transferability hypothesis.",
+      "decision_seconds": 26.712,
+      "llm_tokens": {
+        "prompt": 19876,
+        "completion": 1085
+      },
+      "decisions": [
+        {
+          "candidate_id": "E4-BCC-1077",
+          "state": "frozen_awaiting_dft",
+          "decision_id": "dc-c2311d0c2de37206c139aa17",
+          "composition": {
+            "Hf": 10,
+            "Ta": 46,
+            "Ti": 32,
+            "Zr": 40
+          },
+          "group": "Ta-Hf-Zr-Ti/c10",
+          "structure_sha256": "dc67a30700b285b34fd75416401043a9719066b28b577f07d65f89070dbf950d",
+          "committee_force_disagreement_eV_A": 0.09725,
+          "uncertainty_rank": 1,
+          "soap_novelty_to_references": 0.21187,
+          "shared_physical_calculation": true,
+          "cited_evidence_ids": [
+            "ev-bda198a367a805d34a7e23b8",
+            "ev-da310d3c6eac03161ce0cf35",
+            "ev-5487fe4324d101f29b843e4a",
+            "ev-2ea1b22dead00739b1dbe3e4"
+          ],
+          "scientific_question": "Do pretrained UMA and MACE potentials maintain force accuracy within the 0.1 eV/A threshold at the point of maximum committee force disagreement (0.09725 eV/A) in a 4-component V-free and Nb-free Ta-Hf-Zr-Ti alloy?",
+          "informativeness": "E4-BCC-1077 exhibits the highest committee force disagreement in the entire 84-candidate pool (0.09725 eV/A) and high SOAP novelty (0.21187) relative to the single existing 6-component reference group. Evaluating DFT forces here provides the most stringent test of inter-model disagreement and identifies which model fails when V and Nb are absent.",
+          "expected_effect": "If both models show force MAE below 0.1 eV/A despite maximum committee disagreement, the transferability hypothesis is strongly supported; if one or both exceed 0.1 eV/A, it falsifies broad transferability for at least one potential and provides high-leverage training data.",
+          "uncertainty_diversity_considerations": "Maximizes epistemic uncertainty via peak committee disagreement while exploring a 4-component subsystem (Ta-Hf-Zr-Ti) enriched in Ta, Zr, and Ti."
+        },
+        {
+          "candidate_id": "E4-BCC-0582",
+          "state": "frozen_awaiting_dft",
+          "decision_id": "dc-6da2b7e1a81229633cadd9f1",
+          "composition": {
+            "Hf": 20,
+            "Nb": 37,
+            "Ti": 36,
+            "V": 35
+          },
+          "group": "Nb-V-Hf-Ti/c6",
+          "structure_sha256": "7fd91cff655e00adeb2ee7995c7220e9bc7f93177cb6872d3f5e2753ce3f634f",
+          "committee_force_disagreement_eV_A": 0.09238,
+          "uncertainty_rank": 4,
+          "soap_novelty_to_references": 0.17655,
+          "shared_physical_calculation": false,
+          "cited_evidence_ids": [
+            "ev-99d94e0eee8385b1aabe9db2",
+            "ev-bda198a367a805d34a7e23b8",
+            "ev-da310d3c6eac03161ce0cf35",
+            "ev-5487fe4324d101f29b843e4a",
+            "ev-2ea1b22dead00739b1dbe3e4"
+          ],
+          "scientific_question": "How well do pretrained potentials transfer force predictions to a complementary V- and Nb-rich 4-component alloy (Nb-V-Hf-Ti) that lacks Ta and Zr and exhibits high committee disagreement (0.09238 eV/A)?",
+          "informativeness": "E4-BCC-0582 tests the chemical species missing in E4-BCC-1077 (specifically Nb and V, which creates large atomic-size mismatch with Hf) while maintaining very high committee force disagreement (0.09238 eV/A, well above the pool median of 0.0823 eV/A) and substantial SOAP novelty (0.17655).",
+          "expected_effect": "Tests whether force errors correlate with V/Hf local lattice distortions in Ta/Zr-free compositions, directly probing whether the baseline force MAE differences (0.156736 eV/A vs 0.05277 eV/A) persist in distinct 4-component subsystems.",
+          "uncertainty_diversity_considerations": "Provides strong compositional orthogonality to E4-BCC-1077 (testing Nb-V-Hf-Ti vs Ta-Hf-Zr-Ti) while still targeting the upper tail of committee uncertainty."
+        }
+      ]
+    }
+  }
+}

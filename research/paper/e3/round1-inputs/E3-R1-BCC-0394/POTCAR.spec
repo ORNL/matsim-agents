@@ -1,0 +1,5 @@
+Hf Hf_pv /lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Hf_pv/POTCAR db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84
+Nb Nb_pv /lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Nb_pv/POTCAR 086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114
+Ta Ta_pv /lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ta_pv/POTCAR ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa
+Ti Ti_pv /lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents/external/vasp6/potcar/Ti_pv/POTCAR 1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba
+assembled_potcar_sha256 04fddd3d9039dee7891e3aa2949c13fae525b149a3130d4814736d73a6396158

@@ -1,0 +1,34 @@
+{
+  "manifest": "e3-round1-frozen",
+  "material": "bcc_refractory",
+  "protocol_sha256": "2934207b61028c4afa07701dc68981db5a384041d8b533e4ffb5dfee8b194e58",
+  "method_signature": "bcc-pbe-350eV-gamma222-nonspin-v1",
+  "split_manifest_sha256": "fad87312754d162add162a2edbf5a656c3c717e292125341bb6dd6dadcbb59ee",
+  "llm": {
+    "provider": "mag",
+    "model": "gemini-4-argon@google",
+    "mag_provider": "google",
+    "endpoint": "https://mag.genesis.americansciencecloud.org/v1",
+    "temperature": 0.0,
+    "max_tokens": 8192,
+    "prompt_template": "e3-llm-guided-round-v2",
+    "superseded_route": "gpt-6-luna@openai (403 no_provider_alloc; never retried)"
+  },
+  "rule_policy_version": "score_ensemble[mace-mp-0-small,uma-s-1p1-omat]+soap-maxmin/v2",
+  "selections": {
+    "llm_guided_adaptation": [
+      "E4-BCC-1077",
+      "E4-BCC-0582"
+    ],
+    "rule_based_adaptation": [
+      "E4-BCC-1077",
+      "E4-BCC-0394"
+    ]
+  },
+  "overlap": [
+    "E4-BCC-1077"
+  ],
+  "unique_physical_calculations_requested": 3,
+  "dft_dispatched": 0,
+  "sha256": "b2089e8fbb3a5362c4d8deda7da87f4326aaaa4114dd1f353fe652df1aff7c8e"
+}

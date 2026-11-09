@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dry-run-first qsub helper for the frozen E4 first-batch manifest."""
+"""Dry-run-first qsub helper for frozen E4/E3 VASP batch manifests."""
 
 from __future__ import annotations
 
@@ -13,8 +13,19 @@ import sys
 from pathlib import Path
 from typing import Any
 
-EXPECTED_COUNTS = {"HydraGNN": 8, "GenesisHackathonOct26": 4, "GridAI": 8}
-EXPECTED_CAPS = {"HydraGNN": 192, "GenesisHackathonOct26": 96, "GridAI": 192}
+# Approved envelope of each frozen batch; any other batch ID is rejected.
+BATCHES = {
+    "E4-first-production-batch-01": {
+        "id_pattern": r"E4-(BCC|FCC|LFP)-[0-9]{4}",
+        "counts": {"HydraGNN": 8, "GenesisHackathonOct26": 4, "GridAI": 8},
+        "caps": {"HydraGNN": 192, "GenesisHackathonOct26": 96, "GridAI": 192},
+    },
+    "E3-round1-bcc-01": {
+        "id_pattern": r"E3-R1-BCC-[0-9]{4}",
+        "counts": {"HydraGNN": 3},
+        "caps": {"HydraGNN": 72},
+    },
+}
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO = SCRIPT_DIR.parents[3]
 
@@ -39,14 +50,22 @@ def load_manifest(path: Path) -> dict[str, Any]:
     raise AssertionError("unreachable")
 
 
+def batch_spec(manifest: dict[str, Any]) -> dict[str, Any]:
+    spec = BATCHES.get(manifest.get("batch_id"))
+    if spec is None:
+        fail("unexpected batch ID")
+    return spec
+
+
 def validate_case(
     case: dict[str, Any], manifest: dict[str, Any], check_output_collision: bool = True
 ) -> None:
     calc_id = case.get("calculation_id")
-    if not isinstance(calc_id, str) or not re.fullmatch(r"E4-(BCC|FCC|LFP)-[0-9]{4}", calc_id):
+    pattern = batch_spec(manifest)["id_pattern"]
+    if not isinstance(calc_id, str) or not re.fullmatch(pattern, calc_id):
         fail(f"invalid calculation ID {calc_id!r}")
     family_by_id = {"BCC": "bcc", "FCC": "fcc", "LFP": "lifepo4"}
-    expected_family = family_by_id[calc_id.split("-")[1]]
+    expected_family = family_by_id[calc_id.split("-")[-2]]
     allocation_by_family = {
         "bcc": "HydraGNN",
         "fcc": "GenesisHackathonOct26",
@@ -150,8 +169,9 @@ def validate_case(
 def validate_manifest(
     path: Path, manifest: dict[str, Any], selected_ids: set[str] | None = None
 ) -> list[dict[str, Any]]:
-    if manifest.get("batch_id") != "E4-first-production-batch-01":
-        fail("unexpected batch ID")
+    spec = batch_spec(manifest)
+    expected_cases = sum(spec["counts"].values())
+    expected_total = sum(spec["caps"].values())
     if manifest.get("queue") != "capacity":
         fail("unexpected queue")
     executable = Path(manifest.get("executable", ""))
@@ -163,10 +183,10 @@ def validate_manifest(
     ):
         fail("unexpected VASP executable identity")
     cases = manifest.get("cases")
-    if not isinstance(cases, list) or len(cases) != 20:
-        fail("manifest must contain exactly 20 cases")
+    if not isinstance(cases, list) or len(cases) != expected_cases:
+        fail(f"manifest must contain exactly {expected_cases} cases")
     ids = [case.get("calculation_id") for case in cases]
-    if len(set(ids)) != 20:
+    if len(set(ids)) != expected_cases:
         fail("duplicate calculation IDs in manifest")
     allocation_counts: dict[str, int] = {}
     allocation_caps: dict[str, int] = {}
@@ -181,14 +201,14 @@ def validate_manifest(
         allocation_caps[allocation] = allocation_caps.get(allocation, 0) + (
             case["nodes"] * case["walltime_seconds"] // 3600
         )
-    if allocation_counts != EXPECTED_COUNTS:
+    if allocation_counts != spec["counts"]:
         fail(f"allocation-to-material case counts mismatch: {allocation_counts}")
-    if allocation_caps != EXPECTED_CAPS or sum(allocation_caps.values()) != 480:
+    if allocation_caps != spec["caps"] or sum(allocation_caps.values()) != expected_total:
         fail(f"resource caps mismatch: {allocation_caps}")
-    if manifest.get("resource_caps_node_hours") != EXPECTED_CAPS:
+    if manifest.get("resource_caps_node_hours") != spec["caps"]:
         fail("manifest allocation caps differ from the approved envelope")
-    if manifest.get("total_resource_cap_node_hours") != 480:
-        fail("manifest total cap differs from the approved 480 node-hours")
+    if manifest.get("total_resource_cap_node_hours") != expected_total:
+        fail(f"manifest total cap differs from the approved {expected_total} node-hours")
     return cases
 
 
@@ -229,7 +249,7 @@ def main() -> int:
         "--only",
         nargs="+",
         metavar="CALCULATION_ID",
-        help="submit only a named subset from the frozen 20-case manifest",
+        help="submit only a named subset from the frozen manifest",
     )
     args = parser.parse_args()
     manifest_path = args.manifest.resolve()
@@ -282,7 +302,8 @@ def main() -> int:
         print(f"DRY RUN: validated {len(cases)} cases; no qstat or qsub commands executed.")
         for case, command in zip(cases, commands, strict=True):
             print(f"{case['calculation_id']} [{case['allocation']}] " + " ".join(command))
-        print("Maximum requested resource envelope: 480 node-hours.")
+        total = manifest["total_resource_cap_node_hours"]
+        print(f"Maximum requested resource envelope: {total} node-hours.")
         return 0
     if manifest.get("execution_authorized") is not True:
         fail("manifest is not marked execution_authorized; obtain explicit user approval first")
