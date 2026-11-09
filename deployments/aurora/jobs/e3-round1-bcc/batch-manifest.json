@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "batch_id": "E3-round1-bcc-01",
-  "execution_authorized": false,
+  "execution_authorized": true,
   "executable": "/soft/applications/vasp/vasp.6.6.1/bin/vasp_std",
   "executable_sha256": "3354871ac0b7a812ebe3444dbd3d5bb4176995a5c37c3859978b58b5c7b55eb6",
   "queue": "capacity",
@@ -281,5 +281,9 @@
         "soap_novelty_to_references": 0.21187
       }
     }
-  ]
+  ],
+  "authorization": {
+    "granted_utc": "2026-11-09T06:11:42Z",
+    "scope": "one initial PBS submission per case; 3 jobs; <=72 node-hours; no automatic restarts"
+  }
 }

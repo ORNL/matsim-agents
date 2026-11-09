@@ -1382,7 +1382,32 @@ def main(argv: list[str] | None = None) -> int:
         cmd = sub.add_parser(name)
         cmd.add_argument("--output", type=Path, required=True)
         cmd.add_argument("--materials", nargs="+", default=["lifepo4", "bcc_refractory"])
+    ing = sub.add_parser("ingest", help="ingest finished DFT into copied strategy ledgers")
+    ing.add_argument("--material", default="bcc_refractory")
+    ing.add_argument("--round", type=int, required=True)
+    ing.add_argument("--manifest", type=Path, required=True)
+    ing.add_argument("--ledgers", type=Path, required=True, help="copy of the round's ledger directory")
+    ing.add_argument("--replay", type=Path, required=True, help="prepared replay directory")
+    ing.add_argument("--state", type=Path, required=True)
+    ing.add_argument("--reassess", action="store_true", help="deterministic reassessment once ingested")
     args = parser.parse_args(argv)
+    if args.command == "ingest":
+        from benchmarks.e3 import controller, reassessment
+
+        state = controller.ingest_round(
+            material=args.material,
+            round_number=args.round,
+            manifest_path=args.manifest,
+            ledger_dir=args.ledgers,
+            replay_dir=args.replay,
+            state_path=args.state,
+        )
+        if args.reassess:
+            ctx = controller.load_context(args.material, args.replay, controller.DEFAULT_REFERENCE_ROLES)
+            reassessment.reassess_round(state, ctx, args.ledgers.resolve())
+            state.save(args.state)
+        print(json.dumps(state.round(args.round).model_dump(mode="json"), indent=2))
+        return 0
     protocol, protocol_sha = load_protocol()
     if args.command == "prepare":
         results = [prepare_replay(m, protocol, args.output / m) for m in args.materials]

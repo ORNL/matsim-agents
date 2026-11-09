@@ -218,7 +218,8 @@ def test_round1_staging_ids_and_frozen_manifest_consistency():
         pytest.skip("Round 1 batch not staged in this checkout")
     manifest = json.loads(manifest_path.read_text())
     round1 = json.loads((REPO / "research/paper/e3/round1-bcc.json").read_text())
-    assert manifest["execution_authorized"] is False
+    if manifest["execution_authorized"]:
+        assert manifest["authorization"]["granted_utc"] and manifest["authorization"]["scope"]
     assert manifest["total_resource_cap_node_hours"] == 72
     ids = {c["e3"]["candidate_id"] for c in manifest["cases"]}
     frozen = {d for s in round1["selections"].values() for d in s}
