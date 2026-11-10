@@ -1,0 +1,46 @@
+{
+ "request_sha256_inputs": "lfp-ideal-force-criterion",
+ "latency_s": 7.5,
+ "mag_applied": "model=gemini-4-argon@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "OrjrarnjO6GbotQPyuD--AI",
+  "created": 1793833018,
+  "model": "gemini-4-argon@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\"scores\": [{\"item_id\": \"item-008\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Complete and well-reasoned response.\"}, {\"item_id\": \"item-009\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Thorough quantitative verification and discussion of force conventions.\"}, {\"item_id\": \"item-019\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Clear quantitative check, appropriate caveats, and proper handling of follow-up options.\"}, {\"item_id\": \"item-027\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 0, \"evidence_attribution\": 1, \"uncertainty\": 0, \"follow_up\": 2, \"notes\": \"No physical reasoning, quantitative check, or uncertainty stated in the rationale; evidence ID is cited in metadata only.\"}], \"correct_verdict_in_your_judgement\": \"supported\", \"case_notes\": \"The single converged DFT relaxation record directly tests the claim: EDIFFG was set to -0.01 eV/A, the VASP ionic accuracy marker confirms convergence, and the recorded final_max_force is 0.009575 eV/A, which is at or below the 0.01 eV/A threshold.\"}",
+     "role": "assistant",
+     "images": [],
+     "thinking_blocks": [],
+     "provider_specific_fields": {
+      "thought_signatures": [
+       "AY89a18jcXigjfuJF+L7+xZp6BCxZ+NsoDhx92MqTYfhZcOjv3ljJPGlL0a6+HgcNQNGuWNzOmIzhkbBY8s/D0SFicE2UQNZKnZ1e3HazTAqAUd53Q=="
+      ]
+     }
+    },
+    "provider_specific_fields": {
+     "native_finish_reason": "STOP"
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 382,
+   "prompt_tokens": 4038,
+   "total_tokens": 4420,
+   "completion_tokens_details": {
+    "text_tokens": 382
+   },
+   "prompt_tokens_details": {
+    "text_tokens": 4038
+   }
+  },
+  "vertex_ai_grounding_metadata": [],
+  "vertex_ai_url_context_metadata": [],
+  "vertex_ai_safety_results": [],
+  "vertex_ai_citation_metadata": []
+ }
+}

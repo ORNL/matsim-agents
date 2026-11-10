@@ -1,0 +1,60 @@
+{
+ "request_sha256_inputs": "zn-pbcn-force-criterion",
+ "latency_s": 10.9,
+ "mag_applied": "model=claude-opus-5-5@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "chatcmpl-1e1d8fc4-7cb1-4563-a0a1-8ca9239c08aa",
+  "created": 1793931344,
+  "model": "claude-opus-5-5@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\"scores\": [{\"item_id\": \"item-006\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 1, \"evidence_attribution\": 1, \"uncertainty\": 0, \"follow_up\": 2, \"notes\": \"The verdict is correct. The answer cites the right record but never states the 0.01977 vs 0.02 comparison, so the reasoning is generic. It gives no caveats, for example on the thin 1.1% margin or the missing hashes. It correctly makes no DFT request.\"}, {\"item_id\": \"item-013\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"It makes the quantitative comparison and runs consistency checks (EDIFFG, 107/200 steps, 0.48 kbar stress). It weights the thin margin and the provenance gaps correctly without changing the verdict. It is somewhat redundant and leans on peer agreement, but it acknowledges that agreement is not independent corroboration.\"}, {\"item_id\": \"item-015\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"It is specific and quantitative and traces cleanly to the record values. It treats provenance gaps as caveats rather than contradictions. It sensibly names a falsification check without requesting DFT.\"}, {\"item_id\": \"item-016\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"It makes the correct direct comparison, explicitly checks scope, and gives specific caveats (margin, no hashes). It correctly makes no DFT request.\"}], \"correct_verdict_in_your_judgement\": \"supported\", \"case_notes\": \"There is a single admissible converged_dft record for the exact target structure, with max_force 0.0197717654 eV/A, which is \u22640.02 eV/A. The claim concerns only the recorded criterion, so it is decidable as supported. The thin margin and the empty hash and convergence fields are provenance caveats, not grounds for an unresolved verdict. No DFT or follow-up test is needed.\"}",
+     "role": "assistant",
+     "reasoning_content": "",
+     "thinking_blocks": [
+      {
+       "type": "thinking",
+       "thinking": "",
+       "signature": "CAQSywoKEggTEAIYAjgBQgh0aGlua2luZxIMoj0RB1hbKza9Xh0xGgwynRf4AplLc97AcQMiMBSYWTgLvRhQD/BLHT8z21oqlPjfIQVYSqxQf08CCMvnQiEvZyKRZECMajW8qbO9qirmCV8cKBNSVwaDnaDvBErHaI9hX2Yueja9EVX2WJ51ZHp4n7LpT8FnM6J6dA+UFJ2oqGfjz96pQVGnlei8o6jlx9NmQj4HT0raxT6PkJLr3W6/yU8eFQklqVuTCNDznrmbbHQRwKuJRIjM3BtJYaDfY5kuLaN5YJYZ7h4u7FbW3brUBJBhGZTWkD4HwNCWLJt43g6Eq6GEsksKB2QC4J8KGV8Pn/1QwFw4+r+uxd2Ovodvc5X8L1e8BN33Yapm66uRx7Xu7cPiOivLt6i2UkU+Wn2C499LTwgCGEdSK3hvpVeXGHonC53U+3GtIfQOFCzrqyS1V7ysXffCLdFeHG8kXb4bj2rzqjQwISteQutoVEOw6Qzvcg5AgLT3PGKEHo/sJg2FKSu6BozQIcGA9aHvGy/wBeUni4sq6qn65yxmWziWwzLaJsvQpJOz5P8VBtwxcGY6+rpB+y9MrbVmFJHb56W2L/jmZHpfTbXocleGyXSzLLq24qUvqUlEfKp3ZtwVw1Kf6iKMvKCEv+mXFuYVbOzCcQ2435kR+In4OckA5xdlnDlremid4vdBEkQmd+lP6RA9LbAuwrvbr91/NEj3szRej5qsE3OGpsUucgnZdfxZ08Y6Akc/KVSzioH8Tn23Qc165Q30rFppi0ZxM08hAfU7ogEavRnw/vDjuLKBTJc9UWhzCU8AqUnFZpvDhbC6BPlbUZu6NxauQ/X9H8qLfHmJen3INw9jX0Lau+dOS3mkjaWwihPqBjsYb18bEUmbUexbYfPL7sX9yvHcrixAkRic002/ACbuDBzqcbamWEXSOozz9ZpFjMHcVPFQDzSopLo+KBLklGzfEsP7zmmywe/2sZ2bToQKhr9+lI0tqmEX8Nx100WBBpGQT1ha8FdIi3cvKZN4qsbxKLMrBWXGudz1pVUUVKOJZCsK/XWrqTcV/0PHzhcKZPtm3Z+4hVVGD0HaaIZ1KIlOIaH2o8LT7aRh8oGsfHNd8KDgnJU3kuYhJpnCm4tozEigkEZ8M3u1wopuBmxY87Um0B/ApRfRCsmsejmJZAtBTIt/7gMiddDRyifmikE2IsLjj2WFkN+XQwHk1PF2iLhVK7dtIpEdgaBrY5W4VpbX7m2W/KDzuTLdT//+lW5ZSKwrdrZnmw292757TeJJKHJ8BvMRfCXoiZqZNZYvzIotyI3d1CTWq7v9qiLDkSt02u7jIhhNIHJ+kqNSCRo+nqdOfHJdbF00MaeuYsLrvn/qkIzgrQ2QISkeTyLOJoQePYf+tcCr3Y3sTzRGboy0ilUVS/1CHBgpqYF5BtqLl8XnUqs+mXLcDkwQyD4nrW8Z41eY+CndoWY4snJa2RaWgmsBiuzHea2Pjay5eFheS7/m8LJ0+FktmxRoBbJOU767Fw8vQLUf+CAk4SboZlHZbY1iRF98TdCJr9+Y4ZJj7yk9NZOQNHufNsH8UKqz4xRecbVKz/53HHGxXRvThQG0U/e7nScAiCm9VhXzF//BVqh3yYei30hooc/7oeGX5inMpjxIEX7Hol7EhIq7GQmt2AGwK1zcogjpp6j9f4kJJSUIqqr8ixyVBilH3sBliHohbfa/JYHNuuQ5jmh3NS6lzHRedFJV2pZEGaf98T5GyyhoUvUSMD+Ec1wc5QcjG4voEnoSQJwO+qX+p5PA4gzk4hgB"
+      }
+     ],
+     "provider_specific_fields": {
+      "citations": null,
+      "thinking_blocks": [
+       {
+        "type": "thinking",
+        "thinking": "",
+        "signature": "CAQSywoKEggTEAIYAjgBQgh0aGlua2luZxIMoj0RB1hbKza9Xh0xGgwynRf4AplLc97AcQMiMBSYWTgLvRhQD/BLHT8z21oqlPjfIQVYSqxQf08CCMvnQiEvZyKRZECMajW8qbO9qirmCV8cKBNSVwaDnaDvBErHaI9hX2Yueja9EVX2WJ51ZHp4n7LpT8FnM6J6dA+UFJ2oqGfjz96pQVGnlei8o6jlx9NmQj4HT0raxT6PkJLr3W6/yU8eFQklqVuTCNDznrmbbHQRwKuJRIjM3BtJYaDfY5kuLaN5YJYZ7h4u7FbW3brUBJBhGZTWkD4HwNCWLJt43g6Eq6GEsksKB2QC4J8KGV8Pn/1QwFw4+r+uxd2Ovodvc5X8L1e8BN33Yapm66uRx7Xu7cPiOivLt6i2UkU+Wn2C499LTwgCGEdSK3hvpVeXGHonC53U+3GtIfQOFCzrqyS1V7ysXffCLdFeHG8kXb4bj2rzqjQwISteQutoVEOw6Qzvcg5AgLT3PGKEHo/sJg2FKSu6BozQIcGA9aHvGy/wBeUni4sq6qn65yxmWziWwzLaJsvQpJOz5P8VBtwxcGY6+rpB+y9MrbVmFJHb56W2L/jmZHpfTbXocleGyXSzLLq24qUvqUlEfKp3ZtwVw1Kf6iKMvKCEv+mXFuYVbOzCcQ2435kR+In4OckA5xdlnDlremid4vdBEkQmd+lP6RA9LbAuwrvbr91/NEj3szRej5qsE3OGpsUucgnZdfxZ08Y6Akc/KVSzioH8Tn23Qc165Q30rFppi0ZxM08hAfU7ogEavRnw/vDjuLKBTJc9UWhzCU8AqUnFZpvDhbC6BPlbUZu6NxauQ/X9H8qLfHmJen3INw9jX0Lau+dOS3mkjaWwihPqBjsYb18bEUmbUexbYfPL7sX9yvHcrixAkRic002/ACbuDBzqcbamWEXSOozz9ZpFjMHcVPFQDzSopLo+KBLklGzfEsP7zmmywe/2sZ2bToQKhr9+lI0tqmEX8Nx100WBBpGQT1ha8FdIi3cvKZN4qsbxKLMrBWXGudz1pVUUVKOJZCsK/XWrqTcV/0PHzhcKZPtm3Z+4hVVGD0HaaIZ1KIlOIaH2o8LT7aRh8oGsfHNd8KDgnJU3kuYhJpnCm4tozEigkEZ8M3u1wopuBmxY87Um0B/ApRfRCsmsejmJZAtBTIt/7gMiddDRyifmikE2IsLjj2WFkN+XQwHk1PF2iLhVK7dtIpEdgaBrY5W4VpbX7m2W/KDzuTLdT//+lW5ZSKwrdrZnmw292757TeJJKHJ8BvMRfCXoiZqZNZYvzIotyI3d1CTWq7v9qiLDkSt02u7jIhhNIHJ+kqNSCRo+nqdOfHJdbF00MaeuYsLrvn/qkIzgrQ2QISkeTyLOJoQePYf+tcCr3Y3sTzRGboy0ilUVS/1CHBgpqYF5BtqLl8XnUqs+mXLcDkwQyD4nrW8Z41eY+CndoWY4snJa2RaWgmsBiuzHea2Pjay5eFheS7/m8LJ0+FktmxRoBbJOU767Fw8vQLUf+CAk4SboZlHZbY1iRF98TdCJr9+Y4ZJj7yk9NZOQNHufNsH8UKqz4xRecbVKz/53HHGxXRvThQG0U/e7nScAiCm9VhXzF//BVqh3yYei30hooc/7oeGX5inMpjxIEX7Hol7EhIq7GQmt2AGwK1zcogjpp6j9f4kJJSUIqqr8ixyVBilH3sBliHohbfa/JYHNuuQ5jmh3NS6lzHRedFJV2pZEGaf98T5GyyhoUvUSMD+Ec1wc5QcjG4voEnoSQJwO+qX+p5PA4gzk4hgB"
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1136,
+   "prompt_tokens": 4895,
+   "total_tokens": 6031,
+   "completion_tokens_details": {
+    "reasoning_tokens": 367,
+    "text_tokens": 769
+   },
+   "prompt_tokens_details": {
+    "cached_tokens": 0,
+    "text_tokens": 4,
+    "cache_write_tokens": 4891,
+    "cache_creation_tokens": 4891,
+    "cache_creation_token_details": {
+     "ephemeral_5m_input_tokens": 4891,
+     "ephemeral_1h_input_tokens": 0
+    }
+   },
+   "cache_creation_input_tokens": 4891,
+   "cache_read_input_tokens": 0
+  }
+ }
+}

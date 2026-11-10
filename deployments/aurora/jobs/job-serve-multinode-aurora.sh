@@ -73,7 +73,8 @@ fi
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
 # shellcheck disable=SC1091
-source "${VENV}/bin/activate"
+source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
+activate_matsim_aurora_python "${REPO}" "${VENV}"
 
 # ── job geometry ────────────────────────────────────────────────────────────
 NNODES="$(wc -l < "${PBS_NODEFILE}")"

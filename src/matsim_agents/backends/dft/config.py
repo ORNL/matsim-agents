@@ -28,13 +28,16 @@ def reject_moved_placement_fields(data: Any, block: str) -> Any:
 class VASPConfig(BaseModel):
     """How to run VASP single-point calculations."""
 
-    vasp_bin: Path = Field(..., description="Path to vasp_std (or vasp_gam/vasp_ncl) on Frontier.")
+    vasp_bin: Path = Field(..., description="Facility-provided or custom VASP executable path.")
+    vasp_env_setup: Path | None = Field(
+        None, description="Trusted Bash runtime setup script; overrides wrapper module defaults."
+    )
+    vasp_expected_sha256: str | None = Field(None, pattern=r"^[0-9a-f]{64}$")
     vasp_wrapper: Path = Field(
         ...,
         description=(
-            "Bash wrapper that does `module reset && module load PrgEnv-cray ...` "
-            "and execs `srun vasp_std`. Provided at "
-            "deployments/frontier/launchers/_vasp-step-frontier.sh."
+            "Facility placement wrapper with arguments: work_dir, vasp_bin, nodes, "
+            "ranks_per_node, threads_per_rank. Independent of installation source."
         ),
     )
     incar_template: Path = Field(..., description="INCAR template with Python str.format() slots.")
@@ -44,6 +47,14 @@ class VASPConfig(BaseModel):
     potcar_dir: Path = Field(..., description="Directory containing per-element POTCAR files.")
     timeout_sec: int = 7200
     extra_incar: dict[str, str] = Field(default_factory=dict)
+
+    def runtime_environment(self) -> dict[str, str]:
+        env: dict[str, str] = {}
+        if self.vasp_env_setup is not None:
+            env["VASP_ENV_SETUP"] = str(self.vasp_env_setup.resolve())
+        if self.vasp_expected_sha256 is not None:
+            env["VASP_EXPECTED_SHA256"] = self.vasp_expected_sha256
+        return env
 
     @model_validator(mode="before")
     @classmethod

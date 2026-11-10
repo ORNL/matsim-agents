@@ -48,6 +48,7 @@ done
 # a NERSC facility module install (mirrors _vasp-step-perlmutter.sh /
 # _vasp-step-frontier.sh): if build-vasp-gpu-perlmutter.sh preferred the
 # facility module, load that directly instead of the from-source toolchain.
+if [[ -z "${VASP_ENV_SETUP:-}" ]]; then
 VASP_BIN_RESOLVED="$(readlink -f "${VASP_BIN}" 2>/dev/null || echo "${VASP_BIN}")"
 module reset 2>/dev/null || true
 if [[ "${VASP_BIN_RESOLVED}" == /global/common/software/nersc9/vasp/vasp/* ]]; then
@@ -85,6 +86,9 @@ else
   # above since the SONAMEs differ (libcudart.so.12 vs libcudart.so.13).
   export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/opt/nvidia/hpc_sdk/Linux_x86_64/26.5/cuda/13.2/lib64"
 fi
+fi
+# shellcheck disable=SC1091
+source "${REPO}/deployments/common/vasp-runtime.sh"
 # VASP 6.6.1 was built with CUDA-aware MPI and refuses to run without it.
 # Keep GPU-aware MPI enabled (=1). Disable both NCCL P2P and SHM transports,
 # which both fail with "Cuda failure 101 / invalid device ordinal" on single-

@@ -2,6 +2,11 @@
 
 This page records the VASP 6.6.1 build configuration and helper for Aurora.
 
+Building is optional. See [VASP installations and HPC execution](vasp-hpc-runtime.md)
+for selecting the ALCF-provided executable or a custom binary through the same
+launcher. Aurora launchers now load the compatible MPICH runtime in the VASP
+step rather than assuming it is inherited from the Python driver.
+
 ## Repository policy
 
 - The VASP source tree under `external/vasp6/src/vasp.6.6.1/` is gitignored.
@@ -85,6 +90,48 @@ When reproducing the Aurora build, confirm these points before compiling:
 3. Run the helper with the desired target and parallelism; it installs the recipe
   as `external/vasp6/src/vasp.6.6.1/makefile.include` by default.
 4. Do not commit the VASP source tree, generated objects, or the vendor tarball.
+
+## Aurora runtime requirements
+
+A successful build is not enough: the first VASP calculations on Aurora failed
+three different ways before any SCF step completed. All three fixes are runtime
+settings; none changes the physics or the staged scientific inputs. Validated
+with `vasp_std` 6.6.1 on one node, 12 MPI ranks x 8 OpenMP threads, one PVC
+tile per rank, Nb4Ta4O20 (28 atoms, `ENCUT=600`, `PREC=Accurate`, `ALGO=Normal`,
+4x8x9 Gamma mesh, 146 k-points, 132 bands).
+
+| Symptom | Cause | Fix | Where |
+|---|---|---|---|
+| `launch failed: Invalid GPU visibility keyword: closest`, exit 127, VASP never starts (job 9038831) | PALS `mpiexec` 1.8 accepts only `none`, `per_task:N`, `single:N`, `list:...` for `--gpu-bind`; `closest` is Slurm syntax | Always pass an explicit one-tile-per-rank list, e.g. `--gpu-bind=list:0:1:...:11` | `deployments/aurora/launchers/_vasp-step-aurora.sh` (also `_qe-step-aurora.sh`) |
+| All ranks `SIGSEGV` before the first SCF step, in an OpenMP worker thread (`setdij` -> `setylm_aug` -> `asa_mp_setylm`), exit 139 (job 9038870) | OpenMP worker-thread stack overflow with the Intel runtime's small default stack | `export OMP_STACKSIZE=512m` and `ulimit -s unlimited` before `mpiexec` | `_vasp-step-aurora.sh` |
+| Enters SCF iteration 1 and never returns; at walltime every rank is idle inside MPI/libfabric (job 9039042) | Davidson (`ALGO=Normal`) hangs when a k-point's bands are distributed over several ranks. Not GPU-aware MPI: it also hangs with `MPICH_GPU_SUPPORT_ENABLED=0` | `KPAR` = number of MPI ranks (12 per node), so each rank owns whole k-points | Runtime INCAR written by `run-nbtao5-case-aurora.sh`; set it in any other Aurora INCAR that uses Davidson |
+
+Diagnostic evidence (debug jobs 9039247 and 9039368, same structure and
+POTCAR, at most 4 SCF steps):
+
+| Ranks | `ALGO` | `KPAR` | Mesh | Result |
+|---|---|---|---|---|
+| 12 | Normal | 1 | 2x2x2 | hang, 0 SCF steps in 240 s (also with GPU-aware MPI off) |
+| 1 | Normal | 1 | 2x2x2 | 4 steps in 28 s |
+| 12 | VeryFast | 1 | 2x2x2 | 4 steps in 77 s |
+| 12 | Normal | 12 | 2x2x2 | 4 steps in 14 s |
+| 12 | Normal | 12 | 4x8x9 | 4 steps in 57 s including setup |
+
+With all three fixes, qualification job 9039526 ran 18 ionic relaxation steps in
+about 24 minutes (roughly 80 s per ionic step for this system) with monotonically
+decreasing energy, before its soft walltime stop. `KPAR` affects only how work
+is distributed; results are not expected to depend on it, but this has not been
+compared numerically against a `KPAR=1` run on another platform.
+
+Caveats:
+
+- `KPAR` must divide the rank count, and with `KPAR` equal to the rank count each
+  rank needs at least one k-point. Gamma-only or very small meshes with fewer
+  k-points than ranks need fewer ranks instead.
+- `ALGO=VeryFast` (RMM-DIIS) avoided the hang without `KPAR` but changes the
+  electronic minimizer; prefer `KPAR` to keep the protocol's `ALGO`.
+- Long qualification relaxations exceed 30 minutes on one node for this system
+  size; size walltime caps from the measured per-ionic-step cost above.
 
 ## Related repository docs
 

@@ -1,0 +1,20 @@
+{
+  "status": "frozen_candidate_inventory",
+  "inventory_id": "e4-lifepo4-112-symmetry-distinct-v1",
+  "inventory_count": 510,
+  "canonical_identity_count": 510,
+  "atom_count_counts": {
+    "112": 510
+  },
+  "configuration_counts_by_exchange_pairs": {
+    "0": 1,
+    "1": 8,
+    "2": 496,
+    "3": 5
+  },
+  "minimum_interatomic_distance_A": 1.5361996140099066,
+  "maximum_minimum_interatomic_distance_A": 1.5361996140099066,
+  "manifest_sha256": "c8c6fb83ebd59388e8283d87a9670b2e2b326b8df88b2ff8c5415c3cccedda02",
+  "configuration_sha256": "78d07b34ae13891e80347dcd8e5429ec4419d98ffdd73653c49ff8bbc8d5d3e5",
+  "execution_authorized": false
+}

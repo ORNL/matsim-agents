@@ -1,0 +1,165 @@
+#!/bin/bash
+#PBS -N e4bcc-restart-qual
+#PBS -A HydraGNN
+#PBS -q capacity
+#PBS -l select=1
+#PBS -l place=scatter
+#PBS -l walltime=00:15:00
+#PBS -l filesystems=home:flare
+#PBS -k doe
+#PBS -j oe
+set -euo pipefail
+
+readonly REPO=/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents
+readonly CASE_DIR=/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/e4-vasp-ab-pilot-inputs/Nb22Ta22V21Hf21Zr21Ti21/case-1
+readonly VARIANT=alcf
+readonly REPEAT=repeat-03
+readonly E4_CALCULATION_ID=E4-BCC-AB-Nb22Ta22V21Hf21Zr21Ti21-case-1
+readonly ROOT="${CASE_DIR}/${VARIANT}/${REPEAT}"
+readonly RUNNER="${REPO}/deployments/aurora/jobs/job-e4-vasp-ab-aurora.pbs"
+readonly VASP_STEP="${REPO}/deployments/aurora/launchers/_vasp-step-aurora.sh"
+readonly VASP_BIN=/soft/applications/vasp/vasp.6.6.1/bin/vasp_std
+readonly VASP_SHA256=3354871ac0b7a812ebe3444dbd3d5bb4176995a5c37c3859978b58b5c7b55eb6
+readonly MPICH_MODULE=mpich/prd/5.0.0.aurora_test.51a9474
+readonly RANKS=8
+readonly THREADS=8
+readonly E4_CHECKPOINT_SECONDS=480
+readonly E4_SOFT_STOP_SECONDS=680
+readonly E4_NSW=30
+readonly E4_REQUESTED_NODES=1
+readonly E4_REQUESTED_WALLTIME_SECONDS=900
+
+phase="${E4_RESTART_PHASE:?set E4_RESTART_PHASE=first or resume}"
+[[ "${phase}" == first || "${phase}" == resume ]] || {
+  echo "E4_RESTART_PHASE must be first or resume" >&2
+  exit 2
+}
+[[ "${PBS_O_WORKDIR:-}" == "${CASE_DIR}" ]] || {
+  echo "Submit from the archived case directory: ${CASE_DIR}" >&2
+  exit 2
+}
+[[ -x "${VASP_BIN}" && -f "${VASP_STEP}" && -f "${RUNNER}" ]] || {
+  echo "VASP executable or runner is unavailable" >&2
+  exit 2
+}
+
+if [[ "${phase}" == first ]]; then
+  [[ ! -e "${ROOT}" ]] || {
+    echo "Refusing to overwrite an existing repeat: ${ROOT}" >&2
+    exit 2
+  }
+else
+  [[ -s "${ROOT}/protocol.sha256" && -s "${ROOT}/latest-checkpoint" ]] || {
+    echo "Resume requires the fresh qualification checkpoint at ${ROOT}" >&2
+    exit 2
+  }
+fi
+
+export REPO CASE_DIR VARIANT REPEAT E4_CALCULATION_ID VASP_BIN VASP_EXPECTED_SHA256="${VASP_SHA256}"
+export VASP_ENV_SETUP="${REPO}/deployments/aurora/setup/vasp-runtime-aurora.sh"
+export VASP_MPICH_MODULE="${MPICH_MODULE}" VASP_STEP
+export RANKS THREADS E4_CHECKPOINT_SECONDS E4_SOFT_STOP_SECONDS E4_NSW
+export E4_REQUESTED_NODES E4_REQUESTED_WALLTIME_SECONDS
+export MATSIM_DEVICE_MASK=0,1,2,3,4,5,6,7,8,9,10,11
+export OMP_STACKSIZE=512m
+
+verify_checkpoint() {
+  local tag precision status manifest_digest actual_digest ionic_steps
+  read -r tag precision status manifest_digest < "${ROOT}/latest-checkpoint"
+  [[ "${tag}" =~ ^N?[0-9]+$ && "${manifest_digest}" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "Malformed latest-checkpoint record" >&2
+    return 1
+  }
+  case "${precision}:${tag}" in
+    Low:[0-9]*|Normal:N[0-9]*) ;;
+    *) echo "Unexpected precision/tag in checkpoint: ${precision}/${tag}" >&2; return 1 ;;
+  esac
+  [[ "${status}" == checkpoint:time || "${status}" == interrupted:stopcar ]] || {
+    echo "Expected a controlled stop, received ${status}" >&2
+    return 1
+  }
+  [[ -s "${ROOT}/${tag}.checkpoint.sha256" ]] || {
+    echo "Checkpoint manifest is missing" >&2
+    return 1
+  }
+  actual_digest=$(sha256sum "${ROOT}/${tag}.checkpoint.sha256" | awk '{print $1}')
+  [[ "${actual_digest}" == "${manifest_digest}" ]] || {
+    echo "Checkpoint manifest digest does not match latest-checkpoint" >&2
+    return 1
+  }
+  (cd "${ROOT}" && sha256sum -c "${tag}.checkpoint.sha256" >/dev/null)
+  for suffix in CONTCAR WAVECAR CHGCAR; do
+    [[ -s "${ROOT}/${tag}.${suffix}" ]] || {
+      echo "Missing or empty ${tag}.${suffix}" >&2
+      return 1
+    }
+  done
+  grep -q 'General timing and accounting' "${ROOT}/${tag}.OUTCAR" || {
+    echo "Checkpoint OUTCAR lacks a normal VASP timing footer" >&2
+    return 1
+  }
+  ionic_steps=$(grep -c 'F=' "${ROOT}/${tag}.OSZICAR" || true)
+  (( ionic_steps > 0 )) || { echo "Checkpoint has no completed ionic step" >&2; return 1; }
+  printf '%s %s %s %s\n' "${tag}" "${precision}" "${status}" "${ionic_steps}"
+}
+
+previous_tag=""
+previous_identity=""
+previous_attempts=0
+if [[ "${phase}" == resume ]]; then
+  read -r previous_tag _ < "${ROOT}/latest-checkpoint"
+  previous_identity=$(cat "${ROOT}/protocol.sha256")
+  previous_attempts=$(find "${ROOT}/attempts" -mindepth 1 -maxdepth 1 -type d | wc -l)
+fi
+
+export E4_RESUME=0
+[[ "${phase}" == resume ]] && export E4_RESUME=1
+set +e
+bash "${RUNNER}"
+runner_status=$?
+set -e
+
+if [[ "${phase}" == first ]]; then
+  [[ "${runner_status}" -eq 75 ]] || {
+    echo "Expected a controlled interruption (runner status 75), got ${runner_status}" >&2
+    exit 1
+  }
+else
+  [[ "${runner_status}" -eq 75 ]] || {
+    echo "Expected a controlled resumed interruption (runner status 75), got ${runner_status}" >&2
+    exit 1
+  }
+  [[ "$(cat "${ROOT}/protocol.sha256")" == "${previous_identity}" ]] || {
+    echo "Protocol identity changed across resume" >&2
+    exit 1
+  }
+  grep -Fq "resume verified tag=${previous_tag}" "${ROOT}/run-record.log" || {
+    echo "Runner did not verify the saved checkpoint for resume" >&2
+    exit 1
+  }
+  grep -Fq "from=${previous_tag}" "${ROOT}/run-record.log" || {
+    echo "No resumed VASP attempt consumed the saved checkpoint" >&2
+    exit 1
+  }
+  current_attempts=$(find "${ROOT}/attempts" -mindepth 1 -maxdepth 1 -type d | wc -l)
+  (( current_attempts > previous_attempts )) || {
+    echo "Resume did not create an isolated new attempt directory" >&2
+    exit 1
+  }
+fi
+
+checkpoint_record=$(verify_checkpoint)
+current_tag=${checkpoint_record%% *}
+if [[ "${phase}" == resume && "${current_tag}" == "${previous_tag}" ]]; then
+  echo "Resume did not advance to a new checkpoint tag" >&2
+  exit 1
+fi
+
+printf '[restart-qualification] phase=%s job=%s checkpoint=%s protocol=%s\n' \
+  "${phase}" "${PBS_JOBID:-unknown}" "${checkpoint_record}" \
+  "$(cat "${ROOT}/protocol.sha256")" | tee -a "${ROOT}/run-record.log"
+grep -Fq "calculation_id=${E4_CALCULATION_ID}" "${ROOT}/run-record.log" || {
+  echo "Calculation identity is missing from cumulative run record" >&2
+  exit 1
+}
+echo "Controlled checkpoint qualification phase ${phase} passed."

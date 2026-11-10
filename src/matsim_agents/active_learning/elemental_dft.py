@@ -425,7 +425,7 @@ def _run_reference_relaxation(
                 stderr=subprocess.STDOUT,
                 timeout=vasp.timeout_sec,
                 check=False,
-                env=launch.environment(),
+                env={**launch.environment(), **vasp.runtime_environment()},
             )
         result = parse_relax_outputs(work_dir, return_code=proc.returncode)
     except subprocess.TimeoutExpired as exc:

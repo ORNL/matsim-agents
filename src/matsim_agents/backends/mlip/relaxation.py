@@ -154,6 +154,18 @@ def _load_fused_stack(logdir, checkpoint, mlp_checkpoint, precision, mlp_precisi
     stack = load_fused_stack(
         logdir, checkpoint, mlp_checkpoint, precision, mlp_precision, mlp_device
     )
+    if mlp_device == "xpu" and stack[3].type != "xpu":
+        raise RuntimeError(f"HydraGNN GNN is on {stack[3]}, but XPU was requested")
+    from matsim_agents.backends.mlip.hydragnn_checkpoint import restore_hydragnn_checkpoint
+
+    if checkpoint is None:
+        from inference_random_structures import find_checkpoint
+
+        checkpoint = find_checkpoint(logdir, checkpoint)
+    model = stack[0]
+    model._hydragnn_checkpoint_state_keys = restore_hydragnn_checkpoint(
+        model, checkpoint, device=stack[3]
+    )
     if mlp_device != "xpu":
         return stack
     from contextlib import nullcontext
@@ -172,8 +184,6 @@ def _load_fused_stack(logdir, checkpoint, mlp_checkpoint, precision, mlp_precisi
         gnn_prec,
         mlp_prec,
     ) = stack
-    if device.type != "xpu":
-        raise RuntimeError(f"HydraGNN GNN is on {device}, but XPU was requested")
     mlp = mlp.to(device=device)
     unified = mlp_prec == gnn_prec
     mlp_autocast_ctx = (

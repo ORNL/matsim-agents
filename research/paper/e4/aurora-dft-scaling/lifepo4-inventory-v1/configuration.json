@@ -1,0 +1,36 @@
+{
+  "inventory_id": "e4-lifepo4-112-symmetry-distinct-v1",
+  "parent_poscar": "/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-dft-reference/dft_reference/vasp/calculations/critical_minerals_LiFePO4_olivine_ideal/POSCAR",
+  "parent_poscar_sha256": "5e35c88df52f6b2bddaafbd4c8e4e16700a631799efe784bfb544536639d2b62",
+  "supercell_matrix": [
+    2,
+    2,
+    1
+  ],
+  "atom_count": 112,
+  "composition": {
+    "Fe": 16,
+    "Li": 16,
+    "O": 64,
+    "P": 16
+  },
+  "inventory_count": 510,
+  "selection": "pristine; all symmetry-distinct single-pair configurations ordered by canonical SHA256; then lexicographic site-combination enumeration of two-pair and three-pair exchanges, stopping at 510",
+  "symmetry_settings": {
+    "preserve_parent_species": true,
+    "spglib_symprec_A": 1e-05,
+    "site_coordinate_quantization": 1e-07
+  },
+  "generator_sha256": {
+    "freeze_lifepo4_inventory.py": "28db9ba83aa0d30df22b7e3518ab3b80cba7d40515f5be3d5647bdd109b8b80c",
+    "prepare_stage1.py": "c0d4a30e264e71e88d25a196fcfea5b0c17bf401e65a36092294c49b2e9573f3"
+  },
+  "runtime_versions": {
+    "ase": "3.26.0",
+    "numpy": "2.4.6",
+    "spglib": "2.8.0"
+  },
+  "potcar_files_included": false,
+  "external_duplicate_audit": "incomplete",
+  "execution_authorized": false
+}

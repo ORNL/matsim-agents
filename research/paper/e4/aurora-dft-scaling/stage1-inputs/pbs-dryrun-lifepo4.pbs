@@ -1,0 +1,13 @@
+#PBS -N e4-s1-lifepo4-preflight
+#PBS -A GridAI
+#PBS -q capacity
+#PBS -l select=1
+#PBS -l place=scatter
+#PBS -l walltime=08:00:00
+#PBS -l filesystems=home:flare
+#PBS -k doe
+#PBS -j oe
+set -euo pipefail
+echo "E4 Stage 1 preflight only: family=lifepo4; allocation=GridAI; nodes=1; walltime=08:00:00"
+echo "No VASP executable, mpiexec, or nested qsub is invoked."
+exit 0

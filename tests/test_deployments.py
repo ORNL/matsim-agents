@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -19,6 +20,151 @@ def test_deployment_assets_are_portable() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.validate() == []
+
+
+def test_frozen_batch_manifest_paths_are_repository_relative() -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = root / "deployments/aurora/jobs/e4-first-batch/submit_batch.py"
+    spec = importlib.util.spec_from_file_location("submit_batch", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    for batch, directory in (
+        ("e3-round1-bcc", "e3-round1-bcc-01"),
+        ("e4-first-batch", "e4-first-batch-01"),
+    ):
+        manifest_path = root / f"deployments/aurora/jobs/{batch}/batch-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        for case in manifest["cases"]:
+            assert not Path(case["pbs_script"]).is_absolute()
+            assert module.resolve_repo_path(case["pbs_script"], "PBS script").is_file()
+            assert not Path(case["case_dir"]).is_absolute()
+            assert module.resolve_case_dir(case, manifest) == (
+                root.parent / directory / "inputs" / case["calculation_id"]
+            )
+            assert all(
+                not Path(component["source"]).is_absolute() for component in case["paw_components"]
+            )
+
+
+def test_batch_case_dir_rejects_symlink_escape(tmp_path, monkeypatch) -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = root / "deployments/aurora/jobs/e4-first-batch/submit_batch.py"
+    spec = importlib.util.spec_from_file_location("submit_batch", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    repository = tmp_path / "matsim-agents"
+    repository.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    batch_root = repository.parent / "e3-round1-bcc-01"
+    batch_root.mkdir()
+    (batch_root / "inputs").symlink_to(outside, target_is_directory=True)
+    monkeypatch.setattr(module, "REPO", repository)
+    case = {
+        "calculation_id": "E3-R1-BCC-0394",
+        "case_dir": "../e3-round1-bcc-01/inputs/E3-R1-BCC-0394",
+    }
+
+    with pytest.raises(SystemExit, match="escapes its batch root"):
+        module.resolve_case_dir(case, {"batch_id": "E3-round1-bcc-01"})
+
+
+def test_mistral_tokenizer_preparation_rejects_source_as_overlay(tmp_path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = root / "deployments/aurora/setup/prepare_mistral_tokenizer.py"
+    spec = importlib.util.spec_from_file_location("prepare_mistral_tokenizer", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    model = tmp_path / "snapshot"
+    model.mkdir()
+    config = '{"tokenizer_class":"LlamaTokenizer","chat_template":"template"}\n'
+    (model / "tokenizer_config.json").write_text(config)
+    (model / "tokenizer.json").write_text("tokenizer\n")
+    (model / "special_tokens_map.json").write_text("{}\n")
+
+    with pytest.raises(ValueError, match="must differ"):
+        module.prepare_tokenizer(model, model.resolve())
+
+    assert (model / "tokenizer_config.json").read_text() == config
+    assert (model / "tokenizer.json").read_text() == "tokenizer\n"
+    assert not (model / "chat_template.jinja").exists()
+
+
+def test_aurora_engineering_jobs_disable_scientific_portability_and_record_e1_failures() -> None:
+    root = Path(__file__).resolve().parents[1]
+    llm_check = (root / "deployments/aurora/jobs/job-llm-check-aurora.sh").read_text()
+    assert "unset MATSIM_RUN_PORTABILITY" in llm_check
+
+    e1 = (root / "deployments/aurora/jobs/job-e1-development-aurora.sh").read_text()
+    assert "trap finalize_job EXIT" in e1
+    assert e1.index("trap finalize_job EXIT") < e1.index("matsim-agents resources serve")
+    assert '"job_script_status": int(os.environ["JOB_STATUS"])' in e1
+
+
+def test_qwen_e1_runner_enables_xpu_graph_and_uses_graph_resource_plans() -> None:
+    root = Path(__file__).resolve().parents[1]
+    runner = (root / "deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh").read_text()
+
+    assert "export VLLM_XPU_ENABLE_XPU_GRAPH=1" in runner
+    assert "--enforce-eager" in runner
+    assert "qwen3-235b-instruct-xpu-graph.yaml" in runner
+    assert "qwen3-235b-thinking-xpu-graph.yaml" in runner
+
+    for model in ("instruct", "thinking"):
+        resources = yaml.safe_load(
+            (root / f"deployments/aurora/resources/qwen3-235b-{model}-xpu-graph.yaml").read_text()
+        )
+        server = resources["resources"]["pools"]["llm"]["servers"][0]
+        assert server["tensor_parallel_size"] == 8
+        assert "--enforce-eager" not in server["extra_args"]
+        graph_config_index = server["extra_args"].index("--compilation-config")
+        graph_config = json.loads(server["extra_args"][graph_config_index + 1])
+        assert graph_config["cudagraph_mode"] == "PIECEWISE"
+
+
+def test_qwen_e1_runner_rejects_eager_resource_override(tmp_path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    runner = root / "deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh"
+    resources = tmp_path / "eager.yaml"
+    resources.write_text("extra_args: [--enforce-eager]\n")
+    env = {
+        **os.environ,
+        "PROJECT_ROOT": str(root),
+        "E1_MODEL_KEY": "qwen3-235b-instruct-2507",
+        "E1_MANIFEST": str(root / "README.md"),
+        "MATSIM_RESOURCES": str(resources),
+    }
+
+    result = subprocess.run(["bash", str(runner)], env=env, capture_output=True, text=True)
+
+    assert result.returncode == 2
+    assert "cannot use an eager-mode resource plan" in result.stderr
+
+
+def test_qwen_e1_runner_rejects_full_graph_resource_override(tmp_path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    runner = root / "deployments/aurora/jobs/job-e1-qwen3-235b-aurora.sh"
+    resources = tmp_path / "full-graph.yaml"
+    resources.write_text(
+        'extra_args: [--compilation-config, \'{"cudagraph_mode":"FULL_AND_PIECEWISE"}\']\n'
+    )
+    env = {
+        **os.environ,
+        "PROJECT_ROOT": str(root),
+        "E1_MODEL_KEY": "qwen3-235b-instruct-2507",
+        "E1_MANIFEST": str(root / "README.md"),
+        "MATSIM_RESOURCES": str(resources),
+    }
+
+    result = subprocess.run(["bash", str(runner)], env=env, capture_output=True, text=True)
+
+    assert result.returncode == 2
+    assert "require PIECEWISE XPU Graphs" in result.stderr
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#PBS -N nbtao5-qual
+#PBS -l select=1
+#PBS -l place=scatter
+#PBS -l walltime=02:00:00
+#PBS -A HydraGNN
+#PBS -l filesystems=home:flare
+#PBS -q capacity
+#PBS -k doe
+#PBS -j oe
+
+set -eo pipefail
+export NBTAO5_SOFT_STOP_SECONDS=6900
+REPO="${NBTAO5_REPO_ROOT:?pass NBTAO5_REPO_ROOT as the absolute checkout path with qsub -v}"
+REPO="$(realpath -e "${REPO}")"
+[[ -f "${REPO}/pyproject.toml" ]] || { echo "Invalid NBTAO5_REPO_ROOT: ${REPO}" >&2; exit 2; }
+RUNNER="${REPO}/deployments/aurora/launchers/run-nbtao5-case-aurora.sh"
+[[ -x "${RUNNER}" ]] || { echo "Missing or non-executable Nb-Ta-O runner: ${RUNNER}" >&2; exit 127; }
+for approval in NBTAO5_QUALIFICATION_AUTHORIZED NBTAO5_RESOURCE_APPROVED NBTAO5_PAW_RELEASE_APPROVED; do
+	[[ "${!approval:-}" == "YES" ]] || { echo "Q1 requires actual approval: ${approval}=YES." >&2; exit 2; }
+done
+CASE_DIR="$(realpath -e "${NBTAO5_CASE_DIR:?set NBTAO5_CASE_DIR to the fresh external Q1 case}")"
+PREFLIGHT_RECORD="${NBTAO5_PREFLIGHT_RECORD:?set NBTAO5_PREFLIGHT_RECORD to the successful preflight record}"
+[[ -x "${REPO}/.venv/bin/python" ]] || { echo "Missing checkout Python: ${REPO}/.venv/bin/python" >&2; exit 2; }
+"${REPO}/.venv/bin/python" "${REPO}/scripts/nbtao5_q1_gate.py" validate-preflight \
+	--repo "${REPO}" --case "${CASE_DIR}" --record "${PREFLIGHT_RECORD}"
+exec bash "${RUNNER}" qualification

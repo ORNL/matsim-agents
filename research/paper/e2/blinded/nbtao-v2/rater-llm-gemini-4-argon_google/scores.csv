@@ -1,0 +1,5 @@
+item_id,case,verdict_correct,physical_reasoning,evidence_attribution,uncertainty,follow_up,notes
+item-001,nbtao-formation-energy-negative-v2,Y,0,1,0,2,"Correct verdict, evidence ID, and follow-up flags, but the rationale is a single boilerplate sentence with no physical reasoning, no reference to specific values from the record, and no discussion of scope or uncertainty."
+item-002,nbtao-formation-energy-negative-v2,Y,2,2,2,2,"Thorough quantitative verification of the formation energy arithmetic, exact mapping to the record's values and settings, and well-weighted discussion of PBE O2 overbinding and scope boundaries."
+item-003,nbtao-formation-energy-negative-v2,Y,2,2,2,2,"Complete arithmetic check of the cell and per-atom formation energy, accurate attribution to the evidence record, and appropriate discussion of scope and unverified source settings."
+item-004,nbtao-formation-energy-negative-v2,Y,2,2,2,2,"Clear quantitative verification of the arithmetic, solid physical context regarding oxide formation enthalpies and O2 overbinding, and accurate scoping."

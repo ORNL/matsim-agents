@@ -1,0 +1,21 @@
+{
+  "packet_version": "e1-packet-hashes-v1",
+  "development": {
+    "path": "research/paper/e1/d-questions.v1.json",
+    "sha256": "10bd35944511e49259cd920e46a32c96a8bf8116dbaaf2b120962d5ba9eeadce"
+  },
+  "response_schema": {
+    "path": "research/paper/e1/response-schema.v1.json",
+    "sha256": "9eab3b993777b864af11e0f0a9919227e7b8fccb5ae5f0ceffe3eb33adc11129"
+  },
+  "rubric_and_provenance": {
+    "path": "research/paper/e1/development-protocol.v1.md",
+    "sha256": "a50ef7528acd1296e89864841f1aeac72570af415380aca90e4273feb925740d"
+  },
+  "held_out": {
+    "path": "$HOME/.local/share/matsim-agents/e1/h-questions.v1.json",
+    "permissions": "0600",
+    "sha256": "ddbd2c6e65c133e0db7ea09932f5e4d24b83571348556e7e4f5f5969ac1f6638",
+    "eligibility": "replacement-required: prompt content appeared in tracked history"
+  }
+}

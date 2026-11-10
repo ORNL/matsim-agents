@@ -1,0 +1,29 @@
+preview:
+  nodes: 1
+  spare_devices: [4, 5, 6, 7, 8, 9, 10, 11]
+resources:
+  preset: aurora
+  pools:
+    llm:
+      nodes: 1
+      devices: [0, 1, 2, 3]
+      servers:
+        - name: model
+          kind: managed-vllm
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Mistral-Small-24B-Instruct-2501
+          served_name: Mistral-Small-24B-Instruct-2501
+          tensor_parallel_size: 4
+          max_model_len: 16384
+          startup_timeout_s: 2700
+          launcher:
+            - bash
+            - ${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/aurora/launchers/vllm-server-aurora.sh
+          extra_args:
+            - --trust-remote-code
+            - --enforce-eager
+            - --tokenizer-mode
+            - hf
+            - --tokenizer
+            - ${MISTRAL_TOKENIZER_DIR:?prepare the tokenizer overlay and set MISTRAL_TOKENIZER_DIR}
+            - --chat-template
+            - ${MISTRAL_TOKENIZER_DIR:?prepare the tokenizer overlay and set MISTRAL_TOKENIZER_DIR}/chat_template.jinja

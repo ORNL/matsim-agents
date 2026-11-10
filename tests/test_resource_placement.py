@@ -582,6 +582,7 @@ def test_layouts_are_shipped_for_every_facility():
 def test_shipped_layout_resolves(path, monkeypatch):
     monkeypatch.setenv("MODEL_ROOT", "/models")
     monkeypatch.setenv("PROJECT_ROOT", str(ROOT))
+    monkeypatch.setenv("MISTRAL_TOKENIZER_DIR", "/models/mistral-tokenizer-overlay")
     document = yaml.safe_load(path.read_text())
     preview = document.get("preview", {})
     plan = ResourcePlan.from_yaml(path)

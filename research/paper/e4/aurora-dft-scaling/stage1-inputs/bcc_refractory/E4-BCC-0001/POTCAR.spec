@@ -1,0 +1,5 @@
+Hf Hf_pv
+Nb Nb_pv
+Ta Ta_pv
+V V_pv
+assembled_potcar_sha256 10a4727b2e4a00fb8089889b167e3f1a66d188ef1a38d71229eea6532e16930f

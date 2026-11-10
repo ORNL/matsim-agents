@@ -1,4 +1,5 @@
-# LLM deployment qualification: one vLLM server for Qwen2.5-14B-Instruct on PVC tiles 0-3 (tensor parallel 4),
+# LLM deployment qualification: one vLLM server for the locally staged
+# Mistral Small 24B checkpoint on PVC tiles 0-3 (tensor parallel 4),
 # started by `matsim-agents resources serve` in job-llm-check-aurora.sh.
 #   matsim-agents resources plan deployments/aurora/resources/llm-check.yaml
 preview: {nodes: 1, spare_devices: [4, 5, 6, 7, 8, 9, 10, 11]}
@@ -11,8 +12,11 @@ resources:
       servers:
         - name: model
           kind: managed-vllm
-          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Qwen2.5-14B-Instruct
-          max_model_len: 8192
+          model: ${MODEL_ROOT:?export MODEL_ROOT=<directory of model snapshots>}/Mistral-Small-24B-Instruct-2501
+          served_name: Mistral-Small-24B-Instruct-2501
+          tensor_parallel_size: 4
+          max_model_len: 32768
+          startup_timeout_s: 2700
           launcher:
             - bash
             - ${PROJECT_ROOT:?export PROJECT_ROOT=<matsim-agents checkout>}/deployments/aurora/launchers/vllm-server-aurora.sh

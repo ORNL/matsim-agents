@@ -1,0 +1,34 @@
+{
+  "case_id": "NbTaO5-ordering-01-encut-560",
+  "category": "crystalline_numerical_qualification",
+  "status": "input_candidate_not_authorized_for_execution",
+  "species_order": [
+    "Nb",
+    "Ta",
+    "O"
+  ],
+  "species_counts": {
+    "Nb": 4,
+    "Ta": 4,
+    "O": 20
+  },
+  "settings": {
+    "encut_eV": 560,
+    "kspacing_A^-1": 0.2,
+    "ediff_eV": 1e-06,
+    "ediffg_eV_A": -0.01
+  },
+  "gamma_only": false,
+  "input_hashes": {
+    "POSCAR": "262b3f0be63e7c5b6fdf0fc7a63b7f49e22fa532a718e466680127cc7a4cfef0",
+    "INCAR": "f5393796d5ae4ed2a89396993a528f4c36828532dbd2cddca0f85255f451242b",
+    "INCAR.static": "914f4d8ae6ba14f2f2e0964b6599559f8e37e0b798cb4ceb0398314b347aea24",
+    "KPOINTS": "d2f059c1ae7f3e220fcf95d870abeeabbe7fbafb70e079b8992cbdbede83e0f1",
+    "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+  },
+  "potcar_required_components": [
+    "Nb_pv",
+    "Ta_pv",
+    "O"
+  ]
+}

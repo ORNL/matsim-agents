@@ -49,6 +49,7 @@ class TestGetChatModelInstantiation:
         assert result.base_url == "http://localhost:8000/v1"
         assert result.max_completion_tokens == 4096
         assert result.request_timeout == 3600
+        assert result.max_retries == 0
 
     def test_vllm_completion_tokens_from_environment(self, monkeypatch):
         from matsim_agents.backends.llm.provider import get_chat_model
@@ -78,6 +79,14 @@ class TestGetChatModelInstantiation:
         result = get_chat_model(provider="vllm", model="test-model")
 
         assert result.request_timeout == 7200
+
+    def test_vllm_retries_from_environment(self, monkeypatch):
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        monkeypatch.setenv("MATSIM_VLLM_MAX_RETRIES", "2")
+        result = get_chat_model(provider="vllm", model="test-model")
+
+        assert result.max_retries == 2
 
     @pytest.mark.parametrize("environment", ["7200", "invalid"])
     def test_vllm_explicit_timeout_overrides_environment(self, monkeypatch, environment):
@@ -157,8 +166,50 @@ class TestGetChatModelInstantiation:
             base_url="http://localhost:8000/v1",
             api_key="EMPTY",
             timeout=3600,
+            max_retries=0,
         )
         assert result.content == "local response"
+
+    def test_mag_provider_routes_through_gateway_and_sets_provider_header(self, monkeypatch):
+        from matsim_agents.backends.llm.provider import ChatMAG, get_chat_model
+
+        monkeypatch.setenv("AMSC_TOKEN", "test-token")
+        response = MagicMock()
+        response.choices[0].message.content = "gateway response"
+        client = MagicMock()
+        raw_response = MagicMock()
+        raw_response.parse.return_value = response
+        raw_response.headers = {"x-amsc-mag-applied": "provider=openai"}
+        client.chat.completions.with_raw_response.create.return_value = raw_response
+        with patch("openai.OpenAI", return_value=client) as openai_client:
+            model = get_chat_model(
+                provider="mag",
+                model="catalog-model",
+                mag_provider="openai",
+            )
+            result = model.invoke([HumanMessage(content="hello")])
+
+        assert isinstance(model, ChatMAG)
+        openai_client.assert_called_once_with(
+            base_url="https://mag.genesis.americansciencecloud.org/v1",
+            api_key="test-token",
+            timeout=3600,
+            max_retries=0,
+            default_headers={"X-AmSC-MAG-Provider": "openai"},
+        )
+        assert result.content == "gateway response"
+        assert result.response_metadata["provider_metadata"] == {"mag_applied": "provider=openai"}
+        with pytest.raises(ValueError, match="explicit model ID"):
+            get_chat_model(provider="mag", model=None, api_key="test-token")
+
+    def test_mag_explicit_none_suppresses_environment_route(self, monkeypatch):
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        monkeypatch.setenv("MATSIM_MAG_PROVIDER", "environment-route")
+        model = get_chat_model(
+            provider="mag", model="catalog-model", api_key="test-token", mag_provider=None
+        )
+        assert model.default_headers == {}
 
     def test_openai_provider(self):
         mock_openai = MagicMock()

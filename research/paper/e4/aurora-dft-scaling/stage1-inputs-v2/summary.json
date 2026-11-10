@@ -1,0 +1,31 @@
+{
+  "status": "staged_not_submitted",
+  "execution_authorized": false,
+  "case_count": 16,
+  "families": {
+    "bcc_refractory": 8,
+    "fcc_hea": 4,
+    "lifepo4": 4
+  },
+  "production_exclusions": [
+    {
+      "calculation_id": "E4-LFP-0001",
+      "reason": "Exact 2x2x1 periodic supercell reuse of the archived 28-atom pristine LiFePO4 calculation; retain in the frozen inventory but exclude from new pristine production."
+    }
+  ],
+  "lifepo4_antisite_pair_counts": {
+    "0": 1,
+    "1": 2,
+    "2": 1,
+    "3": 0
+  },
+  "one_attempt_node_hours_max": {
+    "bcc_refractory": 64,
+    "fcc_hea": 32,
+    "lifepo4": 32
+  },
+  "stage1_initial_attempt_node_hours_max": 128,
+  "potcar_files_staged": false,
+  "external_duplicate_audit": "incomplete; public OSTI structure payloads were not enumerated",
+  "pbs_scripts": "preflight-only; they do not launch VASP"
+}

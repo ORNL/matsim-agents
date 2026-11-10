@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/allaffa/HydraGNN.git",
+  "commit": "81d5b88304f20bb45c840571e2e26c490d1b19da",
+  "branch_context": "fix/multibranch-bf16-autocast-dtype",
+  "selection": "User approved pinning the existing revision on 2026-11-07",
+  "checkpoint_policy": "Upload separately; re-audit hashes before any execution",
+  "expected_example": "examples/multidataset_hpo_sc26"
+}

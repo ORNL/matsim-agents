@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from matsim_agents.backends.dft.config import DFTConfig
+from matsim_agents.backends.dft.config import DFTConfig, QEBackendConfig, VASPConfig
 from matsim_agents.backends.dft.qe_relax import resolve_pseudopotentials
 from matsim_agents.backends.dft.vasp_io import resolve_potcar_paths
 from matsim_agents.execution.placement import ProcessLaunch
@@ -34,6 +34,7 @@ def path_identity(path: Path | None) -> dict[str, Any] | None:
 
 
 def scientific_dft_payload(cfg: DFTConfig, elements: set[str]) -> dict[str, Any]:
+    block: VASPConfig | QEBackendConfig
     if cfg.backend == "vasp":
         assert cfg.vasp is not None
         block = cfg.vasp
@@ -93,9 +94,14 @@ def dft_execution_signature(cfg: DFTConfig, launch: ProcessLaunch) -> str:
     Host names are excluded so cached results stay valid across allocations
     with the same per-calculation layout.
     """
-    block = cfg.vasp if cfg.backend == "vasp" else cfg.qe
-    assert block is not None
-    wrapper = block.vasp_wrapper if cfg.backend == "vasp" else block.pw_wrapper
+    if cfg.backend == "vasp":
+        assert cfg.vasp is not None
+        block: VASPConfig | QEBackendConfig = cfg.vasp
+        wrapper = cfg.vasp.vasp_wrapper
+    else:
+        assert cfg.qe is not None
+        block = cfg.qe
+        wrapper = cfg.qe.pw_wrapper
     resolved_defaults = {}
     if wrapper.is_file():
         text = wrapper.read_text()
@@ -108,7 +114,7 @@ def dft_execution_signature(cfg: DFTConfig, launch: ProcessLaunch) -> str:
             }:
                 continue
             resolved_defaults[name] = os.environ.get(name) or default
-    payload = {
+    payload: dict[str, Any] = {
         "schema_version": 2,
         "backend": cfg.backend,
         "wrapper": path_identity(wrapper),
@@ -119,5 +125,13 @@ def dft_execution_signature(cfg: DFTConfig, launch: ProcessLaunch) -> str:
         "timeout_sec": block.timeout_sec,
         "resolved_wrapper_defaults": resolved_defaults,
     }
+    if cfg.backend == "vasp":
+        assert cfg.vasp is not None
+        setup = cfg.vasp.vasp_env_setup or os.environ.get("VASP_ENV_SETUP")
+        if setup is not None:
+            payload["runtime_setup"] = path_identity(Path(setup))
+        expected = cfg.vasp.vasp_expected_sha256 or os.environ.get("VASP_EXPECTED_SHA256")
+        if expected is not None:
+            payload["expected_executable_sha256"] = expected
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()

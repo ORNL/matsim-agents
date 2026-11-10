@@ -1,0 +1,75 @@
+{
+  "checked_at": "2026-10-30",
+  "endpoint": "https://mag.genesis.americansciencecloud.org/v1/models",
+  "authentication": "AMSC_TOKEN present; secret not recorded",
+  "catalog_count": 1375,
+  "catalog_evidence": [
+    {
+      "model_id": "claude-sonnet-5-5@amazon",
+      "mag_owner_field": "openai",
+      "upstream_route": "amazon",
+      "mode": "chat",
+      "advertised_max_input_tokens": 1000000,
+      "advertised_max_output_tokens": 128000,
+      "created_field": 1677610602,
+      "recommended_for_candidate_screen": true
+    },
+    {
+      "model_id": "gemini-4-argon@google",
+      "mag_owner_field": "openai",
+      "upstream_route": "google",
+      "mode": "chat",
+      "advertised_max_input_tokens": 1048576,
+      "advertised_max_output_tokens": 1048576,
+      "created_field": 1677610602,
+      "recommended_for_candidate_screen": true
+    },
+    {
+      "model_id": "gemini-3.8-flash@google",
+      "mag_owner_field": "openai",
+      "upstream_route": "google",
+      "mode": "chat",
+      "advertised_max_input_tokens": 1048576,
+      "advertised_max_output_tokens": 65536,
+      "created_field": 1677610602,
+      "recommended_for_candidate_screen": false
+    },
+    {
+      "model_id": "gpt-6-astra@openai",
+      "mag_owner_field": "openai",
+      "upstream_route": "openai",
+      "mode": "chat",
+      "advertised_max_input_tokens": 922000,
+      "advertised_max_output_tokens": 128000,
+      "created_field": 1677610602,
+      "recommended_for_candidate_screen": false
+    }
+  ],
+  "technical_scope": {
+    "verified": [
+      "Authenticated account can read /models",
+      "Exact catalog IDs and advertised input/output limits for listed entries",
+      "MAG OpenAI-compatible endpoint documented in docs/model-access-gateway.md",
+      "E1 runner parses the frozen response schema and captures completion status, latency, token usage when returned, MAG applied-route metadata, and allocation records"
+    ],
+    "not_verified": [
+      "No candidate inference request was sent",
+      "Serving revision or immutable-version semantics are not provided by this catalog response",
+      "Candidate-specific JSON behavior, token-usage reporting, route behavior, and effective generation limit have not been tested with inference",
+      "No project spending/allocation ceiling, data-use approval, or retention approval was found in the workspace"
+    ]
+  },
+  "next_candidate": {
+    "model_id": "gemini-4-argon@google",
+    "mag_provider": "google",
+    "reason": "Distinct model family and upstream provider from the completed OpenAI-routed candidate; catalog advertises a 1,048,576 output-token ceiling, above the frozen 32,768 request cap.",
+    "dispatch_status": "blocked_pending_model_bound_project_and_spending_authorization"
+  },
+  "authorization_needed": [
+    "Approval reference and approver",
+    "Exact model ID/revision or explicit mutable-alias acceptance and MAG upstream provider route",
+    "Project authorization and aggregate allocation/spending ceiling for 18 requests",
+    "Data-use and retention terms for the frozen development prompts",
+    "Confirmation that the advertised model limit applies to this account/route"
+  ]
+}

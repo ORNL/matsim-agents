@@ -1,0 +1,46 @@
+{
+ "request_sha256_inputs": "lfp-antisite-energy-ranking",
+ "latency_s": 8.5,
+ "mag_applied": "model=gemini-4-argon@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "MrjrapmGFL7esbwPmMyUqAY",
+  "created": 1793833010,
+  "model": "gemini-4-argon@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\"scores\": [{\"item_id\": \"item-004\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Accurate physical reasoning regarding the 50 eV unrelaxed energy artifact, exact record attribution, and proper follow-up test selection.\"}, {\"item_id\": \"item-011\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 0, \"evidence_attribution\": 0, \"uncertainty\": 0, \"follow_up\": 1, \"notes\": \"No physical reasoning, no evidence records cited, no uncertainty discussion, and inconsistent follow-up (proposes DFT tests while setting request_dft to false).\"}, {\"item_id\": \"item-030\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 1, \"notes\": \"Strong physical reasoning, record attribution, and caveats (e.g., missing k-points entry in antisite record, spin configurations), but proposed_test_ids is left empty despite selecting complete-antisite-ionic-relaxation in the text and setting request_dft=true.\"}, {\"item_id\": \"item-031\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 1, \"notes\": \"Strong physical reasoning, record attribution, and caveats (PBE vs PBE+U, magnetic state), but proposed_test_ids is left empty despite identifying complete-antisite-ionic-relaxation in the text and setting request_dft=true.\"}], \"correct_verdict_in_your_judgement\": \"unresolved\", \"case_notes\": \"The ideal olivine structure has a converged PBE total energy (-195.77 eV), whereas the Fe/Li antisite calculation stopped after SCF convergence with huge residual forces (81.4 eV/A) and stress (237 kbar), marked not_converged. By rule and physical soundness, the unconverged antisite energy (-145.21 eV) cannot be used for ranking, leaving the claim unresolved pending a completed ionic relaxation of the antisite configuration.\"}",
+     "role": "assistant",
+     "images": [],
+     "thinking_blocks": [],
+     "provider_specific_fields": {
+      "thought_signatures": [
+       "AY89a185rlcbmxdvzDFySFodEm27qT/90c0BdC9uawgTCKzDFO/kicI77b8QojDpUbY60FUeNPtzsGzcC6mrlHtmzYoa8KFVuhjQ97kH0OSff2ZpRQ=="
+      ]
+     }
+    },
+    "provider_specific_fields": {
+     "native_finish_reason": "STOP"
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 525,
+   "prompt_tokens": 5913,
+   "total_tokens": 6438,
+   "completion_tokens_details": {
+    "text_tokens": 525
+   },
+   "prompt_tokens_details": {
+    "text_tokens": 5913
+   }
+  },
+  "vertex_ai_grounding_metadata": [],
+  "vertex_ai_url_context_metadata": [],
+  "vertex_ai_safety_results": [],
+  "vertex_ai_citation_metadata": []
+ }
+}

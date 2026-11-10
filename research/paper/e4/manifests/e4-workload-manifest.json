@@ -1,0 +1,190 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "e4-si-scaling-portability-v0",
+  "status": "draft_not_authorized",
+  "config_path": "benchmarks/e4/config/campaign.json",
+  "config_sha256": "77e83ec07f22c7c47392e0f3280c70537537a52620ad69cf195f6567056c27d1",
+  "source_commit": "7e85bf41e39816b02214bf7726957e3553f06a78",
+  "candidate_structure": {
+    "path": "benchmarks/portability/structures/Si.vasp",
+    "sha256": "d20286559953a16225ee1effdb8eb6dd20fb166b81a63f5507e25e7f4758d373"
+  },
+  "candidate_qe_assets": {
+    "config_path": "benchmarks/portability/config/relaxation/qe-si.yaml",
+    "config_sha256": "676d84ab1ae4dc4110f8ec908d109dd4b7b8209e472223deea6fcc960050ddd2",
+    "pseudopotential_path": "/global/cfs/projectdirs/m5216/mlupopa/matsim-agents/external/quantum-espresso/src/pseudo/Si_r.upf",
+    "pseudopotential_exists": false,
+    "pseudopotential_sha256": null
+  },
+  "facility_preflight": {
+    "aurora": {
+      "overlay_path": "benchmarks/portability/config/aurora.yaml",
+      "overlay_sha256": "683f680917cec1ddf9a588de34fa7c8db4cc922a459a3cf21bf1c46582614db2",
+      "preflight_errors": [],
+      "launchers": {
+        "qe": {
+          "path": "deployments/aurora/launchers/_qe-step-aurora.sh",
+          "sha256": "0a7be43d2fb507ff79a7cbb3025a4004618750d8d20d59a7e59a8b8be7734714"
+        },
+        "vasp": {
+          "path": "deployments/aurora/launchers/_vasp-step-aurora.sh",
+          "sha256": "18bce6aa61707ee8eca7880675e6e9126e8c0abc4c03359a30d4a6ff5da46135"
+        }
+      }
+    },
+    "frontier": {
+      "overlay_path": "benchmarks/portability/config/frontier.yaml",
+      "overlay_sha256": "4dcdabb13bedd4c3a078e20e5a412f1c150f12543905765abfac05c7ef47e16f",
+      "preflight_errors": [],
+      "launchers": {
+        "qe": {
+          "path": "deployments/frontier/launchers/_qe-step-frontier.sh",
+          "sha256": "09dc1e78b7ae7a8e273de34c235bfaead9623c93939cfd7e763a3df5f83cc327"
+        },
+        "vasp": {
+          "path": "deployments/frontier/launchers/_vasp-step-frontier.sh",
+          "sha256": "ec581433bbd192ff443d4e56711024731d4618f3427546453e8315846571cb4c"
+        }
+      }
+    },
+    "perlmutter": {
+      "overlay_path": "benchmarks/portability/config/perlmutter.yaml",
+      "overlay_sha256": "3516e7a3af37e4c9351209c6172d2a8b94debe4d1fcc1e993b03ffe485e2d0c1",
+      "preflight_errors": [],
+      "launchers": {
+        "qe": {
+          "path": "deployments/perlmutter/launchers/_qe-step-perlmutter.sh",
+          "sha256": "bd48639fcfd6aa59cc519277477e00faa8794f21e26898510003e725de21cd1d"
+        },
+        "vasp": {
+          "path": "deployments/perlmutter/launchers/_vasp-step-perlmutter.sh",
+          "sha256": "bef4832a2bd48f279d8215880dca2286b3735c777e7685125e407d7f7cbae12c"
+        }
+      }
+    }
+  },
+  "candidate_mlip": {
+    "candidate": "MACE-MP small or a single HydraGNN checkpoint supported on all facilities",
+    "backend": "unselected",
+    "checkpoint_sha256": null,
+    "status": "requires same-checkpoint three-facility qualification"
+  },
+  "candidate_dft": {
+    "backend": "qe",
+    "candidate_pseudopotential": "Si_r.upf",
+    "pseudopotential_sha256": null,
+    "qe_version": null,
+    "settings_candidate": {
+      "kpts": [
+        4,
+        4,
+        4
+      ],
+      "koffset": [
+        0,
+        0,
+        0
+      ],
+      "occupations": "smearing",
+      "smearing": "gaussian",
+      "degauss_ry": 0.007
+    },
+    "settings_source": "benchmarks/portability/config/relaxation/qe-si.yaml and qe-si-frontier.yaml",
+    "status": "candidate only; common version, pseudo hash, and Aurora QE case must be verified"
+  },
+  "scientific_contract": {
+    "material": "Si",
+    "structure": "benchmarks/portability/structures/Si.vasp",
+    "objective": "Run a fresh MLIP relaxation, a method-matched QE relaxation/reference, register both outputs and provenance, and decide the frozen per-task convergence/evidence contract.",
+    "task_bank_policy": "Repeated byte-identical seed structures with unique task IDs and isolated output directories are permitted for throughput measurement only; they are not independent scientific discoveries. Disable result reuse and verify each task executed MLIP and DFT.",
+    "mlip": {
+      "candidate": "MACE-MP small or a single HydraGNN checkpoint supported on all facilities",
+      "backend": "unselected",
+      "checkpoint_sha256": null,
+      "status": "requires same-checkpoint three-facility qualification"
+    },
+    "dft": {
+      "backend": "qe",
+      "candidate_pseudopotential": "Si_r.upf",
+      "pseudopotential_sha256": null,
+      "qe_version": null,
+      "settings_candidate": {
+        "kpts": [
+          4,
+          4,
+          4
+        ],
+        "koffset": [
+          0,
+          0,
+          0
+        ],
+        "occupations": "smearing",
+        "smearing": "gaussian",
+        "degauss_ry": 0.007
+      },
+      "settings_source": "benchmarks/portability/config/relaxation/qe-si.yaml and qe-si-frontier.yaml",
+      "status": "candidate only; common version, pseudo hash, and Aurora QE case must be verified"
+    },
+    "force_tolerance_eV_per_A": null,
+    "force_tolerance_conflict": "Existing portability science.yaml uses 0.05; compute qualification configs use 0.02. Freeze one value after review.",
+    "open_items": [
+      "Select one exact MLIP backend, model/checkpoint, license, and SHA-256 available on Aurora, Frontier, and Perlmutter; MACE XPU remains provisional.",
+      "Verify one QE version and Si_r.upf pseudopotential bytes/hash on all sites; the config-referenced pseudo path is absent in this checkout.",
+      "Resolve the existing 0.05 versus 0.02 eV/A force-tolerance discrepancy and freeze a scientific evidence decision rule.",
+      "Measure task duration, stage capacity, and sustainable concurrency before selecting fixed W and per-node weak workload w.",
+      "Obtain facility accounts, available balances, walltime ceilings, and stop limits before resource estimates or authorization."
+    ],
+    "llm_assessment": {
+      "included": "to be decided during qualification",
+      "model": null,
+      "checkpoint_sha256": null,
+      "remote_api_for_primary_scaling": false
+    },
+    "cache_policy": "Fresh output directory per task; no reuse of prior DFT or MLIP result artifacts."
+  },
+  "device_units": {
+    "aurora": {
+      "device_unit": "xpu-tile",
+      "logical_devices_per_node": 12,
+      "physical_gpu_packages_per_node": 6,
+      "tiles_per_package": 2
+    },
+    "frontier": {
+      "device_unit": "rocm-gcd",
+      "logical_devices_per_node": 8,
+      "physical_gpu_packages_per_node": 4,
+      "gcds_per_package": 2
+    },
+    "perlmutter": {
+      "device_unit": "cuda-gpu",
+      "logical_devices_per_node": 4,
+      "physical_gpu_packages_per_node": 4,
+      "devices_per_package": 1
+    }
+  },
+  "task_count": {
+    "strong": null,
+    "weak_per_node": null
+  },
+  "resource_profile": {
+    "policy": "exclusive node pools; orchestration runs on an LLM service node",
+    "llm_nodes": "max(1, ceil(N/32))",
+    "mlip_nodes": "max(1, ceil(N/16))",
+    "dft_nodes": "N - llm_nodes - mlip_nodes",
+    "dft_nodes_per_job": 1,
+    "dft_ranks_per_device": 1,
+    "dft_threads_per_rank": "floor(104/12)=8",
+    "freeze_status": "provisional; ratios and DFT layout require qualification measurements"
+  },
+  "planned_allocations": 45,
+  "scheduler_submissions": 0,
+  "note": "Inputs and model are candidates, not frozen. Null hashes and task counts must be resolved at Gates 1-3.",
+  "open_items": [
+    "Select one exact MLIP backend, model/checkpoint, license, and SHA-256 available on Aurora, Frontier, and Perlmutter; MACE XPU remains provisional.",
+    "Verify one QE version and Si_r.upf pseudopotential bytes/hash on all sites; the config-referenced pseudo path is absent in this checkout.",
+    "Resolve the existing 0.05 versus 0.02 eV/A force-tolerance discrepancy and freeze a scientific evidence decision rule.",
+    "Measure task duration, stage capacity, and sustainable concurrency before selecting fixed W and per-node weak workload w.",
+    "Obtain facility accounts, available balances, walltime ceilings, and stop limits before resource estimates or authorization."
+  ]
+}

@@ -1,0 +1,289 @@
+{
+  "schema_version": 1,
+  "batch_id": "E3-round1-bcc-01",
+  "execution_authorized": true,
+  "executable": "/soft/applications/vasp/vasp.6.6.1/bin/vasp_std",
+  "executable_sha256": "3354871ac0b7a812ebe3444dbd3d5bb4176995a5c37c3859978b58b5c7b55eb6",
+  "queue": "capacity",
+  "resource_caps_node_hours": {
+    "HydraGNN": 72
+  },
+  "total_resource_cap_node_hours": 72,
+  "e3_accounting": {
+    "logical_attempts": {
+      "llm_guided_adaptation": 2,
+      "rule_based_adaptation": 2
+    },
+    "unique_physical_calculations": 3,
+    "attempts_consumed_on": "qsub acceptance; restarts reuse the calculation ID"
+  },
+  "cases": [
+    {
+      "calculation_id": "E3-R1-BCC-0394",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 40,
+        "Nb": 46,
+        "Ta": 10,
+        "Ti": 32
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e3-round1-bcc-01/inputs/E3-R1-BCC-0394",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "629d3d1482e03d15459741149996c4e06c2bc7e8a9dfe68b9912b6e287ffd2e3",
+      "source_poscar": "research/paper/e3/round1-inputs/E3-R1-BCC-0394/POSCAR",
+      "source_poscar_sha256": "2ec3e0f2dd2cb9594d5e8e9a68c41cbd1e9c5bb7fd577445edef8d296201b814",
+      "prepared_input_bundle_sha256": "f37ae11e431017a05000731e4f0c0dfdbe9baf4aac6d96fb50d7a634a3f45966",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e3/round1-inputs/E3-R1-BCC-0394/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-0394/POSCAR": "2ec3e0f2dd2cb9594d5e8e9a68c41cbd1e9c5bb7fd577445edef8d296201b814",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-0394/POTCAR.order": "742caafbeb4b375aa6c785c525b5aa513325232a6473819c4d687e6e56eeb8b5",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-0394/POTCAR.spec": "57e695c5c7351c2b27bb9cd8a94d6629753b90d8800d5080bb4cb9cff12ad276",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-0394/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "2ec3e0f2dd2cb9594d5e8e9a68c41cbd1e9c5bb7fd577445edef8d296201b814",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "04fddd3d9039dee7891e3aa2949c13fae525b149a3130d4814736d73a6396158"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "04fddd3d9039dee7891e3aa2949c13fae525b149a3130d4814736d73a6396158",
+      "poscar_sha256": "2ec3e0f2dd2cb9594d5e8e9a68c41cbd1e9c5bb7fd577445edef8d296201b814",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+      "e3": {
+        "candidate_id": "E4-BCC-0394",
+        "requested_by": [
+          "rule_based_adaptation"
+        ],
+        "logical_attempts": 1,
+        "round": 1,
+        "frozen_round1_manifest_sha256": "b2089e8fbb3a5362c4d8deda7da87f4326aaaa4114dd1f353fe652df1aff7c8e",
+        "decision_ids": {
+          "rule_based_adaptation": "dc-b2313d48e17efd1943dce28e"
+        },
+        "structure_sha256": "629d3d1482e03d15459741149996c4e06c2bc7e8a9dfe68b9912b6e287ffd2e3",
+        "committee_force_disagreement_eV_A": 0.09569,
+        "soap_novelty_to_references": 0.20972
+      }
+    },
+    {
+      "calculation_id": "E3-R1-BCC-0582",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 20,
+        "Nb": 37,
+        "Ti": 36,
+        "V": 35
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e3-round1-bcc-01/inputs/E3-R1-BCC-0582",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "7fd91cff655e00adeb2ee7995c7220e9bc7f93177cb6872d3f5e2753ce3f634f",
+      "source_poscar": "research/paper/e3/round1-inputs/E3-R1-BCC-0582/POSCAR",
+      "source_poscar_sha256": "00e8d7728e09f8e7b25193053ccfa68e243568e2c5b05f39cb0fd664835fbf34",
+      "prepared_input_bundle_sha256": "9a71055fbb4b1cec2b7c7dfa8012148fd27195c7b7f7169c6e7f12a594e0ddb8",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e3/round1-inputs/E3-R1-BCC-0582/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-0582/POSCAR": "00e8d7728e09f8e7b25193053ccfa68e243568e2c5b05f39cb0fd664835fbf34",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-0582/POTCAR.order": "2e6458c79e5af826072fd517d79f6f8a8413492a0ccfda518f753df05b67764e",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-0582/POTCAR.spec": "4e7ee2d241b680a206fd076f901825fb4d4452811c1ac1f647012a394c0cca80",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-0582/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "00e8d7728e09f8e7b25193053ccfa68e243568e2c5b05f39cb0fd664835fbf34",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "a7b848aa508f0266294e9b1e45138623eeb961feb27c7695b3bc437b202aa9f2"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "a7b848aa508f0266294e9b1e45138623eeb961feb27c7695b3bc437b202aa9f2",
+      "poscar_sha256": "00e8d7728e09f8e7b25193053ccfa68e243568e2c5b05f39cb0fd664835fbf34",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+      "e3": {
+        "candidate_id": "E4-BCC-0582",
+        "requested_by": [
+          "llm_guided_adaptation"
+        ],
+        "logical_attempts": 1,
+        "round": 1,
+        "frozen_round1_manifest_sha256": "b2089e8fbb3a5362c4d8deda7da87f4326aaaa4114dd1f353fe652df1aff7c8e",
+        "decision_ids": {
+          "llm_guided_adaptation": "dc-6da2b7e1a81229633cadd9f1"
+        },
+        "structure_sha256": "7fd91cff655e00adeb2ee7995c7220e9bc7f93177cb6872d3f5e2753ce3f634f",
+        "committee_force_disagreement_eV_A": 0.09238,
+        "soap_novelty_to_references": 0.17655
+      }
+    },
+    {
+      "calculation_id": "E3-R1-BCC-1077",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 10,
+        "Ta": 46,
+        "Ti": 32,
+        "Zr": 40
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e3-round1-bcc-01/inputs/E3-R1-BCC-1077",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "dc67a30700b285b34fd75416401043a9719066b28b577f07d65f89070dbf950d",
+      "source_poscar": "research/paper/e3/round1-inputs/E3-R1-BCC-1077/POSCAR",
+      "source_poscar_sha256": "da8914cdda7139ed7a43382b576f465d15413825ee37c5680e32142455f95117",
+      "prepared_input_bundle_sha256": "4fae577f0307ba13d9b90f9c72fde22cba4d18d725e2fb2f734bdb4609b69a13",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e3/round1-inputs/E3-R1-BCC-1077/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-1077/POSCAR": "da8914cdda7139ed7a43382b576f465d15413825ee37c5680e32142455f95117",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-1077/POTCAR.order": "596c9bf42dbeee00db3de4b874877ce11017eb0123fe2ee60d838d40dbff9232",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-1077/POTCAR.spec": "e32c3349827f60e09f0a49aeb76fd38b464809adf437606eac9a90081a1ce0e8",
+        "research/paper/e3/round1-inputs/E3-R1-BCC-1077/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "da8914cdda7139ed7a43382b576f465d15413825ee37c5680e32142455f95117",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "4fb07ad9a5886b15697b62da9ef6e83339f9cd8d3a9e7232b3699fcb76ac6ae2"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "4fb07ad9a5886b15697b62da9ef6e83339f9cd8d3a9e7232b3699fcb76ac6ae2",
+      "poscar_sha256": "da8914cdda7139ed7a43382b576f465d15413825ee37c5680e32142455f95117",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+      "e3": {
+        "candidate_id": "E4-BCC-1077",
+        "requested_by": [
+          "llm_guided_adaptation",
+          "rule_based_adaptation"
+        ],
+        "logical_attempts": 2,
+        "round": 1,
+        "frozen_round1_manifest_sha256": "b2089e8fbb3a5362c4d8deda7da87f4326aaaa4114dd1f353fe652df1aff7c8e",
+        "decision_ids": {
+          "rule_based_adaptation": "dc-07636a2c9a62995a213ae1d1",
+          "llm_guided_adaptation": "dc-c2311d0c2de37206c139aa17"
+        },
+        "structure_sha256": "dc67a30700b285b34fd75416401043a9719066b28b577f07d65f89070dbf950d",
+        "committee_force_disagreement_eV_A": 0.09725,
+        "soap_novelty_to_references": 0.21187
+      }
+    }
+  ],
+  "authorization": {
+    "granted_utc": "2026-11-09T06:11:42Z",
+    "scope": "one initial PBS submission per case; 3 jobs; <=72 node-hours; no automatic restarts"
+  }
+}

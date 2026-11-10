@@ -2,6 +2,11 @@
 
 This page centralizes HPC-oriented documentation for matsim-agents.
 
+For E4-B HydraGNN execution, use the
+[frozen-source cloning and installation requirement](hydragnn-frozen-source.md).
+It pins the model-code repository and immutable commit independently of
+facility dependency recipes.
+
 See [`hpc-validation.md`](hpc-validation.md) for the validation standard and
 current status of each machine/toolchain combination.
 

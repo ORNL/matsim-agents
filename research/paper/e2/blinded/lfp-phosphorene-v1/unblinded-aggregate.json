@@ -1,0 +1,198 @@
+{
+ "opus": {
+  "no_llm": {
+   "verdict_Y": 8.0,
+   "physical_reasoning": 3.0,
+   "evidence_attribution": 5.0,
+   "uncertainty": 1.0,
+   "follow_up": 14.0,
+   "n": 8
+  },
+  "no_llm|LiFePO4": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 1.0,
+   "evidence_attribution": 2.0,
+   "uncertainty": 0.0,
+   "follow_up": 7.0,
+   "n": 4
+  },
+  "no_llm|phosphorene": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 2.0,
+   "evidence_attribution": 3.0,
+   "uncertainty": 1.0,
+   "follow_up": 7.0,
+   "n": 4
+  },
+  "single_llm": {
+   "verdict_Y": 8.0,
+   "physical_reasoning": 16.0,
+   "evidence_attribution": 16.0,
+   "uncertainty": 16.0,
+   "follow_up": 16.0,
+   "n": 8
+  },
+  "single_llm|LiFePO4": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 8.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 8.0,
+   "follow_up": 8.0,
+   "n": 4
+  },
+  "single_llm|phosphorene": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 8.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 8.0,
+   "follow_up": 8.0,
+   "n": 4
+  },
+  "multi_llm_no_critique": {
+   "verdict_Y": 8.0,
+   "physical_reasoning": 16.0,
+   "evidence_attribution": 16.0,
+   "uncertainty": 16.0,
+   "follow_up": 13.0,
+   "n": 8
+  },
+  "multi_llm_no_critique|LiFePO4": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 8.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 8.0,
+   "follow_up": 6.0,
+   "n": 4
+  },
+  "multi_llm_cross_critique": {
+   "verdict_Y": 7.0,
+   "physical_reasoning": 15.0,
+   "evidence_attribution": 15.0,
+   "uncertainty": 14.0,
+   "follow_up": 11.0,
+   "n": 8
+  },
+  "multi_llm_cross_critique|LiFePO4": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 8.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 8.0,
+   "follow_up": 6.0,
+   "n": 4
+  },
+  "multi_llm_no_critique|phosphorene": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 8.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 8.0,
+   "follow_up": 7.0,
+   "n": 4
+  },
+  "multi_llm_cross_critique|phosphorene": {
+   "verdict_Y": 3.0,
+   "physical_reasoning": 7.0,
+   "evidence_attribution": 7.0,
+   "uncertainty": 6.0,
+   "follow_up": 5.0,
+   "n": 4
+  }
+ },
+ "argon": {
+  "no_llm": {
+   "verdict_Y": 8.0,
+   "physical_reasoning": 0.0,
+   "evidence_attribution": 5.0,
+   "uncertainty": 0.0,
+   "follow_up": 14.0,
+   "n": 8
+  },
+  "no_llm|LiFePO4": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 0.0,
+   "evidence_attribution": 2.0,
+   "uncertainty": 0.0,
+   "follow_up": 7.0,
+   "n": 4
+  },
+  "no_llm|phosphorene": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 0.0,
+   "evidence_attribution": 3.0,
+   "uncertainty": 0.0,
+   "follow_up": 7.0,
+   "n": 4
+  },
+  "single_llm": {
+   "verdict_Y": 8.0,
+   "physical_reasoning": 16.0,
+   "evidence_attribution": 16.0,
+   "uncertainty": 16.0,
+   "follow_up": 16.0,
+   "n": 8
+  },
+  "single_llm|LiFePO4": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 8.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 8.0,
+   "follow_up": 8.0,
+   "n": 4
+  },
+  "single_llm|phosphorene": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 8.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 8.0,
+   "follow_up": 8.0,
+   "n": 4
+  },
+  "multi_llm_no_critique": {
+   "verdict_Y": 8.0,
+   "physical_reasoning": 16.0,
+   "evidence_attribution": 16.0,
+   "uncertainty": 16.0,
+   "follow_up": 13.0,
+   "n": 8
+  },
+  "multi_llm_no_critique|LiFePO4": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 8.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 8.0,
+   "follow_up": 6.0,
+   "n": 4
+  },
+  "multi_llm_cross_critique": {
+   "verdict_Y": 7.0,
+   "physical_reasoning": 15.0,
+   "evidence_attribution": 16.0,
+   "uncertainty": 14.0,
+   "follow_up": 12.0,
+   "n": 8
+  },
+  "multi_llm_cross_critique|LiFePO4": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 8.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 8.0,
+   "follow_up": 6.0,
+   "n": 4
+  },
+  "multi_llm_no_critique|phosphorene": {
+   "verdict_Y": 4.0,
+   "physical_reasoning": 8.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 8.0,
+   "follow_up": 7.0,
+   "n": 4
+  },
+  "multi_llm_cross_critique|phosphorene": {
+   "verdict_Y": 3.0,
+   "physical_reasoning": 7.0,
+   "evidence_attribution": 8.0,
+   "uncertainty": 6.0,
+   "follow_up": 6.0,
+   "n": 4
+  }
+ }
+}

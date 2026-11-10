@@ -1,0 +1,13 @@
+#PBS -N e4-lfp-dryrun
+#PBS -A GridAI
+#PBS -q __QUEUE_REQUIRES_ALCF_VERIFICATION__
+#PBS -l select={{NODES}}
+#PBS -l place=scatter
+#PBS -l walltime=__WALLTIME_REQUIRES_PILOT__
+#PBS -l filesystems=home:flare
+#PBS -k doe
+#PBS -j oe
+set -euo pipefail
+echo "E4 planning-only template: family=lifepo4 allocation=GridAI nodes={{NODES}}"
+echo "No VASP command or nested scheduler submission is present."
+exit 0

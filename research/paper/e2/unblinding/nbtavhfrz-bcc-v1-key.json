@@ -1,0 +1,50 @@
+[
+ {
+  "item_id": "item-001",
+  "case_id": "bcc-sampled-ranking-adequacy",
+  "arm": "single_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-002",
+  "case_id": "bcc-ideal-force-criterion",
+  "arm": "single_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-003",
+  "case_id": "bcc-sampled-ranking-adequacy",
+  "arm": "no_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-004",
+  "case_id": "bcc-ideal-force-criterion",
+  "arm": "no_llm",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-005",
+  "case_id": "bcc-sampled-ranking-adequacy",
+  "arm": "multi_llm_cross_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-006",
+  "case_id": "bcc-sampled-ranking-adequacy",
+  "arm": "multi_llm_no_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-007",
+  "case_id": "bcc-ideal-force-criterion",
+  "arm": "multi_llm_no_critique",
+  "random_seed": 0
+ },
+ {
+  "item_id": "item-008",
+  "case_id": "bcc-ideal-force-criterion",
+  "arm": "multi_llm_cross_critique",
+  "random_seed": 0
+ }
+]

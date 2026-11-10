@@ -4,6 +4,11 @@ Reusable performance and backend-comparison drivers belong here.  Diagnostic
 and paper-specific post-processing remains under `scripts/diagnostics/` until
 it is promoted into a stable benchmark with documented inputs and outputs.
 
+[E4-B MLIP scaling](e4_mlip/README.md) provides single-node Aurora device
+scaling preparation, synchronized numerical timing and measured-result analysis.
+Its default is CPU-only preflight; execution and submission require separate
+approval and a verified model/inventory.
+
 The [`portability/`](portability/) benchmark is the canonical, fixed scientific
 gate shared by Frontier, Aurora, and Perlmutter. It deliberately separates one
 science configuration from small facility overlays and complements—rather than

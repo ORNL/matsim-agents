@@ -1,0 +1,96 @@
+{
+  "packet_version": "e1b-generalization-proposed-v1",
+  "status": "proposed-pending-independent-scientific-review",
+  "partition": "supplementary-cross-domain-generalization",
+  "target_question_count": 12,
+  "intended_use": "A separate external-domain assessment after E1a protocol and panel freeze; never use these responses to select or revise E1a questions, prompts, rubric, panel, or conditions.",
+  "e1a_boundary": "This packet is not an E1a development or held-out packet and is rejected by the E1 development runner, which accepts D-prefixed question IDs only.",
+  "response_contract": "Reuse the scientific fields in research/paper/e1/response-schema.v1.json only as a conceptual common contract. No current E1 runner accepts this packet.",
+  "evidence_policy": "Every item below is explicitly hypothetical qualitative evidence with no supplied measured values or claimed empirical outcome. Before any later evidence-bearing version is considered, independently verify and cite all source data, methods, provenance, and scope limits. Do not invent numerical values or literature findings.",
+  "questions": [
+    {
+      "question_id": "E1B-DEFECT-01",
+      "domain": "charged point defects and chemical potentials",
+      "material_context": "Hypothetical oxygen vacancy in an oxide semiconductor",
+      "evidence_status": "explicitly-hypothetical-qualitative; no numerical energies or charge-transition levels supplied",
+      "prompt": "Consider this explicitly hypothetical dossier: calculations compare a neutral oxygen-vacancy supercell with one charged-vacancy supercell, but do not report finite-size corrections, Fermi-level dependence, or the chemical-potential limits used. Explain which defect-formation comparisons are and are not interpretable, distinguish charge neutrality of the simulation cell from the material's compensating carriers or defects, and specify the minimum matched calculations and provenance needed to test whether the preferred defect charge state changes across the allowed chemical-potential and Fermi-level range. Do not infer a preferred charge state or invent values."
+    },
+    {
+      "question_id": "E1B-DEFECT-02",
+      "domain": "charged point defects and chemical potentials",
+      "material_context": "Hypothetical aliovalent dopant in an ionic ceramic",
+      "evidence_status": "explicitly-hypothetical-qualitative; no measured conductivity or defect concentrations supplied",
+      "prompt": "Consider this explicitly hypothetical report: an aliovalent dopant is proposed to improve ionic conductivity, but the report gives no charge-compensation mechanism, defect concentrations, migration data, or temperature dependence. Formulate at least two charge-balanced compensation hypotheses, state the assumptions each requires, and distinguish evidence for dopant incorporation from evidence for mobile-ion concentration and transport. Propose a discriminating set of structural, defect-thermodynamic, and transport measurements or calculations, including an outcome that would weaken each hypothesis. Do not claim improved conductivity without evidence."
+    },
+    {
+      "question_id": "E1B-DIFFUSION-01",
+      "domain": "diffusion barriers and transport rates",
+      "material_context": "Hypothetical lithium-ion conductor with two migration pathways",
+      "evidence_status": "explicitly-hypothetical-qualitative; no barriers, prefactors, or diffusivities supplied",
+      "prompt": "Consider this explicitly hypothetical pathway study: two lithium migration paths have different reported saddle-point energies, but their initial-site energies, pathway populations, attempt frequencies, correlated hops, and temperature dependence are not provided. Explain why a migration barrier alone does not determine a macroscopic diffusion rate, identify the reference state and sampling needed for a comparable barrier, and propose a matched calculation or experiment that could distinguish a low-barrier but rare path from a kinetically dominant path. State which outcomes would change the transport interpretation; do not invent a rate or barrier."
+    },
+    {
+      "question_id": "E1B-DIFFUSION-02",
+      "domain": "diffusion barriers and transport rates",
+      "material_context": "Hypothetical vacancy-mediated cation diffusion in a solid",
+      "evidence_status": "explicitly-hypothetical-qualitative; no tracer profiles or kinetic coefficients supplied",
+      "prompt": "Audit this explicitly hypothetical claim: a calculated vacancy migration path is described as proof of fast cation diffusion, although vacancy formation thermodynamics, defect concentration, competing paths, and kinetic prefactors are absent. State the strongest supportable conclusion, separate defect formation from migration and the resulting transport rate, and design the smallest evidence sequence that could test the claim across a stated temperature and composition range. Include at least one result that would falsify the proposed fast-diffusion interpretation. Do not infer a rate from a path alone."
+    },
+    {
+      "question_id": "E1B-ADSORPTION-01",
+      "domain": "surface adsorption and catalytic reaction barriers",
+      "material_context": "Hypothetical adsorbate on a transition-metal surface",
+      "evidence_status": "explicitly-hypothetical-qualitative; no adsorption energies or activation free energies supplied",
+      "prompt": "Consider this explicitly hypothetical surface study: one adsorbed intermediate is lower in electronic energy on surface A than on surface B, but no transition states, coverage controls, solvent treatment, or competing adsorption geometries are reported. Explain what the adsorption comparison can establish and why it does not by itself rank catalytic activity. Propose a like-for-like investigation of the relevant reaction free-energy barriers and coverage-dependent states, name the needed controls, and give outcomes that could reverse the apparent surface preference. Do not assert a catalyst ranking."
+    },
+    {
+      "question_id": "E1B-ADSORPTION-02",
+      "domain": "surface adsorption and catalytic reaction barriers",
+      "material_context": "Hypothetical multistep surface-catalyzed reaction",
+      "evidence_status": "explicitly-hypothetical-qualitative; no free-energy profile, rate, or selectivity supplied",
+      "prompt": "Audit this explicitly hypothetical claim: a catalyst is called highly active because the first reactant binds strongly, while the remaining intermediates, transition states, desorption step, and operating conditions are uncharacterized. Identify alternative explanations for the strong binding, distinguish adsorption thermodynamics from turnover kinetics and product selectivity, and propose a minimum reaction-network calculation or measurement set with discriminating outcomes. State what evidence would weaken the high-activity claim; do not infer a rate or selectivity."
+    },
+    {
+      "question_id": "E1B-PHONON-01",
+      "domain": "harmonic phonons and finite-temperature stability",
+      "material_context": "Hypothetical dynamically soft crystalline phase",
+      "evidence_status": "explicitly-hypothetical-qualitative; no phonon frequencies or finite-temperature data supplied",
+      "prompt": "Consider this explicitly hypothetical result: a harmonic phonon calculation has an imaginary branch near a zone-boundary wavevector, but supercell convergence, structural relaxation, and finite-temperature behavior are not reported. Explain the distinct possibilities represented by this observation, distinguish a numerical instability from a zero-temperature harmonic instability and from finite-temperature stabilization, and propose convergence checks plus a suitable anharmonic or finite-temperature test. Specify what outcomes would support or weaken each interpretation; do not label the phase stable or unstable from the incomplete report."
+    },
+    {
+      "question_id": "E1B-PHONON-02",
+      "domain": "harmonic phonons and finite-temperature stability",
+      "material_context": "Hypothetical dynamically stable candidate with no thermodynamic comparison",
+      "evidence_status": "explicitly-hypothetical-qualitative; no free energies, competing phases, or temperature range supplied",
+      "prompt": "Consider this explicitly hypothetical dossier: a relaxed structure has no reported imaginary harmonic phonons at the sampled wavevectors, but no free-energy comparison, competing phases, anharmonic sampling, or decomposition analysis is available. State what harmonic dynamical information could support and what it cannot establish about thermodynamic or finite-temperature stability. Design a temperature- and composition-scoped follow-up that distinguishes local dynamical stability from phase stability, and state how missing competitor coverage should limit the conclusion. Do not claim stability from the phonon result alone."
+    },
+    {
+      "question_id": "E1B-FERRO-01",
+      "domain": "ferroelectric and structural transitions",
+      "material_context": "Hypothetical polar perovskite with a temperature-dependent structural anomaly",
+      "evidence_status": "explicitly-hypothetical-qualitative; no polarization, diffraction, or free-energy data supplied",
+      "prompt": "Consider this explicitly hypothetical report: a polar perovskite is said to undergo a temperature-dependent ferroelectric-to-structural transition based only on relaxed zero-temperature structures. No symmetry-mode amplitudes, polarization path, temperature-dependent structure, or competing phases are supplied. Formulate at least two plausible interpretations, such as a change in polar distortion versus a competing nonpolar or antipolar structural transition. Identify order parameters and symmetry evidence that distinguish them, then propose matched calculations or measurements that address finite-temperature behavior, domains, and convergence. State what outcomes would weaken each interpretation; do not claim that a transition or phase is established."
+    },
+    {
+      "question_id": "E1B-FERRO-02",
+      "domain": "ferroelectric and structural transitions",
+      "material_context": "Hypothetical polarization assignment across a symmetry-changing path",
+      "evidence_status": "explicitly-hypothetical-qualitative; no structures, polarization branches, or switching measurements supplied",
+      "prompt": "Audit this explicitly hypothetical claim: a Berry-phase polarization difference between two relaxed structures is called spontaneous ferroelectric polarization, but the connecting path, insulating character, symmetry relation, polarization branch, and domain/electrode conditions are not reported. Explain which distinctions are needed between formal polarization, a switchable spontaneous polarization, and a structural or polar discontinuity. Propose the minimum symmetry, path, and measurement or calculation checks that could support or falsify the claim, including how a gap closure or branch ambiguity changes the interpretation. Do not infer a switchable polarization from endpoint values alone."
+    },
+    {
+      "question_id": "E1B-MECH-01",
+      "domain": "mechanical and elastic stability",
+      "material_context": "Hypothetical low-symmetry crystal with an incomplete elastic tensor",
+      "evidence_status": "explicitly-hypothetical-qualitative; no elastic constants, stress state, or strain data supplied",
+      "prompt": "Consider this explicitly hypothetical report: a relaxed low-symmetry crystal is called mechanically stable because its bulk and shear moduli are positive, but several independent elastic-tensor components, the residual stress, and the tensor symmetrization/convergence checks are not reported. Explain why aggregate moduli alone may not establish elastic stability for the stated symmetry. Specify the full stress-corrected stability test and numerical checks needed at a declared pressure, and distinguish local elastic stability from finite-strain failure, fracture, or thermodynamic phase stability. State outcomes that would change the conclusion; do not invent elastic constants."
+    },
+    {
+      "question_id": "E1B-MECH-02",
+      "domain": "mechanical and elastic stability",
+      "material_context": "Hypothetical ductility claim based on isotropic elastic averages",
+      "evidence_status": "explicitly-hypothetical-qualitative; no single-crystal response, defects, or failure observations supplied",
+      "prompt": "Audit this explicitly hypothetical claim: a material is described as ductile and mechanically robust because isotropic averages of its elastic constants are favorable, although the single-crystal elastic anisotropy, ideal stress-strain response, defects, and failure observations are not examined. Separate small-strain elastic stability from ductility, strength, fracture resistance, and kinetic persistence. Propose a staged, symmetry- and direction-aware set of elastic, finite-strain, and defect-sensitive tests, and identify results that could falsify the claim. Explain what can be concluded from elastic constants alone; do not infer ductility from an empirical modulus ratio without supporting evidence."
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "suite_id": "e2-cantor-fcc-v1",
+  "source_run": "research/paper/e2/raw/cantor-fcc-v1/agent-eval-0w0ugqk4",
+  "answers_sha256": "9a32ee2d65f9d725c17f020cb827a77233f71646977ba2b6ea57039f5a9d536e",
+  "shuffle_seed": 20261106,
+  "unblinding_key_sha256": "492ee284546ab74c5416eec76a0d39abd2032ed3cadb97ddae0c65acaaec4745",
+  "redaction": "model names replaced by [participant]; arm, model, grade and answer key removed",
+  "residual_unblinding_risk": "template-style deterministic rationales and references to peers or critique rounds can reveal the arm family"
+}

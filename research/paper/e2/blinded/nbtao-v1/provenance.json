@@ -1,0 +1,9 @@
+{
+  "suite_id": "e2-nbtao-v1",
+  "source_run": "research/paper/e2/raw/nbtao-v1-pgbpfthh",
+  "answers_sha256": "b1acc582690b3eb4e0caaa642443d222ae78bc3c4f7e330b7364e32ca9c03201",
+  "shuffle_seed": 20261104,
+  "unblinding_key_sha256": "de0d4812e90d5eaf15c917c8b8f0ce26f168c7ac6fbbba211c4cb5c6702b2935",
+  "redaction": "model names replaced by [participant]; arm, model, grade and answer key removed",
+  "residual_unblinding_risk": "template-style deterministic rationales and references to peers or critique rounds can reveal the arm family"
+}

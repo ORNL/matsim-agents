@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "e4-si-scaling-portability-v0",
+  "status": "planning_only_not_authorized",
+  "scaling": {
+    "node_points": [8, 16, 32, 64, 128, 256],
+    "repetitions_per_point": 3,
+    "strong_workload_task_count": null,
+    "weak_workload_tasks_per_node": null
+  },
+  "consistency": {
+    "facilities": ["aurora", "frontier", "perlmutter"],
+    "repetitions_per_facility": 3,
+    "proposed_nodes_per_facility": 3,
+    "authorization": "not_authorized"
+  },
+  "candidate_contract": {
+    "material": "Si",
+    "structure": "benchmarks/portability/structures/Si.vasp",
+    "objective": "Run a fresh MLIP relaxation, a method-matched QE relaxation/reference, register both outputs and provenance, and decide the frozen per-task convergence/evidence contract.",
+    "task_bank_policy": "Repeated byte-identical seed structures with unique task IDs and isolated output directories are permitted for throughput measurement only; they are not independent scientific discoveries. Disable result reuse and verify each task executed MLIP and DFT.",
+    "mlip": {
+      "candidate": "MACE-MP small or a single HydraGNN checkpoint supported on all facilities",
+      "backend": "unselected",
+      "checkpoint_sha256": null,
+      "status": "requires same-checkpoint three-facility qualification"
+    },
+    "dft": {
+      "backend": "qe",
+      "candidate_pseudopotential": "Si_r.upf",
+      "pseudopotential_sha256": null,
+      "qe_version": null,
+      "settings_candidate": {
+        "kpts": [4, 4, 4],
+        "koffset": [0, 0, 0],
+        "occupations": "smearing",
+        "smearing": "gaussian",
+        "degauss_ry": 0.007
+      },
+      "settings_source": "benchmarks/portability/config/relaxation/qe-si.yaml and qe-si-frontier.yaml",
+      "status": "candidate only; common version, pseudo hash, and Aurora QE case must be verified"
+    },
+    "force_tolerance_eV_per_A": null,
+    "force_tolerance_conflict": "Existing portability science.yaml uses 0.05; compute qualification configs use 0.02. Freeze one value after review.",
+    "open_items": [
+      "Select one exact MLIP backend, model/checkpoint, license, and SHA-256 available on Aurora, Frontier, and Perlmutter; MACE XPU remains provisional.",
+      "Verify one QE version and Si_r.upf pseudopotential bytes/hash on all sites; the config-referenced pseudo path is absent in this checkout.",
+      "Resolve the existing 0.05 versus 0.02 eV/A force-tolerance discrepancy and freeze a scientific evidence decision rule.",
+      "Measure task duration, stage capacity, and sustainable concurrency before selecting fixed W and per-node weak workload w.",
+      "Obtain facility accounts, available balances, walltime ceilings, and stop limits before resource estimates or authorization."
+    ],
+    "llm_assessment": {
+      "included": "to be decided during qualification",
+      "model": null,
+      "checkpoint_sha256": null,
+      "remote_api_for_primary_scaling": false
+    },
+    "cache_policy": "Fresh output directory per task; no reuse of prior DFT or MLIP result artifacts."
+  },
+  "aurora_resource_profile_candidate": {
+    "policy": "exclusive node pools; orchestration runs on an LLM service node",
+    "llm_nodes": "max(1, ceil(N/32))",
+    "mlip_nodes": "max(1, ceil(N/16))",
+    "dft_nodes": "N - llm_nodes - mlip_nodes",
+    "dft_nodes_per_job": 1,
+    "dft_ranks_per_device": 1,
+    "dft_threads_per_rank": "floor(104/12)=8",
+    "freeze_status": "provisional; ratios and DFT layout require qualification measurements"
+  },
+  "device_units": {
+    "aurora": {"device_unit": "xpu-tile", "logical_devices_per_node": 12, "physical_gpu_packages_per_node": 6, "tiles_per_package": 2},
+    "frontier": {"device_unit": "rocm-gcd", "logical_devices_per_node": 8, "physical_gpu_packages_per_node": 4, "gcds_per_package": 2},
+    "perlmutter": {"device_unit": "cuda-gpu", "logical_devices_per_node": 4, "physical_gpu_packages_per_node": 4, "devices_per_package": 1}
+  },
+  "authorization": "No jobs or production calculations authorized."
+}

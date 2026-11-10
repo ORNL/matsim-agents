@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class VASPBackend:
-    """DFTBackend implementation for VASP 6.x on Frontier."""
+    """DFTBackend implementation for VASP 6.x using a facility placement wrapper."""
 
     name = "vasp"
 
@@ -65,7 +65,7 @@ class VASPBackend:
                     stderr=subprocess.STDOUT,
                     timeout=cfg.timeout_sec,
                     check=False,
-                    env=launch.environment(),
+                    env={**launch.environment(), **cfg.runtime_environment()},
                 )
                 rc = proc.returncode
             except subprocess.TimeoutExpired:

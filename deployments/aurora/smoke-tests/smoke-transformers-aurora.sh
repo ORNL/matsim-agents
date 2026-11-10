@@ -40,7 +40,8 @@ mkdir -p "${RUN_DIR}"
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
 # shellcheck disable=SC1091
-source "${VENV}/bin/activate"
+source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
+activate_matsim_aurora_python "${REPO}" "${VENV}"
 
 export PYTHONUNBUFFERED=1 PYTHONNOUSERSITE=1 PYTHONFAULTHANDLER=1
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1

@@ -1,0 +1,9 @@
+{
+  "suite_id": "e2-nbtavhfrz-bcc-v1",
+  "source_run": "research/paper/e2/raw/nbtavhfrz-bcc-v1/agent-eval-bj8rbngk",
+  "answers_sha256": "42d3c7df1a0642358c365d0224d16c15ea36e4d3e09c972d9044a41e5f200b2c",
+  "shuffle_seed": 20261104,
+  "unblinding_key_sha256": "d2f6acf97763caff937af6ea59c26298672bd9974647db1429f718e7d8eb52b3",
+  "redaction": "model names replaced by [participant]; arm, model, grade and answer key removed",
+  "residual_unblinding_risk": "template-style deterministic rationales and references to peers or critique rounds can reveal the arm family"
+}

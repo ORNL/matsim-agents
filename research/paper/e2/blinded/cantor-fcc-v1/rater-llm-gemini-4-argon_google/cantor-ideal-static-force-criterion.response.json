@@ -1,0 +1,46 @@
+{
+ "request_sha256_inputs": "cantor-ideal-static-force-criterion",
+ "latency_s": 13.8,
+ "mag_applied": "model=gemini-4-argon@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "-wTuapu_KpOFsbwPweepkAE",
+  "created": 1793983739,
+  "model": "gemini-4-argon@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\"scores\": [{\"item_id\": \"item-008\", \"verdict_correct\": \"N\", \"physical_reasoning\": 1, \"evidence_attribution\": 2, \"uncertainty\": 0, \"follow_up\": 2, \"notes\": \"Overstates a generic schema ambiguity (component vs magnitude of max_force) to render a clearly decidable claim unresolved, despite the decision criterion explicitly mapping to the 'max_force' quantity.\"}, {\"item_id\": \"item-009\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Thorough and accurate evaluation of the static record, scope exclusions, and numerical criterion.\"}, {\"item_id\": \"item-010\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Complete and well-grounded assessment of the evidence, settings, and scope.\"}, {\"item_id\": \"item-011\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 0, \"evidence_attribution\": 1, \"uncertainty\": 0, \"follow_up\": 2, \"notes\": \"Correct verdict and record ID, but rationale contains no specific physical values, checks, or discussion of caveats.\"}], \"correct_verdict_in_your_judgement\": \"supported\", \"case_notes\": \"The claim is strictly scoped to the reported static force from VASP 6.6.1 on the archived coordinates and explicitly excludes the preceding relaxation's SCF issues and broader physical inferences. The converged static record reports max_force = 0.01218 eV/A <= 0.02 eV/A, directly supporting the claim.\"}",
+     "role": "assistant",
+     "images": [],
+     "thinking_blocks": [],
+     "provider_specific_fields": {
+      "thought_signatures": [
+       "AY89a1/ME2v2sMZRs+yCrfzq6UTvdCSMKxNHT+q+31t54IOFgHX57LLpn6Cew2/Pk3y5YQIS8FKbVQ+VDjdVDnd6f9tR2IgLqQanfgt3m3G5bC1Jrw=="
+      ]
+     }
+    },
+    "provider_specific_fields": {
+     "native_finish_reason": "STOP"
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 417,
+   "prompt_tokens": 4267,
+   "total_tokens": 4684,
+   "completion_tokens_details": {
+    "text_tokens": 417
+   },
+   "prompt_tokens_details": {
+    "text_tokens": 4267
+   }
+  },
+  "vertex_ai_grounding_metadata": [],
+  "vertex_ai_url_context_metadata": [],
+  "vertex_ai_safety_results": [],
+  "vertex_ai_citation_metadata": []
+ }
+}

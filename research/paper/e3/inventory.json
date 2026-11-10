@@ -1,0 +1,158 @@
+{
+  "protocol_id": "e3-unified-six-material-v1",
+  "protocol_sha256": "2934207b61028c4afa07701dc68981db5a384041d8b533e4ffb5dfee8b194e58",
+  "strategies": [
+    "LLM-guided adaptation",
+    "Rule-based adaptation"
+  ],
+  "budget": {
+    "rounds": 4,
+    "max_attempts_per_round": 2,
+    "max_attempts_per_strategy": 8,
+    "charge_failed_attempts": true,
+    "restart_consumes_selection": false,
+    "charge_restart_node_hours": true,
+    "early_stop_allowed": true
+  },
+  "e4_first_batch_ids_excluded": 20,
+  "first_paired_comparison": {
+    "materials": [
+      "lifepo4",
+      "bcc_refractory"
+    ],
+    "eligible": false
+  },
+  "materials": [
+    {
+      "material": "lifepo4",
+      "name": "LiFePO4",
+      "priority": 1,
+      "split_unit": "canonical antisite occupation (symmetry-distinct configuration)",
+      "pool_kind": "manifest_poscars",
+      "pool_materialized_candidates": 120,
+      "pool_seed_structures": 0,
+      "pool_error": null,
+      "method_signature": "lifepo4-pbe-verified-v1",
+      "e3_qualified_reference_labels": 0,
+      "mlip_cells": {
+        "HydraGNN": "pending_support_audit",
+        "UMA": "pending_support_audit",
+        "MACE": "pending_support_audit"
+      },
+      "activation": "blocked",
+      "blockers": [
+        "No qualified E3 reference labels (0); validation/test roles are empty.",
+        "Pretrained MACE/UMA energy convention (PBE+U on Fe) differs from the frozen plain-PBE protocol."
+      ]
+    },
+    {
+      "material": "bcc_refractory",
+      "name": "NbTaVHfZrTi-family BCC refractory alloys",
+      "priority": 1,
+      "split_unit": "composition system (elements and composition index); disorder realizations of one composition stay together",
+      "pool_kind": "lattice_occupations",
+      "pool_materialized_candidates": 120,
+      "pool_seed_structures": 0,
+      "pool_error": null,
+      "method_signature": "bcc-pbe-350eV-gamma222-nonspin-v1",
+      "e3_qualified_reference_labels": 0,
+      "mlip_cells": {
+        "HydraGNN": "pending_support_audit",
+        "UMA": "pending_support_audit",
+        "MACE": "pending_support_audit"
+      },
+      "activation": "blocked",
+      "blockers": [
+        "Only one independent reference group (54 correlated Normal-stage frames from one starting structure); no independent test group exists."
+      ]
+    },
+    {
+      "material": "fcc_cantor",
+      "name": "Cantor CrMnFeCoNi FCC alloy",
+      "priority": 2,
+      "split_unit": "composition index; disorder realizations stay together",
+      "pool_kind": "lattice_occupations",
+      "pool_materialized_candidates": 120,
+      "pool_seed_structures": 0,
+      "pool_error": null,
+      "method_signature": null,
+      "e3_qualified_reference_labels": 0,
+      "mlip_cells": {
+        "HydraGNN": "pending_support_audit",
+        "UMA": "pending_support_audit",
+        "MACE": "pending_support_audit"
+      },
+      "activation": "blocked",
+      "blockers": [
+        "E3 spin-polarized method and magnetic initializations are not frozen.",
+        "No E3-qualified VASP reference labels; validation thresholds are not frozen."
+      ]
+    },
+    {
+      "material": "phosphorene",
+      "name": "Phosphorene",
+      "priority": 3,
+      "split_unit": "strain/vacancy family",
+      "pool_kind": "seeds_only",
+      "pool_materialized_candidates": 0,
+      "pool_seed_structures": 2,
+      "pool_error": null,
+      "method_signature": null,
+      "e3_qualified_reference_labels": 0,
+      "mlip_cells": {
+        "HydraGNN": "pending_support_audit",
+        "UMA": "pending_support_audit",
+        "MACE": "pending_support_audit"
+      },
+      "activation": "blocked",
+      "blockers": [
+        "Candidate pool not materialized (requires MLIP MD sampling from the seeds).",
+        "Vacuum and in-plane k-spacing qualification not done; signature not frozen."
+      ]
+    },
+    {
+      "material": "zn_formate_mof",
+      "name": "Zn(HCOO)2 MOF",
+      "priority": 3,
+      "split_unit": "polymorph (alpha/beta) and guest/proton configuration",
+      "pool_kind": "seeds_only",
+      "pool_materialized_candidates": 0,
+      "pool_seed_structures": 2,
+      "pool_error": null,
+      "method_signature": null,
+      "e3_qualified_reference_labels": 0,
+      "mlip_cells": {
+        "HydraGNN": "pending_support_audit",
+        "UMA": "pending_support_audit",
+        "MACE": "pending_support_audit"
+      },
+      "activation": "blocked",
+      "blockers": [
+        "Candidate pool not materialized; no DFT labels of any kind exist.",
+        "PBE-D3(BJ) (IVDW=12) support on the pinned VASP build is unverified."
+      ]
+    },
+    {
+      "material": "nb_ta_o",
+      "name": "Nb-Ta-O oxides",
+      "priority": 3,
+      "split_unit": "formula and polymorph/ordering family",
+      "pool_kind": "poscar_dir",
+      "pool_materialized_candidates": 14,
+      "pool_seed_structures": 0,
+      "pool_error": null,
+      "method_signature": null,
+      "e3_qualified_reference_labels": 0,
+      "mlip_cells": {
+        "HydraGNN": "pending_support_audit",
+        "UMA": "pending_support_audit",
+        "MACE": "pending_support_audit"
+      },
+      "activation": "blocked",
+      "blockers": [
+        "Reference domain (unary/binary/ternary phases) not frozen or computed with VASP.",
+        "Historical QE labels are excluded from E3; no E3 VASP labels exist."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+ "request_sha256_inputs": "zn-pbcn-force-criterion",
+ "latency_s": 59.0,
+ "mag_applied": "model=gemini-4-argon@google; provider=google; service_tier=standard; effort=default; compression=off; form=none",
+ "response": {
+  "id": "dDjtaqW8J4uZotQP-8vB6AQ",
+  "created": 1793931380,
+  "model": "gemini-4-argon@google",
+  "object": "chat.completion",
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "index": 0,
+    "message": {
+     "content": "{\"scores\": [{\"item_id\": \"item-006\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 0, \"evidence_attribution\": 1, \"uncertainty\": 0, \"follow_up\": 2, \"notes\": \"Rationale is a single boilerplate sentence with no physical reasoning, specific record values, or uncertainty analysis.\"}, {\"item_id\": \"item-013\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Thorough quantitative verification against record values, physical consistency checks (EDIFFG, NSW, stress), and appropriate caveats.\"}, {\"item_id\": \"item-015\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Clear, specific quantitative mapping to the record, solid physical consistency checks, and well-weighted caveats.\"}, {\"item_id\": \"item-016\", \"verdict_correct\": \"Y\", \"physical_reasoning\": 2, \"evidence_attribution\": 2, \"uncertainty\": 2, \"follow_up\": 2, \"notes\": \"Accurate citation of values, appropriate physical checks on relaxation settings, and reasonable caveats.\"}], \"correct_verdict_in_your_judgement\": \"supported\", \"case_notes\": \"The single converged DFT relaxation record directly reports max_force = 0.0197717654 eV/A for the target structure, which is below the 0.02 eV/A threshold.\"}",
+     "role": "assistant",
+     "images": [],
+     "thinking_blocks": [],
+     "provider_specific_fields": {
+      "thought_signatures": [
+       "AY89a18znDzbCxamx/1VW4oNS/UHHVUSd2RhNBxrhv/424Po8krwsnTtmNuNmoTD6qUinn3nvadF7V5/ctVbcvZuo+E8GZR30T9Kr57poZIRWDVTRw=="
+      ]
+     }
+    },
+    "provider_specific_fields": {
+     "native_finish_reason": "STOP"
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 378,
+   "prompt_tokens": 3812,
+   "total_tokens": 4190,
+   "completion_tokens_details": {
+    "text_tokens": 378
+   },
+   "prompt_tokens_details": {
+    "text_tokens": 3812
+   }
+  },
+  "vertex_ai_grounding_metadata": [],
+  "vertex_ai_url_context_metadata": [],
+  "vertex_ai_safety_results": [],
+  "vertex_ai_citation_metadata": []
+ }
+}

@@ -1,0 +1,80 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "conclusion": {
+      "title": "Conclusion",
+      "type": "string"
+    },
+    "confidence": {
+      "title": "Confidence",
+      "type": "string"
+    },
+    "falsifiable_predictions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Falsifiable Predictions",
+      "type": "array"
+    },
+    "hypotheses": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Hypotheses",
+      "type": "array"
+    },
+    "missing_or_conflicting_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Or Conflicting Evidence",
+      "type": "array"
+    },
+    "outcome_interpretation": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Outcome Interpretation",
+      "type": "array"
+    },
+    "proposed_tests": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Proposed Tests",
+      "type": "array"
+    },
+    "reasoning_summary": {
+      "title": "Reasoning Summary",
+      "type": "string"
+    },
+    "supporting_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Supporting Evidence",
+      "type": "array"
+    }
+  },
+  "required": [
+    "conclusion",
+    "hypotheses",
+    "reasoning_summary",
+    "assumptions",
+    "supporting_evidence",
+    "missing_or_conflicting_evidence",
+    "falsifiable_predictions",
+    "proposed_tests",
+    "outcome_interpretation",
+    "confidence"
+  ],
+  "title": "E1ScientificResponse",
+  "type": "object"
+}

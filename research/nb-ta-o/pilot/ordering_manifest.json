@@ -1,0 +1,1545 @@
+{
+  "schema_version": 1,
+  "status": "structure_audited_dft_not_run",
+  "parent": {
+    "path": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+    "sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+    "formula": "Nb2O5",
+    "atom_count": 28
+  },
+  "enumeration": {
+    "raw_half_substitutions": 70,
+    "symmetry_inequivalent_orderings": 14,
+    "symmetry_audit": [
+      {
+        "symprec_A": 0.01,
+        "space_group": "C2/c",
+        "cation_site_permutation_count": 8
+      },
+      {
+        "symprec_A": 0.05,
+        "space_group": "C2/c",
+        "cation_site_permutation_count": 8
+      },
+      {
+        "symprec_A": 0.1,
+        "space_group": "C2/c",
+        "cation_site_permutation_count": 8
+      },
+      {
+        "symprec_A": 0.15,
+        "space_group": "C2/c",
+        "cation_site_permutation_count": 8
+      },
+      {
+        "symprec_A": 0.2,
+        "space_group": "C2/c",
+        "cation_site_permutation_count": 8
+      },
+      {
+        "symprec_A": 0.5,
+        "space_group": "C2/c",
+        "cation_site_permutation_count": 8
+      }
+    ],
+    "periodic_structure_matcher": {
+      "tolerances": {
+        "ltol": 0.0001,
+        "stol": 0.0001,
+        "angle_tol_degrees": 0.001
+      },
+      "primitive_cell": false,
+      "scale": false,
+      "attempt_supercell": true,
+      "species_preserved": true,
+      "duplicate_pairs": []
+    }
+  },
+  "descriptor_method": {
+    "periodic_cation_neighbor_cutoff_A": 8.0,
+    "radial_shell_grouping_tolerance_A": 0.12,
+    "reported_shells": [
+      3.404111,
+      3.567304,
+      3.712265,
+      4.421638,
+      4.543347,
+      4.667451
+    ],
+    "oxygen_centered_neighbor_cutoff_A": 2.8,
+    "oxygen_centered_motif_bins": [
+      "cn2_ta0",
+      "cn2_ta1",
+      "cn2_ta2",
+      "cn3_ta0",
+      "cn3_ta1",
+      "cn3_ta2",
+      "cn3_ta3"
+    ],
+    "pilot_selection": "least and most first-shell Ta-Ta clustered, then greedy maximin in min-max-scaled six-shell pair counts, Ta first-shell degree histogram, and oxygen-centered Nb/Ta coordination-motif counts; ties by ordering ID",
+    "pilot_size": 5,
+    "pilot_ids_in_selection_order": [
+      "NbTaO5_ordering_01",
+      "NbTaO5_ordering_09",
+      "NbTaO5_ordering_14",
+      "NbTaO5_ordering_12",
+      "NbTaO5_ordering_06"
+    ]
+  },
+  "poscar_conversion": {
+    "tool": "pymatgen",
+    "species_order": [
+      "Nb",
+      "Ta",
+      "O"
+    ],
+    "structure_changes": "species grouping only; lattice and fractional coordinates unchanged",
+    "canonical_computational_format": "POSCAR",
+    "cif_role": "source/provenance and independent structure-audit input",
+    "vasp_execution": false
+  },
+  "orderings": [
+    {
+      "ordering_id": "NbTaO5_ordering_01",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_01.cif",
+      "ordering_cif_sha256": "c5aee83deb7154511ca8033cd66aa374da1c3d801bef3ebdfb9eb1be671798ad",
+      "ta_parent_site_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "symmetry_orbit_size": 2,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          0,
+          6,
+          4,
+          0,
+          2,
+          2
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          4,
+          0,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 6,
+          "cn2_ta1": 0,
+          "cn2_ta2": 6,
+          "cn3_ta0": 0,
+          "cn3_ta1": 4,
+          "cn3_ta2": 4,
+          "cn3_ta3": 0
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "1": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "2": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "3": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.567304,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.567304
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": true,
+      "pilot_rank": 1,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_01.POSCAR",
+        "sha256": "262b3f0be63e7c5b6fdf0fc7a63b7f49e22fa532a718e466680127cc7a4cfef0",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_02",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_02.cif",
+      "ordering_cif_sha256": "64cbba013703bad38ee0fca187fbf2115a7a688dbc8a2feb06065911c7e64f8f",
+      "ta_parent_site_indices": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "symmetry_orbit_size": 8,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          1,
+          3,
+          4,
+          1,
+          1,
+          1
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          2,
+          2,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 3,
+          "cn2_ta1": 6,
+          "cn2_ta2": 3,
+          "cn3_ta0": 1,
+          "cn3_ta1": 3,
+          "cn3_ta2": 3,
+          "cn3_ta3": 1
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "1": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "2": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "4": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.404111,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.404111
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": false,
+      "pilot_rank": null,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_02.POSCAR",
+        "sha256": "79332615645538f661a58016bc8cf46d9657122384f715311b00d2dff906e5c5",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_03",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_03.cif",
+      "ordering_cif_sha256": "f606df1555bd57b96d64bf3240391ad4c38b1f135c9b34861a3faf751c985197",
+      "ta_parent_site_indices": [
+        0,
+        1,
+        2,
+        5
+      ],
+      "symmetry_orbit_size": 8,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          0,
+          3,
+          4,
+          0,
+          1,
+          1
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          4,
+          0,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 3,
+          "cn2_ta1": 6,
+          "cn2_ta2": 3,
+          "cn3_ta0": 0,
+          "cn3_ta1": 4,
+          "cn3_ta2": 4,
+          "cn3_ta3": 0
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "1": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "2": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "5": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.567304,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.567304
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": false,
+      "pilot_rank": null,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_03.POSCAR",
+        "sha256": "44df862f5cb0215a6074024a3979a6171781240746bd529bbe3d89e48cafe83b",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_04",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_04.cif",
+      "ordering_cif_sha256": "b810a64a47e20e079d7e86d9cc21c4619b12a64822b47edfaac88bc5fa0369da",
+      "ta_parent_site_indices": [
+        0,
+        1,
+        2,
+        6
+      ],
+      "symmetry_orbit_size": 8,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          1,
+          3,
+          2,
+          1,
+          1,
+          1
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          2,
+          2,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 3,
+          "cn2_ta1": 6,
+          "cn2_ta2": 3,
+          "cn3_ta0": 0,
+          "cn3_ta1": 4,
+          "cn3_ta2": 4,
+          "cn3_ta3": 0
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "1": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "2": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "6": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.404111,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.404111
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": false,
+      "pilot_rank": null,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_04.POSCAR",
+        "sha256": "40f226a255372e7ee7322f02ab21e31f5377942a8850756a59069ecf384c492f",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_05",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_05.cif",
+      "ordering_cif_sha256": "ffb330094f7370057005798e9871eee57d8a4ea322cbc7cf325a0545a8644fba",
+      "ta_parent_site_indices": [
+        0,
+        1,
+        2,
+        7
+      ],
+      "symmetry_orbit_size": 8,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          1,
+          3,
+          4,
+          1,
+          1,
+          1
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          2,
+          2,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 3,
+          "cn2_ta1": 6,
+          "cn2_ta2": 3,
+          "cn3_ta0": 1,
+          "cn3_ta1": 3,
+          "cn3_ta2": 3,
+          "cn3_ta3": 1
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "1": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "2": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "7": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.404111,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.404111
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": false,
+      "pilot_rank": null,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_05.POSCAR",
+        "sha256": "f0e8992ca0296a15ccd8c887c5504937a76339c9ca418a6482db8da74a500f57",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_06",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_06.cif",
+      "ordering_cif_sha256": "f641c804abd5c7ef340ddfd00b9a7710c8204b17281608cb7f4037753d0a777e",
+      "ta_parent_site_indices": [
+        0,
+        1,
+        4,
+        5
+      ],
+      "symmetry_orbit_size": 2,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          0,
+          2,
+          4,
+          0,
+          0,
+          0
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          4,
+          0,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 2,
+          "cn2_ta1": 8,
+          "cn2_ta2": 2,
+          "cn3_ta0": 0,
+          "cn3_ta1": 4,
+          "cn3_ta2": 4,
+          "cn3_ta3": 0
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "1": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "4": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "5": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.567304,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.567304
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": true,
+      "pilot_rank": 5,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_06.POSCAR",
+        "sha256": "68b79f92d29f54bf2f92ca8cdc0e4f7b6ab06b62283f5540666f7cff9640ec5b",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_07",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_07.cif",
+      "ordering_cif_sha256": "e333fabaca38970bbd5996f25de9e3d51479cf081e0571c37aa601cc74c97a9f",
+      "ta_parent_site_indices": [
+        0,
+        1,
+        4,
+        6
+      ],
+      "symmetry_orbit_size": 8,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          1,
+          1,
+          2,
+          1,
+          1,
+          1
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          2,
+          2,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 1,
+          "cn2_ta1": 10,
+          "cn2_ta2": 1,
+          "cn3_ta0": 0,
+          "cn3_ta1": 4,
+          "cn3_ta2": 4,
+          "cn3_ta3": 0
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "1": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "4": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "6": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.404111,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.404111
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": false,
+      "pilot_rank": null,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_07.POSCAR",
+        "sha256": "0eb6c30251376f216bad2f340d09548f46473be32d9f96aa5218b39c58f12cb5",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_08",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_08.cif",
+      "ordering_cif_sha256": "bac662910311ffb19fdfd15e9cdbd10b38b136a09b5b120b63b9ccc7e6cd1e0a",
+      "ta_parent_site_indices": [
+        0,
+        1,
+        4,
+        7
+      ],
+      "symmetry_orbit_size": 8,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          1,
+          3,
+          4,
+          1,
+          0,
+          0
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          2,
+          2,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 3,
+          "cn2_ta1": 6,
+          "cn2_ta2": 3,
+          "cn3_ta0": 1,
+          "cn3_ta1": 3,
+          "cn3_ta2": 3,
+          "cn3_ta3": 1
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "1": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "4": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "7": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.404111,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.404111
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": false,
+      "pilot_rank": null,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_08.POSCAR",
+        "sha256": "e36b9088333d05d5f9592df3b34cf7172c5e30e283ed3df34fece4fd88feb500",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_09",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_09.cif",
+      "ordering_cif_sha256": "cb196a69d00d6a104cdba6b5db516df686a4a1387424fd9ea3dedbbf4d342065",
+      "ta_parent_site_indices": [
+        0,
+        1,
+        6,
+        7
+      ],
+      "symmetry_orbit_size": 2,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          2,
+          2,
+          0,
+          2,
+          0,
+          0
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          0,
+          4,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 2,
+          "cn2_ta1": 8,
+          "cn2_ta2": 2,
+          "cn3_ta0": 0,
+          "cn3_ta1": 4,
+          "cn3_ta2": 4,
+          "cn3_ta3": 0
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "1": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "6": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "7": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.404111,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.62273,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.404111
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": true,
+      "pilot_rank": 2,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_09.POSCAR",
+        "sha256": "31c6ec3fd780766adce9ab63ac88653b3cb5983647e6b69aebb58471544ef013",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_10",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_10.cif",
+      "ordering_cif_sha256": "512c815ef1cb42eb9cb699530a74fba1da069378d9228b2fa35028abfbccefd8",
+      "ta_parent_site_indices": [
+        0,
+        2,
+        4,
+        6
+      ],
+      "symmetry_orbit_size": 2,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          2,
+          0,
+          0,
+          2,
+          2,
+          2
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          0,
+          4,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 0,
+          "cn2_ta1": 12,
+          "cn2_ta2": 0,
+          "cn3_ta0": 0,
+          "cn3_ta1": 4,
+          "cn3_ta2": 4,
+          "cn3_ta3": 0
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "2": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "4": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "6": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.404111,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.567304,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.404111
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": false,
+      "pilot_rank": null,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_10.POSCAR",
+        "sha256": "7228b8578f0780b4876b0577835654a69d221c88de667b581f702378bfdcdd86",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_11",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_11.cif",
+      "ordering_cif_sha256": "39b61db7d49d20666df7a74f6879e5a2e77b6af2fb267075dc2fd498d3533146",
+      "ta_parent_site_indices": [
+        0,
+        2,
+        4,
+        7
+      ],
+      "symmetry_orbit_size": 8,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          1,
+          2,
+          4,
+          1,
+          1,
+          1
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          2,
+          2,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 2,
+          "cn2_ta1": 8,
+          "cn2_ta2": 2,
+          "cn3_ta0": 1,
+          "cn3_ta1": 3,
+          "cn3_ta2": 3,
+          "cn3_ta3": 1
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "2": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "4": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "7": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.404111,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.404111
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": false,
+      "pilot_rank": null,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_11.POSCAR",
+        "sha256": "55d307da851ee3fbbc4d0c3a204f81d6b496a94379d1528ce463f426603efb48",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_12",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_12.cif",
+      "ordering_cif_sha256": "82f35596da12735c4675f58a4cb05f2fbb1674d872cc50ae6036b2b28dd967ea",
+      "ta_parent_site_indices": [
+        0,
+        2,
+        5,
+        7
+      ],
+      "symmetry_orbit_size": 2,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          0,
+          0,
+          4,
+          0,
+          2,
+          2
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          4,
+          0,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 0,
+          "cn2_ta1": 12,
+          "cn2_ta2": 0,
+          "cn3_ta0": 0,
+          "cn3_ta1": 4,
+          "cn3_ta2": 4,
+          "cn3_ta3": 0
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "2": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "5": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "7": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.712265,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.712265
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": true,
+      "pilot_rank": 4,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_12.POSCAR",
+        "sha256": "303ced162f151a8c2e0d5665468aa25315b4bdcd91e58c9ae0be6a63eb268f46",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_13",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_13.cif",
+      "ordering_cif_sha256": "251550936e803a8c9823d061336c9acb7c96378654960430fd628e3da97357a1",
+      "ta_parent_site_indices": [
+        0,
+        3,
+        4,
+        7
+      ],
+      "symmetry_orbit_size": 2,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          0,
+          4,
+          4,
+          0,
+          0,
+          0
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          4,
+          0,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 4,
+          "cn2_ta1": 4,
+          "cn2_ta2": 4,
+          "cn3_ta0": 0,
+          "cn3_ta1": 4,
+          "cn3_ta2": 4,
+          "cn3_ta3": 0
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "3": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "4": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "7": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.62273,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.404111,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.62273
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": false,
+      "pilot_rank": null,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_13.POSCAR",
+        "sha256": "02a3dbf17f3c4931353433e4971b2e450b1fed3f9b1837a8648137159010c436",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    },
+    {
+      "ordering_id": "NbTaO5_ordering_14",
+      "formula": "TaNbO5",
+      "atom_count": 28,
+      "parent_cif": "research/nb-ta-o/source_cifs/COD_1528678_zeta-Nb2O5.cif",
+      "parent_sha256": "ea8be5ef3d7a8583e16a0fd9deed42aa3ba5b2bd53ea97311a1464187b43b203",
+      "ordering_cif": "research/nb-ta-o/orderings/NbTaO5_ordering_14.cif",
+      "ordering_cif_sha256": "5fb96a897ad0d495cacf020590ab141f68a36ca120cee902e1753569f3e7202f",
+      "ta_parent_site_indices": [
+        0,
+        3,
+        5,
+        6
+      ],
+      "symmetry_orbit_size": 2,
+      "descriptors": {
+        "ta_ta_pair_counts_by_shell": [
+          2,
+          4,
+          8,
+          2,
+          0,
+          0
+        ],
+        "ta_first_shell_degree_histogram_0_to_4": [
+          0,
+          4,
+          0,
+          0,
+          0
+        ],
+        "oxygen_centered_motif_counts": {
+          "cn2_ta0": 4,
+          "cn2_ta1": 4,
+          "cn2_ta2": 4,
+          "cn3_ta0": 4,
+          "cn3_ta1": 0,
+          "cn3_ta2": 0,
+          "cn3_ta3": 4
+        },
+        "ta_centered_oxygen_shells_A": {
+          "0": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "3": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "5": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ],
+          "6": [
+            1.814318,
+            1.90828,
+            1.942795,
+            2.060346,
+            2.12319,
+            2.19027
+          ]
+        }
+      },
+      "minimum_pair_distances_A": {
+        "Nb:Nb": 3.404111,
+        "Nb:O": 1.814318,
+        "Nb:Ta": 3.567304,
+        "O:O": 2.604907,
+        "O:Ta": 1.814318,
+        "Ta:Ta": 3.404111
+      },
+      "poscar_max_site_mapping_error_A": 0.0,
+      "pilot_selected": true,
+      "pilot_rank": 3,
+      "poscar": {
+        "path": "research/nb-ta-o/pilot/poscars/NbTaO5_ordering_14.POSCAR",
+        "sha256": "ec29051a50e83ef7291e5b2e4bc25c2385575e04051a70fe4085ac077d2b2990",
+        "species_order": [
+          "Nb",
+          "Ta",
+          "O"
+        ],
+        "species_counts": [
+          4,
+          4,
+          20
+        ],
+        "conversion": "pymatgen POSCAR; species grouped Nb, Ta, O; cell and coordinates unchanged",
+        "canonical_for_computation": true
+      }
+    }
+  ]
+}

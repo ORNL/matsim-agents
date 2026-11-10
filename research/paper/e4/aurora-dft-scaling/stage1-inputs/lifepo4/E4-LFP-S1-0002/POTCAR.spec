@@ -1,0 +1,5 @@
+Fe Fe_pv
+Li Li_sv
+O O
+P P
+assembled_potcar_sha256 f2a05d8ed7e9bfe3976233c793251a2ab96a49a35bc4f349babdc9f708ea4232

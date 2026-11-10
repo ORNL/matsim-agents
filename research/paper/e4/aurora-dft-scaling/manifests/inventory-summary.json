@@ -1,0 +1,14 @@
+{
+  "status": "blocked_pending_archive_audit_and_queue_eligibility",
+  "production_authorized": false,
+  "candidate_counts": {
+    "bcc_refractory": 2040,
+    "fcc_hea": 510,
+    "lifepo4": 510
+  },
+  "run_count": 64,
+  "candidate_structure_hashes_available": 0,
+  "archive_audit_complete": false,
+  "allocation_status_verified": true,
+  "project_queue_authorization_verified": false
+}

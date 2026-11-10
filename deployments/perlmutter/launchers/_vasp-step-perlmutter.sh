@@ -65,6 +65,7 @@ if ! command -v module >/dev/null 2>&1 && [[ -f /usr/share/lmod/lmod/init/bash ]
   source /usr/share/lmod/lmod/init/bash
 fi
 
+if [[ -z "${VASP_ENV_SETUP:-}" ]]; then
 VASP_BIN_RESOLVED="$(readlink -f "${VASP_BIN}" 2>/dev/null || echo "${VASP_BIN}")"
 module reset
 if [[ "${VASP_BIN_RESOLVED}" == /global/common/software/nersc9/vasp/vasp/* ]]; then
@@ -102,6 +103,9 @@ else
   # above since the SONAMEs differ (libcudart.so.12 vs libcudart.so.13).
   export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/opt/nvidia/hpc_sdk/Linux_x86_64/26.5/cuda/13.2/lib64"
 fi
+fi
+# shellcheck disable=SC1091
+source "${REPO}/deployments/common/vasp-runtime.sh"
 
 # Strip env vars that would perturb the VASP launch (set by the Python venv)
 unset LD_PRELOAD

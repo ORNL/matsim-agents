@@ -1,0 +1,28 @@
+{
+  "case_id": "Ta-bcc-encut-560",
+  "category": "crystalline_numerical_qualification",
+  "status": "input_candidate_not_authorized_for_execution",
+  "species_order": [
+    "Ta"
+  ],
+  "species_counts": {
+    "Ta": 1
+  },
+  "settings": {
+    "encut_eV": 560,
+    "kspacing_A^-1": 0.2,
+    "ediff_eV": 1e-06,
+    "ediffg_eV_A": -0.01
+  },
+  "gamma_only": false,
+  "input_hashes": {
+    "POSCAR": "dc79e55cee37db43f9610c4495189e3717f1bbf96cd521b847cb1eddbee762e6",
+    "INCAR": "4c17fcddd71462971f768d61c045dcabd0615797bc0b42fa5ed2314328076e41",
+    "INCAR.static": "280df938a275b6acd7b16806ace093ab8326df872573ad6725ae983b22f3ea5b",
+    "KPOINTS": "122e7696057e86a1097ded957e898ff26dcb16e2c8e247113553555e6f96cc8f",
+    "POTCAR.order": "952f8b45d009fa58150664e29e63ff6b7b2dd6d2d0d05984583f33f5f95aa684"
+  },
+  "potcar_required_components": [
+    "Ta_pv"
+  ]
+}

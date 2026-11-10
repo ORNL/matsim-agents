@@ -13,6 +13,7 @@ def restore_hydragnn_checkpoint(model, checkpoint_path, *, device):
     model.eval()
     for parameter in model.parameters():
         parameter.requires_grad_(False)
+    return tuple(state_dict)
 
 
 def load_hydragnn_state_dict(model, state_dict: Mapping, *, strict=True):

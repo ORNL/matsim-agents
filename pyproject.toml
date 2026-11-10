@@ -71,6 +71,7 @@ uma = [
     "fairchem-core>=2.20",
 ]
 openai = ["langchain-openai>=0.2.0"]
+mag = ["openai>=1.0.0"]
 ollama = ["langchain-ollama>=0.2.0"]
 vllm = ["langchain-openai>=0.2.0"]  # vLLM uses the OpenAI-compatible client
 anthropic = ["langchain-anthropic>=0.2.0"]

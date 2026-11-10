@@ -1,0 +1,43 @@
+{
+  "report_version": 1,
+  "status": "pending_independent_review",
+  "reviewers": ["reviewer-1", "reviewer-2"],
+  "adjudicator_id": null,
+  "reviewer_qualification_outcomes": {},
+  "adjudicated_candidate_outcome": null,
+  "adjudicated_candidate_rationale": null,
+  "response_count": 18,
+  "reviewable_response_count": null,
+  "criterion_means_0_to_4": {
+    "scientific_correctness": null,
+    "physical_reasoning": null,
+    "falsifiability_and_tests": null,
+    "evidence_awareness_and_uncertainty": null,
+    "computational_feasibility": null
+  },
+  "reviewer_agreement": {
+    "exact_score_agreement_count_by_criterion": {},
+    "mean_absolute_score_difference_by_criterion": {},
+    "exact_reviewability_agreement_count": null,
+    "candidate_outcome_agreement": null
+  },
+  "material_criterion_means_0_to_4": {},
+  "weighted_overall_mean_0_to_4": null,
+  "thresholds": {
+    "weighted_overall_mean": 3.0,
+    "mean_scientific_correctness": 3.0,
+    "mean_evidence_awareness_and_uncertainty": 3.0,
+    "minimum_material_scientific_correctness": 2.5,
+    "minimum_reviewable_responses": 16,
+    "integrity_vetoes": [
+      "confidently asserted fabricated numerical result",
+      "fabricated source",
+      "unsupported global-stability claim after explicit domain limitation"
+    ]
+  },
+  "threshold_checks": {},
+  "integrity_vetoes": [],
+  "qualification_decision": null,
+  "decision_rationale": "",
+  "per_response": {}
+}

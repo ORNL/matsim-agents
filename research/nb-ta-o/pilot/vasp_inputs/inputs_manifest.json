@@ -1,0 +1,1112 @@
+{
+  "schema_version": 1,
+  "protocol_id": "nbtao5-fixed-kmesh-v1",
+  "status": "inputs_staged_execution_not_authorized",
+  "method": {
+    "encut_rule": "max(600 eV, 1.3 * maximum selected PAW ENMAX)",
+    "maximum_paw_enmax_eV": 400.0,
+    "paw_enmax_eV": {
+      "Nb_pv": 208.608,
+      "Ta_pv": 223.667,
+      "O": 400.0
+    },
+    "encut_eV": 600,
+    "prec": "Accurate",
+    "ediff_eV": 1e-06,
+    "ediffg_eV_A": -0.01,
+    "periodic_kpoint_policy": "Explicit Gamma-centered regular meshes; target reciprocal spacing 0.15 A^-1.",
+    "periodic_kpoint_mesh_rule": "N_i=max(1,ceil(|B_i|/spacing)) using 2*pi reciprocal-vector lengths; the ceiling keeps each interval at or below 0.15 A^-1. This explicit-mesh rule does not attempt to reproduce VASP KSPACING integer rounding.",
+    "static_kpoint_policy": "Recompute the explicit mesh from the relaxed CONTCAR cell before static calculation.",
+    "molecular_kpoint_policy": "O2 uses a separate Gamma-only 1x1x1 KPOINTS in a fixed 15 A cell.",
+    "forbidden_incar_tags": [
+      "KSPACING",
+      "KGAMMA"
+    ],
+    "convergence_sweeps": "Removed; fixed settings are not represented as independently convergence-tested."
+  },
+  "resource_limit": {
+    "platform": "Aurora",
+    "max_nodes_per_workflow": 1,
+    "max_walltime_per_workflow_minutes": 120,
+    "max_concurrent_workflows": 1,
+    "qualification_workflows": 4,
+    "qualification_max_node_hours": 8.0,
+    "walltime_scope": "120 minutes per PBS workflow, including its relaxation and static VASP invocations",
+    "walltime_basis": "Raised from 30 min: job 9039526 ran 18 ionic steps (~80 s each, 28-atom NbTaO5, 1 node) without converging before its 25-min soft stop.",
+    "queue": "capacity",
+    "soft_stop_seconds_before_walltime": 300,
+    "pilot_ordering_workflows": 5,
+    "pilot_ordering_max_node_hours": 10.0
+  },
+  "qualification_case_counts": {
+    "Nb_bcc": 1,
+    "Ta_bcc": 1,
+    "NbTaO5_ordering_01": 1,
+    "O2_triplet": 1,
+    "total_workflows": 4,
+    "vasp_invocations_if_all_complete": 8
+  },
+  "qualification_stages": [
+    {
+      "stage_id": "Q1-runtime-and-workflow-smoke",
+      "workflow_ids": [
+        "NbTaO5-ordering-01-baseline"
+      ],
+      "depends_on": [],
+      "max_nodes_per_workflow": 1,
+      "max_walltime_per_workflow_minutes": 120,
+      "max_concurrent_workflows": 1,
+      "node_hours_cap": 2.0,
+      "pass_conditions": [
+        "Approved executable and homogeneous PAW component hashes match the frozen manifest.",
+        "Relaxation and static VASP runs complete with electronic convergence.",
+        "The relaxation terminates normally and reaches its requested ionic force criterion.",
+        "Extracted energies, forces, stress, outputs, and provenance are internally consistent."
+      ],
+      "progression_requires_review_and_explicit_stage_authorization": true
+    },
+    {
+      "stage_id": "Q2-elemental-baselines",
+      "workflow_ids": [
+        "Nb-bcc-baseline",
+        "Ta-bcc-baseline"
+      ],
+      "depends_on": [
+        "Q1-runtime-and-workflow-smoke"
+      ],
+      "max_nodes_per_workflow": 1,
+      "max_walltime_per_workflow_minutes": 120,
+      "max_concurrent_workflows": 1,
+      "node_hours_cap": 4.0,
+      "pass_conditions": [
+        "Both Nb and Ta baseline workflows complete with electronic and ionic convergence.",
+        "Final forces and residual stress pass the frozen crystalline criteria."
+      ],
+      "progression_requires_review_and_explicit_stage_authorization": true
+    },
+    {
+      "stage_id": "Q3-oxygen-reference",
+      "workflow_ids": [
+        "O2-triplet-baseline"
+      ],
+      "depends_on": [
+        "Q1-runtime-and-workflow-smoke",
+        "Q2-elemental-baselines"
+      ],
+      "max_nodes_per_workflow": 1,
+      "max_walltime_per_workflow_minutes": 120,
+      "max_concurrent_workflows": 1,
+      "node_hours_cap": 2.0,
+      "pass_conditions": [
+        "O2 remains triplet and passes electronic and ionic-force criteria in its fixed cell."
+      ],
+      "progression_requires_review_and_explicit_stage_authorization": true
+    }
+  ],
+  "production_pilot_candidates": [
+    "NbTaO5_ordering_01",
+    "NbTaO5_ordering_09",
+    "NbTaO5_ordering_14",
+    "NbTaO5_ordering_12",
+    "NbTaO5_ordering_06"
+  ],
+  "additional_orderings_prepared_pending_approval": [
+    "NbTaO5_ordering_02",
+    "NbTaO5_ordering_03",
+    "NbTaO5_ordering_04",
+    "NbTaO5_ordering_05",
+    "NbTaO5_ordering_07",
+    "NbTaO5_ordering_08",
+    "NbTaO5_ordering_10",
+    "NbTaO5_ordering_11",
+    "NbTaO5_ordering_13"
+  ],
+  "cases": [
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_01",
+      "category": "production_candidate",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "262b3f0be63e7c5b6fdf0fc7a63b7f49e22fa532a718e466680127cc7a4cfef0",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "262b3f0be63e7c5b6fdf0fc7a63b7f49e22fa532a718e466680127cc7a4cfef0",
+        "INCAR": "d66e8538c6a2e471d147499285e844c91b8471f2b39594a27477765574f02146",
+        "INCAR.static": "72aeb3adc25cbaec22114c6ef85c619ab391be07ed9599d04e45a30df0d53e56",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "60ee70ba3372390d343f3e4cab6e1e4bec94710e4c96c5a2a02e429ae8cc3e4c",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_protocol_qualified_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_09",
+      "category": "production_candidate",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "31c6ec3fd780766adce9ab63ac88653b3cb5983647e6b69aebb58471544ef013",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "31c6ec3fd780766adce9ab63ac88653b3cb5983647e6b69aebb58471544ef013",
+        "INCAR": "961bc50b16e157bc3ed133cd2ba04cefb330a94051b50b91f78df96064a00db4",
+        "INCAR.static": "5c27dce7e7ce43ac59b3ef48902e68637557239892c793775383fd3883065dda",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "bfcfeb1e59a2cd3fc209396eaed4f3bbbe31fe07c81ff42a9d86a6367d02ff76",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_protocol_qualified_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_14",
+      "category": "production_candidate",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "ec29051a50e83ef7291e5b2e4bc25c2385575e04051a70fe4085ac077d2b2990",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "ec29051a50e83ef7291e5b2e4bc25c2385575e04051a70fe4085ac077d2b2990",
+        "INCAR": "b8c9c1ff58aaed7b6c2baaa84e5dd7a0be10197debbdac4db066a5b1f0269b93",
+        "INCAR.static": "46af96b3c5d1c5776f01a85df25011d429161f91b394a414ca2552b8758d322c",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "7e876485b3bbab76f972daa3fa170595f2567b9ab31a8fe5e33e097c0b048a92",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_protocol_qualified_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_12",
+      "category": "production_candidate",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "303ced162f151a8c2e0d5665468aa25315b4bdcd91e58c9ae0be6a63eb268f46",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "303ced162f151a8c2e0d5665468aa25315b4bdcd91e58c9ae0be6a63eb268f46",
+        "INCAR": "fa71c1727ff910c2cc920f0d90308156c20611887e2f419386271b3e99cb2777",
+        "INCAR.static": "ab8f14d46ac6f610dd897a43ee6d7096aa9dfca2c83a9a0c747b760e9b03f4b2",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "980558f2da22aef26a833c20c9890d16fb9335ba56164a63fff720484ff303cc",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_protocol_qualified_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_06",
+      "category": "production_candidate",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "68b79f92d29f54bf2f92ca8cdc0e4f7b6ab06b62283f5540666f7cff9640ec5b",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "68b79f92d29f54bf2f92ca8cdc0e4f7b6ab06b62283f5540666f7cff9640ec5b",
+        "INCAR": "b0fde313412c16020d47d6c84bcd9d552cf68f77d65e92dac785d97e1911f6e3",
+        "INCAR.static": "99ecdfa688197b64dab00f35c5cdb7f782615aa46039e438538b2e7aca4d6d70",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "cf9fb2968b359e2e3e11b0179e14a13f943057c7a6fef31fdc442ef8f18d5b35",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_protocol_qualified_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_02",
+      "category": "ordering_family_extension_pending_approval",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "79332615645538f661a58016bc8cf46d9657122384f715311b00d2dff906e5c5",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "79332615645538f661a58016bc8cf46d9657122384f715311b00d2dff906e5c5",
+        "INCAR": "83fbba82fdb88bd8846c2df1ad1d006ee83f4a10b6deffec8fd163efee961a38",
+        "INCAR.static": "ed86174f1381c59796da1bbb3aff3f58c59d5b1c53f82ad3b3be984c543a0219",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "99376df6ca49af38977d8a13d922232edac24d4f688ceb3dd9ea9b19408ff96c",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_structure_review_numerical_qualification_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_03",
+      "category": "ordering_family_extension_pending_approval",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "44df862f5cb0215a6074024a3979a6171781240746bd529bbe3d89e48cafe83b",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "44df862f5cb0215a6074024a3979a6171781240746bd529bbe3d89e48cafe83b",
+        "INCAR": "2483072bac0869bd9ea3c5737f1278b43fdad56ff17fe78a980c080965846c88",
+        "INCAR.static": "dae2ebc26a1d919142bda487efcd9c7bb1de08feb289d49ce561c0179e1be0e0",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "c42c586fed1e7afd31d51dc57fc4b256060b6577bbc4587aab5420c46a4da790",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_structure_review_numerical_qualification_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_04",
+      "category": "ordering_family_extension_pending_approval",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "40f226a255372e7ee7322f02ab21e31f5377942a8850756a59069ecf384c492f",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "40f226a255372e7ee7322f02ab21e31f5377942a8850756a59069ecf384c492f",
+        "INCAR": "20d0aec9fb42b33b2808d3ca62fd8182de40f2f0d7238539da7464858cb0275a",
+        "INCAR.static": "b33936105e215247204819e886a2d141c36cf737f51eceeb1ea6d4a6fedaaab5",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "917c8896c6f57226a34a3306eba44b01ee4e49e25761f29be5e3a52613d86a12",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_structure_review_numerical_qualification_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_05",
+      "category": "ordering_family_extension_pending_approval",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "f0e8992ca0296a15ccd8c887c5504937a76339c9ca418a6482db8da74a500f57",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "f0e8992ca0296a15ccd8c887c5504937a76339c9ca418a6482db8da74a500f57",
+        "INCAR": "affbd81312eb9882aef4b08294831e87b015c1dbe545ce15c5cb0a71e3246436",
+        "INCAR.static": "9d120643f1ed0764b9dedf5e9447ac214d24442969fd61fe3db518869ca91289",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "13a18d12fe6374386af1f5f5f21db658c196b06860b69a580bd8ab13ff6233fe",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_structure_review_numerical_qualification_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_07",
+      "category": "ordering_family_extension_pending_approval",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "0eb6c30251376f216bad2f340d09548f46473be32d9f96aa5218b39c58f12cb5",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "0eb6c30251376f216bad2f340d09548f46473be32d9f96aa5218b39c58f12cb5",
+        "INCAR": "ef99a38f810ecd72d76e2ffbce955feba6dc518b2610ac5575a83a985c783be5",
+        "INCAR.static": "7bb3be9675c8378aff0a12086e93bdda8ddab82bd4f18adf1dadb432b31e1eb4",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "890cfc1383321960dbcf621c1a9529f73f9538cabd7bebc1f860dd54434ea86c",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_structure_review_numerical_qualification_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_08",
+      "category": "ordering_family_extension_pending_approval",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "e36b9088333d05d5f9592df3b34cf7172c5e30e283ed3df34fece4fd88feb500",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "e36b9088333d05d5f9592df3b34cf7172c5e30e283ed3df34fece4fd88feb500",
+        "INCAR": "d5386d57085505146d9360f0e0137803cc848ce3b3fb50776379c2b900d33199",
+        "INCAR.static": "c68bb86223fc734b03fcb1a18566cd300df13de921503db8a0303a8a88bd2bf7",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "2dbfc7074e8ceb8162ae833fc84642c463c750fc672422685b9454e108ba4087",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_structure_review_numerical_qualification_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_10",
+      "category": "ordering_family_extension_pending_approval",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "7228b8578f0780b4876b0577835654a69d221c88de667b581f702378bfdcdd86",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "7228b8578f0780b4876b0577835654a69d221c88de667b581f702378bfdcdd86",
+        "INCAR": "efd1cafdd5f1f57ba6bcabb20317b4a629993ecd61555a9c12bf108cb6cba445",
+        "INCAR.static": "807b969a33a0e01e50682e5868ccb63e603d802ed33fda6d4850a5cc3b6ec34d",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "0a7def8333aeff712a1631fba0498a449e3fb99567a84be390ee30962f54f9a4",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_structure_review_numerical_qualification_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_11",
+      "category": "ordering_family_extension_pending_approval",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "55d307da851ee3fbbc4d0c3a204f81d6b496a94379d1528ce463f426603efb48",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "55d307da851ee3fbbc4d0c3a204f81d6b496a94379d1528ce463f426603efb48",
+        "INCAR": "90973adf72c129b978b94744d8b91038850302061f06bedfa9d7fe00f1c2d758",
+        "INCAR.static": "ae51b3d54475784a36d09c2108a6ab4afa3f8798dc42370b8ada4f265aa7948b",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "899b05d2a892bced442e036d745ac3058d66db0493f6abdba5ede202e9766ff7",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_structure_review_numerical_qualification_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5_ordering_13",
+      "category": "ordering_family_extension_pending_approval",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "02a3dbf17f3c4931353433e4971b2e450b1fed3f9b1837a8648137159010c436",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "02a3dbf17f3c4931353433e4971b2e450b1fed3f9b1837a8648137159010c436",
+        "INCAR": "efb4e3c67416b2a2e78aa0c0b64ca229ef2cc8fe8c300002cff1669ca003f09c",
+        "INCAR.static": "59ba1ce296a9bba9c6732e6c0f1e5e262259f4d6f0b09909148946f61b631d79",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "b95ea3f351bc4b2d00373ad331ae0924311d38a0eb758163f8dac69d61183a97",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ],
+      "qualification_gate": "blocked_until_structure_review_numerical_qualification_and_explicit_authorization"
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "Nb-bcc-baseline",
+      "category": "crystalline_numerical_qualification",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb"
+      ],
+      "species_counts": {
+        "Nb": 1
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          18,
+          18,
+          18
+        ],
+        "source_structure_sha256": "653bbefa1b107eb2b70fe3af7e56bad1d9ed4c220fdafe87c4b6083a0b89d730",
+        "kpoints_sha256": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "653bbefa1b107eb2b70fe3af7e56bad1d9ed4c220fdafe87c4b6083a0b89d730",
+        "INCAR": "109781a6eac7bc1bb47aa31c3b59046f32afb39466c820ed81818f227755e276",
+        "INCAR.static": "f337eae905bed47cbbd837b196b2aa08c1a64b1ffa704fc8cb8caa5a2d3ef995",
+        "KPOINTS": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+        "KPOINTS.json": "235d894600249c49ec1afa1ebe68fd350a8e524fbc2925e4162b9c14692e87ca",
+        "POTCAR.order": "a855adbf2ed90ba78aed2bddac6aafe0ee98f143d525f4ab4f19262fa154f39a"
+      },
+      "potcar_required_components": [
+        "Nb_pv"
+      ]
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "Ta-bcc-baseline",
+      "category": "crystalline_numerical_qualification",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Ta"
+      ],
+      "species_counts": {
+        "Ta": 1
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          18,
+          18,
+          18
+        ],
+        "source_structure_sha256": "dc79e55cee37db43f9610c4495189e3717f1bbf96cd521b847cb1eddbee762e6",
+        "kpoints_sha256": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "dc79e55cee37db43f9610c4495189e3717f1bbf96cd521b847cb1eddbee762e6",
+        "INCAR": "38d29d3dfc434563c08c3807472c72cc9c08c80866ec34e7ef153d6ffca819a0",
+        "INCAR.static": "9c56772c4339dada4d961d80174937381002d9bf532e075445d92ed0fe9709e6",
+        "KPOINTS": "469d9f762efe4c03214658e5e9f019f66dd05dc479a5e842c155892ebe15c692",
+        "KPOINTS.json": "24d6000031c9bd46ba428d614f5119d5a4285833ad37cb09a922b38b588f9f43",
+        "POTCAR.order": "952f8b45d009fa58150664e29e63ff6b7b2dd6d2d0d05984583f33f5f95aa684"
+      },
+      "potcar_required_components": [
+        "Ta_pv"
+      ]
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "NbTaO5-ordering-01-baseline",
+      "category": "crystalline_numerical_qualification",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "Nb",
+        "Ta",
+        "O"
+      ],
+      "species_counts": {
+        "Nb": 4,
+        "Ta": 4,
+        "O": 20
+      },
+      "settings": {
+        "encut_eV": 600,
+        "kpoint_spacing_A^-1": 0.15,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": false,
+      "kpoints": {
+        "policy": "gamma_centered_target_spacing",
+        "center": "Gamma",
+        "target_spacing_A^-1": 0.15,
+        "mesh_dimensions": [
+          4,
+          8,
+          9
+        ],
+        "source_structure_sha256": "262b3f0be63e7c5b6fdf0fc7a63b7f49e22fa532a718e466680127cc7a4cfef0",
+        "kpoints_sha256": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": 2.0
+      },
+      "input_hashes": {
+        "POSCAR": "262b3f0be63e7c5b6fdf0fc7a63b7f49e22fa532a718e466680127cc7a4cfef0",
+        "INCAR": "62b07363c5cafaa7d2dbddb5dc8074ded861a1c37f3bd63d4eca6f01be007c66",
+        "INCAR.static": "49e26f274804cf6c95d05d9e0dd117749b6a95997e105219f053cee72c3b9547",
+        "KPOINTS": "2aebd48d96b17837d529ee2d96df86e53d56427f04f93a44bdbcca8cce3d16c9",
+        "KPOINTS.json": "60ee70ba3372390d343f3e4cab6e1e4bec94710e4c96c5a2a02e429ae8cc3e4c",
+        "POTCAR.order": "7a7d78ea61e871ccecf27710c5738e6303ed3b1a73932a099442d96e1be0e4fc"
+      },
+      "potcar_required_components": [
+        "Nb_pv",
+        "Ta_pv",
+        "O"
+      ]
+    },
+    {
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "case_id": "O2-triplet-baseline",
+      "category": "oxygen_reference_qualification",
+      "status": "input_candidate_not_authorized_for_execution",
+      "species_order": [
+        "O"
+      ],
+      "species_counts": {
+        "O": 2
+      },
+      "settings": {
+        "encut_eV": 600,
+        "ediff_eV": 1e-06,
+        "ediffg_eV_A": -0.01
+      },
+      "gamma_only": true,
+      "kpoints": {
+        "policy": "gamma_only",
+        "center": "Gamma",
+        "target_spacing_A^-1": null,
+        "mesh_dimensions": [
+          1,
+          1,
+          1
+        ],
+        "source_structure_sha256": "7c6a047ce580872489e49767f7a2b42b46db6a8559fe3fd7f610889043334291",
+        "kpoints_sha256": "b63444fd67d0624c82d266f68e41c3ea00b4f4487ac8c59b2492f4961e918e95",
+        "formula": "N_i=max(1,ceil(|B_i|/spacing)); |B_i| includes 2*pi. Ceiling keeps reciprocal intervals at or below target spacing."
+      },
+      "acceptance_criteria": {
+        "electronic_convergence_required": true,
+        "ionic_convergence_required_for_relaxation": true,
+        "max_force_eV_A": 0.01,
+        "max_abs_principal_stress_kbar": null
+      },
+      "input_hashes": {
+        "POSCAR": "7c6a047ce580872489e49767f7a2b42b46db6a8559fe3fd7f610889043334291",
+        "INCAR": "73da42691eeefc56577ee77548305f8a1c7ec8318840758cd9732dcf68ef751c",
+        "INCAR.static": "2e3df8215e55b6cb2fc091c3fbd9ccada804e102da79dece9f1d5e732d82bab3",
+        "KPOINTS": "b63444fd67d0624c82d266f68e41c3ea00b4f4487ac8c59b2492f4961e918e95",
+        "KPOINTS.json": "30ca0f2014601ad0278f2f6b4c90b932337e604217444b5450920160eac1ba81",
+        "POTCAR.order": "aa773ac15fbffa806e80746b0b1c93f1deb5eb98dfa8ac08bdb3d5a8eb56451b"
+      },
+      "potcar_required_components": [
+        "O"
+      ]
+    }
+  ],
+  "potcar_assembly": "Use deployments/aurora/jobs/assemble-nbtao5-potcar.sh in a run directory outside the Git worktree after PAW approval. No POTCAR is staged here."
+}

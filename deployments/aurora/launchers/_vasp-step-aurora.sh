@@ -7,8 +7,15 @@ set -euo pipefail
 WORK_DIR=$1; VASP_BIN=$2; NNODES=$3; RANKS_PER_NODE=$4; THREADS_PER_RANK=$5
 TOTAL_RANKS=$((NNODES * RANKS_PER_NODE))
 HOSTS=${MATSIM_ASSIGNED_NODES:?dispatcher must assign disjoint Aurora nodes}
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+VASP_ENV_SETUP="${VASP_ENV_SETUP:-${REPO}/deployments/aurora/setup/vasp-runtime-aurora.sh}"
+# shellcheck disable=SC1091
+source "${REPO}/deployments/common/vasp-runtime.sh"
 
 export OMP_NUM_THREADS=${THREADS_PER_RANK}
+# VASP OpenMP regions (e.g. SETDIJ) overflow the small default worker stack.
+export OMP_STACKSIZE=${OMP_STACKSIZE:-512m}
+ulimit -s unlimited 2>/dev/null || true
 export MPICH_GPU_SUPPORT_ENABLED=1
 export ONEAPI_DEVICE_SELECTOR=${ONEAPI_DEVICE_SELECTOR:-level_zero:gpu}
 cd "${WORK_DIR}"
@@ -16,18 +23,13 @@ echo "[vasp-step] assigned_nodes=${HOSTS} ranks=${TOTAL_RANKS} ppn=${RANKS_PER_N
 # Each rank owns THREADS_PER_RANK cores (--cpu-bind=cores would put all of a
 # rank's OpenMP threads on one core).
 CPU_ARGS=(--depth="${THREADS_PER_RANK}" --cpu-bind=depth)
-# Ranks go to the placed tiles: nearest tile when the step uses the whole node,
-# otherwise an explicit rank-to-tile list from the placement's MATSIM_DEVICE_MASK.
-GPU_ARGS=(--gpu-bind=closest)
-if [[ -n "${MATSIM_DEVICE_MASK:-}" && -n "${MATSIM_NODE_DEVICES:-}" \
-      && "${MATSIM_DEVICES_PER_NODE:-}" != "${MATSIM_NODE_DEVICES}" ]]; then
-  IFS=, read -r -a TILES <<<"${MATSIM_DEVICE_MASK}"
-  RANK_TILES=()
-  for ((rank = 0; rank < RANKS_PER_NODE; rank++)); do
-    RANK_TILES+=("${TILES[rank % ${#TILES[@]}]}")
-  done
-  GPU_ARGS=(--gpu-bind="list:$(IFS=:; echo "${RANK_TILES[*]}")")
-fi
+# PALS mpiexec 1.8 has no "closest" keyword; default to the node's 12 FLAT tiles.
+IFS=, read -r -a TILES <<<"${MATSIM_DEVICE_MASK:-0,1,2,3,4,5,6,7,8,9,10,11}"
+RANK_TILES=()
+for ((rank = 0; rank < RANKS_PER_NODE; rank++)); do
+  RANK_TILES+=("${TILES[rank % ${#TILES[@]}]}")
+done
+GPU_ARGS=(--gpu-bind="list:$(IFS=:; echo "${RANK_TILES[*]}")")
 # mpiexec sets each rank's ZE_AFFINITY_MASK from --gpu-bind (FLAT tile indices).
 unset ZE_AFFINITY_MASK
 export ZE_FLAT_DEVICE_HIERARCHY=FLAT

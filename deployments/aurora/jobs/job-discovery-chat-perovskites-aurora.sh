@@ -56,7 +56,10 @@ mkdir -p "${RUN_DIR}" "${OUTPUT_DIR}"
 source "${REPO}/deployments/aurora/setup/aurora-module-stack.sh"
 load_aurora_frameworks_modules
 # shellcheck disable=SC1091
-[[ -f "${VENV_PATH}/bin/activate" ]] && source "${VENV_PATH}/bin/activate"
+if [[ -f "${VENV_PATH}/bin/activate" ]]; then
+    source "${REPO}/deployments/aurora/setup/aurora-python-env.sh"
+    activate_matsim_aurora_python "${REPO}" "${VENV_PATH}"
+fi
 
 export PYTHONPATH="${HYDRAGNN_EXAMPLE}:${PROJ}/HydraGNN:${PYTHONPATH:-}"
 export PYTHONNOUSERSITE=1

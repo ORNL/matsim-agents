@@ -9,6 +9,13 @@ The single full-install entry point is:
 bash deployments/aurora/setup/install.sh
 ```
 
+For E4-B and its HydraGNN model stack, explicitly select
+`HYDRAGNN_REPO=https://github.com/allaffa/HydraGNN.git` and
+`HYDRAGNN_REF=81d5b88304f20bb45c840571e2e26c490d1b19da`, using a separate
+`HYDRAGNN_DIR`. See [the frozen-source requirement](../../../docs/hydragnn-frozen-source.md)
+for clone-only preparation, the exact installer command, checkpoint upload
+layout and verification. Do not silently substitute the moving branch or main.
+
 It preserves an existing HydraGNN checkout unless `HYDRAGNN_REF` is explicitly
 set, runs HydraGNN's current Aurora installer, then installs and verifies
 matsim-agents wheels in that environment.
@@ -177,6 +184,32 @@ Download entry points:
 
 - `deployments/aurora/download/download-models-aurora.sh` (full set, gated models optional via token)
 - `deployments/aurora/download/download-open-models-aurora.sh` (open-access set)
+
+Both scripts accept `MODEL_SET=experimental` for the opt-in OpenAI GPT-OSS
+20B/120B, Kimi K2.6/K3, and GLM 5.2/5.3/5.3-Flash checkpoints. These large or
+newly released models are excluded from the default download set. Select a
+single model when appropriate, for example:
+
+```bash
+qsub -v MODEL_IDS="openai/gpt-oss-20b" \
+  deployments/aurora/download/download-open-models-aurora.sh
+```
+
+After downloading, the sequential benchmark can use a selected snapshot via
+`BENCHMARK_MODELS="name:huggingface_id:local_directory"`. For example:
+
+```bash
+qsub -v BENCHMARK_PROMPT="Suggest a candidate inorganic material and justify its stability.",\
+BENCHMARK_MODELS="gpt-oss-20b:openai/gpt-oss-20b:gpt-oss-20b" \
+  deployments/aurora/jobs/job-sequential-benchmark-aurora.sh
+```
+
+These IDs are exposed for download and explicit evaluation only. The current
+Aurora vLLM-XPU build has not been qualified for these architectures; successful
+download or upstream support for CUDA/GPU vLLM does not establish Aurora
+compatibility. In particular, do not request the complete experimental set
+unless storage and runtime are available for every checkpoint. The E1 campaign
+roster remains unchanged.
 
 ## vLLM-XPU
 

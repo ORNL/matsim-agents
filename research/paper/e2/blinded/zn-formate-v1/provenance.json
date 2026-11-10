@@ -1,0 +1,9 @@
+{
+  "suite_id": "e2-zn-formate-v1",
+  "source_run": "research/paper/e2/raw/zn-formate-v1/agent-eval-vhjqyznq",
+  "answers_sha256": "a7a699d112008e50eb5f94a418204ed22ecdbdcba38da55c673a8d082e369b82",
+  "shuffle_seed": 20261104,
+  "unblinding_key_sha256": "73a69848aeb42c9ddd2759c8cf999402fbbbf5ad2b24630a421f1c40d2fb8025",
+  "redaction": "model names replaced by [participant]; arm, model, grade and answer key removed",
+  "residual_unblinding_risk": "template-style deterministic rationales and references to peers or critique rounds can reveal the arm family"
+}

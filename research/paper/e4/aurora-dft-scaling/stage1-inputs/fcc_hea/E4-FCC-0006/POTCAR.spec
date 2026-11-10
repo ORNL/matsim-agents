@@ -1,0 +1,6 @@
+Co Co
+Cr Cr_pv
+Fe Fe_pv
+Mn Mn_pv
+Ni Ni_pv
+assembled_potcar_sha256 c0e6f0e3856534892c239c7a8ec155102fdb9ee703a10e88b94d0c13f7ae4918

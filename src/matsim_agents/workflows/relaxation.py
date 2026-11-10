@@ -7,6 +7,7 @@ in :mod:`matsim_agents.backends` and can still be used independently.
 
 from __future__ import annotations
 
+import os
 import socket
 from collections.abc import Callable
 from enum import StrEnum
@@ -65,6 +66,7 @@ class DFTBackendConfig(BaseModel):
     pseudo_dir: str | None = None
     potcar_dir: str | None = None
     settings: dict[str, Any] = Field(default_factory=dict)
+    environment: dict[str, str] = Field(default_factory=dict)
     timeout_sec: int | None = Field(None, gt=0)
     launch: ProcessLaunch | None = Field(
         None,
@@ -101,12 +103,12 @@ class DFTBackendConfig(BaseModel):
         """
 
         if self.launch is None:
-            return None
+            return {**os.environ, **self.environment} if self.environment else None
         argv = (
             [self.launcher] if isinstance(self.launcher, str) else list(self.launcher or [default])
         )
         if any(token in PLACEMENT_PLACEHOLDERS for token in argv):
-            return self.launch.environment({})
+            return {**self.launch.environment({}), **self.environment}
         if self.launch.total_ranks != 1:
             raise ValueError(
                 f"DFT launcher {argv[0]!r} starts one process, but the dft pool resolved to "
@@ -121,7 +123,7 @@ class DFTBackendConfig(BaseModel):
                 f"pool places it on {self.launch.hosts}; use a step wrapper with {{nodes}}, "
                 "{ranks_per_node}, and {threads_per_rank}, or place the dft pool here"
             )
-        return self.launch.environment({}, local=True)
+        return {**self.launch.environment({}, local=True), **self.environment}
 
     @model_validator(mode="after")
     def _valid_backend(self) -> DFTBackendConfig:

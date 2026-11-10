@@ -1,0 +1,18 @@
+{
+  "status": "staged_not_submitted",
+  "execution_authorized": false,
+  "case_count": 16,
+  "families": {
+    "bcc_refractory": 8,
+    "fcc_hea": 4,
+    "lifepo4": 4
+  },
+  "one_attempt_node_hours_max": {
+    "bcc_refractory": 64,
+    "fcc_hea": 32,
+    "lifepo4": 32
+  },
+  "stage1_initial_attempt_node_hours_max": 128,
+  "potcar_files_staged": false,
+  "pbs_scripts": "preflight-only; they do not launch VASP"
+}
