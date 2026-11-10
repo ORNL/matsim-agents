@@ -35,6 +35,12 @@ model_facts:
     heads support the structure. It is an acquisition feature, not calibrated
     uncertainty or independent physical validation until compared with qualified
     class-specific DFT residuals.
+  magnetism_limitation: >-
+    The code cannot currently handle magnetism: energies are not resolved over
+    magnetic orderings or spin states (MLIPs carry no explicit spin; DFT uses only
+    the initialized spin configuration). Hull, formation and defect energies for
+    LiFePO4, FCC Cantor alloys and spin-polarized references (e.g. triplet O2) are
+    reported with this limitation and marked provisional for magnetic elements.
   alternatives_to_screen:
     - name: CHGNet
       classes: [lifepo4, fcc_cantor, nb_ta_o]

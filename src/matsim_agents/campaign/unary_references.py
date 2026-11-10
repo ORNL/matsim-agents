@@ -50,6 +50,128 @@ class UnaryReferenceSearchResult(BaseModel):
     provisional: bool = True
 
 
+class CompoundReferencePhase(BaseModel):
+    """One multielement hull reference relaxed by one MLIP."""
+
+    phase_id: str
+    formula: str
+    source: str
+    provenance: dict[str, str] = Field(default_factory=dict)
+    initial_structure_path: str
+    optimized_structure_path: str | None = None
+    converged: bool = False
+    num_steps: int = 0
+    max_force_eV_per_A: float | None = None
+    total_energy_eV: float | None = None
+    energy_correction_eV_per_atom: float = 0.0
+    magnetic_state: str = "model_default_or_implicit"
+    failure: str | None = None
+
+
+class CompoundReferenceSearchResult(BaseModel):
+    """Auditable relaxation of the multielement hull references for one MLIP."""
+
+    model_identifier: str
+    phases: list[CompoundReferencePhase] = Field(default_factory=list)
+
+
+def relax_structure(
+    structure_path: str | Path,
+    calculator: Any,
+    *,
+    output_path: Path,
+    log_path: Path,
+    max_steps: int,
+    fmax_eV_per_A: float,
+    maxstep_A: float,
+    relax_cell: bool,
+) -> tuple[bool, int, float, float]:
+    """Relax one structure with FIRE; return (converged, steps, max force, energy)."""
+    from ase.filters import ExpCellFilter
+    from ase.io import read, write
+    from ase.optimize import FIRE
+
+    from matsim_agents.backends.mlip.relaxation import _NumericalStressCalculator
+
+    atoms = read(str(structure_path))
+    atoms.calc = calculator
+    optimizable: Any = atoms
+    if relax_cell and bool(np.all(atoms.pbc)):
+        atoms.calc = _NumericalStressCalculator(calculator)
+        optimizable = ExpCellFilter(atoms)
+    optimizer = FIRE(optimizable, logfile=str(log_path), maxstep=maxstep_A)
+    converged = bool(optimizer.run(fmax=fmax_eV_per_A, steps=max_steps))
+    forces = np.asarray(optimizable.get_forces(), dtype=float)
+    max_force = float(np.linalg.norm(forces, axis=1).max())
+    energy = float(atoms.get_potential_energy())
+    write(output_path, atoms)
+    return converged, int(optimizer.nsteps), max_force, energy
+
+
+def relax_compound_references(
+    phases: list[dict[str, Any]],
+    calculator: Any,
+    *,
+    model_identifier: str,
+    output_dir: Path,
+    max_steps: int = 200,
+    fmax_eV_per_A: float = 0.02,
+    maxstep_A: float = 0.01,
+    relax_cell: bool = True,
+) -> CompoundReferenceSearchResult:
+    """Relax every multielement reference with the same controls as the unary search."""
+    from pymatgen.core import Composition
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    result_path = output_dir / "compound_reference_search.json"
+    if result_path.is_file():
+        return CompoundReferenceSearchResult.model_validate_json(
+            result_path.read_text(encoding="utf-8")
+        )
+    records: list[CompoundReferencePhase] = []
+    for spec in phases:
+        if len(Composition(str(spec["formula"])).elements) < 2:
+            continue
+        phase_id = str(spec.get("phase_id", spec["formula"]))
+        artifact_name = (
+            f"{_safe_name(phase_id)}-{hashlib.sha256(phase_id.encode('utf-8')).hexdigest()}"
+        )
+        record = CompoundReferencePhase(
+            phase_id=phase_id,
+            formula=str(spec["formula"]),
+            source=str(spec.get("source", "manifest")),
+            provenance={
+                str(key): str(value) for key, value in dict(spec.get("provenance", {})).items()
+            },
+            initial_structure_path=str(spec["path"]),
+            energy_correction_eV_per_atom=float(spec.get("energy_correction_eV_per_atom", 0.0)),
+            magnetic_state=str(spec.get("magnetic_state", "model_default_or_implicit")),
+        )
+        optimized_path = output_dir / f"{artifact_name}.extxyz"
+        try:
+            converged, steps, max_force, energy = relax_structure(
+                spec["path"],
+                calculator,
+                output_path=optimized_path,
+                log_path=output_dir / f"{artifact_name}.log",
+                max_steps=max_steps,
+                fmax_eV_per_A=fmax_eV_per_A,
+                maxstep_A=maxstep_A,
+                relax_cell=relax_cell and bool(spec.get("relax_cell", True)),
+            )
+            record.optimized_structure_path = str(optimized_path.resolve())
+            record.converged = converged
+            record.num_steps = steps
+            record.max_force_eV_per_A = max_force
+            record.total_energy_eV = energy
+        except Exception as exc:  # noqa: BLE001
+            record.failure = repr(exc)
+        records.append(record)
+    result = CompoundReferenceSearchResult(model_identifier=model_identifier, phases=records)
+    result_path.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    return result
+
+
 def load_reference_phase_specs(reference_manifest: Path) -> list[dict[str, Any]]:
     """Load normalized phase specifications and resolve paths against the manifest."""
     raw = json.loads(reference_manifest.read_text(encoding="utf-8"))
@@ -106,12 +228,8 @@ def relax_unary_references(
     relax_cell: bool = True,
 ) -> UnaryReferenceSearchResult:
     """Relax all unary candidates and select the minimum endpoint per element."""
-    from ase.filters import ExpCellFilter
-    from ase.io import read, write
-    from ase.optimize import FIRE
+    from ase.io import read
     from pymatgen.core import Composition
-
-    from matsim_agents.backends.mlip.relaxation import _NumericalStressCalculator
 
     output_dir.mkdir(parents=True, exist_ok=True)
     result_path = output_dir / "unary_reference_search.json"
@@ -150,32 +268,25 @@ def relax_unary_references(
             magnetic_state=str(spec.get("magnetic_state", "model_default_or_implicit")),
         )
         try:
-            atoms = read(str(spec["path"]))
-            active_calculator = calculator
-            atoms.calc = active_calculator
-            optimizable: Any = atoms
-            if relax_cell and bool(spec.get("relax_cell", True)) and bool(np.all(atoms.pbc)):
-                active_calculator = _NumericalStressCalculator(calculator)
-                atoms.calc = active_calculator
-                optimizable = ExpCellFilter(atoms)
-            optimizer = FIRE(
-                optimizable,
-                logfile=str(output_dir / f"{artifact_name}.log"),
-                maxstep=maxstep_A,
-            )
-            converged = bool(optimizer.run(fmax=fmax_eV_per_A, steps=max_steps))
-            forces = np.asarray(optimizable.get_forces(), dtype=float)
-            max_force = float(np.linalg.norm(forces, axis=1).max())
-            energy = float(atoms.get_potential_energy())
             optimized_path = output_dir / f"{artifact_name}.extxyz"
-            write(optimized_path, atoms)
+            converged, steps, max_force, energy = relax_structure(
+                spec["path"],
+                calculator,
+                output_path=optimized_path,
+                log_path=output_dir / f"{artifact_name}.log",
+                max_steps=max_steps,
+                fmax_eV_per_A=fmax_eV_per_A,
+                maxstep_A=maxstep_A,
+                relax_cell=relax_cell and bool(spec.get("relax_cell", True)),
+            )
+            n_atoms = len(read(optimized_path))
             record.optimized_structure_path = str(optimized_path.resolve())
             record.converged = converged
-            record.num_steps = int(optimizer.nsteps)
+            record.num_steps = steps
             record.max_force_eV_per_A = max_force
             record.total_energy_eV = energy
-            record.energy_per_atom_eV = energy / len(atoms)
-            record.corrected_energy_per_atom_eV = energy / len(atoms) + correction
+            record.energy_per_atom_eV = energy / n_atoms
+            record.corrected_energy_per_atom_eV = energy / n_atoms + correction
         except Exception as exc:  # noqa: BLE001
             record.failure = repr(exc)
         records.append(record)

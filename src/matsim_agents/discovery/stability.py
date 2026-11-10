@@ -260,6 +260,7 @@ class StabilityReport(BaseModel):
     reference_set_id: str | None = None
     degeneracy_tolerance_eV_per_atom: float = 0.01
     degeneracy_reference_structure_path: str | None = None
+    limitations: list[str] = Field(default_factory=list)
     near_degenerate_structure_paths: list[str] = Field(default_factory=list)
 
 
@@ -549,6 +550,15 @@ def score_stability(
         )
     summary_lines.append(f"Chemical-stability proxy: {'PASS' if chem_stable else 'INCONCLUSIVE'}.")
 
+    from matsim_agents.discovery.defects import MAGNETISM_LIMITATION, magnetic_elements
+
+    # Hull references (e.g. O2, transition-metal endpoints) can be spin-polarized.
+    limitations = (
+        [MAGNETISM_LIMITATION]
+        if ranking_mode == RankingMode.CONVEX_HULL or magnetic_elements(ground.composition)
+        else []
+    )
+
     return StabilityReport(
         formula=formula,
         ground_state=ground,
@@ -561,4 +571,5 @@ def score_stability(
         degeneracy_tolerance_eV_per_atom=degeneracy_tol_eV_per_atom,
         degeneracy_reference_structure_path=degeneracy_reference.optimized_structure_path,
         near_degenerate_structure_paths=[item.optimized_structure_path for item in near_degenerate],
+        limitations=limitations,
     )
