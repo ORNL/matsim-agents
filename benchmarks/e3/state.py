@@ -67,6 +67,8 @@ class E3CalculationRecord(BaseModel):
     final_status: str | None = None
     qualified: bool | None = None
     rejection_reasons: list[str] = Field(default_factory=list)
+    execution_warnings: list[str] = Field(default_factory=list)
+    allocation_history: list[dict[str, Any]] = Field(default_factory=list)
     values: dict[str, Any] = Field(default_factory=dict)
     elapsed_seconds: float | None = None
     node_hours: float | None = None

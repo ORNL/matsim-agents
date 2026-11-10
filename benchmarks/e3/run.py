@@ -1389,6 +1389,7 @@ def main(argv: list[str] | None = None) -> int:
     ing.add_argument("--ledgers", type=Path, required=True, help="copy of the round's ledger directory")
     ing.add_argument("--replay", type=Path, required=True, help="prepared replay directory")
     ing.add_argument("--state", type=Path, required=True)
+    ing.add_argument("--allocation-adjustments", type=Path, help="manifest-SHA-bound verified PBS accounting")
     ing.add_argument("--reassess", action="store_true", help="deterministic reassessment once ingested")
     args = parser.parse_args(argv)
     if args.command == "ingest":
@@ -1401,6 +1402,7 @@ def main(argv: list[str] | None = None) -> int:
             ledger_dir=args.ledgers,
             replay_dir=args.replay,
             state_path=args.state,
+            allocation_adjustments_path=args.allocation_adjustments,
         )
         if args.reassess:
             ctx = controller.load_context(args.material, args.replay, controller.DEFAULT_REFERENCE_ROLES)

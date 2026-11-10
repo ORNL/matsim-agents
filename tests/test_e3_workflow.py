@@ -85,7 +85,12 @@ def _seed_ledger(path: Path, requests: dict[str, str]) -> dict[str, str]:
 
 
 def _run_log(
-    repeat: Path, cid: str, normal: bool = True, normal_ok: bool = True, exited: bool = True
+    repeat: Path,
+    cid: str,
+    normal: bool = True,
+    normal_ok: bool = True,
+    exited: bool = True,
+    exit_status: int = 0,
 ):
     root = repeat / "attempts"
     lines = [
@@ -107,7 +112,7 @@ def _run_log(
             f"allocation_accounting pbs_job_id=900.pbs calculation_id={cid} allocated_nodes=1 "
             "requested_nodes=1 walltime_limit_seconds=86400 requested_node_hours=24.000000 "
             "elapsed_seconds=3600 elapsed_node_hours=1.000000",
-            f"EXIT job=900.pbs calculation_id={cid} status=0 final={final}",
+            f"EXIT job=900.pbs calculation_id={cid} status={exit_status} final={final}",
         ]
     (repeat / "run-record.log").write_text(
         "".join(f"[e4-ab 2026-11-09T00:00:00+00:00] {line}\n" for line in lines)
@@ -361,6 +366,75 @@ def test_failed_normal_stage_is_recorded_without_values(campaign):
     assert evidence.outcome == EvidenceOutcome.FAILED_TO_COMPUTE and not evidence.values
     assert evidence.cost.failed_jobs == 1 and evidence.cost.node_hours == 1.0
     assert state.round(1).strategies[RULE].logical_attempts == 2  # failures are charged
+
+
+def test_converged_normal_survives_wrapper_failure_as_warning(campaign):
+    repeat = Path(campaign.cases[0]["case_dir"]) / "alcf/repeat-01"
+    _run_log(repeat, "x", exit_status=2)
+    stage = controller.locate_normal_stage(Path(campaign.cases[0]["case_dir"]), "repeat-01")
+    assert stage.status == "converged" and "job exit 2" in stage.reason
+
+    state = campaign.ingest()
+    calc = state.round(1).calculations["E3-R1-BCC-0001"]
+    evidence = _ledger(campaign, RULE).get(calc.evidence_ids[RULE])
+    assert evidence.outcome == EvidenceOutcome.MEASURED
+    assert calc.execution_warnings and "job exit 2" in calc.execution_warnings[0]
+    assert evidence.cost.failed_jobs == 1 and evidence.cost.failed_seconds == 3600
+    assert any("execution warning" in item for item in evidence.physical_assumptions)
+
+
+def test_manifest_bound_prior_allocation_is_aggregated(campaign):
+    adjustments = campaign.root / "allocation-adjustments.json"
+    adjustments.write_text(
+        json.dumps(
+            {
+                "manifest_sha256": sha256_bytes(campaign.manifest.read_bytes()),
+                "adjustments": {
+                    "E3-R1-BCC-0001": [
+                        {
+                            "pbs_job_id": "899.pbs",
+                            "allocated_nodes": 1,
+                            "elapsed_seconds": 1800,
+                            "elapsed_node_hours": 0.5,
+                            "exit_status": -20,
+                            "source": "verified prior PBS accounting record",
+                        }
+                    ]
+                },
+            }
+        )
+    )
+    state = controller.ingest_round(
+        material=MATERIAL,
+        round_number=1,
+        manifest_path=campaign.manifest,
+        ledger_dir=campaign.ledgers,
+        replay_dir=campaign.replay,
+        state_path=campaign.state,
+        reference_roles=campaign.roles,
+        allocation_adjustments_path=adjustments,
+    )
+    calc = state.round(1).calculations["E3-R1-BCC-0001"]
+    evidence = _ledger(campaign, RULE).get(calc.evidence_ids[RULE])
+    assert calc.elapsed_seconds == 5400 and calc.node_hours == 1.5 and calc.nodes == 2
+    assert len(calc.allocation_history) == 2
+    assert evidence.cost.node_hours == 1.5
+    assert evidence.cost.failed_jobs == 1 and evidence.cost.failed_seconds == 1800
+
+    bad = json.loads(adjustments.read_text())
+    bad["manifest_sha256"] = "0" * 64
+    adjustments.write_text(json.dumps(bad))
+    with pytest.raises(ValueError, match="manifest SHA-256"):
+        controller.ingest_round(
+            material=MATERIAL,
+            round_number=1,
+            manifest_path=campaign.manifest,
+            ledger_dir=campaign.ledgers,
+            replay_dir=campaign.replay,
+            state_path=campaign.root / "other-state.json",
+            reference_roles=campaign.roles,
+            allocation_adjustments_path=adjustments,
+        )
 
 
 def test_unqualified_normal_stage_is_not_converged(campaign):

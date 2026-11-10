@@ -94,6 +94,9 @@ class StageResult:
     elapsed_seconds: float | None = None
     node_hours: float | None = None
     nodes: int | None = None
+    failed_jobs: int = 0
+    failed_seconds: float = 0.0
+    allocation_history: list[dict[str, Any]] = field(default_factory=list)
     attempts: list[E3Attempt] = field(default_factory=list)
 
 
@@ -118,7 +121,7 @@ def locate_normal_stage(case_dir: Path, repeat: str, variant: str = "alcf") -> S
         return StageResult("pending", reason="run has not started (no run-record.log)")
     events = parse_run_record(log)
     attempts: dict[str, E3Attempt] = {}
-    starts, ends, exits, allocation, header = [], {}, [], None, {}
+    starts, ends, exits, allocations, header = [], {}, [], [], {}
     for kind, kv in events:
         if kind == "job":
             header = kv
@@ -133,15 +136,25 @@ def locate_normal_stage(case_dir: Path, repeat: str, variant: str = "alcf") -> S
                 attempts[kv["tag"]].status = kv.get("status")
                 attempts[kv["tag"]].rc = int(kv["rc"]) if kv.get("rc", "").lstrip("-").isdigit() else None
         elif kind == "allocation_accounting":
-            allocation = kv
+            allocations.append(kv)
         elif kind == "EXIT":
             exits.append(kv)
     result = StageResult("pending", attempts=list(attempts.values()))
-    result.pbs_job_id = (allocation or {}).get("pbs_job_id") or header.get("job")
-    if allocation:
-        result.elapsed_seconds = float(allocation["elapsed_seconds"])
-        result.node_hours = float(allocation["elapsed_node_hours"])
-        result.nodes = int(allocation["allocated_nodes"])
+    result.allocation_history = [dict(item) for item in allocations]
+    result.pbs_job_id = (allocations[-1] if allocations else {}).get("pbs_job_id") or header.get("job")
+    if allocations:
+        result.elapsed_seconds = sum(float(item.get("elapsed_seconds", 0)) for item in allocations)
+        result.node_hours = sum(float(item.get("elapsed_node_hours", 0)) for item in allocations)
+        result.nodes = sum(int(item.get("allocated_nodes", 0)) for item in allocations)
+        exit_statuses = {
+            item.get("job"): int(item["status"])
+            for item in exits
+            if item.get("status", "").lstrip("-").isdigit()
+        }
+        for allocation in allocations:
+            if exit_statuses.get(allocation.get("pbs_job_id"), 0) != 0:
+                result.failed_jobs += 1
+                result.failed_seconds += float(allocation.get("elapsed_seconds", 0))
     if not exits:
         result.reason = "job has not exited"
         return result
@@ -164,9 +177,7 @@ def locate_normal_stage(case_dir: Path, repeat: str, variant: str = "alcf") -> S
         result.reason = f"Normal stage {tag} did not end converged: {end}"
         return result
     if final_exit.get("status") != "0" or result.final != f"converged:{tag}":
-        result.status = "failed"
         result.reason = f"job exit {final_exit.get('status')} final={result.final}, expected converged:{tag}"
-        return result
     snapshot = result.attempt_dir / "snapshot-tag"
     if snapshot.is_file() and snapshot.read_text().strip() != tag:
         result.status = "failed"
@@ -316,11 +327,40 @@ def _cost(stage: StageResult, failed: bool) -> CostRecord:
     return CostRecord(
         dft_calculations=1,
         dft_seconds=seconds,
-        failed_jobs=1 if failed else 0,
-        failed_seconds=seconds if failed else 0.0,
+        failed_jobs=max(stage.failed_jobs, 1 if failed else 0),
+        failed_seconds=max(stage.failed_seconds, seconds if failed else 0.0),
         nodes=stage.nodes or 0,
         node_hours=stage.node_hours or 0.0,
     )
+
+
+def _add_allocation_adjustments(stage: StageResult, adjustments: list[dict[str, Any]]) -> None:
+    known_jobs = {item.get("pbs_job_id") for item in stage.allocation_history}
+    for item in adjustments:
+        job_id = str(item["pbs_job_id"])
+        if job_id in known_jobs:
+            raise ValueError(f"allocation adjustment duplicates recorded PBS job {job_id}")
+        seconds = float(item["elapsed_seconds"])
+        node_hours = float(item["elapsed_node_hours"])
+        nodes = int(item["allocated_nodes"])
+        if seconds < 0 or node_hours < 0 or nodes < 1:
+            raise ValueError(f"invalid allocation adjustment for PBS job {job_id}")
+        allocation = {
+            "pbs_job_id": job_id,
+            "allocated_nodes": nodes,
+            "elapsed_seconds": seconds,
+            "elapsed_node_hours": node_hours,
+            "exit_status": int(item["exit_status"]),
+            "source": str(item["source"]),
+        }
+        stage.allocation_history.insert(0, allocation)
+        stage.elapsed_seconds = (stage.elapsed_seconds or 0.0) + seconds
+        stage.node_hours = (stage.node_hours or 0.0) + node_hours
+        stage.nodes = (stage.nodes or 0) + nodes
+        if allocation["exit_status"] != 0:
+            stage.failed_jobs += 1
+            stage.failed_seconds += seconds
+        known_jobs.add(job_id)
 
 
 def build_evidence(
@@ -338,6 +378,7 @@ def build_evidence(
         "PREC=Normal stage only; PREC=Low frames are not E3 labels",
         "physical calculation shared across strategies is charged in full to each requester",
     ]
+    assumptions.extend(f"execution warning: {warning}" for warning in calc.execution_warnings)
     common = dict(
         kind="relaxation",
         subject=calc.candidate_id,
@@ -387,6 +428,7 @@ def ingest_case(
     *,
     variant: str = "alcf",
     verify=None,
+    allocation_adjustments: list[dict[str, Any]] | None = None,
 ) -> E3CalculationRecord:
     e3 = case["e3"]
     cid = e3["candidate_id"]
@@ -414,8 +456,12 @@ def ingest_case(
         calc.state, calc.rejection_reasons = E3State.REJECTED, reasons
         return calc
     stage = locate_normal_stage(Path(case["case_dir"]), case.get("repeat", "repeat-01"), variant)
+    if allocation_adjustments:
+        _add_allocation_adjustments(stage, allocation_adjustments)
     calc.attempts, calc.pbs_job_id, calc.final_status = stage.attempts, stage.pbs_job_id, stage.final
     calc.elapsed_seconds, calc.node_hours, calc.nodes = stage.elapsed_seconds, stage.node_hours, stage.nodes
+    calc.allocation_history = stage.allocation_history
+    calc.execution_warnings = [stage.reason] if stage.status == "converged" and stage.reason else []
     if stage.status == "pending":
         calc.state = E3State.AWAITING_DFT
         calc.rejection_reasons = [stage.reason] if stage.reason else []
@@ -582,6 +628,7 @@ def ingest_round(
     protocol_path: Path | None = None,
     variant: str = "alcf",
     verify=None,
+    allocation_adjustments_path: Path | None = None,
 ) -> E3WorkflowState:
     ledger_dir = Path(ledger_dir).resolve()
     if FROZEN_ROUND1_LEDGERS.resolve() in (ledger_dir, *ledger_dir.parents):
@@ -589,6 +636,13 @@ def ingest_round(
     ctx = load_context(material, replay_dir, reference_roles, protocol_path)
     manifest_bytes = Path(manifest_path).read_bytes()
     manifest = json.loads(manifest_bytes)
+    adjustments = {}
+    if allocation_adjustments_path is not None:
+        adjustment_data = json.loads(Path(allocation_adjustments_path).read_text())
+        manifest_sha = sha256_bytes(manifest_bytes)
+        if adjustment_data.get("manifest_sha256") != manifest_sha:
+            raise ValueError("allocation adjustments do not match the batch manifest SHA-256")
+        adjustments = adjustment_data.get("adjustments", {})
     if Path(state_path).is_file():
         state = E3WorkflowState.load(state_path)
         if state.protocol_sha256 != ctx.protocol_sha:
@@ -606,7 +660,15 @@ def ingest_round(
     for case in cases:
         if "executable_sha256" not in case and manifest.get("executable_sha256"):
             case = {**case, "executable_sha256": manifest["executable_sha256"]}
-        ingest_case(case, ctx, ledgers, state, variant=variant, verify=verify)
+        ingest_case(
+            case,
+            ctx,
+            ledgers,
+            state,
+            variant=variant,
+            verify=verify,
+            allocation_adjustments=adjustments.get(case["calculation_id"], []),
+        )
     account(state, ctx, ledger_dir)
     record = state.round(round_number)
     for strategy, st in record.strategies.items():

@@ -96,6 +96,19 @@ def test_strong_scaling_requires_complete_fixed_workload():
         )
 
 
+def test_scaling_uses_smallest_node_count_as_baseline():
+    strong = analyze_scaling(
+        [
+            _measurement("strong", 1, 1, 100),
+            _measurement("strong", 2, 1, 60),
+            _measurement("strong", 4, 1, 35),
+            _measurement("strong", 8, 1, 20),
+        ]
+    )
+    assert [row["speedup"] for row in strong] == [1, 100 / 60, 100 / 35, 5]
+    assert [row["efficiency"] for row in strong] == [1, (100 / 60) / 2, (100 / 35) / 4, 5 / 8]
+
+
 def test_weak_scaling_uses_valid_task_throughput_and_node_hours():
     rows = analyze_scaling(
         [
