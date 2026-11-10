@@ -1,0 +1,1094 @@
+{
+  "schema_version": 1,
+  "queue": "capacity",
+  "source_manifest": {
+    "path": "../matsim-agents-e3-e4/deployments/aurora/jobs/e4-first-batch/batch-manifest.json",
+    "sha256": "00980167163f6bb8247988df81339ade666ff2a146a2f36c61fef817ed88e95c",
+    "batch_authorization_applies_to_scaling": false
+  },
+  "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+  "task_layout": {
+    "nodes_per_task": 1,
+    "mpi_ranks_per_task": 8,
+    "omp_threads_per_rank": 8,
+    "task_walltime_cap_hours": 24,
+    "output_root": "runs/e4-scaling/<experiment>/<run-id>/<tier>/<segment>/<task-id>/",
+    "runner": "deployments/aurora/jobs/job-e4-scaling.pbs"
+  },
+  "tasks": [
+    {
+      "calculation_id": "E4-BCC-0001",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-0001",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0001/POSCAR",
+      "source_poscar_sha256": "25ee70024b9dd1e2a39d1cd3c1091409e9c83aa5b7789e633df8b58ac044189c",
+      "composition": {
+        "Hf": 32,
+        "Nb": 32,
+        "Ta": 32,
+        "V": 32
+      },
+      "structure_id": "9b90b97c40ef6169c7048b924038c5e2761621879d9491a96db1d0049555a72c",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "25ee70024b9dd1e2a39d1cd3c1091409e9c83aa5b7789e633df8b58ac044189c",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "10a4727b2e4a00fb8089889b167e3f1a66d188ef1a38d71229eea6532e16930f"
+      },
+      "prepared_input_bundle_sha256": "b562a57a0f01cab21b31f3a8cd19168039fac657b06a6b804b41a25bdf314440",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "10a4727b2e4a00fb8089889b167e3f1a66d188ef1a38d71229eea6532e16930f",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-0002",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-0002",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-0002/POSCAR",
+      "source_poscar_sha256": "08bfd8aeed3d1db58292d39910adefbf25fadd580f7722b4f5e458c0a8f94e9f",
+      "composition": {
+        "Hf": 32,
+        "Nb": 32,
+        "Ta": 32,
+        "V": 32
+      },
+      "structure_id": "9bf028c480afc0d445d54ab114bc4426fcb4a1ee27fa1fa47f8319de10303db3",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "08bfd8aeed3d1db58292d39910adefbf25fadd580f7722b4f5e458c0a8f94e9f",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "10a4727b2e4a00fb8089889b167e3f1a66d188ef1a38d71229eea6532e16930f"
+      },
+      "prepared_input_bundle_sha256": "7afdab47a6859228c1aa73126f273fa9e3e8fd9fca1302715259f91ab67afd3a",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "10a4727b2e4a00fb8089889b167e3f1a66d188ef1a38d71229eea6532e16930f",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-0561",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-0561",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0561/POSCAR",
+      "source_poscar_sha256": "0c0dea4668d3788f8bf5a00e32231e4253e70b84a409d9857569bc6fa68f27b7",
+      "composition": {
+        "Hf": 32,
+        "Nb": 32,
+        "Ti": 32,
+        "V": 32
+      },
+      "structure_id": "7aed8a02667805b7f1d2408d6d6e2858e211bd76b471afa44b9b9f8ffa48b781",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "0c0dea4668d3788f8bf5a00e32231e4253e70b84a409d9857569bc6fa68f27b7",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "a7b848aa508f0266294e9b1e45138623eeb961feb27c7695b3bc437b202aa9f2"
+      },
+      "prepared_input_bundle_sha256": "a04f2ab003b001f8a7b85ff3acbfa48dcdf06affc0e49dd3422de97611c41498",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "a7b848aa508f0266294e9b1e45138623eeb961feb27c7695b3bc437b202aa9f2",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-0562",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-0562",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-0562/POSCAR",
+      "source_poscar_sha256": "7e7c5968f6d0afc9275b07bf4741e33edffc471056830cc04f3cfaae0a22157c",
+      "composition": {
+        "Hf": 32,
+        "Nb": 32,
+        "Ti": 32,
+        "V": 32
+      },
+      "structure_id": "9d23fb4406835d6885ae8e3abf49096eb61376e168e7108de0babc6c5b03ff86",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "7e7c5968f6d0afc9275b07bf4741e33edffc471056830cc04f3cfaae0a22157c",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "a7b848aa508f0266294e9b1e45138623eeb961feb27c7695b3bc437b202aa9f2"
+      },
+      "prepared_input_bundle_sha256": "4a2c72a75f6cff3a1fbef4076ba206201dbf1eb75ffd24c4e3363689f7b9d5fc",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "a7b848aa508f0266294e9b1e45138623eeb961feb27c7695b3bc437b202aa9f2",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1121",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1121",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1121/POSCAR",
+      "source_poscar_sha256": "3feecd1a60b7a465836a6e6108a3a2927eea39fc361cbbf04f58cf9c90e736e5",
+      "composition": {
+        "Hf": 32,
+        "Ti": 32,
+        "V": 32,
+        "Zr": 32
+      },
+      "structure_id": "4538d488fa3492c4b50d675f4734120974a2f45b5e5ebc3f260857b0b7b76164",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "3feecd1a60b7a465836a6e6108a3a2927eea39fc361cbbf04f58cf9c90e736e5",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "42a3e2ae184ea34f2ba7173b8f347be9e31b09ec7605b6516f831eaa310108af"
+      },
+      "prepared_input_bundle_sha256": "bc887ae21509738f0fc78fc99a80f089e6431c17d91fdd24024c56fae56958a0",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "42a3e2ae184ea34f2ba7173b8f347be9e31b09ec7605b6516f831eaa310108af",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1122",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1122",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1122/POSCAR",
+      "source_poscar_sha256": "c295d0e7a0e2df8f49f60129ca9086b091c62bca1ae10e89fb2669aafa72c19f",
+      "composition": {
+        "Hf": 32,
+        "Ti": 32,
+        "V": 32,
+        "Zr": 32
+      },
+      "structure_id": "4b56481b4f0434dd7c0e30bc05a88e5b3db3a1d9dab46e3106044b8f724a0946",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "c295d0e7a0e2df8f49f60129ca9086b091c62bca1ae10e89fb2669aafa72c19f",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "42a3e2ae184ea34f2ba7173b8f347be9e31b09ec7605b6516f831eaa310108af"
+      },
+      "prepared_input_bundle_sha256": "a76409ce10558085286b45785709dda62fa17b6159292b282a8f9ec96ada9bd2",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "42a3e2ae184ea34f2ba7173b8f347be9e31b09ec7605b6516f831eaa310108af",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1201",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1201",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1201/POSCAR",
+      "source_poscar_sha256": "c8d63d350db266ece90e3fece37d2a59442800039f1dae178307484917c4363c",
+      "composition": {
+        "Hf": 25,
+        "Nb": 26,
+        "Ta": 26,
+        "V": 26,
+        "Zr": 25
+      },
+      "structure_id": "fdc7b99ff302523b1017e0243dd4d9c57f96eed1bc05d67a6c9d041c9702476b",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "c8d63d350db266ece90e3fece37d2a59442800039f1dae178307484917c4363c",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "f6d9ae6e98a59244ed35420e2dabf8b66fa56bf7b55516f8952d134a2946b917"
+      },
+      "prepared_input_bundle_sha256": "a904eff3a36ad25d48e386d9c0ce2bcecac40d7f432f8240f3b1092f14b786e4",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "f6d9ae6e98a59244ed35420e2dabf8b66fa56bf7b55516f8952d134a2946b917",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1202",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1202",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1202/POSCAR",
+      "source_poscar_sha256": "cf909f24cdb23f5101bd62b921616f58f008c13b516d338871c679aa8a10dbe8",
+      "composition": {
+        "Hf": 25,
+        "Nb": 26,
+        "Ta": 26,
+        "V": 26,
+        "Zr": 25
+      },
+      "structure_id": "a0ccfd43b77a7c4254df0e28443ff3f9b0954337023a937f29d8ee33fb279ec6",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "cf909f24cdb23f5101bd62b921616f58f008c13b516d338871c679aa8a10dbe8",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "f6d9ae6e98a59244ed35420e2dabf8b66fa56bf7b55516f8952d134a2946b917"
+      },
+      "prepared_input_bundle_sha256": "c5f0d3d0a7eeb8e21ac216203e13adb78c3f21cbc8c3db6817c9b5c10fea4651",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "f6d9ae6e98a59244ed35420e2dabf8b66fa56bf7b55516f8952d134a2946b917",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1501",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1501",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1501/POSCAR",
+      "source_poscar_sha256": "1a81e3278b3bce927ab89f4d04efe810a43a04eefe7356c2669d99f9bfd1d3bd",
+      "composition": {
+        "Hf": 26,
+        "Nb": 26,
+        "Ta": 26,
+        "Ti": 25,
+        "Zr": 25
+      },
+      "structure_id": "2337f32c0736a77fb5cafe99c65d2649ff501f69df882efcea3648aaaea46de8",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "1a81e3278b3bce927ab89f4d04efe810a43a04eefe7356c2669d99f9bfd1d3bd",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "3485ba344693ce6c187230d913c618a66a75b2a1befd5fa090c434ac4280e973"
+      },
+      "prepared_input_bundle_sha256": "5d8d5dcab71f864ca7909bbc2c3a5d96bd3e69d432e8dfa58e908e3f0f17b2cb",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "3485ba344693ce6c187230d913c618a66a75b2a1befd5fa090c434ac4280e973",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1502",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1502",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1502/POSCAR",
+      "source_poscar_sha256": "c6cd242f195a46642b201f4dfe104f40b2eacb593b7c224bfce55f67925ea183",
+      "composition": {
+        "Hf": 26,
+        "Nb": 26,
+        "Ta": 26,
+        "Ti": 25,
+        "Zr": 25
+      },
+      "structure_id": "538bc564b7d763a18df9becc269b3980653848cc34ba7c9e19ad266ceb089c5b",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "c6cd242f195a46642b201f4dfe104f40b2eacb593b7c224bfce55f67925ea183",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "3485ba344693ce6c187230d913c618a66a75b2a1befd5fa090c434ac4280e973"
+      },
+      "prepared_input_bundle_sha256": "e68746c826186dae9f0918f4eca715b07e1076646f1650dac3cd83207373e673",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "3485ba344693ce6c187230d913c618a66a75b2a1befd5fa090c434ac4280e973",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1701",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1701",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1701/POSCAR",
+      "source_poscar_sha256": "725056c78815c72928c2ebe83045aac589487b321f1bb77a91a1f68881a79d36",
+      "composition": {
+        "Hf": 26,
+        "Ta": 26,
+        "Ti": 25,
+        "V": 26,
+        "Zr": 25
+      },
+      "structure_id": "6c2790b1797919915cb598dc8ea71a34b79d3edaa618ab7c6b34f6eae1b31358",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "725056c78815c72928c2ebe83045aac589487b321f1bb77a91a1f68881a79d36",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "afe5a8d80ca2663f34ee2038a20ed6b84fd3bb1cc2c711256ca02cf6a0be323a"
+      },
+      "prepared_input_bundle_sha256": "7c1cfc38a48242e27255da02273796787cdc075479b8d6ff56eda01cb5992acd",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "afe5a8d80ca2663f34ee2038a20ed6b84fd3bb1cc2c711256ca02cf6a0be323a",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1702",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1702",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1702/POSCAR",
+      "source_poscar_sha256": "7533b8538d527dbac07cda5c162bf40ecb267864d3ad5885a1158d4915f63cad",
+      "composition": {
+        "Hf": 26,
+        "Ta": 26,
+        "Ti": 25,
+        "V": 26,
+        "Zr": 25
+      },
+      "structure_id": "ae7bd78a55e50133c5b77b9be603c0c840f9f6ae6c40848f0f00543759d24fbf",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "7533b8538d527dbac07cda5c162bf40ecb267864d3ad5885a1158d4915f63cad",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "afe5a8d80ca2663f34ee2038a20ed6b84fd3bb1cc2c711256ca02cf6a0be323a"
+      },
+      "prepared_input_bundle_sha256": "e26bd21da460b8d3743d96c9254240e76cc014595d492147adc76f9195e6c06e",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "afe5a8d80ca2663f34ee2038a20ed6b84fd3bb1cc2c711256ca02cf6a0be323a",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1801",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1801",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1801/POSCAR",
+      "source_poscar_sha256": "35fe5c79aec66140a10ab28c09c728670c9f87c38dbcb9f17f6b6a2e80a262b9",
+      "composition": {
+        "Hf": 21,
+        "Nb": 22,
+        "Ta": 22,
+        "Ti": 21,
+        "V": 21,
+        "Zr": 21
+      },
+      "structure_id": "95593797dd7ba43b0ec7ae8d91add3c2c94b93918ea50695d6453876cf469aec",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "35fe5c79aec66140a10ab28c09c728670c9f87c38dbcb9f17f6b6a2e80a262b9",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d"
+      },
+      "prepared_input_bundle_sha256": "fba914dace9285061d34a5c9f58e57fc7c467821c7aa631be2fa3a8250d83b40",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1802",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1802",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1802/POSCAR",
+      "source_poscar_sha256": "b2fd57c45e3e090b8cb9e3845636f0166a7cf69a92be03a1eaccf8fffee6bbe7",
+      "composition": {
+        "Hf": 21,
+        "Nb": 22,
+        "Ta": 22,
+        "Ti": 21,
+        "V": 21,
+        "Zr": 21
+      },
+      "structure_id": "7eae92b4d60fa1e2ad351260bc7dc16433fbf7c258b74d52777d8da4e6856058",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "b2fd57c45e3e090b8cb9e3845636f0166a7cf69a92be03a1eaccf8fffee6bbe7",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d"
+      },
+      "prepared_input_bundle_sha256": "1463bc1b2ad6f18296f07c8ea1fcd87ca57c91b9171d49a7fba3ae3709cd7063",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1805",
+      "case_dir": "../e4-first-batch-01/inputs/E4-BCC-1805",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1805/POSCAR",
+      "source_poscar_sha256": "eb8f3877d44bafa9741f96a4766093ca8c61f22ea0ffe152d137e839a2185d7b",
+      "composition": {
+        "Hf": 16,
+        "Nb": 46,
+        "Ta": 17,
+        "Ti": 16,
+        "V": 17,
+        "Zr": 16
+      },
+      "structure_id": "1d52b395e1ad6040ea450d960f3c8d47187dd7be539001697185c74e44da1c45",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "eb8f3877d44bafa9741f96a4766093ca8c61f22ea0ffe152d137e839a2185d7b",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d"
+      },
+      "prepared_input_bundle_sha256": "4cf5316257d8ba7dbee67fe6129d663d5cc5bb63b90bb0694dc2a2bf548629d6",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    },
+    {
+      "calculation_id": "E4-BCC-1806",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1806",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1806/POSCAR",
+      "source_poscar_sha256": "bc62cdeaf564b8e54bf51e798827e2361e5841074ff195e91195f0830df46b99",
+      "composition": {
+        "Hf": 16,
+        "Nb": 46,
+        "Ta": 17,
+        "Ti": 16,
+        "V": 17,
+        "Zr": 16
+      },
+      "structure_id": "b31ed587ac99136c98c8bd41a56201743d1af6c60ed91bd71c05726f4266cdaf",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "bc62cdeaf564b8e54bf51e798827e2361e5841074ff195e91195f0830df46b99",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d"
+      },
+      "prepared_input_bundle_sha256": "a2edb6a41f21a4fb91936ba32e2c3d44b6282f3c65dab99ae37680f6753f1fcb",
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d",
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "ediffg_eV_per_A": "-0.01"
+    }
+  ],
+  "larger_tiers": {
+    "nodes": [
+      16,
+      32,
+      64,
+      128
+    ],
+    "status": "planned_separate_authorization_required"
+  },
+  "execution_authorized": true,
+  "authorization": {
+    "id": "E4-SCALE-AUTH-20261110-weak",
+    "granted_by": "user (mlupopa)",
+    "granted_on": "2026-11-10",
+    "statement": "I approve all the allocationz",
+    "scope": "bounded 1/2/4/8-node tiers in this manifest only; capacity queue; HydraGNN",
+    "node_hours_cap": 720,
+    "combined_node_hours_cap": 1488
+  },
+  "campaign_id": "E4-Aurora-BCC-Weak-v1",
+  "experiment": "weak",
+  "run_id_prefix": "E4-SCALE-WEAK-v1",
+  "available_unique_case_ids": [
+    "E4-BCC-0001",
+    "E4-BCC-0002",
+    "E4-BCC-0561",
+    "E4-BCC-0562",
+    "E4-BCC-1121",
+    "E4-BCC-1122",
+    "E4-BCC-1201",
+    "E4-BCC-1202",
+    "E4-BCC-1501",
+    "E4-BCC-1502",
+    "E4-BCC-1701",
+    "E4-BCC-1702",
+    "E4-BCC-1801",
+    "E4-BCC-1802",
+    "E4-BCC-1805",
+    "E4-BCC-1806"
+  ],
+  "additional_case_ids": [
+    "E4-BCC-0002",
+    "E4-BCC-0562",
+    "E4-BCC-1122",
+    "E4-BCC-1202",
+    "E4-BCC-1502",
+    "E4-BCC-1702",
+    "E4-BCC-1802",
+    "E4-BCC-1806"
+  ],
+  "additional_input_manifest": "../matsim-agents-e3-e4/research/paper/e4/aurora-dft-scaling/priority-scaling/weak-input-manifest.json",
+  "tiers": [
+    {
+      "nodes": 1,
+      "required_unique_tasks": 2,
+      "available_unique_tasks": 2,
+      "node_assignments": [
+        [
+          "E4-BCC-0001",
+          "E4-BCC-0002"
+        ]
+      ],
+      "walltime_cap_hours": 48,
+      "node_hours_cap": 48,
+      "status": "planning_only_dispatcher_ready_authorization_required"
+    },
+    {
+      "nodes": 2,
+      "required_unique_tasks": 4,
+      "available_unique_tasks": 4,
+      "node_assignments": [
+        [
+          "E4-BCC-0001",
+          "E4-BCC-0002"
+        ],
+        [
+          "E4-BCC-0561",
+          "E4-BCC-0562"
+        ]
+      ],
+      "walltime_cap_hours": 48,
+      "node_hours_cap": 96,
+      "status": "planning_only_dispatcher_ready_authorization_required"
+    },
+    {
+      "nodes": 4,
+      "required_unique_tasks": 8,
+      "available_unique_tasks": 8,
+      "node_assignments": [
+        [
+          "E4-BCC-0001",
+          "E4-BCC-0002"
+        ],
+        [
+          "E4-BCC-0561",
+          "E4-BCC-0562"
+        ],
+        [
+          "E4-BCC-1121",
+          "E4-BCC-1122"
+        ],
+        [
+          "E4-BCC-1201",
+          "E4-BCC-1202"
+        ]
+      ],
+      "walltime_cap_hours": 48,
+      "node_hours_cap": 192,
+      "status": "planning_only_dispatcher_ready_authorization_required"
+    },
+    {
+      "nodes": 8,
+      "required_unique_tasks": 16,
+      "available_unique_tasks": 16,
+      "node_assignments": [
+        [
+          "E4-BCC-0001",
+          "E4-BCC-0002"
+        ],
+        [
+          "E4-BCC-0561",
+          "E4-BCC-0562"
+        ],
+        [
+          "E4-BCC-1121",
+          "E4-BCC-1122"
+        ],
+        [
+          "E4-BCC-1201",
+          "E4-BCC-1202"
+        ],
+        [
+          "E4-BCC-1501",
+          "E4-BCC-1502"
+        ],
+        [
+          "E4-BCC-1701",
+          "E4-BCC-1702"
+        ],
+        [
+          "E4-BCC-1801",
+          "E4-BCC-1802"
+        ],
+        [
+          "E4-BCC-1805",
+          "E4-BCC-1806"
+        ]
+      ],
+      "walltime_cap_hours": 48,
+      "node_hours_cap": 384,
+      "status": "planning_only_dispatcher_ready_authorization_required"
+    }
+  ],
+  "aggregate_node_hours_cap": 720,
+  "resource_request": {
+    "maximum_nodes_per_job": 8,
+    "maximum_walltime_hours_per_job": 48,
+    "total_node_hours_cap": 720,
+    "submission": "authorized 2026-11-10; tiers >8 nodes remain unauthorized"
+  }
+}

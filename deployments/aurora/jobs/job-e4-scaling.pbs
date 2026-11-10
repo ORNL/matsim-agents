@@ -15,4 +15,4 @@ ARGS=(dispatch --manifest "${E4_SCALING_MANIFEST}" --nodes "${E4_SCALING_NODES}"
 if [[ -n "${E4_SCALING_SEGMENT:-}" ]]; then
   ARGS+=(--segment-id "${E4_SCALING_SEGMENT}")
 fi
-exec python "${REPO}/benchmarks/e4/aurora_dft/scaling.py" "${ARGS[@]}"
+exec "${REPO}/../matsim-agents/.venv/bin/python" "${REPO}/benchmarks/e4/aurora_dft/scaling.py" "${ARGS[@]}"
