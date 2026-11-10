@@ -2,7 +2,19 @@
 
 Strategies: **LLM-guided adaptation** and **Rule-based adaptation**. Protocol and
 code are in [`benchmarks/e3/`](../../../benchmarks/e3/README.md).
-No DFT or training was run.
+The E3 Round 1 BCC DFT cases have since completed or reached terminal outcomes;
+the large E3-MLIP campaign has not started. No campaign DFT is authorized by
+this status document.
+
+Mandatory exploration, learning, discovery, statistical, and reporting gates
+are specified in
+[`scientific-objectives-v1.yaml`](../../../benchmarks/e3/scientific-objectives-v1.yaml).
+Campaign start remains blocked until the MLIP set, scientific endpoint,
+independent reference coverage, full protocol, and budget are approved.
+E3-MLIP covers all six material classes with a planning target of 5,000 unique
+valid configurations per class (30,000 total); the approval matrix is
+[`mlip-suitability-v1.yaml`](mlip-suitability-v1.yaml). E3-DFT identifiers,
+results, execution protocol, and acquisition budgets remain unchanged.
 
 - [`inventory.json`](inventory.json): six-material inventory.
 - [`round1-bcc-manifest.json`](round1-bcc-manifest.json) and
@@ -60,12 +72,79 @@ to validation; test is empty.
 | MACE | MACE-MP-0 small, float64, CPU, `.venv-mace` | 0.157 / 0.205 | 0.040 | insufficient validation evidence |
 | HydraGNN | frozen epoch-97 + branch MLP | not evaluated | — | XPU-only; strict-load rerun (job 9052180) hit the 840 s timeout (exit 124) with no results; units unverified |
 
-These metrics are diagnostic. With one correlated reference group, no cell
+The initial 54-frame metrics above use one correlated reference group; no cell
 gets pass/fail. Relative energies within one near-relaxed trajectory span
 little energy, so that metric does not discriminate between models. LiFePO4
 has no references, so it has no zero-shot errors. MACE-MP and UMA-omat also
 learn MP-style PBE+U energies for Fe oxides, a convention mismatch with the
 plain-PBE protocol.
+
+### Preliminary BCC model screen (2026-11-10)
+
+The saved screening run contains 68 frames from four 128-atom BCC trajectories:
+30 frames in two held-out E4 references (E4-BCC-0001 test and E4-BCC-0561
+validation group 1) and 38 frames in the E3-R1-BCC-0394/0582 acquisition cases.
+The metrics below are frame-weighted diagnostics, not independent samples:
+
+| Model | Held-out force MAE / RMSE (eV/A) | Held-out within-trajectory relative-energy MAE (meV/atom) | Acquired force MAE / RMSE (eV/A) |
+|---|---:|---:|---:|
+| UMA `uma-s-1p1-omat` | 0.0507 / 0.0646 | 0.0316 | 0.0471 / 0.0595 |
+| MACE `mace-mp-0-small` | 0.1392 / 0.1791 | 0.0360 | 0.1297 / 0.1705 |
+
+UMA is the preliminary BCC force-screen leader. The result is not a final model
+selection: there is only one held-out validation group (two are required),
+frames within each relaxation are correlated, and within-trajectory relative
+energies span a narrow range. Two held-out groups do not support a reliable
+inferential confidence interval. The selection recommendation is to prioritize
+UMA and retain frozen MACE as a committee comparator, pending explicit approval.
+These are not materials-discovery results and provide no independent support
+for a candidate's scientific utility. Source artifacts remain in the protected
+sibling checkout at `../../../../matsim-agents/runs/e3/zero-shot-qualified-bcc-20261110/`;
+`metrics.json` SHA-256 is
+`2635930ececd5d112a1b6d62190f98a6fb3bef46813c9ca8146f0daa31f3335c` and
+`frames-manifest.json` SHA-256 is
+`0a23b2e29d7bfc5a65ad9071783467cf9f6b2001bd6f5ecef23a93c11f27f48a`.
+
+### Codabench Reference Screen
+
+The Codabench reference package contains 37 public labeled structures across
+eight benchmark categories; the public split matches E3 classes only for one
+LiFePO4 structure and one P monolayer. The other four E3 classes have no exact
+public match. All 37 public structures were evaluated by frozen MACE-MP-0-small,
+UMA-s-1p1-OMAT, and HydraGNN OMat24 head 7; all three completed 37/37 without
+prediction failures. The 84 private leaderboard labels are excluded. VASP
+minor-version differences are not a reason to exclude these labels.
+
+| Model | Public force-component MAE (eV/A) | Formation-energy MAE (eV/atom) | Inference + element-reference time (s, excluding model load) |
+|---|---:|---:|---:|
+| MACE-MP-0-small | 60.423 | 0.349 | 49.67 |
+| UMA-s-1p1-OMAT | 60.351 | 0.677 | 433.79 |
+| HydraGNN OMat24 (head 7) | 59.683 | 1.423 | 13.21 |
+
+These pooled force errors are dominated by shared outlier DFT force labels:
+MATS-0030 Cu (max component 12,436 eV/A), MATS-0033 Fe (972 eV/A), and
+MATS-0006 C (120 eV/A). Treat the pooled force metrics as a data-quality warning,
+not a model ranking; inspect per-class and per-structure results.
+
+The exact E3-class public cases are one LiFePO4 structure (MATS-0060) and one
+P monolayer (MATS-0016). Their force-component MAE / absolute formation-energy
+error are:
+
+| Public case | MACE-MP-0-small | UMA-s-1p1-OMAT | HydraGNN OMat24 head 7 |
+|---|---:|---:|---:|
+| LiFePO4, MATS-0060 (eV/A; eV/atom) | 4.413; 0.356 | 4.237; 0.025 | 0.442; 0.160 |
+| P monolayer, MATS-0016 (eV/A; eV/atom) | 2.547; 0.076 | 2.488; 0.010 | 2.486; 0.336 |
+
+Each is a single structure, not an independent-group estimate or a class-level
+ranking. HydraGNN's head predicts composition-baseline residual energies; its
+formation energy, like MACE and UMA, is computed with same-model pure-element
+subtraction:
+$(E_{model}(compound)-\sum_i n_i E_{model}(element_i))/N$. The composition-linear
+baseline cancels for HydraGNN, and no benchmark labels are used to fit a correction. The
+results and logs are in [`runs/codabench/e3-public/`](../../../runs/codabench/e3-public/);
+the 16-branch checkpoint is pinned to head 7 (`OMat24`) with no routing MLP.
+These public screens are useful for model suitability, but not discovery or
+E3 validation claims without sufficient independent groups.
 
 ## 5. Round 1 paired BCC decision (frozen; no DFT requested)
 

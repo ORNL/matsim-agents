@@ -134,6 +134,41 @@ class TestAnalystNode:
         assert "-5.432" in summary  # best energy from fake_relaxation_result
         assert "2 relaxation" in summary
 
+    def test_deterministic_summary_ranks_per_atom_within_composition(self, tmp_path):
+        from ase import Atoms
+        from ase.io import write
+
+        from matsim_agents.orchestration.agents.analyst import _deterministic_summary
+
+        def result(name, atoms, energy):
+            path = tmp_path / f"{name}.extxyz"
+            write(path, atoms)
+            return RelaxationResult(
+                structure_path=str(path),
+                optimized_structure_path=str(path),
+                trajectory_path="",
+                log_csv_path="",
+                final_energy_eV=energy,
+                final_max_force_eV_per_A=0.01,
+                num_steps=1,
+                converged=True,
+            )
+
+        si2 = Atoms("Si2", positions=[(0, 0, 0), (1.4, 1.4, 1.4)], cell=[5, 5, 5], pbc=True)
+        si8 = Atoms("Si8", positions=[(i, 0, 0) for i in range(8)], cell=[9, 5, 5], pbc=True)
+        c2 = Atoms("C2", positions=[(0, 0, 0), (1.5, 0, 0)], cell=[5, 5, 5], pbc=True)
+        # Si8 has the lowest total but the higher per-atom energy; C must not be ranked against Si.
+        state = _state(
+            results=[
+                result("si2", si2, -10.0),
+                result("si8", si8, -32.0),
+                result("c2", c2, -100.0),
+            ]
+        )
+        summary = _deterministic_summary(state)
+        assert "Si: lowest energy -5.0000 eV/atom" in summary
+        assert "C: lowest energy -50.0000 eV/atom" in summary
+
     def test_analyst_uses_llm_when_available(self, fake_relaxation_result, monkeypatch):
         import matsim_agents.backends.llm.provider as llm_mod
 

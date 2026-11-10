@@ -1,3 +1,16 @@
+# E3 unified six-material adaptive-acquisition protocol.
+
+Scientific reporting and launch gates are specified in
+[`scientific-objectives-v1.yaml`](scientific-objectives-v1.yaml). That spec
+defines exploration, learning, and independent discovery as separate outcomes.
+It does not authorize campaign execution or DFT; the E3-MLIP campaign remains
+blocked pending model-set, endpoint, reference-coverage, protocol, and budget
+approval.
+
+E3-MLIP scope is all six classes with 5,000 unique valid configurations planned
+per class (30,000 total); per-class model and reference coverage is tracked in
+[`mlip-suitability-v1.yaml`](../../research/paper/e3/mlip-suitability-v1.yaml).
+The legacy E3-DFT protocol and acquisition budgets remain unchanged.
 # E3: paired adaptive acquisition across six materials
 
 E3 compares two adaptation strategies, using the terminology of the revised

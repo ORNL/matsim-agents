@@ -1,0 +1,275 @@
+schema_version: 1
+campaign: E3-MLIP
+status: preliminary_for_user_approval_not_frozen
+scope: all_six_material_classes
+execution_authorized: false
+source_inventory: research/paper/e3/inventory.json
+
+model_facts:
+  uma:
+    checkpoint_screened: uma-s-1p1
+    heads: {omat: inorganic_bulk, omol: molecules_and_MOFs}
+    predictions_include_energy_and_forces: true
+    frozen_for_primary_comparison: true
+  mace:
+    measured_checkpoint: mace-mp-0-small
+    available_families_in_code: [mace_mp, mace_omol, mace_off, mace_polar, mace_anicc]
+    predictions_include_energy_and_forces: true
+    frozen_for_primary_comparison: true
+  hydragnn:
+    checkpoint: multidataset_hpo-BEST6-fp64_epoch_97.pk
+    branch: {name: OMat24, index: 7}
+    predictions_are_composition_baseline_residuals: true
+    frozen_for_primary_comparison: true
+    formation_energy_reconstruction: >-
+      Subtract the same head's pure-element predictions from the compound residual
+      prediction. The composition-linear regression baseline cancels algebraically;
+      do not fit or use benchmark formation labels to reconstruct predictions.
+  shared_caveat: >-
+    Checkpoint-level supported-element lists and exact training-domain overlap are
+    not recorded in the saved E3 artifacts. Verify each selected checkpoint's
+    species coverage and metadata before pool freeze. API support is not evidence
+    of class-specific accuracy or stable relaxation.
+  disagreement: >-
+    Force disagreement can be computed on identical structures in eV/A when both
+    heads support the structure. It is an acquisition feature, not calibrated
+    uncertainty or independent physical validation until compared with qualified
+    class-specific DFT residuals.
+  alternatives_to_screen:
+    - name: CHGNet
+      classes: [lifepo4, fcc_cantor, nb_ta_o]
+      rationale: magnetic-moment-aware inorganic model is a relevant comparator
+      caveat: no local E3 benchmark; does not encode arbitrary spin order as an explicit spin Hamiltonian
+      status: candidate_only_not_selected
+    - name: MACE-MP-0b2
+      classes: [phosphorene, nb_ta_o, bcc_refractory, fcc_cantor]
+      rationale: newer periodic inorganic checkpoint may be a useful checkpoint sensitivity check
+      caveat: local availability and class-specific accuracy not established
+      status: candidate_only_not_selected
+
+classes:
+  lifepo4:
+    name: LiFePO4
+    unique_configuration_target: 5000
+    scientific_questions: [antisite_pair_energetics, defect_induced_relaxation, symmetry_distinct_antisite_configurations]
+    candidate_generation: >-
+      Enumerate symmetry-distinct Li/Fe antisite pairs and pair separations in
+      charge-neutral supercells; deduplicate by canonical occupation and structure
+      hash. Do not use unconstrained coordinate noise.
+    model_candidates:
+      primary: UMA uma-s-1p1 / omat
+      comparison: MACE-MP-0 small
+      support: >-
+        Both are periodic inorganic-model candidates for Li/Fe/P/O; verify exact
+        checkpoint species coverage. Neither has explicit spin configurations.
+      measured_accuracy: >-
+        Public Codabench MATS-0060 (one case): force-component MAE eV/A is 4.413
+        MACE, 4.237 UMA, 0.442 HydraGNN-OMat24; formation-energy absolute error
+        eV/atom is 0.356, 0.025, 0.160, respectively. Not a class-level estimate.
+        The separate 84-structure E3 acquisition pool has UMA/MACE predictions
+        but no DFT labels.
+      relaxation_stability: not_measured_for_this_class
+      disagreement: computable_for_forces_if_checkpoint_species_check_passes; not_spin_aware
+    dft_references:
+      e3_qualified: 0
+      existing_legacy: >-
+        Codabench public split has one LiFePO4 structure (MATS-0060) with DFT
+        forces and formation energy; three historical unit-cell records are also
+        documented. E4 LiFePO4 cases did not run. Use the Codabench public case
+        for a one-structure diagnostic, not as multi-group validation.
+      blocker: plain-PBE E3 signature versus pretrained PBE+U convention; spin and reference coverage
+    recommendation: >-
+      No-go for model freeze. Shortlist UMA-OMAT and MACE-MP-0 for force screening;
+      add CHGNet only as a candidate. Freeze only after spin-aware protocol and
+      independent qualified groups are established.
+  phosphorene:
+    name: Phosphorene
+    unique_configuration_target: 5000
+    scientific_questions: [black_blue_allotrope_ordering, strain_response, vacancy_formation_and_reconstruction]
+    candidate_generation: >-
+      Seed from black- and blue-phosphorus prototypes; enumerate symmetry-distinct
+      strain states and vacancy families, then relax/deduplicate. Preserve 2D
+      vacuum and in-plane k-point convergence; no arbitrary perturbation pool.
+    model_candidates:
+      primary: UMA uma-s-1p1 / omat
+      comparison: MACE-MP-0 small
+      support: >-
+        P is within the intended inorganic periodic-model domain; the 2D slab,
+        vacuum and defect transfer regime is not benchmarked.
+      measured_accuracy: >-
+        Public Codabench MATS-0016 P monolayer (one case): force-component MAE
+        eV/A is 2.547 MACE, 2.488 UMA, 2.486 HydraGNN-OMat24; absolute
+        formation-energy error eV/atom is 0.076, 0.010, 0.336, respectively.
+        Not a class-level estimate; public metadata does not identify allotrope.
+      relaxation_stability: not_measured_for_this_class
+      disagreement: computable_if_both_models_pass_slab_and_species_checks; uncalibrated
+    dft_references:
+      e3_qualified: 0
+      existing_legacy: >-
+        Codabench public split has one P monolayer structure (MATS-0016) with DFT
+        forces and formation energy; public metadata does not identify its
+        allotrope. E2 phosphorene evaluation records and seed structures also exist.
+      blocker: method signature, 2D vacuum/k-mesh protocol, and independent reference roles are not frozen
+    recommendation: >-
+      Provisional UMA-OMAT versus MACE-MP-0 screening pair; no freeze until a
+      slab-specific relaxation and DFT reference protocol is qualified.
+  zn_formate_mof:
+    name: Zn(HCOO)2 MOF
+    unique_configuration_target: 5000
+    scientific_questions: [polymorph_and_ordering_stability, coordination_environment_changes, framework_distortion]
+    candidate_generation: >-
+      Enumerate known alpha/beta/Pbcn polymorphs, symmetry-distinct proton/guest
+      arrangements, and coordination-preserving framework modes; deduplicate by
+      topology, composition and canonical structure. Exclude unsupported arbitrary distortions.
+    model_candidates:
+      primary: UMA uma-s-1p1 / omol
+      comparison: MACE-OMOL
+      secondary_control: UMA omat and MACE-MP-0 only if periodic-framework support is demonstrated
+      support: >-
+        Local configuration describes UMA OMOL as the molecules/MOF head; MACE
+        OMOL loader exists. Check periodic-cell and Zn/C/H/O checkpoint coverage.
+      measured_accuracy: none
+      relaxation_stability: not_measured_for_this_class
+      disagreement: only compare same periodic framework with domain-appropriate heads; calibrate against DFT
+    dft_references:
+      e3_qualified: 0
+      existing_legacy: >-
+        E2 VASP artifacts exist for alpha, Pbcn and dihydrate structures; alpha
+        was accepted in E2, while Pbcn was reported still relaxing. The Codabench
+        public split has no Zn-formate MOF structure.
+      blocker: PBE-D3(BJ) support and method signature unverified; dispersion and framework stability matter
+    recommendation: >-
+      Prefer UMA-OMOL / MACE-OMOL as candidates, not as approved models. Require
+      periodic relaxation tests, dispersion-aware reference protocol and qualified DFT groups.
+  nb_ta_o:
+    name: Nb-Ta-O oxides
+    unique_configuration_target: 5000
+    scientific_questions: [composition_and_cation_ordering, oxygen_vacancy_ordering, local_environment_and_relative_stability]
+    candidate_generation: >-
+      Enumerate charge-balanced compositions, symmetry-distinct cation orderings,
+      and oxygen-vacancy families; use validated oxide prototypes and canonical
+      symmetry reduction, not random displacement sampling.
+    model_candidates:
+      primary: UMA uma-s-1p1 / omat
+      comparison: MACE-MP-0 small
+      support: >-
+        Periodic inorganic oxide heads are the intended candidates; verify Nb/Ta/O
+        species support, oxidation-state coverage and relevant coordination environments.
+      measured_accuracy: none
+      relaxation_stability: not_measured_for_this_class
+      disagreement: computable_after_common-structure and species checks; not calibrated
+    dft_references:
+      e3_qualified: 0
+      existing_legacy: >-
+        Historical QE labels and E2 Nb-Ta-O agent/reference records exist; the
+        Codabench public split has no Nb-Ta-O structure.
+      blocker: unary/binary/ternary reference hull and common E3 DFT signature are not frozen
+    recommendation: >-
+      Provisional UMA-OMAT / MACE-MP-0 pair; consider CHGNet as an oxide comparator.
+      Do not freeze before a consistent reference hull and qualified held-out groups exist.
+  bcc_refractory:
+    name: Nb-Ta-V-Hf-Zr-Ti BCC refractory alloys
+    unique_configuration_target: 5000
+    scientific_questions: [multicomponent_composition_effects, chemical_ordering, local_environment_and_relaxation]
+    candidate_generation: >-
+      Enumerate balanced composition strata and symmetry-distinct site occupations;
+      include validated SQS/orderings and deduplicate by composition, canonical
+      occupation and structure hash.
+    model_candidates:
+      primary: UMA uma-s-1p1 / omat
+      comparison: MACE-MP-0 small
+      support: periodic bulk alloy candidate heads; exact checkpoint species coverage still must be recorded
+      measured_accuracy: >-
+        Latest saved screen: held-out 30 frames from E4-BCC-0001/0561 gives
+        frame-weighted force MAE/RMSE 0.0507/0.0646 eV/A for UMA and
+        0.1392/0.1791 eV/A for MACE; held-out within-trajectory relative-energy
+        MAE 0.0316 and 0.0360 meV/atom, respectively. Two groups only: one
+        validation and one test. Not a discovery result.
+      additional_screen: >-
+        The 38 frames from E3-R1-BCC-0394/0582 are acquisition evidence, not
+        held-out validation; force MAE/RMSE 0.0471/0.0595 UMA and 0.1297/0.1705 MACE.
+      relaxation_stability: measured_on_these_BCC_cases_only; broad-composition reliability_unestablished
+      disagreement: computable_on_common_BCC_pool; calibration inadequate_with_current_group_count
+    dft_references:
+      heldout_in_saved_screen: 2_groups (E4-BCC-0001 test; E4-BCC-0561 validation-1)
+      codabench_public_exact_class: 0
+      additional_validation_role: E4-BCC-1121 assigned validation-2; not present in the retrieved metrics artifact
+      acquisition_groups: 2 (E3-R1-BCC-0394 and E3-R1-BCC-0582); not held-out
+      preliminary_pilot: 54 correlated frames from one starting structure; one group only
+      blocker: only one validation group in retrieved screen; second validation group not yet in metrics artifact
+    recommendation: >-
+      UMA is the BCC-specific preliminary force-screen leader. Retain MACE as a
+      frozen comparison/committee candidate pending approval; do not generalize
+      this ranking to the other five material classes.
+  fcc_cantor:
+    name: Cr-Mn-Fe-Co-Ni FCC Cantor alloys
+    unique_configuration_target: 5000
+    scientific_questions: [composition_dependence, chemical_short_range_order, local_structure_and_relative_energy]
+    candidate_generation: >-
+      Enumerate composition strata and symmetry-distinct FCC occupations/SRO
+      motifs; include validated orderings and deduplicate by composition and
+      canonical structure. Freeze collinear magnetic initialization separately.
+    model_candidates:
+      primary: UMA uma-s-1p1 / omat
+      comparison: MACE-MP-0 small
+      support: periodic alloy candidates; exact element support must be checked; neither supplies explicit spin-order control
+      measured_accuracy: none
+      relaxation_stability: not_measured_for_this_class
+      disagreement: arithmetic_computable_if_same_structure_and_species_supported; magnetic transfer unvalidated
+    dft_references:
+      e3_qualified: 0
+      existing_legacy: >-
+        E2 VASP ideal/random Cantor relax/static outputs exist. Codabench public
+        has six generic intermetallic structures but no Cr-Mn-Fe-Co-Ni Cantor
+        alloy; its labels are not exact-class validation. E3 magnetic method,
+        MAGMOM initialization and validation thresholds are not frozen.
+      blocker: spin-polarized reference protocol and group-disjoint E3 validation/test sets
+    recommendation: >-
+      Provisional UMA-OMAT / MACE-MP-0 candidates; add CHGNet only as a screening
+      comparator. No model freeze until spin protocol and qualified independent groups exist.
+
+generation_allocation:
+  total_unique_valid_configurations: 30000
+  equal_class_weighting: true
+  per_class: 5000
+  quotas_are_planning_targets_not_execution_authorization: true
+  invalid_or_duplicate_structures_do_not_count_toward_quota: true
+  feasibility_gate: >-
+    Before production, freeze class-specific chemistry, generation constraints,
+    canonicalization, deduplication, checkpoint applicability and pilot throughput.
+    If a target is infeasible without arbitrary perturbations, report the shortfall
+    and seek approval for a scientifically justified reallocation.
+  scale_extension: >-
+    Consider 100000 total only after measured per-class validity, unique yield,
+    model throughput, costs and scientific utility justify expansion.
+  class_balanced_reporting: >-
+    Report every class separately and use an equal-weight macro summary alongside
+    pooled counts; do not let BCC or any larger/cheaper class dominate.
+
+historical_artifacts:
+  bcc_metrics: ../matsim-agents/runs/e3/zero-shot-qualified-bcc-20261110/metrics.json
+  e3_replay: ../matsim-agents/runs/e3/replay-20261108/
+  e3_round1_dft_campaign: unchanged_and_not_authorized_by_this_matrix
+  codabench_public_label_set:
+    total_public_structures: 37
+    e3_class_matches: {lifepo4: 1, phosphorene: 1, zn_formate_mof: 0,
+                       nb_ta_o: 0, bcc_refractory: 0, fcc_cantor: 0}
+    vasp_version_difference_is_not_an_exclusion: true
+    private_leaderboard_labels_used: false
+  codabench_frozen_model_screen:
+    results_dir: runs/codabench/e3-public/
+    all_models: {mace_mp_0_small: {success: 37, failures: 0, seconds: 49.67,
+                                   force_component_mae_eV_A: 60.423,
+                                   formation_energy_mae_eV_atom: 0.349},
+                 uma_s_1p1_omat: {success: 37, failures: 0, seconds: 433.79,
+                                  force_component_mae_eV_A: 60.351,
+                                  formation_energy_mae_eV_atom: 0.677},
+                 hydragnn_omat24_head_7: {success: 37, failures: 0, seconds: 13.21,
+                                          force_component_mae_eV_A: 59.683,
+                                          formation_energy_mae_eV_atom: 1.423}}
+    formation_energy: same_model_pure_element_subtraction; no_fit_to_benchmark_labels
+    pooled_force_metrics_warning: >-
+      Several public labels have extreme DFT forces (MATS-0030 Cu 12435 eV/A,
+      MATS-0033 Fe 1157 eV/A, MATS-0006 C 138 eV/A). These shared outliers
+      dominate pooled errors for all models; use per-case/class reports and audit
+      label quality before drawing broad model conclusions.
