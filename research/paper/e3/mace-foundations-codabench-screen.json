@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "status": "completed_public_zero_shot_screen",
+  "date": "2026-11-11",
+  "source": "https://github.com/ACEsuit/mace-foundations",
+  "software": {"mace_torch": "0.3.16", "dtype": "float64", "device": "cpu", "fine_tuning": false, "geometry": "single point at DFT-relaxed structures"},
+  "dataset": {
+    "public_structures": 37,
+    "private_structures": 84,
+    "total_atoms": 1314,
+    "public_id_sha256": "166b7460a466c19cd0331527dcc584570392e96cf6ce67f33d58747c3c706e6c",
+    "categories": {"2D Monolayer": 7, "Catalysis": 4, "Critical Mineral": 9, "Intermetallic": 6, "MAX Phase": 2, "Nuclear Material": 2, "Perovskite": 5, "Thermoelectric": 2},
+    "e3_exact_class_overlap": {"LiFePO4": ["MATS-0060"], "phosphorene_P_monolayer": ["MATS-0016"], "zn_formate_mof": [], "nb_ta_o": [], "bcc_refractory": [], "fcc_cantor": []},
+    "dft_functional": "PBE",
+    "private_labels_used": false,
+    "formation_energy_formula": "(E_model(compound) - sum_i n_i E_model(pure_element_i)) / N",
+    "labels_used_for_correction": false
+  },
+  "force_label_exclusion_rule_eV_A": 10.0,
+  "excluded_force_label_ids": ["MATS-0002", "MATS-0004", "MATS-0006", "MATS-0013", "MATS-0030", "MATS-0033", "MATS-0075"],
+  "suspect_energy_label_excluded_from_energy_summary": "MATS-0039",
+  "metrics": {
+    "units": {"force": "eV/A", "formation_energy": "eV/atom", "runtime": "seconds, excluding model load"},
+    "force_population": "30 structures with DFT max atomic force <= 10 eV/A",
+    "formation_energy_population": "36 public structures, excluding suspect Pd MATS-0039",
+    "models": [
+      {"name":"MACE-MP-0-small","alias":"small","head":"default","training":"MPTrj, PBE+U","force_mae_pooled":1.099,"force_rmse":5.636,"force_mae_structure_median":0.159,"force_mae_class_macro":1.142,"formation_mae":0.132,"formation_median_abs_error":0.039,"formation_max_abs_error":0.598,"formation_signed_bias":0.087,"formation_pearson_r":0.992,"oxide_mae":0.141,"oxide_bias":0.126,"nonoxide_mae":0.127,"seconds":49.7},
+      {"name":"MACE-MP-0-medium","alias":"medium","head":"default","training":"MPTrj, PBE+U","force_mae_pooled":15.080,"force_rmse":133.527,"force_mae_structure_median":0.128,"force_mae_class_macro":15.335,"formation_mae":0.158,"formation_median_abs_error":0.062,"formation_max_abs_error":0.779,"formation_signed_bias":-0.027,"formation_pearson_r":0.986,"oxide_mae":0.153,"oxide_bias":0.047,"nonoxide_mae":0.160,"seconds":28.2},
+      {"name":"MACE-MP-0-large","alias":"large","head":"default","training":"MPTrj, PBE+U","force_mae_pooled":60.141,"force_rmse":443.062,"force_mae_structure_median":0.126,"force_mae_class_macro":61.117,"formation_mae":0.133,"formation_median_abs_error":0.057,"formation_max_abs_error":1.085,"formation_signed_bias":0.039,"formation_pearson_r":0.990,"oxide_mae":0.155,"oxide_bias":0.052,"nonoxide_mae":0.122,"seconds":59.6},
+      {"name":"MACE-MP-0b3-medium","alias":"medium-0b3","head":"default","training":"MPTrj, PBE+U","force_mae_pooled":1.769,"force_rmse":8.790,"force_mae_structure_median":0.121,"force_mae_class_macro":1.827,"formation_mae":0.179,"formation_median_abs_error":0.116,"formation_max_abs_error":0.964,"formation_signed_bias":-0.097,"formation_pearson_r":0.986,"oxide_mae":0.186,"oxide_bias":-0.035,"nonoxide_mae":0.175,"seconds":26.9},
+      {"name":"MACE-MPA-0-medium","alias":"medium-mpa-0","head":"default","training":"MPTrj+sAlex, PBE+U","force_mae_pooled":1.572,"force_rmse":7.071,"force_mae_structure_median":0.157,"force_mae_class_macro":1.616,"formation_mae":0.122,"formation_median_abs_error":0.089,"formation_max_abs_error":0.461,"formation_signed_bias":-0.025,"formation_pearson_r":0.995,"oxide_mae":0.204,"oxide_bias":-0.029,"nonoxide_mae":0.080,"seconds":29.5},
+      {"name":"MACE-OMAT-0-small","alias":"small-omat-0","head":"default","training":"OMat24, PBE+U","force_mae_pooled":1.058,"force_rmse":4.594,"force_mae_structure_median":0.125,"force_mae_class_macro":1.094,"formation_mae":0.105,"formation_median_abs_error":0.072,"formation_max_abs_error":0.364,"formation_signed_bias":-0.040,"formation_pearson_r":0.996,"oxide_mae":0.197,"oxide_bias":-0.048,"nonoxide_mae":0.059,"seconds":11.6},
+      {"name":"MACE-OMAT-0-medium","alias":"medium-omat-0","head":"default","training":"OMat24, PBE+U","force_mae_pooled":0.981,"force_rmse":4.401,"force_mae_structure_median":0.113,"force_mae_class_macro":1.016,"formation_mae":0.106,"formation_median_abs_error":0.040,"formation_max_abs_error":0.412,"formation_signed_bias":-0.028,"formation_pearson_r":0.996,"oxide_mae":0.209,"oxide_bias":-0.067,"nonoxide_mae":0.055,"seconds":25.5},
+      {"name":"MACE-MH-0","alias":"mh-0","head":"omat_pbe","training":"OMAT/OMOL/OC20/MATPES multi-head, PBE head","force_mae_pooled":0.918,"force_rmse":4.171,"force_mae_structure_median":0.131,"force_mae_class_macro":0.952,"formation_mae":0.080,"formation_median_abs_error":0.012,"formation_max_abs_error":0.521,"formation_signed_bias":0.055,"formation_pearson_r":0.995,"oxide_mae":0.124,"oxide_bias":0.102,"nonoxide_mae":0.058,"seconds":26.9},
+      {"name":"MACE-MH-1","alias":"mh-1","head":"omat_pbe","training":"OMAT/OMOL/OC20/MATPES multi-head, PBE head","force_mae_pooled":1.171,"force_rmse":5.405,"force_mae_structure_median":0.131,"force_mae_class_macro":1.209,"formation_mae":0.066,"formation_median_abs_error":0.019,"formation_max_abs_error":0.520,"formation_signed_bias":0.048,"formation_pearson_r":0.996,"oxide_mae":0.123,"oxide_bias":0.123,"nonoxide_mae":0.037,"seconds":40.0},
+      {"name":"MACE-MH-1","alias":"mh-1","head":"mp_pbe_refit_add","training":"OMAT/OMOL/OC20/MATPES multi-head, MP PBE-refit head","force_mae_pooled":1.175,"force_rmse":5.326,"force_mae_structure_median":0.134,"force_mae_class_macro":1.215,"formation_mae":0.071,"formation_median_abs_error":0.029,"formation_max_abs_error":0.569,"formation_signed_bias":0.027,"formation_pearson_r":0.996,"oxide_mae":0.128,"oxide_bias":0.091,"nonoxide_mae":0.043,"seconds":41.7},
+      {"name":"MACE-MATPES-PBE-0","alias":"mace-matpes-pbe-0","head":"default","training":"MATPES-PBE, PBE without +U","force_mae_pooled":2.206,"force_rmse":11.316,"force_mae_structure_median":0.125,"force_mae_class_macro":2.260,"formation_mae":0.042,"formation_median_abs_error":0.030,"formation_max_abs_error":0.237,"formation_signed_bias":-0.019,"formation_pearson_r":0.999,"oxide_mae":0.030,"oxide_bias":-0.015,"nonoxide_mae":0.047,"seconds":26.3},
+      {"name":"MACE-MATPES-r2SCAN-0","alias":"mace-matpes-r2scan-0","head":"default","training":"MATPES-r2SCAN","force_mae_pooled":1.591,"force_rmse":7.436,"force_mae_structure_median":0.121,"force_mae_class_macro":1.637,"formation_mae_vs_pbe":"not comparable; functional mismatch","formation_median_vs_pbe":"not comparable; functional mismatch","formation_signed_bias_vs_pbe":"not comparable; functional mismatch","seconds":27.2}
+    ],
+    "pbe_energy_comparisons": {"omat_medium_minus_matpes_pbe_mae": {"mean":0.0647,"ci95":[0.0303,0.1027]},"omat_medium_minus_mh0_omat_pbe_mae":{"mean":0.0263,"ci95":[-0.0141,0.0663]},"omat_medium_minus_mh1_omat_pbe_mae":{"mean":0.0404,"ci95":[0.0049,0.0773]},"bootstrap_unit":"structure","replicates":20000,"seed":20261111}
+  },
+  "e3_exact_cases": {
+    "LiFePO4_MATS-0060": {"MACE-MP-0-small":{"formation_error":0.356,"force_mae":4.413},"MACE-OMAT-0-medium":{"formation_error":0.165,"force_mae":4.218},"MACE-MATPES-PBE-0":{"formation_error":-0.031,"force_mae":4.126},"MACE-MH-1-omat_pbe":{"formation_error":0.309,"force_mae":4.104}},
+    "P_monolayer_MATS-0016": {"MACE-MP-0-small":{"formation_error":-0.076,"force_mae":2.547},"MACE-OMAT-0-medium":{"formation_error":-0.058,"force_mae":2.438},"MACE-MATPES-PBE-0":{"formation_error":0.020,"force_mae":2.443},"MACE-MH-1-omat_pbe":{"formation_error":-0.072,"force_mae":2.417}}
+  },
+  "label_warnings": {"force_outlier_ids":["MATS-0002","MATS-0004","MATS-0006","MATS-0013","MATS-0030","MATS-0033","MATS-0075"],"suspect_palladium_formation_label":"MATS-0039","model_specific_palladium_force_failures":["MACE-MP-0-medium","MACE-MP-0-large"]},
+  "provisional_recommendation": "MACE-OMAT-0 medium is a balanced provisional checkpoint choice, not a universal winner. MATPES-PBE-0 leads formation-energy MAE, MH-0 has best pooled/class-macro force MAE, and OMAT-0 medium has the best median per-structure force MAE. Validate on relevant E3-class groups before freezing."
+}

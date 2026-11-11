@@ -3,6 +3,10 @@
 Recorded 2026-11-10. Raw outputs: `runs/codabench/e3-public/` (not tracked);
 aggregate summary: [`codabench-zero-shot-comparison.json`](codabench-zero-shot-comparison.json);
 evaluation script: [`benchmarks/e3/codabench_public_benchmark.py`](../../../benchmarks/e3/codabench_public_benchmark.py).
+The expanded 12-checkpoint MACE foundation screen is documented separately in
+[`mace-foundations-codabench-screen.md`](mace-foundations-codabench-screen.md),
+with structured results in
+[`mace-foundations-codabench-screen.json`](mace-foundations-codabench-screen.json).
 
 ## 1. Purpose
 
@@ -252,7 +256,11 @@ A separate zero-shot screen used qualified VASP 6.6.1 PBE relaxation trajectorie
 
 UMA's force error is about 2.7× lower on both subsets. Frames within one relaxation are correlated, and only two held-out structure groups exist, so no confidence interval is reported.
 
-## 8. How the recommendation was reached, and its limits
+## 8. Initial three-model recommendation and its limits
+
+This recommendation predates the expanded MACE-family screen. It applies only
+to MACE-MP-0-small, UMA-s-1p1 and HydraGNN; the MACE checkpoint recommendation
+is superseded by [`mace-foundations-codabench-screen.md`](mace-foundations-codabench-screen.md).
 
 **Forces (what drives relaxation and molecular dynamics):**
 - UMA has the lowest typical-case force error on Codabench: median per-structure 0.131 vs 0.159 eV/Å for MACE. The paired difference of −0.052 eV/Å has a 95% CI of [−0.134, −0.004], excluding zero.

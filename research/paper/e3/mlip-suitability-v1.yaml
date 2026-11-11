@@ -12,10 +12,20 @@ model_facts:
     predictions_include_energy_and_forces: true
     frozen_for_primary_comparison: true
   mace:
-    measured_checkpoint: mace-mp-0-small
-    available_families_in_code: [mace_mp, mace_omol, mace_off, mace_polar, mace_anicc]
+    checkpoints_screened_on_codabench_public: [
+      mace-mp-0-small, mace-mp-0-medium, mace-mp-0-large, mace-mp-0b3-medium,
+      mace-mpa-0-medium, mace-omat-0-small, mace-omat-0-medium,
+      mace-mh-0-omat-pbe, mace-mh-1-omat-pbe, mace-mh-1-mp-pbe,
+      mace-matpes-pbe-0, mace-matpes-r2scan-0
+    ]
+    provisional_user_choice: mace-omat-0-medium
+    choice_status: provisional_not_campaign_approval
+    available_families_in_code: [mace_mp, mace_omol, mace_off, mace_polar, mace_anicc, checkpoint]
+    multihead_selection: explicit_head_required_for_mh_0_and_mh_1
     predictions_include_energy_and_forces: true
     frozen_for_primary_comparison: true
+    codabench_mace_screen_report: research/paper/e3/mace-foundations-codabench-screen.md
+    codabench_mace_screen_data: research/paper/e3/mace-foundations-codabench-screen.json
   hydragnn:
     checkpoint: multidataset_hpo-BEST6-fp64_epoch_97.pk
     branch: {name: OMat24, index: 7}

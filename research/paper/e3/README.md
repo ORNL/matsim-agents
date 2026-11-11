@@ -115,6 +115,13 @@ UMA-s-1p1-OMAT, and HydraGNN OMat24 head 7; all three completed 37/37 without
 prediction failures. The 84 private leaderboard labels are excluded. VASP
 minor-version differences are not a reason to exclude these labels.
 
+An expanded screen subsequently evaluated 12 MACE foundation checkpoint/head
+variants on the same public structures. The version-by-version model details,
+matched metrics, paired comparisons, PBE/r2SCAN caveat, outlier analysis and
+provisional OMAT-0 medium selection are in
+[`mace-foundations-codabench-screen.md`](mace-foundations-codabench-screen.md)
+and [`mace-foundations-codabench-screen.json`](mace-foundations-codabench-screen.json).
+
 | Model | Public force-component MAE (eV/A) | Formation-energy MAE (eV/atom) | Inference + element-reference time (s, excluding model load) |
 |---|---:|---:|---:|
 | MACE-MP-0-small | 60.423 | 0.349 | 49.67 |
