@@ -119,7 +119,14 @@ minor-version differences are not a reason to exclude these labels.
 |---|---:|---:|---:|
 | MACE-MP-0-small | 60.423 | 0.349 | 49.67 |
 | UMA-s-1p1-OMAT | 60.351 | 0.677 | 433.79 |
-| HydraGNN OMat24 (head 7) | 59.683 | 1.423 | 13.21 |
+| HydraGNN OMat24 (head 7) | 59.683 | 1.423* | 13.21 |
+
+\*Not a valid accuracy measure: HydraGNN head 7 predicts formation energies of
+-0.007 to -0.002 eV/atom for all 37 structures, so each error is the negated
+DFT label; the HydraGNN energy pathway (scale/normalization) is unresolved.
+The full comparison, label-quality exclusions, per-structure tables and the
+model recommendation are in
+[`mlip-zero-shot-comparison.md`](mlip-zero-shot-comparison.md).
 
 These pooled force errors are dominated by shared outlier DFT force labels:
 MATS-0030 Cu (max component 12,436 eV/A), MATS-0033 Fe (972 eV/A), and
