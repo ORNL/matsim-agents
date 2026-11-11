@@ -664,13 +664,16 @@ def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
     # MACE keeps energies/forces at the calculator dtype; fp64 is preferred for
     # relaxation, so an unset precision defaults to float64.
     dtype = {"fp32": "float32", "fp64": "float64", None: "float64"}[cfg.precision]
+    head = {"head": cfg.head} if cfg.head is not None else {}
 
     if cfg.family == "checkpoint":
         ckpt = Path(cfg.model)
         if not ckpt.is_file():
             raise FileNotFoundError(f"MACE checkpoint not found: {ckpt}")
         log.info("Loading MACE checkpoint from %s", ckpt)
-        calc = MACECalculator(model_paths=[str(ckpt)], device=cfg.device, default_dtype=dtype)
+        calc = MACECalculator(
+            model_paths=[str(ckpt)], device=cfg.device, default_dtype=dtype, **head
+        )
     elif cfg.family == "mace_off":
         calc = mace_off(model=cfg.model, device=cfg.device, default_dtype=dtype)
     elif cfg.family == "mace_omol":
@@ -688,6 +691,7 @@ def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
             device=cfg.device,
             default_dtype=dtype,
             dispersion=cfg.dispersion,
+            **head,
         )
 
     # Expose the underlying torch module as `.model` so uncertainty.score_mc_dropout

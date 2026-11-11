@@ -80,6 +80,9 @@ class RelaxStructureInput(BaseModel):
         description="MACE model alias, URL, or local checkpoint path.",
     )
     mace_dispersion: bool = False
+    mace_head: str | None = Field(
+        None, description="Output head of a multi-head MACE model when mlip_backend='mace'."
+    )
     relax_cell: bool = Field(
         False,
         description=(
@@ -576,6 +579,7 @@ _CALCULATOR_FIELDS = (
     "mace_family",
     "mace_model",
     "mace_dispersion",
+    "mace_head",
 )
 
 
@@ -650,6 +654,7 @@ def _relaxation_calculator(args: RelaxStructureInput) -> _RelaxCalculator:
             device=args.mlp_device,
             precision=args.precision,
             dispersion=args.mace_dispersion,
+            head=args.mace_head,
         ),
         enable_mc_dropout=False,
     )
