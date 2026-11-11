@@ -21,6 +21,7 @@ ALLOCATIONS = {
 }
 NODE_TIERS = (1, 2, 4, 8, 16, 32, 64, 128)
 BLOCKED_STATUS = "blocked_pending_archive_audit_and_resource_authorization"
+SIX_CLASS_INPUTS = "research/paper/e4/aurora-dft-scaling/six-class-inputs-v1/manifest.json"
 REPO = Path(__file__).resolve().parents[3]
 
 
@@ -273,7 +274,8 @@ def _candidate_from_case(case: dict[str, Any], family: str, assignment: dict[str
         "source_calculation_id": case.get("source_calculation_id", case["calculation_id"]),
         "composition": case["composition"],
         "number_of_atoms": case["atom_count"],
-        "structure_family": {
+        "structure_family": case.get("structure_family")
+        or {
             "bcc_refractory": "128-site BCC refractory alloy",
             "fcc_hea": "128-site FCC Cantor alloy",
             "lifepo4": "112-atom LiFePO4 olivine antisite supercell",
@@ -285,6 +287,7 @@ def _candidate_from_case(case: dict[str, Any], family: str, assignment: dict[str
             "antisite_exchange_pairs": case.get("antisite_exchange_pairs"),
             "composition_index": case.get("composition_index"),
             "disorder_realization": case.get("disorder_realization"),
+            **case.get("variation", {}),
         },
         "source_poscar": case["source_poscar"],
         "protocol_id": case["protocol_id"],
@@ -528,127 +531,48 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
         case["structure_source"] = f"{case_id} frozen first-batch input; fresh scaling identity"
         return case
 
+    inputs_path = repo / SIX_CLASS_INPUTS
+    staged = json.loads(inputs_path.read_text())["classes"]
+
+    def staged_records(name: str, strong_ids: list[str]) -> list[dict[str, Any]]:
+        return [
+            _candidate_from_case(
+                case,
+                name,
+                {"strong": case["calculation_id"] in strong_ids, "weak": True},
+            )
+            for case in staged[name]
+        ]
+
+    fcc_frozen = [scaling_case(calc_id, "FCC") for calc_id in fcc_ids]
+    fcc_cases = fcc_frozen + staged["fcc_hea"]
+    # Strong: the four frozen compositions at realizations 1 and 2.
+    fcc_strong = [case["calculation_id"] for case in fcc_frozen] + [
+        case["calculation_id"] for case in staged["fcc_hea"] if case["disorder_realization"] == 2
+    ]
+    fcc_weak = [case["calculation_id"] for case in fcc_cases]
     fcc_records = [
         _candidate_from_case(
-            scaling_case(calc_id, "FCC"),
-            "fcc_hea",
-            {"strong": True, "weak": True},
+            case, "fcc_hea", {"strong": case["calculation_id"] in fcc_strong, "weak": True}
         )
-        for calc_id in fcc_ids
+        for case in fcc_cases
     ]
+    lfp_frozen = [scaling_case(calc_id, "LFP") for calc_id in lfp_ids]
+    lfp_strong = [case["calculation_id"] for case in lfp_frozen]
+    lfp_weak = lfp_strong + [case["calculation_id"] for case in staged["lifepo4"]]
     lfp_records = [
-        _candidate_from_case(
-            scaling_case(calc_id, "LFP"),
-            "lifepo4",
-            {"strong": True, "weak": True},
-        )
-        for calc_id in lfp_ids
-    ]
+        _candidate_from_case(case, "lifepo4", {"strong": True, "weak": True}) for case in lfp_frozen
+    ] + staged_records("lifepo4", [])
 
-    nbtao_path = repo / "research/nb-ta-o/pilot/vasp_inputs/inputs_manifest.json"
-    nbtao_input = json.loads(nbtao_path.read_text())
-    nbtao_runtime = json.loads(
-        (repo / "research/nb-ta-o/pilot/vasp_runtime_manifest.json").read_text()
-    )
-    nbtao_pilot_ids = {f"E4-{case_id}" for case_id in nbtao_input["production_pilot_candidates"]}
-    nbtao_paws = [
-        {"label": label, **item} for label, item in nbtao_runtime["proposed_components"].items()
-    ]
-    nbtao_records = []
-    for case in nbtao_input["cases"]:
-        if case["category"] not in {
-            "production_candidate",
-            "ordering_family_extension_pending_approval",
-        }:
-            continue
-        calc_id = case["case_id"]
-        source = f"research/nb-ta-o/pilot/poscars/{calc_id}.POSCAR"
-        nbtao_records.append(
-            {
-                "material_class": "nb_ta_o",
-                "calculation_id": f"E4-{calc_id}",
-                "composition": case["species_counts"],
-                "number_of_atoms": sum(case["species_counts"].values()),
-                "structure_family": "28-atom monoclinic NbTaO5; symmetry-distinct Nb/Ta ordering",
-                "initial_geometry": source,
-                "geometry_source": case["category"],
-                "defect_ordering_or_disorder": {
-                    "ordering_id": calc_id,
-                    "source_parent": "COD 1528678 Nb2O5",
-                },
-                "protocol_id": case["protocol_id"],
-                "input_file_hashes": case["input_hashes"],
-                "paw_components": nbtao_paws,
-                "allocation": "HydraGNN",
-                "estimated_task_walltime_hours": 2.0,
-                "case_dir": (
-                    f"research/nb-ta-o/pilot/vasp_inputs/ordering-family-pending-approval/{calc_id}"
-                ),
-                "input_approval_category": case["category"],
-                "source_poscar_sha256": case["input_hashes"]["POSCAR"],
-                "structure_id": case["input_hashes"]["POSCAR"],
-                "execution_ready": False,
-                "execution_status": "legacy_inputs_require_E4_case_staging_and_protocol_review",
-                "scaling_assignments": {
-                    "strong": f"E4-{calc_id}" in nbtao_pilot_ids,
-                    "weak": True,
-                },
-            }
-        )
-
-    from ase.io import read
-
-    def seed_records(material_class: str, seed_names: list[str], structure_family: str, issue: str):
-        records = []
-        for seed_name in seed_names:
-            path = repo / "examples/paper_cases/seeds" / seed_name
-            atoms = read(path)
-            composition: dict[str, int] = {}
-            for symbol in atoms.get_chemical_symbols():
-                composition[symbol] = composition.get(symbol, 0) + 1
-            records.append(
-                {
-                    "material_class": material_class,
-                    "calculation_id": f"E4-{material_class.upper()}-{path.stem.upper()}",
-                    "composition": composition,
-                    "chemical_formula": atoms.get_chemical_formula(),
-                    "number_of_atoms": len(atoms),
-                    "cell_lengths_A": [float(value) for value in atoms.cell.lengths()],
-                    "periodic_boundary_conditions": [bool(value) for value in atoms.pbc],
-                    "structure_family": structure_family,
-                    "initial_geometry": str(path.relative_to(repo)),
-                    "geometry_source": "existing E3 example seed; not E4-qualified",
-                    "defect_ordering_or_disorder": None,
-                    "protocol_id": None,
-                    "input_file_hashes": {"seed_geometry": _sha256(path)},
-                    "paw_components": None,
-                    "allocation": "HydraGNN",
-                    "estimated_task_walltime_hours": None,
-                    "case_dir": None,
-                    "source_poscar_sha256": _sha256(path),
-                    "structure_id": None,
-                    "execution_ready": False,
-                    "execution_status": issue,
-                    "scaling_assignments": {"strong": False, "weak": False},
-                }
-            )
-        return records
-
-    phos_records = seed_records(
-        "phosphorene",
-        ["phosphorene_black_P.extxyz", "phosphorene_blue_P.extxyz"],
-        "2D phosphorene allotrope seed with vacuum cell",
-        "seed_only; retrieve archived E2 structures and freeze a qualified 2D VASP protocol",
-    )
-    mof_records = seed_records(
-        "zn_formate_mof",
-        ["zn_formate_alpha.extxyz", "zn_formate_beta.extxyz"],
-        "Zn-formate framework placeholder",
-        (
-            "invalid_seed_stoichiometry_missing_H_and_half_linker_O; "
-            "obtain validated CIF and verify bonding"
-        ),
-    )
+    nbtao_weak = [case["calculation_id"] for case in staged["nb_ta_o"]]
+    nbtao_strong = nbtao_weak[:8]
+    nbtao_records = staged_records("nb_ta_o", nbtao_strong)
+    mof_weak = [case["calculation_id"] for case in staged["zn_formate_mof"]]
+    mof_strong = mof_weak[:8]
+    mof_records = staged_records("zn_formate_mof", mof_strong)
+    phos_weak = [case["calculation_id"] for case in staged["phosphorene"]]
+    phos_strong = phos_weak[:8]
+    phos_records = staged_records("phosphorene", phos_strong)
 
     queue = "capacity"
     protocol_data = {
@@ -705,42 +629,71 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             "task_walltime_hours": 24,
         },
         "phosphorene": {
-            "id": None,
-            "status": "not_frozen",
-            "references": [
-                "E3 Aurora AL example is single-point only",
-                "E2 reference geometries are not staged in this checkout",
-            ],
-            "blocker": (
-                "retrieve qualified puckered E2 geometries; freeze 2D vacuum, "
-                "k-mesh, strain, and defect protocol"
+            "id": "phosphorene-pbe-2d-inplane-relax-v1",
+            "status": "frozen_from_E2_numerics_with_rebuilt_geometry",
+            "functional": "PBE (E2 setting; no dispersion for an isolated monolayer)",
+            "encut_eV": 520,
+            "precision": "Accurate",
+            "kpoints": "Gamma-centered; E2 8x11x1 unit-cell density, ceil(8/nx) x ceil(11/ny) x 1",
+            "spin": "ISPIN=2, MAGMOM 0.5 per atom (vacancies leave unpaired electrons)",
+            "smearing": "ISMEAR=0 SIGMA=0.05",
+            "ediff_eV": 1e-6,
+            "ediffg_eV_A": -0.01,
+            "relaxation": "ISIF=3 with LATTICE_CONSTRAINTS=T T F (in-plane cell only)",
+            "vacuum_axis_A": 20.0,
+            "max_ionic_steps": 200,
+            "mpi_ranks": 12,
+            "threads_per_rank": 8,
+            "kpar": 1,
+            "ncore": 12,
+            "paw": ["P"],
+            "task_walltime_hours": 12,
+            "geometry_basis": (
+                "bulk black P (Brown & Rundqvist 1965, Cmce); archived E2 P4/P36/P35 have "
+                "no P-P bond below 2.5 A (puckering placed on the zigzag axis)"
             ),
         },
         "zn_formate_mof": {
-            "id": None,
-            "status": "not_frozen",
-            "candidate_reference": (
-                "E3 example uses PBE/520 eV; seed lacks H and IVDW=12 support is unverified"
+            "id": "znformate-pbe-d3bj-fixed-volume-eos-v1",
+            "status": "frozen_from_qualified_E2_zn_formate_anhydrous_v1",
+            "functional": "PBE-D3(BJ), IVDW=12",
+            "encut_eV": 520,
+            "precision": "Accurate",
+            "kpoints": "E2 Gamma meshes: alpha 3x4x3, Pbcn 4x2x2",
+            "spin": "ISPIN=1",
+            "smearing": "ISMEAR=0 SIGMA=0.05",
+            "ediff_eV": 1e-6,
+            "ediffg_eV_A": -0.02,
+            "relaxation": "ISIF=4 fixed-volume equation-of-state points (E2 used ISIF=3)",
+            "max_ionic_steps": 200,
+            "mpi_ranks": 12,
+            "threads_per_rank": 8,
+            "kpar": 12,
+            "paw": ["Zn", "H", "C", "O"],
+            "task_walltime_hours": 12,
+            "runtime_basis": (
+                "E2 1-node relax: alpha 108 atoms 99 s/step; Pbcn 216 atoms 245 s/step"
             ),
-            "blocker": "obtain complete CIF and freeze a validated dispersion protocol",
         },
         "nb_ta_o": {
             "id": "nbtao5-fixed-kmesh-v1",
-            "status": "E2_pilot_protocol_not_yet_E4_qualified",
+            "status": "E2_protocol_with_E4_parallelization_adapter",
             "functional": "PBE",
             "encut_eV": 600,
             "kpoints": "Gamma-centered mesh targeting 0.15 A^-1; 28-atom ordering uses 4x8x9",
             "spin": "ISPIN=1",
-            "smearing": "ISMEAR=0",
+            "smearing": "ISMEAR=0 SIGMA=0.05",
             "ediff_eV": 1e-6,
             "ediffg_eV_A": -0.01,
-            "relax_and_static": True,
-            "task_walltime_hours": 2,
+            "relaxation": "ISIF=3, ISYM=0; static follow-up not part of the scaling task",
+            "max_ionic_steps": 200,
+            "mpi_ranks": 12,
+            "threads_per_rank": 8,
+            "kpar": 12,
+            "e4_adapter": "KPAR=12 added, exactly as in the converged E2 ordering-01 run",
+            "task_walltime_hours": 5,
             "paw": ["Nb_pv", "Ta_pv", "O"],
-            "blocker": (
-                "E2 inputs need E4 staging/runtime qualification, reference review, "
-                "and separate authorization"
-            ),
+            "runtime_basis": "E2 ordering-01: 50 ionic steps in 3590-3680 s on one node",
         },
     }
 
@@ -807,9 +760,6 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             "authorization": None,
         }
 
-    fcc_ready_ids = [r["calculation_id"] for r in fcc_records]
-    lfp_ready_ids = [r["calculation_id"] for r in lfp_records]
-    nbtao_ids = [r["calculation_id"] for r in nbtao_records]
     classes = [
         class_record(
             "bcc_refractory",
@@ -826,106 +776,100 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
         class_record(
             "fcc_hea",
             fcc_records,
-            fcc_ready_ids,
-            fcc_ready_ids,
-            "minimal_preparation_four_frozen_geometries",
-            [
-                "Four E4 POSCARs: strong tiers above 4 nodes and weak tiers above "
-                "2 nodes lack unique structures.",
-                "The 510 composition candidates lack audited structure hashes.",
-            ],
+            fcc_strong,
+            fcc_weak,
+            "inputs_qualified_authorization_required",
+            ["E4 FCC runtime is unmeasured; 24-hour task ceiling retained."],
             (
-                "Use audited 128-site FCC Cantor lattice and frozen disorder "
-                "realizations; do not sample new compositions for scaling"
+                "Frozen stage-1 generator on the archived E2 Cantor parent: compositions 1-4, "
+                "disorder realizations 1-4 with inventory seeds; canonical duplicates rejected"
             ),
             24,
             True,
-            4,
-            planned_strong_count=4,
-            planned_weak_count=16,
+            len(fcc_records),
         ),
         class_record(
             "lifepo4",
             lfp_records,
-            lfp_ready_ids,
-            lfp_ready_ids,
-            "minimal_preparation_eight_frozen_geometries",
-            [
-                "Eight frozen inputs support strong through 8 nodes and weak "
-                "through 4; weak-8 needs 16 unique cases."
-            ],
-            "Use the frozen 112-atom olivine parent and symmetry-distinct Li/Fe antisite pairs",
+            lfp_strong,
+            lfp_weak,
+            "inputs_qualified_authorization_required",
+            ["E4 LiFePO4 runtime is unmeasured; 24-hour task ceiling retained."],
+            (
+                "Eight frozen first-batch inputs plus eight canonical lifepo4-inventory-v1 "
+                "structures (1/2/3 antisite pairs) on the frozen START template"
+            ),
             24,
             True,
-            510,
+            len(lfp_records),
         ),
         class_record(
             "phosphorene",
             phos_records,
-            [],
-            [],
-            "blocked_missing_qualified_E4_geometry_and_protocol",
+            phos_strong,
+            phos_weak,
+            "inputs_qualified_geometry_rebuilt_authorization_required",
             [
-                "Two small seeds are staged; E2 geometries remain in an unavailable "
-                "private archive.",
-                "The E3 example is single-point DFT, not E4 relaxation; no E4 "
-                "2D mesh/vacuum protocol is frozen.",
+                "No E2 phosphorene calculation is scientifically qualified: the archived "
+                "geometries are unbonded, so inputs are rebuilt from bulk black P.",
+                "Runtime is extrapolated from the archived E2 P36 timing (about 38 s per "
+                "ionic step); run a 1-node pilot before larger tiers.",
             ],
             (
-                "Retrieve qualified puckered E2 geometries; then make "
-                "vacuum-preserving supercells, controlled in-plane strains, and supported vacancies"
+                "Puckered monolayer from bulk black P; 1x1 and 2x3-4x5 supercells, "
+                "pristine plus mono- and in-plane divacancies; 20 A vacuum axis fixed"
             ),
-            None,
-            False,
-            2,
+            12,
+            True,
+            len(phos_records),
+            budget_basis="12-hour task ceiling extrapolated from E2 P36 timing",
         ),
         class_record(
             "zn_formate_mof",
             mof_records,
-            [],
-            [],
-            "blocked_invalid_seed_and_unverified_dispersion",
+            mof_strong,
+            mof_weak,
+            "inputs_qualified_authorization_required",
             [
-                "Both seeds are C8O8Zn4 placeholders; four-Zn Zn(HCOO)2 requires C8H8O16Zn4.",
-                "PBE-D3(BJ)/IVDW=12 support and an E4 reference/protocol are unverified.",
+                "Only two qualified anhydrous frameworks exist; the 16 inputs are "
+                "fixed-volume EOS points from them, not distinct polymorphs.",
+                "E2 ran the custom VASP build (ebd28402); E4 runs the ALCF build. Both "
+                "are 6.6.1 with D3(BJ); confirm agreement in the first E4 task.",
             ],
             (
-                "Replace placeholders with complete CIFs; generate "
-                "topology-preserving supercells, breathing modes, and proton orderings"
+                "E2-qualified PBE-D3(BJ) relaxed alpha and Pbcn frameworks under "
+                "isotropic strain of +/-0.5 to +/-2 percent; connectivity verified"
             ),
-            None,
-            False,
-            2,
+            12,
+            True,
+            len(mof_records),
+            budget_basis="12-hour task ceiling from E2 Pbcn relaxation (7.3 h, 107 steps)",
         ),
         class_record(
             "nb_ta_o",
             nbtao_records,
-            [calc_id for calc_id in nbtao_ids if calc_id in nbtao_pilot_ids],
-            nbtao_ids,
-            "minimal_preparation_E2_inputs_need_E4_adapter",
+            nbtao_strong,
+            nbtao_weak,
+            "inputs_qualified_authorization_required",
             [
-                "Fourteen symmetry-distinct NbTaO5 POSCARs are staged; only "
-                "ordering-01 has converged DFT.",
-                "Inputs need E4 case staging and capacity-launcher/protocol qualification.",
-                "Weak-8 requires 16 unique tasks; only 14 orderings are currently available.",
+                "Only 14 symmetry-distinct orderings exist in the 28-atom cell; "
+                "weak-8 (16 tasks) remains blocked.",
+                "E2 ran the custom VASP build; compare E4 ordering-01 with E2 "
+                "(50 steps, converged) as the cross-build check.",
             ],
             (
                 "Reuse the 14 symmetry-inequivalent equimolar Nb/Ta orderings "
                 "from Nb2O5; preserve charge-balanced NbTaO5 stoichiometry"
             ),
-            2,
-            False,
-            14,
-            planned_strong_count=len(nbtao_pilot_ids),
-            budget_basis=(
-                "2-hour per-task ceiling from the prior E2 qualification workflow; "
-                "E4 runtime unmeasured"
-            ),
+            5,
+            True,
+            len(nbtao_records),
+            budget_basis="5-hour task ceiling covering 200 steps at the E2 72 s/step rate",
         ),
     ]
     return {
         "schema_version": 1,
-        "manifest_id": "E4-Aurora-Six-Class-Workflow-Scaling-v1",
+        "manifest_id": "E4-Aurora-Six-Class-Workflow-Scaling-v2",
         "execution_authorized": False,
         "platform": "Aurora",
         "scheduler": "PBS Pro",
@@ -965,6 +909,7 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             "first_batch_hydragnn_revision_sha256": _sha256(
                 repo / "deployments/aurora/jobs/e4-first-batch/batch-manifest-hydragnn.json"
             ),
+            "six_class_inputs_sha256": _sha256(inputs_path),
         },
         "material_classes": classes,
         "authorization_request": {

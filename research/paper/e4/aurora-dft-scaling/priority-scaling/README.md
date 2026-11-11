@@ -6,36 +6,57 @@ see the [Perlmutter E3-MLIP and E4 execution runbook](../../../perlmutter-e3-e4-
 This package records the immediate BCC DFT scaling workload, its blockers, and
 resource caps. The original BCC manifests and authorizations remain immutable.
 The versioned six-class extension is
-[`../six-class-workflow-v1.json`](../six-class-workflow-v1.json); it does not
-authorize additional work.
+[`../six-class-workflow-v2.json`](../six-class-workflow-v2.json) (v1 is the
+superseded infrastructure baseline); it does not authorize additional work.
 
 ## Six-Class Extension
 
-The new manifest combines the existing frozen inputs with the currently
-available, explicitly blocked candidate records. It distinguishes task-input
-readiness from execution authorization and preserves workflow-level semantics:
-each VASP task remains one node, and nodes execute independent calculations.
-It does not measure solver-level scaling of one calculation across nodes.
+The v2 manifest consumes the qualified inputs in
+[`../six-class-inputs-v1/manifest.json`](../six-class-inputs-v1/manifest.json),
+staged by `python -m benchmarks.e4.aurora_dft.six_class_inputs` into the
+private run directory `../e4-six-class-inputs-v1/` (POTCARs are never
+committed). Each VASP task remains one node, and nodes execute independent
+calculations. It does not measure solver-level scaling of one calculation
+across nodes.
 
-| Class | Frozen/qualified inputs in this checkout | Strong input-backed tiers | Weak input-backed tiers | Current blocker |
-|---|---|---|---|---|
-| BCC refractory | 16 distinct frozen tasks | 1/2/4/8 nodes, 8 fixed tasks | 1/2/4/8 nodes, 2 tasks/node | Existing BCC authorization only; running measurements are preserved |
-| FCC Cantor | 4 frozen first-batch cases | 1/2/4 nodes, 4 fixed tasks | 1/2 nodes, 2 tasks/node | 510 composition candidates are not audited structures; larger tiers need more frozen POSCARs |
-| LiFePO4 | 8 frozen cases from the 510-entry antisite inventory | 1/2/4/8 nodes, 8 fixed tasks | 1/2/4 nodes, 2 tasks/node | Weak-8 requires 16 distinct inputs |
-| Phosphorene | 2 small E3 seed cells only | blocked | blocked | Qualified E2 geometries are not staged; no E4 2D numerical protocol is frozen |
-| Zn(HCOO)2 MOF | 2 example placeholders, formula C8O8Zn4 instead of C8H8O16Zn4 | blocked | blocked | Not valid DFT geometries; dispersion/reference protocol unverified |
-| Nb-Ta-O | 14 symmetry-inequivalent NbTaO5 orderings; 5 designated pilot candidates; 1 converged E2 ordering | blocked | blocked | E2 VASP inputs need E4 staging and runtime/protocol qualification; weak-8 requires 16 |
+| Class | Unique validated inputs | Protocol | Strong ready (8 fixed tasks) | Weak ready (2 tasks/node) | Proposed node-hour cap | Remaining blocker |
+|---|---|---|---|---|---|---|
+| BCC refractory | 16 | `bcc-pbe-low-normal-v1-approved-ediffg-0.01` | 1/2/4/8 | 1/2/4/8 | existing 1,488 authorization | none; running jobs preserved |
+| FCC Cantor | 16 (4 frozen + 12 new realizations) | `fcc-pbe-verified-v1` | 1/2/4/8 | 1/2/4/8 | 1,488 | E4 runtime unmeasured |
+| LiFePO4 | 16 (8 frozen + 8 inventory) | `lifepo4-pbe-verified-v1` | 1/2/4/8 | 1/2/4/8 | 1,488 | E4 runtime unmeasured |
+| Phosphorene | 16 rebuilt puckered monolayer cells | `phosphorene-pbe-2d-inplane-relax-v1` | 1/2/4/8 | 1/2/4/8 | 744 | no qualified E2 geometry exists; runtime extrapolated |
+| Zn(HCOO)2 MOF | 16 EOS points of 2 E2-qualified frameworks | `znformate-pbe-d3bj-fixed-volume-eos-v1` | 1/2/4/8 | 1/2/4/8 | 744 | only two distinct frameworks; cross-build check |
+| Nb-Ta-O | 14 symmetry-distinct NbTaO5 orderings | `nbtao5-fixed-kmesh-v1` + `KPAR=12` | 1/2/4/8 | 1/2/4 | 230 | weak-8 needs 16 orderings; cross-build check |
 
-Under the existing 24-hour-per-task ceiling, the current FCC tier set is a
-432 node-hour cap and the LiFePO4 tier set is 1,104 node-hours. These are
-proposals, not approvals. The E2 NbTaO5 2-hour workflow is a planning basis
-only; the manifest's 66 node-hour cap (5 fixed strong tasks and up to 14 weak
-inputs) assumes the missing E4 adapter and qualification. Phosphorene and MOF
-have no defensible runtime budget until valid inputs and a pilot exist. The proposed additional request for currently
-input-backed FCC and LiFePO4 scaling is 1,536 node-hours. NbTaO5's 66 node-hour
-figure is a separate E2-derived planning ceiling, not a resource request until
-the E4 adapter is validated. The existing BCC 1,488 node-hour authorization is
-not counted again.
+Input qualification:
+
+- **Nb-Ta-O**: POSCAR, INCAR, and KPOINTS hashes match the frozen E2 manifest.
+  INCAR equals the converged E2 ordering-01 run (50 ionic steps) apart from
+  `KPAR=12`, the only E4 adapter tag. PAWs match `POTCAR.order`. Strong uses the
+  five production candidates plus orderings 02-04.
+- **Zn-formate**: alpha-Zn3(HCOO)6 (COD 4515120, 108 atoms) and lonsdaleite
+  Pbcn Zn(HCOO)2 (COD 7205949, 216 atoms) come from the accepted E2 PBE-D3(BJ)
+  relaxations (forces < 0.02 eV/A). Each staged cell has octahedral Zn, intact
+  HCOO- linkers including H, and one connected periodic bond graph. Isotropic
+  strains of +/-0.5 to +/-2 percent at fixed volume (ISIF=4) form an
+  equation-of-state set. The assembled POTCAR equals the E2 hash `f8ebdae2`.
+  The dihydrate (COD 7102783) is qualified but excluded as a different formula.
+- **Phosphorene**: archived E2 P4/P36/P35 inputs have no P-P bond below 2.5 A
+  because the generator placed the puckering on the zigzag axis, and the
+  relaxed results fragmented. Inputs are rebuilt from bulk black P (Cmce,
+  Brown & Rundqvist 1965) in the E2 cell (4.376 x 3.314 A, 20 A vacuum).
+  All atoms are three-fold coordinated (2.224/2.244 A bonds). The set covers
+  the 1x1 cell and 2x3-4x5 supercells, pristine plus mono- and divacancies,
+  using the E2 numerics with in-plane-only cell relaxation.
+- **FCC/LiFePO4**: FCC realizations 2-4 of the four frozen compositions use
+  the pre-assigned inventory seeds; the generator reproduces the frozen
+  realization-1 POSCARs byte for byte. LiFePO4 adds eight canonical
+  inventory structures (1/2/3 antisite pairs). Symmetry-canonical duplicates
+  are rejected for both.
+
+The proposed additional ceiling is 4,694 node-hours. These ceilings are task
+walltime caps, not runtime predictions, and are proposals, not approvals. The
+existing BCC 1,488 node-hour authorization is not counted again.
 
 The six-class manifest also records 16/32/64/128-node weak-scaling points. The
 capacity queue admits at most 16 nodes/job; 32/64/128 are explicitly marked
@@ -51,7 +72,7 @@ Generate/validate the plan and inspect a tier without submitting:
 python -m benchmarks.e4.aurora_dft.scaling plan-six-class
 python -m benchmarks.e4.aurora_dft.scaling validate-six-class
 python -m benchmarks.e4.aurora_dft.scaling dispatch-six-class \
-  --manifest research/paper/e4/aurora-dft-scaling/six-class-workflow-v1.json \
+  --manifest research/paper/e4/aurora-dft-scaling/six-class-workflow-v2.json \
   --material-class fcc_hea --experiment strong --nodes 4 --dry-run
 ```
 
@@ -70,7 +91,7 @@ find runs/e4-scaling -name measurements.jsonl -type f -print0 \
   | xargs -0 -r cat > runs/e4-scaling/measurements-all.jsonl
 python -m benchmarks.e4.analyze \
   runs/e4-scaling/measurements-all.jsonl --kind scaling \
-  --workload-manifest research/paper/e4/aurora-dft-scaling/six-class-workflow-v1.json \
+  --workload-manifest research/paper/e4/aurora-dft-scaling/six-class-workflow-v2.json \
   --output runs/e4-scaling/analysis/scaling.csv
 ```
 
@@ -81,10 +102,9 @@ or efficiency and never interpolates unmeasured tiers.
 ## Proposed Submission Order
 
 1. Preserve and finish the active BCC jobs; validate their dispatch and measurement records, then use the existing BCC authorization only for its frozen manifests.
-2. After separate approval, run the input-backed FCC tiers (strong 1/2/4; weak 1/2) and LiFePO4 tiers (strong 1/2/4/8; weak 1/2/4). Extend the structure sets before requesting more tiers.
-3. Qualify the NbTaO5 E2-derived inputs through the shared E4 case adapter and a one-node runtime pilot, then add unique orderings before weak-8.
-4. Retrieve validated puckered phosphorene geometries, freeze its two-dimensional protocol, and prepare/adjudicate the E4 pool before estimating runtime.
-5. Replace the incomplete Zn-formate placeholders with validated hydrogen-complete CIFs, qualify the dispersion protocol, and run a serial pilot before sizing tiers.
+2. One-node pilots (strong n1 segment 1, or weak n1) for Nb-Ta-O, Zn-formate, and phosphorene. These measure E4 runtime and check the ALCF build against E2 (NbTaO5 ordering-01 and the zero-strain-adjacent MOF points).
+3. FCC and LiFePO4 strong 1/2/4/8 and weak 1/2/4/8.
+4. Remaining Nb-Ta-O, Zn-formate, and phosphorene tiers, with task caps resized from pilot measurements.
 
 Each order step requires its own scientific and resource approval. The workload
 manifest and dry-run commands alone authorize no production calculation.

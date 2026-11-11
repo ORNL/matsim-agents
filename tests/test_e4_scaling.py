@@ -125,23 +125,33 @@ def test_six_class_manifest_keeps_blocked_inputs_and_authorization_explicit():
         "input_complete_authorization_required"
     )
     assert classes["fcc_hea"]["strong_scaling"]["tiers"][3]["status"] == (
-        "blocked_fixed_workload_underfills_node_tier"
-    )
-    assert classes["lifepo4"]["weak_scaling"]["tiers"][2]["status"] == (
         "input_complete_authorization_required"
     )
-    assert classes["lifepo4"]["weak_scaling"]["tiers"][3]["status"] == (
-        "blocked_insufficient_unique_inputs"
+    assert classes["fcc_hea"]["strong_scaling"]["tiers"][4]["status"] == (
+        "blocked_fixed_workload_underfills_node_tier"
+    )
+    for name in ("fcc_hea", "lifepo4", "phosphorene", "zn_formate_mof"):
+        weak = classes[name]["weak_scaling"]["tiers"]
+        assert weak[3]["status"] == "input_complete_authorization_required"
+        assert len(set(weak[3]["calculation_ids"])) == 16
+        assert weak[4]["status"] == "blocked_insufficient_unique_inputs"
+        assert len(classes[name]["strong_scaling"]["fixed_calculation_ids"]) == 8
+    nbtao = classes["nb_ta_o"]
+    assert nbtao["strong_scaling"]["tiers"][0]["status"] == (
+        "input_complete_authorization_required"
+    )
+    assert nbtao["weak_scaling"]["tiers"][3]["status"] == "blocked_insufficient_unique_inputs"
+    assert len(nbtao["strong_scaling"]["fixed_calculation_ids"]) == 8
+    assert classes["zn_formate_mof"]["protocol"]["functional"].startswith("PBE-D3(BJ)")
+    assert all(
+        candidate["composition"]["H"] == candidate["composition"]["C"]
+        for candidate in classes["zn_formate_mof"]["candidates"]
     )
     assert all(
-        not tier["calculation_ids"]
-        for name in ("phosphorene", "zn_formate_mof")
-        for tier in classes[name]["strong_scaling"]["tiers"]
+        candidate["input_hashes_validated"] and candidate["execution_ready"] is False
+        for name in ("phosphorene", "zn_formate_mof", "nb_ta_o")
+        for candidate in classes[name]["candidates"]
     )
-    assert classes["nb_ta_o"]["strong_scaling"]["tiers"][0]["status"] == (
-        "blocked_E4_runtime_adapter_or_protocol_qualification"
-    )
-    assert len(classes["nb_ta_o"]["strong_scaling"]["fixed_calculation_ids"]) == 5
     assert all(
         candidate["allocation"] == "HydraGNN" and candidate["material_class"] == name
         for name, entry in classes.items()

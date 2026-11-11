@@ -711,14 +711,14 @@ def main(argv: list[str] | None = None) -> int:
     plan_six.add_argument(
         "--output",
         type=Path,
-        default=REPO / "research/paper/e4/aurora-dft-scaling/six-class-workflow-v1.json",
+        default=REPO / "research/paper/e4/aurora-dft-scaling/six-class-workflow-v2.json",
     )
     validate_six = sub.add_parser("validate-six-class")
     validate_six.add_argument(
         "manifest",
         type=Path,
         nargs="?",
-        default=REPO / "research/paper/e4/aurora-dft-scaling/six-class-workflow-v1.json",
+        default=REPO / "research/paper/e4/aurora-dft-scaling/six-class-workflow-v2.json",
     )
     dispatch_six = sub.add_parser("dispatch-six-class")
     dispatch_six.add_argument("--manifest", type=Path, required=True)
