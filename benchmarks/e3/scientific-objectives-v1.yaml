@@ -25,7 +25,12 @@ material_scope:
 
 pre_campaign_gates:
   model_selection:
-    status: awaiting_user_approval
+    status: primary_checkpoint_selected_by_user
+    selected_primary_checkpoint: mace-omat-0-medium
+    selected_head: default
+    selection_date: 2026-11-11
+    selection_scope: common_frozen_E3_MLIP_pilot_model
+    class_specific_transfer_limitations_must_be_reported: true
     candidates_are_class_specific: true
     suitability_matrix: research/paper/e3/mlip-suitability-v1.yaml
     checkpoint_hash_required: true

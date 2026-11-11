@@ -4,8 +4,10 @@ Scientific reporting and launch gates are specified in
 [`scientific-objectives-v1.yaml`](scientific-objectives-v1.yaml). That spec
 defines exploration, learning, and independent discovery as separate outcomes.
 It does not authorize campaign execution or DFT; the E3-MLIP campaign remains
-blocked pending model-set, endpoint, reference-coverage, protocol, and budget
-approval.
+blocked pending endpoint, reference-coverage, protocol, and bounded-budget
+approval. The user selected frozen `mace-omat-0-medium` as the common pilot
+checkpoint for both adaptation arms on 2026-11-11; class-specific transfer limits
+remain, especially for Zn-formate MOF.
 
 E3-MLIP scope is all six classes with 5,000 unique valid configurations planned
 per class (30,000 total); per-class model and reference coverage is tracked in

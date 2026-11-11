@@ -1,6 +1,6 @@
 schema_version: 1
 campaign: E3-MLIP
-status: preliminary_for_user_approval_not_frozen
+status: primary_MACE_checkpoint_selected; class_specific_pilot_limitations_remain
 scope: all_six_material_classes
 execution_authorized: false
 source_inventory: research/paper/e3/inventory.json
@@ -18,8 +18,15 @@ model_facts:
       mace-mh-0-omat-pbe, mace-mh-1-omat-pbe, mace-mh-1-mp-pbe,
       mace-matpes-pbe-0, mace-matpes-r2scan-0
     ]
-    provisional_user_choice: mace-omat-0-medium
-    choice_status: provisional_not_campaign_approval
+    selected_primary_checkpoint: mace-omat-0-medium
+    selection_authority: user
+    selection_date: 2026-11-11
+    choice_status: selected_for_frozen_E3_MLIP_pilot
+    selection_scope: shared_frozen_checkpoint_for_both_adaptation_arms
+    limitation: >-
+      Selection does not establish suitability for every material class. In
+      particular, the MOF class is outside the demonstrated Codabench domain;
+      record this limitation rather than presenting it as validated.
     available_families_in_code: [mace_mp, mace_omol, mace_off, mace_polar, mace_anicc, checkpoint]
     multihead_selection: explicit_head_required_for_mh_0_and_mh_1
     predictions_include_energy_and_forces: true

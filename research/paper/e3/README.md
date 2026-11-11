@@ -9,8 +9,11 @@ this status document.
 Mandatory exploration, learning, discovery, statistical, and reporting gates
 are specified in
 [`scientific-objectives-v1.yaml`](../../../benchmarks/e3/scientific-objectives-v1.yaml).
-Campaign start remains blocked until the MLIP set, scientific endpoint,
-independent reference coverage, full protocol, and budget are approved.
+MACE-OMAT-0 medium was selected by the user on 2026-11-11 as the common frozen
+pilot checkpoint for both adaptation arms. Campaign start remains blocked until
+the scientific endpoint, independent reference coverage, full protocol, and
+bounded budget are approved. Its MOF transfer applicability is unvalidated and
+must be reported as a limitation, not silently generalized.
 E3-MLIP covers all six material classes with a planning target of 5,000 unique
 valid configurations per class (30,000 total); the approval matrix is
 [`mlip-suitability-v1.yaml`](mlip-suitability-v1.yaml). E3-DFT identifiers,
