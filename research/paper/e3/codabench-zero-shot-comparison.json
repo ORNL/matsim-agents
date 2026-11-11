@@ -1,0 +1,260 @@
+{
+  "hydra_result_status": "corrected_checkpoint_restored_result_replaces_unloaded_checkpoint_values",
+  "hydra_corrected_result": {
+    "artifact": "codabench-hydragnn-omat24-restored.json",
+    "source_result_sha256": "cd9934e5129880b09b75b4a7bd8f52b34060daa8c5c2664f54df4e0cd84bdfec",
+    "checkpoint_load": {
+      "checkpoint_tensor_count": 200,
+      "model_tensor_count": 200,
+      "matched_tensor_count": 200,
+      "missing_tensor_count": 0,
+      "unused_checkpoint_tensor_count": 0,
+      "wrapper_prefixes_removed": 1
+    },
+    "formation_energy_36_excluding_suspect_pd": {
+      "mae_eV_atom": 0.3657253623,
+      "rmse_eV_atom": 0.4974165957,
+      "median_abs_error_eV_atom": 0.2580528191,
+      "max_abs_error_eV_atom": 1.7293605983,
+      "signed_bias_eV_atom": 0.0796703488,
+      "pearson_r": 0.9618199309
+    },
+    "force_clean_30": {
+      "component_mae_eV_A": 1.6416455139,
+      "component_rmse_eV_A": 7.4314297380,
+      "median_per_structure_mae_eV_A": 0.2610280051,
+      "class_macro_mae_eV_A": 1.6828957768
+    }
+  },
+  "force_label_cut_eV_A": 10.0,
+  "excluded_force_labels": [
+    {
+      "id": "MATS-0002",
+      "formula": "BN",
+      "class": "2D Monolayer",
+      "dft_fmax": 132.688
+    },
+    {
+      "id": "MATS-0004",
+      "formula": "BN",
+      "class": "2D Monolayer",
+      "dft_fmax": 130.94
+    },
+    {
+      "id": "MATS-0006",
+      "formula": "C",
+      "class": "2D Monolayer",
+      "dft_fmax": 138.19
+    },
+    {
+      "id": "MATS-0013",
+      "formula": "MoSe2",
+      "class": "2D Monolayer",
+      "dft_fmax": 109.595
+    },
+    {
+      "id": "MATS-0030",
+      "formula": "Cu",
+      "class": "Catalysis",
+      "dft_fmax": 12435.504
+    },
+    {
+      "id": "MATS-0033",
+      "formula": "Fe",
+      "class": "Catalysis",
+      "dft_fmax": 1156.663
+    },
+    {
+      "id": "MATS-0075",
+      "formula": "WC",
+      "class": "Critical Mineral",
+      "dft_fmax": 39.239
+    }
+  ],
+  "models": {
+    "MACE": {
+      "ef_mae_all": 0.3486565933631665,
+      "ef_median_all": 0.040806425831024506,
+      "ef_rmse_all": 1.3598043438732255,
+      "ef_mae_clean": 0.3703913959724854,
+      "ef_class_macro_mae": 0.3547196540787147,
+      "ef_mean_signed": 0.3051771393205296,
+      "force_mae_pooled_clean": 1.0994221347565545,
+      "force_mae_median_clean": 0.15899486601805113,
+      "force_class_macro_clean": 1.1416587284829403,
+      "seconds": 49.666038748808205
+    },
+    "UMA": {
+      "ef_mae_all": 0.677268396022476,
+      "ef_median_all": 0.03537963772456898,
+      "ef_rmse_all": 2.4147337029768874,
+      "ef_mae_clean": 0.812274601672103,
+      "ef_class_macro_mae": 0.6199181798000811,
+      "ef_mean_signed": 0.4730953076150479,
+      "force_mae_pooled_clean": 1.0193546941825387,
+      "force_mae_median_clean": 0.13140900451023999,
+      "force_class_macro_clean": 1.0580320186062049,
+      "seconds": 433.78762029111385
+    },
+    "Hydra": {
+      "ef_mae_all_37": 0.7030041189,
+      "ef_rmse_all_37": 2.1679625122,
+      "ef_mae_excluding_suspect_pd_36": 0.3657253623,
+      "ef_median_abs_excluding_suspect_pd_36": 0.2580528191,
+      "ef_mean_signed_excluding_suspect_pd_36": 0.0796703488,
+      "ef_pearson_r_excluding_suspect_pd_36": 0.9618199309,
+      "force_mae_pooled_clean": 1.6416455139,
+      "force_mae_median_clean": 0.2610280051,
+      "force_class_macro_clean": 1.6828957768,
+      "seconds": 1.9679328500
+    }
+  },
+  "paired": {
+    "UMA-MACE Ef 37": [
+      0.3286118026593098,
+      -0.03167391795351048,
+      0.946050654582216
+    ],
+    "UMA-MACE Ef 30": [
+      0.44188320569961775,
+      0.005683543998256944,
+      1.200346696562778
+    ],
+    "UMA-MACE F 30": [
+      -0.05223406529011729,
+      -0.13431568456926324,
+      -0.004475830008099483
+    ],
+    "hydra_comparisons": "withdrawn; prior paired bootstraps used an unloaded checkpoint and must be recomputed"
+  },
+  "per_class": {
+    "2D Monolayer": {
+      "n": 7,
+      "n_force_clean": 3,
+      "MACE": [
+        0.25357373596172667,
+        0.9240029870433474
+      ],
+      "UMA": [
+        1.5906145405229053,
+        0.8948055110236095
+      ],
+      "Hydra": [
+        0.49595936403752117,
+        0.8836521336180638
+      ]
+    },
+    "Catalysis": {
+      "n": 4,
+      "n_force_clean": 2,
+      "MACE": [
+        2.062896367208679,
+        6.6058299103637355
+      ],
+      "UMA": [
+        2.546612554923023,
+        6.034990110520413
+      ],
+      "Hydra": [
+        3.3170712368000137,
+        10.529389652552675
+      ]
+    },
+    "Critical Mineral": {
+      "n": 9,
+      "n_force_clean": 8,
+      "MACE": [
+        0.17374255817269238,
+        0.76148775038603
+      ],
+      "UMA": [
+        0.18936647199453746,
+        0.7184407853384349
+      ],
+      "Hydra": [
+        0.5914355805621369,
+        0.8205
+      ]
+    },
+    "Intermetallic": {
+      "n": 6,
+      "n_force_clean": 6,
+      "MACE": [
+        0.06573729224398248,
+        0.024188833889476236
+      ],
+      "UMA": [
+        0.006326162951581172,
+        0.028649093771818113
+      ],
+      "Hydra": [
+        0.12847688855573788,
+        0.07034585214054391
+      ]
+    },
+    "MAX Phase": {
+      "n": 2,
+      "n_force_clean": 2,
+      "MACE": [
+        0.0806109444631071,
+        0.4345467919831883
+      ],
+      "UMA": [
+        0.005219704781784323,
+        0.3925974970378099
+      ],
+      "Hydra": [
+        0.21959056140697825,
+        0.4992834909736016
+      ]
+    },
+    "Nuclear Material": {
+      "n": 2,
+      "n_force_clean": 2,
+      "MACE": [
+        0.06516693332090107,
+        0.12502885108098583
+      ],
+      "UMA": [
+        0.36139851975688786,
+        0.1602154504363819
+      ],
+      "Hydra": [
+        0.32274440134955573,
+        0.33930090555339004
+      ]
+    },
+    "Perovskite": {
+      "n": 5,
+      "n_force_clean": 5,
+      "MACE": [
+        0.11732366625565169,
+        0.15800946343693986
+      ],
+      "UMA": [
+        0.24769066926722033,
+        0.17155733880367025
+      ],
+      "Hydra": [
+        0.38460240009667795,
+        0.21508713238563787
+      ]
+    },
+    "Thermoelectric": {
+      "n": 2,
+      "n_force_clean": 2,
+      "MACE": [
+        0.01870573500297726,
+        0.1001752396798193
+      ],
+      "UMA": [
+        0.012116814202708479,
+        0.06300036191750118
+      ],
+      "Hydra": [
+        0.08484421135554893,
+        0.105646371262158
+      ]
+    }
+  }
+}

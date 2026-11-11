@@ -21,6 +21,27 @@ MODELS = {
     # Frozen E3 zero-shot configurations.
     "mace-mp-0-small": {"backend": "mace", "model": "small", "dtype": "float64"},
     "uma-s-1p1-omat": {"backend": "uma", "model": "uma-s-1p1", "task": "omat"},
+    # mace-foundations checkpoints (mace-torch 0.3.16 aliases).
+    "mace-mp-0-medium": {"backend": "mace", "model": "medium", "dtype": "float64"},
+    "mace-mp-0-large": {"backend": "mace", "model": "large", "dtype": "float64"},
+    "mace-mp-0b3-medium": {"backend": "mace", "model": "medium-0b3", "dtype": "float64"},
+    "mace-mpa-0-medium": {"backend": "mace", "model": "medium-mpa-0", "dtype": "float64"},
+    "mace-omat-0-small": {"backend": "mace", "model": "small-omat-0", "dtype": "float64"},
+    "mace-omat-0-medium": {"backend": "mace", "model": "medium-omat-0", "dtype": "float64"},
+    "mace-matpes-pbe-0": {"backend": "mace", "model": "mace-matpes-pbe-0", "dtype": "float64"},
+    # r2SCAN energies are not on the PBE scale of the DFT references.
+    "mace-matpes-r2scan-0": {
+        "backend": "mace", "model": "mace-matpes-r2scan-0", "dtype": "float64"
+    },
+    "mace-mh-1-omat-pbe": {
+        "backend": "mace", "model": "mh-1", "head": "omat_pbe", "dtype": "float64"
+    },
+    "mace-mh-1-mp-pbe": {
+        "backend": "mace", "model": "mh-1", "head": "mp_pbe_refit_add", "dtype": "float64"
+    },
+    "mace-mh-0-omat-pbe": {
+        "backend": "mace", "model": "mh-0", "head": "omat_pbe", "dtype": "float64"
+    },
 }
 
 
@@ -29,7 +50,8 @@ def calculator(name: str, device: str):
     if spec["backend"] == "mace":
         from mace.calculators import mace_mp
 
-        return mace_mp(model=spec["model"], device=device, default_dtype=spec["dtype"])
+        head = {"head": spec["head"]} if "head" in spec else {}
+        return mace_mp(model=spec["model"], device=device, default_dtype=spec["dtype"], **head)
     from fairchem.core import FAIRChemCalculator, pretrained_mlip
 
     unit = pretrained_mlip.get_predict_unit(spec["model"], device=device)

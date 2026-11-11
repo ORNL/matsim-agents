@@ -92,8 +92,10 @@ NELM_MAX=170
 VASP_STEP="${VASP_STEP:-${REPO}/deployments/aurora/launchers/_vasp-step-aurora.sh}"
 
 umask 077
-ROOT="${CASE_DIR}/${VARIANT}/${REPEAT}"
-mkdir -p "${CASE_DIR}/${VARIANT}"
+ROOT="${E4_OUTPUT_ROOT:-${CASE_DIR}/${VARIANT}/${REPEAT}}"
+if [[ -z "${E4_OUTPUT_ROOT:-}" ]]; then
+  mkdir -p "${CASE_DIR}/${VARIANT}"
+fi
 if [[ "${RESUME}" == 0 ]]; then
   mkdir "${ROOT}"
   mkdir "${ROOT}/attempts"
@@ -123,8 +125,8 @@ cleanup() {
   stop_watchdog
   job_end=$(date +%s)
   elapsed_seconds=$((job_end - JOB_START))
-  allocated_nodes=unknown
-  if [[ -n "${PBS_NODEFILE:-}" && -r "${PBS_NODEFILE}" ]]; then
+  allocated_nodes="${E4_ACCOUNTING_NODES:-unknown}"
+  if [[ "${allocated_nodes}" == unknown && -n "${PBS_NODEFILE:-}" && -r "${PBS_NODEFILE}" ]]; then
     allocated_nodes=$(awk 'NF && !seen[$0]++ {count++} END {print count+0}' "${PBS_NODEFILE}")
   fi
   elapsed_node_hours=unknown

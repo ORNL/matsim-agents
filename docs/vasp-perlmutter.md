@@ -1,5 +1,8 @@
 # VASP on Perlmutter (NVIDIA A100, sm_80)
 
+For campaign-specific instructions, see the
+[Perlmutter E3-MLIP and E4 execution runbook](../research/paper/perlmutter-e3-e4-execution-runbook.md).
+
 This page documents how VASP 6.6.0 (OpenACC GPU port) is built, launched, and
 driven from the matsim-agents workflows on NERSC Perlmutter, and records every
 runtime problem that had to be solved to get GPU VASP running **both** as a

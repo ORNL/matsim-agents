@@ -1,0 +1,653 @@
+{
+  "schema_version": 1,
+  "campaign_id": "E4-Aurora-BCC-Weak-v1",
+  "execution_authorized": false,
+  "authorization": null,
+  "source_manifest_sha256": "00980167163f6bb8247988df81339ade666ff2a146a2f36c61fef817ed88e95c",
+  "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+  "structure_identity": "POSCAR SHA-256 and symmetry-canonical occupation hash",
+  "external_duplicate_audit": "incomplete",
+  "cases": [
+    {
+      "calculation_id": "E4-BCC-0002",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 32,
+        "Nb": 32,
+        "Ta": 32,
+        "V": 32
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-0002",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "9bf028c480afc0d445d54ab114bc4426fcb4a1ee27fa1fa47f8319de10303db3",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-0002/POSCAR",
+      "source_poscar_sha256": "08bfd8aeed3d1db58292d39910adefbf25fadd580f7722b4f5e458c0a8f94e9f",
+      "prepared_input_bundle_sha256": "7afdab47a6859228c1aa73126f273fa9e3e8fd9fca1302715259f91ab67afd3a",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0001/INCAR.low": "cc75ffa808aaaa026e06fb0457ee47b64b32e3d31d74d6b7cadc2c78687ef0d8",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0001/INCAR.normal": "ca6fdeb832fe3fd9e1861164f4c456c1889518cc6816ab1d75301a03a33b5456",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0001/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0001/POSCAR": "25ee70024b9dd1e2a39d1cd3c1091409e9c83aa5b7789e633df8b58ac044189c",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0001/POTCAR.order": "63d8697d9cbc626e93848f86a6dc395ceb930d87372396407adbbf99e5880e88",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0001/POTCAR.spec": "6c05eacda6b6a73ac97b6841d860e1061a4552158b9c579a7b0bc77b302014a6",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0001/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "08bfd8aeed3d1db58292d39910adefbf25fadd580f7722b4f5e458c0a8f94e9f",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "10a4727b2e4a00fb8089889b167e3f1a66d188ef1a38d71229eea6532e16930f"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "10a4727b2e4a00fb8089889b167e3f1a66d188ef1a38d71229eea6532e16930f",
+      "poscar_sha256": "08bfd8aeed3d1db58292d39910adefbf25fadd580f7722b4f5e458c0a8f94e9f",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb"
+    },
+    {
+      "calculation_id": "E4-BCC-0562",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 32,
+        "Nb": 32,
+        "Ti": 32,
+        "V": 32
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-0562",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "9d23fb4406835d6885ae8e3abf49096eb61376e168e7108de0babc6c5b03ff86",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-0562/POSCAR",
+      "source_poscar_sha256": "7e7c5968f6d0afc9275b07bf4741e33edffc471056830cc04f3cfaae0a22157c",
+      "prepared_input_bundle_sha256": "4a2c72a75f6cff3a1fbef4076ba206201dbf1eb75ffd24c4e3363689f7b9d5fc",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0561/INCAR.low": "cc75ffa808aaaa026e06fb0457ee47b64b32e3d31d74d6b7cadc2c78687ef0d8",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0561/INCAR.normal": "ca6fdeb832fe3fd9e1861164f4c456c1889518cc6816ab1d75301a03a33b5456",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0561/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0561/POSCAR": "0c0dea4668d3788f8bf5a00e32231e4253e70b84a409d9857569bc6fa68f27b7",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0561/POTCAR.order": "2e6458c79e5af826072fd517d79f6f8a8413492a0ccfda518f753df05b67764e",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0561/POTCAR.spec": "4e7ee2d241b680a206fd076f901825fb4d4452811c1ac1f647012a394c0cca80",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-0561/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "7e7c5968f6d0afc9275b07bf4741e33edffc471056830cc04f3cfaae0a22157c",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "a7b848aa508f0266294e9b1e45138623eeb961feb27c7695b3bc437b202aa9f2"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "a7b848aa508f0266294e9b1e45138623eeb961feb27c7695b3bc437b202aa9f2",
+      "poscar_sha256": "7e7c5968f6d0afc9275b07bf4741e33edffc471056830cc04f3cfaae0a22157c",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb"
+    },
+    {
+      "calculation_id": "E4-BCC-1122",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 32,
+        "Ti": 32,
+        "V": 32,
+        "Zr": 32
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1122",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "4b56481b4f0434dd7c0e30bc05a88e5b3db3a1d9dab46e3106044b8f724a0946",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1122/POSCAR",
+      "source_poscar_sha256": "c295d0e7a0e2df8f49f60129ca9086b091c62bca1ae10e89fb2669aafa72c19f",
+      "prepared_input_bundle_sha256": "a76409ce10558085286b45785709dda62fa17b6159292b282a8f9ec96ada9bd2",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1121/INCAR.low": "cc75ffa808aaaa026e06fb0457ee47b64b32e3d31d74d6b7cadc2c78687ef0d8",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1121/INCAR.normal": "ca6fdeb832fe3fd9e1861164f4c456c1889518cc6816ab1d75301a03a33b5456",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1121/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1121/POSCAR": "3feecd1a60b7a465836a6e6108a3a2927eea39fc361cbbf04f58cf9c90e736e5",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1121/POTCAR.order": "bbe7c9567943a0d9e830e4e1055e4d96f858ac1d31200a20fdbee8acdb8374f7",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1121/POTCAR.spec": "43fd06aa84eec023b75681727e02ca392ca6fe16fe3504ac875e59efd9ced0db",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1121/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "c295d0e7a0e2df8f49f60129ca9086b091c62bca1ae10e89fb2669aafa72c19f",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "42a3e2ae184ea34f2ba7173b8f347be9e31b09ec7605b6516f831eaa310108af"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "42a3e2ae184ea34f2ba7173b8f347be9e31b09ec7605b6516f831eaa310108af",
+      "poscar_sha256": "c295d0e7a0e2df8f49f60129ca9086b091c62bca1ae10e89fb2669aafa72c19f",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb"
+    },
+    {
+      "calculation_id": "E4-BCC-1202",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 25,
+        "Nb": 26,
+        "Ta": 26,
+        "V": 26,
+        "Zr": 25
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1202",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "a0ccfd43b77a7c4254df0e28443ff3f9b0954337023a937f29d8ee33fb279ec6",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1202/POSCAR",
+      "source_poscar_sha256": "cf909f24cdb23f5101bd62b921616f58f008c13b516d338871c679aa8a10dbe8",
+      "prepared_input_bundle_sha256": "c5f0d3d0a7eeb8e21ac216203e13adb78c3f21cbc8c3db6817c9b5c10fea4651",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1201/INCAR.low": "cc75ffa808aaaa026e06fb0457ee47b64b32e3d31d74d6b7cadc2c78687ef0d8",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1201/INCAR.normal": "ca6fdeb832fe3fd9e1861164f4c456c1889518cc6816ab1d75301a03a33b5456",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1201/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1201/POSCAR": "c8d63d350db266ece90e3fece37d2a59442800039f1dae178307484917c4363c",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1201/POTCAR.order": "005cad247b9287649a2d5480c279cf9a730160e3356d54e59e18413c90d391ed",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1201/POTCAR.spec": "db2e10a6c1b3c42eb8ebdcab698a2ebf78079ab7fcf13d764fb47f22b2d2f0bc",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1201/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "cf909f24cdb23f5101bd62b921616f58f008c13b516d338871c679aa8a10dbe8",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "f6d9ae6e98a59244ed35420e2dabf8b66fa56bf7b55516f8952d134a2946b917"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "f6d9ae6e98a59244ed35420e2dabf8b66fa56bf7b55516f8952d134a2946b917",
+      "poscar_sha256": "cf909f24cdb23f5101bd62b921616f58f008c13b516d338871c679aa8a10dbe8",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb"
+    },
+    {
+      "calculation_id": "E4-BCC-1502",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 26,
+        "Nb": 26,
+        "Ta": 26,
+        "Ti": 25,
+        "Zr": 25
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1502",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "538bc564b7d763a18df9becc269b3980653848cc34ba7c9e19ad266ceb089c5b",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1502/POSCAR",
+      "source_poscar_sha256": "c6cd242f195a46642b201f4dfe104f40b2eacb593b7c224bfce55f67925ea183",
+      "prepared_input_bundle_sha256": "e68746c826186dae9f0918f4eca715b07e1076646f1650dac3cd83207373e673",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1501/INCAR.low": "cc75ffa808aaaa026e06fb0457ee47b64b32e3d31d74d6b7cadc2c78687ef0d8",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1501/INCAR.normal": "ca6fdeb832fe3fd9e1861164f4c456c1889518cc6816ab1d75301a03a33b5456",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1501/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1501/POSCAR": "1a81e3278b3bce927ab89f4d04efe810a43a04eefe7356c2669d99f9bfd1d3bd",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1501/POTCAR.order": "6f71003ed8e4b5162cc4c67785620b0dec76522a797ece815538baf0d5a70178",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1501/POTCAR.spec": "cda1a78a8f686e0cec515abc649bfca112124370e36446c4599b0bc0201b3cbb",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1501/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "c6cd242f195a46642b201f4dfe104f40b2eacb593b7c224bfce55f67925ea183",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "3485ba344693ce6c187230d913c618a66a75b2a1befd5fa090c434ac4280e973"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "3485ba344693ce6c187230d913c618a66a75b2a1befd5fa090c434ac4280e973",
+      "poscar_sha256": "c6cd242f195a46642b201f4dfe104f40b2eacb593b7c224bfce55f67925ea183",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb"
+    },
+    {
+      "calculation_id": "E4-BCC-1702",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 26,
+        "Ta": 26,
+        "Ti": 25,
+        "V": 26,
+        "Zr": 25
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1702",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "ae7bd78a55e50133c5b77b9be603c0c840f9f6ae6c40848f0f00543759d24fbf",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1702/POSCAR",
+      "source_poscar_sha256": "7533b8538d527dbac07cda5c162bf40ecb267864d3ad5885a1158d4915f63cad",
+      "prepared_input_bundle_sha256": "e26bd21da460b8d3743d96c9254240e76cc014595d492147adc76f9195e6c06e",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1701/INCAR.low": "cc75ffa808aaaa026e06fb0457ee47b64b32e3d31d74d6b7cadc2c78687ef0d8",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1701/INCAR.normal": "ca6fdeb832fe3fd9e1861164f4c456c1889518cc6816ab1d75301a03a33b5456",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1701/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1701/POSCAR": "725056c78815c72928c2ebe83045aac589487b321f1bb77a91a1f68881a79d36",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1701/POTCAR.order": "d10025ceb1173b246557e8aa4067aa42416e8a517c2699d8f15c27f5ca81d839",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1701/POTCAR.spec": "90d7556b985362eba18d7b5d466443c6bad94bacac205231015676219e4e1914",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1701/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "7533b8538d527dbac07cda5c162bf40ecb267864d3ad5885a1158d4915f63cad",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "afe5a8d80ca2663f34ee2038a20ed6b84fd3bb1cc2c711256ca02cf6a0be323a"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "afe5a8d80ca2663f34ee2038a20ed6b84fd3bb1cc2c711256ca02cf6a0be323a",
+      "poscar_sha256": "7533b8538d527dbac07cda5c162bf40ecb267864d3ad5885a1158d4915f63cad",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb"
+    },
+    {
+      "calculation_id": "E4-BCC-1802",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 21,
+        "Nb": 22,
+        "Ta": 22,
+        "Ti": 21,
+        "V": 21,
+        "Zr": 21
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1802",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "7eae92b4d60fa1e2ad351260bc7dc16433fbf7c258b74d52777d8da4e6856058",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1802/POSCAR",
+      "source_poscar_sha256": "b2fd57c45e3e090b8cb9e3845636f0166a7cf69a92be03a1eaccf8fffee6bbe7",
+      "prepared_input_bundle_sha256": "1463bc1b2ad6f18296f07c8ea1fcd87ca57c91b9171d49a7fba3ae3709cd7063",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1801/INCAR.low": "cc75ffa808aaaa026e06fb0457ee47b64b32e3d31d74d6b7cadc2c78687ef0d8",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1801/INCAR.normal": "ca6fdeb832fe3fd9e1861164f4c456c1889518cc6816ab1d75301a03a33b5456",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1801/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1801/POSCAR": "35fe5c79aec66140a10ab28c09c728670c9f87c38dbcb9f17f6b6a2e80a262b9",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1801/POTCAR.order": "a1a178ab76f32c31f2867c6a8ab76728beb42a1b2aeab4137c9b999197939ad9",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1801/POTCAR.spec": "da89401dbe3dd993efbb488f5375d6e89fcf4a00c64bac3655b4f12719330027",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1801/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "b2fd57c45e3e090b8cb9e3845636f0166a7cf69a92be03a1eaccf8fffee6bbe7",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d",
+      "poscar_sha256": "b2fd57c45e3e090b8cb9e3845636f0166a7cf69a92be03a1eaccf8fffee6bbe7",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb"
+    },
+    {
+      "calculation_id": "E4-BCC-1806",
+      "material_family": "bcc",
+      "composition": {
+        "Hf": 16,
+        "Nb": 46,
+        "Ta": 17,
+        "Ti": 16,
+        "V": 17,
+        "Zr": 16
+      },
+      "atom_count": 128,
+      "allocation": "HydraGNN",
+      "pbs_script": "deployments/aurora/jobs/e4-first-batch/job-bcc.pbs",
+      "case_dir": "../e4-scaling-weak-inputs-20261110/inputs/E4-BCC-1806",
+      "repeat": "repeat-01",
+      "walltime_seconds": 86400,
+      "nodes": 1,
+      "mpi_ranks": 8,
+      "omp_threads_per_rank": 8,
+      "kpar": 8,
+      "ncore": null,
+      "stage_nsw_max": 240,
+      "ediffg_eV_per_A": "-0.01",
+      "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+      "structure_id": "b31ed587ac99136c98c8bd41a56201743d1af6c60ed91bd71c05726f4266cdaf",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs/E4-BCC-1806/POSCAR",
+      "source_poscar_sha256": "bc62cdeaf564b8e54bf51e798827e2361e5841074ff195e91195f0830df46b99",
+      "prepared_input_bundle_sha256": "a2edb6a41f21a4fb91936ba32e2c3d44b6282f3c65dab99ae37680f6753f1fcb",
+      "antisite_exchange_pairs": null,
+      "source_hashes": {
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1805/INCAR.low": "cc75ffa808aaaa026e06fb0457ee47b64b32e3d31d74d6b7cadc2c78687ef0d8",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1805/INCAR.normal": "ca6fdeb832fe3fd9e1861164f4c456c1889518cc6816ab1d75301a03a33b5456",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1805/KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1805/POSCAR": "eb8f3877d44bafa9741f96a4766093ca8c61f22ea0ffe152d137e839a2185d7b",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1805/POTCAR.order": "a1a178ab76f32c31f2867c6a8ab76728beb42a1b2aeab4137c9b999197939ad9",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1805/POTCAR.spec": "da89401dbe3dd993efbb488f5375d6e89fcf4a00c64bac3655b4f12719330027",
+        "research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/E4-BCC-1805/START": "ece3dfec13b93270b873903f765eca52af2ed1d320d148f0edd0bee175980eb1"
+      },
+      "input_hashes": {
+        "START": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb",
+        "POSCAR": "bc62cdeaf564b8e54bf51e798827e2361e5841074ff195e91195f0830df46b99",
+        "KPOINTS": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+        "POTCAR": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d"
+      },
+      "paw_components": [
+        {
+          "element": "Hf",
+          "label": "Hf_pv",
+          "sha256": "db42cd3e4a48e81eaff18895282e2f5a37f2c8c6a4b9ac45e357affc13c83b84",
+          "source": "external/vasp6/potcar/Hf_pv/POTCAR"
+        },
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "Ti",
+          "label": "Ti_pv",
+          "sha256": "1a7a8efddf2a5b6c8861aa48543d0531abc8e9b6e54500458b415b06354c25ba",
+          "source": "external/vasp6/potcar/Ti_pv/POTCAR"
+        },
+        {
+          "element": "V",
+          "label": "V_pv",
+          "sha256": "7e6e3948baf479b1e61e3653bf3429049e07351b243ece4a7a45499cd5dea1a0",
+          "source": "external/vasp6/potcar/V_pv/POTCAR"
+        },
+        {
+          "element": "Zr",
+          "label": "Zr_sv",
+          "sha256": "e3d75732e64ed47e733ef12202d7082321f6b043dd450e16fe03b686b180cdc0",
+          "source": "external/vasp6/potcar/Zr_sv/POTCAR"
+        }
+      ],
+      "potcar_sha256": "40c87ed0dc4b827194210fd185433b977e945a39544e0e3dd0f0905491151e2d",
+      "poscar_sha256": "bc62cdeaf564b8e54bf51e798827e2361e5841074ff195e91195f0830df46b99",
+      "kpoints_sha256": "153f5a32fe014286ff99b50343adaba85ccc699c88bbdaff4d2bacd148e75b47",
+      "start_sha256": "ac10daf3e1bdec4080104ee9fc43af814862135cfef9ecd0a18e8151b2b4c2bb"
+    }
+  ]
+}

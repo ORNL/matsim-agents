@@ -11,7 +11,7 @@
 set -euo pipefail
 
 : "${E4_CASE_DIR:?}" "${E4_CALCULATION_ID:?}"
-readonly REPO=/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents
+readonly REPO=/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4
 export REPO CASE_DIR="${E4_CASE_DIR}" VARIANT=alcf REPEAT=repeat-01
 export E4_CALCULATION_ID E4_STAGE_MODE=low-normal E4_STAGE_NSW_MAX=240
 export E4_MPI_RANKS=8 E4_OMP_THREADS=8

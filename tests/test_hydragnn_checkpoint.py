@@ -96,6 +96,37 @@ def test_inference_restores_ddp_checkpoint_and_freezes_lazy_parameters(tmp_path)
         torch.testing.assert_close(rebuilt.state_dict()[key], expected, rtol=0, atol=0)
 
 
+def test_inference_restores_nested_module_model_checkpoint_prefix(tmp_path):
+    trained = LazyConditioning().double()
+    trained._ensure_graph_concat_projector(2, 2, "cpu", torch.float64)
+    path = tmp_path / "model.pk"
+    state = {f"module.model.{key}": value for key, value in trained.state_dict().items()}
+    state["module.model.branch_weight_mlp.weight"] = torch.ones(3, 3, dtype=torch.float64)
+    torch.save({"model_state_dict": state}, path)
+
+    rebuilt = LazyConditioning().double()
+    restore_hydragnn_checkpoint(rebuilt, path, device="cpu")
+
+    for key, expected in trained.state_dict().items():
+        torch.testing.assert_close(rebuilt.state_dict()[key], expected, rtol=0, atol=0)
+    report = rebuilt._hydragnn_checkpoint_load_report
+    assert report["model_tensor_count"] == len(trained.state_dict())
+    assert report["matched_tensor_count"] == len(trained.state_dict())
+    assert report["missing_tensor_count"] == 0
+    assert report["unused_checkpoint_tensor_count"] == 1
+    assert report["wrapper_prefixes_removed"] == 2
+
+
+def test_inference_rejects_checkpoint_with_no_matching_model_keys(tmp_path):
+    path = tmp_path / "model.pk"
+    torch.save(
+        {"model_state_dict": {"module.model.unrelated.weight": torch.ones(2, 2)}},
+        path,
+    )
+    with pytest.raises(RuntimeError, match="no keys matching the constructed model"):
+        restore_hydragnn_checkpoint(LazyConditioning(), path, device="cpu")
+
+
 @pytest.mark.parametrize("ddp", [False, True])
 def test_fused_loader_strictly_restores_model_prefix_and_lazy_weights(tmp_path, monkeypatch, ddp):
     import sys

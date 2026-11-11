@@ -215,10 +215,13 @@ def analyze_scaling(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             per_node = {r["attempted_tasks"] / r["nodes"] for r in subset}
             if len(per_node) != 1:
                 raise ValueError("weak-scaling attempted tasks per node are not constant")
+        baseline_nodes = min((r["nodes"] for r in subset), default=None)
         baseline = None
         if experiment == "strong":
             baseline_rows = [
-                r for r in subset if r["nodes"] == 8 and r["valid_tasks"] == r["attempted_tasks"]
+            r
+            for r in subset
+            if r["nodes"] == baseline_nodes and r["valid_tasks"] == r["attempted_tasks"]
             ]
             if baseline_rows:
                 baseline = statistics.median(
@@ -226,7 +229,9 @@ def analyze_scaling(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 )
         else:
             baseline_rows = [
-                r for r in subset if r["nodes"] == 8 and r["application_makespan_seconds"] > 0
+                r
+                for r in subset
+                if r["nodes"] == baseline_nodes and r["application_makespan_seconds"] > 0
             ]
             if baseline_rows:
                 baseline = statistics.median(
@@ -254,7 +259,11 @@ def analyze_scaling(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 if experiment == "strong" and baseline and median_time
                 else None
             )
-            efficiency = speedup / (nodes / 8) if speedup is not None else None
+            efficiency = (
+                speedup / (nodes / baseline_nodes)
+                if speedup is not None and baseline_nodes
+                else None
+            )
             weak_efficiency = (
                 (throughput / nodes) / baseline if experiment == "weak" and baseline else None
             )

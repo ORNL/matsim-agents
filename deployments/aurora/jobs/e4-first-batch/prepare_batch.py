@@ -48,6 +48,19 @@ ALLOCATIONS = {
 }
 WALLTIME_SECONDS = 24 * 60 * 60
 VASP_SHA256 = "3354871ac0b7a812ebe3444dbd3d5bb4176995a5c37c3859978b58b5c7b55eb6"
+WEAK_SCALING_IDS = (
+    "E4-BCC-0002",
+    "E4-BCC-0562",
+    "E4-BCC-1122",
+    "E4-BCC-1202",
+    "E4-BCC-1502",
+    "E4-BCC-1702",
+    "E4-BCC-1802",
+    "E4-BCC-1806",
+)
+WEAK_SCALING_TEMPLATES = dict(
+    zip(WEAK_SCALING_IDS, BCC_IDS, strict=True)
+)
 
 
 def sha256(path: Path) -> str:
@@ -109,7 +122,7 @@ def install_potcar(spec: Path, poscar: Path, destination: Path) -> list[dict[str
                 "element": element,
                 "label": label,
                 "sha256": actual,
-                "source": str(source.resolve().relative_to(REPO)),
+                "source": str(Path("external/vasp6/potcar") / label / "POTCAR"),
             }
         )
     assembled = b"".join(chunks)
@@ -327,11 +340,115 @@ def prepare_case(
     return metadata
 
 
+def prepare_weak_scaling_inputs(root: Path, source_manifest: Path, output_manifest: Path) -> list[dict[str, Any]]:
+    """Freeze second disorder realizations for the unauthorized weak-scaling plan."""
+    import sys
+
+    sys.path.insert(0, str(REPO))
+    from benchmarks.e4.aurora_dft.planning import build_candidate_inventory
+    from benchmarks.e4.aurora_dft.prepare_stage1 import (
+        _lattice_occupations,
+        _write_poscar,
+        canonical_occupation_hash,
+        lattice_site_permutations,
+    )
+    from ase.io import read
+
+    root = root.resolve()
+    source_poscars = REPO / "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-inputs"
+    if root.exists() and any(root.iterdir()):
+        raise FileExistsError(f"refusing to overwrite non-empty scaling input directory: {root}")
+    if source_poscars.exists() and any(source_poscars.iterdir()):
+        raise FileExistsError(f"refusing to overwrite frozen scaling POSCARs: {source_poscars}")
+    if sha256(EXECUTABLE) != VASP_SHA256:
+        raise ValueError(f"VASP executable hash mismatch: {EXECUTABLE}")
+
+    source_manifest_data = json.loads(source_manifest.read_text())
+    if source_manifest_data.get("batch_id") != "E4-first-production-batch-01":
+        raise ValueError("unexpected source batch manifest")
+    if source_manifest_data.get("execution_authorized") is not True:
+        raise ValueError("source batch manifest is not the frozen production input set")
+    source_manifest_sha256 = sha256(source_manifest)
+    stage_records = read_jsonl(STAGE1 / "manifest.jsonl")
+    candidates = {
+        row["calculation_id"]: row
+        for row in build_candidate_inventory()
+        if row["material_family"] == "bcc_refractory"
+    }
+    parent_path = STAGE1 / "bcc_refractory" / "E4-BCC-0001" / "POSCAR"
+    parent = read(parent_path, format="vasp")
+    permutations = lattice_site_permutations(parent, preserve_species=False)
+    known_canonical = {
+        stage_records[calc_id]["canonical_structure_id"] for calc_id in BCC_IDS
+    }
+    known_poscar_hashes = {
+        case["input_hashes"]["POSCAR"] for case in source_manifest_data["cases"] if case["material_family"] == "bcc"
+    }
+    source_poscars.mkdir(parents=True, mode=0o700)
+    root.mkdir(parents=True, mode=0o700)
+    (root / "inputs").mkdir(mode=0o700)
+    records = []
+    for calc_id in WEAK_SCALING_IDS:
+        candidate = candidates[calc_id]
+        structure = _lattice_occupations(parent, candidate["composition"], candidate["random_seed"])
+        canonical = canonical_occupation_hash(structure, permutations)
+        if canonical in known_canonical:
+            raise ValueError(f"{calc_id} duplicates a selected strong-scaling occupation")
+        known_canonical.add(canonical)
+        source_dir = source_poscars / calc_id
+        source_dir.mkdir(mode=0o700)
+        poscar_source = source_dir / "POSCAR"
+        _write_poscar(structure, poscar_source, calc_id)
+        digest = sha256(poscar_source)
+        if digest in known_poscar_hashes:
+            raise ValueError(f"{calc_id} duplicates a selected POSCAR hash")
+        known_poscar_hashes.add(digest)
+        records.append(
+            prepare_case(
+                calc_id,
+                "bcc",
+                STAGE1 / "bcc_refractory" / WEAK_SCALING_TEMPLATES[calc_id],
+                poscar_source,
+                {**candidate, "canonical_structure_id": canonical},
+                root,
+            )
+        )
+    output_manifest.parent.mkdir(parents=True, exist_ok=True)
+    output_manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "campaign_id": "E4-Aurora-BCC-Weak-v1",
+                "execution_authorized": False,
+                "authorization": None,
+                "source_manifest_sha256": source_manifest_sha256,
+                "protocol_id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
+                "structure_identity": "POSCAR SHA-256 and symmetry-canonical occupation hash",
+                "external_duplicate_audit": "incomplete",
+                "cases": records,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    return records
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument("--weak-scaling", action="store_true")
     args = parser.parse_args()
+    if args.weak_scaling:
+        output_manifest = (
+            REPO
+            / "research/paper/e4/aurora-dft-scaling/priority-scaling/weak-input-manifest.json"
+        )
+        records = prepare_weak_scaling_inputs(args.root, args.manifest, output_manifest)
+        print(f"Prepared {len(records)} unauthorized weak-scaling inputs at {args.root.resolve()}")
+        print(f"Frozen manifest: {output_manifest}")
+        return 0
     root = args.root.resolve()
     manifest_path = args.manifest.resolve()
     if root.exists() and any(root.iterdir()):

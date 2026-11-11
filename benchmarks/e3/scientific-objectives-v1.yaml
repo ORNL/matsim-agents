@@ -1,0 +1,155 @@
+schema_version: 1
+campaign: E3-MLIP
+status: design_gate_not_campaign_authorization
+supersedes_for_scientific_reporting: e3-unified-six-material-v1
+campaign_separation:
+  e3_mlip: acquisition_uses_frozen_pretrained_mlip_evidence
+  e3_dft: acquisition_uses_qualified_first_principles_evidence
+  share_questions_and_metric_definitions_where_applicable: true
+  keep_evidence_fidelity_costs_and_artifacts_separate: true
+  preserve_historical_e3_dft_ids_results_protocol_and_budgets: true
+
+primary_hypothesis: >-
+  Across all six material classes and under matched MLIP evaluation budgets,
+  LLM-guided adaptation identifies more independently validated, scientifically
+  useful crystallographic configurations than Rule-based adaptation.
+
+material_scope:
+  classes: [lifepo4, phosphorene, zn_formate_mof, nb_ta_o, bcc_refractory, fcc_cantor]
+  all_classes_mandatory: true
+  planning_unique_valid_configurations: 30000
+  equal_per_class_target: 5000
+  class_suitability_and_generation_matrix: research/paper/e3/mlip-suitability-v1.yaml
+  no_class_omission_due_to_workflow_maturity: true
+  reporting: per_class_plus_equal_weight_macro_and_pooled_totals
+
+pre_campaign_gates:
+  model_selection:
+    status: primary_checkpoint_selected_by_user
+    selected_primary_checkpoint: mace-omat-0-medium
+    selected_head: default
+    selection_date: 2026-11-11
+    selection_scope: common_frozen_E3_MLIP_pilot_model
+    class_specific_transfer_limitations_must_be_reported: true
+    candidates_are_class_specific: true
+    suitability_matrix: research/paper/e3/mlip-suitability-v1.yaml
+    checkpoint_hash_required: true
+    trainable: false
+  scientific_endpoint:
+    status: must_be_frozen
+    required: [target_property, admissible_threshold, independent_reference_method,
+              candidate_level_useful_label_rule]
+  reference_data:
+    status: must_be_frozen
+    priority: reuse_existing_qualified_DFT_references_before_proposing_new_DFT
+    e3_qualified_group_count_is_distinct_from_public_codabench_benchmark_coverage: true
+    require_group_disjoint_acquisition_validation_test: true
+    min_validation_groups: 2
+    min_test_groups: 1
+    insufficient_coverage_result: discovery_performance_not_established
+  candidate_generation:
+    status: must_be_frozen
+    record_generator_seed_constraints_and_versions: true
+    deduplicate_by: [composition, symmetry_canonical_structure, structure_hash]
+    planning_scale: 30000_total_unique_valid_configurations
+    per_class_target: 5000
+    extension_to_100000_requires_measured_throughput_and_budget_justification: true
+    report_scale_claim_only_if_measured_budget_and_throughput_support_it: true
+  execution:
+    require_matched_strategy_budgets: true
+    dft_submission_requires_separate_user_authorization: true
+    campaign_start_requires_approved_model_set_protocol_and_budget: true
+
+strategies:
+  names: [LLM-guided adaptation, Rule-based adaptation]
+  initial_checkpoints_frozen: true
+  evidence_ledgers: separate_append_only_per_strategy
+  shared_per_round: [candidate_universe, admissibility_rules, evaluation_budget,
+                     reference_roles, endpoint, cost_accounting]
+  leakage_controls:
+    validation_and_test_visible_to_acquisition: false
+    each_strategy_reads_only_its_own_acquired_evidence: true
+  acquisition_comparison:
+    matched_mlip_evaluation_budget: true
+    matched_admissible_actions: true
+    report_logical_selections_and_unique_physical_evaluations: true
+    apply_to_each_material_class: true
+    generation_operations_and_acceptance_rules_shared: true
+
+outcomes:
+  exploration:
+    question: How extensively and efficiently was admissible crystallographic space explored?
+    metrics:
+      - generated_candidate_count
+      - valid_candidate_count
+      - unique_valid_structure_count
+      - distinct_composition_and_canonical_structure_counts
+      - chemical_and_structural_coverage
+      - diversity_and_novelty_against_frozen_reference_set
+      - mlip_evaluations_per_second
+      - wall_time_device_hours_and_cost
+    interpretation: throughput_or_volume_alone_is_not_discovery
+  learning:
+    question: Did accumulated evidence improve subsequent acquisition decisions?
+    metrics:
+      - marginal_predefined_scientific_utility_per_round_and_per_acquisition
+      - redundant_acquisition_rate_and_reduction_from_round_1
+      - roundwise_selection_quality_under_matched_budgets
+      - heldout_uncertainty_error_and_calibration_by_round
+      - scientific_utility_per_additional_mlip_evaluation
+    utility_definition: must_be_frozen_before_round_1
+  discovery:
+    question: Did exploration identify useful candidates supported by independent evidence?
+    categories:
+      mlip_predicted: predefined_criteria_met_by_acquisition_mlip_only
+      independently_validated: predefined_criteria_met_by_qualified_independent_reference
+    metrics:
+      discovery_yield: independently_validated_useful_candidates / total_mlip_evaluations
+      validation_precision: independently_validated_useful_candidates / selected_candidates_with_qualified_reference
+      discovery_yield_per_gpu_hour: independently_validated_useful_candidates / measured_gpu_hours
+    required_reporting:
+      - numerator_and_denominator_for_each_metric
+      - selected_candidates_with_qualified_reference
+      - unresolved_selected_candidates_without_qualified_reference
+      - qualified_reference_failures_reported_separately
+      - confidence_intervals
+    unresolved_candidates_are_not_failures: true
+    mlip_agreement_is_not_independent_validation: true
+    insufficient_qualified_dft_coverage: report_not_yet_established
+
+statistics:
+  paired_unit: independent_scientific_group
+  comparison: llm_guided_minus_rule_based_under_matched_budget
+  confidence_intervals: group_cluster_bootstrap_for_differences; wilson_for_proportions
+  report_per_group_values_and_sample_counts: true
+  do_not_treat_correlated_frames_as_independent_samples: true
+  if_groups_are_too_few_for_reliable_intervals: report_interval_unavailable_and_mark_not_established
+  replicate_runs:
+    proposed_minimum_independent_seeds_per_strategy_and_class: 3
+    seeds_matched_between_strategies: true
+    status: proposed_for_approval
+  aggregate_summary:
+    include_equal_weight_class_macro_average: true
+    include_pooled_counts_separately: true
+    prevent_large_or_cheap_classes_from_dominating: true
+
+provenance:
+  content_address: [candidate_inputs, generator_config, model_checkpoints, predictions,
+                    reference_data, prompts, strategy_outputs, evidence_ledgers,
+                    execution_records, metric_code]
+  record_per_candidate: [strategy, round, selection_reason, cited_evidence_ids,
+                         mlip_evaluations, reference_status, utility_label]
+
+manuscript:
+  sections: [Exploration, Learning, Discovery]
+  direct_strategy_comparison_in_each_section: true
+  required_tables: [exploration_coverage_and_cost, roundwise_learning_metrics,
+                    discovery_yield_and_precision_with_denominators_and_intervals]
+  required_figures: [coverage_and_diversity_by_budget, marginal_utility_and_redundancy_by_round,
+                     independently_validated_discovery_yield_by_budget]
+  interpretation_outcomes:
+    - more_diverse_exploration_without_better_independent_discovery
+    - improved_independent_discovery_yield
+    - rule_based_matches_or_outperforms
+    - neither_has_independently_validated_advantage
+  large_exploration_without_established_utility_is_not_materials_discovery: true

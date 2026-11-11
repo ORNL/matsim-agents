@@ -45,6 +45,7 @@ from matsim_agents.backends.dft.vasp_relax import VASPSettings
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.datasets.governance import sha256_file
 from matsim_agents.discovery.composition import parse_composition
+from matsim_agents.discovery.defects import MAGNETISM_LIMITATION
 from matsim_agents.discovery.stability import (
     RankingMode,
     ReferenceEnergySet,
@@ -1424,7 +1425,8 @@ def _assess_stability(contract, relaxed, observables, base) -> CharacterizationR
     limitations = [
         "Stability is relative to the declared reference phases (the lowest among those "
         "tested, not a global ground-state search), at 0 K without zero-point or "
-        "finite-temperature contributions."
+        "finite-temperature contributions.",
+        MAGNETISM_LIMITATION,
     ]
     if level not in DFT_EVIDENCE or not at_least(level, EvidenceLevel.CONVERGED_DFT):
         return CharacterizationReport(

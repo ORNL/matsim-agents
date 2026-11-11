@@ -203,6 +203,8 @@ def _model_identifier(cfg: ALConfig) -> str:
             "dispersion": mace.dispersion,
             "precision": mace.precision,
         }
+        if mace.head is not None:
+            settings["head"] = mace.head
         return (
             f"mace:{mace.family}:{mace.model}:settings="
             f"{json.dumps(settings, sort_keys=True, separators=(',', ':'))}"
@@ -658,6 +660,7 @@ def _exploration_kwargs(cfg: ALConfig, overrides: dict[str, Any]) -> dict[str, A
         values.setdefault("mace_family", cfg.mlip.mace.family)
         values.setdefault("mace_model", cfg.mlip.mace.model)
         values.setdefault("mace_dispersion", cfg.mlip.mace.dispersion)
+        values.setdefault("mace_head", cfg.mlip.mace.head)
         values.setdefault("mlp_device", cfg.mlip.mace.device)
         values.setdefault("precision", cfg.mlip.mace.precision)
     elif cfg.mlip.hydragnn is not None:

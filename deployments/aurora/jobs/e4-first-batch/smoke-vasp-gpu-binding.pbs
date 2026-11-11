@@ -1,0 +1,76 @@
+#!/bin/bash
+#PBS -N e4-gpu-smoke
+#PBS -A HydraGNN
+#PBS -q capacity
+#PBS -l select=1
+#PBS -l place=scatter
+#PBS -l walltime=00:10:00
+#PBS -l filesystems=home:flare
+#PBS -j oe
+set -euo pipefail
+
+REPO=/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4
+CASE_ID=E4-BCC-1701
+CASE_DIR="${REPO}/../e4-first-batch-01/inputs/${CASE_ID}"
+INPUT_DIR="${REPO}/research/paper/e4/aurora-dft-scaling/stage1-inputs-v2/bcc_refractory/${CASE_ID}"
+VASP_BIN=/soft/applications/vasp/vasp.6.6.1/bin/vasp_std
+VASP_SHA256=3354871ac0b7a812ebe3444dbd3d5bb4176995a5c37c3859978b58b5c7b55eb6
+MPICH_MODULE=mpich/prd/5.0.0.aurora_test.51a9474
+RANKS=8
+THREADS=8
+SMOKE_SECONDS=45
+
+: "${PBS_JOBID:?must run under PBS}"
+: "${PBS_NODEFILE:?PBS_NODEFILE is required}"
+echo "PRECHECK job=${PBS_JOBID} repo=${REPO} case=${CASE_DIR} input=${INPUT_DIR}"
+[[ -r "${PBS_NODEFILE}" ]] || { echo "Missing PBS_NODEFILE=${PBS_NODEFILE}" >&2; exit 2; }
+[[ -s "${CASE_DIR}/POSCAR" ]] || { echo "Missing frozen POSCAR in ${CASE_DIR}" >&2; exit 2; }
+[[ -s "${INPUT_DIR}/INCAR.normal" ]] || { echo "Missing frozen INCAR.normal in ${INPUT_DIR}" >&2; exit 2; }
+echo "${VASP_SHA256}  ${VASP_BIN}" | sha256sum -c -
+echo "ca6fdeb832fe3fd9e1861164f4c456c1889518cc6816ab1d75301a03a33b5456  ${INPUT_DIR}/INCAR.normal" | sha256sum -c -
+(cd "${CASE_DIR}" && sha256sum -c inputs.sha256)
+
+RUN_DIR="${REPO}/runs/e4-gpu-binding-smoke/${PBS_JOBID}"
+mkdir -p "${RUN_DIR}"
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/e4-gpu-binding-${PBS_JOBID}.XXXXXX")"
+cp "${INPUT_DIR}/INCAR.normal" "${WORK_DIR}/INCAR"
+cp "${CASE_DIR}/POSCAR" "${CASE_DIR}/KPOINTS" "${CASE_DIR}/POTCAR" "${WORK_DIR}/"
+sha256sum "${WORK_DIR}/INCAR" "${WORK_DIR}/POSCAR" "${WORK_DIR}/KPOINTS" "${WORK_DIR}/POTCAR" > "${RUN_DIR}/input-hashes.sha256"
+
+HOSTS="$(awk 'NF && !seen[$0]++ {printf "%s%s", separator, $0; separator=","}' "${PBS_NODEFILE}")"
+NODE_COUNT="$(awk 'NF && !seen[$0]++ {count++} END {print count+0}' "${PBS_NODEFILE}")"
+[[ "${NODE_COUNT}" == 1 ]]
+export MATSIM_ASSIGNED_NODES="${HOSTS}"
+
+export VASP_MPICH_MODULE="${MPICH_MODULE}"
+export VASP_EXPECTED_SHA256="${VASP_SHA256}"
+export VASP_ENV_SETUP="${REPO}/deployments/aurora/setup/vasp-runtime-aurora.sh"
+export OMP_NUM_THREADS="${THREADS}"
+export OMP_STACKSIZE=512m
+export MPICH_GPU_SUPPORT_ENABLED=1
+export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+export ZE_FLAT_DEVICE_HIERARCHY=FLAT
+unset ZE_AFFINITY_MASK
+source "${REPO}/deployments/common/vasp-runtime.sh"
+
+echo "PBS_JOBID=${PBS_JOBID} CASE_ID=${CASE_ID} HOSTS=${HOSTS} RANKS=${RANKS} THREADS=${THREADS}"
+mpiexec --hosts "${HOSTS}" -n "${RANKS}" --ppn "${RANKS}" \
+  --depth="${THREADS}" --cpu-bind=depth --gpu-bind=list:0:1:2:3:4:5:6:7 \
+  bash -c 'printf "tile_probe rank=%s mask=%s\n" "${PMI_RANK:-${PMI_ID:-${PMIX_RANK:-${ALPS_APP_PE:-unknown}}}}" "${ZE_AFFINITY_MASK:-unset}"' \
+  | tee "${RUN_DIR}/tile-probe.log"
+
+set +e
+timeout --signal=INT --kill-after=20s "${SMOKE_SECONDS}s" \
+  bash "${REPO}/deployments/aurora/launchers/_vasp-step-aurora.sh" \
+    "${WORK_DIR}" "${VASP_BIN}" 1 "${RANKS}" "${THREADS}" \
+    2>&1 | tee "${RUN_DIR}/vasp-launch.log"
+VASP_RC=${PIPESTATUS[0]}
+set -e
+if [[ "${VASP_RC}" == 1 ]]; then
+  grep -q 'forrtl: error (69): process interrupted (SIGINT)' "${RUN_DIR}/vasp-launch.log"
+fi
+[[ "${VASP_RC}" == 0 || "${VASP_RC}" == 1 || "${VASP_RC}" == 124 || "${VASP_RC}" == 130 ]]
+[[ -s "${WORK_DIR}/OUTCAR" ]]
+grep -qi 'running on' "${WORK_DIR}/OUTCAR"
+cp "${WORK_DIR}/OUTCAR" "${RUN_DIR}/OUTCAR"
+printf 'VASP_SMOKE_STATUS=started_and_interrupted rc=%s\n' "${VASP_RC}" | tee "${RUN_DIR}/result.txt"

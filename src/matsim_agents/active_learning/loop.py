@@ -837,7 +837,8 @@ def _model_id(mlip: MLIPConfig) -> str:
     if mlip.backend == "uma" and mlip.uma is not None:
         return str(mlip.uma.model_name)
     if mlip.backend == "mace" and mlip.mace is not None:
-        return f"{mlip.mace.family}:{mlip.mace.model}"
+        head = f":{mlip.mace.head}" if mlip.mace.head is not None else ""
+        return f"{mlip.mace.family}:{mlip.mace.model}{head}"
     return mlip.backend
 
 

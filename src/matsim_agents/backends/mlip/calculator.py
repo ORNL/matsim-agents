@@ -221,23 +221,18 @@ def _add_hydragnn_example_dirs(logdir: Path) -> None:
             sys.path.insert(0, str(directory))
 
 
-def _selected_head_hydragnn_calculator(
-    cfg: HydraGNNConfig, logdir: Path, selected_head: int, *, has_convention: bool
-):
+def _selected_head_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path, selected_head: int):
     """Calculator that evaluates one pretrained head of the multi-branch model."""
-    from inference_random_structures import load_config_and_model
+    from inference_random_structures import find_checkpoint, load_config_and_model
 
+    from matsim_agents.backends.mlip.hydragnn_checkpoint import restore_hydragnn_checkpoint
     from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 
     model, config, device, autocast_ctx, param_dtype = load_config_and_model(
         str(logdir), cfg.checkpoint, cfg.precision
     )
-    if has_convention:
-        from matsim_agents.backends.mlip.hydragnn_checkpoint import (
-            restore_hydragnn_checkpoint,
-        )
-
-        restore_hydragnn_checkpoint(model, logdir / cfg.checkpoint, device=device)
+    checkpoint_path = find_checkpoint(str(logdir), cfg.checkpoint)
+    restore_hydragnn_checkpoint(model, checkpoint_path, device=device)
     num_branches = int(getattr(model, "num_branches", 1))
     if selected_head >= num_branches:
         raise ValueError(
@@ -258,6 +253,7 @@ def _selected_head_hydragnn_calculator(
         charge=cfg.charge,
         spin=cfg.spin,
     )
+    calculator.hydragnn_checkpoint_load_report = model._hydragnn_checkpoint_load_report
     return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
 
 
@@ -461,9 +457,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
 
     selected_head = resolve_hydragnn_inference_head(cfg.inference_head)
     if selected_head is not None:
-        return _selected_head_hydragnn_calculator(
-            cfg, logdir, selected_head, has_convention=convention is not None
-        )
+        return _selected_head_hydragnn_calculator(cfg, logdir, selected_head)
     if cfg.newhead_ft_config is not None:
         return _newhead_hydragnn_calculator(cfg, logdir)
     return _fused_stack_hydragnn_calculator(cfg, logdir, convention)
@@ -664,13 +658,16 @@ def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
     # MACE keeps energies/forces at the calculator dtype; fp64 is preferred for
     # relaxation, so an unset precision defaults to float64.
     dtype = {"fp32": "float32", "fp64": "float64", None: "float64"}[cfg.precision]
+    head = {"head": cfg.head} if cfg.head is not None else {}
 
     if cfg.family == "checkpoint":
         ckpt = Path(cfg.model)
         if not ckpt.is_file():
             raise FileNotFoundError(f"MACE checkpoint not found: {ckpt}")
         log.info("Loading MACE checkpoint from %s", ckpt)
-        calc = MACECalculator(model_paths=[str(ckpt)], device=cfg.device, default_dtype=dtype)
+        calc = MACECalculator(
+            model_paths=[str(ckpt)], device=cfg.device, default_dtype=dtype, **head
+        )
     elif cfg.family == "mace_off":
         calc = mace_off(model=cfg.model, device=cfg.device, default_dtype=dtype)
     elif cfg.family == "mace_omol":
@@ -688,6 +685,7 @@ def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
             device=cfg.device,
             default_dtype=dtype,
             dispersion=cfg.dispersion,
+            **head,
         )
 
     # Expose the underlying torch module as `.model` so uncertainty.score_mc_dropout

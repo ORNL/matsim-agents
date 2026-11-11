@@ -212,6 +212,13 @@ class MACEConfig(BaseModel):
         description="Calculator dtype -> MACE default_dtype (fp64 recommended for relaxation).",
     )
     dispersion: bool = Field(False, description="Add DFT-D3 dispersion correction (mace_mp only).")
+    head: str | None = Field(
+        None,
+        description=(
+            "Output head of a multi-head MACE model (e.g. 'omat_pbe' or 'mp_pbe_refit_add' "
+            "for mh-0/mh-1); required for those models, ignored by single-head ones."
+        ),
+    )
     ensemble_models: list[str] = Field(
         default_factory=list,
         description=(
@@ -238,6 +245,10 @@ class MACEConfig(BaseModel):
             raise ValueError("MACE checkpoint family requires model to be an existing file")
         if self.dispersion and self.family != "mace_mp":
             raise ValueError("MACE dispersion is supported only for family='mace_mp'")
+        if self.head is not None and self.family not in {"mace_mp", "checkpoint"}:
+            raise ValueError("MACE head selection is supported only for mace_mp and checkpoint")
+        if self.family == "mace_mp" and self.model in {"mh-0", "mh-1"} and self.head is None:
+            raise ValueError(f"multi-head MACE model {self.model!r} requires an explicit head")
         if self.family == "mace_anicc" and self.precision == "fp32":
             raise ValueError("MACE ANI-CC loader does not support precision='fp32'")
         return self

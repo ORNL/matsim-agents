@@ -1,0 +1,18 @@
+#!/bin/bash
+#PBS -N e4-bcc-scaling
+#PBS -A HydraGNN
+#PBS -q capacity
+#PBS -l place=scatter
+#PBS -l filesystems=home:flare
+#PBS -k doe
+#PBS -j oe
+# Supply -l select=<nodes> and -l walltime=<tier cap> to qsub.
+set -euo pipefail
+
+REPO=/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4
+: "${E4_SCALING_MANIFEST:?}" "${E4_SCALING_NODES:?}"
+ARGS=(dispatch --manifest "${E4_SCALING_MANIFEST}" --nodes "${E4_SCALING_NODES}")
+if [[ -n "${E4_SCALING_SEGMENT:-}" ]]; then
+  ARGS+=(--segment-id "${E4_SCALING_SEGMENT}")
+fi
+exec "${REPO}/../matsim-agents/.venv/bin/python" "${REPO}/benchmarks/e4/aurora_dft/scaling.py" "${ARGS[@]}"
