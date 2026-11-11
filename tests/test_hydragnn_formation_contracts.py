@@ -319,6 +319,7 @@ def test_selected_head_factory_restores_total_energy(tmp_path, training_inputs, 
         )
 
     inference.load_config_and_model = load
+    inference.find_checkpoint = lambda logdir, checkpoint: str(Path(logdir) / checkpoint)
     monkeypatch.setitem(sys.modules, "inference_random_structures", inference)
     monkeypatch.setattr(
         factory, "_build_selected_head_calculator", lambda *a, **kw: FormationCalculator()
