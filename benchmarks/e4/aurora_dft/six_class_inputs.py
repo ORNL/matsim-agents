@@ -342,6 +342,10 @@ def stage_case(
     walltime_hours: float | None = None,
     stage_nsw_max: int = 200,
     precision: str = "Accurate",
+    continuation_segments: int = 1,
+    execution_segment_hours: int | None = None,
+    scheduler_margin_hours_per_segment: int = 0,
+    scheduler_task_walltime_hours: int | None = None,
 ) -> dict[str, Any]:
     check_start(start, ranks, expected_start, precision)
     poscar = source_poscar.read_text()
@@ -385,6 +389,10 @@ def stage_case(
         "ediffg_eV_per_A": ediffg,
         "stage_nsw_max": stage_nsw_max,
         "walltime_seconds": int((walltime_hours or TASK_WALLTIME_HOURS[material_class]) * 3600),
+        "continuation_segments": continuation_segments,
+        "execution_segment_hours": execution_segment_hours,
+        "scheduler_margin_hours_per_segment": scheduler_margin_hours_per_segment,
+        "scheduler_task_walltime_hours": scheduler_task_walltime_hours,
         **extra,
     }
     if hashes["POSCAR"] != record["source_poscar_sha256"]:
@@ -810,6 +818,10 @@ FULL_CLASSES = {
     "fcc_hea": {
         "protocol_id": "fcc-pbe-verified-v1",
         "task_cap_hours": 48,
+        "continuation_segments": 2,
+        "execution_segment_hours": 24,
+        "scheduler_margin_hours_per_segment": 1,
+        "scheduler_task_walltime_hours": 50,
         "expected_task_hours": 21.0,
         "runtime_basis": "E2 108-atom Cantor relaxations (1,420-1,690 s/step, 25-37 steps) "
         "scaled to 128 atoms",
@@ -817,6 +829,10 @@ FULL_CLASSES = {
     "lifepo4": {
         "protocol_id": "lifepo4-pbe-verified-v1",
         "task_cap_hours": 72,
+        "continuation_segments": 3,
+        "execution_segment_hours": 24,
+        "scheduler_margin_hours_per_segment": 1,
+        "scheduler_task_walltime_hours": 75,
         "expected_task_hours": 43.0,
         "runtime_basis": "archived 28-atom LiFePO4 relaxation (222 s/step) extrapolated to "
         "112 atoms and the 2x4x8 mesh; unmeasured at E4 size",
@@ -869,6 +885,12 @@ def _full_kwargs(name: str) -> dict[str, Any]:
         "material_class": name,
         "protocol_id": spec["protocol_id"],
         "walltime_hours": spec["task_cap_hours"],
+        "continuation_segments": spec.get("continuation_segments", 1),
+        "execution_segment_hours": spec.get("execution_segment_hours"),
+        "scheduler_margin_hours_per_segment": spec.get("scheduler_margin_hours_per_segment", 0),
+        "scheduler_task_walltime_hours": spec.get(
+            "scheduler_task_walltime_hours", spec["task_cap_hours"]
+        ),
     }
 
 

@@ -105,6 +105,147 @@ def test_convergence_tags_cover_bcc_and_single_stage_materials():
     assert not scaling.is_converged_final_status("converged:n0")
 
 
+def test_fcc_and_lifepo4_continuation_schedules_preserve_cumulative_budgets():
+    fcc = {
+        "calculation_id": "fcc",
+        "estimated_task_walltime_hours": 48,
+        "launch_settings": {
+            "continuation_segments": 2,
+            "execution_segment_hours": 24,
+            "scheduler_margin_hours_per_segment": 1,
+        },
+    }
+    lifepo4 = {
+        "calculation_id": "lifepo4",
+        "estimated_task_walltime_hours": 72,
+        "launch_settings": {
+            "continuation_segments": 3,
+            "execution_segment_hours": 24,
+            "scheduler_margin_hours_per_segment": 1,
+        },
+    }
+    for task, count, budget in ((fcc, 2, 48), (lifepo4, 3, 72)):
+        schedule = scaling.task_continuation_schedule(task)
+        assert len(schedule) == count
+        assert sum(segment["active_seconds"] for segment in schedule) == budget * 3600
+        assert (
+            sum(segment["requested_walltime_seconds"] for segment in schedule)
+            == (budget + count) * 3600
+        )
+        assert all(segment["soft_stop_seconds"] == 24 * 3600 for segment in schedule)
+        assert [segment["resume"] for segment in schedule] == [False] + [True] * (count - 1)
+
+
+def test_single_segment_task_retains_existing_shutdown_margin():
+    schedule = scaling.task_continuation_schedule(
+        {"calculation_id": "other", "estimated_task_walltime_hours": 24}
+    )
+    assert schedule == [
+        {
+            "resume": False,
+            "active_seconds": 24 * 3600,
+            "requested_walltime_seconds": 24 * 3600,
+            "soft_stop_seconds": 23 * 3600,
+        }
+    ]
+
+
+def test_dispatch_resumes_continuation_from_validated_checkpoint(monkeypatch, tmp_path):
+    nodefile = tmp_path / "nodefile"
+    nodefile.write_text("node0\n")
+    monkeypatch.setattr(scaling, "REPO", tmp_path)
+    monkeypatch.setattr(scaling, "validate_manifest_data", lambda manifest: manifest)
+    monkeypatch.setenv("PBS_JOBID", "test-job")
+    monkeypatch.setenv("PBS_NODEFILE", str(nodefile))
+    monkeypatch.setenv("E4_SCALING_AUTHORIZATION", "approved")
+    monkeypatch.setenv("E4_SCALING_RUN_ID", "E4-TEST-run")
+    seen = []
+
+    def fake_run(args, *, env=None, stdout=None, stderr=None, **kwargs):
+        if args[0] == "git":
+            return type("Result", (), {"stdout": "test-commit"})()
+        assert env is not None
+        seen.append(env.copy())
+        root = Path(env["E4_OUTPUT_ROOT"])
+        root.mkdir(parents=True, exist_ok=True)
+        if len(seen) == 1:
+            (root / "latest-checkpoint").write_text(
+                "A1 Accurate interrupted:stopcar " + "a" * 64 + "\n"
+            )
+            final, status, code = "Accurate:interrupted:stopcar", 75, 75
+        else:
+            with (root / "run-record.log").open("a") as record:
+                record.write("resume verified tag=A1 prec=Accurate status=interrupted:stopcar\n")
+            final, status, code = "converged:A2", 0, 0
+        with (root / "run-record.log").open("a") as record:
+            record.write(f"EXIT job=test calculation_id=FCC-1 status={status} final={final}\n")
+        return type("Result", (), {"returncode": code})()
+
+    monkeypatch.setattr(scaling.subprocess, "run", fake_run)
+    task = {
+        "calculation_id": "FCC-1",
+        "case_dir": "case",
+        "source_poscar": "POSCAR",
+        "source_poscar_sha256": "hash",
+        "composition": {"Fe": 1},
+        "structure_id": "structure",
+        "protocol_id": "fcc",
+        "input_hashes": {},
+        "prepared_input_bundle_sha256": "bundle",
+        "paw_components": [],
+        "potcar_sha256": "potcar",
+        "mpi_ranks": 8,
+        "omp_threads_per_rank": 8,
+        "ediffg_eV_per_A": "-0.02",
+        "estimated_task_walltime_hours": 48,
+        "launch_settings": {
+            "stage_mode": "single",
+            "stage_nsw_max": 200,
+            "single_precision": "Accurate",
+            "single_prefix": "A",
+            "continuation_segments": 2,
+            "execution_segment_hours": 24,
+            "scheduler_margin_hours_per_segment": 1,
+        },
+    }
+    manifest = {
+        "execution_authorized": True,
+        "authorization": {"id": "approved"},
+        "experiment": "strong",
+        "material_class": "fcc_hea",
+        "run_id_prefix": "E4-TEST",
+        "protocol_id": "fcc",
+        "tasks": [task],
+        "fixed_task_ids": ["FCC-1"],
+        "tiers": [{"nodes": 1, "segments": [{"segment_id": "all", "task_ids": ["FCC-1"]}]}],
+        "resource_request": {"total_node_hours_cap": 50},
+    }
+    assert (
+        scaling.dispatch(tmp_path / "unused.json", 1, None, False, manifest_override=manifest) == 0
+    )
+    assert [env["E4_RESUME"] for env in seen] == ["0", "1"]
+    assert len({env["E4_OUTPUT_ROOT"] for env in seen}) == 1
+    assert [env["E4_SOFT_STOP_SECONDS"] for env in seen] == ["86400", "86400"]
+    assert [env["E4_REQUESTED_WALLTIME_SECONDS"] for env in seen] == ["90000", "90000"]
+    measurement = json.loads(
+        (tmp_path / "runs/e4-scaling/strong/E4-TEST-run/n01/all/measurements.jsonl")
+        .read_text()
+        .splitlines()[0]
+    )
+    result = next(
+        json.loads(line)
+        for line in (tmp_path / "runs/e4-scaling/strong/E4-TEST-run/n01/all/dispatch.jsonl")
+        .read_text()
+        .splitlines()
+        if '"event": "finished"' in line
+    )
+    assert result["task_status"] == "converged"
+    assert result["continuation_segments_used"] == 2
+    assert [r["resume"] for r in result["restart_provenance"]] == [False, True]
+    assert result["restart_provenance"][1]["checkpoint_validated"] is True
+    assert measurement["planned_tasks"] == 1
+
+
 def test_six_class_production_matrix_covers_all_tiers_without_authorizing():
     manifest = build_six_class_workload_manifest()
     validate_six_class_workload_manifest(manifest, verify_files=False)

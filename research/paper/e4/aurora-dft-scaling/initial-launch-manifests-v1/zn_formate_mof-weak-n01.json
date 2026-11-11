@@ -1,0 +1,227 @@
+{
+  "authorization": {
+    "id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+    "scope": "initial weak-scaling n01 job; 2 calculations; no other tiers"
+  },
+  "campaign_id": "E4-six-class-initial-zn_formate_mof-weak-n01-v1",
+  "execution_authorized": true,
+  "experiment": "weak",
+  "fixed_task_ids": null,
+  "material_class": "zn_formate_mof",
+  "protocol_id": "znformate-pbe-d3bj-strain-stress-v1",
+  "queue": "capacity",
+  "resource_request": {
+    "maximum_nodes_per_job": 1,
+    "maximum_walltime_hours_per_job": 21,
+    "total_node_hours_cap": 21
+  },
+  "run_id_prefix": "E4-SIX-zn_formate_mof-weak-n01-v1",
+  "schema_version": 1,
+  "tasks": [
+    {
+      "allocation": "HydraGNN",
+      "atom_count": 108,
+      "calculation_id": "E4-ZNFS-0001",
+      "case_dir": "../e4-six-class-inputs-v2/inputs/E4-ZNFS-0001",
+      "composition": {
+        "C": 24,
+        "H": 24,
+        "O": 48,
+        "Zn": 12
+      },
+      "defect_ordering_or_disorder": {
+        "antisite_exchange_pairs": null,
+        "calculation_id": "E4-ZNFS-0001",
+        "composition_index": null,
+        "disorder_realization": null,
+        "framework": "zn_formate_alpha_Zn3HCOO6_COD4515120",
+        "purpose": "relaxed-ion stress-strain sampling (elastic tensor, EOS)",
+        "strain_kind": "volumetric",
+        "strain_value": -0.005
+      },
+      "ediffg_eV_A": "-0.02",
+      "ediffg_eV_per_A": "-0.02",
+      "estimated_task_walltime_hours": 10.0,
+      "execution_ready": false,
+      "execution_status": "input_hashes_frozen; submission_not_authorized_by_six_class_manifest",
+      "geometry_source": "E2 qualified PBE-D3(BJ) relaxed CONTCAR of zn_formate_alpha_Zn3HCOO6_COD4515120",
+      "initial_geometry": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-ZNFS-0001.POSCAR",
+      "input_file_hashes": {
+        "KPOINTS": "b718080039efd9e49f4f835babfb86fa3a3b4a39e94873bfc6b96e2b55b05485",
+        "POSCAR": "8bf2dadb37b5f3a54c78292abcba3d460b14b738d9c40c8b5d5c17788437801d",
+        "POTCAR": "f8ebdae2fad119cadaf23c83ac1dcea9f9161361c642606c2baf02980bec9dd7",
+        "START": "5c7b4431aae699f8957be8afaa8f7d98c82ebee78e8cf97a5f4c50345cb7b0c5"
+      },
+      "input_hashes": {
+        "KPOINTS": "b718080039efd9e49f4f835babfb86fa3a3b4a39e94873bfc6b96e2b55b05485",
+        "POSCAR": "8bf2dadb37b5f3a54c78292abcba3d460b14b738d9c40c8b5d5c17788437801d",
+        "POTCAR": "f8ebdae2fad119cadaf23c83ac1dcea9f9161361c642606c2baf02980bec9dd7",
+        "START": "5c7b4431aae699f8957be8afaa8f7d98c82ebee78e8cf97a5f4c50345cb7b0c5"
+      },
+      "input_hashes_validated": true,
+      "launch_settings": {
+        "checkpoint_seconds": 3600,
+        "continuation_segments": 1,
+        "execution_segment_hours": null,
+        "nsw_per_checkpoint_segment": 30,
+        "scheduler_margin_hours_per_segment": 0,
+        "single_precision": "Accurate",
+        "single_prefix": "A",
+        "stage_mode": "single",
+        "stage_nsw_max": 200
+      },
+      "material_class": "zn_formate_mof",
+      "mpi_ranks": 12,
+      "number_of_atoms": 108,
+      "omp_threads_per_rank": 8,
+      "paw_components": [
+        {
+          "element": "Zn",
+          "label": "Zn",
+          "sha256": "a9e75569c74432b6efe4f522da7317143f7ca230c1076b8adbff8e3ef9494c0b",
+          "source": "external/vasp6/potcar/Zn/POTCAR"
+        },
+        {
+          "element": "H",
+          "label": "H",
+          "sha256": "c7c1440066f80b3689496d8a45f8df6af183c40e59b514734edddfaa6840a3be",
+          "source": "external/vasp6/potcar/H/POTCAR"
+        },
+        {
+          "element": "C",
+          "label": "C",
+          "sha256": "e324f39f282d3fd6b99a7bff390f4b2441edd3dd3eac607d1f1c01376f3d0dc0",
+          "source": "external/vasp6/potcar/C/POTCAR"
+        },
+        {
+          "element": "O",
+          "label": "O",
+          "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
+          "source": "external/vasp6/potcar/O/POTCAR"
+        }
+      ],
+      "potcar_sha256": "f8ebdae2fad119cadaf23c83ac1dcea9f9161361c642606c2baf02980bec9dd7",
+      "prepared_input_bundle_sha256": "9fe32cff681e1228f8d0c1818645bc3d12b025f99bcc0a6cc0f6dc76286eecd6",
+      "protocol_id": "znformate-pbe-d3bj-strain-stress-v1",
+      "scaling_assignments": {
+        "strong": true,
+        "weak": true
+      },
+      "source_calculation_id": "E4-ZNFS-0001",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-ZNFS-0001.POSCAR",
+      "source_poscar_sha256": "8bf2dadb37b5f3a54c78292abcba3d460b14b738d9c40c8b5d5c17788437801d",
+      "structure_family": "anhydrous Zn(HCOO)2 framework (alpha)",
+      "structure_id": "8bf2dadb37b5f3a54c78292abcba3d460b14b738d9c40c8b5d5c17788437801d",
+      "threads_per_rank": 8
+    },
+    {
+      "allocation": "HydraGNN",
+      "atom_count": 216,
+      "calculation_id": "E4-ZNFS-0002",
+      "case_dir": "../e4-six-class-inputs-v2/inputs/E4-ZNFS-0002",
+      "composition": {
+        "C": 48,
+        "H": 48,
+        "O": 96,
+        "Zn": 24
+      },
+      "defect_ordering_or_disorder": {
+        "antisite_exchange_pairs": null,
+        "calculation_id": "E4-ZNFS-0002",
+        "composition_index": null,
+        "disorder_realization": null,
+        "framework": "zn_formate_lonsdaleite_Pbcn_COD7205949",
+        "purpose": "relaxed-ion stress-strain sampling (elastic tensor, EOS)",
+        "strain_kind": "volumetric",
+        "strain_value": -0.005
+      },
+      "ediffg_eV_A": "-0.02",
+      "ediffg_eV_per_A": "-0.02",
+      "estimated_task_walltime_hours": 10.0,
+      "execution_ready": false,
+      "execution_status": "input_hashes_frozen; submission_not_authorized_by_six_class_manifest",
+      "geometry_source": "E2 qualified PBE-D3(BJ) relaxed CONTCAR of zn_formate_lonsdaleite_Pbcn_COD7205949",
+      "initial_geometry": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-ZNFS-0002.POSCAR",
+      "input_file_hashes": {
+        "KPOINTS": "801c3477281cd7728d7eb1178cc4d00fdff83a98abb3de2abb12b1ca9566032e",
+        "POSCAR": "bc55e2b3556c17eecccba136955982497ea6becdc4f3268c60a33c138f5eb267",
+        "POTCAR": "f8ebdae2fad119cadaf23c83ac1dcea9f9161361c642606c2baf02980bec9dd7",
+        "START": "e6172ef0a452891ed46aaa11e5578273fec58583bc5bf8b784130eccb2c1e200"
+      },
+      "input_hashes": {
+        "KPOINTS": "801c3477281cd7728d7eb1178cc4d00fdff83a98abb3de2abb12b1ca9566032e",
+        "POSCAR": "bc55e2b3556c17eecccba136955982497ea6becdc4f3268c60a33c138f5eb267",
+        "POTCAR": "f8ebdae2fad119cadaf23c83ac1dcea9f9161361c642606c2baf02980bec9dd7",
+        "START": "e6172ef0a452891ed46aaa11e5578273fec58583bc5bf8b784130eccb2c1e200"
+      },
+      "input_hashes_validated": true,
+      "launch_settings": {
+        "checkpoint_seconds": 3600,
+        "continuation_segments": 1,
+        "execution_segment_hours": null,
+        "nsw_per_checkpoint_segment": 30,
+        "scheduler_margin_hours_per_segment": 0,
+        "single_precision": "Accurate",
+        "single_prefix": "A",
+        "stage_mode": "single",
+        "stage_nsw_max": 200
+      },
+      "material_class": "zn_formate_mof",
+      "mpi_ranks": 12,
+      "number_of_atoms": 216,
+      "omp_threads_per_rank": 8,
+      "paw_components": [
+        {
+          "element": "Zn",
+          "label": "Zn",
+          "sha256": "a9e75569c74432b6efe4f522da7317143f7ca230c1076b8adbff8e3ef9494c0b",
+          "source": "external/vasp6/potcar/Zn/POTCAR"
+        },
+        {
+          "element": "H",
+          "label": "H",
+          "sha256": "c7c1440066f80b3689496d8a45f8df6af183c40e59b514734edddfaa6840a3be",
+          "source": "external/vasp6/potcar/H/POTCAR"
+        },
+        {
+          "element": "C",
+          "label": "C",
+          "sha256": "e324f39f282d3fd6b99a7bff390f4b2441edd3dd3eac607d1f1c01376f3d0dc0",
+          "source": "external/vasp6/potcar/C/POTCAR"
+        },
+        {
+          "element": "O",
+          "label": "O",
+          "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
+          "source": "external/vasp6/potcar/O/POTCAR"
+        }
+      ],
+      "potcar_sha256": "f8ebdae2fad119cadaf23c83ac1dcea9f9161361c642606c2baf02980bec9dd7",
+      "prepared_input_bundle_sha256": "614c046e230b125ecd75db2ae900e8f7daa1455bad1e97c90eee7a9ae554832c",
+      "protocol_id": "znformate-pbe-d3bj-strain-stress-v1",
+      "scaling_assignments": {
+        "strong": true,
+        "weak": true
+      },
+      "source_calculation_id": "E4-ZNFS-0002",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-ZNFS-0002.POSCAR",
+      "source_poscar_sha256": "bc55e2b3556c17eecccba136955982497ea6becdc4f3268c60a33c138f5eb267",
+      "structure_family": "anhydrous Zn(HCOO)2 framework (pbcn)",
+      "structure_id": "bc55e2b3556c17eecccba136955982497ea6becdc4f3268c60a33c138f5eb267",
+      "threads_per_rank": 8
+    }
+  ],
+  "tiers": [
+    {
+      "node_assignments": [
+        [
+          "E4-ZNFS-0001",
+          "E4-ZNFS-0002"
+        ]
+      ],
+      "nodes": 1,
+      "required_unique_tasks": 2,
+      "walltime_cap_hours": 21
+    }
+  ]
+}

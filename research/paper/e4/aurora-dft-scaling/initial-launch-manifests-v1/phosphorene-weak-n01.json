@@ -1,0 +1,187 @@
+{
+  "authorization": {
+    "id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+    "scope": "initial weak-scaling n01 job; 2 calculations; no other tiers"
+  },
+  "campaign_id": "E4-six-class-initial-phosphorene-weak-n01-v1",
+  "execution_authorized": true,
+  "experiment": "weak",
+  "fixed_task_ids": null,
+  "material_class": "phosphorene",
+  "protocol_id": "phosphorene-pbe-2d-strain-fixed-cell-v1",
+  "queue": "capacity",
+  "resource_request": {
+    "maximum_nodes_per_job": 1,
+    "maximum_walltime_hours_per_job": 25,
+    "total_node_hours_cap": 25
+  },
+  "run_id_prefix": "E4-SIX-phosphorene-weak-n01-v1",
+  "schema_version": 1,
+  "tasks": [
+    {
+      "allocation": "HydraGNN",
+      "atom_count": 80,
+      "calculation_id": "E4-PHOSS-0001",
+      "case_dir": "../e4-six-class-inputs-v2/inputs/E4-PHOSS-0001",
+      "composition": {
+        "P": 80
+      },
+      "defect_ordering_or_disorder": {
+        "antisite_exchange_pairs": null,
+        "armchair_strain": 0.06,
+        "calculation_id": "E4-PHOSS-0001",
+        "composition_index": null,
+        "defect": "pristine",
+        "disorder_realization": null,
+        "removed_sites": [],
+        "zigzag_strain": 0.0
+      },
+      "ediffg_eV_A": "-0.01",
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 12.0,
+      "execution_ready": false,
+      "execution_status": "input_hashes_frozen; submission_not_authorized_by_six_class_manifest",
+      "geometry_source": "rebuilt from bulk black P (Cmce); archived E2 geometries are unbonded",
+      "initial_geometry": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-PHOSS-0001.POSCAR",
+      "input_file_hashes": {
+        "KPOINTS": "e7f2c47275bb52ca55d65369c86b8be556717f1d8d6ef731f2f8d7e0a3df6d6a",
+        "POSCAR": "020090a0771a0270f5fccadaf2f57dcbc0a2170a6539eaf8f5cb596a20b37b9f",
+        "POTCAR": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
+        "START": "89d9b1047e28c362e1ec4e327f60cfb4246a587048a9f70839b430ce7dcbeaa6"
+      },
+      "input_hashes": {
+        "KPOINTS": "e7f2c47275bb52ca55d65369c86b8be556717f1d8d6ef731f2f8d7e0a3df6d6a",
+        "POSCAR": "020090a0771a0270f5fccadaf2f57dcbc0a2170a6539eaf8f5cb596a20b37b9f",
+        "POTCAR": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
+        "START": "89d9b1047e28c362e1ec4e327f60cfb4246a587048a9f70839b430ce7dcbeaa6"
+      },
+      "input_hashes_validated": true,
+      "launch_settings": {
+        "checkpoint_seconds": 3600,
+        "continuation_segments": 1,
+        "execution_segment_hours": null,
+        "nsw_per_checkpoint_segment": 30,
+        "scheduler_margin_hours_per_segment": 0,
+        "single_precision": "Accurate",
+        "single_prefix": "A",
+        "stage_mode": "single",
+        "stage_nsw_max": 200
+      },
+      "material_class": "phosphorene",
+      "mpi_ranks": 12,
+      "number_of_atoms": 80,
+      "omp_threads_per_rank": 8,
+      "paw_components": [
+        {
+          "element": "P",
+          "label": "P",
+          "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
+          "source": "external/vasp6/potcar/P/POTCAR"
+        }
+      ],
+      "potcar_sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
+      "prepared_input_bundle_sha256": "cb5ca42caa9eacece1a32ee6a142da05063ff60d9050b0b292c2e02dc1bb4816",
+      "protocol_id": "phosphorene-pbe-2d-strain-fixed-cell-v1",
+      "scaling_assignments": {
+        "strong": true,
+        "weak": true
+      },
+      "source_calculation_id": "E4-PHOSS-0001",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-PHOSS-0001.POSCAR",
+      "source_poscar_sha256": "020090a0771a0270f5fccadaf2f57dcbc0a2170a6539eaf8f5cb596a20b37b9f",
+      "structure_family": "4x5 puckered phosphorene, 20 A vacuum axis",
+      "structure_id": "020090a0771a0270f5fccadaf2f57dcbc0a2170a6539eaf8f5cb596a20b37b9f",
+      "threads_per_rank": 8
+    },
+    {
+      "allocation": "HydraGNN",
+      "atom_count": 79,
+      "calculation_id": "E4-PHOSS-0002",
+      "case_dir": "../e4-six-class-inputs-v2/inputs/E4-PHOSS-0002",
+      "composition": {
+        "P": 79
+      },
+      "defect_ordering_or_disorder": {
+        "antisite_exchange_pairs": null,
+        "armchair_strain": 0.06,
+        "calculation_id": "E4-PHOSS-0002",
+        "composition_index": null,
+        "defect": "monovacancy",
+        "disorder_realization": null,
+        "removed_sites": [
+          33
+        ],
+        "zigzag_strain": 0.0
+      },
+      "ediffg_eV_A": "-0.01",
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 12.0,
+      "execution_ready": false,
+      "execution_status": "input_hashes_frozen; submission_not_authorized_by_six_class_manifest",
+      "geometry_source": "rebuilt from bulk black P (Cmce); archived E2 geometries are unbonded",
+      "initial_geometry": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-PHOSS-0002.POSCAR",
+      "input_file_hashes": {
+        "KPOINTS": "e7f2c47275bb52ca55d65369c86b8be556717f1d8d6ef731f2f8d7e0a3df6d6a",
+        "POSCAR": "e04e44a865575a9b9ba90c8b47383ad3041f3431f1da82c019596c5be8e032f3",
+        "POTCAR": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
+        "START": "e053d1e38b8ce5b79852d1b25d716207d739c94eadc6f7d1f35a1e7618752e2b"
+      },
+      "input_hashes": {
+        "KPOINTS": "e7f2c47275bb52ca55d65369c86b8be556717f1d8d6ef731f2f8d7e0a3df6d6a",
+        "POSCAR": "e04e44a865575a9b9ba90c8b47383ad3041f3431f1da82c019596c5be8e032f3",
+        "POTCAR": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
+        "START": "e053d1e38b8ce5b79852d1b25d716207d739c94eadc6f7d1f35a1e7618752e2b"
+      },
+      "input_hashes_validated": true,
+      "launch_settings": {
+        "checkpoint_seconds": 3600,
+        "continuation_segments": 1,
+        "execution_segment_hours": null,
+        "nsw_per_checkpoint_segment": 30,
+        "scheduler_margin_hours_per_segment": 0,
+        "single_precision": "Accurate",
+        "single_prefix": "A",
+        "stage_mode": "single",
+        "stage_nsw_max": 200
+      },
+      "material_class": "phosphorene",
+      "mpi_ranks": 12,
+      "number_of_atoms": 79,
+      "omp_threads_per_rank": 8,
+      "paw_components": [
+        {
+          "element": "P",
+          "label": "P",
+          "sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
+          "source": "external/vasp6/potcar/P/POTCAR"
+        }
+      ],
+      "potcar_sha256": "ff56d25c245497eab82fbf156c8a80195e6c8278b657680eda7251824aa36cf8",
+      "prepared_input_bundle_sha256": "28ffc3492ee0953abb4e88736c515e5464a5cdac395af27e06788bb4134f29c4",
+      "protocol_id": "phosphorene-pbe-2d-strain-fixed-cell-v1",
+      "scaling_assignments": {
+        "strong": true,
+        "weak": true
+      },
+      "source_calculation_id": "E4-PHOSS-0002",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-PHOSS-0002.POSCAR",
+      "source_poscar_sha256": "e04e44a865575a9b9ba90c8b47383ad3041f3431f1da82c019596c5be8e032f3",
+      "structure_family": "4x5 puckered phosphorene, 20 A vacuum axis",
+      "structure_id": "e04e44a865575a9b9ba90c8b47383ad3041f3431f1da82c019596c5be8e032f3",
+      "threads_per_rank": 8
+    }
+  ],
+  "tiers": [
+    {
+      "node_assignments": [
+        [
+          "E4-PHOSS-0001",
+          "E4-PHOSS-0002"
+        ]
+      ],
+      "nodes": 1,
+      "required_unique_tasks": 2,
+      "walltime_cap_hours": 25
+    }
+  ]
+}

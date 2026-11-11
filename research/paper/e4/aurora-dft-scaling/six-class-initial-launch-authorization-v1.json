@@ -1,0 +1,127 @@
+{
+  "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+  "authorization_source": "User explicitly authorized start of all six E4 material-class campaigns in this conversation.",
+  "execution_authorized": true,
+  "initial_jobs": [
+    {
+      "allocation": "HydraGNN",
+      "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+      "calculation_ids": [
+        "E4-SCALE-FCC-0001",
+        "E4-SCALE-FCC-0002"
+      ],
+      "expected_node_hours": 42.0,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/fcc_hea-weak-n01.json",
+      "manifest_sha256": "b4a3ffe6e687c13dd45df21b44b6378b04c898bee8eda1dbee85de4efe8da35e",
+      "material_class": "fcc_hea",
+      "maximum_job_walltime_hours": 101,
+      "maximum_node_hours": 101,
+      "nodes": 1,
+      "queue": "capacity",
+      "run_id_prefix": "E4-SIX-fcc_hea-weak-n01-v1"
+    },
+    {
+      "allocation": "HydraGNN",
+      "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+      "calculation_ids": [
+        "E4-SCALE-LFP-0002",
+        "E4-SCALE-LFP-0003"
+      ],
+      "expected_node_hours": 86.0,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/lifepo4-weak-n01.json",
+      "manifest_sha256": "841565bac748e20182612a6cb7c3f94529c4ec3eacd0ed033d0d5d00a71359c8",
+      "material_class": "lifepo4",
+      "maximum_job_walltime_hours": 151,
+      "maximum_node_hours": 151,
+      "nodes": 1,
+      "queue": "capacity",
+      "run_id_prefix": "E4-SIX-lifepo4-weak-n01-v1"
+    },
+    {
+      "allocation": "HydraGNN",
+      "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+      "calculation_ids": [
+        "E4-PHOSS-0001",
+        "E4-PHOSS-0002"
+      ],
+      "expected_node_hours": 9.4,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/phosphorene-weak-n01.json",
+      "manifest_sha256": "a1e39b39030c243db94c0205583ea6cd11e5230d73eceef700890f70b9875410",
+      "material_class": "phosphorene",
+      "maximum_job_walltime_hours": 25,
+      "maximum_node_hours": 25,
+      "nodes": 1,
+      "queue": "capacity",
+      "run_id_prefix": "E4-SIX-phosphorene-weak-n01-v1"
+    },
+    {
+      "allocation": "HydraGNN",
+      "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+      "calculation_ids": [
+        "E4-ZNFS-0001",
+        "E4-ZNFS-0002"
+      ],
+      "expected_node_hours": 3.6,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/zn_formate_mof-weak-n01.json",
+      "manifest_sha256": "1598af86ff56c63cfb841cc73f8cfa44462967028cb9cdafc5dd5eb3bef6c060",
+      "material_class": "zn_formate_mof",
+      "maximum_job_walltime_hours": 21,
+      "maximum_node_hours": 21,
+      "nodes": 1,
+      "queue": "capacity",
+      "run_id_prefix": "E4-SIX-zn_formate_mof-weak-n01-v1"
+    },
+    {
+      "allocation": "HydraGNN",
+      "authorization_id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+      "calculation_ids": [
+        "E4-NBTAO56-0001",
+        "E4-NBTAO56-0002"
+      ],
+      "expected_node_hours": 7.0,
+      "experiment": "weak",
+      "manifest": "research/paper/e4/aurora-dft-scaling/initial-launch-manifests-v1/nb_ta_o-weak-n01.json",
+      "manifest_sha256": "5633976a2e4fb94307da218fa72d4f1365d090ac4b285b38cfba20cd0acf2db0",
+      "material_class": "nb_ta_o",
+      "maximum_job_walltime_hours": 21,
+      "maximum_node_hours": 21,
+      "nodes": 1,
+      "queue": "capacity",
+      "run_id_prefix": "E4-SIX-nb_ta_o-weak-n01-v1"
+    }
+  ],
+  "preserved_bcc_execution": {
+    "active_job_id": "9069491.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+    "additional_existing_authorized_bcc_remaining_node_hour_cap": 1440,
+    "authorization_manifest": "research/paper/e4/aurora-dft-scaling/priority-scaling/authorized/strong-manifest.json",
+    "completed_weak_n01_job": "9069490.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+    "state": "running; not modified or resubmitted"
+  },
+  "production_plan": "research/paper/e4/aurora-dft-scaling/six-class-workflow-v4.json",
+  "production_plan_sha256": "7138d0c7446084891926505bb9f921199e8f1941d751f847b0443ea3320db927",
+  "remaining_campaigns": "All other v4 tier jobs remain in v4 plan, not authorized by these five initial-job records; full-plan expected shortfall and reservation are separate requests.",
+  "request_id": "E4-SIX-INITIAL-ALL-CLASSES-20261111",
+  "resource_totals": {
+    "combined_maximum_node_hours": 1759,
+    "existing_bcc_strong_job_preserved": "9069491",
+    "existing_bcc_weak_n01_completed": true,
+    "expected_node_hours": 148.0,
+    "maximum_node_hours": 319,
+    "new_jobs": 5,
+    "reserved_existing_bcc_node_hours": 1440
+  },
+  "scheduler_constraints": {
+    "max_nodes": 16,
+    "max_queued_jobs_per_user": 5,
+    "max_running_jobs_per_user": 2,
+    "max_walltime_hours": 168,
+    "queue": "capacity",
+    "reservation_tiers_32_64_128_not_submitted": true
+  },
+  "schema_version": 1,
+  "status": "authorized_by_user_for_initial_jobs; submission_pending"
+}

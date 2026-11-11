@@ -1,0 +1,219 @@
+{
+  "authorization": {
+    "id": "E4-SIX-USER-AUTH-20261111-ALL-CLASSES",
+    "scope": "initial weak-scaling n01 job; 2 calculations; no other tiers"
+  },
+  "campaign_id": "E4-six-class-initial-nb_ta_o-weak-n01-v1",
+  "execution_authorized": true,
+  "experiment": "weak",
+  "fixed_task_ids": null,
+  "material_class": "nb_ta_o",
+  "protocol_id": "nbtao5-fixed-kmesh-v1",
+  "queue": "capacity",
+  "resource_request": {
+    "maximum_nodes_per_job": 1,
+    "maximum_walltime_hours_per_job": 21,
+    "total_node_hours_cap": 21
+  },
+  "run_id_prefix": "E4-SIX-nb_ta_o-weak-n01-v1",
+  "schema_version": 1,
+  "tasks": [
+    {
+      "allocation": "HydraGNN",
+      "atom_count": 56,
+      "calculation_id": "E4-NBTAO56-0001",
+      "case_dir": "../e4-six-class-inputs-v2/inputs/E4-NBTAO56-0001",
+      "composition": {
+        "Nb": 8,
+        "O": 40,
+        "Ta": 8
+      },
+      "defect_ordering_or_disorder": {
+        "antisite_exchange_pairs": null,
+        "calculation_id": "E4-NBTAO56-0001",
+        "composition_index": null,
+        "disorder_realization": null,
+        "e2_parent_ordering": "doubled E2 NbTaO5_ordering_01",
+        "kpoint_mesh": [
+          4,
+          8,
+          5
+        ],
+        "ordering": "0000111100001111"
+      },
+      "ediffg_eV_A": "-0.01",
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 10.0,
+      "execution_ready": false,
+      "execution_status": "input_hashes_frozen; submission_not_authorized_by_six_class_manifest",
+      "geometry_source": "doubled E2 NbTaO5_ordering_01; parent COD 1528678 Nb2O5 framework",
+      "initial_geometry": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-NBTAO56-0001.POSCAR",
+      "input_file_hashes": {
+        "KPOINTS": "ca9f93d4ac47ecf7d170fff979a338fabd4c0e40b7bb839faa52746f58740b28",
+        "POSCAR": "4989622b592f79e47aca0e23856a0d7bdf526b2996d6fc5a19705bd319ec7838",
+        "POTCAR": "6044c1b454b2d82b7442db5f270384615b6354e561cf9860ced87aa086bd7602",
+        "START": "45643cc5e9fcbb4b62e449e6d36263d3b2f1b97546b4f67a158ad02442cda91f"
+      },
+      "input_hashes": {
+        "KPOINTS": "ca9f93d4ac47ecf7d170fff979a338fabd4c0e40b7bb839faa52746f58740b28",
+        "POSCAR": "4989622b592f79e47aca0e23856a0d7bdf526b2996d6fc5a19705bd319ec7838",
+        "POTCAR": "6044c1b454b2d82b7442db5f270384615b6354e561cf9860ced87aa086bd7602",
+        "START": "45643cc5e9fcbb4b62e449e6d36263d3b2f1b97546b4f67a158ad02442cda91f"
+      },
+      "input_hashes_validated": true,
+      "launch_settings": {
+        "checkpoint_seconds": 3600,
+        "continuation_segments": 1,
+        "execution_segment_hours": null,
+        "nsw_per_checkpoint_segment": 30,
+        "scheduler_margin_hours_per_segment": 0,
+        "single_precision": "Accurate",
+        "single_prefix": "A",
+        "stage_mode": "single",
+        "stage_nsw_max": 200
+      },
+      "material_class": "nb_ta_o",
+      "mpi_ranks": 12,
+      "number_of_atoms": 56,
+      "omp_threads_per_rank": 8,
+      "paw_components": [
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "O",
+          "label": "O",
+          "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
+          "source": "external/vasp6/potcar/O/POTCAR"
+        }
+      ],
+      "potcar_sha256": "6044c1b454b2d82b7442db5f270384615b6354e561cf9860ced87aa086bd7602",
+      "prepared_input_bundle_sha256": "a31e56a5c72af91835293b94bb6add424410aa516a9cea627b894f46462447a9",
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "scaling_assignments": {
+        "strong": true,
+        "weak": true
+      },
+      "source_calculation_id": "E4-NBTAO56-0001",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-NBTAO56-0001.POSCAR",
+      "source_poscar_sha256": "4989622b592f79e47aca0e23856a0d7bdf526b2996d6fc5a19705bd319ec7838",
+      "structure_family": "56-atom (1x1x2) NbTaO5; symmetry-distinct Nb/Ta ordering",
+      "structure_id": "4989622b592f79e47aca0e23856a0d7bdf526b2996d6fc5a19705bd319ec7838",
+      "threads_per_rank": 8
+    },
+    {
+      "allocation": "HydraGNN",
+      "atom_count": 56,
+      "calculation_id": "E4-NBTAO56-0002",
+      "case_dir": "../e4-six-class-inputs-v2/inputs/E4-NBTAO56-0002",
+      "composition": {
+        "Nb": 8,
+        "O": 40,
+        "Ta": 8
+      },
+      "defect_ordering_or_disorder": {
+        "antisite_exchange_pairs": null,
+        "calculation_id": "E4-NBTAO56-0002",
+        "composition_index": null,
+        "disorder_realization": null,
+        "e2_parent_ordering": "doubled E2 NbTaO5_ordering_09",
+        "kpoint_mesh": [
+          4,
+          8,
+          5
+        ],
+        "ordering": "0011110000111100"
+      },
+      "ediffg_eV_A": "-0.01",
+      "ediffg_eV_per_A": "-0.01",
+      "estimated_task_walltime_hours": 10.0,
+      "execution_ready": false,
+      "execution_status": "input_hashes_frozen; submission_not_authorized_by_six_class_manifest",
+      "geometry_source": "doubled E2 NbTaO5_ordering_09; parent COD 1528678 Nb2O5 framework",
+      "initial_geometry": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-NBTAO56-0002.POSCAR",
+      "input_file_hashes": {
+        "KPOINTS": "ca9f93d4ac47ecf7d170fff979a338fabd4c0e40b7bb839faa52746f58740b28",
+        "POSCAR": "6990ead020b71d0a3f4686d7cb5ae20d2d9d2329c0e37c5d0f2252436ea1f70e",
+        "POTCAR": "6044c1b454b2d82b7442db5f270384615b6354e561cf9860ced87aa086bd7602",
+        "START": "3f7f8edfa23e143d79d29d7d388492204d82689e633c719dc7e39e7e87c18b3d"
+      },
+      "input_hashes": {
+        "KPOINTS": "ca9f93d4ac47ecf7d170fff979a338fabd4c0e40b7bb839faa52746f58740b28",
+        "POSCAR": "6990ead020b71d0a3f4686d7cb5ae20d2d9d2329c0e37c5d0f2252436ea1f70e",
+        "POTCAR": "6044c1b454b2d82b7442db5f270384615b6354e561cf9860ced87aa086bd7602",
+        "START": "3f7f8edfa23e143d79d29d7d388492204d82689e633c719dc7e39e7e87c18b3d"
+      },
+      "input_hashes_validated": true,
+      "launch_settings": {
+        "checkpoint_seconds": 3600,
+        "continuation_segments": 1,
+        "execution_segment_hours": null,
+        "nsw_per_checkpoint_segment": 30,
+        "scheduler_margin_hours_per_segment": 0,
+        "single_precision": "Accurate",
+        "single_prefix": "A",
+        "stage_mode": "single",
+        "stage_nsw_max": 200
+      },
+      "material_class": "nb_ta_o",
+      "mpi_ranks": 12,
+      "number_of_atoms": 56,
+      "omp_threads_per_rank": 8,
+      "paw_components": [
+        {
+          "element": "Nb",
+          "label": "Nb_pv",
+          "sha256": "086061c276946e9fc55bb7633d9ce78b32a420dec762592491c07c1c47ded114",
+          "source": "external/vasp6/potcar/Nb_pv/POTCAR"
+        },
+        {
+          "element": "Ta",
+          "label": "Ta_pv",
+          "sha256": "ffb05e92ac3f68ca84c26af10a80f2fbb0cf79e16fcc96fcae98089455bbbaaa",
+          "source": "external/vasp6/potcar/Ta_pv/POTCAR"
+        },
+        {
+          "element": "O",
+          "label": "O",
+          "sha256": "8a74b9a1f5fdb3d0c3e0183c7873177abdbef07d407b310b7edcd9ed0a3eea64",
+          "source": "external/vasp6/potcar/O/POTCAR"
+        }
+      ],
+      "potcar_sha256": "6044c1b454b2d82b7442db5f270384615b6354e561cf9860ced87aa086bd7602",
+      "prepared_input_bundle_sha256": "ad5fa1885beca5ef0aaf502e9686b8a570ab9ac2c214868a54df9186bba57077",
+      "protocol_id": "nbtao5-fixed-kmesh-v1",
+      "scaling_assignments": {
+        "strong": true,
+        "weak": true
+      },
+      "source_calculation_id": "E4-NBTAO56-0002",
+      "source_poscar": "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/structures/E4-NBTAO56-0002.POSCAR",
+      "source_poscar_sha256": "6990ead020b71d0a3f4686d7cb5ae20d2d9d2329c0e37c5d0f2252436ea1f70e",
+      "structure_family": "56-atom (1x1x2) NbTaO5; symmetry-distinct Nb/Ta ordering",
+      "structure_id": "6990ead020b71d0a3f4686d7cb5ae20d2d9d2329c0e37c5d0f2252436ea1f70e",
+      "threads_per_rank": 8
+    }
+  ],
+  "tiers": [
+    {
+      "node_assignments": [
+        [
+          "E4-NBTAO56-0001",
+          "E4-NBTAO56-0002"
+        ]
+      ],
+      "nodes": 1,
+      "required_unique_tasks": 2,
+      "walltime_cap_hours": 21
+    }
+  ]
+}

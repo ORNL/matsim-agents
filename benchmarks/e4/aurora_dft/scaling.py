@@ -49,6 +49,47 @@ def is_converged_final_status(status: str | None) -> bool:
     return bool(re.fullmatch(r"converged:[A-Z]\d+", status or ""))
 
 
+def task_continuation_schedule(task: dict[str, Any]) -> list[dict[str, Any]]:
+    launch = task.get("launch_settings", {})
+    budget_seconds = int(float(task["estimated_task_walltime_hours"]) * 3600)
+    count = int(launch.get("continuation_segments", 1))
+    if count < 1:
+        raise ValueError(f"{task['calculation_id']}: continuation_segments must be positive")
+    if count == 1:
+        return [
+            {
+                "resume": False,
+                "active_seconds": budget_seconds,
+                "requested_walltime_seconds": budget_seconds,
+                "soft_stop_seconds": max(60, budget_seconds - min(3600, budget_seconds // 10)),
+            }
+        ]
+
+    segment_hours = launch.get("execution_segment_hours")
+    margin_hours = int(launch.get("scheduler_margin_hours_per_segment", 0))
+    if not isinstance(segment_hours, (int, float)) or segment_hours <= 0 or margin_hours < 1:
+        raise ValueError(f"{task['calculation_id']}: invalid continuation segment or margin")
+    segment_seconds = int(float(segment_hours) * 3600)
+    if (count - 1) * segment_seconds >= budget_seconds or count * segment_seconds < budget_seconds:
+        raise ValueError(f"{task['calculation_id']}: segments do not cover the task budget exactly")
+    schedule = []
+    remaining = budget_seconds
+    for index in range(count):
+        active_seconds = min(segment_seconds, remaining)
+        schedule.append(
+            {
+                "resume": index > 0,
+                "active_seconds": active_seconds,
+                "requested_walltime_seconds": active_seconds + margin_hours * 3600,
+                "soft_stop_seconds": active_seconds,
+            }
+        )
+        remaining -= active_seconds
+    if remaining:
+        raise ValueError(f"{task['calculation_id']}: continuation budget was not exhausted")
+    return schedule
+
+
 def task_record(case: dict[str, Any]) -> dict[str, Any]:
     return {
         key: case[key]
@@ -383,45 +424,89 @@ def dispatch(
         task = task_map[calc_id]
         task_root = root / calc_id
         launch = task.get("launch_settings", {})
-        task_walltime_hours = float(task.get("estimated_task_walltime_hours", TASK_WALLTIME_HOURS))
-        task_walltime_seconds = int(task_walltime_hours * 3600)
+        continuation_schedule = task_continuation_schedule(task)
+        continuation_count = len(continuation_schedule)
         stage_mode = launch.get("stage_mode", "low-normal")
         stage_nsw_max = int(launch.get("stage_nsw_max", 240 if stage_mode == "low-normal" else 200))
-        env = os.environ.copy()
-        env.update(
-            {
-                "REPO": str(REPO),
-                "CASE_DIR": str((REPO / task["case_dir"]).resolve()),
-                "VARIANT": "alcf",
-                "REPEAT": "repeat-01",
-                "E4_CALCULATION_ID": calc_id,
-                "E4_STAGE_MODE": stage_mode,
-                "E4_STAGE_NSW_MAX": str(stage_nsw_max),
-                "E4_NSW": str(int(launch.get("nsw_per_checkpoint_segment", 30))),
-                "E4_EDIFFG": str(task.get("ediffg_eV_per_A", task.get("ediffg_eV_A", "-0.01"))),
-                "E4_MPI_RANKS": str(task["mpi_ranks"]),
-                "E4_OMP_THREADS": str(task["omp_threads_per_rank"]),
-                "E4_REQUESTED_NODES": "1",
-                "E4_ACCOUNTING_NODES": "1",
-                "E4_REQUESTED_WALLTIME_SECONDS": str(task_walltime_seconds),
-                "E4_SOFT_STOP_SECONDS": str(
-                    max(60, task_walltime_seconds - min(3600, task_walltime_seconds // 10))
-                ),
-                "E4_CHECKPOINT_SECONDS": str(int(launch.get("checkpoint_seconds", 3600))),
-                "E4_OUTPUT_ROOT": str(task_root),
-                "MATSIM_ASSIGNED_NODES": host,
-            }
-        )
-        if stage_mode == "single":
-            env["E4_SINGLE_PRECISION"] = str(launch.get("single_precision", "Accurate"))
-            env["E4_SINGLE_PREFIX"] = str(launch.get("single_prefix", "A"))
         started = datetime.now(UTC).isoformat()
         start_monotonic = time.monotonic()
-        with (
-            (root / f"{calc_id}.stdout").open("w") as stdout,
-            (root / f"{calc_id}.stderr").open("w") as stderr,
-        ):
-            process = subprocess.run(["bash", str(wrapper)], env=env, stdout=stdout, stderr=stderr)
+        continuation_records = []
+        requested_walltime_seconds = 0
+        process = None
+        for segment_index, segment in enumerate(continuation_schedule):
+            active_seconds = segment["active_seconds"]
+            requested_seconds = segment["requested_walltime_seconds"]
+            soft_stop_seconds = segment["soft_stop_seconds"]
+            requested_walltime_seconds += requested_seconds
+            env = os.environ.copy()
+            env.update(
+                {
+                    "REPO": str(REPO),
+                    "CASE_DIR": str((REPO / task["case_dir"]).resolve()),
+                    "VARIANT": "alcf",
+                    "REPEAT": "repeat-01",
+                    "E4_CALCULATION_ID": calc_id,
+                    "E4_STAGE_MODE": stage_mode,
+                    "E4_STAGE_NSW_MAX": str(stage_nsw_max),
+                    "E4_NSW": str(int(launch.get("nsw_per_checkpoint_segment", 30))),
+                    "E4_EDIFFG": str(task.get("ediffg_eV_per_A", task.get("ediffg_eV_A", "-0.01"))),
+                    "E4_MPI_RANKS": str(task["mpi_ranks"]),
+                    "E4_OMP_THREADS": str(task["omp_threads_per_rank"]),
+                    "E4_REQUESTED_NODES": "1",
+                    "E4_ACCOUNTING_NODES": "1",
+                    "E4_REQUESTED_WALLTIME_SECONDS": str(requested_seconds),
+                    "E4_SOFT_STOP_SECONDS": str(soft_stop_seconds),
+                    "E4_CHECKPOINT_SECONDS": str(int(launch.get("checkpoint_seconds", 3600))),
+                    "E4_OUTPUT_ROOT": str(task_root),
+                    "E4_RESUME": "1" if segment["resume"] else "0",
+                    "MATSIM_ASSIGNED_NODES": host,
+                }
+            )
+            if stage_mode == "single":
+                env["E4_SINGLE_PRECISION"] = str(launch.get("single_precision", "Accurate"))
+                env["E4_SINGLE_PREFIX"] = str(launch.get("single_prefix", "A"))
+            with (
+                (root / f"{calc_id}.stdout").open("a" if segment_index else "w") as stdout,
+                (root / f"{calc_id}.stderr").open("a" if segment_index else "w") as stderr,
+            ):
+                process = subprocess.run(
+                    ["bash", str(wrapper)], env=env, stdout=stdout, stderr=stderr
+                )
+            run_record = task_root / "run-record.log"
+            run_text = run_record.read_text(errors="replace") if run_record.is_file() else ""
+            exits = re.findall(
+                r"\bEXIT\s+job=\S+\s+calculation_id=\S+\s+status=(-?\d+)\s+final=(\S+)",
+                run_text,
+            )
+            checkpoint = None
+            checkpoint_path = task_root / "latest-checkpoint"
+            if checkpoint_path.is_file():
+                fields = checkpoint_path.read_text().split()
+                if len(fields) == 4:
+                    checkpoint = {
+                        "tag": fields[0],
+                        "precision": fields[1],
+                        "status": fields[2],
+                        "manifest_sha256": fields[3],
+                    }
+            continuation_records.append(
+                {
+                    "segment": segment_index + 1,
+                    "resume": segment["resume"],
+                    "wrapper_exit_status": process.returncode,
+                    "final_status": exits[-1][1] if exits else None,
+                    "requested_walltime_seconds": requested_seconds,
+                    "soft_stop_seconds": active_seconds,
+                    "checkpoint_validated": (
+                        None if not segment["resume"] else "resume verified" in run_text
+                    ),
+                    "checkpoint": checkpoint,
+                }
+            )
+            if process.returncode == 0 and exits and is_converged_final_status(exits[-1][1]):
+                break
+            if process.returncode != 75 or segment_index + 1 == continuation_count:
+                break
         ended = datetime.now(UTC).isoformat()
         execution_seconds = time.monotonic() - start_monotonic
         final_status = None
@@ -451,6 +536,17 @@ def dispatch(
             "final_status": final_status,
             "task_status": "converged" if converged else "failed_or_incomplete",
             "execution_seconds": round(execution_seconds, 3),
+            "continuation_segments_allowed": continuation_count,
+            "continuation_segments_used": len(continuation_records),
+            "cumulative_execution_seconds": round(execution_seconds, 3),
+            "cumulative_vasp_runtime_seconds": sum(int(record[3]) for record in stage_records),
+            "cumulative_actual_node_hours": round(execution_seconds / 3600, 6),
+            "cumulative_requested_walltime_seconds": requested_walltime_seconds,
+            "cumulative_requested_node_hours": round(requested_walltime_seconds / 3600, 6),
+            "execution_budget_exhausted": (
+                not converged and len(continuation_records) == continuation_count
+            ),
+            "restart_provenance": continuation_records,
             "total_ionic_steps": sum(int(record[1]) for record in stage_records),
             "final_max_force_eV_per_A": float(stage_records[-1][2]) if stage_records else None,
             "stage_statuses": [record[4] for record in stage_records],
@@ -711,14 +807,14 @@ def main(argv: list[str] | None = None) -> int:
     plan_six.add_argument(
         "--output",
         type=Path,
-        default=REPO / "research/paper/e4/aurora-dft-scaling/six-class-workflow-v3.json",
+        default=REPO / "research/paper/e4/aurora-dft-scaling/six-class-workflow-v4.json",
     )
     validate_six = sub.add_parser("validate-six-class")
     validate_six.add_argument(
         "manifest",
         type=Path,
         nargs="?",
-        default=REPO / "research/paper/e4/aurora-dft-scaling/six-class-workflow-v3.json",
+        default=REPO / "research/paper/e4/aurora-dft-scaling/six-class-workflow-v4.json",
     )
     dispatch_six = sub.add_parser("dispatch-six-class")
     dispatch_six.add_argument("--manifest", type=Path, required=True)

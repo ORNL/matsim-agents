@@ -318,6 +318,9 @@ def _candidate_from_case(case: dict[str, Any], family: str, assignment: dict[str
             "single_precision": "Accurate",
             "single_prefix": "A",
             "checkpoint_seconds": 3600,
+            "continuation_segments": case.get("continuation_segments", 1),
+            "execution_segment_hours": case.get("execution_segment_hours"),
+            "scheduler_margin_hours_per_segment": case.get("scheduler_margin_hours_per_segment", 0),
         },
         "input_hashes_validated": True,
         "execution_ready": False,
@@ -569,6 +572,16 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
     }
     for name, spec in settings.items():
         protocol_data[name]["task_walltime_hours"] = spec["task_cap_hours"]
+        protocol_data[name]["scheduler_task_walltime_hours"] = spec.get(
+            "scheduler_task_walltime_hours", spec["task_cap_hours"]
+        )
+        protocol_data[name]["continuation_segments"] = spec.get("continuation_segments", 1)
+        protocol_data[name]["execution_segment_hours"] = spec.get(
+            "execution_segment_hours", spec["task_cap_hours"]
+        )
+        protocol_data[name]["scheduler_margin_hours_per_segment"] = spec.get(
+            "scheduler_margin_hours_per_segment", 0
+        )
         protocol_data[name]["expected_task_hours"] = spec["expected_task_hours"]
         protocol_data[name]["runtime_basis"] = spec["runtime_basis"]
 
@@ -579,9 +592,12 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
         generation_procedure: str,
     ):
         cap = settings[name]["task_cap_hours"]
+        scheduler_task_hours = settings[name].get("scheduler_task_walltime_hours", cap)
         expected = settings[name]["expected_task_hours"]
-        strong = _strong_tiers(strong_ids[name], cap, expected, fixed_count=strong_count)
-        weak = _weak_tiers(weak_ids[name], cap, expected)
+        strong = _strong_tiers(
+            strong_ids[name], scheduler_task_hours, expected, fixed_count=strong_count
+        )
+        weak = _weak_tiers(weak_ids[name], scheduler_task_hours, expected)
 
         def total(tiers: list[dict[str, Any]], field: str, capacity_only: bool = False):
             return round(
@@ -611,6 +627,12 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             "blockers": blockers,
             "resource_budget": {
                 "task_walltime_cap_hours": cap,
+                "scheduler_task_walltime_cap_hours": scheduler_task_hours,
+                "maximum_continuation_segments": settings[name].get("continuation_segments", 1),
+                "execution_segment_hours": settings[name].get("execution_segment_hours", cap),
+                "scheduler_margin_hours_per_segment": settings[name].get(
+                    "scheduler_margin_hours_per_segment", 0
+                ),
                 "expected_task_hours": expected,
                 "budget_basis": settings[name]["runtime_basis"],
                 "strong_requested_node_hours_ceiling": total(strong, "node_hours_cap"),
@@ -699,7 +721,7 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
     )
     return {
         "schema_version": 1,
-        "manifest_id": "E4-Aurora-Six-Class-Production-Scaling-v3",
+        "manifest_id": "E4-Aurora-Six-Class-Production-Scaling-v4",
         "execution_authorized": False,
         "platform": "Aurora",
         "scheduler": "PBS Pro",
@@ -744,8 +766,9 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             "weak_definition": "two unique calculations per node, run sequentially",
             "node_tiers": list(NODE_TIERS),
             "segmentation": (
-                "strong tiers longer than 168 h run as wave-aligned segments; the "
-                "analyzer sums segment makespans"
+                "strong tiers longer than 168 h run as wave-aligned jobs; FCC and "
+                "LiFePO4 calculations checkpoint/resume across 24 h execution segments "
+                "with a 1 h scheduler shutdown margin"
             ),
             "execution_authorized": False,
             "scheduler_submissions": 0,
