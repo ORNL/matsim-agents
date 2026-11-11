@@ -9,8 +9,13 @@ REPO = Path(__file__).resolve().parents[1]
 PLANS = REPO / "research/paper/e4/aurora-dft-scaling/priority-scaling"
 
 
-def test_strong_tiers_respect_queue_walltime_and_segment_eight_tasks():
-    manifest = scaling.validate_manifest(PLANS / "strong-manifest.json")
+def _validate_plan_without_machine_artifacts(monkeypatch, path):
+    monkeypatch.setattr(scaling, "validate_task", lambda task: None)
+    return scaling.validate_manifest(path)
+
+
+def test_strong_tiers_respect_queue_walltime_and_segment_eight_tasks(monkeypatch):
+    manifest = _validate_plan_without_machine_artifacts(monkeypatch, PLANS / "strong-manifest.json")
     tiers = {tier["nodes"]: tier for tier in manifest["tiers"]}
     one_node = tiers[1]
     assert one_node["walltime_cap_hours"] == 96
@@ -34,8 +39,8 @@ def test_strong_tiers_respect_queue_walltime_and_segment_eight_tasks():
     assert all(tier["walltime_cap_hours"] <= 168 for tier in tiers.values())
 
 
-def test_weak_tiers_use_unique_frozen_tasks_sequentially():
-    manifest = scaling.validate_manifest(PLANS / "weak-manifest.json")
+def test_weak_tiers_use_unique_frozen_tasks_sequentially(monkeypatch):
+    manifest = _validate_plan_without_machine_artifacts(monkeypatch, PLANS / "weak-manifest.json")
     tiers = {tier["nodes"]: tier for tier in manifest["tiers"]}
     for nodes, tier in tiers.items():
         assigned = [task_id for node in tier["node_assignments"] for task_id in node]
@@ -52,6 +57,7 @@ def test_weak_tiers_use_unique_frozen_tasks_sequentially():
 
 
 def test_dispatch_requires_separate_authorization_before_pbs(monkeypatch, tmp_path):
+    monkeypatch.setattr(scaling, "validate_task", lambda task: None)
     manifest_path = PLANS / "strong-manifest.json"
     with pytest.raises(PermissionError, match="separate E4 scaling authorization"):
         scaling.dispatch(manifest_path, 1, "segment-1", dry_run=False)

@@ -319,7 +319,9 @@ def dispatch(manifest_path: Path, nodes: int, segment_id: str | None, dry_run: b
                                run_record.read_text(errors="replace"))
             if exits:
                 final_status = exits[-1][1]
-        converged = process.returncode == 0 and final_status == "converged:N0"
+        converged = process.returncode == 0 and bool(
+            re.fullmatch(r"converged:N\d+", final_status or "")
+        )
         return {
             "event": "finished",
             "time": ended,

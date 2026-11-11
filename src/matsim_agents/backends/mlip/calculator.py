@@ -221,9 +221,7 @@ def _add_hydragnn_example_dirs(logdir: Path) -> None:
             sys.path.insert(0, str(directory))
 
 
-def _selected_head_hydragnn_calculator(
-    cfg: HydraGNNConfig, logdir: Path, selected_head: int
-):
+def _selected_head_hydragnn_calculator(cfg: HydraGNNConfig, logdir: Path, selected_head: int):
     """Calculator that evaluates one pretrained head of the multi-branch model."""
     from inference_random_structures import find_checkpoint, load_config_and_model
 

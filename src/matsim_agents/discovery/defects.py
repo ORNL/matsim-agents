@@ -29,9 +29,27 @@ CHARGE_LIMITATION = (
 )
 MAGNETIC_ELEMENTS = frozenset(
     {
-        "Cr", "Mn", "Fe", "Co", "Ni",
-        "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb",
-        "U", "Np", "Pu",
+        "Cr",
+        "Mn",
+        "Fe",
+        "Co",
+        "Ni",
+        "Ce",
+        "Pr",
+        "Nd",
+        "Pm",
+        "Sm",
+        "Eu",
+        "Gd",
+        "Tb",
+        "Dy",
+        "Ho",
+        "Er",
+        "Tm",
+        "Yb",
+        "U",
+        "Np",
+        "Pu",
     }
 )
 
