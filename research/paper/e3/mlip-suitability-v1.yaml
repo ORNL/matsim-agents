@@ -38,6 +38,12 @@ model_facts:
     branch: {name: OMat24, index: 7}
     predictions_are_composition_baseline_residuals: true
     frozen_for_primary_comparison: true
+    codabench_head7_checkpoint_load: {matched: 200, model_tensors: 200, missing: 0, unused: 0, wrapper_prefixes_removed: 1}
+    corrected_codabench_result: research/paper/e3/codabench-hydragnn-omat24-restored.json
+    accuracy_summary: >-
+      Corrected public run: formation-energy MAE 0.3657 eV/atom over 36 cases
+      excluding suspect Pd; force-component MAE 1.642 eV/A over 30 structures
+      with clean DFT force labels. Old unloaded-checkpoint values are superseded.
     formation_energy_reconstruction: >-
       Subtract the same head's pure-element predictions from the compound residual
       prediction. The composition-linear regression baseline cancels algebraically;
@@ -87,8 +93,8 @@ classes:
         checkpoint species coverage. Neither has explicit spin configurations.
       measured_accuracy: >-
         Public Codabench MATS-0060 (one case): force-component MAE eV/A is 4.413
-        MACE, 4.237 UMA, 0.442 HydraGNN-OMat24; formation-energy absolute error
-        eV/atom is 0.356, 0.025, 0.160, respectively. Not a class-level estimate.
+        MACE, 4.237 UMA, 4.316 HydraGNN-OMat24; formation-energy absolute error
+        eV/atom is 0.356, 0.025, 0.265, respectively. Not a class-level estimate.
         The separate 84-structure E3 acquisition pool has UMA/MACE predictions
         but no DFT labels.
       relaxation_stability: not_measured_for_this_class
@@ -121,8 +127,8 @@ classes:
         vacuum and defect transfer regime is not benchmarked.
       measured_accuracy: >-
         Public Codabench MATS-0016 P monolayer (one case): force-component MAE
-        eV/A is 2.547 MACE, 2.488 UMA, 2.486 HydraGNN-OMat24; absolute
-        formation-energy error eV/atom is 0.076, 0.010, 0.336, respectively.
+        eV/A is 2.547 MACE, 2.488 UMA, 2.357 HydraGNN-OMat24; absolute
+        formation-energy error eV/atom is 0.076, 0.010, 0.102, respectively.
         Not a class-level estimate; public metadata does not identify allotrope.
       relaxation_stability: not_measured_for_this_class
       disagreement: computable_if_both_models_pass_slab_and_species_checks; uncalibrated
@@ -287,9 +293,12 @@ historical_artifacts:
                  uma_s_1p1_omat: {success: 37, failures: 0, seconds: 433.79,
                                   force_component_mae_eV_A: 60.351,
                                   formation_energy_mae_eV_atom: 0.677},
-                 hydragnn_omat24_head_7: {success: 37, failures: 0, seconds: 13.21,
-                                          force_component_mae_eV_A: 59.683,
-                                          formation_energy_mae_eV_atom: 1.423}}
+                 hydragnn_omat24_head_7: {success: 37, failures: 0, seconds: 1.97,
+                                          force_component_mae_eV_A: 60.838,
+                                          formation_energy_mae_eV_atom: 0.703,
+                                          formation_energy_mae_excluding_suspect_pd_eV_atom: 0.366,
+                                          clean_force_component_mae_eV_A: 1.642}}
+    hydragnn_corrected_result: research/paper/e3/codabench-hydragnn-omat24-restored.json
     formation_energy: same_model_pure_element_subtraction; no_fit_to_benchmark_labels
     pooled_force_metrics_warning: >-
       Several public labels have extreme DFT forces (MATS-0030 Cu 12435 eV/A,

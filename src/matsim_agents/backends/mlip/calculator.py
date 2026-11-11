@@ -222,22 +222,19 @@ def _add_hydragnn_example_dirs(logdir: Path) -> None:
 
 
 def _selected_head_hydragnn_calculator(
-    cfg: HydraGNNConfig, logdir: Path, selected_head: int, *, has_convention: bool
+    cfg: HydraGNNConfig, logdir: Path, selected_head: int
 ):
     """Calculator that evaluates one pretrained head of the multi-branch model."""
-    from inference_random_structures import load_config_and_model
+    from inference_random_structures import find_checkpoint, load_config_and_model
 
+    from matsim_agents.backends.mlip.hydragnn_checkpoint import restore_hydragnn_checkpoint
     from matsim_agents.backends.mlip.hydragnn_energy import restore_hydragnn_total_energy
 
     model, config, device, autocast_ctx, param_dtype = load_config_and_model(
         str(logdir), cfg.checkpoint, cfg.precision
     )
-    if has_convention:
-        from matsim_agents.backends.mlip.hydragnn_checkpoint import (
-            restore_hydragnn_checkpoint,
-        )
-
-        restore_hydragnn_checkpoint(model, logdir / cfg.checkpoint, device=device)
+    checkpoint_path = find_checkpoint(str(logdir), cfg.checkpoint)
+    restore_hydragnn_checkpoint(model, checkpoint_path, device=device)
     num_branches = int(getattr(model, "num_branches", 1))
     if selected_head >= num_branches:
         raise ValueError(
@@ -258,6 +255,7 @@ def _selected_head_hydragnn_calculator(
         charge=cfg.charge,
         spin=cfg.spin,
     )
+    calculator.hydragnn_checkpoint_load_report = model._hydragnn_checkpoint_load_report
     return restore_hydragnn_total_energy(calculator, logdir, cfg.checkpoint)
 
 
@@ -461,9 +459,7 @@ def build_hydragnn_calculator(cfg: HydraGNNConfig, logdir_override: str | Path |
 
     selected_head = resolve_hydragnn_inference_head(cfg.inference_head)
     if selected_head is not None:
-        return _selected_head_hydragnn_calculator(
-            cfg, logdir, selected_head, has_convention=convention is not None
-        )
+        return _selected_head_hydragnn_calculator(cfg, logdir, selected_head)
     if cfg.newhead_ft_config is not None:
         return _newhead_hydragnn_calculator(cfg, logdir)
     return _fused_stack_hydragnn_calculator(cfg, logdir, convention)

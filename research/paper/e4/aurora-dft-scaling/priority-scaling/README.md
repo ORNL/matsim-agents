@@ -1,5 +1,8 @@
 # E4 Scaling Priority
 
+For Perlmutter staging, VASP portability limits, and unfinished-case instructions,
+see the [Perlmutter E3-MLIP and E4 execution runbook](../../../perlmutter-e3-e4-execution-runbook.md).
+
 This package records the immediate BCC DFT scaling workload, its blockers, and
 resource caps. The dispatcher accepts both manifests for validation and dry
 runs, but neither manifest authorizes execution. See

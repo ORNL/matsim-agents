@@ -5,8 +5,10 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import importlib
 import json
 import os
+import sys
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -15,7 +17,20 @@ from typing import Any
 import numpy as np
 from ase.io import read
 
-from benchmarks.e3.mlip_predict import MODELS, calculator
+REPO = Path(__file__).resolve().parents[2]
+WORKTREE_SOURCE = (REPO / "src").resolve()
+ORIGINAL_CHECKOUT_SOURCE = (REPO.parent / "matsim-agents" / "src").resolve()
+# The shared HPC venv is editable-installed from a sibling checkout; prefer this checkout.
+sys.path = [
+    entry
+    for entry in sys.path
+    if Path(entry or ".").resolve() != ORIGINAL_CHECKOUT_SOURCE
+]
+sys.path.insert(0, str(WORKTREE_SOURCE))
+
+_mlip_predict = importlib.import_module("benchmarks.e3.mlip_predict")
+MODELS = _mlip_predict.MODELS
+calculator = _mlip_predict.calculator
 
 HYDRAGNN_MODEL = "hydragnn-omat24"
 HYDRAGNN_HEAD = "OMat24"
@@ -78,6 +93,7 @@ def build_calculator(
         inference_head=HYDRAGNN_HEAD,
         mlp_device=device,
     )
+    model_calculator = build_hydragnn_calculator(cfg)
     model_config = {
         "backend": "hydragnn",
         "checkpoint": str(checkpoint_path.resolve()),
@@ -86,8 +102,11 @@ def build_calculator(
         "inference_head": HYDRAGNN_HEAD,
         "inference_head_index": HYDRAGNN_HEAD_INDEX,
         "branch_weight_mlp_used": False,
+        "checkpoint_load_report": getattr(
+            model_calculator, "hydragnn_checkpoint_load_report", None
+        ),
     }
-    return build_hydragnn_calculator(cfg), model_config
+    return model_calculator, model_config
 
 
 def benchmark(
@@ -164,8 +183,11 @@ def benchmark(
                 "formula": metadata[sid]["formula"],
                 "n_atoms": len(atoms),
                 "formation_energy_prediction_eV_atom": formation_energy,
-                "formation_energy_reference_eV_atom": float(labels[sid]["formation_energy_eV_per_atom"]),
-                "formation_energy_error_eV_atom": formation_energy - float(labels[sid]["formation_energy_eV_per_atom"]),
+                "formation_energy_reference_eV_atom": float(
+                    labels[sid]["formation_energy_eV_per_atom"]
+                ),
+                "formation_energy_error_eV_atom": formation_energy
+                - float(labels[sid]["formation_energy_eV_per_atom"]),
                 "force_error_eV_A": (forces - reference_forces).tolist(),
             })
         except Exception as exc:
@@ -217,13 +239,15 @@ def benchmark(
 
 
 def main() -> int:
-    repo = Path(__file__).resolve().parents[2]
+    repo = REPO
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--codabench-root", type=Path,
         default=repo.parent / "matsim-agents" / "benchmarks" / "codabench",
     )
-    parser.add_argument("--reference-root", type=Path, default=repo.parent / "matsim-agents-dft-reference")
+    parser.add_argument(
+        "--reference-root", type=Path, default=repo.parent / "matsim-agents-dft-reference"
+    )
     parser.add_argument("--model", choices=sorted([*MODELS, HYDRAGNN_MODEL]), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", default="cpu")
@@ -232,7 +256,11 @@ def main() -> int:
     args = parser.parse_args()
     if args.model == HYDRAGNN_MODEL:
         args.hydragnn_logdir = args.hydragnn_logdir or (
-            repo.parent / "matsim-agents" / "models" / "hydragnn-sc26" / "multidataset_hpo-BEST6-fp64"
+            repo.parent
+            / "matsim-agents"
+            / "models"
+            / "hydragnn-sc26"
+            / "multidataset_hpo-BEST6-fp64"
         )
         args.hydragnn_root = args.hydragnn_root or (
             repo.parent / "HydraGNN-e4b-frozen-81d5b883"
@@ -252,7 +280,9 @@ def main() -> int:
         "failed_predictions": len(result["failed_predictions"]),
         "overall": result["overall"],
         "by_material_class": result["by_material_class"],
-        "elapsed_seconds_including_model_elemental_references": result["elapsed_seconds_including_model_elemental_references"],
+        "elapsed_seconds_including_model_elemental_references": result[
+            "elapsed_seconds_including_model_elemental_references"
+        ],
     }, indent=2))
     return 0
 

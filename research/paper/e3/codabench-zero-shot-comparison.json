@@ -1,4 +1,31 @@
 {
+  "hydra_result_status": "corrected_checkpoint_restored_result_replaces_unloaded_checkpoint_values",
+  "hydra_corrected_result": {
+    "artifact": "codabench-hydragnn-omat24-restored.json",
+    "source_result_sha256": "cd9934e5129880b09b75b4a7bd8f52b34060daa8c5c2664f54df4e0cd84bdfec",
+    "checkpoint_load": {
+      "checkpoint_tensor_count": 200,
+      "model_tensor_count": 200,
+      "matched_tensor_count": 200,
+      "missing_tensor_count": 0,
+      "unused_checkpoint_tensor_count": 0,
+      "wrapper_prefixes_removed": 1
+    },
+    "formation_energy_36_excluding_suspect_pd": {
+      "mae_eV_atom": 0.3657253623,
+      "rmse_eV_atom": 0.4974165957,
+      "median_abs_error_eV_atom": 0.2580528191,
+      "max_abs_error_eV_atom": 1.7293605983,
+      "signed_bias_eV_atom": 0.0796703488,
+      "pearson_r": 0.9618199309
+    },
+    "force_clean_30": {
+      "component_mae_eV_A": 1.6416455139,
+      "component_rmse_eV_A": 7.4314297380,
+      "median_per_structure_mae_eV_A": 0.2610280051,
+      "class_macro_mae_eV_A": 1.6828957768
+    }
+  },
   "force_label_cut_eV_A": 10.0,
   "excluded_force_labels": [
     {
@@ -70,16 +97,16 @@
       "seconds": 433.78762029111385
     },
     "Hydra": {
-      "ef_mae_all": 1.4225137022137821,
-      "ef_median_all": 0.9311262737283399,
-      "ef_rmse_all": 1.8695807108452704,
-      "ef_mae_clean": 1.5303317574221111,
-      "ef_class_macro_mae": 1.39968634106327,
-      "ef_mean_signed": 0.8272537126852831,
-      "force_mae_pooled_clean": 0.1802076803090138,
-      "force_mae_median_clean": 0.13331693051216767,
-      "force_class_macro_clean": 0.2536605764503304,
-      "seconds": 13.212435033172369
+      "ef_mae_all_37": 0.7030041189,
+      "ef_rmse_all_37": 2.1679625122,
+      "ef_mae_excluding_suspect_pd_36": 0.3657253623,
+      "ef_median_abs_excluding_suspect_pd_36": 0.2580528191,
+      "ef_mean_signed_excluding_suspect_pd_36": 0.0796703488,
+      "ef_pearson_r_excluding_suspect_pd_36": 0.9618199309,
+      "force_mae_pooled_clean": 1.6416455139,
+      "force_mae_median_clean": 0.2610280051,
+      "force_class_macro_clean": 1.6828957768,
+      "seconds": 1.9679328500
     }
   },
   "paired": {
@@ -98,36 +125,7 @@
       -0.13431568456926324,
       -0.004475830008099483
     ],
-    "UMA-Hydra Ef 37": [
-      -0.7452453061913062,
-      -1.418505472826638,
-      0.08498938794103128
-    ],
-    "UMA-Hydra Ef 30": [
-      -0.7180571557500081,
-      -1.532857762809994,
-      0.28509753507930435
-    ],
-    "UMA-Hydra F 30": [
-      0.5259911582949595,
-      0.0001772597268384778,
-      1.439542882319394
-    ],
-    "MACE-Hydra Ef 37": [
-      -1.0738571088506157,
-      -1.559395227863079,
-      -0.5486021475082782
-    ],
-    "MACE-Hydra Ef 30": [
-      -1.1599403614496255,
-      -1.735936133916541,
-      -0.5133858869916098
-    ],
-    "MACE-Hydra F 30": [
-      0.5782252235850768,
-      0.012353676854432095,
-      1.5724647236523162
-    ]
+    "hydra_comparisons": "withdrawn; prior paired bootstraps used an unloaded checkpoint and must be recomputed"
   },
   "per_class": {
     "2D Monolayer": {
@@ -142,8 +140,8 @@
         0.8948055110236095
       ],
       "Hydra": [
-        1.0721353322043181,
-        0.9014567472362035
+        0.49595936403752117,
+        0.8836521336180638
       ]
     },
     "Catalysis": {
@@ -158,8 +156,8 @@
         6.034990110520413
       ],
       "Hydra": [
-        1.0439374421571403,
-        0.1433592312220912
+        3.3170712368000137,
+        10.529389652552675
       ]
     },
     "Critical Mineral": {
@@ -174,8 +172,8 @@
         0.7184407853384349
       ],
       "Hydra": [
-        2.0003666724008218,
-        0.25453977158421587
+        0.5914355805621369,
+        0.8205
       ]
     },
     "Intermetallic": {
@@ -190,8 +188,8 @@
         0.028649093771818113
       ],
       "Hydra": [
-        0.2973917111000892,
-        0.02841450119050345
+        0.12847688855573788,
+        0.07034585214054391
       ]
     },
     "MAX Phase": {
@@ -206,8 +204,8 @@
         0.3925974970378099
       ],
       "Hydra": [
-        0.5595723757966693,
-        0.39718732541714996
+        0.21959056140697825,
+        0.4992834909736016
       ]
     },
     "Nuclear Material": {
@@ -222,8 +220,8 @@
         0.1602154504363819
       ],
       "Hydra": [
-        3.3497024628782257,
-        0.1123143385943762
+        0.32274440134955573,
+        0.33930090555339004
       ]
     },
     "Perovskite": {
@@ -238,8 +236,8 @@
         0.17155733880367025
       ],
       "Hydra": [
-        2.532446809451879,
-        0.1275245195647318
+        0.38460240009667795,
+        0.21508713238563787
       ]
     },
     "Thermoelectric": {
@@ -254,8 +252,8 @@
         0.06300036191750118
       ],
       "Hydra": [
-        0.3419379225170176,
-        0.0644881767933712
+        0.08484421135554893,
+        0.105646371262158
       ]
     }
   }

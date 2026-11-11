@@ -103,12 +103,13 @@ All three models produce nearly identical force errors on these 7 structures (fo
 - MACE predicts +11.33 and UMA +13.31 eV/atom (errors of +8.2 and +10.1).
 - Either the label, the structure, or the Pd elemental reference is problematic. This case is excluded from the robust energy summaries and reported separately.
 
-### 5.3 HydraGNN head-7 formation energies are degenerate
-- HydraGNN predicts a formation energy between −0.007 and −0.002 eV/atom for every one of the 37 structures (standard deviation 0.001, versus 1.676 for the DFT labels).
-- Its correlation with the labels is −0.31, compared with +0.99 for MACE and +0.79 for UMA (Pd excluded).
-- Each HydraGNN error is therefore almost exactly minus the DFT label (CeO₂: label −3.483, error +3.478; MoS₂: −1.771, +1.764; C: +1.810, −1.813).
-- **Interpretation:** the energies coming out of this HydraGNN path are effectively additive in composition, which suggests a problem with energy scale, normalization or units (for example, a residual output not converted back to physical units). The HydraGNN energy pathway had not been independently checked for units before this benchmark.
-- **Consequence:** the HydraGNN formation-energy numbers below are a pipeline diagnostic, not a measure of the model's physical accuracy. HydraGNN forces vary sensibly by structure and are assessed normally.
+### 5.3 HydraGNN checkpoint-loading failure and correction
+- The initial HydraGNN results are invalid: the frozen inference loader did not normalize the checkpoint's nested `module.model.` keys, so none of the 200 trained tensors matched the constructed model. The near-zero formation energies were predictions from effectively random initialization, not a HydraGNN energy-scale or normalization problem.
+- The loader now strips recognized wrapper prefixes and fails closed if no model tensors match. The corrected public run reports 200/200 tensors matched, 0 missing, 0 unused, and one wrapper prefix removed. Head 7 (OMat24) and the frozen checkpoint are unchanged.
+- Corrected formation-energy results: all 37 MAE 0.703 eV/atom and RMSE 2.168; excluding suspect Pd MATS-0039, MAE 0.3657, median absolute error 0.2581, RMSE 0.4974, maximum absolute error 1.7294, signed bias +0.0797, and Pearson correlation +0.9618.
+- Corrected force-component results on the 30 structures with DFT maximum atomic force ≤10 eV/Å: MAE 1.642 eV/Å, RMSE 7.431, median per-structure MAE 0.261, and class-macro MAE 1.683. The all-37 force metrics remain dominated by the seven bad DFT labels.
+- Corrected predictions still use same-head pure-element subtraction; no benchmark labels are fitted. The composition-linear training baseline cancels in this difference.
+- The corrected checkpoint report and full per-structure results are in [`codabench-hydragnn-omat24-restored.json`](codabench-hydragnn-omat24-restored.json). Initial raw output files are retained for provenance but must not be used as model results.
 
 ### 5.4 UMA's systematic oxide shift
 - On oxides without a strongly correlated transition metal, UMA's error is a near-constant −0.52 to −0.55 eV per oxygen atom: CeO₂, La₂O₃, MgAl₂O₄, TiO₂, UO₂, ZrO₂, BaTiO₃ (two structures), SrTiO₃. Per atom this is about −0.30 to −0.37 eV/atom.
@@ -124,9 +125,9 @@ All three models produce nearly identical force errors on these 7 structures (fo
 |---|---|---|---|---|---|
 | MACE | 60.42 | 793.43 | 0.349 | 1.360 | 49.7 |
 | UMA | 60.35 | 793.43 | 0.677 | 2.415 | 433.8 |
-| HydraGNN (head 7) | 59.68 | 793.41 | 1.423* | 1.870* | 13.2 |
+| HydraGNN (head 7, restored checkpoint) | 60.84 | 793.42 | 0.703 | 2.168 | 2.0 |
 
-\*Degenerate energy pathway (§5.3). The force aggregates are dominated by the bad labels in §5.1.
+The force aggregates are dominated by the bad labels in §5.1.
 
 ### 6.2 Forces on the 30 structures with physical DFT forces
 
@@ -134,60 +135,53 @@ All three models produce nearly identical force errors on these 7 structures (fo
 |---|---|---|---|
 | MACE | 1.099 | 0.159 | 1.142 |
 | UMA | 1.019 | **0.131** | 1.058 |
-| HydraGNN | **0.180** | 0.133 | **0.254** |
+| HydraGNN (head 7, restored checkpoint) | 1.642 | 0.261 | 1.683 |
 
-HydraGNN's much lower pooled and class-balanced numbers come mostly from two structures where MACE and UMA fail and HydraGNN does not:
-- Pd slab MATS-0039: per-component MAE 13.0 (MACE), 12.0 (UMA), 0.17 (HydraGNN).
-- LiFePO₄ MATS-0060: 4.41, 4.24, 0.44.
-
-On typical structures (the median), UMA and HydraGNN are tied and both beat MACE.
+HydraGNN's previous force results were also invalid because its trained checkpoint was not loaded. The corrected values above replace them.
 
 ### 6.3 Formation energies, robust splits (absolute error, eV/atom; error = model − DFT)
 
-| Subset | n | MACE MAE / median / max | UMA MAE / median / max | HydraGNN MAE / median / max* |
+| Subset | n | MACE MAE / median / max | UMA MAE / median / max | HydraGNN MAE / median / max |
 |---|---|---|---|---|
-| All, excluding Pd MATS-0039 | 36 | **0.132** / 0.039 / 0.60 | 0.414 / **0.033** / 10.57 | 1.374 / 0.869 / 3.48 |
-| Non-oxides, excluding Pd | 24 | **0.127** / 0.048 / 0.52 | 0.477 / **0.012** / 10.57 | 0.708 / 0.472 / 2.29 |
-| Oxides | 12 | **0.141** / **0.027** / 0.60 | 0.289 / 0.317 / 0.37 | 2.706 / 3.031 / 3.48 |
+| All, excluding Pd MATS-0039 | 36 | **0.132** / 0.039 / 0.60 | 0.414 / **0.033** / 10.57 | 0.366 / 0.258 / 1.729 |
+| Non-oxides, excluding Pd | 24 | **0.127** / 0.048 / 0.52 | 0.477 / **0.012** / 10.57 | 0.320 / 0.152 / 1.729 |
+| Oxides | 12 | **0.141** / **0.027** / 0.60 | 0.289 / 0.317 / 0.37 | 0.457 / 0.542 / 0.639 |
 
 Per-structure wins (lower error):
-- All except Pd: UMA beats MACE on 21/36; HydraGNN beats MACE on 1/36 and UMA on 1/36.
+- All except Pd: UMA beats MACE on 21/36. HydraGNN pairwise win counts are not reported here; the earlier comparisons used the unloaded checkpoint and have been withdrawn.
 - Non-oxides: UMA beats MACE on 18/24.
 - Oxides: UMA beats MACE on 3/12 (the −0.53 eV per oxygen atom shift).
 
-Correlation between predicted and DFT formation energies (36 structures, Pd excluded): MACE +0.992, UMA +0.791 (lowered by the WS₂ failure), HydraGNN −0.307.
+Correlation between predicted and DFT formation energies (36 structures, Pd excluded): MACE +0.992, UMA +0.791 (lowered by the WS₂ failure), HydraGNN +0.962.
 
 UMA's single catastrophic failure is WS₂ monolayer MATS-0019 (error +10.57 eV/atom). The W and S references are not at fault: WC, MoS₂ and CoS₂ errors are small for UMA. MACE's largest error excluding Pd is 0.60 eV/atom (LiCoO₂).
-
-\*Degenerate energy pathway (§5.3).
 
 ### 6.4 Paired bootstrap differences (A − B; negative favours A; mean and 95% CI over structures)
 
 | Comparison | Formation energy, 37 structures | Formation energy, 30 clean-force structures | Force MAE, 30 clean structures |
 |---|---|---|---|
 | UMA − MACE | +0.329 [−0.032, +0.946]; UMA better on 21/37 | +0.442 [+0.006, +1.200]; UMA better on 16/30 | **−0.052 [−0.134, −0.004]**; UMA better on 15/30 |
-| UMA − HydraGNN | −0.745 [−1.419, +0.085]; UMA better on 35/37 | −0.718 [−1.533, +0.285]; 28/30 | +0.526 [+0.000, +1.440]; UMA better on 18/30 |
-| MACE − HydraGNN | −1.074 [−1.559, −0.549]; MACE better on 35/37 | −1.160 [−1.736, −0.513]; 28/30 | +0.578 [+0.012, +1.572]; MACE better on 14/30 |
+| HydraGNN comparisons | Withdrawn; prior bootstrap used unloaded checkpoint | Withdrawn | Withdrawn |
 
-The only clearly resolved results are:
+The previously reported HydraGNN paired comparisons are invalid because they used an unloaded checkpoint. They must be recomputed from per-structure corrected predictions before comparative claims are made. The remaining clearly resolved results are:
 - UMA has lower force errors than MACE; the interval excludes zero, but only just.
-- MACE and UMA formation energies beat HydraGNN's degenerate output.
+- The old HydraGNN comparison was based on invalid predictions; corrected paired comparisons have not yet been calculated.
 - MACE beats UMA on formation-energy MAE on the 30-structure subset; the interval barely excludes zero.
 
 ### 6.5 Per category (formation-energy MAE over all structures in the category | force MAE over clean-force structures; eV/atom | eV/Å)
 
-| Category | n (clean forces) | MACE | UMA | HydraGNN* |
+| Category | n (clean forces) | MACE | UMA | HydraGNN (restored) |
 |---|---|---|---|---|
-| 2D monolayer | 7 (3) | 0.254 / 0.924 | 1.591 / 0.895 | 1.072 / 0.901 |
-| Catalysis | 4 (2) | 2.063 / 6.606 | 2.547 / 6.035 | 1.044 / 0.143 |
-| Critical mineral | 9 (8) | 0.174 / 0.761 | 0.189 / 0.718 | 2.000 / 0.255 |
-| Intermetallic | 6 (6) | 0.066 / 0.024 | **0.006** / 0.029 | 0.297 / 0.028 |
-| MAX phase | 2 (2) | 0.081 / 0.435 | **0.005** / 0.393 | 0.560 / 0.397 |
-| Nuclear material | 2 (2) | **0.065** / 0.125 | 0.361 / 0.160 | 3.350 / 0.112 |
-| Perovskite | 5 (5) | **0.117** / 0.158 | 0.248 / 0.172 | 2.532 / 0.128 |
-| Thermoelectric | 2 (2) | 0.019 / 0.100 | **0.012** / 0.063 | 0.342 / 0.064 |
+| 2D monolayer | 7 (3) | 0.254 / 0.924 | 1.591 / 0.895 | 0.496 / 0.884 |
+| Catalysis | 4 (2) | 2.063 / 6.606 | 2.547 / 6.035 | 3.317 / 10.529 |
+| Critical mineral | 9 (8) | 0.174 / 0.761 | 0.189 / 0.718 | 0.591 / 0.821 |
+| Intermetallic | 6 (6) | 0.066 / 0.024 | **0.006** / 0.029 | 0.128 / 0.070 |
+| MAX phase | 2 (2) | 0.081 / 0.435 | **0.005** / 0.393 | 0.220 / 0.499 |
+| Nuclear material | 2 (2) | **0.065** / 0.125 | 0.361 / 0.160 | 0.323 / 0.339 |
+| Perovskite | 5 (5) | **0.117** / 0.158 | 0.248 / 0.172 | 0.385 / 0.215 |
+| Thermoelectric | 2 (2) | 0.019 / 0.100 | **0.012** / 0.063 | 0.085 / 0.106 |
 
-UMA's 2D-monolayer and catalysis formation-energy numbers are dominated by WS₂ and Pd. Its nuclear-material and perovskite numbers reflect the oxide shift. \*HydraGNN energies degenerate (§5.3).
+UMA's 2D-monolayer and catalysis formation-energy numbers are dominated by WS₂ and Pd. Its nuclear-material and perovskite numbers reflect the oxide shift. HydraGNN entries are corrected; the catalysis energy error includes suspect Pd and should be read with §5.2.
 
 ### 6.6 The two structures that match E3 material classes (single structures, not class estimates)
 
@@ -195,52 +189,54 @@ UMA's 2D-monolayer and catalysis formation-energy numbers are dominated by WS₂
 |---|---|---|---|
 | LiFePO₄, MATS-0060 (28 atoms; DFT label −0.164 eV/atom; largest DFT force 2.80 eV/Å) | MACE | +0.356 | 4.413 |
 | | UMA | **+0.025** | 4.237 |
-| | HydraGNN* | +0.160 | **0.442** |
+| | HydraGNN (restored) | +0.265 | 4.316 |
 | P monolayer, MATS-0016 (4 atoms; DFT label +0.332 eV/atom; largest DFT force 7.43 eV/Å) | MACE | −0.076 | 2.547 |
 | | UMA | **−0.010** | 2.488 |
-| | HydraGNN* | −0.336 | 2.486 |
+| | HydraGNN (restored) | −0.102 | 2.357 |
 
 ### 6.7 Per-structure results (all 37; error = model − DFT; forces are per-component MAE; † = force label excluded; ‡ = suspect energy label)
 
-| ID | Category | Formula | N | DFT E_f (eV/atom) | Largest DFT force (eV/Å) | MACE ΔE_f | UMA ΔE_f | HydraGNN ΔE_f* | MACE force MAE | UMA force MAE | HydraGNN force MAE |
+HydraGNN values below are overwritten with predictions from the corrected checkpoint-loaded run. Full precision and checkpoint provenance are in [`codabench-hydragnn-omat24-restored.json`](codabench-hydragnn-omat24-restored.json); the old raw output files remain only as provenance.
+
+| ID | Category | Formula | N | DFT E_f (eV/atom) | Largest DFT force (eV/Å) | MACE ΔE_f | UMA ΔE_f | HydraGNN ΔE_f | MACE force MAE | UMA force MAE | HydraGNN force MAE |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| MATS-0002† | 2D monolayer | BN | 31 | −0.935 | 133 | +0.515 | −0.224 | +0.931 | 57.8 | 57.8 | 57.7 |
-| MATS-0004† | 2D monolayer | BN | 32 | −0.493 | 131 | +0.432 | −0.238 | +0.489 | 59.6 | 59.6 | 59.6 |
-| MATS-0006† | 2D monolayer | C | 32 | +1.810 | 138 | +0.154 | −0.031 | −1.813 | 62.9 | 62.9 | 62.9 |
-| MATS-0011 | 2D monolayer | MoS₂ | 48 | −1.771 | 0.743 | +0.046 | +0.023 | +1.764 | 0.172 | 0.143 | 0.165 |
-| MATS-0013† | 2D monolayer | MoSe₂ | 47 | +0.549 | 110 | −0.156 | +0.040 | −0.553 | 26.1 | 26.0 | 25.8 |
-| MATS-0016 | 2D monolayer | P | 4 | +0.332 | 7.43 | −0.076 | −0.010 | −0.336 | 2.55 | 2.49 | 2.49 |
-| MATS-0019 | 2D monolayer | WS₂ | 48 | +1.614 | 0.24 | +0.396 | +10.568 | −1.620 | 0.0534 | 0.0535 | 0.0534 |
-| MATS-0030† | Catalysis | Cu | 64 | +0.152 | 12,435 | +0.006 | +0.007 | −0.158 | 1,060 | 1,060 | 1,060 |
-| MATS-0033† | Catalysis | Fe | 31 | +0.485 | 1,157 | +0.032 | +0.035 | −0.491 | 116 | 116 | 116 |
-| MATS-0035 | Catalysis | Ni | 63 | +0.348 | 0.571 | +0.049 | −0.004 | −0.353 | 0.162 | 0.111 | 0.113 |
-| MATS-0039‡ | Catalysis | Pd | 63 | +3.167 | 0.86 | +8.164 | +10.140 | −3.174 | 13.0 | 12.0 | 0.174 |
-| MATS-0047 | Critical mineral | CeO₂ | 95 | −3.483 | 2.06 | −0.002 | −0.363 | +3.478 | 0.120 | 0.121 | 0.129 |
-| MATS-0051 | Critical mineral | CoS₂ | 11 | −1.070 | 0.793 | −0.019 | −0.017 | +1.066 | 0.258 | 0.206 | 0.251 |
-| MATS-0055 | Critical mineral | La₂O₃ | 5 | −3.463 | 0.284 | +0.020 | −0.313 | +3.461 | 0.0632 | 0.0540 | 0.0523 |
-| MATS-0058 | Critical mineral | LiCoO₂ | 12 | −1.483 | 2.83 | +0.598 | +0.200 | +1.480 | 0.453 | 0.442 | 0.471 |
-| MATS-0060 | Critical mineral | LiFePO₄ | 28 | −0.164 | 2.80 | +0.356 | +0.025 | +0.160 | 4.41 | 4.24 | 0.442 |
-| MATS-0065 | Critical mineral | MgAl₂O₄ | 56 | −2.990 | 0.907 | −0.001 | −0.303 | +2.987 | 0.295 | 0.300 | 0.299 |
-| MATS-0068 | Critical mineral | SiC | 64 | −0.219 | 2.42 | −0.041 | −0.010 | +0.216 | 0.200 | 0.143 | 0.144 |
-| MATS-0072 | Critical mineral | TiO₂ | 71 | −2.869 | 2.09 | −0.034 | −0.357 | +2.866 | 0.290 | 0.246 | 0.248 |
-| MATS-0075† | Critical mineral | WC | 53 | +2.285 | 39.2 | +0.493 | −0.115 | −2.290 | 0.840 | 0.688 | 0.577 |
-| MATS-0097 | Intermetallic | Cu₃Au | 32 | −0.034 | 0.409 | −0.001 | +0.004 | +0.028 | 0.0563 | 0.0717 | 0.0735 |
-| MATS-0103 | Intermetallic | Fe₃Al | 16 | −0.195 | 0 | −0.038 | −0.004 | +0.190 | ~0 | ~0 | 0.0002 |
-| MATS-0107 | Intermetallic | FePt | 2 | −0.236 | 0 | +0.199 | −0.005 | +0.233 | ~0 | ~0 | 0.0009 |
-| MATS-0108 | Intermetallic | Ni₃Al | 32 | −0.460 | 1.20 | −0.049 | −0.006 | +0.455 | 0.0888 | 0.100 | 0.0958 |
-| MATS-0115 | Intermetallic | NiAl | 2 | −0.656 | 0 | −0.035 | −0.003 | +0.653 | ~0 | ~0 | 0.0001 |
-| MATS-0117 | Intermetallic | NiTi | 4 | +0.223 | 0 | −0.073 | −0.015 | −0.226 | ~0 | ~0 | 0.0001 |
-| MATS-0118 | MAX phase | Ti₂AlC | 31 | −0.315 | 3.40 | −0.130 | −0.005 | +0.312 | 0.629 | 0.558 | 0.553 |
-| MATS-0124 | MAX phase | Ti₃AlC₂ | 12 | −0.811 | 1.94 | −0.031 | −0.006 | +0.807 | 0.240 | 0.228 | 0.242 |
-| MATS-0128 | Nuclear material | UO₂ | 12 | −3.389 | 0 | −0.035 | −0.366 | +3.385 | ~0 | ~0 | 0.0002 |
-| MATS-0132 | Nuclear material | ZrO₂ | 95 | −3.318 | 2.01 | +0.095 | −0.357 | +3.315 | 0.250 | 0.320 | 0.224 |
-| MATS-0137 | Perovskite | BaTiO₃ | 39 | −2.809 | 1.72 | −0.016 | −0.327 | +2.805 | 0.231 | 0.202 | 0.194 |
-| MATS-0138 | Perovskite | BaTiO₃ | 5 | −3.077 | 0 | +0.000 | −0.317 | +3.075 | ~0 | ~0 | 0.0002 |
-| MATS-0142 | Perovskite | CsPbBr₃ | 39 | −1.332 | 0.288 | −0.033 | −0.051 | +1.326 | 0.0535 | 0.0570 | 0.0597 |
-| MATS-0146 | Perovskite | LaFeO₃ | 19 | −2.363 | 0.779 | +0.531 | +0.225 | +2.359 | 0.377 | 0.457 | 0.246 |
-| MATS-0148 | Perovskite | SrTiO₃ | 39 | −3.101 | 1.17 | −0.006 | −0.318 | +3.097 | 0.129 | 0.141 | 0.138 |
-| MATS-0153 | Thermoelectric | Bi₂Te₃ | 14 | −0.238 | 0.572 | −0.029 | +0.013 | +0.236 | 0.156 | 0.113 | 0.115 |
-| MATS-0157 | Thermoelectric | PbTe | 63 | −0.453 | 0.272 | +0.008 | −0.011 | +0.448 | 0.0443 | 0.0129 | 0.0136 |
+| MATS-0002† | 2D monolayer | BN | 31 | −0.935 | 133 | +0.515 | −0.224 | +0.479 | 57.8 | 57.8 | 57.940 |
+| MATS-0004† | 2D monolayer | BN | 32 | −0.493 | 131 | +0.432 | −0.238 | −0.464 | 59.6 | 59.6 | 59.616 |
+| MATS-0006† | 2D monolayer | C | 32 | +1.810 | 138 | +0.154 | −0.031 | −1.729 | 62.9 | 62.9 | 62.956 |
+| MATS-0011 | 2D monolayer | MoS₂ | 48 | −1.771 | 0.743 | +0.046 | +0.023 | +0.496 | 0.172 | 0.143 | 0.241 |
+| MATS-0013† | 2D monolayer | MoSe₂ | 47 | +0.549 | 110 | −0.156 | +0.040 | −0.195 | 26.1 | 26.0 | 26.026 |
+| MATS-0016 | 2D monolayer | P | 4 | +0.332 | 7.43 | −0.076 | −0.010 | −0.102 | 2.55 | 2.49 | 2.357 |
+| MATS-0019 | 2D monolayer | WS₂ | 48 | +1.614 | 0.24 | +0.396 | +10.568 | −0.005 | 0.0534 | 0.0535 | 0.053 |
+| MATS-0030† | Catalysis | Cu | 64 | +0.152 | 12,435 | +0.006 | +0.007 | −0.252 | 1,060 | 1,060 | 1057.438 |
+| MATS-0033† | Catalysis | Fe | 31 | +0.485 | 1,157 | +0.032 | +0.035 | −0.034 | 116 | 116 | 116.340 |
+| MATS-0035 | Catalysis | Ni | 63 | +0.348 | 0.571 | +0.049 | −0.004 | −0.137 | 0.162 | 0.111 | 0.111 |
+| MATS-0039‡ | Catalysis | Pd | 63 | +3.167 | 0.86 | +8.164 | +10.140 | +12.845 | 13.0 | 12.0 | 20.948 |
+| MATS-0047 | Critical mineral | CeO₂ | 95 | −3.483 | 2.06 | −0.002 | −0.363 | +0.576 | 0.120 | 0.121 | 0.287 |
+| MATS-0051 | Critical mineral | CoS₂ | 11 | −1.070 | 0.793 | −0.019 | −0.017 | +0.999 | 0.258 | 0.206 | 0.338 |
+| MATS-0055 | Critical mineral | La₂O₃ | 5 | −3.463 | 0.284 | +0.020 | −0.313 | +0.574 | 0.0632 | 0.0540 | 0.098 |
+| MATS-0058 | Critical mineral | LiCoO₂ | 12 | −1.483 | 2.83 | +0.598 | +0.200 | +0.622 | 0.453 | 0.442 | 0.498 |
+| MATS-0060 | Critical mineral | LiFePO₄ | 28 | −0.164 | 2.80 | +0.356 | +0.025 | +0.265 | 4.41 | 4.24 | 4.316 |
+| MATS-0065 | Critical mineral | MgAl₂O₄ | 56 | −2.990 | 0.907 | −0.001 | −0.303 | +0.335 | 0.295 | 0.300 | 0.372 |
+| MATS-0068 | Critical mineral | SiC | 64 | −0.219 | 2.42 | −0.041 | −0.010 | −0.585 | 0.200 | 0.143 | 0.364 |
+| MATS-0072 | Critical mineral | TiO₂ | 71 | −2.869 | 2.09 | −0.034 | −0.357 | +0.563 | 0.290 | 0.246 | 0.290 |
+| MATS-0075† | Critical mineral | WC | 53 | +2.285 | 39.2 | +0.493 | −0.115 | −0.803 | 0.840 | 0.688 | 0.672 |
+| MATS-0097 | Intermetallic | Cu₃Au | 32 | −0.034 | 0.409 | −0.001 | +0.004 | −0.097 | 0.0563 | 0.0717 | 0.088 |
+| MATS-0103 | Intermetallic | Fe₃Al | 16 | −0.195 | 0 | −0.038 | −0.004 | +0.250 | ~0 | ~0 | 0.130 |
+| MATS-0107 | Intermetallic | FePt | 2 | −0.236 | 0 | +0.199 | −0.005 | +0.080 | ~0 | ~0 | 0.022 |
+| MATS-0108 | Intermetallic | Ni₃Al | 32 | −0.460 | 1.20 | −0.049 | −0.006 | +0.167 | 0.0888 | 0.100 | 0.129 |
+| MATS-0115 | Intermetallic | NiAl | 2 | −0.656 | 0 | −0.035 | −0.003 | +0.042 | ~0 | ~0 | 0.025 |
+| MATS-0117 | Intermetallic | NiTi | 4 | +0.223 | 0 | −0.073 | −0.015 | −0.136 | ~0 | ~0 | 0.029 |
+| MATS-0118 | MAX phase | Ti₂AlC | 31 | −0.315 | 3.40 | −0.130 | −0.005 | −0.309 | 0.629 | 0.558 | 0.644 |
+| MATS-0124 | MAX phase | Ti₃AlC₂ | 12 | −0.811 | 1.94 | −0.031 | −0.006 | −0.131 | 0.240 | 0.228 | 0.355 |
+| MATS-0128 | Nuclear material | UO₂ | 12 | −3.389 | 0 | −0.035 | −0.366 | +0.119 | ~0 | ~0 | 0.299 |
+| MATS-0132 | Nuclear material | ZrO₂ | 95 | −3.318 | 2.01 | +0.095 | −0.357 | +0.526 | 0.250 | 0.320 | 0.380 |
+| MATS-0137 | Perovskite | BaTiO₃ | 39 | −2.809 | 1.72 | −0.016 | −0.327 | +0.202 | 0.231 | 0.202 | 0.161 |
+| MATS-0138 | Perovskite | BaTiO₃ | 5 | −3.077 | 0 | +0.000 | −0.317 | +0.505 | ~0 | ~0 | 0.171 |
+| MATS-0142 | Perovskite | CsPbBr₃ | 39 | −1.332 | 0.288 | −0.033 | −0.051 | +0.021 | 0.0535 | 0.0570 | 0.087 |
+| MATS-0146 | Perovskite | LaFeO₃ | 19 | −2.363 | 0.779 | +0.531 | +0.225 | +0.557 | 0.377 | 0.457 | 0.375 |
+| MATS-0148 | Perovskite | SrTiO₃ | 39 | −3.101 | 1.17 | −0.006 | −0.318 | +0.639 | 0.129 | 0.141 | 0.281 |
+| MATS-0153 | Thermoelectric | Bi₂Te₃ | 14 | −0.238 | 0.572 | −0.029 | +0.013 | −0.103 | 0.156 | 0.113 | 0.150 |
+| MATS-0157 | Thermoelectric | PbTe | 63 | −0.453 | 0.272 | +0.008 | −0.011 | −0.067 | 0.0443 | 0.0129 | 0.062 |
 
 ## 7. Supporting evidence from a second, independent DFT dataset (BCC refractory alloys)
 
@@ -258,17 +254,18 @@ UMA's force error is about 2.7× lower on both subsets. Frames within one relaxa
 
 ## 8. Initial three-model recommendation and its limits
 
-This recommendation predates the expanded MACE-family screen. It applies only
+This recommendation predates the expanded MACE-family screen and the corrected
+HydraGNN rerun. It applies only
 to MACE-MP-0-small, UMA-s-1p1 and HydraGNN; the MACE checkpoint recommendation
 is superseded by [`mace-foundations-codabench-screen.md`](mace-foundations-codabench-screen.md).
 
 **Forces (what drives relaxation and molecular dynamics):**
 - UMA has the lowest typical-case force error on Codabench: median per-structure 0.131 vs 0.159 eV/Å for MACE. The paired difference of −0.052 eV/Å has a 95% CI of [−0.134, −0.004], excluding zero.
 - On BCC alloys, UMA is about 2.7× better than MACE.
-- HydraGNN ties UMA on typical structures and is the most robust on the two difficult structures (Pd slab, LiFePO₄).
+- The corrected HydraGNN run has a force-component MAE of 1.642 eV/Å on the 30 clean-force structures and a formation-energy MAE of 0.366 eV/atom on 36 structures. Do not compare it with prior HydraGNN values or infer a model ranking until paired statistics are recomputed from the corrected predictions.
 
 **Formation energies (what drives single-composition analysis and the convex hull):**
-- HydraGNN is excluded from this ranking until its energy pathway is fixed (§5.3).
+- Corrected HydraGNN formation energies are no longer excluded for a pipeline failure; class suitability remains uncertain because the public set is small and only two structures overlap E3 classes.
 - Between MACE and UMA the evidence is split:
   - UMA is more accurate in the typical case: median error 0.033 vs 0.039 eV/atom overall and 0.012 vs 0.048 on non-oxides; it wins 21/36 structures.
   - MACE is more robust: MAE 0.132 vs 0.414, correlation 0.992 vs 0.791, no error above 0.60 eV/atom. UMA has one catastrophic failure (WS₂, +10.6 eV/atom) and a systematic −0.53 eV per oxygen shift on oxides.
@@ -276,7 +273,7 @@ is superseded by [`mace-foundations-codabench-screen.md`](mace-foundations-codab
 **Overall zero-shot judgement:**
 - **UMA (uma-s-1p1, OMat head):** recommended as the primary model, mainly for force accuracy (Codabench and BCC) and typical-case energy accuracy.
 - **MACE-MP-0 small:** recommended as the comparison model and committee member. It is the more robust formation-energy reference and catches UMA's rare large failures.
-- **HydraGNN (OMat24 head 7):** not recommended for energies until the energy scale/normalization problem is diagnosed. Its forces are competitive, and it is about 33× faster than UMA and 4× faster than MACE on CPU.
+- **HydraGNN (OMat24 head 7):** checkpoint loading is fixed and its corrected zero-shot metrics are reported above. The small public sample does not establish a primary-model recommendation; recompute paired comparisons before making ranking claims.
 - UMA is **not** shown to be best on robust formation-energy accuracy. Formation-energy or hull conclusions should be checked against MACE, and UMA's oxide shift must be accounted for before comparing its oxide formation energies with plain-PBE references.
 
 **Limits of the evidence:**

@@ -18,6 +18,8 @@ E3-MLIP covers all six material classes with a planning target of 5,000 unique
 valid configurations per class (30,000 total); the approval matrix is
 [`mlip-suitability-v1.yaml`](mlip-suitability-v1.yaml). E3-DFT identifiers,
 results, execution protocol, and acquisition budgets remain unchanged.
+Perlmutter preparation and launch constraints are in the
+[combined E3-MLIP/E4 runbook](../perlmutter-e3-e4-execution-runbook.md).
 
 - [`inventory.json`](inventory.json): six-material inventory.
 - [`round1-bcc-manifest.json`](round1-bcc-manifest.json) and
@@ -129,13 +131,19 @@ and [`mace-foundations-codabench-screen.json`](mace-foundations-codabench-screen
 |---|---:|---:|---:|
 | MACE-MP-0-small | 60.423 | 0.349 | 49.67 |
 | UMA-s-1p1-OMAT | 60.351 | 0.677 | 433.79 |
-| HydraGNN OMat24 (head 7) | 59.683 | 1.423* | 13.21 |
+| HydraGNN OMat24 (head 7, restored checkpoint) | 60.838 | 0.703 | 1.97 |
 
-\*Not a valid accuracy measure: HydraGNN head 7 predicts formation energies of
--0.007 to -0.002 eV/atom for all 37 structures, so each error is the negated
-DFT label; the HydraGNN energy pathway (scale/normalization) is unresolved.
-The full comparison, label-quality exclusions, per-structure tables and the
-model recommendation are in
+The previous HydraGNN result is superseded: its checkpoint loader matched no
+trained tensors, so its reported energies and forces were not model predictions.
+The corrected head-7 run matched all 200/200 model tensors (0 missing, 0 unused;
+one wrapper prefix removed). Its formation-energy MAE is 0.3657 eV/atom over 36
+structures excluding suspect Pd MATS-0039 (RMSE 0.4974; correlation 0.9618).
+On the 30 structures with clean DFT force labels, force-component MAE is 1.642
+eV/A (RMSE 7.431; median per-structure MAE 0.261). The all-37 force aggregate
+remains dominated by bad DFT labels. Corrected provenance and per-structure
+metrics are in
+[`codabench-hydragnn-omat24-restored.json`](codabench-hydragnn-omat24-restored.json);
+the comparison, label-quality exclusions, and model recommendation are in
 [`mlip-zero-shot-comparison.md`](mlip-zero-shot-comparison.md).
 
 These pooled force errors are dominated by shared outlier DFT force labels:
@@ -149,8 +157,8 @@ error are:
 
 | Public case | MACE-MP-0-small | UMA-s-1p1-OMAT | HydraGNN OMat24 head 7 |
 |---|---:|---:|---:|
-| LiFePO4, MATS-0060 (eV/A; eV/atom) | 4.413; 0.356 | 4.237; 0.025 | 0.442; 0.160 |
-| P monolayer, MATS-0016 (eV/A; eV/atom) | 2.547; 0.076 | 2.488; 0.010 | 2.486; 0.336 |
+| LiFePO4, MATS-0060 (eV/A; eV/atom) | 4.413; 0.356 | 4.237; 0.025 | 4.316; 0.265 |
+| P monolayer, MATS-0016 (eV/A; eV/atom) | 2.547; 0.076 | 2.488; 0.010 | 2.357; 0.102 |
 
 Each is a single structure, not an independent-group estimate or a class-level
 ranking. HydraGNN's head predicts composition-baseline residual energies; its
