@@ -14,6 +14,7 @@
   "material_classes": [
     {
       "allocation": "HydraGNN",
+      "authorization": null,
       "blockers": [],
       "candidates": [
         {
@@ -1979,6 +1980,7 @@
     },
     {
       "allocation": "HydraGNN",
+      "authorization": null,
       "blockers": [
         "Four E4 POSCARs: strong tiers above 4 nodes and weak tiers above 2 nodes lack unique structures.",
         "The 510 composition candidates lack audited structure hashes."
@@ -2712,6 +2714,7 @@
     },
     {
       "allocation": "HydraGNN",
+      "authorization": null,
       "blockers": [
         "Eight frozen inputs support strong through 8 nodes and weak through 4; weak-8 needs 16 unique cases."
       ],
@@ -3451,7 +3454,7 @@
           "P"
         ],
         "smearing": "ISMEAR=0 SIGMA=0.05",
-        "spin": "ISPIN=2; archived AFM start",
+        "spin": "ISPIN=2; archived FM initialization (Fe 5.0, other species 0.6 muB)",
         "stages": [
           "Accurate relaxation"
         ],
@@ -3842,6 +3845,7 @@
     },
     {
       "allocation": "HydraGNN",
+      "authorization": null,
       "blockers": [
         "Two small seeds are staged; E2 geometries remain in an unavailable private archive.",
         "The E3 example is single-point DFT, not E4 relaxation; no E4 2D mesh/vacuum protocol is frozen."
@@ -4195,6 +4199,7 @@
     },
     {
       "allocation": "HydraGNN",
+      "authorization": null,
       "blockers": [
         "Both seeds are C8O8Zn4 placeholders; four-Zn Zn(HCOO)2 requires C8H8O16Zn4.",
         "PBE-D3(BJ)/IVDW=12 support and an E4 reference/protocol are unverified."
@@ -4549,6 +4554,7 @@
     },
     {
       "allocation": "HydraGNN",
+      "authorization": null,
       "blockers": [
         "Fourteen symmetry-distinct NbTaO5 POSCARs are staged; only ordering-01 has converged DFT.",
         "Inputs need E4 case staging and capacity-launcher/protocol qualification.",
@@ -5816,6 +5822,8 @@
       }
     }
   ],
+  "output_root_template": "runs/e4-scaling/<experiment>/<run-id>/n<node-count>/<segment-id-or-all>/",
+  "per_calculation_wrapper": "deployments/aurora/jobs/job-e4-vasp-ab-aurora.pbs",
   "platform": "Aurora",
   "preserved_source_manifests": {
     "bcc_strong_sha256": "2870168e7b74816bc06f0fa7f83ef2adb34b71f8931c6a71696212b664e8b80d",
@@ -5828,6 +5836,7 @@
     "maximum_nodes_per_job": 16,
     "maximum_walltime_hours": 168
   },
+  "runner": "deployments/aurora/jobs/job-e4-scaling.pbs",
   "scheduler": "PBS Pro",
   "schema_version": 1,
   "semantics": {

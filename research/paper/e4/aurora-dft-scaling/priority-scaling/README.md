@@ -137,23 +137,25 @@ no hash checks were weakened.
 
 ## Resource Caps
 
-All values are worst-case planning caps using the approved 24-hour per-task
-walltime. They are not requests or approvals.
+All values are worst-case caps using a 24-hour per-task walltime. The 1,488
+node-hour envelope below is approved only for the frozen BCC manifests; it does
+not authorize any additional class or tier.
 
 | Experiment | Nodes | Tasks | Max walltime | Node-hour cap | Status |
 |---|---:|---:|---:|---:|---|
-| Strong | 1 | 8 | 2 x 96 h | 192 | Two 4-task PBS segments; authorization required |
-| Strong | 2 | 8 | 96 h | 192 | Authorization required |
-| Strong | 4 | 8 | 48 h | 192 | Authorization required |
-| Strong | 8 | 8 | 24 h | 192 | Authorization required |
-| Weak | 1 | 2 | 48 h | 48 | Authorization required |
-| Weak | 2 | 4 | 48 h | 96 | Authorization required |
-| Weak | 4 | 8 | 48 h | 192 | Authorization required |
-| Weak | 8 | 16 | 48 h | 384 | Authorization required; external duplicate audit incomplete |
+| Strong | 1 | 8 | 2 x 96 h | 192 | Authorized; two 4-task PBS segments |
+| Strong | 2 | 8 | 96 h | 192 | Authorized under BCC manifest |
+| Strong | 4 | 8 | 48 h | 192 | Authorized under BCC manifest |
+| Strong | 8 | 8 | 24 h | 192 | Authorized; job 9069491 running |
+| Weak | 1 | 2 | 48 h | 48 | Authorized; both calculations converged |
+| Weak | 2 | 4 | 48 h | 96 | Authorized under BCC manifest |
+| Weak | 4 | 8 | 48 h | 192 | Authorized under BCC manifest |
+| Weak | 8 | 16 | 48 h | 384 | Authorized under BCC manifest; external duplicate audit remains incomplete |
 
 The bounded request for one measurement at every listed point is **1,488
-node-hours maximum**: 768 strong plus 720 weak. No repeats or larger tiers are
-included. The root `strong-manifest.json` and `weak-manifest.json` remain
+node-hours maximum**: 768 strong plus 720 weak. This is the existing BCC-only
+authorization, not a new request. No repeats or larger tiers are included. The
+root `strong-manifest.json` and `weak-manifest.json` remain
 planning-only; corresponding copies under `authorized/` carry the existing
 BCC-only authorization. The six-class manifest remains
 `execution_authorized: false`. The dispatcher requires a separately authorized
@@ -170,14 +172,13 @@ the node's CPU allocation and would change the resource layout.
 ## Path To 128 Nodes
 
 Keep the DFT workflow study separate from MLIP device scaling. First qualify
-the 1/2/4/8-node BCC workload, including the additional weak-scaling cases and
-the multi-task dispatcher. Expand to 16 nodes only after the 8-node measurements
-and resource review; the current queue ceiling is 16 nodes. The 32/64/128-node
-weak-scaling points require a different approved allocation and respectively
-64/128/256 unique frozen tasks, all under the same protocol. At two sequential
-24-hour tasks per node, the 128-node point has a 48-hour walltime and a
-6,144-node-hour cap. Do not extrapolate a curve to 128 nodes from the current
-inventory.
+the authorized 1/2/4/8-node BCC points. The queue's 16-node maximum does not make
+a 16-node BCC strong point meaningful: the fixed workload contains only eight
+independent calculations. A 16-node weak point would require 32 unique frozen
+tasks and a new authorization. The 32/64/128-node weak points require 64/128/256
+unique tasks and a queue/allocation capable of those requests. At two sequential
+24-hour tasks per node, a hypothetical 128-node point would need 48 hours and
+6,144 node-hours. No curve is extrapolated from unmeasured tiers.
 
 ## Existing Components
 

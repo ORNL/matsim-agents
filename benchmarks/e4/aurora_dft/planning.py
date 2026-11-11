@@ -691,7 +691,7 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             "functional": "PBE",
             "encut_eV": 520,
             "kpoints": "Monkhorst-Pack 2x4x8",
-            "spin": "ISPIN=2; archived AFM start",
+            "spin": "ISPIN=2; archived FM initialization (Fe 5.0, other species 0.6 muB)",
             "smearing": "ISMEAR=0 SIGMA=0.05",
             "ediff_eV": 1e-6,
             "ediffg_eV_A": -0.01,
@@ -804,6 +804,7 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
                 ),
             },
             "execution_authorized": False,
+            "authorization": None,
         }
 
     fcc_ready_ids = [r["calculation_id"] for r in fcc_records]
@@ -930,7 +931,12 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
         "scheduler": "PBS Pro",
         "queue": "capacity",
         "allocation": "HydraGNN",
+        "runner": "deployments/aurora/jobs/job-e4-scaling.pbs",
+        "per_calculation_wrapper": "deployments/aurora/jobs/job-e4-vasp-ab-aurora.pbs",
         "queue_limits": {"maximum_nodes_per_job": 16, "maximum_walltime_hours": 168},
+        "output_root_template": (
+            "runs/e4-scaling/<experiment>/<run-id>/n<node-count>/<segment-id-or-all>/"
+        ),
         "semantics": {
             "scaling_level": (
                 "workflow-level independent calculations; not single-VASP solver scaling"
