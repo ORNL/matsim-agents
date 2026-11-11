@@ -1,19 +1,21 @@
-# E3 unified six-material adaptive-acquisition protocol.
+# E3 campaign protocols
 
-Scientific reporting and launch gates are specified in
-[`scientific-objectives-v1.yaml`](scientific-objectives-v1.yaml). That spec
-defines exploration, learning, and independent discovery as separate outcomes.
-It does not authorize campaign execution or DFT; the E3-MLIP campaign remains
-blocked pending endpoint, reference-coverage, protocol, and bounded-budget
-approval. The user selected frozen `mace-omat-0-medium` as the common pilot
-checkpoint for both adaptation arms on 2026-11-11; class-specific transfer limits
-remain, especially for Zn-formate MOF.
+## E3-MLIP crystallographic exploration
 
-E3-MLIP scope is all six classes with 5,000 unique valid configurations planned
-per class (30,000 total); per-class model and reference coverage is tracked in
+The revised design is documented in
+[`e3-mlip-exploration-plan-v1.md`](../../research/paper/e3/e3-mlip-exploration-plan-v1.md).
+It makes adaptive structure generation and mandatory MACE geometry optimization
+the workload: 5,000 unique valid configurations per class **per strategy**,
+with matched Rule-based and LLM-guided budgets and no DFT labels, references,
+or VASP.
+
+The current Perlmutter preparation job remains a CPU-only single-point
+diagnostic; it does not implement the revised campaign. The feasibility pilot
+and production campaign are not authorized or launched. Per-class checkpoint
+limitations and preflight checks are tracked in
 [`mlip-suitability-v1.yaml`](../../research/paper/e3/mlip-suitability-v1.yaml).
-The legacy E3-DFT protocol and acquisition budgets remain unchanged.
-# E3: paired adaptive acquisition across six materials
+
+## Legacy E3-DFT paired adaptive acquisition across six materials
 
 E3 compares two adaptation strategies, using the terminology of the revised
 manuscript:
@@ -77,20 +79,23 @@ Load the Aurora XPU module stack first
 # Six-material inventory, readiness and blockers.
 .venv/bin/python -m benchmarks.e3.run inventory --output research/paper/e3/inventory.json
 
-# 1. Freeze pools, splits, qualified references and overlap checks.
+# Legacy reference-backed E3-DFT preparation.
 .venv/bin/python -m benchmarks.e3.run prepare --output runs/e3/<run>
 
-# 2. Zero-shot predictions, each backend in its isolated venv (CPU, offline).
-export HF_HUB_OFFLINE=1 PYTHONPATH=$PWD
-for m in lifepo4 bcc_refractory; do for s in acquisition references; do
-  f=runs/e3/<run>/$m/$s.extxyz; [ -f $f ] || continue
-  .venv-mace/bin/python -m benchmarks.e3.mlip_predict --model mace-mp-0-small \
-    --input $f --output ${f%.extxyz}.mace-mp-0-small.json
-  .venv-uma/bin/python -m benchmarks.e3.mlip_predict --model uma-s-1p1-omat \
-    --input $f --output ${f%.extxyz}.uma-s-1p1-omat.json
-done; done
+# Candidate-only E3-MLIP preparation; no DFT data are read.
+.venv/bin/python -m benchmarks.e3.run prepare-candidates \
+  --output runs/e3-mlip/<run> \
+  --materials lifepo4 bcc_refractory fcc_cantor phosphorene zn_formate_mof nb_ta_o
 
-# 3. Frozen Round 1 paired decision for one material (needs AMSC_TOKEN for MAG).
+# Zero-shot predictions on all available E3-MLIP candidate geometries.
+export HF_HUB_OFFLINE=1 PYTHONPATH=$PWD
+for m in lifepo4 bcc_refractory fcc_cantor phosphorene zn_formate_mof nb_ta_o; do
+  f=runs/e3-mlip/<run>/$m/candidates.extxyz
+  .venv-mace/bin/python -m benchmarks.e3.mlip_predict --model mace-omat-0-medium \
+    --input $f --output ${f%.extxyz}.mace-omat-0-medium.json --device cpu
+done
+
+# Legacy DFT-enabled adaptive decision (not part of E3-MLIP).
 .venv/bin/python -m benchmarks.e3.run round1 --source runs/e3/<run> \
   --output runs/e3/<round1-run> --material bcc_refractory
 ```

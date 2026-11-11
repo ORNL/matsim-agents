@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${REPO_ROOT}"
+
+if [[ -x "${REPO_ROOT}/.venv/bin/python" ]]; then
+    PATH="${REPO_ROOT}/.venv/bin:${PATH}"
+fi
+export PATH
+export PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}"
+
 MODE="${1:-all}"
 
 run_docs() {

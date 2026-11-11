@@ -35,6 +35,32 @@ def test_protocol_uses_manuscript_strategy_names_and_budget():
     assert len(protocol["materials"]) == 6 and len(digest) == 64
 
 
+def test_candidate_preparation_uses_all_candidates_without_dft_or_splits(monkeypatch, tmp_path):
+    protocol, _ = run.load_protocol()
+
+    def candidate_pool_without_exclusions(spec, excluded):
+        assert excluded == set()
+        return _pool(40)
+
+    monkeypatch.setattr(run, "candidate_pool", candidate_pool_without_exclusions)
+    monkeypatch.setattr(
+        run,
+        "_split",
+        lambda *_args, **_kwargs: pytest.fail("candidate-only preparation made a data split"),
+    )
+    out = tmp_path / "bcc-candidate-only"
+    result = run.prepare_candidate_material("bcc_refractory", protocol, out)
+
+    assert result["candidate_frames"] == 40
+    assert result["dft_outputs_used"] is False
+    assert result["dft_labels_used"] is False
+    assert result["dft_reference_frames_used"] is False
+    assert result["train_validation_test_split"] is False
+    assert (out / "candidates.extxyz").is_file()
+    assert not (out / "references.extxyz").exists()
+    assert not (out / "split").exists()
+
+
 @pytest.mark.parametrize(
     "path",
     [

@@ -27,6 +27,9 @@ pre_campaign_gates:
   model_selection:
     status: primary_checkpoint_selected_by_user
     selected_primary_checkpoint: mace-omat-0-medium
+    official_checkpoint_name: MACE-OMAT-0 medium
+    mace_torch_loader_alias: medium-omat-0
+    training_dataset: OMat24
     selected_head: default
     selection_date: 2026-11-11
     selection_scope: common_frozen_E3_MLIP_pilot_model

@@ -1,6 +1,8 @@
 """E3 six-material inventory and paired-strategy dry run.
 
 ``inventory`` audits the frozen per-material candidate sources and blockers.
+``prepare-candidates`` freezes structure-only pools and leakage-safe candidate splits
+without loading any DFT references or labels.
 ``dry-run`` exercises the full paired protocol for selected materials without any
 DFT or training: it freezes a candidate pool, partitions it with the existing
 ``make_split`` (validation/test withheld), runs four rounds for both strategies with
@@ -148,7 +150,15 @@ def candidate_pool(
             for atoms in [read(path, format="vasp")]
         ]
     if kind == "seeds_only":
-        return []
+        entries = []
+        for seed in spec.get("seeds", []):
+            path = REPO / seed
+            for index, atoms in enumerate(read(path, index=":", format="extxyz")):
+                candidate_id = f"{seed}::frame-{index:04d}"
+                entries.append(
+                    PoolEntry(candidate_id, seed, atoms, _structure_hash(atoms))
+                )
+        return entries
     raise ValueError(f"unknown pool kind {kind!r}")
 
 
@@ -530,6 +540,47 @@ def prepare_replay(material: str, protocol: dict[str, Any], out: Path) -> dict[s
         "overlap": overlap,
     }
     (out / "prepare.json").write_text(json.dumps(record, indent=2) + "\n")
+    return record
+
+
+def prepare_candidate_material(
+    material: str, protocol: dict[str, Any], out: Path
+) -> dict[str, Any]:
+    """Write all geometry-only candidates without DFT data or train/validation splits."""
+    spec = protocol["materials"][material]
+    out.mkdir(parents=True, exist_ok=False)
+    pool = candidate_pool(spec["pool"], set())
+    if not pool:
+        raise ValueError(f"{material}: no candidate geometries are available")
+
+    frames = []
+    for entry in pool:
+        source = entry.atoms
+        atoms = Atoms(
+            symbols=source.get_chemical_symbols(),
+            positions=source.positions.copy(),
+            cell=source.cell.array.copy(),
+            pbc=source.pbc.copy(),
+        )
+        atoms.info.update(
+            frame_id=entry.candidate_id,
+            candidate_id=entry.candidate_id,
+            candidate_group=entry.group,
+        )
+        frames.append(atoms)
+    candidate_file = out / "candidates.extxyz"
+    write(candidate_file, frames, format="extxyz")
+
+    record = {
+        "material": material,
+        "candidate_frames": len(frames),
+        "candidate_sha256": hashlib.sha256(candidate_file.read_bytes()).hexdigest(),
+        "dft_outputs_used": False,
+        "dft_labels_used": False,
+        "dft_reference_frames_used": False,
+        "train_validation_test_split": False,
+    }
+    (out / "candidate-preparation.json").write_text(json.dumps(record, indent=2) + "\n")
     return record
 
 
@@ -1382,6 +1433,23 @@ def main(argv: list[str] | None = None) -> int:
         cmd = sub.add_parser(name)
         cmd.add_argument("--output", type=Path, required=True)
         cmd.add_argument("--materials", nargs="+", default=["lifepo4", "bcc_refractory"])
+    candidate_prep = sub.add_parser(
+        "prepare-candidates",
+        help="freeze unlabeled candidate pools and splits without reading DFT data",
+    )
+    candidate_prep.add_argument("--output", type=Path, required=True)
+    candidate_prep.add_argument(
+        "--materials",
+        nargs="+",
+        default=[
+            "lifepo4",
+            "bcc_refractory",
+            "fcc_cantor",
+            "phosphorene",
+            "zn_formate_mof",
+            "nb_ta_o",
+        ],
+    )
     ing = sub.add_parser("ingest", help="ingest finished DFT into copied strategy ledgers")
     ing.add_argument("--material", default="bcc_refractory")
     ing.add_argument("--round", type=int, required=True)
@@ -1414,6 +1482,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "prepare":
         results = [prepare_replay(m, protocol, args.output / m) for m in args.materials]
         (args.output / "prepare-summary.json").write_text(json.dumps(results, indent=2) + "\n")
+        return 0
+    if args.command == "prepare-candidates":
+        results = [
+            prepare_candidate_material(m, protocol, args.output / m) for m in args.materials
+        ]
+        (args.output / "candidate-preparation-summary.json").write_text(
+            json.dumps(results, indent=2) + "\n"
+        )
         return 0
     if args.command == "round1":
         from matsim_agents.backends.llm.provider import get_chat_model
