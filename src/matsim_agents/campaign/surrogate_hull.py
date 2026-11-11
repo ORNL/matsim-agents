@@ -383,7 +383,11 @@ def evaluate_surrogate_defects(
         }
         if converged:
             defects.append(
-                {"defect_id": defect_id, "symbols": atoms.get_chemical_symbols(), "energy_eV": energy}
+                {
+                    "defect_id": defect_id,
+                    "symbols": atoms.get_chemical_symbols(),
+                    "energy_eV": energy,
+                }
             )
     unconverged = sorted(name for name, item in relaxations.items() if not item["converged"])
     if not relaxations["host"]["converged"]:

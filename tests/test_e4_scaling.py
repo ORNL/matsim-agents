@@ -26,7 +26,9 @@ def test_strong_tiers_respect_queue_walltime_and_segment_eight_tasks():
         [task_id] for task_id in scaling.STRONG_IDS[4:]
     ]
     for nodes in (2, 4, 8):
-        assigned = [task_id for wave in scaling.dispatch_plan(manifest, nodes, None) for task_id in wave]
+        assigned = [
+            task_id for wave in scaling.dispatch_plan(manifest, nodes, None) for task_id in wave
+        ]
         assert sorted(assigned) == sorted(scaling.STRONG_IDS)
         assert len(set(assigned)) == 8
     assert all(tier["walltime_cap_hours"] <= 168 for tier in tiers.values())
