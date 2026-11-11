@@ -8,6 +8,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from typer.main import get_command
 
+from matsim_agents.backends.mlip import hydragnn_checkpoint
 from matsim_agents.backends.mlip.calculator import build_hydragnn_calculator
 from matsim_agents.backends.mlip.config import (
     HYDRAGNN_DATASET_HEADS,
@@ -207,8 +208,16 @@ def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
         autocast_ctx,
         "float64",
     )
+    inference.find_checkpoint = lambda logdir, checkpoint: f"{logdir}/{checkpoint}"
     monkeypatch.setitem(sys.modules, "inference_random_structures", inference)
     monkeypatch.setitem(sys.modules, "torch", None)
+    restored = []
+
+    def restore(model, path, *, device):
+        restored.append((path, device))
+        model._hydragnn_checkpoint_load_report = {"missing_tensor_count": 0}
+
+    monkeypatch.setattr(hydragnn_checkpoint, "restore_hydragnn_checkpoint", restore)
     captured = {}
 
     def selected_builder(model, **kwargs):
@@ -220,6 +229,7 @@ def test_builder_bypasses_fused_stack_for_selected_head(tmp_path, monkeypatch):
     result = build_hydragnn_calculator(HydraGNNConfig(logdir=logdir, inference_head="OMat24"))
 
     assert result.head_index == 7
+    assert restored and restored[0][1] == "cuda"
     assert captured["radius"] == 6.0
     assert captured["max_neighbours"] == 24
     assert captured["autocast_ctx"] is autocast_ctx

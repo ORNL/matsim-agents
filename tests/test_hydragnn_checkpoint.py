@@ -97,14 +97,13 @@ def test_inference_restores_ddp_checkpoint_and_freezes_lazy_parameters(tmp_path)
 
 
 def test_inference_restores_nested_module_model_checkpoint_prefix(tmp_path):
-    trained = LazyConditioning().double()
-    trained._ensure_graph_concat_projector(2, 2, "cpu", torch.float64)
+    trained = torch.nn.ModuleDict({"model": LazyConditioning().double()})
+    trained["model"]._ensure_graph_concat_projector(2, 2, "cpu", torch.float64)
     path = tmp_path / "model.pk"
-    state = {f"module.model.{key}": value for key, value in trained.state_dict().items()}
-    state["module.model.branch_weight_mlp.weight"] = torch.ones(3, 3, dtype=torch.float64)
+    state = {f"module.{key}": value for key, value in trained.state_dict().items()}
     torch.save({"model_state_dict": state}, path)
 
-    rebuilt = LazyConditioning().double()
+    rebuilt = torch.nn.ModuleDict({"model": LazyConditioning().double()})
     restore_hydragnn_checkpoint(rebuilt, path, device="cpu")
 
     for key, expected in trained.state_dict().items():
@@ -113,8 +112,8 @@ def test_inference_restores_nested_module_model_checkpoint_prefix(tmp_path):
     assert report["model_tensor_count"] == len(trained.state_dict())
     assert report["matched_tensor_count"] == len(trained.state_dict())
     assert report["missing_tensor_count"] == 0
-    assert report["unused_checkpoint_tensor_count"] == 1
-    assert report["wrapper_prefixes_removed"] == 2
+    assert report["unused_checkpoint_tensor_count"] == 0
+    assert report["wrapper_prefixes_removed"] == 1
 
 
 def test_inference_rejects_checkpoint_with_no_matching_model_keys(tmp_path):

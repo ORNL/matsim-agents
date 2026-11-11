@@ -183,6 +183,7 @@ def test_campaign_forwards_mace_selection():
         "mace_family": "mace_mp",
         "mace_model": "medium-omat-0",
         "mace_dispersion": True,
+        "mace_head": None,
         "mlp_device": "cpu",
         "precision": "fp64",
     }
