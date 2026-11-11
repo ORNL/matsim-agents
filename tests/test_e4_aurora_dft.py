@@ -88,7 +88,7 @@ def test_run_matrix_rejects_duplicate_assignment(candidate_plan):
 def test_registry_rejects_wrong_allocation_and_duplicate_method(tmp_path):
     registry = CalculationRegistry(tmp_path / "registry.sqlite")
     with pytest.raises(RegistryConflict, match="allocation"):
-        registry.register("calc-1", "fcc_hea", "HydraGNN", "s1", "m1")
+        registry.register("calc-1", "fcc_hea", "OtherProject", "s1", "m1")
     registry.register("calc-1", "fcc_hea", ALLOCATIONS["fcc_hea"], "s1", "m1")
     with pytest.raises(RegistryConflict, match="already registered"):
         registry.register("calc-2", "fcc_hea", ALLOCATIONS["fcc_hea"], "s1", "m1")

@@ -9,8 +9,11 @@ from typing import Any
 
 ALLOCATIONS = {
     "bcc_refractory": "HydraGNN",
-    "fcc_hea": "GenesisHackathonOct26",
-    "lifepo4": "GridAI",
+    "fcc_hea": "HydraGNN",
+    "lifepo4": "HydraGNN",
+    "phosphorene": "HydraGNN",
+    "zn_formate_mof": "HydraGNN",
+    "nb_ta_o": "HydraGNN",
 }
 ACTIVE_STATES = {"RESERVED", "SUBMITTED", "RUNNING", "RESTART_PENDING"}
 TERMINAL_ATTEMPT_STATES = {"COMPLETED", "FAILED", "INTERRUPTED", "QUARANTINED"}

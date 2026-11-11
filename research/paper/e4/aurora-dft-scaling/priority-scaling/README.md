@@ -4,9 +4,90 @@ For Perlmutter staging, VASP portability limits, and unfinished-case instruction
 see the [Perlmutter E3-MLIP and E4 execution runbook](../../../perlmutter-e3-e4-execution-runbook.md).
 
 This package records the immediate BCC DFT scaling workload, its blockers, and
-resource caps. The dispatcher accepts both manifests for validation and dry
-runs, but neither manifest authorizes execution. See
-`strong-manifest.json` and `weak-manifest.json` for the task sets and tiers.
+resource caps. The original BCC manifests and authorizations remain immutable.
+The versioned six-class extension is
+[`../six-class-workflow-v1.json`](../six-class-workflow-v1.json); it does not
+authorize additional work.
+
+## Six-Class Extension
+
+The new manifest combines the existing frozen inputs with the currently
+available, explicitly blocked candidate records. It distinguishes task-input
+readiness from execution authorization and preserves workflow-level semantics:
+each VASP task remains one node, and nodes execute independent calculations.
+It does not measure solver-level scaling of one calculation across nodes.
+
+| Class | Frozen/qualified inputs in this checkout | Strong input-backed tiers | Weak input-backed tiers | Current blocker |
+|---|---|---|---|---|
+| BCC refractory | 16 distinct frozen tasks | 1/2/4/8 nodes, 8 fixed tasks | 1/2/4/8 nodes, 2 tasks/node | Existing BCC authorization only; running measurements are preserved |
+| FCC Cantor | 4 frozen first-batch cases | 1/2/4 nodes, 4 fixed tasks | 1/2 nodes, 2 tasks/node | 510 composition candidates are not audited structures; larger tiers need more frozen POSCARs |
+| LiFePO4 | 8 frozen cases from the 510-entry antisite inventory | 1/2/4/8 nodes, 8 fixed tasks | 1/2/4 nodes, 2 tasks/node | Weak-8 requires 16 distinct inputs |
+| Phosphorene | 2 small E3 seed cells only | blocked | blocked | Qualified E2 geometries are not staged; no E4 2D numerical protocol is frozen |
+| Zn(HCOO)2 MOF | 2 example placeholders, formula C8O8Zn4 instead of C8H8O16Zn4 | blocked | blocked | Not valid DFT geometries; dispersion/reference protocol unverified |
+| Nb-Ta-O | 14 symmetry-inequivalent NbTaO5 orderings; 5 designated pilot candidates; 1 converged E2 ordering | blocked | blocked | E2 VASP inputs need E4 staging and runtime/protocol qualification; weak-8 requires 16 |
+
+Under the existing 24-hour-per-task ceiling, the current FCC tier set is a
+432 node-hour cap and the LiFePO4 tier set is 1,104 node-hours. These are
+proposals, not approvals. The E2 NbTaO5 2-hour workflow is a planning basis
+only; the manifest's 66 node-hour cap (5 fixed strong tasks and up to 14 weak
+inputs) assumes the missing E4 adapter and qualification. Phosphorene and MOF
+have no defensible runtime budget until valid inputs and a pilot exist. The proposed additional request for currently
+input-backed FCC and LiFePO4 scaling is 1,536 node-hours. NbTaO5's 66 node-hour
+figure is a separate E2-derived planning ceiling, not a resource request until
+the E4 adapter is validated. The existing BCC 1,488 node-hour authorization is
+not counted again.
+
+The six-class manifest also records 16/32/64/128-node weak-scaling points. The
+capacity queue admits at most 16 nodes/job; 32/64/128 are explicitly marked
+ineligible pending a different allocation/queue. At 2 calculations/node and a
+24-hour/task cap, those hypothetical weak points require 64/128/256 distinct
+inputs and 1,536/3,072/6,144 node-hours, respectively. Strong-scaling points
+above 8 nodes are blocked because the fixed strong workload contains only eight
+calculations; do not call idle-node runs strong scaling.
+
+Generate/validate the plan and inspect a tier without submitting:
+
+```bash
+python -m benchmarks.e4.aurora_dft.scaling plan-six-class
+python -m benchmarks.e4.aurora_dft.scaling validate-six-class
+python -m benchmarks.e4.aurora_dft.scaling dispatch-six-class \
+  --manifest research/paper/e4/aurora-dft-scaling/six-class-workflow-v1.json \
+  --material-class fcc_hea --experiment strong --nodes 4 --dry-run
+```
+
+The six-class manifest has `execution_authorized=false`. No jobs were submitted
+for this extension. In the last checked state, weak BCC scaling had completed
+two one-node calculations and strong BCC job 9069491 was still running on eight
+nodes. Do not edit or reuse their output roots.
+
+After separately authorized work completes, `benchmarks/e4/analyze.py` reads
+the dispatcher-written `measurements.jsonl` records, groups results by class,
+and writes per-class CSV aggregates, a planned-versus-measured JSON summary, and
+plots. For example:
+
+```bash
+find runs/e4-scaling -name measurements.jsonl -type f -print0 \
+  | xargs -0 -r cat > runs/e4-scaling/measurements-all.jsonl
+python -m benchmarks.e4.analyze \
+  runs/e4-scaling/measurements-all.jsonl --kind scaling \
+  --workload-manifest research/paper/e4/aurora-dft-scaling/six-class-workflow-v1.json \
+  --output runs/e4-scaling/analysis/scaling.csv
+```
+
+The analyzer merges one-node continuation segments for the same fixed strong
+workload before computing speedup. It leaves incomplete points without speedup
+or efficiency and never interpolates unmeasured tiers.
+
+## Proposed Submission Order
+
+1. Preserve and finish the active BCC jobs; validate their dispatch and measurement records, then use the existing BCC authorization only for its frozen manifests.
+2. After separate approval, run the input-backed FCC tiers (strong 1/2/4; weak 1/2) and LiFePO4 tiers (strong 1/2/4/8; weak 1/2/4). Extend the structure sets before requesting more tiers.
+3. Qualify the NbTaO5 E2-derived inputs through the shared E4 case adapter and a one-node runtime pilot, then add unique orderings before weak-8.
+4. Retrieve validated puckered phosphorene geometries, freeze its two-dimensional protocol, and prepare/adjudicate the E4 pool before estimating runtime.
+5. Replace the incomplete Zn-formate placeholders with validated hydrogen-complete CIFs, qualify the dispersion protocol, and run a serial pilot before sizing tiers.
+
+Each order step requires its own scientific and resource approval. The workload
+manifest and dry-run commands alone authorize no production calculation.
 
 ## Workload Audit
 
@@ -72,9 +153,11 @@ walltime. They are not requests or approvals.
 
 The bounded request for one measurement at every listed point is **1,488
 node-hours maximum**: 768 strong plus 720 weak. No repeats or larger tiers are
-included. Each manifest remains `execution_authorized: false`; the dispatcher
-refuses execution without a separately authorized manifest and matching
-`E4_SCALING_AUTHORIZATION` ID. For the 1-node strong point, request two
+included. The root `strong-manifest.json` and `weak-manifest.json` remain
+planning-only; corresponding copies under `authorized/` carry the existing
+BCC-only authorization. The six-class manifest remains
+`execution_authorized: false`. The dispatcher requires a separately authorized
+manifest and matching `E4_SCALING_AUTHORIZATION` ID. For the 1-node strong point, request two
 separate 96-hour jobs (`segment-1`, `segment-2`), each with four tasks. The
 other per-job requests are 2 nodes/96 h, 4 nodes/48 h, 8 nodes/24 h for strong,
 and 1/2/4/8 nodes/48 h for weak. All requests use `capacity` and the
@@ -114,5 +197,5 @@ inventory.
 The isolated GPU-binding probe is
 `deployments/aurora/jobs/e4-first-batch/smoke-vasp-gpu-binding.pbs`. It uses a
 frozen BCC input copy in a unique temporary directory and is not a scaling or
-recovery job. No scaling jobs have been submitted. The initial 480 node-hour
-production-batch cap does not cover these proposed scaling tiers.
+recovery job. The initial 480 node-hour production-batch cap does not cover
+the separately approved BCC scaling manifests or the proposed six-class tiers.

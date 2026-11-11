@@ -20,6 +20,11 @@ BATCHES = {
         "counts": {"HydraGNN": 8, "GenesisHackathonOct26": 4, "GridAI": 8},
         "caps": {"HydraGNN": 192, "GenesisHackathonOct26": 96, "GridAI": 192},
     },
+    "E4-first-production-batch-01-hydragnn": {
+        "id_pattern": r"E4-(BCC|FCC|LFP)-[0-9]{4}",
+        "counts": {"HydraGNN": 20},
+        "caps": {"HydraGNN": 480},
+    },
     "E3-round1-bcc-01": {
         "id_pattern": r"E3-R1-BCC-[0-9]{4}",
         "counts": {"HydraGNN": 3},
@@ -28,6 +33,7 @@ BATCHES = {
 }
 BATCH_DIRECTORIES = {
     "E4-first-production-batch-01": "e4-first-batch-01",
+    "E4-first-production-batch-01-hydragnn": "e4-first-batch-01-hydragnn",
     "E3-round1-bcc-01": "e3-round1-bcc-01",
 }
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -58,12 +64,15 @@ def resolve_repo_path(value: str, description: str) -> Path:
 
 def resolve_case_dir(case: dict[str, Any], manifest: dict[str, Any]) -> Path:
     batch_spec(manifest)
+    batch_directory = manifest.get(
+        "input_batch_directory", BATCH_DIRECTORIES[manifest["batch_id"]]
+    )
     relative = (
-        Path("..") / BATCH_DIRECTORIES[manifest["batch_id"]] / "inputs" / case["calculation_id"]
+        Path("..") / batch_directory / "inputs" / case["calculation_id"]
     )
     if case.get("case_dir") != relative.as_posix():
         fail(f"{case['calculation_id']} has an unexpected case directory")
-    batch_root = (REPO.parent / BATCH_DIRECTORIES[manifest["batch_id"]]).resolve()
+    batch_root = (REPO.parent / batch_directory).resolve()
     case_dir = (REPO / relative).resolve()
     if not case_dir.is_relative_to(batch_root):
         fail(f"{case['calculation_id']} case directory escapes its batch root")
@@ -94,11 +103,11 @@ def validate_case(
         fail(f"invalid calculation ID {calc_id!r}")
     family_by_id = {"BCC": "bcc", "FCC": "fcc", "LFP": "lifepo4"}
     expected_family = family_by_id[calc_id.split("-")[-2]]
-    allocation_by_family = {
-        "bcc": "HydraGNN",
-        "fcc": "GenesisHackathonOct26",
-        "lifepo4": "GridAI",
-    }
+    allocation_by_family = (
+        {"bcc": "HydraGNN", "fcc": "HydraGNN", "lifepo4": "HydraGNN"}
+        if manifest["batch_id"] == "E4-first-production-batch-01-hydragnn"
+        else {"bcc": "HydraGNN", "fcc": "GenesisHackathonOct26", "lifepo4": "GridAI"}
+    )
     if case.get("material_family") != expected_family:
         fail(f"{calc_id} has wrong material family")
     if case.get("allocation") != allocation_by_family[expected_family]:
@@ -275,7 +284,9 @@ def active_job_names() -> set[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--manifest", type=Path, default=SCRIPT_DIR / "batch-manifest.json")
+    parser.add_argument(
+        "--manifest", type=Path, default=SCRIPT_DIR / "batch-manifest-hydragnn.json"
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="validate only (the default)")
     mode.add_argument("--submit", action="store_true", help="submit after explicit authorization")
@@ -288,6 +299,11 @@ def main() -> int:
     args = parser.parse_args()
     manifest_path = args.manifest.resolve()
     manifest = load_manifest(manifest_path)
+    if manifest.get("batch_id") == "E4-first-production-batch-01":
+        fail(
+            "legacy mixed-allocation manifest is retained for provenance; "
+            "use batch-manifest-hydragnn.json"
+        )
     if args.only:
         selected_ids = set(args.only)
         if len(selected_ids) != len(args.only):

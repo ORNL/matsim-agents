@@ -30,11 +30,16 @@ def test_frozen_batch_manifest_paths_are_repository_relative() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    for batch, directory in (
-        ("e3-round1-bcc", "e3-round1-bcc-01"),
-        ("e4-first-batch", "e4-first-batch-01"),
+    for batch, directory, manifest_name in (
+        ("e3-round1-bcc", "e3-round1-bcc-01", "batch-manifest.json"),
+        ("e4-first-batch", "e4-first-batch-01", "batch-manifest.json"),
+        (
+            "e4-first-batch",
+            "e4-first-batch-01-hydragnn",
+            "batch-manifest-hydragnn.json",
+        ),
     ):
-        manifest_path = root / f"deployments/aurora/jobs/{batch}/batch-manifest.json"
+        manifest_path = root / f"deployments/aurora/jobs/{batch}/{manifest_name}"
         manifest = json.loads(manifest_path.read_text())
         for case in manifest["cases"]:
             assert not Path(case["pbs_script"]).is_absolute()

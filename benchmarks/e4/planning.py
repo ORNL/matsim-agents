@@ -182,6 +182,14 @@ def validate_measurement(record: dict[str, Any]) -> list[str]:
     for field in ("nodes", "repetition", "attempted_tasks", "valid_tasks", "failed_tasks"):
         if not isinstance(record[field], int) or record[field] < 0:
             errors.append(f"{field} must be a nonnegative integer")
+    if "planned_tasks" in record and (
+        not isinstance(record["planned_tasks"], int) or record["planned_tasks"] < 0
+    ):
+        errors.append("planned_tasks must be a nonnegative integer")
+    if "total_ionic_steps" in record and (
+        not isinstance(record["total_ionic_steps"], int) or record["total_ionic_steps"] < 0
+    ):
+        errors.append("total_ionic_steps must be a nonnegative integer")
     for field in ("application_makespan_seconds", "allocation_seconds"):
         if (
             not isinstance(record[field], (int, float))
@@ -196,43 +204,98 @@ def validate_measurement(record: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _combine_strong_segments(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    ungrouped = []
+    for record in records:
+        if record.get("segment_group_id") and record.get("segment_count", 1) > 1:
+            key = (
+                record["segment_group_id"],
+                record["material_class"],
+                record["experiment"],
+                record["nodes"],
+                record["repetition"],
+                record["workload_hash"],
+            )
+            grouped.setdefault(key, []).append(record)
+        else:
+            ungrouped.append(record)
+    combined = list(ungrouped)
+    for segment_records in grouped.values():
+        first = dict(segment_records[0])
+        first["segment_ids"] = sorted({record["segment_id"] for record in segment_records})
+        first["segments_completed"] = len(first["segment_ids"])
+        for field in ("attempted_tasks", "valid_tasks", "failed_tasks", "total_ionic_steps"):
+            first[field] = sum(record.get(field, 0) for record in segment_records)
+        for field in ("application_makespan_seconds", "allocation_seconds"):
+            first[field] = sum(record[field] for record in segment_records)
+        first["task_execution_seconds"] = [
+            seconds
+            for record in segment_records
+            for seconds in record.get("task_execution_seconds", [])
+        ]
+        first["completed_calculation_ids"] = sorted(
+            {
+                calc_id
+                for record in segment_records
+                for calc_id in record.get("completed_calculation_ids", [])
+            }
+        )
+        first["failed_calculation_ids"] = sorted(
+            {
+                calc_id
+                for record in segment_records
+                for calc_id in record.get("failed_calculation_ids", [])
+            }
+        )
+        first["segment_id"] = "combined"
+        combined.append(first)
+    return combined
+
+
 def analyze_scaling(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    records = _combine_strong_segments(records)
     for index, record in enumerate(records):
         errors = validate_measurement(record)
         if errors:
             raise ValueError(f"measurement {index}: {'; '.join(errors)}")
     results: list[dict[str, Any]] = []
-    for experiment in ("strong", "weak"):
-        subset = [r for r in records if r["experiment"] == experiment]
+
+    def complete(record: dict[str, Any]) -> bool:
+        planned = record.get("planned_tasks", record["attempted_tasks"])
+        return record["valid_tasks"] == planned and record["failed_tasks"] == 0
+
+    groups = sorted({(r["experiment"], r.get("material_class", "unclassified")) for r in records})
+    for experiment, material_class in groups:
+        if experiment not in {"strong", "weak"}:
+            continue
+        subset = [
+            r
+            for r in records
+            if r["experiment"] == experiment
+            and r.get("material_class", "unclassified") == material_class
+        ]
         if not subset:
             continue
         if experiment == "strong":
             if len({r["workload_hash"] for r in subset}) != 1:
                 raise ValueError("strong-scaling workload hashes differ")
-            if len({r["attempted_tasks"] for r in subset}) != 1:
-                raise ValueError("strong-scaling task counts differ")
+            if len({r.get("planned_tasks", r["attempted_tasks"]) for r in subset}) != 1:
+                raise ValueError("strong-scaling planned task counts differ")
         else:
-            per_node = {r["attempted_tasks"] / r["nodes"] for r in subset}
+            per_node = {r.get("planned_tasks", r["attempted_tasks"]) / r["nodes"] for r in subset}
             if len(per_node) != 1:
                 raise ValueError("weak-scaling attempted tasks per node are not constant")
         baseline_nodes = min((r["nodes"] for r in subset), default=None)
         baseline = None
         if experiment == "strong":
-            baseline_rows = [
-            r
-            for r in subset
-            if r["nodes"] == baseline_nodes and r["valid_tasks"] == r["attempted_tasks"]
-            ]
+            baseline_rows = [r for r in subset if r["nodes"] == baseline_nodes and complete(r)]
             if baseline_rows:
                 baseline = statistics.median(
                     r["application_makespan_seconds"] for r in baseline_rows
                 )
         else:
-            baseline_rows = [
-                r
-                for r in subset
-                if r["nodes"] == baseline_nodes and r["application_makespan_seconds"] > 0
-            ]
+            baseline_rows = [r for r in subset if r["nodes"] == baseline_nodes and complete(r)]
             if baseline_rows:
                 baseline = statistics.median(
                     r["valid_tasks"] / r["application_makespan_seconds"] / r["nodes"]
@@ -240,11 +303,7 @@ def analyze_scaling(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 )
         for nodes in sorted({r["nodes"] for r in subset}):
             point = [r for r in subset if r["nodes"] == nodes]
-            valid = [
-                r
-                for r in point
-                if r["valid_tasks"] == r["attempted_tasks"] and r["failed_tasks"] == 0
-            ]
+            valid = [r for r in point if complete(r)]
             times = [r["application_makespan_seconds"] for r in valid]
             median_time = statistics.median(times) if times else None
             throughput = (
@@ -265,12 +324,22 @@ def analyze_scaling(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 else None
             )
             weak_efficiency = (
-                (throughput / nodes) / baseline if experiment == "weak" and baseline else None
+                (throughput / nodes) / baseline
+                if experiment == "weak" and baseline and all(complete(record) for record in point)
+                else None
             )
             allocation_node_hours = sum(r["nodes"] * r["allocation_seconds"] / 3600 for r in point)
+            task_times = [
+                seconds for record in point for seconds in record.get("task_execution_seconds", [])
+            ]
+            task_time_mean = statistics.mean(task_times) if task_times else None
+            workload_imbalance = (
+                max(task_times) / task_time_mean if task_times and task_time_mean else None
+            )
             results.append(
                 {
                     "experiment": experiment,
+                    "material_class": material_class,
                     "nodes": nodes,
                     "repetitions": len(point),
                     "fully_valid_repetitions": len(valid),
@@ -280,8 +349,19 @@ def analyze_scaling(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "efficiency": efficiency,
                     "weak_efficiency": weak_efficiency,
                     "attempted_tasks": sum(r["attempted_tasks"] for r in point),
+                    "planned_tasks": sum(
+                        r.get("planned_tasks", r["attempted_tasks"]) for r in point
+                    ),
                     "valid_tasks": sum(r["valid_tasks"] for r in point),
                     "failed_tasks": sum(r["failed_tasks"] for r in point),
+                    "total_ionic_steps": sum(r.get("total_ionic_steps", 0) for r in point),
+                    "workload_imbalance_max_over_mean": workload_imbalance,
+                    "task_failure_rate": (
+                        sum(r["failed_tasks"] for r in point)
+                        / sum(r["attempted_tasks"] for r in point)
+                        if sum(r["attempted_tasks"] for r in point)
+                        else None
+                    ),
                     "allocated_node_hours": allocation_node_hours,
                 }
             )

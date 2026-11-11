@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N e4-bcc-scaling
+#PBS -N e4-scaling
 #PBS -A HydraGNN
 #PBS -q capacity
 #PBS -l place=scatter
@@ -12,6 +12,13 @@ set -euo pipefail
 REPO=/lus/flare/projects/HydraGNN/mlupopa/AgenticAI4Materials/matsim-agents-e3-e4
 : "${E4_SCALING_MANIFEST:?}" "${E4_SCALING_NODES:?}"
 ARGS=(dispatch --manifest "${E4_SCALING_MANIFEST}" --nodes "${E4_SCALING_NODES}")
+if [[ -n "${E4_SCALING_CLASS:-}" || -n "${E4_SCALING_EXPERIMENT:-}" ]]; then
+  : "${E4_SCALING_CLASS:?}" "${E4_SCALING_EXPERIMENT:?}"
+  ARGS=(dispatch-six-class --manifest "${E4_SCALING_MANIFEST}"
+    --material-class "${E4_SCALING_CLASS}"
+    --experiment "${E4_SCALING_EXPERIMENT}"
+    --nodes "${E4_SCALING_NODES}")
+fi
 if [[ -n "${E4_SCALING_SEGMENT:-}" ]]; then
   ARGS+=(--segment-id "${E4_SCALING_SEGMENT}")
 fi

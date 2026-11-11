@@ -290,8 +290,14 @@ def test_submission_helper_batch_envelopes_are_frozen():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     e4 = module.BATCHES["E4-first-production-batch-01"]
+    e4_hydragnn = module.BATCHES["E4-first-production-batch-01-hydragnn"]
     e3 = module.BATCHES["E3-round1-bcc-01"]
     assert sum(e4["caps"].values()) == 480 and sum(e4["counts"].values()) == 20
+    assert e4_hydragnn == {
+        "id_pattern": r"E4-(BCC|FCC|LFP)-[0-9]{4}",
+        "counts": {"HydraGNN": 20},
+        "caps": {"HydraGNN": 480},
+    }
     assert e3 == {
         "id_pattern": r"E3-R1-BCC-[0-9]{4}",
         "counts": {"HydraGNN": 3},
