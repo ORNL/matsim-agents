@@ -105,7 +105,7 @@ def test_convergence_tags_cover_bcc_and_single_stage_materials():
     assert not scaling.is_converged_final_status("converged:n0")
 
 
-def test_six_class_manifest_keeps_blocked_inputs_and_authorization_explicit():
+def test_six_class_production_matrix_covers_all_tiers_without_authorizing():
     manifest = build_six_class_workload_manifest()
     validate_six_class_workload_manifest(manifest, verify_files=False)
     classes = {entry["material_class"]: entry for entry in manifest["material_classes"]}
@@ -118,49 +118,39 @@ def test_six_class_manifest_keeps_blocked_inputs_and_authorization_explicit():
         "nb_ta_o",
     }
     assert manifest["execution_authorized"] is False
+    assert manifest["authorization_request"]["additional_jobs_authorized"] is False
     assert manifest["semantics"]["scheduler_submissions"] == 0
     assert manifest["semantics"]["node_tiers"] == [1, 2, 4, 8, 16, 32, 64, 128]
-    assert manifest["queue_limits"]["maximum_nodes_per_job"] == 16
-    assert classes["fcc_hea"]["strong_scaling"]["tiers"][2]["status"] == (
-        "input_complete_authorization_required"
-    )
-    assert classes["fcc_hea"]["strong_scaling"]["tiers"][3]["status"] == (
-        "input_complete_authorization_required"
-    )
-    assert classes["fcc_hea"]["strong_scaling"]["tiers"][4]["status"] == (
-        "blocked_fixed_workload_underfills_node_tier"
-    )
-    for name in ("fcc_hea", "lifepo4", "phosphorene", "zn_formate_mof"):
-        weak = classes[name]["weak_scaling"]["tiers"]
-        assert weak[3]["status"] == "input_complete_authorization_required"
-        assert len(set(weak[3]["calculation_ids"])) == 16
-        assert weak[4]["status"] == "blocked_insufficient_unique_inputs"
-        assert len(classes[name]["strong_scaling"]["fixed_calculation_ids"]) == 8
-    nbtao = classes["nb_ta_o"]
-    assert nbtao["strong_scaling"]["tiers"][0]["status"] == (
-        "input_complete_authorization_required"
-    )
-    assert nbtao["weak_scaling"]["tiers"][3]["status"] == "blocked_insufficient_unique_inputs"
-    assert len(nbtao["strong_scaling"]["fixed_calculation_ids"]) == 8
+    for name, entry in classes.items():
+        assert len(entry["candidates"]) == 256
+        assert len({c["source_poscar_sha256"] for c in entry["candidates"]}) == 256
+        assert len(entry["strong_scaling"]["fixed_calculation_ids"]) == 128
+        assert entry["execution_authorized"] is False and entry["authorization"] is None
+        for experiment in ("strong_scaling", "weak_scaling"):
+            for tier in entry[experiment]["tiers"]:
+                assert tier["inputs_ready"], (name, experiment, tier["nodes"])
+                assert tier["queue"] == ("capacity" if tier["nodes"] <= 16 else "reservation")
+                assert tier["walltime_cap_hours"] <= 168
+        for tier in entry["strong_scaling"]["tiers"]:
+            ids = [i for s in tier.get("segments", []) for i in s["calculation_ids"]]
+            assert sorted(ids or tier["calculation_ids"]) == sorted(
+                entry["strong_scaling"]["fixed_calculation_ids"]
+            )
+        weak_128 = entry["weak_scaling"]["tiers"][-1]
+        assert len(set(weak_128["calculation_ids"])) == 256
+        assert all(
+            c["allocation"] == "HydraGNN" and c["material_class"] == name
+            for c in entry["candidates"]
+        )
     assert classes["zn_formate_mof"]["protocol"]["functional"].startswith("PBE-D3(BJ)")
     assert all(
-        candidate["composition"]["H"] == candidate["composition"]["C"]
-        for candidate in classes["zn_formate_mof"]["candidates"]
+        c["composition"]["H"] == c["composition"]["C"]
+        for c in classes["zn_formate_mof"]["candidates"]
     )
-    assert all(
-        candidate["input_hashes_validated"] and candidate["execution_ready"] is False
-        for name in ("phosphorene", "zn_formate_mof", "nb_ta_o")
-        for candidate in classes[name]["candidates"]
+    request = manifest["authorization_request"]
+    assert request["expected_node_hours"] == pytest.approx(
+        request["capacity_queue_expected_node_hours"] + request["reservation_expected_node_hours"]
     )
-    assert all(
-        candidate["allocation"] == "HydraGNN" and candidate["material_class"] == name
-        for name, entry in classes.items()
-        for candidate in entry["candidates"]
-    )
-    weak_32 = classes["bcc_refractory"]["weak_scaling"]["tiers"][5]
-    assert weak_32["required_unique_calculations"] == 64
-    assert weak_32["queue_eligible"] is False
-    assert weak_32["status"] == "blocked_capacity_queue_node_limit"
 
 
 def test_segmented_one_node_strong_baseline_is_combined_without_queue_wait():

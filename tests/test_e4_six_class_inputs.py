@@ -3,6 +3,7 @@ import json
 import numpy as np
 import pytest
 from ase.build import molecule
+from ase.io import read
 
 from benchmarks.e4.aurora_dft import six_class_inputs as inputs
 
@@ -68,3 +69,39 @@ def test_committed_six_class_inputs_are_unique_and_provenanced():
     assert all(r["chemistry_validation"]["periodic_bond_graph_components"] == 1 for r in mof)
     nbtao = manifest["classes"]["nb_ta_o"]
     assert all(r["e4_adapter"]["added_tags"] == {"KPAR": "12"} for r in nbtao)
+
+
+def test_production_inputs_are_unique_valid_and_frozen():
+    manifest = json.loads(inputs.FULL_MANIFEST.read_text())
+    assert manifest["execution_authorized"] is False
+    assert manifest["scheduler_submissions"] == 0
+    assert set(manifest["classes"]) == set(inputs.FULL_CLASSES)
+    for name, records in manifest["classes"].items():
+        assert len(records) == inputs.UNIQUE_INPUTS
+        assert len({r["calculation_id"] for r in records}) == inputs.UNIQUE_INPUTS
+        assert len({r["source_poscar_sha256"] for r in records}) == inputs.UNIQUE_INPUTS
+        assert {r["protocol_id"] for r in records} == {inputs.FULL_CLASSES[name]["protocol_id"]}
+        assert {r["walltime_seconds"] for r in records} == {
+            inputs.FULL_CLASSES[name]["task_cap_hours"] * 3600
+        }
+        for record in records:
+            source = inputs.REPO / record["source_poscar"]
+            assert inputs.sha256(source) == record["source_poscar_sha256"]
+            assert record["input_hashes"]["POSCAR"] == record["source_poscar_sha256"]
+    mof = manifest["classes"]["zn_formate_mof"]
+    assert {r["potcar_sha256"] for r in mof} == {inputs.MOF_E2_POTCAR_SHA256}
+    for record in mof[:4]:
+        atoms = read(inputs.REPO / record["source_poscar"], format="vasp")
+        assert inputs.validate_zn_formate(atoms)["periodic_bond_graph_components"] == 1
+    phos = manifest["classes"]["phosphorene"]
+    vacancies = {"pristine": 0, "monovacancy": 1}
+    for record in phos[:8]:
+        atoms = read(inputs.REPO / record["source_poscar"], format="vasp")
+        atoms.pbc = [True, True, False]
+        defect = record["variation"]["defect"]
+        inputs.validate_strained_phosphorene(atoms, vacancies.get(defect, 2))
+    nbtao = manifest["classes"]["nb_ta_o"]
+    assert all(r["composition"] == {"Nb": 8, "Ta": 8, "O": 40} for r in nbtao)
+    assert len({r["variation"]["ordering"] for r in nbtao}) == inputs.UNIQUE_INPUTS
+    bcc = manifest["classes"]["bcc_refractory"]
+    assert [r["source_calculation_id"] for r in bcc[:8]] == list(inputs.BCC_AUTHORIZED_STRONG)

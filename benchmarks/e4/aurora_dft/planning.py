@@ -6,6 +6,7 @@ import csv
 import hashlib
 import itertools
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,10 @@ ALLOCATIONS = {
 }
 NODE_TIERS = (1, 2, 4, 8, 16, 32, 64, 128)
 BLOCKED_STATUS = "blocked_pending_archive_audit_and_resource_authorization"
-SIX_CLASS_INPUTS = "research/paper/e4/aurora-dft-scaling/six-class-inputs-v1/manifest.json"
+SIX_CLASS_INPUTS = "research/paper/e4/aurora-dft-scaling/six-class-inputs-v2/manifest.json"
+CAPACITY_MAX_NODES = 16
+QUEUE_WALLTIME_HOURS = 168
+HYDRAGNN_AVAILABLE_NODE_HOURS = 36614.0
 REPO = Path(__file__).resolve().parents[3]
 
 
@@ -322,168 +326,94 @@ def _candidate_from_case(case: dict[str, Any], family: str, assignment: dict[str
     }
 
 
+def _queue_for(nodes: int) -> tuple[str, str]:
+    if nodes <= CAPACITY_MAX_NODES:
+        return "capacity", "input_complete_authorization_required"
+    return "reservation", "input_complete_requires_aurora_reservation"
+
+
 def _strong_tiers(
     calculation_ids: list[str],
-    task_hours: float | None,
+    task_hours: float,
+    expected_hours: float,
     *,
-    planned_count: int,
-    runner_ready: bool,
+    fixed_count: int,
 ) -> list[dict[str, Any]]:
+    work = calculation_ids[:fixed_count]
+    waves_per_job = max(1, int(QUEUE_WALLTIME_HOURS // task_hours))
     tiers = []
     for nodes in NODE_TIERS:
-        count = planned_count
-        enough_inputs = len(calculation_ids) >= count
-        if nodes > 16 or task_hours is None or nodes > count:
-            walltime = node_hours = None
-        else:
-            waves = (count + nodes - 1) // nodes
-            walltime = waves * task_hours
-            if walltime > 168:
-                # The one-node reference is explicitly segmented, never truncated.
-                group_size = max(1, int(96 // task_hours))
-                segments = [
-                    calculation_ids[i : i + group_size] for i in range(0, count, group_size)
-                ]
-                segment_hours = [len(segment) * task_hours for segment in segments]
-                if max(segment_hours) > 168:
-                    walltime = None
-                    node_hours = None
-                else:
-                    walltime = max(segment_hours)
-                    node_hours = sum(segment_hours)
-                    status = (
-                        "input_complete_authorization_required"
-                        if runner_ready and enough_inputs
-                        else "blocked_input_or_E4_runtime_adapter"
-                    )
-                    tiers.append(
-                        {
-                            "nodes": nodes,
-                            "queue_eligible": nodes <= 16,
-                            "required_unique_calculations": count,
-                            "available_unique_calculations": len(calculation_ids),
-                            "calculation_ids": calculation_ids[:count] if enough_inputs else [],
-                            "segments": [
-                                {
-                                    "segment": index + 1,
-                                    "calculation_ids": ids,
-                                    "walltime_cap_hours": hours,
-                                }
-                                for index, (ids, hours) in enumerate(
-                                    zip(segments, segment_hours, strict=True)
-                                )
-                            ],
-                            "walltime_cap_hours": walltime,
-                            "node_hours_cap": (
-                                node_hours
-                                if status == "input_complete_authorization_required"
-                                else None
-                            ),
-                            "planning_cap_if_inputs_complete_node_hours": node_hours,
-                            "inputs_ready": status == "input_complete_authorization_required",
-                            "status": status,
-                        }
-                    )
-                    continue
-            else:
-                node_hours = nodes * walltime
-        if nodes > 16:
-            status = "blocked_capacity_queue_node_limit"
-        elif nodes > count:
-            status = "blocked_fixed_workload_underfills_node_tier"
-        elif task_hours is None:
-            status = "blocked_no_runtime_basis"
-        elif not enough_inputs:
+        queue, status = _queue_for(nodes)
+        if len(work) < fixed_count:
             status = "blocked_insufficient_unique_inputs"
-        elif not runner_ready:
-            status = "blocked_E4_runtime_adapter_or_protocol_qualification"
-        elif walltime is None:
-            status = "blocked_one_node_reference_exceeds_queue_walltime"
-        else:
-            status = "input_complete_authorization_required"
-        tiers.append(
-            {
-                "nodes": nodes,
-                "queue_eligible": nodes <= 16,
-                "inputs_ready": status == "input_complete_authorization_required",
-                "required_unique_calculations": count,
-                "available_unique_calculations": len(calculation_ids),
-                "calculation_ids": calculation_ids[:count] if enough_inputs else [],
-                "wave_count": (count + nodes - 1) // nodes
-                if enough_inputs and nodes <= count
-                else 0,
-                "walltime_cap_hours": walltime,
-                "node_hours_cap": (
-                    node_hours if status == "input_complete_authorization_required" else None
-                ),
-                "planning_cap_if_inputs_complete_node_hours": (
-                    node_hours if task_hours is not None and nodes <= count else None
-                ),
-                "status": status,
-            }
-        )
+        waves = math.ceil(len(work) / nodes)
+        segments = None
+        walltime = waves * task_hours
+        if walltime > QUEUE_WALLTIME_HOURS:
+            group = nodes * waves_per_job
+            chunks = [work[i : i + group] for i in range(0, len(work), group)]
+            segments = [
+                {
+                    "segment": index + 1,
+                    "calculation_ids": chunk,
+                    "walltime_cap_hours": math.ceil(len(chunk) / nodes) * task_hours,
+                }
+                for index, chunk in enumerate(chunks)
+            ]
+            walltime = max(segment["walltime_cap_hours"] for segment in segments)
+        ready = not status.startswith("blocked")
+        tier = {
+            "nodes": nodes,
+            "queue": queue,
+            "queue_eligible": nodes <= CAPACITY_MAX_NODES,
+            "inputs_ready": ready,
+            "required_unique_calculations": fixed_count,
+            "available_unique_calculations": len(calculation_ids),
+            "calculation_ids": work if ready else [],
+            "wave_count": waves,
+            "jobs": len(segments) if segments else 1,
+            "walltime_cap_hours": walltime,
+            "node_hours_cap": nodes * waves * task_hours if ready else None,
+            "expected_node_hours": round(nodes * waves * expected_hours, 1),
+            "expected_makespan_hours": round(waves * expected_hours, 1),
+            "planning_cap_if_inputs_complete_node_hours": nodes * waves * task_hours,
+            "status": status,
+        }
+        if segments:
+            tier["segments"] = segments
+        tiers.append(tier)
     return tiers
 
 
 def _weak_tiers(
     calculation_ids: list[str],
-    task_hours: float | None,
-    *,
-    planned_calculation_count: int,
-    runner_ready: bool,
+    task_hours: float,
+    expected_hours: float,
 ) -> list[dict[str, Any]]:
     tiers = []
     for nodes in NODE_TIERS:
         required = 2 * nodes
-        enough_inputs = len(calculation_ids) >= required
-        if nodes > 16:
-            status = "blocked_capacity_queue_node_limit"
-            walltime = 2 * task_hours if task_hours is not None else None
-            node_hours = None
-            planning_cap = 2 * task_hours * nodes if task_hours is not None else None
-        elif task_hours is None:
-            status = "blocked_no_runtime_basis"
-            walltime = node_hours = None
-            planning_cap = None
-        elif not enough_inputs:
+        queue, status = _queue_for(nodes)
+        if len(calculation_ids) < required:
             status = "blocked_insufficient_unique_inputs"
-            walltime = 2 * task_hours
-            node_hours = None
-            planning_cap = 2 * task_hours * nodes
-        elif not runner_ready:
-            status = "blocked_E4_runtime_adapter_or_protocol_qualification"
-            walltime = 2 * task_hours
-            node_hours = None
-            planning_cap = 2 * task_hours * nodes
-        elif nodes == 16:
-            status = "blocked_separate_16_node_resource_authorization"
-            walltime = 2 * task_hours
-            node_hours = None
-            planning_cap = 2 * task_hours * nodes
-        else:
-            status = "input_complete_authorization_required"
-            walltime = 2 * task_hours
-            node_hours = 2 * task_hours * nodes
-            planning_cap = 2 * task_hours * nodes
+        ready = not status.startswith("blocked")
         tiers.append(
             {
                 "nodes": nodes,
-                "queue_eligible": nodes <= 16,
-                "inputs_ready": status == "input_complete_authorization_required",
+                "queue": queue,
+                "queue_eligible": nodes <= CAPACITY_MAX_NODES,
+                "inputs_ready": ready,
                 "tasks_per_node": 2,
+                "tasks_per_node_run_sequentially": True,
                 "required_unique_calculations": required,
                 "available_unique_calculations": len(calculation_ids),
-                "calculation_ids": calculation_ids[:required] if enough_inputs else [],
-                "planned_unique_calculation_count": planned_calculation_count,
-                "tasks_per_node_run_sequentially": True,
-                "walltime_cap_hours": walltime if enough_inputs else None,
-                "planning_walltime_if_queue_available": (
-                    2 * task_hours if task_hours is not None else None
-                ),
-                "node_hours_cap": (
-                    node_hours if status == "input_complete_authorization_required" else None
-                ),
-                "planning_cap_if_inputs_complete_node_hours": planning_cap,
+                "calculation_ids": calculation_ids[:required] if ready else [],
+                "jobs": 1,
+                "walltime_cap_hours": 2 * task_hours,
+                "node_hours_cap": 2 * task_hours * nodes if ready else None,
+                "expected_node_hours": round(2 * expected_hours * nodes, 1),
+                "expected_makespan_hours": round(2 * expected_hours, 1),
+                "planning_cap_if_inputs_complete_node_hours": 2 * task_hours * nodes,
                 "status": status,
             }
         )
@@ -491,90 +421,26 @@ def _weak_tiers(
 
 
 def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
-    """Build a provenance-first E4 matrix; unavailable science remains blocked."""
+    """Build the full six-class E4 production matrix from the staged v2 inputs."""
     repo = repo.resolve()
-    batch = json.loads(
-        (repo / "deployments/aurora/jobs/e4-first-batch/batch-manifest-hydragnn.json").read_text()
-    )
-    bcc_root = repo / "research/paper/e4/aurora-dft-scaling/priority-scaling/authorized"
-    bcc_strong = json.loads((bcc_root / "strong-manifest.json").read_text())
-    bcc_weak = json.loads((bcc_root / "weak-manifest.json").read_text())
-    bcc_tasks = {task["calculation_id"]: task for task in bcc_strong["tasks"]}
-    bcc_tasks.update({task["calculation_id"]: task for task in bcc_weak["tasks"]})
-    bcc_strong_ids = list(bcc_strong["fixed_workload"]["case_poscar_sha256"])
-    bcc_weak_ids = list(bcc_weak["available_unique_case_ids"])
-    bcc_records = [
-        _candidate_from_case(
-            {
-                **bcc_tasks[calc_id],
-                "atom_count": sum(bcc_tasks[calc_id]["composition"].values()),
-                "structure_source": "authorized BCC strong/weak scaling manifests",
-                "walltime_seconds": 86400,
-            },
-            "bcc_refractory",
-            {"strong": calc_id in bcc_strong_ids, "weak": calc_id in bcc_weak_ids},
-        )
-        for calc_id in sorted(set(bcc_strong_ids + bcc_weak_ids))
-    ]
-    batch_cases = {case["calculation_id"]: case for case in batch["cases"]}
-    fcc_ids = [
-        case["calculation_id"] for case in batch["cases"] if case["material_family"] == "fcc"
-    ]
-    lfp_ids = [
-        case["calculation_id"] for case in batch["cases"] if case["material_family"] == "lifepo4"
-    ]
-
-    def scaling_case(case_id: str, prefix: str) -> dict[str, Any]:
-        case = dict(batch_cases[case_id])
-        case["source_calculation_id"] = case_id
-        case["calculation_id"] = f"E4-SCALE-{prefix}-{case_id.rsplit('-', 1)[-1]}"
-        case["structure_source"] = f"{case_id} frozen first-batch input; fresh scaling identity"
-        return case
-
     inputs_path = repo / SIX_CLASS_INPUTS
-    staged = json.loads(inputs_path.read_text())["classes"]
-
-    def staged_records(name: str, strong_ids: list[str]) -> list[dict[str, Any]]:
-        return [
+    staged = json.loads(inputs_path.read_text())
+    settings = staged["class_settings"]
+    strong_count = staged["strong_fixed_tasks_per_class"]
+    records: dict[str, list[dict[str, Any]]] = {}
+    strong_ids: dict[str, list[str]] = {}
+    weak_ids: dict[str, list[str]] = {}
+    for name, cases in staged["classes"].items():
+        ids = [case["calculation_id"] for case in cases]
+        strong_ids[name], weak_ids[name] = ids[:strong_count], ids
+        fixed = set(strong_ids[name])
+        records[name] = [
             _candidate_from_case(
-                case,
-                name,
-                {"strong": case["calculation_id"] in strong_ids, "weak": True},
+                case, name, {"strong": case["calculation_id"] in fixed, "weak": True}
             )
-            for case in staged[name]
+            for case in cases
         ]
 
-    fcc_frozen = [scaling_case(calc_id, "FCC") for calc_id in fcc_ids]
-    fcc_cases = fcc_frozen + staged["fcc_hea"]
-    # Strong: the four frozen compositions at realizations 1 and 2.
-    fcc_strong = [case["calculation_id"] for case in fcc_frozen] + [
-        case["calculation_id"] for case in staged["fcc_hea"] if case["disorder_realization"] == 2
-    ]
-    fcc_weak = [case["calculation_id"] for case in fcc_cases]
-    fcc_records = [
-        _candidate_from_case(
-            case, "fcc_hea", {"strong": case["calculation_id"] in fcc_strong, "weak": True}
-        )
-        for case in fcc_cases
-    ]
-    lfp_frozen = [scaling_case(calc_id, "LFP") for calc_id in lfp_ids]
-    lfp_strong = [case["calculation_id"] for case in lfp_frozen]
-    lfp_weak = lfp_strong + [case["calculation_id"] for case in staged["lifepo4"]]
-    lfp_records = [
-        _candidate_from_case(case, "lifepo4", {"strong": True, "weak": True}) for case in lfp_frozen
-    ] + staged_records("lifepo4", [])
-
-    nbtao_weak = [case["calculation_id"] for case in staged["nb_ta_o"]]
-    nbtao_strong = nbtao_weak[:8]
-    nbtao_records = staged_records("nb_ta_o", nbtao_strong)
-    mof_weak = [case["calculation_id"] for case in staged["zn_formate_mof"]]
-    mof_strong = mof_weak[:8]
-    mof_records = staged_records("zn_formate_mof", mof_strong)
-    phos_weak = [case["calculation_id"] for case in staged["phosphorene"]]
-    phos_strong = phos_weak[:8]
-    phos_records = staged_records("phosphorene", phos_strong)
-
-    queue = "capacity"
     protocol_data = {
         "bcc_refractory": {
             "id": "bcc-pbe-low-normal-v1-approved-ediffg-0.01",
@@ -629,17 +495,21 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             "task_walltime_hours": 24,
         },
         "phosphorene": {
-            "id": "phosphorene-pbe-2d-inplane-relax-v1",
-            "status": "frozen_from_E2_numerics_with_rebuilt_geometry",
+            "id": "phosphorene-pbe-2d-strain-fixed-cell-v1",
+            "status": "E2_numerics_with_rebuilt_geometry",
             "functional": "PBE (E2 setting; no dispersion for an isolated monolayer)",
             "encut_eV": 520,
             "precision": "Accurate",
-            "kpoints": "Gamma-centered; E2 8x11x1 unit-cell density, ceil(8/nx) x ceil(11/ny) x 1",
+            "kpoints": "Gamma 2x3x1 for the 4x5 supercell (E2 8x11x1 unit-cell density)",
             "spin": "ISPIN=2, MAGMOM 0.5 per atom (vacancies leave unpaired electrons)",
             "smearing": "ISMEAR=0 SIGMA=0.05",
             "ediff_eV": 1e-6,
             "ediffg_eV_A": -0.01,
-            "relaxation": "ISIF=3 with LATTICE_CONSTRAINTS=T T F (in-plane cell only)",
+            "relaxation": "ISIF=2 ionic relaxation at fixed strained in-plane cell",
+            "workload": (
+                "4x5 supercell; pristine, monovacancy, in-plane and interlayer divacancy; "
+                "8x8 armchair (-2..+12%) x zigzag (-6..+8%) strain grid"
+            ),
             "vacuum_axis_A": 20.0,
             "max_ionic_steps": 200,
             "mpi_ranks": 12,
@@ -647,15 +517,14 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             "kpar": 1,
             "ncore": 12,
             "paw": ["P"],
-            "task_walltime_hours": 12,
             "geometry_basis": (
                 "bulk black P (Brown & Rundqvist 1965, Cmce); archived E2 P4/P36/P35 have "
                 "no P-P bond below 2.5 A (puckering placed on the zigzag axis)"
             ),
         },
         "zn_formate_mof": {
-            "id": "znformate-pbe-d3bj-fixed-volume-eos-v1",
-            "status": "frozen_from_qualified_E2_zn_formate_anhydrous_v1",
+            "id": "znformate-pbe-d3bj-strain-stress-v1",
+            "status": "E2_zn_formate_anhydrous_v1_numerics",
             "functional": "PBE-D3(BJ), IVDW=12",
             "encut_eV": 520,
             "precision": "Accurate",
@@ -664,96 +533,98 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             "smearing": "ISMEAR=0 SIGMA=0.05",
             "ediff_eV": 1e-6,
             "ediffg_eV_A": -0.02,
-            "relaxation": "ISIF=4 fixed-volume equation-of-state points (E2 used ISIF=3)",
+            "relaxation": "ISIF=2 relaxed-ion stress at fixed strained cell",
+            "workload": (
+                "alpha and Pbcn frameworks; 8 volumetric (+/-0.5-2%) and 120 Voigt "
+                "(6 components x +/- x 0.1-1.0%) strain states each"
+            ),
             "max_ionic_steps": 200,
             "mpi_ranks": 12,
             "threads_per_rank": 8,
             "kpar": 12,
             "paw": ["Zn", "H", "C", "O"],
-            "task_walltime_hours": 12,
-            "runtime_basis": (
-                "E2 1-node relax: alpha 108 atoms 99 s/step; Pbcn 216 atoms 245 s/step"
-            ),
         },
         "nb_ta_o": {
             "id": "nbtao5-fixed-kmesh-v1",
             "status": "E2_protocol_with_E4_parallelization_adapter",
             "functional": "PBE",
             "encut_eV": 600,
-            "kpoints": "Gamma-centered mesh targeting 0.15 A^-1; 28-atom ordering uses 4x8x9",
+            "kpoints": "Gamma-centered mesh targeting 0.15 A^-1; 56-atom cell uses 4x8x5",
             "spin": "ISPIN=1",
             "smearing": "ISMEAR=0 SIGMA=0.05",
             "ediff_eV": 1e-6,
             "ediffg_eV_A": -0.01,
-            "relaxation": "ISIF=3, ISYM=0; static follow-up not part of the scaling task",
+            "relaxation": "ISIF=3, ISYM=0",
+            "workload": (
+                "256 of 854 symmetry-distinct equimolar Nb/Ta orderings of the 1x1x2 "
+                "cell; the 14 doubled E2 orderings first"
+            ),
             "max_ionic_steps": 200,
             "mpi_ranks": 12,
             "threads_per_rank": 8,
             "kpar": 12,
             "e4_adapter": "KPAR=12 added, exactly as in the converged E2 ordering-01 run",
-            "task_walltime_hours": 5,
             "paw": ["Nb_pv", "Ta_pv", "O"],
-            "runtime_basis": "E2 ordering-01: 50 ionic steps in 3590-3680 s on one node",
         },
     }
+    for name, spec in settings.items():
+        protocol_data[name]["task_walltime_hours"] = spec["task_cap_hours"]
+        protocol_data[name]["expected_task_hours"] = spec["expected_task_hours"]
+        protocol_data[name]["runtime_basis"] = spec["runtime_basis"]
 
     def class_record(
         name: str,
-        records: list[dict[str, Any]],
-        strong_ids: list[str],
-        weak_ids: list[str],
         readiness: str,
         blockers: list[str],
         generation_procedure: str,
-        wall_hours: float | None,
-        runner_ready: bool,
-        input_inventory_count: int,
-        planned_strong_count: int = 8,
-        planned_weak_count: int = 16,
-        budget_basis: str = "24-hour maximum per task; not a runtime prediction",
     ):
-        strong = _strong_tiers(
-            strong_ids,
-            wall_hours,
-            planned_count=planned_strong_count,
-            runner_ready=runner_ready,
-        )
-        weak = _weak_tiers(
-            weak_ids,
-            wall_hours,
-            planned_calculation_count=planned_weak_count,
-            runner_ready=runner_ready,
-        )
+        cap = settings[name]["task_cap_hours"]
+        expected = settings[name]["expected_task_hours"]
+        strong = _strong_tiers(strong_ids[name], cap, expected, fixed_count=strong_count)
+        weak = _weak_tiers(weak_ids[name], cap, expected)
+
+        def total(tiers: list[dict[str, Any]], field: str, capacity_only: bool = False):
+            return round(
+                sum(
+                    tier[field] or 0
+                    for tier in tiers
+                    if not capacity_only or tier["queue"] == "capacity"
+                ),
+                1,
+            )
+
         return {
             "material_class": name,
             "readiness": readiness,
             "allocation": "HydraGNN",
-            "queue": queue,
-            "input_inventory_count": input_inventory_count,
+            "queue": "capacity (1-16 nodes); Aurora reservation (32-128 nodes)",
+            "input_inventory_count": len(records[name]),
             "generation_procedure": generation_procedure,
-            "candidates": records,
+            "candidates": records[name],
             "protocol": protocol_data[name],
-            "strong_scaling": {"fixed_calculation_ids": strong_ids, "tiers": strong},
+            "strong_scaling": {"fixed_calculation_ids": strong_ids[name], "tiers": strong},
             "weak_scaling": {
                 "tasks_per_node": 2,
-                "unique_calculation_ids": weak_ids,
+                "unique_calculation_ids": weak_ids[name],
                 "tiers": weak,
             },
             "blockers": blockers,
             "resource_budget": {
-                "task_walltime_basis_hours": wall_hours,
-                "budget_basis": budget_basis,
-                "strong_requested_node_hours_ceiling": sum(
-                    tier["node_hours_cap"] or 0 for tier in strong
-                ),
-                "weak_requested_node_hours_ceiling": sum(
-                    tier["node_hours_cap"] or 0 for tier in weak
-                ),
-                "strong_planning_cap_if_inputs_complete": sum(
-                    tier["planning_cap_if_inputs_complete_node_hours"] or 0 for tier in strong
-                ),
-                "weak_planning_cap_if_inputs_complete": sum(
-                    tier["planning_cap_if_inputs_complete_node_hours"] or 0 for tier in weak
+                "task_walltime_cap_hours": cap,
+                "expected_task_hours": expected,
+                "budget_basis": settings[name]["runtime_basis"],
+                "strong_requested_node_hours_ceiling": total(strong, "node_hours_cap"),
+                "weak_requested_node_hours_ceiling": total(weak, "node_hours_cap"),
+                "strong_expected_node_hours": total(strong, "expected_node_hours"),
+                "weak_expected_node_hours": total(weak, "expected_node_hours"),
+                "capacity_queue_expected_node_hours": total(strong, "expected_node_hours", True)
+                + total(weak, "expected_node_hours", True),
+                "reservation_expected_node_hours": round(
+                    total(strong, "expected_node_hours")
+                    + total(weak, "expected_node_hours")
+                    - total(strong, "expected_node_hours", True)
+                    - total(weak, "expected_node_hours", True),
+                    1,
                 ),
             },
             "execution_authorized": False,
@@ -763,121 +634,103 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
     classes = [
         class_record(
             "bcc_refractory",
-            bcc_records,
-            bcc_strong_ids,
-            bcc_weak_ids,
-            "running_existing_BCC_workloads",
-            [],
-            "Use the frozen 128-site BCC parent; retain composition and disorder realizations",
-            24,
-            True,
-            16,
+            "inputs_qualified_authorization_required",
+            [
+                "The 16 authorized inputs are reused unchanged; their 1-8-node "
+                "authorized runs remain a separate 8-task workload."
+            ],
+            (
+                "Authorized 16 inputs plus 240 frozen-generator occupations: 22 element "
+                "subsets x composition indices 1-11, realization 1, inventory seeds"
+            ),
         ),
         class_record(
             "fcc_hea",
-            fcc_records,
-            fcc_strong,
-            fcc_weak,
             "inputs_qualified_authorization_required",
-            ["E4 FCC runtime is unmeasured; 24-hour task ceiling retained."],
+            ["E4 runtime unmeasured; cap 48 h from E2 108-atom timing."],
             (
-                "Frozen stage-1 generator on the archived E2 Cantor parent: compositions 1-4, "
-                "disorder realizations 1-4 with inventory seeds; canonical duplicates rejected"
+                "Frozen stage-1 generator on the E2 Cantor parent: compositions 1-64 x "
+                "realizations 1-4; reproduces all 16 previously frozen POSCARs"
             ),
-            24,
-            True,
-            len(fcc_records),
         ),
         class_record(
             "lifepo4",
-            lfp_records,
-            lfp_strong,
-            lfp_weak,
             "inputs_qualified_authorization_required",
-            ["E4 LiFePO4 runtime is unmeasured; 24-hour task ceiling retained."],
-            (
-                "Eight frozen first-batch inputs plus eight canonical lifepo4-inventory-v1 "
-                "structures (1/2/3 antisite pairs) on the frozen START template"
-            ),
-            24,
-            True,
-            len(lfp_records),
+            ["E4 runtime unmeasured; 72-h cap extrapolated from a 28-atom relaxation."],
+            "Frozen 8 + qualified 8 + 240 canonical lifepo4-inventory-v1 structures",
         ),
         class_record(
             "phosphorene",
-            phos_records,
-            phos_strong,
-            phos_weak,
             "inputs_qualified_geometry_rebuilt_authorization_required",
             [
-                "No E2 phosphorene calculation is scientifically qualified: the archived "
-                "geometries are unbonded, so inputs are rebuilt from bulk black P.",
-                "Runtime is extrapolated from the archived E2 P36 timing (about 38 s per "
-                "ionic step); run a 1-node pilot before larger tiers.",
+                "No qualified E2 phosphorene geometry exists (archived inputs are "
+                "unbonded); inputs are rebuilt from bulk black P with E2 numerics."
             ],
-            (
-                "Puckered monolayer from bulk black P; 1x1 and 2x3-4x5 supercells, "
-                "pristine plus mono- and in-plane divacancies; 20 A vacuum axis fixed"
-            ),
-            12,
-            True,
-            len(phos_records),
-            budget_basis="12-hour task ceiling extrapolated from E2 P36 timing",
+            "4x5 puckered supercell x 4 defect states x 64 in-plane strain states",
         ),
         class_record(
             "zn_formate_mof",
-            mof_records,
-            mof_strong,
-            mof_weak,
             "inputs_qualified_authorization_required",
             [
-                "Only two qualified anhydrous frameworks exist; the 16 inputs are "
-                "fixed-volume EOS points from them, not distinct polymorphs.",
-                "E2 ran the custom VASP build (ebd28402); E4 runs the ALCF build. Both "
-                "are 6.6.1 with D3(BJ); confirm agreement in the first E4 task.",
+                "E2 used the custom VASP 6.6.1 build; E4 uses the ALCF 6.6.1 build "
+                "(both include D3(BJ))."
             ],
-            (
-                "E2-qualified PBE-D3(BJ) relaxed alpha and Pbcn frameworks under "
-                "isotropic strain of +/-0.5 to +/-2 percent; connectivity verified"
-            ),
-            12,
-            True,
-            len(mof_records),
-            budget_basis="12-hour task ceiling from E2 Pbcn relaxation (7.3 h, 107 steps)",
+            "E2-qualified alpha and Pbcn frameworks x 128 strain states each",
         ),
         class_record(
             "nb_ta_o",
-            nbtao_records,
-            nbtao_strong,
-            nbtao_weak,
             "inputs_qualified_authorization_required",
-            [
-                "Only 14 symmetry-distinct orderings exist in the 28-atom cell; "
-                "weak-8 (16 tasks) remains blocked.",
-                "E2 ran the custom VASP build; compare E4 ordering-01 with E2 "
-                "(50 steps, converged) as the cross-build check.",
-            ],
-            (
-                "Reuse the 14 symmetry-inequivalent equimolar Nb/Ta orderings "
-                "from Nb2O5; preserve charge-balanced NbTaO5 stoichiometry"
-            ),
-            5,
-            True,
-            len(nbtao_records),
-            budget_basis="5-hour task ceiling covering 200 steps at the E2 72 s/step rate",
+            ["E2 used the custom VASP 6.6.1 build; E4 uses the ALCF 6.6.1 build."],
+            "Symmetry-distinct equimolar orderings of the doubled NbTaO5 cell",
         ),
     ]
+    expected_total = sum(
+        c["resource_budget"]["strong_expected_node_hours"]
+        + c["resource_budget"]["weak_expected_node_hours"]
+        for c in classes
+    )
+    cap_total = sum(
+        c["resource_budget"]["strong_requested_node_hours_ceiling"]
+        + c["resource_budget"]["weak_requested_node_hours_ceiling"]
+        for c in classes
+    )
+    capacity_expected = sum(
+        c["resource_budget"]["capacity_queue_expected_node_hours"] for c in classes
+    )
     return {
         "schema_version": 1,
-        "manifest_id": "E4-Aurora-Six-Class-Workflow-Scaling-v2",
+        "manifest_id": "E4-Aurora-Six-Class-Production-Scaling-v3",
         "execution_authorized": False,
         "platform": "Aurora",
         "scheduler": "PBS Pro",
-        "queue": "capacity",
+        "queue": "capacity (1-16 nodes); reservation (32-128 nodes)",
         "allocation": "HydraGNN",
         "runner": "deployments/aurora/jobs/job-e4-scaling.pbs",
         "per_calculation_wrapper": "deployments/aurora/jobs/job-e4-vasp-ab-aurora.pbs",
-        "queue_limits": {"maximum_nodes_per_job": 16, "maximum_walltime_hours": 168},
+        "queue_limits": {
+            "maximum_nodes_per_job": CAPACITY_MAX_NODES,
+            "maximum_walltime_hours": QUEUE_WALLTIME_HOURS,
+            "capacity_max_running_jobs_per_user": 2,
+            "capacity_max_queued_jobs_per_user": 5,
+        },
+        "scheduler_constraints": {
+            "capacity": "1-16 nodes, 168 h, 2 running / 5 queued jobs per user",
+            "prod": "routes to small/medium/large; minimum 256 nodes, 12-24 h walltime",
+            "debug_scaling": "1-256 nodes but 1 h walltime; unusable for DFT tasks",
+            "gap": "no Aurora production queue accepts 17-255-node jobs, so the "
+            "32/64/128-node tiers need an ALCF reservation",
+        },
+        "required_resource_configuration": {
+            "tiers_1_to_16_nodes": "capacity queue, HydraGNN, select=<nodes>, walltime=<tier cap>",
+            "tiers_32_to_128_nodes": (
+                "ALCF reservation of 128 nodes for HydraGNN with jobs up to 168 h "
+                "(LiFePO4 weak needs 144 h) and no 2-running-job limit"
+            ),
+            "allocation": (
+                f"HydraGNN has {HYDRAGNN_AVAILABLE_NODE_HOURS:,.0f} node-hours available "
+                "(through 2027-01-10); the expected campaign total exceeds it"
+            ),
+        },
         "output_root_template": (
             "runs/e4-scaling/<experiment>/<run-id>/n<node-count>/<segment-id-or-all>/"
         ),
@@ -885,12 +738,15 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
             "scaling_level": (
                 "workflow-level independent calculations; not single-VASP solver scaling"
             ),
-            "strong_definition": "same fixed calculation IDs at every feasible node tier",
+            "strong_definition": (
+                f"same {strong_count} fixed calculation IDs at every node tier 1-128"
+            ),
             "weak_definition": "two unique calculations per node, run sequentially",
             "node_tiers": list(NODE_TIERS),
-            "initial_node_tiers": [1, 2, 4, 8],
-            "large_tiers_require_new_queue_and_allocation_review": [16, 32, 64, 128],
-            "default_task_walltime_cap_hours": 24,
+            "segmentation": (
+                "strong tiers longer than 168 h run as wave-aligned segments; the "
+                "analyzer sums segment makespans"
+            ),
             "execution_authorized": False,
             "scheduler_submissions": 0,
         },
@@ -903,9 +759,6 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
                 repo / "research/paper/e4/aurora-dft-scaling/priority-scaling/authorized/"
                 "weak-manifest.json"
             ),
-            "first_batch_original_sha256": _sha256(
-                repo / "deployments/aurora/jobs/e4-first-batch/batch-manifest.json"
-            ),
             "first_batch_hydragnn_revision_sha256": _sha256(
                 repo / "deployments/aurora/jobs/e4-first-batch/batch-manifest-hydragnn.json"
             ),
@@ -915,16 +768,16 @@ def build_six_class_workload_manifest(repo: Path = REPO) -> dict[str, Any]:
         "authorization_request": {
             "status": "not_authorized",
             "additional_jobs_authorized": False,
-            "per_class_tiers_require_separate_review": True,
             "existing_bcc_authorization_applies_only_to_the_frozen_bcc_manifests": True,
             "existing_bcc_authorized_node_hours": 1488,
-            "proposed_additional_node_hours_ceiling": sum(
-                entry["resource_budget"]["strong_requested_node_hours_ceiling"]
-                + entry["resource_budget"]["weak_requested_node_hours_ceiling"]
-                for entry in classes
-                if entry["material_class"] != "bcc_refractory"
+            "expected_node_hours": round(expected_total, 1),
+            "node_hours_ceiling": round(cap_total, 1),
+            "capacity_queue_expected_node_hours": round(capacity_expected, 1),
+            "reservation_expected_node_hours": round(expected_total - capacity_expected, 1),
+            "hydragnn_available_node_hours": HYDRAGNN_AVAILABLE_NODE_HOURS,
+            "additional_allocation_needed_expected_node_hours": round(
+                max(0.0, expected_total - HYDRAGNN_AVAILABLE_NODE_HOURS), 1
             ),
-            "provisional_phosphorene_and_mof_budget_must_be_replaced_after_pilot": True,
         },
     }
 
