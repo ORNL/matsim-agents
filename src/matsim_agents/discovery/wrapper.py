@@ -18,7 +18,12 @@ from matsim_agents.backends.mlip.pool import MLIPWorkerPool
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.composition import Composition, parse_composition
-from matsim_agents.discovery.seeds import PhaseCandidate, generate_seeds
+from matsim_agents.discovery.seeds import (
+    PhaseCandidate,
+    SeedGenerationAction,
+    generate_seed_action,
+    generate_seeds,
+)
 from matsim_agents.discovery.stability import StabilityReport, score_stability
 
 _RANKING_FORCE_TOL_EV_PER_A = 0.05
@@ -74,6 +79,7 @@ def explore_composition(
     maxiter: int = 200,
     maxstep: float = 1e-2,
     fmax: float = 0.02,
+    relax_cell: bool = False,
     degeneracy_tol_eV_per_atom: float = 0.01,
     relative_increase_threshold: float = 0.05,
     mlp_device: str = "cuda",
@@ -81,6 +87,7 @@ def explore_composition(
     mlp_precision: str | None = None,
     n_random: int = 50,
     random_seed: int = 0,
+    generation_action: SeedGenerationAction | None = None,
     max_relaxations: int | None = None,
     on_relaxation_attempt: Callable[[], None] | None = None,
     on_phase_start: Callable[[PhaseCandidate], None] | None = None,
@@ -105,6 +112,11 @@ def explore_composition(
         applicable AFLOW prototype decoration). ``0`` disables.
     random_seed:
         Seed for the pyXtal RNG (reproducibility).
+    generation_action:
+        Optional strategy-selected generator action. When supplied, its AFLOW,
+        pyXtal, space-group, and formula-unit controls replace ``n_random`` and
+        ``random_seed``. Every generated candidate is relaxed unless an explicit
+        ``max_relaxations`` budget is set.
     max_relaxations:
         Cap on candidate relaxation attempts, including failures. Generation
         is unchanged; unrelaxed candidates are recorded explicitly.
@@ -123,22 +135,43 @@ def explore_composition(
         raise ValueError("pass either relax_fn or mlip_pool, not both")
     if max_relaxations is not None and max_relaxations < 0:
         raise ValueError("max_relaxations must be non-negative")
+    if generation_action is not None and (n_random != 50 or random_seed != 0):
+        raise ValueError(
+            "generation_action cannot be combined with n_random or random_seed; "
+            "set those controls on the action"
+        )
     if isinstance(composition, str):
         parsed = parse_composition(composition)
         if parsed is None:
             raise ValueError(f"Could not parse chemical composition: {composition!r}")
         composition = parsed
 
-    seeds_dir = os.path.join(output_dir, composition.formula, "seeds")
-    relax_dir = os.path.join(output_dir, composition.formula, "relaxed")
+    if generation_action is not None:
+        if generation_action.formula != composition.formula:
+            raise ValueError(
+                f"generation_action formula {generation_action.formula!r} does not match "
+                f"requested composition {composition.formula!r}"
+            )
+        seeds_dir = os.path.join(
+            output_dir, composition.formula, "seeds", generation_action.action_id
+        )
+        relax_dir = os.path.join(
+            output_dir, composition.formula, "relaxed", generation_action.action_id
+        )
+    else:
+        seeds_dir = os.path.join(output_dir, composition.formula, "seeds")
+        relax_dir = os.path.join(output_dir, composition.formula, "relaxed")
     os.makedirs(relax_dir, exist_ok=True)
 
-    candidates = generate_seeds(
-        composition,
-        seeds_dir,
-        n_random=n_random,
-        random_seed=random_seed,
-    )
+    if generation_action is None:
+        candidates = generate_seeds(
+            composition,
+            seeds_dir,
+            n_random=n_random,
+            random_seed=random_seed,
+        )
+    else:
+        candidates = generate_seed_action(generation_action, seeds_dir)
     relaxations: list[RelaxationResult] = []
     failures: list[str] = []
     callback_failures: list[str] = []
@@ -161,6 +194,7 @@ def explore_composition(
             maxiter=maxiter,
             maxstep=maxstep,
             fmax=fmax,
+            relax_cell=relax_cell,
             relative_increase_threshold=relative_increase_threshold,
             precision=precision,
             mlp_precision=mlp_precision,

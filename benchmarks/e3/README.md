@@ -15,6 +15,25 @@ and production campaign are not authorized or launched. Per-class checkpoint
 limitations and preflight checks are tracked in
 [`mlip-suitability-v1.yaml`](../../research/paper/e3/mlip-suitability-v1.yaml).
 
+The discovery API now accepts a `SeedGenerationAction` for explicit
+formula-unit tiers, AFLOW candidate caps, PyXtal counts, space-group/prototype
+filters, and reproducible seeds. Pass it to `explore_composition` to relax the
+generated batch with the selected MLIP; the action and geometry metadata are
+recorded separately per action. This is the shared generation/relaxation
+interface. `benchmarks.e3.mlip_exploration.run_generation_round` executes a
+per-strategy action list with MACE-OMAT-0 medium and no relaxation cap, or
+selects from an allow-listed action space. The deterministic selector balances
+composition, size, generator, prototype and space-group coverage, with a
+smoothed convergence-rate term from that strategy's prior same-class MLIP
+results. The LLM selector receives only that strategy's round summaries and
+allowed actions; it must cite initial design or strategy-local result IDs, and
+unsupported or repeated actions are rejected. Cell relaxation is off by
+default and should be enabled only for a preflight-verified class/model
+combination. These generic selectors do not replace the required
+class-specific generators for alloys, phosphorene, defects and the MOF. The
+E3-MLIP campaign must use explicit actions rather than the backward-compatible
+`generate_seeds` defaults.
+
 ## Legacy E3-DFT paired adaptive acquisition across six materials
 
 E3 compares two adaptation strategies, using the terminology of the revised

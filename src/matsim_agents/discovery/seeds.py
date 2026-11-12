@@ -32,6 +32,8 @@ ready to feed into the relaxation pipeline.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import warnings
@@ -39,11 +41,15 @@ from collections import Counter
 from functools import lru_cache
 from itertools import permutations
 from math import gcd
-from typing import Literal
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from matsim_agents.discovery.composition import Composition
+from matsim_agents.discovery.composition import Composition, parse_composition
+
+if TYPE_CHECKING:
+    from pymatgen.core import Structure
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +78,14 @@ class PhaseCandidate(BaseModel):
         description="AFLOW prototype label, e.g. 'AB_cF8_216_c_a' (zincblende).",
     )
     space_group: int | None = None
+    lattice_parameters: dict[str, float] | None = None
+    cell_matrix: list[list[float]] | None = None
     decoration_mapping: str | None = None
     random_seed: int | None = None
     parent_candidate_id: str | None = None
     iteration_created: int = 0
     num_atoms: int | None = None
+    formula_units: int | None = None
     needs_dft_verification: bool = Field(
         default=False,
         description="True for random-source seeds: known-prototype hits are "
@@ -84,6 +93,51 @@ class PhaseCandidate(BaseModel):
         "DFT-validated before any stability claim.",
     )
     notes: str | None = None
+
+
+class SeedGenerationAction(BaseModel):
+    """Strategy-issued controls for one reproducible structure-generation batch."""
+
+    action_id: str = Field(min_length=1)
+    formula: str
+    formula_units: int = Field(gt=0)
+    max_aflow_candidates: int = Field(default=0, ge=0)
+    prototype_ids: list[str] = Field(default_factory=list)
+    space_groups: list[int] = Field(default_factory=list)
+    pyxtal_count: int = Field(default=0, ge=0)
+    random_seed: int = 0
+
+    @model_validator(mode="after")
+    def _validate_requested_sources(self) -> SeedGenerationAction:
+        if self.max_aflow_candidates == 0 and self.pyxtal_count == 0:
+            raise ValueError("an action must request AFLOW candidates or pyXtal structures")
+        if self.prototype_ids and self.max_aflow_candidates == 0:
+            raise ValueError("prototype_ids require a positive max_aflow_candidates")
+        return self
+
+    @field_validator("formula")
+    @classmethod
+    def _normalize_formula(cls, value: str) -> str:
+        composition = parse_composition(value)
+        if composition is None:
+            raise ValueError(f"Could not parse chemical composition: {value!r}")
+        return composition.formula
+
+    @field_validator("space_groups")
+    @classmethod
+    def _validate_space_groups(cls, value: list[int]) -> list[int]:
+        if any(group < 1 or group > 230 for group in value):
+            raise ValueError("space_groups must contain integers from 1 to 230")
+        return value
+
+    @field_validator("action_id")
+    @classmethod
+    def _validate_action_id(cls, value: str) -> str:
+        import re
+
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value):
+            raise ValueError("action_id may contain only letters, digits, '.', '_' and '-'")
+        return value
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +150,15 @@ class _LoadedPrototype:
 
     __slots__ = ("aflow", "pearson", "strukturbericht", "mineral", "structure", "signature")
 
-    def __init__(self, aflow, pearson, strukturbericht, mineral, structure, signature):
+    def __init__(
+        self,
+        aflow: str,
+        pearson: str | None,
+        strukturbericht: str | None,
+        mineral: str | None,
+        structure: Structure,
+        signature: tuple[int, ...],
+    ) -> None:
         self.aflow = aflow
         self.pearson = pearson
         self.strukturbericht = strukturbericht
@@ -126,6 +188,7 @@ def load_prototypes() -> list[_LoadedPrototype]:
     import pathlib
 
     import pymatgen.analysis.prototypes as _ap
+    from pymatgen.core import Structure
     from pymatgen.util.provenance import StructureNL
 
     json_path = pathlib.Path(_ap.__file__).parent / "aflow_prototypes.json.gz"
@@ -142,6 +205,8 @@ def load_prototypes() -> list[_LoadedPrototype]:
         try:
             snl = StructureNL.from_dict(entry["snl"])
             s = snl.structure
+            if not isinstance(s, Structure):
+                continue
         except Exception as exc:  # pragma: no cover - guards against future format changes
             logger.debug("Skipping prototype %r: %s", entry.get("tags", {}).get("aflow"), exc)
             continue
@@ -248,7 +313,7 @@ def _enumerate_assignments(
     return assignments
 
 
-def decorate(proto: _LoadedPrototype, comp: Composition):
+def decorate(proto: _LoadedPrototype, comp: Composition) -> list[tuple[Structure, str]]:
     """Yield every distinct decoration of ``proto`` with ``comp``'s elements.
 
     Returns a list of (pymatgen Structure, mapping_str). Duplicates that
@@ -308,13 +373,21 @@ def random_search(
     n: int = 50,
     *,
     seed: int = 0,
+    formula_units: int = 1,
+    space_groups: list[int] | None = None,
     max_attempts_factor: int = 4,
-) -> list[tuple[object, int]]:
+) -> list[tuple[Structure, int]]:
     """Generate up to ``n`` random crystal structures across the 230 space groups.
 
     Returns a list of ``(pymatgen Structure, space_group)`` tuples.
     Returns ``[]`` (with a warning) if pyXtal is not installed.
     """
+    if formula_units < 1:
+        raise ValueError("formula_units must be positive")
+    if space_groups is not None and (
+        not space_groups or any(group < 1 or group > 230 for group in space_groups)
+    ):
+        raise ValueError("space_groups must contain integers from 1 to 230")
     if n <= 0:
         return []
     if not _pyxtal_available():
@@ -328,26 +401,30 @@ def random_search(
     import random as _random
 
     from pymatgen.analysis.structure_matcher import StructureMatcher
+    from pymatgen.core import Structure
     from pyxtal import pyxtal
 
     rng = _random.Random(seed)
     elements = list(comp.elements.keys())
-    counts = [comp.elements[e] for e in elements]
+    counts = [comp.elements[e] * formula_units for e in elements]
+    allowed_groups = tuple(space_groups) if space_groups is not None else tuple(range(1, 231))
 
-    results: list[tuple[object, int]] = []
+    results: list[tuple[Structure, int]] = []
     matcher = StructureMatcher(primitive_cell=True, attempt_supercell=False)
     max_attempts = max(n * max_attempts_factor, n + 20)
     attempts = 0
     duplicates = 0
     while len(results) < n and attempts < max_attempts:
         attempts += 1
-        spg = rng.randint(1, 230)
+        spg = rng.choice(allowed_groups)
         try:
             x = pyxtal()
             x.from_random(dim=3, group=spg, species=elements, numIons=counts)
             if not x.valid:
                 continue
             pmg = x.to_pymatgen()
+            if not isinstance(pmg, Structure):
+                raise TypeError("pyXtal did not produce a periodic pymatgen Structure")
             if any(matcher.fit(existing, pmg) for existing, _ in results):
                 duplicates += 1
                 continue
@@ -378,6 +455,12 @@ def generate_seeds(
     n_random: int = 50,
     fmt: str = "vasp",
     random_seed: int = 0,
+    formula_units: int | None = None,
+    include_aflow: bool = True,
+    max_aflow_prototypes: int | None = None,
+    max_aflow_candidates: int | None = None,
+    prototype_ids: list[str] | None = None,
+    space_groups: list[int] | None = None,
 ) -> list[PhaseCandidate]:
     """Generate the unified prototype + random seed list for one composition.
 
@@ -395,16 +478,68 @@ def generate_seeds(
         ASE-compatible structure format (``"vasp"``, ``"cif"``, ``"xyz"``).
     random_seed:
         Seed for the pyXtal RNG (reproducibility).
+    formula_units:
+        Requested number of reduced formula units. AFLOW cells are replicated
+        only when their existing formula-unit count divides this value; pyXtal
+        structures are generated at the requested size.
+    include_aflow:
+        Whether to include AFLOW prototype decorations in this action.
+    max_aflow_prototypes:
+        Maximum number of matching AFLOW prototypes to use after filtering.
+    max_aflow_candidates:
+        Maximum number of generated AFLOW configurations to return. This is
+        applied after decoration, size filtering, and structural deduplication.
+    prototype_ids:
+        Optional AFLOW prototype labels to include.
+    space_groups:
+        Optional allowed space groups applied to both AFLOW and pyXtal.
     """
     from ase.io import write
+    from pymatgen.analysis.structure_matcher import StructureMatcher
     from pymatgen.io.ase import AseAtomsAdaptor
 
+    if n_random < 0:
+        raise ValueError("n_random must be non-negative")
+    if formula_units is not None and formula_units < 1:
+        raise ValueError("formula_units must be positive")
+    if max_aflow_prototypes is not None and max_aflow_prototypes < 1:
+        raise ValueError("max_aflow_prototypes must be positive")
+    if max_aflow_candidates is not None and max_aflow_candidates < 0:
+        raise ValueError("max_aflow_candidates must be non-negative")
+    if space_groups is not None and (
+        not space_groups or any(group < 1 or group > 230 for group in space_groups)
+    ):
+        raise ValueError("space_groups must contain integers from 1 to 230")
+    requested_prototypes = set(prototype_ids or [])
+    allowed_space_groups = set(space_groups) if space_groups is not None else None
     os.makedirs(output_dir, exist_ok=True)
     ext = ".vasp" if fmt == "vasp" else f".{fmt}"
     candidates: list[PhaseCandidate] = []
+    seen_by_size: dict[int, list[Structure]] = {}
+    matcher = StructureMatcher(primitive_cell=False, attempt_supercell=False)
 
     # --- 1. Prototype decoration -------------------------------------------
-    matches = compatible_prototypes(composition)
+    matches = compatible_prototypes(composition) if include_aflow else []
+    if requested_prototypes:
+        found = {proto.aflow for proto in matches}
+        missing = requested_prototypes - found
+        if missing:
+            raise ValueError(
+                f"Requested AFLOW prototype(s) do not match {composition.formula}: "
+                f"{', '.join(sorted(missing))}"
+            )
+        matches = [proto for proto in matches if proto.aflow in requested_prototypes]
+    if formula_units is not None:
+        matches = [
+            proto
+            for proto in matches
+            if proto.structure.num_sites % composition.total_atoms == 0
+            and formula_units % (proto.structure.num_sites // composition.total_atoms) == 0
+        ]
+    if max_aflow_candidates == 0:
+        matches = []
+    if max_aflow_prototypes is not None:
+        matches = matches[:max_aflow_prototypes]
     logger.info(
         "Composition %s: %d AFLOW prototypes match stoichiometry signature %s.",
         composition.formula,
@@ -412,18 +547,57 @@ def generate_seeds(
         _composition_signature(composition),
     )
 
+    aflow_candidates_written = 0
     for proto in matches:
+        if max_aflow_candidates is not None and aflow_candidates_written >= max_aflow_candidates:
+            break
         decorations = decorate(proto, composition)
         for o_idx, (struct, mapping_str) in enumerate(decorations):
-            atoms = AseAtomsAdaptor.get_atoms(struct)
+            if (
+                max_aflow_candidates is not None
+                and aflow_candidates_written >= max_aflow_candidates
+            ):
+                break
+            base_formula_units, remainder = divmod(struct.num_sites, composition.total_atoms)
+            if remainder:
+                logger.warning(
+                    "Skipping AFLOW prototype %s: atom count %d is not an integer "
+                    "number of %s formula units.",
+                    proto.aflow,
+                    struct.num_sites,
+                    composition.formula,
+                )
+                continue
+            if formula_units is not None:
+                multiplier, remainder = divmod(formula_units, base_formula_units)
+                if remainder:
+                    logger.debug(
+                        "Skipping AFLOW prototype %s: its %d formula units do not "
+                        "divide requested tier %d.",
+                        proto.aflow,
+                        base_formula_units,
+                        formula_units,
+                    )
+                    continue
+                if multiplier > 1:
+                    struct.make_supercell(_balanced_supercell_matrix(struct, multiplier))
+            actual_formula_units = struct.num_sites // composition.total_atoms
             spg = struct.get_space_group_info()[1]
+            if allowed_space_groups is not None and spg not in allowed_space_groups:
+                continue
+            prior_structures = seen_by_size.setdefault(actual_formula_units, [])
+            if any(matcher.fit(previous, struct) for previous in prior_structures):
+                continue
+            prior_structures.append(struct)
+            atoms = AseAtomsAdaptor.get_atoms(struct)
             o_tag = f"_o{o_idx}" if len(decorations) > 1 else ""
             # AFLOW labels contain '_' already; replace with '-' in filename
             # to keep tags readable.
             safe_label = proto.aflow.replace("/", "-") or f"proto{matches.index(proto)}"
+            size_tag = f"__fu{actual_formula_units}" if formula_units is not None else ""
             path = os.path.join(
                 output_dir,
-                f"{composition.formula}__{safe_label}{o_tag}{ext}",
+                f"{composition.formula}{size_tag}__{safe_label}{o_tag}{ext}",
             )
             write(path, atoms, format=fmt)
             candidate_id = f"{composition.formula}-P{len(candidates):04d}"
@@ -440,23 +614,41 @@ def generate_seeds(
                     formula=composition.formula,
                     candidate_id=candidate_id,
                     structure_path=path,
+                    structure_hash=_file_sha256(path),
                     source="prototype",
                     prototype_id=proto.aflow,
                     space_group=spg,
+                    lattice_parameters=_lattice_parameters(struct),
+                    cell_matrix=struct.lattice.matrix.tolist(),
                     decoration_mapping=mapping_str,
                     num_atoms=len(atoms),
+                    formula_units=actual_formula_units,
                     needs_dft_verification=False,
                     notes=" ".join(notes_bits),
                 )
             )
+            aflow_candidates_written += 1
 
     # --- 2. pyXtal random search -------------------------------------------
-    random_hits = random_search(composition, n=n_random, seed=random_seed)
+    requested_formula_units = formula_units or 1
+    random_hits = random_search(
+        composition,
+        n=n_random,
+        seed=random_seed,
+        formula_units=requested_formula_units,
+        space_groups=space_groups,
+    )
     for r_idx, (struct, spg) in enumerate(random_hits):
+        actual_formula_units = struct.num_sites // composition.total_atoms
+        prior_structures = seen_by_size.setdefault(actual_formula_units, [])
+        if any(matcher.fit(previous, struct) for previous in prior_structures):
+            continue
+        prior_structures.append(struct)
         atoms = AseAtomsAdaptor.get_atoms(struct)
+        size_tag = f"__fu{actual_formula_units}" if formula_units is not None else ""
         path = os.path.join(
             output_dir,
-            f"{composition.formula}__pyxtal_sg{spg:03d}_r{r_idx:03d}{ext}",
+            f"{composition.formula}{size_tag}__pyxtal_sg{spg:03d}_r{r_idx:03d}{ext}",
         )
         write(path, atoms, format=fmt)
         candidates.append(
@@ -464,24 +656,105 @@ def generate_seeds(
                 formula=composition.formula,
                 candidate_id=f"{composition.formula}-R{r_idx:04d}",
                 structure_path=path,
+                structure_hash=_file_sha256(path),
                 source="random",
                 prototype_id=None,
                 space_group=int(spg),
+                lattice_parameters=_lattice_parameters(struct),
+                cell_matrix=struct.lattice.matrix.tolist(),
                 random_seed=random_seed,
                 num_atoms=len(atoms),
+                formula_units=actual_formula_units,
                 needs_dft_verification=True,
                 notes=(
                     f"Random pyXtal structure (space group {spg}). "
-                    "Novel topology — requires DFT verification before any stability claim."
+                    "Novel topology — requires independent validation before any stability claim."
                 ),
             )
         )
 
+    prototype_count = sum(candidate.source == "prototype" for candidate in candidates)
+    random_count = sum(candidate.source == "random" for candidate in candidates)
     logger.info(
         "Composition %s: %d total seeds (%d prototype + %d random).",
         composition.formula,
         len(candidates),
-        len(candidates) - len(random_hits),
-        len(random_hits),
+        prototype_count,
+        random_count,
+    )
+    return candidates
+
+
+def _balanced_supercell_matrix(structure: Structure, multiplier: int) -> list[list[int]]:
+    """Choose a diagonal replication that keeps cell-vector lengths balanced."""
+    lengths = structure.lattice.abc
+    best_factors = (multiplier, 1, 1)
+    best_score = float("inf")
+    for a in range(1, multiplier + 1):
+        if multiplier % a:
+            continue
+        remaining = multiplier // a
+        for b in range(1, remaining + 1):
+            if remaining % b:
+                continue
+            c = remaining // b
+            scaled = (lengths[0] * a, lengths[1] * b, lengths[2] * c)
+            score = max(scaled) / min(scaled)
+            if score < best_score:
+                best_factors = (a, b, c)
+                best_score = score
+    a, b, c = best_factors
+    return [[a, 0, 0], [0, b, 0], [0, 0, c]]
+
+
+def _lattice_parameters(structure: Structure) -> dict[str, float]:
+    lattice = structure.lattice
+    return {
+        "a": float(lattice.a),
+        "b": float(lattice.b),
+        "c": float(lattice.c),
+        "alpha": float(lattice.alpha),
+        "beta": float(lattice.beta),
+        "gamma": float(lattice.gamma),
+    }
+
+
+def _file_sha256(path: str) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def generate_seed_action(
+    action: SeedGenerationAction,
+    output_dir: str,
+    *,
+    fmt: str = "vasp",
+) -> list[PhaseCandidate]:
+    """Execute one strategy-selected generation action."""
+    composition = parse_composition(action.formula)
+    if composition is None:
+        raise ValueError(f"Could not parse chemical composition: {action.formula!r}")
+    os.makedirs(output_dir, exist_ok=True)
+    action_manifest = Path(output_dir) / "generation-action.json"
+    action_manifest.write_text(action.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    candidates = generate_seeds(
+        composition,
+        output_dir,
+        n_random=action.pyxtal_count,
+        fmt=fmt,
+        random_seed=action.random_seed,
+        formula_units=action.formula_units,
+        include_aflow=action.max_aflow_candidates > 0,
+        max_aflow_candidates=action.max_aflow_candidates,
+        prototype_ids=action.prototype_ids or None,
+        space_groups=action.space_groups or None,
+    )
+    manifest = {
+        "schema_version": 1,
+        "action": action.model_dump(mode="json"),
+        "candidate_count": len(candidates),
+        "candidates": [candidate.model_dump(mode="json") for candidate in candidates],
+    }
+    (Path(output_dir) / "generation-manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
     )
     return candidates

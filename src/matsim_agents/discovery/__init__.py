@@ -17,7 +17,9 @@ from matsim_agents.discovery.composition import (
 )
 from matsim_agents.discovery.seeds import (
     PhaseCandidate,
+    SeedGenerationAction,
     compatible_prototypes,
+    generate_seed_action,
     generate_seeds,
     load_prototypes,
     random_search,
@@ -45,11 +47,13 @@ __all__ = [
     "ReferenceCompletenessReport",
     "ReferenceEnergySet",
     "ReferencePhaseEntry",
+    "SeedGenerationAction",
     "StabilityReport",
     "compatible_prototypes",
     "explore_composition",
     "extract_compositions",
     "generate_seeds",
+    "generate_seed_action",
     "load_prototypes",
     "parse_composition",
     "random_search",

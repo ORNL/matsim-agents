@@ -66,14 +66,29 @@ relaxations before exact-hash cache reuse.
 ### Crystallographic and MLIP feasibility gates
 
 1. AFLOW matching supplies prototype hypotheses, not labels. Retain its
-   prototype ID, space group, decoration, unit-cell atom count, and source
-   geometry hash. The current `generate_seeds` helper decorates matching
-   prototypes and defaults to up to 50 PyXtal structures per formula; neither
-   behavior currently provides the required adaptive, size-aware E3 workflow.
-2. Extend generation actions with formula-unit multipliers and space-group
-   constraints. The current PyXtal path samples 3D space groups and passes only
-   reduced-formula counts. Add an explicit multiplier for bulk tiers; implement
-   and validate a separate 2D path before considering PyXtal for phosphorene.
+   prototype ID, space group, decoration, formula-unit count, atom count,
+   lattice parameters, cell matrix, and source geometry hash. The generic
+   generator now exposes `SeedGenerationAction`: a strategy can request an
+   explicit formula-unit tier, AFLOW candidate cap, PyXtal count, prototype or
+   space-group filters, and random seed. The action manifest is persisted, and
+   `explore_composition(..., generation_action=...)` sends every generated
+   candidate through the same relaxation path unless an explicit relaxation
+   cap is supplied.
+2. The action interface currently covers AFLOW prototypes and 3D PyXtal
+   generation only. `benchmarks.e3.mlip_exploration.run_generation_round`
+   executes strategy-supplied actions with the same MACE-OMAT-0 medium
+   optimizer and no relaxation cap, or selects from a shared allow-listed
+   action space. The deterministic selector scores under-covered composition,
+   size, generator, prototype and space-group dimensions, with a secondary
+   smoothed convergence-rate term from prior same-composition/size MLIP
+   results. The LLM selector receives only its strategy-local round summaries
+   and the same allowed actions; it must cite valid evidence and cannot submit
+   unsupported or previously used action IDs. Class-specific actions for alloy
+   occupations, defects, and framework perturbations remain to be implemented.
+   The older `generate_seeds` defaults remain for backward compatibility and
+   must not be used by the adaptive E3 runner. The current PyXtal path accepts
+   formula-unit and space-group controls, but remains 3D; implement and validate
+   a separate 2D path before considering PyXtal for phosphorene.
 3. Use symmetry-aware occupation enumeration for BCC/FCC alloys and
    connectivity-preserving perturbations for LiFePO4 and the MOF. Reject
    unconstrained coordinate noise, broken MOF connectivity, non-periodic
@@ -114,6 +129,14 @@ generation-attempt cap.
 
 **Rule-based policy (deterministic, versioned):**
 
+- The executable generic selector is currently a bounded prototype: greedily
+  score under-covered composition, size, generator, prototype and space-group
+  dimensions, add `0.25 * (converged + 1) / (attempted + 2)` from prior
+  same-composition/size relaxations (or a neutral 0.5 prior), and break ties
+  by action ID. It chooses only among the explicitly supplied allow-listed
+  actions. It does not yet implement the structural descriptor, promising
+  relaxed-parent ranking, or perturbation actions specified below; therefore
+  it is not the final frozen production rule-based policy.
 - Reserve the first 10% of each replicate's class budget for balanced coverage
   of all allowed size tiers and seed structural families.
 - For each later round, rank available generation actions using
