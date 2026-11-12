@@ -173,8 +173,11 @@ def test_generation_round_uses_explicit_actions_and_mace_medium(tmp_path, monkey
 
     monkeypatch.setattr("benchmarks.e3.mlip_exploration.explore_composition", fake_explore)
     monkeypatch.setattr(
-        "benchmarks.e3.mlip_exploration._verified_checkpoint_sha256",
-        lambda: "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a",
+        "benchmarks.e3.mlip_exploration._verified_checkpoint",
+        lambda: (
+            tmp_path / "verified-mace-checkpoint",
+            "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a",
+        ),
     )
     results = run_generation_round(
         "llm_guided_adaptation",
@@ -190,7 +193,8 @@ def test_generation_round_uses_explicit_actions_and_mace_medium(tmp_path, monkey
     assert formula == action.formula
     assert kwargs["generation_action"] == action
     assert kwargs["mlip_backend"] == "mace"
-    assert kwargs["mace_model"] == "medium-omat-0"
+    assert kwargs["mace_family"] == "checkpoint"
+    assert kwargs["mace_model"] == str(tmp_path / "verified-mace-checkpoint")
     assert kwargs["maxiter"] == 500
     assert kwargs["maxstep"] == 0.05
     assert kwargs["fmax"] == 0.03
@@ -204,6 +208,7 @@ def test_generation_round_uses_explicit_actions_and_mace_medium(tmp_path, monkey
         manifest["checkpoint_sha256"]
         == "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a"
     )
+    assert manifest["mace_model_path"] == str(tmp_path / "verified-mace-checkpoint")
     assert manifest["actions"][0]["aflow_candidate_cap"] == 12
     assert manifest["actions"][0]["pyxtal_requested"] == 3
     assert (
@@ -236,8 +241,11 @@ def test_generation_round_selects_rule_actions_from_strategy_local_history(tmp_p
 
     monkeypatch.setattr("benchmarks.e3.mlip_exploration.explore_composition", fake_explore)
     monkeypatch.setattr(
-        "benchmarks.e3.mlip_exploration._verified_checkpoint_sha256",
-        lambda: "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a",
+        "benchmarks.e3.mlip_exploration._verified_checkpoint",
+        lambda: (
+            tmp_path / "verified-mace-checkpoint",
+            "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a",
+        ),
     )
 
     run_generation_round(

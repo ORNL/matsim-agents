@@ -77,6 +77,16 @@ strategies:
     apply_to_each_material_class: true
     generation_operations_and_acceptance_rules_shared: true
 
+llm_guided_configuration:
+  provider: mag
+  model: gemini-4-argon@google
+  mag_provider: google
+  temperature: 0.0
+  request_limits:
+    max_calls_per_round: 1
+    max_tokens: 8192
+  environment_overrides: prohibited
+
 outcomes:
   exploration:
     question: How extensively and efficiently was admissible crystallographic space explored?

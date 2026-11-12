@@ -94,51 +94,58 @@ submission authorization.
 
 ### 3.2 Current entrypoint and planned workflow
 
-The current [E3-MLIP Slurm job](../../deployments/perlmutter/jobs/job-e3-mlip-preparation-perlmutter.sh)
-is still CPU-only geometry materialization plus single-point MACE inference.
-It is a diagnostic only and does not satisfy the revised experimental
-protocol. The adaptive generator, geometry-optimization controller, and
-GPU-runner described in the plan must be implemented and pass its pilot gates
-before production.
-
-The repository already has an in-node `MLIPWorkerPool`: on a Perlmutter GPU
-node it can run one persistent relaxation worker per A100. The planned pilot
-uses one node and all four GPUs; adaptive rounds synchronize between batches.
-This does not submit or coordinate a production allocation.
+The [CPU preparation job](../../deployments/perlmutter/jobs/job-e3-mlip-preparation-perlmutter.sh)
+remains a diagnostic and is not the production path. The production entrypoint
+is
+[`job-e3-mlip-production-perlmutter.sh`](../../deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh):
+it runs one paired-seed/material/strategy stream per Slurm array element,
+launches one MACE worker per GPU across 20 nodes, enforces round barriers, and
+resumes only tasks without a terminal result. The complete adaptive schedule
+is generated with `python -m benchmarks.e3.production plan`; future-round
+structures are generated only after that round's strategy decision.
 
 ```bash
 # Diagnostic only; this is not the revised exploration campaign.
 PROJECT_ROOT="$PWD" sbatch -A <allocation> \
   deployments/perlmutter/jobs/job-e3-mlip-preparation-perlmutter.sh
 
-# Candidate-only diagnostic preparation; does not generate or optimize structures.
-python -m benchmarks.e3.run prepare-candidates \
-  --output runs/e3-perlmutter/prepared \
-  --materials lifepo4 bcc_refractory fcc_cantor phosphorene zn_formate_mof nb_ta_o
+# Generate all 360 adaptive round manifests (no structures or jobs are run).
+python -m benchmarks.e3.production plan \
+  --output benchmarks/e3/manifests/e3-mlip-production-v1.json
 
-# Predict the selected frozen MACE model on all candidate geometries.
-python -m benchmarks.e3.mlip_predict \
-  --model mace-omat-0-medium \
-  --input runs/e3-perlmutter/prepared/bcc_refractory/candidates.extxyz \
-  --output runs/e3-perlmutter/predictions/bcc_refractory.mace-omat-0-medium.json \
-  --device cpu
+# After explicit resource authorization only:
+MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:regular:38016 \
+  PROJECT_ROOT="$PWD" sbatch --account=m5216_g \
+  deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh
 ```
 
-For this diagnostic only, populate the offline MACE cache on a Perlmutter login node:
-`PROJECT_ROOT="$PWD" bash deployments/perlmutter/download/download-mace-perlmutter.sh mace_mp medium-omat-0`.
-The diagnostic writes a unique
-`runs/e3-perlmutter/preparation-<job-id>/` directory (or configured
-`MATSIM_RUNS_ROOT`) with geometry files, single-point predictions, and source
-revision/status. It does not run adaptive selection or geometry optimization.
-The legacy reference-backed E3-DFT commands and protocol below are unchanged
-and must not be used by E3-MLIP.
+The production job requires the verified offline MACE cache and the base and
+MACE virtual environments. Each structure attempt preserves its initial
+geometry, optimizer trajectory, per-step log, terminal reason, hardware and
+timing. It uses no DFT labels or references. The legacy reference-backed
+E3-DFT commands and protocol below are unchanged and must not be used by
+E3-MLIP.
+
+The frozen LLM provider, model identifier, temperature, and token limit are
+versioned in `benchmarks/e3/scientific-objectives-v1.yaml`; runtime environment
+variables cannot override them. After all streams finish, generate the
+campaign-wide relaxed-minimum report offline (not during acquisition):
+
+```bash
+python -m benchmarks.e3.production cluster-minima \
+  --output-root /path/to/e3-mlip-results \
+  --output /path/to/e3-mlip-results/relaxed-minima.json
+```
 
 ### 3.3 E3-MLIP pre-production gate
 
-Follow the plan's six pre-production gates, including the incomplete MOF
-seed stoichiometry, checkpoint species checks, and 280-relaxation GPU pilot.
-No production run is authorized until pilot-derived cost estimates and an
-explicit Perlmutter allocation are approved.
+Follow the six production-start gates in the E3-MLIP plan: valid class-specific
+generators including COD-derived connectivity-checked Zn-formate variants;
+checkpoint hash and species checks; identical frozen optimization settings;
+restartable task manifests and round barriers; matched adaptive budgets; and
+explicit Perlmutter resource authorization. No standalone pilot is required
+or introduced. The production job remains blocked unless the operator supplies
+the exact authorization token specified in the job script.
 
 ## 4. Perlmutter decision checklist
 

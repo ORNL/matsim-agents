@@ -20,7 +20,7 @@ E3_STRATEGIES = ("rule_based_adaptation", "llm_guided_adaptation")
 _INITIAL_EVIDENCE_ID = "campaign-design"
 
 
-def _verified_checkpoint_sha256() -> str:
+def _verified_checkpoint() -> tuple[Path, str]:
     artifact_dir = os.environ.get("MACE_ARTIFACT_DIR")
     if not artifact_dir:
         raise RuntimeError("MACE_ARTIFACT_DIR must identify the frozen E3-MLIP model cache")
@@ -37,7 +37,15 @@ def _verified_checkpoint_sha256() -> str:
             "frozen E3-MLIP checkpoint hash mismatch: "
             f"expected {E3_MLIP_CHECKPOINT_SHA256}, got {actual_sha256}"
         )
-    return actual_sha256
+    return checkpoint_path.resolve(), actual_sha256
+
+
+def _verified_checkpoint_path() -> Path:
+    return _verified_checkpoint()[0]
+
+
+def _verified_checkpoint_sha256() -> str:
+    return _verified_checkpoint()[1]
 
 
 def load_action_history(
@@ -323,7 +331,7 @@ def run_generation_round(
         raise ValueError("generation action IDs must be unique within a round")
     if maxiter < 1 or maxstep <= 0 or fmax <= 0:
         raise ValueError("maxiter, maxstep, and fmax must be positive")
-    checkpoint_sha256 = _verified_checkpoint_sha256()
+    checkpoint_path, checkpoint_sha256 = _verified_checkpoint()
 
     round_dir = Path(output_dir) / strategy / f"round-{round_index:02d}"
     round_dir.mkdir(parents=True, exist_ok=False)
@@ -340,6 +348,7 @@ def run_generation_round(
                     "status": status,
                     "model": "MACE-OMAT-0 medium",
                     "mace_model": E3_MLIP_MODEL,
+                    "mace_model_path": str(checkpoint_path),
                     "checkpoint_sha256": checkpoint_sha256,
                     "optimizer": optimizer,
                     "maxiter": maxiter,
@@ -377,8 +386,8 @@ def run_generation_round(
                     action.formula,
                     output_dir=str(round_dir),
                     mlip_backend="mace",
-                    mace_family="mace_mp",
-                    mace_model=E3_MLIP_MODEL,
+                    mace_family="checkpoint",
+                    mace_model=str(checkpoint_path),
                     mlp_device=mlp_device,
                     optimizer=optimizer,
                     maxiter=maxiter,
@@ -394,6 +403,7 @@ def run_generation_round(
                 result_payload = result.model_dump(mode="json")
                 result_payload["model"] = "MACE-OMAT-0 medium"
                 result_payload["mace_model"] = E3_MLIP_MODEL
+                result_payload["mace_model_path"] = str(checkpoint_path)
                 result_payload["checkpoint_sha256"] = checkpoint_sha256
                 result_payload["optimizer_protocol"] = {
                     "optimizer": optimizer,

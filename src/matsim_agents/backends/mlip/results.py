@@ -16,6 +16,7 @@ class RelaxationResult(BaseModel):
     final_max_force_eV_per_A: float
     num_steps: int
     converged: bool
+    termination_reason: str | None = None
     top_branch: int | None = None
     top_branch_weight: float | None = None
     notes: str | None = None

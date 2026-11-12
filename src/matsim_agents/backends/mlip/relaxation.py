@@ -671,6 +671,7 @@ class _OptimizationOutcome(NamedTuple):
     top_weight: float
     converged: bool
     steps_taken: int
+    termination_reason: str
 
 
 def _optimize_with_log(
@@ -703,6 +704,7 @@ def _optimize_with_log(
     top_weight = float("nan")
     converged = False
     steps_taken = 0
+    termination_reason = "max_steps"
 
     with open(log_csv_path, "w") as csv_file:
         csv_file.write(",".join(csv_header) + "\n")
@@ -744,6 +746,7 @@ def _optimize_with_log(
 
                 if max_force < args.fmax:
                     converged = True
+                    termination_reason = "force_threshold"
                     break
 
                 if prev_max_force is not None and prev_max_force > 0.0:
@@ -751,6 +754,7 @@ def _optimize_with_log(
                     if relative_increase > args.relative_increase_threshold:
                         if not cell_relax_active:
                             atoms.set_positions(prev_positions)
+                        termination_reason = "force_growth"
                         break
 
                 prev_max_force = max_force
@@ -760,7 +764,15 @@ def _optimize_with_log(
         finally:
             traj_writer.close()
 
-    return _OptimizationOutcome(energy, max_force, top_branch, top_weight, converged, steps_taken)
+    return _OptimizationOutcome(
+        energy,
+        max_force,
+        top_branch,
+        top_weight,
+        converged,
+        steps_taken,
+        termination_reason,
+    )
 
 
 def relax_with_mlip(
@@ -838,6 +850,7 @@ def relax_with_mlip(
         final_max_force_eV_per_A=float(outcome.max_force),
         num_steps=outcome.steps_taken,
         converged=outcome.converged,
+        termination_reason=outcome.termination_reason,
         top_branch=outcome.top_branch if outcome.top_branch >= 0 else None,
         top_branch_weight=outcome.top_weight if np.isfinite(outcome.top_weight) else None,
         notes=uq_note,
