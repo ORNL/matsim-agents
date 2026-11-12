@@ -243,6 +243,44 @@ def _geometry_hash(atoms, *, translation_invariant: bool = False) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+def make_structure_matcher():
+    try:
+        from pymatgen.analysis.structure_matcher import StructureMatcher
+    except ImportError as exc:
+        raise StructureGenerationError(
+            "Symmetry-aware E3 deduplication requires pymatgen."
+        ) from exc
+    return StructureMatcher(
+        ltol=0.01,
+        stol=0.01,
+        angle_tol=1.0,
+        primitive_cell=False,
+        scale=False,
+        attempt_supercell=False,
+    )
+
+
+def structures_symmetry_equivalent(left, right, matcher=None) -> bool:
+    if len(left) != len(right) or Counter(left.get_chemical_symbols()) != Counter(
+        right.get_chemical_symbols()
+    ):
+        return False
+    if matcher is None:
+        matcher = make_structure_matcher()
+    try:
+        from pymatgen.io.ase import AseAtomsAdaptor
+    except ImportError as exc:
+        raise StructureGenerationError(
+            "Symmetry-aware E3 deduplication requires pymatgen's ASE adaptor."
+        ) from exc
+    return bool(
+        matcher.fit(
+            AseAtomsAdaptor.get_structure(left),
+            AseAtomsAdaptor.get_structure(right),
+        )
+    )
+
+
 def _validate_geometry(atoms, *, min_distance: float = 0.7) -> None:
     _, np, _, _, _, _ = _ase()
     if len(atoms) == 0 or not all(bool(value) for value in atoms.pbc):
@@ -719,7 +757,7 @@ def _pyxtal_oxide_candidates(
     try:
         proposals = random_search(
             composition,
-            n=min(max(count * 2, 4), 64),
+            n=max(count * 2, 4),
             seed=seed,
             formula_units=tier,
             space_groups=list(space_groups) or None,
@@ -1053,6 +1091,7 @@ def generate_structures(
     rng_master = np.random.default_rng(seed)
     selected = []
     seen: set[str] = set()
+    symmetry_matcher = make_structure_matcher()
     max_attempts = max(40, count * 30)
     for _ in range(max_attempts):
         candidate_seed = int(rng_master.integers(0, 2**32, dtype=np.uint64))
@@ -1110,6 +1149,10 @@ def generate_structures(
             )
         geometry_hash = _geometry_hash(atoms, translation_invariant=material in _ALLOY_ELEMENTS)
         if geometry_hash in seen:
+            continue
+        if any(
+            structures_symmetry_equivalent(atoms, prior, symmetry_matcher) for prior, _ in selected
+        ):
             continue
         seen.add(geometry_hash)
         space_group, space_group_reason = _space_group(atoms)

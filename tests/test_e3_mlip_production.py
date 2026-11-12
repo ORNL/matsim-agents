@@ -12,6 +12,7 @@ from benchmarks.e3.production import (
     _action_space,
     _execute_round_tasks,
     _llm_allocation,
+    _materialize_round,
     _rule_allocation,
     _task_result,
     build_campaign_manifest,
@@ -86,6 +87,121 @@ def test_rule_policy_is_deterministic_and_satisfies_tier_floors():
         tier = str(item["action"]["size_tier"])
         by_tier[tier] = by_tier.get(tier, 0) + item["count"]
     assert all(by_tier[tier] >= floor for tier, floor in floors.items())
+
+
+def test_lifepo4_parent_action_capacity_is_shared_across_allocators():
+    actions = _action_space("lifepo4")
+    parent_actions = [
+        action
+        for action in actions
+        if action["family_label"] == "olivine-pristine" and action["family"] == "olivine"
+    ]
+    assert parent_actions
+
+    allocation = _rule_allocation(
+        actions,
+        [],
+        target=20,
+        minimum_by_tier={"4": 2, "8": 2, "16": 2, "32": 2},
+    )
+    parent_counts = {}
+    for row in allocation:
+        action = row["action"]
+        if action["family_label"] == "olivine-pristine":
+            tier = str(action["size_tier"])
+            parent_counts[tier] = parent_counts.get(tier, 0) + row["count"]
+    assert all(count <= 1 for count in parent_counts.values())
+
+    exhausted = parent_actions[0]
+    prior_history = [
+        {
+            "action_id": exhausted["action_id"],
+            "action": exhausted,
+            "attempted": 1,
+            "converged": 1,
+        }
+    ]
+    allocation = _rule_allocation(
+        actions,
+        prior_history,
+        target=20,
+        minimum_by_tier={"4": 2, "8": 2, "16": 2, "32": 2},
+    )
+    assert not any(
+        row["action"]["family_label"] == "olivine-pristine"
+        and row["action"]["size_tier"] == exhausted["size_tier"]
+        for row in allocation
+    )
+
+    class FakeChat:
+        def invoke(self, prompt):
+            catalog = prompt.split("Hierarchical action catalog: ", maxsplit=1)[1]
+            assert exhausted["action_id"] not in catalog
+            return type(
+                "Response",
+                (),
+                {
+                    "content": json.dumps(
+                        {
+                            "allocations": [{"action_id": exhausted["action_id"], "count": 1}],
+                            "cited_evidence_ids": ["campaign-design"],
+                            "rationale": "test finite-capacity rejection",
+                        }
+                    )
+                },
+            )()
+
+    with pytest.raises(ValueError, match="finite generation-action capacity"):
+        _llm_allocation(
+            FakeChat(),
+            "lifepo4",
+            actions,
+            prior_history,
+            target=1,
+            minimum_by_tier={},
+        )
+
+
+def test_round_materialization_preserves_control_generation_family(monkeypatch, tmp_path):
+    from benchmarks.e3 import production
+    from benchmarks.e3.structure_generation import _FAMILIES
+
+    manifest = build_campaign_manifest()
+    spec = next(
+        row
+        for row in manifest["rounds"]
+        if row["material"] == "bcc_refractory"
+        and row["strategy"] == E3_STRATEGIES[0]
+        and row["seed"] == REPLICATE_SEEDS[0]
+        and row["round"] == 1
+    )
+    spec = {
+        **spec,
+        "main_target": 1,
+        "minimum_main_count_by_tier": {"4": 1},
+        "finite_size_control_families": [0],
+    }
+    manifest["action_spaces"]["bcc_refractory"] = _action_space("bcc_refractory")
+    monkeypatch.setattr(
+        production,
+        "_verified_checkpoint",
+        lambda: (tmp_path / "checkpoint", "checkpoint-sha256"),
+    )
+
+    _, tasks_path, result = _materialize_round(manifest, spec, tmp_path, [], None)
+
+    tasks = [
+        json.loads(line)
+        for line in tasks_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    controls = [task for task in tasks if task["candidate_kind"] == "finite_size_control"]
+    assert result["finite_size_controls"] == len(MATERIALS["bcc_refractory"]["tiers"])
+    assert len(controls) == len(MATERIALS["bcc_refractory"]["tiers"])
+    for control in controls:
+        assert control["control_family_id"] == 0
+        assert control["action"]["family"] in _FAMILIES["bcc_refractory"]
+        assert control["generation"]["family"] in _FAMILIES["bcc_refractory"]
 
 
 def test_llm_policy_validates_exact_budget_allowlist_and_evidence():

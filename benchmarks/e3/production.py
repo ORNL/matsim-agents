@@ -581,6 +581,34 @@ def _action_dimensions(action: dict[str, Any]) -> set[str]:
     return dimensions
 
 
+def _finite_capacity_group(action: dict[str, Any]) -> tuple[str, str] | None:
+    if (
+        action.get("material") == "lifepo4"
+        and action.get("family_label") == "olivine-pristine"
+        and action.get("family") == "olivine"
+        and action.get("defect") is None
+        and action.get("strain") is None
+    ):
+        return "lifepo4-pristine-parent", str(action["size_tier"])
+    return None
+
+
+def _finite_capacity_remaining(
+    action_space: list[dict[str, Any]], history: list[dict[str, Any]]
+) -> dict[tuple[str, str], int]:
+    action_by_id = {action["action_id"]: action for action in action_space}
+    capacity_groups = {
+        group for action in action_space if (group := _finite_capacity_group(action)) is not None
+    }
+    used: dict[tuple[str, str], int] = defaultdict(int)
+    for record in history:
+        action = action_by_id.get(record.get("action_id"), record.get("action", {}))
+        group = _finite_capacity_group(action)
+        if group is not None:
+            used[group] += int(record.get("attempted", record.get("count", 0)))
+    return {group: max(0, 1 - used[group]) for group in capacity_groups}
+
+
 def _rule_allocation(
     action_space: list[dict[str, Any]],
     history: list[dict[str, Any]],
@@ -600,6 +628,20 @@ def _rule_allocation(
         attempted[action["action_id"]] += int(record.get("attempted", 0))
         converged[action["action_id"]] += int(record.get("converged", 0))
     counts: dict[str, int] = defaultdict(int)
+    finite_remaining = _finite_capacity_remaining(action_space, history)
+    finite_allocated: dict[tuple[str, str], int] = defaultdict(int)
+
+    def available(action: dict[str, Any]) -> bool:
+        group = _finite_capacity_group(action)
+        return group is None or finite_allocated[group] < finite_remaining[group]
+
+    def allocate_one(action: dict[str, Any]) -> None:
+        counts[action["action_id"]] += 1
+        group = _finite_capacity_group(action)
+        if group is not None:
+            finite_allocated[group] += 1
+        for dimension in _action_dimensions(action):
+            covered[dimension] += 1
 
     def score(action: dict[str, Any]) -> tuple[float, str]:
         undercovered = sum(1 / (1 + covered[dimension]) for dimension in _action_dimensions(action))
@@ -608,26 +650,36 @@ def _rule_allocation(
         return undercovered + 0.25 * rate, action["action_id"]
 
     for tier_text, count in sorted(minimum_by_tier.items(), key=lambda item: int(item[0])):
-        tier_actions = [action for action in action_space if str(action["size_tier"]) == tier_text]
+        tier_actions = [
+            action
+            for action in action_space
+            if str(action["size_tier"]) == tier_text and available(action)
+        ]
         if not tier_actions and count:
             raise ValueError(f"no allowed generation actions for required tier {tier_text}")
-        for _ in range(count):
+        for allocation_index in range(count):
+            if not tier_actions:
+                raise ValueError(
+                    f"finite action capacity cannot satisfy the tier {tier_text} minimum"
+                )
             chosen = max(
                 tier_actions, key=lambda action: (score(action)[0], -int(action["action_id"], 16))
             )
-            counts[chosen["action_id"]] += 1
-            for dimension in _action_dimensions(chosen):
-                covered[dimension] += 1
+            allocate_one(chosen)
+            tier_actions = [action for action in tier_actions if available(action)]
+            if allocation_index < count - 1 and not tier_actions:
+                raise ValueError(
+                    f"finite action capacity cannot satisfy the tier {tier_text} minimum"
+                )
     allocated = sum(counts.values())
     if allocated > target:
         raise ValueError("required tier coverage exceeds the round budget")
     for _ in range(target - allocated):
-        chosen = max(
-            action_space, key=lambda action: (score(action)[0], -int(action["action_id"], 16))
-        )
-        counts[chosen["action_id"]] += 1
-        for dimension in _action_dimensions(chosen):
-            covered[dimension] += 1
+        eligible = [action for action in action_space if available(action)]
+        if not eligible:
+            raise ValueError("finite action capacities cannot satisfy the round target")
+        chosen = max(eligible, key=lambda action: (score(action)[0], -int(action["action_id"], 16)))
+        allocate_one(chosen)
     return [
         {"action": allowed[action_id], "count": count}
         for action_id, count in sorted(counts.items())
@@ -716,7 +768,18 @@ def _llm_allocation(
     valid_evidence = {"campaign-design"} | {
         item["evidence_id"] for item in history if item.get("evidence_id")
     }
-    prompt_catalog = _compact_action_catalog(material, action_space)
+    finite_remaining = _finite_capacity_remaining(action_space, history)
+    available_actions = [
+        action
+        for action in action_space
+        if (group := _finite_capacity_group(action)) is None or finite_remaining[group] > 0
+    ]
+    prompt_catalog = _compact_action_catalog(material, available_actions)
+    finite_capacity_by_action = {
+        action["action_id"]: finite_remaining[group]
+        for action in available_actions
+        if (group := _finite_capacity_group(action)) is not None
+    }
     prompt_history = _compact_history(history)
     prompt = (
         "Choose E3-MLIP crystallographic generation allocations for this round. "
@@ -735,6 +798,8 @@ def _llm_allocation(
         f"Round target: {target}\n"
         f"Minimum counts by size tier: {json.dumps(minimum_by_tier, sort_keys=True)}\n"
         f"Prior strategy-local outcomes: {json.dumps(prompt_history, sort_keys=True)}\n"
+        f"Remaining finite action counts: "
+        f"{json.dumps(finite_capacity_by_action, sort_keys=True)}\n"
         f"Hierarchical action catalog: {json.dumps(prompt_catalog, separators=(',', ':'))}\n"
     )
     response = chat.invoke(prompt)
@@ -752,6 +817,7 @@ def _llm_allocation(
     selected = []
     seen = set()
     tier_counts: dict[str, int] = defaultdict(int)
+    finite_allocated: dict[tuple[str, str], int] = defaultdict(int)
     total = 0
     for allocation in allocations:
         if not isinstance(allocation, dict) or set(allocation) != {"action_id", "count"}:
@@ -768,6 +834,11 @@ def _llm_allocation(
             raise ValueError("LLM allocation contains an invalid or repeated action")
         seen.add(action_id)
         action = action_map[action_id]
+        group = _finite_capacity_group(action)
+        if group is not None and finite_allocated[group] + count > finite_remaining[group]:
+            raise ValueError("LLM allocation exceeds a finite generation-action capacity")
+        if group is not None:
+            finite_allocated[group] += count
         tier_counts[str(action["size_tier"])] += count
         total += count
         selected.append({"action": action, "count": count})
@@ -872,7 +943,13 @@ def _materialize_round(
     history: list[dict[str, Any]],
     chat: Any | None,
 ) -> tuple[Path, Path, dict[str, Any]]:
-    from benchmarks.e3.structure_generation import generate_structures
+    from ase.io import read
+
+    from benchmarks.e3.structure_generation import (
+        generate_structures,
+        make_structure_matcher,
+        structures_symmetry_equivalent,
+    )
 
     material = round_spec["material"]
     strategy = round_spec["strategy"]
@@ -934,10 +1011,21 @@ def _materialize_round(
     candidate_records = []
     registry_path = run_root / material / strategy / f"seed-{seed}" / "candidate-registry.jsonl"
     known_hashes = set()
+    symmetry_index: dict[tuple[str, int, int], list[Any]] = defaultdict(list)
+    symmetry_matcher = make_structure_matcher()
     if registry_path.is_file():
         for line in registry_path.read_text(encoding="utf-8").splitlines():
             if line.strip():
-                known_hashes.add(json.loads(line)["structure_sha256"])
+                prior = json.loads(line)
+                known_hashes.add(prior["structure_sha256"])
+                if prior.get("candidate_kind") == "unique_configuration":
+                    prior_atoms = read(prior["structure_path"])
+                    key = (
+                        str(prior["formula"]),
+                        int(prior["action"]["size_tier"]),
+                        int(prior["num_atoms"]),
+                    )
+                    symmetry_index[key].append(prior_atoms)
     for allocation in allocations:
         action_template = dict(allocation["action"])
         count = int(allocation["count"])
@@ -982,7 +1070,19 @@ def _materialize_round(
                 digest = _geometry_sha256(structure_path)
                 if digest in known_hashes:
                     continue
+                atoms = read(structure_path)
+                symmetry_key = (
+                    str(record["formula"]),
+                    int(action_template["size_tier"]),
+                    num_atoms,
+                )
+                if any(
+                    structures_symmetry_equivalent(atoms, prior, symmetry_matcher)
+                    for prior in symmetry_index[symmetry_key]
+                ):
+                    continue
                 known_hashes.add(digest)
+                symmetry_index[symmetry_key].append(atoms)
                 candidate_id = hashlib.sha256(
                     f"{material}:{strategy}:{seed}:{round_index}:{digest}".encode()
                 ).hexdigest()[:24]
@@ -1039,7 +1139,6 @@ def _materialize_round(
             control_action = dict(base_actions[0])
             control_action.update(
                 action_id=f"control-{family_id:02d}-tier-{tier}",
-                family=f"size-control-{family_id:02d}",
                 random_seed=int(
                     hashlib.sha256(f"size-control:{material}:{family_id}".encode()).hexdigest()[:8],
                     16,

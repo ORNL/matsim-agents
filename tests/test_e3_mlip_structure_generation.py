@@ -117,6 +117,54 @@ def test_lifepo4_antisite_batch_keeps_source_composition_and_provenance(tmp_path
         assert record["generation"]["operation"]["type"] == "Li-Fe antisite pair"
 
 
+def test_symmetry_matching_recognizes_translated_lifepo4_antisite_cell(tmp_path):
+    pytest.importorskip("pymatgen")
+    from benchmarks.e3.structure_generation import (
+        make_structure_matcher,
+        structures_symmetry_equivalent,
+    )
+
+    record = generate_structures(
+        "lifepo4",
+        _action(
+            "lifepo4-symmetry",
+            family="antisite_pair",
+            formula="LiFePO4",
+            size_tier=8,
+            generator="class_specific",
+            random_seed=83,
+            count=1,
+            defect="antisite_pair",
+        ),
+        tmp_path,
+    )[0]
+    atoms = _read_record(record)
+    translated = atoms.copy()
+    translated.translate(atoms.cell.array[0] * 0.37 + atoms.cell.array[1] * 0.19)
+
+    assert structures_symmetry_equivalent(atoms, translated, matcher=make_structure_matcher())
+
+
+def test_pyxtal_proposals_scale_with_requested_count(monkeypatch):
+    pytest.importorskip("pyxtal")
+    from benchmarks.e3 import structure_generation
+    from matsim_agents.discovery import seeds
+
+    captured = {}
+
+    def fake_random_search(*args, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(seeds, "random_search", fake_random_search)
+    with pytest.raises(StructureGenerationError, match="PyXtal produced no oxide candidate"):
+        structure_generation._pyxtal_oxide_candidates(
+            "Nb2O5", tier=2, seed=3, count=80, prototype_ids=(), space_groups=()
+        )
+
+    assert captured["n"] == 160
+
+
 def test_phosphorene_is_generated_from_2d_template_with_fixed_vacuum(tmp_path):
     from ase.io import read
 

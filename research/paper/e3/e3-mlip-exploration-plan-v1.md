@@ -80,22 +80,25 @@ relaxations before exact-hash cache reuse.
 2. The action interface currently covers AFLOW prototypes and 3D PyXtal
    generation only. `benchmarks.e3.mlip_exploration.run_generation_round`
    executes strategy-supplied actions with the same MACE-OMAT-0 medium
-   optimizer and no relaxation cap, or selects from a shared allow-listed
-   action space. The deterministic selector scores under-covered composition,
-   size, generator, prototype and space-group dimensions, with a secondary
-   smoothed convergence-rate term from prior same-composition/size MLIP
-   results. The LLM selector receives only its strategy-local round summaries
-   and the same allowed actions; it must cite valid evidence and cannot submit
-   unsupported or previously used action IDs. Class-specific actions for alloy
-   occupations, defects, and framework perturbations remain to be implemented.
-   The older `generate_seeds` defaults remain for backward compatibility and
-   must not be used by the adaptive E3 runner. The current PyXtal path accepts
-   formula-unit and space-group controls, but remains 3D; implement and validate
-   a separate 2D path before considering PyXtal for phosphorene.
-3. Use symmetry-aware occupation enumeration for BCC/FCC alloys and
-   connectivity-preserving perturbations for LiFePO4 and the MOF. Reject
-   unconstrained coordinate noise, broken MOF connectivity, non-periodic
-   overlaps, and supercell copies masquerading as new structural families.
+   optimizer and no relaxation cap, or selects from a shared compact,
+   hierarchical allow-list. The deterministic and LLM selectors validate
+   against that same full action space; the LLM receives strategy-local
+   summaries and compact dimension codes, and must cite valid evidence.
+   Class-specific generators now cover all six materials. The pristine
+   LiFePO4 parent is a finite-capacity action: at most one parent structure
+   per tier is allocated across rounds, with exhausted actions removed from
+   both selectors. The older `generate_seeds` defaults remain for backward
+   compatibility and must not be used by the adaptive E3 runner.
+3. Use exact geometry hashes before symmetry matching. Acquisition maintains
+   composition-, size-tier-, and atom-count-scoped symmetry indexes of accepted
+   representatives, so equivalent structures within a batch, round, or prior
+   round do not consume additional unique-configuration budget. Finite-size
+   controls retain their valid material generator family and a separate
+   control-family identity; they are not counted as new structure families.
+   Offline relaxed-minimum clustering remains the comprehensive final
+   structural-diversity analysis. Reject unconstrained coordinate noise,
+   broken MOF connectivity, non-periodic overlaps, and supercell copies
+   masquerading as new structural families.
 4. **MOF seed source:** E3-MLIP preparation uses the structure-only experimental
    CIF COD 7205949 (DOI `10.1039/c1ce05031a`), which expands to
    Zn24C48H48O96 (216 atoms, 24 Zn(HCOO)2 formula units, Pbcn); its source
