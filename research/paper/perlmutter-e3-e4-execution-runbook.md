@@ -99,10 +99,12 @@ remains a diagnostic and is not the production path. The production entrypoint
 is
 [`job-e3-mlip-production-perlmutter.sh`](../../deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh):
 it runs one paired-seed/material/strategy stream per Slurm array element,
-launches one MACE worker per GPU across 20 nodes, enforces round barriers, and
-resumes only tasks without a terminal result. The complete adaptive schedule
-is generated with `python -m benchmarks.e3.production plan`; future-round
-structures are generated only after that round's strategy decision.
+launches one MACE worker per GPU on one node, enforces round barriers, and
+resumes only tasks without a terminal result. A persistent GPU-time ledger
+reserves each allocation before work starts and caps cumulative use at 2,000
+GPU-hours, including restarts. The complete adaptive schedule is generated
+with `python -m benchmarks.e3.production plan`; future-round structures are
+generated only after that round's strategy decision.
 
 ```bash
 # Diagnostic only; this is not the revised exploration campaign.
@@ -113,11 +115,19 @@ PROJECT_ROOT="$PWD" sbatch -A <allocation> \
 python -m benchmarks.e3.production plan \
   --output benchmarks/e3/manifests/e3-mlip-production-v1.json
 
-# After explicit resource authorization only:
-MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:regular:38016 \
+# After the 2,000 GPU-hour resource authorization:
+MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:regular:2000 \
   PROJECT_ROOT="$PWD" sbatch --account=m5216_g \
   deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh
 ```
+
+The cap is 500 GPU-node-hours at four GPUs per node. A single full array is
+limited to 1,999.2 GPU-hours (36 elements, one node each, 13 hours 53 minutes);
+unused reservation is reconciled to actual allocation time for safe restarts.
+The cap does not guarantee completion of all 61,120 logical optimizations:
+that would require an average below 118 GPU-seconds per optimization, which
+has not been measured. The controller preserves partial progress rather than
+exceeding the authorization.
 
 The production job requires the verified offline MACE cache and the base and
 MACE virtual environments. Each structure attempt preserves its initial
@@ -144,8 +154,8 @@ generators including COD-derived connectivity-checked Zn-formate variants;
 checkpoint hash and species checks; identical frozen optimization settings;
 restartable task manifests and round barriers; matched adaptive budgets; and
 explicit Perlmutter resource authorization. No standalone pilot is required
-or introduced. The production job remains blocked unless the operator supplies
-the exact authorization token specified in the job script.
+or introduced. The production job checks the exact authorization token and
+enforces the cumulative GPU-hour cap from its persistent ledger.
 
 ## 4. Perlmutter decision checklist
 

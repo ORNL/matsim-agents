@@ -15,6 +15,8 @@ from benchmarks.e3.production import (
     _rule_allocation,
     _task_result,
     build_campaign_manifest,
+    release_gpu_hours,
+    reserve_gpu_hours,
     validate_campaign_manifest,
 )
 
@@ -27,7 +29,9 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     assert manifest["total_logical_optimizations"] == 61120
     assert manifest["resource_request"]["account"] == "m5216_g"
     assert manifest["resource_request"]["qos"] == "regular"
-    assert manifest["resource_request"]["requested_node_hour_cap"] == 38016
+    assert manifest["resource_request"]["requested_gpu_hour_cap"] == 2000
+    assert manifest["resource_request"]["maximum_scheduled_gpu_hours"] == pytest.approx(1999.2)
+    assert manifest["resource_request"]["maximum_scheduled_gpu_node_hours"] == pytest.approx(499.8)
     assert manifest["llm_guided_configuration"] == {
         "provider": "mag",
         "model": "gemini-4-argon@google",
@@ -224,6 +228,46 @@ def test_task_result_only_accepts_a_terminal_result(tmp_path):
         )
     )
     assert _task_result(tmp_path / "candidate-1", task) == path
+
+
+def test_resource_ledger_enforces_total_gpu_hour_cap_and_releases_unused_time(tmp_path):
+    state = tmp_path / "resource-budget.json"
+    cap = 10_000
+
+    reserved = reserve_gpu_hours(
+        state,
+        "job-1",
+        reserved_gpu_seconds=6_000,
+        cap_gpu_seconds=cap,
+    )
+    assert reserved["reserved_gpu_seconds"] == 6_000
+    with pytest.raises(RuntimeError, match="only 4000 remain"):
+        reserve_gpu_hours(
+            state,
+            "job-2",
+            reserved_gpu_seconds=4_001,
+            cap_gpu_seconds=cap,
+        )
+
+    released = release_gpu_hours(
+        state,
+        "job-1",
+        actual_gpu_seconds=3_000,
+    )
+    assert released == {
+        "cap_gpu_seconds": cap,
+        "spent_gpu_seconds": 3_000,
+        "reserved_gpu_seconds": 0,
+    }
+    assert (
+        reserve_gpu_hours(
+            state,
+            "job-2",
+            reserved_gpu_seconds=7_000,
+            cap_gpu_seconds=cap,
+        )["reserved_gpu_seconds"]
+        == 7_000
+    )
 
 
 def test_checkpoint_path_is_the_verified_local_artifact(tmp_path, monkeypatch):

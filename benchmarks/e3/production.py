@@ -28,6 +28,11 @@ from benchmarks.e3.mlip_exploration import (
 
 REPO = Path(__file__).resolve().parents[2]
 OBJECTIVES = REPO / "benchmarks" / "e3" / "scientific-objectives-v1.yaml"
+GPU_HOUR_CAP = 2_000
+GPU_COUNT_PER_NODE = 4
+ARRAY_ELEMENTS = 36
+WALLTIME_SECONDS_PER_ELEMENT = 13 * 3600 + 53 * 60
+GPU_SECONDS_PER_ELEMENT = GPU_COUNT_PER_NODE * WALLTIME_SECONDS_PER_ELEMENT
 MODEL_NAME = "MACE-OMAT-0 medium"
 OPTIMIZER_SETTINGS = {
     "optimizer": "FIRE",
@@ -148,6 +153,81 @@ def _atomic_json(path: Path, value: Any) -> None:
     temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temp.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(temp, path)
+
+
+def reserve_gpu_hours(
+    state_path: Path,
+    reservation_id: str,
+    *,
+    reserved_gpu_seconds: int,
+    cap_gpu_seconds: int = GPU_HOUR_CAP * 3600,
+) -> dict[str, int]:
+    """Atomically reserve an allocation against the persistent campaign cap."""
+    if not reservation_id or reserved_gpu_seconds <= 0 or cap_gpu_seconds <= 0:
+        raise ValueError("resource reservations require an ID and positive GPU-second limits")
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = state_path.with_suffix(f"{state_path.suffix}.lock")
+    with lock_path.open("a+") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        if state_path.is_file():
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            if state["cap_gpu_seconds"] != cap_gpu_seconds:
+                raise ValueError("resource ledger cap differs from the authorized cap")
+        else:
+            state = {
+                "schema_version": 1,
+                "cap_gpu_seconds": cap_gpu_seconds,
+                "spent_gpu_seconds": 0,
+                "reservations": {},
+            }
+        reservations = state["reservations"]
+        if reservation_id in reservations:
+            raise RuntimeError(f"duplicate Slurm allocation reservation: {reservation_id}")
+        reserved_total = sum(int(item["reserved_gpu_seconds"]) for item in reservations.values())
+        remaining = cap_gpu_seconds - int(state["spent_gpu_seconds"]) - reserved_total
+        if reserved_gpu_seconds > remaining:
+            raise RuntimeError(
+                f"allocation needs {reserved_gpu_seconds} GPU-seconds but only "
+                f"{max(remaining, 0)} remain in the campaign authorization"
+            )
+        reservations[reservation_id] = {
+            "reserved_gpu_seconds": reserved_gpu_seconds,
+        }
+        _atomic_json(state_path, state)
+        return {
+            "cap_gpu_seconds": cap_gpu_seconds,
+            "spent_gpu_seconds": int(state["spent_gpu_seconds"]),
+            "reserved_gpu_seconds": reserved_total + reserved_gpu_seconds,
+        }
+
+
+def release_gpu_hours(
+    state_path: Path, reservation_id: str, *, actual_gpu_seconds: int
+) -> dict[str, int]:
+    """Replace a reservation with the allocation's actual GPU-time charge."""
+    if actual_gpu_seconds < 0:
+        raise ValueError("actual GPU seconds cannot be negative")
+    lock_path = state_path.with_suffix(f"{state_path.suffix}.lock")
+    with lock_path.open("a+") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        if not state_path.is_file():
+            raise FileNotFoundError(f"resource ledger does not exist: {state_path}")
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        try:
+            reservation = state["reservations"].pop(reservation_id)
+        except KeyError as exc:
+            raise RuntimeError(f"no active resource reservation: {reservation_id}") from exc
+        charged = min(actual_gpu_seconds, int(reservation["reserved_gpu_seconds"]))
+        state["spent_gpu_seconds"] += charged
+        _atomic_json(state_path, state)
+        reserved_total = sum(
+            int(item["reserved_gpu_seconds"]) for item in state["reservations"].values()
+        )
+        return {
+            "cap_gpu_seconds": int(state["cap_gpu_seconds"]),
+            "spent_gpu_seconds": int(state["spent_gpu_seconds"]),
+            "reserved_gpu_seconds": reserved_total,
+        }
 
 
 def _split_even(total: int, parts: int, offset: int = 0) -> list[int]:
@@ -409,15 +489,20 @@ def build_campaign_manifest() -> dict[str, Any]:
         "resource_request": {
             "account": "m5216_g",
             "qos": "regular",
-            "array_elements": 36,
-            "nodes_per_array_element": 20,
-            "gpus_per_node": 4,
-            "walltime_hours_per_array_element": 48,
-            "maximum_scheduled_node_hours": 34560,
-            "restart_contingency_node_hours": 3456,
-            "requested_node_hour_cap": 38016,
-            "gpu_hours_at_cap": 152064,
-            "basis": "36 replicate streams x 20 GPU nodes x 48 hours, plus 10% restart reserve",
+            "array_elements": ARRAY_ELEMENTS,
+            "nodes_per_array_element": 1,
+            "gpus_per_node": GPU_COUNT_PER_NODE,
+            "walltime_seconds_per_array_element": WALLTIME_SECONDS_PER_ELEMENT,
+            "maximum_scheduled_gpu_hours": (ARRAY_ELEMENTS * GPU_SECONDS_PER_ELEMENT / 3600),
+            "maximum_scheduled_gpu_node_hours": (ARRAY_ELEMENTS * WALLTIME_SECONDS_PER_ELEMENT)
+            / 3600,
+            "requested_gpu_hour_cap": GPU_HOUR_CAP,
+            "gpu_hours_at_cap": GPU_HOUR_CAP,
+            "average_gpu_seconds_per_logical_optimization_at_cap": (GPU_HOUR_CAP * 3600 / 61120),
+            "basis": (
+                "36 streams x 1 GPU node x 4 GPUs x 13h53m; persistent allocation "
+                "ledger caps all submissions and restarts at 2,000 GPU-hours"
+            ),
             "measured_throughput": False,
         },
     }
@@ -441,6 +526,11 @@ def validate_campaign_manifest(manifest: dict[str, Any]) -> None:
         raise ValueError("finite-size controls do not equal 1,120 logical optimizations")
     if sum(row["logical_target"] for row in manifest["rounds"]) != 61120:
         raise ValueError("total logical optimization target is not 61,120")
+    resources = manifest["resource_request"]
+    if resources["requested_gpu_hour_cap"] != GPU_HOUR_CAP:
+        raise ValueError("resource cap does not match the authorized 2,000 GPU-hours")
+    if resources["maximum_scheduled_gpu_hours"] > GPU_HOUR_CAP:
+        raise ValueError("a single production array can exceed the authorized GPU-hour cap")
     for row in manifest["rounds"]:
         if sum(row["minimum_main_count_by_tier"].values()) > row["main_target"]:
             raise ValueError(f"tier minima exceed round target: {row}")
@@ -1613,6 +1703,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     cluster.add_argument("--output-root", type=Path, required=True)
     cluster.add_argument("--output", type=Path, required=True)
+    reserve = commands.add_parser(
+        "budget-reserve", help="reserve Slurm GPU time against the campaign authorization"
+    )
+    reserve.add_argument("--state", type=Path, required=True)
+    reserve.add_argument("--reservation-id", required=True)
+    reserve.add_argument("--reserved-gpu-seconds", type=int, required=True)
+    reserve.add_argument("--cap-gpu-seconds", type=int, default=GPU_HOUR_CAP * 3600)
+    release = commands.add_parser(
+        "budget-release", help="record actual GPU time and release unused reservation"
+    )
+    release.add_argument("--state", type=Path, required=True)
+    release.add_argument("--reservation-id", required=True)
+    release.add_argument("--actual-gpu-seconds", type=int, required=True)
     args = parser.parse_args(argv)
     if args.command == "plan":
         manifest = write_campaign_manifest(args.output, overwrite=args.overwrite)
@@ -1634,6 +1737,23 @@ def main(argv: list[str] | None = None) -> int:
         result = cluster_campaign_minima(args.output_root)
         _atomic_json(args.output, result)
         print(json.dumps({"path": str(args.output.resolve()), "streams": result["stream_count"]}))
+        return 0
+    if args.command == "budget-reserve":
+        result = reserve_gpu_hours(
+            args.state,
+            args.reservation_id,
+            reserved_gpu_seconds=args.reserved_gpu_seconds,
+            cap_gpu_seconds=args.cap_gpu_seconds,
+        )
+        print(json.dumps(result, sort_keys=True))
+        return 0
+    if args.command == "budget-release":
+        result = release_gpu_hours(
+            args.state,
+            args.reservation_id,
+            actual_gpu_seconds=args.actual_gpu_seconds,
+        )
+        print(json.dumps(result, sort_keys=True))
         return 0
     result = run_replicate(
         args.manifest,

@@ -2,8 +2,8 @@
 #SBATCH -J e3-mlip
 #SBATCH -C gpu
 #SBATCH -q regular
-#SBATCH -N 20
-#SBATCH -t 48:00:00
+#SBATCH -N 1
+#SBATCH -t 13:53:00
 #SBATCH --gpus-per-node=4
 #SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=8
@@ -24,8 +24,8 @@ REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
   echo "ERROR: this campaign requires Perlmutter account m5216_g" >&2
   exit 2
 }
-[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "m5216_g:regular:38016" ]] || {
-  echo "ERROR: explicit authorization required: MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:regular:38016" >&2
+[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "m5216_g:regular:2000" ]] || {
+  echo "ERROR: explicit authorization required: MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:regular:2000" >&2
   exit 2
 }
 
@@ -36,6 +36,33 @@ MACE_PYTHON="${REPO}/.venv-mace/bin/python"
 MANIFEST="${MATSIM_E3_MLIP_MANIFEST:-${REPO}/benchmarks/e3/manifests/e3-mlip-production-v1.json}"
 OUTPUT_ROOT="${MATSIM_E3_MLIP_OUTPUT_ROOT:-${REPO}/runs/e3-mlip-production-v1}"
 [[ -s "${MANIFEST}" ]] || { echo "ERROR: missing production manifest: ${MANIFEST}" >&2; exit 2; }
+[[ "${SLURM_NNODES:-}" == "1" ]] || {
+  echo "ERROR: this allocation is capped for exactly one GPU node per array element" >&2
+  exit 2
+}
+mkdir -p "${OUTPUT_ROOT}"
+RESOURCE_STATE="${REPO}/runs/e3-mlip-production-v1/resource-budget.json"
+RESOURCE_START=${SECONDS}
+"${BASE_PYTHON}" -m benchmarks.e3.production budget-reserve \
+  --state "${RESOURCE_STATE}" \
+  --reservation-id "${SLURM_JOB_ID}" \
+  --reserved-gpu-seconds 199920 \
+  --cap-gpu-seconds 7200000
+
+release_resource_budget() {
+  local status=$?
+  local runtime_seconds=$((SECONDS - RESOURCE_START + 60))
+  trap - EXIT
+  if ! "${BASE_PYTHON}" -m benchmarks.e3.production budget-release \
+    --state "${RESOURCE_STATE}" \
+    --reservation-id "${SLURM_JOB_ID}" \
+    --actual-gpu-seconds "$((runtime_seconds * 4))"; then
+    echo "ERROR: failed to reconcile the GPU-hour reservation; cap remains conservatively reserved" >&2
+    status=1
+  fi
+  exit "${status}"
+}
+trap release_resource_budget EXIT
 
 source "${REPO}/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu
@@ -47,7 +74,7 @@ export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
-export MATSIM_E3_MLIP_WORKERS=80
+export MATSIM_E3_MLIP_WORKERS=4
 export MATSIM_E3_MLIP_WORKER_PYTHON="${MACE_PYTHON}"
 
 TASK_ID="${SLURM_ARRAY_TASK_ID:?array task id is required}"
@@ -87,6 +114,6 @@ source_revision="$(git -C "${REPO}" rev-parse HEAD)"
   --material "${MATERIAL}" \
   --strategy "${STRATEGY}" \
   --seed "${SEED}" \
-  --workers 80 \
+  --workers 4 \
   --workers-per-node 4 \
   --worker-python "${MACE_PYTHON}"
