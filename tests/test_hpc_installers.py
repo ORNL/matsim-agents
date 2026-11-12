@@ -809,6 +809,10 @@ def test_mace_runtime_paths_use_matsim_owned_compatibility_environment() -> None
     assert common.stat().st_mode & 0o111
     assert "import dscribe" in text
     assert '--system-site-packages "${MACE_VENV_PATH}"' in text
+    assert '("torch", "torchvision", "numpy", "scipy", "ase")' in text
+    assert text.index("check-runtime-dependencies.py") < text.index(
+        'if [[ "${FACILITY}" == "aurora" ]]; then\n    EXPECTED_TORCH='
+    )
     assert "MACE replaced Aurora framework Torch" in text
     assert "guard_mace_optional_backends.py" in text
     assert "except Exception" not in text

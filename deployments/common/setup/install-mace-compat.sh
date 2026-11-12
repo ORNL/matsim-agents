@@ -42,7 +42,7 @@ CONSTRAINTS="$(mktemp)"
 trap 'rm -f -- "${CONSTRAINTS}"' EXIT
 "${BASE_VENV}/bin/python" - >"${CONSTRAINTS}" <<'PY'
 from importlib.metadata import version
-for name in ("torch", "torchvision", "numpy", "scipy"):
+for name in ("torch", "torchvision", "numpy", "scipy", "ase"):
     print(f"{name}=={version(name)}")
 PY
 
@@ -75,9 +75,9 @@ if ! grep -qF "${MARKER}" "${ACTIVATE}"; then
 fi
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 
+"${PYTHON}" "${MATSIM_DIR}/deployments/common/setup/check-runtime-dependencies.py" \
+    matsim-agents mace-torch
 if [[ "${FACILITY}" == "aurora" ]]; then
-    "${PYTHON}" "${MATSIM_DIR}/deployments/common/setup/check-runtime-dependencies.py" \
-        matsim-agents mace-torch
     EXPECTED_TORCH="$("${BASE_VENV}/bin/python" -c 'import torch; print(torch.__file__)')"
     "${PYTHON}" - "${EXPECTED_TORCH}" <<'PY'
 import pathlib
