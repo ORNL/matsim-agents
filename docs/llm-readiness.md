@@ -77,6 +77,7 @@ API keys are excluded from resolved configuration and provenance artifacts.
 | `openai` | `OPENAI_API_KEY` or `api_key` is configured |
 | `anthropic` | `ANTHROPIC_API_KEY` or `api_key` is configured |
 | `mag` | `AMSC_TOKEN` or `api_key` is configured; MAG `/v1/models` contains the explicit model ID |
+| `copilot` | The Copilot account (signed-in CLI, `COPILOT_GITHUB_TOKEN`, or `api_key`) lists the explicit model ID in its Copilot catalog |
 
 For MAG, set `provider: mag`, `model` to an ID returned by the authenticated
 catalog, and optionally `mag_provider` to select an upstream provider. The
@@ -85,6 +86,19 @@ be overridden with `base_url` or `MATSIM_MAG_BASE_URL`. Set `AMSC_TOKEN` in the
 runtime environment; it is excluded from saved run configuration. See the
 [MAG integration guide](model-access-gateway.md) for setup and E1 manifest
 configuration.
+
+For a GitHub Copilot account, install `pip install -e '.[copilot]'`, sign in
+once with `copilot login` (on headless hosts it uses the device-code flow; if
+no system keychain exists, the CLI offers to store the token in plaintext under
+`~/.copilot/`), then set `provider: copilot` and `model` to an ID returned by
+`matsim_agents.backends.llm.provider.list_copilot_models()`. Each request runs
+in a tool-free Copilot session and counts against the account's Copilot usage.
+The Copilot SDK exposes no sampling controls, so keep `temperature` at its
+default and do not treat replies as deterministic. Copilot-hosted models do not
+enforce the requested output-token limit; replies that exceed it are flagged
+with `provider_metadata["output_token_limit_exceeded"]`, while the reported
+finish reason and token counts come from the runtime's usage records. Copilot
+is not part of any frozen experiment configuration.
 
 ## External API access from ALCF and OLCF
 

@@ -120,6 +120,34 @@ def test_mag_config_requires_catalog_model():
         LLMCheckConfig(provider="mag")
 
 
+def test_copilot_config_requires_model_and_readiness_verifies_catalog(monkeypatch):
+    import pytest
+    from pydantic import ValidationError
+
+    import matsim_agents.workflows.llm_check as llm_check
+
+    with pytest.raises(ValidationError, match="explicit model ID"):
+        LLMCheckConfig(provider="copilot")
+    with pytest.raises(ValidationError, match="base_url"):
+        LLMCheckConfig(provider="copilot", model="catalog-model", base_url="http://x/v1")
+
+    tokens = []
+
+    def list_models(token):
+        tokens.append(token)
+        return ["catalog-model"]
+
+    monkeypatch.setattr(llm_check, "list_copilot_models", list_models)
+    readiness = probe_readiness(LLMCheckConfig(provider="copilot", model="catalog-model"))
+    assert readiness == {
+        "served_models": ["catalog-model"],
+        "authentication": "copilot_cli_account",
+    }
+    assert tokens == [None]
+    with pytest.raises(RuntimeError, match="unavailable"):
+        probe_readiness(LLMCheckConfig(provider="copilot", model="missing-model"))
+
+
 def test_mag_llm_check_routes_provider_without_persisting_token(tmp_path):
     calls = []
 

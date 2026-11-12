@@ -6,6 +6,7 @@ Supported providers (set ``MATSIM_LLM_PROVIDER`` or pass ``provider=...``):
     ollama       - local Ollama daemon (default for local development)
     vllm         - vLLM server with an OpenAI-compatible /v1 endpoint
     mag          - Genesis Mission Model Access Gateway
+    copilot      - models available to a GitHub Copilot account (Copilot SDK)
     openai       - hosted OpenAI API
     anthropic    - hosted Anthropic API
     huggingface  - local HuggingFace transformers pipeline (no server needed)
@@ -20,6 +21,10 @@ integers and timeouts finite positive seconds; explicit arguments take priority.
 For Ollama, set ``MATSIM_OLLAMA_BASE_URL`` to point at a non-default host
 (default ``http://localhost:11434``).
 
+For Copilot, sign in once with ``copilot login`` (or set
+``COPILOT_GITHUB_TOKEN``) and pass an explicit model ID from the account's
+catalog (:func:`list_copilot_models`). Install extras: ``pip install -e .[copilot]``.
+
 For HuggingFace local inference, set ``MATSIM_HF_MODEL_PATH`` to a local
 model directory (default: the ``model`` argument). Uses ``device_map="auto"``
 to spread across all available GPUs, or across the devices a resource plan
@@ -31,17 +36,19 @@ Install extras: ``pip install -e .[huggingface]``.
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import logging
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Coroutine, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from pydantic import Field
+from pydantic import Field, SecretStr
 
 from matsim_agents.backends.llm.replies import split_reasoning
 
@@ -219,6 +226,199 @@ class ChatMAG(ChatVLLM):
         return "mag"
 
 
+_COPILOT_DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant."
+
+
+def _run_coroutine(factory: Callable[[], Coroutine[Any, Any, Any]]) -> Any:
+    """Run a coroutine from synchronous code, even when this thread has an event loop."""
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(factory())
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(lambda: asyncio.run(factory())).result()
+
+
+def _copilot_client(github_token: str | None) -> Any:
+    from copilot import CopilotClient
+
+    return CopilotClient(github_token=github_token, use_logged_in_user=github_token is None)
+
+
+def list_copilot_models(github_token: str | None = None) -> list[str]:
+    """Model IDs the authenticated GitHub Copilot account may use."""
+
+    async def _list() -> list[str]:
+        client = _copilot_client(github_token)
+        await client.start()
+        try:
+            return [model.id for model in await client.list_models()]
+        finally:
+            await client.stop()
+
+    return _run_coroutine(_list)
+
+
+class ChatCopilot(BaseChatModel):
+    """LangChain chat model backed by the GitHub Copilot SDK.
+
+    Each call starts a Copilot runtime, opens a tool-free session whose system
+    prompt is replaced by the caller's system messages, sends one prompt, and
+    stops the runtime. Authentication uses the Copilot CLI's signed-in account
+    (or ``COPILOT_GITHUB_TOKEN``/``GH_TOKEN``/``GITHUB_TOKEN``) unless
+    ``github_token`` is set. The SDK exposes no sampling controls, so replies
+    use the model's default decoding and are not guaranteed to be deterministic.
+    ``max_completion_tokens`` is passed to the runtime as a model limit, but
+    Copilot-hosted models do not enforce it; replies that exceed it are logged
+    and flagged in ``provider_metadata["output_token_limit_exceeded"]``.
+    """
+
+    model: str = Field(min_length=1)
+    max_completion_tokens: int = Field(default=4096, gt=0)
+    request_timeout: float = Field(default=600.0, gt=0, allow_inf_nan=False)
+    github_token: SecretStr | None = Field(default=None, repr=False)
+
+    @property
+    def _llm_type(self) -> str:
+        return "copilot"
+
+    @staticmethod
+    def _text(message: BaseMessage) -> str:
+        if not isinstance(message.content, str):
+            raise ValueError("the Copilot provider supports text message content only")
+        return message.content
+
+    def _prompt(self, messages: list[BaseMessage]) -> tuple[str, str]:
+        system = "\n\n".join(self._text(m) for m in messages if m.type == "system")
+        turns = [m for m in messages if m.type != "system"]
+        if not turns:
+            raise ValueError("the Copilot provider needs at least one non-system message")
+        if len(turns) == 1 and turns[0].type == "human":
+            prompt = self._text(turns[0])
+        else:
+            labels = {"human": "User", "ai": "Assistant", "tool": "Tool"}
+            prompt = "\n\n".join(
+                f"{labels.get(m.type, m.type.title())}:\n{self._text(m)}" for m in turns
+            )
+        return system or _COPILOT_DEFAULT_SYSTEM_PROMPT, prompt
+
+    async def _acomplete(self, messages: list[BaseMessage]) -> ChatResult:
+        from copilot.session import ModelCapabilitiesOverride, ModelLimitsOverride
+        from copilot.session_events import AssistantMessageData, AssistantUsageData
+
+        system, prompt = self._prompt(messages)
+        token = self.github_token.get_secret_value() if self.github_token else None
+        usages: list[Any] = []
+        client = _copilot_client(token)
+        await client.start()
+        try:
+            session = await client.create_session(
+                model=self.model,
+                system_message={"mode": "replace", "content": system},
+                model_capabilities=ModelCapabilitiesOverride(
+                    limits=ModelLimitsOverride(max_output_tokens=self.max_completion_tokens)
+                ),
+                tools=[],
+                available_tools=[],
+                mcp_servers={},
+                included_builtin_agents=[],
+                enable_skills=False,
+                skip_custom_instructions=True,
+                enable_config_discovery=False,
+                enable_session_telemetry=False,
+                streaming=False,
+            )
+            session.on(
+                lambda event: (
+                    usages.append(event.data)
+                    if isinstance(event.data, AssistantUsageData)
+                    and not getattr(event, "agent_id", None)
+                    else None
+                )
+            )
+            response = await session.send_and_wait(prompt, timeout=self.request_timeout)
+        finally:
+            await client.stop()
+        data = getattr(response, "data", None)
+        if not isinstance(data, AssistantMessageData):
+            raise RuntimeError(f"Copilot model {self.model!r} returned no assistant message")
+        usage = next(
+            (u for u in reversed(usages) if data.api_call_id and u.api_call_id == data.api_call_id),
+            usages[-1] if usages else None,
+        )
+        input_tokens = getattr(usage, "input_tokens", None)
+        output_tokens = getattr(usage, "output_tokens", None)
+        provider_metadata: dict[str, str] = {}
+        if isinstance(output_tokens, int) and output_tokens > self.max_completion_tokens:
+            log.warning(
+                "Copilot model %s produced %d output tokens, above the requested %d; "
+                "Copilot-hosted models do not enforce the output-token limit",
+                self.model,
+                output_tokens,
+                self.max_completion_tokens,
+            )
+            provider_metadata["output_token_limit_exceeded"] = (
+                f"{output_tokens}>{self.max_completion_tokens}"
+            )
+        message = AIMessage(
+            content=data.content,
+            additional_kwargs=(
+                {"reasoning_content": data.reasoning_text} if data.reasoning_text else {}
+            ),
+            response_metadata={
+                "finish_reason": getattr(usage, "finish_reason", None),
+                "model_name": data.model or self.model,
+                **({"provider_metadata": provider_metadata} if provider_metadata else {}),
+            },
+            usage_metadata=(
+                {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": input_tokens + output_tokens,
+                }
+                if isinstance(input_tokens, int) and isinstance(output_tokens, int)
+                else None
+            ),
+        )
+        return ChatResult(generations=[ChatGeneration(message=message)])
+
+    @staticmethod
+    def _check_call_options(stop: list[str] | None, kwargs: dict[str, Any]) -> None:
+        if stop:
+            raise ValueError("the Copilot provider does not support stop sequences")
+        unsupported = sorted(
+            name
+            for name, value in kwargs.items()
+            if not (name == "temperature" and value in (None, 0, 0.0))
+        )
+        if unsupported:
+            raise ValueError(
+                "the Copilot SDK exposes no sampling controls; unsupported call options: "
+                + ", ".join(unsupported)
+            )
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        self._check_call_options(stop, kwargs)
+        return _run_coroutine(lambda: self._acomplete(messages))
+
+    async def _agenerate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        self._check_call_options(stop, kwargs)
+        return await self._acomplete(messages)
+
+
 # Loaded in-process models keyed by model path, load options, and assigned
 # devices. Every ``get_chat_model`` call reuses the same weights; only
 # generation settings differ between callers.
@@ -345,7 +545,7 @@ DEFAULT_MODELS = {
     "anthropic": "claude-3-5-sonnet-latest",
     "huggingface": "Qwen/Qwen2.5-72B-Instruct",
 }
-SUPPORTED_PROVIDERS = frozenset((*DEFAULT_MODELS, "mag"))
+SUPPORTED_PROVIDERS = frozenset((*DEFAULT_MODELS, "mag", "copilot"))
 
 
 def get_chat_model(
@@ -370,7 +570,8 @@ def get_chat_model(
     base_url:
         Override the server URL (Ollama, vLLM, or MAG).
     api_key:
-        Override the API key (OpenAI, Anthropic, MAG, or a secured vLLM server).
+        Override the API key (OpenAI, Anthropic, MAG, or a secured vLLM server),
+        or a GitHub token for Copilot (default: the Copilot CLI's signed-in account).
     max_tokens:
         Most tokens one reply may generate, including a reasoning model's
         reasoning; the provider's default when omitted.
@@ -449,6 +650,24 @@ def get_chat_model(
             top_p=kwargs.get("top_p"),
             seed=kwargs.get("seed"),
             default_headers=headers,
+        )
+
+    if provider == "copilot":
+        if not model:
+            raise ValueError(
+                "Copilot requires an explicit model ID from the account's Copilot model catalog"
+            )
+        if base_url:
+            raise ValueError("the Copilot provider does not use base_url")
+        if temperature != 0.0 or {"top_p", "seed"} & kwargs.keys():
+            raise ValueError(
+                "the Copilot SDK exposes no sampling controls; use the default temperature"
+            )
+        return ChatCopilot(
+            model=model,
+            max_completion_tokens=max_tokens if max_tokens is not None else 4096,
+            request_timeout=kwargs.pop("request_timeout", 600),
+            github_token=SecretStr(api_key) if api_key else None,
         )
 
     if provider == "openai":

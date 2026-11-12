@@ -761,6 +761,7 @@ For Genesis Mission hosted models through the Model Access Gateway, see the
 | **`ollama`** *(library default)* | `brew install ollama && ollama pull llama3.1:8b` | `llama3.1:8b` *(default)*; `qwen2.5:14b`, `deepseek-r1:14b` are examples | Fully local, CPU/GPU/Metal. |
 | **`vllm`** | Run a vLLM server (`vllm serve <model> --port 8000`) | `meta-llama/Llama-3.1-8B-Instruct` | OpenAI-compatible; great for HPC. |
 | **`mag`** | `pip install matsim-agents[mag]` | Explicit ID from authenticated MAG `/v1/models` | Genesis Mission hosted models; set `AMSC_TOKEN`. Optional upstream route via `mag_provider` or `MATSIM_MAG_PROVIDER`. |
+| **`copilot`** | `pip install matsim-agents[copilot]`, then `copilot login` once | Explicit ID from the account's Copilot catalog (`list_copilot_models()`) | Models included with a GitHub Copilot subscription, through the Copilot SDK; requests count against the account's Copilot usage. Uses the signed-in Copilot CLI account, `COPILOT_GITHUB_TOKEN`, or `api_key`. No sampling controls (temperature/top-p/seed), so replies are not guaranteed to be deterministic; `max_tokens` is not enforced by Copilot-hosted models (overruns are flagged in `provider_metadata`); tool-free sessions only. |
 | **`openai`** | `pip install matsim-agents[openai]` | `gpt-4o-mini` | Hosted. Set `OPENAI_API_KEY`. |
 | **`anthropic`** | `pip install matsim-agents[anthropic]` | `claude-3-5-sonnet-latest` | Hosted. Set `ANTHROPIC_API_KEY`. |
 | **`huggingface`** | `pip install matsim-agents[huggingface]` | `Qwen/Qwen2.5-72B-Instruct` | Direct HF Transformers + Accelerate; no server needed. Ideal as fallback on HPC when vLLM is unavailable. Set `MATSIM_HF_MODEL_PATH` to a local model directory. |
@@ -784,7 +785,7 @@ download as a background job, and resuming interrupted downloads — see
 Configuration knobs:
 
 ```bash
-export MATSIM_LLM_PROVIDER=ollama          # or vllm | openai | anthropic | huggingface
+export MATSIM_LLM_PROVIDER=ollama          # or vllm | mag | copilot | openai | anthropic | huggingface
 export MATSIM_LLM_MODEL=llama3.1:8b         # provider-specific model ID or local path
 export MATSIM_OLLAMA_BASE_URL=http://...    # optional
 export MATSIM_VLLM_BASE_URL=http://node:8000/v1
@@ -796,7 +797,7 @@ The exact environment-variable contract is:
 
 | Variable | Allowed values / format | Default and scope |
 |---|---|---|
-| `MATSIM_LLM_PROVIDER` | `ollama`, `vllm`, `openai`, `anthropic`, or `huggingface` | General library default: `ollama`. The portability `--live-llm` path defaults to `vllm` so it can address an HPC model server. |
+| `MATSIM_LLM_PROVIDER` | `ollama`, `vllm`, `mag`, `copilot`, `openai`, `anthropic`, or `huggingface` | General library default: `ollama`. The portability `--live-llm` path defaults to `vllm` so it can address an HPC model server. `mag` and `copilot` require an explicit model ID. |
 | `MATSIM_LLM_MODEL` | Provider-specific model identifier, Ollama tag, or local model path | Used by entry points that expose environment-selected models, including the live portability benchmark. If omitted there, the provider default below is used. |
 | `MATSIM_VLLM_BASE_URL` | Full OpenAI-compatible vLLM API root, normally `http[s]://host:port/v1` | vLLM only; defaults to `http://localhost:8000/v1`. Include `/v1`. |
 | `MATSIM_VLLM_MAX_TOKENS` | Positive integer completion-token limit | vLLM only; defaults to `4096`. |

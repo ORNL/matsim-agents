@@ -72,6 +72,7 @@ uma = [
 ]
 openai = ["langchain-openai>=0.2.0"]
 mag = ["openai>=1.0.0"]
+copilot = ["github-copilot-sdk>=1.0.31"]
 ollama = ["langchain-ollama>=0.2.0"]
 vllm = ["langchain-openai>=0.2.0"]  # vLLM uses the OpenAI-compatible client
 anthropic = ["langchain-anthropic>=0.2.0"]

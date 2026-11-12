@@ -19,7 +19,12 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
 
-from matsim_agents.backends.llm.provider import DEFAULT_MODELS, SUPPORTED_PROVIDERS, get_chat_model
+from matsim_agents.backends.llm.provider import (
+    DEFAULT_MODELS,
+    SUPPORTED_PROVIDERS,
+    get_chat_model,
+    list_copilot_models,
+)
 from matsim_agents.backends.llm.replies import invoke_model
 from matsim_agents.backends.llm.servers import llm_endpoints
 from matsim_agents.backends.llm.transcript import Contribution, Transcript
@@ -106,6 +111,13 @@ class LLMCheckConfig(BaseModel):
                 "MATSIM_MAG_BASE_URL", "https://mag.genesis.americansciencecloud.org/v1"
             )
             self.mag_provider = self.mag_provider or os.environ.get("MATSIM_MAG_PROVIDER")
+        elif self.provider == "copilot":
+            if not self.model:
+                raise ValueError(
+                    "Copilot requires an explicit model ID from the account's Copilot model catalog"
+                )
+            if self.base_url:
+                raise ValueError("the Copilot provider does not use base_url")
         else:
             self.model = self.model or DEFAULT_MODELS[self.provider]
         if self.provider == "vllm":
@@ -193,6 +205,16 @@ def probe_readiness(cfg: LLMCheckConfig) -> dict[str, Any]:
             "endpoint": cfg.base_url,
             "served_models": models,
             "mag_provider": cfg.mag_provider,
+        }
+    if cfg.provider == "copilot":
+        models = list_copilot_models(cfg.api_key)
+        if cfg.model not in models:
+            raise RuntimeError(
+                f"configured Copilot model {cfg.model!r} unavailable; available={models}"
+            )
+        return {
+            "served_models": models,
+            "authentication": "github_token" if cfg.api_key else "copilot_cli_account",
         }
     credential = "OPENAI_API_KEY" if cfg.provider == "openai" else "ANTHROPIC_API_KEY"
     if not (cfg.api_key or os.environ.get(credential)):
