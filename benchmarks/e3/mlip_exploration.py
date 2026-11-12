@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -13,8 +14,30 @@ from matsim_agents.discovery.seeds import SeedGenerationAction
 from matsim_agents.discovery.wrapper import CompositionExplorationResult, explore_composition
 
 E3_MLIP_MODEL = "medium-omat-0"
+E3_MLIP_CHECKPOINT_RELATIVE_PATH = Path("mace/maceomat0mediummodel")
+E3_MLIP_CHECKPOINT_SHA256 = "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a"
 E3_STRATEGIES = ("rule_based_adaptation", "llm_guided_adaptation")
 _INITIAL_EVIDENCE_ID = "campaign-design"
+
+
+def _verified_checkpoint_sha256() -> str:
+    artifact_dir = os.environ.get("MACE_ARTIFACT_DIR")
+    if not artifact_dir:
+        raise RuntimeError("MACE_ARTIFACT_DIR must identify the frozen E3-MLIP model cache")
+    checkpoint_path = Path(artifact_dir) / E3_MLIP_CHECKPOINT_RELATIVE_PATH
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"frozen E3-MLIP checkpoint is missing: {checkpoint_path}")
+    digest = hashlib.sha256()
+    with checkpoint_path.open("rb") as checkpoint:
+        for chunk in iter(lambda: checkpoint.read(1024 * 1024), b""):
+            digest.update(chunk)
+    actual_sha256 = digest.hexdigest()
+    if actual_sha256 != E3_MLIP_CHECKPOINT_SHA256:
+        raise ValueError(
+            "frozen E3-MLIP checkpoint hash mismatch: "
+            f"expected {E3_MLIP_CHECKPOINT_SHA256}, got {actual_sha256}"
+        )
+    return actual_sha256
 
 
 def load_action_history(
@@ -241,8 +264,8 @@ def run_generation_round(
     mlip_pool: MLIPWorkerPool | None = None,
     mlp_device: str = "cuda",
     optimizer: str = "FIRE",
-    maxiter: int = 200,
-    maxstep: float = 1e-2,
+    maxiter: int = 500,
+    maxstep: float = 0.05,
     fmax: float = 0.02,
     relax_cell: bool = False,
 ) -> list[CompositionExplorationResult]:
@@ -300,6 +323,7 @@ def run_generation_round(
         raise ValueError("generation action IDs must be unique within a round")
     if maxiter < 1 or maxstep <= 0 or fmax <= 0:
         raise ValueError("maxiter, maxstep, and fmax must be positive")
+    checkpoint_sha256 = _verified_checkpoint_sha256()
 
     round_dir = Path(output_dir) / strategy / f"round-{round_index:02d}"
     round_dir.mkdir(parents=True, exist_ok=False)
@@ -316,6 +340,7 @@ def run_generation_round(
                     "status": status,
                     "model": "MACE-OMAT-0 medium",
                     "mace_model": E3_MLIP_MODEL,
+                    "checkpoint_sha256": checkpoint_sha256,
                     "optimizer": optimizer,
                     "maxiter": maxiter,
                     "maxstep_A": maxstep,
@@ -336,6 +361,8 @@ def run_generation_round(
             action_record = {
                 "evidence_id": None,
                 "action_id": action.action_id,
+                "model": "MACE-OMAT-0 medium",
+                "checkpoint_sha256": checkpoint_sha256,
                 "action": action.model_dump(mode="json"),
                 "formula": action.formula,
                 "formula_units": action.formula_units,
@@ -364,8 +391,20 @@ def run_generation_round(
                 result_path = round_dir / "action-results" / f"{action.action_id}.json"
                 result_path.parent.mkdir(parents=True, exist_ok=True)
                 temp_result_path = result_path.with_suffix(".json.tmp")
+                result_payload = result.model_dump(mode="json")
+                result_payload["model"] = "MACE-OMAT-0 medium"
+                result_payload["mace_model"] = E3_MLIP_MODEL
+                result_payload["checkpoint_sha256"] = checkpoint_sha256
+                result_payload["optimizer_protocol"] = {
+                    "optimizer": optimizer,
+                    "maxiter": maxiter,
+                    "maxstep_A": maxstep,
+                    "fmax_eV_A": fmax,
+                    "relax_cell": relax_cell,
+                }
+                result_payload["generation_action"] = action.model_dump(mode="json")
                 temp_result_path.write_text(
-                    result.model_dump_json(indent=2) + "\n", encoding="utf-8"
+                    json.dumps(result_payload, indent=2) + "\n", encoding="utf-8"
                 )
                 temp_result_path.replace(result_path)
             except Exception as exc:

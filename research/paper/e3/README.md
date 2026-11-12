@@ -14,14 +14,15 @@ The MLIP generation and optimization protocol is specified separately in
 The selected primary checkpoint is **MACE-OMAT-0 medium**, trained on OMat24;
 its MACE-Torch loader alias is `medium-omat-0` and E3 CLI alias is
 `mace-omat-0-medium`. Campaign start remains blocked pending the exploration
-plan's species, class-feasibility, bounded-pilot, and resource gates. Its MOF
-transfer applicability is unvalidated and must be reported as a limitation,
-not silently generalized.
+plan's species, class-generator, restart, and resource-authorization gates. Its
+checkpoint hash and MOF transfer applicability remain unresolved and must not
+be silently generalized. The first acquisition round is retained as production
+data; no separate pilot is required.
 E3-MLIP covers all six material classes with a target of 5,000 unique valid
 configurations per class per strategy (60,000 total logical optimizations,
-before matched-size controls); the approval matrix is
-[`mlip-suitability-v1.yaml`](mlip-suitability-v1.yaml). E3-DFT identifiers,
-results, execution protocol, and acquisition budgets remain unchanged.
+before matched-size controls). It uses no DFT or VASP evidence; E3-DFT
+identifiers, results, execution protocol, and acquisition budgets remain
+unchanged.
 Perlmutter preparation and launch constraints are in the
 [combined E3-MLIP/E4 runbook](../perlmutter-e3-e4-execution-runbook.md).
 

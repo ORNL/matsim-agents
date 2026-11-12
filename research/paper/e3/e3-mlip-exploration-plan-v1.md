@@ -1,6 +1,6 @@
 # E3-MLIP adaptive crystallographic exploration plan
 
-Status: **feasibility-pilot design; production execution is not authorized**.
+Status: **production implementation incomplete; production execution is not authorized**.
 This plan changes E3-MLIP only. It does not change E3-DFT, use DFT labels or
 references, or submit VASP calculations.
 
@@ -8,10 +8,12 @@ references, or submit VASP calculations.
 
 - Freeze **MACE-OMAT-0 medium**, trained on OMat24, for both Rule-based and
   LLM-guided adaptation. Its MACE-Torch loader alias is `medium-omat-0` and its
-  E3 CLI alias is `mace-omat-0-medium`. Record the checkpoint hash and do not
-  silently substitute another model. Before the pilot, verify checkpoint
-  species coverage and calculator loading for every proposed composition.
-  Exact species coverage is not yet recorded and MOF transferability is
+  E3 CLI alias is `mace-omat-0-medium`. The frozen artifact is
+  `${MACE_ARTIFACT_DIR}/mace/maceomat0mediummodel`, SHA-256
+  `d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a`.
+  The loaded checkpoint supports all campaign species (C, Co, Cr, Fe, H, Hf,
+  Li, Mn, Nb, Ni, O, P, Ta, Ti, V, Zn, Zr). Verify the hash at every round
+  start and do not silently substitute another model. MOF transferability is
   unestablished.
 - Each strategy receives a budget of **5,000 unique valid starting
   configurations per material class**, not 5,000 shared across the strategies.
@@ -29,8 +31,9 @@ references, or submit VASP calculations.
   Invalid proposals are recorded but are not called valid configurations and
   are not optimized.
 - Geometry is the only input evidence. Strip calculator results and labels from
-  source structures. Report candidates as **MLIP-predicted**, not independently
-  validated discoveries.
+  source structures. Use MLIP-only evidence for acquisition and assessment.
+  Report candidates as **MLIP-predicted**, not independently validated
+  discoveries; independent DFT validation is outside E3-MLIP.
 
 ## 2. Six-class generation and size matrix
 
@@ -46,7 +49,7 @@ not rounded after generation.
 | LiFePO4 | Olivine prototype and symmetry-distinct Li/Fe antisite pairs and pair separations; separately tagged Li-vacancy/compensation and strain families. AFLOW prototypes plus PyXtal proposals filtered to valid bulk chemistry and connectivity. | 4, 8, 16, 32 formula units: 28, 56, 112, 224 atoms. | 1,250 |
 | Phosphorene | Black and blue phosphorus allotropes, symmetry-distinct vacancy/reconstruction families, and bounded in-plane strains. Use a class-specific 2D generator; the current PyXtal helper is 3D-only and must not generate slabs for this class. | 4, 16, 36, 64, 144 P atoms, with near-isotropic 2D supercells of each allotrope. Keep the out-of-plane vacuum and periodicity fixed. | 1,000 |
 | Nb-Ta-O oxides | Start with Nb2O5, Ta2O5, NbTaO5, NbO2, TaO2, and NbTaO4; add charge-balanced integer substitutions and separately tagged oxygen-defect families. AFLOW prototypes and 3D PyXtal proposals are filtered by formula, density, coordination, and valid periodic geometry. | 2, 4, 8, 16, 32 formula units per formula. This gives 14-224 atoms for the 7-atom pentoxide formulas and 6-96 atoms for the 3-atom dioxide formulas. | 1,000 |
-| Zn(HCOO)2 MOF | Alpha/beta framework topologies; connectivity-preserving linker/coordination variants, proton configurations, bounded framework strain, and larger-cell defects. Use a MOF-specific generator; generic AFLOW decoration or unconstrained 3D PyXtal is not accepted as a MOF generator. | Corrected primitive cell and 2x, 4x, 8x supercells. Record the actual atom count from the corrected CIF and its formula-unit count; do not infer it from the current seed filenames. | 1,250 |
+| Zn(HCOO)2 MOF | COD 7205949 experimental Pbcn zinc-formate framework as the verified parent; additional topologies, proton configurations, bounded strain, and defects require connectivity-preserving generation. Generic AFLOW decoration or unconstrained 3D PyXtal is not accepted as a MOF generator. | 216-atom, 24-formula-unit CIF cell and 2x, 4x, 8x multiplicities (432, 864, 1,728 atoms). | 1,250 |
 
 For the four-tier classes, the 5,000-configuration quota is divided evenly
 (1,250 per tier); for the five-tier classes it is 1,000 per tier. Formula and
@@ -93,16 +96,18 @@ relaxations before exact-hash cache reuse.
    connectivity-preserving perturbations for LiFePO4 and the MOF. Reject
    unconstrained coordinate noise, broken MOF connectivity, non-periodic
    overlaps, and supercell copies masquerading as new structural families.
-4. **MOF seed blocker:** the two checked-in alpha/beta EXTXYZ seeds contain
-   Zn4C8O8 (20 atoms) and no hydrogen, rather than the stated
-   Zn4C8H8O16 stoichiometry for four Zn(HCOO)2 formula units. Do not use them
-   until their source is verified and chemically complete framework geometries
-   are supplied or reconstructed.
-5. Before freezing pools, inspect the pinned MACE checkpoint for every element
-   and test calculator creation and one bounded relaxation per class and
-   atom-count tier. Element support is only a software-compatibility check, not
-   evidence of transferability. A failure blocks that class; do not swap models
-   without a recorded protocol amendment.
+4. **MOF seed source:** E3-MLIP preparation uses the structure-only experimental
+   CIF COD 7205949 (DOI `10.1039/c1ce05031a`), which expands to
+   Zn24C48H48O96 (216 atoms, 24 Zn(HCOO)2 formula units, Pbcn); its source
+   SHA-256 is `df49d464c2cffdf50abe5c5442f0e2e2719fff77e950a43463ab8476a1887d10`.
+   The two older alpha/beta EXTXYZ files remain excluded: they contain Zn4C8O8
+   and omit hydrogen. The full campaign still requires connectivity-preserving
+   class-specific generation beyond this verified parent structure.
+5. Before freezing production manifests, inspect the pinned MACE checkpoint
+   for every element and automatically verify calculator loading and species
+   compatibility for every class. Element support is only a
+   software-compatibility check, not evidence of transferability. A failure
+   blocks that class; do not swap models without a recorded protocol amendment.
 
 All generation outputs record: formula/composition, formula-unit count, atom
 count, cell matrix and lengths/angles, PBC, space group (or `unknown` with
@@ -174,11 +179,14 @@ budget or erase its independent action provenance.
 ## 4. Mandatory MLIP geometry optimization
 
 Use the existing MACE relaxation path with a single frozen checkpoint per
-worker. Proposed common defaults for the feasibility pilot are:
+worker. The frozen common protocol for both strategies is:
 
 - Initial energy and forces recorded before optimization.
-- ASE FIRE optimizer; maximum 200 optimization steps; maximum atomic step
-  0.01 A; convergence at maximum atomic force below 0.02 eV/A.
+- ASE FIRE optimizer; maximum 500 optimization steps; maximum atomic step
+  0.05 A; convergence at maximum atomic force below 0.02 eV/A. The larger
+  displacement cap avoids artificially slow movement from strongly distorted
+  starts, while remaining conservative for local MLIP relaxation; the larger
+  step cap prevents early termination from being mistaken for convergence.
 - Store initial structure, every available trajectory frame, per-step energy
   and maximum force, final structure, final energy/forces, and termination
   outcome. A single-point evaluation is never marked as an optimized result.
@@ -188,7 +196,7 @@ worker. Proposed common defaults for the feasibility pilot are:
   unverified stress model. Phosphorene keeps vacuum and out-of-plane cell
   fixed; selective in-plane cell optimization requires a validated 2D filter.
   MOF cell relaxation also remains off until framework stress and connectivity
-  are shown stable in the pilot.
+  are demonstrated to be stable.
 - Same criteria and optimizer for both strategies within each class. Any
   class-specific change is frozen before either strategy starts.
 
@@ -217,8 +225,8 @@ Use two separate deduplication stages:
 2. **Relaxed minima:** match only structures with the same composition,
    defect state, and dimensionality. Initial proposed matcher tolerances are
    `ltol=0.2`, `stol=0.3 A`, and `angle_tol=5 degrees`, with primitive-cell and
-   supercell matching enabled. Freeze these after a blind pilot review and
-   report a tolerance-sensitivity check. Record the relaxed-minimum cluster ID
+   supercell matching enabled. Freeze these before round 1 and report a
+   tolerance-sensitivity check. Record the relaxed-minimum cluster ID
    separately from the starting-configuration ID and size-control family.
 
 Report counts of proposals, valid unique starts, optimized starts,
@@ -226,81 +234,60 @@ convergences, failures, relaxed-minimum clusters, and cross-size family
 relations separately. A converged relaxation is not automatically a distinct
 material discovery.
 
-## 6. Feasibility pilot and cost model
+## 6. Production throughput and resource controls
 
-### Pilot
+There is no separate disposable pilot. After automated model and species
+checks, the first acquisition round is production data and remains in the
+scientific dataset. Record per class and size tier the structures per GPU-hour,
+relaxation-time distribution, optimizer steps, convergence/failure rates,
+GPU memory, model load time, and I/O overhead. Use those measurements to size
+later round jobs without changing the frozen optimizer protocol or either
+strategy's logical budget.
 
-Run five valid, unique starts per class/tier/strategy on one Perlmutter GPU
-node: `5 * (5 + 5 + 4 + 5 + 5 + 4) * 2 = 280` logical relaxations. Include the
-matched-size controls only after the first pilot passes. Request one node with
-four A100 GPUs, one MACE worker per GPU, and a 24-hour walltime ceiling under a
-currently approved QoS. Confirm the account/QoS limit before submission. No
-DFT or VASP allocation is part of this pilot.
-
-Measure per class/tier: structures per GPU-hour, median and p90 relaxation
-time, optimizer-step distribution, convergence/failure rates, GPU memory,
-model load time, and I/O overhead. Do not extrapolate production hours until
-this pilot is complete.
-
-### Production cost estimate
-
-Only one model is currently selected, so there is no second-model cost
-estimate. For each class/tier, let `t90[class,tier]` be the measured p90
-single-structure GPU seconds from the pilot and `n[class,tier]` the logical
-structure count. A conservative four-GPU-node estimate is:
-
-```
-node_hours = 1.20 * sum(n[class,tier] * t90[class,tier]) / (4 * 3600)
-```
-
-The 20% factor covers controller, staging, and result I/O. Use actual pilot
-throughput if GPU occupancy or the large structures make the four-worker
-assumption inaccurate. At the proposed maximum of 200 steps, the 60,000
-exploration relaxations have a 12,000,000-step upper bound; matched-size
-controls add their own measured work. This is a step-count bound, not a
-walltime claim.
+The current plan contains 60,000 logical optimizations for the matched
+strategy budgets plus 1,120 finite-size-control optimizations, before exact
+hash cache reuse. At the 500-step cap this is at most 30,560,000 attempted
+optimizer steps. This is a step-count bound, not a walltime or GPU-hour
+estimate. A defensible aggregate node-hour request cannot be calculated until
+the checkpoint and production runtime per class/size are known. Submit no job
+until the required Perlmutter account, QoS, and aggregate resource authorization
+are confirmed.
 
 ### GPU dispatch and scale-out
 
 Structure relaxations are embarrassingly parallel across configurations;
-optimizer steps within a single structure remain sequential. The repository's
-`MLIPWorkerPool` already launches one persistent worker process per assigned
-device, caches the loaded calculator in that worker, dispatches independent
-relaxations concurrently, and preserves result order. Perlmutter GPU nodes have
-four A100 devices, so a one-node pilot can run four independent MACE
-relaxations at once.
-
-Use a one-node `perlmutter-gpu` resource placement with all four devices in the
-`mlip` pool and `max_concurrent: 4`. Each worker owns one GPU; keep CPU thread
-counts bounded to avoid oversubscription. At round boundaries, wait for the
-round's results before issuing the next adaptive decisions. Scale beyond one
-node with Slurm array/chunk jobs and a manifest-backed round barrier; the
-in-node worker pool does not itself coordinate multiple nodes.
+optimizer steps within a single structure remain sequential. Use one
+independently managed worker per configured A100 GPU, subject to runtime
+hardware discovery. Perlmutter has four A100 devices per GPU node; verify this
+at launch rather than assuming it. Multi-node scheduling, persistent
+per-structure manifests, automatic restart, and round barriers are required;
+the existing single-node `MLIPWorkerPool` alone is not the production
+orchestrator.
 
 The current
 [`job-e3-mlip-preparation-perlmutter.sh`](../../../deployments/perlmutter/jobs/job-e3-mlip-preparation-perlmutter.sh)
-is CPU-only single-point prediction and does not implement this plan. A new
-GPU relaxation entrypoint and adaptive controller are required before the
-pilot. The plan requires, at minimum, an action schema, size-aware/class-aware
-generators, resumable optimization manifests, a round controller, and the
-coverage/cost analysis outputs described above.
+is CPU-only single-point prediction and does not implement this plan. A
+multi-node GPU geometry-optimization entrypoint, manifest-backed scheduling,
+automatic restart, and adaptive round barriers are still missing. Do not
+represent the current CPU single-point job as an E3-MLIP campaign.
 
-## 7. Pre-production gates
+## 7. Production start conditions
 
-Do not start the 5,000-per-class campaign until all of these pass:
+Production may start only after all of these concrete conditions pass:
 
-1. The MOF seed-composition issue is resolved and framework validity is
-   checked.
-2. The pinned checkpoint's species support and one relaxation in every
-   class/tier are verified offline.
-3. The 280-relaxation pilot meets the force, failure-recording, restart, and
-   GPU-utilization requirements; measured costs are used to size the campaign.
-4. AFLOW/PyXtal/class-specific generation actions are reproducible, size-aware,
-   and produce no invalid or trivially duplicated structures in the pilot
-   acceptance set.
-5. Rule and LLM policies share the same action schema, candidate validity
-   rules, model, optimizer, budgets, and result-cache semantics.
-6. The Perlmutter allocation and campaign node-hours are explicitly authorized.
+1. All six class-specific generators produce valid, provenance-complete
+   structures, including a chemically complete, connectivity-checked MOF
+   source; class omissions are not permitted.
+2. The exact MACE checkpoint is frozen by identifier and hash, and automated
+   loading/species checks pass for every class.
+3. The 500-step, 0.05 A, 0.02 eV/A FIRE protocol and all termination outcomes
+   are recorded in the manifests and applied identically to both strategies.
+4. Persistent per-structure/per-round manifests, restart after worker failure,
+   distributed scheduling, and strategy-specific round barriers are tested.
+5. Rule and LLM policies share the same generator capabilities, validity
+   rules, model, optimizer, matched logical budgets, and cache accounting.
+6. The Perlmutter allocation and aggregate campaign resource budget are
+   explicitly authorized.
 
-Until then, the current inference-only Slurm job remains a diagnostic and must
-not be represented as the E3-MLIP exploration campaign.
+The first acquisition round is part of production, not a separate pilot; its
+valid results and resource measurements are retained.

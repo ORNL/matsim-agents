@@ -19,6 +19,7 @@ import hashlib
 import json
 import re
 import time
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,7 @@ from matsim_agents.execution.ledger import (
 
 REPO = Path(__file__).resolve().parents[2]
 PROTOCOL = Path(__file__).with_name("protocol.yaml")
+COD_ZN_FORMATE_CIF_SHA256 = "df49d464c2cffdf50abe5c5442f0e2e2719fff77e950a43463ab8476a1887d10"
 LLM = "llm_guided_adaptation"
 RULE = "rule_based_adaptation"
 STRATEGIES = (LLM, RULE)
@@ -552,10 +554,13 @@ def prepare_candidate_material(
 ) -> dict[str, Any]:
     """Write all geometry-only candidates without DFT data or train/validation splits."""
     spec = protocol["materials"][material]
-    out.mkdir(parents=True, exist_ok=False)
-    pool = candidate_pool(spec["pool"], set(), include_seed_pools=True)
+    if material == "zn_formate_mof":
+        pool = _zn_formate_cod_pool()
+    else:
+        pool = candidate_pool(spec["pool"], set(), include_seed_pools=True)
     if not pool:
         raise ValueError(f"{material}: no candidate geometries are available")
+    out.mkdir(parents=True, exist_ok=False)
 
     frames = []
     for entry in pool:
@@ -570,6 +575,7 @@ def prepare_candidate_material(
             frame_id=entry.candidate_id,
             candidate_id=entry.candidate_id,
             candidate_group=entry.group,
+            structure_source=entry.group,
         )
         frames.append(atoms)
     candidate_file = out / "candidates.extxyz"
@@ -579,6 +585,15 @@ def prepare_candidate_material(
         "material": material,
         "candidate_frames": len(frames),
         "candidate_sha256": hashlib.sha256(candidate_file.read_bytes()).hexdigest(),
+        "geometry_sources": [
+            {
+                "candidate_id": entry.candidate_id,
+                "group": entry.group,
+                "structure_sha256": entry.structure_sha256,
+            }
+            for entry in pool
+        ],
+        "source_cif_sha256": (COD_ZN_FORMATE_CIF_SHA256 if material == "zn_formate_mof" else None),
         "dft_outputs_used": False,
         "dft_labels_used": False,
         "dft_reference_frames_used": False,
@@ -586,6 +601,46 @@ def prepare_candidate_material(
     }
     (out / "candidate-preparation.json").write_text(json.dumps(record, indent=2) + "\n")
     return record
+
+
+def _zn_formate_cod_pool() -> list[PoolEntry]:
+    path = REPO / "examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+    if not path.is_file():
+        raise FileNotFoundError(f"verified Zn(HCOO)2 structure is missing: {path}")
+    source_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    if source_sha256 != COD_ZN_FORMATE_CIF_SHA256:
+        raise ValueError(
+            "COD 7205949 source CIF hash mismatch: "
+            f"expected {COD_ZN_FORMATE_CIF_SHA256}, got {source_sha256}"
+        )
+    from pymatgen.core import Structure
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    atoms = AseAtomsAdaptor.get_atoms(Structure.from_file(path))
+    zinc_count = Counter(atoms.get_chemical_symbols()).get("Zn", 0)
+    expected_counts = Counter(
+        {"Zn": zinc_count, "C": 2 * zinc_count, "H": 2 * zinc_count, "O": 4 * zinc_count}
+    )
+    if zinc_count != 24 or Counter(atoms.get_chemical_symbols()) != expected_counts:
+        raise ValueError(
+            f"{path} must contain the verified COD 7205949 Zn(HCOO)2 cell "
+            "(24 formula units, 216 atoms)"
+        )
+    if (
+        not np.all(atoms.pbc)
+        or atoms.cell.volume <= 0
+        or not np.isfinite(atoms.positions).all()
+        or not np.isfinite(atoms.cell.array).all()
+    ):
+        raise ValueError(f"{path} must contain a finite, fully periodic crystal cell")
+    return [
+        PoolEntry(
+            "COD-7205949",
+            "COD-7205949/Pbcn",
+            atoms,
+            _structure_hash(atoms),
+        )
+    ]
 
 
 def _predictions(directory: Path, name: str, stem: str) -> dict[str, dict[str, Any]]:

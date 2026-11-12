@@ -1,10 +1,12 @@
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
 import pytest
 from ase import Atoms
+from ase.io import read
 
 from benchmarks.e3 import run
 from matsim_agents.execution.ledger import EvidenceLedger
@@ -60,6 +62,40 @@ def test_candidate_preparation_uses_all_candidates_without_dft_or_splits(monkeyp
     assert (out / "candidates.extxyz").is_file()
     assert not (out / "references.extxyz").exists()
     assert not (out / "split").exists()
+
+
+def test_zn_formate_candidate_preparation_uses_verified_cod_geometry(tmp_path):
+    protocol, _ = run.load_protocol()
+    out = tmp_path / "zn-formate-candidate-only"
+
+    result = run.prepare_candidate_material("zn_formate_mof", protocol, out)
+    frames = read(out / "candidates.extxyz", index=":", format="extxyz")
+
+    assert result["candidate_frames"] == 1
+    assert result["geometry_sources"][0]["candidate_id"] == "COD-7205949"
+    assert result["geometry_sources"][0]["group"] == "COD-7205949/Pbcn"
+    assert result["source_cif_sha256"] == run.COD_ZN_FORMATE_CIF_SHA256
+    assert len(frames) == 1 and len(frames[0]) == 216
+    assert Counter(frames[0].get_chemical_symbols()) == Counter(
+        {"Zn": 24, "C": 48, "H": 48, "O": 96}
+    )
+    assert frames[0].info["candidate_id"] == "COD-7205949"
+    assert result["dft_outputs_used"] is False
+    assert result["dft_labels_used"] is False
+
+
+def test_zn_formate_candidate_preparation_validates_source_before_output(monkeypatch, tmp_path):
+    protocol, _ = run.load_protocol()
+
+    def reject_source():
+        raise ValueError("verified COD 7205949 source is invalid")
+
+    monkeypatch.setattr(run, "_zn_formate_cod_pool", reject_source)
+    out = tmp_path / "invalid-zn-formate"
+
+    with pytest.raises(ValueError, match="verified COD 7205949"):
+        run.prepare_candidate_material("zn_formate_mof", protocol, out)
+    assert not out.exists()
 
 
 def test_seed_only_candidate_pools_are_opt_in(monkeypatch, tmp_path):

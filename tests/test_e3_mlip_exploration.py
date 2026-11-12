@@ -172,6 +172,10 @@ def test_generation_round_uses_explicit_actions_and_mace_medium(tmp_path, monkey
         )
 
     monkeypatch.setattr("benchmarks.e3.mlip_exploration.explore_composition", fake_explore)
+    monkeypatch.setattr(
+        "benchmarks.e3.mlip_exploration._verified_checkpoint_sha256",
+        lambda: "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a",
+    )
     results = run_generation_round(
         "llm_guided_adaptation",
         2,
@@ -187,7 +191,8 @@ def test_generation_round_uses_explicit_actions_and_mace_medium(tmp_path, monkey
     assert kwargs["generation_action"] == action
     assert kwargs["mlip_backend"] == "mace"
     assert kwargs["mace_model"] == "medium-omat-0"
-    assert kwargs["maxiter"] == 200
+    assert kwargs["maxiter"] == 500
+    assert kwargs["maxstep"] == 0.05
     assert kwargs["fmax"] == 0.03
     assert kwargs["relax_cell"] is False
     assert "max_relaxations" not in kwargs
@@ -195,12 +200,23 @@ def test_generation_round_uses_explicit_actions_and_mace_medium(tmp_path, monkey
     round_dir = tmp_path / "llm_guided_adaptation" / "round-02"
     manifest = json.loads((round_dir / "round-manifest.json").read_text())
     assert manifest["status"] == "complete"
+    assert (
+        manifest["checkpoint_sha256"]
+        == "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a"
+    )
     assert manifest["actions"][0]["aflow_candidate_cap"] == 12
     assert manifest["actions"][0]["pyxtal_requested"] == 3
+    assert (
+        manifest["actions"][0]["checkpoint_sha256"]
+        == "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a"
+    )
     assert manifest["actions"][0]["failed"] == 1
     assert manifest["actions"][0]["nonconverged"] == 1
     saved_result = round_dir / manifest["actions"][0]["result_path"]
-    assert json.loads(saved_result.read_text())["relaxations"][0]["converged"] is False
+    saved_payload = json.loads(saved_result.read_text())
+    assert saved_payload["relaxations"][0]["converged"] is False
+    assert saved_payload["checkpoint_sha256"] == manifest["checkpoint_sha256"]
+    assert saved_payload["optimizer_protocol"]["maxiter"] == 500
 
 
 def test_generation_round_selects_rule_actions_from_strategy_local_history(tmp_path, monkeypatch):
@@ -219,6 +235,10 @@ def test_generation_round_selects_rule_actions_from_strategy_local_history(tmp_p
         )
 
     monkeypatch.setattr("benchmarks.e3.mlip_exploration.explore_composition", fake_explore)
+    monkeypatch.setattr(
+        "benchmarks.e3.mlip_exploration._verified_checkpoint_sha256",
+        lambda: "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a",
+    )
 
     run_generation_round(
         "rule_based_adaptation",
