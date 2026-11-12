@@ -81758,7 +81758,7 @@
     "maximum_scheduled_gpu_node_hours": 499.8,
     "measured_throughput": false,
     "nodes_per_array_element": 1,
-    "qos": "regular",
+    "qos": "gpu_regular",
     "requested_gpu_hour_cap": 2000,
     "walltime_seconds_per_array_element": 49980
   },

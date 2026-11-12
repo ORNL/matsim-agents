@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
@@ -29,7 +30,7 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     assert len(manifest["rounds"]) == 6 * 2 * 3 * 10
     assert manifest["total_logical_optimizations"] == 61120
     assert manifest["resource_request"]["account"] == "m5216_g"
-    assert manifest["resource_request"]["qos"] == "regular"
+    assert manifest["resource_request"]["qos"] == "gpu_regular"
     assert manifest["resource_request"]["requested_gpu_hour_cap"] == 2000
     assert manifest["resource_request"]["maximum_scheduled_gpu_hours"] == pytest.approx(1999.2)
     assert manifest["resource_request"]["maximum_scheduled_gpu_node_hours"] == pytest.approx(499.8)
@@ -58,6 +59,24 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
             assert {row["seed"] for row in rows} == set(REPLICATE_SEEDS)
             for row in rows:
                 assert sum(row["minimum_main_count_by_tier"].values()) <= row["main_target"]
+
+
+def test_perlmutter_launcher_targets_the_authorized_gpu_resources():
+    launcher = (
+        Path(__file__).resolve().parents[1]
+        / "deployments"
+        / "perlmutter"
+        / "jobs"
+        / "job-e3-mlip-production-perlmutter.sh"
+    )
+    text = launcher.read_text(encoding="utf-8")
+
+    assert 'SLURM_JOB_ACCOUNT:-}" == "m5216_g"' in text
+    assert "#SBATCH -p gpu_ss11" in text
+    assert "#SBATCH -q gpu_regular" in text
+    assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:gpu_regular:2000" in text
+    assert "MATSIM_E3_MLIP_BASE_PYTHON" in text
+    assert "MATSIM_E3_MLIP_WORKER_PYTHON" in text
 
 
 def test_class_actions_are_material_specific_and_mof_never_uses_pyxtal():

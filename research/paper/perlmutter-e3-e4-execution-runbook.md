@@ -116,10 +116,15 @@ python -m benchmarks.e3.production plan \
   --output benchmarks/e3/manifests/e3-mlip-production-v1.json
 
 # After the 2,000 GPU-hour resource authorization:
-MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:regular:2000 \
-  PROJECT_ROOT="$PWD" sbatch --account=m5216_g \
+MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:gpu_regular:2000 \
+  PROJECT_ROOT="$PWD" sbatch --account=m5216_g --partition=gpu_ss11 --qos=gpu_regular \
   deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh
 ```
+
+The production launcher uses `$PROJECT_ROOT/.venv` and
+`$PROJECT_ROOT/.venv-mace` by default. Set
+`MATSIM_E3_MLIP_BASE_PYTHON` and `MATSIM_E3_MLIP_WORKER_PYTHON` when a source
+worktree shares the prepared base and MACE environments from another checkout.
 
 The cap is 500 GPU-node-hours at four GPUs per node. A single full array is
 limited to 1,999.2 GPU-hours (36 elements, one node each, 13 hours 53 minutes);

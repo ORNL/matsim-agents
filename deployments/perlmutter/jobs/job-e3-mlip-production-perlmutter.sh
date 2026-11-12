@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH -J e3-mlip
+#SBATCH -p gpu_ss11
 #SBATCH -C gpu
-#SBATCH -q regular
+#SBATCH -q gpu_regular
 #SBATCH -N 1
 #SBATCH -t 13:53:00
 #SBATCH --gpus-per-node=4
@@ -24,13 +25,13 @@ REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
   echo "ERROR: this campaign requires Perlmutter account m5216_g" >&2
   exit 2
 }
-[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "m5216_g:regular:2000" ]] || {
-  echo "ERROR: explicit authorization required: MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:regular:2000" >&2
+[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "m5216_g:gpu_regular:2000" ]] || {
+  echo "ERROR: explicit authorization required: MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:gpu_regular:2000" >&2
   exit 2
 }
 
-BASE_PYTHON="${REPO}/.venv/bin/python"
-MACE_PYTHON="${REPO}/.venv-mace/bin/python"
+BASE_PYTHON="${MATSIM_E3_MLIP_BASE_PYTHON:-${REPO}/.venv/bin/python}"
+MACE_PYTHON="${MATSIM_E3_MLIP_WORKER_PYTHON:-${REPO}/.venv-mace/bin/python}"
 [[ -x "${BASE_PYTHON}" ]] || { echo "ERROR: missing ${BASE_PYTHON}" >&2; exit 2; }
 [[ -x "${MACE_PYTHON}" ]] || { echo "ERROR: missing ${MACE_PYTHON}" >&2; exit 2; }
 MANIFEST="${MATSIM_E3_MLIP_MANIFEST:-${REPO}/benchmarks/e3/manifests/e3-mlip-production-v1.json}"
@@ -100,7 +101,7 @@ source_revision="$(git -C "${REPO}" rev-parse HEAD)"
   echo "seed=${SEED}"
   echo "source_revision=${source_revision}"
   echo "account=m5216_g"
-  echo "qos=regular"
+  echo "qos=gpu_regular"
   echo "nodes=${SLURM_NNODES}"
   echo "gpus_per_node=4"
   echo "MACE_ARTIFACT_DIR=${MACE_ARTIFACT_DIR}"
