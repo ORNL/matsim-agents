@@ -38,8 +38,9 @@ def test_protocol_uses_manuscript_strategy_names_and_budget():
 def test_candidate_preparation_uses_all_candidates_without_dft_or_splits(monkeypatch, tmp_path):
     protocol, _ = run.load_protocol()
 
-    def candidate_pool_without_exclusions(spec, excluded):
+    def candidate_pool_without_exclusions(spec, excluded, **kwargs):
         assert excluded == set()
+        assert kwargs["include_seed_pools"] is True
         return _pool(40)
 
     monkeypatch.setattr(run, "candidate_pool", candidate_pool_without_exclusions)
@@ -59,6 +60,35 @@ def test_candidate_preparation_uses_all_candidates_without_dft_or_splits(monkeyp
     assert (out / "candidates.extxyz").is_file()
     assert not (out / "references.extxyz").exists()
     assert not (out / "split").exists()
+
+
+def test_seed_only_candidate_pools_are_opt_in(monkeypatch, tmp_path):
+    from ase.io import write
+
+    seed_path = tmp_path / "seed.extxyz"
+    write(seed_path, Atoms("P2", positions=[[0, 0, 0], [1, 0, 0]], cell=[5, 5, 10], pbc=True))
+    monkeypatch.setattr(run, "REPO", tmp_path)
+    spec = {"kind": "seeds_only", "seeds": ["seed.extxyz"]}
+
+    assert run.candidate_pool(spec, set()) == []
+    assert len(run.candidate_pool(spec, set(), include_seed_pools=True)) == 1
+
+
+@pytest.mark.parametrize("material", ["phosphorene", "zn_formate_mof"])
+def test_legacy_dry_run_skips_seed_only_materials_without_splitting(
+    material, tmp_path, monkeypatch
+):
+    protocol, digest = run.load_protocol()
+    monkeypatch.setattr(
+        run,
+        "_split",
+        lambda *_args, **_kwargs: pytest.fail("legacy dry-run must not split seed-only pools"),
+    )
+
+    result = run.dry_run_material(material, protocol, digest, tmp_path / material, run.DryRunChat())
+
+    assert result["status"] == "skipped"
+    assert not (tmp_path / material).exists()
 
 
 @pytest.mark.parametrize(

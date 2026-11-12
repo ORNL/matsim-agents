@@ -100,7 +100,11 @@ def _limited(rows: list[Any], limit: int | None) -> list[Any]:
 
 
 def candidate_pool(
-    spec: dict[str, Any], excluded: set[str], exclude_compositions: tuple[dict, ...] = ()
+    spec: dict[str, Any],
+    excluded: set[str],
+    exclude_compositions: tuple[dict, ...] = (),
+    *,
+    include_seed_pools: bool = False,
 ) -> list[PoolEntry]:
     """Frozen pool; excluded IDs and reference compositions are removed before limiting."""
     kind = spec["kind"]
@@ -150,14 +154,14 @@ def candidate_pool(
             for atoms in [read(path, format="vasp")]
         ]
     if kind == "seeds_only":
+        if not include_seed_pools:
+            return []
         entries = []
         for seed in spec.get("seeds", []):
             path = REPO / seed
             for index, atoms in enumerate(read(path, index=":", format="extxyz")):
                 candidate_id = f"{seed}::frame-{index:04d}"
-                entries.append(
-                    PoolEntry(candidate_id, seed, atoms, _structure_hash(atoms))
-                )
+                entries.append(PoolEntry(candidate_id, seed, atoms, _structure_hash(atoms)))
         return entries
     raise ValueError(f"unknown pool kind {kind!r}")
 
@@ -549,7 +553,7 @@ def prepare_candidate_material(
     """Write all geometry-only candidates without DFT data or train/validation splits."""
     spec = protocol["materials"][material]
     out.mkdir(parents=True, exist_ok=False)
-    pool = candidate_pool(spec["pool"], set())
+    pool = candidate_pool(spec["pool"], set(), include_seed_pools=True)
     if not pool:
         raise ValueError(f"{material}: no candidate geometries are available")
 
@@ -1454,11 +1458,17 @@ def main(argv: list[str] | None = None) -> int:
     ing.add_argument("--material", default="bcc_refractory")
     ing.add_argument("--round", type=int, required=True)
     ing.add_argument("--manifest", type=Path, required=True)
-    ing.add_argument("--ledgers", type=Path, required=True, help="copy of the round's ledger directory")
+    ing.add_argument(
+        "--ledgers", type=Path, required=True, help="copy of the round's ledger directory"
+    )
     ing.add_argument("--replay", type=Path, required=True, help="prepared replay directory")
     ing.add_argument("--state", type=Path, required=True)
-    ing.add_argument("--allocation-adjustments", type=Path, help="manifest-SHA-bound verified PBS accounting")
-    ing.add_argument("--reassess", action="store_true", help="deterministic reassessment once ingested")
+    ing.add_argument(
+        "--allocation-adjustments", type=Path, help="manifest-SHA-bound verified PBS accounting"
+    )
+    ing.add_argument(
+        "--reassess", action="store_true", help="deterministic reassessment once ingested"
+    )
     args = parser.parse_args(argv)
     if args.command == "ingest":
         from benchmarks.e3 import controller, reassessment
@@ -1473,7 +1483,9 @@ def main(argv: list[str] | None = None) -> int:
             allocation_adjustments_path=args.allocation_adjustments,
         )
         if args.reassess:
-            ctx = controller.load_context(args.material, args.replay, controller.DEFAULT_REFERENCE_ROLES)
+            ctx = controller.load_context(
+                args.material, args.replay, controller.DEFAULT_REFERENCE_ROLES
+            )
             reassessment.reassess_round(state, ctx, args.ledgers.resolve())
             state.save(args.state)
         print(json.dumps(state.round(args.round).model_dump(mode="json"), indent=2))
@@ -1484,9 +1496,7 @@ def main(argv: list[str] | None = None) -> int:
         (args.output / "prepare-summary.json").write_text(json.dumps(results, indent=2) + "\n")
         return 0
     if args.command == "prepare-candidates":
-        results = [
-            prepare_candidate_material(m, protocol, args.output / m) for m in args.materials
-        ]
+        results = [prepare_candidate_material(m, protocol, args.output / m) for m in args.materials]
         (args.output / "candidate-preparation-summary.json").write_text(
             json.dumps(results, indent=2) + "\n"
         )

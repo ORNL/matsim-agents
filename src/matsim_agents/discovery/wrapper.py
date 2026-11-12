@@ -52,12 +52,16 @@ class CompositionExplorationResult(BaseModel):
 
     @property
     def candidate_counts(self) -> dict[str, int]:
+        backend_errors = len(self.failures)
+        nonconverged = sum(not result.converged for result in self.relaxations)
         return {
             "generated": len(self.phase_candidates),
-            "attempted": len(self.relaxations) + len(self.failures),
+            "attempted": len(self.relaxations) + backend_errors,
             "completed": len(self.relaxations),
             "converged": sum(result.converged for result in self.relaxations),
-            "failed": len(self.failures),
+            "failed": backend_errors + nonconverged,
+            "backend_errors": backend_errors,
+            "nonconverged": nonconverged,
         }
 
 

@@ -18,12 +18,21 @@ _INITIAL_EVIDENCE_ID = "campaign-design"
 
 
 def load_action_history(
-    output_dir: str | Path, strategy: Literal["rule_based_adaptation", "llm_guided_adaptation"]
+    output_dir: str | Path,
+    strategy: Literal["rule_based_adaptation", "llm_guided_adaptation"],
+    before_round_index: int,
 ) -> list[dict[str, Any]]:
-    """Load completed action summaries from this strategy's prior round manifests."""
+    """Load only completed action summaries from earlier strategy-local rounds."""
+    if before_round_index < 1:
+        raise ValueError("before_round_index must be positive")
     strategy_dir = Path(output_dir) / strategy
     history = []
     for path in sorted(strategy_dir.glob("round-*/round-manifest.json")):
+        match = re.fullmatch(r"round-(\d+)", path.parent.name)
+        if match is None:
+            raise ValueError(f"invalid E3-MLIP round directory: {path.parent.name!r}")
+        if int(match.group(1)) >= before_round_index:
+            continue
         manifest = json.loads(path.read_text(encoding="utf-8"))
         if manifest.get("strategy") != strategy:
             raise ValueError(f"{path} contains history for another strategy")
@@ -131,21 +140,31 @@ def _llm_action_prompt(
     history: list[dict[str, Any]],
     n_actions: int,
 ) -> str:
-    evidence = [
-        {
-            "evidence_id": record["evidence_id"],
-            "action_id": record["action_id"],
-            "formula": record["formula"],
-            "formula_units": record["formula_units"],
-            "generated": record["generated"],
-            "attempted": record["attempted"],
-            "converged": record["converged"],
-            "failed": record["failed"],
-            "unrelaxed": record["unrelaxed"],
-            "outcome_class": record["outcome_class"],
-        }
-        for record in history
-    ]
+    evidence = []
+    for record in history:
+        backend_errors = int(record.get("backend_errors", record.get("failed", 0)))
+        nonconverged = int(
+            record.get(
+                "nonconverged",
+                max(0, int(record["attempted"]) - int(record["converged"]) - backend_errors),
+            )
+        )
+        evidence.append(
+            {
+                "evidence_id": record["evidence_id"],
+                "action_id": record["action_id"],
+                "formula": record["formula"],
+                "formula_units": record["formula_units"],
+                "generated": record["generated"],
+                "attempted": record["attempted"],
+                "converged": record["converged"],
+                "failed": record.get("failed", backend_errors + nonconverged),
+                "backend_errors": backend_errors,
+                "nonconverged": nonconverged,
+                "unrelaxed": record["unrelaxed"],
+                "outcome_class": record["outcome_class"],
+            }
+        )
     return (
         "Select the next E3-MLIP structure-generation actions. Use only the allowed "
         "action IDs. Consider coverage gaps, optimization outcomes, and generator "
@@ -239,7 +258,7 @@ def run_generation_round(
     if actions is None:
         if action_space is None or n_actions is None:
             raise ValueError("action_space and n_actions are required when actions are selected")
-        history = load_action_history(output_dir, strategy)
+        history = load_action_history(output_dir, strategy, round_index)
         if strategy == "rule_based_adaptation":
             actions = select_rule_based_actions(action_space, history, n_actions)
             selection_record = {
@@ -342,6 +361,13 @@ def run_generation_round(
                     generation_action=action,
                     mlip_pool=mlip_pool,
                 )
+                result_path = round_dir / "action-results" / f"{action.action_id}.json"
+                result_path.parent.mkdir(parents=True, exist_ok=True)
+                temp_result_path = result_path.with_suffix(".json.tmp")
+                temp_result_path.write_text(
+                    result.model_dump_json(indent=2) + "\n", encoding="utf-8"
+                )
+                temp_result_path.replace(result_path)
             except Exception as exc:
                 action_record.update(
                     status="failed",
@@ -353,10 +379,13 @@ def run_generation_round(
             results.append(result)
             action_record.update(
                 status="complete",
+                result_path=str(result_path.relative_to(round_dir)),
                 generated=len(result.phase_candidates),
                 attempted=result.candidate_counts["attempted"],
                 converged=result.candidate_counts["converged"],
                 failed=result.candidate_counts["failed"],
+                backend_errors=result.candidate_counts["backend_errors"],
+                nonconverged=result.candidate_counts["nonconverged"],
                 unrelaxed=len(result.unrelaxed_candidate_paths),
                 outcome_class=result.outcome_class,
             )
