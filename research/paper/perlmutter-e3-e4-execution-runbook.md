@@ -116,10 +116,13 @@ python -m benchmarks.e3.production plan \
   --output benchmarks/e3/manifests/e3-mlip-production-v1.json
 
 # After the 2,000 GPU-hour resource authorization:
-MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:gpu_regular:2000 \
-  PROJECT_ROOT="$PWD" sbatch --account=m5216_g --partition=gpu_ss11 --qos=gpu_regular \
+MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:regular:2000 \
+  PROJECT_ROOT="$PWD" sbatch --account=m5216 \
   deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh
 ```
+
+Submit with project account `m5216`; NERSC records GPU usage against billing
+account `m5216_g` and maps `regular` to GPU QoS `gpu_regular`.
 
 The production launcher uses `$PROJECT_ROOT/.venv` and
 `$PROJECT_ROOT/.venv-mace` by default. Set

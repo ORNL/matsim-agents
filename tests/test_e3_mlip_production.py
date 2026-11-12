@@ -29,8 +29,10 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     validate_campaign_manifest(manifest)
     assert len(manifest["rounds"]) == 6 * 2 * 3 * 10
     assert manifest["total_logical_optimizations"] == 61120
-    assert manifest["resource_request"]["account"] == "m5216_g"
-    assert manifest["resource_request"]["qos"] == "gpu_regular"
+    assert manifest["resource_request"]["account"] == "m5216"
+    assert manifest["resource_request"]["billing_account"] == "m5216_g"
+    assert manifest["resource_request"]["qos"] == "regular"
+    assert manifest["resource_request"]["billing_qos"] == "gpu_regular"
     assert manifest["resource_request"]["requested_gpu_hour_cap"] == 2000
     assert manifest["resource_request"]["maximum_scheduled_gpu_hours"] == pytest.approx(1999.2)
     assert manifest["resource_request"]["maximum_scheduled_gpu_node_hours"] == pytest.approx(499.8)
@@ -72,9 +74,9 @@ def test_perlmutter_launcher_targets_the_authorized_gpu_resources():
     text = launcher.read_text(encoding="utf-8")
 
     assert 'SLURM_JOB_ACCOUNT:-}" == "m5216_g"' in text
-    assert "#SBATCH -p gpu_ss11" in text
-    assert "#SBATCH -q gpu_regular" in text
-    assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:gpu_regular:2000" in text
+    assert "#SBATCH -p gpu_ss11" not in text
+    assert "#SBATCH -q regular" in text
+    assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:regular:2000" in text
     assert "MATSIM_E3_MLIP_BASE_PYTHON" in text
     assert "MATSIM_E3_MLIP_WORKER_PYTHON" in text
 

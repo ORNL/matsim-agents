@@ -1,8 +1,7 @@
 #!/bin/bash
 #SBATCH -J e3-mlip
-#SBATCH -p gpu_ss11
 #SBATCH -C gpu
-#SBATCH -q gpu_regular
+#SBATCH -q regular
 #SBATCH -N 1
 #SBATCH -t 13:53:00
 #SBATCH --gpus-per-node=4
@@ -25,8 +24,8 @@ REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
   echo "ERROR: this campaign requires Perlmutter account m5216_g" >&2
   exit 2
 }
-[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "m5216_g:gpu_regular:2000" ]] || {
-  echo "ERROR: explicit authorization required: MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216_g:gpu_regular:2000" >&2
+[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "m5216:regular:2000" ]] || {
+  echo "ERROR: explicit authorization required: MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:regular:2000" >&2
   exit 2
 }
 
@@ -101,6 +100,7 @@ source_revision="$(git -C "${REPO}" rev-parse HEAD)"
   echo "seed=${SEED}"
   echo "source_revision=${source_revision}"
   echo "account=m5216_g"
+  echo "submission_account=m5216"
   echo "qos=gpu_regular"
   echo "nodes=${SLURM_NNODES}"
   echo "gpus_per_node=4"

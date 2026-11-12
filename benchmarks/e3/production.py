@@ -487,8 +487,10 @@ def build_campaign_manifest() -> dict[str, Any]:
             "job_submission_performed": False,
         },
         "resource_request": {
-            "account": "m5216_g",
-            "qos": "gpu_regular",
+            "account": "m5216",
+            "billing_account": "m5216_g",
+            "qos": "regular",
+            "billing_qos": "gpu_regular",
             "array_elements": ARRAY_ELEMENTS,
             "nodes_per_array_element": 1,
             "gpus_per_node": GPU_COUNT_PER_NODE,

@@ -81748,17 +81748,19 @@
     "relax_cell": false
   },
   "resource_request": {
-    "account": "m5216_g",
+    "account": "m5216",
     "array_elements": 36,
     "average_gpu_seconds_per_logical_optimization_at_cap": 117.80104712041884,
     "basis": "36 streams x 1 GPU node x 4 GPUs x 13h53m; persistent allocation ledger caps all submissions and restarts at 2,000 GPU-hours",
+    "billing_account": "m5216_g",
+    "billing_qos": "gpu_regular",
     "gpu_hours_at_cap": 2000,
     "gpus_per_node": 4,
     "maximum_scheduled_gpu_hours": 1999.2,
     "maximum_scheduled_gpu_node_hours": 499.8,
     "measured_throughput": false,
     "nodes_per_array_element": 1,
-    "qos": "gpu_regular",
+    "qos": "regular",
     "requested_gpu_hour_cap": 2000,
     "walltime_seconds_per_array_element": 49980
   },
