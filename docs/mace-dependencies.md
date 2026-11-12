@@ -34,7 +34,11 @@ matsim-agents/.venv-mace  MACE compatibility process with e3nn 0.4.4
 
 `.venv-mace` explicitly adds `.venv`'s site-packages through a `.pth` file. It
 reuses the large, facility-qualified PyTorch, NumPy, and SciPy installations
-while its own site-packages appear first and shadow e3nn with 0.4.4. Python's
+while its own site-packages appear first and shadow e3nn with 0.4.4. The
+installer constrains Torch, torchvision, NumPy, SciPy, and ASE to the base
+environment's versions, then checks the dependency trees of matsim-agents and
+MACE. This prevents a MACE dependency from silently upgrading the project's
+pinned ASE version. Python's
 `--system-site-packages` option is intentionally not used because it exposes
 global interpreter packages, not packages belonging to another virtual
 environment. The result must be treated as a separate process environment:
