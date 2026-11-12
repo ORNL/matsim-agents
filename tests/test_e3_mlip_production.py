@@ -12,6 +12,7 @@ from benchmarks.e3.production import (
     REPLICATE_SEEDS,
     _action_space,
     _execute_round_tasks,
+    _finite_capacity_group,
     _llm_allocation,
     _materialize_round,
     _rule_allocation,
@@ -79,6 +80,7 @@ def test_perlmutter_launcher_targets_the_authorized_gpu_resources():
     assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:regular:2000" in text
     assert "MATSIM_E3_MLIP_BASE_PYTHON" in text
     assert "MATSIM_E3_MLIP_WORKER_PYTHON" in text
+    assert text.index("export PYTHONPATH=") < text.index("budget-reserve")
 
 
 def test_class_actions_are_material_specific_and_mof_never_uses_pyxtal():
@@ -183,7 +185,83 @@ def test_lifepo4_parent_action_capacity_is_shared_across_allocators():
         )
 
 
-def test_round_materialization_preserves_control_generation_family(monkeypatch, tmp_path):
+@pytest.mark.parametrize("family_label", ["black-phosphorene", "blue-phosphorene"])
+def test_pristine_phosphorene_capacity_is_shared_across_allocators_and_rounds(family_label):
+    actions = _action_space("phosphorene")
+    pristine = [
+        action
+        for action in actions
+        if action["family_label"] == family_label
+        and action["operation"] == "allotrope"
+        and action["defect"] is None
+        and action["strain"] is None
+    ]
+    assert pristine
+    assert all(_finite_capacity_group(action) is not None for action in pristine)
+
+    allocation = _rule_allocation(actions, [], target=10, minimum_by_tier={})
+    allocated = {}
+    for row in allocation:
+        group = _finite_capacity_group(row["action"])
+        if group is not None:
+            allocated[group] = allocated.get(group, 0) + row["count"]
+    assert all(count <= 1 for count in allocated.values())
+
+    exhausted = pristine[0]
+    prior_history = [
+        {
+            "action_id": exhausted["action_id"],
+            "action": exhausted,
+            "attempted": 1,
+            "converged": 1,
+        }
+    ]
+    allocation = _rule_allocation(actions, prior_history, target=1, minimum_by_tier={})
+    assert not any(row["action"]["action_id"] == exhausted["action_id"] for row in allocation)
+
+    remaining = next(action for action in pristine if action["action_id"] != exhausted["action_id"])
+
+    class FakeChat:
+        def invoke(self, prompt):
+            catalog = prompt.split("Hierarchical action catalog: ", maxsplit=1)[1]
+            assert exhausted["action_id"] not in catalog
+            return type(
+                "Response",
+                (),
+                {
+                    "content": json.dumps(
+                        {
+                            "allocations": [{"action_id": remaining["action_id"], "count": 1}],
+                            "cited_evidence_ids": ["campaign-design"],
+                            "rationale": "sample an unused pristine allotrope tier",
+                        }
+                    )
+                },
+            )()
+
+    allocations, _, _ = _llm_allocation(
+        FakeChat(),
+        "phosphorene",
+        actions,
+        prior_history,
+        target=1,
+        minimum_by_tier={str(remaining["size_tier"]): 1},
+    )
+    assert allocations == [{"action": remaining, "count": 1}]
+
+
+@pytest.mark.parametrize(
+    ("material", "minimum_by_tier"),
+    [
+        ("bcc_refractory", {"4": 1}),
+        ("phosphorene", {"4": 1}),
+    ],
+)
+def test_round_materialization_replicates_control_families_across_tiers(
+    monkeypatch, tmp_path, material, minimum_by_tier
+):
+    from ase.io import read
+
     from benchmarks.e3 import production
     from benchmarks.e3.structure_generation import _FAMILIES
 
@@ -191,7 +269,7 @@ def test_round_materialization_preserves_control_generation_family(monkeypatch, 
     spec = next(
         row
         for row in manifest["rounds"]
-        if row["material"] == "bcc_refractory"
+        if row["material"] == material
         and row["strategy"] == E3_STRATEGIES[0]
         and row["seed"] == REPLICATE_SEEDS[0]
         and row["round"] == 1
@@ -199,10 +277,10 @@ def test_round_materialization_preserves_control_generation_family(monkeypatch, 
     spec = {
         **spec,
         "main_target": 1,
-        "minimum_main_count_by_tier": {"4": 1},
+        "minimum_main_count_by_tier": minimum_by_tier,
         "finite_size_control_families": [0],
     }
-    manifest["action_spaces"]["bcc_refractory"] = _action_space("bcc_refractory")
+    manifest["action_spaces"][material] = _action_space(material)
     monkeypatch.setattr(
         production,
         "_verified_checkpoint",
@@ -217,17 +295,25 @@ def test_round_materialization_preserves_control_generation_family(monkeypatch, 
         if line.strip()
     ]
     controls = [task for task in tasks if task["candidate_kind"] == "finite_size_control"]
-    assert result["finite_size_controls"] == len(MATERIALS["bcc_refractory"]["tiers"])
-    assert len(controls) == len(MATERIALS["bcc_refractory"]["tiers"])
+    assert result["finite_size_controls"] == len(MATERIALS[material]["tiers"])
+    assert len(controls) == len(MATERIALS[material]["tiers"])
+    base = read(controls[0]["structure_path"], index=0, format="extxyz")
     for control in controls:
         assert control["control_family_id"] == 0
-        assert control["action"]["family"] in _FAMILIES["bcc_refractory"]
-        assert control["generation"]["family"] in _FAMILIES["bcc_refractory"]
+        assert control["action"]["family"] in _FAMILIES[material]
+        assert control["generation"]["family"] in _FAMILIES[material]
+        control_metadata = control["generation"]["finite_size_control"]
+        assert control_metadata["control_family_id"] == 0
+        expected = base.repeat(tuple(control_metadata["supercell_repetitions"]))
+        actual = read(control["structure_path"], index=0, format="extxyz")
+        assert actual.get_chemical_symbols() == expected.get_chemical_symbols()
+        assert list(actual.cell.array.flat) == pytest.approx(list(expected.cell.array.flat))
+        assert list(actual.positions.flat) == pytest.approx(list(expected.positions.flat))
 
 
 def test_llm_policy_validates_exact_budget_allowlist_and_evidence():
     actions = _action_space("phosphorene")
-    allowed = actions[:2]
+    allowed = next(action for action in actions if _finite_capacity_group(action) is None)
 
     class FakeChat:
         model_id = "test-model"
@@ -241,9 +327,9 @@ def test_llm_policy_validates_exact_budget_allowlist_and_evidence():
                 {
                     "content": json.dumps(
                         {
-                            "allocations": [{"action_id": allowed[0]["action_id"], "count": 2}],
+                            "allocations": [{"action_id": allowed["action_id"], "count": 2}],
                             "cited_evidence_ids": ["campaign-design"],
-                            "rationale": "The allotrope tier has not yet been sampled.",
+                            "rationale": "The bounded perturbation has not yet been sampled.",
                         }
                     )
                 },
@@ -255,9 +341,9 @@ def test_llm_policy_validates_exact_budget_allowlist_and_evidence():
         actions,
         [],
         target=2,
-        minimum_by_tier={str(allowed[0]["size_tier"]): 2},
+        minimum_by_tier={str(allowed["size_tier"]): 2},
     )
-    assert allocations == [{"action": allowed[0], "count": 2}]
+    assert allocations == [{"action": allowed, "count": 2}]
     assert citations == ["campaign-design"]
     assert rationale
 

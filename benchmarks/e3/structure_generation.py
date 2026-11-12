@@ -761,6 +761,7 @@ def _pyxtal_oxide_candidates(
             seed=seed,
             formula_units=tier,
             space_groups=list(space_groups) or None,
+            seed_proposals=True,
         )
     except ImportError as exc:
         raise StructureGenerationError("PyXtal oxide generation requires pymatgen.") from exc
@@ -990,6 +991,92 @@ def _generate_one(
     raise StructureGenerationError(f"Unknown E3 material class: {material!r}.")
 
 
+def replicate_structure(
+    material: str,
+    base_record: dict[str, Any],
+    action: dict[str, Any],
+    output_dir: str | Path,
+    control_family_id: int,
+) -> dict[str, Any]:
+    """Build a finite-size control by exact supercell replication of one base motif."""
+    ase, np, _, _, _, write = _ase()
+    base_path = Path(base_record["structure_path"]).expanduser().resolve()
+    if hashlib.sha256(base_path.read_bytes()).hexdigest() != base_record["structure_sha256"]:
+        raise StructureGenerationError(f"Finite-size control base hash mismatch: {base_path}")
+    base_generation = base_record["generation"]
+    for key in ("material", "family", "family_label", "formula", "generator"):
+        if base_generation.get(key) != action.get(key):
+            raise StructureGenerationError(
+                f"Finite-size control action changed {key}: "
+                f"{base_generation.get(key)!r} != {action.get(key)!r}."
+            )
+    base_tier = int(base_generation["size_tier"])
+    target_tier = int(action["size_tier"])
+    if material not in _TIERS or target_tier not in _TIERS[material]:
+        raise StructureGenerationError(f"Unsupported finite-size control tier: {target_tier}.")
+    if target_tier < base_tier or target_tier % base_tier:
+        raise StructureGenerationError(
+            f"Finite-size control tier {target_tier} is not an integer multiple "
+            f"of base tier {base_tier}."
+        )
+
+    from ase.io import read
+
+    atoms = read(base_path, index=0, format="extxyz")
+    repetitions = _factor_triplet(
+        target_tier // base_tier,
+        atoms.cell,
+        dimensions=2 if material == "phosphorene" else 3,
+    )
+    atoms = atoms.repeat(repetitions)
+    _validate_geometry(atoms)
+    if not _formula_matches(atoms, str(action["formula"]), target_tier):
+        raise StructureGenerationError(
+            f"Replicated control does not match {action['formula']} × {target_tier}."
+        )
+
+    generation = dict(base_generation)
+    geometry_hash = _geometry_hash(atoms, translation_invariant=material in _ALLOY_ELEMENTS)
+    generation.update(
+        action_id=action["action_id"],
+        num_atoms=len(atoms),
+        formula_units=target_tier,
+        size_tier=target_tier,
+        tier_unit="atoms" if material == "phosphorene" else "formula_units",
+        canonical_geometry_sha256=geometry_hash,
+        lattice={
+            "matrix_angstrom": np.round(atoms.cell.array, 10).tolist(),
+            "lengths_angstrom": np.round(atoms.cell.lengths(), 10).tolist(),
+            "angles_degrees": np.round(atoms.cell.angles(), 10).tolist(),
+            "pbc": [bool(value) for value in atoms.pbc],
+        },
+        finite_size_control={
+            "control_family_id": control_family_id,
+            "base_size_tier": base_tier,
+            "supercell_repetitions": list(repetitions),
+            "base_geometry_sha256": base_generation["canonical_geometry_sha256"],
+        },
+    )
+    safe_action_id = re.sub(r"[^A-Za-z0-9._-]+", "-", str(action["action_id"])).strip("-")
+    candidate_id = f"{safe_action_id}-{geometry_hash[:12]}"
+    output = Path(output_dir).expanduser().resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    structure_path = output / f"{candidate_id}.extxyz"
+    atoms.info = {"generation_json": json.dumps(generation, sort_keys=True, separators=(",", ":"))}
+    atoms.calc = None
+    write(structure_path, atoms, format="extxyz")
+    structure_hash = hashlib.sha256(structure_path.read_bytes()).hexdigest()
+    return {
+        **base_record,
+        "candidate_id": candidate_id,
+        "structure_path": str(structure_path),
+        "structure_sha256": structure_hash,
+        "num_atoms": len(atoms),
+        "formula_units": target_tier,
+        "generation": generation,
+    }
+
+
 def generate_structures(
     material: str, action: dict[str, Any], output_dir: str | Path
 ) -> list[dict[str, Any]]:
@@ -1093,6 +1180,7 @@ def generate_structures(
     seen: set[str] = set()
     symmetry_matcher = make_structure_matcher()
     max_attempts = max(40, count * 30)
+    geometry_rejections: Counter[str] = Counter()
     for _ in range(max_attempts):
         candidate_seed = int(rng_master.integers(0, 2**32, dtype=np.uint64))
         rng = np.random.default_rng(candidate_seed)
@@ -1141,7 +1229,11 @@ def generate_structures(
                 space_group_filter,
                 operation_label,
             )
-        _validate_geometry(atoms)
+        try:
+            _validate_geometry(atoms)
+        except StructureGenerationError as exc:
+            geometry_rejections[str(exc)] += 1
+            continue
         formula_units = source_metadata["formula_units"]
         if not _formula_matches(atoms, formula, formula_units):
             raise StructureGenerationError(
@@ -1207,9 +1299,13 @@ def generate_structures(
         if len(selected) == count:
             break
     if len(selected) != count:
+        rejection_summary = "; ".join(
+            f"{reason} ({rejected})" for reason, rejected in geometry_rejections.most_common(3)
+        )
         raise StructureGenerationError(
             f"Requested {count} unique {material} structures for action {action_id!r}, "
-            f"but only {len(selected)} were generated in {max_attempts} attempts."
+            f"but only {len(selected)} were generated in {max_attempts} attempts. "
+            f"Geometry rejections: {rejection_summary or 'none'}."
         )
 
     records: list[dict[str, Any]] = []

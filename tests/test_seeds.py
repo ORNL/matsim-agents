@@ -180,6 +180,38 @@ def test_random_search_uses_formula_unit_and_space_group_controls(monkeypatch):
     ]
 
 
+@requires_pymatgen
+def test_random_search_seeded_proposals_replay_the_same_structure(monkeypatch):
+    from pymatgen.core import Lattice, Structure
+
+    random_values = []
+
+    class FakePyXtal:
+        valid = True
+
+        def from_random(self, **kwargs):
+            assert "random_state" in kwargs
+            self.coordinate = float(kwargs["random_state"].random_sample())
+            random_values.append(self.coordinate)
+
+        def to_pymatgen(self):
+            return Structure(
+                Lattice.cubic(4.0),
+                ["Si"],
+                [[self.coordinate, 0.2, 0.3]],
+            )
+
+    monkeypatch.setattr("matsim_agents.discovery.seeds._pyxtal_available", lambda: True)
+    monkeypatch.setitem(sys.modules, "pyxtal", SimpleNamespace(pyxtal=FakePyXtal))
+
+    first = random_search(_comp("Si"), n=1, seed=31, seed_proposals=True)
+    second = random_search(_comp("Si"), n=1, seed=31, seed_proposals=True)
+
+    assert len(first) == len(second) == 1
+    assert random_values[0] == random_values[1]
+    assert first[0][0].matches(second[0][0])
+
+
 # --------------------------------------------------------------------- #
 # Unified entry point                                                   #
 # --------------------------------------------------------------------- #

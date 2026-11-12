@@ -592,6 +592,14 @@ def _finite_capacity_group(action: dict[str, Any]) -> tuple[str, str] | None:
         and action.get("strain") is None
     ):
         return "lifepo4-pristine-parent", str(action["size_tier"])
+    if (
+        action.get("material") == "phosphorene"
+        and action.get("family_label") in {"black-phosphorene", "blue-phosphorene"}
+        and action.get("family") in {"black_phosphorene", "black", "blue_phosphorene", "blue"}
+        and action.get("defect") is None
+        and action.get("strain") is None
+    ):
+        return f"phosphorene-pristine-{action['family_label']}", str(action["size_tier"])
     return None
 
 
@@ -950,6 +958,7 @@ def _materialize_round(
     from benchmarks.e3.structure_generation import (
         generate_structures,
         make_structure_matcher,
+        replicate_structure,
         structures_symmetry_equivalent,
     )
 
@@ -1131,33 +1140,47 @@ def _materialize_round(
 
     control_records = []
     for family_id in round_spec["finite_size_control_families"]:
-        for tier in MATERIALS[material]["tiers"]:
-            base_actions = [
-                action
-                for action in action_space
-                if action["size_tier"] == tier
-                and action["generator"] == MATERIALS[material]["generators"][0]
-            ]
-            control_action = dict(base_actions[0])
+        tiers = MATERIALS[material]["tiers"]
+        base_tier = tiers[0]
+        base_actions = [
+            action
+            for action in action_space
+            if action["size_tier"] == base_tier
+            and action["generator"] == MATERIALS[material]["generators"][0]
+        ]
+        base_action = dict(base_actions[0])
+        base_action.update(
+            action_id=f"control-{family_id:02d}-tier-{base_tier}",
+            random_seed=int(
+                hashlib.sha256(f"size-control:{material}:{family_id}".encode()).hexdigest()[:8],
+                16,
+            ),
+            count=1,
+            control_family_id=family_id,
+        )
+        generated = generate_structures(
+            material,
+            base_action,
+            round_dir / "controls" / base_action["action_id"],
+        )
+        if len(generated) != 1:
+            raise ValueError(f"size-control generator did not return one structure: {base_action}")
+        base_record = generated[0]
+        for tier in tiers:
+            control_action = dict(base_action)
             control_action.update(
                 action_id=f"control-{family_id:02d}-tier-{tier}",
-                random_seed=int(
-                    hashlib.sha256(f"size-control:{material}:{family_id}".encode()).hexdigest()[:8],
-                    16,
-                ),
-                count=1,
-                control_family_id=family_id,
+                size_tier=tier,
             )
-            generated = generate_structures(
+            record = replicate_structure(
                 material,
+                base_record,
                 control_action,
                 round_dir / "controls" / control_action["action_id"],
+                family_id,
             )
-            if len(generated) != 1:
-                raise ValueError(
-                    f"size-control generator did not return one structure: {control_action}"
-                )
-            record = generated[0]
+            if tier == base_tier:
+                base_record = record
             path = Path(record["structure_path"]).resolve()
             file_digest = _sha256_file(path)
             if file_digest != record["structure_sha256"]:

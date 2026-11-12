@@ -376,6 +376,7 @@ def random_search(
     formula_units: int = 1,
     space_groups: list[int] | None = None,
     max_attempts_factor: int = 4,
+    seed_proposals: bool = False,
 ) -> list[tuple[Structure, int]]:
     """Generate up to ``n`` random crystal structures across the 230 space groups.
 
@@ -419,7 +420,12 @@ def random_search(
         spg = rng.choice(allowed_groups)
         try:
             x = pyxtal()
-            x.from_random(dim=3, group=spg, species=elements, numIons=counts)
+            proposal_args = {}
+            if seed_proposals:
+                import numpy as np
+
+                proposal_args["random_state"] = np.random.RandomState(rng.getrandbits(32))
+            x.from_random(dim=3, group=spg, species=elements, numIons=counts, **proposal_args)
             if not x.valid:
                 continue
             pmg = x.to_pymatgen()

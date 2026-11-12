@@ -43,6 +43,7 @@ OUTPUT_ROOT="${MATSIM_E3_MLIP_OUTPUT_ROOT:-${REPO}/runs/e3-mlip-production-v1}"
 mkdir -p "${OUTPUT_ROOT}"
 RESOURCE_STATE="${REPO}/runs/e3-mlip-production-v1/resource-budget.json"
 RESOURCE_START=${SECONDS}
+export PYTHONPATH="${REPO}:${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
 "${BASE_PYTHON}" -m benchmarks.e3.production budget-reserve \
   --state "${RESOURCE_STATE}" \
   --reservation-id "${SLURM_JOB_ID}" \
@@ -69,7 +70,6 @@ load_perlmutter_modules_gpu
 source "${REPO}/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
 configure_mace_model_artifacts "${REPO}"
 
-export PYTHONPATH="${REPO}:${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 export CUDA_DEVICE_ORDER=PCI_BUS_ID

@@ -117,6 +117,40 @@ def test_lifepo4_antisite_batch_keeps_source_composition_and_provenance(tmp_path
         assert record["generation"]["operation"]["type"] == "Li-Fe antisite pair"
 
 
+def test_candidate_geometry_rejection_retries_within_the_bounded_batch(monkeypatch, tmp_path):
+    import benchmarks.e3.structure_generation as generation
+
+    validate = generation._validate_geometry
+    calls = 0
+
+    def reject_first_candidate(atoms):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise StructureGenerationError("test overlap")
+        validate(atoms)
+
+    monkeypatch.setattr(generation, "_validate_geometry", reject_first_candidate)
+    records = generate_structures(
+        "lifepo4",
+        _action(
+            "lifepo4-retry",
+            family="olivine",
+            formula="LiFePO4",
+            size_tier=4,
+            generator="class_specific",
+            count=1,
+        ),
+        tmp_path,
+    )
+
+    assert len(records) == 1
+    assert calls == 2
+    assert Counter(_read_record(records[0]).get_chemical_symbols()) == Counter(
+        {"Li": 4, "Fe": 4, "P": 4, "O": 16}
+    )
+
+
 def test_symmetry_matching_recognizes_translated_lifepo4_antisite_cell(tmp_path):
     pytest.importorskip("pymatgen")
     from benchmarks.e3.structure_generation import (
