@@ -1,6 +1,8 @@
 """E3 six-material inventory and paired-strategy dry run.
 
 ``inventory`` audits the frozen per-material candidate sources and blockers.
+``prepare-candidates`` freezes structure-only pools and leakage-safe candidate splits
+without loading any DFT references or labels.
 ``dry-run`` exercises the full paired protocol for selected materials without any
 DFT or training: it freezes a candidate pool, partitions it with the existing
 ``make_split`` (validation/test withheld), runs four rounds for both strategies with
@@ -17,6 +19,7 @@ import hashlib
 import json
 import re
 import time
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -44,6 +47,7 @@ from matsim_agents.execution.ledger import (
 
 REPO = Path(__file__).resolve().parents[2]
 PROTOCOL = Path(__file__).with_name("protocol.yaml")
+COD_ZN_FORMATE_CIF_SHA256 = "df49d464c2cffdf50abe5c5442f0e2e2719fff77e950a43463ab8476a1887d10"
 LLM = "llm_guided_adaptation"
 RULE = "rule_based_adaptation"
 STRATEGIES = (LLM, RULE)
@@ -98,7 +102,11 @@ def _limited(rows: list[Any], limit: int | None) -> list[Any]:
 
 
 def candidate_pool(
-    spec: dict[str, Any], excluded: set[str], exclude_compositions: tuple[dict, ...] = ()
+    spec: dict[str, Any],
+    excluded: set[str],
+    exclude_compositions: tuple[dict, ...] = (),
+    *,
+    include_seed_pools: bool = False,
 ) -> list[PoolEntry]:
     """Frozen pool; excluded IDs and reference compositions are removed before limiting."""
     kind = spec["kind"]
@@ -148,7 +156,15 @@ def candidate_pool(
             for atoms in [read(path, format="vasp")]
         ]
     if kind == "seeds_only":
-        return []
+        if not include_seed_pools:
+            return []
+        entries = []
+        for seed in spec.get("seeds", []):
+            path = REPO / seed
+            for index, atoms in enumerate(read(path, index=":", format="extxyz")):
+                candidate_id = f"{seed}::frame-{index:04d}"
+                entries.append(PoolEntry(candidate_id, seed, atoms, _structure_hash(atoms)))
+        return entries
     raise ValueError(f"unknown pool kind {kind!r}")
 
 
@@ -531,6 +547,100 @@ def prepare_replay(material: str, protocol: dict[str, Any], out: Path) -> dict[s
     }
     (out / "prepare.json").write_text(json.dumps(record, indent=2) + "\n")
     return record
+
+
+def prepare_candidate_material(
+    material: str, protocol: dict[str, Any], out: Path
+) -> dict[str, Any]:
+    """Write all geometry-only candidates without DFT data or train/validation splits."""
+    spec = protocol["materials"][material]
+    if material == "zn_formate_mof":
+        pool = _zn_formate_cod_pool()
+    else:
+        pool = candidate_pool(spec["pool"], set(), include_seed_pools=True)
+    if not pool:
+        raise ValueError(f"{material}: no candidate geometries are available")
+    out.mkdir(parents=True, exist_ok=False)
+
+    frames = []
+    for entry in pool:
+        source = entry.atoms
+        atoms = Atoms(
+            symbols=source.get_chemical_symbols(),
+            positions=source.positions.copy(),
+            cell=source.cell.array.copy(),
+            pbc=source.pbc.copy(),
+        )
+        atoms.info.update(
+            frame_id=entry.candidate_id,
+            candidate_id=entry.candidate_id,
+            candidate_group=entry.group,
+            structure_source=entry.group,
+        )
+        frames.append(atoms)
+    candidate_file = out / "candidates.extxyz"
+    write(candidate_file, frames, format="extxyz")
+
+    record = {
+        "material": material,
+        "candidate_frames": len(frames),
+        "candidate_sha256": hashlib.sha256(candidate_file.read_bytes()).hexdigest(),
+        "geometry_sources": [
+            {
+                "candidate_id": entry.candidate_id,
+                "group": entry.group,
+                "structure_sha256": entry.structure_sha256,
+            }
+            for entry in pool
+        ],
+        "source_cif_sha256": (COD_ZN_FORMATE_CIF_SHA256 if material == "zn_formate_mof" else None),
+        "dft_outputs_used": False,
+        "dft_labels_used": False,
+        "dft_reference_frames_used": False,
+        "train_validation_test_split": False,
+    }
+    (out / "candidate-preparation.json").write_text(json.dumps(record, indent=2) + "\n")
+    return record
+
+
+def _zn_formate_cod_pool() -> list[PoolEntry]:
+    path = REPO / "examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+    if not path.is_file():
+        raise FileNotFoundError(f"verified Zn(HCOO)2 structure is missing: {path}")
+    source_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    if source_sha256 != COD_ZN_FORMATE_CIF_SHA256:
+        raise ValueError(
+            "COD 7205949 source CIF hash mismatch: "
+            f"expected {COD_ZN_FORMATE_CIF_SHA256}, got {source_sha256}"
+        )
+    from pymatgen.core import Structure
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    atoms = AseAtomsAdaptor.get_atoms(Structure.from_file(path))
+    zinc_count = Counter(atoms.get_chemical_symbols()).get("Zn", 0)
+    expected_counts = Counter(
+        {"Zn": zinc_count, "C": 2 * zinc_count, "H": 2 * zinc_count, "O": 4 * zinc_count}
+    )
+    if zinc_count != 24 or Counter(atoms.get_chemical_symbols()) != expected_counts:
+        raise ValueError(
+            f"{path} must contain the verified COD 7205949 Zn(HCOO)2 cell "
+            "(24 formula units, 216 atoms)"
+        )
+    if (
+        not np.all(atoms.pbc)
+        or atoms.cell.volume <= 0
+        or not np.isfinite(atoms.positions).all()
+        or not np.isfinite(atoms.cell.array).all()
+    ):
+        raise ValueError(f"{path} must contain a finite, fully periodic crystal cell")
+    return [
+        PoolEntry(
+            "COD-7205949",
+            "COD-7205949/Pbcn",
+            atoms,
+            _structure_hash(atoms),
+        )
+    ]
 
 
 def _predictions(directory: Path, name: str, stem: str) -> dict[str, dict[str, Any]]:
@@ -1382,15 +1492,38 @@ def main(argv: list[str] | None = None) -> int:
         cmd = sub.add_parser(name)
         cmd.add_argument("--output", type=Path, required=True)
         cmd.add_argument("--materials", nargs="+", default=["lifepo4", "bcc_refractory"])
+    candidate_prep = sub.add_parser(
+        "prepare-candidates",
+        help="freeze unlabeled candidate pools and splits without reading DFT data",
+    )
+    candidate_prep.add_argument("--output", type=Path, required=True)
+    candidate_prep.add_argument(
+        "--materials",
+        nargs="+",
+        default=[
+            "lifepo4",
+            "bcc_refractory",
+            "fcc_cantor",
+            "phosphorene",
+            "zn_formate_mof",
+            "nb_ta_o",
+        ],
+    )
     ing = sub.add_parser("ingest", help="ingest finished DFT into copied strategy ledgers")
     ing.add_argument("--material", default="bcc_refractory")
     ing.add_argument("--round", type=int, required=True)
     ing.add_argument("--manifest", type=Path, required=True)
-    ing.add_argument("--ledgers", type=Path, required=True, help="copy of the round's ledger directory")
+    ing.add_argument(
+        "--ledgers", type=Path, required=True, help="copy of the round's ledger directory"
+    )
     ing.add_argument("--replay", type=Path, required=True, help="prepared replay directory")
     ing.add_argument("--state", type=Path, required=True)
-    ing.add_argument("--allocation-adjustments", type=Path, help="manifest-SHA-bound verified PBS accounting")
-    ing.add_argument("--reassess", action="store_true", help="deterministic reassessment once ingested")
+    ing.add_argument(
+        "--allocation-adjustments", type=Path, help="manifest-SHA-bound verified PBS accounting"
+    )
+    ing.add_argument(
+        "--reassess", action="store_true", help="deterministic reassessment once ingested"
+    )
     args = parser.parse_args(argv)
     if args.command == "ingest":
         from benchmarks.e3 import controller, reassessment
@@ -1405,7 +1538,9 @@ def main(argv: list[str] | None = None) -> int:
             allocation_adjustments_path=args.allocation_adjustments,
         )
         if args.reassess:
-            ctx = controller.load_context(args.material, args.replay, controller.DEFAULT_REFERENCE_ROLES)
+            ctx = controller.load_context(
+                args.material, args.replay, controller.DEFAULT_REFERENCE_ROLES
+            )
             reassessment.reassess_round(state, ctx, args.ledgers.resolve())
             state.save(args.state)
         print(json.dumps(state.round(args.round).model_dump(mode="json"), indent=2))
@@ -1414,6 +1549,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "prepare":
         results = [prepare_replay(m, protocol, args.output / m) for m in args.materials]
         (args.output / "prepare-summary.json").write_text(json.dumps(results, indent=2) + "\n")
+        return 0
+    if args.command == "prepare-candidates":
+        results = [prepare_candidate_material(m, protocol, args.output / m) for m in args.materials]
+        (args.output / "candidate-preparation-summary.json").write_text(
+            json.dumps(results, indent=2) + "\n"
+        )
         return 0
     if args.command == "round1":
         from matsim_agents.backends.llm.provider import get_chat_model

@@ -17,8 +17,10 @@ import pytest
 from matsim_agents.discovery.composition import parse_composition
 from matsim_agents.discovery.seeds import (
     PhaseCandidate,
+    SeedGenerationAction,
     compatible_prototypes,
     decorate,
+    generate_seed_action,
     generate_seeds,
     load_prototypes,
     random_search,
@@ -140,6 +142,76 @@ def test_random_search_filters_symmetry_equivalent_structures(monkeypatch):
     assert len(results) == 1
 
 
+@requires_pymatgen
+def test_random_search_uses_formula_unit_and_space_group_controls(monkeypatch):
+    from pymatgen.core import Lattice, Structure
+
+    calls = []
+    structure = Structure(Lattice.cubic(4.0), ["Li", "Fe", "P", "O"], [[0, 0, 0]] * 4)
+
+    class FakePyXtal:
+        valid = True
+
+        def from_random(self, **kwargs):
+            calls.append(kwargs)
+
+        def to_pymatgen(self):
+            return structure.copy()
+
+    monkeypatch.setattr("matsim_agents.discovery.seeds._pyxtal_available", lambda: True)
+    monkeypatch.setitem(sys.modules, "pyxtal", SimpleNamespace(pyxtal=FakePyXtal))
+
+    random_search(
+        _comp("LiFePO4"),
+        n=1,
+        seed=3,
+        formula_units=4,
+        space_groups=[62],
+        max_attempts_factor=1,
+    )
+
+    assert calls == [
+        {
+            "dim": 3,
+            "group": 62,
+            "species": ["Li", "Fe", "P", "O"],
+            "numIons": [4, 4, 4, 16],
+        }
+    ]
+
+
+@requires_pymatgen
+def test_random_search_seeded_proposals_replay_the_same_structure(monkeypatch):
+    from pymatgen.core import Lattice, Structure
+
+    random_values = []
+
+    class FakePyXtal:
+        valid = True
+
+        def from_random(self, **kwargs):
+            assert "random_state" in kwargs
+            self.coordinate = float(kwargs["random_state"].random_sample())
+            random_values.append(self.coordinate)
+
+        def to_pymatgen(self):
+            return Structure(
+                Lattice.cubic(4.0),
+                ["Si"],
+                [[self.coordinate, 0.2, 0.3]],
+            )
+
+    monkeypatch.setattr("matsim_agents.discovery.seeds._pyxtal_available", lambda: True)
+    monkeypatch.setitem(sys.modules, "pyxtal", SimpleNamespace(pyxtal=FakePyXtal))
+
+    first = random_search(_comp("Si"), n=1, seed=31, seed_proposals=True)
+    second = random_search(_comp("Si"), n=1, seed=31, seed_proposals=True)
+
+    assert len(first) == len(second) == 1
+    assert random_values[0] == random_values[1]
+    assert first[0][0].matches(second[0][0])
+
+
 # --------------------------------------------------------------------- #
 # Unified entry point                                                   #
 # --------------------------------------------------------------------- #
@@ -158,6 +230,10 @@ def test_generate_seeds_writes_files_and_carries_metadata(tmp_path: Path):
         assert c.space_group is not None and 1 <= c.space_group <= 230
         assert c.needs_dft_verification is False
         assert c.num_atoms is not None and c.num_atoms >= 2
+        assert c.formula_units is not None
+        assert c.structure_hash is not None and len(c.structure_hash) == 64
+        assert set(c.lattice_parameters or {}) == {"a", "b", "c", "alpha", "beta", "gamma"}
+        assert len(c.cell_matrix or []) == 3
 
 
 @requires_pymatgen
@@ -172,6 +248,69 @@ def test_generate_seeds_unique_paths(tmp_path: Path):
     cands = generate_seeds(_comp("MgAl2O4"), str(tmp_path), n_random=0)
     paths = [c.structure_path for c in cands]
     assert len(paths) == len(set(paths))
+
+
+@requires_pymatgen
+def test_generate_seeds_honors_formula_unit_tier_and_prototype_filter(tmp_path: Path):
+    composition = _comp("Si")
+    prototype = compatible_prototypes(composition)[0]
+    base_formula_units = prototype.structure.num_sites // composition.total_atoms
+    requested_formula_units = base_formula_units * 2
+
+    candidates = generate_seeds(
+        composition,
+        str(tmp_path),
+        n_random=0,
+        formula_units=requested_formula_units,
+        max_aflow_candidates=1,
+        prototype_ids=[prototype.aflow],
+    )
+
+    assert candidates
+    assert len(candidates) <= 1
+    assert all(c.formula_units == requested_formula_units for c in candidates)
+    assert all(c.num_atoms == requested_formula_units for c in candidates)
+    assert all(
+        f"__fu{requested_formula_units}__" in Path(c.structure_path).name for c in candidates
+    )
+
+
+@requires_pymatgen
+def test_generation_action_passes_strategy_controls(monkeypatch, tmp_path: Path):
+    captured = {}
+
+    def fake_generate_seeds(composition, output_dir, **kwargs):
+        captured.update(composition=composition, output_dir=output_dir, **kwargs)
+        return []
+
+    monkeypatch.setattr("matsim_agents.discovery.seeds.generate_seeds", fake_generate_seeds)
+    action = SeedGenerationAction(
+        action_id="round-1-tier-4",
+        formula="NaCl",
+        formula_units=4,
+        max_aflow_candidates=0,
+        pyxtal_count=12,
+        space_groups=[225],
+        random_seed=17,
+    )
+    generate_seed_action(action, str(tmp_path))
+
+    assert captured["composition"].formula == "ClNa"
+    assert (tmp_path / "generation-action.json").is_file()
+    assert (tmp_path / "generation-manifest.json").is_file()
+    assert captured["formula_units"] == 4
+    assert captured["include_aflow"] is False
+    assert captured["max_aflow_candidates"] == 0
+    assert captured["n_random"] == 12
+    assert captured["space_groups"] == [225]
+    assert captured["random_seed"] == 17
+
+
+def test_generation_action_rejects_invalid_space_groups_and_action_paths():
+    with pytest.raises(ValueError, match="space_groups"):
+        SeedGenerationAction(action_id="round-1", formula="Si", formula_units=1, space_groups=[231])
+    with pytest.raises(ValueError, match="action_id"):
+        SeedGenerationAction(action_id="../round-1", formula="Si", formula_units=1)
 
 
 @requires_pymatgen

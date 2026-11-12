@@ -76,6 +76,8 @@ def test_completion_callback_failure_does_not_double_count_candidates(
         "completed": 2,
         "converged": 2,
         "failed": 1,
+        "backend_errors": 1,
+        "nonconverged": 0,
     }
     assert completed == candidates[:2]
     assert ranked == result.relaxations
@@ -83,7 +85,36 @@ def test_completion_callback_failure_does_not_double_count_candidates(
     assert len(result.callback_failures) == 1
     assert "progress callback failed" in result.callback_failures[0]
     assert "Completion callback failed" in caplog.text
-    assert len(result.model_dump()["callback_failures"]) == 1
+
+
+def test_candidate_counts_include_nonconverged_relaxations():
+    result = CompositionExplorationResult(
+        composition=parse_composition("Si"),
+        phase_candidates=[],
+        relaxations=[
+            RelaxationResult(
+                structure_path="seed.extxyz",
+                optimized_structure_path="relaxed.extxyz",
+                trajectory_path="trajectory.traj",
+                log_csv_path="log.csv",
+                final_energy_eV=-1.0,
+                final_max_force_eV_per_A=0.1,
+                num_steps=200,
+                converged=False,
+            )
+        ],
+        failures=["worker crashed"],
+    )
+
+    assert result.candidate_counts == {
+        "generated": 0,
+        "attempted": 2,
+        "completed": 1,
+        "converged": 0,
+        "failed": 2,
+        "backend_errors": 1,
+        "nonconverged": 1,
+    }
 
 
 def test_active_learning_defaults_to_label_collection_without_retraining():

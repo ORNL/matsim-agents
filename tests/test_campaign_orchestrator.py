@@ -113,6 +113,8 @@ def test_campaign_enforces_budget_and_prioritizes_llm_formula(tmp_path):
         "completed": 0,
         "converged": 0,
         "failed": 0,
+        "backend_errors": 0,
+        "nonconverged": 0,
     }
     assert result.campaign.formula_runs["NbO2"].outcome_class == "generation_failure"
     assert result.campaign.formula_runs["NbO2"].evidence["iteration_states"][0]["score_mean"] == 0.5

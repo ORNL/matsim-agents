@@ -9,7 +9,7 @@ from matsim_agents.backends.mlip.calculator import build_ensemble, build_mace_ca
 from matsim_agents.backends.mlip.config import HydraGNNConfig, MACEConfig, MLIPConfig, UMAConfig
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
 from matsim_agents.campaign.formula_execution import _exploration_kwargs
-from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.discovery.seeds import PhaseCandidate, SeedGenerationAction
 from matsim_agents.discovery.wrapper import explore_composition
 
 
@@ -255,6 +255,53 @@ def test_exploration_wrapper_forwards_mace_selection(tmp_path, monkeypatch):
     assert captured["mace_family"] == "mace_omol"
     assert captured["mace_model"] == "extra_large"
     assert captured["mace_dispersion"] is True
+
+
+def test_exploration_wrapper_runs_strategy_generation_action(tmp_path, monkeypatch):
+    seed = tmp_path / "seed.extxyz"
+    seed.touch()
+    candidate = PhaseCandidate(
+        formula="ClNa",
+        source="prototype",
+        structure_path=str(seed),
+        prototype_id="AB_cF8_225_a_b",
+    )
+    action = SeedGenerationAction(
+        action_id="round-2-fu4",
+        formula="NaCl",
+        formula_units=4,
+        max_aflow_candidates=3,
+        pyxtal_count=2,
+        random_seed=29,
+    )
+    generation_call = {}
+    monkeypatch.setattr(
+        "matsim_agents.discovery.wrapper.generate_seed_action",
+        lambda requested_action, output_dir: (
+            generation_call.update(action=requested_action, output_dir=output_dir) or [candidate]
+        ),
+    )
+    relaxation_calls = []
+
+    def fail_relaxation(request):
+        relaxation_calls.append(request)
+        raise RuntimeError("expected test failure")
+
+    result = explore_composition(
+        "NaCl",
+        output_dir=str(tmp_path),
+        mlip_backend="mace",
+        mace_family="mace_mp",
+        mace_model="medium-omat-0",
+        generation_action=action,
+        relax_fn=fail_relaxation,
+    )
+
+    assert generation_call["action"] == action
+    assert generation_call["output_dir"].endswith("seeds/round-2-fu4")
+    assert relaxation_calls[0].output_dir.endswith("relaxed/round-2-fu4")
+    assert relaxation_calls[0].mace_model == "medium-omat-0"
+    assert result.failures
 
 
 def test_exploration_reports_ranking_failure_after_convergence(

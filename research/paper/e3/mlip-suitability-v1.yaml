@@ -19,6 +19,9 @@ model_facts:
       mace-matpes-pbe-0, mace-matpes-r2scan-0
     ]
     selected_primary_checkpoint: mace-omat-0-medium
+    official_checkpoint_name: MACE-OMAT-0 medium
+    mace_torch_loader_alias: medium-omat-0
+    training_dataset: OMat24
     selection_authority: user
     selection_date: 2026-11-11
     choice_status: selected_for_frozen_E3_MLIP_pilot
