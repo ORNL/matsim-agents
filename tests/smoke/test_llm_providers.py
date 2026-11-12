@@ -246,6 +246,164 @@ class TestGetChatModelInstantiation:
         assert result.base_url == "http://localhost:8000/v1"
 
 
+# ── copilot provider ──────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def fake_copilot_sdk(monkeypatch):
+    """Install a stand-in ``copilot`` SDK that records clients, sessions, and prompts."""
+
+    import sys
+    from dataclasses import dataclass
+    from types import ModuleType, SimpleNamespace
+
+    @dataclass
+    class AssistantMessageData:
+        content: str
+        model: str | None = None
+        reasoning_text: str | None = None
+
+    @dataclass
+    class ModelLimitsOverride:
+        max_output_tokens: int | None = None
+
+    @dataclass
+    class ModelCapabilitiesOverride:
+        limits: ModelLimitsOverride | None = None
+
+    state = SimpleNamespace(clients=[], sessions=[], prompts=[], reply="copilot reply")
+
+    class FakeSession:
+        async def send_and_wait(self, prompt, *, timeout):
+            state.prompts.append((prompt, timeout))
+            if isinstance(state.reply, Exception):
+                raise state.reply
+            return SimpleNamespace(
+                data=AssistantMessageData(content=state.reply, model="served-model")
+            )
+
+    class CopilotClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.started = self.stopped = False
+            state.clients.append(self)
+
+        async def start(self):
+            self.started = True
+
+        async def stop(self):
+            self.stopped = True
+
+        async def list_models(self):
+            return [SimpleNamespace(id="catalog-model"), SimpleNamespace(id="other-model")]
+
+        async def create_session(self, **kwargs):
+            state.sessions.append(kwargs)
+            return FakeSession()
+
+    modules = {
+        "copilot": ModuleType("copilot"),
+        "copilot.session": ModuleType("copilot.session"),
+        "copilot.session_events": ModuleType("copilot.session_events"),
+    }
+    modules["copilot"].CopilotClient = CopilotClient
+    modules["copilot.session"].ModelCapabilitiesOverride = ModelCapabilitiesOverride
+    modules["copilot.session"].ModelLimitsOverride = ModelLimitsOverride
+    modules["copilot.session_events"].AssistantMessageData = AssistantMessageData
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    return state
+
+
+class TestCopilotProvider:
+    def test_factory_requires_explicit_model_and_rejects_unsupported_settings(self):
+        from matsim_agents.backends.llm.provider import ChatCopilot, get_chat_model
+
+        model = get_chat_model(provider="copilot", model="catalog-model", max_tokens=8192)
+        assert isinstance(model, ChatCopilot)
+        assert model.max_completion_tokens == 8192
+        assert model.github_token is None
+        with pytest.raises(ValueError, match="explicit model ID"):
+            get_chat_model(provider="copilot")
+        with pytest.raises(ValueError, match="base_url"):
+            get_chat_model(provider="copilot", model="catalog-model", base_url="http://x/v1")
+        with pytest.raises(ValueError, match="sampling controls"):
+            get_chat_model(provider="copilot", model="catalog-model", temperature=0.7)
+        with pytest.raises(ValueError, match="sampling controls"):
+            get_chat_model(provider="copilot", model="catalog-model", seed=1)
+
+    def test_invoke_uses_tool_free_session_and_signed_in_account(self, fake_copilot_sdk):
+        from langchain_core.messages import SystemMessage
+
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        model = get_chat_model(provider="copilot", model="catalog-model", max_tokens=8192)
+        result = model.invoke([SystemMessage(content="Be terse."), HumanMessage(content="hi")])
+
+        assert result.content == "copilot reply"
+        assert result.response_metadata["model_name"] == "served-model"
+        (client,) = fake_copilot_sdk.clients
+        assert client.kwargs == {"github_token": None, "use_logged_in_user": True}
+        assert client.started and client.stopped
+        (session,) = fake_copilot_sdk.sessions
+        assert session["model"] == "catalog-model"
+        assert session["system_message"] == {"mode": "replace", "content": "Be terse."}
+        assert session["model_capabilities"].limits.max_output_tokens == 8192
+        assert session["tools"] == session["available_tools"] == []
+        assert session["mcp_servers"] == {}
+        assert session["included_builtin_agents"] == []
+        assert fake_copilot_sdk.prompts == [("hi", 600)]
+
+    def test_explicit_token_disables_signed_in_account_and_is_not_shown(self, fake_copilot_sdk):
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        model = get_chat_model(provider="copilot", model="catalog-model", api_key="secret-token")
+        assert "secret-token" not in repr(model)
+        model.invoke([HumanMessage(content="hi")])
+
+        (client,) = fake_copilot_sdk.clients
+        assert client.kwargs == {"github_token": "secret-token", "use_logged_in_user": False}
+
+    def test_multi_turn_history_is_rendered_and_runtime_stops_on_failure(self, fake_copilot_sdk):
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        model = get_chat_model(provider="copilot", model="catalog-model")
+        model.invoke(
+            [
+                HumanMessage(content="one"),
+                AIMessage(content="two"),
+                HumanMessage(content="three"),
+            ]
+        )
+        assert fake_copilot_sdk.prompts[0][0] == "User:\none\n\nAssistant:\ntwo\n\nUser:\nthree"
+        assert fake_copilot_sdk.sessions[0]["system_message"]["content"]
+
+        fake_copilot_sdk.reply = TimeoutError("no reply")
+        with pytest.raises(TimeoutError):
+            model.invoke([HumanMessage(content="hi")])
+        assert fake_copilot_sdk.clients[-1].stopped
+
+    def test_sync_and_async_calls_work_inside_an_event_loop(self, fake_copilot_sdk):
+        import asyncio
+
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        model = get_chat_model(provider="copilot", model="catalog-model")
+
+        async def call_both():
+            sync_reply = model.invoke([HumanMessage(content="sync")])
+            async_reply = await model.ainvoke([HumanMessage(content="async")])
+            return sync_reply.content, async_reply.content
+
+        assert asyncio.run(call_both()) == ("copilot reply", "copilot reply")
+
+    def test_list_copilot_models_reads_account_catalog(self, fake_copilot_sdk):
+        from matsim_agents.backends.llm.provider import list_copilot_models
+
+        assert list_copilot_models() == ["catalog-model", "other-model"]
+        assert fake_copilot_sdk.clients[0].stopped
+
+
 # ── huggingface provider ──────────────────────────────────────────────────────
 
 
