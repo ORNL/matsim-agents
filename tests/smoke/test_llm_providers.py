@@ -262,6 +262,15 @@ def fake_copilot_sdk(monkeypatch):
         content: str
         model: str | None = None
         reasoning_text: str | None = None
+        api_call_id: str | None = None
+
+    @dataclass
+    class AssistantUsageData:
+        model: str
+        api_call_id: str | None = None
+        finish_reason: str | None = None
+        input_tokens: int | None = None
+        output_tokens: int | None = None
 
     @dataclass
     class ModelLimitsOverride:
@@ -271,15 +280,45 @@ def fake_copilot_sdk(monkeypatch):
     class ModelCapabilitiesOverride:
         limits: ModelLimitsOverride | None = None
 
-    state = SimpleNamespace(clients=[], sessions=[], prompts=[], reply="copilot reply")
+    state = SimpleNamespace(
+        clients=[], sessions=[], prompts=[], reply="copilot reply", finish_reason="stop"
+    )
 
     class FakeSession:
+        def __init__(self):
+            self.handlers = []
+
+        def on(self, handler):
+            self.handlers.append(handler)
+            return lambda: self.handlers.remove(handler)
+
         async def send_and_wait(self, prompt, *, timeout):
             state.prompts.append((prompt, timeout))
             if isinstance(state.reply, Exception):
                 raise state.reply
+            events = [
+                SimpleNamespace(
+                    agent_id="sub-agent",
+                    data=AssistantUsageData(model="other", finish_reason="stop"),
+                ),
+                SimpleNamespace(
+                    agent_id=None,
+                    data=AssistantUsageData(
+                        model="served-model",
+                        api_call_id="call-1",
+                        finish_reason=state.finish_reason,
+                        input_tokens=11,
+                        output_tokens=7,
+                    ),
+                ),
+            ]
+            for event in events:
+                for handler in self.handlers:
+                    handler(event)
             return SimpleNamespace(
-                data=AssistantMessageData(content=state.reply, model="served-model")
+                data=AssistantMessageData(
+                    content=state.reply, model="served-model", api_call_id="call-1"
+                )
             )
 
     class CopilotClient:
@@ -310,6 +349,7 @@ def fake_copilot_sdk(monkeypatch):
     modules["copilot.session"].ModelCapabilitiesOverride = ModelCapabilitiesOverride
     modules["copilot.session"].ModelLimitsOverride = ModelLimitsOverride
     modules["copilot.session_events"].AssistantMessageData = AssistantMessageData
+    modules["copilot.session_events"].AssistantUsageData = AssistantUsageData
     for name, module in modules.items():
         monkeypatch.setitem(sys.modules, name, module)
     return state
@@ -342,6 +382,8 @@ class TestCopilotProvider:
 
         assert result.content == "copilot reply"
         assert result.response_metadata["model_name"] == "served-model"
+        assert result.response_metadata["finish_reason"] == "stop"
+        assert result.usage_metadata == {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18}
         (client,) = fake_copilot_sdk.clients
         assert client.kwargs == {"github_token": None, "use_logged_in_user": True}
         assert client.started and client.stopped
@@ -402,6 +444,53 @@ class TestCopilotProvider:
 
         assert list_copilot_models() == ["catalog-model", "other-model"]
         assert fake_copilot_sdk.clients[0].stopped
+
+    def test_token_limit_termination_is_reported_as_truncated(self, fake_copilot_sdk):
+        from matsim_agents.backends.llm.provider import get_chat_model
+        from matsim_agents.backends.llm.replies import invoke_model
+
+        fake_copilot_sdk.finish_reason = "length"
+        model = get_chat_model(provider="copilot", model="catalog-model", max_tokens=8)
+        reply = invoke_model(model, [HumanMessage(content="hi")])
+
+        assert reply.text == "copilot reply"
+        assert reply.finish_reason == "length"
+        assert reply.completion_tokens == 7
+        assert reply.truncated
+        assert reply.provider_metadata is None
+
+    def test_unenforced_output_token_limit_overrun_is_flagged(self, fake_copilot_sdk):
+        from matsim_agents.backends.llm.provider import get_chat_model
+        from matsim_agents.backends.llm.replies import invoke_model
+
+        model = get_chat_model(provider="copilot", model="catalog-model", max_tokens=4)
+        reply = invoke_model(model, [HumanMessage(content="hi")])
+
+        assert reply.provider_metadata == {"output_token_limit_exceeded": "7>4"}
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda model, messages: model.invoke(messages, temperature=0.7),
+            lambda model, messages: model.bind(seed=1).invoke(messages),
+            lambda model, messages: model.invoke(messages, top_p=0.9),
+        ],
+    )
+    def test_per_call_sampling_options_are_rejected_before_runtime_starts(
+        self, fake_copilot_sdk, call
+    ):
+        import asyncio
+
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        model = get_chat_model(provider="copilot", model="catalog-model")
+        messages = [HumanMessage(content="hi")]
+        with pytest.raises(ValueError, match="no sampling controls"):
+            call(model, messages)
+        with pytest.raises(ValueError, match="no sampling controls"):
+            asyncio.run(model.ainvoke(messages, temperature=0.7))
+        assert fake_copilot_sdk.clients == []
+        assert model.invoke(messages, temperature=0.0).content == "copilot reply"
 
 
 # ── huggingface provider ──────────────────────────────────────────────────────

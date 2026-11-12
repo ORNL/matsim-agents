@@ -269,6 +269,9 @@ class ChatCopilot(BaseChatModel):
     (or ``COPILOT_GITHUB_TOKEN``/``GH_TOKEN``/``GITHUB_TOKEN``) unless
     ``github_token`` is set. The SDK exposes no sampling controls, so replies
     use the model's default decoding and are not guaranteed to be deterministic.
+    ``max_completion_tokens`` is passed to the runtime as a model limit, but
+    Copilot-hosted models do not enforce it; replies that exceed it are logged
+    and flagged in ``provider_metadata["output_token_limit_exceeded"]``.
     """
 
     model: str = Field(min_length=1)
@@ -302,10 +305,11 @@ class ChatCopilot(BaseChatModel):
 
     async def _acomplete(self, messages: list[BaseMessage]) -> ChatResult:
         from copilot.session import ModelCapabilitiesOverride, ModelLimitsOverride
-        from copilot.session_events import AssistantMessageData
+        from copilot.session_events import AssistantMessageData, AssistantUsageData
 
         system, prompt = self._prompt(messages)
         token = self.github_token.get_secret_value() if self.github_token else None
+        usages: list[Any] = []
         client = _copilot_client(token)
         await client.start()
         try:
@@ -325,20 +329,74 @@ class ChatCopilot(BaseChatModel):
                 enable_session_telemetry=False,
                 streaming=False,
             )
+            session.on(
+                lambda event: (
+                    usages.append(event.data)
+                    if isinstance(event.data, AssistantUsageData)
+                    and not getattr(event, "agent_id", None)
+                    else None
+                )
+            )
             response = await session.send_and_wait(prompt, timeout=self.request_timeout)
         finally:
             await client.stop()
         data = getattr(response, "data", None)
         if not isinstance(data, AssistantMessageData):
             raise RuntimeError(f"Copilot model {self.model!r} returned no assistant message")
+        usage = next(
+            (u for u in reversed(usages) if data.api_call_id and u.api_call_id == data.api_call_id),
+            usages[-1] if usages else None,
+        )
+        input_tokens = getattr(usage, "input_tokens", None)
+        output_tokens = getattr(usage, "output_tokens", None)
+        provider_metadata: dict[str, str] = {}
+        if isinstance(output_tokens, int) and output_tokens > self.max_completion_tokens:
+            log.warning(
+                "Copilot model %s produced %d output tokens, above the requested %d; "
+                "Copilot-hosted models do not enforce the output-token limit",
+                self.model,
+                output_tokens,
+                self.max_completion_tokens,
+            )
+            provider_metadata["output_token_limit_exceeded"] = (
+                f"{output_tokens}>{self.max_completion_tokens}"
+            )
         message = AIMessage(
             content=data.content,
             additional_kwargs=(
                 {"reasoning_content": data.reasoning_text} if data.reasoning_text else {}
             ),
-            response_metadata={"finish_reason": None, "model_name": data.model or self.model},
+            response_metadata={
+                "finish_reason": getattr(usage, "finish_reason", None),
+                "model_name": data.model or self.model,
+                **({"provider_metadata": provider_metadata} if provider_metadata else {}),
+            },
+            usage_metadata=(
+                {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": input_tokens + output_tokens,
+                }
+                if isinstance(input_tokens, int) and isinstance(output_tokens, int)
+                else None
+            ),
         )
         return ChatResult(generations=[ChatGeneration(message=message)])
+
+    @staticmethod
+    def _check_call_options(stop: list[str] | None, kwargs: dict[str, Any]) -> None:
+        if stop:
+            raise ValueError("the Copilot provider does not support stop sequences")
+        unsupported = sorted(
+            name
+            for name, value in kwargs.items()
+            if not (name == "temperature" and value in (None, 0, 0.0))
+        )
+        if unsupported:
+            raise ValueError(
+                "the Copilot SDK exposes no sampling controls; unsupported call options: "
+                + ", ".join(unsupported)
+            )
 
     def _generate(
         self,
@@ -347,8 +405,7 @@ class ChatCopilot(BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
-        if stop:
-            raise ValueError("the Copilot provider does not support stop sequences")
+        self._check_call_options(stop, kwargs)
         return _run_coroutine(lambda: self._acomplete(messages))
 
     async def _agenerate(
@@ -358,8 +415,7 @@ class ChatCopilot(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
-        if stop:
-            raise ValueError("the Copilot provider does not support stop sequences")
+        self._check_call_options(stop, kwargs)
         return await self._acomplete(messages)
 
 

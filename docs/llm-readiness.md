@@ -94,8 +94,11 @@ no system keychain exists, the CLI offers to store the token in plaintext under
 `matsim_agents.backends.llm.provider.list_copilot_models()`. Each request runs
 in a tool-free Copilot session and counts against the account's Copilot usage.
 The Copilot SDK exposes no sampling controls, so keep `temperature` at its
-default and do not treat replies as deterministic. Copilot is not part of any
-frozen experiment configuration.
+default and do not treat replies as deterministic. Copilot-hosted models do not
+enforce the requested output-token limit; replies that exceed it are flagged
+with `provider_metadata["output_token_limit_exceeded"]`, while the reported
+finish reason and token counts come from the runtime's usage records. Copilot
+is not part of any frozen experiment configuration.
 
 ## External API access from ALCF and OLCF
 
