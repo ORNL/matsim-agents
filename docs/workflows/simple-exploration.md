@@ -142,8 +142,9 @@ Set `iterations: 3` in the same YAML. Each round generates a fresh batch using
 All rounds share one calculator cache within the running process.
 The default `iterations: 1` retains the original single-batch interface.
 Deterministic AFLOW prototypes can repeat across rounds; incrementing the seed
-does not guarantee distinct structures. This milestone does not deduplicate
-across rounds or adapt generation from previous results.
+does not guarantee distinct structures. The default `selection: sequential`
+retains generation order and permits repeated structures. Opt in to the
+structural screening policy below to avoid repeating equivalent structures.
 
 ```bash
 .venv-mace/bin/python -m matsim_agents.cli explore run explore.yaml
@@ -168,8 +169,8 @@ successful calculations.
 **Resume guarantees and limits:**
 
 - Completed attempts, including nonconverged results and backend failures, are
-  not rerun or retried. Unattempted candidates beyond the per-round cap remain
-  unattempted. A completed run is a no-op on resume.
+  not rerun or retried. Unselected candidates in a checkpointed round remain
+  unattempted in that round. A completed run is a no-op on resume.
 - The calculator is reused across rounds in one process. A resumed process
   loads its own calculator on its first outstanding attempt; it cannot recover
   GPU/CPU model memory from a terminated process.
@@ -192,3 +193,74 @@ successful calculations.
 Use the same prepared interpreter and code checkout when resuming. Static
 preflight and checkpoint verification still apply. The resume command never
 changes the stored budget, submits jobs, or automatically retries backend errors.
+
+## Select diverse, fresh structures
+
+For checkpointed multi-round runs, add:
+
+```yaml
+iterations: 3
+selection: diverse
+max_relaxations: 2
+generation:
+  max_aflow_candidates: 4
+  pyxtal_count: 4
+  random_seed: 123
+```
+
+These settings supplement the formula, trusted checkpoint, and relaxation
+settings in your YAML. Generate more candidates than the attempt budget to give
+selection a meaningful choice. Generation itself can be costly; this policy does
+not automatically increase candidate counts, replenish duplicates, or submit jobs.
+`selection: diverse` requires `iterations > 1`; single-batch behavior is unchanged.
+
+Selection runs before each round's first relaxation:
+
+1. Compare generated structures against **previously attempted input structures**
+   (including backend failures and nonconvergence), previously **converged**
+   optimized structures meeting the configured force target, and earlier unique
+   candidates in the current batch. Unselected candidates from earlier rounds
+   are not references: if generated again, they can be selected later.
+2. Skip periodic equivalents using pymatgen `StructureMatcher`: `ltol=0.2`,
+   `stol=0.3`, `angle_tol=5`, primitive-cell reduction, uniform-volume scaling,
+   and no supercell search. Primitive/supercell representations that reduce to
+   the same primitive structure can match. Uniformly expanded versions of the
+   same topology are also treated as duplicates, **not** separate density trials.
+   This is approximate geometric equivalence, not proof of a shared relaxed basin.
+3. Among unique candidates, choose the farthest from the prior reference set,
+   then iteratively choose the farthest from references plus current selections.
+   Without prior references, seed selection with the first unique candidate.
+   Input order breaks exact ties. The distance is RMS difference in angstroms
+   between species-averaged first-eight periodic-neighbor distances. It includes
+   periodic images, works for primitive cells, and needs no SOAP dependency.
+   It is a coarse local-geometry heuristic: different structures can have equal
+   descriptors. Structural matching, not this descriptor, determines duplicates.
+
+All structures must be finite, nonempty, fully periodic, and match the requested
+composition. Invalid inputs stop the run with persisted error evidence rather
+than silently dropping structures. Skipped duplicates consume **no** relaxation
+budget. Unique candidates beyond the per-round budget are **deferred**. A round
+with only duplicates completes with zero attempts; later rounds still generate
+their configured batches. There is no automatic retry of previous backend errors.
+
+The canonical `rounds-state.json` records each round's `selection`:
+
+- `method`, initial reference paths, and selected candidate indices **in attempt
+  order** (not necessarily generation order).
+- One decision per generated candidate: `selected`, `duplicate`, or `deferred`;
+  a reason; the representative path for a duplicate; and the RMS novelty distance
+  at selection time when references exist.
+
+`explore summary` also reports cumulative `selected`, `duplicate`, and `deferred`
+counts. Counts describe decisions across generated batches: the same structure
+can be deferred in one round and selected in another. During interruption,
+selected counts can exceed attempted counts. Resume reuses checkpointed decisions
+without rerunning selection or generation for that round; artifact checks cover
+both selected and skipped inputs as well as result references.
+
+This uses previous results as a geometric coverage reference, **not** an energy
+acquisition function. It neither biases toward low energies nor creates new
+structures around minima. It adds no LLM steering, uncertainty calibration,
+thermodynamic stability claims, or DFT calls. Existing run journals remain
+readable, but resume across changed workflow/source versions remains refused;
+finish old runs with their original checkout or start a fresh run.

@@ -41,6 +41,9 @@ def _print_summary(summary: ExplorationSummary) -> None:
     )
     for key in ("generated", "attempted", "converged", "nonconverged", "backend_errors"):
         console.print(f"  {key}: {summary.counts.get(key, 0)}")
+    for key in ("selected", "duplicate", "deferred"):
+        if key in summary.counts:
+            console.print(f"  {key}: {summary.counts[key]}")
     for reason, count in summary.termination_reasons.items():
         console.print(f"  termination {reason}: {count}", markup=False)
     if summary.calculator_loads is not None:
