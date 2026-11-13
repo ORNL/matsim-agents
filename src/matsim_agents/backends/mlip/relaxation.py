@@ -10,6 +10,7 @@ agent framework can be developed and tested without a HydraGNN install.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
@@ -91,6 +92,11 @@ class RelaxStructureInput(BaseModel):
             "Use for vc-relax benchmarks."
         ),
     )
+    cell_mask: tuple[bool, bool, bool, bool, bool, bool] | None = None
+    stress_tolerance_eV_per_A3: float | None = Field(None, gt=0, allow_inf_nan=False)
+    max_cell_step_strain: float | None = Field(None, gt=0, allow_inf_nan=False)
+    max_cell_total_strain: float | None = Field(None, gt=0, lt=1, allow_inf_nan=False)
+    require_native_stress: bool = False
     random_displacement: bool = False
     random_displacement_scale: float = 0.1
     seed: int = 42
@@ -102,6 +108,16 @@ class RelaxStructureInput(BaseModel):
 
     @model_validator(mode="after")
     def _validate_backend_inputs(self):
+        if not self.relax_cell and (
+            self.cell_mask is not None
+            or self.stress_tolerance_eV_per_A3 is not None
+            or self.max_cell_step_strain is not None
+            or self.max_cell_total_strain is not None
+            or self.require_native_stress
+        ):
+            raise ValueError("Cell-relaxation options require relax_cell=True.")
+        if self.cell_mask is not None and not any(self.cell_mask):
+            raise ValueError("cell_mask must enable at least one strain component.")
         if self.mlip_backend == "hydragnn":
             if not self.logdir:
                 raise ValueError("mlip_backend='hydragnn' requires logdir.")
@@ -303,9 +319,10 @@ class _NumericalStressCalculator:
 
     implemented_properties = ["energy", "forces", "stress", "stresses"]
 
-    def __init__(self, inner, dx: float = 1e-3):
+    def __init__(self, inner, dx: float = 1e-3, *, require_native: bool = False):
         self._inner = inner
         self.dx = dx
+        self._require_native = require_native
         self.results: dict = {}
         self._state: tuple | None = None
         # An inner calculator that predicts stress is used for it directly.
@@ -350,6 +367,8 @@ class _NumericalStressCalculator:
             "forces": self._inner.results["forces"],
         }
         native = self._inner.results.get("stress") if self._native_stress else None
+        if self._require_native and native is None:
+            raise ValueError("Calculator did not provide the required native stress.")
         # Copy last_branch_weights *before* perturbations overwrite them.
         if hasattr(self._inner, "last_branch_weights"):
             self.last_branch_weights = self._inner.last_branch_weights
@@ -686,6 +705,7 @@ def _optimize_with_log(
     num_branches: int,
     active_branches: int,
     cell_relax_active: bool,
+    step_guard: Callable[[Any], str | None] | None = None,
 ) -> _OptimizationOutcome:
     """Step the optimizer, logging per-step energy, force, and branch weights to CSV.
 
@@ -696,6 +716,8 @@ def _optimize_with_log(
     csv_header = ["step", "energy_eV", "max_force_eV_per_A", "top_branch", "top_weight"] + [
         f"w_branch_{i}" for i in range(int(num_branches))
     ]
+    if cell_relax_active:
+        csv_header += ["max_atomic_force_eV_per_A", "max_active_stress_eV_per_A3", "cell_volume_A3"]
     prev_max_force: float | None = None
     prev_positions = None
     energy = float("nan")
@@ -705,20 +727,84 @@ def _optimize_with_log(
     converged = False
     steps_taken = 0
     termination_reason = "max_steps"
+    initial_cell = atoms.cell.array.copy()
+    previous_cell = initial_cell.copy()
+    initial_determinant = np.linalg.det(initial_cell)
+    if cell_relax_active and (
+        not np.isfinite(initial_determinant) or abs(initial_determinant) < 1e-12
+    ):
+        raise ValueError("Cell relaxation requires a finite nonsingular initial cell.")
 
     with open(log_csv_path, "w") as csv_file:
         csv_file.write(",".join(csv_header) + "\n")
         try:
             for step in range(args.maxiter):
+                previous_positions = atoms.get_positions().copy()
                 optimizer.step()
                 steps_taken = step + 1
+                if cell_relax_active:
+                    current_cell = atoms.cell.array.copy()
+                    if (
+                        not np.isfinite(current_cell).all()
+                        or np.linalg.det(current_cell) * initial_determinant <= 0
+                    ):
+                        reason = "invalid_cell"
+                    else:
+                        step_strain = np.max(
+                            np.abs(
+                                np.linalg.svd(
+                                    np.linalg.solve(previous_cell, current_cell), compute_uv=False
+                                )
+                                - 1
+                            )
+                        )
+                        total_strain = np.max(
+                            np.abs(
+                                np.linalg.svd(
+                                    np.linalg.solve(initial_cell, current_cell), compute_uv=False
+                                )
+                                - 1
+                            )
+                        )
+                        reason = None
+                        if (
+                            args.max_cell_step_strain is not None
+                            and step_strain > args.max_cell_step_strain
+                        ):
+                            reason = "cell_step_strain_limit"
+                        elif (
+                            args.max_cell_total_strain is not None
+                            and total_strain > args.max_cell_total_strain
+                        ):
+                            reason = "cell_total_strain_limit"
+                        elif step_guard is not None:
+                            reason = step_guard(atoms)
+                    if reason is not None:
+                        atoms.set_cell(previous_cell, scale_atoms=False)
+                        atoms.set_positions(previous_positions)
+                        energy = float(atoms.get_potential_energy())
+                        max_force = float(np.linalg.norm(atoms.get_forces(), axis=1).max())
+                        termination_reason = reason
+                        traj_writer.write()
+                        break
+                    previous_cell = current_cell
 
                 energy = atoms.get_potential_energy()
-                atoms.get_forces()
+                atomic_forces = atoms.get_forces()
                 # For convergence we check the optimizable's forces (which
                 # includes stress pseudo-forces when relax_cell=True).
                 opt_forces = optimizable.get_forces()
                 max_force = float(np.sqrt((opt_forces**2).sum(axis=1).max()))
+                atomic_max_force = float(np.linalg.norm(atomic_forces, axis=1).max())
+                if not np.isfinite(energy) or not np.isfinite(opt_forces).all():
+                    raise ValueError("Non-finite energy or forces during relaxation.")
+                active_stress = None
+                if cell_relax_active:
+                    stress = np.asarray(atoms.get_stress(), dtype=float)
+                    if not np.isfinite(stress).all():
+                        raise ValueError("Non-finite stress during relaxation.")
+                    active = np.asarray(args.cell_mask or (True,) * 6, dtype=bool)
+                    active_stress = float(np.max(np.abs(stress[active])))
                 weights = getattr(calculator, "last_branch_weights", None)
                 top_branch = int(np.argmax(weights)) if weights is not None else -1
                 top_weight = (
@@ -741,10 +827,20 @@ def _optimize_with_log(
                     if weights is not None
                     else ["nan"] * int(num_branches)
                 )
+                if cell_relax_active:
+                    row += [
+                        f"{atomic_max_force:.8e}",
+                        f"{active_stress:.8e}",
+                        f"{atoms.get_volume():.8e}",
+                    ]
                 csv_file.write(",".join(row) + "\n")
                 csv_file.flush()
 
-                if max_force < args.fmax:
+                stress_ok = True
+                if args.stress_tolerance_eV_per_A3 is not None:
+                    assert active_stress is not None
+                    stress_ok = active_stress <= args.stress_tolerance_eV_per_A3
+                if max_force < args.fmax and atomic_max_force < args.fmax and stress_ok:
                     converged = True
                     termination_reason = "force_threshold"
                     break
@@ -754,6 +850,8 @@ def _optimize_with_log(
                     if relative_increase > args.relative_increase_threshold:
                         if not cell_relax_active:
                             atoms.set_positions(prev_positions)
+                            energy = float(atoms.get_potential_energy())
+                            max_force = float(np.linalg.norm(atoms.get_forces(), axis=1).max())
                         termination_reason = "force_growth"
                         break
 
@@ -776,7 +874,10 @@ def _optimize_with_log(
 
 
 def relax_with_mlip(
-    args: RelaxStructureInput, *, calculators: CalculatorCache | None = None
+    args: RelaxStructureInput,
+    *,
+    calculators: CalculatorCache | None = None,
+    step_guard: Callable[[Any], str | None] | None = None,
 ) -> RelaxationResult:
     """Relax one structure with the selected MLIP backend and ASE optimizer.
 
@@ -813,14 +914,26 @@ def relax_with_mlip(
     if args.relax_cell:
         from ase.filters import ExpCellFilter
 
+        if args.require_native_stress and "stress" not in getattr(
+            calculator, "implemented_properties", ()
+        ):
+            raise ValueError("Cell relaxation requires native calculator stress.")
+        if args.cell_mask == (True, True, False, False, False, True):
+            cell = atoms.cell.array
+            if not np.allclose(cell[:2, 2], 0, atol=1e-8) or not np.allclose(
+                cell[2, :2], 0, atol=1e-8
+            ):
+                raise ValueError("The in-plane cell mask requires the vacuum vector along z.")
         # Wrap with numerical stress unconditionally when relax_cell=True;
         # _NumericalStressCalculator.calculate() will try the inner calc first
         # and only use FD for stress (which the inner calc won't provide).
         # This also patches implemented_properties on the inner calc so ASE's
         # property cache doesn't raise before reaching our wrapper.
-        calculator = _NumericalStressCalculator(calculator)
+        calculator = _NumericalStressCalculator(
+            calculator, require_native=args.require_native_stress
+        )
         atoms.calc = calculator
-        optimizable = ExpCellFilter(atoms)
+        optimizable = ExpCellFilter(atoms, mask=args.cell_mask)
         cell_relax_active = True
     else:
         optimizable = atoms
@@ -837,6 +950,7 @@ def relax_with_mlip(
         num_branches=num_branches,
         active_branches=active_branches,
         cell_relax_active=cell_relax_active,
+        step_guard=step_guard,
     )
 
     write(paths.optimized, atoms)
@@ -847,7 +961,11 @@ def relax_with_mlip(
         trajectory_path=paths.trajectory,
         log_csv_path=paths.log_csv,
         final_energy_eV=float(outcome.energy),
-        final_max_force_eV_per_A=float(outcome.max_force),
+        final_max_force_eV_per_A=(
+            float(np.linalg.norm(atoms.get_forces(), axis=1).max())
+            if cell_relax_active
+            else float(outcome.max_force)
+        ),
         num_steps=outcome.steps_taken,
         converged=outcome.converged,
         termination_reason=outcome.termination_reason,

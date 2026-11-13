@@ -129,6 +129,14 @@ The production launcher uses `$PROJECT_ROOT/.venv` and
 `MATSIM_E3_MLIP_BASE_PYTHON` and `MATSIM_E3_MLIP_WORKER_PYTHON` when a source
 worktree shares the prepared base and MACE environments from another checkout.
 
+The cell-relaxation protocol now uses native MACE stress for all families,
+in-plane-only strain for phosphorene, explicit stress convergence, and
+strain/connectivity guards; see the E3-MLIP exploration plan. The former
+fixed-cell array was cancelled. Before submitting a replacement, verify the
+updated manifest, qualify the cell-relaxation workflow and GPU throughput, and
+obtain authorization for any revised resource request. Do not mix prior
+fixed-cell results with this protocol.
+
 The cap is 500 GPU-node-hours at four GPUs per node. A single full array is
 limited to 1,999.2 GPU-hours (36 elements, one node each, 13 hours 53 minutes);
 unused reservation is reconciled to actual allocation time for safe restarts.

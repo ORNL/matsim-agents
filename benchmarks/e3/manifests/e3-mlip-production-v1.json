@@ -81742,10 +81742,23 @@
   "model": "MACE-OMAT-0 medium",
   "optimizer": {
     "fmax_eV_A": 0.02,
+    "max_cell_step_strain": 0.05,
+    "max_cell_total_strain": 0.25,
     "maxiter": 500,
     "maxstep_A": 0.05,
+    "mof_connectivity_guard": true,
     "optimizer": "FIRE",
-    "relax_cell": false
+    "phosphorene_cell_mask": [
+      true,
+      true,
+      false,
+      false,
+      false,
+      true
+    ],
+    "relax_cell": true,
+    "require_native_stress": true,
+    "stress_tolerance_eV_per_A3": 0.01
   },
   "resource_request": {
     "account": "m5216",
