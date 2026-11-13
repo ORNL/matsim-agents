@@ -129,9 +129,16 @@ not permit an automatic extra call. Replacing an already-consumed legacy
 decision requires scientific authorization; missing historical raw responses
 are recorded as unavailable, never reconstructed or invented.
 
-The launcher verifies the allocation's actual account, QOS, nodes, and time
-limit; reserves the full allocation in the shared resource ledger; and
-reconciles usage on exit. It uses a private, unique node-local `COPILOT_HOME`
+The CPU submission helper reserves the full allocation in the shared resource
+ledger before `sbatch`. The GPU launcher verifies the allocation's actual
+account, QOS, nodes, time limit, and reservation; it does **not** reconcile
+usage on exit. After Slurm reports the allocation as terminal, manually run
+`budget-reconcile` with the helper's printed reservation ID and the same ledger
+path, following the [accounting command](../../benchmarks/e3/README.md).
+Until verified terminal `sacct` usage is reconciled, the full reservation
+remains charged against the 768-GPU-hour cap and can block further submissions.
+This includes startup failures and unavailable or ambiguous scheduler records.
+The launcher uses a private, unique node-local `COPILOT_HOME`
 for Copilot sessions, initializing it from the user's CLI config when present
 and removing it at exit. This keeps runtime metadata locks off CFS. Array
 indices 0-5 map to the six classes listed above. The scheduler rejects all six
