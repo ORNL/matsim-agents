@@ -201,9 +201,12 @@ worker. The frozen common protocol for both strategies is:
   strain, preserving its out-of-plane cell and vacuum. The filter requires the
   vacuum vector aligned with z. Stop and roll back any step exceeding 5%
   principal strain in one step or 10% cumulative principal strain, or changing
-  the MOF Zn-O/formate connectivity signature; these limits are screening
-  safeguards, not proof of physical stability. Record active stress, atomic
-  force and volume at each accepted step.
+  the initial MOF atom-indexed Zn-O, C-O, or C-H bond graph. The periodic
+  neighbor-list guard uses respective distance cutoffs of 2.75, 1.68, and
+  1.25 A; bonds between the same atom indices in different periodic images
+  are treated as one bond. These limits are screening safeguards, not proof
+  of physical stability. Record active stress, atomic force and volume at
+  each accepted step.
 - Preliminary energy finite-difference checks covered xx and xy at two strain
   magnitudes for one representative per family; they do not qualify every
   stress component, structure, cell filter, or GPU backend. The exploratory

@@ -46,6 +46,7 @@ OPTIMIZER_SETTINGS = {
     "require_native_stress": True,
     "phosphorene_cell_mask": [True, True, False, False, False, True],
     "mof_connectivity_guard": True,
+    "mof_connectivity_version": "atom-indexed-v1",
 }
 REPLICATE_SEEDS = (20261111, 20261112, 20261113)
 MATERIALS: dict[str, dict[str, Any]] = {
@@ -1288,6 +1289,30 @@ def _space_group_number(atoms: Any) -> int | None:
     return int(dataset.number) if dataset is not None else None
 
 
+def _mof_bond_graph(atoms) -> frozenset[tuple[int, int]]:
+    from ase.neighborlist import neighbor_list
+
+    cutoffs = {("Zn", "O"): 2.75, ("C", "O"): 1.68, ("C", "H"): 1.25}
+    sources, targets = neighbor_list("ij", atoms, cutoffs)
+    symbols = atoms.get_chemical_symbols()
+    return frozenset(
+        (int(source), int(target))
+        for source, target in zip(sources, targets)
+        if (symbols[source], symbols[target]) in cutoffs
+    )
+
+
+def _mof_connectivity_guard(initial):
+    initial_graph = _mof_bond_graph(initial)
+
+    def guard(atoms):
+        if _mof_bond_graph(atoms) != initial_graph:
+            return "mof_connectivity_changed"
+        return None
+
+    return guard
+
+
 def _execute_task(task: dict[str, Any], task_root: Path, calculators: Any) -> dict[str, Any]:
     import numpy as np
     from ase.geometry import find_mic
@@ -1388,14 +1413,7 @@ def _execute_task(task: dict[str, Any], task_root: Path, calculators: Any) -> di
         result_payload["initial_force_evaluated"] = True
         step_guard = None
         if task["material"] == "zn_formate_mof":
-            from benchmarks.e3.structure_generation import _mof_connectivity_signature
-
-            initial_connectivity = _mof_connectivity_signature(initial)
-
-            def step_guard(atoms):
-                if _mof_connectivity_signature(atoms) != initial_connectivity:
-                    return "mof_connectivity_changed"
-                return None
+            step_guard = _mof_connectivity_guard(initial)
 
         relaxed = relax_with_mlip(relax_args, calculators=calculators, step_guard=step_guard)
         result_payload.update(

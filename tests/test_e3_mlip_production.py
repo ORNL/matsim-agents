@@ -18,6 +18,8 @@ from benchmarks.e3.production import (
     _finite_capacity_group,
     _llm_allocation,
     _materialize_round,
+    _mof_bond_graph,
+    _mof_connectivity_guard,
     _rule_allocation,
     _task_result,
     build_campaign_manifest,
@@ -35,6 +37,7 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     assert manifest["optimizer"] == OPTIMIZER_SETTINGS
     assert manifest["optimizer"]["relax_cell"] is True
     assert manifest["optimizer"]["max_cell_total_strain"] == 0.1
+    assert manifest["optimizer"]["mof_connectivity_version"] == "atom-indexed-v1"
     assert manifest["optimizer"]["phosphorene_cell_mask"] == [True, True, False, False, False, True]
     assert len(manifest["rounds"]) == 6 * 2 * 3 * 10
     assert manifest["total_logical_optimizations"] == 61120
@@ -478,6 +481,14 @@ def test_manifest_rejects_old_fixed_cell_protocol():
         validate_campaign_manifest(manifest)
 
 
+def test_manifest_rejects_old_mof_guard_protocol():
+    manifest = build_campaign_manifest()
+    manifest["optimizer"] = dict(manifest["optimizer"])
+    manifest["optimizer"].pop("mof_connectivity_version")
+    with pytest.raises(ValueError, match="optimizer"):
+        validate_campaign_manifest(manifest)
+
+
 def test_completed_fixed_cell_round_cannot_be_resumed(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(build_campaign_manifest()))
@@ -501,6 +512,87 @@ def test_completed_fixed_cell_round_cannot_be_resumed(tmp_path):
             20261111,
             worker_count=1,
         )
+
+
+def test_mof_bond_graph_handles_periodic_images_and_pair_cutoffs():
+    from ase import Atoms
+
+    atoms = Atoms(
+        ["Zn", "O", "C", "O", "H"],
+        positions=[[0.2, 1, 1], [9.5, 1, 1], [5, 5, 5], [6.5, 5, 5], [5, 6.2, 5]],
+        cell=[10, 10, 10],
+        pbc=True,
+    )
+    expected = frozenset({(0, 1), (2, 3), (2, 4)})
+    assert _mof_bond_graph(atoms) == expected
+    atoms.positions[1, 0] -= 10
+    assert _mof_bond_graph(atoms) == expected
+    atoms.positions[3, 0] = 6.7
+    atoms.positions[4, 1] = 6.3
+    assert _mof_bond_graph(atoms) == frozenset({(0, 1)})
+
+
+def test_mof_bond_swap_preserving_coordination_is_rejected():
+    from ase import Atoms
+
+    from benchmarks.e3.structure_generation import _mof_connectivity_signature
+
+    atoms = Atoms(
+        ["C", "C", "O", "O"],
+        positions=[[2, 5, 5], [8, 5, 5], [3, 5, 5], [9, 5, 5]],
+        cell=[20, 20, 20],
+        pbc=True,
+    )
+    guard = _mof_connectivity_guard(atoms)
+    swapped = atoms.copy()
+    swapped.positions[[2, 3]] = swapped.positions[[3, 2]]
+    assert _mof_connectivity_signature(atoms) == _mof_connectivity_signature(swapped)
+    assert guard(atoms) is None
+    assert guard(swapped) == "mof_connectivity_changed"
+
+
+def test_mof_bond_swap_rolls_back_relaxation(tmp_path, monkeypatch):
+    from ase import Atoms
+    from ase.calculators.emt import EMT
+    from ase.io import read, write
+    from ase.optimize import FIRE
+
+    import matsim_agents.backends.mlip.relaxation as relaxation
+
+    initial = Atoms(
+        ["C", "C", "O", "O"],
+        positions=[[2, 5, 5], [8, 5, 5], [3, 5, 5], [9, 5, 5]],
+        cell=[20, 20, 20],
+        pbc=True,
+    )
+    source = tmp_path / "input.extxyz"
+    write(source, initial)
+
+    def swap_step(optimizer, *args, **kwargs):
+        atoms = optimizer.atoms.atoms
+        atoms.positions[[2, 3]] = atoms.positions[[3, 2]]
+
+    monkeypatch.setattr(FIRE, "step", swap_step)
+    monkeypatch.setattr(
+        relaxation,
+        "_relaxation_calculator",
+        lambda args: relaxation._RelaxCalculator(EMT(), 0, 0, None),
+    )
+    result = relaxation.relax_with_mlip(
+        relaxation.RelaxStructureInput(
+            structure_path=str(source),
+            output_dir=str(tmp_path),
+            mlip_backend="mace",
+            relax_cell=True,
+            maxiter=2,
+        ),
+        step_guard=_mof_connectivity_guard(initial),
+    )
+    restored = read(result.optimized_structure_path)
+    assert not result.converged
+    assert result.termination_reason == "mof_connectivity_changed"
+    assert restored.positions == pytest.approx(initial.positions)
+    assert restored.cell.array == pytest.approx(initial.cell.array)
 
 
 @pytest.mark.parametrize("material", sorted(MATERIALS))
@@ -558,7 +650,7 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
     monkeypatch.setattr(relaxation, "relax_with_mlip", fake_relax)
     if material == "zn_formate_mof":
         monkeypatch.setattr(
-            "benchmarks.e3.structure_generation._mof_connectivity_signature",
+            "benchmarks.e3.production._mof_bond_graph",
             lambda atoms: float(atoms.positions[0, 0]),
         )
     monkeypatch.setattr("benchmarks.e3.production._space_group_number", lambda atoms: None)
