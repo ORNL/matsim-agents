@@ -1,0 +1,22 @@
+# Edit checkpoint to point to a trusted local MACE checkpoint.
+# Paths are relative to this YAML file, not your working directory.
+formula: Nb2O5
+checkpoint: /path/to/trusted/maceomat0mediummodel
+checkpoint_sha256: d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a
+output_dir: ./nb2o5-runs
+device: cpu
+precision: fp64
+max_relaxations: 2
+generation:
+  formula_units: 1
+  max_aflow_candidates: 1
+  pyxtal_count: 1
+  random_seed: 20261113
+relaxation:
+  optimizer: FIRE
+  maxiter: 500
+  maxstep: 0.05
+  fmax: 0.02
+  max_optimization_seconds: 60
+  relative_increase_threshold: 0.2
+  relax_cell: false

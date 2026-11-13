@@ -1,0 +1,134 @@
+# A small phase search, without writing Python
+
+This is the beginner-facing entry point for **one bounded batch** of
+MACE structure generation and relaxation. It reuses the same generators,
+calculator, ranking, and evidence storage as the library workflows.
+You need one YAML file, not a session-specific test driver.
+
+This first interface supports a **trusted local MACE checkpoint**. It does
+not yet reproduce the three-round Nb2O5 coordination test: there are no LLM
+calls, SOAP filtering, adaptive decisions, DFT, active learning, or resume.
+Existing advanced commands remain available.
+
+## 1. Prepare once
+
+Use the [installation instructions](../../README.md#installation) or your
+facility's prepared MACE environment. The examples below assume the repository
+root and `.venv-mace/bin/python`. This interpreter must import matsim-agents,
+MACE, ASE, PyTorch, pymatgen, and PyXtal if random generation is requested.
+The CLI and Python API use the same validated configuration.
+
+Copy [the Nb2O5 example](../../examples/workflows/explore-nb2o5.yaml) somewhere
+convenient, then edit **`checkpoint`** to the local model file. The supplied hash
+pins MACE-OMAT-0 medium; change the hash as well if deliberately using another
+model. Only deserialize checkpoints you trust.
+
+```bash
+cp examples/workflows/explore-nb2o5.yaml ./explore.yaml
+# Edit explore.yaml: set checkpoint to your trusted local model path.
+```
+
+Paths in the YAML are resolved relative to the YAML file, including the output
+directory. There are no machine-specific Python paths to rewrite. The example
+uses CPU and at most two relaxation attempts; use a compute allocation for
+extended work. Nothing in these commands submits a scheduler job.
+
+## 2. Check before spending compute
+
+```bash
+.venv-mace/bin/python -m matsim_agents.cli explore check explore.yaml
+```
+
+This validates the configuration, checks dependency availability in the
+**current interpreter**, and verifies the checkpoint hash. It does not import
+or load MACE, generate structures, contact an LLM, or create a run directory.
+It is a static preflight, not a device/ABI or scientific qualification.
+If dependencies are missing, use the correct prepared interpreter first;
+do not mix packages from unrelated environments.
+
+## 3. Run and read the result
+
+Inside your compute allocation:
+
+```bash
+.venv-mace/bin/python -m matsim_agents.cli explore run explore.yaml
+```
+
+The command prints the run directory, generated/attempted/converged counts,
+termination reasons, backend errors, and number of calculator loads. A single
+calculator is reused across candidates; initial loading is not repeated for
+each structure. The run directory contains the standard `results.json`,
+`resolved_config.json`, provenance, calculations, and an
+`exploration-summary.json`. The complete user configuration and checkpoint hash
+are recorded in `resolved_config.json`, including if the engine fails.
+
+Inspect it later without loading the model or repeating calculations:
+
+```bash
+.venv-mace/bin/python -m matsim_agents.cli explore summary /path/to/printed/run-directory
+```
+
+Running the YAML again starts a **fresh** run, not a resume. Keep the printed
+directory when comparing results. Execution completion is not convergence;
+nonconverged results are excluded from ranking. Ranking compares only
+same-composition relaxed candidates, not thermodynamic stability against other
+phases. Generated counts can be below the requested counts. Seeds do not
+guarantee bit-for-bit reproducibility across generators or package versions.
+
+Exit codes: `0` means execution completed (possibly with no converged minimum),
+`1` indicates preflight/backend/generation/ranking failure, and `2` indicates an
+invalid configuration. Details remain in output and persisted evidence.
+
+## Changing scientific settings
+
+- `max_relaxations` caps attempts, including backend failures.
+- `generation` controls AFLOW count, PyXtal count, formula units, seed, and
+  optional `space_groups` (integers 1–230). At least one source is required.
+- `relaxation` controls optimizer, steps, maximum step, force target, and a
+  between-step wall-clock limit. A slow step can overrun the limit. The current
+  shared ranking accepts force tolerances no looser than 0.05 eV/A, so this
+  interface rejects larger `fmax` values rather than silently misranking them.
+- The example is fixed-cell. For cell relaxation, explicitly set `relax_cell:
+  true`, `require_native_stress: true`, and a positive
+  `stress_tolerance_eV_per_A3` (for example 0.01). Set
+  `max_cell_step_strain: 0.1` and `max_cell_total_strain: 0.5` if the revised
+  E3 abort policy is intended. These are principal strains, not volume changes.
+  Supply a suitable six-component `cell_mask` for slabs.
+- Force-growth and strain aborts accept YAML `null` to disable them. They are
+  screening safeguards, not convergence criteria. Disabling them can permit
+  major structural collapse; inspect trajectories before scientific claims.
+
+On shared HPC storage, dedicated MACE processes can optionally use
+[the inference isolation launcher](../../scripts/mace-inference.sh) to avoid
+unnecessary Transformers imports:
+
+```bash
+bash scripts/mace-inference.sh .venv-mace/bin/python -m matsim_agents.cli explore run explore.yaml
+```
+
+Read [the isolation cautions](../../research/paper/perlmutter-e3-e4-execution-runbook.md)
+first. Do not use that opt-in for a process that needs Transformers.
+
+## Python API
+
+```python
+from matsim_agents.workflows import (
+    check_exploration,
+    load_exploration_config,
+    run_exploration,
+)
+
+config = load_exploration_config("explore.yaml")
+check = check_exploration(config)
+if not check.ready:
+    raise RuntimeError("\n".join(check.errors))
+summary = run_exploration(config)
+print(summary.model_dump_json(indent=2))
+```
+
+## Next usability milestone
+
+Add a supported multi-round orchestration contract, distinguishing advisory
+LLM feedback from changes that actually steer generation. Resume and adaptive
+selection need explicit evidence and compatibility rules, not hidden defaults.
+This interface intentionally does not claim those features yet.

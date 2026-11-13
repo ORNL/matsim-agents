@@ -3,6 +3,7 @@
 # Import order defines the order commands are listed in ``--help``.
 from matsim_agents.cli import (  # noqa: F401, I001  (register commands)
     workflow_commands,
+    exploration,
     objective,
     interactive,
     composition,
