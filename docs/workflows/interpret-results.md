@@ -31,6 +31,10 @@ Native output is streamed and logged, including interactive prompts. Ctrl-C
 stops the wrapper's own local child process group, allowing a short graceful
 shutdown before escalation. It does **not** cancel jobs already accepted by a
 scheduler. Inspect native artifacts after any interruption.
+Surviving members of the wrapper's owned process group are stopped even if the
+original command has already exited. Invocation locking uses the existing atomic
+file-lock mechanism supported on shared HPC filesystems, not CFS-incompatible
+`flock`.
 
 ## Exploration: execution, convergence, and ranking are different
 
@@ -50,6 +54,9 @@ relaxations, rounds, backend loads, and observed stop reasons. Read it as follow
   committed. Backend failures and nonconverged attempts can still exist.
 - **Eligible minimum:** a relaxation passed the configured convergence and
   eligibility criteria. Inspect forces, stress, and abort reasons, not only energy.
+- **E3 hard deadline:** an overdue geometry task is forcibly stopped and labeled
+  nonconverged with `optimization_time_limit`. Partial trajectories are forensic
+  artifacts, not converged minima; no missing final metrics are fabricated.
 - **Lowest observed candidate:** lowest energy among eligible attempted results
   under this model/protocol. It is not a proven global ground state.
 - **Relative energy:** comparison within the sampled compatible candidates,

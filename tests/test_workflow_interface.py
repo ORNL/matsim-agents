@@ -1,4 +1,3 @@
-import fcntl
 import json
 import os
 import subprocess
@@ -13,6 +12,7 @@ from matsim_agents.cli import app
 from matsim_agents.cli.workflow_catalog import ADAPTERS, WorkflowConfig, load_workflow
 from matsim_agents.cli.workflows import _check, _command, _validate_native_cli
 from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord
+from matsim_agents.execution.locking import exclusive_lock
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.execution.workflow_record import WorkflowInvocation, read_invocation
 
@@ -354,10 +354,11 @@ def test_invocation_lock_prevents_concurrent_resume(tmp_path, native_process):
         state="running",
         configuration_sha256={},
     )
-    with (run.path / ".workflow.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        with pytest.raises(ValueError, match="another process"):
-            _execute(run, record)
+    with (
+        exclusive_lock(run.path / ".workflow.lock", timeout=0),
+        pytest.raises(ValueError, match="another process"),
+    ):
+        _execute(run, record)
     assert native_process == []
 
 
@@ -378,6 +379,63 @@ def test_catalog_covers_all_native_scientific_entrypoints():
         ("benchmark", "agent-eval"),
     }
     assert {adapter.command for adapter in ADAPTERS.values() if adapter.command} == expected
+
+
+@pytest.mark.parametrize("workflow", ["chat", "explore"])
+def test_relative_native_resume_path_is_resolved_in_callers_directory(
+    tmp_path, monkeypatch, workflow
+):
+    from types import SimpleNamespace
+
+    run = _saved_invocation(tmp_path, "explore" if workflow == "explore" else "characterize")
+    if workflow == "chat":
+        from matsim_agents.cli.workflows import _hashes
+        from matsim_agents.execution.workflow_record import write_invocation
+
+        cfg = WorkflowConfig(workflow="chat", output_root=tmp_path)
+        run.write_json("resolved_config.json", cfg.model_dump(mode="json"))
+        record = read_invocation(run.path)
+        record.workflow = "chat"
+        record.configuration_sha256 = _hashes(cfg)
+        write_invocation(run, record)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    native = ScientificRunDirectory.create(
+        elsewhere,
+        workflow=workflow,
+        request={},
+        resolved_config={},
+        provenance=ProvenanceRecord(workflow=workflow, evidence_level=EvidenceLevel.HYPOTHESIS),
+    )
+    observed = []
+    monkeypatch.setattr(
+        "matsim_agents.workflows.exploration_checkpoint._state",
+        lambda directory: SimpleNamespace(config="same"),
+    )
+    monkeypatch.setattr(
+        "matsim_agents.workflows.exploration_config.load_exploration_config",
+        lambda path: "same",
+    )
+
+    def execute(command, output, emit, *, cwd, env):
+        observed.append(command)
+        return 0
+
+    monkeypatch.setattr("matsim_agents.cli.workflows.run_native_command", execute)
+    monkeypatch.chdir(elsewhere)
+    result = CliRunner().invoke(
+        app,
+        [
+            "workflow",
+            "resume",
+            str(run.path),
+            "--native-run",
+            native.path.name,
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert str(native.path) in observed[0]
+    assert read_invocation(run.path).native_run_directory == str(native.path)
 
 
 def test_record_rejects_ambient_relative_working_directory():

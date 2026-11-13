@@ -87,6 +87,33 @@ never run a second stream concurrently against the same reservation. The normal
 launcher already runs the native stream directly and remains a supported choice.
 Missing approval, allocation, or reservation is an error, not a CPU fallback.
 
+### Five-minute hard geometry cutoff
+
+The MLIP preset now explicitly sets `hard_optimization_seconds: 300`.
+Each GPU's controller runs geometry tasks in a spawned process. At 300 seconds
+it kills that process even if it is blocked inside a force evaluation/optimizer
+step, then atomically records `status: nonconverged`, `converged: false`, and
+`termination_reason: optimization_time_limit`. Partial artifacts are retained,
+but no final energy/force or convergence claim is invented. Completed timeout
+records are not automatically retried on resume.
+
+The task budget includes model loading on first use, initial evaluation,
+relaxation, and final scientific measurements. Worker-process initialization
+has a separate bounded startup allowance; this is not a whole-round or
+allocation walltime limit. Calculators are reused across successful tasks.
+After a forced timeout the next task gets a fresh process/calculator.
+Process scheduling and cleanup can add small overhead beyond 300 seconds,
+but a stuck native calculation cannot continue indefinitely.
+
+This is an explicit **new execution policy**, not a silent modification of the
+frozen 60-second between-step protocol. It is stored in `execution-policy.json`,
+each task/result's optimizer metadata, and the round's `execution_optimizer`.
+Use fresh output streams; switching the deadline when resuming is rejected.
+The underlying frozen manifest remains unchanged. Native invocation accepts
+`--hard-optimization-seconds 300`; omitting it retains the frozen protocol.
+This option does not itself change ten rounds to three or enforce the proposed
+16-node/two-hour class-level schedule.
+
 For an interrupted invocation, native round manifests remain authoritative:
 
 ```bash

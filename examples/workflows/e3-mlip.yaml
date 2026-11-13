@@ -14,4 +14,7 @@ settings:
   seed: 20261113
   workers: 4
   workers_per_node: 4
+  # New execution policy: kill an overdue geometry task, including a stalled step.
+  # Use a fresh output stream; this is not the frozen 60-second cooperative policy.
+  hard_optimization_seconds: 300
   # worker_python: /path/to/prepared/.venv-mace/bin/python

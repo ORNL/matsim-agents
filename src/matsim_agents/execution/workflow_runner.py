@@ -6,6 +6,7 @@ import codecs
 import os
 import signal
 import subprocess
+import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TextIO
@@ -17,6 +18,25 @@ def _signal_group(process: subprocess.Popen, requested_signal: signal.Signals) -
     except ProcessLookupError:
         if process.poll() is None:
             raise
+
+
+def _group_alive(pid: int) -> bool:
+    try:
+        os.killpg(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _stop_survivors(process: subprocess.Popen) -> None:
+    if not _group_alive(process.pid):
+        return
+    _signal_group(process, signal.SIGTERM)
+    deadline = time.monotonic() + 10
+    while _group_alive(process.pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if _group_alive(process.pid):
+        _signal_group(process, signal.SIGKILL)
 
 
 def run_native_command(
@@ -61,6 +81,7 @@ def run_native_command(
             except subprocess.TimeoutExpired:
                 _signal_group(process, signal.SIGKILL)
                 process.wait()
+        _stop_survivors(process)
         raise
     finally:
         process.stdout.close()

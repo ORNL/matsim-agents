@@ -56,6 +56,7 @@ def test_cancellation_signals_only_owned_child_group_and_waits(monkeypatch):
         "matsim_agents.execution.workflow_runner.os.killpg",
         lambda pid, sig: signals.append((pid, sig)),
     )
+    monkeypatch.setattr("matsim_agents.execution.workflow_runner._group_alive", lambda pid: False)
     with pytest.raises(KeyboardInterrupt):
         run_native_command(["test-only"], io.StringIO(), lambda text: None, cwd=Path.cwd())
     assert created[0]["start_new_session"] is True
@@ -66,3 +67,42 @@ def test_cancellation_signals_only_owned_child_group_and_waits(monkeypatch):
     ]
     assert process.waits == [10, 10, None]
     assert process.stdout.closed
+
+
+def test_descendants_are_stopped_even_after_leader_exits(monkeypatch):
+    class Stream(io.BytesIO):
+        def fileno(self):
+            return 1
+
+    class Process:
+        pid = 12345
+        stdout = Stream()
+
+        def wait(self, timeout=None):
+            return -signal.SIGINT
+
+    signals = []
+    monkeypatch.setattr(
+        "matsim_agents.execution.workflow_runner.subprocess.Popen",
+        lambda *args, **kwargs: Process(),
+    )
+    monkeypatch.setattr(
+        "matsim_agents.execution.workflow_runner.os.read",
+        lambda *args: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
+    monkeypatch.setattr(
+        "matsim_agents.execution.workflow_runner.os.killpg",
+        lambda pid, sig: signals.append((pid, sig)),
+    )
+    monkeypatch.setattr("matsim_agents.execution.workflow_runner._group_alive", lambda pid: True)
+    clock = iter([0, 11])
+    monkeypatch.setattr(
+        "matsim_agents.execution.workflow_runner.time.monotonic", lambda: next(clock)
+    )
+    with pytest.raises(KeyboardInterrupt):
+        run_native_command(["test"], io.StringIO(), lambda text: None, cwd=Path.cwd())
+    assert signals == [
+        (12345, signal.SIGINT),
+        (12345, signal.SIGTERM),
+        (12345, signal.SIGKILL),
+    ]

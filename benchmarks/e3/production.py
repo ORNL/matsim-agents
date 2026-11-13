@@ -1279,7 +1279,7 @@ def _task_result(attempt_dir: Path, task: dict[str, Any]) -> Path | None:
         if (
             result.get("structure_sha256") == task["structure_sha256"]
             and result.get("terminal")
-            and result.get("optimizer") == OPTIMIZER_SETTINGS
+            and result.get("optimizer") == task.get("optimizer", OPTIMIZER_SETTINGS)
         ):
             return result_path
     return None
@@ -1348,6 +1348,7 @@ def _execute_task(
     wall_started = time.time()
     initial_energy = None
     initial_max_force = None
+    optimizer_settings = task.get("optimizer", OPTIMIZER_SETTINGS)
     result_payload: dict[str, Any] = {
         "schema_version": 1,
         "candidate_id": task["candidate_id"],
@@ -1356,7 +1357,7 @@ def _execute_task(
         "model": MODEL_NAME,
         "mace_model": E3_MLIP_MODEL,
         "checkpoint_sha256": E3_MLIP_CHECKPOINT_SHA256,
-        "optimizer": OPTIMIZER_SETTINGS,
+        "optimizer": optimizer_settings,
         "initial_structure_path": task["structure_path"],
         "host": socket.gethostname(),
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
@@ -1395,7 +1396,7 @@ def _execute_task(
             mace_model=str(checkpoint_path),
             optimizer=OPTIMIZER_SETTINGS["optimizer"],
             maxiter=OPTIMIZER_SETTINGS["maxiter"],
-            max_optimization_seconds=OPTIMIZER_SETTINGS["max_optimization_seconds"],
+            max_optimization_seconds=optimizer_settings["max_optimization_seconds"],
             maxstep=OPTIMIZER_SETTINGS["maxstep_A"],
             fmax=OPTIMIZER_SETTINGS["fmax_eV_A"],
             relative_increase_threshold=OPTIMIZER_SETTINGS["relative_increase_threshold"],
@@ -1494,8 +1495,78 @@ def _execute_task(
     return result_payload
 
 
+def _deadline_calculators() -> Any:
+    from matsim_agents.backends.mlip.relaxation import CalculatorCache
+
+    return CalculatorCache()
+
+
+def _deadline_execute(request: tuple[dict[str, Any], Path], calculators: Any) -> dict[str, Any]:
+    task, task_root = request
+    return _execute_task(task, task_root, calculators)
+
+
+def _hard_optimizer_policy(seconds: float) -> dict[str, Any]:
+    if not math.isfinite(seconds) or seconds <= 0 or seconds > 300:
+        raise ValueError("Hard optimization deadline must be finite and within (0, 300] seconds")
+    return {
+        **OPTIMIZER_SETTINGS,
+        "max_optimization_seconds": seconds,
+        "optimization_timeout_policy": "parent_process_deadline_v1",
+    }
+
+
+def _timeout_result(
+    task: dict[str, Any], task_root: Path, started: float, wall_started: float
+) -> dict[str, Any]:
+    task_dir = task_root / task["candidate_id"]
+    task_dir.mkdir(parents=True, exist_ok=True)
+    attempts = sorted(task_dir.glob("attempt-*"))
+    if attempts and not (attempts[-1] / "result.json").exists():
+        attempt_dir = attempts[-1]
+    else:
+        attempt_dir = task_dir / f"attempt-{len(attempts) + 1:04d}"
+        attempt_dir.mkdir()
+    elapsed = time.monotonic() - started
+    result = {
+        "schema_version": 1,
+        "candidate_id": task["candidate_id"],
+        "structure_sha256": task["structure_sha256"],
+        "candidate_kind": task["candidate_kind"],
+        "model": MODEL_NAME,
+        "mace_model": E3_MLIP_MODEL,
+        "checkpoint_sha256": E3_MLIP_CHECKPOINT_SHA256,
+        "optimizer": task["optimizer"],
+        "initial_structure_path": task["structure_path"],
+        "status": "nonconverged",
+        "converged": False,
+        "terminal": True,
+        "termination_reason": "optimization_time_limit",
+        "timeout_enforcement": "parent_process_kill",
+        "initial_force_evaluated": False,
+        "final_energy_eV": None,
+        "final_max_force_eV_per_A": None,
+        "host": socket.gethostname(),
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "started_at_unix": wall_started,
+        "finished_at_unix": time.time(),
+        "runtime_seconds": elapsed,
+        "gpu_hours": elapsed / 3600,
+        "gpu_node_hours": elapsed / (3600 * 4),
+        "attempt": int(attempt_dir.name.split("-")[1]),
+        "partial_artifacts_directory": str(attempt_dir),
+    }
+    _atomic_json(attempt_dir / "result.json", result)
+    return result
+
+
 def run_worker(
-    tasks_path: Path, output_root: Path, *, rank: int, world_size: int
+    tasks_path: Path,
+    output_root: Path,
+    *,
+    rank: int,
+    world_size: int,
+    hard_optimization_seconds: float | None = None,
 ) -> dict[str, int]:
     if world_size < 1 or rank < 0 or rank >= world_size:
         raise ValueError("worker rank/world-size are invalid")
@@ -1511,16 +1582,39 @@ def run_worker(
     ]
     counts: dict[str, int] = defaultdict(int)
     task_root = output_root / "tasks"
-    calculators = CalculatorCache()
-    for index, task in enumerate(tasks):
-        if index % world_size != rank:
-            continue
-        if _task_result(task_root / task["candidate_id"], task) is not None:
-            counts["resumed"] += 1
-            continue
-        result = _execute_task(task, task_root, calculators)
-        counts[result["status"]] += 1
-        counts["attempted"] += 1
+    from matsim_agents.execution.deadline_worker import DeadlineWorker, TaskDeadlineExceeded
+
+    effective_optimizer = (
+        OPTIMIZER_SETTINGS
+        if hard_optimization_seconds is None
+        else _hard_optimizer_policy(hard_optimization_seconds)
+    )
+    calculators = CalculatorCache() if hard_optimization_seconds is None else None
+    with DeadlineWorker(_deadline_calculators, _deadline_execute) as worker:
+        for index, task in enumerate(tasks):
+            if index % world_size != rank:
+                continue
+            if hard_optimization_seconds is not None:
+                if task.get("optimizer", effective_optimizer) != effective_optimizer:
+                    raise ValueError("Task optimizer policy differs from the worker hard deadline")
+                task["optimizer"] = effective_optimizer
+            elif task.get("optimizer", OPTIMIZER_SETTINGS) != OPTIMIZER_SETTINGS:
+                raise ValueError(
+                    "Task requires its declared hard deadline; refusing unbounded dispatch"
+                )
+            if _task_result(task_root / task["candidate_id"], task) is not None:
+                counts["resumed"] += 1
+                continue
+            if hard_optimization_seconds is None:
+                result = _execute_task(task, task_root, calculators)
+            else:
+                started, wall_started = time.monotonic(), time.time()
+                try:
+                    result = worker.run((task, task_root), seconds=hard_optimization_seconds)
+                except TaskDeadlineExceeded:
+                    result = _timeout_result(task, task_root, started, wall_started)
+            counts[result["status"]] += 1
+            counts["attempted"] += 1
     return dict(counts)
 
 
@@ -1700,11 +1794,18 @@ def _execute_round_tasks(
     worker_count: int,
     workers_per_node: int,
     worker_python: str,
+    hard_optimization_seconds: float | None = None,
 ) -> None:
     if worker_count < 1 or worker_count % workers_per_node:
         raise ValueError("worker count must be a positive multiple of workers per node")
     if worker_count == 1:
-        run_worker(tasks_path, round_dir, rank=0, world_size=1)
+        run_worker(
+            tasks_path,
+            round_dir,
+            rank=0,
+            world_size=1,
+            hard_optimization_seconds=hard_optimization_seconds,
+        )
         return
     if not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("multi-node workers must run inside an authorized Slurm allocation")
@@ -1729,6 +1830,8 @@ def _execute_round_tasks(
         "--output-root",
         str(round_dir),
     ]
+    if hard_optimization_seconds is not None:
+        command.extend(["--hard-optimization-seconds", str(hard_optimization_seconds)])
     subprocess.run(command, check=True)
 
 
@@ -1742,6 +1845,7 @@ def run_replicate(
     worker_count: int | None = None,
     worker_python: str | None = None,
     workers_per_node: int = 4,
+    hard_optimization_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Run all ten adaptive rounds for one material/strategy/paired-seed stream."""
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1758,6 +1862,17 @@ def run_replicate(
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise RuntimeError(f"replicate is already running: {stream_dir}") from exc
+        if hard_optimization_seconds is not None:
+            _hard_optimizer_policy(hard_optimization_seconds)
+        policy = {"hard_optimization_seconds": hard_optimization_seconds}
+        policy_path = stream_dir / "execution-policy.json"
+        if policy_path.is_file():
+            if json.loads(policy_path.read_text()) != policy:
+                raise ValueError("Cannot change optimization deadline when resuming a stream")
+        elif list(stream_dir.glob("round-*")) and hard_optimization_seconds is not None:
+            raise ValueError("A hard deadline requires a fresh stream, not frozen prior evidence")
+        else:
+            _atomic_json(policy_path, policy)
         if worker_count is None:
             worker_count = int(os.environ.get("MATSIM_E3_MLIP_WORKERS", "16"))
         worker_python = worker_python or os.environ.get(
@@ -1784,12 +1899,25 @@ def run_replicate(
             round_manifest_path, tasks_path, round_manifest = _materialize_round(
                 manifest, spec, output_root, history, chat
             )
+            if hard_optimization_seconds is not None:
+                effective_optimizer = _hard_optimizer_policy(hard_optimization_seconds)
+                tasks = _read_tasks(tasks_path)
+                for task in tasks:
+                    task["optimizer"] = effective_optimizer
+                _write_jsonl(tasks_path, tasks)
+                round_manifest["execution_optimizer"] = effective_optimizer
+                _atomic_json(round_manifest_path, round_manifest)
             _execute_round_tasks(
                 tasks_path,
                 round_dir,
                 worker_count,
                 workers_per_node,
                 worker_python,
+                **(
+                    {"hard_optimization_seconds": hard_optimization_seconds}
+                    if hard_optimization_seconds is not None
+                    else {}
+                ),
             )
             tasks = _read_tasks(tasks_path)
             task_root = round_dir / "tasks"
@@ -1877,7 +2005,13 @@ def _worker_command(args: argparse.Namespace) -> int:
         rank = int(os.environ.get("SLURM_PROCID", "0"))
     if world_size is None:
         world_size = int(os.environ.get("SLURM_NTASKS", "1"))
-    result = run_worker(args.tasks, args.output_root, rank=rank, world_size=world_size)
+    result = run_worker(
+        args.tasks,
+        args.output_root,
+        rank=rank,
+        world_size=world_size,
+        hard_optimization_seconds=args.hard_optimization_seconds,
+    )
     print(json.dumps(result, sort_keys=True))
     return 0
 
@@ -1903,11 +2037,13 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--workers", type=int)
     run.add_argument("--workers-per-node", type=int, default=4)
     run.add_argument("--worker-python")
+    run.add_argument("--hard-optimization-seconds", type=float)
     worker = commands.add_parser("worker")
     worker.add_argument("--tasks", type=Path, required=True)
     worker.add_argument("--output-root", type=Path, required=True)
     worker.add_argument("--rank", type=int)
     worker.add_argument("--world-size", type=int)
+    worker.add_argument("--hard-optimization-seconds", type=float)
     cluster = commands.add_parser(
         "cluster-minima", help="cluster relaxed minima after campaign acquisition is complete"
     )
@@ -1978,6 +2114,7 @@ def main(argv: list[str] | None = None) -> int:
         worker_count=args.workers,
         worker_python=args.worker_python,
         workers_per_node=args.workers_per_node,
+        hard_optimization_seconds=args.hard_optimization_seconds,
     )
     print(json.dumps(result, sort_keys=True))
     return 0

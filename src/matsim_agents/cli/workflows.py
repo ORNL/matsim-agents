@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -28,6 +27,7 @@ from matsim_agents.cli.workflow_catalog import (
 )
 from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord
 from matsim_agents.execution.ledger import file_sha256
+from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.execution.workflow_record import (
     WorkflowInvocation,
@@ -247,6 +247,8 @@ def _command(cfg: WorkflowConfig, *, approved: bool) -> list[str]:
         ]
         if settings.worker_python is not None:
             command.extend(["--worker-python", str(settings.worker_python)])
+        if settings.hard_optimization_seconds is not None:
+            command.extend(["--hard-optimization-seconds", str(settings.hard_optimization_seconds)])
         return command
     if isinstance(cfg.settings, E3DFTSettings):
         command = [
@@ -274,16 +276,15 @@ def _hashes(cfg: WorkflowConfig) -> dict[str, str]:
 
 def _execute(run: ScientificRunDirectory, record: WorkflowInvocation) -> None:
     """Preserve native output and status; never reinterpret completion as convergence."""
-    with (run.path / ".workflow.lock").open("a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
-            raise ValueError("Workflow invocation is already running in another process") from error
-        state_path = run.path / "workflow-state.json"
-        if state_path.is_file() and read_invocation(run.path).state == "completed":
-            console.print("Invocation already completed; no command executed.")
-            return
-        _execute_locked(run, record)
+    try:
+        with exclusive_lock(run.path / ".workflow.lock", timeout=0):
+            state_path = run.path / "workflow-state.json"
+            if state_path.is_file() and read_invocation(run.path).state == "completed":
+                console.print("Invocation already completed; no command executed.")
+                return
+            _execute_locked(run, record)
+    except LockTimeoutError as error:
+        raise ValueError("Workflow invocation is already running in another process") from error
 
 
 def _execute_locked(run: ScientificRunDirectory, record: WorkflowInvocation) -> None:
@@ -462,6 +463,8 @@ def resume(
     ),
 ) -> None:
     try:
+        if native_run is not None:
+            native_run = native_run.expanduser().resolve()
         record = read_invocation(directory)
         cfg = WorkflowConfig.model_validate(saved_workflow_config(directory))
         if approve_execution and cfg.workflow != "e3-mlip":

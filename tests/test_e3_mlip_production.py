@@ -27,8 +27,185 @@ from benchmarks.e3.production import (
     release_gpu_hours,
     reserve_gpu_hours,
     run_replicate,
+    run_worker,
     validate_campaign_manifest,
 )
+
+
+def test_hard_deadline_records_nonconvergence_and_is_not_retried(tmp_path, monkeypatch):
+    from matsim_agents.execution.deadline_worker import TaskDeadlineExceeded
+
+    tasks_path = tmp_path / "tasks.jsonl"
+    task = {
+        "candidate_id": "test",
+        "structure_sha256": "test-sha",
+        "candidate_kind": "unique_configuration",
+        "structure_path": "test.extxyz",
+    }
+    tasks_path.write_text(json.dumps(task) + "\n")
+    monkeypatch.setattr(
+        "benchmarks.e3.production._verified_checkpoint",
+        lambda: (Path("unused"), E3_MLIP_CHECKPOINT_SHA256),
+    )
+    calls = []
+
+    class Worker:
+        def __init__(self, *args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def run(self, request, *, seconds):
+            calls.append(seconds)
+            candidate, root = request
+            attempt = root / candidate["candidate_id"] / "attempt-0001"
+            attempt.mkdir(parents=True)
+            (attempt / "partial.traj").write_bytes(b"preserved")
+            raise TaskDeadlineExceeded("stalled optimizer step")
+
+    monkeypatch.setattr("matsim_agents.execution.deadline_worker.DeadlineWorker", Worker)
+    result = run_worker(
+        tasks_path,
+        tmp_path / "results",
+        rank=0,
+        world_size=1,
+        hard_optimization_seconds=300,
+    )
+    assert result == {"nonconverged": 1, "attempted": 1}
+    path = tmp_path / "results/tasks/test/attempt-0001/result.json"
+    payload = json.loads(path.read_text())
+    assert payload["converged"] is False
+    assert payload["terminal"] is True
+    assert payload["termination_reason"] == "optimization_time_limit"
+    assert payload["timeout_enforcement"] == "parent_process_kill"
+    assert payload["final_energy_eV"] is None
+    assert payload["optimizer"]["max_optimization_seconds"] == 300
+    assert (path.parent / "partial.traj").read_bytes() == b"preserved"
+    assert run_worker(
+        tasks_path,
+        tmp_path / "results",
+        rank=0,
+        world_size=1,
+        hard_optimization_seconds=300,
+    ) == {"resumed": 1}
+    assert calls == [300]
+    assert _task_result(path.parent.parent, task) is None
+    task["optimizer"] = payload["optimizer"]
+    assert _task_result(path.parent.parent, task) == path
+
+
+def test_hard_deadline_is_forwarded_to_all_gpu_workers(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setenv("SLURM_JOB_ID", "test")
+    monkeypatch.setattr(
+        "benchmarks.e3.production.subprocess.run",
+        lambda command, **kwargs: calls.append(command),
+    )
+    _execute_round_tasks(
+        tmp_path / "tasks.jsonl",
+        tmp_path / "results",
+        64,
+        4,
+        "python",
+        hard_optimization_seconds=300,
+    )
+    assert calls[0][calls[0].index("--nodes") + 1] == "16"
+    assert calls[0][-2:] == ["--hard-optimization-seconds", "300"]
+
+
+def test_existing_stream_cannot_change_optimization_deadline(tmp_path):
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(build_campaign_manifest()))
+    stream = tmp_path / "runs/nb_ta_o/rule_based_adaptation/seed-20261111"
+    stream.mkdir(parents=True)
+    (stream / "execution-policy.json").write_text(json.dumps({"hard_optimization_seconds": 300}))
+    with pytest.raises(ValueError, match="Cannot change optimization deadline"):
+        run_replicate(
+            manifest_path,
+            tmp_path / "runs",
+            "nb_ta_o",
+            "rule_based_adaptation",
+            20261111,
+            hard_optimization_seconds=60,
+        )
+
+
+@pytest.mark.parametrize("seconds", [0, -1, 301, float("nan"), float("inf")])
+def test_hard_deadline_rejects_invalid_or_longer_than_five_minutes(seconds):
+    from benchmarks.e3.production import _hard_optimizer_policy
+
+    with pytest.raises(ValueError, match="within"):
+        _hard_optimizer_policy(seconds)
+
+
+def test_hard_timeout_is_counted_as_nonconverged_without_usable_minimum(tmp_path):
+    import time
+
+    from benchmarks.e3.production import (
+        _hard_optimizer_policy,
+        _round_action_outcomes,
+        _timeout_result,
+    )
+
+    task = {
+        "candidate_id": "timeout",
+        "structure_sha256": "sha",
+        "candidate_kind": "unique_configuration",
+        "structure_path": "initial.extxyz",
+        "optimizer": _hard_optimizer_policy(300),
+        "action_id": "action",
+        "action": {
+            "size_tier": "small",
+            "family": "test",
+            "generator": "test",
+        },
+        "formula": "Cu",
+        "formula_units": 1,
+        "num_atoms": 1,
+    }
+    _timeout_result(task, tmp_path, time.monotonic(), time.time())
+    outcome = _round_action_outcomes([task], tmp_path)[0]
+    assert outcome["attempted"] == 1
+    assert outcome["nonconverged"] == 1
+    assert outcome["converged"] == outcome["failed"] == 0
+    assert outcome["mean_energy_eV_per_atom"] is None
+    assert outcome["minimum_energy_eV_per_atom"] is None
+
+
+def test_wrapper_constructs_explicit_five_minute_deadline(monkeypatch, tmp_path):
+    from matsim_agents.cli.workflow_catalog import WorkflowConfig
+    from matsim_agents.cli.workflows import _command
+
+    resource = tmp_path / "resource.json"
+    resource.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "cap_gpu_seconds": 7200000,
+                "reservations": {"test": {"reserved_gpu_seconds": 100}},
+            }
+        )
+    )
+    monkeypatch.setenv("SLURM_JOB_ID", "test")
+    cfg = WorkflowConfig.model_validate(
+        {
+            "workflow": "e3-mlip",
+            "settings": {
+                "manifest": str(tmp_path / "manifest"),
+                "output_root": str(tmp_path / "runs"),
+                "resource_state": str(resource),
+                "material": "nb_ta_o",
+                "strategy": "rule_based_adaptation",
+                "hard_optimization_seconds": 300,
+            },
+        }
+    )
+    command = _command(cfg, approved=True)
+    assert command[-2:] == ["--hard-optimization-seconds", "300.0"]
 
 
 def test_campaign_manifest_has_all_matched_rounds_and_budgets():

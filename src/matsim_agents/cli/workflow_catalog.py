@@ -60,6 +60,7 @@ class E3MLIPSettings(BaseModel):
     workers_per_node: int = Field(4, gt=0)
     worker_python: Path | None = None
     resource_state: Path
+    hard_optimization_seconds: float | None = Field(default=None, gt=0, le=300)
 
 
 class E3DFTSettings(BaseModel):
