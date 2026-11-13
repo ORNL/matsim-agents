@@ -566,3 +566,47 @@ def test_seeded_generation_rejects_prior_round_duplicates_inside_attempt_budget(
     diagnostics = json.loads((tmp_path / "next/generation-diagnostics.json").read_text())
     assert diagnostics["rejection_reasons"]["prior_symmetry_equivalent"] >= 1
     assert diagnostics["generation_attempts"] <= 40
+
+
+@pytest.mark.parametrize("variant", ["identical", "translated", "reordered", "basis", "distorted"])
+def test_uncached_niggli_matching_preserves_frozen_equivalence(variant, monkeypatch):
+    import numpy as np
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    parent, _ = structure_generation._mof(
+        "ZnC2H2O4",
+        24,
+        "cod_parent",
+        None,
+        None,
+        np.random.default_rng(0),
+    )
+    other = parent.copy()
+    if variant == "translated":
+        other.positions += other.cell.array[0] * 0.317
+        other.wrap()
+    elif variant == "reordered":
+        other = other[list(reversed(range(len(other))))]
+    elif variant == "basis":
+        other.set_cell(other.cell.array[[1, 0, 2]], scale_atoms=False)
+    elif variant == "distorted":
+        other, _ = structure_generation._mof(
+            "ZnC2H2O4",
+            24,
+            "bounded_perturbation",
+            0.005,
+            None,
+            np.random.default_rng(20261113),
+            operation_label="proton_orientation",
+        )
+    matcher = structure_generation.make_structure_matcher()
+    expected = matcher.fit(
+        AseAtomsAdaptor.get_structure(parent),
+        AseAtomsAdaptor.get_structure(other),
+    )
+
+    def reject_cached_preprocessing(*args, **kwargs):
+        pytest.fail("composition-keyed reduction cache must not be used")
+
+    monkeypatch.setattr(matcher, "_get_reduced_structure", reject_cached_preprocessing)
+    assert structure_generation.structures_symmetry_equivalent(parent, other, matcher) == expected

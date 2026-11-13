@@ -282,12 +282,17 @@ def structures_symmetry_equivalent(left, right, matcher=None) -> bool:
         raise StructureGenerationError(
             "Symmetry-aware E3 deduplication requires pymatgen's ASE adaptor."
         ) from exc
-    return bool(
-        matcher.fit(
-            AseAtomsAdaptor.get_structure(left),
-            AseAtomsAdaptor.get_structure(right),
-        )
-    )
+    first = AseAtomsAdaptor.get_structure(left)
+    second = AseAtomsAdaptor.get_structure(right)
+    if matcher._primitive_cell:
+        return bool(matcher.fit(first, second))
+    # The matcher's composition-keyed reduction cache compares same-composition
+    # structures quadratically. Perform the identical Niggli reduction directly.
+    return bool(matcher.fit(
+        first.get_reduced_structure(reduction_algo="niggli"),
+        second.get_reduced_structure(reduction_algo="niggli"),
+        skip_structure_reduction=True,
+    ))
 
 
 def _validate_geometry(atoms, *, min_distance: float = 0.7) -> None:

@@ -52,6 +52,10 @@ Formate proton variants rotate all C-H vectors independently by at most
 15 degrees, keeping bond lengths and checking framework connectivity. Both
 changes add genuine degrees of freedom without relaxing deduplication.
 Seeded PyXtal uses NumPy's `Generator`, as required by the installed version.
+Deduplication performs the same Niggli reduction directly before matching,
+avoiding the matcher's composition-keyed cache equality bottleneck for large
+frameworks. Matching tolerances, primitive-cell handling, and equivalence
+decisions are unchanged.
 
 The discovery API now accepts a `SeedGenerationAction` for explicit
 formula-unit tiers, AFLOW candidate caps, PyXtal counts, space-group/prototype
