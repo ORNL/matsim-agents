@@ -7,9 +7,9 @@ output_dir: ./nb2o5-runs
 device: cpu
 precision: fp64
 max_relaxations: 2
-# Set iterations: 3 for checkpointed rounds (two attempts per round).
+# Every run is checkpointed; set iterations: 3 for three rounds.
 iterations: 1
-# For iterations > 1, use diverse to deduplicate and prioritize fresh structures.
+# Use diverse to deduplicate and prioritize fresh structures.
 selection: sequential
 generation:
   formula_units: 1

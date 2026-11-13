@@ -48,8 +48,7 @@ def _print_summary(summary: ExplorationSummary) -> None:
         console.print(f"  termination {reason}: {count}", markup=False)
     if summary.calculator_loads is not None:
         console.print(f"Calculator loads: {summary.calculator_loads}")
-    if summary.rounds_requested > 1:
-        console.print(f"Rounds: {summary.rounds_completed}/{summary.rounds_requested}")
+    console.print(f"Rounds: {summary.rounds_completed}/{summary.rounds_requested}")
     for error in summary.errors:
         console.print(f"Error: {error}", style="red", markup=False)
     for note in summary.notes:
@@ -80,7 +79,7 @@ def check(
 def run(
     config: Path = typer.Argument(..., exists=True, dir_okay=False, help="Exploration YAML."),
 ) -> None:
-    """Generate and relax a bounded batch; never submit a scheduler job."""
+    """Generate, select, and relax checkpointed rounds; never submit a scheduler job."""
     cfg = _load_config(config)
     try:
         summary = run_exploration(cfg, on_progress=_progress)
@@ -111,7 +110,7 @@ def summary(
 def resume(
     run_directory: Path = typer.Argument(..., exists=True, file_okay=False),
 ) -> None:
-    """Continue a checkpointed multi-round run; do not retry committed failures."""
+    """Continue a checkpointed run; do not retry committed failures."""
     try:
         result = resume_exploration(run_directory, on_progress=_progress)
     except (ValueError, OSError) as error:

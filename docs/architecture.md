@@ -25,6 +25,31 @@ discovery and disjoint DFT node grouping are owned by `execution.allocation`.
 See [Scientific workflow contracts](scientific-workflows.md) for behavior and
 [Run artifacts and restarts](run-artifacts-and-restarts.md) for persistence.
 
+## Config-driven exploration: where to start reading
+
+The CLI and Python API use a single checkpointed engine for any number of rounds.
+Read the modules in this order:
+
+| Module | Responsibility |
+| --- | --- |
+| [`cli/exploration.py`](../src/matsim_agents/cli/exploration.py) | Parse commands and present progress, errors, and summaries |
+| [`workflows/exploration.py`](../src/matsim_agents/workflows/exploration.py) | Small public API: check, run, summarize, resume |
+| [`workflows/exploration_config.py`](../src/matsim_agents/workflows/exploration_config.py) | Validate settings, resolve paths, preflight dependencies/checkpoint, build relaxation requests |
+| [`workflows/exploration_rounds.py`](../src/matsim_agents/workflows/exploration_rounds.py) | Execution lifecycle: lock, generate, checkpoint, relax, rank, finish |
+| [`workflows/exploration_checkpoint.py`](../src/matsim_agents/workflows/exploration_checkpoint.py) | Journal contracts, progress invariants, artifact hashes, runtime compatibility |
+| [`workflows/exploration_reporting.py`](../src/matsim_agents/workflows/exploration_reporting.py) | Read-only summaries and cumulative relative-energy reports |
+| [`discovery/selection.py`](../src/matsim_agents/discovery/selection.py) | Structural equivalence and deterministic diversity selection |
+
+New scientific options belong in the validated configuration and its shared
+request builder, not duplicated single-/multi-round execution paths.
+Checkpoint preparation is transactional: candidates/attempts become committed
+only when the journal is atomically written; interruption restores the last
+committed state before saving the error. Reporting does not resume or calculate.
+
+Only version-2 exploration checkpoints are supported; there is no legacy reader
+or migration layer. The separate advanced phase-exploration/active-learning
+workflow retains its own contracts and is not invoked by this config-driven API.
+
 ## Import layers
 
 Packages are layered; a package may import only from strictly lower layers.
