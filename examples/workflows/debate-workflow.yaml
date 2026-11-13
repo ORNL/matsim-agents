@@ -1,0 +1,4 @@
+# The common interface uses the existing debate config and implementation.
+workflow: debate
+config: ../debate/equal-independent.yaml
+output_root: ./workflow-records

@@ -57,12 +57,22 @@ Inside your compute allocation:
 The command prints the run directory, generated/attempted/converged counts,
 termination reasons, backend errors, and number of calculator loads. A single
 calculator is reused across candidates; initial loading is not repeated for
-each structure. Single-batch run directories contain the standard `results.json`,
-`resolved_config.json`, provenance, calculations, and an
-`exploration-summary.json`. The complete user configuration and checkpoint hash
-are recorded in `resolved_config.json`, including if the engine fails.
-Multi-round runs use the candidate journal and cumulative ranking described below
-instead of the single-batch `results.json`.
+each structure. Every run, including the default one-round search, uses the same
+checkpointed engine and output layout:
+
+| Output | Purpose |
+| --- | --- |
+| `resolved_config.json` | Complete validated configuration with absolute paths |
+| `provenance.json` | Checkpoint identity and scientific runtime settings |
+| `rounds-state.json` | Version-2 checkpoint: generated candidates, decisions, attempts, errors, hashes |
+| `cumulative-ranking.json` | Relative-energy ranking, or `null` when nothing qualifies |
+| `exploration-summary.json` | Counts, termination reasons, execution/scientific outcome |
+| `round-0001/seeds/` | Generated input structures |
+| `round-0001/attempt-0000/` | Relaxation output for candidate index zero |
+
+Additional rounds use numbered directories in the same layout. Configuration
+and checkpoint identity are recorded before generation, including when it fails.
+There is no alternate single-batch `results.json` format.
 
 Inspect it later without loading the model or repeating calculations:
 
@@ -76,6 +86,12 @@ nonconverged results are excluded from ranking. Ranking compares only
 same-composition relaxed candidates, not thermodynamic stability against other
 phases. Generated counts can be below the requested counts. Seeds do not
 guarantee bit-for-bit reproducibility across generators or package versions.
+
+To continue an interrupted run, even a one-round search:
+
+```bash
+.venv-mace/bin/python -m matsim_agents.cli explore resume /path/to/printed/run-directory
+```
 
 Exit codes: `0` means execution completed (possibly with no converged minimum),
 `1` indicates preflight/backend/generation/ranking failure, and `2` indicates an
@@ -140,7 +156,8 @@ Set `iterations: 3` in the same YAML. Each round generates a fresh batch using
 `random_seed + round_index` (the first round uses the configured seed).
 `max_relaxations: 2` permits at most six attempts across three rounds.
 All rounds share one calculator cache within the running process.
-The default `iterations: 1` retains the original single-batch interface.
+The default `iterations: 1` uses exactly the same engine, progress reporting,
+selection options, checkpoint format, and resume command.
 Deterministic AFLOW prototypes can repeat across rounds; incrementing the seed
 does not guarantee distinct structures. The default `selection: sequential`
 retains generation order and permits repeated structures. Opt in to the
@@ -152,13 +169,16 @@ structural screening policy below to avoid repeating equivalent structures.
 .venv-mace/bin/python -m matsim_agents.cli explore resume /path/to/printed/run-directory
 ```
 
-Resume is supported for runs started with `iterations > 1`; legacy single-batch
-runs do not contain candidate checkpoints. Multi-round runs store
-`rounds-state.json` atomically after generation, each completed attempt, and each
+All new runs store `rounds-state.json` atomically after generation, each completed attempt, and each
 round. This contains the complete configuration, incremented-seed round
 candidates, results/errors, checkpoint identity, and artifact hashes.
 `cumulative-ranking.json` ranks converged results across completed work; a JSON
 `null` means no eligible result. No LLM, DFT, or active learning is introduced.
+`report.md` presents counts, termination reasons, evidence links, and next actions
+without claiming that completion establishes stability. `explore status` reads
+the last saved checkpoint progress; it does not query the scheduler or prove
+that a process is alive. See [interpret results](interpret-results.md) for recovery
+and scientific-claim limits.
 The cumulative report preserves all eligible attempts, including equivalent
 minima, but omits polymorph-degeneracy and chemical-stability proxy claims.
 Its `ground_state` entry means only the lowest-energy observed candidate.
@@ -220,7 +240,7 @@ These settings supplement the formula, trusted checkpoint, and relaxation
 settings in your YAML. Generate more candidates than the attempt budget to give
 selection a meaningful choice. Generation itself can be costly; this policy does
 not automatically increase candidate counts, replenish duplicates, or submit jobs.
-`selection: diverse` requires `iterations > 1`; single-batch behavior is unchanged.
+`selection: diverse` works with either one round or multiple rounds.
 
 Selection runs before each round's first relaxation:
 
@@ -269,6 +289,17 @@ both selected and skipped inputs as well as result references.
 This uses previous results as a geometric coverage reference, **not** an energy
 acquisition function. It neither biases toward low energies nor creates new
 structures around minima. It adds no LLM steering, uncertainty calibration,
-thermodynamic stability claims, or DFT calls. Existing run journals remain
-readable, but resume across changed workflow/source versions remains refused;
-finish old runs with their original checkout or start a fresh run.
+thermodynamic stability claims, or DFT calls.
+
+## Run format and compatibility
+
+This implementation requires **version 2** of the exploration checkpoint.
+Older single-batch evidence (`results.json` without a checkpoint) and version-1
+round journals are **not supported** by summary or resume. There is no migration,
+legacy reader, or automatic conversion. Start a fresh run with your YAML; do not
+relabel an old checkpoint's version.
+
+The independent advanced phase-exploration workflow is not part of this
+config-driven interface. Its results are not accepted as exploration checkpoints.
+Changed code or scientific dependency versions also block resume of version-2
+runs. The stored configuration and source/dependency identities are authoritative.

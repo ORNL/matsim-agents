@@ -1,0 +1,20 @@
+# Frozen E3-MLIP production stream, not a small exploration smoke test.
+# This file does not authorize compute. Run requires --approve-execution and Slurm.
+# Prepare MACE_ARTIFACT_DIR and the inference environment as documented.
+workflow: e3-mlip
+output_root: ./e3-workflow-records
+settings:
+  manifest: ../../benchmarks/e3/manifests/e3-mlip-production-v1.json
+  output_root: ./e3-mlip-results
+  # Must contain this Slurm job's active GPU-budget reservation, managed by
+  # the existing Perlmutter production launcher. This command never reserves twice.
+  resource_state: ../../runs/e3-mlip-production-v1/resource-budget.json
+  material: nb_ta_o
+  strategy: rule_based_adaptation
+  seed: 20261113
+  workers: 4
+  workers_per_node: 4
+  # New execution policy: kill an overdue geometry task, including a stalled step.
+  # Use a fresh output stream; this is not the frozen 60-second cooperative policy.
+  hard_optimization_seconds: 300
+  # worker_python: /path/to/prepared/.venv-mace/bin/python

@@ -48,14 +48,14 @@ def _print_summary(summary: ExplorationSummary) -> None:
         console.print(f"  termination {reason}: {count}", markup=False)
     if summary.calculator_loads is not None:
         console.print(f"Calculator loads: {summary.calculator_loads}")
-    if summary.rounds_requested > 1:
-        console.print(f"Rounds: {summary.rounds_completed}/{summary.rounds_requested}")
+    console.print(f"Rounds: {summary.rounds_completed}/{summary.rounds_requested}")
     for error in summary.errors:
         console.print(f"Error: {error}", style="red", markup=False)
     for note in summary.notes:
         console.print(f"Note: {note}", markup=False)
     console.print("Completed execution does not imply convergence or thermodynamic stability.")
     console.print("This command does not launch LLM, DFT, or active-learning work.")
+    console.print(f"Report: {Path(summary.run_directory) / 'report.md'}", markup=False)
 
 
 @explore_app.command("check")
@@ -80,7 +80,7 @@ def check(
 def run(
     config: Path = typer.Argument(..., exists=True, dir_okay=False, help="Exploration YAML."),
 ) -> None:
-    """Generate and relax a bounded batch; never submit a scheduler job."""
+    """Generate, select, and relax checkpointed rounds; never submit a scheduler job."""
     cfg = _load_config(config)
     try:
         summary = run_exploration(cfg, on_progress=_progress)
@@ -111,7 +111,7 @@ def summary(
 def resume(
     run_directory: Path = typer.Argument(..., exists=True, file_okay=False),
 ) -> None:
-    """Continue a checkpointed multi-round run; do not retry committed failures."""
+    """Continue a checkpointed run; do not retry committed failures."""
     try:
         result = resume_exploration(run_directory, on_progress=_progress)
     except (ValueError, OSError) as error:
@@ -120,3 +120,21 @@ def resume(
     _print_summary(result)
     if result.status == "failed":
         raise typer.Exit(1)
+
+
+@explore_app.command("status")
+def status(
+    run_directory: Path = typer.Argument(..., exists=True, file_okay=False),
+) -> None:
+    """Read checkpoint progress without loading a model or probing a scheduler."""
+    try:
+        result = summarize_exploration(run_directory)
+    except (ValueError, OSError) as error:
+        console.print(f"Cannot read exploration status: {error}", markup=False)
+        raise typer.Exit(1) from error
+    console.print(
+        f"{result.outcome}; rounds {result.rounds_completed}/{result.rounds_requested}; "
+        f"attempted {result.counts['attempted']}; converged {result.counts['converged']}",
+        markup=False,
+    )
+    console.print("Checkpoint progress only; not a liveness or scheduler probe.")

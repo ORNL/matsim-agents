@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 from matsim_agents.backends.mlip.relaxation import _RelaxCalculator
 from matsim_agents.cli import app
 from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.execution.locking import exclusive_lock
 from matsim_agents.workflows import (
     ExplorationConfig,
     resume_exploration,
@@ -36,7 +37,7 @@ def setup(tmp_path, monkeypatch):
     )
     calls = {"loads": 0, "seeds": [], "relax": []}
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration.importlib.util.find_spec", lambda name: object()
+        "matsim_agents.workflows.exploration_config.importlib.util.find_spec", lambda name: object()
     )
 
     def generate(action, output_dir):
@@ -162,10 +163,42 @@ def test_resume_rejects_changed_inputs_or_runtime(setup, change):
 def test_resume_refuses_active_writer(setup):
     cfg, _, _ = setup
     result = run_exploration(cfg)
-    with (Path(result.run_directory) / ".exploration.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        with pytest.raises(ValueError, match="another process"):
-            resume_exploration(result.run_directory)
+    with (
+        exclusive_lock(Path(result.run_directory) / ".exploration.lock", timeout=0),
+        pytest.raises(ValueError, match="another process"),
+    ):
+        resume_exploration(result.run_directory)
+
+
+@pytest.mark.parametrize("iterations", [1, 3])
+def test_exploration_runs_and_resumes_when_cfs_rejects_flock(setup, monkeypatch, iterations):
+    cfg, calls, _ = setup
+    cfg = cfg.model_copy(update={"iterations": iterations})
+
+    def unavailable(*args, **kwargs):
+        raise OSError(524, "CFS does not support flock")
+
+    monkeypatch.setattr(fcntl, "flock", unavailable)
+    result = run_exploration(cfg)
+    assert result.rounds_completed == iterations
+    assert calls["seeds"] == [10 + index for index in range(iterations)]
+    assert result.counts["attempted"] == 2 * iterations
+    assert not (Path(result.run_directory) / ".exploration.lock").exists()
+    assert resume_exploration(result.run_directory) == result
+    assert not (Path(result.run_directory) / ".exploration.lock").exists()
+
+
+def test_exploration_lock_released_after_interruption(setup):
+    cfg, _, _ = setup
+
+    def stop(message):
+        raise KeyboardInterrupt("before generation")
+
+    with pytest.raises(KeyboardInterrupt, match="before generation"):
+        run_exploration(cfg, on_progress=stop)
+    directory = next(cfg.output_dir.iterdir())
+    assert not (directory / ".exploration.lock").exists()
+    assert resume_exploration(directory).rounds_completed == 3
 
 
 def test_resume_cli_and_single_batch_compatibility(setup):
@@ -180,7 +213,7 @@ def test_resume_cli_and_single_batch_compatibility(setup):
     output = CliRunner().invoke(app, ["explore", "resume", str(legacy)])
     assert output.exit_code == 1
     assert "Cannot resume" in output.output
-    assert "iterations > 1" in output.output
+    assert "Unsupported exploration run format" in output.output
 
 
 def test_per_round_budget(setup):
@@ -410,12 +443,65 @@ def test_diverse_journal_integrity(diverse_setup, change):
         resume_exploration(result.run_directory)
 
 
-def test_diverse_requires_checkpointed_rounds(tmp_path):
-    with pytest.raises(ValueError, match="iterations > 1"):
-        ExplorationConfig(
-            formula="Cu",
-            checkpoint=tmp_path / "model",
-            selection="diverse",
+def test_diverse_supports_one_checkpointed_round(diverse_setup):
+    cfg, calls, _ = diverse_setup
+    cfg.iterations = 1
+    result = run_exploration(cfg)
+    assert result.rounds_completed == result.rounds_requested == 1
+    assert result.counts["attempted"] == 2
+    assert result.counts["deferred"] == 1
+    assert resume_exploration(result.run_directory) == result
+    assert len(calls["relax"]) == 2
+
+
+@pytest.mark.parametrize("version", [None, 1, 3])
+def test_other_checkpoint_versions_are_rejected_without_migration(setup, version):
+    cfg, calls, _ = setup
+    result = run_exploration(cfg)
+    directory = Path(result.run_directory)
+    path = directory / "rounds-state.json"
+    state = json.loads(path.read_text())
+    if version is None:
+        state.pop("schema_version")
+    else:
+        state["schema_version"] = version
+    path.write_text(json.dumps(state))
+    before = {str(p): p.read_bytes() for p in directory.rglob("*") if p.is_file()}
+    for action in (summarize_exploration, resume_exploration):
+        with pytest.raises(ValueError, match="requires version 2"):
+            action(directory)
+    assert len(calls["relax"]) == 6
+    assert before == {str(p): p.read_bytes() for p in directory.rglob("*") if p.is_file()}
+
+
+def test_one_and_many_rounds_share_first_round_behavior(setup):
+    cfg, _, _ = setup
+    one = run_exploration(cfg.model_copy(update={"iterations": 1}))
+    many = run_exploration(cfg)
+    one_state = json.loads((Path(one.run_directory) / "rounds-state.json").read_text())
+    many_state = json.loads((Path(many.run_directory) / "rounds-state.json").read_text())
+    one_round = one_state["rounds"][0]
+    many_round = many_state["rounds"][0]
+    for first, second in zip(one_round["attempts"], many_round["attempts"], strict=True):
+        assert first["candidate"] == second["candidate"]
+        for field in (
+            "final_energy_eV",
+            "final_max_force_eV_per_A",
+            "converged",
+            "termination_reason",
+        ):
+            assert first["result"][field] == second["result"][field]
+    for directory in (Path(one.run_directory), Path(many.run_directory)):
+        assert all(
+            (directory / filename).is_file()
+            for filename in (
+                "request.json",
+                "resolved_config.json",
+                "provenance.json",
+                "rounds-state.json",
+                "cumulative-ranking.json",
+                "exploration-summary.json",
+            )
         )
 
 

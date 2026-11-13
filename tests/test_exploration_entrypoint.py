@@ -14,12 +14,19 @@ from typer.testing import CliRunner
 from matsim_agents.backends.mlip.relaxation import _RelaxCalculator
 from matsim_agents.cli import app
 from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord
+from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.workflows import (
     ExplorationConfig,
     check_exploration,
     load_exploration_config,
+    resume_exploration,
     run_exploration,
     summarize_exploration,
+)
+from matsim_agents.workflows.exploration_reporting import (
+    ExplorationSummary,
+    write_exploration_report,
 )
 
 
@@ -46,7 +53,7 @@ def config_path(tmp_path):
 @pytest.fixture
 def available_dependencies(monkeypatch):
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration.importlib.util.find_spec", lambda name: object()
+        "matsim_agents.workflows.exploration_config.importlib.util.find_spec", lambda name: object()
     )
 
 
@@ -73,7 +80,7 @@ def emt_workflow(monkeypatch, available_dependencies):
         calls["loads"] += 1
         return _RelaxCalculator(EMT(), 0, 0, None)
 
-    monkeypatch.setattr("matsim_agents.discovery.wrapper.generate_seed_action", generate)
+    monkeypatch.setattr("matsim_agents.workflows.exploration_rounds.generate_seed_action", generate)
     monkeypatch.setattr("matsim_agents.backends.mlip.relaxation._relaxation_calculator", calculator)
     return calls
 
@@ -85,6 +92,80 @@ def test_paths_resolve_relative_to_config_not_cwd(config_path, tmp_path, monkeyp
     cfg = load_exploration_config(config_path)
     assert cfg.checkpoint == config_path.parent / "model.model"
     assert cfg.output_dir == config_path.parent / "runs"
+
+
+@pytest.mark.parametrize(
+    "outcome,counts,next_step",
+    [
+        ("incomplete", {"converged": 0, "nonconverged": 0}, "Resume outstanding attempts"),
+        (
+            "relaxation_non_convergence",
+            {"converged": 0, "nonconverged": 2},
+            "force/stress histories",
+        ),
+        ("usable_minimum", {"converged": 1, "nonconverged": 0}, "Review the ranked structures"),
+    ],
+)
+def test_human_report_distinguishes_outcome_and_recovery(outcome, counts, next_step, tmp_path):
+    run = ScientificRunDirectory.create(
+        tmp_path,
+        workflow="explore",
+        request={},
+        resolved_config={},
+        provenance=ProvenanceRecord(workflow="explore", evidence_level=EvidenceLevel.HYPOTHESIS),
+    )
+    write_exploration_report(
+        run,
+        ExplorationSummary(
+            run_directory=str(run.path),
+            status="failed" if outcome == "incomplete" else "completed",
+            outcome=outcome,
+            counts=counts,
+            termination_reasons={"step_limit": 2},
+            errors=["backend failure"],
+            rounds_completed=1,
+            rounds_requested=3,
+        ),
+    )
+    report = (run.path / "report.md").read_text()
+    assert next_step in report
+    assert "step_limit: 2" in report
+    assert "backend failure" in report
+    assert "1/3" in report
+    assert "do not establish thermodynamic stability" in report
+    assert "No LLM, DFT, or scheduler job is launched" in report
+
+
+def test_report_write_failure_preserves_original_interruption(
+    config_path, available_dependencies, monkeypatch, caplog
+):
+    def interrupt(*args, **kwargs):
+        raise KeyboardInterrupt("requested stop")
+
+    def report_failure(*args, **kwargs):
+        raise OSError("report storage unavailable")
+
+    monkeypatch.setattr("matsim_agents.workflows.exploration_rounds._generate_round", interrupt)
+    monkeypatch.setattr(
+        "matsim_agents.workflows.exploration_rounds.write_exploration_report", report_failure
+    )
+    with pytest.raises(KeyboardInterrupt, match="requested stop"):
+        run_exploration(load_exploration_config(config_path))
+    assert "preserving original failure" in caplog.text
+    assert "report storage unavailable" in caplog.text
+
+
+def test_report_write_failure_after_execution_is_not_silenced(
+    config_path, emt_workflow, monkeypatch
+):
+    def report_failure(*args, **kwargs):
+        raise OSError("report storage unavailable")
+
+    monkeypatch.setattr(
+        "matsim_agents.workflows.exploration_rounds.write_exploration_report", report_failure
+    )
+    with pytest.raises(OSError, match="report storage unavailable"):
+        run_exploration(load_exploration_config(config_path))
 
 
 @pytest.mark.parametrize(
@@ -123,7 +204,7 @@ def test_preflight_has_no_scientific_side_effects(config_path, available_depende
 
 def test_preflight_reports_wrong_environment_and_missing_checkpoint(config_path, monkeypatch):
     monkeypatch.setattr(
-        "matsim_agents.workflows.exploration.importlib.util.find_spec", lambda name: None
+        "matsim_agents.workflows.exploration_config.importlib.util.find_spec", lambda name: None
     )
     cfg = load_exploration_config(config_path)
     cfg.checkpoint.unlink()
@@ -150,14 +231,18 @@ def test_run_uses_existing_engine_budget_cache_and_provenance(config_path, emt_w
     assert summary.counts["attempted"] == 2
     assert summary.counts["converged"] == 2
     assert summary.calculator_loads == emt_workflow["loads"] == 1
-    assert emt_workflow["actions"][0] == cfg.generation_action()
+    assert emt_workflow["actions"][0] == cfg.generation_action().model_copy(
+        update={"action_id": "round-0001"}
+    )
     run = Path(summary.run_directory)
     assert summarize_exploration(run) == summary
     saved = json.loads((run / "resolved_config.json").read_text())
-    assert saved["request_config"]["config"] == cfg.model_dump(mode="json")
-    assert saved["request_config"]["preflight"]["checkpoint_sha256"] == cfg.checkpoint_sha256
-    assert saved["policy"]["active_learning"] is False
-    assert saved["policy"]["dft_approved"] is False
+    assert saved == cfg.model_dump(mode="json")
+    state = json.loads((run / "rounds-state.json").read_text())
+    assert state["checkpoint_sha256"] == cfg.checkpoint_sha256
+    assert summary.rounds_completed == summary.rounds_requested == 1
+    assert resume_exploration(run) == summary
+    assert emt_workflow["loads"] == 1
     assert (run / "exploration-summary.json").is_file()
     # Repeating the request creates a fresh run, never overwrites prior evidence.
     second = run_exploration(cfg)
@@ -165,7 +250,8 @@ def test_run_uses_existing_engine_budget_cache_and_provenance(config_path, emt_w
 
 
 def test_full_relaxation_options_reach_calculator(config_path, emt_workflow, monkeypatch):
-    import matsim_agents.workflows.exploration as workflow
+    import matsim_agents.workflows.exploration_rounds as workflow
+    from matsim_agents.workflows.exploration import ExplorationRelaxationConfig
 
     captured = []
     original = workflow.relax_with_mlip
@@ -176,7 +262,7 @@ def test_full_relaxation_options_reach_calculator(config_path, emt_workflow, mon
 
     monkeypatch.setattr(workflow, "relax_with_mlip", relax)
     cfg = load_exploration_config(config_path)
-    cfg.relaxation = workflow.ExplorationRelaxationConfig(
+    cfg.relaxation = ExplorationRelaxationConfig(
         relax_cell=True,
         require_native_stress=True,
         stress_tolerance_eV_per_A3=0.01,
@@ -230,11 +316,17 @@ def test_nonconvergence_is_not_presented_as_successful_science(
     from matsim_agents.backends.mlip.results import RelaxationResult
 
     def unconverged(request, **kwargs):
+        output = Path(request.output_dir)
+        output.mkdir(parents=True)
+        trajectory = output / "test.traj"
+        csv = output / "test.csv"
+        trajectory.write_text("test trajectory")
+        csv.write_text("test csv")
         return RelaxationResult(
             structure_path=request.structure_path,
             optimized_structure_path=request.structure_path,
-            trajectory_path="",
-            log_csv_path="",
+            trajectory_path=str(trajectory),
+            log_csv_path=str(csv),
             final_energy_eV=-1.0,
             final_max_force_eV_per_A=1.0,
             num_steps=2,
@@ -242,35 +334,36 @@ def test_nonconvergence_is_not_presented_as_successful_science(
             termination_reason="max_steps",
         )
 
-    monkeypatch.setattr("matsim_agents.workflows.exploration.relax_with_mlip", unconverged)
+    monkeypatch.setattr("matsim_agents.workflows.exploration_rounds.relax_with_mlip", unconverged)
     summary = run_exploration(load_exploration_config(config_path))
     assert summary.status == "completed"
     assert summary.counts["converged"] == 0
     assert summary.counts["nonconverged"] == 2
     assert summary.termination_reasons == {"max_steps": 2}
-    record = json.loads((Path(summary.run_directory) / "results.json").read_text())
-    report = record["result"]["initial"]["stability"]
-    assert report is None or not report["ranking"]
+    report = json.loads((Path(summary.run_directory) / "cumulative-ranking.json").read_text())
+    assert report is None
 
 
 def test_generation_failure_keeps_complete_requested_config(config_path, emt_workflow, monkeypatch):
     def fail(action, output_dir):
         raise ValueError("invalid generator geometry")
 
-    monkeypatch.setattr("matsim_agents.discovery.wrapper.generate_seed_action", fail)
+    monkeypatch.setattr("matsim_agents.workflows.exploration_rounds.generate_seed_action", fail)
     cfg = load_exploration_config(config_path)
     with pytest.raises(ValueError, match="invalid generator geometry"):
         run_exploration(cfg)
     run = next(cfg.output_dir.iterdir())
     saved = json.loads((run / "resolved_config.json").read_text())
-    assert saved["request_config"]["config"] == cfg.model_dump(mode="json")
+    assert saved == cfg.model_dump(mode="json")
     summary = summarize_exploration(run)
     assert summary.status == "failed"
-    assert summary.errors == ["invalid generator geometry"]
+    assert summary.errors == ["ValueError: invalid generator geometry"]
 
 
 def test_empty_generation_is_a_failure(config_path, emt_workflow, monkeypatch):
-    monkeypatch.setattr("matsim_agents.discovery.wrapper.generate_seed_action", lambda *_args: [])
+    monkeypatch.setattr(
+        "matsim_agents.workflows.exploration_rounds.generate_seed_action", lambda *_args: []
+    )
     summary = run_exploration(load_exploration_config(config_path))
     assert summary.status == "failed"
     assert summary.counts["generated"] == 0
@@ -303,3 +396,64 @@ def test_example_contract_is_valid():
     assert cfg.formula == "Nb2O5"
     assert cfg.max_relaxations == 2
     assert cfg.relaxation.fmax == 0.02
+
+
+def test_public_exploration_imports_remain_available():
+    from matsim_agents.workflows import exploration, exploration_config, exploration_reporting
+
+    for name in (
+        "ExplorationCheck",
+        "ExplorationConfig",
+        "ExplorationGenerationConfig",
+        "ExplorationRelaxationConfig",
+        "check_exploration",
+        "load_exploration_config",
+    ):
+        assert getattr(exploration, name) is getattr(exploration_config, name)
+    assert exploration.ExplorationSummary is exploration_reporting.ExplorationSummary
+    assert exploration.summarize_exploration is exploration_reporting.summarize_exploration
+
+
+@pytest.mark.parametrize("action", ["summary", "resume"])
+def test_legacy_evidence_is_explicitly_unsupported(tmp_path, action):
+    (tmp_path / "provenance.json").write_text("{}")
+    (tmp_path / "results.json").write_text('{"legacy": true}')
+    result = CliRunner().invoke(app, ["explore", action, str(tmp_path)])
+    assert result.exit_code == 1
+    assert "Unsupported exploration run format" in result.output
+    assert "explore run CONFIG" in result.output
+
+
+def test_single_round_cli_resumes_interrupted_work(config_path, emt_workflow, monkeypatch):
+    import matsim_agents.workflows.exploration_rounds as engine
+
+    original = engine.relax_with_mlip
+    attempted = []
+
+    def interrupt(request, **kwargs):
+        attempted.append(request.structure_path)
+        if len(attempted) == 2:
+            raise KeyboardInterrupt("single-round interruption")
+        return original(request, **kwargs)
+
+    monkeypatch.setattr(engine, "relax_with_mlip", interrupt)
+    cfg = load_exploration_config(config_path)
+    progress = []
+    with pytest.raises(KeyboardInterrupt):
+        run_exploration(cfg, on_progress=progress.append)
+    directory = next(cfg.output_dir.iterdir())
+    assert progress[0] == f"Run directory: {directory}"
+    partial = summarize_exploration(directory)
+    assert partial.outcome == "incomplete"
+    assert partial.counts["attempted"] == 1
+    monkeypatch.setattr(engine, "relax_with_mlip", original)
+    output = CliRunner().invoke(app, ["explore", "resume", str(directory)])
+    assert output.exit_code == 0, output.output
+    summary = summarize_exploration(directory)
+    assert summary.rounds_completed == summary.rounds_requested == 1
+    assert summary.counts["attempted"] == 2
+    assert summary.calculator_loads == emt_workflow["loads"] == 2
+    assert len(emt_workflow["actions"]) == 1
+    before = {str(p): p.read_bytes() for p in directory.rglob("*") if p.is_file()}
+    assert resume_exploration(directory) == summary
+    assert before == {str(p): p.read_bytes() for p in directory.rglob("*") if p.is_file()}
