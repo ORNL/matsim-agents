@@ -20,6 +20,8 @@ potentials can be added without changing orchestration logic.
 
 For a bounded MACE-only phase search, use one YAML file with
 `matsim-agents explore check`, `explore run`, and `explore summary`.
+Use `iterations: 3` for resumable rounds and opt in to `selection: diverse`
+to skip equivalent structures and prioritize structural diversity.
 See the [step-by-step guide](docs/workflows/simple-exploration.md) and
 [Nb2O5 example](examples/workflows/explore-nb2o5.yaml).
 This path needs no custom Python driver and never launches LLM, DFT, or
@@ -1270,7 +1272,7 @@ matsim-agents supervisor-run COMPOSITION [options]  # discovery -> UQ -> optiona
 matsim-agents relax   CONFIG.yaml           # provenance-tracked MLIP/DFT relaxation
 matsim-agents characterize CONTRACT.yaml   # answer a characterization contract (resumable)
 matsim-agents explore check CONFIG.yaml    # static preflight for a bounded MACE phase search
-matsim-agents explore run CONFIG.yaml      # generate, relax, and rank one MLIP-only batch
+matsim-agents explore run CONFIG.yaml      # generate, select, relax, and rank MLIP-only batches
 matsim-agents explore summary RUN_DIRECTORY # inspect counts, termination reasons, and errors
 matsim-agents explore resume RUN_DIRECTORY # resume checkpointed multi-round exploration
 matsim-agents ledger  verify LEDGER.jsonl    # check the evidence ledger's hash chain and artifacts

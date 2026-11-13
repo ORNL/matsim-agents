@@ -23,6 +23,7 @@ from matsim_agents.backends.mlip.relaxation import (
 )
 from matsim_agents.backends.mlip.results import RelaxationResult
 from matsim_agents.discovery.seeds import PhaseCandidate, generate_seed_action
+from matsim_agents.discovery.selection import CandidateSelection, select_diverse_candidates
 from matsim_agents.discovery.stability import score_stability
 from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord
 from matsim_agents.execution.ledger import file_sha256
@@ -54,6 +55,7 @@ class Round(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     candidates: list[PhaseCandidate]
+    selection: CandidateSelection | None = None
     attempts: list[Attempt] = Field(default_factory=list)
     complete: bool = False
 
@@ -76,10 +78,42 @@ class RoundState(BaseModel):
         if len(self.rounds) > self.config.iterations:
             raise ValueError("Checkpoint contains too many rounds")
         for index, round_ in enumerate(self.rounds):
-            allowance = min(self.config.max_relaxations, len(round_.candidates))
-            if [attempt.candidate for attempt in round_.attempts] != list(
-                range(len(round_.attempts))
-            ):
+            if self.config.selection == "diverse":
+                if round_.selection is None:
+                    raise ValueError("Diverse round is missing checkpointed selection")
+                if len(round_.selection.decisions) != len(round_.candidates):
+                    raise ValueError("Selection must account for every generated candidate")
+                selected = round_.selection.selected
+                if len(selected) > self.config.max_relaxations:
+                    raise ValueError("Selection exceeds the per-round attempt budget")
+                available = sum(
+                    decision.disposition != "duplicate" for decision in round_.selection.decisions
+                )
+                if len(selected) != min(available, self.config.max_relaxations):
+                    raise ValueError(
+                        "Selection must fill the budget from available unique candidates"
+                    )
+                if round_.selection.references != _selection_references(
+                    self.rounds[:index], self.config.relaxation.fmax
+                ):
+                    raise ValueError("Selection references do not match prior checkpointed work")
+                representatives = set(round_.selection.references)
+                for decision, candidate in zip(
+                    round_.selection.decisions, round_.candidates, strict=True
+                ):
+                    if decision.disposition == "duplicate":
+                        if decision.duplicate_of not in representatives:
+                            raise ValueError("Duplicate decision has no prior representative")
+                    else:
+                        representatives.add(candidate.structure_path)
+            else:
+                if round_.selection is not None:
+                    raise ValueError("Sequential round cannot contain a diverse selection")
+                selected = list(range(min(self.config.max_relaxations, len(round_.candidates))))
+            allowance = len(selected)
+            if [attempt.candidate for attempt in round_.attempts] != selected[
+                : len(round_.attempts)
+            ]:
                 raise ValueError("Checkpoint attempts must be ordered without gaps or duplicates")
             if len(round_.attempts) > allowance:
                 raise ValueError("Checkpoint exceeds the per-round attempt budget")
@@ -99,7 +133,7 @@ def _compatibility() -> dict[str, str]:
     # Refuse to combine evidence produced by changed workflow/optimizer code
     # or scientific dependencies. Users can inspect the original run instead.
     from matsim_agents.backends.mlip import calculator, mace_inference, relaxation
-    from matsim_agents.discovery import composition, seeds, stability
+    from matsim_agents.discovery import composition, seeds, selection, stability
     from matsim_agents.workflows import exploration
 
     result = {"python": platform.python_version()}
@@ -109,6 +143,7 @@ def _compatibility() -> dict[str, str]:
         relaxation,
         composition,
         seeds,
+        selection,
         stability,
         exploration,
     ):
@@ -154,6 +189,18 @@ def summarize_rounds(run: ScientificRunDirectory) -> ExplorationSummary:
         "backend_errors": sum(attempt.error is not None for attempt in attempts),
     }
     counts["failed"] = counts["nonconverged"] + counts["backend_errors"]
+    if state.config.selection == "diverse":
+        counts.update(
+            {
+                disposition: sum(
+                    decision.disposition == disposition
+                    for round_ in state.rounds
+                    if round_.selection is not None
+                    for decision in round_.selection.decisions
+                )
+                for disposition in ("selected", "duplicate", "deferred")
+            }
+        )
     reasons: dict[str, int] = {}
     for result in results:
         reason = result.termination_reason or "not_recorded"
@@ -182,10 +229,12 @@ def summarize_rounds(run: ScientificRunDirectory) -> ExplorationSummary:
     )
 
 
-def _verify_artifacts(state: RoundState) -> None:
+def _verify_artifacts(run: ScientificRunDirectory, state: RoundState) -> None:
     required = {
         candidate.structure_path for round_ in state.rounds for candidate in round_.candidates
     }
+    if state.complete:
+        required.add(str(run.path / "cumulative-ranking.json"))
     for round_ in state.rounds:
         for attempt in round_.attempts:
             if attempt.result is not None:
@@ -208,6 +257,17 @@ def _remember(state: RoundState, filenames: list[str]) -> None:
     for filename in filenames:
         path = Path(filename).resolve()
         state.artifacts[str(path)] = file_sha256(path)
+
+
+def _selection_references(rounds: list[Round], fmax: float) -> list[str]:
+    references = []
+    for round_ in rounds:
+        for attempt in round_.attempts:
+            references.append(round_.candidates[attempt.candidate].structure_path)
+            result = attempt.result
+            if result is not None and result.converged and result.final_max_force_eV_per_A <= fmax:
+                references.append(result.optimized_structure_path)
+    return list(dict.fromkeys(references))
 
 
 def run_rounds(
@@ -282,7 +342,7 @@ def run_rounds(
             raise ValueError(
                 "Resume refused: workflow code or scientific dependency versions changed"
             )
-        _verify_artifacts(state)
+        _verify_artifacts(run, state)
         if state.complete:
             return summarize_rounds(run)
         state.error = None
@@ -306,7 +366,17 @@ def run_rounds(
                         for candidate in generate_seed_action(action, str(folder / "seeds"))
                     ]
                     _remember(state, [candidate.structure_path for candidate in candidates])
-                    state.rounds.append(Round(candidates=candidates))
+                    selection = (
+                        select_diverse_candidates(
+                            [candidate.structure_path for candidate in candidates],
+                            _selection_references(state.rounds, cfg.relaxation.fmax),
+                            formula=cfg.formula,
+                            budget=cfg.max_relaxations,
+                        )
+                        if cfg.selection == "diverse"
+                        else None
+                    )
+                    state.rounds.append(Round(candidates=candidates, selection=selection))
                     run.write_json("rounds-state.json", state)
                 round_ = state.rounds[index]
                 if round_.complete:
@@ -316,8 +386,18 @@ def run_rounds(
                         f"Round {index + 1}/{cfg.iterations}: "
                         f"{len(round_.attempts)} attempts already checkpointed"
                     )
-                allowance = min(cfg.max_relaxations, len(round_.candidates))
-                for candidate_index in range(len(round_.attempts), allowance):
+                selected = (
+                    round_.selection.selected
+                    if round_.selection is not None
+                    else list(range(min(cfg.max_relaxations, len(round_.candidates))))
+                )
+                if on_progress is not None and round_.selection is not None:
+                    on_progress(
+                        f"Round {index + 1}: {len(selected)} selected; "
+                        f"{sum(d.disposition == 'duplicate' for d in round_.selection.decisions)} "
+                        "duplicates skipped"
+                    )
+                for candidate_index in selected[len(round_.attempts) :]:
                     candidate = round_.candidates[candidate_index]
                     request = RelaxStructureInput(
                         structure_path=candidate.structure_path,
@@ -361,8 +441,12 @@ def run_rounds(
                 run.append_event("round_finished", {"round": index + 1})
                 _write_ranking(run, state)
             _write_ranking(run, state)
+            _remember(state, [str(run.path / "cumulative-ranking.json")])
             state.complete = True
         except BaseException as exc:
+            # Only publish the last atomically committed work, not partial
+            # hashes/results left in memory by an interrupted checkpoint.
+            state = _state(run)
             state.error = f"{type(exc).__name__}: {exc}"
             raise
         finally:
@@ -391,4 +475,25 @@ def _write_ranking(run: ScientificRunDirectory, state: RoundState) -> None:
         if results
         else None
     )
-    run.write_json("cumulative-ranking.json", report)
+    if report is None:
+        run.write_json("cumulative-ranking.json", None)
+        return
+    payload = report.model_dump(
+        mode="json",
+        include={
+            "formula",
+            "ground_state",
+            "ranking",
+            "evidence_level",
+            "ranking_mode",
+            "limitations",
+        },
+    )
+    payload["summary"] = (
+        f"Relative energy ranking of {len(report.ranking)} eligible relaxation attempt(s). "
+        "The ground_state entry is the lowest-energy observed candidate, "
+        "not a proven ground state. "
+        "Equivalent relaxed structures may appear more than once; no polymorph-degeneracy "
+        "or chemical-stability proxy is assessed."
+    )
+    run.write_json("cumulative-ranking.json", payload)

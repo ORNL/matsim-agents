@@ -75,11 +75,14 @@ class ExplorationConfig(BaseModel):
     precision: Literal["fp32", "fp64"] = "fp64"
     max_relaxations: int = Field(2, gt=0)
     iterations: int = Field(1, ge=1, le=1000)
+    selection: Literal["sequential", "diverse"] = "sequential"
     generation: ExplorationGenerationConfig = Field(default_factory=ExplorationGenerationConfig)
     relaxation: ExplorationRelaxationConfig = Field(default_factory=ExplorationRelaxationConfig)
 
     @model_validator(mode="after")
     def _validate_generation(self) -> ExplorationConfig:
+        if self.selection == "diverse" and self.iterations == 1:
+            raise ValueError("Diverse selection requires checkpointed rounds: set iterations > 1")
         self.formula = self.generation_action().formula
         return self
 
