@@ -2149,7 +2149,7 @@ def _execute_round_tasks(
             "--time",
             str(remaining_minutes),
             "--kill-on-bad-exit=1",
-            "--wait=10",
+            "--wait=0",
         ]
     subprocess.run(command, check=True)
 

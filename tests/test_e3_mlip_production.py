@@ -62,6 +62,29 @@ def test_spooled_slurm_launcher_resolves_submission_checkout(tmp_path, monkeypat
     assert "not a matsim-agents checkout" not in result.stderr
 
 
+def test_worker_step_waits_for_slow_ranks_after_first_success(monkeypatch, tmp_path):
+    import time
+
+    calls = []
+    monkeypatch.setenv("SLURM_JOB_ID", "test-allocation")
+    monkeypatch.setattr(
+        "benchmarks.e3.production.subprocess.run", lambda command, **_: calls.append(command)
+    )
+    _execute_round_tasks(
+        tmp_path / "tasks.jsonl",
+        tmp_path,
+        64,
+        4,
+        "worker-python",
+        hard_optimization_seconds=300,
+        round_deadline=time.monotonic() + 1200,
+    )
+    assert "--wait=0" in calls[0]
+    assert "--wait=10" not in calls[0]
+    assert "--kill-on-bad-exit=1" in calls[0]
+    assert "--time" in calls[0]
+
+
 def test_hard_deadline_records_nonconvergence_and_is_not_retried(tmp_path, monkeypatch):
     from matsim_agents.execution.deadline_worker import TaskDeadlineExceeded
 
