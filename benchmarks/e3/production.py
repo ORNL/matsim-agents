@@ -42,7 +42,7 @@ OPTIMIZER_SETTINGS = {
     "relax_cell": True,
     "stress_tolerance_eV_per_A3": 0.01,
     "max_cell_step_strain": 0.05,
-    "max_cell_total_strain": 0.25,
+    "max_cell_total_strain": 0.1,
     "require_native_stress": True,
     "phosphorene_cell_mask": [True, True, False, False, False, True],
     "mof_connectivity_guard": True,

@@ -81743,7 +81743,7 @@
   "optimizer": {
     "fmax_eV_A": 0.02,
     "max_cell_step_strain": 0.05,
-    "max_cell_total_strain": 0.25,
+    "max_cell_total_strain": 0.1,
     "maxiter": 500,
     "maxstep_A": 0.05,
     "mof_connectivity_guard": true,

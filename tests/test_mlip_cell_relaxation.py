@@ -157,6 +157,27 @@ def test_cell_strain_guard_rolls_back_rejected_step(tmp_path, monkeypatch):
     assert final.positions == pytest.approx(initial.positions)
 
 
+@pytest.mark.parametrize(
+    ("scale", "expected_reason"), [(1.099, "max_steps"), (1.101, "cell_total_strain_limit")]
+)
+def test_total_strain_limit_at_ten_percent(tmp_path, monkeypatch, scale, expected_reason):
+    initial_cell = bulk("Cu", "fcc", a=3.8, cubic=True).cell.array
+
+    def set_cell_step(optimizer, *args, **kwargs):
+        optimizer.atoms.atoms.set_cell(initial_cell * scale, scale_atoms=True)
+
+    monkeypatch.setattr(FIRE, "step", set_cell_step)
+    initial, final, result = _relax_emt(
+        tmp_path, monkeypatch, fmax=1e-10, max_cell_total_strain=0.1
+    )
+    assert result.termination_reason == expected_reason
+    assert final.cell.array == pytest.approx(
+        initial.cell.array
+        if expected_reason == "cell_total_strain_limit"
+        else initial.cell.array * scale
+    )
+
+
 def test_native_stress_requirement_rejects_forces_only(tmp_path, monkeypatch):
     source = tmp_path / "input.extxyz"
     write(source, bulk("Cu", "fcc", a=3.8))

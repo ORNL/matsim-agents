@@ -200,7 +200,7 @@ worker. The frozen common protocol for both strategies is:
   numerical stress fallback is forbidden. Phosphorene uses only xx, yy and xy
   strain, preserving its out-of-plane cell and vacuum. The filter requires the
   vacuum vector aligned with z. Stop and roll back any step exceeding 5%
-  principal strain in one step or 25% cumulative principal strain, or changing
+  principal strain in one step or 10% cumulative principal strain, or changing
   the MOF Zn-O/formate connectivity signature; these limits are screening
   safeguards, not proof of physical stability. Record active stress, atomic
   force and volume at each accepted step.
