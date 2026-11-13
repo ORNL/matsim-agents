@@ -1,34 +1,28 @@
-# E3 status: references, zero-shot evaluation, and first acquisition decisions
+# E3 status: references, zero-shot evaluation, and acquisition benchmarks
 
-Strategies: **LLM-guided adaptation** and **Rule-based adaptation**. Protocol and
-code are in [`benchmarks/e3/`](../../../benchmarks/e3/README.md).
+The current E3-MLIP benchmark uses one **LLM-guided adaptation** strategy.
+Protocol and code are in [`benchmarks/e3/`](../../../benchmarks/e3/README.md).
 The E3 Round 1 BCC DFT cases have since completed or reached terminal outcomes;
-the large E3-MLIP campaign has not started. No campaign DFT is authorized by
-this status document.
+the E3-MLIP benchmark is the three-round, six-class Perlmutter workload
+described below. E3-DFT/VASP submission remains separate.
 
-Mandatory exploration, learning, discovery, statistical, and reporting gates
-are specified in
-[`scientific-objectives-v1.yaml`](../../../benchmarks/e3/scientific-objectives-v1.yaml).
-The MLIP generation and optimization protocol is specified separately in
-[`e3-mlip-exploration-plan-v1.md`](e3-mlip-exploration-plan-v1.md).
+The exploration and reporting protocol is specified in
+[`scientific-objectives.yaml`](../../../benchmarks/e3/scientific-objectives.yaml)
+and [`e3-mlip-exploration-plan.md`](e3-mlip-exploration-plan.md).
 The selected primary checkpoint is **MACE-OMAT-0 medium**, trained on OMat24;
 its MACE-Torch loader alias is `medium-omat-0` and E3 CLI alias is
-`mace-omat-0-medium`. Campaign start remains blocked pending the exploration
-plan's species, class-generator, restart, and resource-authorization gates. Its
-checkpoint hash and MOF transfer applicability remain unresolved and must not
-be silently generalized. The first acquisition round is retained as production
-data; no separate pilot is required.
-E3-MLIP covers all six material classes with a target of 5,000 unique valid
-configurations per class per strategy (60,000 total logical optimizations,
-before matched-size controls). It uses no DFT or VASP evidence; E3-DFT
-identifiers, results, execution protocol, and acquisition budgets remain
-unchanged.
+`mace-omat-0-medium`. Its checkpoint hash is verified at execution; MOF
+transfer applicability remains unestablished. Each of six classes has three
+rounds, one registered seed, and at most 64 candidate relaxations per round.
+Results are descriptive: there is no paired strategy or seed comparison.
+E3-MLIP uses no DFT or VASP evidence; E3-DFT identifiers, results, execution
+protocol, and acquisition budgets remain unchanged.
 Perlmutter preparation and launch constraints are in the
 [combined E3-MLIP/E4 runbook](../perlmutter-e3-e4-execution-runbook.md).
 
 - [`inventory.json`](inventory.json): six-material inventory.
 - [`round1-bcc-manifest.json`](round1-bcc-manifest.json) and
-  [`round1-bcc.json`](round1-bcc.json): the frozen Round 1 paired BCC decision.
+  [`round1-bcc.json`](round1-bcc.json): the historical E3-DFT Round 1 BCC decision.
 - [`replay-summary.superseded-composition-diversity.json`](replay-summary.superseded-composition-diversity.json):
   references, zero-shot metrics, splits, and superseded v1 Rule-based
   selections.

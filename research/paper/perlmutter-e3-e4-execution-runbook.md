@@ -155,88 +155,78 @@ late activation, invalid settings, and spawned-worker inheritance:
 PYTHONPATH="$PWD/src:$PWD" .venv/bin/python -m pytest -q tests/test_mace_inference_imports.py tests/test_mace_backend.py tests/test_documentation.py
 ```
 
-### 3.1 Selected frozen model and campaign contract
+### 3.1 Model and benchmark scope
 
-The selected primary checkpoint is **MACE-OMAT-0 medium**, trained on OMat24,
-loaded with MACE-Torch alias `medium-omat-0` (E3 CLI alias
-`mace-omat-0-medium`). See the [E3-MLIP exploration
-plan](./e3/e3-mlip-exploration-plan-v1.md) for the frozen generation,
-optimization, and adaptive-comparison design. Checkpoint species coverage and
-class-specific transferability must pass the plan's feasibility gates; the MOF
-domain is not established.
+The benchmark uses **MACE-OMAT-0 medium**, trained on OMat24, loaded with
+MACE-Torch alias `medium-omat-0`. Its artifact SHA-256 is
+`d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a`.
+MOF transfer applicability is not independently established and must be
+reported as a limitation.
 
-E3-MLIP uses generated geometry and MLIP optimization outcomes only: do not
-load DFT references, labels, energies, forces, or results, and do not submit
-VASP. E3-DFT remains separate and unchanged. The design target is 5,000 unique
-valid starts per class **per strategy** (60,000 logical optimization jobs,
-before matched-size controls and any physical cache reuse); this is not
-submission authorization.
+The current benchmark supersedes the former large paired design. It runs one
+LLM-guided stream with seed `20261113` for each of the six material classes,
+with three adaptive rounds and at most 64 candidate relaxations per round.
+That is at most 192 tasks per class and 1,152 tasks total. There is no
+rule-based arm or multiple-seed replicate; report descriptive outcomes, not
+comparative effects or confidence intervals. Use generated geometry and MLIP
+outcomes only. Do not read DFT references or submit VASP; E3-DFT remains
+separate.
 
-### 3.2 Current entrypoint and planned workflow
+### 3.2 Resource limits and launch
 
-The [CPU preparation job](../../deployments/perlmutter/jobs/job-e3-mlip-preparation-perlmutter.sh)
-remains a diagnostic and is not the production path. The production entrypoint
-is
-[`job-e3-mlip-production-perlmutter.sh`](../../deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh):
-it runs one paired-seed/material/strategy stream per Slurm array element,
-launches one MACE worker per GPU on one node, enforces round barriers, and
-resumes only tasks without a terminal result. A persistent GPU-time ledger
-reserves each allocation before work starts and caps cumulative use at 2,000
-GPU-hours, including restarts. The complete adaptive schedule is generated
-with `python -m benchmarks.e3.production plan`; future-round structures are
-generated only after that round's strategy decision.
+The current entrypoint is
+[`job-e3-mlip-production-perlmutter.sh`](../../deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh).
+It maps one array element to each class and requests 16 GPU nodes, four A100
+GPUs per node, 64 workers, premium QOS, and a two-hour allocation. Each of the
+three rounds has a hard 30-minute wall-clock deadline, including generation,
+LLM selection, evaluation, and cleanup. Each geometry task is terminated by
+its parent process after five minutes and recorded as nonconverged. GPU workers
+may use up to 15 minutes of the round budget to initialize MACE.
+
+The maximum allocation is 192 GPU-node-hours, or 768 physical GPU-hours, across
+the six classes. A shared ledger reserves this full cap and reconciles usage
+after each job. Premium billing multipliers are separate from physical GPU
+hours; verify current project charges and authorization before launch.
+Five array elements are allowed concurrently. The final element may start
+later, so the array does not promise all six jobs start together.
 
 ```bash
-# Diagnostic only; this is not the revised exploration campaign.
-PROJECT_ROOT="$PWD" sbatch -A <allocation> \
-  deployments/perlmutter/jobs/job-e3-mlip-preparation-perlmutter.sh
+# Keep the existing production manifest and attempt records on resume.
+PYTHONPATH="$PWD/src:$PWD" .venv/bin/python -m benchmarks.e3.production validate \
+  --manifest benchmarks/e3/manifests/e3-mlip-production.json
 
-# Generate all 360 adaptive round manifests (no structures or jobs are run).
-python -m benchmarks.e3.production plan \
-  --output benchmarks/e3/manifests/e3-mlip-production-v1.json
-
-# After the 2,000 GPU-hour resource authorization:
-MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:regular:2000 \
-  PROJECT_ROOT="$PWD" sbatch --account=m5216 \
-  deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh
+# Actual CPU generation must pass before this helper requests GPU resources.
+# Example: material index 2 is LiFePO4. Use only the affected stream indices.
+MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:premium:768 \
+  PROJECT_ROOT="$PWD" bash \
+  deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh 2
 ```
 
-Submit with project account `m5216`; NERSC records GPU usage against billing
-account `m5216_g` and maps `regular` to GPU QoS `gpu_regular`.
+The [generation gate and recovery contract](../../docs/workflows/run-campaigns.md)
+describe shared capacities, installed-prototype filtering, raw-proposal retention,
+and generation-exhaustion evidence. No first-round GPU submission is allowed
+without a full real-generation receipt. Generation time remains part of the
+30-minute round budget. Later rounds are checked only after preceding optimization
+outcomes exist. An already-consumed LLM decision cannot be replaced under the
+frozen one-call-per-round limit without additional scientific authorization.
 
-The production launcher uses `$PROJECT_ROOT/.venv` and
-`$PROJECT_ROOT/.venv-mace` by default. Set
-`MATSIM_E3_MLIP_BASE_PYTHON` and `MATSIM_E3_MLIP_WORKER_PYTHON` when a source
-worktree shares the prepared base and MACE environments from another checkout.
+The launcher verifies the allocation's actual account, QOS, nodes, tasks,
+manifest, model environments, and resource reservation before calculation.
+It uses `$PROJECT_ROOT/.venv` and `$PROJECT_ROOT/.venv-mace` by default; set
+`MATSIM_E3_MLIP_BASE_PYTHON` and `MATSIM_E3_MLIP_WORKER_PYTHON` only when
+using prepared environments elsewhere.
+The current QOS rejects more than five submitted tasks; wait for capacity before
+submitting another material. The launcher places Copilot session state in a unique node-local
+`COPILOT_HOME`, seeds it from the user's Copilot CLI config when present, and
+removes it on exit. This keeps runtime metadata locks off CFS.
 
-The cell-relaxation protocol now uses native MACE stress for all families,
-in-plane-only strain for phosphorene, explicit stress convergence, and
-strain/connectivity guards; see the E3-MLIP exploration plan. The former
-fixed-cell array was cancelled. Before submitting a replacement, verify the
-updated manifest, qualify the cell-relaxation workflow and GPU throughput, and
-obtain authorization for any revised resource request. Do not mix prior
-fixed-cell results with this protocol.
-
-The cap is 500 GPU-node-hours at four GPUs per node. A single full array is
-limited to 1,999.2 GPU-hours (36 elements, one node each, 13 hours 53 minutes);
-unused reservation is reconciled to actual allocation time for safe restarts.
-The cap does not guarantee completion of all 61,120 logical optimizations:
-that would require an average below 118 GPU-seconds per optimization, which
-has not been measured. The controller preserves partial progress rather than
-exceeding the authorization.
-
-The production job requires the verified offline MACE cache and the base and
-MACE virtual environments. Each structure attempt preserves its initial
-geometry, optimizer trajectory, per-step log, terminal reason, hardware and
-timing. It uses no DFT labels or references. The legacy reference-backed
-E3-DFT commands and protocol below are unchanged and must not be used by
-E3-MLIP.
-
-The frozen LLM provider and model identifier are versioned in
-`benchmarks/e3/scientific-objectives-v1.yaml`; runtime environment variables
-cannot override them. Copilot uses provider-default decoding and does not
-guarantee the requested output-token limit. Install the Copilot SDK in the base
-environment and ensure the authenticated CLI and remote model are available
+The registered model is selected in
+`benchmarks/e3/scientific-objectives.yaml`; one configured Copilot model is
+queried once per round. Each attempt preserves its initial geometry,
+optimizer trajectory, per-step log, terminal reason, hardware, and timing.
+The Markdown campaign report distinguishes incomplete rounds and counts
+nonconverged and failed outcomes explicitly. No throughput guarantee or
+continuous 64-GPU utilization is implied. model are available
 from compute nodes. The 60-second optimization target is checked between
 completed steps, excludes loading and other allocation overhead, and can be
 exceeded by a slow or stalled step. After all streams finish, generate the
@@ -265,7 +255,7 @@ enforces the cumulative GPU-hour cap from its persistent ledger.
 - [ ] Stage E4 inputs/PAWs and verify hashes; obtain separate Perlmutter allocation approval.
 - [ ] Write the E4 Slurm dispatcher/entrypoint around the existing Perlmutter VASP step launcher; do not call PBS wrappers.
 - [ ] Run and qualify one E4 Perlmutter pilot before the scaling tiers.
-- [ ] Prefetch MACE-OMAT-0 medium using the existing Perlmutter downloader (`mace_mp medium-omat-0`).
-- [ ] Complete six-class E3 candidate generation, scientific/reference gates and updated frozen model protocol.
-- [ ] Implement a live paired E3-MLIP Slurm/DFT controller; current E3 commands only prepare, replay or freeze decisions.
-- [ ] Obtain a separate bounded Perlmutter E3-MLIP DFT allocation approval before any campaign DFT submission.
+- [ ] Confirm the E3-MLIP premium GPU-hour authorization and current project billing multiplier before submission.
+- [ ] Verify the prepared MACE/Copilot environments and checkpoint on Perlmutter.
+- [ ] Validate the generated E3-MLIP manifest and the actual six-element array/QOS behavior.
+- [ ] Keep E3-MLIP MLIP-only; any DFT/VASP work requires the separate E3-DFT protocol and authorization.

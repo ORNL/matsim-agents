@@ -1,38 +1,45 @@
 # E3 campaign protocols
 
-## E3-MLIP crystallographic exploration
+## E3-MLIP benchmark
 
-The revised design is documented in
-[`e3-mlip-exploration-plan-v1.md`](../../research/paper/e3/e3-mlip-exploration-plan-v1.md).
-It makes adaptive structure generation and mandatory MACE geometry optimization
-the workload: 5,000 unique valid configurations per class **per strategy**,
-with matched Rule-based and LLM-guided budgets and no DFT labels, references,
-or VASP.
+The current benchmark protocol is documented in
+[`e3-mlip-exploration-plan.md`](../../research/paper/e3/e3-mlip-exploration-plan.md)
+and encoded in
+[`scientific-objectives.yaml`](scientific-objectives.yaml). It covers six
+material classes, one LLM-guided strategy, seed `20261113`, and three adaptive
+rounds of at most 64 candidate relaxations per class (1,152 maximum total).
+Each class is limited to 16 Perlmutter GPU nodes and two hours, with 30-minute
+round deadlines and parent-enforced five-minute task cutoffs. The physical
+allocation cap is 768 GPU-hours on the premium QOS.
 
-The current Perlmutter preparation job remains a CPU-only single-point
-diagnostic; it does not implement the revised campaign. The feasibility pilot
-and production campaign are not authorized or launched. Per-class checkpoint
-limitations and preflight checks are tracked in
-[`mlip-suitability-v1.yaml`](../../research/paper/e3/mlip-suitability-v1.yaml).
+The generated manifest and execution policy are validated by
+[`production.py`](production.py); the Perlmutter array launcher is
+[`job-e3-mlip-production-perlmutter.sh`](../../deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh).
+Campaign execution uses MACE evidence only and does not read or submit E3-DFT/
+VASP calculations. One strategy and seed support descriptive reporting only,
+not a comparison or inferential claims. Resource authorization is still
+required before submission.
+
+Use the [CPU-generation submission helper](../../deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh)
+to execute and validate the actual first-round structures before requesting GPUs.
+The [shared executable catalog](feasibility.py) filters unavailable prototypes
+and exposes joint capacities to both policy implementations. The production
+design remains LLM-only. See the [generation and recovery contract](../../docs/workflows/run-campaigns.md)
+for raw proposal retention, generation shortfalls, and the frozen one-call
+limit that blocks unapproved replacement decisions.
 
 The discovery API now accepts a `SeedGenerationAction` for explicit
 formula-unit tiers, AFLOW candidate caps, PyXtal counts, space-group/prototype
 filters, and reproducible seeds. Pass it to `explore_composition` to relax the
 generated batch with the selected MLIP; the action and geometry metadata are
 recorded separately per action. This is the shared generation/relaxation
-interface. `benchmarks.e3.mlip_exploration.run_generation_round` executes a
-per-strategy action list with MACE-OMAT-0 medium and no relaxation cap, or
-selects from an allow-listed action space. The deterministic selector balances
-composition, size, generator, prototype and space-group coverage, with a
-smoothed convergence-rate term from that strategy's prior same-class MLIP
-results. The LLM selector receives only that strategy's round summaries and
-allowed actions; it must cite initial design or strategy-local result IDs, and
-unsupported or repeated actions are rejected. Cell relaxation is off by
-default and should be enabled only for a preflight-verified class/model
-combination. These generic selectors do not replace the required
-class-specific generators for alloys, phosphorene, defects and the MOF. The
-E3-MLIP campaign must use explicit actions rather than the backward-compatible
-`generate_seeds` defaults.
+interface. `benchmarks.e3.production` executes the registered three-round protocol.
+Actions are chosen from the material-specific allow-list; structures pass
+composition, periodicity, geometry, exact-hash, and symmetry-deduplication
+checks. The LLM sees only its material stream's prior round summaries and
+allowed actions. It must cite design or stream-local evidence IDs.
+Cell-relaxation settings and class-specific generators are fixed in the
+manifest. Generic legacy `generate_seeds` defaults are not used.
 
 ## Legacy E3-DFT paired adaptive acquisition across six materials
 

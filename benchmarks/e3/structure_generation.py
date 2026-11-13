@@ -91,6 +91,15 @@ class StructureGenerationError(ValueError):
     """Raised when an E3 structure action is invalid or cannot fill its batch."""
 
 
+class GenerationExhausted(StructureGenerationError):
+    """A valid seeded batch fell short; partial structures and diagnostics are retained."""
+
+    def __init__(self, message, records, diagnostics):
+        super().__init__(message)
+        self.records = records
+        self.diagnostics = diagnostics
+
+
 def _ase():
     try:
         import ase
@@ -388,7 +397,7 @@ def _alloy(
 
 
 def _olivine(formula: str, tier: int, family: str, defect: str | None, strain: Any, rng):
-    _, _, _, _, _, _ = _ase()
+    _, np, _, _, _, _ = _ase()
     if _parse_formula(formula) != {"Li": 1, "Fe": 1, "P": 1, "O": 4}:
         raise StructureGenerationError("The LiFePO4 generator accepts only LiFePO4.")
     base, source_path, source_hash = _template(_SOURCE_DIR / "lifepo4_olivine.extxyz")
@@ -426,7 +435,15 @@ def _olivine(formula: str, tier: int, family: str, defect: str | None, strain: A
         _random_strain(atoms, rng, amount)
         operation["strain_fraction"] = amount
         if operation["type"] == "source olivine parent":
-            operation["type"] = "bounded homogeneous olivine strain"
+            # Sub-percent affine strains alone collapse to the pristine parent
+            # under the frozen matcher. Include small non-affine distortions.
+            directions = rng.normal(size=atoms.positions.shape)
+            norms = np.linalg.norm(directions, axis=1)
+            directions /= np.maximum(norms[:, None], np.finfo(float).tiny)
+            radii = rng.uniform(0.0, 0.04, len(atoms))
+            atoms.positions += directions * radii[:, None]
+            operation["type"] = "bounded strained olivine with local distortions"
+            operation["maximum_local_displacement_angstrom"] = 0.04
     return _fresh_atoms(atoms), {
         "source_file": source_path,
         "source_sha256": source_hash,
@@ -1181,7 +1198,10 @@ def generate_structures(
     symmetry_matcher = make_structure_matcher()
     max_attempts = max(40, count * 30)
     geometry_rejections: Counter[str] = Counter()
+    rejections: Counter[str] = Counter()
+    attempts = 0
     for _ in range(max_attempts):
+        attempts += 1
         candidate_seed = int(rng_master.integers(0, 2**32, dtype=np.uint64))
         rng = np.random.default_rng(candidate_seed)
         if oxide_candidates is not None:
@@ -1233,6 +1253,7 @@ def generate_structures(
             _validate_geometry(atoms)
         except StructureGenerationError as exc:
             geometry_rejections[str(exc)] += 1
+            rejections["invalid_geometry"] += 1
             continue
         formula_units = source_metadata["formula_units"]
         if not _formula_matches(atoms, formula, formula_units):
@@ -1241,10 +1262,12 @@ def generate_structures(
             )
         geometry_hash = _geometry_hash(atoms, translation_invariant=material in _ALLOY_ELEMENTS)
         if geometry_hash in seen:
+            rejections["duplicate_geometry_hash"] += 1
             continue
         if any(
             structures_symmetry_equivalent(atoms, prior, symmetry_matcher) for prior, _ in selected
         ):
+            rejections["symmetry_equivalent"] += 1
             continue
         seen.add(geometry_hash)
         space_group, space_group_reason = _space_group(atoms)
@@ -1255,7 +1278,7 @@ def generate_structures(
         generation = {
             "generator": generator,
             "generator_module": "benchmarks.e3.structure_generation",
-            "generator_version": "1",
+            "generator_version": "2",
             "generator_source_file": str(Path(__file__).resolve()),
             "generator_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "ase_version": ase.__version__,
@@ -1298,16 +1321,6 @@ def generate_structures(
         selected.append((atoms, generation))
         if len(selected) == count:
             break
-    if len(selected) != count:
-        rejection_summary = "; ".join(
-            f"{reason} ({rejected})" for reason, rejected in geometry_rejections.most_common(3)
-        )
-        raise StructureGenerationError(
-            f"Requested {count} unique {material} structures for action {action_id!r}, "
-            f"but only {len(selected)} were generated in {max_attempts} attempts. "
-            f"Geometry rejections: {rejection_summary or 'none'}."
-        )
-
     records: list[dict[str, Any]] = []
     for atoms, generation in selected:
         canonical_hash = generation["canonical_geometry_sha256"]
@@ -1331,5 +1344,25 @@ def generate_structures(
                 "formula_units": generation["formula_units"],
                 "generation": generation,
             }
+        )
+    diagnostics = {
+        "action_id": action_id, "requested": count,
+        "generation_attempts": attempts, "accepted_unique": len(records),
+        "rejection_reasons": dict(rejections), "geometry_rejections": dict(geometry_rejections),
+        "category": "generation_shortfall" if len(records) != count else "complete",
+        "remaining_capacity": None,
+    }
+    (output / "generation-diagnostics.json").write_text(
+        json.dumps(diagnostics, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if len(records) != count:
+        rejection_summary = "; ".join(
+            f"{reason} ({rejected})" for reason, rejected in geometry_rejections.most_common(3)
+        )
+        raise GenerationExhausted(
+            f"Requested {count} unique {material} structures for action {action_id!r}, "
+            f"but only {len(selected)} were generated in {max_attempts} attempts. "
+            f"Geometry rejections: {rejection_summary or 'none'}.",
+            records, diagnostics,
         )
     return records

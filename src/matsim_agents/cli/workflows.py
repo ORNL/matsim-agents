@@ -86,7 +86,7 @@ def _check(cfg: WorkflowConfig) -> list[str]:
         raise ValueError(f"Native configuration does not exist: {cfg.config}")
     if isinstance(cfg.settings, E3MLIPSettings):
         if not (REPO / "benchmarks/e3/production.py").is_file():
-            raise ValueError("E3-MLIP requires a source checkout containing the frozen runner")
+            raise ValueError("E3-MLIP requires a source checkout containing the benchmark runner")
         checked = subprocess.run(
             [
                 sys.executable,
@@ -102,10 +102,9 @@ def _check(cfg: WorkflowConfig) -> list[str]:
             env={**os.environ, **_native_environment()},
         )
         if checked.returncode != 0:
-            raise ValueError("Frozen E3-MLIP preflight failed:\n" + checked.stdout + checked.stderr)
-        notes.append(
-            "Frozen E3-MLIP production protocol validated; run requires Slurm and approval."
-        )
+            detail = checked.stdout + checked.stderr
+            raise ValueError(f"E3-MLIP protocol preflight failed:\n{detail}")
+        notes.append("E3-MLIP protocol validated; run requires Slurm and approval.")
         return notes
     if isinstance(cfg.settings, E3DFTSettings):
         manifest = json.loads(cfg.settings.manifest.read_text())
@@ -217,39 +216,32 @@ def _command(cfg: WorkflowConfig, *, approved: bool) -> list[str]:
             raise ValueError("E3-MLIP production must run inside an existing Slurm allocation")
         settings = cfg.settings
         budget = json.loads(settings.resource_state.read_text())
-        if budget.get("schema_version") != 1 or budget.get("cap_gpu_seconds") != 7_200_000:
-            raise ValueError("E3-MLIP requires the native resource ledger with its frozen GPU cap")
+        cap = 2_764_800
+        if budget.get("schema_version") != 1 or budget.get("cap_gpu_seconds") != cap:
+            raise ValueError("E3-MLIP requires the 768-GPU-hour benchmark resource ledger")
         reservation = budget.get("reservations", {}).get(os.environ["SLURM_JOB_ID"])
-        if not isinstance(reservation, dict) or reservation.get("reserved_gpu_seconds", 0) <= 0:
-            raise ValueError(
-                "E3-MLIP requires this Slurm job's active GPU-budget reservation. "
-                "Use the documented production launcher and resource accounting."
-            )
-        command = [
+        if not isinstance(reservation, dict) or reservation.get("reserved_gpu_seconds") != 460_800:
+            raise ValueError("E3-MLIP requires this job's full 16-node/two-hour reservation.")
+        return [
             sys.executable,
             "-m",
             "benchmarks.e3.production",
-            "run-replicate",
+            "run-campaign",
             "--manifest",
             str(settings.manifest),
             "--output-root",
             str(settings.output_root),
+            "--resource-state",
+            str(settings.resource_state),
             "--material",
             settings.material,
-            "--strategy",
-            settings.strategy,
-            "--seed",
-            str(settings.seed),
             "--workers",
             str(settings.workers),
-            "--workers-per-node",
-            str(settings.workers_per_node),
+            "--worker-python",
+            str(settings.worker_python or (REPO / ".venv-mace/bin/python")),
+            "--hard-optimization-seconds",
+            str(settings.hard_optimization_seconds),
         ]
-        if settings.worker_python is not None:
-            command.extend(["--worker-python", str(settings.worker_python)])
-        if settings.hard_optimization_seconds is not None:
-            command.extend(["--hard-optimization-seconds", str(settings.hard_optimization_seconds)])
-        return command
     if isinstance(cfg.settings, E3DFTSettings):
         command = [
             sys.executable,
@@ -360,17 +352,16 @@ def init(
                     f"{field}: {raw[field]}", f"{field}: {json.dumps(str(getattr(cfg, field)))}"
                 )
         if cfg.settings is not None:
-            original = raw["settings"]["manifest"]
-            text = text.replace(
-                f"manifest: {original}",
-                f"manifest: {json.dumps(str(cfg.settings.manifest))}",
-            )
-            if isinstance(cfg.settings, E3MLIPSettings):
-                original = raw["settings"]["resource_state"]
-                text = text.replace(
-                    f"resource_state: {original}",
-                    f"resource_state: {json.dumps(str(cfg.settings.resource_state))}",
-                )
+            for field in ("manifest", "output_root", "resource_state", "worker_python"):
+                resolved = getattr(cfg.settings, field, None)
+                if resolved is not None:
+                    original = raw["settings"].get(field)
+                    if original is None:
+                        continue
+                    text = text.replace(
+                        f"{field}: {original}",
+                        f"{field}: {json.dumps(str(resolved))}",
+                    )
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("x") as stream:
             stream.write(text)

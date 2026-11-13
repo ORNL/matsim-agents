@@ -8,7 +8,6 @@ import pytest
 
 from benchmarks.e3.production import (
     E3_MLIP_CHECKPOINT_SHA256,
-    E3_STRATEGIES,
     MATERIALS,
     OPTIMIZER_SETTINGS,
     REPLICATE_SEEDS,
@@ -48,10 +47,11 @@ def test_hard_deadline_records_nonconvergence_and_is_not_retried(tmp_path, monke
         lambda: (Path("unused"), E3_MLIP_CHECKPOINT_SHA256),
     )
     calls = []
+    startup_deadlines = []
 
     class Worker:
-        def __init__(self, *args):
-            pass
+        def __init__(self, *args, **kwargs):
+            startup_deadlines.append(kwargs["startup_seconds"])
 
         def __enter__(self):
             return self
@@ -93,6 +93,7 @@ def test_hard_deadline_records_nonconvergence_and_is_not_retried(tmp_path, monke
         hard_optimization_seconds=300,
     ) == {"resumed": 1}
     assert calls == [300]
+    assert startup_deadlines == [15 * 60, 15 * 60]
     assert _task_result(path.parent.parent, task) is None
     task["optimizer"] = payload["optimizer"]
     assert _task_result(path.parent.parent, task) == path
@@ -120,17 +121,19 @@ def test_hard_deadline_is_forwarded_to_all_gpu_workers(monkeypatch, tmp_path):
 def test_existing_stream_cannot_change_optimization_deadline(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(build_campaign_manifest()))
-    stream = tmp_path / "runs/nb_ta_o/rule_based_adaptation/seed-20261111"
+    stream = tmp_path / "runs/nb_ta_o/llm_guided_adaptation/seed-20261113"
     stream.mkdir(parents=True)
     (stream / "execution-policy.json").write_text(json.dumps({"hard_optimization_seconds": 300}))
-    with pytest.raises(ValueError, match="Cannot change optimization deadline"):
+    with pytest.raises(ValueError, match="64 workers and a 300-second hard cutoff"):
         run_replicate(
             manifest_path,
             tmp_path / "runs",
             "nb_ta_o",
-            "rule_based_adaptation",
-            20261111,
+            "llm_guided_adaptation",
+            20261113,
+            worker_count=64,
             hard_optimization_seconds=60,
+            round_index=1,
         )
 
 
@@ -185,8 +188,8 @@ def test_wrapper_constructs_explicit_five_minute_deadline(monkeypatch, tmp_path)
         json.dumps(
             {
                 "schema_version": 1,
-                "cap_gpu_seconds": 7200000,
-                "reservations": {"test": {"reserved_gpu_seconds": 100}},
+                "cap_gpu_seconds": 2764800,
+                "reservations": {"test": {"reserved_gpu_seconds": 460800}},
             }
         )
     )
@@ -199,16 +202,15 @@ def test_wrapper_constructs_explicit_five_minute_deadline(monkeypatch, tmp_path)
                 "output_root": str(tmp_path / "runs"),
                 "resource_state": str(resource),
                 "material": "nb_ta_o",
-                "strategy": "rule_based_adaptation",
                 "hard_optimization_seconds": 300,
             },
         }
     )
     command = _command(cfg, approved=True)
-    assert command[-2:] == ["--hard-optimization-seconds", "300.0"]
+    assert command[-2:] == ["--hard-optimization-seconds", "300"]
 
 
-def test_campaign_manifest_has_all_matched_rounds_and_budgets():
+def test_campaign_manifest_has_six_classes_and_bounded_budgets():
     manifest = build_campaign_manifest()
 
     validate_campaign_manifest(manifest)
@@ -221,15 +223,15 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     assert manifest["optimizer"]["optimization_timeout_policy"] == "between_steps_v1"
     assert manifest["optimizer"]["mof_connectivity_version"] == "atom-indexed-v1"
     assert manifest["optimizer"]["phosphorene_cell_mask"] == [True, True, False, False, False, True]
-    assert len(manifest["rounds"]) == 6 * 2 * 3 * 10
-    assert manifest["total_logical_optimizations"] == 61120
+    assert len(manifest["rounds"]) == 6 * 3
+    assert manifest["total_logical_optimizations"] == 1152
     assert manifest["resource_request"]["account"] == "m5216"
     assert manifest["resource_request"]["billing_account"] == "m5216_g"
-    assert manifest["resource_request"]["qos"] == "regular"
-    assert manifest["resource_request"]["billing_qos"] == "gpu_regular"
-    assert manifest["resource_request"]["requested_gpu_hour_cap"] == 2000
-    assert manifest["resource_request"]["maximum_scheduled_gpu_hours"] == pytest.approx(1999.2)
-    assert manifest["resource_request"]["maximum_scheduled_gpu_node_hours"] == pytest.approx(499.8)
+    assert manifest["resource_request"]["qos"] == "premium"
+    assert manifest["resource_request"]["billing_qos"] == "gpu_premium"
+    assert manifest["resource_request"]["requested_gpu_hour_cap"] == 768
+    assert manifest["resource_request"]["maximum_scheduled_gpu_hours"] == pytest.approx(768)
+    assert manifest["resource_request"]["maximum_scheduled_gpu_node_hours"] == pytest.approx(192)
     assert manifest["llm_guided_configuration"] == {
         "provider": "copilot",
         "model": "gemini-4-carbon",
@@ -239,21 +241,15 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     }
 
     for material in MATERIALS:
-        for strategy in E3_STRATEGIES:
-            rows = [
-                row
-                for row in manifest["rounds"]
-                if row["material"] == material and row["strategy"] == strategy
-            ]
-            assert len(rows) == 30
-            assert sum(row["main_target"] for row in rows) == 5000
-            assert sum(row["finite_size_control_target"] for row in rows) == (
-                20 * len(MATERIALS[material]["tiers"])
-            )
-            assert sum(len(row["finite_size_control_families"]) for row in rows) == 20
-            assert {row["seed"] for row in rows} == set(REPLICATE_SEEDS)
-            for row in rows:
-                assert sum(row["minimum_main_count_by_tier"].values()) <= row["main_target"]
+        rows = [row for row in manifest["rounds"] if row["material"] == material]
+        assert len(rows) == 3
+        assert sum(row["main_target"] for row in rows) == 192
+        assert all(row["finite_size_control_target"] == 0 for row in rows)
+        assert {row["strategy"] for row in rows} == {"llm_guided_adaptation"}
+        assert {row["seed"] for row in rows} == set(REPLICATE_SEEDS)
+        for row in rows:
+            assert row["main_target"] == 64
+            assert sum(row["minimum_main_count_by_tier"].values()) <= row["main_target"]
 
 
 def test_perlmutter_launcher_targets_the_authorized_gpu_resources():
@@ -268,8 +264,11 @@ def test_perlmutter_launcher_targets_the_authorized_gpu_resources():
 
     assert 'SLURM_JOB_ACCOUNT:-}" == "m5216_g"' in text
     assert "#SBATCH -p gpu_ss11" not in text
-    assert "#SBATCH -q regular" in text
-    assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:regular:2000" in text
+    assert "#SBATCH -q premium" in text
+    assert "#SBATCH -N 16" in text
+    assert "#SBATCH -t 02:00:00" in text
+    assert "#SBATCH --array=0-5%5" in text
+    assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:premium:768" in text
     assert "MATSIM_E3_MLIP_BASE_PYTHON" in text
     assert "MATSIM_E3_MLIP_WORKER_PYTHON" in text
     assert text.index("export PYTHONPATH=") < text.index("budget-reserve")
@@ -366,7 +365,7 @@ def test_lifepo4_parent_action_capacity_is_shared_across_allocators():
                 },
             )()
 
-    with pytest.raises(ValueError, match="finite generation-action capacity"):
+    with pytest.raises(ValueError, match="unavailable or repeated action ID"):
         _llm_allocation(
             FakeChat(),
             "lifepo4",
@@ -439,7 +438,9 @@ def test_pristine_phosphorene_capacity_is_shared_across_allocators_and_rounds(fa
         target=1,
         minimum_by_tier={str(remaining["size_tier"]): 1},
     )
-    assert allocations == [{"action": remaining, "count": 1}]
+    assert allocations[0]["action"]["action_id"] == remaining["action_id"]
+    assert allocations[0]["count"] == 1
+    assert allocations[0]["action"]["feasibility"]["remaining_capacity"] == 1
 
 
 @pytest.mark.parametrize(
@@ -462,12 +463,13 @@ def test_round_materialization_replicates_control_families_across_tiers(
         row
         for row in manifest["rounds"]
         if row["material"] == material
-        and row["strategy"] == E3_STRATEGIES[0]
+        and row["strategy"] == "llm_guided_adaptation"
         and row["seed"] == REPLICATE_SEEDS[0]
         and row["round"] == 1
     )
     spec = {
         **spec,
+        "strategy": "rule_based_adaptation",
         "main_target": 1,
         "minimum_main_count_by_tier": minimum_by_tier,
         "finite_size_control_families": [0],
@@ -535,11 +537,13 @@ def test_llm_policy_validates_exact_budget_allowlist_and_evidence():
         target=2,
         minimum_by_tier={str(allowed["size_tier"]): 2},
     )
-    assert allocations == [{"action": allowed, "count": 2}]
+    assert allocations[0]["action"]["action_id"] == allowed["action_id"]
+    assert allocations[0]["count"] == 2
+    assert allocations[0]["action"]["feasibility"]["generator_available"]
     assert citations == ["campaign-design"]
     assert rationale
 
-    with pytest.raises(ValueError, match="outside the list|invalid or repeated action"):
+    with pytest.raises(ValueError, match="unavailable or repeated action"):
         _llm_allocation(
             type(
                 "FakeChat",
@@ -729,28 +733,30 @@ def test_timed_out_structures_are_not_counted_as_relaxed_minima():
     assert _distinct_relaxed_minima(tasks, results) == {}
 
 
-def test_completed_fixed_cell_round_cannot_be_resumed(tmp_path):
+def test_prior_fixed_cell_evidence_is_not_replayed(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(build_campaign_manifest()))
     round_dir = (
         tmp_path
         / "runs"
         / "bcc_refractory"
-        / "rule_based_adaptation"
-        / "seed-20261111"
+        / "llm_guided_adaptation"
+        / "seed-20261113"
         / "round-01"
     )
     round_dir.mkdir(parents=True)
     (round_dir / "round-summary.json").write_text(json.dumps({"status": "complete"}))
     (round_dir / "round-manifest.json").write_text(json.dumps({"optimizer": {"relax_cell": False}}))
-    with pytest.raises(ValueError, match="different optimization protocol"):
+    with pytest.raises(ValueError, match="requires a fresh stream"):
         run_replicate(
             manifest_path,
             tmp_path / "runs",
             "bcc_refractory",
-            "rule_based_adaptation",
-            20261111,
-            worker_count=1,
+            "llm_guided_adaptation",
+            20261113,
+            worker_count=64,
+            hard_optimization_seconds=300,
+            round_index=1,
         )
 
 

@@ -44,84 +44,118 @@ moving a wrapper between directories. Native execution records its working
 directory and reuses it on resume, preserving those relative paths. Do not put credentials in configs or
 arguments: invocation evidence records them.
 
-## E3-MLIP: choose one frozen production stream
+## E3-MLIP: current three-round benchmark
 
 ```bash
 matsim-agents workflow init e3-mlip ./mlip-campaign.yaml
-# Inspect and edit material, strategy, seed, output directories, worker_python,
-# and resource_state. Do not change the frozen scientific manifest.
+# Select a material class and set the prepared worker_python and paths.
 matsim-agents workflow check ./mlip-campaign.yaml
 ```
 
 The annotated [MLIP preset](../../examples/workflows/e3-mlip.yaml) uses the
-[frozen production manifest](../../benchmarks/e3/manifests/e3-mlip-production-v1.json).
+[current production manifest](../../benchmarks/e3/manifests/e3-mlip-production.json).
 The E3 presets require a source checkout containing the native campaign files.
 The wrapper gives their subprocesses that checkout's package paths, so copied
 presets can be checked from outside the repository.
-One invocation runs one material/strategy/seed stream, including its ten adaptive
-rounds. This is **not** a smoke-test budget. The entire frozen campaign comprises
-six materials, two strategies, and three seeds (360 material-stream rounds).
+The benchmark runs one LLM-guided stream per class: three adaptive rounds,
+seed `20261113`, and at most 64 candidate relaxations per round. It does not
+include a rule-based arm or multiple seeds, so report descriptive results only.
 
 - Materials: `bcc_refractory`, `fcc_cantor`, `lifepo4`, `phosphorene`,
   `nb_ta_o`, `zn_formate_mof`.
-- Strategies: `llm_guided_adaptation`, `rule_based_adaptation`.
-- Seeds: `20261111`, `20261112`, `20261113`.
+- Strategy: `llm_guided_adaptation`.
+- Maximum total: 1,152 candidate relaxations across all six classes.
 - Use the prepared inference environment and `MACE_ARTIFACT_DIR` from the
   [Perlmutter execution runbook](../../research/paper/perlmutter-e3-e4-execution-runbook.md).
   The native runner verifies the frozen model artifact; wrapper static preflight
   does not load MACE or qualify CUDA.
 
-Actual execution requires **both** explicit approval and an existing Slurm
-allocation with an active reservation for `SLURM_JOB_ID` in `resource_state`:
+Each material's allocation is limited to 16 premium-QOS GPU nodes for two
+hours; it uses 64 workers, a five-minute parent-enforced geometry-task cutoff,
+and a hard 30-minute round deadline. The six allocations reserve at most
+768 physical GPU-hours (192 GPU-node-hours). Premium billing multipliers are
+separate; verify current project charges. A five-element array concurrency
+limit does not guarantee simultaneous start or continuous GPU utilization.
+The round deadline includes generation and LLM work as well as GPU evaluation.
+GPU workers may use up to 15 minutes of that round budget to initialize MACE;
+the remaining time is still bounded by the 30-minute round deadline.
 
 ```bash
-# Only inside an already approved and accounted allocation:
-matsim-agents workflow run ./mlip-campaign.yaml --approve-execution
+# Keep the existing manifest on resume. This performs no inference or submission.
+PYTHONPATH="$PWD/src:$PWD" .venv/bin/python -m benchmarks.e3.production validate \
+  --manifest benchmarks/e3/manifests/e3-mlip-production.json
+
+# Example: actual CPU generation, then authorized GPU submission for LiFePO4 (index 2).
+# This stops without submission if allocation, capacity, or real generation fails.
+MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:premium:768 \
+  PROJECT_ROOT="$PWD" bash \
+  deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh 2
 ```
 
-The wrapper does not submit Slurm jobs, create reservations, or reconcile
-allocation charges. Preserve the reserve/release lifecycle and walltime/resource
-limits in the [production launcher](../../deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh).
-If using its command slot for the wrapper, keep its accounting and exit trap;
-never run a second stream concurrently against the same reservation. The normal
-launcher already runs the native stream directly and remains a supported choice.
-Missing approval, allocation, or reservation is an error, not a CPU fallback.
+Use the [CPU-generation submission helper](../../deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh),
+not direct `sbatch`, for each stream. Index mapping is 0 BCC, 1 FCC, 2 LiFePO4,
+3 phosphorene, 4 Nb-Ta-O, 5 Zn-formate. Do not relaunch completed streams.
+For a partially completed stream, set `MATSIM_E3_MLIP_START_ROUND` to its first
+incomplete round; all earlier round summaries must be complete.
 
-### Five-minute hard geometry cutoff
+The CPU gate executes the selected actions with production seeds, validates
+composition and geometry, and applies the unchanged symmetry-aware deduplication.
+Only a full 64-candidate workload receives `generation-preflight.json`; the GPU
+launcher checks this receipt and all structure checksums before reservation.
+Generation time is deducted from the round's 1,800-second budget, excluding queue
+waiting time. Later adaptive rounds are generated only after the previous round's
+optimization results exist, and before dispatching that round's GPU tasks.
 
-The MLIP preset now explicitly sets `hard_optimization_seconds: 300`.
-Each GPU's controller runs geometry tasks in a spawned process. At 300 seconds
-it kills that process even if it is blocked inside a force evaluation/optimizer
-step, then atomically records `status: nonconverged`, `converged: false`, and
-`termination_reason: optimization_time_limit`. Partial artifacts are retained,
-but no final energy/force or convergence claim is invented. Completed timeout
-records are not automatically retried on resume.
+Both acquisition policies use the same executable catalog and joint capacity
+validator, although the production experiment remains LLM-only. The catalog
+records installed AFLOW prototypes, template availability, perturbation bounds,
+capacity-group aliases, and remaining operational capacity. Small four-atom
+phosphorene reconstructions and 0.5% homogeneous MOF strains have a conservative
+capacity of one per group/tier; this is not a physical limit on possible structures.
+The existing affine-strain bounds and equivalence tolerances are unchanged.
+Generator revision 2 adds explicitly recorded, bounded non-affine displacements
+of at most 0.04 Angstrom to the strained-olivine family (small relative to
+interatomic bond lengths), preserving composition and the olivine template.
+Pure single-antisite actions have their template-symmetry orbit capacities
+of 2, 4, 8, and 16 for tiers 4, 8, 16, and 32; aliases share those limits.
 
-The task budget includes model loading on first use, initial evaluation,
-relaxation, and final scientific measurements. Worker-process initialization
-has a separate bounded startup allowance; this is not a whole-round or
-allocation walltime limit. Calculators are reused across successful tasks.
-After a forced timeout the next task gets a fresh process/calculator.
-Process scheduling and cleanup can add small overhead beyond 300 seconds,
-but a stuck native calculation cannot continue indefinitely.
+Round-local `acquisition/` records contain versioned catalogs, prompts, unmodified
+LLM responses saved before parsing, parsed and accepted allocations, and precise
+rejection/shortfall diagnostics. Partial generation artifacts are retained and
+never counted as MLIP evaluations. The deterministic policy may make another
+explicit decision using generation-shortfall evidence. The frozen production
+protocol allows **one LLM call per round**: a rejected or exhausted proposal does
+not permit an automatic extra call. Replacing an already-consumed legacy
+decision requires scientific authorization; missing historical raw responses
+are recorded as unavailable, never reconstructed or invented.
 
-This is an explicit **new execution policy**, not a silent modification of the
-frozen 60-second between-step protocol. It is stored in `execution-policy.json`,
-each task/result's optimizer metadata, and the round's `execution_optimizer`.
-Use fresh output streams; switching the deadline when resuming is rejected.
-The underlying frozen manifest remains unchanged. Native invocation accepts
-`--hard-optimization-seconds 300`; omitting it retains the frozen protocol.
-This option does not itself change ten rounds to three or enforce the proposed
-16-node/two-hour class-level schedule.
+The launcher verifies the allocation's actual account, QOS, nodes, and time
+limit; reserves the full allocation in the shared resource ledger; and
+reconciles usage on exit. It uses a private, unique node-local `COPILOT_HOME`
+for Copilot sessions, initializing it from the user's CLI config when present
+and removing it at exit. This keeps runtime metadata locks off CFS. Array
+indices 0-5 map to the six classes listed above. The scheduler rejects all six
+submitted tasks at once with its current five-task submit limit; submit the
+last task only after a slot opens. Do not bypass these checks or run the
+workflow wrapper as a second writer in the same allocation.
 
-For an interrupted invocation, native round manifests remain authoritative:
+### Hard task and round cutoffs
 
-```bash
-matsim-agents workflow resume WORKFLOW_RUN_DIRECTORY --approve-execution
-```
+Each geometry task runs in a spawned process. At 300 seconds its controller
+kills the process even if it is stuck inside a force evaluation/optimizer step,
+then records it as terminal and nonconverged. Partial artifacts are retained;
+no final energy, force, or convergence claim is invented.
 
-Resume needs an active allocation/reservation again and delegates native
-production replay/reuse; it does not reinterpret scientific results.
+The parent supervises each complete round for 30 minutes, including structure
+generation, the remote LLM decision, GPU evaluation, and cleanup. Timeout
+terminates the round process group and writes an incomplete campaign report.
+The 2-hour Slurm allocation is the outer limit; the three 30-minute round
+budgets leave up to 30 minutes for startup and finalization.
+
+The run writes `report.md`, `campaign-summary.json`, round manifests/summaries,
+and per-task structure/trajectory/result evidence under the configured output
+root. Failed or nonconverged attempts are retained and not silently replayed.
+The lowest MLIP energy is not a ground-state or DFT-validation claim.
 
 ## E3-DFT/VASP: validate the existing frozen Aurora batch
 

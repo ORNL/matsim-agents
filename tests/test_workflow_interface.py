@@ -203,8 +203,8 @@ def mlip_preset(tmp_path):
         json.dumps(
             {
                 "schema_version": 1,
-                "cap_gpu_seconds": 7_200_000,
-                "reservations": {"123": {"reserved_gpu_seconds": 60}},
+                "cap_gpu_seconds": 2_764_800,
+                "reservations": {"123": {"reserved_gpu_seconds": 460_800}},
             }
         )
     )
@@ -216,7 +216,6 @@ def mlip_preset(tmp_path):
                 "resource_state": str(resource),
                 "output_root": str(tmp_path / "science"),
                 "material": "nb_ta_o",
-                "strategy": "rule_based_adaptation",
             },
         }
     )
@@ -229,12 +228,12 @@ def test_e3_mlip_requires_approval_allocation_and_reservation(mlip_preset, monke
     with pytest.raises(ValueError, match="Slurm allocation"):
         _command(mlip_preset, approved=True)
     monkeypatch.setenv("SLURM_JOB_ID", "456")
-    with pytest.raises(ValueError, match="GPU-budget reservation"):
+    with pytest.raises(ValueError, match="full 16-node/two-hour"):
         _command(mlip_preset, approved=True)
     monkeypatch.setenv("SLURM_JOB_ID", "123")
     command = _command(mlip_preset, approved=True)
-    assert command[2:4] == ["benchmarks.e3.production", "run-replicate"]
-    assert "--seed" in command and "--workers-per-node" in command
+    assert command[2:4] == ["benchmarks.e3.production", "run-campaign"]
+    assert "--workers" in command and "64" in command
     # Command construction never executes the campaign.
 
 
@@ -258,7 +257,7 @@ def test_native_e3_protocol_validation_never_executes_campaign(monkeypatch, caps
             [
                 "validate",
                 "--manifest",
-                str(REPO / "benchmarks/e3/manifests/e3-mlip-production-v1.json"),
+                str(REPO / "benchmarks/e3/manifests/e3-mlip-production.json"),
             ]
         )
         == 0
@@ -269,7 +268,7 @@ def test_native_e3_protocol_validation_never_executes_campaign(monkeypatch, caps
 def test_e3_static_check_from_outside_the_checkout(tmp_path, mlip_preset):
     from matsim_agents.cli.workflows import REPO
 
-    mlip_preset.settings.manifest = REPO / "benchmarks/e3/manifests/e3-mlip-production-v1.json"
+    mlip_preset.settings.manifest = REPO / "benchmarks/e3/manifests/e3-mlip-production.json"
     path = tmp_path / "workflow.yaml"
     path.write_text(yaml.safe_dump(mlip_preset.model_dump(mode="json")))
     result = subprocess.run(

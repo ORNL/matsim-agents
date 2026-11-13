@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH -J e3-mlip
 #SBATCH -C gpu
-#SBATCH -q regular
-#SBATCH -N 1
-#SBATCH -t 13:53:00
+#SBATCH -q premium
+#SBATCH -N 16
+#SBATCH -t 02:00:00
 #SBATCH --gpus-per-node=4
 #SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=8
-#SBATCH --array=0-35%4
+#SBATCH --array=0-5%5
 #SBATCH -o %x-%A_%a.out
 #SBATCH -e %x-%A_%a.err
 
@@ -24,47 +24,83 @@ REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
   echo "ERROR: this campaign requires Perlmutter account m5216_g" >&2
   exit 2
 }
-[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "m5216:regular:2000" ]] || {
-  echo "ERROR: explicit authorization required: MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:regular:2000" >&2
+[[ "${SLURM_JOB_QOS:-}" == "gpu_premium" ]] || {
+  echo "ERROR: this campaign requires the gpu_premium QOS" >&2
+  exit 2
+}
+[[ "${SLURM_NNODES:-}" == "16" && "${SLURM_NTASKS:-}" == "64" ]] || {
+  echo "ERROR: each material campaign requires exactly 16 nodes and 64 tasks" >&2
+  exit 2
+}
+[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "m5216:premium:768" ]] || {
+  echo "ERROR: explicit authorization required: MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:premium:768" >&2
   exit 2
 }
 
 BASE_PYTHON="${MATSIM_E3_MLIP_BASE_PYTHON:-${REPO}/.venv/bin/python}"
 MACE_PYTHON="${MATSIM_E3_MLIP_WORKER_PYTHON:-${REPO}/.venv-mace/bin/python}"
-[[ -x "${BASE_PYTHON}" ]] || { echo "ERROR: missing ${BASE_PYTHON}" >&2; exit 2; }
-[[ -x "${MACE_PYTHON}" ]] || { echo "ERROR: missing ${MACE_PYTHON}" >&2; exit 2; }
+[[ -x "${BASE_PYTHON}" && -x "${MACE_PYTHON}" ]] || {
+  echo "ERROR: prepared base and MACE Python environments are required" >&2
+  exit 2
+}
 export PATH="${HOME}/.local/bin:${PATH}"
 "${BASE_PYTHON}" -c 'import copilot' || {
   echo "ERROR: Copilot SDK is missing from ${BASE_PYTHON}" >&2
   exit 2
 }
-command -v copilot >/dev/null || { echo "ERROR: Copilot CLI is not on PATH" >&2; exit 2; }
-MANIFEST="${MATSIM_E3_MLIP_MANIFEST:-${REPO}/benchmarks/e3/manifests/e3-mlip-production-v1.json}"
-OUTPUT_ROOT="${MATSIM_E3_MLIP_OUTPUT_ROOT:-${REPO}/runs/e3-mlip-production-v1}"
-[[ -s "${MANIFEST}" ]] || { echo "ERROR: missing production manifest: ${MANIFEST}" >&2; exit 2; }
-[[ "${SLURM_NNODES:-}" == "1" ]] || {
-  echo "ERROR: this allocation is capped for exactly one GPU node per array element" >&2
+command -v copilot >/dev/null || {
+  echo "ERROR: Copilot CLI is not on PATH" >&2
   exit 2
 }
-mkdir -p "${OUTPUT_ROOT}"
-RESOURCE_STATE="${REPO}/runs/e3-mlip-production-v1/resource-budget.json"
-RESOURCE_START=${SECONDS}
+
+MANIFEST="${MATSIM_E3_MLIP_MANIFEST:-${REPO}/benchmarks/e3/manifests/e3-mlip-production.json}"
+OUTPUT_ROOT="${MATSIM_E3_MLIP_OUTPUT_ROOT:-${REPO}/runs/e3-mlip-production}"
+[[ -s "${MANIFEST}" ]] || { echo "ERROR: missing campaign manifest: ${MANIFEST}" >&2; exit 2; }
 export PYTHONPATH="${REPO}:${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
+"${BASE_PYTHON}" -m benchmarks.e3.production validate --manifest "${MANIFEST}"
+
+TASK_ID="${SLURM_ARRAY_TASK_ID:?array task id is required}"
+MATERIALS=(bcc_refractory fcc_cantor lifepo4 phosphorene nb_ta_o zn_formate_mof)
+[[ "${TASK_ID}" =~ ^[0-5]$ ]] || { echo "ERROR: invalid material array index" >&2; exit 2; }
+MATERIAL="${MATERIALS[TASK_ID]}"
+"${BASE_PYTHON}" -m benchmarks.e3.production verify-preflight \
+  --manifest "${MANIFEST}" --output-root "${OUTPUT_ROOT}" --material "${MATERIAL}" \
+  --round-index "${MATSIM_E3_MLIP_START_ROUND:-1}"
+mkdir -p "${OUTPUT_ROOT}"
+RESOURCE_STATE="${OUTPUT_ROOT}/resource-budget.json"
+RESOURCE_START=${SECONDS}
 "${BASE_PYTHON}" -m benchmarks.e3.production budget-reserve \
   --state "${RESOURCE_STATE}" \
   --reservation-id "${SLURM_JOB_ID}" \
-  --reserved-gpu-seconds 199920 \
-  --cap-gpu-seconds 7200000
+  --reserved-gpu-seconds 460800 \
+  --cap-gpu-seconds 2764800
+
+cleanup_copilot_home() {
+  local path="${COPILOT_HOME:-}"
+  [[ -z "${path}" ]] && return 0
+  local expected_prefix="${copilot_home_root}/matsim-copilot-${SLURM_JOB_ID}."
+  if [[ "${path}" != "${expected_prefix}"* ]]; then
+    echo "ERROR: refusing to remove unexpected Copilot home: ${path}" >&2
+    return 1
+  fi
+  if ! rm -rf -- "${path}"; then
+    echo "ERROR: failed to remove private Copilot home: ${path}" >&2
+    return 1
+  fi
+}
 
 release_resource_budget() {
   local status=$?
-  local runtime_seconds=$((SECONDS - RESOURCE_START + 60))
+  local runtime_seconds=$((SECONDS - RESOURCE_START))
   trap - EXIT
   if ! "${BASE_PYTHON}" -m benchmarks.e3.production budget-release \
     --state "${RESOURCE_STATE}" \
     --reservation-id "${SLURM_JOB_ID}" \
-    --actual-gpu-seconds "$((runtime_seconds * 4))"; then
-    echo "ERROR: failed to reconcile the GPU-hour reservation; cap remains conservatively reserved" >&2
+    --actual-gpu-seconds "$((runtime_seconds * 64))"; then
+    echo "ERROR: failed to reconcile GPU allocation; reservation remains conservatively charged" >&2
+    status=1
+  fi
+  if ! cleanup_copilot_home; then
     status=1
   fi
   exit "${status}"
@@ -76,51 +112,46 @@ load_perlmutter_modules_gpu
 source "${REPO}/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
 configure_mace_model_artifacts "${REPO}"
 
+copilot_home_root="${SLURM_TMPDIR:-/tmp}"
+if [[ ! -d "${copilot_home_root}" || ! -w "${copilot_home_root}" ]]; then
+  copilot_home_root="/tmp"
+fi
+COPILOT_HOME="$(mktemp -d "${copilot_home_root}/matsim-copilot-${SLURM_JOB_ID}.XXXXXX")"
+export COPILOT_HOME
+if [[ -r "${HOME}/.copilot/config.json" ]]; then
+  cp -p "${HOME}/.copilot/config.json" "${COPILOT_HOME}/config.json"
+  chmod 600 "${COPILOT_HOME}/config.json"
+fi
+
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
-export MATSIM_E3_MLIP_WORKERS=4
-export MATSIM_E3_MLIP_WORKER_PYTHON="${MACE_PYTHON}"
-
-TASK_ID="${SLURM_ARRAY_TASK_ID:?array task id is required}"
-MATERIALS=(bcc_refractory fcc_cantor lifepo4 phosphorene nb_ta_o zn_formate_mof)
-STRATEGIES=(rule_based_adaptation llm_guided_adaptation)
-SEEDS=(20261111 20261112 20261113)
-material_index=$((TASK_ID / 6))
-pair_index=$((TASK_ID % 6))
-strategy_index=$((pair_index / 3))
-seed_index=$((pair_index % 3))
-MATERIAL="${MATERIALS[material_index]}"
-STRATEGY="${STRATEGIES[strategy_index]}"
-SEED="${SEEDS[seed_index]}"
-
-source_revision="$(git -C "${REPO}" rev-parse HEAD)"
 {
-  echo "campaign=e3-mlip-production-v1"
+  echo "campaign=e3-mlip-production"
   echo "job_id=${SLURM_JOB_ID}"
   echo "array_job_id=${SLURM_ARRAY_JOB_ID:-}"
   echo "array_task_id=${TASK_ID}"
   echo "material=${MATERIAL}"
-  echo "strategy=${STRATEGY}"
-  echo "seed=${SEED}"
-  echo "source_revision=${source_revision}"
+  echo "source_revision=$(git -C "${REPO}" rev-parse HEAD)"
   echo "account=m5216_g"
-  echo "submission_account=m5216"
-  echo "qos=gpu_regular"
-  echo "nodes=${SLURM_NNODES}"
-  echo "gpus_per_node=4"
-  echo "MACE_ARTIFACT_DIR=${MACE_ARTIFACT_DIR}"
+  echo "qos=gpu_premium"
+  echo "nodes=16"
+  echo "gpus=64"
+  echo "allocation_seconds=7200"
+  echo "round_seconds=1800"
+  echo "rounds=3"
+  echo "hard_optimization_seconds=300"
+  echo "strategy=llm_guided_adaptation"
+  echo "seed=20261113"
   echo "dft_outputs_used=false"
   echo "dft_labels_used=false"
 } | tee "${OUTPUT_ROOT}/slurm-${SLURM_JOB_ID}-${TASK_ID}.txt"
 
-"${BASE_PYTHON}" -m benchmarks.e3.production run-replicate \
+"${BASE_PYTHON}" -m benchmarks.e3.production run-campaign \
   --manifest "${MANIFEST}" \
   --output-root "${OUTPUT_ROOT}" \
   --material "${MATERIAL}" \
-  --strategy "${STRATEGY}" \
-  --seed "${SEED}" \
-  --workers 4 \
-  --workers-per-node 4 \
-  --worker-python "${MACE_PYTHON}"
+  --workers 64 \
+  --worker-python "${MACE_PYTHON}" \
+  --hard-optimization-seconds 300

@@ -1,0 +1,57 @@
+{
+  "lifepo4": {
+    "action_id": "d10cc02b17a3454a",
+    "formula": "LiFePO4",
+    "size_tier": 4,
+    "family": "olivine",
+    "family_label": "olivine-pristine",
+    "generator": "ase_seed_variants",
+    "operation": "antisite_pair",
+    "defect": null,
+    "strain": null,
+    "count": 2,
+    "random_seed": null,
+    "note": "Original raw proposal/seed was not persisted; count=2 reproduces the logged shared-capacity violation, not the unknown original allocation."
+  },
+  "phosphorene": {
+    "action_id": "25c1bb34540489d1",
+    "formula": "P",
+    "size_tier": 4,
+    "family": "black_phosphorene",
+    "family_label": "black-phosphorene",
+    "generator": "2d_template",
+    "operation": "symmetry_distinct_distortion",
+    "defect": "reconstruction",
+    "strain": null,
+    "count": 3,
+    "random_seed": 3180278999
+  },
+  "nb_ta_o": {
+    "action_id": "e46a7f4ba45fb914",
+    "formula": "Nb2O5",
+    "size_tier": 2,
+    "family": "oxide_prototype",
+    "family_label": "niobium-pentoxide",
+    "generator": "aflow_prototype",
+    "operation": "prototype",
+    "defect": null,
+    "strain": null,
+    "space_group_family": "orthorhombic-sg16-74",
+    "space_groups": [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74],
+    "count": 2,
+    "random_seed": 2655013286
+  },
+  "zn_formate_mof": {
+    "action_id": "10991ea5222e1f6d",
+    "formula": "ZnC2H2O4",
+    "size_tier": 24,
+    "family": "strain",
+    "family_label": "cod-7205949-framework",
+    "generator": "cod_7205949",
+    "operation": "bounded_strain",
+    "defect": null,
+    "strain": 0.005,
+    "count": 3,
+    "random_seed": 3763974465
+  }
+}
