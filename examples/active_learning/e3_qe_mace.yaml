@@ -1,0 +1,78 @@
+# Use only through benchmarks.e3.qe_active_learning, not `al run`.
+# Per-material inputs and safety gates: e3-qe-mace-three-iteration-reproduction.txt.
+mlip:
+  backend: mace
+  mace:
+    family: checkpoint
+    model: ${MACE_CHECKPOINT:?set the trusted MACE-OMAT-0 medium checkpoint}
+    device: cuda
+    precision: fp64
+
+# Required by the generic AL schema, but NOT executed by the E3 sampler.
+md:
+  seed_source:
+    kind: compositions
+    compositions: [Nb2O5]
+    n_random: 0
+  n_steps: 0
+
+acquisition:
+  strategy: random
+  n_select: 16
+  diversity_filter: false
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: qe
+  qe:
+    pw_bin: ${PW_BIN:?set GPU-enabled pw.x}
+    pw_wrapper: ${PROJ_ROOT:?set checkout absolute path}/deployments/perlmutter/launchers/_qe-step-perlmutter.sh
+    pseudo_dir: ${PSEUDO_DIR:?set reviewed UPF directory}
+    pseudopotentials: ${E3_QE_PSEUDOPOTENTIALS:?set a YAML symbol-to-UPF mapping for this material}
+    ecutwfc_ry: ${E3_QE_ECUTWFC_RY:?set converged wavefunction cutoff in Ry}
+    ecutrho_ry: ${E3_QE_ECUTRHO_RY:?set converged density cutoff in Ry}
+    kpts: ${E3_QE_KPTS:?set a reviewed YAML k-mesh such as [2,2,2]}
+    koffset: [0, 0, 0]
+    occupations: ${E3_QE_OCCUPATIONS:?set fixed or smearing after material-specific review}
+    smearing: ${E3_QE_SMEARING:-mv}
+    degauss_ry: ${E3_QE_DEGAUSS_RY:-0.01}
+    extra_control: {tstress: true, tprnfor: true, calculation: scf}
+    extra_system: ${E3_QE_SYSTEM:?set reviewed YAML SYSTEM settings including XC and spin}
+    extra_electrons: {conv_thr: 1.0e-8, electron_maxstep: 150, mixing_beta: 0.3}
+    timeout_sec: 1800
+
+trainer:
+  enabled: true
+  force_error_trigger_eV_per_A: ${E3_FORCE_ERROR_TOLERANCE:-0.2}
+  train_script: ${PROJ_ROOT}/src/matsim_agents/training/finetune_mace.py
+  finetune_mode: lora
+  start_from: incumbent
+  epochs_per_iter: 2
+  compare_after_training: true
+  validation_fraction: 0
+  validation_set: ${E3_QE_VALIDATION_SET:?set independent QE-labelled held-out extxyz for this material}
+  validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
+  promote_model: ${E3_QE_PROMOTION_APPROVED:?explicitly set true or false after reviewing the promotion policy}
+  promotion_approved: ${E3_QE_PROMOTION_APPROVED:?explicitly set true or false after reviewing the promotion policy}
+  promotion_min_evaluated_frames: 2
+  promotion_max_energy_mae_eV_per_atom: 0.1
+  promotion_max_force_mae_eV_per_A: 0.2
+  promotion_min_relative_improvement: 0.05
+
+loop:
+  n_iterations: 3
+  max_dft_calculations: 48
+  out_dir: ${E3_QE_RUN_DIR:?set a fresh per-material output directory separate from frozen E3}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: true
+
+# Same 64-GPU geometry batch. DFT jobs use one whole four-GPU node each,
+# up to 16 concurrent SCFs, then training uses one driver-node GPU.
+# This needs a separately approved allocation/budget, not the frozen E3 ledger.
+resources:
+  preset: perlmutter-gpu
+  pools:
+    dft: {nodes: 16, devices: 4, max_concurrent: 16, share_with: [training, mlip]}
+    training: {nodes: 1, devices: 1, share_with: [dft, mlip]}
+    mlip: {nodes: 1, devices: 1, share_with: [dft, training]}

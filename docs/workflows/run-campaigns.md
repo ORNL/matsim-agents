@@ -61,6 +61,20 @@ The benchmark runs one LLM-guided stream per class: three adaptive rounds,
 seed `20261113`, and at most 64 candidate relaxations per round. It does not
 include a rule-based arm or multiple seeds, so report descriptive results only.
 
+For a separate 5,000-candidate ceiling per material per round, use the
+[collaborator reproduction instructions](../../examples/workflows/e3-mlip-5000-three-iteration-reproduction.txt).
+That opt-in profile preserves the scientific settings, 64 GPU workers and
+existing time/resource limits. It uses its own manifest and outputs; reaching
+5,000 completed relaxations within those limits is not guaranteed. The default
+64-candidate benchmark is unchanged.
+
+For a separate DFT-backed version with periodic Quantum ESPRESSO force audits
+and accuracy-triggered MACE fine-tuning, see the
+[E3-QE/MACE reproduction instructions](../../examples/active_learning/e3-qe-mace-three-iteration-reproduction.txt).
+This uses a dedicated entry point, not the frozen E3 launcher or generic MD
+`al run`. It needs reviewed per-material QE settings, independent validation
+and a separately approved compute budget.
+
 - Materials: `bcc_refractory`, `fcc_cantor`, `lifepo4`, `phosphorene`,
   `nb_ta_o`, `zn_formate_mof`.
 - Strategy: `llm_guided_adaptation`.

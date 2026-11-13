@@ -36,6 +36,7 @@ from benchmarks.e3.mlip_exploration import (
     _verified_checkpoint_sha256,
 )
 from matsim_agents.execution.locking import exclusive_lock
+from benchmarks.e3.profiles import campaign_id, structures_per_round
 
 REPO = Path(__file__).resolve().parents[2]
 E3_STRATEGIES = ("llm_guided_adaptation",)
@@ -476,11 +477,12 @@ def _action_space(material: str) -> list[dict[str, Any]]:
 def build_campaign_manifest() -> dict[str, Any]:
     """Build the six-class, three-round benchmark; structure choices remain adaptive."""
     objectives = yaml.safe_load(OBJECTIVES.read_text(encoding="utf-8"))
+    target = structures_per_round()
     rounds = []
     class_summaries = {}
     for material, spec in MATERIALS.items():
         class_summaries[material] = {
-            "unique_target": WORKERS_PER_ARRAY_ELEMENT * ROUNDS_PER_MATERIAL,
+            "unique_target": target * ROUNDS_PER_MATERIAL,
             "tier_unit": spec["tier_unit"],
             "tiers": spec["tiers"],
         }
@@ -493,27 +495,27 @@ def build_campaign_manifest() -> dict[str, Any]:
                     "seed": BOUNDED_SEED,
                     "round": round_index,
                     "status": "planned",
-                    "main_target": WORKERS_PER_ARRAY_ELEMENT,
+                    "main_target": target,
                     "finite_size_control_families": [],
                     "finite_size_control_target": 0,
-                    "logical_target": WORKERS_PER_ARRAY_ELEMENT,
+                    "logical_target": target,
                     "minimum_main_count_by_tier": dict.fromkeys(map(str, spec["tiers"]), floor),
-                    "replicate_unique_target": WORKERS_PER_ARRAY_ELEMENT * ROUNDS_PER_MATERIAL,
+                    "replicate_unique_target": target * ROUNDS_PER_MATERIAL,
                     "action_space_material": material,
                 }
             )
 
     manifest = {
         "schema_version": 1,
-        "campaign_id": "e3-mlip-production",
+        "campaign_id": campaign_id(),
         "status": "planned_not_authorized",
         "model": MODEL_NAME,
         "mace_model": E3_MLIP_MODEL,
         "checkpoint_sha256": E3_MLIP_CHECKPOINT_SHA256,
         "optimizer": OPTIMIZER_SETTINGS,
-        "unique_configurations_per_material": WORKERS_PER_ARRAY_ELEMENT * ROUNDS_PER_MATERIAL,
+        "unique_configurations_per_material": target * ROUNDS_PER_MATERIAL,
         "total_logical_optimizations": len(MATERIALS)
-        * WORKERS_PER_ARRAY_ELEMENT
+        * target
         * ROUNDS_PER_MATERIAL,
         "seed": BOUNDED_SEED,
         "rounds_per_material": ROUNDS_PER_MATERIAL,
@@ -566,7 +568,7 @@ def build_campaign_manifest() -> dict[str, Any]:
             "average_gpu_seconds_per_logical_optimization_at_cap": (
                 GPU_HOUR_CAP
                 * 3600
-                / (len(MATERIALS) * WORKERS_PER_ARRAY_ELEMENT * ROUNDS_PER_MATERIAL)
+                / (len(MATERIALS) * target * ROUNDS_PER_MATERIAL)
             ),
             "basis": (
                 "6 material allocations x 16 GPU nodes x 4 GPUs x 2h; persistent "
@@ -587,7 +589,7 @@ def validate_campaign_manifest(manifest: dict[str, Any]) -> None:
         "llm_guided_configuration"
     ] or manifest.get("scientific_objectives_sha256") != _sha256_file(OBJECTIVES):
         raise ValueError("production manifest scientific objectives do not match current protocol")
-    if manifest.get("campaign_id") != "e3-mlip-production":
+    if manifest.get("campaign_id") != campaign_id():
         raise ValueError("production manifest campaign ID does not match the current benchmark")
     if manifest.get("strategies") != ["llm_guided_adaptation"]:
         raise ValueError("production benchmark uses the single LLM-guided strategy")
@@ -610,7 +612,7 @@ def validate_campaign_manifest(manifest: dict[str, Any]) -> None:
     }
     if keys != expected_keys:
         raise ValueError("production manifest has incorrect material, strategy, seed, or round IDs")
-    if manifest["total_logical_optimizations"] != expected_count * WORKERS_PER_ARRAY_ELEMENT:
+    if manifest["total_logical_optimizations"] != expected_count * structures_per_round():
         raise ValueError("production manifest logical optimization total is incorrect")
     if sum(row["main_target"] for row in manifest["rounds"]) != manifest[
         "total_logical_optimizations"
@@ -618,8 +620,8 @@ def validate_campaign_manifest(manifest: dict[str, Any]) -> None:
         raise ValueError("round targets do not match the logical optimization total")
     if any(row["finite_size_control_target"] for row in manifest["rounds"]):
         raise ValueError("the current benchmark does not include finite-size control tasks")
-    if any(row["main_target"] != WORKERS_PER_ARRAY_ELEMENT for row in manifest["rounds"]):
-        raise ValueError("each round must request at most one structure per GPU")
+    if any(row["main_target"] != structures_per_round() for row in manifest["rounds"]):
+        raise ValueError("round targets must match the selected acquisition ceiling")
     resources = manifest["resource_request"]
     if resources["requested_gpu_hour_cap"] != GPU_HOUR_CAP:
         raise ValueError("resource cap does not match the 768-GPU-hour benchmark allocation")
@@ -855,6 +857,9 @@ def _compact_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "hypothesis_update",
         "shortfalls",
         "remaining_capacity_by_group",
+        "qe_audits_by_action",
+        "accuracy_triggered",
+        "model_promoted",
     )
     return [{key: item[key] for key in fields if key in item} for item in history]
 
@@ -886,11 +891,19 @@ def _llm_allocation(
         })
         entry["action_ids"].append(action["action_id"])
     prompt_history = _compact_history(history)
-    prompt = (
-        "Choose E3-MLIP crystallographic generation allocations for this round. "
+    evidence_scope = (
+        "Use the strategy-local MACE geometry history and measured QE force audits below. "
+        "Audits apply only to sampled geometries. Models may change after independently "
+        "validated promotion: do not compare raw energies from different checkpoints. "
+        if context and context.get("campaign_variant") == "e3-mlip-qe-active-learning"
+        else
         "Use only the allow-listed actions and only the strategy-local MACE geometry "
         "optimization history below. There are no DFT labels, DFT references, or "
-        "independent validation data. Return JSON with exactly keys allocations, "
+        "independent validation data. "
+    )
+    prompt = (
+        "Choose E3-MLIP crystallographic generation allocations for this round. "
+        + evidence_scope + "Return JSON with exactly keys allocations, "
         "cited_evidence_ids, rationale. allocations is a list of {action_id,count}; "
         "counts must be positive integers, IDs unique, sum exactly to the round target, "
         "and each minimum tier count must be met. cited_evidence_ids must be a non-empty "
@@ -1230,7 +1243,10 @@ def _materialize_selection(
                 allocations, citations, rationale = _llm_allocation(
                     chat, material, action_space, history, target, minimum_by_tier,
                     evidence_path=proposal_path,
-                    context={"round": round_index, "seed": seed},
+                    context={
+                        "round": round_index, "seed": seed,
+                        "campaign_variant": manifest.get("campaign_variant"),
+                    },
                 )
             selection = {
                 "policy": "evidence-grounded LLM allocation",
@@ -1567,9 +1583,23 @@ def _task_result(attempt_dir: Path, task: dict[str, Any]) -> Path | None:
             result.get("structure_sha256") == task["structure_sha256"]
             and result.get("terminal")
             and result.get("optimizer") == task.get("optimizer", OPTIMIZER_SETTINGS)
+            and result.get("active_model") == task.get("active_model")
         ):
             return result_path
     return None
+
+
+def _task_checkpoint(task: dict[str, Any]) -> tuple[Path, str]:
+    model = task.get("active_model")
+    if model is None:
+        return _verified_checkpoint()
+    if task.get("campaign_variant") != "e3-mlip-qe-active-learning":
+        raise ValueError("A model override requires the separate E3-QE campaign variant")
+    path = Path(model["path"])
+    digest = _sha256_file(path)
+    if digest != model["sha256"]:
+        raise ValueError("E3-QE incumbent checkpoint hash mismatch")
+    return path, digest
 
 
 def _space_group_number(atoms: Any) -> int | None:
@@ -1643,7 +1673,10 @@ def _execute_task(
         "candidate_kind": task["candidate_kind"],
         "model": MODEL_NAME,
         "mace_model": E3_MLIP_MODEL,
-        "checkpoint_sha256": E3_MLIP_CHECKPOINT_SHA256,
+        "checkpoint_sha256": (task.get("active_model") or {}).get(
+            "sha256", E3_MLIP_CHECKPOINT_SHA256
+        ),
+        "active_model": task.get("active_model"),
         "optimizer": optimizer_settings,
         "initial_structure_path": task["structure_path"],
         "host": socket.gethostname(),
@@ -1671,10 +1704,13 @@ def _execute_task(
             initial.arrays.pop(key, None)
         clean_path = attempt_dir / "initial.extxyz"
         write(clean_path, initial, format="extxyz")
-        checkpoint_path, checkpoint_sha256 = _verified_checkpoint()
-        if checkpoint_sha256 != E3_MLIP_CHECKPOINT_SHA256:
+        checkpoint_path, checkpoint_sha256 = _task_checkpoint(task)
+        if task.get("active_model") is None and checkpoint_sha256 != E3_MLIP_CHECKPOINT_SHA256:
             raise ValueError("relaxation checkpoint does not match the frozen E3-MLIP model")
         result_payload["mace_model_path"] = str(checkpoint_path)
+        if task.get("active_model") is not None:
+            result_payload["model"] = "MACE E3-QE incumbent"
+            result_payload["mace_model"] = str(checkpoint_path)
         relax_args = RelaxStructureInput(
             structure_path=str(clean_path),
             output_dir=str(attempt_dir),
@@ -1822,7 +1858,10 @@ def _timeout_result(
         "candidate_kind": task["candidate_kind"],
         "model": MODEL_NAME,
         "mace_model": E3_MLIP_MODEL,
-        "checkpoint_sha256": E3_MLIP_CHECKPOINT_SHA256,
+        "checkpoint_sha256": (task.get("active_model") or {}).get(
+            "sha256", E3_MLIP_CHECKPOINT_SHA256
+        ),
+        "active_model": task.get("active_model"),
         "optimizer": task["optimizer"],
         "initial_structure_path": task["structure_path"],
         "status": "nonconverged",
@@ -1843,6 +1882,9 @@ def _timeout_result(
         "attempt": int(attempt_dir.name.split("-")[1]),
         "partial_artifacts_directory": str(attempt_dir),
     }
+    if task.get("active_model") is not None:
+        result["model"] = "MACE E3-QE incumbent"
+        result["mace_model"] = task["active_model"]["path"]
     _atomic_json(attempt_dir / "result.json", result)
     return result
 
@@ -1932,10 +1974,11 @@ def _preflight_receipt(
         raise ValueError("acquisition code changed after preflight")
     tasks_path = round_dir / "tasks.jsonl"
     tasks = _read_tasks(tasks_path)
-    if len(tasks) != WORKERS_PER_ARRAY_ELEMENT:
-        raise ScientificCapacityError(f"preflight requires 64 real tasks, found {len(tasks)}")
-    if len({task["structure_sha256"] for task in tasks}) != WORKERS_PER_ARRAY_ELEMENT:
-        raise ScientificCapacityError("preflight requires 64 distinct geometry identities")
+    target = structures_per_round()
+    if len(tasks) != target:
+        raise ScientificCapacityError(f"preflight requires {target} real tasks, found {len(tasks)}")
+    if len({task["structure_sha256"] for task in tasks}) != target:
+        raise ScientificCapacityError(f"preflight requires {target} distinct geometry identities")
     # Dispatch may attach the frozen execution optimizer; geometry identities cannot change.
     actual = {task["candidate_id"]: task["structure_file_sha256"] for task in tasks}
     if actual != receipt["structures"]:
@@ -2233,9 +2276,10 @@ def _replay_preflight(
     replay = _read_tasks(replay_tasks_path)
     old_geometries = {task["structure_sha256"] for task in tasks}
     new_geometries = {task["structure_sha256"] for task in replay}
-    if len(replay) != 64 or len(new_geometries) != 64 or old_geometries != new_geometries:
+    target = structures_per_round()
+    if len(replay) != target or len(new_geometries) != target or old_geometries != new_geometries:
         raise ScientificCapacityError(
-            "source revalidation did not reproduce the original 64 distinct geometries"
+            f"source revalidation did not reproduce the original {target} distinct geometries"
         )
     if any(_sha256_file(Path(path)) != digest for path, digest in outcomes.items()):
         raise ValueError("source revalidation modified optimization outcome evidence")

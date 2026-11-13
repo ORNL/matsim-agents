@@ -25,6 +25,11 @@ cd "${REPO}"
 PYTHON="${MATSIM_E3_MLIP_BASE_PYTHON:-${REPO}/.venv/bin/python}"
 MANIFEST="${MATSIM_E3_MLIP_MANIFEST:-${REPO}/benchmarks/e3/manifests/e3-mlip-production.json}"
 OUTPUT_ROOT="${MATSIM_E3_MLIP_OUTPUT_ROOT:-${REPO}/runs/e3-mlip-production}"
+if [[ "${MATSIM_E3_MLIP_STRUCTURES_PER_ROUND:-64}" == "5000" ]]; then
+  : "${MATSIM_E3_MLIP_MANIFEST:?the collaborator profile requires its own manifest}"
+  : "${MATSIM_E3_MLIP_OUTPUT_ROOT:?the collaborator profile requires a separate output root}"
+  : "${MATSIM_E3_MLIP_RESOURCE_STATE:?the collaborator profile requires an explicit resource ledger}"
+fi
 MATERIALS=(bcc_refractory fcc_cantor lifepo4 phosphorene nb_ta_o zn_formate_mof)
 MATERIAL="${MATERIALS[$1]}"
 export PYTHONPATH="${REPO}:${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"

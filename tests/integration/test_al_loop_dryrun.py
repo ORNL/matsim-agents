@@ -312,6 +312,71 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert any(dft_dir.iterdir()), "DFT working directories were not created"
 
 
+@pytest.mark.parametrize(("force_error", "triggered"), [(0.0, False), (0.125, False), (0.5, True)])
+def test_external_sampler_and_measured_error_gate(
+    tmp_path, monkeypatch, elemental_manifest, force_error, triggered
+):
+    from ase.calculators.calculator import Calculator, all_changes
+
+    import matsim_agents.active_learning.loop as loop_mod
+
+    class AuditCalc(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=None, system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            self.results = {"energy": -1.0, "forces": np.full((len(atoms), 3), force_error)}
+
+    cfg = _make_cfg(tmp_path)
+    cfg.trainer.enabled = True
+    cfg.trainer.force_error_trigger_eV_per_A = 0.125
+    cfg.trainer.validation_reference_set = _campaign_elemental_manifest(cfg, elemental_manifest)
+    _patch_runtime(loop_mod, monkeypatch)
+    monkeypatch.setattr(loop_mod, "make_mlip_calculator", lambda *a, **k: AuditCalc())
+
+    class ParsedDFTBackend(_FakeDFTBackend):
+        def run_one(self, spec):
+            result = super().run_one(spec)
+            result.final_atoms.info.clear()
+            return result
+
+    monkeypatch.setattr(loop_mod, "make_backend", lambda *a: ParsedDFTBackend())
+
+    def no_md(*args, **kwargs):
+        pytest.fail("An external sampler must bypass both MD seeds and MD integration")
+
+    monkeypatch.setattr(loop_mod, "resolve_seed_structures", no_md)
+    monkeypatch.setattr(loop_mod, "sample_md_candidates", no_md)
+    trained = []
+
+    def train(*args, **kwargs):
+        trained.append(True)
+        return cfg.mlip.hydragnn.logdir
+
+    monkeypatch.setattr(loop_mod, "retrain_hydragnn", train)
+
+    def sampler(config, iteration, directory):
+        assert config is cfg and iteration == 0
+        candidates = [_make_candidate(i) for i in range(3)]
+        for candidate in candidates:
+            candidate.atoms.info["sampling_method"] = "e3_geometry_optimization"
+        return candidates
+
+    loop_mod.run_active_learning(cfg, candidate_sampler=sampler)
+    state = json.loads((cfg.loop.out_dir / "iteration_0000/state.json").read_text())
+    assert state["status"] == "complete"
+    assert state["accuracy_triggered"] is triggered
+    assert bool(trained) is triggered
+    assert state["training_status"] == ("completed" if triggered else "not_triggered")
+    assert len(state["dft_force_errors_eV_per_A"]) == 2
+    assert all(
+        value == pytest.approx(force_error) for value in state["dft_force_errors_eV_per_A"].values()
+    )
+    frames = ase_read(cfg.loop.out_dir / "dataset.extxyz", index=":")
+    assert len(frames) == 2
+    assert all("temperature_K" not in frame.info for frame in frames)
+
+
 def test_loop_records_cumulative_label_scope_for_training_and_validation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

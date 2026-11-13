@@ -260,6 +260,7 @@ def test_promotion_examples_require_elemental_manifest(
         validation.touch()
         trainer["validation_set"] = str(validation)
     monkeypatch.setenv("NB2O5_PROMOTION_APPROVED", "true")
+    monkeypatch.setenv("E3_QE_PROMOTION_APPROVED", "true")
     body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
     config_path = _write(
         tmp_path, "promotion.yaml", body + yaml.safe_dump({"trainer": trainer}, width=1000)

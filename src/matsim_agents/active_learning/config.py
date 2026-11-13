@@ -187,6 +187,16 @@ class TrainerConfig(BaseModel):
         False,
         description="Opt in to retraining; collecting DFT labels without it is the safe default.",
     )
+    force_error_trigger_eV_per_A: float | None = Field(
+        None,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Retrain only if at least one converged single-point DFT audit has a "
+            "force-component MAE above this tolerance against the incumbent. "
+            "Audits still consume DFT budget below the tolerance."
+        ),
+    )
     promote_model: bool = Field(
         False,
         description=(
