@@ -639,6 +639,9 @@ def build_mace_calculator(cfg: MACEConfig, *, enable_mc_dropout: bool = False):
     is injected into the underlying torch model so MC-Dropout acquisition yields
     non-zero variance. The dropout is dormant for ordinary energy/force calls.
     """
+    from matsim_agents.backends.mlip.mace_inference import configure_mace_inference_imports
+
+    configure_mace_inference_imports()
     try:
         from mace.calculators import (
             MACECalculator,

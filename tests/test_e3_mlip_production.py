@@ -13,6 +13,7 @@ from benchmarks.e3.production import (
     OPTIMIZER_SETTINGS,
     REPLICATE_SEEDS,
     _action_space,
+    _distinct_relaxed_minima,
     _execute_round_tasks,
     _execute_task,
     _finite_capacity_group,
@@ -36,7 +37,11 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     validate_campaign_manifest(manifest)
     assert manifest["optimizer"] == OPTIMIZER_SETTINGS
     assert manifest["optimizer"]["relax_cell"] is True
-    assert manifest["optimizer"]["max_cell_total_strain"] == 0.1
+    assert manifest["optimizer"]["relative_increase_threshold"] == 0.2
+    assert manifest["optimizer"]["max_cell_step_strain"] == 0.1
+    assert manifest["optimizer"]["max_cell_total_strain"] == 0.5
+    assert manifest["optimizer"]["max_optimization_seconds"] == 60
+    assert manifest["optimizer"]["optimization_timeout_policy"] == "between_steps_v1"
     assert manifest["optimizer"]["mof_connectivity_version"] == "atom-indexed-v1"
     assert manifest["optimizer"]["phosphorene_cell_mask"] == [True, True, False, False, False, True]
     assert len(manifest["rounds"]) == 6 * 2 * 3 * 10
@@ -49,10 +54,9 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     assert manifest["resource_request"]["maximum_scheduled_gpu_hours"] == pytest.approx(1999.2)
     assert manifest["resource_request"]["maximum_scheduled_gpu_node_hours"] == pytest.approx(499.8)
     assert manifest["llm_guided_configuration"] == {
-        "provider": "mag",
-        "model": "gemini-4-argon@google",
-        "mag_provider": "google",
-        "temperature": 0.0,
+        "provider": "copilot",
+        "model": "gemini-4-carbon",
+        "decoding": "provider_default",
         "request_limits": {"max_calls_per_round": 1, "max_tokens": 8192},
         "environment_overrides": "prohibited",
     }
@@ -405,11 +409,9 @@ def test_llm_configuration_cannot_be_overridden_by_environment(monkeypatch):
 
     assert calls == [
         {
-            "provider": "mag",
-            "model": "gemini-4-argon@google",
-            "temperature": 0.0,
+            "provider": "copilot",
+            "model": "gemini-4-carbon",
             "max_tokens": 8192,
-            "mag_provider": "google",
         }
     ]
 
@@ -487,6 +489,67 @@ def test_manifest_rejects_old_mof_guard_protocol():
     manifest["optimizer"].pop("mof_connectivity_version")
     with pytest.raises(ValueError, match="optimizer"):
         validate_campaign_manifest(manifest)
+
+
+def test_manifest_rejects_previous_llm_provider():
+    manifest = build_campaign_manifest()
+    manifest["llm_guided_configuration"] = {
+        **manifest["llm_guided_configuration"],
+        "provider": "mag",
+    }
+    with pytest.raises(ValueError, match="scientific objectives"):
+        validate_campaign_manifest(manifest)
+
+
+def test_timed_relaxations_reuse_calculator_and_save_completed_step(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from ase.build import bulk
+    from ase.calculators.emt import EMT
+    from ase.io import read, write
+
+    import matsim_agents.backends.mlip.relaxation as relaxation
+
+    source = tmp_path / "input.extxyz"
+    write(source, bulk("Cu", "fcc", a=3.8, cubic=True))
+    clock_values = iter([100.0, 159.9, 160.0, 200.0, 260.0])
+    monkeypatch.setattr(relaxation, "time", SimpleNamespace(monotonic=lambda: next(clock_values)))
+    monkeypatch.setattr(
+        relaxation,
+        "_relaxation_calculator",
+        lambda args: relaxation._RelaxCalculator(EMT(), 0, 0, None),
+    )
+    monkeypatch.setattr(
+        "benchmarks.e3.production._verified_checkpoint",
+        lambda: (source, E3_MLIP_CHECKPOINT_SHA256),
+    )
+    monkeypatch.setattr("benchmarks.e3.production._space_group_number", lambda atoms: None)
+    cache = relaxation.CalculatorCache()
+    task = {
+        "candidate_kind": "unique_configuration",
+        "structure_sha256": "hash",
+        "structure_path": str(source),
+        "material": "bcc_refractory",
+    }
+    results = [
+        _execute_task({**task, "candidate_id": candidate}, tmp_path / "tasks", cache)
+        for candidate in ("first", "second")
+    ]
+    assert cache.loads == 1
+    assert [result["steps"] for result in results] == [2, 1]
+    for result in results:
+        assert result["status"] == "nonconverged"
+        assert result["termination_reason"] == "optimization_time_limit"
+        assert result["converged"] is False
+        assert len(read(result["trajectory_path"], index=":")) == result["steps"] + 1
+        assert Path(result["optimized_structure_path"]).is_file()
+        assert _task_result(tmp_path / "tasks" / result["candidate_id"], task)
+
+
+def test_timed_out_structures_are_not_counted_as_relaxed_minima():
+    tasks = [{"candidate_kind": "unique_configuration", "formula": "Cu"}]
+    results = [{"status": "nonconverged", "termination_reason": "optimization_time_limit"}]
+    assert _distinct_relaxed_minima(tasks, results) == {}
 
 
 def test_completed_fixed_cell_round_cannot_be_resumed(tmp_path):
@@ -625,8 +688,10 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
         assert args.relax_cell
         assert args.require_native_stress
         assert args.stress_tolerance_eV_per_A3 == 0.01
-        assert args.max_cell_step_strain == 0.05
-        assert args.max_cell_total_strain == 0.1
+        assert args.relative_increase_threshold == 0.2
+        assert args.max_cell_step_strain == 0.1
+        assert args.max_cell_total_strain == 0.5
+        assert args.max_optimization_seconds == 60
         assert args.cell_mask == (
             (True, True, False, False, False, True) if material == "phosphorene" else None
         )

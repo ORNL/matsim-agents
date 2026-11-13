@@ -85,7 +85,7 @@ def explore_composition(
     fmax: float = 0.02,
     relax_cell: bool = False,
     degeneracy_tol_eV_per_atom: float = 0.01,
-    relative_increase_threshold: float = 0.05,
+    relative_increase_threshold: float | None = 0.2,
     mlp_device: str = "cuda",
     precision: str | None = None,
     mlp_precision: str | None = None,

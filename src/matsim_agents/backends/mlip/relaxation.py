@@ -10,6 +10,7 @@ agent framework can be developed and tested without a HydraGNN install.
 from __future__ import annotations
 
 import os
+import time
 from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
@@ -57,9 +58,23 @@ class RelaxStructureInput(BaseModel):
     )
     optimizer: Literal["FIRE", "BFGS", "BFGSLineSearch"] = "FIRE"
     maxiter: int = 200
+    max_optimization_seconds: float | None = Field(
+        None,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Soft wall-clock limit checked after completed optimizer steps. Excludes "
+            "model loading and initialization; an in-progress step is not interrupted."
+        ),
+    )
     maxstep: float = 1e-2
     fmax: float = Field(0.02, description="Stop when max force drops below this value (eV/Å).")
-    relative_increase_threshold: float = 0.05
+    relative_increase_threshold: float | None = Field(
+        0.2,
+        ge=0,
+        allow_inf_nan=False,
+        description="Abort on fractional optimizer-force growth between steps; None disables.",
+    )
     charge: float = 0.0
     spin: float = 0.0
     precision: str | None = None
@@ -711,7 +726,8 @@ def _optimize_with_log(
 
     Stops at convergence, after ``maxiter`` steps, or when the maximum force grows
     by more than ``relative_increase_threshold`` in one step (positions are then
-    rolled back unless the cell is relaxing).
+    rolled back unless the cell is relaxing). An optional wall-clock limit stops
+    after a completed step without discarding the calculator or its model.
     """
     csv_header = ["step", "energy_eV", "max_force_eV_per_A", "top_branch", "top_weight"] + [
         f"w_branch_{i}" for i in range(int(num_branches))
@@ -738,6 +754,7 @@ def _optimize_with_log(
     with open(log_csv_path, "w") as csv_file:
         csv_file.write(",".join(csv_header) + "\n")
         try:
+            started = time.monotonic() if args.max_optimization_seconds is not None else None
             for step in range(args.maxiter):
                 previous_positions = atoms.get_positions().copy()
                 optimizer.step()
@@ -845,7 +862,11 @@ def _optimize_with_log(
                     termination_reason = "force_threshold"
                     break
 
-                if prev_max_force is not None and prev_max_force > 0.0:
+                if (
+                    args.relative_increase_threshold is not None
+                    and prev_max_force is not None
+                    and prev_max_force > 0.0
+                ):
                     relative_increase = (max_force - prev_max_force) / prev_max_force
                     if relative_increase > args.relative_increase_threshold:
                         if not cell_relax_active:
@@ -857,6 +878,12 @@ def _optimize_with_log(
 
                 prev_max_force = max_force
                 prev_positions = deepcopy(atoms.get_positions())
+                if (
+                    started is not None
+                    and time.monotonic() - started >= args.max_optimization_seconds
+                ):
+                    termination_reason = "optimization_time_limit"
+                    break
             else:
                 converged = False
         finally:

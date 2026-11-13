@@ -105,6 +105,35 @@ def test_stress_tolerance_prevents_false_convergence(tmp_path, monkeypatch):
     assert result.termination_reason == "max_steps"
 
 
+def test_convergence_and_guard_take_precedence_over_time_limit(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import matsim_agents.backends.mlip.relaxation as relaxation
+
+    clock = [0.0]
+    original_step = FIRE.step
+
+    def slow_step(optimizer, *args, **kwargs):
+        result = original_step(optimizer, *args, **kwargs)
+        clock[0] += 1
+        return result
+
+    monkeypatch.setattr(FIRE, "step", slow_step)
+    monkeypatch.setattr(relaxation, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    _, _, result = _relax_emt(tmp_path, monkeypatch, fmax=100.0, max_optimization_seconds=0.01)
+    assert result.converged
+    assert result.termination_reason == "force_threshold"
+
+    _, _, result = _relax_emt(
+        tmp_path,
+        monkeypatch,
+        max_optimization_seconds=0.01,
+        step_guard=lambda atoms: "mof_connectivity_changed",
+    )
+    assert not result.converged
+    assert result.termination_reason == "mof_connectivity_changed"
+
+
 def test_in_plane_convergence_ignores_out_of_plane_stress(tmp_path, monkeypatch):
     import numpy as np
     from ase.calculators.calculator import Calculator, all_changes
@@ -194,3 +223,64 @@ def test_native_stress_requirement_rejects_forces_only(tmp_path, monkeypatch):
     )
     with pytest.raises(ValueError, match="native calculator stress"):
         relax_with_mlip(args)
+
+
+@pytest.mark.parametrize(
+    ("threshold", "steps", "reason"),
+    [(0.05, 2, "force_growth"), (0.2, 3, "force_growth"), (None, 3, "max_steps")],
+)
+def test_optional_force_growth_threshold(tmp_path, monkeypatch, threshold, steps, reason):
+    import numpy as np
+    from ase.calculators.calculator import Calculator, all_changes
+
+    class GrowingForce(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(self, atoms=None, properties=None, system_changes=all_changes):
+            super().calculate(atoms, properties, system_changes)
+            magnitude = (1.0, 1.19, 1.44)[int(round(atoms.positions[0, 0])) - 1]
+            self.results = {
+                "energy": 0.0,
+                "forces": np.tile([magnitude, 0.0, 0.0], (len(atoms), 1)),
+            }
+
+    source = tmp_path / "input.extxyz"
+    atoms = bulk("Cu", "fcc", a=3.8, cubic=True)
+    write(source, atoms)
+    monkeypatch.setattr(
+        "matsim_agents.backends.mlip.relaxation._relaxation_calculator",
+        lambda args: _RelaxCalculator(GrowingForce(), 0, 0, None),
+    )
+
+    def step(optimizer):
+        positions = optimizer.atoms.get_positions()
+        positions[:, 0] += 1
+        optimizer.atoms.set_positions(positions)
+
+    monkeypatch.setattr(FIRE, "step", step)
+    result = relax_with_mlip(
+        RelaxStructureInput(
+            structure_path=str(source),
+            output_dir=str(tmp_path),
+            mlip_backend="mace",
+            maxiter=3,
+            relative_increase_threshold=threshold,
+        )
+    )
+    assert result.num_steps == steps
+    assert result.termination_reason == reason
+
+
+@pytest.mark.parametrize("threshold", [-0.1, float("inf"), float("nan")])
+def test_force_growth_rejects_invalid_threshold(threshold):
+    with pytest.raises(ValueError):
+        RelaxStructureInput(
+            structure_path="input.extxyz",
+            mlip_backend="mace",
+            relative_increase_threshold=threshold,
+        )
+
+
+def test_force_growth_default():
+    args = RelaxStructureInput(structure_path="input.extxyz", mlip_backend="mace")
+    assert args.relative_increase_threshold == 0.2

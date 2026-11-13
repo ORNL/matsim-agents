@@ -51,7 +51,7 @@ def supervisor_run(
     maxstep: float = typer.Option(1e-2, help="Optimizer max step."),
     fmax: float = typer.Option(0.02, help="Stop relaxation when max force < fmax (eV/Å)."),
     relative_increase_threshold: float = typer.Option(
-        0.05,
+        0.2,
         "--relative-increase-threshold",
         help="Abort+rollback when |F|max grows by more than this fraction in one step.",
     ),

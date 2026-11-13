@@ -78,10 +78,9 @@ strategies:
     generation_operations_and_acceptance_rules_shared: true
 
 llm_guided_configuration:
-  provider: mag
-  model: gemini-4-argon@google
-  mag_provider: google
-  temperature: 0.0
+  provider: copilot
+  model: gemini-4-carbon
+  decoding: provider_default
   request_limits:
     max_calls_per_round: 1
     max_tokens: 8192
