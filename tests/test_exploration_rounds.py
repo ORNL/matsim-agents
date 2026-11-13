@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 from matsim_agents.backends.mlip.relaxation import _RelaxCalculator
 from matsim_agents.cli import app
 from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.execution.locking import exclusive_lock
 from matsim_agents.workflows import (
     ExplorationConfig,
     resume_exploration,
@@ -162,10 +163,42 @@ def test_resume_rejects_changed_inputs_or_runtime(setup, change):
 def test_resume_refuses_active_writer(setup):
     cfg, _, _ = setup
     result = run_exploration(cfg)
-    with (Path(result.run_directory) / ".exploration.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        with pytest.raises(ValueError, match="another process"):
-            resume_exploration(result.run_directory)
+    with (
+        exclusive_lock(Path(result.run_directory) / ".exploration.lock", timeout=0),
+        pytest.raises(ValueError, match="another process"),
+    ):
+        resume_exploration(result.run_directory)
+
+
+@pytest.mark.parametrize("iterations", [1, 3])
+def test_exploration_runs_and_resumes_when_cfs_rejects_flock(setup, monkeypatch, iterations):
+    cfg, calls, _ = setup
+    cfg = cfg.model_copy(update={"iterations": iterations})
+
+    def unavailable(*args, **kwargs):
+        raise OSError(524, "CFS does not support flock")
+
+    monkeypatch.setattr(fcntl, "flock", unavailable)
+    result = run_exploration(cfg)
+    assert result.rounds_completed == iterations
+    assert calls["seeds"] == [10 + index for index in range(iterations)]
+    assert result.counts["attempted"] == 2 * iterations
+    assert not (Path(result.run_directory) / ".exploration.lock").exists()
+    assert resume_exploration(result.run_directory) == result
+    assert not (Path(result.run_directory) / ".exploration.lock").exists()
+
+
+def test_exploration_lock_released_after_interruption(setup):
+    cfg, _, _ = setup
+
+    def stop(message):
+        raise KeyboardInterrupt("before generation")
+
+    with pytest.raises(KeyboardInterrupt, match="before generation"):
+        run_exploration(cfg, on_progress=stop)
+    directory = next(cfg.output_dir.iterdir())
+    assert not (directory / ".exploration.lock").exists()
+    assert resume_exploration(directory).rounds_completed == 3
 
 
 def test_resume_cli_and_single_batch_compatibility(setup):

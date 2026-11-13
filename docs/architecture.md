@@ -45,6 +45,10 @@ request builder, not duplicated single-/multi-round execution paths.
 Checkpoint preparation is transactional: candidates/attempts become committed
 only when the journal is atomically written; interruption restores the last
 committed state before saving the error. Reporting does not resume or calculate.
+Native exploration uses the shared atomic-file `exclusive_lock` with immediate
+contention failure, rather than `flock`, which is unsupported on NERSC CFS
+compute nodes. The lock covers generation, attempts, and final reporting and is
+released on interruption; competing writers are still rejected.
 
 Only version-2 exploration checkpoints are supported; there is no legacy reader
 or migration layer. The separate advanced phase-exploration/active-learning

@@ -6,15 +6,16 @@ including backend failures and nonconvergence, are never retried implicitly.
 
 from __future__ import annotations
 
-import fcntl
 import logging
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from matsim_agents.backends.mlip.relaxation import CalculatorCache, relax_with_mlip
 from matsim_agents.discovery.seeds import generate_seed_action
 from matsim_agents.discovery.selection import select_diverse_candidates
+from matsim_agents.execution.locking import LockTimeoutError, exclusive_lock
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.workflows.exploration_checkpoint import (
     Attempt,
@@ -37,6 +38,15 @@ from matsim_agents.workflows.exploration_reporting import (
 log = logging.getLogger(__name__)
 
 
+@contextmanager
+def _exploration_lock(run: ScientificRunDirectory) -> Iterator[None]:
+    try:
+        with exclusive_lock(run.path / ".exploration.lock", timeout=0):
+            yield
+    except LockTimeoutError as exc:
+        raise ValueError("This exploration is already running in another process") from exc
+
+
 def run_rounds(
     cfg: ExplorationConfig | None,
     *,
@@ -51,11 +61,7 @@ def run_rounds(
     else:
         run = ScientificRunDirectory.open(run_directory)
 
-    with (run.path / ".exploration.lock").open("a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise ValueError("This exploration is already running in another process") from exc
+    with _exploration_lock(run):
         state = _state(run)
         cfg = state.config
         if on_progress is not None:
