@@ -81571,8 +81571,8 @@
   "model": "MACE-OMAT-0 medium",
   "optimizer": {
     "fmax_eV_A": 0.02,
-    "max_cell_step_strain": 0.1,
-    "max_cell_total_strain": 0.5,
+    "max_cell_step_strain": null,
+    "max_cell_total_strain": null,
     "max_optimization_seconds": 60,
     "maxiter": 500,
     "maxstep_A": 0.05,
@@ -81588,10 +81588,10 @@
       false,
       true
     ],
-    "relative_increase_threshold": 0.2,
+    "relative_increase_threshold": null,
     "relax_cell": true,
     "require_native_stress": true,
-    "stress_tolerance_eV_per_A3": 0.01
+    "stress_tolerance_eV_per_A3": null
   },
   "resource_request": {
     "account": "m5216",

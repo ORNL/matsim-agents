@@ -4,7 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
-[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "m5216:premium:768" ]] || {
+export MATSIM_E3_MLIP_ACCOUNT="${MATSIM_E3_MLIP_ACCOUNT:-m5216}"
+case "${MATSIM_E3_MLIP_ACCOUNT}" in
+  m5216|m5048|m4828|amsc001|amsc004|dasrepo) ;;
+  *) echo "ERROR: account is not authorized for this campaign" >&2; exit 2 ;;
+esac
+[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "${MATSIM_E3_MLIP_ACCOUNT}:premium:768" ]] || {
   echo "ERROR: explicit resource authorization is required" >&2
   exit 2
 }
@@ -51,7 +56,7 @@ export MATSIM_E3_MLIP_RESERVATION_ID="submission-$("${PYTHON}" -c 'from uuid imp
 # A failed/ambiguous submission retains its charge until an operator verifies
 # whether Slurm created an allocation. Never release based only on shell exit.
 echo "Reserved allocation: ${MATSIM_E3_MLIP_RESERVATION_ID}" >&2
-SUBMITTED="$(sbatch --parsable --array="$1-$1%1" --account=m5216 \
+SUBMITTED="$(sbatch --parsable --array="$1-$1%1" --account="${MATSIM_E3_MLIP_ACCOUNT}" \
   "${SCRIPT_DIR}/job-e3-mlip-production-perlmutter.sh")"
 JOB_ID="${SUBMITTED%%;*}"
 "${PYTHON}" -m benchmarks.e3.production budget-bind \

@@ -204,6 +204,62 @@ def test_exhausted_replay_cannot_retry_its_cached_generation(replay):
     )
 
 
+def test_source_revalidation_does_not_require_replacement_call_authorization(replay):
+    (replay.round_dir / "acquisition/recovery-authorization.json").unlink()
+    result = production.revalidate_preflight(replay.manifest, replay.root, "lifepo4", 1)
+    assert result["generation_seconds"] == 220
+    replay_acquisition = replay.calls[0] / (
+        "lifepo4/llm_guided_adaptation/seed-20261113/round-01/acquisition"
+    )
+    assert (replay_acquisition / "proposal-001.json").is_file()
+    assert not (replay_acquisition / "recovery-authorization.json").exists()
+
+
+@pytest.mark.parametrize(
+    "prior_evidence", [None, "attempt", "summary", "later_round", "changed_input"]
+)
+def test_fresh_cpu_preflight_can_register_hard_deadline_policy(replay, monkeypatch, prior_evidence):
+    production.revalidate_preflight(replay.manifest, replay.root, "lifepo4", 1)
+    if prior_evidence == "attempt":
+        (replay.round_dir / "tasks/candidate/attempt-0001").mkdir(parents=True)
+    elif prior_evidence == "summary":
+        production._atomic_json(replay.round_dir / "round-summary.json", {"status": "complete"})
+    elif prior_evidence == "later_round":
+        (replay.round_dir.parent / "round-02").mkdir()
+    elif prior_evidence == "changed_input":
+        (replay.round_dir / "structure-0.extxyz").write_text("changed")
+
+    def reached_execution():
+        raise RuntimeError("verified preflight reached execution")
+
+    monkeypatch.setattr(production, "_verified_checkpoint_sha256", reached_execution)
+    message = (
+        "legacy execution attempts"
+        if prior_evidence == "attempt"
+        else "requires a fresh stream"
+        if prior_evidence in {"summary", "later_round"}
+        else "preflight structure changed"
+        if prior_evidence == "changed_input"
+        else "verified preflight reached execution"
+    )
+    with pytest.raises((ValueError, RuntimeError), match=message):
+        production.run_replicate(
+            replay.manifest,
+            replay.root,
+            "lifepo4",
+            "llm_guided_adaptation",
+            20261113,
+            hard_optimization_seconds=300,
+            round_index=1,
+        )
+    policy_path = replay.round_dir.parent / "execution-policy.json"
+    assert policy_path.exists() == (prior_evidence is None)
+    if prior_evidence is None:
+        policy = json.loads(policy_path.read_text())
+        assert policy["hard_optimization_seconds"] == 300
+        assert policy["manifest_sha256"] == production._sha256_file(replay.manifest)
+
+
 def test_receipt_write_failure_keeps_prior_replay_charge(replay, monkeypatch):
     atomic = production._atomic_json
     receipt_path = replay.round_dir / "generation-preflight.json"

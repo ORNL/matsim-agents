@@ -287,9 +287,10 @@ def test_campaign_manifest_has_six_classes_and_bounded_budgets():
     validate_campaign_manifest(manifest)
     assert manifest["optimizer"] == OPTIMIZER_SETTINGS
     assert manifest["optimizer"]["relax_cell"] is True
-    assert manifest["optimizer"]["relative_increase_threshold"] == 0.2
-    assert manifest["optimizer"]["max_cell_step_strain"] == 0.1
-    assert manifest["optimizer"]["max_cell_total_strain"] == 0.5
+    assert manifest["optimizer"]["relative_increase_threshold"] is None
+    assert manifest["optimizer"]["stress_tolerance_eV_per_A3"] is None
+    assert manifest["optimizer"]["max_cell_step_strain"] is None
+    assert manifest["optimizer"]["max_cell_total_strain"] is None
     assert manifest["optimizer"]["max_optimization_seconds"] == 60
     assert manifest["optimizer"]["optimization_timeout_policy"] == "between_steps_v1"
     assert manifest["optimizer"]["mof_connectivity_version"] == "atom-indexed-v1"
@@ -333,13 +334,13 @@ def test_perlmutter_launcher_targets_the_authorized_gpu_resources():
     )
     text = launcher.read_text(encoding="utf-8")
 
-    assert 'SLURM_JOB_ACCOUNT:-}" == "m5216_g"' in text
+    assert 'SLURM_JOB_ACCOUNT:-}" == "${MATSIM_E3_MLIP_ACCOUNT}_g"' in text
     assert "#SBATCH -p gpu_ss11" not in text
     assert "#SBATCH -q premium" in text
     assert "#SBATCH -N 16" in text
     assert "#SBATCH -t 02:00:00" in text
     assert "#SBATCH --array=0-5%5" in text
-    assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:premium:768" in text
+    assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=${MATSIM_E3_MLIP_ACCOUNT}:premium:768" in text
     assert "MATSIM_E3_MLIP_BASE_PYTHON" in text
     assert "MATSIM_E3_MLIP_WORKER_PYTHON" in text
     assert text.index("export PYTHONPATH=") < text.index("budget-bind")
@@ -914,7 +915,8 @@ def test_mof_bond_swap_rolls_back_relaxation(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("material", sorted(MATERIALS))
-def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, material):
+@pytest.mark.parametrize("hard_deadline", [False, True])
+def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, material, hard_deadline):
     from ase.build import bulk
     from ase.calculators.emt import EMT
     from ase.io import read, write
@@ -931,6 +933,10 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
         "structure_path": str(source),
         "material": material,
     }
+    if hard_deadline:
+        from benchmarks.e3.production import _hard_optimizer_policy
+
+        task["optimizer"] = _hard_optimizer_policy(300)
 
     class Cache:
         def __init__(self):
@@ -942,11 +948,11 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
     def fake_relax(args, *, calculators, step_guard):
         assert args.relax_cell
         assert args.require_native_stress
-        assert args.stress_tolerance_eV_per_A3 == 0.01
-        assert args.relative_increase_threshold == 0.2
-        assert args.max_cell_step_strain == 0.1
-        assert args.max_cell_total_strain == 0.5
-        assert args.max_optimization_seconds == 60
+        assert args.stress_tolerance_eV_per_A3 is None
+        assert args.relative_increase_threshold is None
+        assert args.max_cell_step_strain is None
+        assert args.max_cell_total_strain is None
+        assert args.max_optimization_seconds == (300 if hard_deadline else 60)
         assert args.cell_mask == (
             (True, True, False, False, False, True) if material == "phosphorene" else None
         )
@@ -980,6 +986,10 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
     )
     result = _execute_task(task, tmp_path / "tasks", Cache())
     assert result["status"] == "converged", result
+    assert result["optimizer"]["relative_increase_threshold"] is None
+    assert result["optimizer"]["stress_tolerance_eV_per_A3"] is None
+    assert result["optimizer"]["max_cell_step_strain"] is None
+    assert result["optimizer"]["max_cell_total_strain"] is None
     assert len(result["final_stress_eV_per_A3"]) == 6
 
 

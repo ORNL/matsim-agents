@@ -59,10 +59,10 @@ OPTIMIZER_SETTINGS = {
     "maxstep_A": 0.05,
     "fmax_eV_A": 0.02,
     "relax_cell": True,
-    "stress_tolerance_eV_per_A3": 0.01,
-    "relative_increase_threshold": 0.2,
-    "max_cell_step_strain": 0.1,
-    "max_cell_total_strain": 0.5,
+    "stress_tolerance_eV_per_A3": None,
+    "relative_increase_threshold": None,
+    "max_cell_step_strain": None,
+    "max_cell_total_strain": None,
     "max_optimization_seconds": 60,
     "optimization_timeout_policy": "between_steps_v1",
     "require_native_stress": True,
@@ -1686,16 +1686,16 @@ def _execute_task(
             max_optimization_seconds=optimizer_settings["max_optimization_seconds"],
             maxstep=OPTIMIZER_SETTINGS["maxstep_A"],
             fmax=OPTIMIZER_SETTINGS["fmax_eV_A"],
-            relative_increase_threshold=OPTIMIZER_SETTINGS["relative_increase_threshold"],
+            relative_increase_threshold=optimizer_settings["relative_increase_threshold"],
             relax_cell=OPTIMIZER_SETTINGS["relax_cell"],
             cell_mask=(
                 tuple(OPTIMIZER_SETTINGS["phosphorene_cell_mask"])
                 if task["material"] == "phosphorene"
                 else None
             ),
-            stress_tolerance_eV_per_A3=OPTIMIZER_SETTINGS["stress_tolerance_eV_per_A3"],
-            max_cell_step_strain=OPTIMIZER_SETTINGS["max_cell_step_strain"],
-            max_cell_total_strain=OPTIMIZER_SETTINGS["max_cell_total_strain"],
+            stress_tolerance_eV_per_A3=optimizer_settings["stress_tolerance_eV_per_A3"],
+            max_cell_step_strain=optimizer_settings["max_cell_step_strain"],
+            max_cell_total_strain=optimizer_settings["max_cell_total_strain"],
             require_native_stress=OPTIMIZER_SETTINGS["require_native_stress"],
             mlp_device="cuda",
         )
@@ -2219,6 +2219,8 @@ def _replay_preflight(
     )
     for name in ("proposal-001.json", "recovery-authorization.json"):
         source = round_dir / "acquisition" / name
+        if name == "recovery-authorization.json" and not source.is_file():
+            continue
         _atomic_json(replay_round / "acquisition" / name, json.loads(source.read_text()))
     _atomic_json(replay_root / "original-preflight.json", original)
     outcomes = {
@@ -2562,9 +2564,23 @@ def _run_replicate(
         if policy_path.is_file():
             if json.loads(policy_path.read_text()) != policy:
                 raise ValueError("Cannot change optimization deadline when resuming a stream")
-        elif list(stream_dir.glob("round-*")) and hard_optimization_seconds is not None:
-            raise ValueError("A hard deadline requires a fresh stream, not frozen prior evidence")
         else:
+            prepared_rounds = list(stream_dir.glob("round-*"))
+            if prepared_rounds and hard_optimization_seconds is not None:
+                first_round = stream_dir / "round-01"
+                if (
+                    round_index != 1
+                    or prepared_rounds != [first_round]
+                    or not (first_round / "generation-preflight.json").is_file()
+                    or (first_round / "round-summary.json").exists()
+                    or any(first_round.glob("tasks/*/attempt-*"))
+                ):
+                    raise ValueError(
+                        "A hard deadline requires a fresh stream, not frozen prior evidence"
+                    )
+                _preflight_receipt(
+                    first_round, manifest_path, execution_attempt_id=round_attempt_id,
+                )
             _atomic_json(policy_path, policy)
         worker_python = worker_python or os.environ.get(
             "MATSIM_E3_MLIP_WORKER_PYTHON", sys.executable
@@ -2715,6 +2731,9 @@ def _worker_command(args: argparse.Namespace) -> int:
 def _validate_benchmark_allocation(job_id: str) -> None:
     if not job_id:
         raise RuntimeError("benchmark execution requires an active Slurm job")
+    account = os.environ.get("MATSIM_E3_MLIP_ACCOUNT", "m5216")
+    if account not in {"m5216", "m5048", "m4828", "amsc001", "amsc004", "dasrepo"}:
+        raise ValueError(f"account is not authorized for this campaign: {account}")
     result = subprocess.run(
         ["scontrol", "show", "job", "--oneliner", job_id],
         capture_output=True,
@@ -2727,7 +2746,7 @@ def _validate_benchmark_allocation(job_id: str) -> None:
         if "=" in item
     )
     expected = {
-        "Account": "m5216_g",
+        "Account": f"{account}_g",
         "QOS": "gpu_premium",
         "NumNodes": "16",
     }

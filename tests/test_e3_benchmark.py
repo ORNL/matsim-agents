@@ -12,6 +12,29 @@ import pytest
 from benchmarks.e3 import production
 
 
+@pytest.mark.parametrize("account", ["m5216", "m5048", "m4828", "amsc001", "amsc004", "dasrepo"])
+def test_allocation_checks_explicit_account_and_premium(monkeypatch, account):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("MATSIM_E3_MLIP_ACCOUNT", account)
+    fields = f"Account={account}_g QOS=gpu_premium NumNodes=16 TimeLimit=02:00:00"
+    monkeypatch.setattr(
+        production.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(stdout=fields)
+    )
+    production._validate_benchmark_allocation("123")
+    for wrong in [
+        fields.replace(f"Account={account}_g", "Account=unauthorized_g"),
+        fields.replace("gpu_premium", "gpu_regular"),
+    ]:
+        monkeypatch.setattr(
+            production.subprocess,
+            "run",
+            lambda *args, output=wrong, **kwargs: SimpleNamespace(stdout=output),
+        )
+        with pytest.raises(RuntimeError, match="does not match"):
+            production._validate_benchmark_allocation("123")
+
+
 def test_current_manifest_enforces_six_classes_and_bounded_rounds():
     manifest = production.build_campaign_manifest()
     production.validate_campaign_manifest(manifest)

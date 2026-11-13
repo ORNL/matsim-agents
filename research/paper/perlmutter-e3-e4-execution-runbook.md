@@ -75,17 +75,22 @@ After a Perlmutter run, preserve its outputs and accounting under a Perlmutter-s
 
 ## 3. E3-MLIP on Perlmutter
 
-E3 abort defaults are now `relative_increase_threshold=0.2`,
-`max_cell_step_strain=0.1`, and `max_cell_total_strain=0.5`. These mean a
-20% increase in the maximum optimizer force between completed steps, 10%
-per-step principal strain, and 50% principal strain relative to the starting
-cell, respectively. Filter forces include cell pseudo-forces: they are not
+E3 explicitly sets `relative_increase_threshold=None`,
+`max_cell_step_strain=None`, `max_cell_total_strain=None`, and
+`stress_tolerance_eV_per_A3=None` (JSON `null`). This disables the force-growth
+and cell-deformation abort thresholds and the separate numerical stress
+convergence criterion. A transient force increase must not terminate FIRE
+relaxation. Filter forces include cell pseudo-forces: they are not
 the same as atomic forces. Principal strain is not volume change.
-These are screening limits, not convergence criteria or proof of stability.
-The force/stress convergence targets remain 0.02 eV/A and 0.01 eV/A^3.
+The disabled growth/deformation thresholds were screening limits, not
+convergence criteria or proof of stability.
+The atomic and generalized-force convergence target remains 0.02 eV/A.
+Stress still drives cell relaxation through ExpCellFilter; `None` does not
+freeze the cell or remove its generalized forces from convergence.
 
-The shared relaxation input, discovery wrapper, orchestration, and CLI use
-the 20% force-growth default. Cell-strain defaults are set explicitly in the
+The shared relaxation input, discovery wrapper, orchestration, and CLI retain
+their general 20% force-growth default; E3 explicitly overrides it with `None`.
+Cell-strain and stress tolerances are explicitly unset in the
 E3 protocol; general non-E3 relaxation inputs retain optional, unset cell
 limits to preserve fixed-cell workflows. Each abort threshold accepts Python
 `None` (JSON `null`) in the relaxation input; in E3, changing the corresponding
@@ -93,6 +98,18 @@ optimizer setting to `None` also requires regenerating the manifest. Disabling
 a safeguard does not disable finite-value/valid-cell checks, MOF connectivity
 protection, or step/time limits. Existing attempts use a different optimizer
 contract and must not be silently reused under the revised manifest.
+CPU-only first-round preflight is compatible with a fresh hard-deadline
+stream: execution verifies its receipt before registering the execution policy.
+Existing optimization attempts or completed rounds without that policy are
+still rejected.
+
+The submission helper accepts `MATSIM_E3_MLIP_ACCOUNT` (default `m5216`) from
+the authorized project list `m5216`, `m5048`, `m4828`, `amsc001`, `amsc004`,
+and `dasrepo`. Set `MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=ACCOUNT:premium:768`
+to match, and use the same `MATSIM_E3_MLIP_RESOURCE_STATE` across accounts.
+Slurm must permit premium QoS for the selected account; account selection
+does not enlarge or reset the shared GPU-time cap. The frozen manifest's
+account is the default, while allocation metadata records the actual account.
 
 ### Optional MACE inference import isolation
 

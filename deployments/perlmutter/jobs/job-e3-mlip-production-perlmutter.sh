@@ -21,8 +21,13 @@ REPO="${PROJECT_ROOT:-${SLURM_SUBMIT_DIR:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}
   exit 2
 }
 : "${SLURM_JOB_ID:?submit this script through Slurm}"
-[[ "${SLURM_JOB_ACCOUNT:-}" == "m5216_g" ]] || {
-  echo "ERROR: this campaign requires Perlmutter account m5216_g" >&2
+export MATSIM_E3_MLIP_ACCOUNT="${MATSIM_E3_MLIP_ACCOUNT:-m5216}"
+case "${MATSIM_E3_MLIP_ACCOUNT}" in
+  m5216|m5048|m4828|amsc001|amsc004|dasrepo) ;;
+  *) echo "ERROR: account is not authorized for this campaign" >&2; exit 2 ;;
+esac
+[[ "${SLURM_JOB_ACCOUNT:-}" == "${MATSIM_E3_MLIP_ACCOUNT}_g" ]] || {
+  echo "ERROR: allocation account does not match the authorized campaign account" >&2
   exit 2
 }
 [[ "${SLURM_JOB_QOS:-}" == "gpu_premium" ]] || {
@@ -33,8 +38,8 @@ REPO="${PROJECT_ROOT:-${SLURM_SUBMIT_DIR:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}
   echo "ERROR: each material campaign requires exactly 16 nodes and 64 tasks" >&2
   exit 2
 }
-[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "m5216:premium:768" ]] || {
-  echo "ERROR: explicit authorization required: MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:premium:768" >&2
+[[ "${MATSIM_E3_MLIP_RESOURCE_AUTHORIZED:-}" == "${MATSIM_E3_MLIP_ACCOUNT}:premium:768" ]] || {
+  echo "ERROR: explicit authorization required: MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=${MATSIM_E3_MLIP_ACCOUNT}:premium:768" >&2
   exit 2
 }
 
@@ -125,7 +130,7 @@ export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
   echo "array_task_id=${TASK_ID}"
   echo "material=${MATERIAL}"
   echo "source_revision=$(git -C "${REPO}" rev-parse HEAD)"
-  echo "account=m5216_g"
+  echo "account=${MATSIM_E3_MLIP_ACCOUNT}_g"
   echo "qos=gpu_premium"
   echo "nodes=16"
   echo "gpus=64"
