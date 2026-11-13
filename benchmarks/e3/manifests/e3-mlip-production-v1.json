@@ -81747,6 +81747,7 @@
     "maxiter": 500,
     "maxstep_A": 0.05,
     "mof_connectivity_guard": true,
+    "mof_connectivity_version": "atom-indexed-v1",
     "optimizer": "FIRE",
     "phosphorene_cell_mask": [
       true,
