@@ -6,6 +6,15 @@ from matsim_agents.workflows.debate import (
     ScientificDebateResult,
     run_scientific_debate,
 )
+from matsim_agents.workflows.exploration import (
+    ExplorationCheck,
+    ExplorationConfig,
+    ExplorationSummary,
+    check_exploration,
+    load_exploration_config,
+    run_exploration,
+    summarize_exploration,
+)
 from matsim_agents.workflows.investigation import (
     HypothesisDiscussionConfig,
     InvestigationConfig,
@@ -33,6 +42,13 @@ from matsim_agents.workflows.relaxation import (
 )
 
 __all__ = [
+    "ExplorationCheck",
+    "ExplorationConfig",
+    "ExplorationSummary",
+    "check_exploration",
+    "load_exploration_config",
+    "run_exploration",
+    "summarize_exploration",
     "DebateParticipant",
     "LLMCheckConfig",
     "LLMCheckResult",

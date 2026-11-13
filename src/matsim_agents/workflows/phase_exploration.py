@@ -159,6 +159,7 @@ def run_phase_exploration(
     output_dir: str,
     exploration_kwargs: dict[str, Any] | None = None,
     active_learning_runner: Callable[[str, str, bool, bool, bool], dict[str, Any]] | None = None,
+    request_config: dict[str, Any] | None = None,
 ) -> PhaseExplorationWorkflowResult:
     """Run exploration, optional AL, and optional post-promotion reevaluation.
 
@@ -166,6 +167,8 @@ def run_phase_exploration(
     promotion_approved)`` and must apply those controls before training or
     promotion. It returns a mapping containing ``model_promoted`` plus any
     provenance, keeping this workflow independent of facility-specific launch mechanics.
+    ``request_config`` records a caller's validated configuration before execution,
+    including settings supplied through an otherwise nonserializable callback.
     """
 
     kwargs = dict(exploration_kwargs or {})
@@ -189,6 +192,7 @@ def run_phase_exploration(
             "policy": policy.model_dump(mode="json"),
             "exploration_options": recorded_options,
             "omitted_runtime_options": omitted_options,
+            **({"request_config": request_config} if request_config is not None else {}),
         },
         provenance=ProvenanceRecord(
             workflow="phase_exploration",
