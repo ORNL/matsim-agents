@@ -12,6 +12,7 @@ from matsim_agents.workflows.exploration import (
     ExplorationSummary,
     check_exploration,
     load_exploration_config,
+    resume_exploration,
     run_exploration,
     summarize_exploration,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "check_exploration",
     "load_exploration_config",
     "run_exploration",
+    "resume_exploration",
     "summarize_exploration",
     "DebateParticipant",
     "LLMCheckConfig",

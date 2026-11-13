@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -62,7 +63,7 @@ class ExplorationRelaxationConfig(BaseModel):
 
 
 class ExplorationConfig(BaseModel):
-    """Bounded, single-batch MLIP exploration; never launches LLM, DFT, or AL work."""
+    """Bounded MLIP exploration; never launches LLM, DFT, or AL work."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -73,6 +74,7 @@ class ExplorationConfig(BaseModel):
     device: Literal["cpu", "cuda"] = "cpu"
     precision: Literal["fp32", "fp64"] = "fp64"
     max_relaxations: int = Field(2, gt=0)
+    iterations: int = Field(1, ge=1, le=1000)
     generation: ExplorationGenerationConfig = Field(default_factory=ExplorationGenerationConfig)
     relaxation: ExplorationRelaxationConfig = Field(default_factory=ExplorationRelaxationConfig)
 
@@ -106,6 +108,8 @@ class ExplorationSummary(BaseModel):
     errors: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     calculator_loads: int | None = None
+    rounds_completed: int = 0
+    rounds_requested: int = 1
 
 
 def load_exploration_config(path: str | Path) -> ExplorationConfig:
@@ -165,6 +169,10 @@ def check_exploration(cfg: ExplorationConfig) -> ExplorationCheck:
 def summarize_exploration(run_directory: str | Path) -> ExplorationSummary:
     """Read the canonical persisted evidence, without importing a model."""
     run = ScientificRunDirectory.open(run_directory)
+    if (run.path / "rounds-state.json").is_file():
+        from matsim_agents.workflows.exploration_rounds import summarize_rounds
+
+        return summarize_rounds(run)
     record = PhaseExplorationEvidenceRecord.model_validate_json(
         (run.path / "results.json").read_text(encoding="utf-8")
     )
@@ -209,8 +217,14 @@ def summarize_exploration(run_directory: str | Path) -> ExplorationSummary:
     return summary
 
 
-def run_exploration(cfg: ExplorationConfig) -> ExplorationSummary:
+def run_exploration(
+    cfg: ExplorationConfig, *, on_progress: Callable[[str], None] | None = None
+) -> ExplorationSummary:
     """Use one calculator cache across a bounded batch and persist an honest summary."""
+    if cfg.iterations > 1:
+        from matsim_agents.workflows.exploration_rounds import run_rounds
+
+        return run_rounds(cfg, on_progress=on_progress)
     check = check_exploration(cfg)
     if not check.ready:
         raise ValueError("Exploration preflight failed:\n" + "\n".join(check.errors))
@@ -262,3 +276,12 @@ def run_exploration(cfg: ExplorationConfig) -> ExplorationSummary:
     summary.calculator_loads = cache.loads
     run.write_json("exploration-summary.json", summary)
     return summary
+
+
+def resume_exploration(
+    run_directory: str | Path, *, on_progress: Callable[[str], None] | None = None
+) -> ExplorationSummary:
+    """Resume a checkpointed multi-round run without repeating completed attempts."""
+    from matsim_agents.workflows.exploration_rounds import run_rounds
+
+    return run_rounds(None, run_directory=run_directory, on_progress=on_progress)

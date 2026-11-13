@@ -1272,6 +1272,7 @@ matsim-agents characterize CONTRACT.yaml   # answer a characterization contract 
 matsim-agents explore check CONFIG.yaml    # static preflight for a bounded MACE phase search
 matsim-agents explore run CONFIG.yaml      # generate, relax, and rank one MLIP-only batch
 matsim-agents explore summary RUN_DIRECTORY # inspect counts, termination reasons, and errors
+matsim-agents explore resume RUN_DIRECTORY # resume checkpointed multi-round exploration
 matsim-agents ledger  verify LEDGER.jsonl    # check the evidence ledger's hash chain and artifacts
 matsim-agents ledger  show LEDGER.jsonl      # evidence counts and current hypothesis revisions
 matsim-agents benchmark known-answers [--tier replay|live]  # grade the Si/SiC known-answer suite
