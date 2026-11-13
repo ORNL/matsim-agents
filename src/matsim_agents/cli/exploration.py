@@ -13,12 +13,17 @@ from matsim_agents.workflows.exploration import (
     ExplorationSummary,
     check_exploration,
     load_exploration_config,
+    resume_exploration,
     run_exploration,
     summarize_exploration,
 )
 
 explore_app = typer.Typer(help="Check, run, and inspect a bounded MLIP-only phase search.")
 app.add_typer(explore_app, name="explore")
+
+
+def _progress(message: str) -> None:
+    console.print(message, markup=False, soft_wrap=True)
 
 
 def _load_config(path: Path) -> ExplorationConfig:
@@ -40,6 +45,8 @@ def _print_summary(summary: ExplorationSummary) -> None:
         console.print(f"  termination {reason}: {count}", markup=False)
     if summary.calculator_loads is not None:
         console.print(f"Calculator loads: {summary.calculator_loads}")
+    if summary.rounds_requested > 1:
+        console.print(f"Rounds: {summary.rounds_completed}/{summary.rounds_requested}")
     for error in summary.errors:
         console.print(f"Error: {error}", style="red", markup=False)
     for note in summary.notes:
@@ -73,7 +80,7 @@ def run(
     """Generate and relax a bounded batch; never submit a scheduler job."""
     cfg = _load_config(config)
     try:
-        summary = run_exploration(cfg)
+        summary = run_exploration(cfg, on_progress=_progress)
     except (ValueError, OSError) as error:
         console.print(f"Exploration error: {error}", style="red", markup=False)
         raise typer.Exit(1) from error
@@ -91,6 +98,21 @@ def summary(
         result = summarize_exploration(run_directory)
     except (ValueError, OSError) as error:
         console.print(f"Cannot read exploration evidence: {error}", style="red", markup=False)
+        raise typer.Exit(1) from error
+    _print_summary(result)
+    if result.status == "failed":
+        raise typer.Exit(1)
+
+
+@explore_app.command("resume")
+def resume(
+    run_directory: Path = typer.Argument(..., exists=True, file_okay=False),
+) -> None:
+    """Continue a checkpointed multi-round run; do not retry committed failures."""
+    try:
+        result = resume_exploration(run_directory, on_progress=_progress)
+    except (ValueError, OSError) as error:
+        console.print(f"Cannot resume exploration: {error}", style="red", markup=False)
         raise typer.Exit(1) from error
     _print_summary(result)
     if result.status == "failed":

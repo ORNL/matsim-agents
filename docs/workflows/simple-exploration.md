@@ -1,13 +1,13 @@
 # A small phase search, without writing Python
 
-This is the beginner-facing entry point for **one bounded batch** of
+This is the beginner-facing entry point for **bounded batches or rounds** of
 MACE structure generation and relaxation. It reuses the same generators,
 calculator, ranking, and evidence storage as the library workflows.
 You need one YAML file, not a session-specific test driver.
 
 This first interface supports a **trusted local MACE checkpoint**. It does
 not yet reproduce the three-round Nb2O5 coordination test: there are no LLM
-calls, SOAP filtering, adaptive decisions, DFT, active learning, or resume.
+calls, SOAP filtering, adaptive decisions, DFT, or active learning.
 Existing advanced commands remain available.
 
 ## 1. Prepare once
@@ -57,10 +57,12 @@ Inside your compute allocation:
 The command prints the run directory, generated/attempted/converged counts,
 termination reasons, backend errors, and number of calculator loads. A single
 calculator is reused across candidates; initial loading is not repeated for
-each structure. The run directory contains the standard `results.json`,
+each structure. Single-batch run directories contain the standard `results.json`,
 `resolved_config.json`, provenance, calculations, and an
 `exploration-summary.json`. The complete user configuration and checkpoint hash
 are recorded in `resolved_config.json`, including if the engine fails.
+Multi-round runs use the candidate journal and cumulative ranking described below
+instead of the single-batch `results.json`.
 
 Inspect it later without loading the model or repeating calculations:
 
@@ -81,7 +83,7 @@ invalid configuration. Details remain in output and persisted evidence.
 
 ## Changing scientific settings
 
-- `max_relaxations` caps attempts, including backend failures.
+- `max_relaxations` caps attempts **per round**, including backend failures.
 - `generation` controls AFLOW count, PyXtal count, formula units, seed, and
   optional `space_groups` (integers 1–230). At least one source is required.
 - `relaxation` controls optimizer, steps, maximum step, force target, and a
@@ -128,7 +130,65 @@ print(summary.model_dump_json(indent=2))
 
 ## Next usability milestone
 
-Add a supported multi-round orchestration contract, distinguishing advisory
-LLM feedback from changes that actually steer generation. Resume and adaptive
-selection need explicit evidence and compatibility rules, not hidden defaults.
-This interface intentionally does not claim those features yet.
+Add explicit LLM-guided generation, distinguishing advisory feedback from
+validated decisions that actually steer generation. The rounds below use
+fixed generation settings with incremented seeds, not adaptive LLM steering.
+
+## Multiple rounds and safe resume
+
+Set `iterations: 3` in the same YAML. Each round generates a fresh batch using
+`random_seed + round_index` (the first round uses the configured seed).
+`max_relaxations: 2` permits at most six attempts across three rounds.
+All rounds share one calculator cache within the running process.
+The default `iterations: 1` retains the original single-batch interface.
+Deterministic AFLOW prototypes can repeat across rounds; incrementing the seed
+does not guarantee distinct structures. This milestone does not deduplicate
+across rounds or adapt generation from previous results.
+
+```bash
+.venv-mace/bin/python -m matsim_agents.cli explore run explore.yaml
+.venv-mace/bin/python -m matsim_agents.cli explore summary /path/to/printed/run-directory
+.venv-mace/bin/python -m matsim_agents.cli explore resume /path/to/printed/run-directory
+```
+
+Resume is supported for runs started with `iterations > 1`; legacy single-batch
+runs do not contain candidate checkpoints. Multi-round runs store
+`rounds-state.json` atomically after generation, each completed attempt, and each
+round. This contains the complete configuration, incremented-seed round
+candidates, results/errors, checkpoint identity, and artifact hashes.
+`cumulative-ranking.json` ranks converged results across completed work; a JSON
+`null` means no eligible result. No LLM, DFT, or active learning is introduced.
+
+The summary reports round completion, cumulative candidate counts, stop reasons,
+and errors even for an interrupted run. Execution that has not finished is
+reported as `incomplete` with a nonzero summary exit status. Backend failures
+consume the round budget, are logged and saved, and do not silently become
+successful calculations.
+
+**Resume guarantees and limits:**
+
+- Completed attempts, including nonconverged results and backend failures, are
+  not rerun or retried. Unattempted candidates beyond the per-round cap remain
+  unattempted. A completed run is a no-op on resume.
+- The calculator is reused across rounds in one process. A resumed process
+  loads its own calculator on its first outstanding attempt; it cannot recover
+  GPU/CPU model memory from a terminated process.
+- Only one writer may run/resume a directory at a time (an OS file lock).
+- Missing/modified input or output artifacts, a changed checkpoint, changed
+  workflow/optimizer/generator source, or changed scientific dependency versions
+  block resume. Do not edit the journal to bypass checks. Start a fresh run for
+  changed scientific settings; the stored configuration is authoritative.
+- An interruption **before** an attempt's checkpoint commits can repeat that
+  attempt from its original candidate, not its last optimizer step. Outputs for
+  that uncommitted attempt may be replaced. The guarantee is checkpoint-level,
+  not exactly-once execution.
+- Generation interrupted before its checkpoint commits can run again; random
+  generation is not guaranteed bit-for-bit reproducible. Once candidates are
+  checkpointed, they are reused without regeneration.
+- Ranking is rebuilt when resuming interrupted work from stored eligible results.
+  These are relative phase energies, not thermodynamic stability or evidence of
+  dynamic stability.
+
+Use the same prepared interpreter and code checkout when resuming. Static
+preflight and checkpoint verification still apply. The resume command never
+changes the stored budget, submits jobs, or automatically retries backend errors.

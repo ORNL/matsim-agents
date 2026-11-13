@@ -7,6 +7,8 @@ output_dir: ./nb2o5-runs
 device: cpu
 precision: fp64
 max_relaxations: 2
+# Set iterations: 3 for checkpointed rounds (two attempts per round).
+iterations: 1
 generation:
   formula_units: 1
   max_aflow_candidates: 1
