@@ -8,7 +8,6 @@ import pytest
 
 from benchmarks.e3.production import (
     E3_MLIP_CHECKPOINT_SHA256,
-    E3_STRATEGIES,
     MATERIALS,
     OPTIMIZER_SETTINGS,
     REPLICATE_SEEDS,
@@ -32,6 +31,77 @@ from benchmarks.e3.production import (
 )
 
 
+def test_spooled_slurm_launcher_resolves_submission_checkout(tmp_path, monkeypatch):
+    import subprocess
+
+    repo = Path(__file__).resolve().parents[1]
+    script = repo / "deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh"
+    spooled = tmp_path / "slurm_script"
+    spooled.write_text(script.read_text())
+    monkeypatch.delenv("PROJECT_ROOT", raising=False)
+    for key, value in {
+        "SLURM_SUBMIT_DIR": str(repo),
+        "SLURM_JOB_ID": "test-not-an-allocation",
+        "SLURM_JOB_ACCOUNT": "m5216_g",
+        "SLURM_JOB_QOS": "gpu_premium",
+        "SLURM_NNODES": "16",
+        "SLURM_NTASKS": "64",
+        "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED": "m5216:premium:768",
+        "MATSIM_E3_MLIP_RESERVATION_ID": "pre-reserved-test-allocation",
+        "MATSIM_E3_MLIP_BASE_PYTHON": str(tmp_path / "missing-python"),
+    }.items():
+        monkeypatch.setenv(key, value)
+    result = subprocess.run(
+        ["bash", str(spooled)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "prepared base and MACE Python environments are required" in result.stderr
+    assert "not a matsim-agents checkout" not in result.stderr
+
+
+def test_separate_rerun_uses_explicit_shared_resource_ledger():
+    repo = Path(__file__).resolve().parents[1]
+    script = (repo / "deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh").read_text()
+    assert (
+        'RESOURCE_STATE="${MATSIM_E3_MLIP_RESOURCE_STATE:-${OUTPUT_ROOT}/resource-budget.json}"'
+        in script
+    )
+    assert '--resource-state "${RESOURCE_STATE}"' in script
+    assert script.count('--state "${RESOURCE_STATE}"') == 1
+    helper = (
+        repo / "deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh"
+    ).read_text()
+    assert "MATSIM_E3_MLIP_RESOURCE_STATE:-${OUTPUT_ROOT}/resource-budget.json" in helper
+    assert '--state "${MATSIM_E3_MLIP_RESOURCE_STATE}"' in helper
+
+
+def test_worker_step_waits_for_slow_ranks_after_first_success(monkeypatch, tmp_path):
+    import time
+
+    calls = []
+    monkeypatch.setenv("SLURM_JOB_ID", "test-allocation")
+    monkeypatch.setattr(
+        "benchmarks.e3.production.subprocess.run", lambda command, **_: calls.append(command)
+    )
+    _execute_round_tasks(
+        tmp_path / "tasks.jsonl",
+        tmp_path,
+        64,
+        4,
+        "worker-python",
+        hard_optimization_seconds=300,
+        round_deadline=time.monotonic() + 1200,
+    )
+    assert "--wait=0" in calls[0]
+    assert "--wait=10" not in calls[0]
+    assert "--kill-on-bad-exit=1" in calls[0]
+    assert "--time" in calls[0]
+
+
 def test_hard_deadline_records_nonconvergence_and_is_not_retried(tmp_path, monkeypatch):
     from matsim_agents.execution.deadline_worker import TaskDeadlineExceeded
 
@@ -48,10 +118,11 @@ def test_hard_deadline_records_nonconvergence_and_is_not_retried(tmp_path, monke
         lambda: (Path("unused"), E3_MLIP_CHECKPOINT_SHA256),
     )
     calls = []
+    startup_deadlines = []
 
     class Worker:
-        def __init__(self, *args):
-            pass
+        def __init__(self, *args, **kwargs):
+            startup_deadlines.append(kwargs["startup_seconds"])
 
         def __enter__(self):
             return self
@@ -93,6 +164,7 @@ def test_hard_deadline_records_nonconvergence_and_is_not_retried(tmp_path, monke
         hard_optimization_seconds=300,
     ) == {"resumed": 1}
     assert calls == [300]
+    assert startup_deadlines == [15 * 60, 15 * 60]
     assert _task_result(path.parent.parent, task) is None
     task["optimizer"] = payload["optimizer"]
     assert _task_result(path.parent.parent, task) == path
@@ -120,17 +192,19 @@ def test_hard_deadline_is_forwarded_to_all_gpu_workers(monkeypatch, tmp_path):
 def test_existing_stream_cannot_change_optimization_deadline(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(build_campaign_manifest()))
-    stream = tmp_path / "runs/nb_ta_o/rule_based_adaptation/seed-20261111"
+    stream = tmp_path / "runs/nb_ta_o/llm_guided_adaptation/seed-20261113"
     stream.mkdir(parents=True)
     (stream / "execution-policy.json").write_text(json.dumps({"hard_optimization_seconds": 300}))
-    with pytest.raises(ValueError, match="Cannot change optimization deadline"):
+    with pytest.raises(ValueError, match="64 workers and a 300-second hard cutoff"):
         run_replicate(
             manifest_path,
             tmp_path / "runs",
             "nb_ta_o",
-            "rule_based_adaptation",
-            20261111,
+            "llm_guided_adaptation",
+            20261113,
+            worker_count=64,
             hard_optimization_seconds=60,
+            round_index=1,
         )
 
 
@@ -185,8 +259,8 @@ def test_wrapper_constructs_explicit_five_minute_deadline(monkeypatch, tmp_path)
         json.dumps(
             {
                 "schema_version": 1,
-                "cap_gpu_seconds": 7200000,
-                "reservations": {"test": {"reserved_gpu_seconds": 100}},
+                "cap_gpu_seconds": 2764800,
+                "reservations": {"test": {"reserved_gpu_seconds": 460800}},
             }
         )
     )
@@ -199,37 +273,37 @@ def test_wrapper_constructs_explicit_five_minute_deadline(monkeypatch, tmp_path)
                 "output_root": str(tmp_path / "runs"),
                 "resource_state": str(resource),
                 "material": "nb_ta_o",
-                "strategy": "rule_based_adaptation",
                 "hard_optimization_seconds": 300,
             },
         }
     )
     command = _command(cfg, approved=True)
-    assert command[-2:] == ["--hard-optimization-seconds", "300.0"]
+    assert command[-2:] == ["--hard-optimization-seconds", "300"]
 
 
-def test_campaign_manifest_has_all_matched_rounds_and_budgets():
+def test_campaign_manifest_has_six_classes_and_bounded_budgets():
     manifest = build_campaign_manifest()
 
     validate_campaign_manifest(manifest)
     assert manifest["optimizer"] == OPTIMIZER_SETTINGS
     assert manifest["optimizer"]["relax_cell"] is True
-    assert manifest["optimizer"]["relative_increase_threshold"] == 0.2
-    assert manifest["optimizer"]["max_cell_step_strain"] == 0.1
-    assert manifest["optimizer"]["max_cell_total_strain"] == 0.5
+    assert manifest["optimizer"]["relative_increase_threshold"] is None
+    assert manifest["optimizer"]["stress_tolerance_eV_per_A3"] is None
+    assert manifest["optimizer"]["max_cell_step_strain"] is None
+    assert manifest["optimizer"]["max_cell_total_strain"] is None
     assert manifest["optimizer"]["max_optimization_seconds"] == 60
     assert manifest["optimizer"]["optimization_timeout_policy"] == "between_steps_v1"
     assert manifest["optimizer"]["mof_connectivity_version"] == "atom-indexed-v1"
     assert manifest["optimizer"]["phosphorene_cell_mask"] == [True, True, False, False, False, True]
-    assert len(manifest["rounds"]) == 6 * 2 * 3 * 10
-    assert manifest["total_logical_optimizations"] == 61120
+    assert len(manifest["rounds"]) == 6 * 3
+    assert manifest["total_logical_optimizations"] == 1152
     assert manifest["resource_request"]["account"] == "m5216"
     assert manifest["resource_request"]["billing_account"] == "m5216_g"
-    assert manifest["resource_request"]["qos"] == "regular"
-    assert manifest["resource_request"]["billing_qos"] == "gpu_regular"
-    assert manifest["resource_request"]["requested_gpu_hour_cap"] == 2000
-    assert manifest["resource_request"]["maximum_scheduled_gpu_hours"] == pytest.approx(1999.2)
-    assert manifest["resource_request"]["maximum_scheduled_gpu_node_hours"] == pytest.approx(499.8)
+    assert manifest["resource_request"]["qos"] == "premium"
+    assert manifest["resource_request"]["billing_qos"] == "gpu_premium"
+    assert manifest["resource_request"]["requested_gpu_hour_cap"] == 768
+    assert manifest["resource_request"]["maximum_scheduled_gpu_hours"] == pytest.approx(768)
+    assert manifest["resource_request"]["maximum_scheduled_gpu_node_hours"] == pytest.approx(192)
     assert manifest["llm_guided_configuration"] == {
         "provider": "copilot",
         "model": "gemini-4-carbon",
@@ -239,21 +313,15 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     }
 
     for material in MATERIALS:
-        for strategy in E3_STRATEGIES:
-            rows = [
-                row
-                for row in manifest["rounds"]
-                if row["material"] == material and row["strategy"] == strategy
-            ]
-            assert len(rows) == 30
-            assert sum(row["main_target"] for row in rows) == 5000
-            assert sum(row["finite_size_control_target"] for row in rows) == (
-                20 * len(MATERIALS[material]["tiers"])
-            )
-            assert sum(len(row["finite_size_control_families"]) for row in rows) == 20
-            assert {row["seed"] for row in rows} == set(REPLICATE_SEEDS)
-            for row in rows:
-                assert sum(row["minimum_main_count_by_tier"].values()) <= row["main_target"]
+        rows = [row for row in manifest["rounds"] if row["material"] == material]
+        assert len(rows) == 3
+        assert sum(row["main_target"] for row in rows) == 192
+        assert all(row["finite_size_control_target"] == 0 for row in rows)
+        assert {row["strategy"] for row in rows} == {"llm_guided_adaptation"}
+        assert {row["seed"] for row in rows} == set(REPLICATE_SEEDS)
+        for row in rows:
+            assert row["main_target"] == 64
+            assert sum(row["minimum_main_count_by_tier"].values()) <= row["main_target"]
 
 
 def test_perlmutter_launcher_targets_the_authorized_gpu_resources():
@@ -266,13 +334,17 @@ def test_perlmutter_launcher_targets_the_authorized_gpu_resources():
     )
     text = launcher.read_text(encoding="utf-8")
 
-    assert 'SLURM_JOB_ACCOUNT:-}" == "m5216_g"' in text
+    assert 'SLURM_JOB_ACCOUNT:-}" == "${MATSIM_E3_MLIP_ACCOUNT}_g"' in text
     assert "#SBATCH -p gpu_ss11" not in text
-    assert "#SBATCH -q regular" in text
-    assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:regular:2000" in text
+    assert "#SBATCH -q premium" in text
+    assert "#SBATCH -N 16" in text
+    assert "#SBATCH -t 02:00:00" in text
+    assert "#SBATCH --array=0-5%5" in text
+    assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=${MATSIM_E3_MLIP_ACCOUNT}:premium:768" in text
     assert "MATSIM_E3_MLIP_BASE_PYTHON" in text
     assert "MATSIM_E3_MLIP_WORKER_PYTHON" in text
-    assert text.index("export PYTHONPATH=") < text.index("budget-reserve")
+    assert text.index("export PYTHONPATH=") < text.index("budget-bind")
+    assert "budget-release" not in text
 
 
 def test_class_actions_are_material_specific_and_mof_never_uses_pyxtal():
@@ -366,7 +438,7 @@ def test_lifepo4_parent_action_capacity_is_shared_across_allocators():
                 },
             )()
 
-    with pytest.raises(ValueError, match="finite generation-action capacity"):
+    with pytest.raises(ValueError, match="unavailable or repeated action ID"):
         _llm_allocation(
             FakeChat(),
             "lifepo4",
@@ -439,7 +511,9 @@ def test_pristine_phosphorene_capacity_is_shared_across_allocators_and_rounds(fa
         target=1,
         minimum_by_tier={str(remaining["size_tier"]): 1},
     )
-    assert allocations == [{"action": remaining, "count": 1}]
+    assert allocations[0]["action"]["action_id"] == remaining["action_id"]
+    assert allocations[0]["count"] == 1
+    assert allocations[0]["action"]["feasibility"]["remaining_capacity"] == 1
 
 
 @pytest.mark.parametrize(
@@ -462,12 +536,13 @@ def test_round_materialization_replicates_control_families_across_tiers(
         row
         for row in manifest["rounds"]
         if row["material"] == material
-        and row["strategy"] == E3_STRATEGIES[0]
+        and row["strategy"] == "llm_guided_adaptation"
         and row["seed"] == REPLICATE_SEEDS[0]
         and row["round"] == 1
     )
     spec = {
         **spec,
+        "strategy": "rule_based_adaptation",
         "main_target": 1,
         "minimum_main_count_by_tier": minimum_by_tier,
         "finite_size_control_families": [0],
@@ -535,11 +610,13 @@ def test_llm_policy_validates_exact_budget_allowlist_and_evidence():
         target=2,
         minimum_by_tier={str(allowed["size_tier"]): 2},
     )
-    assert allocations == [{"action": allowed, "count": 2}]
+    assert allocations[0]["action"]["action_id"] == allowed["action_id"]
+    assert allocations[0]["count"] == 2
+    assert allocations[0]["action"]["feasibility"]["generator_available"]
     assert citations == ["campaign-design"]
     assert rationale
 
-    with pytest.raises(ValueError, match="outside the list|invalid or repeated action"):
+    with pytest.raises(ValueError, match="unavailable or repeated action"):
         _llm_allocation(
             type(
                 "FakeChat",
@@ -729,28 +806,30 @@ def test_timed_out_structures_are_not_counted_as_relaxed_minima():
     assert _distinct_relaxed_minima(tasks, results) == {}
 
 
-def test_completed_fixed_cell_round_cannot_be_resumed(tmp_path):
+def test_prior_fixed_cell_evidence_is_not_replayed(tmp_path):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(build_campaign_manifest()))
     round_dir = (
         tmp_path
         / "runs"
         / "bcc_refractory"
-        / "rule_based_adaptation"
-        / "seed-20261111"
+        / "llm_guided_adaptation"
+        / "seed-20261113"
         / "round-01"
     )
     round_dir.mkdir(parents=True)
     (round_dir / "round-summary.json").write_text(json.dumps({"status": "complete"}))
     (round_dir / "round-manifest.json").write_text(json.dumps({"optimizer": {"relax_cell": False}}))
-    with pytest.raises(ValueError, match="different optimization protocol"):
+    with pytest.raises(ValueError, match="requires a fresh stream"):
         run_replicate(
             manifest_path,
             tmp_path / "runs",
             "bcc_refractory",
-            "rule_based_adaptation",
-            20261111,
-            worker_count=1,
+            "llm_guided_adaptation",
+            20261113,
+            worker_count=64,
+            hard_optimization_seconds=300,
+            round_index=1,
         )
 
 
@@ -836,7 +915,8 @@ def test_mof_bond_swap_rolls_back_relaxation(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("material", sorted(MATERIALS))
-def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, material):
+@pytest.mark.parametrize("hard_deadline", [False, True])
+def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, material, hard_deadline):
     from ase.build import bulk
     from ase.calculators.emt import EMT
     from ase.io import read, write
@@ -853,6 +933,10 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
         "structure_path": str(source),
         "material": material,
     }
+    if hard_deadline:
+        from benchmarks.e3.production import _hard_optimizer_policy
+
+        task["optimizer"] = _hard_optimizer_policy(300)
 
     class Cache:
         def __init__(self):
@@ -864,11 +948,11 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
     def fake_relax(args, *, calculators, step_guard):
         assert args.relax_cell
         assert args.require_native_stress
-        assert args.stress_tolerance_eV_per_A3 == 0.01
-        assert args.relative_increase_threshold == 0.2
-        assert args.max_cell_step_strain == 0.1
-        assert args.max_cell_total_strain == 0.5
-        assert args.max_optimization_seconds == 60
+        assert args.stress_tolerance_eV_per_A3 is None
+        assert args.relative_increase_threshold is None
+        assert args.max_cell_step_strain is None
+        assert args.max_cell_total_strain is None
+        assert args.max_optimization_seconds == (300 if hard_deadline else 60)
         assert args.cell_mask == (
             (True, True, False, False, False, True) if material == "phosphorene" else None
         )
@@ -902,6 +986,10 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
     )
     result = _execute_task(task, tmp_path / "tasks", Cache())
     assert result["status"] == "converged", result
+    assert result["optimizer"]["relative_increase_threshold"] is None
+    assert result["optimizer"]["stress_tolerance_eV_per_A3"] is None
+    assert result["optimizer"]["max_cell_step_strain"] is None
+    assert result["optimizer"]["max_cell_total_strain"] is None
     assert len(result["final_stress_eV_per_A3"]) == 6
 
 

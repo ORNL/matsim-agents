@@ -1,0 +1,137 @@
+THREE-ITERATION Nb2O5: QUANTUM ESPRESSO LABELS AND MACE FINE-TUNING
+===============================================================
+
+This is a new DFT-backed active-learning example, not an E3-MLIP benchmark
+or a reproduction of the earlier fixed-cell CPU coordination smoke test.
+It uses the supported AL runner, not a private session driver.
+
+1. WHAT RUNS
+
+Each iteration:
+  - Enumerate up to two prototype-derived Nb2O5 MD seeds.
+  - Sample 40 MACE-driven Langevin steps at 300 K.
+  - Select at most four snapshots using the random/diversity baseline.
+  - Label those exact geometries with QE single-point SCF energy, forces,
+    and stress. QE does not generate or relax the candidate structures.
+  - Append accepted labels to the cumulative training dataset.
+  - Fine-tune a candidate MACE model with two epochs of LoRA.
+  - Compare incumbent and candidate on independent held-out QE labels.
+  - Promote only if approved and the validation policy passes; otherwise
+    keep the incumbent for the next iteration.
+
+There are three iterations and at most 12 new compound DFT calculations.
+This cap does NOT include prerequisite reference/validation calculations.
+No LLM hypothesis agent participates in this example. Acquisition is a
+baseline, not a claim of calibrated uncertainty or optimized discovery.
+Two training epochs and 12 labels demonstrate wiring, not a reliable fit.
+An iteration need not train or promote if insufficient valid labels exist.
+
+2. FILES YOU MUST SUPPLY
+
+The repository supplies:
+  examples/active_learning/nb2o5_qe_mace.yaml
+  src/matsim_agents/training/finetune_mace.py
+  deployments/perlmutter/launchers/_qe-step-perlmutter.sh
+
+You supply:
+  - A trusted MACE-OMAT-0 medium checkpoint.
+  - A working Perlmutter GPU QE pw.x executable.
+  - Reviewed Nb and O PBE UPF pseudopotentials (explicit filenames).
+  - A QE-labelled elemental-reference JSON manifest and its fixed pure-Nb
+    and pure-O geometry files. Use converged real DFT energies, not examples.
+  - An independent held-out Nb2O5 extxyz with at least two labelled frames
+    and its dataset-provenance sidecar. Do not reuse training/MD geometries.
+
+References, validation labels, and new compound labels must use compatible
+QE settings and pseudopotential identities. Training aligns energies to the
+foundation model using the elemental references; do not mix VASP/QE totals.
+See docs/scientific-workflows.md, "Formation-energy comparisons and campaign
+promotion", for the reference manifest and dataset sidecar requirements.
+Configuration validation checks paths/schema, not scientific provenance;
+execution checks reference coverage, hashes, and method compatibility.
+
+Converge cutoffs and k-points for the chosen UPFs before scientific use.
+The YAML's 80/640 Ry and 2x2x2 mesh are demonstration values, not certified
+Nb2O5 settings. Prerequisite DFT requires separate resource authorization.
+
+3. SET THESE ENVIRONMENT VARIABLES
+
+Run in Bash; replace every /path/to value with an actual absolute path:
+
+  export PROJ_ROOT=/path/to/matsim-agents
+  export MACE_CHECKPOINT=/path/to/maceomat0mediummodel
+  export PW_BIN=/path/to/quantum-espresso/bin/pw.x
+  export PSEUDO_DIR=/path/to/pbe-upf
+  export NB_UPF=your-reviewed-Nb.UPF
+  export O_UPF=your-reviewed-O.UPF
+  export ELEMENTAL_REFERENCE_MANIFEST=/path/to/qe-elemental-references.json
+  export NB2O5_QE_VALIDATION_SET=/path/to/heldout-nb2o5.extxyz
+  export NB2O5_AL_RUN_DIR=/path/to/runs/nb2o5-qe-mace-al-001
+
+After reviewing the promotion thresholds and resource requirements:
+
+  export NB2O5_PROMOTION_APPROVED=true
+
+Promotion approval permits only metric-gated model replacement. It does not
+authorize a scheduler allocation. The initial checkpoint is never overwritten.
+Use a new NB2O5_AL_RUN_DIR for a separate attempt; reuse it only to resume.
+
+4. VALIDATE WITHOUT EXECUTION
+
+Use one environment containing matsim-agents, ASE, pymatgen, PyXtal, MACE,
+and the MACE training/LoRA dependencies. The repository Perlmutter MACE
+environment is .venv-mace; set PYTHON to its absolute interpreter path.
+
+  cd "$PROJ_ROOT"
+  export PYTHON="$PROJ_ROOT/.venv-mace/bin/python"
+  export PYTHONPATH="$PROJ_ROOT/src:$PROJ_ROOT"
+  export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+  test -x "$PW_BIN"
+  test -f "$PSEUDO_DIR/$NB_UPF"
+  test -f "$PSEUDO_DIR/$O_UPF"
+  test -f "$NB2O5_QE_VALIDATION_SET"
+  test -f "$ELEMENTAL_REFERENCE_MANIFEST"
+
+For the original MACE-OMAT-0 medium checkpoint:
+
+  echo "d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a  $MACE_CHECKPOINT" \
+    | sha256sum --check
+
+  "$PYTHON" -m matsim_agents.cli al validate-config \
+    examples/active_learning/nb2o5_qe_mace.yaml
+
+Stop if any check fails. Do not bypass checkpoint verification or substitute
+fabricated DFT references. Validation makes no QE or training calls.
+
+5. RUN ONLY INSIDE AN AUTHORIZED COMPUTE ALLOCATION
+
+This example assumes a Perlmutter GPU allocation containing one node and at
+least one GPU, with the driver running on that node. DFT, MD and training
+share one placed GPU sequentially. MACE training runs as a child of the
+driver's Python environment; QE uses the repository's srun/module wrapper.
+Do not run the AL loop on a login node or within the frozen E3-MLIP jobs.
+No sbatch command is supplied: use your separately approved account, queue,
+walltime and GPU allocation. Twelve SCFs may exceed a short allocation.
+
+Inside that allocation, with the variables above exported:
+
+  cd "$PROJ_ROOT"
+  "$PYTHON" -m matsim_agents.cli al run \
+    examples/active_learning/nb2o5_qe_mace.yaml
+
+6. INSPECT THE EVIDENCE
+
+Inspect NB2O5_AL_RUN_DIR for iteration records, QE work directories and
+outputs, the cumulative labelled dataset, model/train.log, candidate MACE
+checkpoints, and model-comparison/promotion decisions. Read failure logs;
+a candidate checkpoint alone does not establish promotion or improvement.
+
+Check that QE converged, labels were accepted, training actually ran, and
+held-out metrics met the promotion policy before claiming a learned model.
+Promotion requires neither energy nor force MAE to regress and at least one
+to improve by the configured threshold, as well as the absolute MAE limits.
+Rejected candidates do not replace the incumbent.
+
+This example has been configuration/regression-tested, not scientifically
+validated by executing new DFT or fine-tuning. It is intentionally separate
+from the frozen E3-MLIP model, datasets, resource ledger and run directories.

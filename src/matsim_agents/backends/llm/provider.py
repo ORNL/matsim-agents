@@ -243,7 +243,14 @@ def _run_coroutine(factory: Callable[[], Coroutine[Any, Any, Any]]) -> Any:
 def _copilot_client(github_token: str | None) -> Any:
     from copilot import CopilotClient
 
-    return CopilotClient(github_token=github_token, use_logged_in_user=github_token is None)
+    options = {
+        "github_token": github_token,
+        "use_logged_in_user": github_token is None,
+    }
+    base_directory = os.environ.get("COPILOT_HOME")
+    if base_directory:
+        options["base_directory"] = base_directory
+    return CopilotClient(**options)
 
 
 def list_copilot_models(github_token: str | None = None) -> list[str]:

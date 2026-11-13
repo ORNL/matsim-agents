@@ -39,7 +39,9 @@ ADAPTERS = {
     "agent-eval": WorkflowAdapter(
         ("benchmark", "agent-eval"), True, description="Agent evaluation"
     ),
-    "e3-mlip": WorkflowAdapter((), resume="config", description="Frozen E3-MLIP production stream"),
+    "e3-mlip": WorkflowAdapter(
+        (), resume="config", description="E3-MLIP three-round production benchmark"
+    ),
     "e3-dft": WorkflowAdapter(
         (), description="Frozen E3/VASP batch validation or explicit submission"
     ),
@@ -54,13 +56,13 @@ class E3MLIPSettings(BaseModel):
     material: Literal[
         "bcc_refractory", "fcc_cantor", "lifepo4", "phosphorene", "nb_ta_o", "zn_formate_mof"
     ]
-    strategy: Literal["llm_guided_adaptation", "rule_based_adaptation"]
-    seed: Literal[20261111, 20261112, 20261113] = 20261113
-    workers: int = Field(4, gt=0)
-    workers_per_node: int = Field(4, gt=0)
+    strategy: Literal["llm_guided_adaptation"] = "llm_guided_adaptation"
+    seed: Literal[20261113] = 20261113
+    workers: Literal[64] = 64
+    workers_per_node: Literal[4] = 4
     worker_python: Path | None = None
     resource_state: Path
-    hard_optimization_seconds: float | None = Field(default=None, gt=0, le=300)
+    hard_optimization_seconds: Literal[300] = 300
 
 
 class E3DFTSettings(BaseModel):

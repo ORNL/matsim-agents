@@ -424,7 +424,7 @@ def random_search(
             if seed_proposals:
                 import numpy as np
 
-                proposal_args["random_state"] = np.random.RandomState(rng.getrandbits(32))
+                proposal_args["random_state"] = np.random.default_rng(rng.getrandbits(32))
             x.from_random(dim=3, group=spg, species=elements, numIons=counts, **proposal_args)
             if not x.valid:
                 continue

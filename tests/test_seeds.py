@@ -191,7 +191,7 @@ def test_random_search_seeded_proposals_replay_the_same_structure(monkeypatch):
 
         def from_random(self, **kwargs):
             assert "random_state" in kwargs
-            self.coordinate = float(kwargs["random_state"].random_sample())
+            self.coordinate = float(kwargs["random_state"].random())
             random_values.append(self.coordinate)
 
         def to_pymatgen(self):

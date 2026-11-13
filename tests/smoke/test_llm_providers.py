@@ -372,11 +372,14 @@ class TestCopilotProvider:
         with pytest.raises(ValueError, match="sampling controls"):
             get_chat_model(provider="copilot", model="catalog-model", seed=1)
 
-    def test_invoke_uses_tool_free_session_and_signed_in_account(self, fake_copilot_sdk):
+    def test_invoke_uses_tool_free_session_and_signed_in_account(
+        self, fake_copilot_sdk, monkeypatch
+    ):
         from langchain_core.messages import SystemMessage
 
         from matsim_agents.backends.llm.provider import get_chat_model
 
+        monkeypatch.delenv("COPILOT_HOME", raising=False)
         model = get_chat_model(provider="copilot", model="catalog-model", max_tokens=8192)
         result = model.invoke([SystemMessage(content="Be terse."), HumanMessage(content="hi")])
 
@@ -396,9 +399,26 @@ class TestCopilotProvider:
         assert session["included_builtin_agents"] == []
         assert fake_copilot_sdk.prompts == [("hi", 600)]
 
-    def test_explicit_token_disables_signed_in_account_and_is_not_shown(self, fake_copilot_sdk):
+    def test_runtime_uses_explicit_copilot_home(self, fake_copilot_sdk, monkeypatch):
         from matsim_agents.backends.llm.provider import get_chat_model
 
+        monkeypatch.setenv("COPILOT_HOME", "/tmp/copilot-state")
+        model = get_chat_model(provider="copilot", model="catalog-model")
+        model.invoke([HumanMessage(content="hi")])
+
+        (client,) = fake_copilot_sdk.clients
+        assert client.kwargs == {
+            "github_token": None,
+            "use_logged_in_user": True,
+            "base_directory": "/tmp/copilot-state",
+        }
+
+    def test_explicit_token_disables_signed_in_account_and_is_not_shown(
+        self, fake_copilot_sdk, monkeypatch
+    ):
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        monkeypatch.delenv("COPILOT_HOME", raising=False)
         model = get_chat_model(provider="copilot", model="catalog-model", api_key="secret-token")
         assert "secret-token" not in repr(model)
         model.invoke([HumanMessage(content="hi")])

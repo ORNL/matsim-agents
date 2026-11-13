@@ -3,36 +3,55 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import json
 import math
 import os
+import signal
 import socket
 import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import yaml
 
+from benchmarks.e3.feasibility import (
+    CATALOG_VERSION,
+    InvalidActionError,
+    ScientificCapacityError,
+    assert_capacity,
+    capacity_group,
+    executable_catalog,
+    validate_allocations,
+)
 from benchmarks.e3.mlip_exploration import (
     E3_MLIP_CHECKPOINT_SHA256,
     E3_MLIP_MODEL,
-    E3_STRATEGIES,
     _verified_checkpoint,
     _verified_checkpoint_sha256,
 )
+from matsim_agents.execution.locking import exclusive_lock
 
 REPO = Path(__file__).resolve().parents[2]
-OBJECTIVES = REPO / "benchmarks" / "e3" / "scientific-objectives-v1.yaml"
-GPU_HOUR_CAP = 2_000
+E3_STRATEGIES = ("llm_guided_adaptation",)
+OBJECTIVES = REPO / "benchmarks" / "e3" / "scientific-objectives.yaml"
+GPU_HOUR_CAP = 768
 GPU_COUNT_PER_NODE = 4
-ARRAY_ELEMENTS = 36
-WALLTIME_SECONDS_PER_ELEMENT = 13 * 3600 + 53 * 60
-GPU_SECONDS_PER_ELEMENT = GPU_COUNT_PER_NODE * WALLTIME_SECONDS_PER_ELEMENT
+ARRAY_ELEMENTS = 6
+NODES_PER_ARRAY_ELEMENT = 16
+WORKERS_PER_ARRAY_ELEMENT = GPU_COUNT_PER_NODE * NODES_PER_ARRAY_ELEMENT
+WALLTIME_SECONDS_PER_ELEMENT = 2 * 3600
+ROUND_SECONDS = 30 * 60
+WORKER_STARTUP_SECONDS = 15 * 60
+HARD_OPTIMIZATION_SECONDS = 5 * 60
+GPU_SECONDS_PER_ELEMENT = WORKERS_PER_ARRAY_ELEMENT * WALLTIME_SECONDS_PER_ELEMENT
+BOUNDED_SEED = 20261113
+ROUNDS_PER_MATERIAL = 3
 MODEL_NAME = "MACE-OMAT-0 medium"
 OPTIMIZER_SETTINGS = {
     "optimizer": "FIRE",
@@ -40,10 +59,10 @@ OPTIMIZER_SETTINGS = {
     "maxstep_A": 0.05,
     "fmax_eV_A": 0.02,
     "relax_cell": True,
-    "stress_tolerance_eV_per_A3": 0.01,
-    "relative_increase_threshold": 0.2,
-    "max_cell_step_strain": 0.1,
-    "max_cell_total_strain": 0.5,
+    "stress_tolerance_eV_per_A3": None,
+    "relative_increase_threshold": None,
+    "max_cell_step_strain": None,
+    "max_cell_total_strain": None,
     "max_optimization_seconds": 60,
     "optimization_timeout_policy": "between_steps_v1",
     "require_native_stress": True,
@@ -51,7 +70,58 @@ OPTIMIZER_SETTINGS = {
     "mof_connectivity_guard": True,
     "mof_connectivity_version": "atom-indexed-v1",
 }
-REPLICATE_SEEDS = (20261111, 20261112, 20261113)
+REPLICATE_SEEDS = (BOUNDED_SEED,)
+
+
+class AcquisitionExhausted(ScientificCapacityError):
+    """A valid seeded acquisition could not supply enough distinct structures."""
+
+
+def _record_acquisition_stop(round_dir: Path, error: AcquisitionExhausted) -> dict[str, Any]:
+    shortfalls = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted((round_dir / "acquisition").glob("shortfall-*.json"))
+    ]
+    partial_path = round_dir / "acquisition" / "partial-candidates.jsonl"
+    partial = _read_tasks(partial_path) if partial_path.is_file() else []
+    partial_count = len(partial)
+    manifest = json.loads((round_dir / "round-manifest.json").read_text(encoding="utf-8"))
+    catalog = json.loads((round_dir / "acquisition" / "catalog.json").read_text(encoding="utf-8"))
+    exhausted_groups = {
+        row["action"]["feasibility"]["capacity_group"] for row in shortfalls
+    }
+    remaining = {
+        row["feasibility"]["capacity_group"]: row["feasibility"]["remaining_capacity"]
+        for row in catalog["available"]
+    }
+    for row in partial:
+        group = row["action"]["feasibility"]["capacity_group"]
+        remaining[group] = max(0, remaining[group] - 1)
+    for group in exhausted_groups:
+        remaining[group] = 0
+    outcome = {
+        "status": "stopped_generation_exhausted",
+        "round_complete": False,
+        "category": "generation_shortfall",
+        "reason": str(error),
+        "evidence_id": f"{round_dir.name}-generation-exhausted",
+        "new_optimization_evidence": False,
+        "optimizations_attempted": 0,
+        "hypotheses_updated": False,
+        "hypothesis_update": "retain prior hypotheses; no new optimization evidence collected",
+        "partial_structures_retained": partial_count,
+        "requested": manifest["main_target"],
+        "accepted_unique": partial_count,
+        "remaining_capacity_by_group": remaining,
+        "shortfalls": shortfalls,
+        "additional_llm_call_performed": False,
+        "next_decision": "stop; another allocation requires remaining authorized call and round budgets",
+    }
+    _atomic_json(round_dir / "acquisition" / "outcome.json", outcome)
+    print(json.dumps({"acquisition_outcome": outcome}, sort_keys=True), file=sys.stderr)
+    return outcome
+
+
 MATERIALS: dict[str, dict[str, Any]] = {
     "bcc_refractory": {
         "formula_families": {
@@ -62,7 +132,6 @@ MATERIALS: dict[str, dict[str, Any]] = {
         },
         "tiers": [4, 8, 16, 32, 64],
         "tier_unit": "formula_units",
-        "quota_per_tier": 1000,
         "generators": ["native_lattice_occupations"],
         "operations": ["chemical_disorder", "substitutional_ordering", "bounded_strain"],
     },
@@ -73,7 +142,6 @@ MATERIALS: dict[str, dict[str, Any]] = {
         },
         "tiers": [4, 8, 16, 32, 64],
         "tier_unit": "formula_units",
-        "quota_per_tier": 1000,
         "generators": ["native_lattice_occupations"],
         "operations": ["chemical_disorder", "substitutional_ordering", "bounded_strain"],
     },
@@ -85,7 +153,6 @@ MATERIALS: dict[str, dict[str, Any]] = {
         },
         "tiers": [4, 8, 16, 32],
         "tier_unit": "formula_units",
-        "quota_per_tier": 1250,
         "generators": ["ase_seed_variants"],
         "operations": ["antisite_pair", "bounded_strain", "symmetry_distinct_ordering"],
     },
@@ -96,7 +163,6 @@ MATERIALS: dict[str, dict[str, Any]] = {
         },
         "tiers": [4, 16, 36, 64, 144],
         "tier_unit": "atoms",
-        "quota_per_tier": 1000,
         "generators": ["2d_template"],
         "operations": ["allotrope", "in_plane_strain", "symmetry_distinct_distortion"],
     },
@@ -113,7 +179,6 @@ MATERIALS: dict[str, dict[str, Any]] = {
         },
         "tiers": [2, 4, 8, 16, 32],
         "tier_unit": "formula_units",
-        "quota_per_tier": 1000,
         "generators": [
             "aflow_prototype",
             "pyxtal",
@@ -135,7 +200,6 @@ MATERIALS: dict[str, dict[str, Any]] = {
         },
         "tiers": [24, 48, 96, 192],
         "tier_unit": "formula_units",
-        "quota_per_tier": 1250,
         "generators": ["cod_7205949"],
         "operations": [
             "connectivity_preserving_distortion",
@@ -177,8 +241,7 @@ def reserve_gpu_hours(
         raise ValueError("resource reservations require an ID and positive GPU-second limits")
     state_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = state_path.with_suffix(f"{state_path.suffix}.lock")
-    with lock_path.open("a+") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    with exclusive_lock(lock_path, timeout=60):
         if state_path.is_file():
             state = json.loads(state_path.read_text(encoding="utf-8"))
             if state["cap_gpu_seconds"] != cap_gpu_seconds:
@@ -218,8 +281,7 @@ def release_gpu_hours(
     if actual_gpu_seconds < 0:
         raise ValueError("actual GPU seconds cannot be negative")
     lock_path = state_path.with_suffix(f"{state_path.suffix}.lock")
-    with lock_path.open("a+") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    with exclusive_lock(lock_path, timeout=60):
         if not state_path.is_file():
             raise FileNotFoundError(f"resource ledger does not exist: {state_path}")
         state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -227,12 +289,19 @@ def release_gpu_hours(
             reservation = state["reservations"].pop(reservation_id)
         except KeyError as exc:
             raise RuntimeError(f"no active resource reservation: {reservation_id}") from exc
-        charged = min(actual_gpu_seconds, int(reservation["reserved_gpu_seconds"]))
-        state["spent_gpu_seconds"] += charged
+        state["spent_gpu_seconds"] += actual_gpu_seconds
+        state.setdefault("allocations", {})[reservation_id] = {
+            **reservation, "actual_gpu_seconds": actual_gpu_seconds,
+        }
         _atomic_json(state_path, state)
         reserved_total = sum(
             int(item["reserved_gpu_seconds"]) for item in state["reservations"].values()
         )
+        if int(state["spent_gpu_seconds"]) + reserved_total > int(state["cap_gpu_seconds"]):
+            raise RuntimeError(
+                "scheduler usage exceeded the authorized GPU cap; actual usage was persisted "
+                "and further allocations are blocked"
+            )
         return {
             "cap_gpu_seconds": int(state["cap_gpu_seconds"]),
             "spent_gpu_seconds": int(state["spent_gpu_seconds"]),
@@ -240,28 +309,54 @@ def release_gpu_hours(
         }
 
 
-def _split_even(total: int, parts: int, offset: int = 0) -> list[int]:
-    quotient, remainder = divmod(total, parts)
-    return [quotient + int((index - offset) % parts < remainder) for index in range(parts)]
+def bind_gpu_reservation(state_path: Path, reservation_id: str, job_id: str) -> None:
+    """Bind the pre-submission charge to one scheduler allocation, idempotently."""
+    if not job_id.isdigit():
+        raise ValueError("a numeric Slurm job ID is required")
+    with exclusive_lock(state_path.with_suffix(f"{state_path.suffix}.lock"), timeout=60):
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        reservation = state["reservations"].get(reservation_id)
+        if reservation is None:
+            raise RuntimeError(f"no active resource reservation: {reservation_id}")
+        if reservation.get("job_id", job_id) != job_id:
+            raise ValueError("resource reservation already belongs to a different Slurm allocation")
+        reservation["job_id"] = job_id
+        _atomic_json(state_path, state)
 
 
-def _replicate_tier_quotas(spec: dict[str, Any]) -> list[dict[int, int]]:
-    seeds_count = len(REPLICATE_SEEDS)
-    quotas = [dict.fromkeys(spec["tiers"], 0) for _ in range(seeds_count)]
-    totals = [0] * seeds_count
-    for tier in spec["tiers"]:
-        quotient, remainder = divmod(spec["quota_per_tier"], seeds_count)
-        for seed_index in range(seeds_count):
-            quotas[seed_index][tier] = quotient
-            totals[seed_index] += quotient
-        for _ in range(remainder):
-            target = min(range(seeds_count), key=lambda index: (totals[index], index))
-            quotas[target][tier] += 1
-            totals[target] += 1
-    expected = _split_even(spec["quota_per_tier"] * len(spec["tiers"]), seeds_count)
-    if sorted(totals) != sorted(expected):
-        raise AssertionError(f"unbalanced replicate quotas: {totals}, expected {expected}")
-    return quotas
+def reconcile_gpu_allocation(state_path: Path, reservation_id: str) -> dict[str, int]:
+    """Release unused time only after Slurm reports the full terminal allocation."""
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    reservation = state["reservations"].get(reservation_id)
+    if reservation is None:
+        raise RuntimeError(f"no active resource reservation: {reservation_id}")
+    job_id = reservation.get("job_id", reservation_id)
+    if not job_id.isdigit():
+        raise ValueError("bind the submission reservation to its scheduler job before reconciliation")
+    result = subprocess.run(
+        [
+            "sacct", "--noheader", "--parsable2", "--allocations", "--jobs", job_id,
+            "--format=JobIDRaw,State,ElapsedRaw,AllocTRES",
+        ],
+        capture_output=True, text=True, check=True,
+    )
+    rows = [line.strip().split("|") for line in result.stdout.splitlines() if line.strip()]
+    if len(rows) != 1 or rows[0][0] != job_id or len(rows[0]) < 4:
+        raise RuntimeError("scheduler allocation is not uniquely accounted; full reservation retained")
+    _, status, elapsed, tres = rows[0][:4]
+    terminal = {
+        "COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY", "NODE_FAIL",
+        "PREEMPTED", "BOOT_FAIL", "DEADLINE", "REVOKED",
+    }
+    if status.split()[0].rstrip("+") not in terminal:
+        raise RuntimeError("scheduler allocation is not terminal; full reservation retained")
+    seconds = int(elapsed)
+    resources = dict(item.split("=", 1) for item in tres.split(",") if "=" in item)
+    if seconds < 0 or (seconds > 0 and resources.get("gres/gpu") != "64"):
+        raise RuntimeError("scheduler GPU usage is unverified; full reservation retained")
+    return release_gpu_hours(
+        state_path, reservation_id, actual_gpu_seconds=seconds * WORKERS_PER_ARRAY_ELEMENT,
+    )
 
 
 def _action_space(material: str) -> list[dict[str, Any]]:
@@ -379,99 +474,50 @@ def _action_space(material: str) -> list[dict[str, Any]]:
 
 
 def build_campaign_manifest() -> dict[str, Any]:
-    """Build the frozen 360-round schedule; structure choices remain adaptive."""
+    """Build the six-class, three-round benchmark; structure choices remain adaptive."""
     objectives = yaml.safe_load(OBJECTIVES.read_text(encoding="utf-8"))
     rounds = []
     class_summaries = {}
     for material, spec in MATERIALS.items():
-        replicate_quotas = _replicate_tier_quotas(spec)
         class_summaries[material] = {
-            "unique_target_per_strategy": 5000,
+            "unique_target": WORKERS_PER_ARRAY_ELEMENT * ROUNDS_PER_MATERIAL,
             "tier_unit": spec["tier_unit"],
             "tiers": spec["tiers"],
-            "tier_quotas_per_strategy": {
-                str(tier): spec["quota_per_tier"] for tier in spec["tiers"]
-            },
-            "replicate_tier_quotas": [
-                {str(tier): quota[tier] for tier in spec["tiers"]} for quota in replicate_quotas
-            ],
         }
-        control_families = (range(0, 7), range(7, 14), range(14, 20))
-        for strategy in E3_STRATEGIES:
-            for seed_index, seed in enumerate(REPLICATE_SEEDS):
-                replicate_total = sum(replicate_quotas[seed_index].values())
-                round_targets = _split_even(replicate_total, 10)
-                tier_rounds = {
-                    tier: _split_even(
-                        replicate_quotas[seed_index][tier],
-                        10,
-                        offset=seed_index,
-                    )
-                    for tier in spec["tiers"]
+        for round_index in range(1, ROUNDS_PER_MATERIAL + 1):
+            floor = max(1, WORKERS_PER_ARRAY_ELEMENT // (10 * len(spec["tiers"])))
+            rounds.append(
+                {
+                    "material": material,
+                    "strategy": "llm_guided_adaptation",
+                    "seed": BOUNDED_SEED,
+                    "round": round_index,
+                    "status": "planned",
+                    "main_target": WORKERS_PER_ARRAY_ELEMENT,
+                    "finite_size_control_families": [],
+                    "finite_size_control_target": 0,
+                    "logical_target": WORKERS_PER_ARRAY_ELEMENT,
+                    "minimum_main_count_by_tier": dict.fromkeys(map(str, spec["tiers"]), floor),
+                    "replicate_unique_target": WORKERS_PER_ARRAY_ELEMENT * ROUNDS_PER_MATERIAL,
+                    "action_space_material": material,
                 }
-                minimum_by_tier_rounds = {
-                    tier: _split_even(
-                        math.ceil(replicate_quotas[seed_index][tier] * 0.10),
-                        10,
-                        offset=seed_index,
-                    )
-                    for tier in spec["tiers"]
-                }
-                family_ids = list(control_families[seed_index])
-                family_rounds = _split_even(len(family_ids), 10)
-                family_cursor = 0
-                for round_index in range(1, 11):
-                    controls = family_ids[
-                        family_cursor : family_cursor + family_rounds[round_index - 1]
-                    ]
-                    family_cursor += len(controls)
-                    tier_minima = {
-                        str(tier): min(
-                            minimum_by_tier_rounds[tier][round_index - 1],
-                            tier_rounds[tier][round_index - 1],
-                        )
-                        for tier in spec["tiers"]
-                    }
-                    main_target = round_targets[round_index - 1]
-                    control_target = len(controls) * len(spec["tiers"])
-                    rounds.append(
-                        {
-                            "material": material,
-                            "strategy": strategy,
-                            "seed": seed,
-                            "round": round_index,
-                            "status": "planned",
-                            "main_target": main_target,
-                            "finite_size_control_families": controls,
-                            "finite_size_control_target": control_target,
-                            "logical_target": main_target + control_target,
-                            "minimum_main_count_by_tier": tier_minima,
-                            "replicate_unique_target": replicate_total,
-                            "replicate_tier_targets": {
-                                str(tier): replicate_quotas[seed_index][tier]
-                                for tier in spec["tiers"]
-                            },
-                            "action_space_material": material,
-                        }
-                    )
-                if family_cursor != len(family_ids):
-                    raise AssertionError("finite-size controls were not assigned to rounds")
+            )
 
     manifest = {
         "schema_version": 1,
-        "campaign_id": "e3-mlip-production-v1",
+        "campaign_id": "e3-mlip-production",
         "status": "planned_not_authorized",
         "model": MODEL_NAME,
         "mace_model": E3_MLIP_MODEL,
         "checkpoint_sha256": E3_MLIP_CHECKPOINT_SHA256,
         "optimizer": OPTIMIZER_SETTINGS,
-        "unique_configurations_per_material_strategy": 5000,
-        "finite_size_controls_per_strategy": 560,
-        "logical_optimizations_per_strategy": 30560,
-        "total_logical_optimizations": 61120,
-        "seeds": list(REPLICATE_SEEDS),
-        "rounds_per_replicate": 10,
-        "strategies": list(E3_STRATEGIES),
+        "unique_configurations_per_material": WORKERS_PER_ARRAY_ELEMENT * ROUNDS_PER_MATERIAL,
+        "total_logical_optimizations": len(MATERIALS)
+        * WORKERS_PER_ARRAY_ELEMENT
+        * ROUNDS_PER_MATERIAL,
+        "seed": BOUNDED_SEED,
+        "rounds_per_material": ROUNDS_PER_MATERIAL,
+        "strategies": ["llm_guided_adaptation"],
         "material_specs": class_summaries,
         "action_spaces": {material: _action_space(material) for material in MATERIALS},
         "llm_guided_configuration": objectives["llm_guided_configuration"],
@@ -481,39 +527,50 @@ def build_campaign_manifest() -> dict[str, Any]:
             "evidence": "strategy-local MACE geometry-optimization outcomes only",
             "llm_calls_per_round": 1,
             "fallback_on_invalid_llm_proposal": False,
-            "minimum_size_tier_coverage_fraction": 0.10,
+            "minimum_candidates_per_size_tier_per_round": 1,
             "e3_dft_inputs": False,
         },
         "execution": {
             "scheduler": "Slurm",
             "worker": "one independent MACE process per assigned GPU",
-            "restart": (
-                "completed tasks are skipped; interrupted attempts remain archived and are retried"
-            ),
+            "restart": "completed tasks are skipped; incomplete rounds resume from their manifest",
             "round_barrier": True,
-            "maximum_nodes_per_array_task": 20,
-            "gpus_per_node": 4,
+            "maximum_nodes_per_array_task": NODES_PER_ARRAY_ELEMENT,
+            "gpus_per_node": GPU_COUNT_PER_NODE,
+            "workers_per_material": WORKERS_PER_ARRAY_ELEMENT,
+            "round_walltime_seconds": ROUND_SECONDS,
+            "allocation_walltime_seconds": WALLTIME_SECONDS_PER_ELEMENT,
+            "hard_optimization_seconds": HARD_OPTIMIZATION_SECONDS,
             "resource_authorization_required": True,
             "job_submission_performed": False,
         },
         "resource_request": {
             "account": "m5216",
             "billing_account": "m5216_g",
-            "qos": "regular",
-            "billing_qos": "gpu_regular",
+            "qos": "premium",
+            "billing_qos": "gpu_premium",
             "array_elements": ARRAY_ELEMENTS,
-            "nodes_per_array_element": 1,
+            "maximum_concurrent_array_elements": 5,
+            "nodes_per_array_element": NODES_PER_ARRAY_ELEMENT,
             "gpus_per_node": GPU_COUNT_PER_NODE,
             "walltime_seconds_per_array_element": WALLTIME_SECONDS_PER_ELEMENT,
             "maximum_scheduled_gpu_hours": (ARRAY_ELEMENTS * GPU_SECONDS_PER_ELEMENT / 3600),
-            "maximum_scheduled_gpu_node_hours": (ARRAY_ELEMENTS * WALLTIME_SECONDS_PER_ELEMENT)
-            / 3600,
+            "maximum_scheduled_gpu_node_hours": (
+                ARRAY_ELEMENTS
+                * NODES_PER_ARRAY_ELEMENT
+                * WALLTIME_SECONDS_PER_ELEMENT
+                / 3600
+            ),
             "requested_gpu_hour_cap": GPU_HOUR_CAP,
             "gpu_hours_at_cap": GPU_HOUR_CAP,
-            "average_gpu_seconds_per_logical_optimization_at_cap": (GPU_HOUR_CAP * 3600 / 61120),
+            "average_gpu_seconds_per_logical_optimization_at_cap": (
+                GPU_HOUR_CAP
+                * 3600
+                / (len(MATERIALS) * WORKERS_PER_ARRAY_ELEMENT * ROUNDS_PER_MATERIAL)
+            ),
             "basis": (
-                "36 streams x 1 GPU node x 4 GPUs x 13h53m; persistent allocation "
-                "ledger caps all submissions and restarts at 2,000 GPU-hours"
+                "6 material allocations x 16 GPU nodes x 4 GPUs x 2h; persistent "
+                "allocation ledger reserves all 768 allocated GPU-hours"
             ),
             "measured_throughput": False,
         },
@@ -530,26 +587,44 @@ def validate_campaign_manifest(manifest: dict[str, Any]) -> None:
         "llm_guided_configuration"
     ] or manifest.get("scientific_objectives_sha256") != _sha256_file(OBJECTIVES):
         raise ValueError("production manifest scientific objectives do not match current protocol")
-    if len(manifest["rounds"]) != 360:
-        raise ValueError(f"expected 360 adaptive rounds, got {len(manifest['rounds'])}")
-    if set(manifest["strategies"]) != set(E3_STRATEGIES):
-        raise ValueError("production manifest must contain exactly the paired strategies")
+    if manifest.get("campaign_id") != "e3-mlip-production":
+        raise ValueError("production manifest campaign ID does not match the current benchmark")
+    if manifest.get("strategies") != ["llm_guided_adaptation"]:
+        raise ValueError("production benchmark uses the single LLM-guided strategy")
+    if manifest.get("seed") != BOUNDED_SEED:
+        raise ValueError("production benchmark must use the registered seed")
+    if manifest.get("rounds_per_material") != ROUNDS_PER_MATERIAL:
+        raise ValueError("production benchmark requires exactly three rounds per material")
+    expected_count = len(MATERIALS) * ROUNDS_PER_MATERIAL
+    if len(manifest["rounds"]) != expected_count:
+        raise ValueError(f"expected {expected_count} material rounds, got {len(manifest['rounds'])}")
     keys = {
         (row["material"], row["strategy"], row["seed"], row["round"]) for row in manifest["rounds"]
     }
-    if len(keys) != 360:
+    if len(keys) != expected_count:
         raise ValueError("production manifest contains duplicate or missing round identities")
-    if sum(row["main_target"] for row in manifest["rounds"]) != 60000:
-        raise ValueError("main target does not equal 60,000 unique logical configurations")
-    if sum(row["finite_size_control_target"] for row in manifest["rounds"]) != 1120:
-        raise ValueError("finite-size controls do not equal 1,120 logical optimizations")
-    if sum(row["logical_target"] for row in manifest["rounds"]) != 61120:
-        raise ValueError("total logical optimization target is not 61,120")
+    expected_keys = {
+        (material, "llm_guided_adaptation", BOUNDED_SEED, round_index)
+        for material in MATERIALS
+        for round_index in range(1, ROUNDS_PER_MATERIAL + 1)
+    }
+    if keys != expected_keys:
+        raise ValueError("production manifest has incorrect material, strategy, seed, or round IDs")
+    if manifest["total_logical_optimizations"] != expected_count * WORKERS_PER_ARRAY_ELEMENT:
+        raise ValueError("production manifest logical optimization total is incorrect")
+    if sum(row["main_target"] for row in manifest["rounds"]) != manifest[
+        "total_logical_optimizations"
+    ]:
+        raise ValueError("round targets do not match the logical optimization total")
+    if any(row["finite_size_control_target"] for row in manifest["rounds"]):
+        raise ValueError("the current benchmark does not include finite-size control tasks")
+    if any(row["main_target"] != WORKERS_PER_ARRAY_ELEMENT for row in manifest["rounds"]):
+        raise ValueError("each round must request at most one structure per GPU")
     resources = manifest["resource_request"]
     if resources["requested_gpu_hour_cap"] != GPU_HOUR_CAP:
-        raise ValueError("resource cap does not match the authorized 2,000 GPU-hours")
-    if resources["maximum_scheduled_gpu_hours"] > GPU_HOUR_CAP:
-        raise ValueError("a single production array can exceed the authorized GPU-hour cap")
+        raise ValueError("resource cap does not match the 768-GPU-hour benchmark allocation")
+    if resources["maximum_scheduled_gpu_hours"] != GPU_HOUR_CAP:
+        raise ValueError("resource schedule must match six 16-node, two-hour allocations")
     for row in manifest["rounds"]:
         if sum(row["minimum_main_count_by_tier"].values()) > row["main_target"]:
             raise ValueError(f"tier minima exceed round target: {row}")
@@ -601,23 +676,7 @@ def _action_dimensions(action: dict[str, Any]) -> set[str]:
 
 
 def _finite_capacity_group(action: dict[str, Any]) -> tuple[str, str] | None:
-    if (
-        action.get("material") == "lifepo4"
-        and action.get("family_label") == "olivine-pristine"
-        and action.get("family") == "olivine"
-        and action.get("defect") is None
-        and action.get("strain") is None
-    ):
-        return "lifepo4-pristine-parent", str(action["size_tier"])
-    if (
-        action.get("material") == "phosphorene"
-        and action.get("family_label") in {"black-phosphorene", "blue-phosphorene"}
-        and action.get("family") in {"black_phosphorene", "black", "blue_phosphorene", "blue"}
-        and action.get("defect") is None
-        and action.get("strain") is None
-    ):
-        return f"phosphorene-pristine-{action['family_label']}", str(action["size_tier"])
-    return None
+    return capacity_group(action)
 
 
 def _finite_capacity_remaining(
@@ -642,6 +701,8 @@ def _rule_allocation(
     target: int,
     minimum_by_tier: dict[str, int],
 ) -> list[dict[str, Any]]:
+    action_space, _ = executable_catalog(action_space, history)
+    assert_capacity(action_space, target, minimum_by_tier)
     allowed = {action["action_id"]: action for action in action_space}
     covered: dict[str, int] = defaultdict(int)
     attempted: dict[str, int] = defaultdict(int)
@@ -655,18 +716,15 @@ def _rule_allocation(
         attempted[action["action_id"]] += int(record.get("attempted", 0))
         converged[action["action_id"]] += int(record.get("converged", 0))
     counts: dict[str, int] = defaultdict(int)
-    finite_remaining = _finite_capacity_remaining(action_space, history)
-    finite_allocated: dict[tuple[str, str], int] = defaultdict(int)
+    finite_allocated: dict[str, int] = defaultdict(int)
 
     def available(action: dict[str, Any]) -> bool:
-        group = _finite_capacity_group(action)
-        return group is None or finite_allocated[group] < finite_remaining[group]
+        info = action["feasibility"]
+        return finite_allocated[info["capacity_group"]] < info["remaining_capacity"]
 
     def allocate_one(action: dict[str, Any]) -> None:
         counts[action["action_id"]] += 1
-        group = _finite_capacity_group(action)
-        if group is not None:
-            finite_allocated[group] += 1
+        finite_allocated[action["feasibility"]["capacity_group"]] += 1
         for dimension in _action_dimensions(action):
             covered[dimension] += 1
 
@@ -683,7 +741,7 @@ def _rule_allocation(
             if str(action["size_tier"]) == tier_text and available(action)
         ]
         if not tier_actions and count:
-            raise ValueError(f"no allowed generation actions for required tier {tier_text}")
+            raise ScientificCapacityError(f"no allowed generation actions for required tier {tier_text}")
         for allocation_index in range(count):
             if not tier_actions:
                 raise ValueError(
@@ -704,13 +762,14 @@ def _rule_allocation(
     for _ in range(target - allocated):
         eligible = [action for action in action_space if available(action)]
         if not eligible:
-            raise ValueError("finite action capacities cannot satisfy the round target")
+            raise ScientificCapacityError("finite action capacities cannot satisfy the round target")
         chosen = max(eligible, key=lambda action: (score(action)[0], -int(action["action_id"], 16)))
         allocate_one(chosen)
-    return [
-        {"action": allowed[action_id], "count": count}
+    proposal = [
+        {"action_id": action_id, "count": count}
         for action_id, count in sorted(counts.items())
     ]
+    return validate_allocations(proposal, list(allowed.values()), target, minimum_by_tier)
 
 
 def _compact_action_catalog(material: str, action_space: list[dict[str, Any]]) -> dict[str, Any]:
@@ -726,17 +785,21 @@ def _compact_action_catalog(material: str, action_space: list[dict[str, Any]]) -
     values: dict[str, list[Any]] = {key: [] for key in dimension_keys}
     action_values = []
     for action in action_space:
+        perturbation = {
+            key: action.get(key)
+            for key in ("operation", "defect", "strain", "charge_compensation")
+            if action.get(key) is not None
+        }
+        constraints = action.get("feasibility", {}).get("perturbation_constraints", {})
+        if "realized_operation" in constraints:
+            perturbation["realized_operation"] = constraints["realized_operation"]
         dimensions = {
             "m": material,
             "c": action["formula"],
             "t": action["size_tier"],
             "f": action.get("family_label", action["family"]),
             "g": action["generator"],
-            "p": {
-                key: action.get(key)
-                for key in ("operation", "defect", "strain", "charge_compensation")
-                if action.get(key) is not None
-            },
+            "p": perturbation,
             "s": action.get("space_group_family", "unrestricted"),
         }
         codes = {}
@@ -780,6 +843,18 @@ def _compact_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "mean_rms_atom_displacement_A",
         "runtime_seconds",
         "gpu_hours",
+        "category",
+        "requested",
+        "generation_attempts",
+        "accepted_unique",
+        "rejection_reasons",
+        "capacity_exhausted",
+        "remaining_capacity",
+        "new_optimization_evidence",
+        "hypotheses_updated",
+        "hypothesis_update",
+        "shortfalls",
+        "remaining_capacity_by_group",
     )
     return [{key: item[key] for key in fields if key in item} for item in history]
 
@@ -791,22 +866,25 @@ def _llm_allocation(
     history: list[dict[str, Any]],
     target: int,
     minimum_by_tier: dict[str, int],
+    *,
+    evidence_path: Path | None = None,
+    context: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str], str]:
     valid_evidence = {"campaign-design"} | {
         item["evidence_id"] for item in history if item.get("evidence_id")
     }
-    finite_remaining = _finite_capacity_remaining(action_space, history)
-    available_actions = [
-        action
-        for action in action_space
-        if (group := _finite_capacity_group(action)) is None or finite_remaining[group] > 0
-    ]
+    available_actions, unavailable = executable_catalog(action_space, history)
+    assert_capacity(available_actions, target, minimum_by_tier)
     prompt_catalog = _compact_action_catalog(material, available_actions)
-    finite_capacity_by_action = {
-        action["action_id"]: finite_remaining[group]
-        for action in available_actions
-        if (group := _finite_capacity_group(action)) is not None
-    }
+    capacity_groups: dict[str, dict[str, Any]] = {}
+    for action in available_actions:
+        info = action["feasibility"]
+        entry = capacity_groups.setdefault(info["capacity_group"], {
+            "action_ids": [], "maximum": info["maximum_distinct_configurations"],
+            "remaining": info["remaining_capacity"],
+            "constraints": info["perturbation_constraints"],
+        })
+        entry["action_ids"].append(action["action_id"])
     prompt_history = _compact_history(history)
     prompt = (
         "Choose E3-MLIP crystallographic generation allocations for this round. "
@@ -827,54 +905,81 @@ def _llm_allocation(
         f"Minimum counts by size tier: {json.dumps(minimum_by_tier, sort_keys=True)}\n"
         f"Valid evidence IDs: {json.dumps(sorted(valid_evidence))}\n"
         f"Prior strategy-local outcomes: {json.dumps(prompt_history, sort_keys=True)}\n"
-        f"Remaining finite action counts: "
-        f"{json.dumps(finite_capacity_by_action, sort_keys=True)}\n"
+        "Shared capacity groups: sum counts across ALL action_ids in each group "
+        "must not exceed remaining. Aliases do not add capacity.\n"
+        f"{json.dumps(capacity_groups, sort_keys=True, separators=(',', ':'))}\n"
         f"Hierarchical action catalog: {json.dumps(prompt_catalog, separators=(',', ':'))}\n"
     )
-    response = chat.invoke(prompt)
+    evidence = {
+        **(context or {}), "catalog_version": CATALOG_VERSION,
+        "prompt_version": CATALOG_VERSION, "prompt": prompt,
+        "model_id": (
+            getattr(chat, "model", getattr(chat, "model_id", None))
+            or yaml.safe_load(OBJECTIVES.read_text())["llm_guided_configuration"]["model"]
+        ),
+        "strategy": "llm_guided_adaptation", "material": material,
+        "unavailable_actions": unavailable, "capacity_groups": capacity_groups,
+        "status": "request_started", "parsed_allocations": None,
+        "accepted_final_allocation": None,
+    }
+    if evidence_path is not None:
+        if evidence_path.exists():
+            raise RuntimeError(f"refusing to repeat or overwrite LLM acquisition: {evidence_path}")
+        _atomic_json(evidence_path, evidence)
+    try:
+        response = chat.invoke(prompt)
+    except Exception as error:
+        evidence.update(status="infrastructure_failure", error=f"{type(error).__name__}: {error}")
+        if evidence_path is not None:
+            _atomic_json(evidence_path, evidence)
+        raise
     content = response.content if hasattr(response, "content") else str(response)
+    evidence.update(raw_response=content, status="response_saved")
+    if evidence_path is not None:
+        _atomic_json(evidence_path, evidence)
+    try:
+        selected, citations, rationale = _parse_llm_allocation(
+            content, available_actions, valid_evidence, target, minimum_by_tier, evidence
+        )
+    except (ValueError, TypeError, KeyError) as error:
+        parsed = evidence.get("parsed_allocations")
+        evidence.update(
+            status="rejected", capacity_validation={"valid": False, "reason": str(error)},
+            rejected_actions=[
+                {"action_id": row.get("action_id"), "reason": str(error)}
+                for row in (parsed if isinstance(parsed, list) else []) if isinstance(row, dict)
+            ],
+        )
+        if evidence_path is not None:
+            _atomic_json(evidence_path, evidence)
+        raise
+    evidence.update(
+        status="accepted", capacity_validation={"valid": True},
+        accepted_final_allocation=selected, rejected_actions=[],
+    )
+    if evidence_path is not None:
+        _atomic_json(evidence_path, evidence)
+    return selected, citations, rationale
+
+
+def _parse_llm_allocation(
+    content: str, available_actions: list[dict[str, Any]], valid_evidence: set[str],
+    target: int, minimum_by_tier: dict[str, int], evidence: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[str], str]:
     start, end = content.find("{"), content.rfind("}")
     if start < 0 or end < start:
         raise ValueError("LLM round proposal contains no JSON object")
     proposal = json.loads(content[start : end + 1])
     if set(proposal) != {"allocations", "cited_evidence_ids", "rationale"}:
         raise ValueError("LLM allocation must contain exactly the required fields")
-    action_map = {action["action_id"]: action for action in action_space}
     allocations = proposal["allocations"]
+    evidence["parsed_allocations"] = allocations
     if not isinstance(allocations, list):
         raise ValueError("LLM allocations must be a list")
-    selected = []
-    seen = set()
-    tier_counts: dict[str, int] = defaultdict(int)
-    finite_allocated: dict[tuple[str, str], int] = defaultdict(int)
-    total = 0
-    for allocation in allocations:
-        if not isinstance(allocation, dict) or set(allocation) != {"action_id", "count"}:
-            raise ValueError("each LLM allocation must contain action_id and count")
-        action_id, count = allocation["action_id"], allocation["count"]
-        if (
-            not isinstance(action_id, str)
-            or action_id not in action_map
-            or action_id in seen
-            or isinstance(count, bool)
-            or not isinstance(count, int)
-            or count <= 0
-        ):
-            raise ValueError("LLM allocation contains an invalid or repeated action")
-        seen.add(action_id)
-        action = action_map[action_id]
-        group = _finite_capacity_group(action)
-        if group is not None and finite_allocated[group] + count > finite_remaining[group]:
-            raise ValueError("LLM allocation exceeds a finite generation-action capacity")
-        if group is not None:
-            finite_allocated[group] += count
-        tier_counts[str(action["size_tier"])] += count
-        total += count
-        selected.append({"action": action, "count": count})
-    if total != target:
-        raise ValueError(f"LLM allocation totals {total}, expected {target}")
-    if any(tier_counts[tier] < count for tier, count in minimum_by_tier.items()):
-        raise ValueError("LLM allocation does not meet the minimum size-tier coverage")
+    selected = validate_allocations(
+        allocations, available_actions, target, minimum_by_tier,
+        unavailable=evidence.get("unavailable_actions"),
+    )
     citations = proposal["cited_evidence_ids"]
     if (
         not isinstance(citations, list)
@@ -970,9 +1075,71 @@ def _materialize_round(
     history: list[dict[str, Any]],
     chat: Any | None,
 ) -> tuple[Path, Path, dict[str, Any]]:
+    started = time.monotonic()
+    local_history = list(history)
+    round_dir = (
+        run_root / round_spec["material"] / round_spec["strategy"] /
+        f"seed-{round_spec['seed']}" / f"round-{round_spec['round']:02d}"
+    )
+    recovery_history = round_dir / "acquisition" / "generation-history.json"
+    if recovery_history.is_file():
+        local_history.extend(json.loads(recovery_history.read_text(encoding="utf-8")))
+    previous_outcome = round_dir / "acquisition" / "outcome.json"
+    if previous_outcome.is_file():
+        local_history.append(json.loads(previous_outcome.read_text(encoding="utf-8")))
+    authorization = round_dir / "acquisition" / "recovery-authorization.json"
+    if authorization.is_file():
+        recovery = json.loads(authorization.read_text(encoding="utf-8"))
+        if (
+            recovery["material"] != round_spec["material"]
+            or recovery["seed"] != round_spec["seed"]
+            or recovery["round"] != round_spec["round"]
+            or recovery["additional_llm_calls"] != 1
+        ):
+            raise ValueError("recovery authorization does not match this round")
+        local_history.append(recovery["generation_evidence"])
+    while True:
+        try:
+            return _materialize_selection(manifest, round_spec, run_root, local_history, chat)
+        except ScientificCapacityError:
+            # Only the deterministic policy can decide again without another LLM call.
+            if round_spec["strategy"] != "rule_based_adaptation":
+                raise
+            shortfalls = sorted((round_dir / "acquisition").glob("shortfall-*.json"))
+            events = [json.loads(path.read_text(encoding="utf-8")) for path in shortfalls]
+            previous = {row.get("action_id") for row in local_history if row.get("capacity_exhausted")}
+            new_events = [event for event in events if event["action"]["action_id"] not in previous]
+            if not new_events or time.monotonic() - started >= ROUND_SECONDS:
+                raise
+            for event in new_events:
+                event.update(
+                    action_id=event["action"]["action_id"],
+                    evidence_id=f"generation-shortfall-{event['action']['action_id']}",
+                )
+            local_history.extend(new_events)
+            _atomic_json(recovery_history, [
+                row for row in local_history if row.get("capacity_exhausted")
+            ])
+            old_manifest = round_dir / "round-manifest.json"
+            attempt = len(list((round_dir / "acquisition").glob("attempt-*"))) + 1
+            archive = round_dir / "acquisition" / f"attempt-{attempt:03d}"
+            archive.mkdir()
+            os.replace(old_manifest, archive / "round-manifest.json")
+
+
+def _materialize_selection(
+    manifest: dict[str, Any],
+    round_spec: dict[str, Any],
+    run_root: Path,
+    history: list[dict[str, Any]],
+    chat: Any | None,
+) -> tuple[Path, Path, dict[str, Any]]:
+    generation_started = time.monotonic()
     from ase.io import read
 
     from benchmarks.e3.structure_generation import (
+        GenerationExhausted,
+        StructureGenerationError,
         generate_structures,
         make_structure_matcher,
         replicate_structure,
@@ -1001,7 +1168,35 @@ def _materialize_round(
         existing = json.loads(round_manifest_path.read_text(encoding="utf-8"))
         allocations = existing["allocations"]
         selection = existing["selection"]
+        legacy_path = round_dir / "acquisition" / "legacy-selection.json"
+        if not existing.get("catalog_version") and not legacy_path.exists():
+            _atomic_json(legacy_path, {
+                "original_round_manifest": existing,
+                "raw_response": None,
+                "raw_response_unavailable_reason": "original execution did not persist raw proposals",
+                "llm_calls_consumed": int(strategy == "llm_guided_adaptation"),
+            })
     else:
+        legacy_summary = round_dir.parent / "campaign-summary.json"
+        if strategy == "llm_guided_adaptation" and legacy_summary.is_file():
+            summary = json.loads(legacy_summary.read_text(encoding="utf-8"))
+            if (
+                summary.get("stopped_round") == round_index
+                and summary.get("termination_reason") == "round_failed"
+                and not (round_dir / "acquisition" / "recovery-authorization.json").is_file()
+            ):
+                evidence = round_dir / "acquisition" / "legacy-selection.json"
+                if not evidence.exists():
+                    _atomic_json(evidence, {
+                        "raw_response": None,
+                        "raw_response_unavailable_reason": "original rejected proposal was not persisted",
+                        "llm_calls_consumed": 1,
+                        "original_campaign_summary": summary,
+                    })
+                raise ScientificCapacityError(
+                    "Original failed round consumed its one LLM call; raw proposal is unavailable. "
+                    "A replacement policy decision requires explicit additional-call authorization."
+                )
         if strategy == "rule_based_adaptation":
             allocations = _rule_allocation(action_space, history, target, minimum_by_tier)
             selection = {
@@ -1018,9 +1213,25 @@ def _materialize_round(
         else:
             if chat is None:
                 raise ValueError("LLM-guided round requires a configured chat model")
-            allocations, citations, rationale = _llm_allocation(
-                chat, material, action_space, history, target, minimum_by_tier
-            )
+            proposal_path = round_dir / "acquisition" / "proposal-001.json"
+            if proposal_path.is_file():
+                saved = json.loads(proposal_path.read_text(encoding="utf-8"))
+                if saved["status"] != "accepted":
+                    raise ScientificCapacityError(
+                        f"one LLM call already consumed: {proposal_path}; "
+                        "another policy decision requires authorization"
+                    )
+                allocations = saved["accepted_final_allocation"]
+                parsed = json.loads(saved["raw_response"][
+                    saved["raw_response"].find("{"):saved["raw_response"].rfind("}") + 1
+                ])
+                citations, rationale = parsed["cited_evidence_ids"], parsed["rationale"]
+            else:
+                allocations, citations, rationale = _llm_allocation(
+                    chat, material, action_space, history, target, minimum_by_tier,
+                    evidence_path=proposal_path,
+                    context={"round": round_index, "seed": seed},
+                )
             selection = {
                 "policy": "evidence-grounded LLM allocation",
                 "model_id": getattr(chat, "model", None),
@@ -1035,8 +1246,33 @@ def _materialize_round(
                 "optimizer": OPTIMIZER_SETTINGS,
                 "selection": selection,
                 "allocations": allocations,
+                "catalog_version": CATALOG_VERSION,
             },
         )
+
+    feasible_actions, unavailable_actions = executable_catalog(action_space, history)
+    _atomic_json(round_dir / "acquisition" / "catalog.json", {
+        "version": CATALOG_VERSION, "available": feasible_actions, "unavailable": unavailable_actions,
+    })
+    try:
+        allocations = validate_allocations(
+            [{"action_id": row["action"]["action_id"], "count": row["count"]} for row in allocations],
+            feasible_actions, target, minimum_by_tier,
+            unavailable=unavailable_actions,
+        )
+    except (InvalidActionError, ScientificCapacityError) as error:
+        _atomic_json(round_dir / "acquisition" / "allocation-rejected.json", {
+            "category": "invalid_action" if isinstance(error, InvalidActionError) else "capacity_exhausted",
+            "allocations": allocations, "reason": str(error),
+            "requested": target, "accepted_unique": 0,
+            "requires_new_policy_decision": True,
+            "remaining_llm_calls": 0 if strategy == "llm_guided_adaptation" else None,
+        })
+        raise ScientificCapacityError(
+            f"{material}: saved policy decision is infeasible: {error}. "
+            "The original selection is retained; no action was substituted. "
+            "LLM recovery needs authorization beyond the frozen one-call-per-round limit."
+        ) from error
 
     selected_actions = []
     candidate_records = []
@@ -1069,87 +1305,138 @@ def _materialize_round(
         action_id = action_template["action_id"]
         accepted = 0
         generated_total = 0
-        for batch_index in range(100):
-            remaining = count - accepted
-            if remaining == 0:
-                break
-            action = {
-                **action_template,
-                "random_seed": int(
-                    hashlib.sha256(f"{action_seed}:{batch_index}".encode()).hexdigest()[:8], 16
-                ),
-                "count": remaining,
-            }
+        generation_attempts = 0
+        global_rejections: Counter[str] = Counter()
+        if time.monotonic() - generation_started >= ROUND_SECONDS:
+            raise TimeoutError("CPU generation exhausted the round's 1800-second budget")
+        action = {
+            **action_template,
+            "random_seed": int(hashlib.sha256(f"{action_seed}:0".encode()).hexdigest()[:8], 16),
+            "count": count,
+        }
+        attempt_index = len(list((round_dir / "acquisition").glob("attempt-*")))
+        generation_dir = (
+            round_dir / "generated" / f"acquisition-{attempt_index:03d}" /
+            action_id / "batch-000"
+        )
+        exhaustion = None
+        try:
+            prior_structures = [
+                prior
+                for (formula, tier, _), structures in symmetry_index.items()
+                if formula == action_template["formula"]
+                and tier == int(action_template["size_tier"])
+                for prior in structures
+            ]
             records = generate_structures(
-                material,
-                action,
-                round_dir / "generated" / action_id / f"batch-{batch_index:03d}",
+                material, action, generation_dir, excluded_structures=prior_structures,
             )
-            generated_total += len(records)
-            for record in records:
-                structure_path = Path(record["structure_path"]).resolve()
-                if not structure_path.is_file():
-                    raise FileNotFoundError(
-                        f"generator returned missing structure: {structure_path}"
-                    )
-                file_digest = _sha256_file(structure_path)
-                if file_digest != record["structure_sha256"]:
-                    raise ValueError(f"structure hash mismatch: {structure_path}")
-                num_atoms, species = _structure_valid(structure_path, record["formula"])
-                if num_atoms != int(record["num_atoms"]):
-                    raise ValueError(f"atom count mismatch for {structure_path}")
-                digest = _geometry_sha256(structure_path)
-                if digest in known_hashes:
-                    continue
-                atoms = read(structure_path)
-                symmetry_key = (
-                    str(record["formula"]),
-                    int(action_template["size_tier"]),
-                    num_atoms,
+        except GenerationExhausted as error:
+            exhaustion = error
+            records = error.records
+        except StructureGenerationError as error:
+            _atomic_json(round_dir / "acquisition" / f"failure-{action_id}.json", {
+                "category": "invalid_action", "action": action,
+                "requested": count, "accepted_unique": 0,
+                "reason": str(error),
+            })
+            raise
+        except Exception as error:
+            _atomic_json(round_dir / "acquisition" / f"failure-{action_id}.json", {
+                "category": "infrastructure_failure", "action": action,
+                "requested": count, "accepted_unique": 0,
+                "reason": f"{type(error).__name__}: {error}",
+            })
+            raise
+        generated_total += len(records)
+        diagnostics_path = generation_dir / "generation-diagnostics.json"
+        if diagnostics_path.is_file():
+            batch_diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+            generation_attempts += int(batch_diagnostics["generation_attempts"])
+            global_rejections.update(batch_diagnostics["rejection_reasons"])
+        for record in records:
+            structure_path = Path(record["structure_path"]).resolve()
+            if not structure_path.is_file():
+                raise FileNotFoundError(
+                    f"generator returned missing structure: {structure_path}"
                 )
-                if any(
-                    structures_symmetry_equivalent(atoms, prior, symmetry_matcher)
-                    for prior in symmetry_index[symmetry_key]
-                ):
-                    continue
-                known_hashes.add(digest)
-                symmetry_index[symmetry_key].append(atoms)
-                candidate_id = hashlib.sha256(
-                    f"{material}:{strategy}:{seed}:{round_index}:{digest}".encode()
-                ).hexdigest()[:24]
-                row = {
-                    "candidate_id": candidate_id,
-                    "material": material,
-                    "strategy": strategy,
-                    "seed": seed,
-                    "round": round_index,
-                    "candidate_kind": "unique_configuration",
-                    "structure_path": str(structure_path),
-                    "structure_sha256": digest,
-                    "num_atoms": num_atoms,
-                    "species": species,
-                    "formula": record["formula"],
-                    "formula_units": record["formula_units"],
-                    "generation": record["generation"],
-                    "structure_file_sha256": file_digest,
-                    "action_id": action_id,
-                    "action": action,
-                    "status": "pending",
-                }
-                candidate_records.append(row)
-                accepted += 1
-            if batch_index == 99 and accepted < count:
-                raise RuntimeError(
-                    f"could not fill the {count}-structure allocation for {material}/"
-                    f"{action_id}; {accepted} unique configurations accepted after "
-                    f"{generated_total} generation attempts"
-                )
+            file_digest = _sha256_file(structure_path)
+            if file_digest != record["structure_sha256"]:
+                raise ValueError(f"structure hash mismatch: {structure_path}")
+            num_atoms, species = _structure_valid(structure_path, record["formula"])
+            if num_atoms != int(record["num_atoms"]):
+                raise ValueError(f"atom count mismatch for {structure_path}")
+            digest = _geometry_sha256(structure_path)
+            if digest in known_hashes:
+                global_rejections["prior_geometry_hash"] += 1
+                continue
+            atoms = read(structure_path)
+            symmetry_key = (
+                str(record["formula"]),
+                int(action_template["size_tier"]),
+                num_atoms,
+            )
+            if any(
+                structures_symmetry_equivalent(atoms, prior, symmetry_matcher)
+                for prior in symmetry_index[symmetry_key]
+            ):
+                global_rejections["prior_symmetry_equivalent"] += 1
+                continue
+            known_hashes.add(digest)
+            symmetry_index[symmetry_key].append(atoms)
+            candidate_id = hashlib.sha256(
+                f"{material}:{strategy}:{seed}:{round_index}:{digest}".encode()
+            ).hexdigest()[:24]
+            row = {
+                "candidate_id": candidate_id,
+                "material": material,
+                "strategy": strategy,
+                "seed": seed,
+                "round": round_index,
+                "candidate_kind": "unique_configuration",
+                "structure_path": str(structure_path),
+                "structure_sha256": digest,
+                "num_atoms": num_atoms,
+                "species": species,
+                "formula": record["formula"],
+                "formula_units": record["formula_units"],
+                "generation": record["generation"],
+                "structure_file_sha256": file_digest,
+                "action_id": action_id,
+                "action": action,
+                "status": "pending",
+            }
+            candidate_records.append(row)
+            accepted += 1
+        if accepted < count:
+            diagnostic = {
+                **(exhaustion.diagnostics if exhaustion else {}),
+                "category": "generation_shortfall", "action": action,
+                "requested": count, "accepted_unique": accepted,
+                "generation_attempts": generation_attempts,
+                "rejection_reasons": dict(global_rejections),
+                "capacity_exhausted": True, "remaining_capacity": 0,
+                "requires_new_policy_decision": True,
+                "llm_calls_remaining": 0 if strategy == "llm_guided_adaptation" else None,
+            }
+            _atomic_json(round_dir / "acquisition" / f"shortfall-{action_id}.json", diagnostic)
+            _write_jsonl(round_dir / "acquisition" / "partial-candidates.jsonl", candidate_records)
+            raise AcquisitionExhausted(
+                f"{material}/{action_id}: {accepted}/{count} globally unique candidates; "
+                "seeded generation exhausted. Partial structures retained, no GPU dispatch. "
+                "A new policy decision is required; the frozen LLM call limit is one."
+            ) from exhaustion
         selected_actions.append(
             {
                 "action": action_template,
                 "requested": count,
                 "generated": generated_total,
                 "accepted": accepted,
+                "generation_attempts": generation_attempts,
+                "rejection_reasons": dict(global_rejections),
+                "remaining_capacity": max(
+                    0, action_template["feasibility"]["remaining_capacity"] - accepted
+                ),
             }
         )
         if accepted != count:
@@ -1399,16 +1686,16 @@ def _execute_task(
             max_optimization_seconds=optimizer_settings["max_optimization_seconds"],
             maxstep=OPTIMIZER_SETTINGS["maxstep_A"],
             fmax=OPTIMIZER_SETTINGS["fmax_eV_A"],
-            relative_increase_threshold=OPTIMIZER_SETTINGS["relative_increase_threshold"],
+            relative_increase_threshold=optimizer_settings["relative_increase_threshold"],
             relax_cell=OPTIMIZER_SETTINGS["relax_cell"],
             cell_mask=(
                 tuple(OPTIMIZER_SETTINGS["phosphorene_cell_mask"])
                 if task["material"] == "phosphorene"
                 else None
             ),
-            stress_tolerance_eV_per_A3=OPTIMIZER_SETTINGS["stress_tolerance_eV_per_A3"],
-            max_cell_step_strain=OPTIMIZER_SETTINGS["max_cell_step_strain"],
-            max_cell_total_strain=OPTIMIZER_SETTINGS["max_cell_total_strain"],
+            stress_tolerance_eV_per_A3=optimizer_settings["stress_tolerance_eV_per_A3"],
+            max_cell_step_strain=optimizer_settings["max_cell_step_strain"],
+            max_cell_total_strain=optimizer_settings["max_cell_total_strain"],
             require_native_stress=OPTIMIZER_SETTINGS["require_native_stress"],
             mlp_device="cuda",
         )
@@ -1590,7 +1877,11 @@ def run_worker(
         else _hard_optimizer_policy(hard_optimization_seconds)
     )
     calculators = CalculatorCache() if hard_optimization_seconds is None else None
-    with DeadlineWorker(_deadline_calculators, _deadline_execute) as worker:
+    with DeadlineWorker(
+        _deadline_calculators,
+        _deadline_execute,
+        startup_seconds=WORKER_STARTUP_SECONDS,
+    ) as worker:
         for index, task in enumerate(tasks):
             if index % world_size != rank:
                 continue
@@ -1622,6 +1913,345 @@ def _read_tasks(path: Path) -> list[dict[str, Any]]:
     return [
         json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
+
+
+def _preflight_receipt(
+    round_dir: Path, manifest_path: Path, *, execution_attempt_id: str | None = None,
+) -> dict[str, Any]:
+    path = round_dir / "generation-preflight.json"
+    if not path.is_file():
+        raise RuntimeError(f"CPU generation preflight is required before GPU allocation: {path}")
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    if receipt["manifest_sha256"] != _sha256_file(manifest_path):
+        raise ValueError("preflight manifest changed")
+    if receipt["generator_sha256"] != _sha256_file(REPO / "benchmarks/e3/structure_generation.py"):
+        raise ValueError("generator changed after preflight")
+    if receipt["catalog_sha256"] != _sha256_file(REPO / "benchmarks/e3/feasibility.py"):
+        raise ValueError("feasibility catalog changed after preflight")
+    if receipt["acquisition_sha256"] != _sha256_file(Path(__file__)):
+        raise ValueError("acquisition code changed after preflight")
+    tasks_path = round_dir / "tasks.jsonl"
+    tasks = _read_tasks(tasks_path)
+    if len(tasks) != WORKERS_PER_ARRAY_ELEMENT:
+        raise ScientificCapacityError(f"preflight requires 64 real tasks, found {len(tasks)}")
+    if len({task["structure_sha256"] for task in tasks}) != WORKERS_PER_ARRAY_ELEMENT:
+        raise ScientificCapacityError("preflight requires 64 distinct geometry identities")
+    # Dispatch may attach the frozen execution optimizer; geometry identities cannot change.
+    actual = {task["candidate_id"]: task["structure_file_sha256"] for task in tasks}
+    if actual != receipt["structures"]:
+        raise ValueError("preflight task identities changed")
+    for task in tasks:
+        if _sha256_file(Path(task["structure_path"])) != task["structure_file_sha256"]:
+            raise ValueError(f"preflight structure changed: {task['candidate_id']}")
+    receipt["generation_seconds"] = _generation_seconds(round_dir, receipt)
+    if receipt["generation_seconds"] >= ROUND_SECONDS:
+        raise TimeoutError("CPU generation consumed the round's 1800-second budget")
+    _check_execution_history(round_dir)
+    consumed = receipt["generation_seconds"] + _execution_seconds(round_dir, execution_attempt_id)
+    if consumed >= ROUND_SECONDS:
+        raise TimeoutError("generation plus prior execution consumed the round's 1800-second budget")
+    return receipt
+
+
+def _time_budget_state(path: Path, initial_seconds: float = 0) -> dict[str, Any]:
+    if path.is_file():
+        return json.loads(path.read_text(encoding="utf-8"))
+    return {"initial_seconds": initial_seconds, "attempts": []}
+
+
+def _time_budget_consumed(state: dict[str, Any]) -> float:
+    # An unclosed attempt retains its entire allowance, even after SIGKILL.
+    return state["initial_seconds"] + sum(
+        row.get("elapsed_seconds", row["reserved_seconds"]) for row in state["attempts"]
+    )
+
+
+def _generation_seconds(round_dir: Path, receipt: dict[str, Any]) -> float:
+    state = _time_budget_state(
+        round_dir / "generation-time.json", receipt["generation_seconds"],
+    )
+    return _time_budget_consumed(state)
+
+
+@contextmanager
+def _time_budget_attempt(path: Path, *, limit_seconds: float, initial_seconds: float = 0):
+    """Reserve time durably before work; only a measured finish releases the balance."""
+    lock = path.with_suffix(".lock")
+    with exclusive_lock(lock, timeout=0):
+        state = _time_budget_state(path, initial_seconds)
+        remaining = limit_seconds - _time_budget_consumed(state)
+        if not math.isfinite(remaining) or remaining <= 0:
+            raise TimeoutError(
+                f"round time budget exhausted: {path}; unfinished attempts remain "
+                "conservatively charged until their elapsed time is reconciled"
+            )
+        attempt = {
+            "attempt_id": uuid4().hex,
+            "started_at_unix": time.time(),
+            "reserved_seconds": remaining,
+            "status": "running",
+        }
+        state["attempts"].append(attempt)
+        _atomic_json(path, state)
+    started = time.monotonic()
+    status = "failed"
+    try:
+        yield attempt
+        status = "complete"
+    finally:
+        elapsed = time.monotonic() - started
+        with exclusive_lock(lock, timeout=0):
+            state = _time_budget_state(path)
+            saved = next(row for row in state["attempts"] if row["attempt_id"] == attempt["attempt_id"])
+            saved.update(
+                elapsed_seconds=elapsed, finished_at_unix=time.time(), status=status,
+            )
+            _atomic_json(path, state)
+    if elapsed >= remaining:
+        raise TimeoutError(f"round time budget exhausted: {path}")
+
+
+def _execution_allowance(round_dir: Path, attempt_id: str) -> float:
+    state = _time_budget_state(round_dir / "execution-time.json")
+    attempt = next(
+        (row for row in state["attempts"] if row["attempt_id"] == attempt_id), None,
+    )
+    if attempt is None or attempt["status"] != "running":
+        raise ValueError("worker requires its active supervisor time reservation")
+    remaining = attempt["reserved_seconds"] - max(0, time.time() - attempt["started_at_unix"])
+    if remaining <= 0:
+        raise TimeoutError("round execution time budget exhausted before worker dispatch")
+    return remaining
+
+
+def _execution_seconds(round_dir: Path, active_attempt_id: str | None = None) -> float:
+    consumed = _time_budget_consumed(_time_budget_state(round_dir / "execution-time.json"))
+    if active_attempt_id is not None:
+        consumed -= _execution_allowance(round_dir, active_attempt_id)
+    return consumed
+
+
+def _check_execution_history(round_dir: Path) -> None:
+    if not (round_dir / "execution-time.json").exists() and any(
+        round_dir.glob("tasks/*/attempt-*")
+    ):
+        raise RuntimeError(
+            "legacy execution attempts have no cumulative time ledger; reconcile their "
+            "scheduler/round elapsed time before resuming, rather than granting a new budget"
+        )
+
+
+def authorize_generation_recovery(
+    manifest_path: Path, output_root: Path, material: str, authorization: str,
+) -> dict[str, Any]:
+    """Archive a failed first acquisition and authorize one replacement decision."""
+    if material not in {"lifepo4", "phosphorene", "nb_ta_o", "zn_formate_mof"}:
+        raise ValueError("generation recovery is limited to the four failed material streams")
+    if not authorization.strip():
+        raise ValueError("an explicit authorization statement is required")
+    manifest_path, output_root = manifest_path.resolve(), output_root.resolve()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validate_campaign_manifest(manifest)
+    strategy, seed, round_index = "llm_guided_adaptation", BOUNDED_SEED, 1
+    _find_round(manifest, material, strategy, seed, round_index)
+    stream_dir = output_root / material / strategy / f"seed-{seed}"
+    if not stream_dir.is_dir():
+        raise ValueError("recovery requires an existing failed production stream")
+    with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        round_dir = stream_dir / "round-01"
+        path = round_dir / "acquisition" / "recovery-authorization.json"
+        if path.is_file():
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            if saved["authorization"] != authorization:
+                raise ValueError("this stream already has a recovery authorization")
+            return saved
+        summary_path = stream_dir / "campaign-summary.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        if (
+            summary.get("stopped_round") != 1
+            or summary.get("termination_reason") != "round_failed"
+        ):
+            raise ValueError("recovery requires a failed first round")
+        if (
+            (round_dir / "generation-preflight.json").exists()
+            or (round_dir / "round-summary.json").exists()
+            or any(round_dir.glob("tasks/**/result.json"))
+        ):
+            raise ValueError("refusing to replace generated or optimized production work")
+        archive = stream_dir / "recovery-attempts" / "round-01-original"
+        archive.mkdir(parents=True, exist_ok=False)
+        _atomic_json(archive / "campaign-summary.json", summary)
+        if round_dir.exists():
+            os.replace(round_dir, archive / "round-01")
+        record = {
+            "material": material, "strategy": strategy, "seed": seed, "round": round_index,
+            "authorization": authorization, "authorized_at_unix": time.time(),
+            "manifest_sha256": _sha256_file(manifest_path),
+            "original_attempt_archive": str(archive),
+            "original_llm_calls_consumed": 1, "additional_llm_calls": 1,
+            "frozen_objectives_modified": False,
+            "generation_evidence": {
+                "evidence_id": "authorized-generation-recovery",
+                "category": "generation_failure_before_gpu",
+                "attempted": 0, "failed": 0,
+            },
+        }
+        _atomic_json(path, record)
+        return record
+
+
+def prepare_round(
+    manifest_path: Path, output_root: Path, material: str, round_index: int,
+) -> dict[str, Any]:
+    """Execute the actual next-round acquisition without launching any GPU work."""
+    manifest_path, output_root = manifest_path.resolve(), output_root.resolve()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validate_campaign_manifest(manifest)
+    strategy, seed = "llm_guided_adaptation", BOUNDED_SEED
+    spec = _find_round(manifest, material, strategy, seed, round_index)
+    stream_dir = output_root / material / strategy / f"seed-{seed}"
+    stream_dir.mkdir(parents=True, exist_ok=True)
+    with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        history = _history_for_round(output_root, material, strategy, seed, round_index)
+        round_dir = stream_dir / f"round-{round_index:02d}"
+        authorization = round_dir / "acquisition" / "recovery-authorization.json"
+        if authorization.is_file():
+            saved = json.loads(authorization.read_text(encoding="utf-8"))
+            if saved["manifest_sha256"] != _sha256_file(manifest_path):
+                raise ValueError("recovery authorization belongs to a different manifest")
+        if (round_dir / "generation-preflight.json").is_file():
+            return _preflight_receipt(round_dir, manifest_path)
+        time_path = round_dir / "generation-time.json"
+        if not time_path.exists() and (round_dir / "round-manifest.json").exists():
+            raise RuntimeError("legacy generation has no time ledger; reconcile before retrying")
+        _check_execution_history(round_dir)
+        with _time_budget_attempt(
+            time_path, limit_seconds=ROUND_SECONDS - _execution_seconds(round_dir),
+        ):
+            try:
+                _, tasks_path, _ = _materialize_round(
+                    manifest, spec, output_root, history, _chat_model(),
+                )
+            except AcquisitionExhausted as error:
+                return _record_acquisition_stop(round_dir, error)
+            tasks = _read_tasks(tasks_path)
+            if len(tasks) != int(spec["main_target"]):
+                raise ScientificCapacityError(f"preflight yielded {len(tasks)}/{spec['main_target']} tasks")
+            receipt = {
+                "catalog_version": CATALOG_VERSION,
+                "manifest_sha256": _sha256_file(manifest_path),
+                "generator_sha256": _sha256_file(REPO / "benchmarks/e3/structure_generation.py"),
+                "catalog_sha256": _sha256_file(REPO / "benchmarks/e3/feasibility.py"),
+                "acquisition_sha256": _sha256_file(Path(__file__)),
+                "material": material, "strategy": strategy, "seed": seed, "round": round_index,
+                "prepared_at_unix": time.time(),
+                "structures": {task["candidate_id"]: task["structure_file_sha256"] for task in tasks},
+                "actual_generation": True, "gpu_work_dispatched": False,
+            }
+        receipt["generation_seconds"] = _time_budget_consumed(_time_budget_state(time_path))
+        _atomic_json(round_dir / "generation-preflight.json", receipt)
+        return _preflight_receipt(round_dir, manifest_path)
+
+
+def revalidate_preflight(
+    manifest_path: Path, output_root: Path, material: str, round_index: int,
+) -> dict[str, Any]:
+    """Prove a source-only recovery reproduces the saved first-round geometries."""
+    if round_index != 1:
+        raise ValueError("source recovery revalidation is limited to the failed first rounds")
+    manifest_path, output_root = manifest_path.resolve(), output_root.resolve()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validate_campaign_manifest(manifest)
+    spec = _find_round(manifest, material, "llm_guided_adaptation", BOUNDED_SEED, 1)
+    stream_dir = output_root / material / "llm_guided_adaptation" / f"seed-{BOUNDED_SEED}"
+    with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        round_dir = stream_dir / "round-01"
+        receipt_path = round_dir / "generation-preflight.json"
+        original = json.loads(receipt_path.read_text(encoding="utf-8"))
+        if original["manifest_sha256"] != _sha256_file(manifest_path):
+            raise ValueError("source revalidation cannot change the campaign manifest")
+        fingerprints = {
+            "generator_sha256": _sha256_file(REPO / "benchmarks/e3/structure_generation.py"),
+            "catalog_sha256": _sha256_file(REPO / "benchmarks/e3/feasibility.py"),
+            "acquisition_sha256": _sha256_file(Path(__file__)),
+        }
+        if all(original.get(key) == value for key, value in fingerprints.items()):
+            return _preflight_receipt(round_dir, manifest_path)
+        _check_execution_history(round_dir)
+        if not (round_dir / "generation-time.json").exists() and any(
+            (round_dir / "acquisition").glob("source-revalidation-*")
+        ):
+            raise RuntimeError("legacy replay history has no time ledger; reconcile before retrying")
+        execution_seconds = _execution_seconds(round_dir)
+        with _time_budget_attempt(
+            round_dir / "generation-time.json",
+            limit_seconds=ROUND_SECONDS - execution_seconds,
+            initial_seconds=original["generation_seconds"],
+        ) as attempt:
+            updated = _replay_preflight(
+                manifest, spec, material, round_dir, original, fingerprints, attempt,
+            )
+        updated["generation_seconds"] = _generation_seconds(round_dir, original)
+        _atomic_json(receipt_path, updated)
+        return _preflight_receipt(round_dir, manifest_path)
+
+
+def _replay_preflight(
+    manifest: dict[str, Any], spec: dict[str, Any], material: str,
+    round_dir: Path, original: dict[str, Any], fingerprints: dict[str, str],
+    attempt: dict[str, Any],
+) -> dict[str, Any]:
+    tasks = _read_tasks(round_dir / "tasks.jsonl")
+    if {row["candidate_id"]: row["structure_file_sha256"] for row in tasks} != original["structures"]:
+        raise ValueError("original preflight task identities changed")
+    for task in tasks:
+        path = Path(task["structure_path"])
+        if (
+            _sha256_file(path) != task["structure_file_sha256"]
+            or _geometry_sha256(path) != task["structure_sha256"]
+        ):
+            raise ValueError(f"original structure changed: {path}")
+    source_hash = hashlib.sha256(_canonical_json(fingerprints).encode()).hexdigest()
+    replay_root = round_dir / "acquisition" / f"source-revalidation-{source_hash[:16]}"
+    replay_round = (
+        replay_root / material / "llm_guided_adaptation" /
+        f"seed-{BOUNDED_SEED}" / "round-01"
+    )
+    for name in ("proposal-001.json", "recovery-authorization.json"):
+        source = round_dir / "acquisition" / name
+        if name == "recovery-authorization.json" and not source.is_file():
+            continue
+        _atomic_json(replay_round / "acquisition" / name, json.loads(source.read_text()))
+    _atomic_json(replay_root / "original-preflight.json", original)
+    outcomes = {
+        str(path): _sha256_file(path) for path in round_dir.glob("tasks/**/result.json")
+    }
+    # A plain sentinel has no invoke method: this replay cannot make an LLM call.
+    _, replay_tasks_path, _ = _materialize_round(
+        manifest, spec, replay_root, [], object(),
+    )
+    replay = _read_tasks(replay_tasks_path)
+    old_geometries = {task["structure_sha256"] for task in tasks}
+    new_geometries = {task["structure_sha256"] for task in replay}
+    if len(replay) != 64 or len(new_geometries) != 64 or old_geometries != new_geometries:
+        raise ScientificCapacityError(
+            "source revalidation did not reproduce the original 64 distinct geometries"
+        )
+    if any(_sha256_file(Path(path)) != digest for path, digest in outcomes.items()):
+        raise ValueError("source revalidation modified optimization outcome evidence")
+    elapsed = max(0, time.time() - attempt["started_at_unix"])
+    proof = {
+        "actual_seeded_generation": True, "geometry_sets_identical": True,
+        "task_count": len(replay), "llm_calls": 0,
+        "retained_optimization_results": outcomes,
+        "original_preflight": str(replay_root / "original-preflight.json"),
+        "replayed_tasks": str(replay_tasks_path), "elapsed_seconds": elapsed,
+    }
+    _atomic_json(replay_root / "revalidation.json", proof)
+    return {
+        **original, **fingerprints,
+        "source_revalidation": str(replay_root / "revalidation.json"),
+    }
 
 
 def _round_action_outcomes(tasks: list[dict[str, Any]], task_root: Path) -> list[dict[str, Any]]:
@@ -1795,6 +2425,7 @@ def _execute_round_tasks(
     workers_per_node: int,
     worker_python: str,
     hard_optimization_seconds: float | None = None,
+    round_deadline: float | None = None,
 ) -> None:
     if worker_count < 1 or worker_count % workers_per_node:
         raise ValueError("worker count must be a positive multiple of workers per node")
@@ -1832,168 +2463,249 @@ def _execute_round_tasks(
     ]
     if hard_optimization_seconds is not None:
         command.extend(["--hard-optimization-seconds", str(hard_optimization_seconds)])
+    if round_deadline is not None:
+        remaining_minutes = int((round_deadline - time.monotonic()) // 60)
+        if remaining_minutes < 1:
+            raise TimeoutError("round budget exhausted before GPU evaluation")
+        command[1:1] = [
+            "--time",
+            str(remaining_minutes),
+            "--kill-on-bad-exit=1",
+            "--wait=0",
+        ]
     subprocess.run(command, check=True)
 
 
 def run_replicate(
+    manifest_path: Path, output_root: Path, material: str, strategy: str, seed: int,
+    *, worker_count: int = WORKERS_PER_ARRAY_ELEMENT, worker_python: str | None = None,
+    workers_per_node: int = 4, hard_optimization_seconds: float | None = None,
+    round_index: int, round_attempt_id: str | None = None,
+) -> dict[str, Any]:
+    round_dir = output_root / material / strategy / f"seed-{seed}" / f"round-{round_index:02d}"
+    summary_path = round_dir / "round-summary.json"
+    complete = (
+        summary_path.is_file()
+        and json.loads(summary_path.read_text()).get("status") == "complete"
+    )
+    if not complete:
+        _check_execution_history(round_dir)
+    if round_attempt_id is not None or complete:
+        reservation = nullcontext(None)
+    else:
+        receipt_path = round_dir / "generation-preflight.json"
+        receipt = (
+            json.loads(receipt_path.read_text())
+            if receipt_path.is_file() else {"generation_seconds": 0}
+        )
+        reservation = _time_budget_attempt(
+            round_dir / "execution-time.json",
+            limit_seconds=ROUND_SECONDS - _generation_seconds(round_dir, receipt),
+        )
+    with reservation as attempt:
+        attempt_id = round_attempt_id or (attempt["attempt_id"] if attempt else None)
+        deadline = (
+            time.monotonic() + _execution_allowance(round_dir, attempt_id)
+            if attempt_id is not None else time.monotonic()
+        )
+        return _run_replicate(
+            manifest_path, output_root, material, strategy, seed,
+            worker_count=worker_count, worker_python=worker_python,
+            workers_per_node=workers_per_node,
+            hard_optimization_seconds=hard_optimization_seconds, round_index=round_index,
+            round_deadline=deadline, round_attempt_id=attempt_id,
+        )
+
+
+def _run_replicate(
     manifest_path: Path,
     output_root: Path,
     material: str,
     strategy: str,
     seed: int,
     *,
-    worker_count: int | None = None,
+    worker_count: int = WORKERS_PER_ARRAY_ELEMENT,
     worker_python: str | None = None,
     workers_per_node: int = 4,
     hard_optimization_seconds: float | None = None,
+    round_index: int,
+    round_deadline: float,
+    round_attempt_id: str | None,
 ) -> dict[str, Any]:
-    """Run all ten adaptive rounds for one material/strategy/paired-seed stream."""
+    """Run one round of the current three-round E3-MLIP benchmark."""
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     validate_campaign_manifest(manifest)
+    if round_index not in range(1, ROUNDS_PER_MATERIAL + 1):
+        raise ValueError("benchmark round must be 1, 2, or 3")
+    if worker_count != WORKERS_PER_ARRAY_ELEMENT or hard_optimization_seconds != HARD_OPTIMIZATION_SECONDS:
+        raise ValueError("benchmark requires 64 workers and a 300-second hard cutoff")
+    if strategy != "llm_guided_adaptation" or seed != BOUNDED_SEED:
+        raise ValueError("benchmark requires the LLM-guided strategy and registered seed")
     if strategy not in E3_STRATEGIES or material not in MATERIALS:
         raise ValueError("unknown E3 material or strategy")
     if seed not in REPLICATE_SEEDS:
-        raise ValueError(f"seed {seed} is not in the frozen paired seed set")
+        raise ValueError(f"seed {seed} is not registered in the current benchmark")
+    if workers_per_node != GPU_COUNT_PER_NODE:
+        raise ValueError("benchmark requires exactly four workers per GPU node")
     stream_dir = output_root / material / strategy / f"seed-{seed}"
     stream_dir.mkdir(parents=True, exist_ok=True)
     lock_path = stream_dir / ".run.lock"
-    with lock_path.open("a+") as lock:
-        try:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise RuntimeError(f"replicate is already running: {stream_dir}") from exc
+    with exclusive_lock(lock_path, timeout=0):
         if hard_optimization_seconds is not None:
             _hard_optimizer_policy(hard_optimization_seconds)
-        policy = {"hard_optimization_seconds": hard_optimization_seconds}
+        policy = {
+            "campaign_id": manifest["campaign_id"],
+            "manifest_sha256": _sha256_file(manifest_path),
+            "hard_optimization_seconds": hard_optimization_seconds,
+            "round_seconds": ROUND_SECONDS,
+            "workers": WORKERS_PER_ARRAY_ELEMENT,
+        }
         policy_path = stream_dir / "execution-policy.json"
         if policy_path.is_file():
             if json.loads(policy_path.read_text()) != policy:
                 raise ValueError("Cannot change optimization deadline when resuming a stream")
-        elif list(stream_dir.glob("round-*")) and hard_optimization_seconds is not None:
-            raise ValueError("A hard deadline requires a fresh stream, not frozen prior evidence")
         else:
+            prepared_rounds = list(stream_dir.glob("round-*"))
+            if prepared_rounds and hard_optimization_seconds is not None:
+                first_round = stream_dir / "round-01"
+                if (
+                    round_index != 1
+                    or prepared_rounds != [first_round]
+                    or not (first_round / "generation-preflight.json").is_file()
+                    or (first_round / "round-summary.json").exists()
+                    or any(first_round.glob("tasks/*/attempt-*"))
+                ):
+                    raise ValueError(
+                        "A hard deadline requires a fresh stream, not frozen prior evidence"
+                    )
+                _preflight_receipt(
+                    first_round, manifest_path, execution_attempt_id=round_attempt_id,
+                )
             _atomic_json(policy_path, policy)
-        if worker_count is None:
-            worker_count = int(os.environ.get("MATSIM_E3_MLIP_WORKERS", "16"))
         worker_python = worker_python or os.environ.get(
             "MATSIM_E3_MLIP_WORKER_PYTHON", sys.executable
         )
         if worker_count > 1:
             _verified_checkpoint_sha256()
         chat = _chat_model() if strategy == "llm_guided_adaptation" else None
-        for round_index in range(1, 11):
-            spec = _find_round(manifest, material, strategy, seed, round_index)
-            round_dir = stream_dir / f"round-{round_index:02d}"
-            summary_path = round_dir / "round-summary.json"
-            if summary_path.is_file():
-                summary = json.loads(summary_path.read_text(encoding="utf-8"))
-                if summary.get("status") == "complete":
-                    previous_manifest = round_dir / "round-manifest.json"
-                    if not previous_manifest.is_file():
-                        raise ValueError(f"completed round has no protocol manifest: {round_dir}")
-                    previous = json.loads(previous_manifest.read_text(encoding="utf-8"))
-                    if previous.get("optimizer") != OPTIMIZER_SETTINGS:
-                        raise ValueError("completed round uses a different optimization protocol")
-                    continue
-            history = _history_for_round(output_root, material, strategy, seed, round_index)
+        deadline = round_deadline
+        spec = _find_round(manifest, material, strategy, seed, round_index)
+        round_dir = stream_dir / f"round-{round_index:02d}"
+        summary_path = round_dir / "round-summary.json"
+        if summary_path.is_file():
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            if summary.get("status") == "complete":
+                return {
+                    "material": material,
+                    "strategy": strategy,
+                    "seed": seed,
+                    "round": round_index,
+                    "status": "complete",
+                    "output_dir": str(stream_dir),
+                }
+        history = _history_for_round(output_root, material, strategy, seed, round_index)
+        if (round_dir / "generation-preflight.json").is_file():
+            _preflight_receipt(
+                round_dir, manifest_path, execution_attempt_id=round_attempt_id,
+            )
+        elif round_index == 1:
+            raise RuntimeError("round 1 requires CPU generation preflight before GPU allocation")
+        try:
             round_manifest_path, tasks_path, round_manifest = _materialize_round(
                 manifest, spec, output_root, history, chat
             )
-            if hard_optimization_seconds is not None:
-                effective_optimizer = _hard_optimizer_policy(hard_optimization_seconds)
-                tasks = _read_tasks(tasks_path)
-                for task in tasks:
-                    task["optimizer"] = effective_optimizer
-                _write_jsonl(tasks_path, tasks)
-                round_manifest["execution_optimizer"] = effective_optimizer
-                _atomic_json(round_manifest_path, round_manifest)
-            _execute_round_tasks(
-                tasks_path,
-                round_dir,
-                worker_count,
-                workers_per_node,
-                worker_python,
-                **(
-                    {"hard_optimization_seconds": hard_optimization_seconds}
-                    if hard_optimization_seconds is not None
-                    else {}
-                ),
-            )
-            tasks = _read_tasks(tasks_path)
-            task_root = round_dir / "tasks"
-            action_outcomes = _round_action_outcomes(tasks, task_root)
-            tier_accounting: dict[str, dict[str, Any]] = {}
-            for outcome in action_outcomes:
-                tier = str(outcome["size_tier"])
-                entry = tier_accounting.setdefault(
-                    tier,
-                    {
-                        "attempted": 0,
-                        "converged": 0,
-                        "nonconverged": 0,
-                        "failed": 0,
-                        "runtime_seconds": 0.0,
-                        "gpu_hours": 0.0,
-                    },
-                )
-                for key in ("attempted", "converged", "nonconverged", "failed"):
-                    entry[key] += int(outcome[key])
-                for key in ("runtime_seconds", "gpu_hours"):
-                    entry[key] += float(outcome[key])
-            task_results = [
-                json.loads(_task_result(task_root / task["candidate_id"], task).read_text())
-                for task in tasks
-            ]
-            geometry_hashes_by_tier: dict[str, set[str]] = defaultdict(set)
-            for task, result in zip(tasks, task_results, strict=True):
-                final_hash = result.get("final_structure_sha256")
-                if final_hash:
-                    geometry_hashes_by_tier[str(task["action"]["size_tier"])].add(final_hash)
-            for tier, entry in tier_accounting.items():
-                entry["distinct_final_geometry_hashes"] = len(geometry_hashes_by_tier[tier])
-            summary = {
-                **spec,
-                "status": "complete",
-                "task_count": len(tasks),
-                "unique_candidates_attempted": sum(
-                    task["candidate_kind"] == "unique_configuration" for task in tasks
-                ),
-                "finite_size_controls_attempted": sum(
-                    task["candidate_kind"] == "finite_size_control" for task in tasks
-                ),
-                "outcomes": dict(Counter(result["status"] for result in task_results)),
-                "costs": {
-                    "runtime_seconds": sum(
-                        float(result.get("runtime_seconds", 0)) for result in task_results
-                    ),
-                    "gpu_hours": sum(float(result.get("gpu_hours", 0)) for result in task_results),
-                    "gpu_node_hours": sum(
-                        float(result.get("gpu_node_hours", 0)) for result in task_results
-                    ),
+        except AcquisitionExhausted as error:
+            return _record_acquisition_stop(round_dir, error)
+        effective_optimizer = _hard_optimizer_policy(hard_optimization_seconds)
+        tasks = _read_tasks(tasks_path)
+        for task in tasks:
+            task["optimizer"] = effective_optimizer
+        _write_jsonl(tasks_path, tasks)
+        round_manifest["execution_optimizer"] = effective_optimizer
+        _atomic_json(round_manifest_path, round_manifest)
+        if len(tasks) != int(spec["main_target"]) or not tasks:
+            raise ScientificCapacityError("refusing incomplete or empty GPU workload")
+        _execute_round_tasks(
+            tasks_path,
+            round_dir,
+            worker_count,
+            workers_per_node,
+            worker_python,
+            hard_optimization_seconds=hard_optimization_seconds,
+            round_deadline=deadline,
+        )
+        tasks = _read_tasks(tasks_path)
+        task_root = round_dir / "tasks"
+        action_outcomes = _round_action_outcomes(tasks, task_root)
+        tier_accounting: dict[str, dict[str, Any]] = {}
+        for outcome in action_outcomes:
+            tier = str(outcome["size_tier"])
+            entry = tier_accounting.setdefault(
+                tier,
+                {
+                    "attempted": 0,
+                    "converged": 0,
+                    "nonconverged": 0,
+                    "failed": 0,
+                    "runtime_seconds": 0.0,
+                    "gpu_hours": 0.0,
                 },
-                "accounting_by_size_tier": tier_accounting,
-                "distinct_relaxed_geometry_hashes": len(
-                    {
-                        result["final_structure_sha256"]
-                        for result in task_results
-                        if result.get("final_structure_sha256")
-                    }
+            )
+            for key in ("attempted", "converged", "nonconverged", "failed"):
+                entry[key] += int(outcome[key])
+            for key in ("runtime_seconds", "gpu_hours"):
+                entry[key] += float(outcome[key])
+        task_results = [
+            json.loads(_task_result(task_root / task["candidate_id"], task).read_text())
+            for task in tasks
+        ]
+        geometry_hashes_by_tier: dict[str, set[str]] = defaultdict(set)
+        for task, result in zip(tasks, task_results, strict=True):
+            final_hash = result.get("final_structure_sha256")
+            if final_hash:
+                geometry_hashes_by_tier[str(task["action"]["size_tier"])].add(final_hash)
+        for tier, entry in tier_accounting.items():
+            entry["distinct_final_geometry_hashes"] = len(geometry_hashes_by_tier[tier])
+        summary = {
+            **spec,
+            "status": "complete",
+            "task_count": len(tasks),
+            "unique_candidates_attempted": sum(
+                task["candidate_kind"] == "unique_configuration" for task in tasks
+            ),
+            "finite_size_controls_attempted": 0,
+            "outcomes": dict(Counter(result["status"] for result in task_results)),
+            "costs": {
+                "runtime_seconds": sum(
+                    float(result.get("runtime_seconds", 0)) for result in task_results
                 ),
-                "action_outcomes": action_outcomes,
-                "selection": round_manifest["selection"],
-                "tasks_sha256": _sha256_file(tasks_path),
-            }
-            _atomic_json(summary_path, summary)
-            round_manifest["status"] = "complete"
-            round_manifest["round_summary"] = str(summary_path)
-            _atomic_json(round_manifest_path, round_manifest)
+                "gpu_hours": sum(float(result.get("gpu_hours", 0)) for result in task_results),
+                "gpu_node_hours": sum(
+                    float(result.get("gpu_node_hours", 0)) for result in task_results
+                ),
+            },
+            "accounting_by_size_tier": tier_accounting,
+            "distinct_relaxed_geometry_hashes": len(
+                {
+                    result["final_structure_sha256"]
+                    for result in task_results
+                    if result.get("final_structure_sha256")
+                }
+            ),
+            "action_outcomes": action_outcomes,
+            "selection": round_manifest["selection"],
+            "tasks_sha256": _sha256_file(tasks_path),
+        }
+        _atomic_json(summary_path, summary)
+        round_manifest["status"] = "complete"
+        round_manifest["round_summary"] = str(summary_path)
+        _atomic_json(round_manifest_path, round_manifest)
         return {
             "material": material,
             "strategy": strategy,
             "seed": seed,
+            "round": round_index,
             "status": "complete",
-            "rounds": 10,
-            "unique_target": 5000,
             "output_dir": str(stream_dir),
         }
 
@@ -2016,18 +2728,370 @@ def _worker_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _validate_benchmark_allocation(job_id: str) -> None:
+    if not job_id:
+        raise RuntimeError("benchmark execution requires an active Slurm job")
+    account = os.environ.get("MATSIM_E3_MLIP_ACCOUNT", "m5216")
+    if account not in {"m5216", "m5048", "m4828", "amsc001", "amsc004", "dasrepo"}:
+        raise ValueError(f"account is not authorized for this campaign: {account}")
+    result = subprocess.run(
+        ["scontrol", "show", "job", "--oneliner", job_id],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    fields = dict(
+        item.split("=", 1)
+        for item in result.stdout.split()
+        if "=" in item
+    )
+    expected = {
+        "Account": f"{account}_g",
+        "QOS": "gpu_premium",
+        "NumNodes": "16",
+    }
+    mismatches = {
+        key: (fields.get(key), value)
+        for key, value in expected.items()
+        if fields.get(key) != value
+    }
+    if mismatches:
+        raise RuntimeError(f"Slurm allocation does not match the benchmark request: {mismatches}")
+    try:
+        time_fields = [int(value) for value in fields["TimeLimit"].split(":")]
+        if len(time_fields) == 3:
+            hours, minutes, seconds = time_fields
+            days = 0
+        elif len(time_fields) == 4:
+            days, hours, minutes, seconds = time_fields
+        else:
+            raise ValueError
+        limit_seconds = days * 86_400 + hours * 3_600 + minutes * 60 + seconds
+    except (KeyError, ValueError) as exc:
+        raise RuntimeError("could not parse the Slurm allocation time limit") from exc
+    if limit_seconds != WALLTIME_SECONDS_PER_ELEMENT:
+        raise RuntimeError(
+            f"Slurm allocation time limit is {limit_seconds} seconds; "
+            f"expected {WALLTIME_SECONDS_PER_ELEMENT}"
+        )
+
+
+def _terminate_process_group(process: subprocess.Popen) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait()
+
+
+def _run_supervised_round(command: list[str], *, seconds: float = ROUND_SECONDS) -> None:
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise ValueError("round deadline must be finite and positive")
+    process = subprocess.Popen(command, start_new_session=True)
+    try:
+        status = process.wait(timeout=seconds)
+    except subprocess.TimeoutExpired:
+        _terminate_process_group(process)
+        raise
+    except BaseException:
+        _terminate_process_group(process)
+        raise
+    if status:
+        raise subprocess.CalledProcessError(status, command)
+
+
+def _write_campaign_report(stream_dir: Path, summary: dict[str, Any]) -> None:
+    lines = [
+        "# E3-MLIP benchmark results",
+        "",
+        f"- Material: `{summary['material']}`",
+        f"- Status: **{summary['status']}**",
+        f"- Rounds: {summary['rounds_completed']} / {summary['rounds_requested']}",
+        f"- Strategy: `{summary.get('strategy', 'llm_guided_adaptation')}`",
+        f"- Seed: `{summary.get('seed', BOUNDED_SEED)}`",
+        f"- Geometry-task cutoff: {HARD_OPTIMIZATION_SECONDS} seconds (parent-enforced)",
+        f"- Round walltime limit: {ROUND_SECONDS} seconds",
+        f"- Allocation walltime limit: {WALLTIME_SECONDS_PER_ELEMENT} seconds",
+        "",
+        "This benchmark has one strategy and one seed per material. It does not",
+        "support a rule-based comparison, statistical confidence intervals, or",
+        "standalone discovery/stability claims. MLIP outcomes are not DFT validation.",
+    ]
+    if "logical_optimizations_attempted" in summary:
+        lines.extend(
+            [
+                "",
+                f"- Geometry tasks attempted: {summary['logical_optimizations_attempted']}",
+                f"- Outcomes: `{json.dumps(summary.get('outcomes', {}), sort_keys=True)}`",
+            ]
+        )
+    if summary["status"] != "complete":
+        lines.extend(
+            [
+                "",
+                f"- Stopped at round: {summary.get('stopped_round', 'unknown')}",
+                f"- Termination reason: `{summary.get('termination_reason', 'unknown')}`",
+            ]
+        )
+    if summary["status"] == "stopped_generation_exhausted":
+        lines.extend([
+            "",
+            "Acquisition stopped without new optimization evidence in the stopped round.",
+            "Partial generated structures are retained, not counted as optimizations.",
+            "Prior hypotheses are retained without update; the stopped round is incomplete.",
+        ])
+    temporary = stream_dir / ".report.md.tmp"
+    temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.replace(temporary, stream_dir / "report.md")
+
+
+def run_campaign(
+    manifest_path: Path,
+    output_root: Path,
+    material: str,
+    worker_python: str,
+    *,
+    worker_count: int = WORKERS_PER_ARRAY_ELEMENT,
+    hard_optimization_seconds: int = HARD_OPTIMIZATION_SECONDS,
+    resource_state: Path | None = None,
+) -> dict[str, Any]:
+    """Run three independently supervised, 30-minute rounds for one material."""
+    manifest_path = manifest_path.resolve()
+    output_root = output_root.resolve()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validate_campaign_manifest(manifest)
+    if material not in MATERIALS:
+        raise ValueError(f"unknown benchmark material: {material}")
+    if worker_count != WORKERS_PER_ARRAY_ELEMENT:
+        raise ValueError("the benchmark requires exactly one worker on each of 64 GPUs")
+    if hard_optimization_seconds != HARD_OPTIMIZATION_SECONDS:
+        raise ValueError("the benchmark geometry deadline is fixed at 300 seconds")
+    job_id = os.environ.get("SLURM_JOB_ID", "")
+    _validate_benchmark_allocation(job_id)
+    state_path = (resource_state or output_root / "resource-budget.json").resolve()
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    reservation_id = os.environ.get("MATSIM_E3_MLIP_RESERVATION_ID", job_id)
+    reservation = state.get("reservations", {}).get(reservation_id)
+    if (
+        state.get("cap_gpu_seconds") != GPU_HOUR_CAP * 3600
+        or not isinstance(reservation, dict)
+        or reservation.get("reserved_gpu_seconds") != GPU_SECONDS_PER_ELEMENT
+        or reservation.get("job_id", job_id) != job_id
+    ):
+        raise RuntimeError("this Slurm allocation lacks its exact active benchmark reservation")
+
+    strategy = "llm_guided_adaptation"
+    seed = BOUNDED_SEED
+    stream_dir = output_root / material / strategy / f"seed-{seed}"
+    stream_dir.mkdir(parents=True, exist_ok=True)
+    for next_round in range(1, ROUNDS_PER_MATERIAL + 1):
+        next_dir = stream_dir / f"round-{next_round:02d}"
+        next_summary = next_dir / "round-summary.json"
+        if next_summary.is_file() and json.loads(next_summary.read_text()).get("status") == "complete":
+            continue
+        _preflight_receipt(next_dir, manifest_path)
+        break
+    policy_path = stream_dir / "campaign-policy.json"
+    policy = {
+        "campaign_id": manifest["campaign_id"],
+        "manifest_sha256": _sha256_file(manifest_path),
+        "hard_optimization_seconds": hard_optimization_seconds,
+        "round_seconds": ROUND_SECONDS,
+        "workers": worker_count,
+        "allocation_seconds": WALLTIME_SECONDS_PER_ELEMENT,
+    }
+    if policy_path.is_file() and json.loads(policy_path.read_text()) != policy:
+        raise ValueError("cannot resume this campaign with different scientific or resource limits")
+    _atomic_json(policy_path, policy)
+
+    completed = 0
+    for round_index in range(1, ROUNDS_PER_MATERIAL + 1):
+        round_dir = stream_dir / f"round-{round_index:02d}"
+        summary_path = round_dir / "round-summary.json"
+        if (
+            summary_path.is_file()
+            and json.loads(summary_path.read_text()).get("status") == "complete"
+        ):
+            completed += 1
+            continue
+        command = [
+            sys.executable,
+            "-m",
+            "benchmarks.e3.production",
+            "run-replicate",
+            "--manifest",
+            str(manifest_path),
+            "--output-root",
+            str(output_root),
+            "--material",
+            material,
+            "--strategy",
+            strategy,
+            "--seed",
+            str(seed),
+            "--workers",
+            str(worker_count),
+            "--workers-per-node",
+            str(GPU_COUNT_PER_NODE),
+            "--worker-python",
+            worker_python,
+            "--hard-optimization-seconds",
+            str(hard_optimization_seconds),
+            "--round-index",
+            str(round_index),
+        ]
+        try:
+            receipt_path = stream_dir / f"round-{round_index:02d}" / "generation-preflight.json"
+            seconds = ROUND_SECONDS
+            if receipt_path.is_file():
+                receipt = _preflight_receipt(receipt_path.parent, manifest_path)
+                seconds -= receipt["generation_seconds"]
+            _check_execution_history(round_dir)
+            with _time_budget_attempt(
+                round_dir / "execution-time.json", limit_seconds=seconds,
+            ) as attempt:
+                _run_supervised_round(
+                    [*command, "--round-attempt-id", attempt["attempt_id"]],
+                    seconds=attempt["reserved_seconds"],
+                )
+        except (TimeoutError, subprocess.TimeoutExpired) as error:
+            if isinstance(error, subprocess.TimeoutExpired):
+                (stream_dir / ".run.lock").unlink(missing_ok=True)
+            failed = {
+                "campaign_id": manifest["campaign_id"],
+                "material": material,
+                "strategy": strategy,
+                "seed": seed,
+                "status": "incomplete",
+                "rounds_completed": completed,
+                "rounds_requested": ROUNDS_PER_MATERIAL,
+                "stopped_round": round_index,
+                "termination_reason": "round_time_limit",
+                "round_limit_seconds": ROUND_SECONDS,
+            }
+            _atomic_json(stream_dir / "campaign-summary.json", failed)
+            _write_campaign_report(stream_dir, failed)
+            raise
+        except subprocess.CalledProcessError:
+            failed = {
+                "campaign_id": manifest["campaign_id"],
+                "material": material,
+                "strategy": strategy,
+                "seed": seed,
+                "status": "incomplete",
+                "rounds_completed": completed,
+                "rounds_requested": ROUNDS_PER_MATERIAL,
+                "stopped_round": round_index,
+                "termination_reason": "round_failed",
+            }
+            _atomic_json(
+                stream_dir / "campaign-summary.json", failed
+            )
+            _write_campaign_report(stream_dir, failed)
+            raise
+        outcome_path = stream_dir / f"round-{round_index:02d}" / "acquisition" / "outcome.json"
+        summary_path = stream_dir / f"round-{round_index:02d}" / "round-summary.json"
+        if outcome_path.is_file() and not (
+            summary_path.is_file()
+            and json.loads(summary_path.read_text()).get("status") == "complete"
+        ):
+            outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
+            if outcome.get("status") != "stopped_generation_exhausted":
+                raise ValueError(f"unrecognized acquisition outcome: {outcome_path}")
+            prior_summaries = [
+                json.loads((stream_dir / f"round-{index:02d}" / "round-summary.json").read_text())
+                for index in range(1, round_index)
+            ]
+            prior_outcomes: Counter[str] = Counter()
+            for prior in prior_summaries:
+                prior_outcomes.update(prior["outcomes"])
+            stopped = {
+                "campaign_id": manifest["campaign_id"],
+                "material": material, "strategy": strategy, "seed": seed,
+                "status": "stopped_generation_exhausted",
+                "rounds_completed": completed, "rounds_requested": ROUNDS_PER_MATERIAL,
+                "stopped_round": round_index, "round_complete": False,
+                "termination_reason": "generation_exhausted",
+                "acquisition_outcome": outcome,
+                "hypotheses_updated_in_stopped_round": False,
+                "new_optimization_evidence_in_stopped_round": False,
+                "logical_optimizations_attempted": sum(
+                    prior["task_count"] for prior in prior_summaries
+                ),
+                "outcomes": dict(prior_outcomes),
+            }
+            _atomic_json(stream_dir / "campaign-summary.json", stopped)
+            _write_campaign_report(stream_dir, stopped)
+            return stopped
+        completed += 1
+
+    summaries = [
+        json.loads(
+            (
+                stream_dir
+                / f"round-{index:02d}"
+                / "round-summary.json"
+            ).read_text(encoding="utf-8")
+        )
+        for index in range(1, ROUNDS_PER_MATERIAL + 1)
+    ]
+    campaign_summary = {
+        "campaign_id": manifest["campaign_id"],
+        "material": material,
+        "strategy": strategy,
+        "seed": seed,
+        "status": "complete",
+        "rounds_completed": completed,
+        "rounds_requested": ROUNDS_PER_MATERIAL,
+        "logical_optimizations_attempted": sum(item["task_count"] for item in summaries),
+        "outcomes": dict(
+            Counter(
+                status
+                for item in summaries
+                for status, count in item["outcomes"].items()
+                for _ in range(count)
+            )
+        ),
+        "resource_limits": policy,
+    }
+    _atomic_json(stream_dir / "campaign-summary.json", campaign_summary)
+    _write_campaign_report(stream_dir, campaign_summary)
+    return campaign_summary
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    plan = commands.add_parser(
-        "plan", help="write the complete 360-round adaptive campaign manifest"
-    )
+    plan = commands.add_parser("plan", help="write the current E3-MLIP benchmark manifest")
     plan.add_argument("--output", type=Path, required=True)
     plan.add_argument("--overwrite", action="store_true")
     validate = commands.add_parser(
         "validate", help="validate the frozen protocol without execution"
     )
     validate.add_argument("--manifest", type=Path, required=True)
+    recovery = commands.add_parser(
+        "authorize-recovery", help="record authorization for one replacement first-round decision"
+    )
+    recovery.add_argument("--manifest", type=Path, required=True)
+    recovery.add_argument("--output-root", type=Path, required=True)
+    recovery.add_argument("--material", choices=sorted(MATERIALS), required=True)
+    recovery.add_argument("--authorization", required=True)
+    for name in (
+        "prepare", "prepare-round", "verify-preflight", "revalidate-preflight", "revalidate-round",
+    ):
+        preflight = commands.add_parser(name, help="CPU-only production generation gate")
+        preflight.add_argument("--manifest", type=Path, required=True)
+        preflight.add_argument("--output-root", type=Path, required=True)
+        preflight.add_argument("--material", choices=sorted(MATERIALS), required=True)
+        preflight.add_argument("--round-index", type=int, choices=(1, 2, 3), default=1)
     run = commands.add_parser("run-replicate")
     run.add_argument("--manifest", type=Path, required=True)
     run.add_argument("--output-root", type=Path, required=True)
@@ -2038,6 +3102,18 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--workers-per-node", type=int, default=4)
     run.add_argument("--worker-python")
     run.add_argument("--hard-optimization-seconds", type=float)
+    run.add_argument("--round-index", type=int, choices=(1, 2, 3), required=True)
+    run.add_argument("--round-attempt-id")
+    campaign = commands.add_parser("run-campaign")
+    campaign.add_argument("--manifest", type=Path, required=True)
+    campaign.add_argument("--output-root", type=Path, required=True)
+    campaign.add_argument("--material", choices=sorted(MATERIALS), required=True)
+    campaign.add_argument("--workers", type=int, default=WORKERS_PER_ARRAY_ELEMENT)
+    campaign.add_argument("--worker-python", required=True)
+    campaign.add_argument("--resource-state", type=Path)
+    campaign.add_argument(
+        "--hard-optimization-seconds", type=int, default=HARD_OPTIMIZATION_SECONDS
+    )
     worker = commands.add_parser("worker")
     worker.add_argument("--tasks", type=Path, required=True)
     worker.add_argument("--output-root", type=Path, required=True)
@@ -2062,7 +3138,74 @@ def main(argv: list[str] | None = None) -> int:
     release.add_argument("--state", type=Path, required=True)
     release.add_argument("--reservation-id", required=True)
     release.add_argument("--actual-gpu-seconds", type=int, required=True)
+    bind = commands.add_parser("budget-bind", help="bind a pre-submission reservation to Slurm")
+    bind.add_argument("--state", type=Path, required=True)
+    bind.add_argument("--reservation-id", required=True)
+    bind.add_argument("--job-id", required=True)
+    reconcile = commands.add_parser("budget-reconcile", help="charge terminal scheduler allocation usage")
+    reconcile.add_argument("--state", type=Path, required=True)
+    reconcile.add_argument("--reservation-id", required=True)
     args = parser.parse_args(argv)
+    if args.command == "budget-bind":
+        bind_gpu_reservation(args.state, args.reservation_id, args.job_id)
+        return 0
+    if args.command == "budget-reconcile":
+        print(json.dumps(reconcile_gpu_allocation(args.state, args.reservation_id), sort_keys=True))
+        return 0
+    if args.command == "authorize-recovery":
+        print(json.dumps(authorize_generation_recovery(
+            args.manifest, args.output_root, args.material, args.authorization,
+        ), sort_keys=True))
+        return 0
+    if args.command in {
+        "prepare", "prepare-round", "verify-preflight", "revalidate-preflight", "revalidate-round",
+    }:
+        round_dir = (
+            args.output_root / args.material / "llm_guided_adaptation" /
+            f"seed-{BOUNDED_SEED}" / f"round-{args.round_index:02d}"
+        )
+        if args.command in {"prepare", "revalidate-preflight"}:
+            internal_command = "prepare-round" if args.command == "prepare" else "revalidate-round"
+            command = [
+                sys.executable, "-m", "benchmarks.e3.production", internal_command,
+                "--manifest", str(args.manifest), "--output-root", str(args.output_root),
+                "--material", args.material, "--round-index", str(args.round_index),
+            ]
+            receipt_path = round_dir / "generation-preflight.json"
+            previous = (
+                json.loads(receipt_path.read_text())
+                if receipt_path.is_file() else {"generation_seconds": 0}
+            )
+            seconds = (
+                ROUND_SECONDS - _generation_seconds(round_dir, previous)
+                - _execution_seconds(round_dir)
+            )
+            if seconds <= 0:
+                raise TimeoutError("round time budget exhausted before source revalidation")
+            _run_supervised_round(command, seconds=seconds)
+            outcome_path = round_dir / "acquisition" / "outcome.json"
+            if (
+                args.command == "prepare" and outcome_path.is_file()
+                and not (round_dir / "generation-preflight.json").is_file()
+            ):
+                outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
+                if outcome.get("status") == "stopped_generation_exhausted":
+                    print(json.dumps(outcome, sort_keys=True))
+                    return 3
+            result = _preflight_receipt(round_dir, args.manifest)
+        elif args.command == "revalidate-round":
+            result = revalidate_preflight(
+                args.manifest, args.output_root, args.material, args.round_index,
+            )
+        elif args.command == "verify-preflight":
+            result = _preflight_receipt(round_dir, args.manifest)
+        else:
+            result = prepare_round(args.manifest, args.output_root, args.material, args.round_index)
+        print(json.dumps(result, sort_keys=True))
+        return (
+            3 if args.command == "prepare"
+            and result.get("status") == "stopped_generation_exhausted" else 0
+        )
     if args.command == "validate":
         validate_campaign_manifest(json.loads(args.manifest.read_text()))
         print(json.dumps({"manifest": str(args.manifest.resolve()), "execution_performed": False}))
@@ -2083,6 +3226,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "worker":
         return _worker_command(args)
+    if args.command == "run-campaign":
+        print(
+            json.dumps(
+                run_campaign(
+                    args.manifest,
+                    args.output_root,
+                    args.material,
+                    args.worker_python,
+                    worker_count=args.workers,
+                    hard_optimization_seconds=args.hard_optimization_seconds,
+                    resource_state=args.resource_state,
+                ),
+                sort_keys=True,
+            )
+        )
+        return 0
     if args.command == "cluster-minima":
         result = cluster_campaign_minima(args.output_root)
         _atomic_json(args.output, result)
@@ -2115,6 +3274,8 @@ def main(argv: list[str] | None = None) -> int:
         worker_python=args.worker_python,
         workers_per_node=args.workers_per_node,
         hard_optimization_seconds=args.hard_optimization_seconds,
+        round_index=args.round_index,
+        round_attempt_id=args.round_attempt_id,
     )
     print(json.dumps(result, sort_keys=True))
     return 0

@@ -91,6 +91,15 @@ class StructureGenerationError(ValueError):
     """Raised when an E3 structure action is invalid or cannot fill its batch."""
 
 
+class GenerationExhausted(StructureGenerationError):
+    """A valid seeded batch fell short; partial structures and diagnostics are retained."""
+
+    def __init__(self, message, records, diagnostics):
+        super().__init__(message)
+        self.records = records
+        self.diagnostics = diagnostics
+
+
 def _ase():
     try:
         import ase
@@ -273,12 +282,17 @@ def structures_symmetry_equivalent(left, right, matcher=None) -> bool:
         raise StructureGenerationError(
             "Symmetry-aware E3 deduplication requires pymatgen's ASE adaptor."
         ) from exc
-    return bool(
-        matcher.fit(
-            AseAtomsAdaptor.get_structure(left),
-            AseAtomsAdaptor.get_structure(right),
-        )
-    )
+    first = AseAtomsAdaptor.get_structure(left)
+    second = AseAtomsAdaptor.get_structure(right)
+    if matcher._primitive_cell:
+        return bool(matcher.fit(first, second))
+    # The matcher's composition-keyed reduction cache compares same-composition
+    # structures quadratically. Perform the identical Niggli reduction directly.
+    return bool(matcher.fit(
+        first.get_reduced_structure(reduction_algo="niggli"),
+        second.get_reduced_structure(reduction_algo="niggli"),
+        skip_structure_reduction=True,
+    ))
 
 
 def _validate_geometry(atoms, *, min_distance: float = 0.7) -> None:
@@ -388,7 +402,7 @@ def _alloy(
 
 
 def _olivine(formula: str, tier: int, family: str, defect: str | None, strain: Any, rng):
-    _, _, _, _, _, _ = _ase()
+    _, np, _, _, _, _ = _ase()
     if _parse_formula(formula) != {"Li": 1, "Fe": 1, "P": 1, "O": 4}:
         raise StructureGenerationError("The LiFePO4 generator accepts only LiFePO4.")
     base, source_path, source_hash = _template(_SOURCE_DIR / "lifepo4_olivine.extxyz")
@@ -426,7 +440,15 @@ def _olivine(formula: str, tier: int, family: str, defect: str | None, strain: A
         _random_strain(atoms, rng, amount)
         operation["strain_fraction"] = amount
         if operation["type"] == "source olivine parent":
-            operation["type"] = "bounded homogeneous olivine strain"
+            # Sub-percent affine strains alone collapse to the pristine parent
+            # under the frozen matcher. Include small non-affine distortions.
+            directions = rng.normal(size=atoms.positions.shape)
+            norms = np.linalg.norm(directions, axis=1)
+            directions /= np.maximum(norms[:, None], np.finfo(float).tiny)
+            radii = rng.uniform(0.0, 0.04, len(atoms))
+            atoms.positions += directions * radii[:, None]
+            operation["type"] = "bounded strained olivine with local distortions"
+            operation["maximum_local_displacement_angstrom"] = 0.04
     return _fresh_atoms(atoms), {
         "source_file": source_path,
         "source_sha256": source_hash,
@@ -444,6 +466,7 @@ def _phosphorene(
     defect: str | None,
     rng,
 ):
+    _, np, _, _, _, _ = _ase()
     if _parse_formula(formula) != {"P": 1}:
         raise StructureGenerationError("The phosphorene generator accepts only elemental P.")
     if family in {"black", "black_phosphorene", "black_allotrope"}:
@@ -483,17 +506,20 @@ def _phosphorene(
         _random_strain(atoms, rng, amount, dimensions=2)
         operation = {"type": "bounded in-plane strain", "maximum_fraction": amount}
     elif family in {"reconstruction", "vacancy_reconstruction"} or defect == "reconstruction":
-        index = int(rng.integers(len(atoms)))
-        direction = rng.normal(size=3)
-        direction[2] = 0
-        norm = float((direction**2).sum() ** 0.5)
-        if norm == 0:
-            direction[0] = 1
-            norm = 1
-        atoms.positions[index] += direction / norm * 0.08
+        # Collective, bounded in-plane modes avoid the few symmetry orbits
+        # available when moving only one atom by a fixed distance.
+        directions = rng.normal(size=(len(atoms), 3))
+        directions[:, 2] = 0
+        norms = np.linalg.norm(directions, axis=1)
+        directions /= np.maximum(norms[:, None], np.finfo(float).tiny)
+        displacements = directions * rng.uniform(0.04, 0.08, (len(atoms), 1))
+        displacements -= displacements.mean(axis=0)
+        largest = float(np.linalg.norm(displacements, axis=1).max())
+        displacements *= min(1.0, 0.08 / max(largest, np.finfo(float).tiny))
+        atoms.positions += displacements
         operation = {
-            "type": "bounded local reconstruction",
-            "site": index,
+            "type": "bounded collective in-plane reconstruction",
+            "sites": list(range(len(atoms))),
             "max_displacement_angstrom": 0.08,
         }
         if strain is not None:
@@ -871,34 +897,36 @@ def _mof(
             symbols = atoms.get_chemical_symbols()
             carbon_indices = [i for i, symbol in enumerate(symbols) if symbol == "C"]
             hydrogen_indices = [i for i, symbol in enumerate(symbols) if symbol == "H"]
-            hydrogen_index = int(rng.choice(hydrogen_indices))
-            carbon_index = min(
-                carbon_indices,
-                key=lambda index: atoms.get_distance(hydrogen_index, index, mic=True),
-            )
-            vector = atoms.get_distance(carbon_index, hydrogen_index, mic=True, vector=True)
-            axis = rng.normal(size=3)
-            axis /= float((axis**2).sum() ** 0.5)
-            angle = float(rng.uniform(-math.pi / 12, math.pi / 12))
-            cross = np.array(
-                [
-                    [0.0, -axis[2], axis[1]],
-                    [axis[2], 0.0, -axis[0]],
-                    [-axis[1], axis[0], 0.0],
-                ]
-            )
-            rotation = (
-                np.eye(3) * math.cos(angle)
-                + np.outer(axis, axis) * (1 - math.cos(angle))
-                + cross * math.sin(angle)
-            )
-            rotated = rotation @ vector
-            atoms.positions[hydrogen_index] = atoms.positions[carbon_index] + rotated
+            attached_carbons = []
+            for hydrogen_index in hydrogen_indices:
+                vectors = atoms.get_distances(
+                    hydrogen_index, carbon_indices, mic=True, vector=True,
+                )
+                closest = int(np.linalg.norm(vectors, axis=1).argmin())
+                carbon_index = carbon_indices[closest]
+                attached_carbons.append(carbon_index)
+                vector = -vectors[closest]
+                axis = rng.normal(size=3)
+                axis /= float((axis**2).sum() ** 0.5)
+                angle = float(rng.uniform(-math.pi / 12, math.pi / 12))
+                cross = np.array(
+                    [
+                        [0.0, -axis[2], axis[1]],
+                        [axis[2], 0.0, -axis[0]],
+                        [-axis[1], axis[0], 0.0],
+                    ]
+                )
+                rotation = (
+                    np.eye(3) * math.cos(angle)
+                    + np.outer(axis, axis) * (1 - math.cos(angle))
+                    + cross * math.sin(angle)
+                )
+                atoms.positions[hydrogen_index] = atoms.positions[carbon_index] + rotation @ vector
             atoms.wrap()
             operation = {
                 "type": "bounded formate proton-orientation variant",
-                "hydrogen_site": hydrogen_index,
-                "carbon_site": carbon_index,
+                "hydrogen_sites": hydrogen_indices,
+                "carbon_sites": attached_carbons,
                 "maximum_rotation_degrees": 15,
             }
         else:
@@ -1078,7 +1106,8 @@ def replicate_structure(
 
 
 def generate_structures(
-    material: str, action: dict[str, Any], output_dir: str | Path
+    material: str, action: dict[str, Any], output_dir: str | Path,
+    *, excluded_structures: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Generate an exact, deduplicated batch of sanitized E3-MLIP structures.
 
@@ -1181,7 +1210,10 @@ def generate_structures(
     symmetry_matcher = make_structure_matcher()
     max_attempts = max(40, count * 30)
     geometry_rejections: Counter[str] = Counter()
+    rejections: Counter[str] = Counter()
+    attempts = 0
     for _ in range(max_attempts):
+        attempts += 1
         candidate_seed = int(rng_master.integers(0, 2**32, dtype=np.uint64))
         rng = np.random.default_rng(candidate_seed)
         if oxide_candidates is not None:
@@ -1233,6 +1265,7 @@ def generate_structures(
             _validate_geometry(atoms)
         except StructureGenerationError as exc:
             geometry_rejections[str(exc)] += 1
+            rejections["invalid_geometry"] += 1
             continue
         formula_units = source_metadata["formula_units"]
         if not _formula_matches(atoms, formula, formula_units):
@@ -1241,10 +1274,18 @@ def generate_structures(
             )
         geometry_hash = _geometry_hash(atoms, translation_invariant=material in _ALLOY_ELEMENTS)
         if geometry_hash in seen:
+            rejections["duplicate_geometry_hash"] += 1
             continue
         if any(
             structures_symmetry_equivalent(atoms, prior, symmetry_matcher) for prior, _ in selected
         ):
+            rejections["symmetry_equivalent"] += 1
+            continue
+        if any(
+            structures_symmetry_equivalent(atoms, prior, symmetry_matcher)
+            for prior in excluded_structures or []
+        ):
+            rejections["prior_symmetry_equivalent"] += 1
             continue
         seen.add(geometry_hash)
         space_group, space_group_reason = _space_group(atoms)
@@ -1255,7 +1296,7 @@ def generate_structures(
         generation = {
             "generator": generator,
             "generator_module": "benchmarks.e3.structure_generation",
-            "generator_version": "1",
+            "generator_version": "3",
             "generator_source_file": str(Path(__file__).resolve()),
             "generator_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "ase_version": ase.__version__,
@@ -1298,16 +1339,6 @@ def generate_structures(
         selected.append((atoms, generation))
         if len(selected) == count:
             break
-    if len(selected) != count:
-        rejection_summary = "; ".join(
-            f"{reason} ({rejected})" for reason, rejected in geometry_rejections.most_common(3)
-        )
-        raise StructureGenerationError(
-            f"Requested {count} unique {material} structures for action {action_id!r}, "
-            f"but only {len(selected)} were generated in {max_attempts} attempts. "
-            f"Geometry rejections: {rejection_summary or 'none'}."
-        )
-
     records: list[dict[str, Any]] = []
     for atoms, generation in selected:
         canonical_hash = generation["canonical_geometry_sha256"]
@@ -1331,5 +1362,25 @@ def generate_structures(
                 "formula_units": generation["formula_units"],
                 "generation": generation,
             }
+        )
+    diagnostics = {
+        "action_id": action_id, "requested": count,
+        "generation_attempts": attempts, "accepted_unique": len(records),
+        "rejection_reasons": dict(rejections), "geometry_rejections": dict(geometry_rejections),
+        "category": "generation_shortfall" if len(records) != count else "complete",
+        "remaining_capacity": None,
+    }
+    (output / "generation-diagnostics.json").write_text(
+        json.dumps(diagnostics, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if len(records) != count:
+        rejection_summary = "; ".join(
+            f"{reason} ({rejected})" for reason, rejected in geometry_rejections.most_common(3)
+        )
+        raise GenerationExhausted(
+            f"Requested {count} unique {material} structures for action {action_id!r}, "
+            f"but only {len(selected)} were generated in {max_attempts} attempts. "
+            f"Geometry rejections: {rejection_summary or 'none'}.",
+            records, diagnostics,
         )
     return records

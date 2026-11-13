@@ -1,0 +1,90 @@
+# Separate DFT-backed AL example, not the frozen E3-MLIP benchmark.
+# Instructions: nb2o5-qe-mace-reproduction.txt.
+mlip:
+  backend: mace
+  mace:
+    family: checkpoint
+    model: ${MACE_CHECKPOINT:?MACE_CHECKPOINT must name the trusted local MACE checkpoint}
+    device: cuda
+    precision: fp64
+
+md:
+  seed_source:
+    kind: compositions
+    compositions: [Nb2O5]
+    max_phases_per_composition: 2
+    n_random: 0
+    random_seed: 20261113
+  random_seed: 20261113
+  timestep_fs: 0.5
+  n_steps: 40
+  temperature_K: 300.0
+  thermostat: langevin
+  friction_inv_ps: 0.2
+  sample_every: 5
+  max_force_threshold_eV_per_A: 30.0
+  max_displacement_A: 2.0
+
+acquisition:
+  # A small random/diversity baseline, not a calibrated uncertainty estimator.
+  strategy: random
+  n_select: 4
+  diversity_filter: true
+  min_uncertainty_eV_per_A: 0.0
+
+dft:
+  backend: qe
+  qe:
+    pw_bin: ${PW_BIN:?set the GPU-enabled Quantum ESPRESSO pw.x path}
+    pw_wrapper: ${PROJ_ROOT:?set the checkout absolute path}/deployments/perlmutter/launchers/_qe-step-perlmutter.sh
+    pseudo_dir: ${PSEUDO_DIR:?set the directory of reviewed PBE UPF files}
+    pseudopotentials:
+      Nb: ${NB_UPF:?set the Nb UPF filename inside PSEUDO_DIR}
+      O: ${O_UPF:?set the O UPF filename inside PSEUDO_DIR}
+    # Demonstration settings only: converge these for the chosen UPFs and phases.
+    ecutwfc_ry: 80.0
+    ecutrho_ry: 640.0
+    kpts: [2, 2, 2]
+    koffset: [0, 0, 0]
+    occupations: fixed
+    extra_control:
+      tstress: true
+      tprnfor: true
+    extra_system:
+      input_dft: PBE
+    extra_electrons:
+      conv_thr: 1.0e-8
+      electron_maxstep: 150
+      mixing_beta: 0.3
+    timeout_sec: 1800
+
+trainer:
+  enabled: true
+  train_script: ${PROJ_ROOT}/src/matsim_agents/training/finetune_mace.py
+  finetune_mode: lora
+  start_from: incumbent
+  epochs_per_iter: 2
+  compare_after_training: true
+  validation_set: ${NB2O5_QE_VALIDATION_SET:?NB2O5_QE_VALIDATION_SET must name independent QE-labelled Nb2O5 extxyz}
+  validation_reference_set: ${ELEMENTAL_REFERENCE_MANIFEST:?provide DFT-labelled elemental JSON manifest}
+  promote_model: true
+  promotion_approved: ${NB2O5_PROMOTION_APPROVED:?explicitly set NB2O5_PROMOTION_APPROVED=true to approve metric-gated promotion}
+  promotion_min_evaluated_frames: 2
+  promotion_max_energy_mae_eV_per_atom: 0.1
+  promotion_max_force_mae_eV_per_A: 0.2
+  promotion_min_relative_improvement: 0.05
+
+loop:
+  n_iterations: 3
+  max_dft_calculations: 12
+  out_dir: ${NB2O5_AL_RUN_DIR:?set a separate output directory for this example}
+  dataset_format: extxyz
+  resume: true
+  fail_fast: true
+
+resources:
+  preset: perlmutter-gpu
+  pools:
+    dft: {nodes: 1, devices: 1, share_with: [training, mlip]}
+    training: {nodes: 1, devices: 1, share_with: [dft, mlip]}
+    mlip: {nodes: 1, devices: 1, share_with: [dft, training]}

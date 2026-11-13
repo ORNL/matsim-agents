@@ -22,6 +22,86 @@ from pydantic import ValidationError
 from matsim_agents.active_learning import ALConfig
 from matsim_agents.active_learning.loop import _dft_method_signature
 from matsim_agents.backends.dft.config import DFTConfig, QEBackendConfig
+from matsim_agents.execution.allocation import Allocation
+
+
+@pytest.fixture
+def nb2o5_qe_mace_example(tmp_path, monkeypatch):
+    root = Path(__file__).resolve().parents[1]
+    inputs = {
+        "MACE_CHECKPOINT": "initial.model",
+        "ELEMENTAL_REFERENCE_MANIFEST": "references.json",
+        "NB2O5_QE_VALIDATION_SET": "heldout.extxyz",
+    }
+    for variable, filename in inputs.items():
+        path = tmp_path / filename
+        path.touch()
+        monkeypatch.setenv(variable, str(path))
+    for variable, value in {
+        "PROJ_ROOT": str(root),
+        "PW_BIN": str(tmp_path / "pw.x"),
+        "PSEUDO_DIR": str(tmp_path),
+        "NB_UPF": "Nb.UPF",
+        "O_UPF": "O.UPF",
+        "NB2O5_PROMOTION_APPROVED": "true",
+        "NB2O5_AL_RUN_DIR": str(tmp_path / "run"),
+    }.items():
+        monkeypatch.setenv(variable, value)
+    return root / "examples/active_learning/nb2o5_qe_mace.yaml"
+
+
+def test_nb2o5_qe_mace_example_config(nb2o5_qe_mace_example):
+    """Schema/placement only: fixture files are not scientific DFT evidence."""
+    cfg = ALConfig.from_yaml(nb2o5_qe_mace_example)
+    assert cfg.mlip.backend == "mace"
+    assert cfg.mlip.mace.family == "checkpoint"
+    assert cfg.md.seed_source.compositions == ["Nb2O5"]
+    assert cfg.md.random_seed == 20261113
+    assert cfg.dft.backend == "qe"
+    assert cfg.dft.qe.pseudopotentials == {"Nb": "Nb.UPF", "O": "O.UPF"}
+    assert cfg.dft.qe.extra_control == {"tstress": True, "tprnfor": True}
+    assert cfg.trainer.enabled and cfg.trainer.promote_model
+    assert cfg.trainer.promotion_approved
+    assert cfg.trainer.finetune_mode == "lora"
+    assert cfg.trainer.start_from == "incumbent"
+    assert cfg.trainer.validation_fraction == 0
+    assert cfg.trainer.validation_set.is_file()
+    assert cfg.trainer.validation_reference_set.is_file()
+    assert cfg.trainer.train_script.is_file()
+    assert cfg.trainer.train_launcher is None
+    assert cfg.loop.n_iterations == 3
+    assert cfg.acquisition.n_select * cfg.loop.n_iterations == cfg.loop.max_dft_calculations == 12
+    placement = cfg.resources.resolve(
+        Allocation(scheduler="slurm", nodes=("example-node",), gpus_per_node=4)
+    )
+    for pool in ("mlip", "dft", "training"):
+        assert placement.pool(pool).device_count == 1
+        assert placement.pool(pool).hosts == ["example-node"]
+    assert placement.shares_devices("mlip", ["dft", "training"])
+    assert placement.shares_devices("training", ["dft"])
+
+
+@pytest.mark.parametrize(
+    ("variable", "reason"),
+    [
+        ("MACE_CHECKPOINT", "MACE_CHECKPOINT"),
+        ("ELEMENTAL_REFERENCE_MANIFEST", "provide DFT-labelled elemental JSON manifest"),
+        ("NB2O5_QE_VALIDATION_SET", "NB2O5_QE_VALIDATION_SET"),
+        ("NB2O5_PROMOTION_APPROVED", "NB2O5_PROMOTION_APPROVED"),
+    ],
+)
+def test_nb2o5_qe_mace_example_requires_inputs(
+    nb2o5_qe_mace_example, monkeypatch, variable, reason
+):
+    monkeypatch.delenv(variable)
+    with pytest.raises(ValueError, match=reason):
+        ALConfig.from_yaml(nb2o5_qe_mace_example)
+
+
+def test_nb2o5_qe_mace_example_requires_promotion_approval(nb2o5_qe_mace_example, monkeypatch):
+    monkeypatch.setenv("NB2O5_PROMOTION_APPROVED", "false")
+    with pytest.raises(ValidationError, match="promotion_approved=True"):
+        ALConfig.from_yaml(nb2o5_qe_mace_example)
 
 
 def _write(tmp_path: Path, name: str, body: str) -> Path:
@@ -175,6 +255,11 @@ def test_promotion_examples_require_elemental_manifest(
     assert trainer.get("validation_fraction", 0) > 0 or trainer.get("validation_set")
     trainer["train_script"] = required_paths["TRAIN_SCRIPT"]
     trainer.pop("train_launcher", None)
+    if "validation_set" in trainer:
+        validation = tmp_path / "heldout.extxyz"
+        validation.touch()
+        trainer["validation_set"] = str(validation)
+    monkeypatch.setenv("NB2O5_PROMOTION_APPROVED", "true")
     body = _minimal_yaml().replace("__SEED_PATH__", required_paths["seed_path"])
     config_path = _write(
         tmp_path, "promotion.yaml", body + yaml.safe_dump({"trainer": trainer}, width=1000)
@@ -200,6 +285,7 @@ def test_hydragnn_al_examples_use_native_single_process_finetuner():
             (Path(__file__).resolve().parents[1] / "examples" / directory).glob("*.yaml")
         )
         if yaml.safe_load(path.read_text()).get("trainer", {}).get("train_script")
+        and yaml.safe_load(path.read_text()).get("mlip", {}).get("backend") == "hydragnn"
     ]
 
     assert examples

@@ -141,6 +141,12 @@ flowchart LR
 
 ## Files
 
+- [nb2o5_qe_mace.yaml](nb2o5_qe_mace.yaml) and
+  [step-by-step instructions](nb2o5-qe-mace-reproduction.txt) — separate
+  three-iteration Nb2O5 example with QE labels, MACE LoRA fine-tuning,
+  independent validation, and explicitly approved, metric-gated promotion.
+  Requires real QE elemental references and held-out compound labels.
+  This is not the frozen E3-MLIP campaign and does not run an LLM agent.
 - `al_config.example.yaml`         — Unified config: contains both `dft.vasp:`
   and `dft.qe:` sub-blocks; flip `dft.backend:` to choose the labeller.
 - `al_config.prompt.example.yaml`  — LLM-generated seeds (works with either backend).
