@@ -970,6 +970,17 @@ def _materialize_round(
     recovery_history = round_dir / "acquisition" / "generation-history.json"
     if recovery_history.is_file():
         local_history.extend(json.loads(recovery_history.read_text(encoding="utf-8")))
+    authorization = round_dir / "acquisition" / "recovery-authorization.json"
+    if authorization.is_file():
+        recovery = json.loads(authorization.read_text(encoding="utf-8"))
+        if (
+            recovery["material"] != round_spec["material"]
+            or recovery["seed"] != round_spec["seed"]
+            or recovery["round"] != round_spec["round"]
+            or recovery["additional_llm_calls"] != 1
+        ):
+            raise ValueError("recovery authorization does not match this round")
+        local_history.append(recovery["generation_evidence"])
     while True:
         try:
             return _materialize_selection(manifest, round_spec, run_root, local_history, chat)
@@ -1052,7 +1063,11 @@ def _materialize_selection(
         legacy_summary = round_dir.parent / "campaign-summary.json"
         if strategy == "llm_guided_adaptation" and legacy_summary.is_file():
             summary = json.loads(legacy_summary.read_text(encoding="utf-8"))
-            if summary.get("stopped_round") == round_index and summary.get("termination_reason") == "round_failed":
+            if (
+                summary.get("stopped_round") == round_index
+                and summary.get("termination_reason") == "round_failed"
+                and not (round_dir / "acquisition" / "recovery-authorization.json").is_file()
+            ):
                 evidence = round_dir / "acquisition" / "legacy-selection.json"
                 if not evidence.exists():
                     _atomic_json(evidence, {
@@ -1805,6 +1820,65 @@ def _preflight_receipt(round_dir: Path, manifest_path: Path) -> dict[str, Any]:
     return receipt
 
 
+def authorize_generation_recovery(
+    manifest_path: Path, output_root: Path, material: str, authorization: str,
+) -> dict[str, Any]:
+    """Archive a failed first acquisition and authorize one replacement decision."""
+    if material not in {"lifepo4", "phosphorene", "nb_ta_o", "zn_formate_mof"}:
+        raise ValueError("generation recovery is limited to the four failed material streams")
+    if not authorization.strip():
+        raise ValueError("an explicit authorization statement is required")
+    manifest_path, output_root = manifest_path.resolve(), output_root.resolve()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validate_campaign_manifest(manifest)
+    strategy, seed, round_index = "llm_guided_adaptation", BOUNDED_SEED, 1
+    _find_round(manifest, material, strategy, seed, round_index)
+    stream_dir = output_root / material / strategy / f"seed-{seed}"
+    if not stream_dir.is_dir():
+        raise ValueError("recovery requires an existing failed production stream")
+    with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        round_dir = stream_dir / "round-01"
+        path = round_dir / "acquisition" / "recovery-authorization.json"
+        if path.is_file():
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            if saved["authorization"] != authorization:
+                raise ValueError("this stream already has a recovery authorization")
+            return saved
+        summary_path = stream_dir / "campaign-summary.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        if (
+            summary.get("stopped_round") != 1
+            or summary.get("termination_reason") != "round_failed"
+        ):
+            raise ValueError("recovery requires a failed first round")
+        if (
+            (round_dir / "generation-preflight.json").exists()
+            or (round_dir / "round-summary.json").exists()
+            or any(round_dir.glob("tasks/**/result.json"))
+        ):
+            raise ValueError("refusing to replace generated or optimized production work")
+        archive = stream_dir / "recovery-attempts" / "round-01-original"
+        archive.mkdir(parents=True, exist_ok=False)
+        _atomic_json(archive / "campaign-summary.json", summary)
+        if round_dir.exists():
+            os.replace(round_dir, archive / "round-01")
+        record = {
+            "material": material, "strategy": strategy, "seed": seed, "round": round_index,
+            "authorization": authorization, "authorized_at_unix": time.time(),
+            "manifest_sha256": _sha256_file(manifest_path),
+            "original_attempt_archive": str(archive),
+            "original_llm_calls_consumed": 1, "additional_llm_calls": 1,
+            "frozen_objectives_modified": False,
+            "generation_evidence": {
+                "evidence_id": "authorized-generation-recovery",
+                "category": "generation_failure_before_gpu",
+                "attempted": 0, "failed": 0,
+            },
+        }
+        _atomic_json(path, record)
+        return record
+
+
 def prepare_round(
     manifest_path: Path, output_root: Path, material: str, round_index: int,
 ) -> dict[str, Any]:
@@ -1820,6 +1894,11 @@ def prepare_round(
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
         history = _history_for_round(output_root, material, strategy, seed, round_index)
         round_dir = stream_dir / f"round-{round_index:02d}"
+        authorization = round_dir / "acquisition" / "recovery-authorization.json"
+        if authorization.is_file():
+            saved = json.loads(authorization.read_text(encoding="utf-8"))
+            if saved["manifest_sha256"] != _sha256_file(manifest_path):
+                raise ValueError("recovery authorization belongs to a different manifest")
         if (round_dir / "generation-preflight.json").is_file():
             return _preflight_receipt(round_dir, manifest_path)
         _, tasks_path, _ = _materialize_round(
@@ -2544,6 +2623,13 @@ def main(argv: list[str] | None = None) -> int:
         "validate", help="validate the frozen protocol without execution"
     )
     validate.add_argument("--manifest", type=Path, required=True)
+    recovery = commands.add_parser(
+        "authorize-recovery", help="record authorization for one replacement first-round decision"
+    )
+    recovery.add_argument("--manifest", type=Path, required=True)
+    recovery.add_argument("--output-root", type=Path, required=True)
+    recovery.add_argument("--material", choices=sorted(MATERIALS), required=True)
+    recovery.add_argument("--authorization", required=True)
     for name in ("prepare", "prepare-round", "verify-preflight"):
         preflight = commands.add_parser(name, help="CPU-only production generation gate")
         preflight.add_argument("--manifest", type=Path, required=True)
@@ -2596,6 +2682,11 @@ def main(argv: list[str] | None = None) -> int:
     release.add_argument("--reservation-id", required=True)
     release.add_argument("--actual-gpu-seconds", type=int, required=True)
     args = parser.parse_args(argv)
+    if args.command == "authorize-recovery":
+        print(json.dumps(authorize_generation_recovery(
+            args.manifest, args.output_root, args.material, args.authorization,
+        ), sort_keys=True))
+        return 0
     if args.command in {"prepare", "prepare-round", "verify-preflight"}:
         round_dir = (
             args.output_root / args.material / "llm_guided_adaptation" /

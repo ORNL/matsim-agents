@@ -215,6 +215,100 @@ def test_legacy_rejected_proposal_does_not_consume_another_llm_call(tmp_path):
     assert saved["llm_calls_consumed"] == 1
 
 
+@pytest.mark.parametrize("material", ["lifepo4", "phosphorene", "nb_ta_o", "zn_formate_mof"])
+def test_authorized_recovery_preserves_original_and_grants_only_one_call(tmp_path, material):
+    manifest = production.build_campaign_manifest()
+    manifest_path = tmp_path / "manifest.json"
+    production._atomic_json(manifest_path, manifest)
+    stream = tmp_path / material / "llm_guided_adaptation/seed-20261113"
+    original = stream / "round-01"
+    original.mkdir(parents=True)
+    (original / "original-evidence.txt").write_text("original failure")
+    production._atomic_json(
+        stream / "campaign-summary.json",
+        {
+            "stopped_round": 1,
+            "termination_reason": "round_failed",
+        },
+    )
+    record = production.authorize_generation_recovery(
+        manifest_path,
+        tmp_path,
+        material,
+        "Approved one replacement decision",
+    )
+    archive = Path(record["original_attempt_archive"])
+    assert (archive / "round-01/original-evidence.txt").read_text() == "original failure"
+    assert (archive / "campaign-summary.json").is_file()
+    assert record["additional_llm_calls"] == 1
+    assert (
+        production.authorize_generation_recovery(
+            manifest_path,
+            tmp_path,
+            material,
+            "Approved one replacement decision",
+        )
+        == record
+    )
+    spec = next(row for row in manifest["rounds"] if row["material"] == material)
+    calls = []
+
+    def invoke(prompt):
+        calls.append(prompt)
+        assert "authorized-generation-recovery" in prompt
+        return SimpleNamespace(content="invalid proposal retained")
+
+    with pytest.raises(ValueError, match="no JSON"):
+        production._materialize_round(
+            manifest,
+            spec,
+            tmp_path,
+            [],
+            SimpleNamespace(invoke=invoke),
+        )
+    with pytest.raises(ScientificCapacityError, match="one LLM call already consumed"):
+        production._materialize_round(
+            manifest,
+            spec,
+            tmp_path,
+            [],
+            SimpleNamespace(invoke=invoke),
+        )
+    assert len(calls) == 1
+    proposal = json.loads((original / "acquisition/proposal-001.json").read_text())
+    assert proposal["raw_response"] == "invalid proposal retained"
+    assert manifest_path.read_text() == json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+
+
+@pytest.mark.parametrize(
+    "artifact",
+    ["generation-preflight.json", "round-summary.json", "tasks/a/attempt-01/result.json"],
+)
+def test_recovery_refuses_generated_or_optimized_work(tmp_path, artifact):
+    manifest_path = tmp_path / "manifest.json"
+    production._atomic_json(manifest_path, production.build_campaign_manifest())
+    stream = tmp_path / "lifepo4/llm_guided_adaptation/seed-20261113"
+    path = stream / "round-01" / artifact
+    path.parent.mkdir(parents=True)
+    path.write_text("{}")
+    production._atomic_json(
+        stream / "campaign-summary.json",
+        {
+            "stopped_round": 1,
+            "termination_reason": "round_failed",
+        },
+    )
+    with pytest.raises(ValueError, match="refusing to replace"):
+        production.authorize_generation_recovery(
+            manifest_path,
+            tmp_path,
+            "lifepo4",
+            "Approved",
+        )
+    assert path.is_file()
+    assert not (stream / "recovery-attempts").exists()
+
+
 def test_insufficient_shared_capacity_fails_before_either_policy_can_acquire():
     actions = [
         row

@@ -28,6 +28,24 @@ design remains LLM-only. See the [generation and recovery contract](../../docs/w
 for raw proposal retention, generation shortfalls, and the frozen one-call
 limit that blocks unapproved replacement decisions.
 
+For an explicitly authorized recovery of the four failed first-round streams,
+record one replacement LLM decision per material before using the submission
+helper:
+
+```bash
+.venv/bin/python -m benchmarks.e3.production authorize-recovery \
+  --manifest benchmarks/e3/manifests/e3-mlip-production.json \
+  --output-root runs/e3-mlip-production --material lifepo4 \
+  --authorization "Operator authorization for this production recovery"
+```
+
+Repeat only for the authorized failed materials (`phosphorene`, `nb_ta_o`,
+`zn_formate_mof`). This preserves the original round and campaign summary in
+the stream's `recovery-attempts/round-01-original` directory. The round-local
+authorization allows one new decision, not unlimited retries; invoking the
+command again does not grant another call. Scientific objectives, seeds,
+optimization settings, round targets, and GPU budgets are unchanged.
+
 The discovery API now accepts a `SeedGenerationAction` for explicit
 formula-unit tiers, AFLOW candidate caps, PyXtal counts, space-group/prototype
 filters, and reproducible seeds. Pass it to `explore_composition` to relax the
