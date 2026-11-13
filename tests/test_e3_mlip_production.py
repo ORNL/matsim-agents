@@ -34,6 +34,7 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     validate_campaign_manifest(manifest)
     assert manifest["optimizer"] == OPTIMIZER_SETTINGS
     assert manifest["optimizer"]["relax_cell"] is True
+    assert manifest["optimizer"]["max_cell_total_strain"] == 0.1
     assert manifest["optimizer"]["phosphorene_cell_mask"] == [True, True, False, False, False, True]
     assert len(manifest["rounds"]) == 6 * 2 * 3 * 10
     assert manifest["total_logical_optimizations"] == 61120
@@ -533,7 +534,7 @@ def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, mater
         assert args.require_native_stress
         assert args.stress_tolerance_eV_per_A3 == 0.01
         assert args.max_cell_step_strain == 0.05
-        assert args.max_cell_total_strain == 0.25
+        assert args.max_cell_total_strain == 0.1
         assert args.cell_mask == (
             (True, True, False, False, False, True) if material == "phosphorene" else None
         )
