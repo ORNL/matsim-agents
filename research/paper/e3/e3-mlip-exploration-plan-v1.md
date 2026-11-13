@@ -168,8 +168,9 @@ generation-attempt cap.
   cost, and coverage gaps.
 - Require a schema-valid action list, requested counts, and evidence IDs for
   every rationale. Reject unsupported actions and requests over budget; never
-  silently repair them. Freeze model/provider/prompt/temperature and record
-  tokens and time.
+  silently repair them. Freeze model/provider/prompt and record tokens and
+  time; the Copilot SDK uses provider-default decoding rather than a fixed
+  temperature.
 - Permit the strategy to change compositions, prototype/space-group focus,
   size tiers, generator mix, and perturbation family within the same class
   validity rules.
@@ -199,14 +200,33 @@ worker. The frozen common protocol for both strategies is:
 - Relax atomic positions and the cell for all classes using native MACE stress;
   numerical stress fallback is forbidden. Phosphorene uses only xx, yy and xy
   strain, preserving its out-of-plane cell and vacuum. The filter requires the
-  vacuum vector aligned with z. Stop and roll back any step exceeding 5%
-  principal strain in one step or 10% cumulative principal strain, or changing
+  vacuum vector aligned with z. Stop and roll back any step exceeding 10%
+  principal strain in one step or 50% cumulative principal strain, or changing
   the initial MOF atom-indexed Zn-O, C-O, or C-H bond graph. The periodic
   neighbor-list guard uses respective distance cutoffs of 2.75, 1.68, and
   1.25 A; bonds between the same atom indices in different periodic images
   are treated as one bond. These limits are screening safeguards, not proof
   of physical stability. Record active stress, atomic force and volume at
   each accepted step.
+- Abort when the maximum optimizer force (including cell pseudo-forces)
+  increases by more than 20% between completed steps. This does not loosen
+  the final force/stress convergence targets. The force-growth and both
+  strain safeguards accept `None` to disable them explicitly; such E3
+  protocol changes require a regenerated manifest and separate validation.
+- Each geometry optimization has a 60-second wall-clock target, starting at
+  the optimization loop after model loading and initial energy/force evaluation.
+  The clock is checked after each completed, validated step: a long or stalled
+  step can exceed the target without bound. If the limit is reached before
+  convergence, save the last valid structure and trajectory as nonconverged
+  with `optimization_time_limit`. If a step converges or triggers a geometry
+  safeguard, that result takes precedence over the time limit. The loaded
+  model remains available for subsequent structures in the same GPU worker
+  and is reloaded when the worker restarts at a round boundary. Initialization,
+  result processing, generation, LLM calls, and scheduling are outside this
+  target, so it is not a cap on total GPU allocation time.
+- LLM-guided allocation uses Copilot SDK with `gemini-4-carbon` and default
+  provider decoding. Temperature is not controllable through the SDK; its
+  requested output-token limit is not guaranteed by Copilot-hosted models.
 - Preliminary energy finite-difference checks covered xx and xy at two strain
   magnitudes for one representative per family; they do not qualify every
   stress component, structure, cell filter, or GPU backend. The exploratory

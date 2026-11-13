@@ -75,6 +75,86 @@ After a Perlmutter run, preserve its outputs and accounting under a Perlmutter-s
 
 ## 3. E3-MLIP on Perlmutter
 
+E3 abort defaults are now `relative_increase_threshold=0.2`,
+`max_cell_step_strain=0.1`, and `max_cell_total_strain=0.5`. These mean a
+20% increase in the maximum optimizer force between completed steps, 10%
+per-step principal strain, and 50% principal strain relative to the starting
+cell, respectively. Filter forces include cell pseudo-forces: they are not
+the same as atomic forces. Principal strain is not volume change.
+These are screening limits, not convergence criteria or proof of stability.
+The force/stress convergence targets remain 0.02 eV/A and 0.01 eV/A^3.
+
+The shared relaxation input, discovery wrapper, orchestration, and CLI use
+the 20% force-growth default. Cell-strain defaults are set explicitly in the
+E3 protocol; general non-E3 relaxation inputs retain optional, unset cell
+limits to preserve fixed-cell workflows. Each abort threshold accepts Python
+`None` (JSON `null`) in the relaxation input; in E3, changing the corresponding
+optimizer setting to `None` also requires regenerating the manifest. Disabling
+a safeguard does not disable finite-value/valid-cell checks, MOF connectivity
+protection, or step/time limits. Existing attempts use a different optimizer
+contract and must not be silently reused under the revised manifest.
+
+### Optional MACE inference import isolation
+
+For a **dedicated MACE inference process**, the opt-in
+[auxiliary launcher](../../scripts/mace-inference.sh) avoids inadvertent
+Transformers initialization without uninstalling anything:
+
+```bash
+PYTHONPATH="$PWD/src:$PWD" bash scripts/mace-inference.sh .venv-mace/bin/python -m benchmarks.e3.production --help
+```
+
+For an authorized Slurm run, put the launcher **inside** `srun`, before the
+Python executable, retaining all existing task/GPU options. Alternatively,
+export `MATSIM_MACE_SKIP_TRANSFORMERS=1` before launching matsim MACE workers.
+The calculator factory applies the shim before importing MACE, including in
+spawned workers, and logs a warning once per process. The launcher does not
+submit a job, change a scientific protocol, or authorize additional compute.
+
+**Why:** MACE 0.3.16 imports training utilities during calculator initialization;
+these import TorchMetrics, whose optional text/image metrics can import
+Transformers simply because it is installed. The installed Transformers version
+recursively scans its model source directories. In the Perlmutter diagnostic
+benchmark, all four workers waited on shared-filesystem metadata for unrelated
+Transformer source files, while a separate 79.5 MB checkpoint read took 0.205 s.
+This identifies dependency discovery as an observed bottleneck, not MACE
+checkpoint size or GPU arithmetic. It does not measure total model load time.
+
+**Cautions:** this is a process-local compatibility shim, not an upstream MACE
+setting. It overrides Lightning's private requirement check **only for
+Transformers**, allowing TorchMetrics to skip its optional features. Actual
+Transformers imports then fail explicitly; no dummy model or metric is supplied.
+Enable it before importing MACE, TorchMetrics, or Transformers; late activation
+fails instead of claiming isolation succeeded. Other packages and ordinary
+launches remain unchanged. The setting persists for the process and its children:
+do not use it for Hugging Face LLMs, Transformer-based metrics, or combined
+inference/training workflows that need Transformers. It does not prevent other
+dependencies from accessing shared storage.
+
+Only matsim's MACE calculator factory automatically installs the shim; scripts
+that import `mace` directly must call
+`configure_mace_inference_imports()` from
+`matsim_agents.backends.mlip.mace_inference` first. Do not enable it globally in
+shell startup files. Revalidate it after Lightning/TorchMetrics/MACE dependency
+upgrades: check clean startup with no Transformers modules loaded, identical
+energy/force/stress predictions with the same checkpoint and precision, and
+worker inheritance. GPU startup and throughput still require an authorized
+compute-node benchmark; CPU checks alone do not establish GPU speedup.
+
+Local validation (2026-11-12) used separate CPU processes, the same frozen
+MACE-OMAT-0 medium checkpoint, fp64, and one CPU thread. Calculator construction
+took 116.55 s normally and 8.38 s with isolation. Energies, every force component,
+and every stress component matched exactly for the 4-atom phosphorene and
+14-atom oxide diagnostic structures; no Transformers modules were loaded in the
+isolated process. These sequential startup timings are subject to filesystem
+caching and are not a controlled GPU speedup measurement. Regression tests cover
+default behavior, selective suppression, explicit import failure, idempotency,
+late activation, invalid settings, and spawned-worker inheritance:
+
+```bash
+PYTHONPATH="$PWD/src:$PWD" .venv/bin/python -m pytest -q tests/test_mace_inference_imports.py tests/test_mace_backend.py tests/test_documentation.py
+```
+
 ### 3.1 Selected frozen model and campaign contract
 
 The selected primary checkpoint is **MACE-OMAT-0 medium**, trained on OMat24,
@@ -152,9 +232,14 @@ timing. It uses no DFT labels or references. The legacy reference-backed
 E3-DFT commands and protocol below are unchanged and must not be used by
 E3-MLIP.
 
-The frozen LLM provider, model identifier, temperature, and token limit are
-versioned in `benchmarks/e3/scientific-objectives-v1.yaml`; runtime environment
-variables cannot override them. After all streams finish, generate the
+The frozen LLM provider and model identifier are versioned in
+`benchmarks/e3/scientific-objectives-v1.yaml`; runtime environment variables
+cannot override them. Copilot uses provider-default decoding and does not
+guarantee the requested output-token limit. Install the Copilot SDK in the base
+environment and ensure the authenticated CLI and remote model are available
+from compute nodes. The 60-second optimization target is checked between
+completed steps, excludes loading and other allocation overhead, and can be
+exceeded by a slow or stalled step. After all streams finish, generate the
 campaign-wide relaxed-minimum report offline (not during acquisition):
 
 ```bash

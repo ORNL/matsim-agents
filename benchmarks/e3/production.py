@@ -41,8 +41,11 @@ OPTIMIZER_SETTINGS = {
     "fmax_eV_A": 0.02,
     "relax_cell": True,
     "stress_tolerance_eV_per_A3": 0.01,
-    "max_cell_step_strain": 0.05,
-    "max_cell_total_strain": 0.1,
+    "relative_increase_threshold": 0.2,
+    "max_cell_step_strain": 0.1,
+    "max_cell_total_strain": 0.5,
+    "max_optimization_seconds": 60,
+    "optimization_timeout_policy": "between_steps_v1",
     "require_native_stress": True,
     "phosphorene_cell_mask": [True, True, False, False, False, True],
     "mof_connectivity_guard": True,
@@ -522,6 +525,11 @@ def build_campaign_manifest() -> dict[str, Any]:
 def validate_campaign_manifest(manifest: dict[str, Any]) -> None:
     if manifest.get("optimizer") != OPTIMIZER_SETTINGS:
         raise ValueError("production manifest optimizer does not match the current protocol")
+    objectives = yaml.safe_load(OBJECTIVES.read_text(encoding="utf-8"))
+    if manifest.get("llm_guided_configuration") != objectives[
+        "llm_guided_configuration"
+    ] or manifest.get("scientific_objectives_sha256") != _sha256_file(OBJECTIVES):
+        raise ValueError("production manifest scientific objectives do not match current protocol")
     if len(manifest["rounds"]) != 360:
         raise ValueError(f"expected 360 adaptive rounds, got {len(manifest['rounds'])}")
     if set(manifest["strategies"]) != set(E3_STRATEGIES):
@@ -807,8 +815,9 @@ def _llm_allocation(
         "independent validation data. Return JSON with exactly keys allocations, "
         "cited_evidence_ids, rationale. allocations is a list of {action_id,count}; "
         "counts must be positive integers, IDs unique, sum exactly to the round target, "
-        "and each minimum tier count must be met. Cite campaign-design and/or valid "
-        "prior evidence IDs. Do not select outside the list. The compact hierarchical "
+        "and each minimum tier count must be met. cited_evidence_ids must be a non-empty "
+        "JSON array of exact strings from Valid evidence IDs below; do not invent, "
+        "modify, or annotate those IDs. Do not select outside the list. The compact hierarchical "
         "catalog maps dimension codes to values; allowed rows are action_id followed "
         "by material class(m), composition(c), tier(t), structural family(f), generator(g), "
         "perturbation(p), and symmetry family(s) codes. These rows are the complete "
@@ -816,6 +825,7 @@ def _llm_allocation(
         f"Material class: {material}\n"
         f"Round target: {target}\n"
         f"Minimum counts by size tier: {json.dumps(minimum_by_tier, sort_keys=True)}\n"
+        f"Valid evidence IDs: {json.dumps(sorted(valid_evidence))}\n"
         f"Prior strategy-local outcomes: {json.dumps(prompt_history, sort_keys=True)}\n"
         f"Remaining finite action counts: "
         f"{json.dumps(finite_capacity_by_action, sort_keys=True)}\n"
@@ -888,9 +898,7 @@ def _chat_model() -> Any:
     return get_chat_model(
         provider=configuration["provider"],
         model=configuration["model"],
-        temperature=configuration["temperature"],
         max_tokens=configuration["request_limits"]["max_tokens"],
-        mag_provider=configuration["mag_provider"],
     )
 
 
@@ -1015,7 +1023,7 @@ def _materialize_round(
             )
             selection = {
                 "policy": "evidence-grounded LLM allocation",
-                "model_id": getattr(chat, "model_id", None),
+                "model_id": getattr(chat, "model", None),
                 "cited_evidence_ids": citations,
                 "rationale": rationale,
             }
@@ -1313,7 +1321,11 @@ def _mof_connectivity_guard(initial):
     return guard
 
 
-def _execute_task(task: dict[str, Any], task_root: Path, calculators: Any) -> dict[str, Any]:
+def _execute_task(
+    task: dict[str, Any],
+    task_root: Path,
+    calculators: Any,
+) -> dict[str, Any]:
     import numpy as np
     from ase.geometry import find_mic
     from ase.io import read, write
@@ -1383,8 +1395,10 @@ def _execute_task(task: dict[str, Any], task_root: Path, calculators: Any) -> di
             mace_model=str(checkpoint_path),
             optimizer=OPTIMIZER_SETTINGS["optimizer"],
             maxiter=OPTIMIZER_SETTINGS["maxiter"],
+            max_optimization_seconds=OPTIMIZER_SETTINGS["max_optimization_seconds"],
             maxstep=OPTIMIZER_SETTINGS["maxstep_A"],
             fmax=OPTIMIZER_SETTINGS["fmax_eV_A"],
+            relative_increase_threshold=OPTIMIZER_SETTINGS["relative_increase_threshold"],
             relax_cell=OPTIMIZER_SETTINGS["relax_cell"],
             cell_mask=(
                 tuple(OPTIMIZER_SETTINGS["phosphorene_cell_mask"])
@@ -1495,9 +1509,9 @@ def run_worker(
         for line in tasks_path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    calculators = CalculatorCache()
     counts: dict[str, int] = defaultdict(int)
     task_root = output_root / "tasks"
+    calculators = CalculatorCache()
     for index, task in enumerate(tasks):
         if index % world_size != rank:
             continue
@@ -1597,7 +1611,11 @@ def _distinct_symmetry_structures(
     representatives: dict[str, list[Any]] = defaultdict(list)
     for task, result in zip(tasks, task_results, strict=True):
         if task["candidate_kind"] != "unique_configuration" or (
-            relaxed and result["status"] not in {"converged", "nonconverged"}
+            relaxed
+            and (
+                result["status"] not in {"converged", "nonconverged"}
+                or result.get("termination_reason") == "optimization_time_limit"
+            )
         ):
             continue
         structure_path = result["optimized_structure_path"] if relaxed else task["structure_path"]

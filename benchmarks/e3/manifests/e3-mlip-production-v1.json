@@ -81489,15 +81489,14 @@
   },
   "finite_size_controls_per_strategy": 560,
   "llm_guided_configuration": {
+    "decoding": "provider_default",
     "environment_overrides": "prohibited",
-    "mag_provider": "google",
-    "model": "gemini-4-argon@google",
-    "provider": "mag",
+    "model": "gemini-4-carbon",
+    "provider": "copilot",
     "request_limits": {
       "max_calls_per_round": 1,
       "max_tokens": 8192
-    },
-    "temperature": 0.0
+    }
   },
   "logical_optimizations_per_strategy": 30560,
   "mace_model": "medium-omat-0",
@@ -81742,12 +81741,14 @@
   "model": "MACE-OMAT-0 medium",
   "optimizer": {
     "fmax_eV_A": 0.02,
-    "max_cell_step_strain": 0.05,
-    "max_cell_total_strain": 0.1,
+    "max_cell_step_strain": 0.1,
+    "max_cell_total_strain": 0.5,
+    "max_optimization_seconds": 60,
     "maxiter": 500,
     "maxstep_A": 0.05,
     "mof_connectivity_guard": true,
     "mof_connectivity_version": "atom-indexed-v1",
+    "optimization_timeout_policy": "between_steps_v1",
     "optimizer": "FIRE",
     "phosphorene_cell_mask": [
       true,
@@ -81757,6 +81758,7 @@
       false,
       true
     ],
+    "relative_increase_threshold": 0.2,
     "relax_cell": true,
     "require_native_stress": true,
     "stress_tolerance_eV_per_A3": 0.01
@@ -91742,7 +91744,7 @@
   ],
   "rounds_per_replicate": 10,
   "schema_version": 1,
-  "scientific_objectives_sha256": "ed0ac94b713d2e701133993c83c71cfa6fc9514c08ceed23f825cfe43dd51964",
+  "scientific_objectives_sha256": "cc57528071160d90ae52b68a9924366f9234480f2b98e8404a85bc411fda66d1",
   "seeds": [
     20261111,
     20261112,

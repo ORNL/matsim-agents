@@ -74,7 +74,7 @@ def chat(
     maxiter: int = typer.Option(200, help="Max relaxation steps per phase."),
     fmax: float = typer.Option(0.02, help="Stop relaxation when max force < fmax (eV/Å)."),
     relative_increase_threshold: float = typer.Option(
-        0.05,
+        0.2,
         "--relative-increase-threshold",
         help="Abort+rollback if |F|max grows by more than this fraction in one step. "
         "Increase (e.g. 10.0) to let FIRE cross small barriers from symmetric starts.",

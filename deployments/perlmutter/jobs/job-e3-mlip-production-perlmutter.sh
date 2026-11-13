@@ -33,6 +33,12 @@ BASE_PYTHON="${MATSIM_E3_MLIP_BASE_PYTHON:-${REPO}/.venv/bin/python}"
 MACE_PYTHON="${MATSIM_E3_MLIP_WORKER_PYTHON:-${REPO}/.venv-mace/bin/python}"
 [[ -x "${BASE_PYTHON}" ]] || { echo "ERROR: missing ${BASE_PYTHON}" >&2; exit 2; }
 [[ -x "${MACE_PYTHON}" ]] || { echo "ERROR: missing ${MACE_PYTHON}" >&2; exit 2; }
+export PATH="${HOME}/.local/bin:${PATH}"
+"${BASE_PYTHON}" -c 'import copilot' || {
+  echo "ERROR: Copilot SDK is missing from ${BASE_PYTHON}" >&2
+  exit 2
+}
+command -v copilot >/dev/null || { echo "ERROR: Copilot CLI is not on PATH" >&2; exit 2; }
 MANIFEST="${MATSIM_E3_MLIP_MANIFEST:-${REPO}/benchmarks/e3/manifests/e3-mlip-production-v1.json}"
 OUTPUT_ROOT="${MATSIM_E3_MLIP_OUTPUT_ROOT:-${REPO}/runs/e3-mlip-production-v1}"
 [[ -s "${MANIFEST}" ]] || { echo "ERROR: missing production manifest: ${MANIFEST}" >&2; exit 2; }
