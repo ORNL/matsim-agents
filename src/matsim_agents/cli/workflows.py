@@ -219,8 +219,14 @@ def _command(cfg: WorkflowConfig, *, approved: bool) -> list[str]:
         cap = 2_764_800
         if budget.get("schema_version") != 1 or budget.get("cap_gpu_seconds") != cap:
             raise ValueError("E3-MLIP requires the 768-GPU-hour benchmark resource ledger")
-        reservation = budget.get("reservations", {}).get(os.environ["SLURM_JOB_ID"])
-        if not isinstance(reservation, dict) or reservation.get("reserved_gpu_seconds") != 460_800:
+        job_id = os.environ["SLURM_JOB_ID"]
+        reservation_id = os.environ.get("MATSIM_E3_MLIP_RESERVATION_ID", job_id)
+        reservation = budget.get("reservations", {}).get(reservation_id)
+        if (
+            not isinstance(reservation, dict)
+            or reservation.get("reserved_gpu_seconds") != 460_800
+            or reservation.get("job_id", job_id) != job_id
+        ):
             raise ValueError("E3-MLIP requires this job's full 16-node/two-hour reservation.")
         return [
             sys.executable,

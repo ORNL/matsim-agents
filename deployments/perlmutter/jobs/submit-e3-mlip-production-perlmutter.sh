@@ -42,5 +42,20 @@ configure_mace_model_artifacts "${REPO}"
 "${PYTHON}" -m benchmarks.e3.production prepare \
   --manifest "${MANIFEST}" --output-root "${OUTPUT_ROOT}" --material "${MATERIAL}" \
   --round-index "${MATSIM_E3_MLIP_START_ROUND:-1}"
-sbatch --parsable --array="$1-$1%1" --account=m5216 \
-  "${SCRIPT_DIR}/job-e3-mlip-production-perlmutter.sh"
+export MATSIM_E3_MLIP_RESOURCE_STATE="${MATSIM_E3_MLIP_RESOURCE_STATE:-${OUTPUT_ROOT}/resource-budget.json}"
+export MATSIM_E3_MLIP_RESERVATION_ID="submission-$("${PYTHON}" -c 'from uuid import uuid4; print(uuid4().hex)')"
+"${PYTHON}" -m benchmarks.e3.production budget-reserve \
+  --state "${MATSIM_E3_MLIP_RESOURCE_STATE}" \
+  --reservation-id "${MATSIM_E3_MLIP_RESERVATION_ID}" \
+  --reserved-gpu-seconds 460800 --cap-gpu-seconds 2764800
+# A failed/ambiguous submission retains its charge until an operator verifies
+# whether Slurm created an allocation. Never release based only on shell exit.
+echo "Reserved allocation: ${MATSIM_E3_MLIP_RESERVATION_ID}" >&2
+SUBMITTED="$(sbatch --parsable --array="$1-$1%1" --account=m5216 \
+  "${SCRIPT_DIR}/job-e3-mlip-production-perlmutter.sh")"
+JOB_ID="${SUBMITTED%%;*}"
+"${PYTHON}" -m benchmarks.e3.production budget-bind \
+  --state "${MATSIM_E3_MLIP_RESOURCE_STATE}" \
+  --reservation-id "${MATSIM_E3_MLIP_RESERVATION_ID}" --job-id "${JOB_ID}"
+echo "${SUBMITTED}"
+echo "After Slurm is terminal, run budget-reconcile with state=${MATSIM_E3_MLIP_RESOURCE_STATE} reservation-id=${MATSIM_E3_MLIP_RESERVATION_ID}" >&2

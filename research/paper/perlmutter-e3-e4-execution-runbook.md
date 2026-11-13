@@ -174,7 +174,10 @@ separate.
 
 ### 3.2 Resource limits and launch
 
-The current entrypoint is
+Submit through the
+[`CPU-generation helper`](../../deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh),
+which reserves the entire allocation against the shared ledger before `sbatch`.
+The GPU entrypoint is
 [`job-e3-mlip-production-perlmutter.sh`](../../deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh).
 It maps one array element to each class and requests 16 GPU nodes, four A100
 GPUs per node, 64 workers, premium QOS, and a two-hour allocation. Each of the
@@ -184,8 +187,12 @@ its parent process after five minutes and recorded as nonconverged. GPU workers
 may use up to 15 minutes of the round budget to initialize MACE.
 
 The maximum allocation is 192 GPU-node-hours, or 768 physical GPU-hours, across
-the six classes. A shared ledger reserves this full cap and reconciles usage
-after each job. Premium billing multipliers are separate from physical GPU
+the six classes. The GPU launcher retains each full reservation through startup,
+execution, and teardown. After a job is terminal, run `budget-reconcile` using
+the helper's printed reservation ID; only verified final `sacct` usage releases
+unused time. Failed/ambiguous submissions and unavailable scheduler records
+remain conservatively charged. See the [accounting instructions](../../benchmarks/e3/README.md)
+for the command. Premium billing multipliers are separate from physical GPU
 hours; verify current project charges and authorization before launch.
 Five array elements are allowed concurrently. The final element may start
 later, so the array does not promise all six jobs start together.
@@ -209,6 +216,10 @@ without a full real-generation receipt. Generation time remains part of the
 30-minute round budget. Later rounds are checked only after preceding optimization
 outcomes exist. An already-consumed LLM decision cannot be replaced under the
 frozen one-call-per-round limit without additional scientific authorization.
+Generation, source replays, and execution retries have durable cumulative time
+ledgers; retries do not receive a new 30-minute allowance. Hard-interrupted
+attempts retain their remaining time reservation until verified reconciliation.
+Legacy interrupted evidence without timing records is not assigned zero duration.
 
 The launcher verifies the allocation's actual account, QOS, nodes, tasks,
 manifest, model environments, and resource reservation before calculation.

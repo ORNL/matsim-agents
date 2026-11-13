@@ -144,6 +144,9 @@ def test_campaign_supervises_three_rounds_and_writes_report(campaign, monkeypatc
     assert result["logical_optimizations_attempted"] == 192
     report = output_root / "nb_ta_o/llm_guided_adaptation/seed-20261113/report.md"
     assert "It does not\nsupport a rule-based comparison" in report.read_text()
+    resumed = production.run_campaign(manifest_path, output_root, "nb_ta_o", "worker-python")
+    assert resumed["status"] == "complete"
+    assert len(commands) == 3
 
 
 def test_campaign_timeout_is_recorded_as_incomplete(campaign, monkeypatch):
@@ -162,6 +165,32 @@ def test_campaign_timeout_is_recorded_as_incomplete(campaign, monkeypatch):
     assert summary["rounds_completed"] == 0
     assert summary["termination_reason"] == "round_time_limit"
     assert "incomplete" in (stream / "report.md").read_text()
+
+
+def test_campaign_retries_subtract_prior_generation_and_execution(campaign, monkeypatch):
+    manifest_path, output_root = campaign
+    clock = [1000.0]
+    monkeypatch.setattr(production.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(production.time, "time", lambda: clock[0] + 100_000)
+    monkeypatch.setattr(production, "_preflight_receipt", lambda *args: {"generation_seconds": 100})
+    round_dir = output_root / "nb_ta_o/llm_guided_adaptation/seed-20261113/round-01"
+    production._atomic_json(round_dir / "generation-preflight.json", {"generation_seconds": 100})
+    with production._time_budget_attempt(round_dir / "execution-time.json", limit_seconds=1700):
+        clock[0] += 300
+    deadlines = []
+
+    def fail(command, *, seconds):
+        deadlines.append(seconds)
+        attempt = command[command.index("--round-attempt-id") + 1]
+        assert production._execution_allowance(round_dir, attempt) == seconds
+        clock[0] += 100
+        raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(production, "_run_supervised_round", fail)
+    for _ in range(2):
+        with pytest.raises(subprocess.CalledProcessError):
+            production.run_campaign(manifest_path, output_root, "nb_ta_o", "worker-python")
+    assert deadlines == [1400, 1300]
 
 
 def test_campaign_generation_exhaustion_stops_without_hypothesis_update(campaign, monkeypatch):
@@ -255,13 +284,30 @@ def test_budget_ledger_uses_cfs_compatible_lock(tmp_path, monkeypatch):
     assert json.loads(ledger.read_text())["spent_gpu_seconds"] == 460_800
 
 
-def test_workflow_wrapper_uses_current_campaign_and_full_reservation(campaign, monkeypatch):
+@pytest.mark.parametrize("preallocated", [False, True])
+def test_workflow_wrapper_uses_current_campaign_and_full_reservation(
+    campaign,
+    monkeypatch,
+    preallocated,
+):
     from matsim_agents.cli.workflow_catalog import WorkflowConfig
     from matsim_agents.cli.workflows import _check, _command
 
     manifest_path, output_root = campaign
     ledger = output_root / "resource-budget.json"
     monkeypatch.setenv("SLURM_JOB_ID", "test-job")
+    reservation_id = "test-job"
+    if preallocated:
+        state = json.loads(ledger.read_text())
+        reservation_id = "submission-test"
+        state["reservations"][reservation_id] = {
+            **state["reservations"].pop("test-job"),
+            "job_id": "test-job",
+        }
+        ledger.write_text(json.dumps(state))
+        monkeypatch.setenv("MATSIM_E3_MLIP_RESERVATION_ID", reservation_id)
+    else:
+        monkeypatch.delenv("MATSIM_E3_MLIP_RESERVATION_ID", raising=False)
     config = WorkflowConfig(
         workflow="e3-mlip",
         settings={
@@ -277,7 +323,13 @@ def test_workflow_wrapper_uses_current_campaign_and_full_reservation(campaign, m
     assert command[2:4] == ["benchmarks.e3.production", "run-campaign"]
     assert "--workers" in command and "64" in command
     state = json.loads(ledger.read_text())
-    state["reservations"]["test-job"]["reserved_gpu_seconds"] = 100
+    if preallocated:
+        state["reservations"][reservation_id]["job_id"] = "other-job"
+        ledger.write_text(json.dumps(state))
+        with pytest.raises(ValueError, match="full 16-node/two-hour"):
+            _command(config, approved=True)
+        state["reservations"][reservation_id]["job_id"] = "test-job"
+    state["reservations"][reservation_id]["reserved_gpu_seconds"] = 100
     ledger.write_text(json.dumps(state))
     with pytest.raises(ValueError, match="full 16-node/two-hour"):
         _command(config, approved=True)
@@ -291,9 +343,14 @@ def test_perlmutter_launcher_matches_manifest_limits():
         "#SBATCH -q premium",
         "#SBATCH -t 02:00:00",
         "#SBATCH --array=0-5%5",
-        "--reserved-gpu-seconds 460800",
-        "--cap-gpu-seconds 2764800",
         "benchmarks.e3.production run-campaign",
     ):
         assert setting in text
+    helper = (
+        production.REPO / "deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh"
+    ).read_text()
+    assert "--reserved-gpu-seconds 460800" in helper
+    assert "--cap-gpu-seconds 2764800" in helper
+    assert helper.index("budget-reserve") < helper.index('SUBMITTED="$(sbatch')
+    assert "MATSIM_E3_MLIP_RESERVATION_ID:?" in text
     subprocess.run(["bash", "-n", str(launcher)], check=True)

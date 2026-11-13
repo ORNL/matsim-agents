@@ -13,12 +13,12 @@ import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import yaml
-
-from matsim_agents.execution.locking import exclusive_lock
 
 from benchmarks.e3.feasibility import (
     CATALOG_VERSION,
@@ -35,6 +35,7 @@ from benchmarks.e3.mlip_exploration import (
     _verified_checkpoint,
     _verified_checkpoint_sha256,
 )
+from matsim_agents.execution.locking import exclusive_lock
 
 REPO = Path(__file__).resolve().parents[2]
 E3_STRATEGIES = ("llm_guided_adaptation",)
@@ -288,17 +289,74 @@ def release_gpu_hours(
             reservation = state["reservations"].pop(reservation_id)
         except KeyError as exc:
             raise RuntimeError(f"no active resource reservation: {reservation_id}") from exc
-        charged = min(actual_gpu_seconds, int(reservation["reserved_gpu_seconds"]))
-        state["spent_gpu_seconds"] += charged
+        state["spent_gpu_seconds"] += actual_gpu_seconds
+        state.setdefault("allocations", {})[reservation_id] = {
+            **reservation, "actual_gpu_seconds": actual_gpu_seconds,
+        }
         _atomic_json(state_path, state)
         reserved_total = sum(
             int(item["reserved_gpu_seconds"]) for item in state["reservations"].values()
         )
+        if int(state["spent_gpu_seconds"]) + reserved_total > int(state["cap_gpu_seconds"]):
+            raise RuntimeError(
+                "scheduler usage exceeded the authorized GPU cap; actual usage was persisted "
+                "and further allocations are blocked"
+            )
         return {
             "cap_gpu_seconds": int(state["cap_gpu_seconds"]),
             "spent_gpu_seconds": int(state["spent_gpu_seconds"]),
             "reserved_gpu_seconds": reserved_total,
         }
+
+
+def bind_gpu_reservation(state_path: Path, reservation_id: str, job_id: str) -> None:
+    """Bind the pre-submission charge to one scheduler allocation, idempotently."""
+    if not job_id.isdigit():
+        raise ValueError("a numeric Slurm job ID is required")
+    with exclusive_lock(state_path.with_suffix(f"{state_path.suffix}.lock"), timeout=60):
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        reservation = state["reservations"].get(reservation_id)
+        if reservation is None:
+            raise RuntimeError(f"no active resource reservation: {reservation_id}")
+        if reservation.get("job_id", job_id) != job_id:
+            raise ValueError("resource reservation already belongs to a different Slurm allocation")
+        reservation["job_id"] = job_id
+        _atomic_json(state_path, state)
+
+
+def reconcile_gpu_allocation(state_path: Path, reservation_id: str) -> dict[str, int]:
+    """Release unused time only after Slurm reports the full terminal allocation."""
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    reservation = state["reservations"].get(reservation_id)
+    if reservation is None:
+        raise RuntimeError(f"no active resource reservation: {reservation_id}")
+    job_id = reservation.get("job_id", reservation_id)
+    if not job_id.isdigit():
+        raise ValueError("bind the submission reservation to its scheduler job before reconciliation")
+    result = subprocess.run(
+        [
+            "sacct", "--noheader", "--parsable2", "--allocations", "--jobs", job_id,
+            "--format=JobIDRaw,State,ElapsedRaw,AllocTRES",
+        ],
+        capture_output=True, text=True, check=True,
+    )
+    rows = [line.strip().split("|") for line in result.stdout.splitlines() if line.strip()]
+    if len(rows) != 1 or rows[0][0] != job_id or len(rows[0]) < 4:
+        raise RuntimeError("scheduler allocation is not uniquely accounted; full reservation retained")
+    _, status, elapsed, tres = rows[0][:4]
+    terminal = {
+        "COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY", "NODE_FAIL",
+        "PREEMPTED", "BOOT_FAIL", "DEADLINE", "REVOKED",
+    }
+    if status.split()[0].rstrip("+") not in terminal:
+        raise RuntimeError("scheduler allocation is not terminal; full reservation retained")
+    seconds = int(elapsed)
+    resources = dict(item.split("=", 1) for item in tres.split(",") if "=" in item)
+    if seconds < 0 or (seconds > 0 and resources.get("gres/gpu") != "64"):
+        raise RuntimeError("scheduler GPU usage is unverified; full reservation retained")
+    return release_gpu_hours(
+        state_path, reservation_id, actual_gpu_seconds=seconds * WORKERS_PER_ARRAY_ELEMENT,
+    )
 
 
 def _action_space(material: str) -> list[dict[str, Any]]:
@@ -1857,7 +1915,9 @@ def _read_tasks(path: Path) -> list[dict[str, Any]]:
     ]
 
 
-def _preflight_receipt(round_dir: Path, manifest_path: Path) -> dict[str, Any]:
+def _preflight_receipt(
+    round_dir: Path, manifest_path: Path, *, execution_attempt_id: str | None = None,
+) -> dict[str, Any]:
     path = round_dir / "generation-preflight.json"
     if not path.is_file():
         raise RuntimeError(f"CPU generation preflight is required before GPU allocation: {path}")
@@ -1883,9 +1943,102 @@ def _preflight_receipt(round_dir: Path, manifest_path: Path) -> dict[str, Any]:
     for task in tasks:
         if _sha256_file(Path(task["structure_path"])) != task["structure_file_sha256"]:
             raise ValueError(f"preflight structure changed: {task['candidate_id']}")
+    receipt["generation_seconds"] = _generation_seconds(round_dir, receipt)
     if receipt["generation_seconds"] >= ROUND_SECONDS:
         raise TimeoutError("CPU generation consumed the round's 1800-second budget")
+    _check_execution_history(round_dir)
+    consumed = receipt["generation_seconds"] + _execution_seconds(round_dir, execution_attempt_id)
+    if consumed >= ROUND_SECONDS:
+        raise TimeoutError("generation plus prior execution consumed the round's 1800-second budget")
     return receipt
+
+
+def _time_budget_state(path: Path, initial_seconds: float = 0) -> dict[str, Any]:
+    if path.is_file():
+        return json.loads(path.read_text(encoding="utf-8"))
+    return {"initial_seconds": initial_seconds, "attempts": []}
+
+
+def _time_budget_consumed(state: dict[str, Any]) -> float:
+    # An unclosed attempt retains its entire allowance, even after SIGKILL.
+    return state["initial_seconds"] + sum(
+        row.get("elapsed_seconds", row["reserved_seconds"]) for row in state["attempts"]
+    )
+
+
+def _generation_seconds(round_dir: Path, receipt: dict[str, Any]) -> float:
+    state = _time_budget_state(
+        round_dir / "generation-time.json", receipt["generation_seconds"],
+    )
+    return _time_budget_consumed(state)
+
+
+@contextmanager
+def _time_budget_attempt(path: Path, *, limit_seconds: float, initial_seconds: float = 0):
+    """Reserve time durably before work; only a measured finish releases the balance."""
+    lock = path.with_suffix(".lock")
+    with exclusive_lock(lock, timeout=0):
+        state = _time_budget_state(path, initial_seconds)
+        remaining = limit_seconds - _time_budget_consumed(state)
+        if not math.isfinite(remaining) or remaining <= 0:
+            raise TimeoutError(
+                f"round time budget exhausted: {path}; unfinished attempts remain "
+                "conservatively charged until their elapsed time is reconciled"
+            )
+        attempt = {
+            "attempt_id": uuid4().hex,
+            "started_at_unix": time.time(),
+            "reserved_seconds": remaining,
+            "status": "running",
+        }
+        state["attempts"].append(attempt)
+        _atomic_json(path, state)
+    started = time.monotonic()
+    status = "failed"
+    try:
+        yield attempt
+        status = "complete"
+    finally:
+        elapsed = time.monotonic() - started
+        with exclusive_lock(lock, timeout=0):
+            state = _time_budget_state(path)
+            saved = next(row for row in state["attempts"] if row["attempt_id"] == attempt["attempt_id"])
+            saved.update(
+                elapsed_seconds=elapsed, finished_at_unix=time.time(), status=status,
+            )
+            _atomic_json(path, state)
+    if elapsed >= remaining:
+        raise TimeoutError(f"round time budget exhausted: {path}")
+
+
+def _execution_allowance(round_dir: Path, attempt_id: str) -> float:
+    state = _time_budget_state(round_dir / "execution-time.json")
+    attempt = next(
+        (row for row in state["attempts"] if row["attempt_id"] == attempt_id), None,
+    )
+    if attempt is None or attempt["status"] != "running":
+        raise ValueError("worker requires its active supervisor time reservation")
+    remaining = attempt["reserved_seconds"] - max(0, time.time() - attempt["started_at_unix"])
+    if remaining <= 0:
+        raise TimeoutError("round execution time budget exhausted before worker dispatch")
+    return remaining
+
+
+def _execution_seconds(round_dir: Path, active_attempt_id: str | None = None) -> float:
+    consumed = _time_budget_consumed(_time_budget_state(round_dir / "execution-time.json"))
+    if active_attempt_id is not None:
+        consumed -= _execution_allowance(round_dir, active_attempt_id)
+    return consumed
+
+
+def _check_execution_history(round_dir: Path) -> None:
+    if not (round_dir / "execution-time.json").exists() and any(
+        round_dir.glob("tasks/*/attempt-*")
+    ):
+        raise RuntimeError(
+            "legacy execution attempts have no cumulative time ledger; reconcile their "
+            "scheduler/round elapsed time before resuming, rather than granting a new budget"
+        )
 
 
 def authorize_generation_recovery(
@@ -1951,7 +2104,6 @@ def prepare_round(
     manifest_path: Path, output_root: Path, material: str, round_index: int,
 ) -> dict[str, Any]:
     """Execute the actual next-round acquisition without launching any GPU work."""
-    started = time.monotonic()
     manifest_path, output_root = manifest_path.resolve(), output_root.resolve()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     validate_campaign_manifest(manifest)
@@ -1969,27 +2121,34 @@ def prepare_round(
                 raise ValueError("recovery authorization belongs to a different manifest")
         if (round_dir / "generation-preflight.json").is_file():
             return _preflight_receipt(round_dir, manifest_path)
-        try:
-            _, tasks_path, _ = _materialize_round(
-                manifest, spec, output_root, history, _chat_model(),
-            )
-        except AcquisitionExhausted as error:
-            return _record_acquisition_stop(round_dir, error)
-        tasks = _read_tasks(tasks_path)
-        if len(tasks) != int(spec["main_target"]):
-            raise ScientificCapacityError(f"preflight yielded {len(tasks)}/{spec['main_target']} tasks")
-        elapsed = time.monotonic() - started
-        receipt = {
-            "catalog_version": CATALOG_VERSION,
-            "manifest_sha256": _sha256_file(manifest_path),
-            "generator_sha256": _sha256_file(REPO / "benchmarks/e3/structure_generation.py"),
-            "catalog_sha256": _sha256_file(REPO / "benchmarks/e3/feasibility.py"),
-            "acquisition_sha256": _sha256_file(Path(__file__)),
-            "material": material, "strategy": strategy, "seed": seed, "round": round_index,
-            "generation_seconds": elapsed, "prepared_at_unix": time.time(),
-            "structures": {task["candidate_id"]: task["structure_file_sha256"] for task in tasks},
-            "actual_generation": True, "gpu_work_dispatched": False,
-        }
+        time_path = round_dir / "generation-time.json"
+        if not time_path.exists() and (round_dir / "round-manifest.json").exists():
+            raise RuntimeError("legacy generation has no time ledger; reconcile before retrying")
+        _check_execution_history(round_dir)
+        with _time_budget_attempt(
+            time_path, limit_seconds=ROUND_SECONDS - _execution_seconds(round_dir),
+        ):
+            try:
+                _, tasks_path, _ = _materialize_round(
+                    manifest, spec, output_root, history, _chat_model(),
+                )
+            except AcquisitionExhausted as error:
+                return _record_acquisition_stop(round_dir, error)
+            tasks = _read_tasks(tasks_path)
+            if len(tasks) != int(spec["main_target"]):
+                raise ScientificCapacityError(f"preflight yielded {len(tasks)}/{spec['main_target']} tasks")
+            receipt = {
+                "catalog_version": CATALOG_VERSION,
+                "manifest_sha256": _sha256_file(manifest_path),
+                "generator_sha256": _sha256_file(REPO / "benchmarks/e3/structure_generation.py"),
+                "catalog_sha256": _sha256_file(REPO / "benchmarks/e3/feasibility.py"),
+                "acquisition_sha256": _sha256_file(Path(__file__)),
+                "material": material, "strategy": strategy, "seed": seed, "round": round_index,
+                "prepared_at_unix": time.time(),
+                "structures": {task["candidate_id"]: task["structure_file_sha256"] for task in tasks},
+                "actual_generation": True, "gpu_work_dispatched": False,
+            }
+        receipt["generation_seconds"] = _time_budget_consumed(_time_budget_state(time_path))
         _atomic_json(round_dir / "generation-preflight.json", receipt)
         return _preflight_receipt(round_dir, manifest_path)
 
@@ -2006,7 +2165,6 @@ def revalidate_preflight(
     spec = _find_round(manifest, material, "llm_guided_adaptation", BOUNDED_SEED, 1)
     stream_dir = output_root / material / "llm_guided_adaptation" / f"seed-{BOUNDED_SEED}"
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
-        started = time.monotonic()
         round_dir = stream_dir / "round-01"
         receipt_path = round_dir / "generation-preflight.json"
         original = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -2019,61 +2177,79 @@ def revalidate_preflight(
         }
         if all(original.get(key) == value for key, value in fingerprints.items()):
             return _preflight_receipt(round_dir, manifest_path)
-        tasks = _read_tasks(round_dir / "tasks.jsonl")
-        if {row["candidate_id"]: row["structure_file_sha256"] for row in tasks} != original["structures"]:
-            raise ValueError("original preflight task identities changed")
-        for task in tasks:
-            path = Path(task["structure_path"])
-            if (
-                _sha256_file(path) != task["structure_file_sha256"]
-                or _geometry_sha256(path) != task["structure_sha256"]
-            ):
-                raise ValueError(f"original structure changed: {path}")
-        source_hash = hashlib.sha256(_canonical_json(fingerprints).encode()).hexdigest()
-        replay_root = round_dir / "acquisition" / f"source-revalidation-{source_hash[:16]}"
-        replay_round = (
-            replay_root / material / "llm_guided_adaptation" /
-            f"seed-{BOUNDED_SEED}" / "round-01"
-        )
-        for name in ("proposal-001.json", "recovery-authorization.json"):
-            source = round_dir / "acquisition" / name
-            _atomic_json(replay_round / "acquisition" / name, json.loads(source.read_text()))
-        _atomic_json(replay_root / "original-preflight.json", original)
-        outcomes = {
-            str(path): _sha256_file(path) for path in round_dir.glob("tasks/**/result.json")
-        }
-        # A plain sentinel has no invoke method: this replay cannot make an LLM call.
-        _, replay_tasks_path, _ = _materialize_round(
-            manifest, spec, replay_root, [], object(),
-        )
-        replay = _read_tasks(replay_tasks_path)
-        old_geometries = {task["structure_sha256"] for task in tasks}
-        new_geometries = {task["structure_sha256"] for task in replay}
-        if len(replay) != 64 or len(new_geometries) != 64 or old_geometries != new_geometries:
-            raise ScientificCapacityError(
-                "source revalidation did not reproduce the original 64 distinct geometries"
+        _check_execution_history(round_dir)
+        if not (round_dir / "generation-time.json").exists() and any(
+            (round_dir / "acquisition").glob("source-revalidation-*")
+        ):
+            raise RuntimeError("legacy replay history has no time ledger; reconcile before retrying")
+        execution_seconds = _execution_seconds(round_dir)
+        with _time_budget_attempt(
+            round_dir / "generation-time.json",
+            limit_seconds=ROUND_SECONDS - execution_seconds,
+            initial_seconds=original["generation_seconds"],
+        ) as attempt:
+            updated = _replay_preflight(
+                manifest, spec, material, round_dir, original, fingerprints, attempt,
             )
-        if any(_sha256_file(Path(path)) != digest for path, digest in outcomes.items()):
-            raise ValueError("source revalidation modified optimization outcome evidence")
-        elapsed = time.monotonic() - started
-        generation_seconds = original["generation_seconds"] + elapsed
-        if generation_seconds >= ROUND_SECONDS:
-            raise TimeoutError("original generation plus source revalidation exhausted round budget")
-        proof = {
-            "actual_seeded_generation": True, "geometry_sets_identical": True,
-            "task_count": len(replay), "llm_calls": 0,
-            "retained_optimization_results": outcomes,
-            "original_preflight": str(replay_root / "original-preflight.json"),
-            "replayed_tasks": str(replay_tasks_path), "elapsed_seconds": elapsed,
-        }
-        _atomic_json(replay_root / "revalidation.json", proof)
-        _atomic_json(receipt_path, {
-            **original,
-            **fingerprints,
-            "generation_seconds": generation_seconds,
-            "source_revalidation": str(replay_root / "revalidation.json"),
-        })
+        updated["generation_seconds"] = _generation_seconds(round_dir, original)
+        _atomic_json(receipt_path, updated)
         return _preflight_receipt(round_dir, manifest_path)
+
+
+def _replay_preflight(
+    manifest: dict[str, Any], spec: dict[str, Any], material: str,
+    round_dir: Path, original: dict[str, Any], fingerprints: dict[str, str],
+    attempt: dict[str, Any],
+) -> dict[str, Any]:
+    tasks = _read_tasks(round_dir / "tasks.jsonl")
+    if {row["candidate_id"]: row["structure_file_sha256"] for row in tasks} != original["structures"]:
+        raise ValueError("original preflight task identities changed")
+    for task in tasks:
+        path = Path(task["structure_path"])
+        if (
+            _sha256_file(path) != task["structure_file_sha256"]
+            or _geometry_sha256(path) != task["structure_sha256"]
+        ):
+            raise ValueError(f"original structure changed: {path}")
+    source_hash = hashlib.sha256(_canonical_json(fingerprints).encode()).hexdigest()
+    replay_root = round_dir / "acquisition" / f"source-revalidation-{source_hash[:16]}"
+    replay_round = (
+        replay_root / material / "llm_guided_adaptation" /
+        f"seed-{BOUNDED_SEED}" / "round-01"
+    )
+    for name in ("proposal-001.json", "recovery-authorization.json"):
+        source = round_dir / "acquisition" / name
+        _atomic_json(replay_round / "acquisition" / name, json.loads(source.read_text()))
+    _atomic_json(replay_root / "original-preflight.json", original)
+    outcomes = {
+        str(path): _sha256_file(path) for path in round_dir.glob("tasks/**/result.json")
+    }
+    # A plain sentinel has no invoke method: this replay cannot make an LLM call.
+    _, replay_tasks_path, _ = _materialize_round(
+        manifest, spec, replay_root, [], object(),
+    )
+    replay = _read_tasks(replay_tasks_path)
+    old_geometries = {task["structure_sha256"] for task in tasks}
+    new_geometries = {task["structure_sha256"] for task in replay}
+    if len(replay) != 64 or len(new_geometries) != 64 or old_geometries != new_geometries:
+        raise ScientificCapacityError(
+            "source revalidation did not reproduce the original 64 distinct geometries"
+        )
+    if any(_sha256_file(Path(path)) != digest for path, digest in outcomes.items()):
+        raise ValueError("source revalidation modified optimization outcome evidence")
+    elapsed = max(0, time.time() - attempt["started_at_unix"])
+    proof = {
+        "actual_seeded_generation": True, "geometry_sets_identical": True,
+        "task_count": len(replay), "llm_calls": 0,
+        "retained_optimization_results": outcomes,
+        "original_preflight": str(replay_root / "original-preflight.json"),
+        "replayed_tasks": str(replay_tasks_path), "elapsed_seconds": elapsed,
+    }
+    _atomic_json(replay_root / "revalidation.json", proof)
+    return {
+        **original, **fingerprints,
+        "source_revalidation": str(replay_root / "revalidation.json"),
+    }
 
 
 def _round_action_outcomes(tasks: list[dict[str, Any]], task_root: Path) -> list[dict[str, Any]]:
@@ -2299,6 +2475,47 @@ def _execute_round_tasks(
 
 
 def run_replicate(
+    manifest_path: Path, output_root: Path, material: str, strategy: str, seed: int,
+    *, worker_count: int = WORKERS_PER_ARRAY_ELEMENT, worker_python: str | None = None,
+    workers_per_node: int = 4, hard_optimization_seconds: float | None = None,
+    round_index: int, round_attempt_id: str | None = None,
+) -> dict[str, Any]:
+    round_dir = output_root / material / strategy / f"seed-{seed}" / f"round-{round_index:02d}"
+    summary_path = round_dir / "round-summary.json"
+    complete = (
+        summary_path.is_file()
+        and json.loads(summary_path.read_text()).get("status") == "complete"
+    )
+    if not complete:
+        _check_execution_history(round_dir)
+    if round_attempt_id is not None or complete:
+        reservation = nullcontext(None)
+    else:
+        receipt_path = round_dir / "generation-preflight.json"
+        receipt = (
+            json.loads(receipt_path.read_text())
+            if receipt_path.is_file() else {"generation_seconds": 0}
+        )
+        reservation = _time_budget_attempt(
+            round_dir / "execution-time.json",
+            limit_seconds=ROUND_SECONDS - _generation_seconds(round_dir, receipt),
+        )
+    with reservation as attempt:
+        attempt_id = round_attempt_id or (attempt["attempt_id"] if attempt else None)
+        deadline = (
+            time.monotonic() + _execution_allowance(round_dir, attempt_id)
+            if attempt_id is not None else time.monotonic()
+        )
+        return _run_replicate(
+            manifest_path, output_root, material, strategy, seed,
+            worker_count=worker_count, worker_python=worker_python,
+            workers_per_node=workers_per_node,
+            hard_optimization_seconds=hard_optimization_seconds, round_index=round_index,
+            round_deadline=deadline, round_attempt_id=attempt_id,
+        )
+
+
+def _run_replicate(
     manifest_path: Path,
     output_root: Path,
     material: str,
@@ -2310,6 +2527,8 @@ def run_replicate(
     workers_per_node: int = 4,
     hard_optimization_seconds: float | None = None,
     round_index: int,
+    round_deadline: float,
+    round_attempt_id: str | None,
 ) -> dict[str, Any]:
     """Run one round of the current three-round E3-MLIP benchmark."""
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -2353,7 +2572,7 @@ def run_replicate(
         if worker_count > 1:
             _verified_checkpoint_sha256()
         chat = _chat_model() if strategy == "llm_guided_adaptation" else None
-        deadline = time.monotonic() + ROUND_SECONDS
+        deadline = round_deadline
         spec = _find_round(manifest, material, strategy, seed, round_index)
         round_dir = stream_dir / f"round-{round_index:02d}"
         summary_path = round_dir / "round-summary.json"
@@ -2370,8 +2589,9 @@ def run_replicate(
                 }
         history = _history_for_round(output_root, material, strategy, seed, round_index)
         if (round_dir / "generation-preflight.json").is_file():
-            receipt = _preflight_receipt(round_dir, manifest_path)
-            deadline -= receipt["generation_seconds"]
+            _preflight_receipt(
+                round_dir, manifest_path, execution_attempt_id=round_attempt_id,
+            )
         elif round_index == 1:
             raise RuntimeError("round 1 requires CPU generation preflight before GPU allocation")
         try:
@@ -2639,11 +2859,13 @@ def run_campaign(
     _validate_benchmark_allocation(job_id)
     state_path = (resource_state or output_root / "resource-budget.json").resolve()
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    reservation = state.get("reservations", {}).get(job_id)
+    reservation_id = os.environ.get("MATSIM_E3_MLIP_RESERVATION_ID", job_id)
+    reservation = state.get("reservations", {}).get(reservation_id)
     if (
         state.get("cap_gpu_seconds") != GPU_HOUR_CAP * 3600
         or not isinstance(reservation, dict)
         or reservation.get("reserved_gpu_seconds") != GPU_SECONDS_PER_ELEMENT
+        or reservation.get("job_id", job_id) != job_id
     ):
         raise RuntimeError("this Slurm allocation lacks its exact active benchmark reservation")
 
@@ -2673,6 +2895,14 @@ def run_campaign(
 
     completed = 0
     for round_index in range(1, ROUNDS_PER_MATERIAL + 1):
+        round_dir = stream_dir / f"round-{round_index:02d}"
+        summary_path = round_dir / "round-summary.json"
+        if (
+            summary_path.is_file()
+            and json.loads(summary_path.read_text()).get("status") == "complete"
+        ):
+            completed += 1
+            continue
         command = [
             sys.executable,
             "-m",
@@ -2705,9 +2935,17 @@ def run_campaign(
             if receipt_path.is_file():
                 receipt = _preflight_receipt(receipt_path.parent, manifest_path)
                 seconds -= receipt["generation_seconds"]
-            _run_supervised_round(command, seconds=seconds)
-        except subprocess.TimeoutExpired:
-            (stream_dir / ".run.lock").unlink(missing_ok=True)
+            _check_execution_history(round_dir)
+            with _time_budget_attempt(
+                round_dir / "execution-time.json", limit_seconds=seconds,
+            ) as attempt:
+                _run_supervised_round(
+                    [*command, "--round-attempt-id", attempt["attempt_id"]],
+                    seconds=attempt["reserved_seconds"],
+                )
+        except (TimeoutError, subprocess.TimeoutExpired) as error:
+            if isinstance(error, subprocess.TimeoutExpired):
+                (stream_dir / ".run.lock").unlink(missing_ok=True)
             failed = {
                 "campaign_id": manifest["campaign_id"],
                 "material": material,
@@ -2846,6 +3084,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--worker-python")
     run.add_argument("--hard-optimization-seconds", type=float)
     run.add_argument("--round-index", type=int, choices=(1, 2, 3), required=True)
+    run.add_argument("--round-attempt-id")
     campaign = commands.add_parser("run-campaign")
     campaign.add_argument("--manifest", type=Path, required=True)
     campaign.add_argument("--output-root", type=Path, required=True)
@@ -2880,7 +3119,20 @@ def main(argv: list[str] | None = None) -> int:
     release.add_argument("--state", type=Path, required=True)
     release.add_argument("--reservation-id", required=True)
     release.add_argument("--actual-gpu-seconds", type=int, required=True)
+    bind = commands.add_parser("budget-bind", help="bind a pre-submission reservation to Slurm")
+    bind.add_argument("--state", type=Path, required=True)
+    bind.add_argument("--reservation-id", required=True)
+    bind.add_argument("--job-id", required=True)
+    reconcile = commands.add_parser("budget-reconcile", help="charge terminal scheduler allocation usage")
+    reconcile.add_argument("--state", type=Path, required=True)
+    reconcile.add_argument("--reservation-id", required=True)
     args = parser.parse_args(argv)
+    if args.command == "budget-bind":
+        bind_gpu_reservation(args.state, args.reservation_id, args.job_id)
+        return 0
+    if args.command == "budget-reconcile":
+        print(json.dumps(reconcile_gpu_allocation(args.state, args.reservation_id), sort_keys=True))
+        return 0
     if args.command == "authorize-recovery":
         print(json.dumps(authorize_generation_recovery(
             args.manifest, args.output_root, args.material, args.authorization,
@@ -2900,10 +3152,17 @@ def main(argv: list[str] | None = None) -> int:
                 "--manifest", str(args.manifest), "--output-root", str(args.output_root),
                 "--material", args.material, "--round-index", str(args.round_index),
             ]
-            seconds = ROUND_SECONDS
-            if args.command == "revalidate-preflight":
-                previous = json.loads((round_dir / "generation-preflight.json").read_text())
-                seconds -= previous["generation_seconds"]
+            receipt_path = round_dir / "generation-preflight.json"
+            previous = (
+                json.loads(receipt_path.read_text())
+                if receipt_path.is_file() else {"generation_seconds": 0}
+            )
+            seconds = (
+                ROUND_SECONDS - _generation_seconds(round_dir, previous)
+                - _execution_seconds(round_dir)
+            )
+            if seconds <= 0:
+                raise TimeoutError("round time budget exhausted before source revalidation")
             _run_supervised_round(command, seconds=seconds)
             outcome_path = round_dir / "acquisition" / "outcome.json"
             if (
@@ -2997,6 +3256,7 @@ def main(argv: list[str] | None = None) -> int:
         workers_per_node=args.workers_per_node,
         hard_optimization_seconds=args.hard_optimization_seconds,
         round_index=args.round_index,
+        round_attempt_id=args.round_attempt_id,
     )
     print(json.dumps(result, sort_keys=True))
     return 0

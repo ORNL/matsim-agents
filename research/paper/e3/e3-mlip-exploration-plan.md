@@ -95,5 +95,7 @@ confidence interval.
   `benchmarks/e3/production.py`
 - Perlmutter array launcher:
   `deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh`
+- CPU generation gate and pre-allocation resource reservation (required for submission):
+  `deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh`
 - Annotated single-material workflow settings:
   `examples/workflows/e3-mlip.yaml`

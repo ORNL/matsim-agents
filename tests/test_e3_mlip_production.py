@@ -47,6 +47,7 @@ def test_spooled_slurm_launcher_resolves_submission_checkout(tmp_path, monkeypat
         "SLURM_NNODES": "16",
         "SLURM_NTASKS": "64",
         "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED": "m5216:premium:768",
+        "MATSIM_E3_MLIP_RESERVATION_ID": "pre-reserved-test-allocation",
         "MATSIM_E3_MLIP_BASE_PYTHON": str(tmp_path / "missing-python"),
     }.items():
         monkeypatch.setenv(key, value)
@@ -70,7 +71,12 @@ def test_separate_rerun_uses_explicit_shared_resource_ledger():
         in script
     )
     assert '--resource-state "${RESOURCE_STATE}"' in script
-    assert script.count('--state "${RESOURCE_STATE}"') == 2
+    assert script.count('--state "${RESOURCE_STATE}"') == 1
+    helper = (
+        repo / "deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh"
+    ).read_text()
+    assert "MATSIM_E3_MLIP_RESOURCE_STATE:-${OUTPUT_ROOT}/resource-budget.json" in helper
+    assert '--state "${MATSIM_E3_MLIP_RESOURCE_STATE}"' in helper
 
 
 def test_worker_step_waits_for_slow_ranks_after_first_success(monkeypatch, tmp_path):
@@ -336,7 +342,8 @@ def test_perlmutter_launcher_targets_the_authorized_gpu_resources():
     assert "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED=m5216:premium:768" in text
     assert "MATSIM_E3_MLIP_BASE_PYTHON" in text
     assert "MATSIM_E3_MLIP_WORKER_PYTHON" in text
-    assert text.index("export PYTHONPATH=") < text.index("budget-reserve")
+    assert text.index("export PYTHONPATH=") < text.index("budget-bind")
+    assert "budget-release" not in text
 
 
 def test_class_actions_are_material_specific_and_mof_never_uses_pyxtal():

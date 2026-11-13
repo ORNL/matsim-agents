@@ -810,6 +810,7 @@ def test_source_revalidation_rejects_changed_original_evidence(tmp_path, changed
     production._atomic_json(
         round_dir / "generation-preflight.json",
         {
+            "generation_seconds": 100,
             "manifest_sha256": (
                 "changed"
                 if changed == "manifest"

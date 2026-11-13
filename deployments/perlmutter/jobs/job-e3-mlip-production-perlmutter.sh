@@ -13,6 +13,7 @@
 
 set -euo pipefail
 
+: "${MATSIM_E3_MLIP_RESERVATION_ID:?use the CPU-generation submission helper to reserve the allocation before sbatch}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${PROJECT_ROOT:-${SLURM_SUBMIT_DIR:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}}"
 [[ -f "${REPO}/pyproject.toml" ]] || {
@@ -43,6 +44,12 @@ MACE_PYTHON="${MATSIM_E3_MLIP_WORKER_PYTHON:-${REPO}/.venv-mace/bin/python}"
   echo "ERROR: prepared base and MACE Python environments are required" >&2
   exit 2
 }
+OUTPUT_ROOT="${MATSIM_E3_MLIP_OUTPUT_ROOT:-${REPO}/runs/e3-mlip-production}"
+RESOURCE_STATE="${MATSIM_E3_MLIP_RESOURCE_STATE:-${OUTPUT_ROOT}/resource-budget.json}"
+export PYTHONPATH="${REPO}:${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
+"${BASE_PYTHON}" -m benchmarks.e3.production budget-bind \
+  --state "${RESOURCE_STATE}" --reservation-id "${MATSIM_E3_MLIP_RESERVATION_ID}" \
+  --job-id "${SLURM_JOB_ID}"
 export PATH="${HOME}/.local/bin:${PATH}"
 "${BASE_PYTHON}" -c 'import copilot' || {
   echo "ERROR: Copilot SDK is missing from ${BASE_PYTHON}" >&2
@@ -54,9 +61,7 @@ command -v copilot >/dev/null || {
 }
 
 MANIFEST="${MATSIM_E3_MLIP_MANIFEST:-${REPO}/benchmarks/e3/manifests/e3-mlip-production.json}"
-OUTPUT_ROOT="${MATSIM_E3_MLIP_OUTPUT_ROOT:-${REPO}/runs/e3-mlip-production}"
 [[ -s "${MANIFEST}" ]] || { echo "ERROR: missing campaign manifest: ${MANIFEST}" >&2; exit 2; }
-export PYTHONPATH="${REPO}:${REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
 "${BASE_PYTHON}" -m benchmarks.e3.production validate --manifest "${MANIFEST}"
 
 TASK_ID="${SLURM_ARRAY_TASK_ID:?array task id is required}"
@@ -67,13 +72,6 @@ MATERIAL="${MATERIALS[TASK_ID]}"
   --manifest "${MANIFEST}" --output-root "${OUTPUT_ROOT}" --material "${MATERIAL}" \
   --round-index "${MATSIM_E3_MLIP_START_ROUND:-1}"
 mkdir -p "${OUTPUT_ROOT}"
-RESOURCE_STATE="${MATSIM_E3_MLIP_RESOURCE_STATE:-${OUTPUT_ROOT}/resource-budget.json}"
-RESOURCE_START=${SECONDS}
-"${BASE_PYTHON}" -m benchmarks.e3.production budget-reserve \
-  --state "${RESOURCE_STATE}" \
-  --reservation-id "${SLURM_JOB_ID}" \
-  --reserved-gpu-seconds 460800 \
-  --cap-gpu-seconds 2764800
 
 cleanup_copilot_home() {
   local path="${COPILOT_HOME:-}"
@@ -89,23 +87,16 @@ cleanup_copilot_home() {
   fi
 }
 
-release_resource_budget() {
+cleanup_after_allocation() {
   local status=$?
-  local runtime_seconds=$((SECONDS - RESOURCE_START))
   trap - EXIT
-  if ! "${BASE_PYTHON}" -m benchmarks.e3.production budget-release \
-    --state "${RESOURCE_STATE}" \
-    --reservation-id "${SLURM_JOB_ID}" \
-    --actual-gpu-seconds "$((runtime_seconds * 64))"; then
-    echo "ERROR: failed to reconcile GPU allocation; reservation remains conservatively charged" >&2
-    status=1
-  fi
   if ! cleanup_copilot_home; then
     status=1
   fi
+  echo "Allocation remains fully charged until terminal Slurm budget-reconcile: ${MATSIM_E3_MLIP_RESERVATION_ID}" >&2
   exit "${status}"
 }
-trap release_resource_budget EXIT
+trap cleanup_after_allocation EXIT
 
 source "${REPO}/deployments/perlmutter/setup/perlmutter-module-stack.sh"
 load_perlmutter_modules_gpu

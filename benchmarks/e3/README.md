@@ -22,6 +22,26 @@ required before submission.
 
 Use the [CPU-generation submission helper](../../deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh)
 to execute and validate the actual first-round structures before requesting GPUs.
+The helper reserves the entire 460,800 GPU-second allocation **before `sbatch`**,
+then binds that reservation to its scheduler job. Direct `sbatch` invocation of
+the GPU launcher is unsupported: it requires the helper's reservation ID.
+Startup failures, cleanup, and scheduler teardown remain fully charged.
+The launcher does not release time from an EXIT trap because Slurm has not
+yet reported the final allocation lifetime.
+
+After the job is terminal, reconcile it from a CPU host using the reservation
+ID printed by the helper:
+
+```bash
+.venv/bin/python -m benchmarks.e3.production budget-reconcile \
+  --state runs/e3-mlip-production/resource-budget.json \
+  --reservation-id submission-REPLACE_WITH_PRINTED_ID
+```
+
+Only verified terminal `sacct` allocation records release the unused balance.
+Unavailable, ambiguous, or nonterminal scheduler records retain the full charge.
+An ambiguous `sbatch` failure also retains its reservation; an operator must
+establish whether an allocation was created before releasing any time.
 The [shared executable catalog](feasibility.py) filters unavailable prototypes
 and exposes joint capacities to both policy implementations. The production
 design remains LLM-only. See the [generation and recovery contract](../../docs/workflows/run-campaigns.md)
@@ -64,6 +84,16 @@ requires exactly the same 64 geometry identities, and verifies that existing
 optimization results remain unchanged. The original receipt and replay evidence
 are retained under `acquisition/source-revalidation-*`; replay time is added to
 the original generation time within the unchanged round budget.
+`generation-time.json` preserves initial generation and all replay attempts,
+including failed attempts and failures before publishing a receipt. Cached generated structures
+do not reset this cumulative time. `execution-time.json` similarly tracks each
+supervised execution attempt; both the supervisor and worker-step deadline use
+the same remaining balance after generation and prior execution.
+Reservations are persisted before work. An attempt killed before its finish
+record retains its entire remaining allowance, not a fresh 30 minutes on retry.
+Legacy interrupted execution/replay evidence without a time ledger is refused
+rather than assigned an invented zero duration; recovering it requires verified
+historical timing evidence. Completed rounds are not rerun or recharged.
 
 Valid generation exhaustion is a scientific stop, not an infrastructure failure.
 The round remains incomplete with status `stopped_generation_exhausted`.
@@ -80,8 +110,8 @@ timeouts remain explicit errors; no structures are silently substituted.
 
 A separately authorized full campaign rerun must use a separate output root
 to preserve prior evidence. Set `MATSIM_E3_MLIP_RESOURCE_STATE` to the original
-campaign's absolute `resource-budget.json` path so the launcher reserves and
-reconciles all attempts against the same physical GPU cap; do not create a
+campaign's absolute `resource-budget.json` path so the helper reserves and the
+terminal scheduler reconciliation charges all attempts against the same physical GPU cap; do not create a
 fresh resource budget for the rerun.
 
 The discovery API now accepts a `SeedGenerationAction` for explicit
