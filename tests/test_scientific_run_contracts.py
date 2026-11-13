@@ -63,3 +63,42 @@ def test_failed_workflow_result_requires_reason():
             evidence_level=EvidenceLevel.MLIP_RELAXATION,
             provenance=_provenance(),
         )
+
+
+def test_text_and_json_writes_are_atomic_and_confined(tmp_path):
+    run = ScientificRunDirectory.create(
+        tmp_path,
+        workflow="relaxation",
+        request={},
+        resolved_config={},
+        provenance=_provenance(),
+    )
+    run.write_text("report.md", "first")
+    run.write_text("report.md", "second")
+    run.write_json("summary.json", {"complete": True})
+    assert (run.path / "report.md").read_text() == "second"
+    assert json.loads((run.path / "summary.json").read_text()) == {"complete": True}
+    confined = run.write_text("../outside.txt", "confined to run directory")
+    assert confined.parent == run.path
+    assert not (run.path.parent / "outside.txt").exists()
+    assert not [path for path in run.path.iterdir() if path.name.startswith(".report.md.")]
+
+
+def test_failed_text_replace_preserves_previous_report(tmp_path, monkeypatch):
+    run = ScientificRunDirectory.create(
+        tmp_path,
+        workflow="relaxation",
+        request={},
+        resolved_config={},
+        provenance=_provenance(),
+    )
+    run.write_text("report.md", "committed report")
+
+    def fail(*args):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr("matsim_agents.execution.run_directory.os.replace", fail)
+    with pytest.raises(OSError, match="replace failed"):
+        run.write_text("report.md", "uncommitted report")
+    assert (run.path / "report.md").read_text() == "committed report"
+    assert not [path for path in run.path.iterdir() if path.name.startswith(".report.md.")]

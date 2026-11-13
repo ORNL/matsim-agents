@@ -96,13 +96,17 @@ class ScientificRunDirectory:
     def write_json(self, name: str, payload: Any) -> Path:
         """Atomically write JSON inside the run directory."""
 
-        destination = self.path / safe_component(name)
         encoded = json.dumps(_jsonable(payload), indent=2, sort_keys=True) + "\n"
+        return self.write_text(name, encoded)
+
+    def write_text(self, name: str, text: str) -> Path:
+        """Atomically write a human-readable report inside the run directory."""
+        destination = self.path / safe_component(name)
         fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", dir=self.path)
         try:
             os.fchmod(fd, _FILE_MODE)
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                stream.write(encoded)
+                stream.write(text)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, destination)

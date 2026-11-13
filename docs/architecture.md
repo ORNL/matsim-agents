@@ -50,6 +50,24 @@ Only version-2 exploration checkpoints are supported; there is no legacy reader
 or migration layer. The separate advanced phase-exploration/active-learning
 workflow retains its own contracts and is not invoked by this config-driven API.
 
+## Common advanced-workflow interface
+
+The [workflow catalog](../src/matsim_agents/cli/workflow_catalog.py) separates
+wrapper configuration and native capabilities from
+[CLI dispatch](../src/matsim_agents/cli/workflows.py). It delegates execution to
+the existing native workflows, not a second scientific engine.
+[Process execution](../src/matsim_agents/execution/workflow_runner.py) owns
+streaming and local child cleanup;
+[invocation records](../src/matsim_agents/execution/workflow_record.py) own
+saved process state and readable reports using atomic run-directory storage.
+Scientific checkpoints/results remain owned by their native engines.
+
+The E3 presets reuse the frozen production/Aurora batch runners, keep approvals
+and resource accounting explicit, and do not introduce generic scheduler adapters.
+User-facing guides separate [running tasks](workflows/run-campaigns.md),
+[interpreting results](workflows/interpret-results.md), and
+[extending the library](workflows/extend-library.md).
+
 ## Import layers
 
 Packages are layered; a package may import only from strictly lower layers.

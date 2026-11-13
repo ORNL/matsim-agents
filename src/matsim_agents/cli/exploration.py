@@ -55,6 +55,7 @@ def _print_summary(summary: ExplorationSummary) -> None:
         console.print(f"Note: {note}", markup=False)
     console.print("Completed execution does not imply convergence or thermodynamic stability.")
     console.print("This command does not launch LLM, DFT, or active-learning work.")
+    console.print(f"Report: {Path(summary.run_directory) / 'report.md'}", markup=False)
 
 
 @explore_app.command("check")
@@ -119,3 +120,21 @@ def resume(
     _print_summary(result)
     if result.status == "failed":
         raise typer.Exit(1)
+
+
+@explore_app.command("status")
+def status(
+    run_directory: Path = typer.Argument(..., exists=True, file_okay=False),
+) -> None:
+    """Read checkpoint progress without loading a model or probing a scheduler."""
+    try:
+        result = summarize_exploration(run_directory)
+    except (ValueError, OSError) as error:
+        console.print(f"Cannot read exploration status: {error}", markup=False)
+        raise typer.Exit(1) from error
+    console.print(
+        f"{result.outcome}; rounds {result.rounds_completed}/{result.rounds_requested}; "
+        f"attempted {result.counts['attempted']}; converged {result.counts['converged']}",
+        markup=False,
+    )
+    console.print("Checkpoint progress only; not a liveness or scheduler probe.")

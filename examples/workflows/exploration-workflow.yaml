@@ -1,0 +1,5 @@
+# Optional common interface around the native exploration CLI.
+# Edit explore-nb2o5.yaml to identify your trusted checkpoint first.
+workflow: explore
+config: ./explore-nb2o5.yaml
+output_root: ./workflow-records

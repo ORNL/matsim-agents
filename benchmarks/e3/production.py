@@ -1890,6 +1890,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     plan.add_argument("--output", type=Path, required=True)
     plan.add_argument("--overwrite", action="store_true")
+    validate = commands.add_parser(
+        "validate", help="validate the frozen protocol without execution"
+    )
+    validate.add_argument("--manifest", type=Path, required=True)
     run = commands.add_parser("run-replicate")
     run.add_argument("--manifest", type=Path, required=True)
     run.add_argument("--output-root", type=Path, required=True)
@@ -1923,6 +1927,10 @@ def main(argv: list[str] | None = None) -> int:
     release.add_argument("--reservation-id", required=True)
     release.add_argument("--actual-gpu-seconds", type=int, required=True)
     args = parser.parse_args(argv)
+    if args.command == "validate":
+        validate_campaign_manifest(json.loads(args.manifest.read_text()))
+        print(json.dumps({"manifest": str(args.manifest.resolve()), "execution_performed": False}))
+        return 0
     if args.command == "plan":
         manifest = write_campaign_manifest(args.output, overwrite=args.overwrite)
         print(

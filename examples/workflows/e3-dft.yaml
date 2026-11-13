@@ -1,0 +1,10 @@
+# Frozen E3 Round-1 BCC VASP batch, using the existing Aurora batch runner.
+# run defaults to input/executable/PAW/collision validation, NOT submission.
+# Actual submission requires --approve-execution AND native manifest authorization.
+# First stage the frozen inputs using the campaign runbook; no staging is hidden.
+workflow: e3-dft
+output_root: ./e3-workflow-records
+settings:
+  manifest: ../../deployments/aurora/jobs/e3-round1-bcc/batch-manifest.json
+  # Select a subset explicitly or leave empty to validate the entire frozen batch.
+  calculation_ids: []

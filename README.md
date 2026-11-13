@@ -27,6 +27,13 @@ See the [step-by-step guide](docs/workflows/simple-exploration.md) and
 This path needs no custom Python driver and never launches LLM, DFT, or
 active-learning work. Multi-round LLM steering is not part of this first interface.
 
+For the frozen E3-MLIP/E3-DFT presets and a common interface across advanced workflows,
+start with [run a campaign](docs/workflows/run-campaigns.md).
+Then [interpret results](docs/workflows/interpret-results.md) or
+[extend the library](docs/workflows/extend-library.md). The interface provides
+check/run/status/summary and capability-based native resume; scheduler submission
+and scientific approvals remain explicit.
+
 ## Table of contents
 
 1. [Architecture](#architecture)
@@ -1274,7 +1281,15 @@ matsim-agents characterize CONTRACT.yaml   # answer a characterization contract 
 matsim-agents explore check CONFIG.yaml    # static preflight for a bounded MACE phase search
 matsim-agents explore run CONFIG.yaml      # generate, select, relax, and rank MLIP-only batches
 matsim-agents explore summary RUN_DIRECTORY # inspect counts, termination reasons, and errors
+matsim-agents explore status RUN_DIRECTORY # last saved checkpoint progress; no scheduler query
 matsim-agents explore resume RUN_DIRECTORY # resume checkpointed exploration (one or more rounds)
+matsim-agents workflow list                # advanced workflows and native restart capabilities
+matsim-agents workflow init PRESET OUTPUT.yaml # annotated E3/exploration/debate presets; no execution
+matsim-agents workflow check CONFIG.yaml   # validate wrapper/native config without scientific execution
+matsim-agents workflow run CONFIG.yaml     # invoke native workflow; E3 execution requires approval
+matsim-agents workflow status RUN_DIRECTORY # last saved invocation status, not scheduler liveness
+matsim-agents workflow summary RUN_DIRECTORY # human report and links to native evidence
+matsim-agents workflow resume RUN_DIRECTORY [--native-run DIR] # native restart where supported
 matsim-agents ledger  verify LEDGER.jsonl    # check the evidence ledger's hash chain and artifacts
 matsim-agents ledger  show LEDGER.jsonl      # evidence counts and current hypothesis revisions
 matsim-agents benchmark known-answers [--tier replay|live]  # grade the Si/SiC known-answer suite

@@ -128,3 +128,63 @@ def _write_ranking(run: ScientificRunDirectory, state: RoundState) -> None:
         "or chemical-stability proxy is assessed."
     )
     run.write_json("cumulative-ranking.json", payload)
+
+
+def write_exploration_report(run: ScientificRunDirectory, summary: ExplorationSummary) -> None:
+    """Present evidence and next steps without inferring stability from completion."""
+    lines = [
+        "# Exploration report",
+        "",
+        f"- Execution: **{summary.status}**",
+        f"- Scientific outcome: **{summary.outcome}**",
+        f"- Rounds: {summary.rounds_completed}/{summary.rounds_requested}",
+        f"- Calculator loads across executing processes: {summary.calculator_loads}",
+        "",
+        "## Candidate accounting",
+        "",
+        "| Measure | Count |",
+        "| --- | --- |",
+        *[f"| {key} | {value} |" for key, value in summary.counts.items()],
+        "",
+        "## Termination reasons",
+        "",
+        *[f"- {reason}: {count}" for reason, count in summary.termination_reasons.items()],
+        "",
+        "## Interpretation",
+        "",
+        "Completed execution does not imply convergence. Nonconverged results are not ranked.",
+        "Relative energies compare only the explored same-composition candidates; they do not "
+        "establish thermodynamic stability or prove a ground state.",
+        "Structural diversity is a screening heuristic, not an uncertainty estimate.",
+        "",
+        "## Evidence",
+        "",
+        "- [Configuration](resolved_config.json)",
+        "- [Candidate and attempt checkpoints](rounds-state.json)",
+        "- [Relative ranking](cumulative-ranking.json)",
+        "- [Machine-readable summary](exploration-summary.json)",
+        "",
+        "## Next actions",
+        "",
+    ]
+    if summary.outcome == "incomplete":
+        lines.append("Resume outstanding attempts with `explore resume RUN_DIRECTORY`.")
+    if summary.errors:
+        lines.extend(
+            [
+                "Inspect the errors before requesting more compute:",
+                *[f"- {error}" for error in summary.errors],
+            ]
+        )
+    if summary.counts.get("nonconverged"):
+        lines.append(
+            "Inspect trajectories and force/stress histories. Start a fresh run for changed "
+            "optimizer settings; do not edit checkpoint budgets or convergence labels."
+        )
+    if summary.counts.get("converged"):
+        lines.append(
+            "Review the ranked structures, then explicitly plan DFT or other validation if "
+            "the scientific question requires higher-fidelity evidence."
+        )
+    lines.append("No LLM, DFT, or scheduler job is launched by this report.")
+    run.write_text("report.md", "\n".join(lines) + "\n")

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import fcntl
 import logging
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from matsim_agents.workflows.exploration_reporting import (
     ExplorationSummary,
     _write_ranking,
     summarize_rounds,
+    write_exploration_report,
 )
 
 log = logging.getLogger(__name__)
@@ -89,9 +91,22 @@ def run_rounds(
             state.error = f"{type(exc).__name__}: {exc}"
             raise
         finally:
-            state.calculator_loads = previous_loads + cache.loads
-            run.write_json("rounds-state.json", state)
-            run.write_json("exploration-summary.json", summarize_rounds(run))
+            original_error = sys.exc_info()[1]
+            try:
+                state.calculator_loads = previous_loads + cache.loads
+                run.write_json("rounds-state.json", state)
+                summary = summarize_rounds(run)
+                run.write_json("exploration-summary.json", summary)
+                write_exploration_report(run, summary)
+            except OSError as persistence_error:
+                if original_error is None:
+                    raise
+                original_error.add_note(
+                    f"Could not persist final evidence/report: {persistence_error}"
+                )
+                log.exception(
+                    "Could not persist final exploration evidence; preserving original failure"
+                )
         return summarize_rounds(run)
 
 

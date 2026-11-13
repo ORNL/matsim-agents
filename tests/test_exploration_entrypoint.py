@@ -14,6 +14,8 @@ from typer.testing import CliRunner
 from matsim_agents.backends.mlip.relaxation import _RelaxCalculator
 from matsim_agents.cli import app
 from matsim_agents.discovery.seeds import PhaseCandidate
+from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord
+from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.workflows import (
     ExplorationConfig,
     check_exploration,
@@ -21,6 +23,10 @@ from matsim_agents.workflows import (
     resume_exploration,
     run_exploration,
     summarize_exploration,
+)
+from matsim_agents.workflows.exploration_reporting import (
+    ExplorationSummary,
+    write_exploration_report,
 )
 
 
@@ -86,6 +92,80 @@ def test_paths_resolve_relative_to_config_not_cwd(config_path, tmp_path, monkeyp
     cfg = load_exploration_config(config_path)
     assert cfg.checkpoint == config_path.parent / "model.model"
     assert cfg.output_dir == config_path.parent / "runs"
+
+
+@pytest.mark.parametrize(
+    "outcome,counts,next_step",
+    [
+        ("incomplete", {"converged": 0, "nonconverged": 0}, "Resume outstanding attempts"),
+        (
+            "relaxation_non_convergence",
+            {"converged": 0, "nonconverged": 2},
+            "force/stress histories",
+        ),
+        ("usable_minimum", {"converged": 1, "nonconverged": 0}, "Review the ranked structures"),
+    ],
+)
+def test_human_report_distinguishes_outcome_and_recovery(outcome, counts, next_step, tmp_path):
+    run = ScientificRunDirectory.create(
+        tmp_path,
+        workflow="explore",
+        request={},
+        resolved_config={},
+        provenance=ProvenanceRecord(workflow="explore", evidence_level=EvidenceLevel.HYPOTHESIS),
+    )
+    write_exploration_report(
+        run,
+        ExplorationSummary(
+            run_directory=str(run.path),
+            status="failed" if outcome == "incomplete" else "completed",
+            outcome=outcome,
+            counts=counts,
+            termination_reasons={"step_limit": 2},
+            errors=["backend failure"],
+            rounds_completed=1,
+            rounds_requested=3,
+        ),
+    )
+    report = (run.path / "report.md").read_text()
+    assert next_step in report
+    assert "step_limit: 2" in report
+    assert "backend failure" in report
+    assert "1/3" in report
+    assert "do not establish thermodynamic stability" in report
+    assert "No LLM, DFT, or scheduler job is launched" in report
+
+
+def test_report_write_failure_preserves_original_interruption(
+    config_path, available_dependencies, monkeypatch, caplog
+):
+    def interrupt(*args, **kwargs):
+        raise KeyboardInterrupt("requested stop")
+
+    def report_failure(*args, **kwargs):
+        raise OSError("report storage unavailable")
+
+    monkeypatch.setattr("matsim_agents.workflows.exploration_rounds._generate_round", interrupt)
+    monkeypatch.setattr(
+        "matsim_agents.workflows.exploration_rounds.write_exploration_report", report_failure
+    )
+    with pytest.raises(KeyboardInterrupt, match="requested stop"):
+        run_exploration(load_exploration_config(config_path))
+    assert "preserving original failure" in caplog.text
+    assert "report storage unavailable" in caplog.text
+
+
+def test_report_write_failure_after_execution_is_not_silenced(
+    config_path, emt_workflow, monkeypatch
+):
+    def report_failure(*args, **kwargs):
+        raise OSError("report storage unavailable")
+
+    monkeypatch.setattr(
+        "matsim_agents.workflows.exploration_rounds.write_exploration_report", report_failure
+    )
+    with pytest.raises(OSError, match="report storage unavailable"):
+        run_exploration(load_exploration_config(config_path))
 
 
 @pytest.mark.parametrize(

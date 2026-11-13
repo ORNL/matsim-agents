@@ -174,6 +174,11 @@ round. This contains the complete configuration, incremented-seed round
 candidates, results/errors, checkpoint identity, and artifact hashes.
 `cumulative-ranking.json` ranks converged results across completed work; a JSON
 `null` means no eligible result. No LLM, DFT, or active learning is introduced.
+`report.md` presents counts, termination reasons, evidence links, and next actions
+without claiming that completion establishes stability. `explore status` reads
+the last saved checkpoint progress; it does not query the scheduler or prove
+that a process is alive. See [interpret results](interpret-results.md) for recovery
+and scientific-claim limits.
 The cumulative report preserves all eligible attempts, including equivalent
 minima, but omits polymorph-degeneracy and chemical-stability proxy claims.
 Its `ground_state` entry means only the lowest-energy observed candidate.
