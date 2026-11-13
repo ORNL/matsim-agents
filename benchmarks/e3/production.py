@@ -857,6 +857,9 @@ def _compact_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "hypothesis_update",
         "shortfalls",
         "remaining_capacity_by_group",
+        "qe_audits_by_action",
+        "accuracy_triggered",
+        "model_promoted",
     )
     return [{key: item[key] for key in fields if key in item} for item in history]
 
@@ -888,11 +891,19 @@ def _llm_allocation(
         })
         entry["action_ids"].append(action["action_id"])
     prompt_history = _compact_history(history)
-    prompt = (
-        "Choose E3-MLIP crystallographic generation allocations for this round. "
+    evidence_scope = (
+        "Use the strategy-local MACE geometry history and measured QE force audits below. "
+        "Audits apply only to sampled geometries. Models may change after independently "
+        "validated promotion: do not compare raw energies from different checkpoints. "
+        if context and context.get("campaign_variant") == "e3-mlip-qe-active-learning"
+        else
         "Use only the allow-listed actions and only the strategy-local MACE geometry "
         "optimization history below. There are no DFT labels, DFT references, or "
-        "independent validation data. Return JSON with exactly keys allocations, "
+        "independent validation data. "
+    )
+    prompt = (
+        "Choose E3-MLIP crystallographic generation allocations for this round. "
+        + evidence_scope + "Return JSON with exactly keys allocations, "
         "cited_evidence_ids, rationale. allocations is a list of {action_id,count}; "
         "counts must be positive integers, IDs unique, sum exactly to the round target, "
         "and each minimum tier count must be met. cited_evidence_ids must be a non-empty "
@@ -1232,7 +1243,10 @@ def _materialize_selection(
                 allocations, citations, rationale = _llm_allocation(
                     chat, material, action_space, history, target, minimum_by_tier,
                     evidence_path=proposal_path,
-                    context={"round": round_index, "seed": seed},
+                    context={
+                        "round": round_index, "seed": seed,
+                        "campaign_variant": manifest.get("campaign_variant"),
+                    },
                 )
             selection = {
                 "policy": "evidence-grounded LLM allocation",
@@ -1569,9 +1583,23 @@ def _task_result(attempt_dir: Path, task: dict[str, Any]) -> Path | None:
             result.get("structure_sha256") == task["structure_sha256"]
             and result.get("terminal")
             and result.get("optimizer") == task.get("optimizer", OPTIMIZER_SETTINGS)
+            and result.get("active_model") == task.get("active_model")
         ):
             return result_path
     return None
+
+
+def _task_checkpoint(task: dict[str, Any]) -> tuple[Path, str]:
+    model = task.get("active_model")
+    if model is None:
+        return _verified_checkpoint()
+    if task.get("campaign_variant") != "e3-mlip-qe-active-learning":
+        raise ValueError("A model override requires the separate E3-QE campaign variant")
+    path = Path(model["path"])
+    digest = _sha256_file(path)
+    if digest != model["sha256"]:
+        raise ValueError("E3-QE incumbent checkpoint hash mismatch")
+    return path, digest
 
 
 def _space_group_number(atoms: Any) -> int | None:
@@ -1645,7 +1673,10 @@ def _execute_task(
         "candidate_kind": task["candidate_kind"],
         "model": MODEL_NAME,
         "mace_model": E3_MLIP_MODEL,
-        "checkpoint_sha256": E3_MLIP_CHECKPOINT_SHA256,
+        "checkpoint_sha256": (task.get("active_model") or {}).get(
+            "sha256", E3_MLIP_CHECKPOINT_SHA256
+        ),
+        "active_model": task.get("active_model"),
         "optimizer": optimizer_settings,
         "initial_structure_path": task["structure_path"],
         "host": socket.gethostname(),
@@ -1673,10 +1704,13 @@ def _execute_task(
             initial.arrays.pop(key, None)
         clean_path = attempt_dir / "initial.extxyz"
         write(clean_path, initial, format="extxyz")
-        checkpoint_path, checkpoint_sha256 = _verified_checkpoint()
-        if checkpoint_sha256 != E3_MLIP_CHECKPOINT_SHA256:
+        checkpoint_path, checkpoint_sha256 = _task_checkpoint(task)
+        if task.get("active_model") is None and checkpoint_sha256 != E3_MLIP_CHECKPOINT_SHA256:
             raise ValueError("relaxation checkpoint does not match the frozen E3-MLIP model")
         result_payload["mace_model_path"] = str(checkpoint_path)
+        if task.get("active_model") is not None:
+            result_payload["model"] = "MACE E3-QE incumbent"
+            result_payload["mace_model"] = str(checkpoint_path)
         relax_args = RelaxStructureInput(
             structure_path=str(clean_path),
             output_dir=str(attempt_dir),
@@ -1824,7 +1858,10 @@ def _timeout_result(
         "candidate_kind": task["candidate_kind"],
         "model": MODEL_NAME,
         "mace_model": E3_MLIP_MODEL,
-        "checkpoint_sha256": E3_MLIP_CHECKPOINT_SHA256,
+        "checkpoint_sha256": (task.get("active_model") or {}).get(
+            "sha256", E3_MLIP_CHECKPOINT_SHA256
+        ),
+        "active_model": task.get("active_model"),
         "optimizer": task["optimizer"],
         "initial_structure_path": task["structure_path"],
         "status": "nonconverged",
@@ -1845,6 +1882,9 @@ def _timeout_result(
         "attempt": int(attempt_dir.name.split("-")[1]),
         "partial_artifacts_directory": str(attempt_dir),
     }
+    if task.get("active_model") is not None:
+        result["model"] = "MACE E3-QE incumbent"
+        result["mace_model"] = task["active_model"]["path"]
     _atomic_json(attempt_dir / "result.json", result)
     return result
 

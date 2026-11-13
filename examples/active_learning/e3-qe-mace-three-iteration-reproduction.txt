@@ -1,0 +1,246 @@
+E3-QE/MACE: three-iteration, six-material active-learning reproduction
+===================================================================
+
+This is a NEW campaign, not an update to frozen E3-MLIP results.
+Use benchmarks.e3.qe_active_learning, NOT "matsim-agents al run".
+The latter runs the generic MD sampler and is NOT this E3 experiment.
+
+1. Prepare the checkout and campaign inputs
+------------------------------------------
+
+Use the checkout containing benchmarks/e3/qe_active_learning.py and install
+the normal project dependencies and MACE environment as described in the
+5000-structure collaborator guide. From the repository root:
+
+  export PROJ_ROOT="$PWD"
+  export PYTHONPATH="$PROJ_ROOT/src:$PROJ_ROOT"
+  export MATSIM_E3_MLIP_STRUCTURES_PER_ROUND=5000
+  source deployments/perlmutter/setup/model-artifacts-perlmutter.sh
+  configure_mace_model_artifacts "$PROJ_ROOT"
+
+Set MACE_CHECKPOINT to the trusted local MACE-OMAT-0 medium .model file.
+Its initial SHA256 must be:
+  d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a
+
+Use the MACE-capable Python environment for BOTH the driver and its spawned
+workers (normally .venv-mace/bin/python). The driver also needs the project,
+ASE, the configured Copilot provider and MACE training dependencies installed.
+Do not install or run the scientific stack on a login node merely to test GPUs.
+
+Retained E3 scientific design:
+  * Six materials: bcc_refractory, fcc_cantor, lifepo4, phosphorene,
+    nb_ta_o and zn_formate_mof. Confirm exact CLI names with --help.
+  * Three LLM-guided iterations, seed 20261113; one allocation proposal per
+    round, with persisted prompt, raw response, rationale and cited evidence.
+  * Up to 5000 generated structures per material/iteration: 15000 per
+    material and 90000 across all six if every generation/evaluation succeeds.
+  * Same E3 action catalogs, finite prototype capacities, deduplication,
+    original size-tier floors and generation feasibility requirements.
+  * FIRE, fmax=0.02 eV/A, maxiter=500, maxstep=0.05 A; cell relaxation and
+    native stress required. Phosphorene has the original in-plane mask.
+    MOF connectivity, finite-value and valid-cell guards remain active.
+  * relative_increase_threshold=None
+    max_cell_step_strain=None
+    max_cell_total_strain=None
+    stress_tolerance_eV_per_A3=None
+  * 64 geometry workers on 16 four-GPU nodes; 300-second parent-enforced
+    task deadline and 1800-second generation/geometry-round deadline.
+
+5000 is a ceiling/target, not a guarantee of 5000 completed optimizations.
+The full generated batch is required before dispatch. Finite generation
+capacity may end a stream early. Slow batches may exhaust the geometry
+deadline; this is a failure requiring reviewed recovery, not scientific
+completion and not an MLIP accuracy measurement.
+
+Intentional differences from frozen E3:
+  * Exact-geometry QE audits are added, and MACE can be fine-tuned/promoted.
+  * QE/training consume ADDITIONAL time outside the geometry-round deadline.
+  * This runner does NOT use the frozen campaign's 768-GPU-hour accounting
+    ledger or its submission helper. Do not claim identical total resources.
+  * CPU generation is performed by this driver before each geometry step;
+    unlike the frozen production launcher, this version does NOT pre-generate
+    round one before reserving GPUs. Include that idle allocation time.
+
+Do not launch until the additional allocation and scientific inputs have
+been reviewed. No QE calculation is launched by preparing these files.
+
+2. Write/review the per-material configuration
+--------------------------------------------
+
+Start from examples/active_learning/e3_qe_mace.yaml. Use ONE separate output
+directory, validation set and reviewed QE policy for EACH material.
+
+Set these variables for that material, preferably in a reviewed shell input:
+
+  export PW_BIN=/absolute/path/to/gpu-enabled/pw.x
+  export PSEUDO_DIR=/absolute/path/to/reviewed/PBE/UPFs
+  export E3_QE_RUN_DIR=/absolute/path/to/new/e3-qe/<material>
+  export E3_QE_VALIDATION_SET=/absolute/path/to/independent-heldout.extxyz
+  export ELEMENTAL_REFERENCE_MANIFEST=/absolute/path/to/qe-elemental-references.json
+  export E3_QE_PSEUDOPOTENTIALS='<YAML mapping of every element to its UPF file>'
+  export E3_QE_ECUTWFC_RY='<converged cutoff>'
+  export E3_QE_ECUTRHO_RY='<converged density cutoff>'
+  export E3_QE_KPTS='<reviewed YAML list, e.g. [2,2,2]>'
+  export E3_QE_OCCUPATIONS='<fixed or smearing>'
+  export E3_QE_SYSTEM='<reviewed YAML SYSTEM mapping, including input_dft>'
+  export E3_FORCE_ERROR_TOLERANCE=0.2
+  export E3_QE_PROMOTION_APPROVED=false
+
+Angle-bracket entries above are placeholders, NOT executable scientific
+defaults. For example, an Nb-Ta-O UPF map must include Nb, Ta and O, whereas
+the phosphorene map needs P. Never reuse a material's map for another class.
+
+Converge cutoffs and k-meshes for the actual UPFs/geometries. Review:
+  - metallic occupations/smearing for refractory alloys;
+  - Fe spin ordering, starting magnetizations and any DFT+U policy for LiFePO4;
+  - out-of-plane k sampling, vacuum and boundary treatment for phosphorene;
+  - dispersion policy and very large cells for the Zn-formate MOF;
+  - consistent XC, pseudopotentials, spin and energy conventions for
+    compounds, elemental references, training labels and held-out validation.
+
+Do not silently enable D3 or Hubbard U in only one part of this comparison.
+QE audits use SCF single points with forces/stress, NOT relax or vc-relax.
+All model errors are compared at identical positions/cells/species.
+QE's printed geometry is allowed at most 1e-5 A componentwise roundoff in
+positions/cell vectors; larger differences stop the audit. Accepted labels
+retain the original SCF input geometry, not rounded printed coordinates.
+
+Accuracy gate and label budget in the supplied template:
+  - Uniform, deterministic random sample of 16 geometries per iteration.
+    No ensemble, MC-dropout or calibrated-uncertainty claim is made.
+  - At most 48 campaign SCF attempts per material, 288 across six materials.
+    Failed SCFs count toward this cap. QE timeout: 1800 seconds/job.
+  - Independent held-out data and elemental reference calculations must
+    already exist; their preparation cost is NOT included in those 288.
+  - QE audits ALWAYS cost DFT work, even if MACE passes the accuracy gate.
+    There is no reliable way for one frozen MACE model to know its actual
+    DFT error without reference evidence.
+  - For each converged audit, compute mean(abs(F_QE - F_MACE)) over all
+    atoms and Cartesian components, in eV/A.
+  - If ANY audited frame exceeds 0.2 eV/A, retain the new QE labels and
+    trigger LoRA fine-tuning on the cumulative governed training set.
+    This tolerance is an explicit starting policy, not a calibrated claim;
+    review it for the intended scientific accuracy.
+  - Otherwise retain the audit labels but do NOT train or replace MACE.
+    Passing 16 samples is not proof of global accuracy.
+  - Optimizer max_steps, timeout, force growth, cell changes or stress do
+    NOT independently activate this accuracy gate.
+
+The audit pool contains one geometry per E3 task: a saved endpoint when
+available, or the initial geometry for a timed-out task with no endpoint.
+This distinction is recorded explicitly; timeouts are not counted as minima.
+Infrastructure/geometry-task errors stop the run, rather than masquerading as
+good audit candidates. This is endpoint/initial sampling, NOT trajectory-wide
+uncertainty monitoring.
+
+Fine-tuning and promotion:
+  - Two MACE LoRA epochs per triggered iteration, starting from the incumbent.
+  - Separate independent QE-labelled held-out set, at least two usable
+    energy/force-labelled frames, with matching elemental DFT references.
+  - Candidate formation-energy MAE <=0.1 eV/atom and force MAE <=0.2 eV/A.
+    Neither may regress; at least one must improve by >5% relatively.
+  - Promotion also needs E3_QE_PROMOTION_APPROVED=true. Leave false to train
+    and compare without automatic model replacement.
+  - Review this policy BEFORE the run; it is not a request for fresh human
+    approval after each iteration. A changed policy needs a new campaign.
+  - Every geometry result records its incumbent checkpoint path and SHA256.
+    Do not pool raw endpoint energies across different promoted checkpoints.
+
+The md block in the YAML exists only to satisfy the shared AL schema.
+The E3 entry point replaces it: no MD seed generation or MD integration runs.
+
+3. Check and run
+----------------
+
+First perform a CPU-only schema/policy check (no LLM, QE or training calls):
+
+  .venv/bin/python -m benchmarks.e3.qe_active_learning check \
+    --material nb_ta_o \
+    --config examples/active_learning/e3_qe_mace.yaml
+
+This validates the configuration/checkpoint identity and prints the resolved
+policy. It does NOT certify physical convergence, inspect all held-out labels
+or prove pw.x/UPFs/GPU memory are usable. The normal AL preflight additionally
+checks reference/validation compatibility before scientific execution.
+
+For each material, obtain an explicitly approved Perlmutter allocation of
+16 four-GPU nodes and launch the MACE-capable driver on the first allocated
+node, outside an exclusive srun step that would occupy the whole allocation:
+
+  .venv-mace/bin/python -m benchmarks.e3.qe_active_learning run \
+    --material nb_ta_o \
+    --config examples/active_learning/e3_qe_mace.yaml \
+    --approve-compute
+
+Do NOT use the frozen-E3 sbatch helper for this variant. The run command never
+submits an allocation itself. Use the reviewed allocation's account/QoS and
+walltime. Premium access must actually be authorized for that account.
+
+Geometry uses 64 workers. The template places up to 16 concurrent QE SCFs
+on one whole four-GPU node per SCF; training and driver inference use one
+first-node GPU, sequentially with those steps. No fixed DFT throughput or MOF
+memory feasibility is guaranteed.
+
+Worst-case geometry alone can consume 90 minutes across three rounds.
+QE adds up to another 90 minutes if all 16 SCFs in each round take 30 minutes
+in parallel, plus initialization, reference evaluation and training time.
+A two-hour frozen-E3 allocation therefore is NOT a completion guarantee.
+5000 structures may already be infeasible within each 30-minute geometry
+window. Review feasibility, budget and walltime before authorizing compute;
+do not silently extend the frozen benchmark or reset its ledger.
+
+Run all six by repeating the check/run commands with each material name
+and its own reviewed inputs and output directory. Do not run six drivers
+on the same allocation simultaneously. No simulations are launched merely
+by reading this guide.
+
+4. Read the results
+-------------------
+
+Within E3_QE_RUN_DIR:
+  e3-qe-policy.json
+    Immutable resolved campaign/scientific/resource policy.
+  e3/<material>/llm_guided_adaptation/seed-20261113/round-*/
+    Original E3 generated structures, allocations, prompt/raw response,
+    task attempts, geometry logs, active model and action-level summaries.
+  iteration_0000/, iteration_0001/, iteration_0002/
+    Zero-based AL iteration directories corresponding to E3 rounds 1, 2, 3.
+  iteration_*/e3-audit-pool.json
+    Candidate-to-action mapping and endpoint versus initial-after-timeout.
+  iteration_*/dft/<candidate_id>/
+    QE inputs, output and exact-geometry labels.
+  iteration_*/state.json
+    Selected IDs, DFT success/failure, measured per-candidate force MAEs,
+    accuracy_triggered, training status, comparison and promotion decision.
+    Random acquisition scores are random rankings, not force uncertainties.
+  dataset.extxyz and its manifest
+    Cumulative accepted QE training labels with method/provenance checks.
+  iteration_*/model/
+    Candidate MACE training artifacts when the force-error gate triggers.
+  iteration_*/generation-stop.json
+    Scientific generation exhaustion; not completion of all three rounds.
+
+The next LLM proposal sees the original action-level geometry feedback PLUS
+the preceding round's action-grouped QE force-error audits and promotion
+outcome. It can revisit which actions to explore, but it does not receive
+fabricated uncertainty for unaudited structures. Inspect the persisted prompt
+to see exactly which evidence informed the allocation. There is still no
+formal hypothesis ledger or single scalar scientific score.
+
+Nonconverged endpoint energies are not minima, and raw total energies of
+different compositions are not formation energies.
+
+5. Resume
+---------
+
+Re-run the same run command, same material, environment, paths and policy,
+inside a new approved allocation. Completed iteration boundaries are reused;
+the last independently validated promoted MACE checkpoint becomes incumbent.
+
+Automatic replay of a failed/partial iteration is intentionally BLOCKED to
+preserve QE outputs and prevent unaccounted duplicate SCFs or dataset changes.
+Do not delete that directory or edit state.json to claim completion.
+Reconcile attempted calculations, dataset membership, remaining budgets and
+the one-LLM-call rule before preparing an explicitly reviewed recovery.
+Changing UPFs, tolerances, material, resource policy or initial checkpoint
+requires a separate output directory, not mutation of an existing campaign.

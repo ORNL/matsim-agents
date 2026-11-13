@@ -16,6 +16,14 @@ MLIP_BACKEND=uma matsim-agents al run examples/active_learning/al_config.example
 
 ## Methodology
 
+For the separate six-material, 5,000-structure-per-round **E3-QE/MACE**
+geometry-search variant, use the
+[three-iteration instructions](e3-qe-mace-three-iteration-reproduction.txt)
+and [configuration](e3_qe_mace.yaml). Its dedicated E3 entry point replaces
+MD, measures QE force errors on periodic random audits, and triggers training
+only above an explicit tolerance. It requires separately reviewed DFT inputs,
+held-out data and compute approval; it does not alter frozen E3 results.
+
 Each iteration of the loop performs four steps:
 
 1. **Cheap MD with the surrogate.** Short molecular-dynamics trajectories are

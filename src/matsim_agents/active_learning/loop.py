@@ -31,7 +31,7 @@ import json
 import logging
 import shutil
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -39,7 +39,7 @@ from typing import Any
 
 import numpy as np
 
-from matsim_agents.active_learning.candidates import sample_md_candidates
+from matsim_agents.active_learning.candidates import Candidate, sample_md_candidates
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dft_protocol import (
     dft_method_signature,
@@ -85,6 +85,8 @@ from matsim_agents.execution.placement import Placement
 
 log = logging.getLogger(__name__)
 
+CandidateSampler = Callable[[ALConfig, int, Path], list[Candidate]]
+
 
 def _scientific_dft_payload(cfg: ALConfig, elements: set[str]) -> dict[str, Any]:
     return scientific_dft_payload(cfg.dft, elements)
@@ -113,6 +115,8 @@ class IterationState:
     score_mean: float | None = None
     selected_candidate_ids: list[str] = field(default_factory=list)
     candidate_uncertainty: dict[str, float] = field(default_factory=dict)
+    dft_force_errors_eV_per_A: dict[str, float] = field(default_factory=dict)
+    accuracy_triggered: bool | None = None
     dataset_path: str | None = None
     validation_dataset_path: str | None = None
     n_training_frames: int = 0
@@ -372,11 +376,25 @@ def _record_provenance(cfg: ALConfig, frames: list, selected: list, i: int) -> N
     for frame in frames:
         candidate = candidates.get(Path(frame.source_work_dir).name)
         info = frame.atoms.info
-        info["temperature_K"] = float(cfg.md.temperature_K)
+        if candidate is not None:
+            for key in (
+                "sampling_method",
+                "e3_action_id",
+                "e3_geometry_stage",
+                "incumbent_checkpoint_sha256",
+            ):
+                if key in candidate.atoms.info:
+                    info[key] = candidate.atoms.info[key]
+        if info.get("sampling_method", "md") == "md":
+            info["temperature_K"] = float(cfg.md.temperature_K)
         info["source_campaign"] = str(cfg.loop.out_dir)
         if candidate is None:
             continue
-        seed = Path(candidate.seed_path).stem
+        seed = (
+            candidate.candidate_id
+            if info.get("sampling_method") == "e3_geometry_optimization"
+            else Path(candidate.seed_path).stem
+        )
         info["config_id"] = f"iteration-{i:04d}/{candidate.candidate_id}"
         info["candidate_id"] = candidate.candidate_id
         info["trajectory_id"] = f"iteration-{i:04d}/{seed}"
@@ -762,8 +780,14 @@ class _SurrogateModels:
             self._pool = None
 
 
-def run_active_learning(cfg: ALConfig) -> None:
-    """Run the full AL loop. Idempotent: safe to re-invoke after a job restart."""
+def run_active_learning(
+    cfg: ALConfig, *, candidate_sampler: CandidateSampler | None = None
+) -> None:
+    """Run AL; an optional sampler replaces MD, including MD seed resolution.
+
+    The sampler receives the current (possibly promoted) config, zero-based
+    iteration and iteration directory, and returns exact geometries to label.
+    """
     if (
         cfg.trainer.enabled
         and cfg.trainer.training_references is None
@@ -792,7 +816,11 @@ def run_active_learning(cfg: ALConfig) -> None:
         # invokes the LLM exactly once and caches the resulting JSON under
         # ``out_dir/seeds/llm_proposed_compositions.json`` for reproducibility.
         seeds_dir = root / "seeds"
-        seed_paths = resolve_seed_structures(cfg.md.seed_source, seeds_dir)
+        seed_paths = (
+            resolve_seed_structures(cfg.md.seed_source, seeds_dir)
+            if candidate_sampler is None
+            else []
+        )
         log.info("Resolved %d seed structure(s) under %s", len(seed_paths), seeds_dir)
 
         # The configured model, before a resume points cfg.mlip at the last promoted one.
@@ -826,6 +854,7 @@ def run_active_learning(cfg: ALConfig) -> None:
                 validation_dataset_path=validation_dataset_path,
                 comparison_enabled=comparison_enabled,
                 foundation_mlip=foundation_mlip,
+                candidate_sampler=candidate_sampler,
             )
         finally:
             models.close()
@@ -902,6 +931,7 @@ def _run_iterations(
     validation_dataset_path: Path,
     comparison_enabled: bool,
     foundation_mlip: MLIPConfig,
+    candidate_sampler: CandidateSampler | None = None,
 ) -> None:
     """Iterations ``start_iter`` .. ``cfg.loop.n_iterations - 1`` of the AL loop."""
     for i in range(start_iter, cfg.loop.n_iterations):
@@ -927,19 +957,22 @@ def _run_iterations(
             t0 = time.time()
             md_dir = it_dir / "md"
             # Seeds run concurrently on the mlip pool, one per device.
-            with models.md_pool() as md_pool:
-                candidates = sample_md_candidates(
-                    cfg.md,
-                    primary_calc,
-                    md_dir,
-                    seed_paths=seed_paths,
-                    mlip_pool=md_pool,
-                    mlip_cfg=cfg.mlip,
-                    enable_mc_dropout=enable_drop,
-                )
+            if candidate_sampler is not None:
+                candidates = candidate_sampler(cfg, i, it_dir)
+            else:
+                with models.md_pool() as md_pool:
+                    candidates = sample_md_candidates(
+                        cfg.md,
+                        primary_calc,
+                        md_dir,
+                        seed_paths=seed_paths,
+                        mlip_pool=md_pool,
+                        mlip_cfg=cfg.mlip,
+                        enable_mc_dropout=enable_drop,
+                    )
             state.n_candidates = len(candidates)
             state.timings_sec["md_sampling"] = time.time() - t0
-            log.info("Iter %d: produced %d MD candidates", i, len(candidates))
+            log.info("Iter %d: produced %d candidates", i, len(candidates))
 
             if not candidates:
                 state.notes = "No candidates produced; ending loop."
@@ -951,6 +984,15 @@ def _run_iterations(
             selected = _select_for_labelling(
                 cfg, candidates, primary_calc, ensemble_calcs, i, completed_dft, state
             )
+            predicted_forces = {}
+            if cfg.trainer.force_error_trigger_eV_per_A is not None:
+                for candidate in selected:
+                    atoms = candidate.atoms.copy()
+                    atoms.calc = primary_calc
+                    forces = np.asarray(atoms.get_forces(), dtype=float)
+                    if forces.shape != (len(atoms), 3) or not np.isfinite(forces).all():
+                        raise ValueError(f"Invalid incumbent forces for {candidate.candidate_id}")
+                    predicted_forces[candidate.candidate_id] = forces.copy()
             # The surrogate is not needed again this iteration; free its device
             # memory before DFT and training, unless they use other devices.
             del primary_calc, ensemble_calcs
@@ -959,6 +1001,14 @@ def _run_iterations(
             # --- 4. DFT labelling (VASP or QE) --------------------------------
             results, backend = _label_with_dft(cfg, selected, it_dir, i, state, placement)
             completed_dft += len(results)
+            if cfg.trainer.force_error_trigger_eV_per_A is not None:
+                state.dft_force_errors_eV_per_A = _audit_force_errors(
+                    selected, results, predicted_forces
+                )
+                state.accuracy_triggered = any(
+                    error > cfg.trainer.force_error_trigger_eV_per_A
+                    for error in state.dft_force_errors_eV_per_A.values()
+                )
 
             # --- 5. Append to dataset -----------------------------------------
             labelled_elements, method_signature, n_appended = _append_labelled_frames(
@@ -976,6 +1026,17 @@ def _run_iterations(
             if comparison_enabled:
                 _check_reference_method(cfg, labelled_elements, backend, method_signature)
             t0 = time.time()
+            if cfg.trainer.enabled and state.accuracy_triggered is False:
+                state.training_status = "not_triggered"
+                state.notes = (
+                    "No converged QE/DFT audit exceeded the force-error tolerance."
+                    if state.dft_force_errors_eV_per_A
+                    else "No usable DFT force audits; accuracy is unknown, not validated."
+                )
+                log.warning("Iteration %d: %s", i, state.notes)
+                _score_benchmarks(cfg, state, models, dataset_path, validation_dataset_path)
+                state.status = "complete"
+                continue
             if cfg.trainer.enabled:
                 _collect_training_deferrals(cfg, state, validation_dataset_path, comparison_enabled)
                 if state.training_deferred_reasons:
@@ -1024,3 +1085,36 @@ def _run_iterations(
 
 def _write_state(it_dir: Path, state: IterationState) -> None:
     (it_dir / "state.json").write_text(json.dumps(state.to_dict(), indent=2))
+
+
+def _audit_force_errors(
+    selected: list[Candidate], results: list, predictions: dict[str, np.ndarray]
+) -> dict[str, float]:
+    """Compare force components only at the identical labelled geometry."""
+    candidates = {candidate.candidate_id: candidate for candidate in selected}
+    errors = {}
+    for result in results:
+        if not result.converged:
+            continue
+        key = Path(result.work_dir).name
+        if key not in candidates:
+            raise ValueError(f"DFT audit result has unknown candidate ID: {key}")
+        source = candidates[key].atoms
+        labelled = result.final_atoms
+        # QE's SCF output rounds cell vectors and positions more than its input.
+        tolerance = 1e-5 if result.backend == "qe" else 1e-8
+        if (
+            labelled is None
+            or not np.array_equal(source.numbers, labelled.numbers)
+            or not np.allclose(source.cell, labelled.cell, rtol=0, atol=tolerance)
+            or not np.allclose(source.positions, labelled.positions, rtol=0, atol=tolerance)
+        ):
+            raise ValueError(f"DFT audit changed the geometry of {key}")
+        forces = np.asarray(result.forces_eV_per_A, dtype=float)
+        if forces.shape != (len(source), 3) or not np.isfinite(forces).all():
+            raise ValueError(f"Missing or non-finite DFT audit forces for {key}")
+        errors[key] = float(np.mean(np.abs(forces - predictions[key])))
+        if result.backend == "qe":
+            result.final_atoms = source.copy()
+            result.final_atoms.info["qe_output_geometry_tolerance_A"] = tolerance
+    return errors
