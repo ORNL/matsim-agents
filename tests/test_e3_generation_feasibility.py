@@ -610,3 +610,53 @@ def test_uncached_niggli_matching_preserves_frozen_equivalence(variant, monkeypa
 
     monkeypatch.setattr(matcher, "_get_reduced_structure", reject_cached_preprocessing)
     assert structure_generation.structures_symmetry_equivalent(parent, other, matcher) == expected
+
+
+def test_source_revalidation_refuses_future_adaptive_rounds(tmp_path):
+    with pytest.raises(ValueError, match="failed first rounds"):
+        production.revalidate_preflight(
+            tmp_path / "manifest.json",
+            tmp_path,
+            "lifepo4",
+            2,
+        )
+
+
+@pytest.mark.parametrize("changed", ["manifest", "tasks", "structure"])
+def test_source_revalidation_rejects_changed_original_evidence(tmp_path, changed):
+    import hashlib
+
+    manifest_path = tmp_path / "manifest.json"
+    production._atomic_json(manifest_path, production.build_campaign_manifest())
+    round_dir = tmp_path / "lifepo4/llm_guided_adaptation/seed-20261113/round-01"
+    round_dir.mkdir(parents=True)
+    structure = round_dir / "original.extxyz"
+    structure.write_text("changed original")
+    task = {
+        "candidate_id": "original",
+        "structure_file_sha256": "original-file-digest",
+        "structure_sha256": "original-geometry-digest",
+        "structure_path": str(structure),
+    }
+    production._write_jsonl(round_dir / "tasks.jsonl", [task])
+    production._atomic_json(
+        round_dir / "generation-preflight.json",
+        {
+            "manifest_sha256": (
+                "changed"
+                if changed == "manifest"
+                else hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+            ),
+            "structures": {} if changed == "tasks" else {"original": "original-file-digest"},
+        },
+    )
+    with pytest.raises(
+        ValueError,
+        match={
+            "manifest": "cannot change",
+            "tasks": "identities changed",
+            "structure": "original structure changed",
+        }[changed],
+    ):
+        production.revalidate_preflight(manifest_path, tmp_path, "lifepo4", 1)
+    assert not list(round_dir.glob("acquisition/source-revalidation-*"))

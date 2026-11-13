@@ -1932,6 +1932,88 @@ def prepare_round(
         return _preflight_receipt(round_dir, manifest_path)
 
 
+def revalidate_preflight(
+    manifest_path: Path, output_root: Path, material: str, round_index: int,
+) -> dict[str, Any]:
+    """Prove a source-only recovery reproduces the saved first-round geometries."""
+    if round_index != 1:
+        raise ValueError("source recovery revalidation is limited to the failed first rounds")
+    manifest_path, output_root = manifest_path.resolve(), output_root.resolve()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validate_campaign_manifest(manifest)
+    spec = _find_round(manifest, material, "llm_guided_adaptation", BOUNDED_SEED, 1)
+    stream_dir = output_root / material / "llm_guided_adaptation" / f"seed-{BOUNDED_SEED}"
+    with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        started = time.monotonic()
+        round_dir = stream_dir / "round-01"
+        receipt_path = round_dir / "generation-preflight.json"
+        original = json.loads(receipt_path.read_text(encoding="utf-8"))
+        if original["manifest_sha256"] != _sha256_file(manifest_path):
+            raise ValueError("source revalidation cannot change the campaign manifest")
+        fingerprints = {
+            "generator_sha256": _sha256_file(REPO / "benchmarks/e3/structure_generation.py"),
+            "catalog_sha256": _sha256_file(REPO / "benchmarks/e3/feasibility.py"),
+            "acquisition_sha256": _sha256_file(Path(__file__)),
+        }
+        if all(original.get(key) == value for key, value in fingerprints.items()):
+            return _preflight_receipt(round_dir, manifest_path)
+        tasks = _read_tasks(round_dir / "tasks.jsonl")
+        if {row["candidate_id"]: row["structure_file_sha256"] for row in tasks} != original["structures"]:
+            raise ValueError("original preflight task identities changed")
+        for task in tasks:
+            path = Path(task["structure_path"])
+            if (
+                _sha256_file(path) != task["structure_file_sha256"]
+                or _geometry_sha256(path) != task["structure_sha256"]
+            ):
+                raise ValueError(f"original structure changed: {path}")
+        source_hash = hashlib.sha256(_canonical_json(fingerprints).encode()).hexdigest()
+        replay_root = round_dir / "acquisition" / f"source-revalidation-{source_hash[:16]}"
+        replay_round = (
+            replay_root / material / "llm_guided_adaptation" /
+            f"seed-{BOUNDED_SEED}" / "round-01"
+        )
+        for name in ("proposal-001.json", "recovery-authorization.json"):
+            source = round_dir / "acquisition" / name
+            _atomic_json(replay_round / "acquisition" / name, json.loads(source.read_text()))
+        _atomic_json(replay_root / "original-preflight.json", original)
+        outcomes = {
+            str(path): _sha256_file(path) for path in round_dir.glob("tasks/**/result.json")
+        }
+        # A plain sentinel has no invoke method: this replay cannot make an LLM call.
+        _, replay_tasks_path, _ = _materialize_round(
+            manifest, spec, replay_root, [], object(),
+        )
+        replay = _read_tasks(replay_tasks_path)
+        old_geometries = {task["structure_sha256"] for task in tasks}
+        new_geometries = {task["structure_sha256"] for task in replay}
+        if len(replay) != 64 or len(new_geometries) != 64 or old_geometries != new_geometries:
+            raise ScientificCapacityError(
+                "source revalidation did not reproduce the original 64 distinct geometries"
+            )
+        if any(_sha256_file(Path(path)) != digest for path, digest in outcomes.items()):
+            raise ValueError("source revalidation modified optimization outcome evidence")
+        elapsed = time.monotonic() - started
+        generation_seconds = original["generation_seconds"] + elapsed
+        if generation_seconds >= ROUND_SECONDS:
+            raise TimeoutError("original generation plus source revalidation exhausted round budget")
+        proof = {
+            "actual_seeded_generation": True, "geometry_sets_identical": True,
+            "task_count": len(replay), "llm_calls": 0,
+            "retained_optimization_results": outcomes,
+            "original_preflight": str(replay_root / "original-preflight.json"),
+            "replayed_tasks": str(replay_tasks_path), "elapsed_seconds": elapsed,
+        }
+        _atomic_json(replay_root / "revalidation.json", proof)
+        _atomic_json(receipt_path, {
+            **original,
+            **fingerprints,
+            "generation_seconds": generation_seconds,
+            "source_revalidation": str(replay_root / "revalidation.json"),
+        })
+        return _preflight_receipt(round_dir, manifest_path)
+
+
 def _round_action_outcomes(tasks: list[dict[str, Any]], task_root: Path) -> list[dict[str, Any]]:
     aggregates: dict[str, dict[str, Any]] = {}
     for task in tasks:
@@ -2639,7 +2721,9 @@ def main(argv: list[str] | None = None) -> int:
     recovery.add_argument("--output-root", type=Path, required=True)
     recovery.add_argument("--material", choices=sorted(MATERIALS), required=True)
     recovery.add_argument("--authorization", required=True)
-    for name in ("prepare", "prepare-round", "verify-preflight"):
+    for name in (
+        "prepare", "prepare-round", "verify-preflight", "revalidate-preflight", "revalidate-round",
+    ):
         preflight = commands.add_parser(name, help="CPU-only production generation gate")
         preflight.add_argument("--manifest", type=Path, required=True)
         preflight.add_argument("--output-root", type=Path, required=True)
@@ -2696,19 +2780,30 @@ def main(argv: list[str] | None = None) -> int:
             args.manifest, args.output_root, args.material, args.authorization,
         ), sort_keys=True))
         return 0
-    if args.command in {"prepare", "prepare-round", "verify-preflight"}:
+    if args.command in {
+        "prepare", "prepare-round", "verify-preflight", "revalidate-preflight", "revalidate-round",
+    }:
         round_dir = (
             args.output_root / args.material / "llm_guided_adaptation" /
             f"seed-{BOUNDED_SEED}" / f"round-{args.round_index:02d}"
         )
-        if args.command == "prepare":
+        if args.command in {"prepare", "revalidate-preflight"}:
+            internal_command = "prepare-round" if args.command == "prepare" else "revalidate-round"
             command = [
-                sys.executable, "-m", "benchmarks.e3.production", "prepare-round",
+                sys.executable, "-m", "benchmarks.e3.production", internal_command,
                 "--manifest", str(args.manifest), "--output-root", str(args.output_root),
                 "--material", args.material, "--round-index", str(args.round_index),
             ]
-            _run_supervised_round(command)
+            seconds = ROUND_SECONDS
+            if args.command == "revalidate-preflight":
+                previous = json.loads((round_dir / "generation-preflight.json").read_text())
+                seconds -= previous["generation_seconds"]
+            _run_supervised_round(command, seconds=seconds)
             result = _preflight_receipt(round_dir, args.manifest)
+        elif args.command == "revalidate-round":
+            result = revalidate_preflight(
+                args.manifest, args.output_root, args.material, args.round_index,
+            )
         elif args.command == "verify-preflight":
             result = _preflight_receipt(round_dir, args.manifest)
         else:

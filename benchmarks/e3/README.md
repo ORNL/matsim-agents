@@ -57,6 +57,14 @@ avoiding the matcher's composition-keyed cache equality bottleneck for large
 frameworks. Matching tolerances, primitive-cell handling, and equivalence
 decisions are unchanged.
 
+After an infrastructure-only source correction invalidates a prepared first-round
+receipt, use `revalidate-preflight` with the same arguments as `verify-preflight`.
+It executes the saved allocation and production seeds again without inference,
+requires exactly the same 64 geometry identities, and verifies that existing
+optimization results remain unchanged. The original receipt and replay evidence
+are retained under `acquisition/source-revalidation-*`; replay time is added to
+the original generation time within the unchanged round budget.
+
 The discovery API now accepts a `SeedGenerationAction` for explicit
 formula-unit tiers, AFLOW candidate caps, PyXtal counts, space-group/prototype
 filters, and reproducible seeds. Pass it to `explore_composition` to relax the
