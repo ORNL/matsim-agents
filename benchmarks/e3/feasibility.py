@@ -8,6 +8,7 @@ from functools import cache
 from typing import Any
 
 from benchmarks.e3 import structure_generation as generation
+from benchmarks.e3.profiles import structures_per_round
 
 CATALOG_VERSION = "executable-capacities-2"
 
@@ -212,7 +213,7 @@ def action_constraints(action: dict[str, Any]) -> dict[str, Any]:
                 raise InvalidActionError("PyXtal does not accept AFLOW prototype ID filters")
             source = "installed PyXtal; seeded generation must pass the CPU preflight"
     singleton = capacity_group(action) is not None
-    maximum = 1 if singleton else 192
+    maximum = 1 if singleton else max(192, 3 * structures_per_round())
     if method == "aflow_prototype" and action.get("strain") is None:
         maximum = len(prototypes)
     if material == "lifepo4" and action["family"] == "antisite_pair":

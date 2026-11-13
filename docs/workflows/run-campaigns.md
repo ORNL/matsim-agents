@@ -61,6 +61,13 @@ The benchmark runs one LLM-guided stream per class: three adaptive rounds,
 seed `20261113`, and at most 64 candidate relaxations per round. It does not
 include a rule-based arm or multiple seeds, so report descriptive results only.
 
+For a separate 5,000-candidate ceiling per material per round, use the
+[collaborator reproduction instructions](../../examples/workflows/e3-mlip-5000-three-iteration-reproduction.txt).
+That opt-in profile preserves the scientific settings, 64 GPU workers and
+existing time/resource limits. It uses its own manifest and outputs; reaching
+5,000 completed relaxations within those limits is not guaranteed. The default
+64-candidate benchmark is unchanged.
+
 - Materials: `bcc_refractory`, `fcc_cantor`, `lifepo4`, `phosphorene`,
   `nb_ta_o`, `zn_formate_mof`.
 - Strategy: `llm_guided_adaptation`.

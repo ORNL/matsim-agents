@@ -124,7 +124,11 @@ export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 {
-  echo "campaign=e3-mlip-production"
+  if [[ "${MATSIM_E3_MLIP_STRUCTURES_PER_ROUND:-64}" == "5000" ]]; then
+    echo "campaign=e3-mlip-collaborator-5000"
+  else
+    echo "campaign=e3-mlip-production"
+  fi
   echo "job_id=${SLURM_JOB_ID}"
   echo "array_job_id=${SLURM_ARRAY_JOB_ID:-}"
   echo "array_task_id=${TASK_ID}"
@@ -140,6 +144,7 @@ export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
   echo "hard_optimization_seconds=300"
   echo "strategy=llm_guided_adaptation"
   echo "seed=20261113"
+  echo "structures_per_round=${MATSIM_E3_MLIP_STRUCTURES_PER_ROUND:-64}"
   echo "dft_outputs_used=false"
   echo "dft_labels_used=false"
 } | tee "${OUTPUT_ROOT}/slurm-${SLURM_JOB_ID}-${TASK_ID}.txt"
