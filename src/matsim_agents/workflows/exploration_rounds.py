@@ -229,10 +229,12 @@ def summarize_rounds(run: ScientificRunDirectory) -> ExplorationSummary:
     )
 
 
-def _verify_artifacts(state: RoundState) -> None:
+def _verify_artifacts(run: ScientificRunDirectory, state: RoundState) -> None:
     required = {
         candidate.structure_path for round_ in state.rounds for candidate in round_.candidates
     }
+    if state.complete:
+        required.add(str(run.path / "cumulative-ranking.json"))
     for round_ in state.rounds:
         for attempt in round_.attempts:
             if attempt.result is not None:
@@ -340,7 +342,7 @@ def run_rounds(
             raise ValueError(
                 "Resume refused: workflow code or scientific dependency versions changed"
             )
-        _verify_artifacts(state)
+        _verify_artifacts(run, state)
         if state.complete:
             return summarize_rounds(run)
         state.error = None
@@ -439,8 +441,12 @@ def run_rounds(
                 run.append_event("round_finished", {"round": index + 1})
                 _write_ranking(run, state)
             _write_ranking(run, state)
+            _remember(state, [str(run.path / "cumulative-ranking.json")])
             state.complete = True
         except BaseException as exc:
+            # Only publish the last atomically committed work, not partial
+            # hashes/results left in memory by an interrupted checkpoint.
+            state = _state(run)
             state.error = f"{type(exc).__name__}: {exc}"
             raise
         finally:
@@ -469,4 +475,25 @@ def _write_ranking(run: ScientificRunDirectory, state: RoundState) -> None:
         if results
         else None
     )
-    run.write_json("cumulative-ranking.json", report)
+    if report is None:
+        run.write_json("cumulative-ranking.json", None)
+        return
+    payload = report.model_dump(
+        mode="json",
+        include={
+            "formula",
+            "ground_state",
+            "ranking",
+            "evidence_level",
+            "ranking_mode",
+            "limitations",
+        },
+    )
+    payload["summary"] = (
+        f"Relative energy ranking of {len(report.ranking)} eligible relaxation attempt(s). "
+        "The ground_state entry is the lowest-energy observed candidate, "
+        "not a proven ground state. "
+        "Equivalent relaxed structures may appear more than once; no polymorph-degeneracy "
+        "or chemical-stability proxy is assessed."
+    )
+    run.write_json("cumulative-ranking.json", payload)

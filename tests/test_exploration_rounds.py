@@ -473,3 +473,133 @@ def test_invalid_candidate_selection_records_incomplete_error(setup, monkeypatch
     assert summary.outcome == "incomplete"
     assert summary.counts["attempted"] == 0
     assert any("composition" in error for error in summary.errors)
+
+
+@pytest.mark.parametrize("change", ["delete", "modify", "missing-hash"])
+def test_completed_resume_requires_final_ranking_integrity(setup, change):
+    cfg, calls, _ = setup
+    result = run_exploration(cfg)
+    directory = Path(result.run_directory)
+    ranking = directory / "cumulative-ranking.json"
+    journal = directory / "rounds-state.json"
+    state = json.loads(journal.read_text())
+    assert str(ranking) in state["artifacts"]
+    if change == "delete":
+        ranking.unlink()
+    elif change == "modify":
+        ranking.write_text("{}")
+    else:
+        del state["artifacts"][str(ranking)]
+        journal.write_text(json.dumps(state))
+    with pytest.raises(ValueError, match="Resume refused"):
+        resume_exploration(directory)
+    assert len(calls["relax"]) == 6
+
+
+def test_intermediate_ranking_is_untracked_and_rebuilt(setup, monkeypatch):
+    cfg, calls, workflow = setup
+    original = workflow._write_ranking
+
+    def interrupt(run, state):
+        original(run, state)
+        raise KeyboardInterrupt("after intermediate ranking")
+
+    monkeypatch.setattr(workflow, "_write_ranking", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        run_exploration(cfg)
+    directory = next(cfg.output_dir.iterdir())
+    ranking = directory / "cumulative-ranking.json"
+    state = json.loads((directory / "rounds-state.json").read_text())
+    assert not state["complete"]
+    assert str(ranking) not in state["artifacts"]
+    ranking.write_text("invalid intermediate ranking")
+    monkeypatch.setattr(workflow, "_write_ranking", original)
+    result = resume_exploration(directory)
+    assert result.status == "completed"
+    assert len(calls["relax"]) == 6
+    assert len(json.loads(ranking.read_text())["ranking"]) == 6
+
+
+def test_repeated_minima_do_not_produce_polymorph_or_stability_claims(setup):
+    cfg, _, _ = setup
+    result = run_exploration(cfg)
+    ranking = json.loads((Path(result.run_directory) / "cumulative-ranking.json").read_text())
+    assert len(ranking["ranking"]) == result.counts["converged"] == 6
+    assert "chemically_stable_proxy" not in ranking
+    assert "near_degenerate_structure_paths" not in ranking
+    assert "degeneracy_tolerance_eV_per_atom" not in ranking
+    assert "degeneracy_reference_structure_path" not in ranking
+    assert "Ground-state assignment is uncertain" not in ranking["summary"]
+    assert "Chemical-stability proxy:" not in ranking["summary"]
+    assert "Equivalent relaxed structures may appear more than once" in ranking["summary"]
+    assert ranking["ground_state"]["energy_per_atom_eV"] == min(
+        phase["energy_per_atom_eV"] for phase in ranking["ranking"]
+    )
+
+
+@pytest.mark.parametrize("stage", ["generation", "attempt", "final-ranking"])
+def test_interrupted_hashing_only_publishes_last_committed_checkpoint(setup, monkeypatch, stage):
+    cfg, calls, workflow = setup
+    original = workflow._remember
+    partial_paths = []
+
+    def interrupt(state, filenames):
+        is_target = (
+            (stage == "generation" and "/seeds/" in filenames[0])
+            or (stage == "attempt" and "/attempt-" in filenames[0])
+            or (stage == "final-ranking" and filenames[0].endswith("cumulative-ranking.json"))
+        )
+        if is_target and not partial_paths:
+            original(state, filenames[:1])
+            partial_paths.append(str(Path(filenames[0]).resolve()))
+            raise KeyboardInterrupt("interrupted during output hashing")
+        original(state, filenames)
+
+    monkeypatch.setattr(workflow, "_remember", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        run_exploration(cfg)
+    directory = next(cfg.output_dir.iterdir())
+    state = json.loads((directory / "rounds-state.json").read_text())
+    assert partial_paths[0] not in state["artifacts"]
+    assert "KeyboardInterrupt" in state["error"]
+    assert not state["complete"]
+    if stage == "generation":
+        assert state["rounds"] == []
+    elif stage == "attempt":
+        assert state["rounds"][0]["attempts"] == []
+    else:
+        assert all(round_["complete"] for round_ in state["rounds"])
+    Path(partial_paths[0]).write_text("uncommitted output may be replaced")
+    result = resume_exploration(directory)
+    assert result.status == "completed"
+    assert result.counts["attempted"] == 6
+    assert len(calls["relax"]) == (7 if stage == "attempt" else 6)
+    assert resume_exploration(directory) == result
+
+
+def test_interrupted_journal_write_does_not_publish_uncommitted_attempt(setup, monkeypatch):
+    cfg, _, workflow = setup
+    original = workflow.ScientificRunDirectory.write_json
+    interrupted = False
+
+    def write_json(run, name, payload):
+        nonlocal interrupted
+        if (
+            name == "rounds-state.json"
+            and isinstance(payload, workflow.RoundState)
+            and payload.rounds
+            and payload.rounds[0].attempts
+            and not interrupted
+        ):
+            interrupted = True
+            raise KeyboardInterrupt("before atomic journal commit")
+        return original(run, name, payload)
+
+    monkeypatch.setattr(workflow.ScientificRunDirectory, "write_json", write_json)
+    with pytest.raises(KeyboardInterrupt):
+        run_exploration(cfg)
+    directory = next(cfg.output_dir.iterdir())
+    state = json.loads((directory / "rounds-state.json").read_text())
+    assert state["rounds"][0]["attempts"] == []
+    assert all("/attempt-" not in path for path in state["artifacts"])
+    assert resume_exploration(directory).counts["attempted"] == 6

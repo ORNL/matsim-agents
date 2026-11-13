@@ -159,6 +159,9 @@ round. This contains the complete configuration, incremented-seed round
 candidates, results/errors, checkpoint identity, and artifact hashes.
 `cumulative-ranking.json` ranks converged results across completed work; a JSON
 `null` means no eligible result. No LLM, DFT, or active learning is introduced.
+The cumulative report preserves all eligible attempts, including equivalent
+minima, but omits polymorph-degeneracy and chemical-stability proxy claims.
+Its `ground_state` entry means only the lowest-energy observed candidate.
 
 The summary reports round completion, cumulative candidate counts, stop reasons,
 and errors even for an interrupted run. Execution that has not finished is
@@ -179,6 +182,9 @@ successful calculations.
   workflow/optimizer/generator source, or changed scientific dependency versions
   block resume. Do not edit the journal to bypass checks. Start a fresh run for
   changed scientific settings; the stored configuration is authoritative.
+- The final cumulative ranking is hashed in the same journal update that marks
+  the run complete. A missing or changed final ranking blocks completed-run
+  resume. Intermediate rankings are untracked and rebuilt after interruption.
 - An interruption **before** an attempt's checkpoint commits can repeat that
   attempt from its original candidate, not its last optimizer step. Outputs for
   that uncommitted attempt may be replaced. The guarantee is checkpoint-level,
@@ -186,6 +192,8 @@ successful calculations.
 - Generation interrupted before its checkpoint commits can run again; random
   generation is not guaranteed bit-for-bit reproducible. Once candidates are
   checkpointed, they are reused without regeneration.
+- Interrupted checkpoint preparation discards in-memory partial hashes and
+  results before recording the error; only the last committed work is retained.
 - Ranking is rebuilt when resuming interrupted work from stored eligible results.
   These are relative phase energies, not thermodynamic stability or evidence of
   dynamic stability.
