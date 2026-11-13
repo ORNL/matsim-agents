@@ -186,20 +186,30 @@ worker. The frozen common protocol for both strategies is:
 
 - Initial energy and forces recorded before optimization.
 - ASE FIRE optimizer; maximum 500 optimization steps; maximum atomic step
-  0.05 A; convergence at maximum atomic force below 0.02 eV/A. The larger
+  0.05 A; convergence requires maximum atomic force and filter force below
+  0.02 eV/A and every active native stress component at or below 0.01 eV/A^3.
+  The stress threshold is an exploratory screening choice, not a validated
+  zero-pressure accuracy guarantee. The larger
   displacement cap avoids artificially slow movement from strongly distorted
   starts, while remaining conservative for local MLIP relaxation; the larger
   step cap prevents early termination from being mistaken for convergence.
 - Store initial structure, every available trajectory frame, per-step energy
   and maximum force, final structure, final energy/forces, and termination
   outcome. A single-point evaluation is never marked as an optimized result.
-- Fixed-cell atomic relaxation is the default. Enable variable-cell relaxation
-  only for a class/tier after native MLIP stress has passed a finite, symmetric
-  strain check. Do not use finite-difference stress as a substitute for an
-  unverified stress model. Phosphorene keeps vacuum and out-of-plane cell
-  fixed; selective in-plane cell optimization requires a validated 2D filter.
-  MOF cell relaxation also remains off until framework stress and connectivity
-  are demonstrated to be stable.
+- Relax atomic positions and the cell for all classes using native MACE stress;
+  numerical stress fallback is forbidden. Phosphorene uses only xx, yy and xy
+  strain, preserving its out-of-plane cell and vacuum. The filter requires the
+  vacuum vector aligned with z. Stop and roll back any step exceeding 5%
+  principal strain in one step or 25% cumulative principal strain, or changing
+  the MOF Zn-O/formate connectivity signature; these limits are screening
+  safeguards, not proof of physical stability. Record active stress, atomic
+  force and volume at each accepted step.
+- Preliminary energy finite-difference checks covered xx and xy at two strain
+  magnitudes for one representative per family; they do not qualify every
+  stress component, structure, cell filter, or GPU backend. The exploratory
+  relaxation checks did not converge for most families, and the oxide hit its
+  cumulative-strain limit. Validate remaining cases and measure throughput
+  before a new production submission; do not reuse fixed-cell campaign results.
 - Same criteria and optimizer for both strategies within each class. Any
   class-specific change is frozen before either strategy starts.
 

@@ -7,11 +7,14 @@ from pathlib import Path
 import pytest
 
 from benchmarks.e3.production import (
+    E3_MLIP_CHECKPOINT_SHA256,
     E3_STRATEGIES,
     MATERIALS,
+    OPTIMIZER_SETTINGS,
     REPLICATE_SEEDS,
     _action_space,
     _execute_round_tasks,
+    _execute_task,
     _finite_capacity_group,
     _llm_allocation,
     _materialize_round,
@@ -20,6 +23,7 @@ from benchmarks.e3.production import (
     build_campaign_manifest,
     release_gpu_hours,
     reserve_gpu_hours,
+    run_replicate,
     validate_campaign_manifest,
 )
 
@@ -28,6 +32,9 @@ def test_campaign_manifest_has_all_matched_rounds_and_budgets():
     manifest = build_campaign_manifest()
 
     validate_campaign_manifest(manifest)
+    assert manifest["optimizer"] == OPTIMIZER_SETTINGS
+    assert manifest["optimizer"]["relax_cell"] is True
+    assert manifest["optimizer"]["phosphorene_cell_mask"] == [True, True, False, False, False, True]
     assert len(manifest["rounds"]) == 6 * 2 * 3 * 10
     assert manifest["total_logical_optimizations"] == 61120
     assert manifest["resource_request"]["account"] == "m5216"
@@ -450,7 +457,117 @@ def test_task_result_only_accepts_a_terminal_result(tmp_path):
             }
         )
     )
+    assert _task_result(tmp_path / "candidate-1", task) is None
+    path.write_text(
+        json.dumps(
+            {
+                "structure_sha256": "geometry-hash",
+                "terminal": True,
+                "optimizer": OPTIMIZER_SETTINGS,
+            }
+        )
+    )
     assert _task_result(tmp_path / "candidate-1", task) == path
+
+
+def test_manifest_rejects_old_fixed_cell_protocol():
+    manifest = build_campaign_manifest()
+    manifest["optimizer"] = {**OPTIMIZER_SETTINGS, "relax_cell": False}
+    with pytest.raises(ValueError, match="optimizer"):
+        validate_campaign_manifest(manifest)
+
+
+def test_completed_fixed_cell_round_cannot_be_resumed(tmp_path):
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(build_campaign_manifest()))
+    round_dir = (
+        tmp_path
+        / "runs"
+        / "bcc_refractory"
+        / "rule_based_adaptation"
+        / "seed-20261111"
+        / "round-01"
+    )
+    round_dir.mkdir(parents=True)
+    (round_dir / "round-summary.json").write_text(json.dumps({"status": "complete"}))
+    (round_dir / "round-manifest.json").write_text(json.dumps({"optimizer": {"relax_cell": False}}))
+    with pytest.raises(ValueError, match="different optimization protocol"):
+        run_replicate(
+            manifest_path,
+            tmp_path / "runs",
+            "bcc_refractory",
+            "rule_based_adaptation",
+            20261111,
+            worker_count=1,
+        )
+
+
+@pytest.mark.parametrize("material", sorted(MATERIALS))
+def test_worker_applies_cell_policy_for_each_family(tmp_path, monkeypatch, material):
+    from ase.build import bulk
+    from ase.calculators.emt import EMT
+    from ase.io import read, write
+
+    import matsim_agents.backends.mlip.relaxation as relaxation
+    from matsim_agents.backends.mlip.results import RelaxationResult
+
+    source = tmp_path / "input.extxyz"
+    write(source, bulk("Cu", "fcc", a=3.8, cubic=True))
+    task = {
+        "candidate_id": "candidate",
+        "candidate_kind": "main",
+        "structure_sha256": "geometry",
+        "structure_path": str(source),
+        "material": material,
+    }
+
+    class Cache:
+        def __init__(self):
+            self.calculator = EMT()
+
+        def get(self, args):
+            return relaxation._RelaxCalculator(self.calculator, 0, 0, "")
+
+    def fake_relax(args, *, calculators, step_guard):
+        assert args.relax_cell
+        assert args.require_native_stress
+        assert args.stress_tolerance_eV_per_A3 == 0.01
+        assert args.max_cell_step_strain == 0.05
+        assert args.max_cell_total_strain == 0.25
+        assert args.cell_mask == (
+            (True, True, False, False, False, True) if material == "phosphorene" else None
+        )
+        assert (step_guard is not None) == (material == "zn_formate_mof")
+        if step_guard is not None:
+            atoms = read(args.structure_path)
+            assert step_guard(atoms) is None
+            atoms.positions[0, 0] += 1
+            assert step_guard(atoms) == "mof_connectivity_changed"
+        return RelaxationResult(
+            structure_path=args.structure_path,
+            optimized_structure_path=args.structure_path,
+            trajectory_path="trajectory",
+            log_csv_path="log",
+            final_energy_eV=0.0,
+            final_max_force_eV_per_A=0.0,
+            num_steps=1,
+            converged=True,
+        )
+
+    monkeypatch.setattr(relaxation, "relax_with_mlip", fake_relax)
+    if material == "zn_formate_mof":
+        monkeypatch.setattr(
+            "benchmarks.e3.structure_generation._mof_connectivity_signature",
+            lambda atoms: float(atoms.positions[0, 0]),
+        )
+    monkeypatch.setattr("benchmarks.e3.production._space_group_number", lambda atoms: None)
+    monkeypatch.setattr(
+        "benchmarks.e3.production._verified_checkpoint",
+        lambda: (source, E3_MLIP_CHECKPOINT_SHA256),
+    )
+    result = _execute_task(task, tmp_path / "tasks", Cache())
+    assert result["status"] == "converged", result
+    assert len(result["final_stress_eV_per_A3"]) == 6
 
 
 def test_resource_ledger_enforces_total_gpu_hour_cap_and_releases_unused_time(tmp_path):

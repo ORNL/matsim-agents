@@ -39,7 +39,13 @@ OPTIMIZER_SETTINGS = {
     "maxiter": 500,
     "maxstep_A": 0.05,
     "fmax_eV_A": 0.02,
-    "relax_cell": False,
+    "relax_cell": True,
+    "stress_tolerance_eV_per_A3": 0.01,
+    "max_cell_step_strain": 0.05,
+    "max_cell_total_strain": 0.25,
+    "require_native_stress": True,
+    "phosphorene_cell_mask": [True, True, False, False, False, True],
+    "mof_connectivity_guard": True,
 }
 REPLICATE_SEEDS = (20261111, 20261112, 20261113)
 MATERIALS: dict[str, dict[str, Any]] = {
@@ -513,6 +519,8 @@ def build_campaign_manifest() -> dict[str, Any]:
 
 
 def validate_campaign_manifest(manifest: dict[str, Any]) -> None:
+    if manifest.get("optimizer") != OPTIMIZER_SETTINGS:
+        raise ValueError("production manifest optimizer does not match the current protocol")
     if len(manifest["rounds"]) != 360:
         raise ValueError(f"expected 360 adaptive rounds, got {len(manifest['rounds'])}")
     if set(manifest["strategies"]) != set(E3_STRATEGIES):
@@ -971,6 +979,8 @@ def _materialize_round(
     round_manifest_path = round_dir / "round-manifest.json"
     if round_manifest_path.is_file():
         existing = json.loads(round_manifest_path.read_text(encoding="utf-8"))
+        if existing.get("optimizer") != OPTIMIZER_SETTINGS:
+            raise ValueError("existing round uses a different optimization protocol")
         if existing.get("status") in {"generation_complete", "complete"}:
             tasks_path = Path(existing["tasks_path"])
             return round_manifest_path, tasks_path, existing
@@ -1013,6 +1023,7 @@ def _materialize_round(
             {
                 **round_spec,
                 "status": "generating",
+                "optimizer": OPTIMIZER_SETTINGS,
                 "selection": selection,
                 "allocations": allocations,
             },
@@ -1256,7 +1267,11 @@ def _task_result(attempt_dir: Path, task: dict[str, Any]) -> Path | None:
             result = json.loads(result_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if result.get("structure_sha256") == task["structure_sha256"] and result.get("terminal"):
+        if (
+            result.get("structure_sha256") == task["structure_sha256"]
+            and result.get("terminal")
+            and result.get("optimizer") == OPTIMIZER_SETTINGS
+        ):
             return result_path
     return None
 
@@ -1346,6 +1361,15 @@ def _execute_task(task: dict[str, Any], task_root: Path, calculators: Any) -> di
             maxstep=OPTIMIZER_SETTINGS["maxstep_A"],
             fmax=OPTIMIZER_SETTINGS["fmax_eV_A"],
             relax_cell=OPTIMIZER_SETTINGS["relax_cell"],
+            cell_mask=(
+                tuple(OPTIMIZER_SETTINGS["phosphorene_cell_mask"])
+                if task["material"] == "phosphorene"
+                else None
+            ),
+            stress_tolerance_eV_per_A3=OPTIMIZER_SETTINGS["stress_tolerance_eV_per_A3"],
+            max_cell_step_strain=OPTIMIZER_SETTINGS["max_cell_step_strain"],
+            max_cell_total_strain=OPTIMIZER_SETTINGS["max_cell_total_strain"],
+            require_native_stress=OPTIMIZER_SETTINGS["require_native_stress"],
             mlp_device="cuda",
         )
         calculator_record = calculators.get(relax_args)
@@ -1362,7 +1386,18 @@ def _execute_task(task: dict[str, Any], task_root: Path, calculators: Any) -> di
         result_payload["initial_forces_sha256"] = _sha256_file(initial_forces_path)
         result_payload["initial_space_group"] = _space_group_number(initial)
         result_payload["initial_force_evaluated"] = True
-        relaxed = relax_with_mlip(relax_args, calculators=calculators)
+        step_guard = None
+        if task["material"] == "zn_formate_mof":
+            from benchmarks.e3.structure_generation import _mof_connectivity_signature
+
+            initial_connectivity = _mof_connectivity_signature(initial)
+
+            def step_guard(atoms):
+                if _mof_connectivity_signature(atoms) != initial_connectivity:
+                    return "mof_connectivity_changed"
+                return None
+
+        relaxed = relax_with_mlip(relax_args, calculators=calculators, step_guard=step_guard)
         result_payload.update(
             status="converged" if relaxed.converged else "nonconverged",
             final_energy_eV=relaxed.final_energy_eV,
@@ -1377,6 +1412,11 @@ def _execute_task(task: dict[str, Any], task_root: Path, calculators: Any) -> di
         final_atoms = read(relaxed.optimized_structure_path)
         final_atoms.calc = calculator
         final_forces = final_atoms.get_forces()
+        final_stress = np.asarray(final_atoms.get_stress(), dtype=float)
+        if not np.isfinite(final_stress).all():
+            raise ValueError("Final native stress is non-finite")
+        result_payload["final_stress_eV_per_A3"] = final_stress.tolist()
+        result_payload["cell_mask"] = list(relax_args.cell_mask) if relax_args.cell_mask else None
         final_forces_path = attempt_dir / "final_forces.npy"
         np.save(final_forces_path, final_forces, allow_pickle=False)
         final_path = Path(relaxed.optimized_structure_path)
@@ -1697,6 +1737,12 @@ def run_replicate(
             if summary_path.is_file():
                 summary = json.loads(summary_path.read_text(encoding="utf-8"))
                 if summary.get("status") == "complete":
+                    previous_manifest = round_dir / "round-manifest.json"
+                    if not previous_manifest.is_file():
+                        raise ValueError(f"completed round has no protocol manifest: {round_dir}")
+                    previous = json.loads(previous_manifest.read_text(encoding="utf-8"))
+                    if previous.get("optimizer") != OPTIMIZER_SETTINGS:
+                        raise ValueError("completed round uses a different optimization protocol")
                     continue
             history = _history_for_round(output_root, material, strategy, seed, round_index)
             round_manifest_path, tasks_path, round_manifest = _materialize_round(
