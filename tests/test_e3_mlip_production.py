@@ -31,6 +31,37 @@ from benchmarks.e3.production import (
 )
 
 
+def test_spooled_slurm_launcher_resolves_submission_checkout(tmp_path, monkeypatch):
+    import subprocess
+
+    repo = Path(__file__).resolve().parents[1]
+    script = repo / "deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh"
+    spooled = tmp_path / "slurm_script"
+    spooled.write_text(script.read_text())
+    monkeypatch.delenv("PROJECT_ROOT", raising=False)
+    for key, value in {
+        "SLURM_SUBMIT_DIR": str(repo),
+        "SLURM_JOB_ID": "test-not-an-allocation",
+        "SLURM_JOB_ACCOUNT": "m5216_g",
+        "SLURM_JOB_QOS": "gpu_premium",
+        "SLURM_NNODES": "16",
+        "SLURM_NTASKS": "64",
+        "MATSIM_E3_MLIP_RESOURCE_AUTHORIZED": "m5216:premium:768",
+        "MATSIM_E3_MLIP_BASE_PYTHON": str(tmp_path / "missing-python"),
+    }.items():
+        monkeypatch.setenv(key, value)
+    result = subprocess.run(
+        ["bash", str(spooled)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "prepared base and MACE Python environments are required" in result.stderr
+    assert "not a matsim-agents checkout" not in result.stderr
+
+
 def test_hard_deadline_records_nonconvergence_and_is_not_retried(tmp_path, monkeypatch):
     from matsim_agents.execution.deadline_worker import TaskDeadlineExceeded
 

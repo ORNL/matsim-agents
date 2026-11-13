@@ -14,7 +14,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+REPO="${PROJECT_ROOT:-${SLURM_SUBMIT_DIR:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}}"
 [[ -f "${REPO}/pyproject.toml" ]] || {
   echo "ERROR: PROJECT_ROOT is not a matsim-agents checkout: ${REPO}" >&2
   exit 2
