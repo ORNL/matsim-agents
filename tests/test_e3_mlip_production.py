@@ -62,6 +62,17 @@ def test_spooled_slurm_launcher_resolves_submission_checkout(tmp_path, monkeypat
     assert "not a matsim-agents checkout" not in result.stderr
 
 
+def test_separate_rerun_uses_explicit_shared_resource_ledger():
+    repo = Path(__file__).resolve().parents[1]
+    script = (repo / "deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh").read_text()
+    assert (
+        'RESOURCE_STATE="${MATSIM_E3_MLIP_RESOURCE_STATE:-${OUTPUT_ROOT}/resource-budget.json}"'
+        in script
+    )
+    assert '--resource-state "${RESOURCE_STATE}"' in script
+    assert script.count('--state "${RESOURCE_STATE}"') == 2
+
+
 def test_worker_step_waits_for_slow_ranks_after_first_success(monkeypatch, tmp_path):
     import time
 

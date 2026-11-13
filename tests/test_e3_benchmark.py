@@ -164,6 +164,82 @@ def test_campaign_timeout_is_recorded_as_incomplete(campaign, monkeypatch):
     assert "incomplete" in (stream / "report.md").read_text()
 
 
+def test_campaign_generation_exhaustion_stops_without_hypothesis_update(campaign, monkeypatch):
+    manifest_path, output_root = campaign
+    calls = []
+
+    def run_round(command, **kwargs):
+        index = int(command[command.index("--round-index") + 1])
+        calls.append(index)
+        root = output_root / "phosphorene/llm_guided_adaptation/seed-20261113"
+        round_dir = root / f"round-{index:02d}"
+        if index < 3:
+            production._atomic_json(
+                round_dir / "round-summary.json",
+                {
+                    "status": "complete",
+                    "task_count": 64,
+                    "outcomes": {"nonconverged": 64},
+                },
+            )
+        else:
+            production._atomic_json(
+                round_dir / "acquisition/outcome.json",
+                {
+                    "status": "stopped_generation_exhausted",
+                    "new_optimization_evidence": False,
+                    "hypotheses_updated": False,
+                    "shortfalls": [
+                        {
+                            "requested": 6,
+                            "accepted_unique": 2,
+                            "generation_attempts": 180,
+                            "rejection_reasons": {
+                                "prior_symmetry_equivalent": 143,
+                                "symmetry_equivalent": 35,
+                            },
+                        }
+                    ],
+                },
+            )
+
+    monkeypatch.setattr(production, "_run_supervised_round", run_round)
+    summary = production.run_campaign(
+        manifest_path,
+        output_root,
+        "phosphorene",
+        "worker-python",
+    )
+    assert calls == [1, 2, 3]
+    assert summary["status"] == "stopped_generation_exhausted"
+    assert summary["rounds_completed"] == 2
+    assert summary["stopped_round"] == 3
+    assert summary["logical_optimizations_attempted"] == 128
+    assert summary["outcomes"] == {"nonconverged": 128}
+    assert summary["new_optimization_evidence_in_stopped_round"] is False
+    assert summary["hypotheses_updated_in_stopped_round"] is False
+    stream = output_root / "phosphorene/llm_guided_adaptation/seed-20261113"
+    assert not (stream / "round-03/round-summary.json").exists()
+    assert "retained without update" in (stream / "report.md").read_text()
+    assert json.loads((stream / "round-01/round-summary.json").read_text())["task_count"] == 64
+
+
+def test_campaign_infrastructure_failure_still_raises(campaign, monkeypatch):
+    manifest_path, output_root = campaign
+
+    def fail(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, ["infrastructure-failure"])
+
+    monkeypatch.setattr(production, "_run_supervised_round", fail)
+    with pytest.raises(subprocess.CalledProcessError):
+        production.run_campaign(manifest_path, output_root, "phosphorene", "worker-python")
+    stream = output_root / "phosphorene/llm_guided_adaptation/seed-20261113"
+    assert (
+        json.loads((stream / "campaign-summary.json").read_text())["termination_reason"]
+        == "round_failed"
+    )
+
+
 def test_budget_ledger_uses_cfs_compatible_lock(tmp_path, monkeypatch):
     import fcntl
 

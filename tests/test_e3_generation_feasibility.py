@@ -622,6 +622,174 @@ def test_source_revalidation_refuses_future_adaptive_rounds(tmp_path):
         )
 
 
+@pytest.mark.parametrize("entrypoint", ["prepare", "replicate"])
+def test_generation_exhaustion_records_llm_ingestible_outcome_without_dispatch(
+    tmp_path,
+    monkeypatch,
+    entrypoint,
+):
+    manifest_path = tmp_path / "manifest.json"
+    manifest = production.build_campaign_manifest()
+    production._atomic_json(manifest_path, manifest)
+    stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
+    round_dir = stream / "round-03"
+    for index in (1, 2):
+        production._atomic_json(
+            stream / f"round-{index:02d}/round-summary.json",
+            {
+                "status": "complete",
+                "task_count": 64,
+            },
+        )
+    action = next(
+        row
+        for row in production._action_space("phosphorene")
+        if row["action_id"] == "2547ea956193a3e8"
+    )
+    available, _ = executable_catalog([action], [])
+    action = available[0]
+    partial = [{"action": action}, {"action": action}]
+    diagnostic = {
+        "action": action,
+        "requested": 6,
+        "accepted_unique": 2,
+        "generation_attempts": 180,
+        "rejection_reasons": {"prior_symmetry_equivalent": 143, "symmetry_equivalent": 35},
+    }
+
+    def exhaust(*args, **kwargs):
+        production._atomic_json(round_dir / "round-manifest.json", {"main_target": 64})
+        production._atomic_json(round_dir / "acquisition/catalog.json", {"available": available})
+        production._atomic_json(round_dir / "acquisition/shortfall-action.json", diagnostic)
+        production._write_jsonl(round_dir / "acquisition/partial-candidates.jsonl", partial)
+        raise production.AcquisitionExhausted("seeded batch accepted 2/6")
+
+    monkeypatch.setattr(production, "_materialize_round", exhaust)
+    monkeypatch.setattr(production, "_chat_model", lambda: object())
+    monkeypatch.setattr(production, "_verified_checkpoint_sha256", lambda: "verified")
+    monkeypatch.setattr(
+        production,
+        "_execute_round_tasks",
+        lambda *args, **kwargs: pytest.fail("no GPU dispatch on generation exhaustion"),
+    )
+    if entrypoint == "prepare":
+        outcome = production.prepare_round(manifest_path, tmp_path, "phosphorene", 3)
+    else:
+        production._atomic_json(
+            stream / "execution-policy.json",
+            {
+                "campaign_id": manifest["campaign_id"],
+                "manifest_sha256": production._sha256_file(manifest_path),
+                "hard_optimization_seconds": 300,
+                "round_seconds": 1800,
+                "workers": 64,
+            },
+        )
+        outcome = production.run_replicate(
+            manifest_path,
+            tmp_path,
+            "phosphorene",
+            "llm_guided_adaptation",
+            20261113,
+            hard_optimization_seconds=300,
+            round_index=3,
+        )
+    assert outcome["status"] == "stopped_generation_exhausted"
+    assert outcome["round_complete"] is False
+    assert outcome["new_optimization_evidence"] is False
+    assert outcome["hypotheses_updated"] is False
+    assert outcome["optimizations_attempted"] == 0
+    assert outcome["requested"] == 64 and outcome["accepted_unique"] == 2
+    assert outcome["shortfalls"] == [diagnostic]
+    assert set(outcome["remaining_capacity_by_group"].values()) == {0}
+    compact = production._compact_history([outcome])[0]
+    assert compact["shortfalls"] == [diagnostic]
+    assert compact["hypotheses_updated"] is False
+    assert not (round_dir / "round-summary.json").exists()
+    assert not (round_dir / "generation-preflight.json").exists()
+    assert len(production._read_tasks(round_dir / "acquisition/partial-candidates.jsonl")) == 2
+
+
+@pytest.mark.parametrize(
+    "error", [OSError("filesystem failed"), InvalidActionError("invalid action")]
+)
+def test_preparation_does_not_disguise_infrastructure_or_invalid_requests(
+    tmp_path,
+    monkeypatch,
+    error,
+):
+    manifest_path = tmp_path / "manifest.json"
+    production._atomic_json(manifest_path, production.build_campaign_manifest())
+    stream = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113"
+    for index in (1, 2):
+        production._atomic_json(
+            stream / f"round-{index:02d}/round-summary.json",
+            {
+                "status": "complete",
+                "task_count": 64,
+            },
+        )
+    monkeypatch.setattr(production, "_chat_model", lambda: object())
+
+    def fail(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(production, "_materialize_round", fail)
+    with pytest.raises(type(error), match=str(error)):
+        production.prepare_round(manifest_path, tmp_path, "phosphorene", 3)
+    assert not list(tmp_path.glob("**/outcome.json"))
+
+
+def test_prepare_cli_exhaustion_blocks_submission_without_traceback(tmp_path, monkeypatch, capsys):
+    outcome = {"status": "stopped_generation_exhausted", "round_complete": False}
+    round_dir = tmp_path / "phosphorene/llm_guided_adaptation/seed-20261113/round-01"
+
+    def supervise(*args, **kwargs):
+        production._atomic_json(round_dir / "acquisition/outcome.json", outcome)
+
+    monkeypatch.setattr(production, "_run_supervised_round", supervise)
+    monkeypatch.setattr(
+        production,
+        "_preflight_receipt",
+        lambda *args: pytest.fail("no successful receipt"),
+    )
+    assert (
+        production.main(
+            [
+                "prepare",
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--output-root",
+                str(tmp_path),
+                "--material",
+                "phosphorene",
+            ]
+        )
+        == 3
+    )
+    assert json.loads(capsys.readouterr().out) == outcome
+
+
+def test_internal_prepare_reports_scientific_stop_to_supervisor(tmp_path, monkeypatch, capsys):
+    outcome = {"status": "stopped_generation_exhausted", "round_complete": False}
+    monkeypatch.setattr(production, "prepare_round", lambda *args: outcome)
+    assert (
+        production.main(
+            [
+                "prepare-round",
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--output-root",
+                str(tmp_path),
+                "--material",
+                "phosphorene",
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == outcome
+
+
 @pytest.mark.parametrize("changed", ["manifest", "tasks", "structure"])
 def test_source_revalidation_rejects_changed_original_evidence(tmp_path, changed):
     import hashlib

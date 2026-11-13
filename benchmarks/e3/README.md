@@ -65,6 +65,25 @@ optimization results remain unchanged. The original receipt and replay evidence
 are retained under `acquisition/source-revalidation-*`; replay time is added to
 the original generation time within the unchanged round budget.
 
+Valid generation exhaustion is a scientific stop, not an infrastructure failure.
+The round remains incomplete with status `stopped_generation_exhausted`.
+`acquisition/outcome.json` retains the requested/accepted counts, rejection
+reasons, partial structures, and remaining capacity groups for LLM ingestion.
+It explicitly records that no new optimization evidence was collected and prior
+hypotheses are retained without update. This evidence enters any subsequent
+authorized allocation prompt; recording it does not make an additional LLM call.
+The campaign writes this stop to its summary/report and exits normally without
+starting later rounds. The CPU `prepare` command instead exits with documented
+code `3` and JSON diagnostics, preventing the submission helper from requesting
+GPUs for an incomplete acquisition. Invalid actions, infrastructure errors, and
+timeouts remain explicit errors; no structures are silently substituted.
+
+A separately authorized full campaign rerun must use a separate output root
+to preserve prior evidence. Set `MATSIM_E3_MLIP_RESOURCE_STATE` to the original
+campaign's absolute `resource-budget.json` path so the launcher reserves and
+reconciles all attempts against the same physical GPU cap; do not create a
+fresh resource budget for the rerun.
+
 The discovery API now accepts a `SeedGenerationAction` for explicit
 formula-unit tiers, AFLOW candidate caps, PyXtal counts, space-group/prototype
 filters, and reproducible seeds. Pass it to `explore_composition` to relax the

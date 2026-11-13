@@ -70,6 +70,57 @@ OPTIMIZER_SETTINGS = {
     "mof_connectivity_version": "atom-indexed-v1",
 }
 REPLICATE_SEEDS = (BOUNDED_SEED,)
+
+
+class AcquisitionExhausted(ScientificCapacityError):
+    """A valid seeded acquisition could not supply enough distinct structures."""
+
+
+def _record_acquisition_stop(round_dir: Path, error: AcquisitionExhausted) -> dict[str, Any]:
+    shortfalls = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted((round_dir / "acquisition").glob("shortfall-*.json"))
+    ]
+    partial_path = round_dir / "acquisition" / "partial-candidates.jsonl"
+    partial = _read_tasks(partial_path) if partial_path.is_file() else []
+    partial_count = len(partial)
+    manifest = json.loads((round_dir / "round-manifest.json").read_text(encoding="utf-8"))
+    catalog = json.loads((round_dir / "acquisition" / "catalog.json").read_text(encoding="utf-8"))
+    exhausted_groups = {
+        row["action"]["feasibility"]["capacity_group"] for row in shortfalls
+    }
+    remaining = {
+        row["feasibility"]["capacity_group"]: row["feasibility"]["remaining_capacity"]
+        for row in catalog["available"]
+    }
+    for row in partial:
+        group = row["action"]["feasibility"]["capacity_group"]
+        remaining[group] = max(0, remaining[group] - 1)
+    for group in exhausted_groups:
+        remaining[group] = 0
+    outcome = {
+        "status": "stopped_generation_exhausted",
+        "round_complete": False,
+        "category": "generation_shortfall",
+        "reason": str(error),
+        "evidence_id": f"{round_dir.name}-generation-exhausted",
+        "new_optimization_evidence": False,
+        "optimizations_attempted": 0,
+        "hypotheses_updated": False,
+        "hypothesis_update": "retain prior hypotheses; no new optimization evidence collected",
+        "partial_structures_retained": partial_count,
+        "requested": manifest["main_target"],
+        "accepted_unique": partial_count,
+        "remaining_capacity_by_group": remaining,
+        "shortfalls": shortfalls,
+        "additional_llm_call_performed": False,
+        "next_decision": "stop; another allocation requires remaining authorized call and round budgets",
+    }
+    _atomic_json(round_dir / "acquisition" / "outcome.json", outcome)
+    print(json.dumps({"acquisition_outcome": outcome}, sort_keys=True), file=sys.stderr)
+    return outcome
+
+
 MATERIALS: dict[str, dict[str, Any]] = {
     "bcc_refractory": {
         "formula_families": {
@@ -741,6 +792,11 @@ def _compact_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "rejection_reasons",
         "capacity_exhausted",
         "remaining_capacity",
+        "new_optimization_evidence",
+        "hypotheses_updated",
+        "hypothesis_update",
+        "shortfalls",
+        "remaining_capacity_by_group",
     )
     return [{key: item[key] for key in fields if key in item} for item in history]
 
@@ -970,6 +1026,9 @@ def _materialize_round(
     recovery_history = round_dir / "acquisition" / "generation-history.json"
     if recovery_history.is_file():
         local_history.extend(json.loads(recovery_history.read_text(encoding="utf-8")))
+    previous_outcome = round_dir / "acquisition" / "outcome.json"
+    if previous_outcome.is_file():
+        local_history.append(json.loads(previous_outcome.read_text(encoding="utf-8")))
     authorization = round_dir / "acquisition" / "recovery-authorization.json"
     if authorization.is_file():
         recovery = json.loads(authorization.read_text(encoding="utf-8"))
@@ -1304,7 +1363,7 @@ def _materialize_selection(
             }
             _atomic_json(round_dir / "acquisition" / f"shortfall-{action_id}.json", diagnostic)
             _write_jsonl(round_dir / "acquisition" / "partial-candidates.jsonl", candidate_records)
-            raise ScientificCapacityError(
+            raise AcquisitionExhausted(
                 f"{material}/{action_id}: {accepted}/{count} globally unique candidates; "
                 "seeded generation exhausted. Partial structures retained, no GPU dispatch. "
                 "A new policy decision is required; the frozen LLM call limit is one."
@@ -1910,9 +1969,12 @@ def prepare_round(
                 raise ValueError("recovery authorization belongs to a different manifest")
         if (round_dir / "generation-preflight.json").is_file():
             return _preflight_receipt(round_dir, manifest_path)
-        _, tasks_path, _ = _materialize_round(
-            manifest, spec, output_root, history, _chat_model(),
-        )
+        try:
+            _, tasks_path, _ = _materialize_round(
+                manifest, spec, output_root, history, _chat_model(),
+            )
+        except AcquisitionExhausted as error:
+            return _record_acquisition_stop(round_dir, error)
         tasks = _read_tasks(tasks_path)
         if len(tasks) != int(spec["main_target"]):
             raise ScientificCapacityError(f"preflight yielded {len(tasks)}/{spec['main_target']} tasks")
@@ -2312,9 +2374,12 @@ def run_replicate(
             deadline -= receipt["generation_seconds"]
         elif round_index == 1:
             raise RuntimeError("round 1 requires CPU generation preflight before GPU allocation")
-        round_manifest_path, tasks_path, round_manifest = _materialize_round(
-            manifest, spec, output_root, history, chat
-        )
+        try:
+            round_manifest_path, tasks_path, round_manifest = _materialize_round(
+                manifest, spec, output_root, history, chat
+            )
+        except AcquisitionExhausted as error:
+            return _record_acquisition_stop(round_dir, error)
         effective_optimizer = _hard_optimizer_policy(hard_optimization_seconds)
         tasks = _read_tasks(tasks_path)
         for task in tasks:
@@ -2537,6 +2602,13 @@ def _write_campaign_report(stream_dir: Path, summary: dict[str, Any]) -> None:
                 f"- Termination reason: `{summary.get('termination_reason', 'unknown')}`",
             ]
         )
+    if summary["status"] == "stopped_generation_exhausted":
+        lines.extend([
+            "",
+            "Acquisition stopped without new optimization evidence in the stopped round.",
+            "Partial generated structures are retained, not counted as optimizations.",
+            "Prior hypotheses are retained without update; the stopped round is incomplete.",
+        ])
     temporary = stream_dir / ".report.md.tmp"
     temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
     os.replace(temporary, stream_dir / "report.md")
@@ -2668,6 +2740,40 @@ def run_campaign(
             )
             _write_campaign_report(stream_dir, failed)
             raise
+        outcome_path = stream_dir / f"round-{round_index:02d}" / "acquisition" / "outcome.json"
+        summary_path = stream_dir / f"round-{round_index:02d}" / "round-summary.json"
+        if outcome_path.is_file() and not (
+            summary_path.is_file()
+            and json.loads(summary_path.read_text()).get("status") == "complete"
+        ):
+            outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
+            if outcome.get("status") != "stopped_generation_exhausted":
+                raise ValueError(f"unrecognized acquisition outcome: {outcome_path}")
+            prior_summaries = [
+                json.loads((stream_dir / f"round-{index:02d}" / "round-summary.json").read_text())
+                for index in range(1, round_index)
+            ]
+            prior_outcomes: Counter[str] = Counter()
+            for prior in prior_summaries:
+                prior_outcomes.update(prior["outcomes"])
+            stopped = {
+                "campaign_id": manifest["campaign_id"],
+                "material": material, "strategy": strategy, "seed": seed,
+                "status": "stopped_generation_exhausted",
+                "rounds_completed": completed, "rounds_requested": ROUNDS_PER_MATERIAL,
+                "stopped_round": round_index, "round_complete": False,
+                "termination_reason": "generation_exhausted",
+                "acquisition_outcome": outcome,
+                "hypotheses_updated_in_stopped_round": False,
+                "new_optimization_evidence_in_stopped_round": False,
+                "logical_optimizations_attempted": sum(
+                    prior["task_count"] for prior in prior_summaries
+                ),
+                "outcomes": dict(prior_outcomes),
+            }
+            _atomic_json(stream_dir / "campaign-summary.json", stopped)
+            _write_campaign_report(stream_dir, stopped)
+            return stopped
         completed += 1
 
     summaries = [
@@ -2799,6 +2905,15 @@ def main(argv: list[str] | None = None) -> int:
                 previous = json.loads((round_dir / "generation-preflight.json").read_text())
                 seconds -= previous["generation_seconds"]
             _run_supervised_round(command, seconds=seconds)
+            outcome_path = round_dir / "acquisition" / "outcome.json"
+            if (
+                args.command == "prepare" and outcome_path.is_file()
+                and not (round_dir / "generation-preflight.json").is_file()
+            ):
+                outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
+                if outcome.get("status") == "stopped_generation_exhausted":
+                    print(json.dumps(outcome, sort_keys=True))
+                    return 3
             result = _preflight_receipt(round_dir, args.manifest)
         elif args.command == "revalidate-round":
             result = revalidate_preflight(
@@ -2809,7 +2924,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             result = prepare_round(args.manifest, args.output_root, args.material, args.round_index)
         print(json.dumps(result, sort_keys=True))
-        return 0
+        return (
+            3 if args.command == "prepare"
+            and result.get("status") == "stopped_generation_exhausted" else 0
+        )
     if args.command == "validate":
         validate_campaign_manifest(json.loads(args.manifest.read_text()))
         print(json.dumps({"manifest": str(args.manifest.resolve()), "execution_performed": False}))

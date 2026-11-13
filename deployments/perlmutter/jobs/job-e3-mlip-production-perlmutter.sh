@@ -67,7 +67,7 @@ MATERIAL="${MATERIALS[TASK_ID]}"
   --manifest "${MANIFEST}" --output-root "${OUTPUT_ROOT}" --material "${MATERIAL}" \
   --round-index "${MATSIM_E3_MLIP_START_ROUND:-1}"
 mkdir -p "${OUTPUT_ROOT}"
-RESOURCE_STATE="${OUTPUT_ROOT}/resource-budget.json"
+RESOURCE_STATE="${MATSIM_E3_MLIP_RESOURCE_STATE:-${OUTPUT_ROOT}/resource-budget.json}"
 RESOURCE_START=${SECONDS}
 "${BASE_PYTHON}" -m benchmarks.e3.production budget-reserve \
   --state "${RESOURCE_STATE}" \
@@ -152,6 +152,7 @@ export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
   --manifest "${MANIFEST}" \
   --output-root "${OUTPUT_ROOT}" \
   --material "${MATERIAL}" \
+  --resource-state "${RESOURCE_STATE}" \
   --workers 64 \
   --worker-python "${MACE_PYTHON}" \
   --hard-optimization-seconds 300
