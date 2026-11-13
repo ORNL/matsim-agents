@@ -1,0 +1,278 @@
+E3-MLIP: THREE EXPLORATION ROUNDS, UP TO 5,000 STRUCTURES PER ROUND
+================================================================
+
+This guide follows the five-step Nb2O5 reproduction guide, but runs the
+six-material, LLM-guided E3-MLIP workflow, not the small CPU Nb2O5 smoke test.
+Copy the Bash commands in order. No custom Python driver is needed.
+
+The ONLY requested experimental change is the acquisition ceiling:
+  Original:     64 structures per material per iteration.
+  This version: 5,000 structures per material per iteration.
+  Three iterations: up to 15,000 per material, 90,000 across all six.
+
+Everything else remains the corrected E3-MLIP protocol:
+  - BCC refractory alloys, FCC Cantor alloys, LiFePO4, phosphorene,
+    Nb-Ta-O oxides and Zn-formate MOFs.
+  - One LLM-guided strategy, seed 20261113, three rounds per material.
+  - Copilot provider, gemini-4-carbon, one decision per round, no fallback.
+  - Frozen MACE-OMAT-0 medium; no training, QE, VASP, or DFT labels.
+  - Same generation families, size tiers, symmetry-aware deduplication,
+    finite prototype/parent capacities and minimum tier coverage.
+  - ASE FIRE, 500 steps, maxstep 0.05 A, force target 0.02 eV/A.
+  - Cell relaxation with native stress; phosphorene vacuum stays fixed.
+  - relative_increase_threshold: null
+    max_cell_step_strain: null
+    max_cell_total_strain: null
+    stress_tolerance_eV_per_A3: null
+  - Invalid/nonfinite geometry checks and MOF connectivity guard remain.
+  - 64 GPU workers per material, not 5,000 simultaneous GPU workers.
+  - Same 300-second task response deadline, 1,800-second round budget,
+    two-hour allocation and shared 768 physical-GPU-hour cap.
+
+IMPORTANT FEASIBILITY LIMIT
+--------------------------
+5,000 is a ceiling/target, NOT a promise of 5,000 completed relaxations.
+The existing full-batch CPU gate requires all selected distinct structures
+before GPU submission. Generation exhaustion or the unchanged time budget
+can stop the campaign before GPU execution. During execution, a time limit
+can leave a round incomplete. Do not silently enlarge these budgets, loosen
+deduplication, invent missing evidence, or count generated inputs as relaxed.
+
+With 64 workers, 5,000 tasks require up to 79 sequential task waves. At the
+300-second per-task limit that can exceed 6.5 hours for ONE round, whereas
+the retained round limit is 30 minutes. Thus this unchanged-resource version
+has not established feasibility of completing 5,000 structures per round.
+If you require all 5,000 to finish, stop and agree a separately versioned
+resource protocol before spending compute.
+
+The operational ceiling for continuous generation pools scales from 192 to
+15,000 to accommodate the larger acquisition budget. This is bookkeeping,
+not proof that 15,000 symmetry-distinct inputs exist. Actual singleton,
+prototype and antisite capacities are not inflated.
+
+Prerequisites: a checkout containing this guide and benchmarks/e3/profiles.py;
+prepared .venv and .venv-mace environments; authenticated Copilot SDK/CLI;
+trusted frozen MACE checkpoint and the existing repository seed files.
+The scheduler commands below are Perlmutter-specific. Other clusters require
+their own reviewed launcher; do not copy NERSC accounts to another machine.
+Only execute submission commands with your project's resource approval.
+
+Obtain this version (not an older main checkout):
+
+git clone --branch work/e3-generation-feasibility-recovery --single-branch \
+  https://github.com/ORNL/matsim-agents.git matsim-agents-e3-5000
+
+Prepare the base/Copilot and MACE environments using the repository's
+deployments/perlmutter/setup/README.md and the E3 section of
+research/paper/perlmutter-e3-e4-execution-runbook.md. A plain source clone
+does not install these environments, model files or Copilot credentials.
+
+1. PREPARE A NEW FOLDER
+----------------------
+Replace the repository path with your checkout. Paste into one Bash shell:
+
+export REPO="/absolute/path/to/matsim-agents"
+export PY="$REPO/.venv/bin/python"
+export MACE_PY="$REPO/.venv-mace/bin/python"
+export PYTHONPATH="$REPO/src:$REPO"
+export WORK="$(mktemp -d "$HOME/e3-mlip-5000-XXXXXXXX")"
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+cd "$REPO"
+test -x "$PY"
+test -x "$MACE_PY"
+test -f benchmarks/e3/profiles.py
+echo "Your working folder: $WORK"
+git rev-parse HEAD | tee "$WORK/source-revision.txt"
+
+Keep the printed WORK path. Never point this version at the existing
+64-structure campaigns. Do not change the checkout while jobs are active:
+preflight verifies source and structure hashes.
+
+2. WRITE environment.sh AND THE MANIFEST
+---------------------------------------
+Paste the ENTIRE block, including EOF:
+
+cat > "$WORK/environment.sh" <<'EOF'
+# Source this AFTER exporting REPO and WORK in your shell.
+export PROJECT_ROOT="$REPO"
+export MATSIM_E3_MLIP_STRUCTURES_PER_ROUND=5000
+export MATSIM_E3_MLIP_BASE_PYTHON="$REPO/.venv/bin/python"
+export MATSIM_E3_MLIP_WORKER_PYTHON="$REPO/.venv-mace/bin/python"
+export MATSIM_E3_MLIP_MANIFEST="$WORK/e3-mlip-5000-manifest.json"
+export MATSIM_E3_MLIP_OUTPUT_ROOT="$WORK/results"
+# Keep one ledger across all six materials AND all selected accounts.
+export MATSIM_E3_MLIP_RESOURCE_STATE="$WORK/resource-budget.json"
+export MATSIM_E3_MLIP_ACCOUNT=m5216
+export MATSIM_E3_MLIP_RESOURCE_AUTHORIZED="${MATSIM_E3_MLIP_ACCOUNT}:premium:768"
+EOF
+
+source "$WORK/environment.sh"
+source "$REPO/deployments/perlmutter/setup/model-artifacts-perlmutter.sh"
+configure_mace_model_artifacts "$REPO"
+"$PY" -m benchmarks.e3.production plan \
+  --output "$MATSIM_E3_MLIP_MANIFEST"
+
+This writes a separate manifest, campaign ID e3-mlip-collaborator-5000.
+It does not overwrite the standard production manifest. Keep the 5000
+environment variable exported for every planning, validation, preparation,
+submission, execution and resume command. Child processes inherit it.
+Without that variable the runner selects the unchanged 64-structure version
+and rejects this manifest rather than silently using the wrong ceiling.
+
+The model setup helper uses the site's configured model cache. If needed,
+set MATSIM_MODEL_ARTIFACTS_ROOT to your trusted cache's artifacts directory
+BEFORE sourcing the helper. Do not substitute a different checkpoint.
+Expected checkpoint SHA-256:
+  d4b14be9afa294eebdbe31a0280b26a0fa29715771e978cbfd3ca24e0d90307a
+
+3. CHECK, THEN RUN
+-----------------
+First validate without inference, generation, LLM calls or submission:
+
+"$PY" -m benchmarks.e3.production validate \
+  --manifest "$MATSIM_E3_MLIP_MANIFEST"
+
+Confirm the printed/planned total is 90,000, each of the 18 round targets is
+5,000, worker count is 64, and all four thresholds above are JSON null.
+Stop if any check fails. The standard config-driven "explore" command is
+NOT a substitute: it does not run the six-material LLM-guided E3 protocol.
+
+On a non-GPU host, before reserving any GPU allocation, run real CPU
+generation preflight for each material. This performs real LLM calls and
+seeded generation and charges the existing per-round generation-time budget:
+
+for MATERIAL in bcc_refractory fcc_cantor lifepo4 phosphorene nb_ta_o zn_formate_mof; do
+  "$PY" -m benchmarks.e3.production prepare \
+    --manifest "$MATSIM_E3_MLIP_MANIFEST" \
+    --output-root "$MATSIM_E3_MLIP_OUTPUT_ROOT" \
+    --material "$MATERIAL" --round-index 1 || break
+done
+
+If preflight stops, inspect its acquisition outcome/errors. Do not submit a
+GPU job for that material, erase its time ledger, or request a hidden second
+LLM allocation. Repeating the same command cannot fix genuine exhaustion.
+Capacity exhaustion is a valid scientific stop, not successful completion.
+
+Only for materials whose preflight succeeded, submit from a non-GPU host:
+
+bash "$REPO/deployments/perlmutter/jobs/submit-e3-mlip-production-perlmutter.sh" 0
+
+Replace the final index as needed:
+  0 = BCC refractory        1 = FCC Cantor
+  2 = LiFePO4               3 = phosphorene
+  4 = Nb-Ta-O               5 = Zn-formate MOF
+
+Each invocation rechecks the prepared batch, reserves the full allocation,
+and submits ONE job that supervises all three rounds for that material.
+Do not submit an additional job per round or submit the same material twice.
+The helper prints a reservation ID and Slurm job ID: save both.
+
+Account selection: m5216 is the default. amsc004 is another supported account
+only when you are a member and Slurm permits premium there. The code also
+accepts explicitly authorized m5048, m4828, amsc001 and dasrepo, but these
+accounts may not permit premium. Check your current associations:
+
+sacctmgr -n -P show assoc where user="$USER" format=Account,QOS
+
+To select another authorized premium account before submission:
+
+export MATSIM_E3_MLIP_ACCOUNT=amsc004
+export MATSIM_E3_MLIP_RESOURCE_AUTHORIZED="${MATSIM_E3_MLIP_ACCOUNT}:premium:768"
+
+Keep the SAME resource ledger. Requested premium maps to gpu_premium, and
+the project maps to its _g GPU billing account on Perlmutter.
+
+Six complete two-hour reservations exactly consume the 768-GPU-hour cap.
+If retries/earlier attempts consumed time, submit in budget-safe waves:
+wait for terminal jobs and reconcile them before requesting more allocations.
+Changing accounts does not create more authorized GPU time.
+
+4. READ THE RESULTS
+-------------------
+Substitute actual submitted job IDs:
+
+squeue -u "$USER"
+sacct -X -j JOB_ID -o JobID,State,QOS,Account,Elapsed,ExitCode
+
+Verify QOS=gpu_premium and the intended project account. Read Slurm stdout
+and stderr printed by "scontrol show job JOB_ID"; do not assume warnings are
+the terminal exception or that a queued job is running.
+
+For one material, inspect:
+
+export MATERIAL=lifepo4
+export RUN="$MATSIM_E3_MLIP_OUTPUT_ROOT/$MATERIAL/llm_guided_adaptation/seed-20261113"
+cat "$RUN/report.md"
+cat "$RUN/campaign-summary.json"
+
+The material's directory contains:
+  campaign-summary.json             Overall status and actual counts.
+  campaign-policy.json              Frozen campaign limits and manifest hash.
+  execution-policy.json             Hard-deadline execution contract.
+  candidate-registry.jsonl           Generated candidate identities.
+  round-01/, round-02/, round-03/
+    acquisition/proposal-001.json    Full available prompt and raw LLM response.
+    acquisition/outcome.json         Graceful acquisition stop, if applicable.
+    generation-preflight.json        Actual generation proof.
+    generation-time.json            Durable generation-time accounting.
+    execution-time.json             Durable execution-time accounting.
+    round-manifest.json             Selected actions and optimizer policy.
+    tasks.jsonl                     Fully materialized geometry tasks.
+    round-summary.json              Completed-round action outcome vectors.
+    tasks/<candidate>/attempt-0001/
+      result.json                   Convergence, stop reason, effective settings.
+      initial_optimization.csv      Per-step optimization log.
+      initial_optimization.traj     ASE trajectory, when produced.
+
+Do not write result files yourself. Count actual terminal records, not the
+90,000 planned maximum. Check every result's optimizer dictionary: the four
+disabled thresholds must remain null. fmax=0.02 and generalized filter forces
+still determine convergence; null stress tolerance does not freeze the cell.
+An optimization can complete without converging. A Slurm COMPLETED job can
+represent a graceful generation stop before all three rounds finished.
+
+The "scoring log" is the action-outcome vector (convergence, available endpoint
+energy per atom, displacement, endpoint hashes and runtime), not a scalar
+score or a formal hypothesis ledger. Nonconverged endpoint energies are not
+validated minima or proof of a ground state. There is no DFT validation.
+
+After EACH job is terminal, replace the placeholders using its printed IDs:
+
+"$PY" -m benchmarks.e3.production budget-reconcile \
+  --state "$MATSIM_E3_MLIP_RESOURCE_STATE" \
+  --reservation-id RESERVATION_ID
+
+The bound job ID lets this command query actual full-allocation GPU time.
+Do not reconcile an active job or reset the ledger to bypass the cap.
+
+5. CONTINUE AN INTERRUPTED RUN
+------------------------------
+Never run two writers against the same material directory. First verify the
+old Slurm job/process is terminal and reconcile its reservation.
+Restore the SAME REPO, WORK and environment, account authorization, checkpoint,
+code revision, manifest, output directory and shared ledger.
+
+Find the first incomplete round from campaign-summary.json and the saved
+round summaries; replace ROUND_INDEX with 1, 2 or 3:
+
+export MATSIM_E3_MLIP_START_ROUND=ROUND_INDEX
+export MATERIAL=lifepo4
+"$PY" -m benchmarks.e3.production prepare \
+  --manifest "$MATSIM_E3_MLIP_MANIFEST" \
+  --output-root "$MATSIM_E3_MLIP_OUTPUT_ROOT" \
+  --material "$MATERIAL" --round-index "$MATSIM_E3_MLIP_START_ROUND"
+
+Only if preparation succeeds and authorized budget remains, rerun the same
+submission helper with that material's index. Completed tasks/rounds are
+skipped; a new allocation requires a new reservation. The durable round-time
+ledger is NOT reset. Hard interruptions can retain the full allowance, so
+some interrupted rounds cannot legally resume within this protocol.
+
+If generation was exhausted or the time/call budget was consumed, stop.
+Resume is not permission to change seeds, allocations, thresholds, resource
+limits, deduplication or LLM call counts. Such changes require a new protocol
+and explicit authorization, not editing an existing result directory.
+
+For a separate new experiment, start again at step 1 with separately approved
+resources. These instructions/profile are regression-tested; no 5,000-per-round
+campaign has been executed or scientifically validated by creating this guide.
