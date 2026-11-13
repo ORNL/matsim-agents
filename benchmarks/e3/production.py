@@ -1204,7 +1204,16 @@ def _materialize_selection(
         )
         exhaustion = None
         try:
-            records = generate_structures(material, action, generation_dir)
+            prior_structures = [
+                prior
+                for (formula, tier, _), structures in symmetry_index.items()
+                if formula == action_template["formula"]
+                and tier == int(action_template["size_tier"])
+                for prior in structures
+            ]
+            records = generate_structures(
+                material, action, generation_dir, excluded_structures=prior_structures,
+            )
         except GenerationExhausted as error:
             exhaustion = error
             records = error.records

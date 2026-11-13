@@ -9,7 +9,7 @@ from typing import Any
 
 from benchmarks.e3 import structure_generation as generation
 
-CATALOG_VERSION = "executable-capacities-1"
+CATALOG_VERSION = "executable-capacities-2"
 
 
 class ScientificCapacityError(ValueError):
@@ -233,9 +233,15 @@ def action_constraints(action: dict[str, Any]) -> dict[str, Any]:
         if action["family"] == "olivine_strain":
             constraints["maximum_local_displacement_A"] = 0.04
     if material == "phosphorene":
-        constraints.update(fixed_vacuum=True, reconstruction_displacement_A=0.08)
+        constraints.update(
+            fixed_vacuum=True, reconstruction_displacement_A=0.08,
+            reconstruction_modes="collective in-plane displacements, no net translation",
+        )
     if material == "zn_formate_mof":
-        constraints.update(preserve_connectivity=True, maximum_proton_rotation_degrees=15)
+        constraints.update(
+            preserve_connectivity=True, maximum_proton_rotation_degrees=15,
+            proton_orientation_sites="all formate hydrogens, fixed C-H lengths",
+        )
     return {
         "catalog_version": CATALOG_VERSION,
         "generator_available": True,

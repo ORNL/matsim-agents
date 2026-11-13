@@ -146,7 +146,7 @@ def test_both_policies_use_identical_full_round_catalog_and_capacities(material)
     assert sum(row["count"] for row in llm) == 64
 
 
-@pytest.mark.parametrize("material,expected", [("phosphorene", 2), ("zn_formate_mof", 1)])
+@pytest.mark.parametrize("material,expected", [("zn_formate_mof", 1)])
 def test_original_seeded_exhaustion_preserves_partial_structures_and_diagnostics(
     tmp_path,
     material,
@@ -340,7 +340,7 @@ def test_generation_shortfall_drives_an_explicit_deterministic_decision(tmp_path
     original = structure_generation.generate_structures
     calls = []
 
-    def exhaust_first(material, action, output):
+    def exhaust_first(material, action, output, **kwargs):
         calls.append(action["action_id"])
         if len(calls) == 1:
             raise structure_generation.GenerationExhausted(
@@ -348,7 +348,7 @@ def test_generation_shortfall_drives_an_explicit_deterministic_decision(tmp_path
                 [],
                 {"generation_attempts": 40, "accepted_unique": 0, "rejection_reasons": {}},
             )
-        return original(material, action, output)
+        return original(material, action, output, **kwargs)
 
     monkeypatch.setattr(structure_generation, "generate_structures", exhaust_first)
     monkeypatch.setattr(
@@ -379,7 +379,7 @@ def test_generation_infrastructure_failure_is_not_capacity_exhaustion(tmp_path, 
         "minimum_main_count_by_tier": {"4": 1},
     }
 
-    def fail(*args):
+    def fail(*args, **kwargs):
         raise OSError("test unavailable filesystem")
 
     monkeypatch.setattr(structure_generation, "generate_structures", fail)
@@ -433,5 +433,136 @@ def test_strained_olivine_nonaffine_variants_are_bounded_and_distinct(tmp_path):
         assert displacements.max() <= 0.040001
         assert atoms.get_chemical_symbols() == base.get_chemical_symbols()
         assert record["generation"]["operation"]["maximum_local_displacement_angstrom"] == 0.04
-        assert record["generation"]["generator_version"] == "2"
+        assert record["generation"]["generator_version"] == "3"
         assert not structure_generation.structures_symmetry_equivalent(atoms, base)
+
+
+@pytest.mark.parametrize(
+    "action_id,seed,count",
+    [("25c1bb34540489d1", 3180278999, 3), ("a039846d4a2a0b50", 2606930876, 4)],
+)
+def test_seeded_collective_reconstructions_are_distinct_and_bounded(
+    tmp_path,
+    action_id,
+    seed,
+    count,
+):
+    import numpy as np
+    from ase.io import read
+
+    action = next(
+        row for row in production._action_space("phosphorene") if row["action_id"] == action_id
+    )
+    base, _ = structure_generation._phosphorene(
+        "P",
+        action["size_tier"],
+        action["family"],
+        None,
+        None,
+        np.random.default_rng(0),
+    )
+    records = structure_generation.generate_structures(
+        "phosphorene",
+        {**action, "random_seed": seed, "count": count},
+        tmp_path,
+    )
+    assert len(records) == count
+    for record in records:
+        atoms = read(record["structure_path"])
+        displacement = atoms.positions - base.positions
+        assert np.linalg.norm(displacement, axis=1).max() <= 0.080001
+        np.testing.assert_allclose(displacement[:, 2], 0, atol=1e-8)
+        np.testing.assert_allclose(displacement.mean(axis=0), 0, atol=1e-8)
+        np.testing.assert_allclose(atoms.cell.array[2], base.cell.array[2])
+        assert atoms.get_chemical_symbols() == base.get_chemical_symbols()
+
+
+def test_recovery_proton_variants_keep_connectivity_bond_lengths_and_rotation_bound(tmp_path):
+    import numpy as np
+    from ase.io import read
+
+    action = next(
+        row
+        for row in production._action_space("zn_formate_mof")
+        if row["action_id"] == "3b4091f2627b3b49"
+    )
+    base, _ = structure_generation._mof(
+        action["formula"],
+        24,
+        "cod_parent",
+        None,
+        None,
+        np.random.default_rng(0),
+    )
+    records = structure_generation.generate_structures(
+        "zn_formate_mof",
+        {**action, "random_seed": 2096500330, "count": 4},
+        tmp_path,
+    )
+    assert len(records) == 4
+    for record in records:
+        atoms = read(record["structure_path"])
+        operation = record["generation"]["operation"]
+        assert len(operation["hydrogen_sites"]) == 48
+        for hydrogen, carbon in zip(
+            operation["hydrogen_sites"],
+            operation["carbon_sites"],
+            strict=True,
+        ):
+            before = base.get_distance(carbon, hydrogen, mic=True, vector=True)
+            after = atoms.get_distance(carbon, hydrogen, mic=True, vector=True)
+            np.testing.assert_allclose(np.linalg.norm(after), np.linalg.norm(before), atol=1e-7)
+            angle = np.degrees(
+                np.arccos(
+                    np.clip(
+                        np.dot(before, after) / np.linalg.norm(before) / np.linalg.norm(after),
+                        -1,
+                        1,
+                    )
+                )
+            )
+            assert angle <= 15.00001
+        assert structure_generation._mof_connectivity_signature(
+            atoms
+        ) == structure_generation._mof_connectivity_signature(base)
+
+
+def test_actual_seeded_pyxtal_recovery_action_accepts_modern_rng(tmp_path):
+    pytest.importorskip("pyxtal")
+    action = next(
+        row for row in production._action_space("nb_ta_o") if row["action_id"] == "3a5dea2fa58a17de"
+    )
+    records = structure_generation.generate_structures(
+        "nb_ta_o",
+        {**action, "random_seed": 2867809719, "count": 3},
+        tmp_path,
+    )
+    assert len(records) == 3
+    assert all(16 <= record["generation"]["operation"]["space_group"] <= 74 for record in records)
+
+
+def test_seeded_generation_rejects_prior_round_duplicates_inside_attempt_budget(tmp_path):
+    from ase.io import read
+
+    action = next(
+        row
+        for row in production._action_space("lifepo4")
+        if row["family"] == "olivine_strain" and row["size_tier"] == 4
+    )
+    action = {**action, "random_seed": 20261113, "count": 1}
+    original = structure_generation.generate_structures("lifepo4", action, tmp_path / "first")
+    prior = read(original[0]["structure_path"])
+    replacement = structure_generation.generate_structures(
+        "lifepo4",
+        action,
+        tmp_path / "next",
+        excluded_structures=[prior],
+    )
+    assert len(replacement) == 1
+    assert not structure_generation.structures_symmetry_equivalent(
+        read(replacement[0]["structure_path"]),
+        prior,
+    )
+    diagnostics = json.loads((tmp_path / "next/generation-diagnostics.json").read_text())
+    assert diagnostics["rejection_reasons"]["prior_symmetry_equivalent"] >= 1
+    assert diagnostics["generation_attempts"] <= 40

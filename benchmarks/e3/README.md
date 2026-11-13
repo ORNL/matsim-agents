@@ -46,6 +46,13 @@ authorization allows one new decision, not unlimited retries; invoking the
 command again does not grant another call. Scientific objectives, seeds,
 optimization settings, round targets, and GPU budgets are unchanged.
 
+Generator revision 3 retains the 0.08 Angstrom phosphorene reconstruction bound
+but samples collective in-plane displacements with zero net translation.
+Formate proton variants rotate all C-H vectors independently by at most
+15 degrees, keeping bond lengths and checking framework connectivity. Both
+changes add genuine degrees of freedom without relaxing deduplication.
+Seeded PyXtal uses NumPy's `Generator`, as required by the installed version.
+
 The discovery API now accepts a `SeedGenerationAction` for explicit
 formula-unit tiers, AFLOW candidate caps, PyXtal counts, space-group/prototype
 filters, and reproducible seeds. Pass it to `explore_composition` to relax the

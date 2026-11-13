@@ -461,6 +461,7 @@ def _phosphorene(
     defect: str | None,
     rng,
 ):
+    _, np, _, _, _, _ = _ase()
     if _parse_formula(formula) != {"P": 1}:
         raise StructureGenerationError("The phosphorene generator accepts only elemental P.")
     if family in {"black", "black_phosphorene", "black_allotrope"}:
@@ -500,17 +501,20 @@ def _phosphorene(
         _random_strain(atoms, rng, amount, dimensions=2)
         operation = {"type": "bounded in-plane strain", "maximum_fraction": amount}
     elif family in {"reconstruction", "vacancy_reconstruction"} or defect == "reconstruction":
-        index = int(rng.integers(len(atoms)))
-        direction = rng.normal(size=3)
-        direction[2] = 0
-        norm = float((direction**2).sum() ** 0.5)
-        if norm == 0:
-            direction[0] = 1
-            norm = 1
-        atoms.positions[index] += direction / norm * 0.08
+        # Collective, bounded in-plane modes avoid the few symmetry orbits
+        # available when moving only one atom by a fixed distance.
+        directions = rng.normal(size=(len(atoms), 3))
+        directions[:, 2] = 0
+        norms = np.linalg.norm(directions, axis=1)
+        directions /= np.maximum(norms[:, None], np.finfo(float).tiny)
+        displacements = directions * rng.uniform(0.04, 0.08, (len(atoms), 1))
+        displacements -= displacements.mean(axis=0)
+        largest = float(np.linalg.norm(displacements, axis=1).max())
+        displacements *= min(1.0, 0.08 / max(largest, np.finfo(float).tiny))
+        atoms.positions += displacements
         operation = {
-            "type": "bounded local reconstruction",
-            "site": index,
+            "type": "bounded collective in-plane reconstruction",
+            "sites": list(range(len(atoms))),
             "max_displacement_angstrom": 0.08,
         }
         if strain is not None:
@@ -888,34 +892,36 @@ def _mof(
             symbols = atoms.get_chemical_symbols()
             carbon_indices = [i for i, symbol in enumerate(symbols) if symbol == "C"]
             hydrogen_indices = [i for i, symbol in enumerate(symbols) if symbol == "H"]
-            hydrogen_index = int(rng.choice(hydrogen_indices))
-            carbon_index = min(
-                carbon_indices,
-                key=lambda index: atoms.get_distance(hydrogen_index, index, mic=True),
-            )
-            vector = atoms.get_distance(carbon_index, hydrogen_index, mic=True, vector=True)
-            axis = rng.normal(size=3)
-            axis /= float((axis**2).sum() ** 0.5)
-            angle = float(rng.uniform(-math.pi / 12, math.pi / 12))
-            cross = np.array(
-                [
-                    [0.0, -axis[2], axis[1]],
-                    [axis[2], 0.0, -axis[0]],
-                    [-axis[1], axis[0], 0.0],
-                ]
-            )
-            rotation = (
-                np.eye(3) * math.cos(angle)
-                + np.outer(axis, axis) * (1 - math.cos(angle))
-                + cross * math.sin(angle)
-            )
-            rotated = rotation @ vector
-            atoms.positions[hydrogen_index] = atoms.positions[carbon_index] + rotated
+            attached_carbons = []
+            for hydrogen_index in hydrogen_indices:
+                vectors = atoms.get_distances(
+                    hydrogen_index, carbon_indices, mic=True, vector=True,
+                )
+                closest = int(np.linalg.norm(vectors, axis=1).argmin())
+                carbon_index = carbon_indices[closest]
+                attached_carbons.append(carbon_index)
+                vector = -vectors[closest]
+                axis = rng.normal(size=3)
+                axis /= float((axis**2).sum() ** 0.5)
+                angle = float(rng.uniform(-math.pi / 12, math.pi / 12))
+                cross = np.array(
+                    [
+                        [0.0, -axis[2], axis[1]],
+                        [axis[2], 0.0, -axis[0]],
+                        [-axis[1], axis[0], 0.0],
+                    ]
+                )
+                rotation = (
+                    np.eye(3) * math.cos(angle)
+                    + np.outer(axis, axis) * (1 - math.cos(angle))
+                    + cross * math.sin(angle)
+                )
+                atoms.positions[hydrogen_index] = atoms.positions[carbon_index] + rotation @ vector
             atoms.wrap()
             operation = {
                 "type": "bounded formate proton-orientation variant",
-                "hydrogen_site": hydrogen_index,
-                "carbon_site": carbon_index,
+                "hydrogen_sites": hydrogen_indices,
+                "carbon_sites": attached_carbons,
                 "maximum_rotation_degrees": 15,
             }
         else:
@@ -1095,7 +1101,8 @@ def replicate_structure(
 
 
 def generate_structures(
-    material: str, action: dict[str, Any], output_dir: str | Path
+    material: str, action: dict[str, Any], output_dir: str | Path,
+    *, excluded_structures: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Generate an exact, deduplicated batch of sanitized E3-MLIP structures.
 
@@ -1269,6 +1276,12 @@ def generate_structures(
         ):
             rejections["symmetry_equivalent"] += 1
             continue
+        if any(
+            structures_symmetry_equivalent(atoms, prior, symmetry_matcher)
+            for prior in excluded_structures or []
+        ):
+            rejections["prior_symmetry_equivalent"] += 1
+            continue
         seen.add(geometry_hash)
         space_group, space_group_reason = _space_group(atoms)
         operation = source_metadata.get("operation") or {}
@@ -1278,7 +1291,7 @@ def generate_structures(
         generation = {
             "generator": generator,
             "generator_module": "benchmarks.e3.structure_generation",
-            "generator_version": "2",
+            "generator_version": "3",
             "generator_source_file": str(Path(__file__).resolve()),
             "generator_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "ase_version": ase.__version__,
