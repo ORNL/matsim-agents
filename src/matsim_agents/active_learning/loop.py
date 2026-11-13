@@ -989,7 +989,10 @@ def _run_iterations(
                 for candidate in selected:
                     atoms = candidate.atoms.copy()
                     atoms.calc = primary_calc
-                    forces = np.asarray(atoms.get_forces(), dtype=float)
+                    try:
+                        forces = np.asarray(atoms.get_forces(), dtype=float)
+                    finally:
+                        atoms.calc = None
                     if forces.shape != (len(atoms), 3) or not np.isfinite(forces).all():
                         raise ValueError(f"Invalid incumbent forces for {candidate.candidate_id}")
                     predicted_forces[candidate.candidate_id] = forces.copy()

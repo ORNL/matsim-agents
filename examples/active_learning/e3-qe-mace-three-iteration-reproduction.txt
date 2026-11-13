@@ -45,6 +45,9 @@ Retained E3 scientific design:
     stress_tolerance_eV_per_A3=None
   * 64 geometry workers on 16 four-GPU nodes; 300-second parent-enforced
     task deadline and 1800-second generation/geometry-round deadline.
+    A parent-supervised subprocess encloses BOTH generation and geometry;
+    overdue work and its process group are terminated, partial evidence
+    is retained, and QE/training do not start for that failed iteration.
 
 5000 is a ceiling/target, not a guarantee of 5000 completed optimizations.
 The full generated batch is required before dispatch. Finite generation
@@ -200,6 +203,11 @@ by reading this guide.
 Within E3_QE_RUN_DIR:
   e3-qe-policy.json
     Immutable resolved campaign/scientific/resource policy.
+    Includes resolved QE executable/UPF content identities, wrapper,
+    validation/reference identities and the scientific-objectives digest.
+    Replacing any of these in place is rejected before resumed generation
+    or QE work. Existing policies lacking these identities need reviewed
+    migration or a fresh output directory, not automatic adoption.
   e3/<material>/llm_guided_adaptation/seed-20261113/round-*/
     Original E3 generated structures, allocations, prompt/raw response,
     task attempts, geometry logs, active model and action-level summaries.
@@ -226,6 +234,9 @@ outcome. It can revisit which actions to explore, but it does not receive
 fabricated uncertainty for unaudited structures. Inspect the persisted prompt
 to see exactly which evidence informed the allocation. There is still no
 formal hypothesis ledger or single scalar scientific score.
+Every geometry action outcome in the prompt includes its round number and
+incumbent checkpoint path/SHA256, so energies from different promoted models
+are identifiable and must not be ranked against one another directly.
 
 Nonconverged endpoint energies are not minima, and raw total energies of
 different compositions are not formation energies.
