@@ -21,7 +21,7 @@
       "pbs_job_id": "9077294.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
       "queue": "capacity",
       "run_id_prefix": "E4-SIX-fcc_hea-weak-n01-v1",
-      "submission_status": "submitted; queued"
+      "submission_status": "failed; PBS Exit_status=-20 after VASP began; retry submitted"
     },
     {
       "allocation": "HydraGNN",
@@ -41,7 +41,7 @@
       "pbs_job_id": "9077295.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
       "queue": "capacity",
       "run_id_prefix": "E4-SIX-lifepo4-weak-n01-v1",
-      "submission_status": "submitted; queued"
+      "submission_status": "running"
     },
     {
       "allocation": "HydraGNN",
@@ -61,7 +61,7 @@
       "pbs_job_id": "9077296.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
       "queue": "capacity",
       "run_id_prefix": "E4-SIX-phosphorene-weak-n01-v1",
-      "submission_status": "submitted; queued"
+      "submission_status": "queued"
     },
     {
       "allocation": "HydraGNN",
@@ -81,7 +81,7 @@
       "pbs_job_id": "9077297.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
       "queue": "capacity",
       "run_id_prefix": "E4-SIX-zn_formate_mof-weak-n01-v1",
-      "submission_status": "submitted; queued"
+      "submission_status": "completed; both calculations converged"
     },
     {
       "allocation": "HydraGNN",
@@ -98,10 +98,10 @@
       "maximum_job_walltime_hours": 21,
       "maximum_node_hours": 21,
       "nodes": 1,
-      "pbs_job_id": null,
+      "pbs_job_id": "9088099.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
       "queue": "capacity",
       "run_id_prefix": "E4-SIX-nb_ta_o-weak-n01-v1",
-      "submission_status": "rejected by PBS generic per-user job limit; retry when a slot is available"
+      "submission_status": "queued"
     }
   ],
   "preserved_bcc_execution": {
@@ -133,12 +133,13 @@
     "reservation_tiers_32_64_128_not_submitted": true
   },
   "schema_version": 1,
-  "status": "partially_submitted; four queued; Nb-Ta-O blocked by PBS generic per-user job limit",
+  "status": "five non-BCC material classes submitted; Zn completed; four active/queued; FCC retry submitted; BCC strong ended nonzero",
   "submission_result": {
-    "accepted_jobs": 4,
-    "reason": "PBS generic per-user job limit; active BCC 9069491 plus four accepted jobs reached limit 5",
-    "rejected_class": "nb_ta_o",
-    "rejected_jobs": 1,
-    "retry_condition": "one existing user job leaves the generic job limit; do not alter or cancel BCC 9069491"
+    "accepted_initial_jobs": 5,
+    "existing_bcc_strong_job": "9069491 completed Exit_status=1; not modified or resubmitted",
+    "fcc_first_attempt": "9077294 exited -20 after VASP started; no validated checkpoint, retry starts fresh",
+    "fcc_retry_job_id": "9088098.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+    "nb_ta_o_job_id": "9088099.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov",
+    "rejected_initial_jobs": 0
   }
 }
