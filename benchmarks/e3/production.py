@@ -860,6 +860,8 @@ def _compact_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "qe_audits_by_action",
         "accuracy_triggered",
         "model_promoted",
+        "active_model",
+        "round",
     )
     return [{key: item[key] for key in fields if key in item} for item in history]
 

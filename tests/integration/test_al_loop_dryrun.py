@@ -316,6 +316,8 @@ def test_one_iteration_dryrun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_external_sampler_and_measured_error_gate(
     tmp_path, monkeypatch, elemental_manifest, force_error, triggered
 ):
+    import weakref
+
     from ase.calculators.calculator import Calculator, all_changes
 
     import matsim_agents.active_learning.loop as loop_mod
@@ -332,10 +334,24 @@ def test_external_sampler_and_measured_error_gate(
     cfg.trainer.force_error_trigger_eV_per_A = 0.125
     cfg.trainer.validation_reference_set = _campaign_elemental_manifest(cfg, elemental_manifest)
     _patch_runtime(loop_mod, monkeypatch)
-    monkeypatch.setattr(loop_mod, "make_mlip_calculator", lambda *a, **k: AuditCalc())
+    calculators = []
+
+    def make_calculator(*args, **kwargs):
+        calculator = AuditCalc()
+        calculators.append(weakref.ref(calculator))
+        return calculator
+
+    monkeypatch.setattr(loop_mod, "make_mlip_calculator", make_calculator)
+    original_init = loop_mod._SurrogateModels.__init__
+
+    def shared_device_models(self, placement, *, keep):
+        original_init(self, placement, keep=False)
+
+    monkeypatch.setattr(loop_mod._SurrogateModels, "__init__", shared_device_models)
 
     class ParsedDFTBackend(_FakeDFTBackend):
         def run_one(self, spec):
+            assert calculators and all(ref() is None for ref in calculators)
             result = super().run_one(spec)
             result.final_atoms.info.clear()
             return result

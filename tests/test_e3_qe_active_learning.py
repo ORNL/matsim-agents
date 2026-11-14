@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -33,6 +35,9 @@ def qe_config(tmp_path, monkeypatch):
     heldout.touch()
     references = tmp_path / "references.json"
     references.touch()
+    (tmp_path / "pw.x").write_bytes(b"synthetic executable")
+    for symbol in ("Nb", "Ta", "O", "P"):
+        (tmp_path / f"{symbol}.UPF").write_text(f"synthetic {symbol} UPF")
     for key, value in {
         "PROJ_ROOT": ROOT,
         "MACE_CHECKPOINT": checkpoint,
@@ -95,6 +100,70 @@ def test_run_requires_approval_and_allocation(qe_config, monkeypatch):
     with pytest.raises(RuntimeError, match="approve-compute"):
         main(["run", "--config", str(path), "--material", "nb_ta_o"])
     assert not cfg.loop.out_dir.exists()
+
+
+@pytest.mark.parametrize("changed", ["upf", "executable", "objectives", "validation", "references"])
+def test_resume_rejects_replaced_inputs_before_any_campaign_work(qe_config, monkeypatch, changed):
+    from benchmarks.e3 import qe_active_learning as qe
+
+    cfg, path = qe_config
+    objectives = cfg.loop.out_dir.parent / "objectives.yaml"
+    objectives.write_text("model: initial")
+    monkeypatch.setattr(e3, "OBJECTIVES", objectives)
+    monkeypatch.setenv("SLURM_JOB_ID", "synthetic")
+    calls = []
+    monkeypatch.setattr(qe, "run_active_learning", lambda *a, **k: calls.append(True))
+    args = ["run", "--config", str(path), "--material", "nb_ta_o", "--approve-compute"]
+    assert main(args) == 0
+    assert main(args) == 0  # JSON normalization must permit a genuinely identical resume.
+    assert calls == [True, True]
+    target = {
+        "upf": cfg.dft.qe.pseudo_dir / "Nb.UPF",
+        "executable": cfg.dft.qe.pw_bin,
+        "objectives": objectives,
+        "validation": cfg.trainer.validation_set,
+        "references": cfg.trainer.validation_reference_set,
+    }[changed]
+    target.write_bytes(b"replaced in place")
+    with pytest.raises(ValueError, match="policy on resume"):
+        main(args)
+    with pytest.raises(ValueError, match="policy on resume"):
+        main(["check", "--config", str(path), "--material", "nb_ta_o"])
+    assert calls == [True, True]
+
+
+@pytest.mark.parametrize("phase", ["generation", "geometry"])
+def test_parent_deadline_terminates_overdue_stage_retaining_evidence(qe_config, monkeypatch, phase):
+    cfg, _ = qe_config
+    current = cfg.loop.out_dir / "iteration_0000"
+    current.mkdir(parents=True)
+    marker = current / f"{phase}-started"
+    late = current / "should-not-finish"
+    supervise = e3._run_supervised_round
+    command = [
+        sys.executable,
+        "-c",
+        "from pathlib import Path; import time; "
+        f"Path({str(marker)!r}).write_text('partial evidence'); "
+        "time.sleep(3); "
+        f"Path({str(late)!r}).touch()",
+    ]
+
+    def run(actual, *, seconds):
+        assert actual[3] == "geometry"
+        assert seconds == 1800
+        supervise(command, seconds=0.5)
+
+    monkeypatch.setattr(e3, "_run_supervised_round", run)
+    started = time.monotonic()
+    with pytest.raises(TimeoutError, match="parent-enforced deadline"):
+        E3Sampler("nb_ta_o")(cfg, 0, current)
+    assert time.monotonic() - started < 2.5
+    assert marker.read_text() == "partial evidence"
+    assert not late.exists()
+    deadline = json.loads((current / "geometry-deadline.json").read_text())
+    assert deadline["partial_evidence_retained"]
+    assert deadline["qe_dispatched"] is False
 
 
 @pytest.mark.parametrize(
@@ -195,11 +264,23 @@ def test_qe_evidence_reaches_actual_llm_prompt():
     allowed = next(action for action in actions if e3._finite_capacity_group(action) is None)
     history = [
         {
+            "evidence_id": "geometry-round-1",
+            "round": 1,
+            "active_model": {"path": "/foundation.model", "sha256": "foundation-hash"},
+            "mean_energy_eV_per_atom": -1.0,
+        },
+        {
+            "evidence_id": "geometry-round-2",
+            "round": 2,
+            "active_model": {"path": "/promoted.model", "sha256": "promoted-hash"},
+            "mean_energy_eV_per_atom": -2.0,
+        },
+        {
             "evidence_id": "qe-audit-0",
             "qe_audits_by_action": {"action": {"n_audited": 1, "maximum_force_mae_eV_per_A": 0.4}},
             "accuracy_triggered": True,
             "model_promoted": True,
-        }
+        },
     ]
 
     class Chat:
@@ -207,6 +288,16 @@ def test_qe_evidence_reaches_actual_llm_prompt():
             assert "no DFT labels" not in prompt
             assert "maximum_force_mae_eV_per_A" in prompt
             assert "do not compare raw energies" in prompt
+            supplied = next(
+                line.split(": ", 1)[1]
+                for line in prompt.splitlines()
+                if line.startswith("Prior strategy-local outcomes: ")
+            )
+            outcomes = json.loads(supplied)
+            assert outcomes[0]["active_model"]["sha256"] == "foundation-hash"
+            assert outcomes[0]["round"] == 1
+            assert outcomes[1]["active_model"]["sha256"] == "promoted-hash"
+            assert outcomes[1]["round"] == 2
             return SimpleNamespace(
                 content=json.dumps(
                     {
@@ -333,6 +424,13 @@ def test_e3_sampler_reuses_generation_workers_and_feeds_qe_to_llm(qe_config, mon
     (previous / "e3-audit-pool.json").write_text(
         json.dumps([{"candidate_id": "old", "action_id": "action-old"}])
     )
+    (previous / "e3-geometry-result.json").write_text(
+        json.dumps(
+            {
+                "active_model": {"path": "/previous.model", "sha256": "previous-model"},
+            }
+        )
+    )
     current = root / "iteration_0001"
     current.mkdir()
     round_dir = root / "round-02"
@@ -356,12 +454,27 @@ def test_e3_sampler_reuses_generation_workers_and_feeds_qe_to_llm(qe_config, mon
     monkeypatch.setattr(
         e3, "_execute_round_tasks", lambda *a, **k: captured.update(worker_kwargs=k)
     )
-    monkeypatch.setattr(e3, "_round_action_outcomes", lambda *a: [])
+    monkeypatch.setattr(
+        e3,
+        "_round_action_outcomes",
+        lambda *a: [
+            {
+                "action_id": "action",
+                "mean_energy_eV_per_atom": -1,
+                "evidence_id": "unscoped",
+            }
+        ],
+    )
     result_path = round_dir / "result.json"
     result_path.write_text(
         json.dumps({"status": "converged", "optimized_structure_path": str(geometry)})
     )
     monkeypatch.setattr(e3, "_task_result", lambda *a: result_path)
+    monkeypatch.setattr(
+        e3,
+        "_run_supervised_round",
+        lambda command, **kwargs: E3Sampler("nb_ta_o")._run_geometry(cfg, 1, current),
+    )
     candidates = E3Sampler("nb_ta_o")(cfg, 1, current)
     assert len(candidates) == 5000
     assert captured["spec"]["main_target"] == 5000
@@ -376,3 +489,8 @@ def test_e3_sampler_reuses_generation_workers_and_feeds_qe_to_llm(qe_config, mon
     assert tasks[0]["optimizer"]["stress_tolerance_eV_per_A3"] is None
     assert captured["worker_kwargs"]["hard_optimization_seconds"] == 300
     assert candidates[0].atoms.info["sampling_method"] == "e3_geometry_optimization"
+    summary = json.loads((round_dir / "round-summary.json").read_text())
+    compact = e3._compact_history(summary["action_outcomes"])[0]
+    assert compact["active_model"]["path"] == cfg.mlip.mace.model
+    assert compact["round"] == 2
+    assert compact["evidence_id"] != "unscoped"
