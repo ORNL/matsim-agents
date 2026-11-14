@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -13,6 +15,7 @@ from pathlib import Path
 from benchmarks.e3 import production as e3
 from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import ALConfig
+from matsim_agents.active_learning.dft_protocol import path_identity, scientific_dft_payload
 from matsim_agents.active_learning.loop import run_active_learning
 from matsim_agents.execution.locking import exclusive_lock
 
@@ -45,6 +48,8 @@ def validate_config(cfg: ALConfig, material: str) -> None:
     if cfg.dft.qe.pw_template is not None:
         raise ValueError("Pin QE settings explicitly, without an overriding pw_template")
     qe = cfg.dft.qe
+    if not qe.pw_bin.is_file() or not qe.pw_wrapper.is_file():
+        raise ValueError("QE executable and wrapper must exist before approving a campaign")
     for field in ("ecutwfc_ry", "ecutrho_ry", "kpts", "occupations", "pseudopotentials"):
         if getattr(qe, field) is None:
             raise ValueError(f"E3-QE requires reviewed, explicit dft.qe.{field}")
@@ -55,6 +60,9 @@ def validate_config(cfg: ALConfig, material: str) -> None:
     }
     if missing := elements - set(qe.pseudopotentials or {}):
         raise ValueError(f"QE pseudopotential mapping lacks {sorted(missing)} for {material}")
+    for filename in (qe.pseudopotentials or {}).values():
+        if not (qe.pseudo_dir / filename).is_file():
+            raise ValueError(f"QE pseudopotential file does not exist: {filename}")
     if qe.extra_control.get("calculation", "scf") != "scf":
         raise ValueError("QE audits must be exact-geometry SCF single points")
     if cfg.acquisition.strategy != "random" or cfg.acquisition.diversity_filter:
@@ -109,8 +117,45 @@ class E3Sampler:
         self.material = material
 
     def __call__(self, cfg: ALConfig, iteration: int, it_dir: Path) -> list[Candidate]:
-        from ase.io import read
+        snapshot = it_dir / "e3-geometry-config.json"
+        e3._atomic_json(snapshot, cfg.model_dump(mode="json"))
+        command = [
+            sys.executable,
+            "-m",
+            "benchmarks.e3.qe_active_learning",
+            "geometry",
+            "--config",
+            str(snapshot.resolve()),
+            "--material",
+            self.material,
+            "--iteration",
+            str(iteration),
+            "--iteration-dir",
+            str(it_dir.resolve()),
+            "--approve-compute",
+        ]
+        try:
+            e3._run_supervised_round(command, seconds=e3.ROUND_SECONDS)
+        except subprocess.TimeoutExpired as error:
+            e3._atomic_json(
+                it_dir / "geometry-deadline.json",
+                {
+                    "status": "failed",
+                    "reason": "generation_geometry_deadline",
+                    "seconds": e3.ROUND_SECONDS,
+                    "partial_evidence_retained": True,
+                    "qe_dispatched": False,
+                },
+            )
+            raise TimeoutError(
+                "E3 generation/geometry exceeded its parent-enforced deadline"
+            ) from error
+        receipt = json.loads((it_dir / "e3-geometry-result.json").read_text())
+        if receipt["status"] == "stopped_generation_exhausted":
+            return []
+        return self._candidates(it_dir, Path(receipt["tasks_path"]), receipt["active_model"])
 
+    def _run_geometry(self, cfg: ALConfig, iteration: int, it_dir: Path) -> None:
         assert cfg.mlip.mace is not None
         root = Path(cfg.loop.out_dir)
         generation_root = root / "e3"
@@ -151,6 +196,12 @@ class E3Sampler:
                     },
                     "accuracy_triggered": previous["accuracy_triggered"],
                     "model_promoted": previous["model_promoted"],
+                    "round": iteration,
+                    "active_model": json.loads(
+                        (
+                            root / f"iteration_{iteration - 1:04d}" / "e3-geometry-result.json"
+                        ).read_text()
+                    )["active_model"],
                     "note": (
                         "QE error is measured at audited geometries only; "
                         "not a global accuracy guarantee."
@@ -164,8 +215,14 @@ class E3Sampler:
             )
         except e3.AcquisitionExhausted as error:
             e3._atomic_json(it_dir / "generation-stop.json", {"reason": str(error)})
+            e3._atomic_json(
+                it_dir / "e3-geometry-result.json",
+                {
+                    "status": "stopped_generation_exhausted",
+                },
+            )
             log.warning("E3 generation exhausted: %s", error)
-            return []
+            return
         checkpoint = Path(cfg.mlip.mace.model).resolve()
         model = {"path": str(checkpoint), "sha256": e3._sha256_file(checkpoint)}
         tasks = e3._read_tasks(tasks_path)
@@ -198,6 +255,12 @@ class E3Sampler:
             round_deadline=started + e3.ROUND_SECONDS,
         )
         outcomes = e3._round_action_outcomes(tasks, round_dir / "tasks")
+        for outcome in outcomes:
+            outcome.update(active_model=model, round=iteration + 1)
+            outcome.pop("evidence_id")
+            outcome["evidence_id"] = hashlib.sha256(
+                e3._canonical_json(outcome).encode()
+            ).hexdigest()
         e3._atomic_json(
             round_dir / "round-summary.json",
             {
@@ -207,6 +270,20 @@ class E3Sampler:
                 "action_outcomes": outcomes,
             },
         )
+        e3._atomic_json(
+            it_dir / "e3-geometry-result.json",
+            {
+                "status": "complete",
+                "tasks_path": str(tasks_path.resolve()),
+                "active_model": model,
+            },
+        )
+
+    def _candidates(self, it_dir: Path, tasks_path: Path, model: dict[str, str]) -> list[Candidate]:
+        from ase.io import read
+
+        tasks = e3._read_tasks(tasks_path)
+        round_dir = tasks_path.parent
         candidates = []
         for task in tasks:
             path = e3._task_result(round_dir / "tasks" / task["candidate_id"], task)
@@ -253,15 +330,29 @@ class E3Sampler:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["check", "run"])
+    parser.add_argument("command", choices=["check", "run", "geometry"])
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--material", choices=sorted(e3.MATERIALS), required=True)
     parser.add_argument("--approve-compute", action="store_true")
+    parser.add_argument("--iteration", type=int)
+    parser.add_argument("--iteration-dir", type=Path)
     args = parser.parse_args(argv)
     profile = os.environ.setdefault("MATSIM_E3_MLIP_STRUCTURES_PER_ROUND", "5000")
     if profile != "5000":
         raise ValueError("E3-QE uses the separate 5,000-structure profile")
     cfg = ALConfig.from_yaml(args.config)
+    if args.command == "geometry":
+        if (
+            not args.approve_compute
+            or not os.environ.get("SLURM_JOB_ID")
+            or args.iteration not in range(3)
+            or args.iteration_dir is None
+        ):
+            raise RuntimeError(
+                "Internal geometry stage requires authorized allocation and iteration"
+            )
+        E3Sampler(args.material)._run_geometry(cfg, args.iteration, args.iteration_dir)
+        return 0
     validate_config(cfg, args.material)
     root = Path(cfg.loop.out_dir)
     check_resume(root)
@@ -270,6 +361,13 @@ def main(argv: list[str] | None = None) -> int:
         "material": args.material,
         "max_structures_per_iteration": 5000,
         "al_config": cfg.model_dump(mode="json"),
+        "dft_input_identities": scientific_dft_payload(
+            cfg.dft, set(cfg.dft.qe.pseudopotentials or {})
+        ),
+        "dft_wrapper_identity": path_identity(cfg.dft.qe.pw_wrapper),
+        "validation_identity": path_identity(cfg.trainer.validation_set),
+        "elemental_reference_identity": path_identity(cfg.trainer.validation_reference_set),
+        "objectives_identity": path_identity(e3.OBJECTIVES),
         "source_sha256": {
             path: e3._sha256_file(e3.REPO / path)
             for path in (
@@ -278,11 +376,17 @@ def main(argv: list[str] | None = None) -> int:
                 "benchmarks/e3/structure_generation.py",
                 "benchmarks/e3/feasibility.py",
                 "benchmarks/e3/profiles.py",
+                "benchmarks/e3/scientific-objectives.yaml",
                 "src/matsim_agents/active_learning/loop.py",
                 "src/matsim_agents/active_learning/config.py",
             )
         },
     }
+    # Normalize tuples in the resolved DFT payload to their on-disk JSON form.
+    policy = json.loads(json.dumps(policy))
+    policy_path = root / "e3-qe-policy.json"
+    if policy_path.exists() and json.loads(policy_path.read_text()) != policy:
+        raise ValueError("Cannot change E3-QE scientific or resource policy on resume")
     if args.command == "check":
         print(json.dumps(policy, indent=2))
         return 0
@@ -291,7 +395,6 @@ def main(argv: list[str] | None = None) -> int:
     root.mkdir(parents=True, exist_ok=True)
     with exclusive_lock(root / ".e3-qe.lock", timeout=0):
         check_resume(root)
-        policy_path = root / "e3-qe-policy.json"
         if policy_path.exists() and json.loads(policy_path.read_text()) != policy:
             raise ValueError("Cannot change E3-QE scientific or resource policy on resume")
         e3._atomic_json(policy_path, policy)

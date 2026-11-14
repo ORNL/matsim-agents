@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import signal
 import subprocess
 import time
@@ -184,8 +185,24 @@ def test_segments_restart_at_same_precision_then_switch(checkpoint_job, segment_
 
 
 @pytest.mark.parametrize("mode", ["stop", "external-stop"])
-def test_graceful_stop_is_archived_without_relaunch(checkpoint_job, mode):
-    result, run_root = run_job(checkpoint_job, MODE=mode, E4_SOFT_STOP_SECONDS="1")
+def test_graceful_stop_is_archived_without_relaunch(checkpoint_job, mode, tmp_path):
+    clock_dir = tmp_path / "clock-bin"
+    clock_dir.mkdir()
+    date = clock_dir / "date"
+    system_date = shutil.which("date")
+    assert system_date is not None
+    date.write_text(
+        "#!/bin/bash\n"
+        'if [[ "$*" == "+%s" ]]; then echo 1700000000; '
+        f'else exec "{system_date}" "$@"; fi\n'
+    )
+    date.chmod(0o755)
+    result, run_root = run_job(
+        checkpoint_job,
+        MODE=mode,
+        E4_SOFT_STOP_SECONDS="1",
+        PATH=f"{clock_dir}:{checkpoint_job[3]['PATH']}",
+    )
     assert result.returncode == 75, result.stdout + result.stderr
     assert "final=Low:interrupted:stopcar" in result.stdout
     assert len(list((run_root / "attempts").iterdir())) == 1
