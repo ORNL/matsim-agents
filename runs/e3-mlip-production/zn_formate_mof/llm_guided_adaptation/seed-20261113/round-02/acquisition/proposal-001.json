@@ -1,0 +1,1104 @@
+{
+  "accepted_final_allocation": [
+    {
+      "action": {
+        "action_id": "fc0638a6e871508b",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|24|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 184,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "connectivity_preserving_distortion",
+        "prototype_ids": [],
+        "size_tier": 24,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 8
+    },
+    {
+      "action": {
+        "action_id": "3b4091f2627b3b49",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|24|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 185,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "proton_orientation",
+        "prototype_ids": [],
+        "size_tier": 24,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 6
+    },
+    {
+      "action": {
+        "action_id": "2caf1c9af00f3d1a",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework-distortion",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|24|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 184,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "connectivity_preserving_distortion",
+        "prototype_ids": [],
+        "size_tier": 24,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 5
+    },
+    {
+      "action": {
+        "action_id": "270c11520ca455d0",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework-distortion",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|24|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 185,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "proton_orientation",
+        "prototype_ids": [],
+        "size_tier": 24,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "fe7f6700ecb5798c",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|48|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 184,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "connectivity_preserving_distortion",
+        "prototype_ids": [],
+        "size_tier": 48,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 7
+    },
+    {
+      "action": {
+        "action_id": "716fca0ed251a3db",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|48|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 185,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "proton_orientation",
+        "prototype_ids": [],
+        "size_tier": 48,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 5
+    },
+    {
+      "action": {
+        "action_id": "cd7743a804138171",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework-distortion",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|48|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 184,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "connectivity_preserving_distortion",
+        "prototype_ids": [],
+        "size_tier": 48,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 5
+    },
+    {
+      "action": {
+        "action_id": "d2f2fcf987594a54",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework-distortion",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|48|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 185,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "proton_orientation",
+        "prototype_ids": [],
+        "size_tier": 48,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "068e89e762d3d82a",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|96|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 184,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "connectivity_preserving_distortion",
+        "prototype_ids": [],
+        "size_tier": 96,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 6
+    },
+    {
+      "action": {
+        "action_id": "30e133fbc5089e52",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|96|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 185,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "proton_orientation",
+        "prototype_ids": [],
+        "size_tier": 96,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 4
+    },
+    {
+      "action": {
+        "action_id": "fc8a69bee7c8006f",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework-distortion",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|96|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 184,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "connectivity_preserving_distortion",
+        "prototype_ids": [],
+        "size_tier": 96,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 4
+    },
+    {
+      "action": {
+        "action_id": "74d98ddc85488018",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework-distortion",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|96|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 185,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "proton_orientation",
+        "prototype_ids": [],
+        "size_tier": 96,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "4fcaedaee1044bfd",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|192|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 184,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "connectivity_preserving_distortion",
+        "prototype_ids": [],
+        "size_tier": 192,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "e00b757595310715",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|192|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 185,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "proton_orientation",
+        "prototype_ids": [],
+        "size_tier": 192,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "d5a3f1d31690917b",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework-distortion",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|192|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 184,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "connectivity_preserving_distortion",
+        "prototype_ids": [],
+        "size_tier": 192,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "1f15d3fa74382579",
+        "defect": null,
+        "family": "bounded_perturbation",
+        "family_label": "cod-7205949-framework-distortion",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "zn_formate_mof|ZnC2H2O4|192|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "cod_7205949",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_proton_rotation_degrees": 15,
+            "preserve_connectivity": true,
+            "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+            "strain_fraction": 0.005
+          },
+          "remaining_capacity": 185,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+        },
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "proton_orientation",
+        "prototype_ids": [],
+        "size_tier": 192,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "count": 2
+    }
+  ],
+  "capacity_groups": {
+    "zn_formate_mof|ZnC2H2O4|192|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion": {
+      "action_ids": [
+        "4fcaedaee1044bfd",
+        "d5a3f1d31690917b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "maximum": 192,
+      "remaining": 184
+    },
+    "zn_formate_mof|ZnC2H2O4|192|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation": {
+      "action_ids": [
+        "e00b757595310715",
+        "1f15d3fa74382579"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "maximum": 192,
+      "remaining": 185
+    },
+    "zn_formate_mof|ZnC2H2O4|24|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion": {
+      "action_ids": [
+        "fc0638a6e871508b",
+        "2caf1c9af00f3d1a"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "maximum": 192,
+      "remaining": 184
+    },
+    "zn_formate_mof|ZnC2H2O4|24|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation": {
+      "action_ids": [
+        "3b4091f2627b3b49",
+        "270c11520ca455d0"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "maximum": 192,
+      "remaining": 185
+    },
+    "zn_formate_mof|ZnC2H2O4|48|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion": {
+      "action_ids": [
+        "fe7f6700ecb5798c",
+        "cd7743a804138171"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "maximum": 192,
+      "remaining": 184
+    },
+    "zn_formate_mof|ZnC2H2O4|48|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation": {
+      "action_ids": [
+        "716fca0ed251a3db",
+        "d2f2fcf987594a54"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "maximum": 192,
+      "remaining": 185
+    },
+    "zn_formate_mof|ZnC2H2O4|96|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion": {
+      "action_ids": [
+        "068e89e762d3d82a",
+        "fc8a69bee7c8006f"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "maximum": 192,
+      "remaining": 184
+    },
+    "zn_formate_mof|ZnC2H2O4|96|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation": {
+      "action_ids": [
+        "30e133fbc5089e52",
+        "74d98ddc85488018"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "maximum": 192,
+      "remaining": 185
+    }
+  },
+  "capacity_validation": {
+    "valid": true
+  },
+  "catalog_version": "executable-capacities-2",
+  "material": "zn_formate_mof",
+  "model_id": "gemini-4-carbon",
+  "parsed_allocations": [
+    {
+      "action_id": "fc0638a6e871508b",
+      "count": 8
+    },
+    {
+      "action_id": "3b4091f2627b3b49",
+      "count": 6
+    },
+    {
+      "action_id": "2caf1c9af00f3d1a",
+      "count": 5
+    },
+    {
+      "action_id": "270c11520ca455d0",
+      "count": 3
+    },
+    {
+      "action_id": "fe7f6700ecb5798c",
+      "count": 7
+    },
+    {
+      "action_id": "716fca0ed251a3db",
+      "count": 5
+    },
+    {
+      "action_id": "cd7743a804138171",
+      "count": 5
+    },
+    {
+      "action_id": "d2f2fcf987594a54",
+      "count": 3
+    },
+    {
+      "action_id": "068e89e762d3d82a",
+      "count": 6
+    },
+    {
+      "action_id": "30e133fbc5089e52",
+      "count": 4
+    },
+    {
+      "action_id": "fc8a69bee7c8006f",
+      "count": 4
+    },
+    {
+      "action_id": "74d98ddc85488018",
+      "count": 2
+    },
+    {
+      "action_id": "4fcaedaee1044bfd",
+      "count": 1
+    },
+    {
+      "action_id": "e00b757595310715",
+      "count": 2
+    },
+    {
+      "action_id": "d5a3f1d31690917b",
+      "count": 1
+    },
+    {
+      "action_id": "1f15d3fa74382579",
+      "count": 2
+    }
+  ],
+  "prompt": "Choose E3-MLIP crystallographic generation allocations for this round. Use only the allow-listed actions and only the strategy-local MACE geometry optimization history below. There are no DFT labels, DFT references, or independent validation data. Return JSON with exactly keys allocations, cited_evidence_ids, rationale. allocations is a list of {action_id,count}; counts must be positive integers, IDs unique, sum exactly to the round target, and each minimum tier count must be met. cited_evidence_ids must be a non-empty JSON array of exact strings from Valid evidence IDs below; do not invent, modify, or annotate those IDs. Do not select outside the list. The compact hierarchical catalog maps dimension codes to values; allowed rows are action_id followed by material class(m), composition(c), tier(t), structural family(f), generator(g), perturbation(p), and symmetry family(s) codes. These rows are the complete authoritative allowlist.\nMaterial class: zn_formate_mof\nRound target: 64\nMinimum counts by size tier: {\"192\": 1, \"24\": 1, \"48\": 1, \"96\": 1}\nValid evidence IDs: [\"2e09f6ac1e2ce5126392d3e453a21d6074ea2da4ea3a72a2fe3f19e327bc96fc\", \"31121016e322294646e83147fa893f94a43e9cc3d55e95ca4f09ce98bc0348f3\", \"44d61f6ab4e5c07e77126ca3dd4fd6aa487baca63854da4d1a09108525a9c3fe\", \"70362a5d678ad9293fbd2e96227f90a7cdefdfc95ff5943bff7e37d8f069fe98\", \"73a378d05fe668888dca117764377dd917790e7097f2fa4cc594ede6b25b37b9\", \"8476c853d72cab2f24b5b56998d777c2a225ee2b9d1ef825be7ae1b49cb79b97\", \"884d935aa40e8f03ff1a762c4b2b0638bbe51a5558c660efc0f8036529e1d23f\", \"8b14063711fe36f8d20772089b9da840d84fe097499b51b68790968eea7c293e\", \"a8713a5a1cf8932411b554a7f432b2bed3f8c026bbc623b50a2c9d92b89721ce\", \"b5894cc8278f1784682aa4cce80d3944d7d89bf1c0022b694dfdd8c1eedb658d\", \"ba11a4f6c135e73d1a92484350e6d3fa1e76a6e94ce644390641d88446d91146\", \"campaign-design\", \"f41df8eaac5b003d7bd351b4431ddabaf5f368727fecdadcb87c1d53559c8064\"]\nPrior strategy-local outcomes: [{\"action_id\": \"10991ea5222e1f6d\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"b5894cc8278f1784682aa4cce80d3944d7d89bf1c0022b694dfdd8c1eedb658d\", \"failed\": 0, \"family\": \"strain\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.04556106833471858, \"mean_energy_eV_per_atom\": -6.068452154143935, \"mean_rms_atom_displacement_A\": 0.38821428113296036, \"nonconverged\": 1, \"runtime_seconds\": 164.0198460049869, \"size_tier\": 24}, {\"action_id\": \"fc0638a6e871508b\", \"attempted\": 8, \"converged\": 0, \"distinct_final_geometry_hashes\": 8, \"evidence_id\": \"70362a5d678ad9293fbd2e96227f90a7cdefdfc95ff5943bff7e37d8f069fe98\", \"failed\": 0, \"family\": \"bounded_perturbation\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.36967894123611283, \"mean_energy_eV_per_atom\": -6.0684506627963035, \"mean_rms_atom_displacement_A\": 0.4286197450161713, \"nonconverged\": 8, \"runtime_seconds\": 1330.8441884500062, \"size_tier\": 24}, {\"action_id\": \"3b4091f2627b3b49\", \"attempted\": 7, \"converged\": 0, \"distinct_final_geometry_hashes\": 7, \"evidence_id\": \"ba11a4f6c135e73d1a92484350e6d3fa1e76a6e94ce644390641d88446d91146\", \"failed\": 0, \"family\": \"bounded_perturbation\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.3164922873536246, \"mean_energy_eV_per_atom\": -6.068298928460186, \"mean_rms_atom_displacement_A\": 0.4127970990505806, \"nonconverged\": 7, \"runtime_seconds\": 1139.3722344730486, \"size_tier\": 24}, {\"action_id\": \"7bd4aa4dad36d6ee\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"8476c853d72cab2f24b5b56998d777c2a225ee2b9d1ef825be7ae1b49cb79b97\", \"failed\": 0, \"family\": \"strain\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.048191331474166266, \"mean_energy_eV_per_atom\": -6.068011230609988, \"mean_rms_atom_displacement_A\": 0.535959458583795, \"nonconverged\": 1, \"runtime_seconds\": 173.48879330699856, \"size_tier\": 48}, {\"action_id\": \"fe7f6700ecb5798c\", \"attempted\": 8, \"converged\": 0, \"distinct_final_geometry_hashes\": 8, \"evidence_id\": \"884d935aa40e8f03ff1a762c4b2b0638bbe51a5558c660efc0f8036529e1d23f\", \"failed\": 0, \"family\": \"bounded_perturbation\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.41511521928278755, \"mean_energy_eV_per_atom\": -6.067958810839576, \"mean_rms_atom_displacement_A\": 0.5270841712848099, \"nonconverged\": 8, \"runtime_seconds\": 1494.414789418035, \"size_tier\": 48}, {\"action_id\": \"716fca0ed251a3db\", \"attempted\": 7, \"converged\": 0, \"distinct_final_geometry_hashes\": 7, \"evidence_id\": \"31121016e322294646e83147fa893f94a43e9cc3d55e95ca4f09ce98bc0348f3\", \"failed\": 0, \"family\": \"bounded_perturbation\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.3587631475947112, \"mean_energy_eV_per_atom\": -6.0677578953775635, \"mean_rms_atom_displacement_A\": 0.5219572061893756, \"nonconverged\": 7, \"runtime_seconds\": 1291.5473313409602, \"size_tier\": 48}, {\"action_id\": \"5c2154403f24c366\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"44d61f6ab4e5c07e77126ca3dd4fd6aa487baca63854da4d1a09108525a9c3fe\", \"failed\": 0, \"family\": \"strain\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.07118369117833127, \"mean_energy_eV_per_atom\": -6.067463349416784, \"mean_rms_atom_displacement_A\": 0.677303842847386, \"nonconverged\": 1, \"runtime_seconds\": 256.2612882419926, \"size_tier\": 96}, {\"action_id\": \"068e89e762d3d82a\", \"attempted\": 8, \"converged\": 0, \"distinct_final_geometry_hashes\": 8, \"evidence_id\": \"73a378d05fe668888dca117764377dd917790e7097f2fa4cc594ede6b25b37b9\", \"failed\": 0, \"family\": \"bounded_perturbation\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.48468184709584117, \"mean_energy_eV_per_atom\": -6.067431587631761, \"mean_rms_atom_displacement_A\": 0.6859264568353618, \"nonconverged\": 8, \"runtime_seconds\": 1744.8546495450282, \"size_tier\": 96}, {\"action_id\": \"30e133fbc5089e52\", \"attempted\": 7, \"converged\": 0, \"distinct_final_geometry_hashes\": 7, \"evidence_id\": \"a8713a5a1cf8932411b554a7f432b2bed3f8c026bbc623b50a2c9d92b89721ce\", \"failed\": 0, \"family\": \"bounded_perturbation\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.41828250038250797, \"mean_energy_eV_per_atom\": -6.0669372575926275, \"mean_rms_atom_displacement_A\": 0.6920404390865038, \"nonconverged\": 7, \"runtime_seconds\": 1505.8170013770286, \"size_tier\": 96}, {\"action_id\": \"603394865593d438\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"8b14063711fe36f8d20772089b9da840d84fe097499b51b68790968eea7c293e\", \"failed\": 0, \"family\": \"strain\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.07875265839388804, \"mean_energy_eV_per_atom\": -6.066761234436374, \"mean_rms_atom_displacement_A\": 0.8729869736145107, \"nonconverged\": 1, \"runtime_seconds\": 283.50957021799695, \"size_tier\": 192}, {\"action_id\": \"4fcaedaee1044bfd\", \"attempted\": 8, \"converged\": 0, \"distinct_final_geometry_hashes\": 5, \"evidence_id\": \"2e09f6ac1e2ce5126392d3e453a21d6074ea2da4ea3a72a2fe3f19e327bc96fc\", \"failed\": 0, \"family\": \"bounded_perturbation\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.6587699658619548, \"mean_energy_eV_per_atom\": -6.066638367223009, \"mean_rms_atom_displacement_A\": 0.809923071953575, \"nonconverged\": 8, \"runtime_seconds\": 2371.571877103037, \"size_tier\": 192}, {\"action_id\": \"e00b757595310715\", \"attempted\": 7, \"converged\": 0, \"distinct_final_geometry_hashes\": 6, \"evidence_id\": \"f41df8eaac5b003d7bd351b4431ddabaf5f368727fecdadcb87c1d53559c8064\", \"failed\": 0, \"family\": \"bounded_perturbation\", \"generator\": \"cod_7205949\", \"gpu_hours\": 0.564653608764727, \"mean_energy_eV_per_atom\": -6.065722395995269, \"mean_rms_atom_displacement_A\": 0.8590214822008212, \"nonconverged\": 7, \"runtime_seconds\": 2032.7529915530176, \"size_tier\": 192}]\nShared capacity groups: sum counts across ALL action_ids in each group must not exceed remaining. Aliases do not add capacity.\n{\"zn_formate_mof|ZnC2H2O4|192|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion\":{\"action_ids\":[\"4fcaedaee1044bfd\",\"d5a3f1d31690917b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_proton_rotation_degrees\":15,\"preserve_connectivity\":true,\"proton_orientation_sites\":\"all formate hydrogens, fixed C-H lengths\",\"strain_fraction\":0.005},\"maximum\":192,\"remaining\":184},\"zn_formate_mof|ZnC2H2O4|192|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation\":{\"action_ids\":[\"e00b757595310715\",\"1f15d3fa74382579\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_proton_rotation_degrees\":15,\"preserve_connectivity\":true,\"proton_orientation_sites\":\"all formate hydrogens, fixed C-H lengths\",\"strain_fraction\":0.005},\"maximum\":192,\"remaining\":185},\"zn_formate_mof|ZnC2H2O4|24|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion\":{\"action_ids\":[\"fc0638a6e871508b\",\"2caf1c9af00f3d1a\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_proton_rotation_degrees\":15,\"preserve_connectivity\":true,\"proton_orientation_sites\":\"all formate hydrogens, fixed C-H lengths\",\"strain_fraction\":0.005},\"maximum\":192,\"remaining\":184},\"zn_formate_mof|ZnC2H2O4|24|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation\":{\"action_ids\":[\"3b4091f2627b3b49\",\"270c11520ca455d0\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_proton_rotation_degrees\":15,\"preserve_connectivity\":true,\"proton_orientation_sites\":\"all formate hydrogens, fixed C-H lengths\",\"strain_fraction\":0.005},\"maximum\":192,\"remaining\":185},\"zn_formate_mof|ZnC2H2O4|48|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion\":{\"action_ids\":[\"fe7f6700ecb5798c\",\"cd7743a804138171\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_proton_rotation_degrees\":15,\"preserve_connectivity\":true,\"proton_orientation_sites\":\"all formate hydrogens, fixed C-H lengths\",\"strain_fraction\":0.005},\"maximum\":192,\"remaining\":184},\"zn_formate_mof|ZnC2H2O4|48|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation\":{\"action_ids\":[\"716fca0ed251a3db\",\"d2f2fcf987594a54\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_proton_rotation_degrees\":15,\"preserve_connectivity\":true,\"proton_orientation_sites\":\"all formate hydrogens, fixed C-H lengths\",\"strain_fraction\":0.005},\"maximum\":192,\"remaining\":185},\"zn_formate_mof|ZnC2H2O4|96|bounded_perturbation|cod_7205949|None|0.005|any-compatible|connectivity_preserving_distortion\":{\"action_ids\":[\"068e89e762d3d82a\",\"fc8a69bee7c8006f\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_proton_rotation_degrees\":15,\"preserve_connectivity\":true,\"proton_orientation_sites\":\"all formate hydrogens, fixed C-H lengths\",\"strain_fraction\":0.005},\"maximum\":192,\"remaining\":184},\"zn_formate_mof|ZnC2H2O4|96|bounded_perturbation|cod_7205949|None|0.005|any-compatible|proton_orientation\":{\"action_ids\":[\"30e133fbc5089e52\",\"74d98ddc85488018\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_proton_rotation_degrees\":15,\"preserve_connectivity\":true,\"proton_orientation_sites\":\"all formate hydrogens, fixed C-H lengths\",\"strain_fraction\":0.005},\"maximum\":192,\"remaining\":185}}\nHierarchical action catalog: {\"dimensions\":{\"m\":{\"0\":\"zn_formate_mof\"},\"c\":{\"0\":\"ZnC2H2O4\"},\"t\":{\"0\":24,\"1\":48,\"2\":96,\"3\":192},\"f\":{\"0\":\"cod-7205949-framework\",\"1\":\"cod-7205949-framework-distortion\"},\"g\":{\"0\":\"cod_7205949\"},\"p\":{\"0\":{\"operation\":\"connectivity_preserving_distortion\",\"strain\":0.005},\"1\":{\"operation\":\"proton_orientation\",\"strain\":0.005}},\"s\":{\"0\":\"any-compatible\"}},\"allowed\":[\"fc0638a6e871508b m0 c0 t0 f0 g0 p0 s0\",\"3b4091f2627b3b49 m0 c0 t0 f0 g0 p1 s0\",\"fe7f6700ecb5798c m0 c0 t1 f0 g0 p0 s0\",\"716fca0ed251a3db m0 c0 t1 f0 g0 p1 s0\",\"068e89e762d3d82a m0 c0 t2 f0 g0 p0 s0\",\"30e133fbc5089e52 m0 c0 t2 f0 g0 p1 s0\",\"4fcaedaee1044bfd m0 c0 t3 f0 g0 p0 s0\",\"e00b757595310715 m0 c0 t3 f0 g0 p1 s0\",\"2caf1c9af00f3d1a m0 c0 t0 f1 g0 p0 s0\",\"270c11520ca455d0 m0 c0 t0 f1 g0 p1 s0\",\"cd7743a804138171 m0 c0 t1 f1 g0 p0 s0\",\"d2f2fcf987594a54 m0 c0 t1 f1 g0 p1 s0\",\"fc8a69bee7c8006f m0 c0 t2 f1 g0 p0 s0\",\"74d98ddc85488018 m0 c0 t2 f1 g0 p1 s0\",\"d5a3f1d31690917b m0 c0 t3 f1 g0 p0 s0\",\"1f15d3fa74382579 m0 c0 t3 f1 g0 p1 s0\"]}\n",
+  "prompt_version": "executable-capacities-2",
+  "raw_response": "```json\n{\n  \"allocations\": [\n    {\"action_id\": \"fc0638a6e871508b\", \"count\": 8},\n    {\"action_id\": \"3b4091f2627b3b49\", \"count\": 6},\n    {\"action_id\": \"2caf1c9af00f3d1a\", \"count\": 5},\n    {\"action_id\": \"270c11520ca455d0\", \"count\": 3},\n    {\"action_id\": \"fe7f6700ecb5798c\", \"count\": 7},\n    {\"action_id\": \"716fca0ed251a3db\", \"count\": 5},\n    {\"action_id\": \"cd7743a804138171\", \"count\": 5},\n    {\"action_id\": \"d2f2fcf987594a54\", \"count\": 3},\n    {\"action_id\": \"068e89e762d3d82a\", \"count\": 6},\n    {\"action_id\": \"30e133fbc5089e52\", \"count\": 4},\n    {\"action_id\": \"fc8a69bee7c8006f\", \"count\": 4},\n    {\"action_id\": \"74d98ddc85488018\", \"count\": 2},\n    {\"action_id\": \"4fcaedaee1044bfd\", \"count\": 1},\n    {\"action_id\": \"e00b757595310715\", \"count\": 2},\n    {\"action_id\": \"d5a3f1d31690917b\", \"count\": 1},\n    {\"action_id\": \"1f15d3fa74382579\", \"count\": 2}\n  ],\n  \"cited_evidence_ids\": [\n    \"70362a5d678ad9293fbd2e96227f90a7cdefdfc95ff5943bff7e37d8f069fe98\",\n    \"ba11a4f6c135e73d1a92484350e6d3fa1e76a6e94ce644390641d88446d91146\",\n    \"884d935aa40e8f03ff1a762c4b2b0638bbe51a5558c660efc0f8036529e1d23f\",\n    \"31121016e322294646e83147fa893f94a43e9cc3d55e95ca4f09ce98bc0348f3\",\n    \"73a378d05fe668888dca117764377dd917790e7097f2fa4cc594ede6b25b37b9\",\n    \"a8713a5a1cf8932411b554a7f432b2bed3f8c026bbc623b50a2c9d92b89721ce\",\n    \"2e09f6ac1e2ce5126392d3e453a21d6074ea2da4ea3a72a2fe3f19e327bc96fc\",\n    \"f41df8eaac5b003d7bd351b4431ddabaf5f368727fecdadcb87c1d53559c8064\",\n    \"campaign-design\"\n  ],\n  \"rationale\": \"Prior MACE optimization outcomes show 0 failures and 0 converged trajectories across all bounded perturbations, making distinct final geometry yield, MACE energy per atom, displacement behavior, and GPU cost the primary selection signals. Size tiers 24, 48, and 96 achieved 100% distinct final geometry hashes (8/8 and 7/7) with lower GPU hours per structure and progressively lower mean energies (-6.0685 to -6.0669 eV/atom), whereas tier 192 exhibited final-geometry hash collisions (5/8 for connectivity_preserving_distortion and 6/7 for proton_orientation), larger RMS displacements (~0.81-0.86 A), higher energies, and the highest compute cost. Accordingly, we concentrate 58 of 64 allocations across tiers 24 (22), 48 (20), and 96 (16), weighting connectivity_preserving_distortion over proton_orientation due to consistently lower MACE energies in those tiers, while allocating 6 structures to tier 192 (favoring proton_orientation for its higher 6/7 distinctness ratio) and sampling both f0 and f1 structural family variants well within shared capacity limits.\"\n}\n```",
+  "rejected_actions": [],
+  "round": 2,
+  "seed": 20261113,
+  "status": "accepted",
+  "strategy": "llm_guided_adaptation",
+  "unavailable_actions": [
+    {
+      "action": {
+        "action_id": "10991ea5222e1f6d",
+        "defect": null,
+        "family": "strain",
+        "family_label": "cod-7205949-framework",
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 24,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "action_id": "10991ea5222e1f6d",
+      "available_prototypes": [],
+      "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+      "capacity_group": "zn-formate-homogeneous-strain:24",
+      "catalog_version": "executable-capacities-2",
+      "category": "capacity_exhausted",
+      "generation_method": "cod_7205949",
+      "generator_available": true,
+      "maximum_distinct_configurations": 1,
+      "perturbation_constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "reason": "capacity exhausted: zn-formate-homogeneous-strain:24",
+      "remaining_capacity": 0,
+      "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+    },
+    {
+      "action": {
+        "action_id": "7bd4aa4dad36d6ee",
+        "defect": null,
+        "family": "strain",
+        "family_label": "cod-7205949-framework",
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 48,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "action_id": "7bd4aa4dad36d6ee",
+      "available_prototypes": [],
+      "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+      "capacity_group": "zn-formate-homogeneous-strain:48",
+      "catalog_version": "executable-capacities-2",
+      "category": "capacity_exhausted",
+      "generation_method": "cod_7205949",
+      "generator_available": true,
+      "maximum_distinct_configurations": 1,
+      "perturbation_constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "reason": "capacity exhausted: zn-formate-homogeneous-strain:48",
+      "remaining_capacity": 0,
+      "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+    },
+    {
+      "action": {
+        "action_id": "5c2154403f24c366",
+        "defect": null,
+        "family": "strain",
+        "family_label": "cod-7205949-framework",
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 96,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "action_id": "5c2154403f24c366",
+      "available_prototypes": [],
+      "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+      "capacity_group": "zn-formate-homogeneous-strain:96",
+      "catalog_version": "executable-capacities-2",
+      "category": "capacity_exhausted",
+      "generation_method": "cod_7205949",
+      "generator_available": true,
+      "maximum_distinct_configurations": 1,
+      "perturbation_constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "reason": "capacity exhausted: zn-formate-homogeneous-strain:96",
+      "remaining_capacity": 0,
+      "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+    },
+    {
+      "action": {
+        "action_id": "603394865593d438",
+        "defect": null,
+        "family": "strain",
+        "family_label": "cod-7205949-framework",
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 192,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "action_id": "603394865593d438",
+      "available_prototypes": [],
+      "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+      "capacity_group": "zn-formate-homogeneous-strain:192",
+      "catalog_version": "executable-capacities-2",
+      "category": "capacity_exhausted",
+      "generation_method": "cod_7205949",
+      "generator_available": true,
+      "maximum_distinct_configurations": 1,
+      "perturbation_constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "reason": "capacity exhausted: zn-formate-homogeneous-strain:192",
+      "remaining_capacity": 0,
+      "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+    },
+    {
+      "action": {
+        "action_id": "391ccd4eeff60e3d",
+        "defect": null,
+        "family": "strain",
+        "family_label": "cod-7205949-framework-distortion",
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 24,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "action_id": "391ccd4eeff60e3d",
+      "available_prototypes": [],
+      "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+      "capacity_group": "zn-formate-homogeneous-strain:24",
+      "catalog_version": "executable-capacities-2",
+      "category": "capacity_exhausted",
+      "generation_method": "cod_7205949",
+      "generator_available": true,
+      "maximum_distinct_configurations": 1,
+      "perturbation_constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "reason": "capacity exhausted: zn-formate-homogeneous-strain:24",
+      "remaining_capacity": 0,
+      "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+    },
+    {
+      "action": {
+        "action_id": "d369517265976e39",
+        "defect": null,
+        "family": "strain",
+        "family_label": "cod-7205949-framework-distortion",
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 48,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "action_id": "d369517265976e39",
+      "available_prototypes": [],
+      "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+      "capacity_group": "zn-formate-homogeneous-strain:48",
+      "catalog_version": "executable-capacities-2",
+      "category": "capacity_exhausted",
+      "generation_method": "cod_7205949",
+      "generator_available": true,
+      "maximum_distinct_configurations": 1,
+      "perturbation_constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "reason": "capacity exhausted: zn-formate-homogeneous-strain:48",
+      "remaining_capacity": 0,
+      "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+    },
+    {
+      "action": {
+        "action_id": "522f51eb49fedb80",
+        "defect": null,
+        "family": "strain",
+        "family_label": "cod-7205949-framework-distortion",
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 96,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "action_id": "522f51eb49fedb80",
+      "available_prototypes": [],
+      "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+      "capacity_group": "zn-formate-homogeneous-strain:96",
+      "catalog_version": "executable-capacities-2",
+      "category": "capacity_exhausted",
+      "generation_method": "cod_7205949",
+      "generator_available": true,
+      "maximum_distinct_configurations": 1,
+      "perturbation_constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "reason": "capacity exhausted: zn-formate-homogeneous-strain:96",
+      "remaining_capacity": 0,
+      "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+    },
+    {
+      "action": {
+        "action_id": "6e03f6f682cc547f",
+        "defect": null,
+        "family": "strain",
+        "family_label": "cod-7205949-framework-distortion",
+        "formula": "ZnC2H2O4",
+        "generator": "cod_7205949",
+        "material": "zn_formate_mof",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 192,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.005
+      },
+      "action_id": "6e03f6f682cc547f",
+      "available_prototypes": [],
+      "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+      "capacity_group": "zn-formate-homogeneous-strain:192",
+      "catalog_version": "executable-capacities-2",
+      "category": "capacity_exhausted",
+      "generation_method": "cod_7205949",
+      "generator_available": true,
+      "maximum_distinct_configurations": 1,
+      "perturbation_constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_proton_rotation_degrees": 15,
+        "preserve_connectivity": true,
+        "proton_orientation_sites": "all formate hydrogens, fixed C-H lengths",
+        "strain_fraction": 0.005
+      },
+      "reason": "capacity exhausted: zn-formate-homogeneous-strain:192",
+      "remaining_capacity": 0,
+      "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/zn_formate_cod_7205949.cif"
+    }
+  ]
+}

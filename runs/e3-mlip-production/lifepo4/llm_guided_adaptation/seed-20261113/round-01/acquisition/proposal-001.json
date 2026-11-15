@@ -1,0 +1,679 @@
+{
+  "accepted_final_allocation": [
+    {
+      "action": {
+        "action_id": "d10cc02b17a3454a",
+        "defect": null,
+        "family": "olivine",
+        "family_label": "olivine-pristine",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "lifepo4-pristine-parent:4",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "realized_operation": "pristine parent (operation labels are aliases)",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "antisite_pair",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "9cfeb4e2f27a6a9d",
+        "defect": null,
+        "family": "olivine",
+        "family_label": "olivine-pristine",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "lifepo4-pristine-parent:8",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "realized_operation": "pristine parent (operation labels are aliases)",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "antisite_pair",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "7b5253f2cedc242c",
+        "defect": null,
+        "family": "olivine",
+        "family_label": "olivine-pristine",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "lifepo4-pristine-parent:16",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "realized_operation": "pristine parent (operation labels are aliases)",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "antisite_pair",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "fdbe30ce5cef87e2",
+        "defect": null,
+        "family": "olivine",
+        "family_label": "olivine-pristine",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "lifepo4-pristine-parent:32",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "realized_operation": "pristine parent (operation labels are aliases)",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "antisite_pair",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "e66fe29b5a9c68cf",
+        "defect": "antisite_pair",
+        "family": "antisite_pair",
+        "family_label": "olivine-antisite-pair",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "lifepo4|LiFePO4|4|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 2,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "antisite_pair",
+            "realized_operation": "Li-Fe antisite pair",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 2,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "antisite_pair",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "960244c7015e1385",
+        "defect": "antisite_pair",
+        "family": "antisite_pair",
+        "family_label": "olivine-antisite-pair",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "lifepo4|LiFePO4|8|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 4,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "antisite_pair",
+            "realized_operation": "Li-Fe antisite pair",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 4,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "antisite_pair",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 4
+    },
+    {
+      "action": {
+        "action_id": "06ec5d5dfd3b4d9c",
+        "defect": "antisite_pair",
+        "family": "antisite_pair",
+        "family_label": "olivine-antisite-pair",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "lifepo4|LiFePO4|16|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 8,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "antisite_pair",
+            "realized_operation": "Li-Fe antisite pair",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 8,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "antisite_pair",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 8
+    },
+    {
+      "action": {
+        "action_id": "4049dc48567c7b53",
+        "defect": "antisite_pair",
+        "family": "antisite_pair",
+        "family_label": "olivine-antisite-pair",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "lifepo4|LiFePO4|32|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 16,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "antisite_pair",
+            "realized_operation": "Li-Fe antisite pair",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 16,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "antisite_pair",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 10
+    },
+    {
+      "action": {
+        "action_id": "f2001686c42033ab",
+        "defect": null,
+        "family": "olivine_strain",
+        "family_label": "olivine-bounded-strain",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "lifepo4|LiFePO4|4|olivine_strain|ase_seed_variants|None|0.01|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_local_displacement_A": 0.04,
+            "realized_operation": "bounded strained olivine with local distortions",
+            "strain_fraction": 0.01
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.01
+      },
+      "count": 9
+    },
+    {
+      "action": {
+        "action_id": "a1f2676de05a39ee",
+        "defect": null,
+        "family": "olivine_strain",
+        "family_label": "olivine-bounded-strain",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "lifepo4|LiFePO4|8|olivine_strain|ase_seed_variants|None|0.01|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_local_displacement_A": 0.04,
+            "realized_operation": "bounded strained olivine with local distortions",
+            "strain_fraction": 0.01
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.01
+      },
+      "count": 9
+    },
+    {
+      "action": {
+        "action_id": "490143162f8527ca",
+        "defect": null,
+        "family": "olivine_strain",
+        "family_label": "olivine-bounded-strain",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "lifepo4|LiFePO4|16|olivine_strain|ase_seed_variants|None|0.01|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_local_displacement_A": 0.04,
+            "realized_operation": "bounded strained olivine with local distortions",
+            "strain_fraction": 0.01
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.01
+      },
+      "count": 9
+    },
+    {
+      "action": {
+        "action_id": "6132c1b1dc24ef0f",
+        "defect": null,
+        "family": "olivine_strain",
+        "family_label": "olivine-bounded-strain",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "lifepo4|LiFePO4|32|olivine_strain|ase_seed_variants|None|0.01|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "ase_seed_variants",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "maximum_local_displacement_A": 0.04,
+            "realized_operation": "bounded strained olivine with local distortions",
+            "strain_fraction": 0.01
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/lifepo4_olivine.extxyz"
+        },
+        "formula": "LiFePO4",
+        "generator": "ase_seed_variants",
+        "material": "lifepo4",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.01
+      },
+      "count": 9
+    }
+  ],
+  "capacity_groups": {
+    "lifepo4-pristine-parent:16": {
+      "action_ids": [
+        "7b5253f2cedc242c",
+        "25a460f85f86160d",
+        "b26a097929dc809c"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "realized_operation": "pristine parent (operation labels are aliases)",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "lifepo4-pristine-parent:32": {
+      "action_ids": [
+        "fdbe30ce5cef87e2",
+        "989a349cd141bfd9",
+        "0c07a3b5e6f6cee9"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "realized_operation": "pristine parent (operation labels are aliases)",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "lifepo4-pristine-parent:4": {
+      "action_ids": [
+        "d10cc02b17a3454a",
+        "ce551fc44e605733",
+        "8274e56fd2600b3a"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "realized_operation": "pristine parent (operation labels are aliases)",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "lifepo4-pristine-parent:8": {
+      "action_ids": [
+        "9cfeb4e2f27a6a9d",
+        "db56a21282e8408c",
+        "38420ff861d646d3"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "realized_operation": "pristine parent (operation labels are aliases)",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "lifepo4|LiFePO4|16|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible": {
+      "action_ids": [
+        "06ec5d5dfd3b4d9c",
+        "f01d416a6bb5cac2",
+        "7fd0ab53ccbe1d7d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "antisite_pair",
+        "realized_operation": "Li-Fe antisite pair",
+        "strain_fraction": null
+      },
+      "maximum": 8,
+      "remaining": 8
+    },
+    "lifepo4|LiFePO4|16|olivine_strain|ase_seed_variants|None|0.01|any-compatible": {
+      "action_ids": [
+        "20595b9b4b68d4fc",
+        "490143162f8527ca",
+        "30ec94cdf185756f"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_local_displacement_A": 0.04,
+        "realized_operation": "bounded strained olivine with local distortions",
+        "strain_fraction": 0.01
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "lifepo4|LiFePO4|32|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible": {
+      "action_ids": [
+        "4049dc48567c7b53",
+        "85f952bab39645d9",
+        "3ddbd0fccc248947"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "antisite_pair",
+        "realized_operation": "Li-Fe antisite pair",
+        "strain_fraction": null
+      },
+      "maximum": 16,
+      "remaining": 16
+    },
+    "lifepo4|LiFePO4|32|olivine_strain|ase_seed_variants|None|0.01|any-compatible": {
+      "action_ids": [
+        "b20194921afb53e9",
+        "6132c1b1dc24ef0f",
+        "dda6cab621fdc398"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_local_displacement_A": 0.04,
+        "realized_operation": "bounded strained olivine with local distortions",
+        "strain_fraction": 0.01
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "lifepo4|LiFePO4|4|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible": {
+      "action_ids": [
+        "e66fe29b5a9c68cf",
+        "448f4055c1236f02",
+        "625f85e19ba0ecb7"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "antisite_pair",
+        "realized_operation": "Li-Fe antisite pair",
+        "strain_fraction": null
+      },
+      "maximum": 2,
+      "remaining": 2
+    },
+    "lifepo4|LiFePO4|4|olivine_strain|ase_seed_variants|None|0.01|any-compatible": {
+      "action_ids": [
+        "618c89063596db62",
+        "f2001686c42033ab",
+        "a8fac9e51db7a899"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_local_displacement_A": 0.04,
+        "realized_operation": "bounded strained olivine with local distortions",
+        "strain_fraction": 0.01
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "lifepo4|LiFePO4|8|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible": {
+      "action_ids": [
+        "960244c7015e1385",
+        "7e77e2eab4486515",
+        "5ceb9aa60cd39646"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "antisite_pair",
+        "realized_operation": "Li-Fe antisite pair",
+        "strain_fraction": null
+      },
+      "maximum": 4,
+      "remaining": 4
+    },
+    "lifepo4|LiFePO4|8|olivine_strain|ase_seed_variants|None|0.01|any-compatible": {
+      "action_ids": [
+        "0292ab38c4bf95ee",
+        "a1f2676de05a39ee",
+        "76843613bb45414c"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "maximum_local_displacement_A": 0.04,
+        "realized_operation": "bounded strained olivine with local distortions",
+        "strain_fraction": 0.01
+      },
+      "maximum": 192,
+      "remaining": 192
+    }
+  },
+  "capacity_validation": {
+    "valid": true
+  },
+  "catalog_version": "executable-capacities-2",
+  "material": "lifepo4",
+  "model_id": "gemini-4-carbon",
+  "parsed_allocations": [
+    {
+      "action_id": "d10cc02b17a3454a",
+      "count": 1
+    },
+    {
+      "action_id": "9cfeb4e2f27a6a9d",
+      "count": 1
+    },
+    {
+      "action_id": "7b5253f2cedc242c",
+      "count": 1
+    },
+    {
+      "action_id": "fdbe30ce5cef87e2",
+      "count": 1
+    },
+    {
+      "action_id": "e66fe29b5a9c68cf",
+      "count": 2
+    },
+    {
+      "action_id": "960244c7015e1385",
+      "count": 4
+    },
+    {
+      "action_id": "06ec5d5dfd3b4d9c",
+      "count": 8
+    },
+    {
+      "action_id": "4049dc48567c7b53",
+      "count": 10
+    },
+    {
+      "action_id": "f2001686c42033ab",
+      "count": 9
+    },
+    {
+      "action_id": "a1f2676de05a39ee",
+      "count": 9
+    },
+    {
+      "action_id": "490143162f8527ca",
+      "count": 9
+    },
+    {
+      "action_id": "6132c1b1dc24ef0f",
+      "count": 9
+    }
+  ],
+  "prompt": "Choose E3-MLIP crystallographic generation allocations for this round. Use only the allow-listed actions and only the strategy-local MACE geometry optimization history below. There are no DFT labels, DFT references, or independent validation data. Return JSON with exactly keys allocations, cited_evidence_ids, rationale. allocations is a list of {action_id,count}; counts must be positive integers, IDs unique, sum exactly to the round target, and each minimum tier count must be met. cited_evidence_ids must be a non-empty JSON array of exact strings from Valid evidence IDs below; do not invent, modify, or annotate those IDs. Do not select outside the list. The compact hierarchical catalog maps dimension codes to values; allowed rows are action_id followed by material class(m), composition(c), tier(t), structural family(f), generator(g), perturbation(p), and symmetry family(s) codes. These rows are the complete authoritative allowlist.\nMaterial class: lifepo4\nRound target: 64\nMinimum counts by size tier: {\"16\": 1, \"32\": 1, \"4\": 1, \"8\": 1}\nValid evidence IDs: [\"campaign-design\"]\nPrior strategy-local outcomes: []\nShared capacity groups: sum counts across ALL action_ids in each group must not exceed remaining. Aliases do not add capacity.\n{\"lifepo4-pristine-parent:16\":{\"action_ids\":[\"7b5253f2cedc242c\",\"25a460f85f86160d\",\"b26a097929dc809c\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"realized_operation\":\"pristine parent (operation labels are aliases)\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"lifepo4-pristine-parent:32\":{\"action_ids\":[\"fdbe30ce5cef87e2\",\"989a349cd141bfd9\",\"0c07a3b5e6f6cee9\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"realized_operation\":\"pristine parent (operation labels are aliases)\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"lifepo4-pristine-parent:4\":{\"action_ids\":[\"d10cc02b17a3454a\",\"ce551fc44e605733\",\"8274e56fd2600b3a\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"realized_operation\":\"pristine parent (operation labels are aliases)\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"lifepo4-pristine-parent:8\":{\"action_ids\":[\"9cfeb4e2f27a6a9d\",\"db56a21282e8408c\",\"38420ff861d646d3\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"realized_operation\":\"pristine parent (operation labels are aliases)\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"lifepo4|LiFePO4|16|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible\":{\"action_ids\":[\"06ec5d5dfd3b4d9c\",\"f01d416a6bb5cac2\",\"7fd0ab53ccbe1d7d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"antisite_pair\",\"realized_operation\":\"Li-Fe antisite pair\",\"strain_fraction\":null},\"maximum\":8,\"remaining\":8},\"lifepo4|LiFePO4|16|olivine_strain|ase_seed_variants|None|0.01|any-compatible\":{\"action_ids\":[\"20595b9b4b68d4fc\",\"490143162f8527ca\",\"30ec94cdf185756f\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_local_displacement_A\":0.04,\"realized_operation\":\"bounded strained olivine with local distortions\",\"strain_fraction\":0.01},\"maximum\":192,\"remaining\":192},\"lifepo4|LiFePO4|32|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible\":{\"action_ids\":[\"4049dc48567c7b53\",\"85f952bab39645d9\",\"3ddbd0fccc248947\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"antisite_pair\",\"realized_operation\":\"Li-Fe antisite pair\",\"strain_fraction\":null},\"maximum\":16,\"remaining\":16},\"lifepo4|LiFePO4|32|olivine_strain|ase_seed_variants|None|0.01|any-compatible\":{\"action_ids\":[\"b20194921afb53e9\",\"6132c1b1dc24ef0f\",\"dda6cab621fdc398\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_local_displacement_A\":0.04,\"realized_operation\":\"bounded strained olivine with local distortions\",\"strain_fraction\":0.01},\"maximum\":192,\"remaining\":192},\"lifepo4|LiFePO4|4|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible\":{\"action_ids\":[\"e66fe29b5a9c68cf\",\"448f4055c1236f02\",\"625f85e19ba0ecb7\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"antisite_pair\",\"realized_operation\":\"Li-Fe antisite pair\",\"strain_fraction\":null},\"maximum\":2,\"remaining\":2},\"lifepo4|LiFePO4|4|olivine_strain|ase_seed_variants|None|0.01|any-compatible\":{\"action_ids\":[\"618c89063596db62\",\"f2001686c42033ab\",\"a8fac9e51db7a899\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_local_displacement_A\":0.04,\"realized_operation\":\"bounded strained olivine with local distortions\",\"strain_fraction\":0.01},\"maximum\":192,\"remaining\":192},\"lifepo4|LiFePO4|8|antisite_pair|ase_seed_variants|antisite_pair|None|any-compatible\":{\"action_ids\":[\"960244c7015e1385\",\"7e77e2eab4486515\",\"5ceb9aa60cd39646\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"antisite_pair\",\"realized_operation\":\"Li-Fe antisite pair\",\"strain_fraction\":null},\"maximum\":4,\"remaining\":4},\"lifepo4|LiFePO4|8|olivine_strain|ase_seed_variants|None|0.01|any-compatible\":{\"action_ids\":[\"0292ab38c4bf95ee\",\"a1f2676de05a39ee\",\"76843613bb45414c\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"maximum_local_displacement_A\":0.04,\"realized_operation\":\"bounded strained olivine with local distortions\",\"strain_fraction\":0.01},\"maximum\":192,\"remaining\":192}}\nHierarchical action catalog: {\"dimensions\":{\"m\":{\"0\":\"lifepo4\"},\"c\":{\"0\":\"LiFePO4\"},\"t\":{\"0\":4,\"1\":8,\"2\":16,\"3\":32},\"f\":{\"0\":\"olivine-pristine\",\"1\":\"olivine-antisite-pair\",\"2\":\"olivine-bounded-strain\"},\"g\":{\"0\":\"ase_seed_variants\"},\"p\":{\"0\":{\"operation\":\"antisite_pair\",\"realized_operation\":\"pristine parent (operation labels are aliases)\"},\"1\":{\"operation\":\"bounded_strain\",\"realized_operation\":\"pristine parent (operation labels are aliases)\"},\"2\":{\"operation\":\"symmetry_distinct_ordering\",\"realized_operation\":\"pristine parent (operation labels are aliases)\"},\"3\":{\"operation\":\"antisite_pair\",\"defect\":\"antisite_pair\",\"realized_operation\":\"Li-Fe antisite pair\"},\"4\":{\"operation\":\"bounded_strain\",\"defect\":\"antisite_pair\",\"realized_operation\":\"Li-Fe antisite pair\"},\"5\":{\"operation\":\"symmetry_distinct_ordering\",\"defect\":\"antisite_pair\",\"realized_operation\":\"Li-Fe antisite pair\"},\"6\":{\"operation\":\"antisite_pair\",\"strain\":0.01,\"realized_operation\":\"bounded strained olivine with local distortions\"},\"7\":{\"operation\":\"bounded_strain\",\"strain\":0.01,\"realized_operation\":\"bounded strained olivine with local distortions\"},\"8\":{\"operation\":\"symmetry_distinct_ordering\",\"strain\":0.01,\"realized_operation\":\"bounded strained olivine with local distortions\"}},\"s\":{\"0\":\"any-compatible\"}},\"allowed\":[\"d10cc02b17a3454a m0 c0 t0 f0 g0 p0 s0\",\"ce551fc44e605733 m0 c0 t0 f0 g0 p1 s0\",\"8274e56fd2600b3a m0 c0 t0 f0 g0 p2 s0\",\"9cfeb4e2f27a6a9d m0 c0 t1 f0 g0 p0 s0\",\"db56a21282e8408c m0 c0 t1 f0 g0 p1 s0\",\"38420ff861d646d3 m0 c0 t1 f0 g0 p2 s0\",\"7b5253f2cedc242c m0 c0 t2 f0 g0 p0 s0\",\"25a460f85f86160d m0 c0 t2 f0 g0 p1 s0\",\"b26a097929dc809c m0 c0 t2 f0 g0 p2 s0\",\"fdbe30ce5cef87e2 m0 c0 t3 f0 g0 p0 s0\",\"989a349cd141bfd9 m0 c0 t3 f0 g0 p1 s0\",\"0c07a3b5e6f6cee9 m0 c0 t3 f0 g0 p2 s0\",\"e66fe29b5a9c68cf m0 c0 t0 f1 g0 p3 s0\",\"448f4055c1236f02 m0 c0 t0 f1 g0 p4 s0\",\"625f85e19ba0ecb7 m0 c0 t0 f1 g0 p5 s0\",\"960244c7015e1385 m0 c0 t1 f1 g0 p3 s0\",\"7e77e2eab4486515 m0 c0 t1 f1 g0 p4 s0\",\"5ceb9aa60cd39646 m0 c0 t1 f1 g0 p5 s0\",\"06ec5d5dfd3b4d9c m0 c0 t2 f1 g0 p3 s0\",\"f01d416a6bb5cac2 m0 c0 t2 f1 g0 p4 s0\",\"7fd0ab53ccbe1d7d m0 c0 t2 f1 g0 p5 s0\",\"4049dc48567c7b53 m0 c0 t3 f1 g0 p3 s0\",\"85f952bab39645d9 m0 c0 t3 f1 g0 p4 s0\",\"3ddbd0fccc248947 m0 c0 t3 f1 g0 p5 s0\",\"618c89063596db62 m0 c0 t0 f2 g0 p6 s0\",\"f2001686c42033ab m0 c0 t0 f2 g0 p7 s0\",\"a8fac9e51db7a899 m0 c0 t0 f2 g0 p8 s0\",\"0292ab38c4bf95ee m0 c0 t1 f2 g0 p6 s0\",\"a1f2676de05a39ee m0 c0 t1 f2 g0 p7 s0\",\"76843613bb45414c m0 c0 t1 f2 g0 p8 s0\",\"20595b9b4b68d4fc m0 c0 t2 f2 g0 p6 s0\",\"490143162f8527ca m0 c0 t2 f2 g0 p7 s0\",\"30ec94cdf185756f m0 c0 t2 f2 g0 p8 s0\",\"b20194921afb53e9 m0 c0 t3 f2 g0 p6 s0\",\"6132c1b1dc24ef0f m0 c0 t3 f2 g0 p7 s0\",\"dda6cab621fdc398 m0 c0 t3 f2 g0 p8 s0\"]}\n",
+  "prompt_version": "executable-capacities-2",
+  "raw_response": "```json\n{\n  \"allocations\": [\n    {\"action_id\": \"d10cc02b17a3454a\", \"count\": 1},\n    {\"action_id\": \"9cfeb4e2f27a6a9d\", \"count\": 1},\n    {\"action_id\": \"7b5253f2cedc242c\", \"count\": 1},\n    {\"action_id\": \"fdbe30ce5cef87e2\", \"count\": 1},\n    {\"action_id\": \"e66fe29b5a9c68cf\", \"count\": 2},\n    {\"action_id\": \"960244c7015e1385\", \"count\": 4},\n    {\"action_id\": \"06ec5d5dfd3b4d9c\", \"count\": 8},\n    {\"action_id\": \"4049dc48567c7b53\", \"count\": 10},\n    {\"action_id\": \"f2001686c42033ab\", \"count\": 9},\n    {\"action_id\": \"a1f2676de05a39ee\", \"count\": 9},\n    {\"action_id\": \"490143162f8527ca\", \"count\": 9},\n    {\"action_id\": \"6132c1b1dc24ef0f\", \"count\": 9}\n  ],\n  \"cited_evidence_ids\": [\"campaign-design\"],\n  \"rationale\": \"With no prior strategy-local MACE optimization history in this initial round, we establish baseline coverage across all four size tiers (4, 8, 16, 32) and all three distinct structural families while strictly respecting shared capacity group limits and avoiding alias duplication. One pristine parent reference is allocated per tier (4 total), Li-Fe antisite pair configurations are sampled across tiers within group capacities (2, 4, 8, and 10 across tiers 4, 8, 16, and 32 for 24 total), and the remaining 36 allocations are distributed evenly (9 per tier) across bounded-strain olivine configurations with local distortions.\"\n}\n```",
+  "rejected_actions": [],
+  "round": 1,
+  "seed": 20261113,
+  "status": "accepted",
+  "strategy": "llm_guided_adaptation",
+  "unavailable_actions": []
+}

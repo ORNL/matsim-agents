@@ -1,0 +1,1370 @@
+{
+  "accepted_final_allocation": [
+    {
+      "action": {
+        "action_id": "aa5239bf62629525",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 190,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "aba2784ded6dc587",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 191,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "22665eed1898829c",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quinary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "6b590f5ce4a5b7b1",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "1b2345532ff8486b",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|Nb2TaVHfZrTi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Nb2TaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "220ed9dea50223b7",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTa2VHfZrTi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTa2VHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "d0f007c2ca5a10b5",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTa2VHfZrTi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTa2VHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "6aba44116c92adc7",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 188,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 8
+    },
+    {
+      "action": {
+        "action_id": "dd717561c30d8953",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 190,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 8
+    },
+    {
+      "action": {
+        "action_id": "b1a41c5fd5850ba6",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 188,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 5
+    },
+    {
+      "action": {
+        "action_id": "bbad7a11e3a73c86",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quinary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "eb1c4a383788c893",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 190,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "0f46f79b8fc7a77d",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|Nb2TaVHfZrTi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Nb2TaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "0492b3656b4e4837",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTa2VHfZrTi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTa2VHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "6e5a47c405a2229b",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTa2VHfZrTi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTa2VHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "8a22a12281364137",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 190,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 10
+    },
+    {
+      "action": {
+        "action_id": "7b7d88e5be9bb2fe",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 190,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "3646e27ff43dad7a",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 190,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "50d0749b9f1ed0e9",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    }
+  ],
+  "capacity_groups": {
+    "bcc_refractory|Nb2TaVHfZrTi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "9a345c4c75ba3121"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "8f860d597b017b13",
+        "6e61a4dfa81d294e"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "4fc3c41eae0b010f"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "c67cd2bc87e2884d",
+        "18339bac07f0c771"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 189
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "1b2345532ff8486b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "610eb733befec724",
+        "648fd8163d5b9648"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "30885c99c83d8639"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "f24f3a577c3659be",
+        "c4d98668e1f84f50"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "0f46f79b8fc7a77d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "da9ae0ddc4178359",
+        "fc02e14b4e8ea5be"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "cbdf3e3cff156730"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTa2VHfZrTi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "b2aff9c85472c879",
+        "0128e1586d7a7fb9"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTa2VHfZrTi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "0aa0c00c31d2b034"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 191
+    },
+    "bcc_refractory|NbTa2VHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "6755286952338041",
+        "07fb55975a767826"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTa2VHfZrTi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "220ed9dea50223b7"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "2a85ef133f3a48f5",
+        "d0f007c2ca5a10b5"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "b767aa9156cfa65d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "623f55231e0a9512",
+        "d89254e1c287cf0e"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 191
+    },
+    "bcc_refractory|NbTa2VHfZrTi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "0492b3656b4e4837"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "b829741dfaf7e3fa",
+        "6e5a47c405a2229b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "bf0cb143016ea6cb"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "19cb3439ae711f9d",
+        "d23ce6d6b6114f7e"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 188
+    },
+    "bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "135c7fdea250861d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "61b60cc1faaccf86",
+        "8503c99d1a400a71"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 188
+    },
+    "bcc_refractory|NbTaVHfZrTi|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "6b590f5ce4a5b7b1"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "44fb6673b3189b2b",
+        "5ef05624d165df83"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "6916d33dd2518981"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 191
+    },
+    "bcc_refractory|NbTaVHfZrTi|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "711cffbd2f0a546e",
+        "2c2b100dabc94187"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVHfZrTi|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "eb1c4a383788c893"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVHfZrTi|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "cf98e36283f45b0b",
+        "4171ccb28344bf2b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "a82ee1883d6038fa"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "b65156a4ddbc0af8",
+        "92a2fd655f9310b6"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 188
+    },
+    "bcc_refractory|NbTaVHfZr|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "00079dad2bc81622"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVHfZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "9103b8101522594f",
+        "6a8d491bf4786b93"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVHfZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "22665eed1898829c"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "c1b64f8cf1aae48f",
+        "e3d831950cab85e3"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "acaa2a7f24cc9fdb"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "e368514150a884a9",
+        "039ac5cc702f7f0b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 191
+    },
+    "bcc_refractory|NbTaVHfZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "bbad7a11e3a73c86"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "f12fb26e71ff36a3",
+        "4ee67a4004508cfb"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 191
+    },
+    "bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "8a22a12281364137"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "707b0d8b34bb105c",
+        "7b7d88e5be9bb2fe"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "4a971f4fc0f81d6e"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "3646e27ff43dad7a",
+        "a2a22c509f6f3c0d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "aa5239bf62629525"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "6f12791286cbd0ac",
+        "aba2784ded6dc587"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 191
+    },
+    "bcc_refractory|NbTaVZr|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "50d0749b9f1ed0e9"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "279541d5f4a093a5",
+        "9a5fedd19138e5a5"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 191
+    },
+    "bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "dd717561c30d8953"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 190
+    },
+    "bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "b1a41c5fd5850ba6",
+        "6aba44116c92adc7"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 188
+    }
+  },
+  "capacity_validation": {
+    "valid": true
+  },
+  "catalog_version": "executable-capacities-2",
+  "material": "bcc_refractory",
+  "model_id": "gemini-4-carbon",
+  "parsed_allocations": [
+    {
+      "action_id": "aa5239bf62629525",
+      "count": 3
+    },
+    {
+      "action_id": "aba2784ded6dc587",
+      "count": 3
+    },
+    {
+      "action_id": "22665eed1898829c",
+      "count": 2
+    },
+    {
+      "action_id": "6b590f5ce4a5b7b1",
+      "count": 2
+    },
+    {
+      "action_id": "1b2345532ff8486b",
+      "count": 3
+    },
+    {
+      "action_id": "220ed9dea50223b7",
+      "count": 2
+    },
+    {
+      "action_id": "d0f007c2ca5a10b5",
+      "count": 2
+    },
+    {
+      "action_id": "6aba44116c92adc7",
+      "count": 8
+    },
+    {
+      "action_id": "dd717561c30d8953",
+      "count": 8
+    },
+    {
+      "action_id": "b1a41c5fd5850ba6",
+      "count": 5
+    },
+    {
+      "action_id": "bbad7a11e3a73c86",
+      "count": 2
+    },
+    {
+      "action_id": "eb1c4a383788c893",
+      "count": 2
+    },
+    {
+      "action_id": "0f46f79b8fc7a77d",
+      "count": 3
+    },
+    {
+      "action_id": "0492b3656b4e4837",
+      "count": 2
+    },
+    {
+      "action_id": "6e5a47c405a2229b",
+      "count": 2
+    },
+    {
+      "action_id": "8a22a12281364137",
+      "count": 10
+    },
+    {
+      "action_id": "7b7d88e5be9bb2fe",
+      "count": 3
+    },
+    {
+      "action_id": "3646e27ff43dad7a",
+      "count": 1
+    },
+    {
+      "action_id": "50d0749b9f1ed0e9",
+      "count": 1
+    }
+  ],
+  "prompt": "Choose E3-MLIP crystallographic generation allocations for this round. Use only the allow-listed actions and only the strategy-local MACE geometry optimization history below. There are no DFT labels, DFT references, or independent validation data. Return JSON with exactly keys allocations, cited_evidence_ids, rationale. allocations is a list of {action_id,count}; counts must be positive integers, IDs unique, sum exactly to the round target, and each minimum tier count must be met. cited_evidence_ids must be a non-empty JSON array of exact strings from Valid evidence IDs below; do not invent, modify, or annotate those IDs. Do not select outside the list. The compact hierarchical catalog maps dimension codes to values; allowed rows are action_id followed by material class(m), composition(c), tier(t), structural family(f), generator(g), perturbation(p), and symmetry family(s) codes. These rows are the complete authoritative allowlist.\nMaterial class: bcc_refractory\nRound target: 64\nMinimum counts by size tier: {\"16\": 1, \"32\": 1, \"4\": 1, \"64\": 1, \"8\": 1}\nValid evidence IDs: [\"01df3a9247469cc681ae46d53845d4663e8298cd8f3eb0d2fc8fb526e1d4023a\", \"1685b76b2213e271c8511312354ca45ac90d77e178d379bd40aaf8a371a14ef7\", \"209967b6781121855843995e87315354d11db200d7055aa07ae743ebbab02537\", \"2567a8346a5f75eaadf3da42d68e052a8bc0e627eaf4e3b8968e5388d066c3d9\", \"285088c16d23aaf3d6e706b032eaf3aca40af4ab0b5b21b767e1860931232cbe\", \"28d23483fdd6acb3af0c8455839174c88607632eb5b818a09b36327b6543cef7\", \"2f425c2a760a0da181a7f89565a4229abb198dc333347034d569c15badd6a5be\", \"3868686aaeba0777580b4c204685f94dd7a628b9e1f0b4ca924016b096f735bd\", \"3a78ee80a25751c560b2d2fb986097e4d812bac4422f6a9aa89e08f3cffaecb9\", \"412b1ed0464e2478326635ae9567b9d50e1f27428c4bb167a4ea25553f4a2a37\", \"43e8212e571f41d228b098b066110c511ebb15e186edae2d6f44d2f9530c427b\", \"4e174a1ca0eec7709fb77c601687e07f395ebf3aab0f4207e808b0e1cb8c929f\", \"610b5e793af11d0022201a0b95ee7d39286b0f994be91ab8b0a6e88ebe82425c\", \"636a13353ab6c2441fa21225ec1c97ccfacce7001b29d4d8444f0fb743a29720\", \"6c4fa34c610aae8f910051c8d4c5ce90027683134f7a5982a3251fa066a32ffa\", \"6f8d7ee6f95ed3b7f79b983118c42fef930329f80b346ea9a806e83d090e793d\", \"7f9a338c47f0c62a760e9c774e5524d458363d4ec5649bf5d50140d8ef8233b4\", \"82324ea6b4f28dc88b982bfb7f3488277375041fdb64226423affa43eba5ae14\", \"8782f6df04d1d6e77e4399cd20f0a1a460c645960b88dd5c227fc47025aa0e1f\", \"8cee6a686ff51f6a43a54078d82a793bf8e1d277feb60877c58493e915a0810a\", \"8e49e74b5a1a7604d22ee037ab8d95fe70d6f98f908fbea0c0e318cfbade052a\", \"9dabdb6d00a9d196553270b4764b44c3c5fe5c5bad5f6a09f6fa2060b5b441c6\", \"a2a6857ec904e4a532806ddb1016be24fa67388eb8f089bb58066395cd7c4b4f\", \"a42285461b601fad694b5b992269fc6c7400b015015dcd35b722319c5323c18a\", \"a56263e4502da025dd0e05d8ffa12d5b79185839f01c23b6b246ce91d53d39d8\", \"abffa9d97b41c9c70cff7e70243bed2cd88173007c3d7fc61a07950329bd643d\", \"campaign-design\", \"d48f24d044fada5ee14410aad11a290199d8fe16367fe7d569a3dcb5116b5c02\", \"d93067bd65974507c2123ea1270280c8cc9e264b9afcc036b01d28ae6e10d7a4\", \"db3cc9f80b085fbb681cd9b9fd29f166e6d82acf1915000883fa0427e92b3295\", \"e4b6b2f10c27714de6f24c18f51340d6df7e890b5403d16489af7f0fff4669d2\", \"e8672f3ec75061cc04b98c16b46e17283db9e876a254f798826976c07fa23c9b\", \"e8f9d1458ddd82c37c54a0510ad117e9d825db6988550fdb590fb3d5c26951e2\", \"f3e43554a0259e4978451e99a3cf8996337c9b891849840992f834db135610fa\", \"f478b3eec9b76502d7268f04f94c2169ac1b3572c16e37853c6849e7525fb30a\", \"f606b6e46ff3277e2574aefadfed4943cf7c9763a42e04c601fca299b5064fa2\", \"fcaa5201d4c72c1dc738094e0abc69b312791a126bc1f5b43f68846d7894aa4c\"]\nPrior strategy-local outcomes: [{\"action_id\": \"6f12791286cbd0ac\", \"attempted\": 1, \"converged\": 1, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"4e174a1ca0eec7709fb77c601687e07f395ebf3aab0f4207e808b0e1cb8c929f\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.04037816271500358, \"mean_energy_eV_per_atom\": -9.705472467980574, \"mean_rms_atom_displacement_A\": 0.4681754923336362, \"nonconverged\": 0, \"runtime_seconds\": 145.3613857740129, \"size_tier\": 4}, {\"action_id\": \"aa5239bf62629525\", \"attempted\": 2, \"converged\": 2, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"209967b6781121855843995e87315354d11db200d7055aa07ae743ebbab02537\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.08923778875194127, \"mean_energy_eV_per_atom\": -9.714864515433703, \"mean_rms_atom_displacement_A\": 0.4762220848473708, \"nonconverged\": 0, \"runtime_seconds\": 321.2560395069886, \"size_tier\": 4}, {\"action_id\": \"b1a41c5fd5850ba6\", \"attempted\": 2, \"converged\": 2, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"abffa9d97b41c9c70cff7e70243bed2cd88173007c3d7fc61a07950329bd643d\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.08294208861694238, \"mean_energy_eV_per_atom\": -9.70319601529, \"mean_rms_atom_displacement_A\": 0.5900422344486034, \"nonconverged\": 0, \"runtime_seconds\": 298.59151902099256, \"size_tier\": 8}, {\"action_id\": \"6aba44116c92adc7\", \"attempted\": 2, \"converged\": 2, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"a2a6857ec904e4a532806ddb1016be24fa67388eb8f089bb58066395cd7c4b4f\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.0788887693588832, \"mean_energy_eV_per_atom\": -9.717538329349585, \"mean_rms_atom_displacement_A\": 0.5991764002560017, \"nonconverged\": 0, \"runtime_seconds\": 283.99956969197956, \"size_tier\": 8}, {\"action_id\": \"dd717561c30d8953\", \"attempted\": 2, \"converged\": 2, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"f478b3eec9b76502d7268f04f94c2169ac1b3572c16e37853c6849e7525fb30a\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.08138248485138724, \"mean_energy_eV_per_atom\": -9.7136436401486, \"mean_rms_atom_displacement_A\": 0.5943426146087394, \"nonconverged\": 0, \"runtime_seconds\": 292.97694546499406, \"size_tier\": 8}, {\"action_id\": \"f12fb26e71ff36a3\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"412b1ed0464e2478326635ae9567b9d50e1f27428c4bb167a4ea25553f4a2a37\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.0530220231130564, \"mean_energy_eV_per_atom\": -9.718929923846705, \"mean_rms_atom_displacement_A\": 0.8008135748639924, \"nonconverged\": 1, \"runtime_seconds\": 190.87928320700303, \"size_tier\": 8}, {\"action_id\": \"eb1c4a383788c893\", \"attempted\": 2, \"converged\": 1, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"82324ea6b4f28dc88b982bfb7f3488277375041fdb64226423affa43eba5ae14\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.08711628400999567, \"mean_energy_eV_per_atom\": -9.396519205198745, \"mean_rms_atom_displacement_A\": 0.6804239875921769, \"nonconverged\": 1, \"runtime_seconds\": 313.61862243598443, \"size_tier\": 8}, {\"action_id\": \"707b0d8b34bb105c\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"e8f9d1458ddd82c37c54a0510ad117e9d825db6988550fdb590fb3d5c26951e2\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.07770257913250034, \"mean_energy_eV_per_atom\": -9.727277488915288, \"mean_rms_atom_displacement_A\": 0.6699901445109591, \"nonconverged\": 2, \"runtime_seconds\": 279.7292848770012, \"size_tier\": 16}, {\"action_id\": \"8a22a12281364137\", \"attempted\": 2, \"converged\": 2, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"1685b76b2213e271c8511312354ca45ac90d77e178d379bd40aaf8a371a14ef7\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.0861155734508308, \"mean_energy_eV_per_atom\": -9.72274490095668, \"mean_rms_atom_displacement_A\": 0.6703977722918021, \"nonconverged\": 0, \"runtime_seconds\": 310.0160644229909, \"size_tier\": 16}, {\"action_id\": \"b65156a4ddbc0af8\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"a42285461b601fad694b5b992269fc6c7400b015015dcd35b722319c5323c18a\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.08947396044027603, \"mean_energy_eV_per_atom\": -9.729573532344654, \"mean_rms_atom_displacement_A\": 0.8596137491980054, \"nonconverged\": 2, \"runtime_seconds\": 322.1062575849937, \"size_tier\": 16}, {\"action_id\": \"92a2fd655f9310b6\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"3868686aaeba0777580b4c204685f94dd7a628b9e1f0b4ca924016b096f735bd\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.08243579129166594, \"mean_energy_eV_per_atom\": -9.728339987788726, \"mean_rms_atom_displacement_A\": 0.8907057823205214, \"nonconverged\": 2, \"runtime_seconds\": 296.7688486499974, \"size_tier\": 16}, {\"action_id\": \"a82ee1883d6038fa\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"db3cc9f80b085fbb681cd9b9fd29f166e6d82acf1915000883fa0427e92b3295\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.0937273530416658, \"mean_energy_eV_per_atom\": -9.728041335545573, \"mean_rms_atom_displacement_A\": 0.8087682233308221, \"nonconverged\": 2, \"runtime_seconds\": 337.41847094999684, \"size_tier\": 16}, {\"action_id\": \"19cb3439ae711f9d\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"2f425c2a760a0da181a7f89565a4229abb198dc333347034d569c15badd6a5be\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.08650108078472436, \"mean_energy_eV_per_atom\": -9.397310165915275, \"mean_rms_atom_displacement_A\": 0.9423958365729017, \"nonconverged\": 2, \"runtime_seconds\": 311.4038908250077, \"size_tier\": 16}, {\"action_id\": \"d23ce6d6b6114f7e\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"636a13353ab6c2441fa21225ec1c97ccfacce7001b29d4d8444f0fb743a29720\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.08190193162333242, \"mean_energy_eV_per_atom\": -9.400749248221768, \"mean_rms_atom_displacement_A\": 0.9369382127761412, \"nonconverged\": 2, \"runtime_seconds\": 294.84695384399674, \"size_tier\": 16}, {\"action_id\": \"bf0cb143016ea6cb\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"9dabdb6d00a9d196553270b4764b44c3c5fe5c5bad5f6a09f6fa2060b5b441c6\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.09602084600166563, \"mean_energy_eV_per_atom\": -9.40177546190738, \"mean_rms_atom_displacement_A\": 0.942290779293298, \"nonconverged\": 2, \"runtime_seconds\": 345.6750456059963, \"size_tier\": 16}, {\"action_id\": \"8f860d597b017b13\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"285088c16d23aaf3d6e706b032eaf3aca40af4ab0b5b21b767e1860931232cbe\", \"failed\": 0, \"family\": \"controlled_substitution\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.10387024521138907, \"mean_energy_eV_per_atom\": -9.49647645267992, \"mean_rms_atom_displacement_A\": 1.0269149006330793, \"nonconverged\": 2, \"runtime_seconds\": 373.93288276100066, \"size_tier\": 16}, {\"action_id\": \"9a345c4c75ba3121\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"2567a8346a5f75eaadf3da42d68e052a8bc0e627eaf4e3b8968e5388d066c3d9\", \"failed\": 0, \"family\": \"controlled_substitution\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.08273863327111435, \"mean_energy_eV_per_atom\": -9.491176514804087, \"mean_rms_atom_displacement_A\": 1.1249560800487162, \"nonconverged\": 2, \"runtime_seconds\": 297.85907977601164, \"size_tier\": 16}, {\"action_id\": \"0128e1586d7a7fb9\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"e8672f3ec75061cc04b98c16b46e17283db9e876a254f798826976c07fa23c9b\", \"failed\": 0, \"family\": \"controlled_substitution\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.09157109750083084, \"mean_energy_eV_per_atom\": -9.737983395008218, \"mean_rms_atom_displacement_A\": 1.0361872927826843, \"nonconverged\": 2, \"runtime_seconds\": 329.65595100299106, \"size_tier\": 16}, {\"action_id\": \"cbdf3e3cff156730\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"43e8212e571f41d228b098b066110c511ebb15e186edae2d6f44d2f9530c427b\", \"failed\": 0, \"family\": \"controlled_substitution\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.09123074037583137, \"mean_energy_eV_per_atom\": -9.733896385183105, \"mean_rms_atom_displacement_A\": 0.9726687503008183, \"nonconverged\": 2, \"runtime_seconds\": 328.43066535299295, \"size_tier\": 16}, {\"action_id\": \"a2a22c509f6f3c0d\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"a56263e4502da025dd0e05d8ffa12d5b79185839f01c23b6b246ce91d53d39d8\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.09881323810222561, \"mean_energy_eV_per_atom\": -9.728722043316967, \"mean_rms_atom_displacement_A\": 1.0614767155299496, \"nonconverged\": 2, \"runtime_seconds\": 355.72765716801223, \"size_tier\": 32}, {\"action_id\": \"4a971f4fc0f81d6e\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"8cee6a686ff51f6a43a54078d82a793bf8e1d277feb60877c58493e915a0810a\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.07262767169277747, \"mean_energy_eV_per_atom\": -9.720647063433823, \"mean_rms_atom_displacement_A\": 1.170135899284498, \"nonconverged\": 2, \"runtime_seconds\": 261.45961809399887, \"size_tier\": 32}, {\"action_id\": \"9103b8101522594f\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"f3e43554a0259e4978451e99a3cf8996337c9b891849840992f834db135610fa\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.09035879076777442, \"mean_energy_eV_per_atom\": -9.723950833081489, \"mean_rms_atom_displacement_A\": 1.3143630916962925, \"nonconverged\": 2, \"runtime_seconds\": 325.29164676398796, \"size_tier\": 32}, {\"action_id\": \"00079dad2bc81622\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"8e49e74b5a1a7604d22ee037ab8d95fe70d6f98f908fbea0c0e318cfbade052a\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.08440090864555613, \"mean_energy_eV_per_atom\": -9.728181963140194, \"mean_rms_atom_displacement_A\": 1.2717225692006786, \"nonconverged\": 2, \"runtime_seconds\": 303.84327112400206, \"size_tier\": 32}, {\"action_id\": \"61b60cc1faaccf86\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"8782f6df04d1d6e77e4399cd20f0a1a460c645960b88dd5c227fc47025aa0e1f\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.09174551150222315, \"mean_energy_eV_per_atom\": -9.397720029366779, \"mean_rms_atom_displacement_A\": 1.3002485275447053, \"nonconverged\": 2, \"runtime_seconds\": 330.28384140800335, \"size_tier\": 32}, {\"action_id\": \"8503c99d1a400a71\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"6c4fa34c610aae8f910051c8d4c5ce90027683134f7a5982a3251fa066a32ffa\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.0923686743833241, \"mean_energy_eV_per_atom\": -9.39615410860764, \"mean_rms_atom_displacement_A\": 1.2749332404373148, \"nonconverged\": 2, \"runtime_seconds\": 332.5272277799668, \"size_tier\": 32}, {\"action_id\": \"135c7fdea250861d\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"01df3a9247469cc681ae46d53845d4663e8298cd8f3eb0d2fc8fb526e1d4023a\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.09039436109638901, \"mean_energy_eV_per_atom\": -9.395326412017035, \"mean_rms_atom_displacement_A\": 1.2564177148321969, \"nonconverged\": 2, \"runtime_seconds\": 325.4196999470005, \"size_tier\": 32}, {\"action_id\": \"c67cd2bc87e2884d\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"28d23483fdd6acb3af0c8455839174c88607632eb5b818a09b36327b6543cef7\", \"failed\": 0, \"family\": \"controlled_substitution\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.09280171020861114, \"mean_energy_eV_per_atom\": -9.495566830396903, \"mean_rms_atom_displacement_A\": 1.333360271102858, \"nonconverged\": 2, \"runtime_seconds\": 334.0861567510001, \"size_tier\": 32}, {\"action_id\": \"18339bac07f0c771\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"610b5e793af11d0022201a0b95ee7d39286b0f994be91ab8b0a6e88ebe82425c\", \"failed\": 0, \"family\": \"controlled_substitution\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.04660169816888811, \"mean_energy_eV_per_atom\": -9.488495504279756, \"mean_rms_atom_displacement_A\": 1.3581766388927685, \"nonconverged\": 1, \"runtime_seconds\": 167.76611340799718, \"size_tier\": 32}, {\"action_id\": \"6755286952338041\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"6f8d7ee6f95ed3b7f79b983118c42fef930329f80b346ea9a806e83d090e793d\", \"failed\": 0, \"family\": \"controlled_substitution\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.09799215623943988, \"mean_energy_eV_per_atom\": -9.732181851764349, \"mean_rms_atom_displacement_A\": 1.3163676926453536, \"nonconverged\": 2, \"runtime_seconds\": 352.7717624619836, \"size_tier\": 32}, {\"action_id\": \"0aa0c00c31d2b034\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"d93067bd65974507c2123ea1270280c8cc9e264b9afcc036b01d28ae6e10d7a4\", \"failed\": 0, \"family\": \"controlled_substitution\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.04586670833694775, \"mean_energy_eV_per_atom\": -9.731141611750957, \"mean_rms_atom_displacement_A\": 1.295626393017948, \"nonconverged\": 1, \"runtime_seconds\": 165.12015001301188, \"size_tier\": 32}, {\"action_id\": \"279541d5f4a093a5\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"fcaa5201d4c72c1dc738094e0abc69b312791a126bc1f5b43f68846d7894aa4c\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.046881983778609235, \"mean_energy_eV_per_atom\": -9.724494628909493, \"mean_rms_atom_displacement_A\": 1.3107411057926421, \"nonconverged\": 1, \"runtime_seconds\": 168.77514160299324, \"size_tier\": 64}, {\"action_id\": \"039ac5cc702f7f0b\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"d48f24d044fada5ee14410aad11a290199d8fe16367fe7d569a3dcb5116b5c02\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.04851287152583407, \"mean_energy_eV_per_atom\": -9.72217863323283, \"mean_rms_atom_displacement_A\": 1.4997004224548705, \"nonconverged\": 1, \"runtime_seconds\": 174.64633749300265, \"size_tier\": 64}, {\"action_id\": \"711cffbd2f0a546e\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"3a78ee80a25751c560b2d2fb986097e4d812bac4422f6a9aa89e08f3cffaecb9\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.0956918209280492, \"mean_energy_eV_per_atom\": -9.394815147730359, \"mean_rms_atom_displacement_A\": 1.4673220707926413, \"nonconverged\": 2, \"runtime_seconds\": 344.49055534097715, \"size_tier\": 64}, {\"action_id\": \"6916d33dd2518981\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"f606b6e46ff3277e2574aefadfed4943cf7c9763a42e04c601fca299b5064fa2\", \"failed\": 0, \"family\": \"equiatomic_ordering\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.04453655703639217, \"mean_energy_eV_per_atom\": -9.394876863314662, \"mean_rms_atom_displacement_A\": 1.5639461828634345, \"nonconverged\": 1, \"runtime_seconds\": 160.33160533101181, \"size_tier\": 64}, {\"action_id\": \"30885c99c83d8639\", \"attempted\": 2, \"converged\": 0, \"distinct_final_geometry_hashes\": 2, \"evidence_id\": \"7f9a338c47f0c62a760e9c774e5524d458363d4ec5649bf5d50140d8ef8233b4\", \"failed\": 0, \"family\": \"controlled_substitution\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.09790910220333898, \"mean_energy_eV_per_atom\": -9.492220858800465, \"mean_rms_atom_displacement_A\": 1.4806320057436158, \"nonconverged\": 2, \"runtime_seconds\": 352.47276793202036, \"size_tier\": 64}, {\"action_id\": \"623f55231e0a9512\", \"attempted\": 1, \"converged\": 0, \"distinct_final_geometry_hashes\": 1, \"evidence_id\": \"e4b6b2f10c27714de6f24c18f51340d6df7e890b5403d16489af7f0fff4669d2\", \"failed\": 0, \"family\": \"controlled_substitution\", \"generator\": \"native_lattice_occupations\", \"gpu_hours\": 0.05098089827000674, \"mean_energy_eV_per_atom\": -9.724582006735616, \"mean_rms_atom_displacement_A\": 1.480087741229352, \"nonconverged\": 1, \"runtime_seconds\": 183.53123377202428, \"size_tier\": 64}]\nShared capacity groups: sum counts across ALL action_ids in each group must not exceed remaining. Aliases do not add capacity.\n{\"bcc_refractory|Nb2TaVHfZrTi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"9a345c4c75ba3121\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|Nb2TaVHfZrTi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"8f860d597b017b13\",\"6e61a4dfa81d294e\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":190},\"bcc_refractory|Nb2TaVHfZrTi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"4fc3c41eae0b010f\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"c67cd2bc87e2884d\",\"18339bac07f0c771\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":189},\"bcc_refractory|Nb2TaVHfZrTi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"1b2345532ff8486b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"610eb733befec724\",\"648fd8163d5b9648\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"30885c99c83d8639\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|Nb2TaVHfZrTi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"f24f3a577c3659be\",\"c4d98668e1f84f50\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"0f46f79b8fc7a77d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"da9ae0ddc4178359\",\"fc02e14b4e8ea5be\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"cbdf3e3cff156730\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTa2VHfZrTi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"b2aff9c85472c879\",\"0128e1586d7a7fb9\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTa2VHfZrTi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"0aa0c00c31d2b034\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":191},\"bcc_refractory|NbTa2VHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"6755286952338041\",\"07fb55975a767826\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTa2VHfZrTi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"220ed9dea50223b7\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"2a85ef133f3a48f5\",\"d0f007c2ca5a10b5\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"b767aa9156cfa65d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"623f55231e0a9512\",\"d89254e1c287cf0e\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":191},\"bcc_refractory|NbTa2VHfZrTi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"0492b3656b4e4837\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"b829741dfaf7e3fa\",\"6e5a47c405a2229b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"bf0cb143016ea6cb\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"19cb3439ae711f9d\",\"d23ce6d6b6114f7e\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":188},\"bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"135c7fdea250861d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"61b60cc1faaccf86\",\"8503c99d1a400a71\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":188},\"bcc_refractory|NbTaVHfZrTi|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"6b590f5ce4a5b7b1\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"44fb6673b3189b2b\",\"5ef05624d165df83\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"6916d33dd2518981\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":191},\"bcc_refractory|NbTaVHfZrTi|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"711cffbd2f0a546e\",\"2c2b100dabc94187\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVHfZrTi|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"eb1c4a383788c893\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVHfZrTi|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"cf98e36283f45b0b\",\"4171ccb28344bf2b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"a82ee1883d6038fa\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"b65156a4ddbc0af8\",\"92a2fd655f9310b6\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":188},\"bcc_refractory|NbTaVHfZr|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"00079dad2bc81622\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVHfZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"9103b8101522594f\",\"6a8d491bf4786b93\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVHfZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"22665eed1898829c\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"c1b64f8cf1aae48f\",\"e3d831950cab85e3\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"acaa2a7f24cc9fdb\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"e368514150a884a9\",\"039ac5cc702f7f0b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":191},\"bcc_refractory|NbTaVHfZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"bbad7a11e3a73c86\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"f12fb26e71ff36a3\",\"4ee67a4004508cfb\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":191},\"bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"8a22a12281364137\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"707b0d8b34bb105c\",\"7b7d88e5be9bb2fe\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"4a971f4fc0f81d6e\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"3646e27ff43dad7a\",\"a2a22c509f6f3c0d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"aa5239bf62629525\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"6f12791286cbd0ac\",\"aba2784ded6dc587\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":191},\"bcc_refractory|NbTaVZr|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"50d0749b9f1ed0e9\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"279541d5f4a093a5\",\"9a5fedd19138e5a5\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":191},\"bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"dd717561c30d8953\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":190},\"bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"b1a41c5fd5850ba6\",\"6aba44116c92adc7\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":188}}\nHierarchical action catalog: {\"dimensions\":{\"m\":{\"0\":\"bcc_refractory\"},\"c\":{\"0\":\"NbTaVZr\",\"1\":\"NbTaVHfZr\",\"2\":\"NbTaVHfZrTi\",\"3\":\"Nb2TaVHfZrTi\",\"4\":\"NbTa2VHfZrTi\"},\"t\":{\"0\":4,\"1\":8,\"2\":16,\"3\":32,\"4\":64},\"f\":{\"0\":\"bcc-equiatomic-quaternary\",\"1\":\"bcc-equiatomic-quinary\",\"2\":\"bcc-equiatomic-senary\",\"3\":\"bcc-substitutional\"},\"g\":{\"0\":\"native_lattice_occupations\"},\"p\":{\"0\":{\"operation\":\"chemical_disorder\"},\"1\":{\"operation\":\"substitutional_ordering\"},\"2\":{\"operation\":\"bounded_strain\",\"strain\":0.02}},\"s\":{\"0\":\"any-compatible\"}},\"allowed\":[\"6f12791286cbd0ac m0 c0 t0 f0 g0 p0 s0\",\"aba2784ded6dc587 m0 c0 t0 f0 g0 p1 s0\",\"aa5239bf62629525 m0 c0 t0 f0 g0 p2 s0\",\"b1a41c5fd5850ba6 m0 c0 t1 f0 g0 p0 s0\",\"6aba44116c92adc7 m0 c0 t1 f0 g0 p1 s0\",\"dd717561c30d8953 m0 c0 t1 f0 g0 p2 s0\",\"707b0d8b34bb105c m0 c0 t2 f0 g0 p0 s0\",\"7b7d88e5be9bb2fe m0 c0 t2 f0 g0 p1 s0\",\"8a22a12281364137 m0 c0 t2 f0 g0 p2 s0\",\"3646e27ff43dad7a m0 c0 t3 f0 g0 p0 s0\",\"a2a22c509f6f3c0d m0 c0 t3 f0 g0 p1 s0\",\"4a971f4fc0f81d6e m0 c0 t3 f0 g0 p2 s0\",\"279541d5f4a093a5 m0 c0 t4 f0 g0 p0 s0\",\"9a5fedd19138e5a5 m0 c0 t4 f0 g0 p1 s0\",\"50d0749b9f1ed0e9 m0 c0 t4 f0 g0 p2 s0\",\"c1b64f8cf1aae48f m0 c1 t0 f1 g0 p0 s0\",\"e3d831950cab85e3 m0 c1 t0 f1 g0 p1 s0\",\"22665eed1898829c m0 c1 t0 f1 g0 p2 s0\",\"f12fb26e71ff36a3 m0 c1 t1 f1 g0 p0 s0\",\"4ee67a4004508cfb m0 c1 t1 f1 g0 p1 s0\",\"bbad7a11e3a73c86 m0 c1 t1 f1 g0 p2 s0\",\"b65156a4ddbc0af8 m0 c1 t2 f1 g0 p0 s0\",\"92a2fd655f9310b6 m0 c1 t2 f1 g0 p1 s0\",\"a82ee1883d6038fa m0 c1 t2 f1 g0 p2 s0\",\"9103b8101522594f m0 c1 t3 f1 g0 p0 s0\",\"6a8d491bf4786b93 m0 c1 t3 f1 g0 p1 s0\",\"00079dad2bc81622 m0 c1 t3 f1 g0 p2 s0\",\"e368514150a884a9 m0 c1 t4 f1 g0 p0 s0\",\"039ac5cc702f7f0b m0 c1 t4 f1 g0 p1 s0\",\"acaa2a7f24cc9fdb m0 c1 t4 f1 g0 p2 s0\",\"44fb6673b3189b2b m0 c2 t0 f2 g0 p0 s0\",\"5ef05624d165df83 m0 c2 t0 f2 g0 p1 s0\",\"6b590f5ce4a5b7b1 m0 c2 t0 f2 g0 p2 s0\",\"cf98e36283f45b0b m0 c2 t1 f2 g0 p0 s0\",\"4171ccb28344bf2b m0 c2 t1 f2 g0 p1 s0\",\"eb1c4a383788c893 m0 c2 t1 f2 g0 p2 s0\",\"19cb3439ae711f9d m0 c2 t2 f2 g0 p0 s0\",\"d23ce6d6b6114f7e m0 c2 t2 f2 g0 p1 s0\",\"bf0cb143016ea6cb m0 c2 t2 f2 g0 p2 s0\",\"61b60cc1faaccf86 m0 c2 t3 f2 g0 p0 s0\",\"8503c99d1a400a71 m0 c2 t3 f2 g0 p1 s0\",\"135c7fdea250861d m0 c2 t3 f2 g0 p2 s0\",\"711cffbd2f0a546e m0 c2 t4 f2 g0 p0 s0\",\"2c2b100dabc94187 m0 c2 t4 f2 g0 p1 s0\",\"6916d33dd2518981 m0 c2 t4 f2 g0 p2 s0\",\"610eb733befec724 m0 c3 t0 f3 g0 p0 s0\",\"648fd8163d5b9648 m0 c3 t0 f3 g0 p1 s0\",\"1b2345532ff8486b m0 c3 t0 f3 g0 p2 s0\",\"da9ae0ddc4178359 m0 c3 t1 f3 g0 p0 s0\",\"fc02e14b4e8ea5be m0 c3 t1 f3 g0 p1 s0\",\"0f46f79b8fc7a77d m0 c3 t1 f3 g0 p2 s0\",\"8f860d597b017b13 m0 c3 t2 f3 g0 p0 s0\",\"6e61a4dfa81d294e m0 c3 t2 f3 g0 p1 s0\",\"9a345c4c75ba3121 m0 c3 t2 f3 g0 p2 s0\",\"c67cd2bc87e2884d m0 c3 t3 f3 g0 p0 s0\",\"18339bac07f0c771 m0 c3 t3 f3 g0 p1 s0\",\"4fc3c41eae0b010f m0 c3 t3 f3 g0 p2 s0\",\"f24f3a577c3659be m0 c3 t4 f3 g0 p0 s0\",\"c4d98668e1f84f50 m0 c3 t4 f3 g0 p1 s0\",\"30885c99c83d8639 m0 c3 t4 f3 g0 p2 s0\",\"2a85ef133f3a48f5 m0 c4 t0 f3 g0 p0 s0\",\"d0f007c2ca5a10b5 m0 c4 t0 f3 g0 p1 s0\",\"220ed9dea50223b7 m0 c4 t0 f3 g0 p2 s0\",\"b829741dfaf7e3fa m0 c4 t1 f3 g0 p0 s0\",\"6e5a47c405a2229b m0 c4 t1 f3 g0 p1 s0\",\"0492b3656b4e4837 m0 c4 t1 f3 g0 p2 s0\",\"b2aff9c85472c879 m0 c4 t2 f3 g0 p0 s0\",\"0128e1586d7a7fb9 m0 c4 t2 f3 g0 p1 s0\",\"cbdf3e3cff156730 m0 c4 t2 f3 g0 p2 s0\",\"6755286952338041 m0 c4 t3 f3 g0 p0 s0\",\"07fb55975a767826 m0 c4 t3 f3 g0 p1 s0\",\"0aa0c00c31d2b034 m0 c4 t3 f3 g0 p2 s0\",\"623f55231e0a9512 m0 c4 t4 f3 g0 p0 s0\",\"d89254e1c287cf0e m0 c4 t4 f3 g0 p1 s0\",\"b767aa9156cfa65d m0 c4 t4 f3 g0 p2 s0\"]}\n",
+  "prompt_version": "executable-capacities-2",
+  "raw_response": "```json\n{\n  \"allocations\": [\n    {\"action_id\": \"aa5239bf62629525\", \"count\": 3},\n    {\"action_id\": \"aba2784ded6dc587\", \"count\": 3},\n    {\"action_id\": \"22665eed1898829c\", \"count\": 2},\n    {\"action_id\": \"6b590f5ce4a5b7b1\", \"count\": 2},\n    {\"action_id\": \"1b2345532ff8486b\", \"count\": 3},\n    {\"action_id\": \"220ed9dea50223b7\", \"count\": 2},\n    {\"action_id\": \"d0f007c2ca5a10b5\", \"count\": 2},\n    {\"action_id\": \"6aba44116c92adc7\", \"count\": 8},\n    {\"action_id\": \"dd717561c30d8953\", \"count\": 8},\n    {\"action_id\": \"b1a41c5fd5850ba6\", \"count\": 5},\n    {\"action_id\": \"bbad7a11e3a73c86\", \"count\": 2},\n    {\"action_id\": \"eb1c4a383788c893\", \"count\": 2},\n    {\"action_id\": \"0f46f79b8fc7a77d\", \"count\": 3},\n    {\"action_id\": \"0492b3656b4e4837\", \"count\": 2},\n    {\"action_id\": \"6e5a47c405a2229b\", \"count\": 2},\n    {\"action_id\": \"8a22a12281364137\", \"count\": 10},\n    {\"action_id\": \"7b7d88e5be9bb2fe\", \"count\": 3},\n    {\"action_id\": \"3646e27ff43dad7a\", \"count\": 1},\n    {\"action_id\": \"50d0749b9f1ed0e9\", \"count\": 1}\n  ],\n  \"cited_evidence_ids\": [\n    \"4e174a1ca0eec7709fb77c601687e07f395ebf3aab0f4207e808b0e1cb8c929f\",\n    \"209967b6781121855843995e87315354d11db200d7055aa07ae743ebbab02537\",\n    \"abffa9d97b41c9c70cff7e70243bed2cd88173007c3d7fc61a07950329bd643d\",\n    \"a2a6857ec904e4a532806ddb1016be24fa67388eb8f089bb58066395cd7c4b4f\",\n    \"f478b3eec9b76502d7268f04f94c2169ac1b3572c16e37853c6849e7525fb30a\",\n    \"412b1ed0464e2478326635ae9567b9d50e1f27428c4bb167a4ea25553f4a2a37\",\n    \"82324ea6b4f28dc88b982bfb7f3488277375041fdb64226423affa43eba5ae14\",\n    \"1685b76b2213e271c8511312354ca45ac90d77e178d379bd40aaf8a371a14ef7\",\n    \"e8f9d1458ddd82c37c54a0510ad117e9d825db6988550fdb590fb3d5c26951e2\",\n    \"e8672f3ec75061cc04b98c16b46e17283db9e876a254f798826976c07fa23c9b\",\n    \"a56263e4502da025dd0e05d8ffa12d5b79185839f01c23b6b246ce91d53d39d8\",\n    \"fcaa5201d4c72c1dc738094e0abc69b312791a126bc1f5b43f68846d7894aa4c\"\n  ],\n  \"rationale\": \"Prior MACE optimization history shows a sharp dependence of convergence on size tier, composition, and perturbation: all tested 32- and 64-atom actions produced 0% convergence with large RMS displacements (>1.06 A), whereas NbTaVZr achieved 100% convergence with 100% distinct final geometry hashes across all 4- and 8-atom actions (RMS displacements 0.47-0.60 A) and in 16-atom bounded_strain (8a22a12281364137, 2/2 converged, 0.67 A). Hf-containing compositions (NbTaVHfZr, NbTaVHfZrTi, Nb2TaVHfZrTi, NbTa2VHfZrTi) failed to converge at size >=16 due to larger relaxations (>0.80 A), though NbTaVHfZrTi partially converged (1/2) at tier 8 under bounded_strain (eb1c4a383788c893) and NbTa2VHfZrTi yielded the lowest MACE energies (-9.738 eV/atom). Accordingly, we restrict tiers 32 and 64 to their mandatory minimums (1 each on lower-displacement NbTaVZr), concentrate exploitation on proven 8-atom and 16-atom NbTaVZr actions plus untested 16-atom substitutional_ordering (7b7d88e5be9bb2fe), and direct exploration of Hf-containing equiatomic and Nb/Ta-rich substitutional compositions into tiers 4 and 8 predominantly with bounded_strain and substitutional_ordering where fewer degrees of freedom support full relaxation.\"\n}\n```",
+  "rejected_actions": [],
+  "round": 2,
+  "seed": 20261113,
+  "status": "accepted",
+  "strategy": "llm_guided_adaptation",
+  "unavailable_actions": []
+}

@@ -1,0 +1,22 @@
+{
+  "campaign_id": "e3-mlip-production",
+  "logical_optimizations_attempted": 192,
+  "material": "lifepo4",
+  "outcomes": {
+    "converged": 107,
+    "nonconverged": 85
+  },
+  "resource_limits": {
+    "allocation_seconds": 7200,
+    "campaign_id": "e3-mlip-production",
+    "hard_optimization_seconds": 300,
+    "manifest_sha256": "4e8c012ba8413cc1bd0e2d835aa5db1dee574a71ba5cd7559feccdfb651857bd",
+    "round_seconds": 1800,
+    "workers": 64
+  },
+  "rounds_completed": 3,
+  "rounds_requested": 3,
+  "seed": 20261113,
+  "status": "complete",
+  "strategy": "llm_guided_adaptation"
+}

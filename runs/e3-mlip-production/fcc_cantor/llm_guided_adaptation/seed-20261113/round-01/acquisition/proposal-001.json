@@ -1,0 +1,2347 @@
+{
+  "accepted_final_allocation": [
+    {
+      "action": {
+        "action_id": "400816f96fca34e5",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "1d5db26074c83962",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "6812669bcef15a65",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "3fc5c27370ec8c27",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "f6fe9849c2bae7d6",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "e27e3f7e46db9fd6",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "ad65120747a72b62",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "2a47368aedef73e8",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "a5236ad683fcb00b",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "3b6038fc38bf25e7",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "6d14b647d74d817e",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "e703932025955340",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "fcc-cantor-equiatomic",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFeCoNi|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "2c63a967d38e2540",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "ec0b9ab19f7e53e3",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "5b062441b27c5c7b",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "4784ff60ab685a83",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "7dd0fbff30845fcd",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "4c17b8e3c0b6681f",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "91c30559b3d77766",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "53e2c35b1f600e81",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "371706b8be599a3e",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "0458f97fe2c6b676",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "78694716e591451a",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "125a3f2d3df4bf0f",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|Cr2MnFeCoNi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Cr2MnFeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "b9873c841fe85838",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "1476342b772dd154",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "1b94f3e73387ff8d",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "0a03de7879380a04",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "b1fd975ab4c83fc8",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "c393a922c5377f72",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "9def248cab8e2aa7",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "c12fb24c5c179b64",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "05ef8273bf8f33a0",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "7424bd1131183ac4",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "0c5bde10fbdea2e0",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "fba5e29256b678c9",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMn2FeCoNi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMn2FeCoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "91c7d0500104457d",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "1b0883566d6a9b1d",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "e922bfbc43c81a25",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "1ff70dd02dc7e457",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "0b9ae8a751cb60cc",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "1f034939758ffd8f",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "f4b2e878d99f792f",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "fbb230bf2561cc36",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "2ff52c5c06384277",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "b6a113c7ab7760f2",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "bef2be98786d0ae5",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "744e0374b140ba36",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "fcc-cantor-offstoichiometric",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "fcc_cantor|CrMnFe2CoNi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "CrMnFe2CoNi",
+        "generator": "native_lattice_occupations",
+        "material": "fcc_cantor",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    }
+  ],
+  "capacity_groups": {
+    "fcc_cantor|Cr2MnFeCoNi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "4c17b8e3c0b6681f"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|Cr2MnFeCoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "4784ff60ab685a83",
+        "7dd0fbff30845fcd"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|Cr2MnFeCoNi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "371706b8be599a3e"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|Cr2MnFeCoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "91c30559b3d77766",
+        "53e2c35b1f600e81"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|Cr2MnFeCoNi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "1a48f7be0808a0ad"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|Cr2MnFeCoNi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "73a5ad049e70db68",
+        "2c63a967d38e2540"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|Cr2MnFeCoNi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "125a3f2d3df4bf0f"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|Cr2MnFeCoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "0458f97fe2c6b676",
+        "78694716e591451a"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|Cr2MnFeCoNi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "5b062441b27c5c7b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|Cr2MnFeCoNi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "df93694d500de651",
+        "ec0b9ab19f7e53e3"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMn2FeCoNi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "c393a922c5377f72"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMn2FeCoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "0a03de7879380a04",
+        "b1fd975ab4c83fc8"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMn2FeCoNi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "05ef8273bf8f33a0"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMn2FeCoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "9def248cab8e2aa7",
+        "c12fb24c5c179b64"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMn2FeCoNi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "b9873c841fe85838"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMn2FeCoNi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "146b9ac57dc29405",
+        "cb1f7188103c9335"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMn2FeCoNi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "fba5e29256b678c9"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMn2FeCoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "7424bd1131183ac4",
+        "0c5bde10fbdea2e0"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMn2FeCoNi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "fcbc2e639b5eaab3"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMn2FeCoNi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "1476342b772dd154",
+        "1b94f3e73387ff8d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFe2CoNi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "1f034939758ffd8f"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFe2CoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "1ff70dd02dc7e457",
+        "0b9ae8a751cb60cc"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFe2CoNi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "2ff52c5c06384277"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFe2CoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "f4b2e878d99f792f",
+        "fbb230bf2561cc36"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFe2CoNi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "c0632880b7d15de7"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFe2CoNi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "91c7d0500104457d",
+        "f85bd1058a12fbd6"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFe2CoNi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "744e0374b140ba36"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFe2CoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "b6a113c7ab7760f2",
+        "bef2be98786d0ae5"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFe2CoNi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "e922bfbc43c81a25"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFe2CoNi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "e1a5a9b5e0864e05",
+        "1b0883566d6a9b1d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFeCoNi|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "e27e3f7e46db9fd6"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFeCoNi|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "3fc5c27370ec8c27",
+        "f6fe9849c2bae7d6"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFeCoNi|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "a5236ad683fcb00b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFeCoNi|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "ad65120747a72b62",
+        "2a47368aedef73e8"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFeCoNi|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "52ef4cb718a2f3c3"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFeCoNi|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "400816f96fca34e5",
+        "1decd085ae15db17"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFeCoNi|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "e703932025955340"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFeCoNi|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "3b6038fc38bf25e7",
+        "6d14b647d74d817e"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFeCoNi|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "6812669bcef15a65"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "fcc_cantor|CrMnFeCoNi|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "1d5db26074c83962",
+        "37de2c5271e75aaa"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    }
+  },
+  "capacity_validation": {
+    "valid": true
+  },
+  "catalog_version": "executable-capacities-2",
+  "material": "fcc_cantor",
+  "model_id": "gemini-4-carbon",
+  "parsed_allocations": [
+    {
+      "action_id": "400816f96fca34e5",
+      "count": 1
+    },
+    {
+      "action_id": "1d5db26074c83962",
+      "count": 1
+    },
+    {
+      "action_id": "6812669bcef15a65",
+      "count": 1
+    },
+    {
+      "action_id": "3fc5c27370ec8c27",
+      "count": 2
+    },
+    {
+      "action_id": "f6fe9849c2bae7d6",
+      "count": 1
+    },
+    {
+      "action_id": "e27e3f7e46db9fd6",
+      "count": 1
+    },
+    {
+      "action_id": "ad65120747a72b62",
+      "count": 2
+    },
+    {
+      "action_id": "2a47368aedef73e8",
+      "count": 1
+    },
+    {
+      "action_id": "a5236ad683fcb00b",
+      "count": 2
+    },
+    {
+      "action_id": "3b6038fc38bf25e7",
+      "count": 2
+    },
+    {
+      "action_id": "6d14b647d74d817e",
+      "count": 1
+    },
+    {
+      "action_id": "e703932025955340",
+      "count": 1
+    },
+    {
+      "action_id": "2c63a967d38e2540",
+      "count": 1
+    },
+    {
+      "action_id": "ec0b9ab19f7e53e3",
+      "count": 1
+    },
+    {
+      "action_id": "5b062441b27c5c7b",
+      "count": 1
+    },
+    {
+      "action_id": "4784ff60ab685a83",
+      "count": 2
+    },
+    {
+      "action_id": "7dd0fbff30845fcd",
+      "count": 1
+    },
+    {
+      "action_id": "4c17b8e3c0b6681f",
+      "count": 1
+    },
+    {
+      "action_id": "91c30559b3d77766",
+      "count": 2
+    },
+    {
+      "action_id": "53e2c35b1f600e81",
+      "count": 1
+    },
+    {
+      "action_id": "371706b8be599a3e",
+      "count": 2
+    },
+    {
+      "action_id": "0458f97fe2c6b676",
+      "count": 2
+    },
+    {
+      "action_id": "78694716e591451a",
+      "count": 1
+    },
+    {
+      "action_id": "125a3f2d3df4bf0f",
+      "count": 1
+    },
+    {
+      "action_id": "b9873c841fe85838",
+      "count": 1
+    },
+    {
+      "action_id": "1476342b772dd154",
+      "count": 1
+    },
+    {
+      "action_id": "1b94f3e73387ff8d",
+      "count": 1
+    },
+    {
+      "action_id": "0a03de7879380a04",
+      "count": 2
+    },
+    {
+      "action_id": "b1fd975ab4c83fc8",
+      "count": 1
+    },
+    {
+      "action_id": "c393a922c5377f72",
+      "count": 1
+    },
+    {
+      "action_id": "9def248cab8e2aa7",
+      "count": 2
+    },
+    {
+      "action_id": "c12fb24c5c179b64",
+      "count": 1
+    },
+    {
+      "action_id": "05ef8273bf8f33a0",
+      "count": 2
+    },
+    {
+      "action_id": "7424bd1131183ac4",
+      "count": 2
+    },
+    {
+      "action_id": "0c5bde10fbdea2e0",
+      "count": 1
+    },
+    {
+      "action_id": "fba5e29256b678c9",
+      "count": 1
+    },
+    {
+      "action_id": "91c7d0500104457d",
+      "count": 1
+    },
+    {
+      "action_id": "1b0883566d6a9b1d",
+      "count": 1
+    },
+    {
+      "action_id": "e922bfbc43c81a25",
+      "count": 1
+    },
+    {
+      "action_id": "1ff70dd02dc7e457",
+      "count": 2
+    },
+    {
+      "action_id": "0b9ae8a751cb60cc",
+      "count": 1
+    },
+    {
+      "action_id": "1f034939758ffd8f",
+      "count": 1
+    },
+    {
+      "action_id": "f4b2e878d99f792f",
+      "count": 2
+    },
+    {
+      "action_id": "fbb230bf2561cc36",
+      "count": 1
+    },
+    {
+      "action_id": "2ff52c5c06384277",
+      "count": 2
+    },
+    {
+      "action_id": "b6a113c7ab7760f2",
+      "count": 2
+    },
+    {
+      "action_id": "bef2be98786d0ae5",
+      "count": 1
+    },
+    {
+      "action_id": "744e0374b140ba36",
+      "count": 1
+    }
+  ],
+  "prompt": "Choose E3-MLIP crystallographic generation allocations for this round. Use only the allow-listed actions and only the strategy-local MACE geometry optimization history below. There are no DFT labels, DFT references, or independent validation data. Return JSON with exactly keys allocations, cited_evidence_ids, rationale. allocations is a list of {action_id,count}; counts must be positive integers, IDs unique, sum exactly to the round target, and each minimum tier count must be met. cited_evidence_ids must be a non-empty JSON array of exact strings from Valid evidence IDs below; do not invent, modify, or annotate those IDs. Do not select outside the list. The compact hierarchical catalog maps dimension codes to values; allowed rows are action_id followed by material class(m), composition(c), tier(t), structural family(f), generator(g), perturbation(p), and symmetry family(s) codes. These rows are the complete authoritative allowlist.\nMaterial class: fcc_cantor\nRound target: 64\nMinimum counts by size tier: {\"16\": 1, \"32\": 1, \"4\": 1, \"64\": 1, \"8\": 1}\nValid evidence IDs: [\"campaign-design\"]\nPrior strategy-local outcomes: []\nShared capacity groups: sum counts across ALL action_ids in each group must not exceed remaining. Aliases do not add capacity.\n{\"fcc_cantor|Cr2MnFeCoNi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"4c17b8e3c0b6681f\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|Cr2MnFeCoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"4784ff60ab685a83\",\"7dd0fbff30845fcd\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|Cr2MnFeCoNi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"371706b8be599a3e\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|Cr2MnFeCoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"91c30559b3d77766\",\"53e2c35b1f600e81\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|Cr2MnFeCoNi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"1a48f7be0808a0ad\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|Cr2MnFeCoNi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"73a5ad049e70db68\",\"2c63a967d38e2540\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|Cr2MnFeCoNi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"125a3f2d3df4bf0f\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|Cr2MnFeCoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"0458f97fe2c6b676\",\"78694716e591451a\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|Cr2MnFeCoNi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"5b062441b27c5c7b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|Cr2MnFeCoNi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"df93694d500de651\",\"ec0b9ab19f7e53e3\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMn2FeCoNi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"c393a922c5377f72\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMn2FeCoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"0a03de7879380a04\",\"b1fd975ab4c83fc8\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMn2FeCoNi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"05ef8273bf8f33a0\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMn2FeCoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"9def248cab8e2aa7\",\"c12fb24c5c179b64\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMn2FeCoNi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"b9873c841fe85838\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMn2FeCoNi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"146b9ac57dc29405\",\"cb1f7188103c9335\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMn2FeCoNi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"fba5e29256b678c9\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMn2FeCoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"7424bd1131183ac4\",\"0c5bde10fbdea2e0\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMn2FeCoNi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"fcbc2e639b5eaab3\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMn2FeCoNi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"1476342b772dd154\",\"1b94f3e73387ff8d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFe2CoNi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"1f034939758ffd8f\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFe2CoNi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"1ff70dd02dc7e457\",\"0b9ae8a751cb60cc\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFe2CoNi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"2ff52c5c06384277\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFe2CoNi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"f4b2e878d99f792f\",\"fbb230bf2561cc36\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFe2CoNi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"c0632880b7d15de7\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFe2CoNi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"91c7d0500104457d\",\"f85bd1058a12fbd6\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFe2CoNi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"744e0374b140ba36\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFe2CoNi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"b6a113c7ab7760f2\",\"bef2be98786d0ae5\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFe2CoNi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"e922bfbc43c81a25\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFe2CoNi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"e1a5a9b5e0864e05\",\"1b0883566d6a9b1d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFeCoNi|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"e27e3f7e46db9fd6\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFeCoNi|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"3fc5c27370ec8c27\",\"f6fe9849c2bae7d6\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFeCoNi|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"a5236ad683fcb00b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFeCoNi|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"ad65120747a72b62\",\"2a47368aedef73e8\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFeCoNi|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"52ef4cb718a2f3c3\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFeCoNi|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"400816f96fca34e5\",\"1decd085ae15db17\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFeCoNi|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"e703932025955340\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFeCoNi|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"3b6038fc38bf25e7\",\"6d14b647d74d817e\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFeCoNi|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"6812669bcef15a65\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"fcc_cantor|CrMnFeCoNi|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"1d5db26074c83962\",\"37de2c5271e75aaa\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192}}\nHierarchical action catalog: {\"dimensions\":{\"m\":{\"0\":\"fcc_cantor\"},\"c\":{\"0\":\"CrMnFeCoNi\",\"1\":\"Cr2MnFeCoNi\",\"2\":\"CrMn2FeCoNi\",\"3\":\"CrMnFe2CoNi\"},\"t\":{\"0\":4,\"1\":8,\"2\":16,\"3\":32,\"4\":64},\"f\":{\"0\":\"fcc-cantor-equiatomic\",\"1\":\"fcc-cantor-offstoichiometric\"},\"g\":{\"0\":\"native_lattice_occupations\"},\"p\":{\"0\":{\"operation\":\"chemical_disorder\"},\"1\":{\"operation\":\"substitutional_ordering\"},\"2\":{\"operation\":\"bounded_strain\",\"strain\":0.02}},\"s\":{\"0\":\"any-compatible\"}},\"allowed\":[\"400816f96fca34e5 m0 c0 t0 f0 g0 p0 s0\",\"1decd085ae15db17 m0 c0 t0 f0 g0 p1 s0\",\"52ef4cb718a2f3c3 m0 c0 t0 f0 g0 p2 s0\",\"1d5db26074c83962 m0 c0 t1 f0 g0 p0 s0\",\"37de2c5271e75aaa m0 c0 t1 f0 g0 p1 s0\",\"6812669bcef15a65 m0 c0 t1 f0 g0 p2 s0\",\"3fc5c27370ec8c27 m0 c0 t2 f0 g0 p0 s0\",\"f6fe9849c2bae7d6 m0 c0 t2 f0 g0 p1 s0\",\"e27e3f7e46db9fd6 m0 c0 t2 f0 g0 p2 s0\",\"ad65120747a72b62 m0 c0 t3 f0 g0 p0 s0\",\"2a47368aedef73e8 m0 c0 t3 f0 g0 p1 s0\",\"a5236ad683fcb00b m0 c0 t3 f0 g0 p2 s0\",\"3b6038fc38bf25e7 m0 c0 t4 f0 g0 p0 s0\",\"6d14b647d74d817e m0 c0 t4 f0 g0 p1 s0\",\"e703932025955340 m0 c0 t4 f0 g0 p2 s0\",\"73a5ad049e70db68 m0 c1 t0 f1 g0 p0 s0\",\"2c63a967d38e2540 m0 c1 t0 f1 g0 p1 s0\",\"1a48f7be0808a0ad m0 c1 t0 f1 g0 p2 s0\",\"df93694d500de651 m0 c1 t1 f1 g0 p0 s0\",\"ec0b9ab19f7e53e3 m0 c1 t1 f1 g0 p1 s0\",\"5b062441b27c5c7b m0 c1 t1 f1 g0 p2 s0\",\"4784ff60ab685a83 m0 c1 t2 f1 g0 p0 s0\",\"7dd0fbff30845fcd m0 c1 t2 f1 g0 p1 s0\",\"4c17b8e3c0b6681f m0 c1 t2 f1 g0 p2 s0\",\"91c30559b3d77766 m0 c1 t3 f1 g0 p0 s0\",\"53e2c35b1f600e81 m0 c1 t3 f1 g0 p1 s0\",\"371706b8be599a3e m0 c1 t3 f1 g0 p2 s0\",\"0458f97fe2c6b676 m0 c1 t4 f1 g0 p0 s0\",\"78694716e591451a m0 c1 t4 f1 g0 p1 s0\",\"125a3f2d3df4bf0f m0 c1 t4 f1 g0 p2 s0\",\"146b9ac57dc29405 m0 c2 t0 f1 g0 p0 s0\",\"cb1f7188103c9335 m0 c2 t0 f1 g0 p1 s0\",\"b9873c841fe85838 m0 c2 t0 f1 g0 p2 s0\",\"1476342b772dd154 m0 c2 t1 f1 g0 p0 s0\",\"1b94f3e73387ff8d m0 c2 t1 f1 g0 p1 s0\",\"fcbc2e639b5eaab3 m0 c2 t1 f1 g0 p2 s0\",\"0a03de7879380a04 m0 c2 t2 f1 g0 p0 s0\",\"b1fd975ab4c83fc8 m0 c2 t2 f1 g0 p1 s0\",\"c393a922c5377f72 m0 c2 t2 f1 g0 p2 s0\",\"9def248cab8e2aa7 m0 c2 t3 f1 g0 p0 s0\",\"c12fb24c5c179b64 m0 c2 t3 f1 g0 p1 s0\",\"05ef8273bf8f33a0 m0 c2 t3 f1 g0 p2 s0\",\"7424bd1131183ac4 m0 c2 t4 f1 g0 p0 s0\",\"0c5bde10fbdea2e0 m0 c2 t4 f1 g0 p1 s0\",\"fba5e29256b678c9 m0 c2 t4 f1 g0 p2 s0\",\"91c7d0500104457d m0 c3 t0 f1 g0 p0 s0\",\"f85bd1058a12fbd6 m0 c3 t0 f1 g0 p1 s0\",\"c0632880b7d15de7 m0 c3 t0 f1 g0 p2 s0\",\"e1a5a9b5e0864e05 m0 c3 t1 f1 g0 p0 s0\",\"1b0883566d6a9b1d m0 c3 t1 f1 g0 p1 s0\",\"e922bfbc43c81a25 m0 c3 t1 f1 g0 p2 s0\",\"1ff70dd02dc7e457 m0 c3 t2 f1 g0 p0 s0\",\"0b9ae8a751cb60cc m0 c3 t2 f1 g0 p1 s0\",\"1f034939758ffd8f m0 c3 t2 f1 g0 p2 s0\",\"f4b2e878d99f792f m0 c3 t3 f1 g0 p0 s0\",\"fbb230bf2561cc36 m0 c3 t3 f1 g0 p1 s0\",\"2ff52c5c06384277 m0 c3 t3 f1 g0 p2 s0\",\"b6a113c7ab7760f2 m0 c3 t4 f1 g0 p0 s0\",\"bef2be98786d0ae5 m0 c3 t4 f1 g0 p1 s0\",\"744e0374b140ba36 m0 c3 t4 f1 g0 p2 s0\"]}\n",
+  "prompt_version": "executable-capacities-2",
+  "raw_response": "```json\n{\n  \"allocations\": [\n    {\"action_id\": \"400816f96fca34e5\", \"count\": 1},\n    {\"action_id\": \"1d5db26074c83962\", \"count\": 1},\n    {\"action_id\": \"6812669bcef15a65\", \"count\": 1},\n    {\"action_id\": \"3fc5c27370ec8c27\", \"count\": 2},\n    {\"action_id\": \"f6fe9849c2bae7d6\", \"count\": 1},\n    {\"action_id\": \"e27e3f7e46db9fd6\", \"count\": 1},\n    {\"action_id\": \"ad65120747a72b62\", \"count\": 2},\n    {\"action_id\": \"2a47368aedef73e8\", \"count\": 1},\n    {\"action_id\": \"a5236ad683fcb00b\", \"count\": 2},\n    {\"action_id\": \"3b6038fc38bf25e7\", \"count\": 2},\n    {\"action_id\": \"6d14b647d74d817e\", \"count\": 1},\n    {\"action_id\": \"e703932025955340\", \"count\": 1},\n    {\"action_id\": \"2c63a967d38e2540\", \"count\": 1},\n    {\"action_id\": \"ec0b9ab19f7e53e3\", \"count\": 1},\n    {\"action_id\": \"5b062441b27c5c7b\", \"count\": 1},\n    {\"action_id\": \"4784ff60ab685a83\", \"count\": 2},\n    {\"action_id\": \"7dd0fbff30845fcd\", \"count\": 1},\n    {\"action_id\": \"4c17b8e3c0b6681f\", \"count\": 1},\n    {\"action_id\": \"91c30559b3d77766\", \"count\": 2},\n    {\"action_id\": \"53e2c35b1f600e81\", \"count\": 1},\n    {\"action_id\": \"371706b8be599a3e\", \"count\": 2},\n    {\"action_id\": \"0458f97fe2c6b676\", \"count\": 2},\n    {\"action_id\": \"78694716e591451a\", \"count\": 1},\n    {\"action_id\": \"125a3f2d3df4bf0f\", \"count\": 1},\n    {\"action_id\": \"b9873c841fe85838\", \"count\": 1},\n    {\"action_id\": \"1476342b772dd154\", \"count\": 1},\n    {\"action_id\": \"1b94f3e73387ff8d\", \"count\": 1},\n    {\"action_id\": \"0a03de7879380a04\", \"count\": 2},\n    {\"action_id\": \"b1fd975ab4c83fc8\", \"count\": 1},\n    {\"action_id\": \"c393a922c5377f72\", \"count\": 1},\n    {\"action_id\": \"9def248cab8e2aa7\", \"count\": 2},\n    {\"action_id\": \"c12fb24c5c179b64\", \"count\": 1},\n    {\"action_id\": \"05ef8273bf8f33a0\", \"count\": 2},\n    {\"action_id\": \"7424bd1131183ac4\", \"count\": 2},\n    {\"action_id\": \"0c5bde10fbdea2e0\", \"count\": 1},\n    {\"action_id\": \"fba5e29256b678c9\", \"count\": 1},\n    {\"action_id\": \"91c7d0500104457d\", \"count\": 1},\n    {\"action_id\": \"1b0883566d6a9b1d\", \"count\": 1},\n    {\"action_id\": \"e922bfbc43c81a25\", \"count\": 1},\n    {\"action_id\": \"1ff70dd02dc7e457\", \"count\": 2},\n    {\"action_id\": \"0b9ae8a751cb60cc\", \"count\": 1},\n    {\"action_id\": \"1f034939758ffd8f\", \"count\": 1},\n    {\"action_id\": \"f4b2e878d99f792f\", \"count\": 2},\n    {\"action_id\": \"fbb230bf2561cc36\", \"count\": 1},\n    {\"action_id\": \"2ff52c5c06384277\", \"count\": 2},\n    {\"action_id\": \"b6a113c7ab7760f2\", \"count\": 2},\n    {\"action_id\": \"bef2be98786d0ae5\", \"count\": 1},\n    {\"action_id\": \"744e0374b140ba36\", \"count\": 1}\n  ],\n  \"cited_evidence_ids\": [\"campaign-design\"],\n  \"rationale\": \"With no prior strategy-local outcomes in this initial round, we allocate the 64-structure budget evenly across all four fcc_cantor compositions (16 each for equiatomic CrMnFeCoNi and off-stoichiometric Cr2MnFeCoNi, CrMn2FeCoNi, and CrMnFe2CoNi) and span all perturbation modes (chemical disorder, substitutional ordering, and 0.02 bounded strain). Every size tier requirement is satisfied (4, 8, 16, 20, and 16 structures for tiers 4, 8, 16, 32, and 64 respectively), weighting larger supercells more heavily so five-element chemical stoichiometry and configurational diversity are well resolved without early symmetry deduplication bottlenecks.\"\n}\n```",
+  "rejected_actions": [],
+  "round": 1,
+  "seed": 20261113,
+  "status": "accepted",
+  "strategy": "llm_guided_adaptation",
+  "unavailable_actions": []
+}
