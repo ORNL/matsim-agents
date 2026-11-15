@@ -44,6 +44,36 @@ moving a wrapper between directories. Native execution records its working
 directory and reuses it on resume, preserving those relative paths. Do not put credentials in configs or
 arguments: invocation evidence records them.
 
+### Scientific hypothesis revision records
+
+When a workflow uses an LLM to revise scientific claims, recording the claims
+is mandatory rather than a logging option. A revision separates the material
+claim, falsifiable prediction, scientific status, reason for retaining or
+changing it, and evidence citations from numerical convergence or sampling
+plans. Earlier identities must remain visible, including retired claims.
+MLIP and DFT evidence have separate fidelity scopes; peer opinions and
+generation failures cannot establish material stability.
+
+LLM-backed multi-formula campaign reviews now run an initial hypothesis stage,
+a review after each calculation iteration, and a final evidence review.
+The existing debate transcripts retain exact prompts and replies.
+`hypothesis-reviews/initial.json`, `round-NNNN.json`, and `final-NNNN.json`
+retain stage status, prior hypotheses, calculation records, and accepted
+ledger revision IDs. The append-only `evidence-ledger.jsonl` retains each
+scientific revision, including every participant's intermediate debate round.
+Custom campaign debate responses must contain matching `scientific_hypotheses`
+and ledger `revisions`; inconsistencies abort before the next model is called.
+Use `matsim-agents ledger show PATH --hypothesis ID` to
+inspect a claim's history. A rejected or interrupted mandatory review prevents
+automatic continuation and must be reconciled, not treated as abstention.
+Initial and final reviews add model calls: authorize their token and compute
+budgets before running the campaign.
+
+Deterministic exploration, MD sampling, and model-training iterations that
+do not revisit scientific claims do not receive artificial LLM assessments.
+Single-shot model checks and independent benchmark responses are not an
+evolving hypothesis trajectory.
+
 ## E3-MLIP: current three-round benchmark
 
 ```bash
@@ -67,6 +97,18 @@ That opt-in profile preserves the scientific settings, 64 GPU workers and
 existing time/resource limits. It uses its own manifest and outputs; reaching
 5,000 completed relaxations within those limits is not guaranteed. The default
 64-candidate benchmark is unchanged.
+
+All new LLM-guided E3-MLIP profiles require explicit scientific hypothesis
+records before and after every completed round, including the last round.
+Inspect `round-NN/acquisition/proposal-001.json` for the full acquisition prompt,
+raw reply, and pre-round claims, and `round-NN/hypothesis-assessment.json` for
+the post-round assessment and its exact numerical input. Missing records,
+invalid citations, or omitted previous hypothesis IDs block progress and
+resume. The protocol authorizes two calls per completed round (acquisition
+plus assessment); old one-call manifests are not compatible.
+In E3-QE, the assessment occurs after the current QE audit and training/promotion
+decision, including the final iteration. See the
+[E3 protocol](../../benchmarks/e3/README.md) for record locations and scope.
 
 For a separate DFT-backed version with periodic Quantum ESPRESSO force audits
 and accuracy-triggered MACE fine-tuning, see the
@@ -137,11 +179,12 @@ Round-local `acquisition/` records contain versioned catalogs, prompts, unmodifi
 LLM responses saved before parsing, parsed and accepted allocations, and precise
 rejection/shortfall diagnostics. Partial generation artifacts are retained and
 never counted as MLIP evaluations. The deterministic policy may make another
-explicit decision using generation-shortfall evidence. The frozen production
-protocol allows **one LLM call per round**: a rejected or exhausted proposal does
-not permit an automatic extra call. Replacing an already-consumed legacy
-decision requires scientific authorization; missing historical raw responses
-are recorded as unavailable, never reconstructed or invented.
+explicit decision using generation-shortfall evidence. Acquisition remains
+limited to **one allocation call per round**; the mandatory post-round
+hypothesis assessment is a separate call, not permission to retry a rejected
+or exhausted allocation. Replacement decisions require scientific
+authorization. Missing historical raw responses are recorded as unavailable,
+never reconstructed or invented, and do not satisfy the new tracking contract.
 
 The CPU submission helper reserves the full allocation in the shared resource
 ledger before `sbatch`. The GPU launcher verifies the allocation's actual

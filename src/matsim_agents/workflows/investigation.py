@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -10,9 +11,12 @@ from typing import Any, Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
 
+from matsim_agents.backends.llm.hypotheses import INSTRUCTIONS as HYPOTHESIS_INSTRUCTIONS
+from matsim_agents.backends.llm.hypotheses import validate_hypotheses
 from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.llm.replies import invoke_model
 from matsim_agents.backends.llm.servers import api_key_from_env
+from matsim_agents.backends.llm.transcript import Contribution, Transcript, prompt_messages
 from matsim_agents.execution.contracts import (
     ComputeBudget,
     EvidenceLevel,
@@ -51,6 +55,7 @@ class ScientificHypothesis(BaseModel):
     discussion_mode: Literal["single_llm", "multi_llm_debate"] | None = None
     discussion_run_id: str | None = None
     source_contribution_ids: list[str] = Field(default_factory=list)
+    scientific_hypotheses: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class HypothesisRevision(BaseModel):
@@ -109,7 +114,8 @@ class InvestigationResult(BaseModel):
     report_path: str
 
 
-_HYPOTHESIS_JSON_INSTRUCTION = """Return JSON only with this exact structure:
+_HYPOTHESIS_JSON_INSTRUCTION = """Return JSON only with these proposal fields, plus the required
+scientific_hypotheses field:
 {
   "hypothesis": "testable scientific claim",
   "proposed_compositions": ["valid chemical formula", "..."],
@@ -117,6 +123,109 @@ _HYPOTHESIS_JSON_INSTRUCTION = """Return JSON only with this exact structure:
   "assumptions": ["assumption", "..."]
 }
 Do not wrap the JSON in Markdown. Propose at least one composition."""
+_REVISION_INSTRUCTION = (
+    f"{HYPOTHESIS_INSTRUCTIONS}\n"
+    "Include scientific_hypotheses in the same JSON object as the investigation proposal. "
+    "The stable evidence ID `investigation-objective` identifies the requested research "
+    "objective and is not a numerical observation. Cite only supplied evidence IDs. "
+    "Never describe peer opinions, MLIP predictions, or convergence as DFT evidence."
+)
+
+
+def _previous_hypotheses(previous: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not previous:
+        return []
+    direct = previous.get("scientific_hypotheses")
+    if isinstance(direct, list):
+        return direct
+    hypothesis = previous.get("hypothesis")
+    if isinstance(hypothesis, dict) and isinstance(hypothesis.get("scientific_hypotheses"), list):
+        return hypothesis["scientific_hypotheses"]
+    return []
+
+
+def _previous_evidence(previous: dict[str, Any] | None) -> tuple[set[str], set[str], set[str]]:
+    """Return only explicitly scoped evidence identifiers from a prior result."""
+    valid: set[str] = set()
+    mlip: set[str] = set()
+    dft: set[str] = set()
+    if not previous:
+        return valid, mlip, dft
+    records = previous.get("evidence_records", previous.get("evidence", []))
+    if isinstance(records, list):
+        for item in records:
+            if not isinstance(item, dict):
+                continue
+            evidence_id = item.get("evidence_id") or item.get("id")
+            if not isinstance(evidence_id, str):
+                continue
+            valid.add(evidence_id)
+            if str(item.get("outcome", "")).lower() != "measured":
+                continue
+            scope = " ".join(
+                str(item.get(key, "")) for key in ("evidence_level", "method", "backend")
+            ).lower()
+            if "dft" in scope:
+                dft.add(evidence_id)
+            elif "mlip" in scope or "mace" in scope:
+                mlip.add(evidence_id)
+    for reference in _previous_exploration_evidence(previous):
+        evidence_id = reference["evidence_id"]
+        valid.add(evidence_id)
+        mlip.add(evidence_id)
+    return valid, mlip, dft
+
+
+def _previous_exploration_evidence(previous: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Assign stable MLIP-scoped citations to measured, converged prior relaxations."""
+    if not previous or not isinstance(previous.get("explorations"), list):
+        return []
+    references = []
+    for exploration in previous["explorations"]:
+        if not isinstance(exploration, dict):
+            continue
+        composition = exploration.get("composition")
+        if isinstance(composition, dict):
+            composition = composition.get("formula")
+        for stage in ("initial", "after_retraining"):
+            result = exploration.get(stage)
+            if not isinstance(result, dict):
+                continue
+            relaxations = result.get("relaxations", [])
+            if not isinstance(relaxations, list):
+                continue
+            for relaxation in relaxations:
+                if (
+                    not isinstance(relaxation, dict)
+                    or not relaxation.get("converged")
+                    or relaxation.get("final_energy_eV") is None
+                ):
+                    continue
+                identity = json.dumps(
+                    [composition, stage, relaxation], sort_keys=True, separators=(",", ":")
+                )
+                digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
+                references.append(
+                    {
+                        "evidence_id": f"prior-mlip-{digest}",
+                        "scope": "measured converged MLIP relaxation; not DFT",
+                        "composition": composition,
+                        "stage": stage,
+                        "relaxation": relaxation,
+                    }
+                )
+    return references
+
+
+def _evidence_context(previous: dict[str, Any] | None) -> tuple[set[str], set[str], set[str]]:
+    valid, mlip, dft = _previous_evidence(previous)
+    valid.add("investigation-objective")
+    for row in _previous_hypotheses(previous):
+        if isinstance(row, dict):
+            ids = row.get("evidence_ids", [])
+            if isinstance(ids, list):
+                valid.update(item for item in ids if isinstance(item, str))
+    return valid, mlip, dft
 
 
 def _parse_hypothesis_proposal(text: str, objective: str) -> ScientificHypothesis:
@@ -150,7 +259,18 @@ def build_hypothesis_from_discussion(
 ) -> ScientificHypothesis:
     """Produce the investigation hypothesis using one LLM or a reusable debate."""
 
-    context = f"\n\nPrevious investigation evidence:\n{json.dumps(previous)}" if previous else ""
+    previous_state = _previous_hypotheses(previous)
+    valid_evidence, mlip_evidence, dft_evidence = _evidence_context(previous)
+    context = (
+        "\n\nPrevious investigation results and evidence:\n"
+        f"{json.dumps(previous, sort_keys=True)}\n\n"
+        "Previous scientific hypothesis state (retain every stable ID):\n"
+        f"{json.dumps(previous_state, sort_keys=True)}\n\n"
+        "Previous evidence references with stable IDs and method scope:\n"
+        f"{json.dumps(_previous_exploration_evidence(previous), sort_keys=True)}"
+        if previous
+        else ""
+    )
     if discussion.mode == "single_llm":
         spec = discussion.single_llm
         api_key = api_key_from_env(spec.api_key_env, owner="single-LLM hypothesis generation")
@@ -165,18 +285,88 @@ def build_hypothesis_from_discussion(
                 else {}
             ),
         )
-        reply = invoke_model(
-            model,
-            [
-                SystemMessage(
-                    content="Formulate a testable materials-science hypothesis. "
-                    + _HYPOTHESIS_JSON_INSTRUCTION
-                ),
-                HumanMessage(content=f"Scientific objective:\n{objective}{context}"),
-            ],
+        messages = [
+            SystemMessage(
+                content="Formulate a testable materials-science hypothesis. "
+                + _HYPOTHESIS_JSON_INSTRUCTION
+                + "\n\n"
+                + _REVISION_INSTRUCTION
+            ),
+            HumanMessage(
+                content=(
+                    f"Scientific objective:\n{objective}{context}\n\n"
+                    f"Available evidence IDs (MLIP: {sorted(mlip_evidence)}; "
+                    f"DFT: {sorted(dft_evidence)}): {sorted(valid_evidence)}"
+                )
+            ),
+        ]
+        discussion_run = ScientificRunDirectory.create(
+            output_root,
+            workflow="single_llm_hypothesis_discussion",
+            request={"objective": objective, "previous": previous},
+            resolved_config=spec.model_dump(mode="json"),
+            provenance=ProvenanceRecord(
+                workflow="single_llm_hypothesis_discussion",
+                evidence_level=EvidenceLevel.HYPOTHESIS,
+            ),
+            prefix="hypothesis",
+            directories=(),
         )
-        hypothesis = _parse_hypothesis_proposal(reply.text, objective)
+        transcript = Transcript(
+            discussion_run.path,
+            title="Single-LLM hypothesis discussion",
+            preamble=f"Run `{discussion_run.run_id}`.\n\n**Objective.** {objective}",
+        )
+        prompt_path = discussion_run.path / "prompts" / "proposal-001.json"
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        prompt_path.write_text(
+            json.dumps(prompt_messages(messages), indent=2) + "\n", encoding="utf-8"
+        )
+        try:
+            reply = invoke_model(model, messages)
+        except Exception as error:
+            discussion_run.append_event("model_call_failed", {"error": str(error)})
+            raise
+        transcript.add(
+            Contribution.from_reply(
+                reply,
+                id="proposal-001",
+                kind="proposal",
+                speaker="proposer",
+                provider=spec.provider,
+                model=spec.model,
+                context=[],
+            ),
+            prompt=messages,
+        )
+        discussion_run.append_event("contribution_completed", {"id": "proposal-001"})
+        if reply.truncated or not reply.text.strip():
+            discussion_run.append_event(
+                "hypothesis_validation_failed",
+                {"id": "proposal-001", "error": "reply is incomplete"},
+            )
+            raise ValueError("incomplete scientific hypothesis proposal")
+        try:
+            payload = json.loads(reply.text)
+            if not isinstance(payload, dict) or "scientific_hypotheses" not in payload:
+                raise ValueError("LLM proposal must include scientific_hypotheses")
+            state = validate_hypotheses(
+                payload["scientific_hypotheses"],
+                valid_evidence,
+                previous_state,
+                mlip_evidence=mlip_evidence,
+                dft_evidence=dft_evidence,
+            )
+            hypothesis = _parse_hypothesis_proposal(reply.text, objective)
+        except Exception as error:
+            discussion_run.append_event(
+                "hypothesis_validation_failed",
+                {"id": "proposal-001", "error": str(error)},
+            )
+            raise
         hypothesis.discussion_mode = "single_llm"
+        hypothesis.discussion_run_id = discussion_run.run_id
+        hypothesis.scientific_hypotheses = state
         return hypothesis
 
     spec = discussion.multi_llm_debate
@@ -193,6 +383,10 @@ def build_hypothesis_from_discussion(
             synthesis_participant=spec.synthesis_participant,
             max_transcript_chars=spec.max_transcript_chars,
             final_response_instruction=_HYPOTHESIS_JSON_INSTRUCTION,
+            evidence_ids=sorted(valid_evidence),
+            mlip_evidence_ids=sorted(mlip_evidence),
+            dft_evidence_ids=sorted(dft_evidence),
+            initial_hypotheses=previous_state,
         ),
         model_factory=model_factory,
     )
@@ -222,6 +416,7 @@ def build_hypothesis_from_discussion(
         discussion_mode="multi_llm_debate",
         discussion_run_id=debate.run_id,
         source_contribution_ids=[verdict.contribution_id for verdict in debate.verdicts],
+        scientific_hypotheses=debate.scientific_hypotheses,
     )
     return hypothesis
 

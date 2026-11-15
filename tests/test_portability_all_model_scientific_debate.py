@@ -22,7 +22,23 @@ class _FakeModel:
     def invoke(self, messages):
         self.calls += 1
         assert THERMOELECTRIC_HYPOTHESIS in messages[-1].content
-        return SimpleNamespace(content=f"{self.model} scientific argument {self.calls}")
+        return SimpleNamespace(
+            content=json.dumps(
+                {
+                    "response": f"{self.model} scientific argument {self.calls}",
+                    "scientific_hypotheses": [
+                        {
+                            "id": "thermoelectric-claim",
+                            "claim": "A candidate may have high thermoelectric ZT.",
+                            "prediction": "Transport measurements will show high ZT.",
+                            "status": "proposed",
+                            "reason": "No numerical evidence is supplied in this debate.",
+                            "evidence_ids": ["debate-hypothesis"],
+                        }
+                    ],
+                }
+            )
+        )
 
 
 def _catalog(tmp_path, count=3):
@@ -77,6 +93,10 @@ def test_every_catalog_model_completes_two_scientific_interaction_rounds(tmp_pat
     contributions = [entry for entry in records if entry["kind"] == "argument"]
     assert len(contributions) == 6
     assert len({entry["id"] for entry in contributions}) == 6
+    assert all(
+        json.loads(entry["text"])["scientific_hypotheses"][0]["id"] == "thermoelectric-claim"
+        for entry in records
+    )
 
 
 def test_actual_first_class_catalog_defines_the_enabled_enclave(tmp_path):

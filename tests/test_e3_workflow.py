@@ -245,6 +245,34 @@ def campaign(tmp_path):
 
     c.ingest = ingest
     c.context = lambda: controller.load_context(MATERIAL, c.replay, roles)
+    reassessment.deterministic_reassessment(
+        _ledger(c, RULE),
+        c.context(),
+        "fixture-initial",
+        phase="initial",
+    )
+    ledger = _ledger(c, LLM)
+    initial = {
+        "hypotheses": [
+            {
+                "hypothesis_id": "e3:bcc_refractory:transfer",
+                "status": "proposed",
+                "scientific_claim": "Independent validation may establish force transfer.",
+                "falsifiable_prediction": "Qualified validation can test force transfer criteria.",
+                "rationale": "Initial transfer claim is untested.",
+                "cited_evidence_ids": [ledger.evidence()[0].evidence_id],
+                "proposed_tests": ["Obtain independent validation evidence."],
+            }
+        ]
+    }
+    assert reassessment.llm_reassessment(
+        ledger,
+        c.context(),
+        FakeChat(initial),
+        "llm:test",
+        0,
+        "initial",
+    ).accepted
     return c
 
 
@@ -528,7 +556,12 @@ class FakeChat:
 
 def test_deterministic_reassessment_is_unresolved_with_insufficient_validation(campaign):
     state = campaign.ingest()
-    results = reassessment.reassess_round(state, campaign.context(), campaign.ledgers)
+    results = reassessment.reassess_round(
+        state,
+        campaign.context(),
+        campaign.ledgers,
+        chat=FakeChat(_llm_reply(campaign)),
+    )
     assert {r.status for r in results.values()} == {"unresolved"}
     ledger = _ledger(campaign, RULE)
     current = ledger.current_hypotheses()["e3:bcc_refractory:transfer"]
@@ -538,21 +571,23 @@ def test_deterministic_reassessment_is_unresolved_with_insufficient_validation(c
     # a later reassessment chains onto the head; it never forks
     reassessment.deterministic_reassessment(ledger, campaign.context(), "x")
     history = EvidenceLedger(ledger.path).history("e3:bcc_refractory:transfer")
-    assert len(history) == 2 and history[1].prior_revision_id == history[0].revision_id
+    assert len(history) == 3 and history[2].prior_revision_id == history[1].revision_id
 
 
 def _llm_reply(campaign, **override):
     ledger = _ledger(campaign, LLM)
     dft = [e.evidence_id for e in ledger.evidence() if e.kind == "relaxation"]
     reply = {
+        "hypothesis_id": "e3:bcc_refractory:transfer",
         "status": "unresolved",
         "scientific_claim": "Transfer cannot be decided with one validation group.",
+        "falsifiable_prediction": "Independent validation must test force transfer.",
         "rationale": "Acquired labels are training data; validation needs more groups.",
         "cited_evidence_ids": dft,
         "proposed_tests": ["qualify a second validation group"],
     }
     reply.update(override)
-    return reply
+    return {"hypotheses": [reply]}
 
 
 def test_llm_reassessment_accepted_and_costed(campaign):
@@ -563,7 +598,7 @@ def test_llm_reassessment_accepted_and_costed(campaign):
     )
     assert results[LLM].accepted and results[LLM].status == "unresolved"
     assert results[LLM].cost.llm_prompt_tokens == 100
-    assert state.round(1).strategies[LLM].llm_prompt_tokens == 100
+    assert state.round(1).strategies[LLM].llm_prompt_tokens == 200
     assert "Evidence:" in chat.prompts[0] and "E4-BCC-0099" not in chat.prompts[0]
 
 
@@ -581,7 +616,7 @@ def test_llm_reassessment_rejected_not_repaired(campaign, override, problem):
     results = reassessment.reassess_round(state, campaign.context(), campaign.ledgers, chat=chat)
     assert not results[LLM].accepted and any(problem in p for p in results[LLM].problems)
     ledger = _ledger(campaign, LLM)
-    assert ledger.current_hypotheses() == {}
+    assert len(ledger.history("e3:bcc_refractory:transfer")) == 1
     rejected = [d for d in ledger.decisions() if d.action == reassessment.REJECT_ACTION]
     assert len(rejected) == 1 and rejected[0].observed_cost.llm_prompt_tokens == 100
 
@@ -604,10 +639,215 @@ def test_unparseable_llm_reply_rejected(campaign):
     assert not results[LLM].accepted and "unparseable" in results[LLM].problems[0]
 
 
+def test_missing_llm_does_not_silently_reassess_rule_arm(campaign):
+    state = campaign.ingest()
+    before = {s: len(_ledger(campaign, s)) for s in (RULE, LLM)}
+    with pytest.raises(ValueError, match="mandatory"):
+        reassessment.reassess_round(state, campaign.context(), campaign.ledgers)
+    assert before == {s: len(_ledger(campaign, s)) for s in (RULE, LLM)}
+
+
+def test_reassessment_retains_exact_prompt_raw_response_and_previous_state(campaign):
+    state = campaign.ingest()
+    chat = FakeChat("invalid raw reply")
+    reassessment.reassess_round(state, campaign.context(), campaign.ledgers, chat=chat)
+    path = campaign.ledgers / LLM / "hypothesis-audit.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()][-3:]
+    assert rows[0]["event"] == "prompt" and rows[0]["prompt"] == chat.prompts[0]
+    assert rows[0]["previous"][0]["falsifiable_prediction"]
+    assert rows[0]["evidence"]
+    assert rows[1]["raw_response"] == "invalid raw reply"
+    assert rows[2]["event"] == "rejected"
+    assert len(_ledger(campaign, LLM).history("e3:bcc_refractory:transfer")) == 1
+
+
+def test_reassessment_requires_all_scientific_fields(campaign):
+    state = campaign.ingest()
+    reply = _llm_reply(campaign)
+    del reply["hypotheses"][0]["falsifiable_prediction"]
+    result = reassessment.reassess_round(
+        state,
+        campaign.context(),
+        campaign.ledgers,
+        chat=FakeChat(reply),
+    )[LLM]
+    assert not result.accepted
+    assert len(_ledger(campaign, LLM).history("e3:bcc_refractory:transfer")) == 1
+
+
+def test_final_round_requires_separate_final_revision(campaign):
+    state = campaign.ingest()
+    ctx = campaign.context()
+    ctx.protocol = {**ctx.protocol, "budget": {**ctx.protocol["budget"], "rounds": 1}}
+    chat = FakeChat(_llm_reply(campaign))
+    reassessment.reassess_round(state, ctx, campaign.ledgers, chat=chat)
+    assert len(chat.prompts) == 2 and "Lifecycle phase: final" in chat.prompts[1]
+    history = _ledger(campaign, LLM).history("e3:bcc_refractory:transfer")
+    assert len(history) == 3
+    assert history[-1].prior_revision_id == history[-2].revision_id
+    assert history[-1].falsifiable_prediction
+
+
+def test_rejected_final_cannot_be_silently_resumed(campaign):
+    state = campaign.ingest()
+    ctx = campaign.context()
+    ctx.protocol = {**ctx.protocol, "budget": {**ctx.protocol["budget"], "rounds": 1}}
+    valid = _llm_reply(campaign)
+
+    class RejectFinal(FakeChat):
+        def invoke(self, prompt):
+            self.reply = "bad final" if "Lifecycle phase: final" in prompt else valid
+            return super().invoke(prompt)
+
+    chat = RejectFinal(valid)
+    result = reassessment.reassess_round(state, ctx, campaign.ledgers, chat=chat)
+    assert not result[LLM].accepted
+    before = len(chat.prompts)
+    with pytest.raises(ValueError, match="rejected or incomplete"):
+        reassessment.reassess_round(state, ctx, campaign.ledgers, chat=chat)
+    assert len(chat.prompts) == before
+
+
+def test_pre_acquisition_revision_and_post_dft_revision_are_distinct(campaign):
+    state = campaign.ingest()
+    ctx = campaign.context()
+    ledger = _ledger(campaign, LLM)
+    reply = _llm_reply(campaign)
+    before = reassessment.llm_reassessment(
+        ledger,
+        ctx,
+        FakeChat(reply),
+        "llm:test",
+        1,
+        "pre_acquisition",
+    )
+    assert before.accepted
+    result = reassessment.reassess_round(state, ctx, campaign.ledgers, chat=FakeChat(reply))[LLM]
+    assert result.accepted
+    history = _ledger(campaign, LLM).history("e3:bcc_refractory:transfer")
+    assert history[-1].prior_revision_id == before.revision_id
+
+
+def test_rejected_acquisition_blocks_dft_resume(campaign):
+    state = campaign.ingest()
+    ledger = _ledger(campaign, LLM)
+    for event in ("prompt", "response", "rejected"):
+        reassessment._audit(ledger, {"event": event, "phase": "acquisition"})
+    with pytest.raises(ValueError, match="rejected or incomplete LLM acquisition"):
+        reassessment.reassess_round(
+            state,
+            campaign.context(),
+            campaign.ledgers,
+            chat=FakeChat(_llm_reply(campaign)),
+        )
+
+
+def test_deterministic_initial_cannot_substitute_for_llm(campaign):
+    ledger_dir = campaign.root / "no-llm-initial"
+    for strategy in (RULE, LLM):
+        ledger = EvidenceLedger(ledger_dir / strategy / "ledger.jsonl")
+        for evidence in _ledger(campaign, strategy).evidence():
+            ledger.append(evidence)
+        reassessment.deterministic_reassessment(
+            ledger,
+            campaign.context(),
+            "deterministic",
+            phase="initial",
+        )
+    state = campaign.ingest()
+    with pytest.raises(ValueError, match="missing initial LLM scientific audit"):
+        reassessment.reassess_round(
+            state,
+            campaign.context(),
+            ledger_dir,
+            chat=FakeChat(_llm_reply(campaign)),
+        )
+
+
+def test_next_round_requires_scientific_revision(campaign):
+    state = campaign.ingest()
+    with pytest.raises(ValueError, match="mandatory scientific"):
+        controller.prepare_next_round(
+            state,
+            {LLM: ["E4-BCC-0004"]},
+            campaign.context(),
+            campaign.root / "r2.json",
+        )
+
+
+def test_reassessment_rejects_legacy_missing_initial_state(campaign):
+    state = campaign.ingest()
+    legacy_dir = campaign.root / "legacy-ledgers"
+    for strategy in (RULE, LLM):
+        original = _ledger(campaign, strategy)
+        legacy = EvidenceLedger(legacy_dir / strategy / "ledger.jsonl")
+        for row in original.evidence():
+            legacy.append(row)
+        for row in original.decisions():
+            legacy.append(row)
+    chat = FakeChat(_llm_reply(campaign))
+    with pytest.raises(ValueError, match="missing initial"):
+        reassessment.reassess_round(state, campaign.context(), legacy_dir, chat=chat)
+    assert not chat.prompts
+
+
+def test_reassessment_must_retain_every_stable_id(campaign):
+    state = campaign.ingest()
+    ledger = _ledger(campaign, LLM)
+    original = ledger.current_hypotheses()["e3:bcc_refractory:transfer"]
+    from matsim_agents.execution.ledger import HypothesisRecord
+
+    ledger.append(
+        HypothesisRecord(
+            hypothesis_id="e3:bcc_refractory:ordering",
+            scientific_claim="Ordering may alter transfer.",
+            falsifiable_prediction="Ordering may alter force transfer errors.",
+            scientific_rationale="Proposed ordering question requires independent evidence.",
+            status=HypothesisStatus.PROPOSED,
+            evidence_ids=original.evidence_ids,
+        )
+    )
+    result = reassessment.reassess_round(
+        state,
+        campaign.context(),
+        campaign.ledgers,
+        chat=FakeChat(_llm_reply(campaign)),
+    )[LLM]
+    assert not result.accepted and any("omit previous stable IDs" in p for p in result.problems)
+    assert len(_ledger(campaign, LLM).history("e3:bcc_refractory:ordering")) == 1
+
+
+def test_completed_scientific_round_is_idempotent_on_reingestion(campaign):
+    state = campaign.ingest()
+    chat = FakeChat(_llm_reply(campaign))
+    reassessment.reassess_round(state, campaign.context(), campaign.ledgers, chat=chat)
+    state.save(campaign.state)
+    before = _ledger(campaign, LLM).path.read_text()
+    state = campaign.ingest()
+    assert state.round(1).strategies[LLM].state == E3State.SCIENTIFICALLY_UNRESOLVED
+    assert (
+        reassessment.reassess_round(
+            state,
+            campaign.context(),
+            campaign.ledgers,
+            chat=chat,
+        )
+        == {}
+    )
+    assert _ledger(campaign, LLM).path.read_text() == before
+    assert len(chat.prompts) == 1
+
+
 # ------------------------------------------------------------- next round --
 def test_next_round_manifest_is_unauthorized_and_budgeted(campaign):
     state = campaign.ingest()
     ctx = campaign.context()
+    reassessment.reassess_round(
+        state,
+        ctx,
+        campaign.ledgers,
+        chat=FakeChat(_llm_reply(campaign)),
+    )
     out = campaign.root / "round2.json"
     manifest = controller.prepare_next_round(
         state, {RULE: ["E4-BCC-0004"], LLM: ["E4-BCC-0004", "E4-BCC-0005"]}, ctx, out
@@ -636,6 +876,12 @@ def test_next_round_manifest_is_unauthorized_and_budgeted(campaign):
 )
 def test_next_round_rejects_invalid_selection(campaign, selection, problem):
     state = campaign.ingest()
+    reassessment.reassess_round(
+        state,
+        campaign.context(),
+        campaign.ledgers,
+        chat=FakeChat(_llm_reply(campaign)),
+    )
     with pytest.raises(ValueError, match=problem):
         controller.prepare_next_round(
             state, selection, campaign.context(), campaign.root / "r2.json"
@@ -644,6 +890,12 @@ def test_next_round_rejects_invalid_selection(campaign, selection, problem):
 
 def test_next_round_respects_total_strategy_budget(campaign):
     state = campaign.ingest()
+    reassessment.reassess_round(
+        state,
+        campaign.context(),
+        campaign.ledgers,
+        chat=FakeChat(_llm_reply(campaign)),
+    )
     state.round(1).strategies[RULE].remaining_attempts = 1
     with pytest.raises(ValueError, match="1 attempts remaining"):
         controller.prepare_next_round(

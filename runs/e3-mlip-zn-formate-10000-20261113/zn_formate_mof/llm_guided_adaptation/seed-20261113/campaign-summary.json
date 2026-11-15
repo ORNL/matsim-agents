@@ -1,0 +1,22 @@
+{
+  "campaign_id": "e3-mlip-zn-formate-10000",
+  "logical_optimizations_attempted": 192,
+  "material": "zn_formate_mof",
+  "outcomes": {
+    "converged": 138,
+    "nonconverged": 54
+  },
+  "resource_limits": {
+    "allocation_seconds": 9000,
+    "campaign_id": "e3-mlip-zn-formate-10000",
+    "hard_optimization_seconds": 1800,
+    "manifest_sha256": "a17988298c351eda2ef6277ec5e9235465bcc1216c00455de85ebb7c9cfb592c",
+    "round_seconds": 2400,
+    "workers": 64
+  },
+  "rounds_completed": 3,
+  "rounds_requested": 3,
+  "seed": 20261113,
+  "status": "complete",
+  "strategy": "llm_guided_adaptation"
+}

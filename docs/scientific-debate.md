@@ -164,6 +164,25 @@ Perlmutter campaign panel layouts do).
   a participant name with `designated_model`, and otherwise defaults to the
   first participant.
 
+Every argument and final verdict must also return a structured
+`scientific_hypotheses` list. Each item has a stable `id`, falsifiable `claim`
+and `prediction`, `status`, `reason`, and supplied `evidence_ids`. Every later
+stage must retain prior IDs. Debate context and peer critiques are not
+numerical evidence; MLIP- and DFT-scoped statuses require explicitly supplied
+evidence of that scope. The complete prompt is saved before invocation and the
+raw reply is appended before its state is validated. An incomplete or invalid
+reply raises an error and does not produce a successful result or skip the
+final verdict stage. `round_response_instruction` can add a workflow-specific
+round schema while preserving this common state contract;
+`final_response_instruction` customizes the final verdict schema.
+Workflow-specific validation is available through
+`run_scientific_debate(..., round_response_validator=..., final_response_validator=...)`.
+Each validator receives the raw `Contribution` (including its stage, speaker, and
+round) plus the current validated generic hypothesis list immediately after the
+reply is persisted. A raised validation error stops the workflow without writing
+a successful result, so a campaign can enforce and append each reviewer's
+custom revision before the next speaker or final verdict runs.
+
 ## Outcomes and artifacts
 
 A run directory is named `debate-<UTC timestamp>_<suffix>` and contains:
@@ -184,9 +203,9 @@ A run directory is named `debate-<UTC timestamp>_<suffix>` and contains:
   `events.jsonl`, managed by the scientific run directory.
 
 Argument IDs encode their round and turn; verdict IDs identify the independent
-or designated conclusion. A reply cut off at the token limit is logged as a
-warning, marked in the transcript, and shown to later speakers with a note;
-raise `max_completion_tokens` for that participant when it happens.
+or designated conclusion. Incomplete replies are marked and retained for
+diagnosis, but fail closed rather than continuing to a successful result; raise
+`max_completion_tokens` for that participant when this happens.
 
 All debate output has `hypothesis` evidence level. Agreement between many LLMs
 is not physical validation. Candidate materials, mechanisms, and property

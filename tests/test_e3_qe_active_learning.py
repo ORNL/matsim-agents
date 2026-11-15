@@ -304,6 +304,16 @@ def test_qe_evidence_reaches_actual_llm_prompt():
                         "allocations": [{"action_id": allowed["action_id"], "count": 2}],
                         "cited_evidence_ids": ["qe-audit-0"],
                         "rationale": "Revisit the audited action.",
+                        "scientific_hypotheses": [
+                            {
+                                "id": "h1",
+                                "claim": "Structures may have different force errors",
+                                "prediction": "Measured QE force errors differ between structures",
+                                "status": "unresolved",
+                                "reason": "Only one action was audited",
+                                "evidence_ids": ["qe-audit-0"],
+                            }
+                        ],
                     }
                 )
             )
@@ -431,6 +441,17 @@ def test_e3_sampler_reuses_generation_workers_and_feeds_qe_to_llm(qe_config, mon
             }
         )
     )
+    e3._atomic_json(
+        previous / "hypothesis-evidence.json",
+        {
+            "evidence_id": "qe-audit-0",
+            "qe_audits_by_action": {
+                "action-old": {"n_audited": 1, "maximum_force_mae_eV_per_A": 0.4},
+            },
+            "accuracy_triggered": True,
+            "model_promoted": True,
+        },
+    )
     current = root / "iteration_0001"
     current.mkdir()
     round_dir = root / "round-02"
@@ -450,6 +471,11 @@ def test_e3_sampler_reuses_generation_workers_and_feeds_qe_to_llm(qe_config, mon
         return round_dir / "round-manifest.json", round_dir / "tasks.jsonl", {}
 
     monkeypatch.setattr(e3, "_materialize_round", materialize)
+    monkeypatch.setattr(
+        e3,
+        "_round_hypothesis_assessment",
+        lambda *args, **kwargs: captured.update(hypothesis_assessment=(args, kwargs)),
+    )
     monkeypatch.setattr(e3, "_read_tasks", lambda *a: tasks)
     monkeypatch.setattr(
         e3, "_execute_round_tasks", lambda *a, **k: captured.update(worker_kwargs=k)
@@ -476,6 +502,7 @@ def test_e3_sampler_reuses_generation_workers_and_feeds_qe_to_llm(qe_config, mon
         lambda command, **kwargs: E3Sampler("nb_ta_o")._run_geometry(cfg, 1, current),
     )
     candidates = E3Sampler("nb_ta_o")(cfg, 1, current)
+    assert "hypothesis_assessment" not in captured
     assert len(candidates) == 5000
     assert captured["spec"]["main_target"] == 5000
     assert (
@@ -494,3 +521,74 @@ def test_e3_sampler_reuses_generation_workers_and_feeds_qe_to_llm(qe_config, mon
     assert compact["active_model"]["path"] == cfg.mlip.mace.model
     assert compact["round"] == 2
     assert compact["evidence_id"] != "unscoped"
+
+
+def test_final_qe_audit_assessed_after_training_and_promotion(qe_config, monkeypatch):
+    from matsim_agents.active_learning.loop import IterationState
+
+    cfg, _ = qe_config
+    for index in range(2):
+        e3._atomic_json(
+            cfg.loop.out_dir / f"iteration_{index:04d}" / "hypothesis-evidence.json",
+            {"evidence_id": f"qe-audit-{index}", "qe_audits_by_action": {}},
+        )
+    it_dir = cfg.loop.out_dir / "iteration_0002"
+    it_dir.mkdir(parents=True)
+    e3._atomic_json(
+        it_dir / "e3-audit-pool.json",
+        [{"candidate_id": "audited", "action_id": "action-last"}],
+    )
+    e3._atomic_json(
+        it_dir / "e3-geometry-result.json",
+        {"active_model": {"path": "incumbent", "sha256": "incumbent-hash"}},
+    )
+    state = IterationState(
+        iteration=2,
+        status="complete",
+        n_candidates=5000,
+        dft_force_errors_eV_per_A={"audited": 0.4},
+        accuracy_triggered=True,
+        model_promoted=True,
+        model_comparison={"force_mae": 0.1},
+    )
+    captured = {}
+    monkeypatch.setattr(e3, "_chat_model", lambda: object())
+    monkeypatch.setattr(
+        e3,
+        "_round_hypothesis_assessment",
+        lambda *args, **kwargs: captured.update(args=args, kwargs=kwargs),
+    )
+    E3Sampler("nb_ta_o").assess_iteration(cfg, 2, it_dir, state)
+    assert captured["args"][3] == 3
+    evidence = captured["kwargs"]["additional_history"][-1]
+    assert evidence["evidence_id"] == "qe-audit-2"
+    assert evidence["qe_audits_by_action"]["action-last"]["maximum_force_mae_eV_per_A"] == 0.4
+    assert evidence["iteration_state"]["model_comparison"] == {"force_mae": 0.1}
+    assert evidence["model_promoted"]
+
+
+def test_qe_resume_requires_every_completed_round_assessment(tmp_path):
+    (tmp_path / "e3-qe-policy.json").write_text("{}")
+    it_dir = tmp_path / "iteration_0000"
+    it_dir.mkdir()
+    (it_dir / "state.json").write_text('{"status":"complete"}')
+    with pytest.raises(FileNotFoundError, match="proposal-001.json"):
+        check_resume(tmp_path, "nb_ta_o")
+
+
+def test_generation_stop_does_not_invent_qe_hypothesis_assessment(qe_config, monkeypatch):
+    from matsim_agents.active_learning.loop import IterationState
+
+    cfg, _ = qe_config
+    it_dir = cfg.loop.out_dir / "iteration_0000"
+    it_dir.mkdir(parents=True)
+    e3._atomic_json(it_dir / "generation-stop.json", {"reason": "exhausted"})
+    monkeypatch.setattr(
+        e3,
+        "_chat_model",
+        lambda: pytest.fail("stopped generation must not invoke an LLM"),
+    )
+    E3Sampler("nb_ta_o").assess_iteration(cfg, 0, it_dir, IterationState(iteration=0))
+    stopped = json.loads((it_dir / "hypothesis-stop.json").read_text())
+    assert stopped["round_complete"] is False
+    assert stopped["post_round_assessment"] is False

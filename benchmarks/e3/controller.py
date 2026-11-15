@@ -531,6 +531,7 @@ def account(state: E3WorkflowState, ctx: Context, ledger_dir: Path) -> None:
     for strategy in STRATEGIES:
         path = ledger_path(ledger_dir, strategy)
         st = current.strategies.get(strategy) or E3StrategyState(strategy=strategy, ledger_path=str(path))
+        previous_dft_count = st.counterfactual_dft_calculations
         st.logical_attempts = totals[strategy]
         st.remaining_attempts = max(0, int(budget["max_attempts_per_strategy"]) - totals[strategy])
         if path.is_file():
@@ -543,7 +544,11 @@ def account(state: E3WorkflowState, ctx: Context, ledger_dir: Path) -> None:
         mine = [c for c in current.calculations.values() if strategy in c.requested_by and c.state != E3State.REJECTED]
         if any(c.state == E3State.AWAITING_DFT for c in mine):
             st.state = E3State.AWAITING_DFT
-        elif mine:
+        elif mine and not (
+            st.state in {E3State.REASSESSED, E3State.SCIENTIFICALLY_UNRESOLVED}
+            and st.hypothesis_revision_ids
+            and previous_dft_count == st.counterfactual_dft_calculations
+        ):
             st.state = E3State.EVIDENCE_INGESTED
         current.strategies[strategy] = st
 
@@ -691,6 +696,27 @@ def prepare_next_round(
     previous = state.round(state.current_round)
     if any(c.state == E3State.AWAITING_DFT for c in previous.calculations.values()):
         raise ValueError(f"round {state.current_round} still has calculations awaiting DFT")
+    for strategy in selections:
+        st = previous.strategies.get(strategy)
+        if strategy in STRATEGIES and (
+            st is None or not st.hypothesis_revision_ids or not st.reassessment_status
+            or st.state not in {E3State.REASSESSED, E3State.SCIENTIFICALLY_UNRESOLVED}
+        ):
+            raise ValueError(f"{strategy}: mandatory scientific round revision is incomplete")
+        if strategy in STRATEGIES:
+            from benchmarks.e3.reassessment import _require_llm_audit, _require_scientific_state
+            from benchmarks.e3.run import LLM
+
+            ledger = EvidenceLedger(Path(st.ledger_path))
+            _require_scientific_state(ledger, ctx)
+            if strategy == LLM:
+                _require_llm_audit(ledger, ctx)
+            latest = [
+                r.revision_id for hid, r in ledger.current_hypotheses().items()
+                if hid.startswith(f"{CAMPAIGN}:{ctx.material}:")
+            ]
+            if any(rid not in st.hypothesis_revision_ids for rid in latest):
+                raise ValueError(f"{strategy}: current scientific revision is not recorded in state")
     number = state.current_round + 1
     budget = ctx.protocol["budget"]
     if number > int(budget["rounds"]):

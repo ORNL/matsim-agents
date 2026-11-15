@@ -1,0 +1,2016 @@
+{
+  "accepted_final_allocation": [
+    {
+      "action": {
+        "action_id": "6f12791286cbd0ac",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "aa5239bf62629525",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "b1a41c5fd5850ba6",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "6aba44116c92adc7",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "dd717561c30d8953",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "f12fb26e71ff36a3",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quinary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "eb1c4a383788c893",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 8,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "707b0d8b34bb105c",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "8a22a12281364137",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "b65156a4ddbc0af8",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quinary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "92a2fd655f9310b6",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quinary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "a82ee1883d6038fa",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quinary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "19cb3439ae711f9d",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "d23ce6d6b6114f7e",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "bf0cb143016ea6cb",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "8f860d597b017b13",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|Nb2TaVHfZrTi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Nb2TaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "9a345c4c75ba3121",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|Nb2TaVHfZrTi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Nb2TaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "0128e1586d7a7fb9",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTa2VHfZrTi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTa2VHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "cbdf3e3cff156730",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTa2VHfZrTi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTa2VHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "a2a22c509f6f3c0d",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "4a971f4fc0f81d6e",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "9103b8101522594f",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quinary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "00079dad2bc81622",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quinary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZr|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "61b60cc1faaccf86",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "8503c99d1a400a71",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "135c7fdea250861d",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "c67cd2bc87e2884d",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|Nb2TaVHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Nb2TaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "18339bac07f0c771",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|Nb2TaVHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Nb2TaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "6755286952338041",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTa2VHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTa2VHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "0aa0c00c31d2b034",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTa2VHfZrTi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTa2VHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 32,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "279541d5f4a093a5",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quaternary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVZr|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "039ac5cc702f7f0b",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-quinary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZr|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZr",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "substitutional_ordering",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "711cffbd2f0a546e",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "6916d33dd2518981",
+        "defect": null,
+        "family": "equiatomic_ordering",
+        "family_label": "bcc-equiatomic-senary",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTaVHfZrTi|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "30885c99c83d8639",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|Nb2TaVHfZrTi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "Nb2TaVHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "bounded_strain",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "623f55231e0a9512",
+        "defect": null,
+        "family": "controlled_substitution",
+        "family_label": "bcc-substitutional",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "bcc_refractory|NbTa2VHfZrTi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "native_lattice_occupations",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "native lattice generator"
+        },
+        "formula": "NbTa2VHfZrTi",
+        "generator": "native_lattice_occupations",
+        "material": "bcc_refractory",
+        "operation": "chemical_disorder",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    }
+  ],
+  "capacity_groups": {
+    "bcc_refractory|Nb2TaVHfZrTi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "9a345c4c75ba3121"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "8f860d597b017b13",
+        "6e61a4dfa81d294e"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "4fc3c41eae0b010f"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "c67cd2bc87e2884d",
+        "18339bac07f0c771"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "1b2345532ff8486b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "610eb733befec724",
+        "648fd8163d5b9648"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "30885c99c83d8639"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "f24f3a577c3659be",
+        "c4d98668e1f84f50"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "0f46f79b8fc7a77d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|Nb2TaVHfZrTi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "da9ae0ddc4178359",
+        "fc02e14b4e8ea5be"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "cbdf3e3cff156730"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "b2aff9c85472c879",
+        "0128e1586d7a7fb9"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "0aa0c00c31d2b034"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "6755286952338041",
+        "07fb55975a767826"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "220ed9dea50223b7"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "2a85ef133f3a48f5",
+        "d0f007c2ca5a10b5"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "b767aa9156cfa65d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "623f55231e0a9512",
+        "d89254e1c287cf0e"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "0492b3656b4e4837"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTa2VHfZrTi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "b829741dfaf7e3fa",
+        "6e5a47c405a2229b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "bf0cb143016ea6cb"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "19cb3439ae711f9d",
+        "d23ce6d6b6114f7e"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "135c7fdea250861d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "61b60cc1faaccf86",
+        "8503c99d1a400a71"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "6b590f5ce4a5b7b1"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "44fb6673b3189b2b",
+        "5ef05624d165df83"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "6916d33dd2518981"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "711cffbd2f0a546e",
+        "2c2b100dabc94187"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "eb1c4a383788c893"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZrTi|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "cf98e36283f45b0b",
+        "4171ccb28344bf2b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "a82ee1883d6038fa"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "b65156a4ddbc0af8",
+        "92a2fd655f9310b6"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "00079dad2bc81622"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "9103b8101522594f",
+        "6a8d491bf4786b93"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "22665eed1898829c"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "c1b64f8cf1aae48f",
+        "e3d831950cab85e3"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "acaa2a7f24cc9fdb"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "e368514150a884a9",
+        "039ac5cc702f7f0b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "bbad7a11e3a73c86"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVHfZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "f12fb26e71ff36a3",
+        "4ee67a4004508cfb"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "8a22a12281364137"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "707b0d8b34bb105c",
+        "7b7d88e5be9bb2fe"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "4a971f4fc0f81d6e"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "3646e27ff43dad7a",
+        "a2a22c509f6f3c0d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "aa5239bf62629525"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "6f12791286cbd0ac",
+        "aba2784ded6dc587"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "50d0749b9f1ed0e9"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "279541d5f4a093a5",
+        "9a5fedd19138e5a5"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible": {
+      "action_ids": [
+        "dd717561c30d8953"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible": {
+      "action_ids": [
+        "b1a41c5fd5850ba6",
+        "6aba44116c92adc7"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    }
+  },
+  "capacity_validation": {
+    "valid": true
+  },
+  "catalog_version": "executable-capacities-2",
+  "material": "bcc_refractory",
+  "model_id": "gemini-4-carbon",
+  "parsed_allocations": [
+    {
+      "action_id": "6f12791286cbd0ac",
+      "count": 1
+    },
+    {
+      "action_id": "aa5239bf62629525",
+      "count": 2
+    },
+    {
+      "action_id": "b1a41c5fd5850ba6",
+      "count": 2
+    },
+    {
+      "action_id": "6aba44116c92adc7",
+      "count": 2
+    },
+    {
+      "action_id": "dd717561c30d8953",
+      "count": 2
+    },
+    {
+      "action_id": "f12fb26e71ff36a3",
+      "count": 1
+    },
+    {
+      "action_id": "eb1c4a383788c893",
+      "count": 2
+    },
+    {
+      "action_id": "707b0d8b34bb105c",
+      "count": 2
+    },
+    {
+      "action_id": "8a22a12281364137",
+      "count": 2
+    },
+    {
+      "action_id": "b65156a4ddbc0af8",
+      "count": 2
+    },
+    {
+      "action_id": "92a2fd655f9310b6",
+      "count": 2
+    },
+    {
+      "action_id": "a82ee1883d6038fa",
+      "count": 2
+    },
+    {
+      "action_id": "19cb3439ae711f9d",
+      "count": 2
+    },
+    {
+      "action_id": "d23ce6d6b6114f7e",
+      "count": 2
+    },
+    {
+      "action_id": "bf0cb143016ea6cb",
+      "count": 2
+    },
+    {
+      "action_id": "8f860d597b017b13",
+      "count": 2
+    },
+    {
+      "action_id": "9a345c4c75ba3121",
+      "count": 2
+    },
+    {
+      "action_id": "0128e1586d7a7fb9",
+      "count": 2
+    },
+    {
+      "action_id": "cbdf3e3cff156730",
+      "count": 2
+    },
+    {
+      "action_id": "a2a22c509f6f3c0d",
+      "count": 2
+    },
+    {
+      "action_id": "4a971f4fc0f81d6e",
+      "count": 2
+    },
+    {
+      "action_id": "9103b8101522594f",
+      "count": 2
+    },
+    {
+      "action_id": "00079dad2bc81622",
+      "count": 2
+    },
+    {
+      "action_id": "61b60cc1faaccf86",
+      "count": 2
+    },
+    {
+      "action_id": "8503c99d1a400a71",
+      "count": 2
+    },
+    {
+      "action_id": "135c7fdea250861d",
+      "count": 2
+    },
+    {
+      "action_id": "c67cd2bc87e2884d",
+      "count": 2
+    },
+    {
+      "action_id": "18339bac07f0c771",
+      "count": 1
+    },
+    {
+      "action_id": "6755286952338041",
+      "count": 2
+    },
+    {
+      "action_id": "0aa0c00c31d2b034",
+      "count": 1
+    },
+    {
+      "action_id": "279541d5f4a093a5",
+      "count": 1
+    },
+    {
+      "action_id": "039ac5cc702f7f0b",
+      "count": 1
+    },
+    {
+      "action_id": "711cffbd2f0a546e",
+      "count": 2
+    },
+    {
+      "action_id": "6916d33dd2518981",
+      "count": 1
+    },
+    {
+      "action_id": "30885c99c83d8639",
+      "count": 2
+    },
+    {
+      "action_id": "623f55231e0a9512",
+      "count": 1
+    }
+  ],
+  "prompt": "Choose E3-MLIP crystallographic generation allocations for this round. Use only the allow-listed actions and only the strategy-local MACE geometry optimization history below. There are no DFT labels, DFT references, or independent validation data. Return JSON with exactly keys allocations, cited_evidence_ids, rationale. allocations is a list of {action_id,count}; counts must be positive integers, IDs unique, sum exactly to the round target, and each minimum tier count must be met. cited_evidence_ids must be a non-empty JSON array of exact strings from Valid evidence IDs below; do not invent, modify, or annotate those IDs. Do not select outside the list. The compact hierarchical catalog maps dimension codes to values; allowed rows are action_id followed by material class(m), composition(c), tier(t), structural family(f), generator(g), perturbation(p), and symmetry family(s) codes. These rows are the complete authoritative allowlist.\nMaterial class: bcc_refractory\nRound target: 64\nMinimum counts by size tier: {\"16\": 1, \"32\": 1, \"4\": 1, \"64\": 1, \"8\": 1}\nValid evidence IDs: [\"campaign-design\"]\nPrior strategy-local outcomes: []\nShared capacity groups: sum counts across ALL action_ids in each group must not exceed remaining. Aliases do not add capacity.\n{\"bcc_refractory|Nb2TaVHfZrTi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"9a345c4c75ba3121\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"8f860d597b017b13\",\"6e61a4dfa81d294e\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"4fc3c41eae0b010f\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"c67cd2bc87e2884d\",\"18339bac07f0c771\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"1b2345532ff8486b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"610eb733befec724\",\"648fd8163d5b9648\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"30885c99c83d8639\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"f24f3a577c3659be\",\"c4d98668e1f84f50\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"0f46f79b8fc7a77d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|Nb2TaVHfZrTi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"da9ae0ddc4178359\",\"fc02e14b4e8ea5be\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|16|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"cbdf3e3cff156730\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|16|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"b2aff9c85472c879\",\"0128e1586d7a7fb9\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|32|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"0aa0c00c31d2b034\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|32|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"6755286952338041\",\"07fb55975a767826\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|4|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"220ed9dea50223b7\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|4|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"2a85ef133f3a48f5\",\"d0f007c2ca5a10b5\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|64|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"b767aa9156cfa65d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|64|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"623f55231e0a9512\",\"d89254e1c287cf0e\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|8|controlled_substitution|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"0492b3656b4e4837\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTa2VHfZrTi|8|controlled_substitution|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"b829741dfaf7e3fa\",\"6e5a47c405a2229b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"bf0cb143016ea6cb\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"19cb3439ae711f9d\",\"d23ce6d6b6114f7e\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"135c7fdea250861d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"61b60cc1faaccf86\",\"8503c99d1a400a71\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"6b590f5ce4a5b7b1\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"44fb6673b3189b2b\",\"5ef05624d165df83\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"6916d33dd2518981\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"711cffbd2f0a546e\",\"2c2b100dabc94187\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"eb1c4a383788c893\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZrTi|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"cf98e36283f45b0b\",\"4171ccb28344bf2b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"a82ee1883d6038fa\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"b65156a4ddbc0af8\",\"92a2fd655f9310b6\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"00079dad2bc81622\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"9103b8101522594f\",\"6a8d491bf4786b93\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"22665eed1898829c\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"c1b64f8cf1aae48f\",\"e3d831950cab85e3\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"acaa2a7f24cc9fdb\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"e368514150a884a9\",\"039ac5cc702f7f0b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"bbad7a11e3a73c86\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVHfZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"f12fb26e71ff36a3\",\"4ee67a4004508cfb\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"8a22a12281364137\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|16|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"707b0d8b34bb105c\",\"7b7d88e5be9bb2fe\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"4a971f4fc0f81d6e\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|32|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"3646e27ff43dad7a\",\"a2a22c509f6f3c0d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"aa5239bf62629525\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|4|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"6f12791286cbd0ac\",\"aba2784ded6dc587\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|64|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"50d0749b9f1ed0e9\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|64|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"279541d5f4a093a5\",\"9a5fedd19138e5a5\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|0.02|any-compatible\":{\"action_ids\":[\"dd717561c30d8953\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"bcc_refractory|NbTaVZr|8|equiatomic_ordering|native_lattice_occupations|None|None|any-compatible\":{\"action_ids\":[\"b1a41c5fd5850ba6\",\"6aba44116c92adc7\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"strain_fraction\":null},\"maximum\":192,\"remaining\":192}}\nHierarchical action catalog: {\"dimensions\":{\"m\":{\"0\":\"bcc_refractory\"},\"c\":{\"0\":\"NbTaVZr\",\"1\":\"NbTaVHfZr\",\"2\":\"NbTaVHfZrTi\",\"3\":\"Nb2TaVHfZrTi\",\"4\":\"NbTa2VHfZrTi\"},\"t\":{\"0\":4,\"1\":8,\"2\":16,\"3\":32,\"4\":64},\"f\":{\"0\":\"bcc-equiatomic-quaternary\",\"1\":\"bcc-equiatomic-quinary\",\"2\":\"bcc-equiatomic-senary\",\"3\":\"bcc-substitutional\"},\"g\":{\"0\":\"native_lattice_occupations\"},\"p\":{\"0\":{\"operation\":\"chemical_disorder\"},\"1\":{\"operation\":\"substitutional_ordering\"},\"2\":{\"operation\":\"bounded_strain\",\"strain\":0.02}},\"s\":{\"0\":\"any-compatible\"}},\"allowed\":[\"6f12791286cbd0ac m0 c0 t0 f0 g0 p0 s0\",\"aba2784ded6dc587 m0 c0 t0 f0 g0 p1 s0\",\"aa5239bf62629525 m0 c0 t0 f0 g0 p2 s0\",\"b1a41c5fd5850ba6 m0 c0 t1 f0 g0 p0 s0\",\"6aba44116c92adc7 m0 c0 t1 f0 g0 p1 s0\",\"dd717561c30d8953 m0 c0 t1 f0 g0 p2 s0\",\"707b0d8b34bb105c m0 c0 t2 f0 g0 p0 s0\",\"7b7d88e5be9bb2fe m0 c0 t2 f0 g0 p1 s0\",\"8a22a12281364137 m0 c0 t2 f0 g0 p2 s0\",\"3646e27ff43dad7a m0 c0 t3 f0 g0 p0 s0\",\"a2a22c509f6f3c0d m0 c0 t3 f0 g0 p1 s0\",\"4a971f4fc0f81d6e m0 c0 t3 f0 g0 p2 s0\",\"279541d5f4a093a5 m0 c0 t4 f0 g0 p0 s0\",\"9a5fedd19138e5a5 m0 c0 t4 f0 g0 p1 s0\",\"50d0749b9f1ed0e9 m0 c0 t4 f0 g0 p2 s0\",\"c1b64f8cf1aae48f m0 c1 t0 f1 g0 p0 s0\",\"e3d831950cab85e3 m0 c1 t0 f1 g0 p1 s0\",\"22665eed1898829c m0 c1 t0 f1 g0 p2 s0\",\"f12fb26e71ff36a3 m0 c1 t1 f1 g0 p0 s0\",\"4ee67a4004508cfb m0 c1 t1 f1 g0 p1 s0\",\"bbad7a11e3a73c86 m0 c1 t1 f1 g0 p2 s0\",\"b65156a4ddbc0af8 m0 c1 t2 f1 g0 p0 s0\",\"92a2fd655f9310b6 m0 c1 t2 f1 g0 p1 s0\",\"a82ee1883d6038fa m0 c1 t2 f1 g0 p2 s0\",\"9103b8101522594f m0 c1 t3 f1 g0 p0 s0\",\"6a8d491bf4786b93 m0 c1 t3 f1 g0 p1 s0\",\"00079dad2bc81622 m0 c1 t3 f1 g0 p2 s0\",\"e368514150a884a9 m0 c1 t4 f1 g0 p0 s0\",\"039ac5cc702f7f0b m0 c1 t4 f1 g0 p1 s0\",\"acaa2a7f24cc9fdb m0 c1 t4 f1 g0 p2 s0\",\"44fb6673b3189b2b m0 c2 t0 f2 g0 p0 s0\",\"5ef05624d165df83 m0 c2 t0 f2 g0 p1 s0\",\"6b590f5ce4a5b7b1 m0 c2 t0 f2 g0 p2 s0\",\"cf98e36283f45b0b m0 c2 t1 f2 g0 p0 s0\",\"4171ccb28344bf2b m0 c2 t1 f2 g0 p1 s0\",\"eb1c4a383788c893 m0 c2 t1 f2 g0 p2 s0\",\"19cb3439ae711f9d m0 c2 t2 f2 g0 p0 s0\",\"d23ce6d6b6114f7e m0 c2 t2 f2 g0 p1 s0\",\"bf0cb143016ea6cb m0 c2 t2 f2 g0 p2 s0\",\"61b60cc1faaccf86 m0 c2 t3 f2 g0 p0 s0\",\"8503c99d1a400a71 m0 c2 t3 f2 g0 p1 s0\",\"135c7fdea250861d m0 c2 t3 f2 g0 p2 s0\",\"711cffbd2f0a546e m0 c2 t4 f2 g0 p0 s0\",\"2c2b100dabc94187 m0 c2 t4 f2 g0 p1 s0\",\"6916d33dd2518981 m0 c2 t4 f2 g0 p2 s0\",\"610eb733befec724 m0 c3 t0 f3 g0 p0 s0\",\"648fd8163d5b9648 m0 c3 t0 f3 g0 p1 s0\",\"1b2345532ff8486b m0 c3 t0 f3 g0 p2 s0\",\"da9ae0ddc4178359 m0 c3 t1 f3 g0 p0 s0\",\"fc02e14b4e8ea5be m0 c3 t1 f3 g0 p1 s0\",\"0f46f79b8fc7a77d m0 c3 t1 f3 g0 p2 s0\",\"8f860d597b017b13 m0 c3 t2 f3 g0 p0 s0\",\"6e61a4dfa81d294e m0 c3 t2 f3 g0 p1 s0\",\"9a345c4c75ba3121 m0 c3 t2 f3 g0 p2 s0\",\"c67cd2bc87e2884d m0 c3 t3 f3 g0 p0 s0\",\"18339bac07f0c771 m0 c3 t3 f3 g0 p1 s0\",\"4fc3c41eae0b010f m0 c3 t3 f3 g0 p2 s0\",\"f24f3a577c3659be m0 c3 t4 f3 g0 p0 s0\",\"c4d98668e1f84f50 m0 c3 t4 f3 g0 p1 s0\",\"30885c99c83d8639 m0 c3 t4 f3 g0 p2 s0\",\"2a85ef133f3a48f5 m0 c4 t0 f3 g0 p0 s0\",\"d0f007c2ca5a10b5 m0 c4 t0 f3 g0 p1 s0\",\"220ed9dea50223b7 m0 c4 t0 f3 g0 p2 s0\",\"b829741dfaf7e3fa m0 c4 t1 f3 g0 p0 s0\",\"6e5a47c405a2229b m0 c4 t1 f3 g0 p1 s0\",\"0492b3656b4e4837 m0 c4 t1 f3 g0 p2 s0\",\"b2aff9c85472c879 m0 c4 t2 f3 g0 p0 s0\",\"0128e1586d7a7fb9 m0 c4 t2 f3 g0 p1 s0\",\"cbdf3e3cff156730 m0 c4 t2 f3 g0 p2 s0\",\"6755286952338041 m0 c4 t3 f3 g0 p0 s0\",\"07fb55975a767826 m0 c4 t3 f3 g0 p1 s0\",\"0aa0c00c31d2b034 m0 c4 t3 f3 g0 p2 s0\",\"623f55231e0a9512 m0 c4 t4 f3 g0 p0 s0\",\"d89254e1c287cf0e m0 c4 t4 f3 g0 p1 s0\",\"b767aa9156cfa65d m0 c4 t4 f3 g0 p2 s0\"]}\n",
+  "prompt_version": "executable-capacities-2",
+  "raw_response": "```json\n{\n  \"allocations\": [\n    {\"action_id\": \"6f12791286cbd0ac\", \"count\": 1},\n    {\"action_id\": \"aa5239bf62629525\", \"count\": 2},\n    {\"action_id\": \"b1a41c5fd5850ba6\", \"count\": 2},\n    {\"action_id\": \"6aba44116c92adc7\", \"count\": 2},\n    {\"action_id\": \"dd717561c30d8953\", \"count\": 2},\n    {\"action_id\": \"f12fb26e71ff36a3\", \"count\": 1},\n    {\"action_id\": \"eb1c4a383788c893\", \"count\": 2},\n    {\"action_id\": \"707b0d8b34bb105c\", \"count\": 2},\n    {\"action_id\": \"8a22a12281364137\", \"count\": 2},\n    {\"action_id\": \"b65156a4ddbc0af8\", \"count\": 2},\n    {\"action_id\": \"92a2fd655f9310b6\", \"count\": 2},\n    {\"action_id\": \"a82ee1883d6038fa\", \"count\": 2},\n    {\"action_id\": \"19cb3439ae711f9d\", \"count\": 2},\n    {\"action_id\": \"d23ce6d6b6114f7e\", \"count\": 2},\n    {\"action_id\": \"bf0cb143016ea6cb\", \"count\": 2},\n    {\"action_id\": \"8f860d597b017b13\", \"count\": 2},\n    {\"action_id\": \"9a345c4c75ba3121\", \"count\": 2},\n    {\"action_id\": \"0128e1586d7a7fb9\", \"count\": 2},\n    {\"action_id\": \"cbdf3e3cff156730\", \"count\": 2},\n    {\"action_id\": \"a2a22c509f6f3c0d\", \"count\": 2},\n    {\"action_id\": \"4a971f4fc0f81d6e\", \"count\": 2},\n    {\"action_id\": \"9103b8101522594f\", \"count\": 2},\n    {\"action_id\": \"00079dad2bc81622\", \"count\": 2},\n    {\"action_id\": \"61b60cc1faaccf86\", \"count\": 2},\n    {\"action_id\": \"8503c99d1a400a71\", \"count\": 2},\n    {\"action_id\": \"135c7fdea250861d\", \"count\": 2},\n    {\"action_id\": \"c67cd2bc87e2884d\", \"count\": 2},\n    {\"action_id\": \"18339bac07f0c771\", \"count\": 1},\n    {\"action_id\": \"6755286952338041\", \"count\": 2},\n    {\"action_id\": \"0aa0c00c31d2b034\", \"count\": 1},\n    {\"action_id\": \"279541d5f4a093a5\", \"count\": 1},\n    {\"action_id\": \"039ac5cc702f7f0b\", \"count\": 1},\n    {\"action_id\": \"711cffbd2f0a546e\", \"count\": 2},\n    {\"action_id\": \"6916d33dd2518981\", \"count\": 1},\n    {\"action_id\": \"30885c99c83d8639\", \"count\": 2},\n    {\"action_id\": \"623f55231e0a9512\", \"count\": 1}\n  ],\n  \"cited_evidence_ids\": [\n    \"campaign-design\"\n  ],\n  \"rationale\": \"With no prior strategy-local optimization outcomes, this initial round distributes the 64-structure budget broadly across all five bcc_refractory compositions (NbTaVZr, NbTaVHfZr, NbTaVHfZrTi, Nb2TaVHfZrTi, NbTa2VHfZrTi), all five size tiers (3 in tier 4, 9 in tier 8, 24 in tier 16, 20 in tier 32, and 8 in tier 64), and all three perturbation modes (chemical disorder, substitutional ordering, and 2% bounded strain). Small-cell allocations (tier 4) are focused on quaternary NbTaVZr and kept modest to avoid symmetry-deduplication saturation and stoichiometric truncation of 5- and 6-component alloys, while medium-to-large supercells (tiers 16 and 32) receive the bulk of the budget to capture diverse multicomponent local chemical environments and off-equilibrium strained configurations.\"\n}\n```",
+  "rejected_actions": [],
+  "round": 1,
+  "seed": 20261113,
+  "status": "accepted",
+  "strategy": "llm_guided_adaptation",
+  "unavailable_actions": []
+}

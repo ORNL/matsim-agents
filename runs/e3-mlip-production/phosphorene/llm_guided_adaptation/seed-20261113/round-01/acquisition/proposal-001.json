@@ -1,0 +1,1703 @@
+{
+  "accepted_final_allocation": [
+    {
+      "action": {
+        "action_id": "7b6a0e48115ee194",
+        "defect": null,
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-pristine-black-phosphorene:4",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "allotrope",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "47a61263988b81e8",
+        "defect": null,
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|4|black_phosphorene|2d_template|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "in_plane_strain",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "25c1bb34540489d1",
+        "defect": "reconstruction",
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-small-reconstruction-black-phosphorene:4",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "reconstruction",
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "symmetry_distinct_distortion",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "eec3ff1b7e0c519b",
+        "defect": null,
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-pristine-black-phosphorene:16",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "allotrope",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "250d5fbf61ac1ddf",
+        "defect": null,
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|16|black_phosphorene|2d_template|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "in_plane_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "a039846d4a2a0b50",
+        "defect": "reconstruction",
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|16|black_phosphorene|2d_template|reconstruction|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "reconstruction",
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "symmetry_distinct_distortion",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "dd92b935333a3be9",
+        "defect": null,
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-pristine-black-phosphorene:36",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "allotrope",
+        "prototype_ids": [],
+        "size_tier": 36,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "0ca4ee3a4db05339",
+        "defect": null,
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|36|black_phosphorene|2d_template|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "in_plane_strain",
+        "prototype_ids": [],
+        "size_tier": 36,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "d35012e49ba160e2",
+        "defect": "reconstruction",
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|36|black_phosphorene|2d_template|reconstruction|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "reconstruction",
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "symmetry_distinct_distortion",
+        "prototype_ids": [],
+        "size_tier": 36,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "c3c68d65a1f5473d",
+        "defect": null,
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-pristine-black-phosphorene:64",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "allotrope",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "7514868c87beda34",
+        "defect": null,
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|64|black_phosphorene|2d_template|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "in_plane_strain",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "5cf6c84d4b6b98f0",
+        "defect": "reconstruction",
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|64|black_phosphorene|2d_template|reconstruction|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "reconstruction",
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "symmetry_distinct_distortion",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "74e86332d08d2e7d",
+        "defect": null,
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-pristine-black-phosphorene:144",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "allotrope",
+        "prototype_ids": [],
+        "size_tier": 144,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "f0e15de2e5791456",
+        "defect": null,
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|144|black_phosphorene|2d_template|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "in_plane_strain",
+        "prototype_ids": [],
+        "size_tier": 144,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "04e4c529e13252fd",
+        "defect": "reconstruction",
+        "family": "black_phosphorene",
+        "family_label": "black-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|144|black_phosphorene|2d_template|reconstruction|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "reconstruction",
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_black_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "symmetry_distinct_distortion",
+        "prototype_ids": [],
+        "size_tier": 144,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "d88b73af28f4bd9c",
+        "defect": null,
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-pristine-blue-phosphorene:4",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "allotrope",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "440ea3a653fdb176",
+        "defect": null,
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|4|blue_phosphorene|2d_template|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "in_plane_strain",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 2
+    },
+    {
+      "action": {
+        "action_id": "f3bd6f7d435ad47f",
+        "defect": "reconstruction",
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-small-reconstruction-blue-phosphorene:4",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "reconstruction",
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "symmetry_distinct_distortion",
+        "prototype_ids": [],
+        "size_tier": 4,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "13961284f08e8fe4",
+        "defect": null,
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-pristine-blue-phosphorene:16",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "allotrope",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "2547ea956193a3e8",
+        "defect": null,
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|16|blue_phosphorene|2d_template|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "in_plane_strain",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "671f5c2b1bad2f33",
+        "defect": "reconstruction",
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|16|blue_phosphorene|2d_template|reconstruction|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "reconstruction",
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "symmetry_distinct_distortion",
+        "prototype_ids": [],
+        "size_tier": 16,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "5b5032d5f22f1767",
+        "defect": null,
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-pristine-blue-phosphorene:36",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "allotrope",
+        "prototype_ids": [],
+        "size_tier": 36,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "0bb1e49e03b02b49",
+        "defect": null,
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|36|blue_phosphorene|2d_template|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "in_plane_strain",
+        "prototype_ids": [],
+        "size_tier": 36,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "bd81fc853a441b5f",
+        "defect": "reconstruction",
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|36|blue_phosphorene|2d_template|reconstruction|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "reconstruction",
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "symmetry_distinct_distortion",
+        "prototype_ids": [],
+        "size_tier": 36,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "f40554fde4ce14b0",
+        "defect": null,
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-pristine-blue-phosphorene:64",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "allotrope",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "e22e76beef490340",
+        "defect": null,
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|64|blue_phosphorene|2d_template|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "in_plane_strain",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "6014ab6ee7637785",
+        "defect": "reconstruction",
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|64|blue_phosphorene|2d_template|reconstruction|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "reconstruction",
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "symmetry_distinct_distortion",
+        "prototype_ids": [],
+        "size_tier": 64,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "fa7854be664085ee",
+        "defect": null,
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "conservative operational capacity under frozen perturbation and deduplication",
+          "capacity_group": "phosphorene-pristine-blue-phosphorene:144",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 1,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 1,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "allotrope",
+        "prototype_ids": [],
+        "size_tier": 144,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 1
+    },
+    {
+      "action": {
+        "action_id": "7eed7d0882d00f85",
+        "defect": null,
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|144|blue_phosphorene|2d_template|None|0.02|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": null,
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": 0.02
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "in_plane_strain",
+        "prototype_ids": [],
+        "size_tier": 144,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": 0.02
+      },
+      "count": 3
+    },
+    {
+      "action": {
+        "action_id": "4ec33e940cc80770",
+        "defect": "reconstruction",
+        "family": "blue_phosphorene",
+        "family_label": "blue-phosphorene",
+        "feasibility": {
+          "available_prototypes": [],
+          "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+          "capacity_group": "phosphorene|P|144|blue_phosphorene|2d_template|reconstruction|None|any-compatible",
+          "catalog_version": "executable-capacities-2",
+          "generation_method": "2d_template",
+          "generator_available": true,
+          "maximum_distinct_configurations": 192,
+          "perturbation_constraints": {
+            "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+            "defect": "reconstruction",
+            "fixed_vacuum": true,
+            "reconstruction_displacement_A": 0.08,
+            "reconstruction_modes": "collective in-plane displacements, no net translation",
+            "strain_fraction": null
+          },
+          "remaining_capacity": 192,
+          "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+        },
+        "formula": "P",
+        "generator": "2d_template",
+        "material": "phosphorene",
+        "operation": "symmetry_distinct_distortion",
+        "prototype_ids": [],
+        "size_tier": 144,
+        "space_group_family": "any-compatible",
+        "space_groups": [],
+        "strain": null
+      },
+      "count": 3
+    }
+  ],
+  "capacity_groups": {
+    "phosphorene-pristine-black-phosphorene:144": {
+      "action_ids": [
+        "74e86332d08d2e7d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-pristine-black-phosphorene:16": {
+      "action_ids": [
+        "eec3ff1b7e0c519b"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-pristine-black-phosphorene:36": {
+      "action_ids": [
+        "dd92b935333a3be9"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-pristine-black-phosphorene:4": {
+      "action_ids": [
+        "7b6a0e48115ee194"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-pristine-black-phosphorene:64": {
+      "action_ids": [
+        "c3c68d65a1f5473d"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-pristine-blue-phosphorene:144": {
+      "action_ids": [
+        "fa7854be664085ee"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-pristine-blue-phosphorene:16": {
+      "action_ids": [
+        "13961284f08e8fe4"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-pristine-blue-phosphorene:36": {
+      "action_ids": [
+        "5b5032d5f22f1767"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-pristine-blue-phosphorene:4": {
+      "action_ids": [
+        "d88b73af28f4bd9c"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-pristine-blue-phosphorene:64": {
+      "action_ids": [
+        "f40554fde4ce14b0"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-small-reconstruction-black-phosphorene:4": {
+      "action_ids": [
+        "25c1bb34540489d1"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "reconstruction",
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene-small-reconstruction-blue-phosphorene:4": {
+      "action_ids": [
+        "f3bd6f7d435ad47f"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "reconstruction",
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 1,
+      "remaining": 1
+    },
+    "phosphorene|P|144|black_phosphorene|2d_template|None|0.02|any-compatible": {
+      "action_ids": [
+        "f0e15de2e5791456"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|144|black_phosphorene|2d_template|reconstruction|None|any-compatible": {
+      "action_ids": [
+        "04e4c529e13252fd"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "reconstruction",
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|144|blue_phosphorene|2d_template|None|0.02|any-compatible": {
+      "action_ids": [
+        "7eed7d0882d00f85"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|144|blue_phosphorene|2d_template|reconstruction|None|any-compatible": {
+      "action_ids": [
+        "4ec33e940cc80770"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "reconstruction",
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|16|black_phosphorene|2d_template|None|0.02|any-compatible": {
+      "action_ids": [
+        "250d5fbf61ac1ddf"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|16|black_phosphorene|2d_template|reconstruction|None|any-compatible": {
+      "action_ids": [
+        "a039846d4a2a0b50"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "reconstruction",
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|16|blue_phosphorene|2d_template|None|0.02|any-compatible": {
+      "action_ids": [
+        "2547ea956193a3e8"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|16|blue_phosphorene|2d_template|reconstruction|None|any-compatible": {
+      "action_ids": [
+        "671f5c2b1bad2f33"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "reconstruction",
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|36|black_phosphorene|2d_template|None|0.02|any-compatible": {
+      "action_ids": [
+        "0ca4ee3a4db05339"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|36|black_phosphorene|2d_template|reconstruction|None|any-compatible": {
+      "action_ids": [
+        "d35012e49ba160e2"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "reconstruction",
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|36|blue_phosphorene|2d_template|None|0.02|any-compatible": {
+      "action_ids": [
+        "0bb1e49e03b02b49"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|36|blue_phosphorene|2d_template|reconstruction|None|any-compatible": {
+      "action_ids": [
+        "bd81fc853a441b5f"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "reconstruction",
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|4|black_phosphorene|2d_template|None|0.02|any-compatible": {
+      "action_ids": [
+        "47a61263988b81e8"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|4|blue_phosphorene|2d_template|None|0.02|any-compatible": {
+      "action_ids": [
+        "440ea3a653fdb176"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|64|black_phosphorene|2d_template|None|0.02|any-compatible": {
+      "action_ids": [
+        "7514868c87beda34"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|64|black_phosphorene|2d_template|reconstruction|None|any-compatible": {
+      "action_ids": [
+        "5cf6c84d4b6b98f0"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "reconstruction",
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|64|blue_phosphorene|2d_template|None|0.02|any-compatible": {
+      "action_ids": [
+        "e22e76beef490340"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": null,
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": 0.02
+      },
+      "maximum": 192,
+      "remaining": 192
+    },
+    "phosphorene|P|64|blue_phosphorene|2d_template|reconstruction|None|any-compatible": {
+      "action_ids": [
+        "6014ab6ee7637785"
+      ],
+      "constraints": {
+        "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+        "defect": "reconstruction",
+        "fixed_vacuum": true,
+        "reconstruction_displacement_A": 0.08,
+        "reconstruction_modes": "collective in-plane displacements, no net translation",
+        "strain_fraction": null
+      },
+      "maximum": 192,
+      "remaining": 192
+    }
+  },
+  "capacity_validation": {
+    "valid": true
+  },
+  "catalog_version": "executable-capacities-2",
+  "material": "phosphorene",
+  "model_id": "gemini-4-carbon",
+  "parsed_allocations": [
+    {
+      "action_id": "7b6a0e48115ee194",
+      "count": 1
+    },
+    {
+      "action_id": "47a61263988b81e8",
+      "count": 2
+    },
+    {
+      "action_id": "25c1bb34540489d1",
+      "count": 1
+    },
+    {
+      "action_id": "eec3ff1b7e0c519b",
+      "count": 1
+    },
+    {
+      "action_id": "250d5fbf61ac1ddf",
+      "count": 3
+    },
+    {
+      "action_id": "a039846d4a2a0b50",
+      "count": 3
+    },
+    {
+      "action_id": "dd92b935333a3be9",
+      "count": 1
+    },
+    {
+      "action_id": "0ca4ee3a4db05339",
+      "count": 3
+    },
+    {
+      "action_id": "d35012e49ba160e2",
+      "count": 3
+    },
+    {
+      "action_id": "c3c68d65a1f5473d",
+      "count": 1
+    },
+    {
+      "action_id": "7514868c87beda34",
+      "count": 3
+    },
+    {
+      "action_id": "5cf6c84d4b6b98f0",
+      "count": 3
+    },
+    {
+      "action_id": "74e86332d08d2e7d",
+      "count": 1
+    },
+    {
+      "action_id": "f0e15de2e5791456",
+      "count": 3
+    },
+    {
+      "action_id": "04e4c529e13252fd",
+      "count": 3
+    },
+    {
+      "action_id": "d88b73af28f4bd9c",
+      "count": 1
+    },
+    {
+      "action_id": "440ea3a653fdb176",
+      "count": 2
+    },
+    {
+      "action_id": "f3bd6f7d435ad47f",
+      "count": 1
+    },
+    {
+      "action_id": "13961284f08e8fe4",
+      "count": 1
+    },
+    {
+      "action_id": "2547ea956193a3e8",
+      "count": 3
+    },
+    {
+      "action_id": "671f5c2b1bad2f33",
+      "count": 3
+    },
+    {
+      "action_id": "5b5032d5f22f1767",
+      "count": 1
+    },
+    {
+      "action_id": "0bb1e49e03b02b49",
+      "count": 3
+    },
+    {
+      "action_id": "bd81fc853a441b5f",
+      "count": 3
+    },
+    {
+      "action_id": "f40554fde4ce14b0",
+      "count": 1
+    },
+    {
+      "action_id": "e22e76beef490340",
+      "count": 3
+    },
+    {
+      "action_id": "6014ab6ee7637785",
+      "count": 3
+    },
+    {
+      "action_id": "fa7854be664085ee",
+      "count": 1
+    },
+    {
+      "action_id": "7eed7d0882d00f85",
+      "count": 3
+    },
+    {
+      "action_id": "4ec33e940cc80770",
+      "count": 3
+    }
+  ],
+  "prompt": "Choose E3-MLIP crystallographic generation allocations for this round. Use only the allow-listed actions and only the strategy-local MACE geometry optimization history below. There are no DFT labels, DFT references, or independent validation data. Return JSON with exactly keys allocations, cited_evidence_ids, rationale. allocations is a list of {action_id,count}; counts must be positive integers, IDs unique, sum exactly to the round target, and each minimum tier count must be met. cited_evidence_ids must be a non-empty JSON array of exact strings from Valid evidence IDs below; do not invent, modify, or annotate those IDs. Do not select outside the list. The compact hierarchical catalog maps dimension codes to values; allowed rows are action_id followed by material class(m), composition(c), tier(t), structural family(f), generator(g), perturbation(p), and symmetry family(s) codes. These rows are the complete authoritative allowlist.\nMaterial class: phosphorene\nRound target: 64\nMinimum counts by size tier: {\"144\": 1, \"16\": 1, \"36\": 1, \"4\": 1, \"64\": 1}\nValid evidence IDs: [\"campaign-design\"]\nPrior strategy-local outcomes: []\nShared capacity groups: sum counts across ALL action_ids in each group must not exceed remaining. Aliases do not add capacity.\n{\"phosphorene-pristine-black-phosphorene:144\":{\"action_ids\":[\"74e86332d08d2e7d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-pristine-black-phosphorene:16\":{\"action_ids\":[\"eec3ff1b7e0c519b\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-pristine-black-phosphorene:36\":{\"action_ids\":[\"dd92b935333a3be9\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-pristine-black-phosphorene:4\":{\"action_ids\":[\"7b6a0e48115ee194\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-pristine-black-phosphorene:64\":{\"action_ids\":[\"c3c68d65a1f5473d\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-pristine-blue-phosphorene:144\":{\"action_ids\":[\"fa7854be664085ee\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-pristine-blue-phosphorene:16\":{\"action_ids\":[\"13961284f08e8fe4\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-pristine-blue-phosphorene:36\":{\"action_ids\":[\"5b5032d5f22f1767\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-pristine-blue-phosphorene:4\":{\"action_ids\":[\"d88b73af28f4bd9c\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-pristine-blue-phosphorene:64\":{\"action_ids\":[\"f40554fde4ce14b0\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-small-reconstruction-black-phosphorene:4\":{\"action_ids\":[\"25c1bb34540489d1\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"reconstruction\",\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene-small-reconstruction-blue-phosphorene:4\":{\"action_ids\":[\"f3bd6f7d435ad47f\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"reconstruction\",\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":1,\"remaining\":1},\"phosphorene|P|144|black_phosphorene|2d_template|None|0.02|any-compatible\":{\"action_ids\":[\"f0e15de2e5791456\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"phosphorene|P|144|black_phosphorene|2d_template|reconstruction|None|any-compatible\":{\"action_ids\":[\"04e4c529e13252fd\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"reconstruction\",\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"phosphorene|P|144|blue_phosphorene|2d_template|None|0.02|any-compatible\":{\"action_ids\":[\"7eed7d0882d00f85\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"phosphorene|P|144|blue_phosphorene|2d_template|reconstruction|None|any-compatible\":{\"action_ids\":[\"4ec33e940cc80770\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"reconstruction\",\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"phosphorene|P|16|black_phosphorene|2d_template|None|0.02|any-compatible\":{\"action_ids\":[\"250d5fbf61ac1ddf\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"phosphorene|P|16|black_phosphorene|2d_template|reconstruction|None|any-compatible\":{\"action_ids\":[\"a039846d4a2a0b50\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"reconstruction\",\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"phosphorene|P|16|blue_phosphorene|2d_template|None|0.02|any-compatible\":{\"action_ids\":[\"2547ea956193a3e8\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"phosphorene|P|16|blue_phosphorene|2d_template|reconstruction|None|any-compatible\":{\"action_ids\":[\"671f5c2b1bad2f33\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"reconstruction\",\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"phosphorene|P|36|black_phosphorene|2d_template|None|0.02|any-compatible\":{\"action_ids\":[\"0ca4ee3a4db05339\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"phosphorene|P|36|black_phosphorene|2d_template|reconstruction|None|any-compatible\":{\"action_ids\":[\"d35012e49ba160e2\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"reconstruction\",\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"phosphorene|P|36|blue_phosphorene|2d_template|None|0.02|any-compatible\":{\"action_ids\":[\"0bb1e49e03b02b49\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"phosphorene|P|36|blue_phosphorene|2d_template|reconstruction|None|any-compatible\":{\"action_ids\":[\"bd81fc853a441b5f\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"reconstruction\",\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"phosphorene|P|4|black_phosphorene|2d_template|None|0.02|any-compatible\":{\"action_ids\":[\"47a61263988b81e8\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"phosphorene|P|4|blue_phosphorene|2d_template|None|0.02|any-compatible\":{\"action_ids\":[\"440ea3a653fdb176\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"phosphorene|P|64|black_phosphorene|2d_template|None|0.02|any-compatible\":{\"action_ids\":[\"7514868c87beda34\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"phosphorene|P|64|black_phosphorene|2d_template|reconstruction|None|any-compatible\":{\"action_ids\":[\"5cf6c84d4b6b98f0\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"reconstruction\",\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":192,\"remaining\":192},\"phosphorene|P|64|blue_phosphorene|2d_template|None|0.02|any-compatible\":{\"action_ids\":[\"e22e76beef490340\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":null,\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":0.02},\"maximum\":192,\"remaining\":192},\"phosphorene|P|64|blue_phosphorene|2d_template|reconstruction|None|any-compatible\":{\"action_ids\":[\"6014ab6ee7637785\"],\"constraints\":{\"deduplication\":\"symmetry-aware-ltol0.01-stol0.01-angle1-scale_false\",\"defect\":\"reconstruction\",\"fixed_vacuum\":true,\"reconstruction_displacement_A\":0.08,\"reconstruction_modes\":\"collective in-plane displacements, no net translation\",\"strain_fraction\":null},\"maximum\":192,\"remaining\":192}}\nHierarchical action catalog: {\"dimensions\":{\"m\":{\"0\":\"phosphorene\"},\"c\":{\"0\":\"P\"},\"t\":{\"0\":4,\"1\":16,\"2\":36,\"3\":64,\"4\":144},\"f\":{\"0\":\"black-phosphorene\",\"1\":\"blue-phosphorene\"},\"g\":{\"0\":\"2d_template\"},\"p\":{\"0\":{\"operation\":\"allotrope\"},\"1\":{\"operation\":\"in_plane_strain\",\"strain\":0.02},\"2\":{\"operation\":\"symmetry_distinct_distortion\",\"defect\":\"reconstruction\"}},\"s\":{\"0\":\"any-compatible\"}},\"allowed\":[\"7b6a0e48115ee194 m0 c0 t0 f0 g0 p0 s0\",\"47a61263988b81e8 m0 c0 t0 f0 g0 p1 s0\",\"25c1bb34540489d1 m0 c0 t0 f0 g0 p2 s0\",\"eec3ff1b7e0c519b m0 c0 t1 f0 g0 p0 s0\",\"250d5fbf61ac1ddf m0 c0 t1 f0 g0 p1 s0\",\"a039846d4a2a0b50 m0 c0 t1 f0 g0 p2 s0\",\"dd92b935333a3be9 m0 c0 t2 f0 g0 p0 s0\",\"0ca4ee3a4db05339 m0 c0 t2 f0 g0 p1 s0\",\"d35012e49ba160e2 m0 c0 t2 f0 g0 p2 s0\",\"c3c68d65a1f5473d m0 c0 t3 f0 g0 p0 s0\",\"7514868c87beda34 m0 c0 t3 f0 g0 p1 s0\",\"5cf6c84d4b6b98f0 m0 c0 t3 f0 g0 p2 s0\",\"74e86332d08d2e7d m0 c0 t4 f0 g0 p0 s0\",\"f0e15de2e5791456 m0 c0 t4 f0 g0 p1 s0\",\"04e4c529e13252fd m0 c0 t4 f0 g0 p2 s0\",\"d88b73af28f4bd9c m0 c0 t0 f1 g0 p0 s0\",\"440ea3a653fdb176 m0 c0 t0 f1 g0 p1 s0\",\"f3bd6f7d435ad47f m0 c0 t0 f1 g0 p2 s0\",\"13961284f08e8fe4 m0 c0 t1 f1 g0 p0 s0\",\"2547ea956193a3e8 m0 c0 t1 f1 g0 p1 s0\",\"671f5c2b1bad2f33 m0 c0 t1 f1 g0 p2 s0\",\"5b5032d5f22f1767 m0 c0 t2 f1 g0 p0 s0\",\"0bb1e49e03b02b49 m0 c0 t2 f1 g0 p1 s0\",\"bd81fc853a441b5f m0 c0 t2 f1 g0 p2 s0\",\"f40554fde4ce14b0 m0 c0 t3 f1 g0 p0 s0\",\"e22e76beef490340 m0 c0 t3 f1 g0 p1 s0\",\"6014ab6ee7637785 m0 c0 t3 f1 g0 p2 s0\",\"fa7854be664085ee m0 c0 t4 f1 g0 p0 s0\",\"7eed7d0882d00f85 m0 c0 t4 f1 g0 p1 s0\",\"4ec33e940cc80770 m0 c0 t4 f1 g0 p2 s0\"]}\n",
+  "prompt_version": "executable-capacities-2",
+  "raw_response": "```json\n{\n  \"allocations\": [\n    {\"action_id\": \"7b6a0e48115ee194\", \"count\": 1},\n    {\"action_id\": \"47a61263988b81e8\", \"count\": 2},\n    {\"action_id\": \"25c1bb34540489d1\", \"count\": 1},\n    {\"action_id\": \"eec3ff1b7e0c519b\", \"count\": 1},\n    {\"action_id\": \"250d5fbf61ac1ddf\", \"count\": 3},\n    {\"action_id\": \"a039846d4a2a0b50\", \"count\": 3},\n    {\"action_id\": \"dd92b935333a3be9\", \"count\": 1},\n    {\"action_id\": \"0ca4ee3a4db05339\", \"count\": 3},\n    {\"action_id\": \"d35012e49ba160e2\", \"count\": 3},\n    {\"action_id\": \"c3c68d65a1f5473d\", \"count\": 1},\n    {\"action_id\": \"7514868c87beda34\", \"count\": 3},\n    {\"action_id\": \"5cf6c84d4b6b98f0\", \"count\": 3},\n    {\"action_id\": \"74e86332d08d2e7d\", \"count\": 1},\n    {\"action_id\": \"f0e15de2e5791456\", \"count\": 3},\n    {\"action_id\": \"04e4c529e13252fd\", \"count\": 3},\n    {\"action_id\": \"d88b73af28f4bd9c\", \"count\": 1},\n    {\"action_id\": \"440ea3a653fdb176\", \"count\": 2},\n    {\"action_id\": \"f3bd6f7d435ad47f\", \"count\": 1},\n    {\"action_id\": \"13961284f08e8fe4\", \"count\": 1},\n    {\"action_id\": \"2547ea956193a3e8\", \"count\": 3},\n    {\"action_id\": \"671f5c2b1bad2f33\", \"count\": 3},\n    {\"action_id\": \"5b5032d5f22f1767\", \"count\": 1},\n    {\"action_id\": \"0bb1e49e03b02b49\", \"count\": 3},\n    {\"action_id\": \"bd81fc853a441b5f\", \"count\": 3},\n    {\"action_id\": \"f40554fde4ce14b0\", \"count\": 1},\n    {\"action_id\": \"e22e76beef490340\", \"count\": 3},\n    {\"action_id\": \"6014ab6ee7637785\", \"count\": 3},\n    {\"action_id\": \"fa7854be664085ee\", \"count\": 1},\n    {\"action_id\": \"7eed7d0882d00f85\", \"count\": 3},\n    {\"action_id\": \"4ec33e940cc80770\", \"count\": 3}\n  ],\n  \"cited_evidence_ids\": [\"campaign-design\"],\n  \"rationale\": \"With no prior strategy-local MACE optimization outcomes, we execute a balanced initial exploration across the entire allow-listed design space (32 black-phosphorene and 32 blue-phosphorene structures across all five size tiers: 4, 16, 36, 64, and 144). All single-capacity pristine baselines and 4-atom reconstruction actions are sampled once to establish reference geometries and energies, while the remaining budget is distributed symmetrically across in-plane strain (0.02) and supercell reconstruction perturbations (2 counts each at tier 4 strain; 3 counts each across tiers 16, 36, 64, and 144 for both strain and reconstruction) to empirically evaluate post-relaxation survival and symmetry-aware deduplication yields across perturbations and supercell sizes.\"\n}\n```",
+  "rejected_actions": [],
+  "round": 1,
+  "seed": 20261113,
+  "status": "accepted",
+  "strategy": "llm_guided_adaptation",
+  "unavailable_actions": []
+}

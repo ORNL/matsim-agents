@@ -108,6 +108,31 @@ def test_disabled_trainer_ignores_comparison_preflight(tmp_path, monkeypatch, ma
     assert cfg.mlip.hydragnn.logdir == incumbent
 
 
+@pytest.mark.parametrize("fails", [False, True])
+def test_iteration_assessment_is_required_before_final_commit(tmp_path, monkeypatch, fails):
+    import matsim_agents.active_learning.loop as loop_mod
+
+    cfg = _make_cfg(tmp_path)
+    _patch_runtime(loop_mod, monkeypatch)
+    calls = []
+
+    def assess(config, iteration, directory, state):
+        calls.append(iteration)
+        assert state.status == "complete"
+        assert state.n_dft_converged > 0
+        if fails:
+            raise ValueError("missing scientific hypotheses")
+
+    if fails:
+        with pytest.raises(ValueError, match="missing scientific hypotheses"):
+            loop_mod.run_active_learning(cfg, iteration_assessor=assess)
+    else:
+        loop_mod.run_active_learning(cfg, iteration_assessor=assess)
+    state = json.loads((cfg.loop.out_dir / "iteration_0000/state.json").read_text())
+    assert calls == [0]
+    assert state["status"] == ("failed" if fails else "complete")
+
+
 # --------------------------------------------------------------------------- #
 # Stubs                                                                       #
 # --------------------------------------------------------------------------- #

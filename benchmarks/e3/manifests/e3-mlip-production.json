@@ -81472,7 +81472,8 @@
     "e3_dft_inputs": false,
     "evidence": "strategy-local MACE geometry-optimization outcomes only",
     "fallback_on_invalid_llm_proposal": false,
-    "llm_calls_per_round": 1,
+    "llm_acquisition_calls_per_round": 1,
+    "llm_assessment_calls_per_completed_round": 1,
     "minimum_candidates_per_size_tier_per_round": 1
   },
   "campaign_id": "e3-mlip-production",
@@ -81491,13 +81492,20 @@
     "worker": "one independent MACE process per assigned GPU",
     "workers_per_material": 64
   },
+  "hypothesis_tracking": {
+    "acquisition_calls_per_round": 1,
+    "additional_assessment_calls_per_completed_round": 1,
+    "version": "e3-mlip-hypotheses-v1"
+  },
   "llm_guided_configuration": {
     "decoding": "provider_default",
     "environment_overrides": "prohibited",
     "model": "gemini-4-carbon",
     "provider": "copilot",
     "request_limits": {
-      "max_calls_per_round": 1,
+      "max_acquisition_calls_per_round": 1,
+      "max_calls_per_round": 2,
+      "max_hypothesis_assessment_calls_per_completed_round": 1,
       "max_tokens": 8192
     }
   },
@@ -81969,7 +81977,7 @@
   ],
   "rounds_per_material": 3,
   "schema_version": 1,
-  "scientific_objectives_sha256": "5bf7a64f882cdb06bde8f0b36d78fe5ee564bf79a8f4a9a299199087b62ca1c8",
+  "scientific_objectives_sha256": "96fcee95304cbffc4187769ab3532ca7092768cbde12173f70f33c92bbe37a3a",
   "seed": 20261113,
   "status": "planned_not_authorized",
   "strategies": [

@@ -133,6 +133,16 @@ def test_both_policies_use_identical_full_round_catalog_and_capacities(material)
         ],
         "cited_evidence_ids": ["campaign-design"],
         "rationale": "capacity parity",
+        "scientific_hypotheses": [
+            {
+                "id": "h1",
+                "claim": "Candidate energies may differ",
+                "prediction": "MACE energies differ between structures",
+                "status": "proposed",
+                "reason": "Not yet evaluated",
+                "evidence_ids": ["campaign-design"],
+            }
+        ],
     }
     llm, _, _ = production._llm_allocation(
         SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposal))),

@@ -1,0 +1,109 @@
+{
+  "acquisition_outcome": {
+    "accepted_unique": 8,
+    "additional_llm_call_performed": false,
+    "category": "generation_shortfall",
+    "evidence_id": "round-03-generation-exhausted",
+    "hypotheses_updated": false,
+    "hypothesis_update": "retain prior hypotheses; no new optimization evidence collected",
+    "new_optimization_evidence": false,
+    "next_decision": "stop; another allocation requires remaining authorized call and round budgets",
+    "optimizations_attempted": 0,
+    "partial_structures_retained": 8,
+    "reason": "phosphorene/2547ea956193a3e8: 2/5 globally unique candidates; seeded generation exhausted. Partial structures retained, no GPU dispatch. A new policy decision is required; the frozen LLM call limit is one.",
+    "remaining_capacity_by_group": {
+      "phosphorene|P|144|black_phosphorene|2d_template|None|0.02|any-compatible": 187,
+      "phosphorene|P|144|black_phosphorene|2d_template|reconstruction|None|any-compatible": 189,
+      "phosphorene|P|144|blue_phosphorene|2d_template|None|0.02|any-compatible": 184,
+      "phosphorene|P|144|blue_phosphorene|2d_template|reconstruction|None|any-compatible": 189,
+      "phosphorene|P|16|black_phosphorene|2d_template|None|0.02|any-compatible": 186,
+      "phosphorene|P|16|black_phosphorene|2d_template|reconstruction|None|any-compatible": 183,
+      "phosphorene|P|16|blue_phosphorene|2d_template|None|0.02|any-compatible": 0,
+      "phosphorene|P|16|blue_phosphorene|2d_template|reconstruction|None|any-compatible": 184,
+      "phosphorene|P|36|black_phosphorene|2d_template|None|0.02|any-compatible": 186,
+      "phosphorene|P|36|black_phosphorene|2d_template|reconstruction|None|any-compatible": 183,
+      "phosphorene|P|36|blue_phosphorene|2d_template|None|0.02|any-compatible": 184,
+      "phosphorene|P|36|blue_phosphorene|2d_template|reconstruction|None|any-compatible": 185,
+      "phosphorene|P|4|black_phosphorene|2d_template|None|0.02|any-compatible": 185,
+      "phosphorene|P|4|blue_phosphorene|2d_template|None|0.02|any-compatible": 183,
+      "phosphorene|P|64|black_phosphorene|2d_template|None|0.02|any-compatible": 187,
+      "phosphorene|P|64|black_phosphorene|2d_template|reconstruction|None|any-compatible": 185,
+      "phosphorene|P|64|blue_phosphorene|2d_template|None|0.02|any-compatible": 184,
+      "phosphorene|P|64|blue_phosphorene|2d_template|reconstruction|None|any-compatible": 186
+    },
+    "requested": 64,
+    "round_complete": false,
+    "shortfalls": [
+      {
+        "accepted_unique": 2,
+        "action": {
+          "action_id": "2547ea956193a3e8",
+          "count": 5,
+          "defect": null,
+          "family": "blue_phosphorene",
+          "family_label": "blue-phosphorene",
+          "feasibility": {
+            "available_prototypes": [],
+            "capacity_basis": "bounded acquisition ceiling; actual seeded batch must pass preflight",
+            "capacity_group": "phosphorene|P|16|blue_phosphorene|2d_template|None|0.02|any-compatible",
+            "catalog_version": "executable-capacities-2",
+            "generation_method": "2d_template",
+            "generator_available": true,
+            "maximum_distinct_configurations": 192,
+            "perturbation_constraints": {
+              "deduplication": "symmetry-aware-ltol0.01-stol0.01-angle1-scale_false",
+              "defect": null,
+              "fixed_vacuum": true,
+              "reconstruction_displacement_A": 0.08,
+              "reconstruction_modes": "collective in-plane displacements, no net translation",
+              "strain_fraction": 0.02
+            },
+            "remaining_capacity": 184,
+            "source": "/global/cfs/cdirs/m5216/mlupopa/matsim-agents/examples/paper_cases/seeds/phosphorene_blue_P.extxyz"
+          },
+          "formula": "P",
+          "generator": "2d_template",
+          "material": "phosphorene",
+          "operation": "in_plane_strain",
+          "prototype_ids": [],
+          "random_seed": 3103254025,
+          "size_tier": 16,
+          "space_group_family": "any-compatible",
+          "space_groups": [],
+          "strain": 0.02
+        },
+        "action_id": "2547ea956193a3e8",
+        "capacity_exhausted": true,
+        "category": "generation_shortfall",
+        "generation_attempts": 150,
+        "geometry_rejections": {},
+        "llm_calls_remaining": 0,
+        "rejection_reasons": {
+          "prior_symmetry_equivalent": 122,
+          "symmetry_equivalent": 26
+        },
+        "remaining_capacity": 0,
+        "requested": 5,
+        "requires_new_policy_decision": true
+      }
+    ],
+    "status": "stopped_generation_exhausted"
+  },
+  "campaign_id": "e3-mlip-production",
+  "hypotheses_updated_in_stopped_round": false,
+  "logical_optimizations_attempted": 128,
+  "material": "phosphorene",
+  "new_optimization_evidence_in_stopped_round": false,
+  "outcomes": {
+    "converged": 124,
+    "nonconverged": 4
+  },
+  "round_complete": false,
+  "rounds_completed": 2,
+  "rounds_requested": 3,
+  "seed": 20261113,
+  "status": "stopped_generation_exhausted",
+  "stopped_round": 3,
+  "strategy": "llm_guided_adaptation",
+  "termination_reason": "generation_exhausted"
+}

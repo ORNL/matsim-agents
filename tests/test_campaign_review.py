@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+from langchain_core.messages import AIMessage
+
+from matsim_agents.backends.llm.transcript import Contribution
 from matsim_agents.campaign.evidence import open_campaign_ledger, sync_stability_evidence
 from matsim_agents.campaign.review import (
     CampaignDebateReviewConfig,
@@ -15,6 +19,119 @@ from matsim_agents.discovery.formula import FormulaCandidate, FormulaGenerationP
 from matsim_agents.discovery.stability import PhaseStability, StabilityReport
 from matsim_agents.execution.contracts import EvidenceLevel, WorkflowStatus
 from matsim_agents.workflows.debate import DebateParticipant, DebateVerdict, ScientificDebateResult
+
+
+def _proposal():
+    return {
+        "claim": "Sampled oxide structures may differ in MLIP energy",
+        "status": "proposed",
+        "falsifiable_prediction": "Relaxed oxide prototypes will have different MLIP energies",
+        "rationale": "This is a testable proposal, not thermodynamic validation.",
+    }
+
+
+def _validate_verdicts(verdicts, callbacks):
+    for verdict in verdicts:
+        try:
+            payload = json.loads(verdict.response)
+        except json.JSONDecodeError as exc:
+            raise ValueError("invalid mandatory hypothesis review") from exc
+        hypotheses = []
+        for index, revision in enumerate(payload.get("revisions", [])):
+            hypotheses.append(
+                {
+                    "id": revision.get("hypothesis_id") or f"hypothesis-{index}",
+                    "claim": revision["claim"],
+                    "prediction": revision["falsifiable_prediction"],
+                    "reason": revision["rationale"],
+                    "status": (
+                        "supported_by_mlip"
+                        if revision["status"] == "supported"
+                        else revision["status"]
+                    ),
+                    "evidence_ids": revision.get("evidence_ids") or ["campaign-design"],
+                }
+            )
+        payload["scientific_hypotheses"] = hypotheses
+        verdict.response = json.dumps(payload)
+        callbacks["final_response_validator"](
+            Contribution(
+                id=verdict.contribution_id,
+                kind="verdict",
+                speaker=verdict.participant,
+                model=verdict.model,
+                text=verdict.response,
+            ),
+            hypotheses,
+        )
+
+
+@pytest.mark.parametrize("invalid_first", [False, True])
+def test_real_debate_validates_every_round_before_continuing(tmp_path, invalid_first):
+    campaign = CampaignState(
+        campaign_id="round-review",
+        element_set=["Nb", "O"],
+        formula_policy=FormulaGenerationPolicy(elements=["Nb", "O"], require_charge_balance=False),
+    )
+    ledger = open_campaign_ledger(campaign, tmp_path)
+    calls = []
+
+    class Model:
+        def invoke(self, messages, **kwargs):
+            calls.append(messages)
+            revision = _proposal()
+            revision["hypothesis_id"] = "oxide-energy" if len(calls) > 1 else None
+            hypothesis = {
+                "id": "oxide-energy",
+                "claim": revision["claim"],
+                "prediction": revision["falsifiable_prediction"],
+                "status": "proposed",
+                "reason": revision["rationale"],
+                "evidence_ids": ["campaign-design"],
+            }
+            if invalid_first and len(calls) == 1:
+                revision["rationale"] = "Contradictory persisted ledger interpretation"
+            return AIMessage(
+                content=json.dumps(
+                    {
+                        "scientific_hypotheses": [hypothesis],
+                        "decisions": [],
+                        "revisions": [revision],
+                        "new_formula_proposals": [],
+                    }
+                )
+            )
+
+    config = CampaignDebateReviewConfig(
+        participants=[
+            DebateParticipant(name=name, provider="vllm", model=name) for name in ("a", "b")
+        ],
+        output_root=str(tmp_path / "debates"),
+        rounds=2,
+    )
+    if invalid_first:
+        with pytest.raises(ValueError, match="hypothesis and ledger revision disagree"):
+            run_campaign_debate_review(
+                campaign,
+                [],
+                config=config,
+                model_factory=lambda **kwargs: Model(),
+            )
+        assert len(calls) == 1
+        assert ledger.history("oxide-energy") == []
+        contributions = list((tmp_path / "debates").glob("*/contributions.jsonl"))
+        assert contributions and "Contradictory" in contributions[0].read_text()
+    else:
+        decision = run_campaign_debate_review(
+            campaign,
+            [],
+            config=config,
+            model_factory=lambda **kwargs: Model(),
+        )
+        assert len(calls) == 6
+        assert len(ledger.history("oxide-energy")) == 4
+        assert len(decision.hypothesis_revisions) == 2
+        assert all(row.hypothesis_id == "oxide-energy" for row in decision.hypothesis_revisions)
 
 
 def test_review_evidence_defines_authoritative_numerical_semantics(tmp_path) -> None:
@@ -118,7 +235,7 @@ def test_campaign_review_requires_cross_model_agreement(tmp_path):
         DebateParticipant(name="model-b", provider="vllm", model="b"),
     ]
 
-    def debate_runner(config, *, model_factory):
+    def debate_runner(config, *, model_factory, **callbacks):
         assert "NbO2" in config.hypothesis
         assert nbo_evidence in config.hypothesis
         deactivate_nbo = {
@@ -129,16 +246,18 @@ def test_campaign_review_requires_cross_model_agreement(tmp_path):
         }
         responses = [
             {
+                "revisions": [_proposal()],
                 "decisions": [
                     deactivate_nbo,
                     {"formula": "NbO2", "action": "deactivate", "rationale": "uncertain"},
-                ]
+                ],
             },
             {
+                "revisions": [_proposal()],
                 "decisions": [
                     deactivate_nbo,
                     {"formula": "NbO2", "action": "keep", "rationale": "needs more evidence"},
-                ]
+                ],
             },
         ]
         verdicts = [
@@ -153,6 +272,7 @@ def test_campaign_review_requires_cross_model_agreement(tmp_path):
                 zip(participants, responses, strict=True)
             )
         ]
+        _validate_verdicts(verdicts, callbacks)
         return ScientificDebateResult(
             run_id="review-001",
             run_directory=str(tmp_path),
@@ -227,16 +347,17 @@ def test_campaign_review_cannot_deactivate_converged_result_without_hull_evidenc
         DebateParticipant(name="model-b", provider="vllm", model="b"),
     ]
 
-    def debate_runner(config, *, model_factory):
+    def debate_runner(config, *, model_factory, **callbacks):
         response = json.dumps(
             {
+                "revisions": [_proposal()],
                 "decisions": [
                     {
                         "formula": "Nb2O3",
                         "action": "deactivate",
                         "rationale": "The prototype identifier has the wrong stoichiometry.",
                     }
-                ]
+                ],
             }
         )
         verdicts = [
@@ -249,6 +370,7 @@ def test_campaign_review_cannot_deactivate_converged_result_without_hull_evidenc
             )
             for participant in participants
         ]
+        _validate_verdicts(verdicts, callbacks)
         return ScientificDebateResult(
             run_id="review-numerical-guard",
             run_directory=str(tmp_path),
@@ -296,7 +418,12 @@ def test_missing_stability_report_blocks_deactivation() -> None:
 def test_parse_verdict_accepts_json_after_reasoning() -> None:
     verdict = _parse_verdict(
         'The schema is {"decisions": []}, followed by the final assessment.\n'
-        '{"decisions": [{"formula": "NbO2", "action": "keep", "rationale": "stable"}]}'
+        + json.dumps(
+            {
+                "decisions": [{"formula": "NbO2", "action": "keep", "rationale": "stable"}],
+                "revisions": [_proposal()],
+            }
+        )
     )
 
     assert verdict.decisions[0].formula == "NbO2"
@@ -348,7 +475,7 @@ def test_campaign_review_preserves_revisions_and_validates_new_formulas(tmp_path
         DebateParticipant(name="model-b", provider="vllm", model="b"),
     ]
 
-    def debate_runner(config, *, model_factory):
+    def debate_runner(config, *, model_factory, **callbacks):
         response = {
             "decisions": [],
             "revisions": [
@@ -358,16 +485,15 @@ def test_campaign_review_preserves_revisions_and_validates_new_formulas(tmp_path
                     "status": "supported",
                     "evidence_ids": [mlip_ranking],
                     "falsifiable_prediction": "No other NbO2 prototype relaxes lower",
+                    "rationale": "The cited MLIP ranking supports only the sampled ordering.",
                     "proposed_test": "phonons",
                 },
                 {
-                    "claim": "NbO2 is thermodynamically stable",
-                    "claim_type": "thermodynamic_stability",
-                    "status": "supported",
-                    "evidence_ids": [mlip_ranking],
+                    "claim": "NbO2 may be metallic",
+                    "status": "proposed",
+                    "falsifiable_prediction": "DFT may show no band gap",
+                    "rationale": "Not tested by the MLIP calculation.",
                 },
-                {"claim": "NbO2 is competitive", "status": "supported"},
-                {"claim": "NbO2 may be metallic", "status": "proposed"},
             ],
             "new_formula_proposals": [
                 {
@@ -392,6 +518,7 @@ def test_campaign_review_preserves_revisions_and_validates_new_formulas(tmp_path
             )
             for participant in participants
         ]
+        _validate_verdicts(verdicts, callbacks)
         return ScientificDebateResult(
             run_id="review-revision",
             run_directory=str(tmp_path),
@@ -417,15 +544,11 @@ def test_campaign_review_preserves_revisions_and_validates_new_formulas(tmp_path
     assert len(decision.hypothesis_revisions) == 4
     kept = {(r.scientific_claim, r.agent_model_id) for r in decision.hypothesis_revisions}
     assert ("NbO2 may be metallic", "model-a:a") in kept
-    rejected = [note for note in decision.notes if "rejected hypothesis revision" in note]
-    assert len(rejected) == 4
-    assert any("needs converged_dft evidence" in note for note in rejected)
-    assert any("must cite evidence" in note for note in rejected)
     assert {proposal.formula for proposal in decision.formula_proposals} == {"NbO2"}
     assert sum("out-of-scope" in note for note in decision.notes) == 2
 
 
-def test_campaign_review_treats_invalid_verdict_as_abstention(tmp_path) -> None:
+def test_campaign_review_rejects_invalid_verdict_instead_of_abstaining(tmp_path) -> None:
     policy = FormulaGenerationPolicy(elements=["Nb", "O"], require_charge_balance=False)
     campaign = CampaignState(
         campaign_id="invalid-review-test",
@@ -447,7 +570,7 @@ def test_campaign_review_treats_invalid_verdict_as_abstention(tmp_path) -> None:
         DebateParticipant(name="model-b", provider="vllm", model="b"),
     ]
 
-    def debate_runner(config, *, model_factory):
+    def debate_runner(config, *, model_factory, **callbacks):
         verdicts = [
             DebateVerdict(
                 contribution_id="verdict-a",
@@ -467,6 +590,7 @@ def test_campaign_review_treats_invalid_verdict_as_abstention(tmp_path) -> None:
                 response="analysis without a JSON verdict",
             ),
         ]
+        _validate_verdicts(verdicts, callbacks)
         return ScientificDebateResult(
             run_id="review-invalid",
             run_directory=str(tmp_path),
@@ -480,19 +604,15 @@ def test_campaign_review_treats_invalid_verdict_as_abstention(tmp_path) -> None:
             contributions_path=str(tmp_path / "contributions.jsonl"),
         )
 
-    decision = run_campaign_debate_review(
-        campaign,
-        records,
-        config=CampaignDebateReviewConfig(
-            participants=participants,
-            output_root=str(tmp_path),
-            minimum_agreement_fraction=1.0,
-        ),
-        model_factory=lambda **_: None,
-        debate_runner=debate_runner,
-    )
-
-    assert decision.deactivate_formulas == []
-    assert decision.notes[-1] == (
-        "[model-b] invalid review verdict: response contains no JSON object"
-    )
+    with pytest.raises(ValueError, match="invalid mandatory hypothesis review"):
+        run_campaign_debate_review(
+            campaign,
+            records,
+            config=CampaignDebateReviewConfig(
+                participants=participants,
+                output_root=str(tmp_path),
+                minimum_agreement_fraction=1.0,
+            ),
+            model_factory=lambda **_: None,
+            debate_runner=debate_runner,
+        )

@@ -34,6 +34,7 @@ from matsim_agents.execution.ledger import (
     DecisionRecord,
     HypothesisRecord,
 )
+from matsim_agents.execution.run_directory import ScientificRunDirectory
 from matsim_agents.workflows.debate import ScientificDebateResult
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
 
@@ -422,6 +423,22 @@ def _record_hypothesis_revisions(
 
 
 def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> None:
+    if decision.debate_run_id:
+        if not decision.hypothesis_revisions:
+            raise ValueError("LLM campaign review requires scientific hypothesis revisions")
+        missing = set(campaign.ledger.current_hypotheses()) - {
+            revision.hypothesis_id for revision in decision.hypothesis_revisions
+        }
+        if missing:
+            raise ValueError(
+                f"LLM campaign review omits previous hypothesis IDs: {sorted(missing)}"
+            )
+        for revision in decision.hypothesis_revisions:
+            if not revision.falsifiable_prediction or not revision.scientific_rationale.strip():
+                raise ValueError("LLM hypothesis revision requires a prediction and rationale")
+            problems = campaign.ledger.problems(revision)
+            if problems:
+                raise ValueError(f"invalid mandatory hypothesis revision: {'; '.join(problems)}")
     unknown = (set(decision.deactivate_formulas) | set(decision.reactivate_formulas)) - set(
         campaign.formulas
     )
@@ -473,6 +490,71 @@ def _apply_review(campaign: CampaignState, decision: CampaignReviewDecision) -> 
             metadata=metadata,
         )
     )
+
+
+def _tracked_review(
+    campaign: CampaignState,
+    records: list[FormulaRunRecord],
+    reviewer: ReviewRunner,
+    root: Path,
+    stage: str,
+) -> None:
+    directory = root / "hypothesis-reviews"
+    directory.mkdir(exist_ok=True)
+    writer = ScientificRunDirectory(directory, campaign.campaign_id)
+    name = f"{stage}.json"
+    path = directory / name
+    if path.exists():
+        saved = json.loads(path.read_text())
+        if saved.get("status") != "accepted":
+            raise RuntimeError(
+                f"Hypothesis review was interrupted or rejected; reconcile {path} before resuming"
+            )
+        decision = CampaignReviewDecision.model_validate(saved["decision"])
+        revision_ids = saved.get("revision_ids")
+        if (
+            not decision.hypothesis_revisions
+            or not isinstance(revision_ids, list)
+            or len(revision_ids) != len(decision.hypothesis_revisions)
+            or not all(
+                isinstance(campaign.ledger.get(revision_id), HypothesisRecord)
+                for revision_id in revision_ids
+            )
+        ):
+            raise RuntimeError(f"Accepted hypothesis review lacks ledger revisions: {path}")
+        return
+    record = {
+        "stage": stage,
+        "iteration": campaign.iteration,
+        "previous_hypotheses": [
+            row.model_dump(mode="json") for row in campaign.ledger.current_hypotheses().values()
+        ],
+        "formula_records": [row.model_dump(mode="json") for row in records],
+        "status": "request_started",
+    }
+    writer.write_json(name, record)
+    try:
+        decision = reviewer(campaign, records)
+        record.update(status="response_saved", decision=decision.model_dump(mode="json"))
+        writer.write_json(name, record)
+        if not decision.debate_run_id or not decision.hypothesis_revisions:
+            raise ValueError(
+                "LLM campaign review requires scientific hypothesis revisions "
+                "and a transcript run ID"
+            )
+        _apply_review(campaign, decision)
+        record.update(
+            status="accepted",
+            revision_ids=campaign.review_history[-1].metadata["hypothesis_revision_ids"],
+        )
+        writer.write_json(name, record)
+        campaign.save(root / "campaign_state.json")
+    except Exception as exc:
+        record.update(status="rejected", error=f"{type(exc).__name__}: {exc}")
+        writer.write_json(name, record)
+        campaign.status = WorkflowStatus.FAILED
+        campaign.save(root / "campaign_state.json")
+        raise
 
 
 def _select_batch(
@@ -858,6 +940,24 @@ def run_campaign(
 
     root.mkdir(parents=True, exist_ok=True)
     ledger = open_campaign_ledger(campaign, root)
+    tracked = bool(
+        getattr(review_runner, "requires_hypothesis_tracking", False)
+        or getattr(final_review_runner, "requires_hypothesis_tracking", False)
+    )
+    if tracked and review_runner is None:
+        review_runner = final_review_runner
+    if tracked and review_runner is not None:
+        completed_current = [
+            row
+            for row in campaign.formula_runs.values()
+            if row.iteration == campaign.iteration and row.status != WorkflowStatus.RUNNING
+        ]
+        if completed_current:
+            raise RuntimeError(
+                "Campaign contains an uncommitted iteration; reconcile its hypothesis review "
+                "before resuming instead of skipping already calculated evidence"
+            )
+        _tracked_review(campaign, [], review_runner, root, "initial")
     campaign.status = WorkflowStatus.RUNNING
     campaign.save(state_path)
     completed: list[str] = []
@@ -973,7 +1073,16 @@ def run_campaign(
 
         if review_runner is not None and iteration_records:
             try:
-                _apply_review(campaign, review_runner(campaign, iteration_records))
+                if tracked:
+                    _tracked_review(
+                        campaign,
+                        iteration_records,
+                        review_runner,
+                        root,
+                        f"round-{campaign.iteration:04d}",
+                    )
+                else:
+                    _apply_review(campaign, review_runner(campaign, iteration_records))
             except Exception:
                 campaign.status = WorkflowStatus.FAILED
                 campaign.save(state_path)
@@ -995,12 +1104,22 @@ def run_campaign(
     campaign.status = (
         WorkflowStatus.PARTIAL if remaining or has_failures else WorkflowStatus.COMPLETE
     )
-    if final_review_runner is not None and campaign.formula_runs:
+    final_reviewer = final_review_runner or (review_runner if tracked else None)
+    if final_reviewer is not None and campaign.formula_runs:
         final_records = sorted(
             campaign.formula_runs.values(),
             key=lambda record: (record.iteration, record.formula),
         )
-        _apply_review(campaign, final_review_runner(campaign, final_records))
+        if tracked:
+            _tracked_review(
+                campaign,
+                final_records,
+                final_reviewer,
+                root,
+                f"final-{campaign.iteration:04d}",
+            )
+        else:
+            _apply_review(campaign, final_reviewer(campaign, final_records))
     campaign.save(state_path)
     return CampaignRunResult(
         campaign=campaign,

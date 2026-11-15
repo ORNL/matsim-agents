@@ -23,7 +23,23 @@ class _Model:
     def invoke(self, messages):
         self.system_prompts.append(messages[0].content)
         self.prompts.append(messages[-1].content)
-        return SimpleNamespace(content=f"argument from {self.name} call {len(self.prompts)}")
+        return SimpleNamespace(
+            content=json.dumps(
+                {
+                    "response": f"argument from {self.name} call {len(self.prompts)}",
+                    "scientific_hypotheses": [
+                        {
+                            "id": "claim-main",
+                            "claim": "The proposed material may have the target property.",
+                            "prediction": "A suitable measurement will show the target property.",
+                            "status": "proposed",
+                            "reason": "The panel has no numerical observations.",
+                            "evidence_ids": ["debate-hypothesis"],
+                        }
+                    ],
+                }
+            )
+        )
 
 
 def test_single_call_mode_invokes_one_model_exactly_once(tmp_path):
@@ -63,6 +79,90 @@ def test_single_call_mode_includes_final_response_instruction(tmp_path):
     assert 'Return JSON with a "formulas" array.' in model.system_prompts[0]
 
 
+def test_custom_round_contract_is_requested_on_every_round(tmp_path):
+    models = {}
+    validated = []
+
+    class CustomModel(_Model):
+        def invoke(self, messages):
+            raw = super().invoke(messages)
+            payload = json.loads(raw.content)
+            payload["reviewer_revisions"] = [
+                {
+                    "hypothesis_id": "claim-main",
+                    "status": "unresolved",
+                    "prediction": "The declared test will resolve the claim.",
+                    "rationale": "The panel has no numerical observations.",
+                }
+            ]
+            return SimpleNamespace(content=json.dumps(payload))
+
+    def factory(*, provider, model, base_url, max_tokens):
+        models[model] = CustomModel(model)
+        return models[model]
+
+    def validate_round(contribution, state):
+        payload = json.loads(contribution.text)
+        assert contribution.kind == "argument"
+        assert payload["reviewer_revisions"][0]["hypothesis_id"] == state[0]["id"]
+        validated.append(contribution.id)
+
+    def validate_final(contribution, state):
+        payload = json.loads(contribution.text)
+        assert contribution.kind == "verdict"
+        assert payload["reviewer_revisions"][0]["hypothesis_id"] == state[0]["id"]
+        validated.append(contribution.id)
+
+    run_scientific_debate(
+        ScientificDebateConfig(
+            hypothesis="A candidate has the target property.",
+            rounds=2,
+            round_response_instruction=(
+                'Include "reviewer_revisions" with each current stable hypothesis ID.'
+            ),
+            final_response_instruction=(
+                'Include "reviewer_revisions" with each final stable hypothesis ID.'
+            ),
+            output_root=str(tmp_path),
+            participants=[
+                DebateParticipant(name="a", provider="vllm", model="a"),
+                DebateParticipant(name="b", provider="vllm", model="b"),
+            ],
+        ),
+        model_factory=factory,
+        round_response_validator=validate_round,
+        final_response_validator=validate_final,
+    )
+    assert all(
+        'Include "reviewer_revisions"' in model.system_prompts[0] for model in models.values()
+    )
+    assert len(validated) == 6
+
+
+def test_custom_round_validation_failure_cannot_finish_successfully(tmp_path):
+    def reject(_contribution, _state):
+        raise ValueError("reviewer revision does not retain prior IDs")
+
+    with pytest.raises(ValueError, match="custom response validation failed"):
+        run_scientific_debate(
+            ScientificDebateConfig(
+                hypothesis="A candidate has the target property.",
+                rounds=1,
+                output_root=str(tmp_path),
+                participants=[
+                    DebateParticipant(name="a", provider="vllm", model="a"),
+                    DebateParticipant(name="b", provider="vllm", model="b"),
+                ],
+            ),
+            model_factory=lambda **_kwargs: _Model("a"),
+            round_response_validator=reject,
+        )
+
+    [run] = list(tmp_path.glob("debate-*"))
+    assert len((run / "contributions.jsonl").read_text().splitlines()) == 1
+    assert not (run / "result.json").exists()
+
+
 def test_single_call_mode_rejects_multiple_models_or_rounds():
     participant = DebateParticipant(name="baseline", provider="vllm", model="baseline")
     with pytest.raises(ValueError, match="exactly one participant and one round"):
@@ -95,6 +195,11 @@ def test_models_debate_each_other_for_user_selected_rounds(tmp_path):
     assert result.rounds_completed == 3
     assert len(result.turns) == 9
     assert len(result.verdicts) == 3
+    assert all(turn.scientific_hypotheses[0]["id"] == "claim-main" for turn in result.turns)
+    assert all(
+        verdict.scientific_hypotheses[0]["id"] == "claim-main" for verdict in result.verdicts
+    )
+    assert result.scientific_hypotheses == result.verdicts[-1].scientific_hypotheses
     assert [turn.participant for turn in result.turns[:6]] == [
         "theorist",
         "skeptic",
@@ -104,6 +209,8 @@ def test_models_debate_each_other_for_user_selected_rounds(tmp_path):
         "theorist",
     ]
     assert "argument from model-a" in models["model-b"].prompts[-1]
+    assert "Previous scientific hypothesis state" in models["model-b"].prompts[-1]
+    assert "claim-main" in models["model-b"].prompts[-1]
     run = tmp_path / result.run_id
     assert result.run_id.startswith("debate-")
     # One canonical record per contribution; no duplicate transcripts or empty folders.
@@ -125,6 +232,11 @@ def test_models_debate_each_other_for_user_selected_rounds(tmp_path):
     assert len(identifiers) == len(set(identifiers)) == 12
     assert [record["kind"] for record in records] == ["argument"] * 9 + ["verdict"] * 3
     assert sorted(path.stem for path in (run / "prompts").iterdir()) == sorted(identifiers)
+    assert all(
+        "scientific_hypotheses"
+        in json.loads((run / "prompts" / f"{contribution_id}.json").read_text())[0]["content"]
+        for contribution_id in identifiers
+    )
     assert len({models[name].system_prompts[0] for name in models}) == 1
     summary = json.loads((run / "result.json").read_text())
     assert "turns" not in summary and "synthesis" not in summary
@@ -225,42 +337,57 @@ class _ReasoningModel:
                 usage_metadata={"input_tokens": 10, "output_tokens": 64},
             )
         return SimpleNamespace(
-            content=f"{self.name} private reasoning</think>{self.name} answer",
+            content=(
+                f"{self.name} private reasoning</think>"
+                + json.dumps(
+                    {
+                        "response": f"{self.name} answer",
+                        "scientific_hypotheses": [
+                            {
+                                "id": "claim-main",
+                                "claim": "The proposed material may have the target property.",
+                                "prediction": (
+                                    "A suitable measurement will show the target property."
+                                ),
+                                "status": "proposed",
+                                "reason": "The panel has no numerical observations.",
+                                "evidence_ids": ["debate-hypothesis"],
+                            }
+                        ],
+                    }
+                )
+            ),
             response_metadata={"finish_reason": "stop"},
             usage_metadata={"input_tokens": 10, "output_tokens": 20},
         )
 
 
-def test_peers_see_answers_only_and_incomplete_replies_are_flagged(tmp_path):
+def test_peers_see_answers_only_and_incomplete_replies_fail_state_validation(tmp_path):
     models = {"a": _ReasoningModel("a"), "b": _ReasoningModel("b", cut_off=True)}
-    result = run_scientific_debate(
-        ScientificDebateConfig(
-            hypothesis="h",
-            rounds=1,
-            output_root=str(tmp_path),
-            participants=[
-                DebateParticipant(name="a", provider="vllm", model="a"),
-                DebateParticipant(name="b", provider="vllm", model="b"),
-            ],
-        ),
-        model_factory=lambda **kwargs: models[kwargs["model"]],
-    )
-    assert result.turns[0].response == "a answer"
+    with pytest.raises(ValueError, match="incomplete scientific hypothesis reply"):
+        run_scientific_debate(
+            ScientificDebateConfig(
+                hypothesis="h",
+                rounds=1,
+                output_root=str(tmp_path),
+                participants=[
+                    DebateParticipant(name="a", provider="vllm", model="a"),
+                    DebateParticipant(name="b", provider="vllm", model="b"),
+                ],
+            ),
+            model_factory=lambda **kwargs: models[kwargs["model"]],
+        )
     assert "private reasoning" not in models["b"].prompts[0]
     assert '<contribution id="round-001-turn-0001" speaker="a">' in models["b"].prompts[0]
-    assert result.turns[1].response == "" and result.turns[1].incomplete
-    assert "[No answer: the token limit ended" in models["a"].prompts[-1]
-    assert result.incomplete_contributions == [
-        result.turns[1].turn_id,
-        result.verdicts[1].contribution_id,
-    ]
-    records = [
-        json.loads(line) for line in Path(result.contributions_path).read_text().splitlines()
-    ]
+    assert "a answer" in models["b"].prompts[0]
+    run = next(tmp_path.glob("debate-*"))
+    records = [json.loads(line) for line in (run / "contributions.jsonl").read_text().splitlines()]
     assert records[0]["reasoning"] == "a private reasoning"
     assert records[0]["completion_tokens"] == 20 and records[0]["finish_reason"] == "stop"
     assert records[1]["truncated"] and records[1]["reasoning"] == "b still thinking"
-    markdown = Path(result.transcript_path).read_text()
+    assert (run / "prompts" / "round-001-turn-0002.json").exists()
+    assert not (run / "result.json").exists()
+    markdown = (run / "transcript.md").read_text()
     assert "<summary>Reasoning (19 characters)</summary>" in markdown
     assert "> **Incomplete:** the token limit ended this reply" in markdown
 
@@ -293,7 +420,25 @@ def test_long_debates_drop_whole_oldest_contributions_and_name_them(tmp_path):
     class Wordy(_Model):
         def invoke(self, messages):
             super().invoke(messages)
-            return SimpleNamespace(content=f"{self.name}-{len(self.prompts)} " + "x" * 600)
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        "response": f"{self.name}-{len(self.prompts)} " + "x" * 600,
+                        "scientific_hypotheses": [
+                            {
+                                "id": "claim-main",
+                                "claim": "The proposed material may have the target property.",
+                                "prediction": (
+                                    "A suitable measurement will show the target property."
+                                ),
+                                "status": "proposed",
+                                "reason": "The panel has no numerical observations.",
+                                "evidence_ids": ["debate-hypothesis"],
+                            }
+                        ],
+                    }
+                )
+            )
 
     models = {"a": Wordy("a"), "b": Wordy("b")}
     result = run_scientific_debate(
@@ -301,7 +446,7 @@ def test_long_debates_drop_whole_oldest_contributions_and_name_them(tmp_path):
             hypothesis="h",
             rounds=3,
             output_root=str(tmp_path),
-            max_transcript_chars=1_500,
+            max_transcript_chars=1_800,
             participants=[
                 DebateParticipant(name="a", provider="vllm", model="a"),
                 DebateParticipant(name="b", provider="vllm", model="b"),

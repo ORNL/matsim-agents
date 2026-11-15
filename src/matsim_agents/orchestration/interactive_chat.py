@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import tempfile
 from collections.abc import Callable
@@ -30,10 +31,12 @@ from langchain_core.messages import (
     messages_to_dict,
 )
 
+from matsim_agents.backends.llm.hypotheses import INSTRUCTIONS as HYPOTHESIS_INSTRUCTIONS
+from matsim_agents.backends.llm.hypotheses import validate_hypotheses
 from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.llm.replies import ModelReply, invoke_model
 from matsim_agents.backends.llm.servers import LLMServices, api_key_from_env
-from matsim_agents.backends.llm.transcript import Contribution, Transcript
+from matsim_agents.backends.llm.transcript import Contribution, Transcript, prompt_messages
 from matsim_agents.backends.mlip.hydragnn_energy import has_declared_hydragnn_checkpoint
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool, release_device_memory
 from matsim_agents.backends.mlip.relaxation import RelaxStructureInput, relax_with_mlip
@@ -56,6 +59,27 @@ unavailable in this session. This restriction overrides any tool instructions
 above. Do not offer to run those tools or imply that calculations were performed.
 Discuss hypotheses and suggest external calculations instead; the user must
 restart chat with --with-mlip to enable atomistic tools."""
+_CHAT_HYPOTHESIS_INSTRUCTION = (
+    f"{HYPOTHESIS_INSTRUCTIONS}\n"
+    "Return one JSON object with a concise `response` string and `scientific_hypotheses`. "
+    "Cite only the supplied evidence IDs. User questions are context, not numerical "
+    "evidence; peer critiques are not evidence. Do not claim DFT support or challenge "
+    "unless measured DFT evidence is explicitly supplied."
+)
+_CHAT_CONDITIONAL_HYPOTHESIS_INSTRUCTION = (
+    "For scientific or materials-science replies, return JSON with a concise `response` and "
+    "`scientific_hypotheses` following the required schema below. Non-scientific greetings "
+    "and small talk may remain plain text and must not invent scientific claims.\n\n"
+    f"{_CHAT_HYPOTHESIS_INSTRUCTION}"
+)
+_SCIENTIFIC_CHAT_TERMS = re.compile(
+    r"\b(?:hypothes(?:is|es|e)|materials?\s+science|materials?|composition|chemical|chemistry|"
+    r"cathodes?|anodes?|batter(?:y|ies)|catalysts?|photovoltaics?|band\s+gap|crystal|"
+    r"phase|compound|dft|mlip|mace|structure|property|properties|stability|stable|"
+    r"relaxation|energy|forces?|oxidation|ionic|spinel|perovskite|alloy|defect|"
+    r"synthesis|element|atom|molecule|density\s+functional)\b",
+    re.IGNORECASE,
+)
 
 DEFAULT_SYSTEM_PROMPT = f"""You are a materials-discovery research partner.
 Your role is to help the user generate, critique, and refine hypotheses for
@@ -170,6 +194,10 @@ class DiscoveryChatSession:
     placement: Placement | None = None
     # <output_dir>/chat/<session id>/: every message of the session, as it happens.
     transcript: Transcript | None = None
+    scientific_hypotheses: list[dict] = field(default_factory=list)
+    scientific_evidence_ids: list[str] = field(default_factory=list)
+    mlip_evidence_ids: list[str] = field(default_factory=list)
+    tool_evidence_ids: list[str] = field(default_factory=list)
 
     def _placement(self) -> Placement | None:
         if self.placement is None and self.config.resources:
@@ -235,6 +263,18 @@ class DiscoveryChatSession:
         )
         self.transcript.add(contribution, prompt=prompt)
 
+    def save_prompt(self, kind: str, messages: list[BaseMessage]) -> None:
+        """Persist the exact request before sending it to the model."""
+        if self.transcript is None:
+            self._open_transcript(Path(self.config.output_dir) / "chat" / make_run_id())
+        assert self.transcript is not None
+        contribution_id = f"{self.transcript.count + 1:04d}-{kind}"
+        prompt_dir = self.transcript.directory / "prompts"
+        prompt_dir.mkdir(parents=True, exist_ok=True)
+        (prompt_dir / f"{contribution_id}.json").write_text(
+            json.dumps(prompt_messages(messages), indent=2) + "\n", encoding="utf-8"
+        )
+
     def _open_transcript(self, directory: Path) -> None:
         cfg = self.config
         critics = ", ".join(cfg.critic_panel_models) or cfg.critic_llm_model or "none"
@@ -259,6 +299,10 @@ class DiscoveryChatSession:
             "messages": messages_to_dict(self.messages),
             "seen_compositions": sorted(self.seen_compositions),
             "explorations": [item.model_dump(mode="json") for item in self.explorations],
+            "scientific_hypotheses": self.scientific_hypotheses,
+            "scientific_evidence_ids": self.scientific_evidence_ids,
+            "mlip_evidence_ids": self.mlip_evidence_ids,
+            "tool_evidence_ids": self.tool_evidence_ids,
         }
         destination = directory / "session.json"
         fd, temporary = tempfile.mkstemp(prefix=".session.json.", dir=directory)
@@ -293,6 +337,10 @@ class DiscoveryChatSession:
             explorations=[
                 CompositionExplorationResult.model_validate(item) for item in state["explorations"]
             ],
+            scientific_hypotheses=state.get("scientific_hypotheses", []),
+            scientific_evidence_ids=state.get("scientific_evidence_ids", []),
+            mlip_evidence_ids=state.get("mlip_evidence_ids", []),
+            tool_evidence_ids=state.get("tool_evidence_ids", []),
         )
         restored._open_transcript(directory)
         return restored
@@ -454,6 +502,60 @@ def _extract_al_command(user_text: str) -> tuple[bool, str | None]:
         arg = txt[len(prefix) :].strip()
         return True, (arg or None)
     return False, None
+
+
+def _validated_chat_revision(session: DiscoveryChatSession, text: str) -> str:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ValueError("LLM reply must be JSON with scientific_hypotheses") from error
+    if not isinstance(payload, dict) or not isinstance(payload.get("response"), str):
+        raise ValueError("LLM reply must include a response string and scientific_hypotheses")
+    if "scientific_hypotheses" not in payload:
+        raise ValueError("LLM reply must include scientific_hypotheses")
+    session.scientific_hypotheses = validate_hypotheses(
+        payload["scientific_hypotheses"],
+        set(session.scientific_evidence_ids),
+        session.scientific_hypotheses,
+        mlip_evidence=set(session.mlip_evidence_ids),
+        dft_evidence=set(),
+    )
+    return payload["response"]
+
+
+def _is_scientific_chat_turn(user_text: str, session: DiscoveryChatSession) -> bool:
+    if re.fullmatch(
+        r"\s*(?:hi|hello|hey|thanks|thank you|good morning|good afternoon|good evening)[.!? ]*\s*",
+        user_text,
+        re.IGNORECASE,
+    ):
+        return False
+    return bool(
+        session.scientific_hypotheses
+        or session.scientific_evidence_ids
+        or _SCIENTIFIC_CHAT_TERMS.search(user_text)
+        or re.search(r"\b[A-Z][a-z]?\d+(?:[A-Z][a-z]?\d*)+\b", user_text)
+    )
+
+
+def _available_chat_evidence(session: DiscoveryChatSession) -> str:
+    return (
+        f"MLIP numerical evidence IDs: {session.mlip_evidence_ids}\n"
+        f"Other tool-output IDs (not necessarily numerical measurements): "
+        f"{session.tool_evidence_ids}\n"
+        f"All supplied evidence/context IDs: {session.scientific_evidence_ids}\n"
+        "User questions are context, not numerical evidence; cite them only to identify "
+        "the claim being discussed."
+    )
+
+
+def _register_tool_evidence(session: DiscoveryChatSession, *, mlip: bool = False) -> str:
+    evidence_id = f"chat-tool-{len(session.tool_evidence_ids) + 1:04d}"
+    session.tool_evidence_ids.append(evidence_id)
+    session.scientific_evidence_ids.append(evidence_id)
+    if mlip:
+        session.mlip_evidence_ids.append(evidence_id)
+    return evidence_id
 
 
 def _run_single_structure_relaxation(
@@ -637,12 +739,11 @@ def _debate_hypothesis_response(
     cfg: DiscoveryChatConfig,
     user_text: str,
     draft_response: str,
-    record: Callable[..., None],
+    session: DiscoveryChatSession,
 ) -> str:
     """Run optional multi-LLM critique/revision rounds for hypothesis quality.
 
-    ``record`` (:meth:`DiscoveryChatSession.record`) receives every critique and
-    revision.
+    Every critique and revision carries a validated stable-ID hypothesis state.
     """
     if not cfg.enable_hypothesis_debate:
         return draft_response
@@ -698,10 +799,24 @@ def _debate_hypothesis_response(
     critic_models = {label: (provider, model) for label, provider, model, _, _ in critic_specs}
 
     def ask(kind: str, speaker: str, llm: object, messages: list[BaseMessage]) -> str:
+        messages[0] = SystemMessage(
+            content=f"{messages[0].content}\n\n{_CHAT_HYPOTHESIS_INSTRUCTION}"
+        )
+        messages[-1] = HumanMessage(
+            content=(
+                f"{messages[-1].content}\n\nPrevious scientific hypothesis state:\n"
+                f"{json.dumps(session.scientific_hypotheses, sort_keys=True)}\n\n"
+                f"Available evidence IDs (MLIP: {session.mlip_evidence_ids}; DFT: []): "
+                f"{session.scientific_evidence_ids}"
+            )
+        )
+        session.save_prompt(kind, messages)
         reply = invoke_model(llm, messages)
         provider, model = critic_models.get(speaker, (cfg.llm_provider, cfg.llm_model))
-        record(kind, speaker, reply=reply, provider=provider, model=model, prompt=messages)
-        return reply.text
+        session.record(kind, speaker, reply=reply, provider=provider, model=model, prompt=messages)
+        if reply.truncated or not reply.text.strip():
+            raise ValueError(f"incomplete scientific hypothesis reply in {kind}")
+        return _validated_chat_revision(session, reply.text)
 
     primary = get_chat_model(
         provider=cfg.llm_provider,
@@ -821,6 +936,8 @@ def _chat_turn(
         if system_prompt == DEFAULT_SYSTEM_PROMPT:
             system_prompt = system_prompt.replace(ATOMISTIC_EXPLORATION_GUIDANCE, "")
         system_prompt = f"{system_prompt.rstrip()}\n\n{LLM_ONLY_MODE_INSTRUCTION}"
+    if not cfg.enable_hypothesis_debate:
+        system_prompt = f"{system_prompt.rstrip()}\n\n{_CHAT_CONDITIONAL_HYPOTHESIS_INSTRUCTION}"
     if not session.messages:
         session.messages.append(SystemMessage(content=system_prompt))
     elif isinstance(session.messages[0], SystemMessage):
@@ -833,6 +950,10 @@ def _chat_turn(
         session.messages = [SystemMessage(content=system_prompt)]
         session.seen_compositions.clear()
         session.explorations.clear()
+        session.scientific_hypotheses.clear()
+        session.scientific_evidence_ids.clear()
+        session.mlip_evidence_ids.clear()
+        session.tool_evidence_ids.clear()
         assistant_text = "Conversation history and discovery state cleared."
         session.record("tool", "matsim-agents", assistant_text)
         if on_assistant is not None:
@@ -864,6 +985,11 @@ def _chat_turn(
                 try:
                     session.release_mlip_models()
                     assistant_text = _run_active_learning_for_formula(al_formula, cfg)
+                    evidence_id = _register_tool_evidence(session)
+                    assistant_text = (
+                        f"[evidence ID: {evidence_id}; scope: active-learning tool output, "
+                        f"not a numerical observation by itself] {assistant_text}"
+                    )
                 except Exception as exc:  # pragma: no cover - depends on runtime environment
                     assistant_text = (
                         f"Active learning failed for {al_formula}: {exc!s}. "
@@ -889,6 +1015,11 @@ def _chat_turn(
                 assistant_text = _run_single_structure_relaxation(
                     relax_path, cfg, mlip_pool=session.relaxation_pool()
                 )
+                evidence_id = _register_tool_evidence(session, mlip=True)
+                assistant_text = (
+                    f"[evidence ID: {evidence_id}; scope: measured MLIP relaxation] "
+                    f"{assistant_text}"
+                )
             except Exception as exc:  # pragma: no cover - depends on runtime environment
                 assistant_text = (
                     f"Single-structure relaxation failed for {relax_path}: {exc!s}. "
@@ -901,6 +1032,24 @@ def _chat_turn(
         return assistant_text
 
     session.messages.append(HumanMessage(content=user_text))
+    scientific_turn = cfg.enable_hypothesis_debate or _is_scientific_chat_turn(user_text, session)
+    if scientific_turn:
+        assert session.transcript is not None
+        context_id = f"chat-user-{session.transcript.count:04d}"
+        if context_id not in session.scientific_evidence_ids:
+            session.scientific_evidence_ids.append(context_id)
+        if cfg.enable_hypothesis_debate:
+            session.messages[0] = SystemMessage(
+                content=f"{system_prompt.rstrip()}\n\n{_CHAT_HYPOTHESIS_INSTRUCTION}"
+            )
+        session.messages[-1] = HumanMessage(
+            content=(
+                f"{user_text}\n\nPrevious scientific hypothesis state:\n"
+                f"{json.dumps(session.scientific_hypotheses, sort_keys=True)}\n\n"
+                f"Current turn context ID (not numerical evidence): {context_id}\n"
+                f"Available evidence:\n{_available_chat_evidence(session)}"
+            )
+        )
 
     llm = get_chat_model(
         provider=cfg.llm_provider,
@@ -908,21 +1057,32 @@ def _chat_turn(
         base_url=cfg.llm_base_url,
         api_key=api_key_from_env(cfg.llm_api_key_env, owner="proposer"),
     )
+    prompt_kind = "draft" if cfg.enable_hypothesis_debate else "assistant"
+    session.save_prompt(prompt_kind, session.messages)
     reply = invoke_model(llm, session.messages)
     session.record(
-        "draft" if cfg.enable_hypothesis_debate else "assistant",
+        prompt_kind,
         "proposer",
         reply=reply,
         provider=cfg.llm_provider,
         model=cfg.llm_model,
         prompt=session.messages,
     )
-    assistant_text = _debate_hypothesis_response(
-        cfg=cfg,
-        user_text=user_text,
-        draft_response=reply.text,
-        record=session.record,
-    )
+    if scientific_turn:
+        if reply.truncated or not reply.text.strip():
+            raise ValueError("incomplete scientific hypothesis reply")
+        draft_response = _validated_chat_revision(session, reply.text)
+        if cfg.enable_hypothesis_debate:
+            assistant_text = _debate_hypothesis_response(
+                cfg=cfg,
+                user_text=user_text,
+                draft_response=draft_response,
+                session=session,
+            )
+        else:
+            assistant_text = draft_response
+    else:
+        assistant_text = reply.text
     session.messages.append(AIMessage(content=assistant_text))
     if on_assistant is not None:
         on_assistant(assistant_text)
@@ -952,6 +1112,11 @@ def _chat_turn(
                 raise
             if exploration is not None:
                 session.explorations.append(exploration)
+                mlip_id = None
+                if exploration.relaxations:
+                    mlip_id = f"chat-mlip-{len(session.mlip_evidence_ids) + 1:04d}"
+                    session.mlip_evidence_ids.append(mlip_id)
+                    session.scientific_evidence_ids.append(mlip_id)
                 if cfg.trigger_active_learning_on_high_uq:
                     should_handoff, handoff_reason = _should_handoff_to_active_learning(
                         exploration,
@@ -994,7 +1159,12 @@ def _chat_turn(
                 # appearing after an `assistant` turn (vLLM raises HTTP
                 # 400 "Unexpected role 'system' after role 'assistant'").
                 # A user-role injection is portable across providers.
-                summary = _summarize_for_llm(exploration)
+                evidence_label = (
+                    f"[evidence ID: {mlip_id}; scope: MLIP] "
+                    if mlip_id
+                    else "[No numerical MLIP outcome evidence was produced] "
+                )
+                summary = evidence_label + _summarize_for_llm(exploration)
                 session.messages.append(HumanMessage(content="[discovery] " + summary))
                 session.record("tool", "discovery", summary)
 

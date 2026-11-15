@@ -84,7 +84,9 @@ llm_guided_configuration:
   model: gemini-4-carbon
   decoding: provider_default
   request_limits:
-    max_calls_per_round: 1
+    max_calls_per_round: 2
+    max_acquisition_calls_per_round: 1
+    max_hypothesis_assessment_calls_per_completed_round: 1
     max_tokens: 8192
   environment_overrides: prohibited
 

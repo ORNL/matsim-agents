@@ -139,6 +139,9 @@ class IterationState:
         return asdict(self)
 
 
+IterationAssessor = Callable[[ALConfig, int, Path, IterationState], None]
+
+
 # --------------------------------------------------------------------------- #
 # Resume                                                                      #
 # --------------------------------------------------------------------------- #
@@ -781,12 +784,17 @@ class _SurrogateModels:
 
 
 def run_active_learning(
-    cfg: ALConfig, *, candidate_sampler: CandidateSampler | None = None
+    cfg: ALConfig,
+    *,
+    candidate_sampler: CandidateSampler | None = None,
+    iteration_assessor: IterationAssessor | None = None,
 ) -> None:
     """Run AL; an optional sampler replaces MD, including MD seed resolution.
 
     The sampler receives the current (possibly promoted) config, zero-based
     iteration and iteration directory, and returns exact geometries to label.
+    An assessor must persist scientific revisions before an iteration is committed,
+    including final iterations and iterations where training is deferred.
     """
     if (
         cfg.trainer.enabled
@@ -855,6 +863,7 @@ def run_active_learning(
                 comparison_enabled=comparison_enabled,
                 foundation_mlip=foundation_mlip,
                 candidate_sampler=candidate_sampler,
+                iteration_assessor=iteration_assessor,
             )
         finally:
             models.close()
@@ -932,6 +941,7 @@ def _run_iterations(
     comparison_enabled: bool,
     foundation_mlip: MLIPConfig,
     candidate_sampler: CandidateSampler | None = None,
+    iteration_assessor: IterationAssessor | None = None,
 ) -> None:
     """Iterations ``start_iter`` .. ``cfg.loop.n_iterations - 1`` of the AL loop."""
     for i in range(start_iter, cfg.loop.n_iterations):
@@ -1083,6 +1093,15 @@ def _run_iterations(
             raise
         finally:
             state.timings_sec["total"] = time.time() - t_iter0
+            if state.status == "complete" and iteration_assessor is not None:
+                try:
+                    iteration_assessor(cfg, i, it_dir, state)
+                except Exception as exc:
+                    state.status = "failed"
+                    state.notes = f"Scientific hypothesis assessment failed: {exc!r}"
+                    _write_state(it_dir, state)
+                    log.exception("Iteration %d hypothesis assessment failed", i)
+                    raise
             _write_state(it_dir, state)
 
 

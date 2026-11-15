@@ -71,12 +71,17 @@ def _dataset_frame_summary(dataset_path: Path) -> list[dict[str, Any]]:
     summary = []
     for frame in frames:
         forces = frame.arrays.get("forces")
+        if forces is None and frame.calc is not None:
+            forces = frame.calc.results.get("forces")
         max_force = float(np.max(np.linalg.norm(forces, axis=1))) if forces is not None else None
+        energy = frame.info.get("energy")
+        if energy is None and frame.calc is not None:
+            energy = frame.calc.results.get("energy")
         summary.append(
             {
                 "candidate_id": Path(str(frame.info.get("source_work_dir", "?"))).name,
                 "dft_backend": frame.info.get("dft_backend"),
-                "energy_eV": frame.info.get("energy"),
+                "energy_eV": energy,
                 "max_force_eV_per_A": max_force,
             }
         )
@@ -84,9 +89,15 @@ def _dataset_frame_summary(dataset_path: Path) -> list[dict[str, Any]]:
 
 
 def build_evidence(state: dict[str, Any], frames: list[dict[str, Any]]) -> str:
+    iteration = int(state.get("iteration", 0))
     lines = [
         "Real active-learning loop evidence for the benchmark Si cell "
         f"(UMA MD sampling -> acquisition -> {state.get('dft_backend') or 'DFT'} labelling):",
+        f"- Evidence ID al-iteration-{iteration:04d}-mlip-sampling: "
+        f"MLIP-generated MD candidates: {state.get('n_candidates')}; selected for DFT: "
+        f"{state.get('n_selected')}; acquisition uncertainty min/mean/max: "
+        f"{state.get('score_min', 'unavailable')}/{state.get('score_mean', 'unavailable')}/"
+        f"{state.get('score_max', 'unavailable')}",
         f"- MD candidates generated: {state.get('n_candidates')}",
         f"- Candidates selected for DFT labelling: {state.get('n_selected')}",
         f"- DFT labels converged: {state.get('n_dft_converged')} "
@@ -97,13 +108,14 @@ def build_evidence(state: dict[str, Any], frames: list[dict[str, Any]]) -> str:
             "- Acquisition uncertainty score min/mean/max: "
             f"{state['score_min']:.4g}/{state['score_mean']:.4g}/{state['score_max']:.4g}"
         )
-    for frame in frames:
+    for index, frame in enumerate(frames, start=1):
         energy = frame["energy_eV"]
         max_force = frame["max_force_eV_per_A"]
         energy_str = f"{energy:.6f} eV" if energy is not None else "unavailable"
         force_str = f"{max_force:.4f} eV/A" if max_force is not None else "unavailable"
         lines.append(
-            f"  - frame {frame['candidate_id']}: DFT energy {energy_str}, max |force| {force_str}"
+            f"  - Evidence ID al-iteration-{iteration:04d}-dft-frame-{index:04d}; "
+            f"frame {frame['candidate_id']}: DFT energy {energy_str}, max |force| {force_str}"
         )
     return "\n".join(lines)
 
@@ -130,6 +142,17 @@ def execute_active_learning_scientific_debate(
     state = _load_iteration_state(al_out_dir)
     frames = _dataset_frame_summary(al_out_dir / "dataset.extxyz")
     evidence = build_evidence(state, frames)
+    iteration = int(state.get("iteration", 0))
+    mlip_evidence_ids = (
+        [f"al-iteration-{iteration:04d}-mlip-sampling"]
+        if state.get("n_candidates")
+        else []
+    )
+    dft_evidence_ids = [
+        f"al-iteration-{iteration:04d}-dft-frame-{index:04d}"
+        for index, frame in enumerate(frames, start=1)
+        if frame["energy_eV"] is not None and frame["dft_backend"]
+    ]
     al_passed = state.get("status") == "complete" and bool(state.get("n_dft_converged"))
 
     debate = execute_all_model_scientific_debate(
@@ -141,6 +164,9 @@ def execute_active_learning_scientific_debate(
         environment=environment,
         model_factory=model_factory,
         hypothesis=HYPOTHESIS_TEMPLATE.format(evidence=evidence),
+        evidence_ids=[*mlip_evidence_ids, *dft_evidence_ids],
+        mlip_evidence_ids=mlip_evidence_ids,
+        dft_evidence_ids=dft_evidence_ids,
     )
 
     payload = {
@@ -153,6 +179,9 @@ def execute_active_learning_scientific_debate(
             "state": state,
             "labelled_frames": frames,
             "evidence": evidence,
+            "evidence_ids": [*mlip_evidence_ids, *dft_evidence_ids],
+            "mlip_evidence_ids": mlip_evidence_ids,
+            "dft_evidence_ids": dft_evidence_ids,
         },
         "debate": debate,
     }

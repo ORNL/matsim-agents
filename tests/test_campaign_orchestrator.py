@@ -30,8 +30,93 @@ from matsim_agents.discovery.stability import (
 )
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
 from matsim_agents.execution.contracts import ComputeBudget, EvidenceLevel, WorkflowStatus
-from matsim_agents.execution.ledger import REVIEW_ACTION, CostRecord, EvidenceLedger
+from matsim_agents.execution.ledger import (
+    REVIEW_ACTION,
+    CostRecord,
+    EvidenceLedger,
+    HypothesisRecord,
+    HypothesisStatus,
+)
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
+
+
+def _hypothesis_revisions(campaign):
+    history = campaign.ledger.history("oxide-ordering")
+    return [
+        HypothesisRecord(
+            hypothesis_id="oxide-ordering",
+            prior_revision_id=history[-1].revision_id if history else None,
+            status=HypothesisStatus.PROPOSED,
+            scientific_claim="Oxide prototypes may differ in energy",
+            falsifiable_prediction="Distinct prototypes will relax to distinct MLIP energies",
+            scientific_rationale="This is a proposal, not stability validation",
+            agent_model_id="test-model",
+        )
+    ]
+
+
+@pytest.mark.parametrize("final_only", [False, True])
+def test_tracked_campaign_records_initial_round_and_final_without_resume_calls(
+    tmp_path, final_only
+):
+    stages = []
+
+    def review(campaign, records):
+        stages.append((campaign.iteration, len(records)))
+        revisions = _hypothesis_revisions(campaign)
+        return CampaignReviewDecision(
+            debate_run_id=f"stage-{len(stages)}",
+            hypothesis_revisions=revisions,
+        )
+
+    review.requires_hypothesis_tracking = True
+    campaign = _campaign(max_candidates=1)
+    reviewers = {"final_review_runner": review} if final_only else {"review_runner": review}
+    result = run_campaign(
+        campaign,
+        output_dir=tmp_path,
+        formula_runner=_result,
+        **reviewers,
+    )
+    assert stages == [(0, 0), (0, 1), (1, 1)]
+    folder = tmp_path / "hypothesis-reviews"
+    assert sorted(path.name for path in folder.glob("*.json")) == [
+        "final-0001.json",
+        "initial.json",
+        "round-0000.json",
+    ]
+    for path in folder.glob("*.json"):
+        record = json.loads(path.read_text())
+        assert record["status"] == "accepted"
+        assert record["revision_ids"]
+    run_campaign(campaign, output_dir=tmp_path, formula_runner=_result, **reviewers)
+    assert len(stages) == 3
+    assert len(result.campaign.ledger.history("oxide-ordering")) == 3
+    initial = folder / "initial.json"
+    record = json.loads(initial.read_text())
+    record["revision_ids"] = []
+    initial.write_text(json.dumps(record))
+    with pytest.raises(RuntimeError, match="lacks ledger revisions"):
+        run_campaign(campaign, output_dir=tmp_path, formula_runner=_result, **reviewers)
+    assert len(stages) == 3
+
+
+def test_tracked_campaign_cannot_skip_rejected_initial_hypotheses_on_resume(tmp_path):
+    calls = []
+
+    def review(campaign, records):
+        calls.append(True)
+        return CampaignReviewDecision(debate_run_id="invalid-no-hypotheses")
+
+    review.requires_hypothesis_tracking = True
+    campaign = _campaign(max_candidates=1)
+    with pytest.raises(ValueError, match="requires scientific hypothesis revisions"):
+        run_campaign(campaign, output_dir=tmp_path, formula_runner=_result, review_runner=review)
+    saved = json.loads((tmp_path / "hypothesis-reviews" / "initial.json").read_text())
+    assert saved["status"] == "rejected" and saved["decision"]
+    with pytest.raises(RuntimeError, match="interrupted or rejected"):
+        run_campaign(campaign, output_dir=tmp_path, formula_runner=_result, review_runner=review)
+    assert calls == [True]
 
 
 def _campaign(*, max_candidates: int | None = None) -> CampaignState:
@@ -285,6 +370,7 @@ def test_campaign_applies_review_decision_before_next_iteration(tmp_path):
                 debate_run_id="review-001",
                 deactivate_formulas=["NbO", "Nb2O3"],
                 evidence_ids={"NbO": cited},
+                hypothesis_revisions=_hypothesis_revisions(campaign),
             )
         return CampaignReviewDecision()
 
@@ -314,7 +400,11 @@ def test_a_review_that_changes_nothing_still_records_its_cost(tmp_path):
     cost = CostRecord(llm_prompt_tokens=100, llm_completion_tokens=20)
 
     def review(campaign, records):
-        return CampaignReviewDecision(debate_run_id=f"review-{records[0].formula}", cost=cost)
+        return CampaignReviewDecision(
+            debate_run_id=f"review-{records[0].formula}",
+            cost=cost,
+            hypothesis_revisions=_hypothesis_revisions(campaign),
+        )
 
     result = run_campaign(
         _campaign(max_candidates=1),
@@ -767,7 +857,10 @@ def test_campaign_runs_final_review_after_stopping(tmp_path):
 
     def final_review(campaign, records):
         review_calls.append([record.formula for record in records])
-        return CampaignReviewDecision(debate_run_id="final-review")
+        return CampaignReviewDecision(
+            debate_run_id="final-review",
+            hypothesis_revisions=_hypothesis_revisions(campaign),
+        )
 
     result = run_campaign(
         _campaign(max_candidates=1),

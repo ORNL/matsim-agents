@@ -184,9 +184,17 @@ def test_paired_dry_run_accounting_and_separate_ledgers(tmp_path, monkeypatch):
     seeds = [{e.evidence_id for e in ledger.evidence()} for ledger in ledgers]
     assert seeds[0] == seeds[1] == {result["identical_initial_evidence_id"]}
     for ledger, strategy in zip(ledgers, run.STRATEGIES, strict=True):
-        decisions = ledger.decisions()
+        decisions = [d for d in ledger.decisions() if d.action == "request_dft_label"]
         assert len(decisions) == 8 and {d.iteration for d in decisions} == {1, 2, 3, 4}
         assert all(d.actor.startswith(strategy) for d in decisions)
+        history = ledger.history("e3:lifepo4:transfer")
+        assert len(history) == 6
+        assert history[0].status.value == "proposed"
+        assert all(r.falsifiable_prediction for r in history)
+        assert all(
+            b.prior_revision_id == a.revision_id
+            for a, b in zip(history[:-1], history[1:], strict=True)
+        )
     roles = json.loads((tmp_path / "out" / "split" / "split-manifest.json").read_text())
     withheld = {f["index"] for f in roles["frames"] if f["role"] in {"validation", "test"}}
     picked = {r["candidate_id"] for s in result["strategies"].values() for r in s["rounds"]}

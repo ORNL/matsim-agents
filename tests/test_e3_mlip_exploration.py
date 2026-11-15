@@ -26,6 +26,17 @@ def _action(action_id, formula, formula_units, **kwargs):
     )
 
 
+def _hypothesis(evidence_ids, status="unresolved"):
+    return {
+        "id": "size-transfer",
+        "claim": "Size changes may alter the predicted structural minimum.",
+        "prediction": "Distinct size tiers may yield different predicted structural motifs.",
+        "status": status,
+        "reason": "Coverage evidence cannot establish DFT accuracy.",
+        "evidence_ids": evidence_ids,
+    }
+
+
 def _history_record(action):
     return {
         "action_id": action.action_id,
@@ -82,7 +93,7 @@ def test_action_history_excludes_current_and_future_rounds(tmp_path):
     assert [record["evidence_id"] for record in history] == ["round-1", "round-2"]
 
 
-def test_llm_policy_enforces_allowlist_and_evidence_citations():
+def test_llm_policy_enforces_allowlist_and_evidence_citations(tmp_path):
     first = _action("first", "Si", 4, max_aflow_candidates=2)
     second = _action("second", "Si", 8, pyxtal_count=2)
 
@@ -104,6 +115,7 @@ def test_llm_policy_enforces_allowlist_and_evidence_citations():
                             "selected_action_ids": self.selection,
                             "cited_evidence_ids": self.evidence_ids,
                             "rationale": "The larger size tier is underexplored.",
+                            "scientific_hypotheses": [_hypothesis(self.evidence_ids)],
                         }
                     )
                 },
@@ -114,6 +126,8 @@ def test_llm_policy_enforces_allowlist_and_evidence_citations():
         [first, second],
         [],
         n_actions=1,
+        audit_path=tmp_path / "audit.jsonl",
+        previous=[_hypothesis(["campaign-design"], "proposed")],
     )
     assert selected == [second]
     assert cited == ["campaign-design"]
@@ -124,6 +138,8 @@ def test_llm_policy_enforces_allowlist_and_evidence_citations():
         [first, second],
         [_history_record(first)],
         n_actions=1,
+        audit_path=tmp_path / "audit.jsonl",
+        previous=[_hypothesis(["campaign-design"])],
     )
     assert selected == [second]
     assert cited == ["evidence-first"]
@@ -137,6 +153,8 @@ def test_llm_policy_enforces_allowlist_and_evidence_citations():
             [first, second],
             [],
             n_actions=1,
+            audit_path=tmp_path / "audit.jsonl",
+            previous=[_hypothesis(["campaign-design"], "proposed")],
         )
 
 
@@ -180,7 +198,7 @@ def test_generation_round_uses_explicit_actions_and_mace_medium(tmp_path, monkey
         ),
     )
     results = run_generation_round(
-        "llm_guided_adaptation",
+        "rule_based_adaptation",
         2,
         [action],
         tmp_path,
@@ -201,7 +219,7 @@ def test_generation_round_uses_explicit_actions_and_mace_medium(tmp_path, monkey
     assert kwargs["relax_cell"] is False
     assert "max_relaxations" not in kwargs
 
-    round_dir = tmp_path / "llm_guided_adaptation" / "round-02"
+    round_dir = tmp_path / "rule_based_adaptation" / "round-02"
     manifest = json.loads((round_dir / "round-manifest.json").read_text())
     assert manifest["status"] == "complete"
     assert (
@@ -222,6 +240,106 @@ def test_generation_round_uses_explicit_actions_and_mace_medium(tmp_path, monkey
     assert saved_payload["relaxations"][0]["converged"] is False
     assert saved_payload["checkpoint_sha256"] == manifest["checkpoint_sha256"]
     assert saved_payload["optimizer_protocol"]["maxiter"] == 500
+
+
+def test_llm_cannot_bypass_revisions_with_explicit_actions(tmp_path):
+    with pytest.raises(ValueError, match="scientific revisions"):
+        run_generation_round(
+            "llm_guided_adaptation",
+            1,
+            [_action("a", "Si", 4, pyxtal_count=1)],
+            tmp_path,
+        )
+
+
+def test_llm_missing_previous_state_rejected_before_invocation(tmp_path):
+    action = _action("a", "Si", 4, pyxtal_count=1)
+
+    class NoInvoke:
+        def invoke(self, prompt):
+            pytest.fail("legacy state must be rejected before calling model")
+
+    with pytest.raises(ValueError, match="missing previous"):
+        select_llm_guided_actions(
+            NoInvoke(),
+            [action],
+            [_history_record(action)],
+            1,
+            audit_path=tmp_path / "audit.jsonl",
+            previous=[],
+        )
+
+
+def test_legacy_llm_round_requires_initial_round_history(tmp_path):
+    with pytest.raises(ValueError, match="missing scientific round history"):
+        run_generation_round(
+            "llm_guided_adaptation",
+            2,
+            None,
+            tmp_path,
+            action_space=[_action("a", "Si", 4, pyxtal_count=1)],
+            n_actions=1,
+            chat=object(),
+        )
+
+
+def test_generation_llm_initial_round_and_final_revisions(tmp_path, monkeypatch):
+    action = _action("a", "Si", 4, pyxtal_count=1)
+    calls = []
+
+    class Chat:
+        def invoke(self, prompt):
+            calls.append(prompt)
+            data = {
+                "scientific_hypotheses": [
+                    _hypothesis(
+                        ["campaign-design"],
+                        "proposed" if "phase initial" in prompt else "unresolved",
+                    )
+                ]
+            }
+            if "Select the next" in prompt:
+                data.update(
+                    selected_action_ids=["a"],
+                    cited_evidence_ids=["campaign-design"],
+                    rationale="Test distinct predicted motifs without claiming DFT accuracy.",
+                )
+            return type("Response", (), {"content": json.dumps(data)})()
+
+    monkeypatch.setattr(
+        "benchmarks.e3.mlip_exploration._verified_checkpoint",
+        lambda: (tmp_path / "checkpoint", "test-hash"),
+    )
+    monkeypatch.setattr(
+        "benchmarks.e3.mlip_exploration.explore_composition",
+        lambda formula, **kwargs: CompositionExplorationResult(
+            composition=parse_composition(formula),
+            phase_candidates=[],
+            relaxations=[],
+            outcome_class="generation_failure",
+        ),
+    )
+    run_generation_round(
+        "llm_guided_adaptation",
+        1,
+        None,
+        tmp_path,
+        action_space=[action],
+        n_actions=1,
+        chat=Chat(),
+    )
+    assert len(calls) == 3
+    assert "phase initial" in calls[0] and "phase final" in calls[2]
+    path = tmp_path / "llm_guided_adaptation" / "hypothesis-revisions.jsonl"
+    audit = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [r["phase"] for r in audit if r["event"] == "accepted"] == ["initial", "round", "final"]
+    assert [r["prompt"] for r in audit if r["event"] == "prompt"] == calls
+    assert all(r["raw_response"] for r in audit if r["event"] == "response")
+    manifest = json.loads((path.parent / "round-01" / "round-manifest.json").read_text())
+    assert (
+        manifest["status"] == "complete"
+        and manifest["scientific_hypotheses"][0]["id"] == "size-transfer"
+    )
 
 
 def test_generation_round_selects_rule_actions_from_strategy_local_history(tmp_path, monkeypatch):
