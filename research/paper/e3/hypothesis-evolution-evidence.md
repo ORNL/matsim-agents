@@ -7,6 +7,9 @@ and preceding strategy-local outcome summaries. Round summaries record outcomes;
 they are not themselves final LLM interpretations. The original files are
 preserved at their run paths.
 
+Read the [chronological audit and complete verbatim rationales](./hypothesis-evolution-audit.md)
+for the recorded evolution, numerical feedback, sampling decisions, and gaps.
+
 | Material | Round 1 proposal | Round 2 proposal | Round 3 proposal | Campaign summary |
 |---|---|---|---|---|
 | BCC refractory | [R1](../../../runs/e3-mlip-production/bcc_refractory/llm_guided_adaptation/seed-20261113/round-01/acquisition/proposal-001.json) | [R2](../../../runs/e3-mlip-production/bcc_refractory/llm_guided_adaptation/seed-20261113/round-02/acquisition/proposal-001.json) | [R3](../../../runs/e3-mlip-production/bcc_refractory/llm_guided_adaptation/seed-20261113/round-03/acquisition/proposal-001.json) | [summary](../../../runs/e3-mlip-production/bcc_refractory/llm_guided_adaptation/seed-20261113/campaign-summary.json) |
