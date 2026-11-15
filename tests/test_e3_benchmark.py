@@ -142,6 +142,48 @@ def campaign(tmp_path, monkeypatch):
     return manifest_path, output_root
 
 
+def _write_test_assessment(round_dir):
+    hypotheses = [
+        {
+            "id": "h1",
+            "claim": "Sampled oxides may differ",
+            "prediction": "Their MACE energies will differ",
+            "status": "unresolved",
+            "reason": "Not yet tested",
+            "evidence_ids": ["campaign-design"],
+        }
+    ]
+    evidence_ids = ["campaign-design"]
+    previous = [] if round_dir.name == "round-01" else hypotheses
+    production._atomic_json(
+        round_dir / "acquisition" / "proposal-001.json",
+        {
+            "status": "accepted",
+            "prompt": f"Valid evidence IDs: {json.dumps(evidence_ids)}\n",
+            "valid_evidence_ids": evidence_ids,
+            "previous_hypotheses": previous,
+            "raw_response": json.dumps({"scientific_hypotheses": hypotheses}),
+            "scientific_hypotheses": hypotheses,
+        },
+    )
+    production._atomic_json(
+        round_dir / "hypothesis-assessment.json",
+        {
+            "status": "accepted",
+            "version": production.hypothesis_tracking.VERSION,
+            "assessment_stage": "post_geometry",
+            "material": round_dir.parent.parent.parent.name,
+            "seed": int(round_dir.parent.name.removeprefix("seed-")),
+            "after_round": int(round_dir.name.removeprefix("round-")),
+            "prompt": "assessment prompt",
+            "raw_response": json.dumps({"scientific_hypotheses": hypotheses}),
+            "valid_evidence_ids": ["campaign-design"],
+            "previous_hypotheses": hypotheses,
+            "scientific_hypotheses": hypotheses,
+        },
+    )
+
+
 def test_campaign_supervises_three_rounds_and_writes_report(campaign, monkeypatch):
     manifest_path, output_root = campaign
     commands = []
@@ -157,6 +199,7 @@ def test_campaign_supervises_three_rounds_and_writes_report(campaign, monkeypatc
             stream / "round-summary.json",
             {"status": "complete", "task_count": 64, "outcomes": {"converged": 60}},
         )
+        _write_test_assessment(stream)
 
     monkeypatch.setattr(production, "_run_supervised_round", run_round)
     result = production.run_campaign(manifest_path, output_root, "nb_ta_o", "worker-python")
@@ -170,6 +213,23 @@ def test_campaign_supervises_three_rounds_and_writes_report(campaign, monkeypatc
     resumed = production.run_campaign(manifest_path, output_root, "nb_ta_o", "worker-python")
     assert resumed["status"] == "complete"
     assert len(commands) == 3
+
+
+def test_campaign_rejects_round_without_hypothesis_assessment(campaign, monkeypatch):
+    manifest_path, output_root = campaign
+
+    def run_round(command, *, seconds=production.ROUND_SECONDS):
+        round_dir = output_root / "nb_ta_o/llm_guided_adaptation/seed-20261113/round-01"
+        production._atomic_json(
+            round_dir / "round-summary.json",
+            {"status": "complete", "task_count": 64, "outcomes": {"converged": 60}},
+        )
+
+    monkeypatch.setattr(production, "_run_supervised_round", run_round)
+    with pytest.raises(RuntimeError, match="without an accepted hypothesis assessment"):
+        production.run_campaign(manifest_path, output_root, "nb_ta_o", "worker-python")
+    summary = output_root / "nb_ta_o/llm_guided_adaptation/seed-20261113/campaign-summary.json"
+    assert not summary.exists()
 
 
 def test_campaign_timeout_is_recorded_as_incomplete(campaign, monkeypatch):
@@ -234,6 +294,7 @@ def test_campaign_generation_exhaustion_stops_without_hypothesis_update(campaign
                     "outcomes": {"nonconverged": 64},
                 },
             )
+            _write_test_assessment(round_dir)
         else:
             production._atomic_json(
                 round_dir / "acquisition/outcome.json",

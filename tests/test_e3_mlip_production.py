@@ -308,7 +308,12 @@ def test_campaign_manifest_has_six_classes_and_bounded_budgets():
         "provider": "copilot",
         "model": "gemini-4-carbon",
         "decoding": "provider_default",
-        "request_limits": {"max_calls_per_round": 1, "max_tokens": 8192},
+        "request_limits": {
+            "max_calls_per_round": 2,
+            "max_acquisition_calls_per_round": 1,
+            "max_hypothesis_assessment_calls_per_completed_round": 1,
+            "max_tokens": 8192,
+        },
         "environment_overrides": "prohibited",
     }
 
@@ -498,6 +503,16 @@ def test_pristine_phosphorene_capacity_is_shared_across_allocators_and_rounds(fa
                             "allocations": [{"action_id": remaining["action_id"], "count": 1}],
                             "cited_evidence_ids": ["campaign-design"],
                             "rationale": "sample an unused pristine allotrope tier",
+                            "scientific_hypotheses": [
+                                {
+                                    "id": "h1",
+                                    "claim": "Allotrope energies may differ",
+                                    "prediction": "MACE energies differ between allotropes",
+                                    "status": "proposed",
+                                    "reason": "Not yet evaluated",
+                                    "evidence_ids": ["campaign-design"],
+                                }
+                            ],
                         }
                     )
                 },
@@ -597,6 +612,16 @@ def test_llm_policy_validates_exact_budget_allowlist_and_evidence():
                             "allocations": [{"action_id": allowed["action_id"], "count": 2}],
                             "cited_evidence_ids": ["campaign-design"],
                             "rationale": "The bounded perturbation has not yet been sampled.",
+                            "scientific_hypotheses": [
+                                {
+                                    "id": "h1",
+                                    "claim": "Allotrope energies may differ",
+                                    "prediction": "MACE energies differ between allotropes",
+                                    "status": "proposed",
+                                    "reason": "Not yet evaluated",
+                                    "evidence_ids": ["campaign-design"],
+                                }
+                            ],
                         }
                     )
                 },

@@ -36,13 +36,10 @@ import json
 import os
 from pathlib import Path
 
-from langchain_core.messages import HumanMessage, SystemMessage
-
-from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.orchestration.interactive_chat import (
-    DiscoveryChatSession,
     DiscoveryChatConfig,
-    _debate_hypothesis_response,
+    DiscoveryChatSession,
+    chat_once,
 )
 
 # Backends surfaced as evidence, mapped to (zero-shot variant dir, fine-tuned
@@ -212,29 +209,7 @@ _HYPOTHESIS_TASK = (
     "verdict in the surrogate-accuracy evidence below.\n\n{evidence}"
 )
 
-_PROPOSER_SYSTEM = (
-    "You are a computational-materials research partner specializing in crystal-"
-    "structure prediction and phase stability (thermodynamic convex-hull and "
-    "phonon/dynamical stability analysis). Given a set of elements, candidate "
-    "stoichiometries and crystallographic structures, plus quantitative evidence "
-    "about a surrogate potential's accuracy, produce a concise, falsifiable "
-    "hypothesis about which structure is both chemically and dynamically stable, "
-    "with explicit numerical falsification criteria and a clear recommended next "
-    "action. Be specific and numerical; do not hedge."
-)
-
-
-def draft_hypothesis(cfg: DiscoveryChatConfig, user_text: str) -> str:
-    proposer = get_chat_model(
-        provider=cfg.llm_provider, model=cfg.llm_model, base_url=cfg.llm_base_url
-    )
-    rsp = proposer.invoke(
-        [SystemMessage(content=_PROPOSER_SYSTEM), HumanMessage(content=user_text)]
-    )
-    return rsp.content if isinstance(rsp.content, str) else str(rsp.content)
-
-
-def run_condition(cfg: DiscoveryChatConfig, spec: dict, evidence: str) -> dict:
+def run_condition(session: DiscoveryChatSession, spec: dict, evidence: str, condition: str) -> dict:
     user_text = _HYPOTHESIS_TASK.format(
         pretty=spec["pretty"],
         elements=spec["elements"],
@@ -242,8 +217,20 @@ def run_condition(cfg: DiscoveryChatConfig, spec: dict, evidence: str) -> dict:
         structures=spec["structures"],
         evidence=evidence,
     )
-    draft = draft_hypothesis(cfg, user_text)
-    final = _debate_hypothesis_response(cfg=cfg, user_text=user_text, draft_response=draft)
+    evidence_id = f"surrogate-accuracy-{condition}"
+    user_text += (
+        f"\n\nEvidence ID `{evidence_id}` identifies the held-out MLIP accuracy measurements "
+        "above. These measurements assess surrogate error, not material stability; do not "
+        "treat them as direct MLIP or DFT evidence for the material claim."
+    )
+    session.messages.clear()
+    session.scientific_hypotheses.clear()
+    session.scientific_evidence_ids = [evidence_id]
+    session.mlip_evidence_ids.clear()
+    start_count = session.transcript.count if session.transcript is not None else 0
+    final = chat_once(session, user_text)
+    contributions = session.transcript.contributions()[start_count:]
+    draft = next(item.text for item in contributions if item.kind == "draft")
     return {"user_text": user_text, "draft": draft, "final": final}
 
 
@@ -295,9 +282,9 @@ def main() -> None:
         session.open()  # starts the plan's servers; stopped in close()
         cfg = session.config
         print("\n[debate] condition = BEFORE fine-tuning ...", flush=True)
-        before = run_condition(cfg, spec, pre)
+        before = run_condition(session, spec, pre, "before")
         print("\n[debate] condition = AFTER fine-tuning ...", flush=True)
-        after = run_condition(cfg, spec, post)
+        after = run_condition(session, spec, post, "after")
     finally:
         session.close()
 

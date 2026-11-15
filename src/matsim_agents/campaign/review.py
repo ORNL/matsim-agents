@@ -11,6 +11,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from matsim_agents.backends.llm.provider import get_chat_model
+from matsim_agents.backends.llm.transcript import Contribution
 from matsim_agents.campaign.evidence import evidence_for_review, new_hypothesis_id
 from matsim_agents.campaign.orchestrator import CampaignReviewDecision, ReviewRunner
 from matsim_agents.campaign.state import CampaignState, FormulaRunRecord
@@ -32,7 +33,7 @@ from matsim_agents.workflows.debate import (
     run_scientific_debate,
 )
 
-REVIEW_POLICY_VERSION = "debate-review-v1"
+REVIEW_POLICY_VERSION = "debate-review-v2"
 
 
 class CampaignDebateReviewConfig(BaseModel):
@@ -51,12 +52,12 @@ class FormulaReview(BaseModel):
 
 class HypothesisRevision(BaseModel):
     hypothesis_id: str | None = None
-    claim: str
+    claim: str = Field(min_length=1)
     claim_type: ClaimType = "other"
     status: HypothesisStatus
     evidence_ids: list[str] = Field(default_factory=list)
-    falsifiable_prediction: str | None = None
-    rationale: str = ""
+    falsifiable_prediction: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
     proposed_test: str | None = None
 
 
@@ -68,12 +69,15 @@ class ReviewFormulaProposal(BaseModel):
 
 class ReviewVerdict(BaseModel):
     decisions: list[FormulaReview] = Field(default_factory=list)
-    revisions: list[HypothesisRevision] = Field(default_factory=list)
+    revisions: list[HypothesisRevision] = Field(min_length=1)
     new_formula_proposals: list[ReviewFormulaProposal] = Field(default_factory=list)
 
 
 _REVIEW_INSTRUCTION = """Return JSON only with this exact structure:
-{"decisions": [{"formula": "...", "action": "keep|deactivate|reactivate", "rationale": "...",
+{"scientific_hypotheses": [{"id": "stable hypothesis ID", "claim": "...", "prediction": "...",
+ "status": "one of the scientific hypothesis statuses specified below",
+ "reason": "...", "evidence_ids": ["supplied evidence ID"]}],
+ "decisions": [{"formula": "...", "action": "keep|deactivate|reactivate", "rationale": "...",
  "evidence_ids": ["ev-..."]}],
  "revisions": [{"hypothesis_id": "hyp-... to revise an existing hypothesis, or null for a new one",
  "claim": "...",
@@ -96,6 +100,17 @@ stability. Use outcome_class as the authoritative stage classification and do no
 generation, or pre-relaxation root cause beyond that classification unless a corresponding recorded
 exception identifies it. Surrogate hull values are MLIP proxies, not DFT validation.
 New formulas are proposals only and will undergo deterministic chemical and budget validation.
+Every response must include at least one explicit scientific revision with a falsifiable
+prediction and rationale. Include every existing hypothesis_id, even when unchanged or
+superseded. Separate scientific reasoning from convergence, cost, and sampling plans.
+At the initial stage propose hypotheses without claiming evidence that has not been collected.
+At the final stage explicitly reassess the complete recorded evidence and retain uncertainty.
+Every scientific_hypotheses entry must have a matching revisions entry with the same claim,
+prediction, rationale, evidence citations, and stable ID in hypothesis_id. For a newly
+introduced ID use null in revisions.hypothesis_id and the new ID in scientific_hypotheses.id.
+Map refined to unresolved, retired to superseded, supported_by_mlip/supported_by_dft to
+supported, and challenged_by_mlip/challenged_by_dft to contradicted in revisions.status.
+campaign-design is an initial proposal citation only; omit it from revisions.evidence_ids.
 Do not wrap the JSON in Markdown."""
 
 
@@ -215,8 +230,14 @@ def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -
         {
             "campaign_id": campaign.campaign_id,
             "iteration": campaign.iteration,
+            "element_set": campaign.element_set,
+            "formula_policy": campaign.formula_policy.model_dump(mode="json"),
+            "formulas_to_explore": [
+                row.model_dump(mode="json") for row in campaign.formulas.values()
+            ],
             "evidence_semantics": _EVIDENCE_SEMANTICS,
             "formulas": formulas,
+            "prior_evidence_records": [row.model_dump(mode="json") for row in ledger.evidence()],
             "hypotheses": [
                 {
                     "hypothesis_id": h.hypothesis_id,
@@ -225,6 +246,12 @@ def _review_evidence(campaign: CampaignState, records: list[FormulaRunRecord]) -
                     "status": h.status.value,
                     "evidence_ids": h.evidence_ids,
                     "support_level": h.support_level.value if h.support_level else None,
+                    "falsifiable_prediction": h.falsifiable_prediction,
+                    "rationale": h.scientific_rationale,
+                    "prior_revision_id": h.prior_revision_id,
+                    "history": [
+                        row.model_dump(mode="json") for row in ledger.history(h.hypothesis_id)
+                    ],
                     "revisions": len(ledger.history(h.hypothesis_id)),
                 }
                 for h in ledger.current_hypotheses().values()
@@ -271,16 +298,30 @@ def _citation_problem(ledger: EvidenceLedger, formula: str, evidence_ids: list[s
 
 
 def _hypothesis_record(
-    campaign: CampaignState, revision: HypothesisRevision, participant: str, model: str
+    campaign: CampaignState,
+    revision: HypothesisRevision,
+    participant: str,
+    model: str,
+    *,
+    new_id: str | None = None,
 ) -> HypothesisRecord | str:
     """The ledger revision for a reviewer's claim, or why it is rejected."""
     ledger = campaign.ledger
+    if not all(
+        value.strip()
+        for value in (
+            revision.claim,
+            revision.falsifiable_prediction,
+            revision.rationale,
+        )
+    ):
+        return "scientific claim, prediction, and rationale must not be blank"
     if revision.hypothesis_id is not None and revision.hypothesis_id not in (
         ledger.current_hypotheses()
     ):
         return f"unknown hypothesis_id {revision.hypothesis_id!r}"
-    hypothesis_id = revision.hypothesis_id or new_hypothesis_id(
-        campaign.campaign_id, revision.claim
+    hypothesis_id = (
+        revision.hypothesis_id or new_id or new_hypothesis_id(campaign.campaign_id, revision.claim)
     )
     history = ledger.history(hypothesis_id)
     record = HypothesisRecord(
@@ -323,6 +364,114 @@ def run_campaign_debate_review(
 ) -> CampaignReviewDecision:
     """Review one campaign iteration and apply only cross-model-agreed actions."""
 
+    previous_ids = set(campaign.ledger.current_hypotheses())
+    current = list(campaign.ledger.current_hypotheses().values())
+    ledger_evidence = campaign.ledger.evidence()
+    status_map = {
+        "proposed": "proposed",
+        "unresolved": "unresolved",
+        "refined": "unresolved",
+        "retired": "superseded",
+        "supported_by_mlip": "supported",
+        "supported_by_dft": "supported",
+        "challenged_by_mlip": "contradicted",
+        "challenged_by_dft": "contradicted",
+    }
+    initial = []
+    for row in current:
+        status = row.status.value
+        if status in {"supported", "contradicted"}:
+            fidelity = (
+                "dft"
+                if row.support_level
+                and row.support_level.value
+                in {
+                    "converged_dft",
+                    "higher_accuracy_dft",
+                }
+                else "mlip"
+            )
+            status = f"{'supported' if status == 'supported' else 'challenged'}_by_{fidelity}"
+        elif status == "superseded":
+            status = "retired"
+        initial.append(
+            {
+                "id": row.hypothesis_id,
+                "claim": row.scientific_claim,
+                "prediction": row.falsifiable_prediction,
+                "status": status,
+                "reason": row.scientific_rationale,
+                "evidence_ids": row.evidence_ids or ["campaign-design"],
+            }
+        )
+    observed: dict[str, list[HypothesisRecord]] = {}
+
+    def validate_response(
+        contribution: Contribution,
+        hypotheses: list[dict[str, Any]],
+        *,
+        append: bool,
+    ) -> None:
+        try:
+            payload = _parse_verdict(contribution.text)
+        except ValueError as exc:
+            raise ValueError(
+                f"[{contribution.speaker}] invalid mandatory hypothesis review: {exc}"
+            ) from exc
+        missing = set(campaign.ledger.current_hypotheses()) - {row["id"] for row in hypotheses}
+        if missing:
+            raise ValueError(f"Review omits recorded hypothesis IDs: {sorted(missing)}")
+        pending: list[HypothesisRecord] = []
+        remaining = list(payload.revisions)
+        for hypothesis in hypotheses:
+            matches = [
+                row
+                for row in remaining
+                if row.claim == hypothesis["claim"]
+                and (row.hypothesis_id is None or row.hypothesis_id == hypothesis["id"])
+            ]
+            if len(matches) != 1:
+                raise ValueError("Each scientific hypothesis needs exactly one matching revision")
+            revision = matches[0]
+            remaining.remove(revision)
+            if (
+                revision.falsifiable_prediction != hypothesis["prediction"]
+                or revision.rationale != hypothesis["reason"]
+                or revision.status.value != status_map[hypothesis["status"]]
+                or set(revision.evidence_ids)
+                != set(hypothesis["evidence_ids"]) - {"campaign-design"}
+            ):
+                raise ValueError("Scientific hypothesis and ledger revision disagree")
+            existing = hypothesis["id"] in campaign.ledger.current_hypotheses()
+            revision = revision.model_copy(
+                update={
+                    "hypothesis_id": hypothesis["id"] if existing else None,
+                }
+            )
+            outcome = _hypothesis_record(
+                campaign,
+                revision,
+                contribution.speaker,
+                contribution.model or "",
+                new_id=hypothesis["id"],
+            )
+            if isinstance(outcome, str):
+                raise ValueError(f"Invalid mandatory hypothesis revision: {outcome}")
+            pending.append(outcome)
+        if remaining:
+            raise ValueError("Ledger revisions contain untracked scientific hypotheses")
+        if append:
+            for row in pending:
+                campaign.ledger.append(row)
+        else:
+            observed[contribution.id] = pending
+
+    def validate_turn(contribution: Contribution, hypotheses: list[dict[str, Any]]) -> None:
+        validate_response(contribution, hypotheses, append=True)
+
+    def validate_final(contribution: Contribution, hypotheses: list[dict[str, Any]]) -> None:
+        validate_response(contribution, hypotheses, append=False)
+
     debate = debate_runner(
         ScientificDebateConfig(
             hypothesis=(
@@ -334,10 +483,29 @@ def run_campaign_debate_review(
             output_root=config.output_root,
             debate_mode="equal",
             synthesis_method="independent_verdicts",
+            round_response_instruction=_REVIEW_INSTRUCTION,
             final_response_instruction=_REVIEW_INSTRUCTION,
+            evidence_ids=["campaign-design", *[row.evidence_id for row in ledger_evidence]],
+            mlip_evidence_ids=[
+                row.evidence_id
+                for row in ledger_evidence
+                if row.outcome == EvidenceOutcome.MEASURED
+                and row.evidence_level.value.startswith("mlip")
+            ],
+            dft_evidence_ids=[
+                row.evidence_id
+                for row in ledger_evidence
+                if row.outcome == EvidenceOutcome.MEASURED
+                and row.evidence_level.value in {"converged_dft", "higher_accuracy_dft"}
+            ],
+            initial_hypotheses=initial,
         ),
         model_factory=model_factory,
+        round_response_validator=validate_turn,
+        final_response_validator=validate_final,
     )
+    if debate.status.value != "complete" or len(debate.verdicts) != len(config.participants):
+        raise ValueError("Mandatory hypothesis review requires completed verdicts from every model")
     threshold = math.ceil(config.minimum_agreement_fraction * len(debate.verdicts))
     votes: Counter[tuple[str, str]] = Counter()
     cited: dict[tuple[str, str], set[str]] = {}
@@ -351,8 +519,15 @@ def run_campaign_debate_review(
         try:
             payload = _parse_verdict(verdict.response)
         except ValueError as exc:
-            notes.append(f"[{verdict.participant}] invalid review verdict: {exc}")
-            continue
+            raise ValueError(
+                f"[{verdict.participant}] invalid mandatory hypothesis review: {exc}; "
+                f"inspect {debate.transcript_path}"
+            ) from exc
+        omitted = previous_ids - {revision.hypothesis_id for revision in payload.revisions}
+        if omitted:
+            raise ValueError(
+                f"[{verdict.participant}] hypothesis review omits previous IDs: {sorted(omitted)}"
+            )
         seen: set[str] = set()
         for decision in payload.decisions:
             if decision.formula not in allowed or decision.formula in seen:
@@ -385,15 +560,9 @@ def run_campaign_debate_review(
                 f"[{verdict.participant}] {decision.formula}: "
                 f"{decision.action} - {decision.rationale}"
             )
-        for revision in payload.revisions:
-            outcome = _hypothesis_record(campaign, revision, verdict.participant, verdict.model)
-            if isinstance(outcome, str):
-                notes.append(
-                    f"[{verdict.participant}] rejected hypothesis revision "
-                    f"{revision.claim!r}: {outcome}"
-                )
-                continue
-            revisions.append(outcome)
+        if verdict.contribution_id not in observed:
+            raise ValueError("Debate runner skipped mandatory final hypothesis validation")
+        revisions.extend(observed[verdict.contribution_id])
         for proposal in payload.new_formula_proposals:
             composition = parse_composition(proposal.formula)
             if composition is None or not set(composition.elements).issubset(
@@ -456,4 +625,5 @@ def make_debate_review_runner(
             model_factory=model_factory,
         )
 
+    review.requires_hypothesis_tracking = True  # type: ignore[attr-defined]
     return review

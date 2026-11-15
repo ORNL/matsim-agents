@@ -12,6 +12,37 @@ Each class is limited to 16 Perlmutter GPU nodes and two hours, with 30-minute
 round deadlines and parent-enforced five-minute task cutoffs. The physical
 allocation cap is 768 GPU-hours on the premium QOS.
 
+New E3-MLIP manifests require scientific hypothesis tracking. Before each
+round the acquisition prompt requests explicit material claims, falsifiable
+predictions, stable hypothesis IDs, status, reasoning, and evidence citations.
+The complete prompt and raw response, including these hypotheses, are saved in
+`round-NN/acquisition/proposal-001.json`. After each completed geometry round,
+a separate LLM call saves the updated claims and its full prompt and response in
+`round-NN/hypothesis-assessment.json`. The next round receives that assessment
+as its previous hypothesis state. All existing IDs must be retained, including
+retired claims; invalid or missing citations and omitted IDs reject the response.
+The final completed round receives the same assessment even if there is no
+next acquisition.
+
+The protocol therefore authorizes at most **two LLM calls per completed round**:
+one acquisition call and one additional assessment call. This changes the
+previously frozen call budget and requires a newly generated manifest and
+explicit authorization before a new campaign; old runs and manifests must not
+be resumed under this protocol. A request, raw response, or rejection is
+persisted before further processing; a failed or interrupted assessment is not
+silently retried and requires operator reconciliation. If generation stops
+before optimization, the acquisition proposal remains available but no
+post-round assessment is invented. MACE-only evidence cannot establish
+thermodynamic stability or DFT-level accuracy.
+In the E3-QE variant the assessment runs after the current QE audit, training
+decision, and promotion comparison, before committing the iteration. This also
+applies to the final iteration and to deferred or untriggered training. Its
+exact numerical input is retained in each iteration's
+`hypothesis-evidence.json`; all earlier audit inputs remain available to later
+acquisition and assessment calls. A missing or rejected assessment blocks
+completion and resume. The same two-call budget applies: no separate
+pre-audit geometry assessment is made.
+
 The generated manifest and execution policy are validated by
 [`production.py`](production.py); the Perlmutter array launcher is
 [`job-e3-mlip-production-perlmutter.sh`](../../deployments/perlmutter/jobs/job-e3-mlip-production-perlmutter.sh).
@@ -46,11 +77,11 @@ The [shared executable catalog](feasibility.py) filters unavailable prototypes
 and exposes joint capacities to both policy implementations. The production
 design remains LLM-only. See the [generation and recovery contract](../../docs/workflows/run-campaigns.md)
 for raw proposal retention, generation shortfalls, and the frozen one-call
-limit that blocks unapproved replacement decisions.
+limit for acquisition decisions that blocks unapproved replacement decisions.
 
-For an explicitly authorized recovery of the four failed first-round streams,
-record one replacement LLM decision per material before using the submission
-helper:
+For an explicitly authorized first-round recovery in a campaign using the
+current hypothesis-tracking protocol, record one replacement LLM decision per
+material before using the submission helper:
 
 ```bash
 .venv/bin/python -m benchmarks.e3.production authorize-recovery \
@@ -59,12 +90,13 @@ helper:
   --authorization "Operator authorization for this production recovery"
 ```
 
-Repeat only for the authorized failed materials (`phosphorene`, `nb_ta_o`,
-`zn_formate_mof`). This preserves the original round and campaign summary in
-the stream's `recovery-attempts/round-01-original` directory. The round-local
-authorization allows one new decision, not unlimited retries; invoking the
-command again does not grant another call. Scientific objectives, seeds,
-optimization settings, round targets, and GPU budgets are unchanged.
+Repeat only for materials covered by the authorization. This preserves the
+original round and campaign summary in the stream's
+`recovery-attempts/round-01-original` directory. The round-local authorization
+allows one new decision, not unlimited retries; invoking the command again
+does not grant another call. It does not make older runs without the required
+hypothesis records compatible with this protocol. Scientific objectives,
+seeds, optimization settings, round targets, and GPU budgets are unchanged.
 
 Generator revision 3 retains the 0.08 Angstrom phosphorene reconstruction bound
 but samples collective in-plane displacements with zero net translation.

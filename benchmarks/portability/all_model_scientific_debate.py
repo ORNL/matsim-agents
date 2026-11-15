@@ -140,6 +140,9 @@ def execute_all_model_scientific_debate(
     environment: dict[str, str] | None = None,
     model_factory=get_chat_model,
     hypothesis: str = THERMOELECTRIC_HYPOTHESIS,
+    evidence_ids: list[str] | None = None,
+    mlip_evidence_ids: list[str] | None = None,
+    dft_evidence_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     if rounds < 2:
         raise ValueError("LLM portability debate requires at least two rounds")
@@ -170,6 +173,9 @@ def execute_all_model_scientific_debate(
         output_root=str(output / "runs"),
         debate_mode="equal",
         synthesis_method="independent_verdicts",
+        evidence_ids=evidence_ids or [],
+        mlip_evidence_ids=mlip_evidence_ids or [],
+        dft_evidence_ids=dft_evidence_ids or [],
     )
     try:
         debate = run_scientific_debate(config, model_factory=model_factory)
@@ -179,6 +185,9 @@ def execute_all_model_scientific_debate(
             "benchmark": "first-class-llm-scientific-enclave",
             "status": "passed" if not errors else "failed",
             "hypothesis": hypothesis,
+            "evidence_ids": config.evidence_ids,
+            "mlip_evidence_ids": config.mlip_evidence_ids,
+            "dft_evidence_ids": config.dft_evidence_ids,
             "required_rounds": rounds,
             "required_models": [participant.model for participant in participants],
             "required_participants": [participant.name for participant in participants],
@@ -198,6 +207,9 @@ def execute_all_model_scientific_debate(
             "benchmark": "first-class-llm-scientific-enclave",
             "status": "failed",
             "hypothesis": hypothesis,
+            "evidence_ids": config.evidence_ids,
+            "mlip_evidence_ids": config.mlip_evidence_ids,
+            "dft_evidence_ids": config.dft_evidence_ids,
             "required_rounds": rounds,
             "required_models": [participant.model for participant in participants],
             "required_participants": [participant.name for participant in participants],

@@ -60,12 +60,51 @@ def _oracle(prompt: str) -> str:
     case = next(c for c in load_suite(SUITE).cases if c.claim in prompt)
     ids = re.findall(r"ev-[0-9a-f]{24}", prompt)
     decisive = case.expected_status != "unresolved"
+    measured = [item for item in case.evidence.values() if item.outcome == EvidenceOutcome.MEASURED]
+    state_status = "unresolved"
+    if decisive:
+        if any(
+            item.evidence_level
+            in {
+                EvidenceLevel.LOW_FIDELITY_DFT,
+                EvidenceLevel.CONVERGED_DFT,
+                EvidenceLevel.HIGHER_ACCURACY_DFT,
+            }
+            for item in measured
+        ):
+            state_status = (
+                "supported_by_dft" if case.expected_status == "supported" else "challenged_by_dft"
+            )
+        elif any(
+            item.evidence_level
+            in {
+                EvidenceLevel.MLIP_PREDICTION,
+                EvidenceLevel.MLIP_RELAXATION,
+            }
+            for item in measured
+        ):
+            state_status = (
+                "supported_by_mlip" if case.expected_status == "supported" else "challenged_by_mlip"
+            )
     return json.dumps(
         {
+            "response": "The declared evidence and criterion determine the assessment.",
             "status": case.expected_status,
             "evidence_ids": sorted(set(ids)) if decisive else [],
             "request_dft": case.dft_request_justified,
             "rationale": "rules",
+            "scientific_hypotheses": [
+                {
+                    "id": "assessed-claim",
+                    "claim": case.claim,
+                    "prediction": (
+                        f"The criterion for {case.criterion.target_structure} will be met."
+                    ),
+                    "status": state_status,
+                    "reason": ("The supplied evidence determines the evidence-scoped claim state."),
+                    "evidence_ids": sorted(set(ids)) or ["debate-hypothesis"],
+                }
+            ],
         }
     )
 
@@ -539,7 +578,27 @@ def test_unparseable_replies_are_graded_wrong(tmp_path):
         SUITE,
         config,
         output_dir=tmp_path,
-        model_factory=lambda **_: _Model(lambda _: "I cannot say."),
+        model_factory=lambda **_: _Model(
+            lambda _: json.dumps(
+                {
+                    "status": "not-a-verdict",
+                    "evidence_ids": [],
+                    "request_dft": False,
+                    "proposed_test_ids": [],
+                    "rationale": "malformed evaluation answer",
+                    "scientific_hypotheses": [
+                        {
+                            "id": "assessed-claim",
+                            "claim": "This reply intentionally has no valid verdict.",
+                            "prediction": "The criterion is not evaluated.",
+                            "status": "proposed",
+                            "reason": "Malformed evaluation-answer test.",
+                            "evidence_ids": ["debate-hypothesis"],
+                        }
+                    ],
+                }
+            )
+        ),
         cases=["sic-3c-on-hull", "si2c-no-evidence"],
     )
     single = next(s for s in result.summaries if s.arm == BenchmarkArm.SINGLE_LLM)

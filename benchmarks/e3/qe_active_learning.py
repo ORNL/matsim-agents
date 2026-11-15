@@ -16,7 +16,7 @@ from benchmarks.e3 import production as e3
 from matsim_agents.active_learning.candidates import Candidate
 from matsim_agents.active_learning.config import ALConfig
 from matsim_agents.active_learning.dft_protocol import path_identity, scientific_dft_payload
-from matsim_agents.active_learning.loop import run_active_learning
+from matsim_agents.active_learning.loop import IterationState, run_active_learning
 from matsim_agents.execution.locking import exclusive_lock
 
 log = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ def validate_config(cfg: ALConfig, material: str) -> None:
             raise ValueError("E3-QE must not write into existing MLIP-only campaign results")
 
 
-def check_resume(root: Path) -> None:
+def check_resume(root: Path, material: str | None = None) -> None:
     """Do not let generic AL cleanup erase interrupted E3/QE evidence."""
     if (
         root.exists()
@@ -110,11 +110,108 @@ def check_resume(root: Path) -> None:
                 f"Interrupted iteration retained at {iteration}; automatic partial replay is "
                 "disabled. Reconcile DFT attempts and datasets before an approved recovery."
             )
+        if material is not None:
+            index = int(iteration.name.removeprefix("iteration_")) + 1
+            stream = root / "e3" / material / "llm_guided_adaptation" / f"seed-{e3.BOUNDED_SEED}"
+            e3._previous_hypotheses(stream, index + 1)
+            assessment = e3._read_hypothesis_assessment(
+                stream / f"round-{index:02d}" / "hypothesis-assessment.json",
+                material=material,
+                seed=e3.BOUNDED_SEED,
+                round_index=index,
+            )
+            evidence_path = iteration / "hypothesis-evidence.json"
+            evidence = json.loads(evidence_path.read_text())
+            if (
+                assessment.get("assessment_stage") != "post_dft_iteration"
+                or evidence.get("evidence_id") != f"qe-audit-{index - 1}"
+                or evidence["evidence_id"] not in assessment["valid_evidence_ids"]
+                or json.dumps(e3._compact_history([evidence])[0], sort_keys=True)
+                not in assessment["prompt"]
+            ):
+                raise RuntimeError(
+                    f"Completed E3-QE iteration lacks its post-DFT hypothesis input: {iteration}"
+                )
 
 
 class E3Sampler:
     def __init__(self, material: str) -> None:
         self.material = material
+
+    def assess_iteration(
+        self,
+        cfg: ALConfig,
+        iteration: int,
+        it_dir: Path,
+        state: IterationState,
+    ) -> None:
+        """Assess the complete iteration, including the final QE audit and promotion."""
+        if not state.n_candidates:
+            if (it_dir / "generation-stop.json").is_file():
+                e3._atomic_json(
+                    it_dir / "hypothesis-stop.json",
+                    {
+                        "status": "stopped_generation_exhausted",
+                        "round_complete": False,
+                        "post_round_assessment": False,
+                        "new_optimization_evidence": False,
+                        "reason": "No geometry round completed; no hypothesis assessment invented.",
+                    },
+                )
+                return
+            raise RuntimeError("E3-QE cannot commit an iteration without geometry evidence")
+        pool = json.loads((it_dir / "e3-audit-pool.json").read_text())
+        action_by_id = {row["candidate_id"]: row["action_id"] for row in pool}
+        audits: dict[str, list[float]] = {}
+        for candidate_id, error in state.dft_force_errors_eV_per_A.items():
+            audits.setdefault(action_by_id[candidate_id], []).append(error)
+        geometry = json.loads((it_dir / "e3-geometry-result.json").read_text())
+        evidence = {
+            "evidence_id": f"qe-audit-{iteration}",
+            "qe_audits_by_action": {
+                action: {
+                    "n_audited": len(errors),
+                    "maximum_force_mae_eV_per_A": max(errors),
+                }
+                for action, errors in audits.items()
+            },
+            "round": iteration + 1,
+            "active_model": geometry["active_model"],
+            "accuracy_triggered": state.accuracy_triggered,
+            "model_promoted": state.model_promoted,
+            "iteration_state": state.to_dict(),
+            "note": (
+                "QE force errors apply only to audited geometries and the recorded "
+                "incumbent model. Missing audits are not proof of accuracy. Training "
+                "and promotion do not validate thermodynamic stability."
+            ),
+        }
+        e3._atomic_json(it_dir / "hypothesis-evidence.json", evidence)
+        stream = (
+            Path(cfg.loop.out_dir)
+            / "e3"
+            / self.material
+            / "llm_guided_adaptation"
+            / f"seed-{e3.BOUNDED_SEED}"
+        )
+        e3._round_hypothesis_assessment(
+            stream,
+            self.material,
+            e3.BOUNDED_SEED,
+            iteration + 1,
+            e3._chat_model(),
+            assessment_stage="post_dft_iteration",
+            additional_history=[
+                json.loads(
+                    (
+                        Path(cfg.loop.out_dir)
+                        / f"iteration_{index:04d}"
+                        / "hypothesis-evidence.json"
+                    ).read_text()
+                )
+                for index in range(iteration + 1)
+            ],
+        )
 
     def __call__(self, cfg: ALConfig, iteration: int, it_dir: Path) -> list[Candidate]:
         snapshot = it_dir / "e3-geometry-config.json"
@@ -172,42 +269,10 @@ class E3Sampler:
             e3.BOUNDED_SEED,
             iteration + 1,
         )
-        # QE errors are appended to the same action-level feedback seen by the LLM.
-        if iteration:
-            previous = json.loads(
-                (root / f"iteration_{iteration - 1:04d}" / "state.json").read_text()
-            )
-            pool = json.loads(
-                (root / f"iteration_{iteration - 1:04d}" / "e3-audit-pool.json").read_text()
-            )
-            action_by_id = {row["candidate_id"]: row["action_id"] for row in pool}
-            audits: dict[str, list[float]] = {}
-            for candidate_id, error in previous["dft_force_errors_eV_per_A"].items():
-                audits.setdefault(action_by_id[candidate_id], []).append(error)
-            history.append(
-                {
-                    "evidence_id": f"qe-audit-{iteration - 1}",
-                    "qe_audits_by_action": {
-                        action: {
-                            "n_audited": len(errors),
-                            "maximum_force_mae_eV_per_A": max(errors),
-                        }
-                        for action, errors in audits.items()
-                    },
-                    "accuracy_triggered": previous["accuracy_triggered"],
-                    "model_promoted": previous["model_promoted"],
-                    "round": iteration,
-                    "active_model": json.loads(
-                        (
-                            root / f"iteration_{iteration - 1:04d}" / "e3-geometry-result.json"
-                        ).read_text()
-                    )["active_model"],
-                    "note": (
-                        "QE error is measured at audited geometries only; "
-                        "not a global accuracy guarantee."
-                    ),
-                }
-            )
+        history.extend(
+            json.loads((root / f"iteration_{index:04d}" / "hypothesis-evidence.json").read_text())
+            for index in range(iteration)
+        )
         started = time.monotonic()
         try:
             manifest_path, tasks_path, round_manifest = e3._materialize_round(
@@ -355,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     validate_config(cfg, args.material)
     root = Path(cfg.loop.out_dir)
-    check_resume(root)
+    check_resume(root, args.material)
     policy = {
         "campaign_variant": VARIANT,
         "material": args.material,
@@ -379,6 +444,8 @@ def main(argv: list[str] | None = None) -> int:
                 "benchmarks/e3/scientific-objectives.yaml",
                 "src/matsim_agents/active_learning/loop.py",
                 "src/matsim_agents/active_learning/config.py",
+                "src/matsim_agents/backends/llm/hypotheses.py",
+                "benchmarks/e3/hypothesis_tracking.py",
             )
         },
     }
@@ -394,11 +461,16 @@ def main(argv: list[str] | None = None) -> int:
         raise RuntimeError("Run requires --approve-compute inside a reviewed Slurm allocation")
     root.mkdir(parents=True, exist_ok=True)
     with exclusive_lock(root / ".e3-qe.lock", timeout=0):
-        check_resume(root)
+        check_resume(root, args.material)
         if policy_path.exists() and json.loads(policy_path.read_text()) != policy:
             raise ValueError("Cannot change E3-QE scientific or resource policy on resume")
         e3._atomic_json(policy_path, policy)
-        run_active_learning(cfg, candidate_sampler=E3Sampler(args.material))
+        sampler = E3Sampler(args.material)
+        run_active_learning(
+            cfg,
+            candidate_sampler=sampler,
+            iteration_assessor=sampler.assess_iteration,
+        )
     return 0
 
 

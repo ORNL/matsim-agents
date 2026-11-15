@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 from ase import Atoms
+from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import write
 
 from benchmarks.portability.active_learning_scientific_debate import (
@@ -50,7 +51,34 @@ class _FakeModel:
 
     def invoke(self, messages):
         self.calls += 1
-        return SimpleNamespace(content=f"{self.model} scientific argument {self.calls}")
+        mlip_evidence = self.model.endswith("model-0")
+        status = "supported_by_mlip" if mlip_evidence else "supported_by_dft"
+        evidence_id = (
+            "al-iteration-0000-mlip-sampling"
+            if mlip_evidence
+            else "al-iteration-0000-dft-frame-0001"
+        )
+        return SimpleNamespace(
+            content=json.dumps(
+                {
+                    "response": f"{self.model} scientific argument {self.calls}",
+                    "scientific_hypotheses": [
+                        {
+                            "id": "silicon-active-learning-claim",
+                            "claim": "The sampled Si configurations may be physically reasonable.",
+                            "prediction": (
+                                "DFT-labeled candidates will have plausible energies and forces."
+                            ),
+                            "status": status,
+                            "reason": (
+                                "The cited evidence is explicitly scoped to its measurement source."
+                            ),
+                            "evidence_ids": [evidence_id],
+                        }
+                    ],
+                }
+            )
+        )
 
 
 def _catalog(tmp_path, count=2):
@@ -99,10 +127,13 @@ def _fake_al_runner(cfg) -> None:
     frames = []
     for index in range(2):
         atoms = Atoms("Si2", positions=[[0, 0, 0], [1.36, 1.36, 1.36]], cell=[5.43] * 3, pbc=True)
-        atoms.info["energy"] = -10.5 - index
         atoms.info["dft_backend"] = "qe"
         atoms.info["source_work_dir"] = f"candidate-{index}"
-        atoms.arrays["forces"] = np.array([[0.01, 0.0, 0.0], [-0.01, 0.0, 0.0]])
+        atoms.calc = SinglePointCalculator(
+            atoms,
+            energy=-10.5 - index,
+            forces=np.array([[0.01, 0.0, 0.0], [-0.01, 0.0, 0.0]]),
+        )
         frames.append(atoms)
     write(out_dir / "dataset.extxyz", frames)
 
@@ -134,11 +165,27 @@ def test_active_learning_evidence_reaches_every_debate_participant(tmp_path):
     assert result["active_learning"]["state"]["n_dft_converged"] == 2
     assert "candidate-0" in result["active_learning"]["evidence"]
     assert "candidate-1" in result["active_learning"]["evidence"]
+    assert result["active_learning"]["mlip_evidence_ids"] == ["al-iteration-0000-mlip-sampling"]
+    assert result["active_learning"]["dft_evidence_ids"] == [
+        "al-iteration-0000-dft-frame-0001",
+        "al-iteration-0000-dft-frame-0002",
+    ]
+    assert "Evidence ID al-iteration-0000-dft-frame-0001" in result["active_learning"]["evidence"]
     assert result["debate"]["status"] == "passed"
+    assert result["debate"]["mlip_evidence_ids"] == ["al-iteration-0000-mlip-sampling"]
+    assert result["debate"]["dft_evidence_ids"] == [
+        "al-iteration-0000-dft-frame-0001",
+        "al-iteration-0000-dft-frame-0002",
+    ]
     assert result["debate"]["turn_count"] == 4
     assert all(model.calls == 3 for model in models.values())
 
     assert Path(result["debate"]["contributions_path"]).is_file()
+    contributions = Path(result["debate"]["contributions_path"]).read_text()
+    assert "supported_by_dft" in contributions
+    assert "al-iteration-0000-dft-frame-0001" in contributions
+    assert "supported_by_mlip" in contributions
+    assert "al-iteration-0000-mlip-sampling" in contributions
 
     result_path = tmp_path / "output" / "active_learning_scientific_debate_result.json"
     assert json.loads(result_path.read_text())["status"] == "passed"

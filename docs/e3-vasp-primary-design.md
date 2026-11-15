@@ -8,6 +8,52 @@ New E3 structures may be informed by reviewed historical geometries, but all E3 
 
 For each material, define immutable structure identities, scientific groups, observables, VASP input signature, convergence rules, data lineage, and train/validation/test group assignments before evaluating models. Group related trajectory frames, polymorph variants, orderings, and duplicate structures together to prevent leakage. Validation chooses adaptation eligibility and checkpoints; the test partition is used once for final reporting. Preserve failed DFT attempts and retries.
 
+### Mandatory scientific revision lifecycle
+
+The E3 VASP controller and acquisition runners enforce a proposed initial
+scientific state, a revision for every round, and a separate final revision after
+the last round's DFT ingestion. Each `HypothesisRecord` retains its stable
+`hypothesis_id`, previous revision, falsifiable prediction, scientific rationale,
+status, evidence citations, and proposed tests. Every existing hypothesis must
+be revised, including unresolved claims; numerical convergence is not itself a
+scientific conclusion.
+
+The LLM arm requires its configured model and never substitutes the rule policy.
+`ingest` always reassesses completed evidence; `--reassess` is a compatibility
+flag, not an opt-out. Next-round preparation rejects missing scientific round
+state. Old ledgers lacking a proposed initial state or complete round history
+cannot be silently resumed or reconstructed. Historical artifacts stay unchanged.
+
+Strategy-local `hypothesis-audit.jsonl` records exact prompts before invocation,
+raw replies before parsing, complete previous state and evidence, accepted
+revision IDs, and rejected outputs. Rejected revisions are costed in the ledger
+without replacing scientific state. Selection calls also retain their exact
+prompts and raw replies. The offline dry-run stub is explicitly non-scientific.
+
+For the current four-round VASP workflow, plan **eight successful LLM calls per
+material** in the implemented path: `round1`/`replay` makes one initial
+revision, one pre-acquisition revision and one selection call; each of four DFT
+ingestions makes one post-evidence revision; the last ingestion makes a
+separate final revision. Later-round DFT selections are supplied externally;
+any external selection calls are additional. Early stops reduce this count.
+The offline four-round dry run instead makes ten stub calls: one initial, four
+pre-selection round revisions, four selections, and one final revision. Legacy
+model-selected MLIP exploration makes one initial call plus two per completed
+generation round (selection/revision, then post-outcome revision), so three
+calls for one round and seven for three. Failed or rejected calls consume
+resources; there is no automatic retry or total LLM-call budget enforcer. These
+are planning counts, not authorization or a change to the DFT attempt budget.
+
+The legacy `mlip_exploration` model-selected action path likewise requires
+initial, round, and post-outcome final scientific revisions, preserved in
+`hypothesis-revisions.jsonl` and round manifests. Explicit actions cannot bypass
+the LLM policy; incomplete/missing prior rounds cannot be resumed. Its evidence
+remains MLIP-only: generation or optimization outcomes cannot establish VASP
+accuracy or thermodynamic stability. Transfer support/contradiction in the DFT
+ledger requires qualified independent validation/test groups and measured VASP
+validation characterization; failed or unconverged attempts cannot support it.
+No revision stage authorizes DFT submission or training.
+
 ## B. Full Baseline Matrix
 The table enumerates all 18 candidate combinations. Every cell is pending system-specific runtime support, checkpoint/license/dependency review, and VASP-labeled independent validation data. Repository code or a YAML template is not evidence that a cell can run or that its reference set is ready. Run zero-shot evaluation only after those gates pass. The conditional adaptive-acquisition trigger applies per row, never based on test data.
 

@@ -335,11 +335,20 @@ class AgentEvalResult(BaseModel):
 
 
 ANSWER_FORMAT = """Return JSON only, with this exact structure:
-{"status": "supported|contradicted|unresolved", "evidence_ids": ["ev-..."],
- "request_dft": true|false, "proposed_test_ids": ["test-id"], "rationale": "..."}
+{"response": "concise assessment",
+ "status": "supported|contradicted|unresolved", "evidence_ids": ["ev-..."],
+ "request_dft": true|false, "proposed_test_ids": ["test-id"], "rationale": "...",
+ "scientific_hypotheses": [{"id": "...", "claim": "...", "prediction": "...",
+   "status": "proposed|unresolved|refined|supported_by_mlip|challenged_by_mlip|"
+             "supported_by_dft|challenged_by_dft|retired",
+   "reason": "...", "evidence_ids": ["debate-hypothesis"]}]}
 Cite evidence only by the evidence_id values given. "supported" or "contradicted" must cite the
 evidence that decides the claim. Select follow-up tests only from the provided options. Do not wrap
-the JSON in Markdown."""
+the JSON in Markdown. Keep the scientific_hypotheses state evidence-scoped; the starting claim
+identifier debate-hypothesis is context, not a numerical observation. Use proposed/unresolved/
+refined for discussion unsupported by numerical evidence. For supported_by_mlip or
+challenged_by_mlip, cite a supplied measured MLIP outcome; for supported_by_dft or
+challenged_by_dft, cite a supplied measured DFT result."""
 
 _RULES = """Rules for judging the claim:
 - A failed_to_compute or not_converged record is not evidence for or against a material.
@@ -466,7 +475,7 @@ def parse_answer(text: str) -> AgentAnswer:
             continue
         try:
             candidate, _ = decoder.raw_decode(text, offset)
-            if isinstance(candidate, dict) and "status" in candidate:
+            if isinstance(candidate, dict) and {"status", "request_dft"} <= set(candidate):
                 answer = AgentAnswer.model_validate(candidate)
         except ValueError:
             continue
@@ -565,6 +574,34 @@ def _debate_answers(
     )
 
 
+def _debate_evidence_scopes(packet: AgentEvalPacket) -> dict[str, list[str]]:
+    """Pass only supplied IDs, with MLIP/DFT scopes limited to measured outcomes."""
+    valid: set[str] = set()
+    mlip: set[str] = set()
+    dft: set[str] = set()
+    for record in packet.evidence.values():
+        evidence_id = record.evidence_id
+        valid.add(evidence_id)
+        if record.outcome != EvidenceOutcome.MEASURED:
+            continue
+        if record.evidence_level in {
+            EvidenceLevel.LOW_FIDELITY_DFT,
+            EvidenceLevel.CONVERGED_DFT,
+            EvidenceLevel.HIGHER_ACCURACY_DFT,
+        }:
+            dft.add(evidence_id)
+        elif record.evidence_level in {
+            EvidenceLevel.MLIP_PREDICTION,
+            EvidenceLevel.MLIP_RELAXATION,
+        }:
+            mlip.add(evidence_id)
+    return {
+        "evidence_ids": sorted(valid),
+        "mlip_evidence_ids": sorted(mlip),
+        "dft_evidence_ids": sorted(dft),
+    }
+
+
 def _merge(parts: list[ArmAnswer], answer: AgentAnswer | None) -> ArmAnswer:
     return ArmAnswer(
         answer=answer,
@@ -607,6 +644,7 @@ def run_arm(
             max_completion_tokens=tokens,
             final_response_instruction=ANSWER_FORMAT,
             output_root=str(output_root),
+            **_debate_evidence_scopes(packet),
         )
 
     if arm == BenchmarkArm.SINGLE_LLM:
@@ -625,6 +663,7 @@ def run_arm(
             max_completion_tokens=tokens,
             final_response_instruction=ANSWER_FORMAT,
             output_root=str(output_root),
+            **_debate_evidence_scopes(packet),
         ),
         factory,
     )

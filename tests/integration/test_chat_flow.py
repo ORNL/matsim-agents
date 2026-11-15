@@ -12,6 +12,7 @@ verifying that:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,7 +20,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from matsim_agents.discovery.composition import Composition
 from matsim_agents.discovery.wrapper import CompositionExplorationResult
@@ -45,7 +46,39 @@ def _make_session(
     import matsim_agents.orchestration.interactive_chat as chat_mod
 
     fake_llm = FakeListChatModel(responses=responses)
-    monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: fake_llm)
+
+    class _ChatFixtureModel:
+        def invoke(self, messages):
+            reply = fake_llm.invoke(messages)
+            prompt = str(messages[-1].content)
+            if "Current turn context ID" not in prompt:
+                return reply
+            try:
+                json.loads(reply.content)
+            except json.JSONDecodeError:
+                reply_text = str(reply.content)
+                reply = SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "response": reply_text,
+                            "scientific_hypotheses": [
+                                {
+                                    "id": "chat-claim",
+                                    "claim": (
+                                        "The proposed material may have the requested property."
+                                    ),
+                                    "prediction": "A suitable measurement will test the property.",
+                                    "status": "proposed",
+                                    "reason": "No numerical outcome is available yet.",
+                                    "evidence_ids": ["chat-user-0001"],
+                                }
+                            ],
+                        }
+                    )
+                )
+            return reply
+
+    monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: _ChatFixtureModel())
 
     mock_explore = MagicMock(side_effect=_fake_exploration_result)
     monkeypatch.setattr(chat_mod, "_kickoff_exploration", mock_explore)
@@ -65,7 +98,27 @@ class _StubModel:
     def invoke(self, _messages):
         idx = min(self.invoke_count, len(self.outputs) - 1)
         self.invoke_count += 1
-        return SimpleNamespace(content=self.outputs[idx])
+        text = self.outputs[idx]
+        reasoning = ""
+        if text.startswith("<think>") and "</think>" in text:
+            reasoning, text = text.split("</think>", 1)
+            reasoning += "</think>"
+        reply = json.dumps(
+            {
+                "response": text,
+                "scientific_hypotheses": [
+                    {
+                        "id": "chat-claim",
+                        "claim": "The candidate may have the desired material property.",
+                        "prediction": "A suitable measurement will show the property.",
+                        "status": "proposed",
+                        "reason": "No numerical evidence has been supplied.",
+                        "evidence_ids": ["chat-user-0001"],
+                    }
+                ],
+            }
+        )
+        return SimpleNamespace(content=f"{reasoning}{reply}")
 
 
 # ── composition detection ─────────────────────────────────────────────────────
@@ -212,7 +265,25 @@ class TestExplorationErrors:
     def test_exploration_error_propagates(self, discovery_config, monkeypatch):
         import matsim_agents.orchestration.interactive_chat as chat_mod
 
-        fake_llm = FakeListChatModel(responses=["Try Li2MnO3 as a cathode."])
+        fake_llm = FakeListChatModel(
+            responses=[
+                json.dumps(
+                    {
+                        "response": "Try Li2MnO3 as a cathode.",
+                        "scientific_hypotheses": [
+                            {
+                                "id": "cathode-claim",
+                                "claim": "Li2MnO3 may be a useful cathode material.",
+                                "prediction": "Testing will show reversible capacity.",
+                                "status": "proposed",
+                                "reason": "No numerical evidence has been supplied.",
+                                "evidence_ids": ["chat-user-0001"],
+                            }
+                        ],
+                    }
+                )
+            ]
+        )
         monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: fake_llm)
 
         def _boom(comp, cfg, **_):
@@ -377,10 +448,172 @@ class TestResumableSession:
         assert resumed.transcript.directory == Path(argument)
 
 
+class TestDefaultScientificChatState:
+    def test_scientific_revisions_resume_with_prior_state_and_evidence(self, tmp_path, monkeypatch):
+        import matsim_agents.orchestration.interactive_chat as chat_mod
+
+        first = {
+            "response": "The cathode claim remains a testable proposal.",
+            "scientific_hypotheses": [
+                {
+                    "id": "cathode-claim",
+                    "claim": "Li2MnO3 may be a useful cathode material.",
+                    "prediction": "Electrochemical testing will show reversible capacity.",
+                    "status": "proposed",
+                    "reason": "This turn provides a proposed material claim without measured data.",
+                    "evidence_ids": ["chat-user-0001"],
+                }
+            ],
+        }
+        second = {
+            "response": "The prediction remains unresolved pending measurements.",
+            "scientific_hypotheses": [
+                {
+                    "id": "cathode-claim",
+                    "claim": "Li2MnO3 may be a useful cathode material.",
+                    "prediction": "Electrochemical testing will show reversible capacity.",
+                    "status": "unresolved",
+                    "reason": "No new numerical outcome was supplied to resolve the proposal.",
+                    "evidence_ids": ["chat-user-0001", "chat-user-0003"],
+                }
+            ],
+        }
+
+        class Model:
+            def __init__(self):
+                self.outputs = iter([first, second])
+                self.prompts = []
+
+            def invoke(self, messages):
+                self.prompts.append(messages)
+                return SimpleNamespace(content=json.dumps(next(self.outputs)))
+
+        model = Model()
+        monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: model)
+        config = DiscoveryChatConfig(llm_only=True, output_dir=str(tmp_path / "outputs"))
+        session = DiscoveryChatSession(config=config)
+
+        assert chat_once(session, "Could Li2MnO3 be a suitable cathode?") == first["response"]
+        saved = json.loads((session.transcript.directory / "session.json").read_text())
+        assert saved["scientific_hypotheses"] == first["scientific_hypotheses"]
+
+        resumed = DiscoveryChatSession.resume(config, session.transcript.directory)
+        assert chat_once(resumed, "Reassess the cathode claim.") == second["response"]
+        assert resumed.scientific_hypotheses == second["scientific_hypotheses"]
+        prompt = model.prompts[1][-1].content
+        assert json.dumps(first["scientific_hypotheses"], sort_keys=True) in prompt
+        assert "chat-user-0001" in prompt
+        assert "chat-user-0003" in prompt
+        raw_assistant_replies = [
+            row.text for row in resumed.transcript.contributions() if row.kind == "assistant"
+        ]
+        assert json.dumps(first) in raw_assistant_replies[0]
+        assert json.dumps(second) in raw_assistant_replies[1]
+
+    def test_nonscientific_greeting_does_not_require_hypotheses(
+        self, discovery_config, monkeypatch
+    ):
+        session, _ = _make_session(
+            discovery_config, responses=["Hello! How can I help?"], monkeypatch=monkeypatch
+        )
+        prior_state = [
+            {
+                "id": "existing-claim",
+                "claim": "A testable materials claim.",
+                "prediction": "An experiment can evaluate it.",
+                "status": "proposed",
+                "reason": "It remains untested.",
+                "evidence_ids": ["chat-user-0001"],
+            }
+        ]
+        session.scientific_hypotheses = prior_state.copy()
+
+        assert chat_once(session, "Hello?") == "Hello! How can I help?"
+        assert session.scientific_hypotheses == prior_state
+
+    def test_scientific_reply_must_not_fall_back_to_plain_text(self, tmp_path, monkeypatch):
+        import matsim_agents.orchestration.interactive_chat as chat_mod
+
+        class InvalidModel:
+            def invoke(self, _messages):
+                return SimpleNamespace(content="Li2MnO3 may be useful.")
+
+        monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: InvalidModel())
+        config = DiscoveryChatConfig(llm_only=True, output_dir=str(tmp_path / "outputs"))
+        session = DiscoveryChatSession(config=config)
+
+        with pytest.raises(ValueError, match="JSON with scientific_hypotheses"):
+            chat_once(session, "Could Li2MnO3 be a useful cathode?")
+
+        [reply] = [row for row in session.transcript.contributions() if row.kind == "assistant"]
+        assert reply.text == "Li2MnO3 may be useful."
+        assert list((session.transcript.directory / "prompts").glob("*-assistant.json"))
+        assert not any(isinstance(message, AIMessage) for message in session.messages)
+
+    def test_default_scientific_turn_cites_measured_tool_output(
+        self, discovery_config, monkeypatch
+    ):
+        import matsim_agents.orchestration.interactive_chat as chat_mod
+
+        monkeypatch.setattr(
+            chat_mod,
+            "_run_single_structure_relaxation",
+            lambda *_args, **_kwargs: "Relaxation completed. E=-1.2 eV, converged=True.",
+        )
+        claim = {
+            "response": "The measured relaxation supports the scoped MLIP claim.",
+            "scientific_hypotheses": [
+                {
+                    "id": "relaxation-claim",
+                    "claim": "The candidate geometry is a local MLIP minimum.",
+                    "prediction": "Further relaxation under this MLIP will preserve a low force.",
+                    "status": "supported_by_mlip",
+                    "reason": "The completed relaxation reports an energy and convergence result.",
+                    "evidence_ids": ["chat-tool-0001"],
+                }
+            ],
+        }
+
+        class Model:
+            def invoke(self, _messages):
+                return SimpleNamespace(content=json.dumps(claim))
+
+        monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: Model())
+        session = DiscoveryChatSession(config=discovery_config)
+        tool_output = chat_once(session, "/relax candidate.vasp")
+        assert "chat-tool-0001" in tool_output
+        assert "chat-tool-0001" in session.mlip_evidence_ids
+
+        assert chat_once(session, "Does that support the claim?") == claim["response"]
+        assert session.scientific_hypotheses == claim["scientific_hypotheses"]
+
+
 # ── multi-LLM critique / panel mode ──────────────────────────────────────────
 
 
 class TestHypothesisDebate:
+    def test_invalid_state_keeps_prompt_and_raw_reply_without_success(
+        self, discovery_config, monkeypatch
+    ):
+        import matsim_agents.orchestration.interactive_chat as chat_mod
+
+        class InvalidModel:
+            def invoke(self, messages):
+                return SimpleNamespace(content="not JSON")
+
+        cfg = discovery_config
+        cfg.enable_hypothesis_debate = True
+        monkeypatch.setattr(chat_mod, "get_chat_model", lambda **_: InvalidModel())
+        session = DiscoveryChatSession(config=cfg)
+
+        with pytest.raises(ValueError, match="JSON with scientific_hypotheses"):
+            chat_once(session, "Reassess the candidate claim.")
+
+        [draft] = [row for row in session.transcript.contributions() if row.kind == "draft"]
+        assert draft.text == "not JSON"
+        assert (session.transcript.directory / "prompts" / "0002-draft.json").is_file()
+        assert not any(isinstance(message, AIMessage) for message in session.messages)
+
     def test_single_critic_revision_round(self, discovery_config, monkeypatch):
         import matsim_agents.orchestration.interactive_chat as chat_mod
 
@@ -481,7 +714,8 @@ class TestTranscript:
             ("0005-user", "user"),
             ("0006-tool", "matsim-agents"),
         ]
-        assert records[1].text == "Draft." and records[1].reasoning == "plan"
+        assert json.loads(records[1].text)["response"] == "Draft."
+        assert records[1].reasoning == "plan"
         assert records[2].model == "critic-model"
         directory = session.transcript.directory
         assert directory.parent == Path(cfg.output_dir) / "chat"

@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
+from matsim_agents.backends.llm.hypotheses import INSTRUCTIONS, validate_hypotheses
 from matsim_agents.backends.mlip.pool import MLIPWorkerPool
 from matsim_agents.discovery.seeds import SeedGenerationAction
 from matsim_agents.discovery.wrapper import CompositionExplorationResult, explore_composition
@@ -170,6 +171,7 @@ def _llm_action_prompt(
     action_space: list[SeedGenerationAction],
     history: list[dict[str, Any]],
     n_actions: int,
+    previous: list[dict[str, Any]] | None = None,
 ) -> str:
     evidence = []
     for record in history:
@@ -200,21 +202,27 @@ def _llm_action_prompt(
         "Select the next E3-MLIP structure-generation actions. Use only the allowed "
         "action IDs. Consider coverage gaps, optimization outcomes, and generator "
         "yield. Do not claim DFT evidence or that the selected strategy is superior. "
-        "Return JSON only with keys selected_action_ids, cited_evidence_ids, rationale. "
+        "Return JSON only with keys selected_action_ids, cited_evidence_ids, rationale, "
+        "scientific_hypotheses. "
         f"Select exactly {n_actions} actions; do not repeat a prior action ID.\n"
         f"Initial campaign-design evidence: {_INITIAL_EVIDENCE_ID} (frozen class/size "
         "quotas, shared MACE-OMAT-0 medium model, and matched optimizer settings).\n"
         f"Prior strategy-local MLIP evidence: {json.dumps(evidence)}\n"
+        f"Previous scientific state: {json.dumps(previous or [])}\n"
+        f"{INSTRUCTIONS}\n"
         "Allowed actions: "
         f"{json.dumps([action.model_dump(mode='json') for action in action_space])}\n"
     )
 
 
-def select_llm_guided_actions(
+def _select_llm_guided_actions(
     chat: Any,
     action_space: list[SeedGenerationAction],
     history: list[dict[str, Any]],
     n_actions: int,
+    *,
+    audit_path: Path,
+    previous: list[dict[str, Any]],
 ) -> tuple[list[SeedGenerationAction], list[str], str]:
     """Ask the LLM once per round and validate its proposal against the allow-list."""
     if n_actions < 1:
@@ -223,14 +231,23 @@ def select_llm_guided_actions(
     if n_actions > len(allowed):
         raise ValueError("requested actions exceed the allowed action space")
     prior = {record["action_id"] for record in history}
-    prompt = _llm_action_prompt(action_space, history, n_actions)
-    reply_object = chat.invoke(prompt)
+    if not previous:
+        raise ValueError(
+            "missing previous scientific hypothesis state; legacy resume is not allowed"
+        )
+    prompt = _llm_action_prompt(action_space, history, n_actions, previous)
+    reply_object = _invoke_scientific(chat, prompt, audit_path, "round", previous, history)
     reply = reply_object.content if hasattr(reply_object, "content") else str(reply_object)
     match = re.search(r"\{.*\}", reply, re.S)
     if match is None:
         raise ValueError("LLM reply contains no JSON object")
     proposal = json.loads(match.group(0))
-    required_fields = {"selected_action_ids", "cited_evidence_ids", "rationale"}
+    required_fields = {
+        "selected_action_ids",
+        "cited_evidence_ids",
+        "rationale",
+        "scientific_hypotheses",
+    }
     if not isinstance(proposal, dict) or set(proposal) != required_fields:
         raise ValueError("LLM proposal must contain exactly the required response fields")
     selected_ids = proposal["selected_action_ids"]
@@ -257,7 +274,119 @@ def select_llm_guided_actions(
         raise ValueError("LLM must cite valid initial or strategy-local evidence IDs")
     if not isinstance(rationale, str) or not rationale.strip():
         raise ValueError("LLM rationale must be a non-empty string")
+    hypotheses = validate_hypotheses(
+        proposal["scientific_hypotheses"],
+        valid_evidence,
+        previous,
+        mlip_evidence={
+            record["evidence_id"] for record in history if int(record.get("converged", 0)) > 0
+        },
+    )
+    from benchmarks.e3.run import unsupported_numbers
+
+    if unsupported_numbers(json.dumps(hypotheses) + rationale, prompt):
+        raise ValueError("scientific revision asserts numbers absent from the prompt")
+    _write_audit(
+        audit_path, {"event": "accepted", "phase": "round", "scientific_hypotheses": hypotheses}
+    )
     return [allowed[action_id] for action_id in selected_ids], cited_ids, rationale
+
+
+def select_llm_guided_actions(
+    chat,
+    action_space,
+    history,
+    n_actions,
+    *,
+    audit_path: Path,
+    previous: list[dict[str, Any]],
+):
+    try:
+        return _select_llm_guided_actions(
+            chat,
+            action_space,
+            history,
+            n_actions,
+            audit_path=audit_path,
+            previous=previous,
+        )
+    except (ValueError, TypeError, KeyError) as exc:
+        _write_audit(audit_path, {"event": "rejected", "phase": "round", "error": str(exc)})
+        raise
+
+
+def _write_audit(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(payload, default=str, sort_keys=True) + "\n")
+
+
+def _invoke_scientific(chat, prompt, path, phase, previous, evidence):
+    if path.exists():
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        if not rows or rows[-1].get("event") != "accepted":
+            raise ValueError("rejected or incomplete scientific audit; cannot resume")
+    _write_audit(
+        path,
+        {
+            "event": "prompt",
+            "phase": phase,
+            "prompt": prompt,
+            "previous": previous,
+            "evidence": evidence,
+        },
+    )
+    try:
+        response = chat.invoke(prompt)
+    except Exception as exc:
+        _write_audit(path, {"event": "invoke_error", "phase": phase, "error": str(exc)})
+        raise
+    _write_audit(
+        path,
+        {
+            "event": "response",
+            "phase": phase,
+            "raw_response": response.content,
+            "usage": getattr(response, "usage_metadata", None),
+        },
+    )
+    return response
+
+
+def _revise_science(chat, path, phase, previous, evidence, actions):
+    prompt = (
+        f"E3-MLIP scientific revision, phase {phase}. "
+        "Return JSON only with scientific_hypotheses.\n"
+        f"{INSTRUCTIONS}\nPrevious scientific state: {json.dumps(previous)}\n"
+        f"Evidence: {json.dumps(evidence)}\n"
+        f"Campaign-design evidence: {_INITIAL_EVIDENCE_ID}; allowed actions: "
+        f"{json.dumps([a.model_dump(mode='json') for a in actions])}\n"
+    )
+    response = _invoke_scientific(chat, prompt, path, phase, previous, evidence)
+    try:
+        data = json.loads(response.content)
+        if set(data) != {"scientific_hypotheses"}:
+            raise ValueError("scientific revision requires exactly scientific_hypotheses")
+        ids = {record["evidence_id"] for record in evidence}
+        hypotheses = validate_hypotheses(
+            data["scientific_hypotheses"],
+            {_INITIAL_EVIDENCE_ID} | ids,
+            previous,
+            mlip_evidence={
+                record["evidence_id"] for record in evidence if int(record.get("converged", 0)) > 0
+            },
+        )
+        if phase == "initial" and any(h["status"] != "proposed" for h in hypotheses):
+            raise ValueError("initial scientific hypotheses must be proposed")
+        from benchmarks.e3.run import unsupported_numbers
+
+        if unsupported_numbers(json.dumps(hypotheses), prompt):
+            raise ValueError("scientific revision asserts numbers absent from the prompt")
+    except (ValueError, TypeError, KeyError) as exc:
+        _write_audit(path, {"event": "rejected", "phase": phase, "error": str(exc)})
+        raise
+    _write_audit(path, {"event": "accepted", "phase": phase, "scientific_hypotheses": hypotheses})
+    return hypotheses
 
 
 def run_generation_round(
@@ -286,6 +415,12 @@ def run_generation_round(
         raise ValueError("round_index must be positive")
     if strategy not in E3_STRATEGIES:
         raise ValueError(f"unsupported E3-MLIP strategy: {strategy!r}")
+    if (Path(output_dir) / strategy / f"round-{round_index:02d}").exists():
+        raise ValueError("existing generation round cannot be silently resumed or overwritten")
+    if strategy == "llm_guided_adaptation" and actions is not None:
+        raise ValueError("LLM strategy requires model-selected actions and scientific revisions")
+    scientific_hypotheses = []
+    audit_path = Path(output_dir) / strategy / "hypothesis-revisions.jsonl"
     if actions is None:
         if action_space is None or n_actions is None:
             raise ValueError("action_space and n_actions are required when actions are selected")
@@ -307,9 +442,66 @@ def run_generation_round(
         else:
             if chat is None:
                 raise ValueError("LLM-guided action selection requires a chat model")
+            for number in range(1, round_index):
+                path = Path(output_dir) / strategy / f"round-{number:02d}" / "round-manifest.json"
+                if not path.is_file():
+                    raise ValueError(f"missing scientific round history for round {number}")
+                previous_manifest = json.loads(path.read_text())
+                if previous_manifest.get("status") != "complete" or not previous_manifest.get(
+                    "scientific_hypotheses"
+                ):
+                    raise ValueError(
+                        f"incomplete scientific state for round {number}; cannot resume"
+                    )
+                prior_evidence = [r for r in load_action_history(output_dir, strategy, number + 1)]
+                scientific_hypotheses = validate_hypotheses(
+                    previous_manifest["scientific_hypotheses"],
+                    {_INITIAL_EVIDENCE_ID} | {r["evidence_id"] for r in prior_evidence},
+                    scientific_hypotheses,
+                    mlip_evidence={
+                        r["evidence_id"] for r in prior_evidence if int(r.get("converged", 0)) > 0
+                    },
+                )
+            if round_index > 1:
+                if not audit_path.is_file():
+                    raise ValueError("missing prior scientific prompt/response audit")
+                accepted = [
+                    row
+                    for line in audit_path.read_text().splitlines()
+                    if (row := json.loads(line)).get("event") == "accepted"
+                ]
+                if (
+                    not json.loads(audit_path.read_text().splitlines()[-1]).get("event")
+                    == "accepted"
+                    or sum(row.get("phase") == "initial" for row in accepted) != 1
+                    or sum(row.get("phase") == "final" for row in accepted) < round_index - 1
+                    or not accepted
+                    or accepted[-1].get("phase") != "final"
+                    or accepted[-1].get("scientific_hypotheses") != scientific_hypotheses
+                ):
+                    raise ValueError("incomplete scientific lifecycle audit; cannot resume")
+            if round_index == 1:
+                if audit_path.exists():
+                    raise ValueError("existing initial scientific audit cannot be silently resumed")
+                scientific_hypotheses = _revise_science(
+                    chat,
+                    audit_path,
+                    "initial",
+                    [],
+                    [],
+                    action_space,
+                )
             actions, cited_ids, rationale = select_llm_guided_actions(
-                chat, action_space, history, n_actions
+                chat,
+                action_space,
+                history,
+                n_actions,
+                audit_path=audit_path,
+                previous=scientific_hypotheses,
             )
+            scientific_hypotheses = json.loads(audit_path.read_text().splitlines()[-1])[
+                "scientific_hypotheses"
+            ]
             selection_record = {
                 "policy": "llm_guided_adaptation",
                 "model_id": getattr(chat, "model_id", None),
@@ -356,6 +548,7 @@ def run_generation_round(
                     "fmax_eV_A": fmax,
                     "relax_cell": relax_cell,
                     "selection": selection_record,
+                    "scientific_hypotheses": scientific_hypotheses,
                     "actions": action_records,
                 },
                 indent=2,
@@ -452,6 +645,26 @@ def run_generation_round(
                 error_type="InterruptedError",
                 error="round execution ended before this action completed",
             )
-        write_manifest("complete" if len(results) == len(actions) else "incomplete")
+        complete = len(results) == len(actions)
+        if complete and strategy == "llm_guided_adaptation":
+            try:
+                scientific_hypotheses = _revise_science(
+                    chat,
+                    audit_path,
+                    "final",
+                    scientific_hypotheses,
+                    [
+                        *history,
+                        *[
+                            {**record, "mlip_result": result.model_dump(mode="json")}
+                            for record, result in zip(action_records, results, strict=True)
+                        ],
+                    ],
+                    action_space,
+                )
+            except Exception:
+                write_manifest("incomplete")
+                raise
+        write_manifest("complete" if complete else "incomplete")
 
     return results

@@ -256,8 +256,14 @@ def llm_prompt(material: str, pool: list[PoolEntry], evidence: list[EvidenceReco
 def _evidence_summary(record: EvidenceRecord) -> dict[str, Any]:
     return {
         "id": record.evidence_id,
+        "subject": record.subject,
         "kind": record.kind,
         "outcome": record.outcome.value,
+        "evidence_level": record.evidence_level.value,
+        "method": record.method.model_dump(mode="json"),
+        "failure_reason": record.failure_reason,
+        "physical_assumptions": record.physical_assumptions,
+        "numerical_convergence": record.numerical_convergence,
         "values": [f"{v.name}={v.value}{v.unit}" for v in record.values],
     }
 
@@ -272,6 +278,19 @@ class DryRunChat:
     model_id = "dry-run-stub"
 
     def invoke(self, prompt: str) -> Any:
+        if "Lifecycle phase:" in prompt:
+            material = re.search(r"hypothesis for (.*?) after", prompt).group(1)
+            return type("Reply", (), {"content": json.dumps({"hypotheses": [{
+                "hypothesis_id": f"e3:{material}:transfer",
+                "scientific_claim": "Dry-run placeholder; no scientific reasoning performed.",
+                "falsifiable_prediction": "Independent validation must test transfer.",
+                "status": "proposed" if "Lifecycle phase: initial" in prompt else "unresolved",
+                "rationale": "Dry-run stub; no DFT evidence or scientific conclusions.",
+                "cited_evidence_ids": [
+                    json.loads(prompt.split("Evidence: ", 1)[1].split("\n", 1)[0])[0]["id"]
+                ],
+                "proposed_tests": ["Obtain qualified independent validation evidence."],
+            }]})})()
         evidence = json.loads(prompt.split("Evidence: ", 1)[1].split("\n", 1)[0])
         pool = json.loads(prompt.split("Candidates: ", 1)[1].split("\n", 1)[0])
         n = int(re.search(r"up to (\d+)", prompt).group(1))
@@ -292,23 +311,85 @@ class DryRunChat:
 def llm_guided_select(
     chat: Any, material: str, pool: list[PoolEntry], ledger: EvidenceLedger, n: int
 ) -> tuple[list[str], list[str], str]:
+    from benchmarks.e3.reassessment import hypothesis_id
+
+    current = ledger.current_hypotheses().get(hypothesis_id(material))
+    if current is None or not current.falsifiable_prediction:
+        raise ValueError("missing initial scientific hypothesis state")
     evidence = ledger.evidence()
-    reply = chat.invoke(llm_prompt(material, pool, evidence, n)).content
-    match = re.search(r"\{.*\}", reply, re.S)
-    if match is None:
-        raise ValueError("LLM reply contains no JSON object")
-    parsed = json.loads(match.group(0))
-    ids = {e.candidate_id for e in pool}
-    selected = list(dict.fromkeys(parsed.get("selected", [])))
-    cited = parsed.get("cited_evidence_ids", [])
-    if not selected or len(selected) > n or not set(selected) <= ids:
-        raise ValueError(f"LLM selection is empty, too large or outside the pool: {selected}")
-    if not cited or not all(c in ledger for c in cited):
-        raise ValueError("LLM selection must cite evidence present in its own ledger")
+    prompt = llm_prompt(material, pool, evidence, n) + _previous_scientific_state(ledger)
+    reply = _audited_invoke(chat, prompt, ledger, "acquisition").content
+    from benchmarks.e3.reassessment import _audit
+
+    try:
+        match = re.search(r"\{.*\}", reply, re.S)
+        if match is None:
+            raise ValueError("LLM reply contains no JSON object")
+        parsed = json.loads(match.group(0))
+        ids = {e.candidate_id for e in pool}
+        selected = list(dict.fromkeys(parsed.get("selected", [])))
+        cited = parsed.get("cited_evidence_ids", [])
+        if not selected or len(selected) > n or not set(selected) <= ids:
+            raise ValueError(f"LLM selection is empty, too large or outside the pool: {selected}")
+        if not cited or not all(c in ledger for c in cited):
+            raise ValueError("LLM selection must cite evidence present in its own ledger")
+        if unsupported_numbers(str(parsed.get("rationale", "")), prompt):
+            raise ValueError("LLM selection asserts numbers absent from the prompt")
+    except (ValueError, TypeError, KeyError) as exc:
+        _audit(ledger, {"event": "rejected", "phase": "acquisition", "error": str(exc)})
+        raise
+    _audit(ledger, {"event": "accepted", "phase": "acquisition", "selected": selected})
     return selected, cited, parsed.get("rationale", "")
 
 
 # ---------------------------------------------------------------- dry run --
+def _previous_scientific_state(ledger: EvidenceLedger) -> str:
+    return "\nPrevious scientific state: " + json.dumps([
+        r.model_dump(mode="json") for r in ledger.current_hypotheses().values()
+    ], sort_keys=True) + "\n"
+
+
+def _audited_invoke(chat: Any, prompt: str, ledger: EvidenceLedger, phase: str) -> Any:
+    from benchmarks.e3.reassessment import _audit
+
+    if chat is None:
+        raise ValueError("LLM-guided strategy requires a chat model")
+    _audit(ledger, {"event": "prompt", "phase": phase, "prompt": prompt})
+    try:
+        response = chat.invoke(prompt)
+    except Exception as exc:
+        _audit(ledger, {"event": "invoke_error", "phase": phase, "error": str(exc)})
+        raise
+    _audit(ledger, {"event": "response", "phase": phase, "raw_response": response.content,
+                    "usage": getattr(response, "usage_metadata", None)})
+    return response
+
+
+def _scientific_revision(
+    ledger: EvidenceLedger, material: str, protocol: dict[str, Any], chat: Any,
+    strategy: str, phase: str, iteration: int, roles: dict[str, Any] | None = None,
+) -> None:
+    from benchmarks.e3.controller import Context
+    from benchmarks.e3.reassessment import deterministic_reassessment, llm_reassessment
+
+    roles = roles or {}
+    ctx = Context(
+        material=material, protocol=protocol, protocol_sha="",
+        material_protocol=protocol["materials"][material], pool={},
+        withheld_ids=set(), withheld_groups=set(),
+        validation_groups=list(roles.get("validation", [])),
+        test_groups=list(roles.get("test", [])),
+    )
+    if strategy == LLM:
+        result = llm_reassessment(
+            ledger, ctx, chat, f"{LLM}:{getattr(chat, 'model_id', 'llm')}", iteration, phase,
+        )
+    else:
+        result = deterministic_reassessment(ledger, ctx, RULE, phase, iteration)
+    if not result.accepted:
+        raise ValueError(f"rejected mandatory {phase} scientific revision: {result.problems}")
+
+
 def _split(material: str, pool: list[PoolEntry], protocol: dict[str, Any], out: Path):
     frames = []
     for entry in pool:
@@ -391,6 +472,7 @@ def dry_run_material(
     for strategy in STRATEGIES:
         ledger = EvidenceLedger(out / strategy / "ledger.jsonl")
         ledger.append(seed)
+        _scientific_revision(ledger, material, protocol, chat, strategy, "initial", 0)
         requested: list[str] = []
         rounds = []
         for round_index in range(1, budget["rounds"] + 1):
@@ -399,6 +481,7 @@ def dry_run_material(
             open_pool = [e for e in acquisition if e.candidate_id not in requested]
             if n <= 0 or not open_pool:
                 break
+            _scientific_revision(ledger, material, protocol, chat, strategy, "round", round_index)
             if strategy == RULE:
                 round_seed = int(
                     sha256_bytes(f"{protocol['protocol_id']}|{material}|{round_index}".encode())[
@@ -442,6 +525,7 @@ def dry_run_material(
                         "shared_physical": shared,
                     }
                 )
+        _scientific_revision(ledger, material, protocol, chat, strategy, "final", len(rounds))
         report[strategy] = {
             "name": protocol["strategies"][strategy]["name"],
             "logical_attempts": len(requested),
@@ -736,13 +820,21 @@ def llm_replay_prompt(
 
 
 def parse_llm_selections(
-    reply: str, pool_ids: set[str], ledger: EvidenceLedger, n: int
+    reply: str, pool_ids: set[str], ledger: EvidenceLedger, n: int, prompt: str | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
     """Admissibility: in-pool, within budget, purposeful, citing this ledger's evidence."""
     match = re.search(r"\{.*\}", reply, re.S)
     if match is None:
         raise ValueError("LLM reply contains no JSON object")
     parsed = json.loads(match.group(0))
+    if prompt is not None and unsupported_numbers(
+        " ".join(
+            [str(parsed.get("round_rationale", ""))]
+            + [str(item.get("scientific_purpose", "")) for item in parsed.get("selections", [])]
+        ),
+        prompt,
+    ):
+        raise ValueError("LLM selection asserts numbers absent from the prompt")
     selections = parsed.get("selections") or []
     ids = [s.get("candidate_id") for s in selections]
     if not selections or len(selections) > n or len(set(ids)) != len(ids):
@@ -856,8 +948,14 @@ def replay_material(
     report: dict[str, Any] = {}
     for strategy in STRATEGIES:
         ledger = EvidenceLedger(out / strategy / "ledger.jsonl")
+        if len(ledger):
+            raise ValueError("existing replay ledger cannot be silently resumed or overwritten")
         for record in shared_evidence:
             ledger.append(record)
+        _scientific_revision(ledger, material, protocol, chat, strategy, "initial", 0, roles)
+        _scientific_revision(
+            ledger, material, protocol, chat, strategy, "pre_acquisition", 1, roles,
+        )
         cited_default = [r.evidence_id for r in shared_evidence]
         cost = CostRecord()
         if strategy == RULE:
@@ -892,10 +990,10 @@ def replay_material(
         else:
             prompt = llm_replay_prompt(
                 material, spec, features, ledger.evidence(), n, 1, budget["rounds"]
-            )
+            ) + _previous_scientific_state(ledger)
             started = time.perf_counter()
             try:
-                response = chat.invoke(prompt)
+                response = _audited_invoke(chat, prompt, ledger, "acquisition")
             except Exception as exc:  # recorded, never replaced by another model
                 report[strategy] = {
                     "name": protocol["strategies"][strategy]["name"],
@@ -915,13 +1013,24 @@ def replay_material(
             (out / strategy / "llm-round-1.json").write_text(
                 json.dumps({"prompt": prompt, "reply": response.content}, indent=2)
             )
-            selections, rationale = parse_llm_selections(response.content, set(by_id), ledger, n)
+            try:
+                selections, rationale = parse_llm_selections(
+                    response.content, set(by_id), ledger, n, prompt,
+                )
+            except (ValueError, TypeError, KeyError) as exc:
+                from benchmarks.e3.reassessment import _audit
+
+                _audit(ledger, {"event": "rejected", "phase": "acquisition", "error": str(exc)})
+                raise
+            from benchmarks.e3.reassessment import _audit
+
+            _audit(ledger, {"event": "accepted", "phase": "acquisition", "selections": selections})
             actor, version = f"{LLM}:{model_label}", None
         withheld = set(prepared["references"]["roles"]["validation"]) | set(
             prepared["references"]["roles"]["test"]
         )
         rounds = []
-        for item in selections:
+        for index, item in enumerate(selections):
             cid = item["candidate_id"]
             if by_id[cid].group in withheld:
                 raise RuntimeError(f"{strategy} selected a withheld reference group")
@@ -939,7 +1048,7 @@ def replay_material(
                     actor=actor,
                     policy_version=version,
                     expected_cost=CostRecord(dft_calculations=1),
-                    observed_cost=cost if strategy == LLM else None,
+                    observed_cost=cost if strategy == LLM and index == 0 else None,
                 )
             )
             rounds.append(
@@ -1304,8 +1413,18 @@ def round1_material(
     rule_diagnostics = None
     for strategy in (RULE, LLM):
         ledger = EvidenceLedger(out / strategy / "ledger.jsonl")
+        if len(ledger):
+            raise ValueError("existing round-1 ledger cannot be silently resumed or overwritten")
         for record in shared:
             ledger.append(record)
+        _scientific_revision(
+            ledger, material, protocol, chat, strategy, "initial", 0,
+            prepared["references"]["roles"],
+        )
+        _scientific_revision(
+            ledger, material, protocol, chat, strategy, "pre_acquisition", 1,
+            prepared["references"]["roles"],
+        )
         cited = [r.evidence_id for r in shared]
         cost, prompt, rejected, diagnostics = CostRecord(), None, [], None
         started = time.perf_counter()
@@ -1332,8 +1451,11 @@ def round1_material(
             actor, version, rationale = RULE, protocol["strategies"][RULE]["policy_version"], ""
             decision_seconds = time.perf_counter() - started + uncertainty_seconds + soap_seconds
         else:
-            prompt = round1_prompt(spec, features, ledger.evidence(), budget, n)
-            response = chat.invoke(prompt)
+            prompt = (
+                round1_prompt(spec, features, ledger.evidence(), budget, n)
+                + _previous_scientific_state(ledger)
+            )
+            response = _audited_invoke(chat, prompt, ledger, "acquisition")
             decision_seconds = time.perf_counter() - started
             usage = getattr(response, "usage_metadata", None) or {}
             meta = getattr(response, "response_metadata", None) or {}
@@ -1354,9 +1476,17 @@ def round1_material(
                     default=str,
                 )
             )
-            match = re.search(r"\{.*\}", response.content, re.S)
-            parsed = json.loads(match.group(0)) if match else {}
-            proposals = (parsed.get("selections") or [])[: n + 2]
+            try:
+                match = re.search(r"\{.*\}", response.content, re.S)
+                parsed = json.loads(match.group(0)) if match else {}
+                proposals = parsed.get("selections") or []
+                if not isinstance(proposals, list):
+                    raise ValueError("LLM selections must be a list")
+            except (ValueError, TypeError, AttributeError) as exc:
+                from benchmarks.e3.reassessment import _audit
+
+                _audit(ledger, {"event": "rejected", "phase": "acquisition", "error": str(exc)})
+                raise
             rationale = str(parsed.get("round_rationale", ""))
             actor = f"{LLM}:{protocol['strategies'][LLM]['llm']['model']}"
             version = protocol["strategies"][LLM]["llm"]["prompt_template"]
@@ -1376,8 +1506,20 @@ def round1_material(
         (out / strategy / "rejected-proposals.json").write_text(
             json.dumps(rejected, indent=2) + "\n"
         )
+        if strategy == LLM and (rejected or len(accepted) != n):
+            from benchmarks.e3.reassessment import _audit
+
+            _audit(ledger, {
+                "event": "rejected", "phase": "acquisition",
+                "problems": rejected, "accepted_count": len(accepted), "required_count": n,
+            })
+            raise ValueError("rejected or incomplete LLM acquisition; no selections frozen")
+        if strategy == LLM:
+            from benchmarks.e3.reassessment import _audit
+
+            _audit(ledger, {"event": "accepted", "phase": "acquisition", "selections": accepted})
         decisions = []
-        for item in accepted:
+        for index, item in enumerate(accepted):
             cid = item["candidate_id"]
             key = sha256_bytes(
                 f"{entries[cid].structure_sha256}|{spec['method_signature']}".encode()
@@ -1395,7 +1537,7 @@ def round1_material(
                     actor=actor,
                     policy_version=version,
                     expected_cost=CostRecord(dft_calculations=1),
-                    observed_cost=cost if strategy == LLM else None,
+                    observed_cost=cost if strategy == LLM and index == 0 else None,
                 )
             )
             decisions.append(
@@ -1522,7 +1664,8 @@ def main(argv: list[str] | None = None) -> int:
         "--allocation-adjustments", type=Path, help="manifest-SHA-bound verified PBS accounting"
     )
     ing.add_argument(
-        "--reassess", action="store_true", help="deterministic reassessment once ingested"
+        "--reassess", action="store_true",
+        help="compatibility flag; scientific reassessment is always mandatory",
     )
     args = parser.parse_args(argv)
     if args.command == "ingest":
@@ -1537,12 +1680,20 @@ def main(argv: list[str] | None = None) -> int:
             state_path=args.state,
             allocation_adjustments_path=args.allocation_adjustments,
         )
-        if args.reassess:
-            ctx = controller.load_context(
-                args.material, args.replay, controller.DEFAULT_REFERENCE_ROLES
-            )
-            reassessment.reassess_round(state, ctx, args.ledgers.resolve())
-            state.save(args.state)
+        from matsim_agents.backends.llm.provider import get_chat_model
+
+        ctx = controller.load_context(
+            args.material, args.replay, controller.DEFAULT_REFERENCE_ROLES
+        )
+        llm = ctx.protocol["strategies"][LLM]["llm"]
+        chat = get_chat_model(
+            provider=llm["provider"], model=llm["model"], temperature=llm["temperature"],
+            max_tokens=llm["max_tokens"], mag_provider=llm["mag_provider"],
+        )
+        results = reassessment.reassess_round(state, ctx, args.ledgers.resolve(), chat=chat)
+        state.save(args.state)
+        if any(not result.accepted for result in results.values()):
+            raise ValueError("mandatory scientific reassessment rejected; see hypothesis audit")
         print(json.dumps(state.round(args.round).model_dump(mode="json"), indent=2))
         return 0
     protocol, protocol_sha = load_protocol()

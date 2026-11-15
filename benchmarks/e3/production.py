@@ -20,6 +20,7 @@ from uuid import uuid4
 
 import yaml
 
+from benchmarks.e3 import hypothesis_tracking
 from benchmarks.e3.feasibility import (
     CATALOG_VERSION,
     InvalidActionError,
@@ -35,8 +36,8 @@ from benchmarks.e3.mlip_exploration import (
     _verified_checkpoint,
     _verified_checkpoint_sha256,
 )
-from matsim_agents.execution.locking import exclusive_lock
 from benchmarks.e3.profiles import campaign_id, structures_per_round
+from matsim_agents.execution.locking import exclusive_lock
 
 REPO = Path(__file__).resolve().parents[2]
 E3_STRATEGIES = ("llm_guided_adaptation",)
@@ -109,7 +110,10 @@ def _record_acquisition_stop(round_dir: Path, error: AcquisitionExhausted) -> di
         "new_optimization_evidence": False,
         "optimizations_attempted": 0,
         "hypotheses_updated": False,
-        "hypothesis_update": "retain prior hypotheses; no new optimization evidence collected",
+        "hypothesis_update": (
+            "no post-round assessment; pre-round hypotheses remain in the acquisition proposal "
+            "and no new optimization evidence was collected"
+        ),
         "partial_structures_retained": partial_count,
         "requested": manifest["main_target"],
         "accepted_unique": partial_count,
@@ -525,9 +529,15 @@ def build_campaign_manifest() -> dict[str, Any]:
         "llm_guided_configuration": objectives["llm_guided_configuration"],
         "rounds": rounds,
         "scientific_objectives_sha256": _sha256_file(OBJECTIVES),
+        "hypothesis_tracking": {
+            "version": hypothesis_tracking.VERSION,
+            "acquisition_calls_per_round": 1,
+            "additional_assessment_calls_per_completed_round": 1,
+        },
         "adaptation": {
             "evidence": "strategy-local MACE geometry-optimization outcomes only",
-            "llm_calls_per_round": 1,
+            "llm_acquisition_calls_per_round": 1,
+            "llm_assessment_calls_per_completed_round": 1,
             "fallback_on_invalid_llm_proposal": False,
             "minimum_candidates_per_size_tier_per_round": 1,
             "e3_dft_inputs": False,
@@ -582,6 +592,13 @@ def build_campaign_manifest() -> dict[str, Any]:
 
 
 def validate_campaign_manifest(manifest: dict[str, Any]) -> None:
+    tracking = manifest.get("hypothesis_tracking")
+    if tracking != {
+        "version": hypothesis_tracking.VERSION,
+        "acquisition_calls_per_round": 1,
+        "additional_assessment_calls_per_completed_round": 1,
+    }:
+        raise ValueError("unrecognized hypothesis tracking protocol or call budget")
     if manifest.get("optimizer") != OPTIMIZER_SETTINGS:
         raise ValueError("production manifest optimizer does not match the current protocol")
     objectives = yaml.safe_load(OBJECTIVES.read_text(encoding="utf-8"))
@@ -660,6 +677,200 @@ def _history_for_round(
             raise RuntimeError(f"cannot adapt from incomplete prior round: {path}")
         history.extend(summary.get("action_outcomes", []))
     return history
+
+
+def _previous_hypotheses(stream_dir: Path, round_index: int) -> list[dict[str, Any]]:
+    previous: list[dict[str, Any]] = []
+    for index in range(1, round_index):
+        round_dir = stream_dir / f"round-{index:02d}"
+        proposal_path = round_dir / "acquisition" / "proposal-001.json"
+        _validate_saved_hypothesis_proposal(proposal_path, previous)
+        proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+        path = round_dir / "hypothesis-assessment.json"
+        assessment = _read_hypothesis_assessment(
+            path, material=stream_dir.parent.parent.name,
+            seed=int(stream_dir.name.removeprefix("seed-")), round_index=index,
+        )
+        if assessment["previous_hypotheses"] != proposal["scientific_hypotheses"]:
+            raise RuntimeError(f"assessment does not match the hypothesis proposal: {path}")
+        previous = assessment["scientific_hypotheses"]
+    return previous
+
+
+def _read_hypothesis_assessment(
+    path: Path, *, material: str | None = None, seed: int | None = None,
+    round_index: int | None = None,
+) -> dict[str, Any]:
+    record = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        record.get("status") != "accepted"
+        or record.get("version") != hypothesis_tracking.VERSION
+        or not isinstance(record.get("prompt"), str)
+        or not record["prompt"].strip()
+        or not isinstance(record.get("raw_response"), str)
+        or not record["raw_response"].strip()
+        or not isinstance(record.get("valid_evidence_ids"), list)
+        or not isinstance(record.get("previous_hypotheses"), list)
+        or (material is not None and record.get("material") != material)
+        or (seed is not None and record.get("seed") != seed)
+        or (round_index is not None and record.get("after_round") != round_index)
+    ):
+        raise RuntimeError(f"scientific hypothesis assessment is incomplete: {path}")
+    content = record["raw_response"]
+    start, end = content.find("{"), content.rfind("}")
+    if start < 0 or end < start:
+        raise ValueError(f"saved hypothesis assessment response is not a JSON object: {path}")
+    parsed = json.loads(content[start:end + 1])
+    if (
+        not isinstance(parsed, dict)
+        or set(parsed) != {"scientific_hypotheses"}
+        or parsed["scientific_hypotheses"] != record.get("scientific_hypotheses")
+    ):
+        raise ValueError(
+            f"saved hypothesis assessment differs from the original LLM response: {path}"
+        )
+    hypothesis_tracking.validate_hypotheses(
+        record.get("scientific_hypotheses"), set(record["valid_evidence_ids"]),
+        record["previous_hypotheses"],
+        mlip_evidence=set(record.get("mlip_evidence_ids", [])),
+        dft_evidence=set(record.get("dft_evidence_ids", [])),
+    )
+    return record
+
+
+def _validate_saved_hypothesis_proposal(
+    path: Path, previous: list[dict[str, Any]],
+) -> None:
+    proposal = json.loads(path.read_text(encoding="utf-8"))
+    if proposal.get("status") != "accepted":
+        raise RuntimeError(f"saved hypothesis proposal is not accepted: {path}")
+    if proposal.get("previous_hypotheses") != previous:
+        raise RuntimeError(
+            f"saved proposal does not match the previous hypothesis assessment: {path}"
+        )
+    content = proposal.get("raw_response")
+    evidence_ids = proposal.get("valid_evidence_ids")
+    if (
+        not isinstance(content, str)
+        or not isinstance(proposal.get("prompt"), str)
+        or not proposal["prompt"].strip()
+        or not isinstance(evidence_ids, list)
+        or not all(isinstance(item, str) for item in evidence_ids)
+        or f"Valid evidence IDs: {json.dumps(evidence_ids)}\n" not in proposal["prompt"]
+    ):
+        raise RuntimeError(f"saved hypothesis prompt or response is missing: {path}")
+    start, end = content.find("{"), content.rfind("}")
+    if start < 0 or end < start:
+        raise ValueError(f"saved hypothesis response is not a JSON object: {path}")
+    parsed = json.loads(content[start:end + 1])
+    if not isinstance(parsed, dict) or parsed.get("scientific_hypotheses") != proposal.get(
+        "scientific_hypotheses"
+    ):
+        raise ValueError(f"saved hypothesis record differs from the original LLM response: {path}")
+    hypothesis_tracking.validate_hypotheses(
+        proposal["scientific_hypotheses"], set(evidence_ids), previous,
+        mlip_evidence=set(proposal.get("mlip_evidence_ids", [])),
+        dft_evidence=set(proposal.get("dft_evidence_ids", [])),
+    )
+
+
+def _hypothesis_evidence_scope(history: list[dict[str, Any]]) -> dict[str, list[str]]:
+    return {
+        "mlip_evidence_ids": sorted({
+            row["evidence_id"] for row in history
+            if row.get("evidence_id") and row.get("converged", 0) > 0
+            and not row.get("category")
+        }),
+        "dft_evidence_ids": sorted({
+            row["evidence_id"] for row in history
+            if row.get("evidence_id") and row.get("qe_audits_by_action")
+        }),
+    }
+
+
+def _round_hypothesis_assessment(
+    stream_dir: Path, material: str, seed: int, round_index: int, chat: Any,
+    *, additional_history: list[dict[str, Any]] | None = None,
+    assessment_stage: str = "post_geometry",
+) -> None:
+    """Persist one post-round LLM assessment and its complete inputs."""
+    round_dir = stream_dir / f"round-{round_index:02d}"
+    path = round_dir / "hypothesis-assessment.json"
+    proposal_path = round_dir / "acquisition" / "proposal-001.json"
+    _validate_saved_hypothesis_proposal(
+        proposal_path, _previous_hypotheses(stream_dir, round_index),
+    )
+    proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+    previous = proposal["scientific_hypotheses"]
+    if path.exists():
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        if existing.get("status") == "accepted":
+            assessment = _read_hypothesis_assessment(
+                path, material=material, seed=seed, round_index=round_index,
+            )
+            if assessment["previous_hypotheses"] != previous:
+                raise RuntimeError(f"assessment does not match the hypothesis proposal: {path}")
+            if assessment.get("assessment_stage") != assessment_stage:
+                raise RuntimeError(f"assessment was recorded at a different scientific stage: {path}")
+            return
+        raise RuntimeError(f"hypothesis assessment call already attempted; inspect {path}")
+    history = _history_for_round(
+        stream_dir.parent.parent.parent, material, "llm_guided_adaptation",
+        seed, round_index + 1,
+    )
+    history.extend(additional_history or [])
+    valid_evidence = {"campaign-design"} | {
+        row["evidence_id"] for row in history if row.get("evidence_id")
+    }
+    evidence_scope = _hypothesis_evidence_scope(history)
+    prompt = (
+        f"Assess scientific hypotheses for {material} after completed E3-MLIP round {round_index}. "
+        "Use only the supplied strategy-local outcomes. Any QE evidence applies only to "
+        "audited geometries; do not compare raw energies from different checkpoints. "
+        "Return JSON with exactly the key scientific_hypotheses. "
+        f"{hypothesis_tracking.INSTRUCTIONS}\n"
+        f"Valid evidence IDs: {json.dumps(sorted(valid_evidence))}\n"
+        f"Measured evidence by fidelity: {json.dumps(evidence_scope, sort_keys=True)}\n"
+        f"Previous scientific hypotheses: {json.dumps(previous, sort_keys=True)}\n"
+        f"Prior strategy-local outcomes: {json.dumps(_compact_history(history), sort_keys=True)}\n"
+    )
+    record: dict[str, Any] = {
+        "version": hypothesis_tracking.VERSION, "material": material, "seed": seed,
+        "after_round": round_index, "prompt": prompt,
+        "assessment_stage": assessment_stage,
+        "model_id": getattr(chat, "model", getattr(chat, "model_id", None)),
+        "valid_evidence_ids": sorted(valid_evidence), "previous_hypotheses": previous,
+        **evidence_scope,
+        "status": "request_started",
+    }
+    _atomic_json(path, record)
+    try:
+        response = chat.invoke(prompt)
+    except Exception as error:
+        record.update(status="infrastructure_failure", error=f"{type(error).__name__}: {error}")
+        _atomic_json(path, record)
+        raise
+    content = response.content if hasattr(response, "content") else str(response)
+    record.update(status="response_saved", raw_response=content)
+    _atomic_json(path, record)
+    try:
+        start, end = content.find("{"), content.rfind("}")
+        if start < 0 or end < start:
+            raise ValueError("final hypothesis response contains no JSON object")
+        parsed = json.loads(content[start:end + 1])
+        if not isinstance(parsed, dict) or set(parsed) != {"scientific_hypotheses"}:
+            raise ValueError("final hypothesis response must contain exactly scientific_hypotheses")
+        record["scientific_hypotheses"] = hypothesis_tracking.validate_hypotheses(
+            parsed["scientific_hypotheses"], valid_evidence, previous,
+            mlip_evidence=set(evidence_scope["mlip_evidence_ids"]),
+            dft_evidence=set(evidence_scope["dft_evidence_ids"]),
+        )
+    except (ValueError, TypeError, KeyError) as error:
+        record.update(status="rejected", error=f"{type(error).__name__}: {error}")
+        _atomic_json(path, record)
+        raise
+    record["status"] = "accepted"
+    _atomic_json(path, record)
 
 
 def _action_dimensions(action: dict[str, Any]) -> set[str]:
@@ -862,6 +1073,7 @@ def _compact_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "model_promoted",
         "active_model",
         "round",
+        "iteration_state",
     )
     return [{key: item[key] for key in fields if key in item} for item in history]
 
@@ -880,6 +1092,7 @@ def _llm_allocation(
     valid_evidence = {"campaign-design"} | {
         item["evidence_id"] for item in history if item.get("evidence_id")
     }
+    hypothesis_scope = _hypothesis_evidence_scope(history)
     available_actions, unavailable = executable_catalog(action_space, history)
     assert_capacity(available_actions, target, minimum_by_tier)
     prompt_catalog = _compact_action_catalog(material, available_actions)
@@ -893,6 +1106,7 @@ def _llm_allocation(
         })
         entry["action_ids"].append(action["action_id"])
     prompt_history = _compact_history(history)
+    previous_hypotheses = context.get("previous_hypotheses", []) if context else []
     evidence_scope = (
         "Use the strategy-local MACE geometry history and measured QE force audits below. "
         "Audits apply only to sampled geometries. Models may change after independently "
@@ -919,15 +1133,28 @@ def _llm_allocation(
         f"Round target: {target}\n"
         f"Minimum counts by size tier: {json.dumps(minimum_by_tier, sort_keys=True)}\n"
         f"Valid evidence IDs: {json.dumps(sorted(valid_evidence))}\n"
+        f"Measured evidence by fidelity: {json.dumps(hypothesis_scope, sort_keys=True)}\n"
         f"Prior strategy-local outcomes: {json.dumps(prompt_history, sort_keys=True)}\n"
         "Shared capacity groups: sum counts across ALL action_ids in each group "
         "must not exceed remaining. Aliases do not add capacity.\n"
         f"{json.dumps(capacity_groups, sort_keys=True, separators=(',', ':'))}\n"
         f"Hierarchical action catalog: {json.dumps(prompt_catalog, separators=(',', ':'))}\n"
     )
+    prompt = prompt.replace(
+        "Return JSON with exactly keys allocations, cited_evidence_ids, rationale.",
+        "Return JSON with exactly keys allocations, cited_evidence_ids, rationale, "
+        "scientific_hypotheses.",
+    )
+    prompt += (
+        f"\n{hypothesis_tracking.INSTRUCTIONS}\n"
+        f"Previous scientific hypotheses: {json.dumps(previous_hypotheses, sort_keys=True)}\n"
+    )
     evidence = {
         **(context or {}), "catalog_version": CATALOG_VERSION,
-        "prompt_version": CATALOG_VERSION, "prompt": prompt,
+        "prompt_version": hypothesis_tracking.VERSION, "prompt": prompt,
+        "previous_hypotheses": previous_hypotheses,
+        "valid_evidence_ids": sorted(valid_evidence),
+        **hypothesis_scope,
         "model_id": (
             getattr(chat, "model", getattr(chat, "model_id", None))
             or yaml.safe_load(OBJECTIVES.read_text())["llm_guided_configuration"]["model"]
@@ -985,7 +1212,7 @@ def _parse_llm_allocation(
     if start < 0 or end < start:
         raise ValueError("LLM round proposal contains no JSON object")
     proposal = json.loads(content[start : end + 1])
-    if set(proposal) != {"allocations", "cited_evidence_ids", "rationale"}:
+    if not isinstance(proposal, dict) or "allocations" not in proposal:
         raise ValueError("LLM allocation must contain exactly the required fields")
     allocations = proposal["allocations"]
     evidence["parsed_allocations"] = allocations
@@ -994,6 +1221,15 @@ def _parse_llm_allocation(
     selected = validate_allocations(
         allocations, available_actions, target, minimum_by_tier,
         unavailable=evidence.get("unavailable_actions"),
+    )
+    expected_fields = {"allocations", "cited_evidence_ids", "rationale", "scientific_hypotheses"}
+    if set(proposal) != expected_fields:
+        raise ValueError("LLM allocation must contain exactly the required fields")
+    evidence["scientific_hypotheses"] = hypothesis_tracking.validate_hypotheses(
+        proposal["scientific_hypotheses"], valid_evidence,
+        evidence.get("previous_hypotheses", []),
+        mlip_evidence=set(evidence.get("mlip_evidence_ids", [])),
+        dft_evidence=set(evidence.get("dft_evidence_ids", [])),
     )
     citations = proposal["cited_evidence_ids"]
     if (
@@ -1168,6 +1404,25 @@ def _materialize_selection(
     round_dir = run_root / material / strategy / f"seed-{seed}" / f"round-{round_index:02d}"
     round_dir.mkdir(parents=True, exist_ok=True)
     round_manifest_path = round_dir / "round-manifest.json"
+    if strategy == "llm_guided_adaptation" and not manifest.get("hypothesis_tracking"):
+        raise ValueError("hypothesis tracking is mandatory for LLM-guided E3-MLIP")
+    saved_proposal = round_dir / "acquisition" / "proposal-001.json"
+    previous_hypotheses = (
+        _previous_hypotheses(round_dir.parent, round_index)
+        if strategy == "llm_guided_adaptation" else []
+    )
+    if (
+        strategy == "llm_guided_adaptation"
+        and round_manifest_path.is_file()
+        and not saved_proposal.is_file()
+    ):
+        raise RuntimeError(f"saved acquisition proposal is missing: {saved_proposal}")
+    if strategy == "llm_guided_adaptation" and saved_proposal.is_file():
+        proposal = json.loads(saved_proposal.read_text(encoding="utf-8"))
+        if proposal.get("status") == "accepted":
+            _validate_saved_hypothesis_proposal(saved_proposal, previous_hypotheses)
+        elif round_manifest_path.is_file():
+            raise RuntimeError(f"round has no accepted hypothesis proposal: {saved_proposal}")
     if round_manifest_path.is_file():
         existing = json.loads(round_manifest_path.read_text(encoding="utf-8"))
         if existing.get("optimizer") != OPTIMIZER_SETTINGS:
@@ -1248,6 +1503,8 @@ def _materialize_selection(
                     context={
                         "round": round_index, "seed": seed,
                         "campaign_variant": manifest.get("campaign_variant"),
+                        "hypothesis_tracking": True,
+                        "previous_hypotheses": previous_hypotheses,
                     },
                 )
             selection = {
@@ -2165,6 +2422,10 @@ def prepare_round(
             if saved["manifest_sha256"] != _sha256_file(manifest_path):
                 raise ValueError("recovery authorization belongs to a different manifest")
         if (round_dir / "generation-preflight.json").is_file():
+            previous = _previous_hypotheses(stream_dir, round_index)
+            _validate_saved_hypothesis_proposal(
+                round_dir / "acquisition" / "proposal-001.json", previous,
+            )
             return _preflight_receipt(round_dir, manifest_path)
         time_path = round_dir / "generation-time.json"
         if not time_path.exists() and (round_dir / "round-manifest.json").exists():
@@ -2641,6 +2902,8 @@ def _run_replicate(
         if summary_path.is_file():
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             if summary.get("status") == "complete":
+                if manifest.get("hypothesis_tracking"):
+                    _round_hypothesis_assessment(stream_dir, material, seed, round_index, chat)
                 return {
                     "material": material,
                     "strategy": strategy,
@@ -2746,6 +3009,8 @@ def _run_replicate(
         round_manifest["status"] = "complete"
         round_manifest["round_summary"] = str(summary_path)
         _atomic_json(round_manifest_path, round_manifest)
+        if manifest.get("hypothesis_tracking"):
+            _round_hypothesis_assessment(stream_dir, material, seed, round_index, chat)
         return {
             "material": material,
             "strategy": strategy,
@@ -2892,7 +3157,8 @@ def _write_campaign_report(stream_dir: Path, summary: dict[str, Any]) -> None:
             "",
             "Acquisition stopped without new optimization evidence in the stopped round.",
             "Partial generated structures are retained, not counted as optimizations.",
-            "Prior hypotheses are retained without update; the stopped round is incomplete.",
+            "Prior post-round hypotheses are retained without update; the stopped round's "
+            "pre-round proposal is recorded separately and the round is incomplete.",
         ])
     temporary = stream_dir / ".report.md.tmp"
     temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -2966,6 +3232,11 @@ def run_campaign(
             summary_path.is_file()
             and json.loads(summary_path.read_text()).get("status") == "complete"
         ):
+            if manifest.get("hypothesis_tracking"):
+                with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+                    _round_hypothesis_assessment(
+                        stream_dir, material, seed, round_index, _chat_model(),
+                    )
             completed += 1
             continue
         command = [
@@ -3077,6 +3348,19 @@ def run_campaign(
             _atomic_json(stream_dir / "campaign-summary.json", stopped)
             _write_campaign_report(stream_dir, stopped)
             return stopped
+        if (
+            not summary_path.is_file()
+            or json.loads(summary_path.read_text()).get("status") != "complete"
+        ):
+            raise RuntimeError(f"round finished without a completed summary: {summary_path}")
+        assessment_path = round_dir / "hypothesis-assessment.json"
+        if not assessment_path.is_file():
+            raise RuntimeError(
+                f"round finished without an accepted hypothesis assessment: {assessment_path}"
+            )
+        _read_hypothesis_assessment(
+            assessment_path, material=material, seed=seed, round_index=round_index,
+        )
         completed += 1
 
     summaries = [

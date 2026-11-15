@@ -15,6 +15,7 @@ from matsim_agents.workflows.investigation import (
     InvestigationConfig,
     MultiLLMDebateDiscussionConfig,
     SingleLLMDiscussionConfig,
+    build_hypothesis_from_discussion,
     run_investigation,
 )
 from matsim_agents.workflows.phase_exploration import PhaseExplorationWorkflowResult
@@ -30,10 +31,21 @@ class _ProposalModel:
         return SimpleNamespace(
             content=json.dumps(
                 {
+                    "response": f"Investigate {self.composition}.",
                     "hypothesis": f"{self.composition} may provide high thermoelectric ZT.",
                     "proposed_compositions": [self.composition],
                     "scientific_rationale": f"Test transport and stability of {self.composition}.",
                     "assumptions": ["Comparable synthesis conditions"],
+                    "scientific_hypotheses": [
+                        {
+                            "id": "thermoelectric-claim",
+                            "claim": f"{self.composition} may provide high thermoelectric ZT.",
+                            "prediction": "Transport measurements will show enhanced ZT.",
+                            "status": "proposed",
+                            "reason": "No numerical evidence has been supplied.",
+                            "evidence_ids": ["investigation-objective"],
+                        }
+                    ],
                 }
             )
         )
@@ -88,6 +100,130 @@ def test_agentic_investigation_can_use_single_llm_discussion(tmp_path, monkeypat
     ]
     assert "test-secret" not in result.model_dump_json()
     assert [exploration.composition for exploration in result.explorations] == ["SnSe"]
+
+
+def test_single_llm_followup_preserves_hypothesis_lineage_and_evidence(tmp_path):
+    previous_state = [
+        {
+            "id": "thermoelectric-claim",
+            "claim": "SnSe may have high thermoelectric ZT.",
+            "prediction": "Transport measurements will show enhanced ZT.",
+            "status": "unresolved",
+            "reason": "Awaiting a DFT band-gap comparison.",
+            "evidence_ids": ["investigation-objective"],
+        }
+    ]
+    evidence = {
+        "evidence_id": "dft-gap-001",
+        "evidence_level": "dft",
+        "outcome": "measured",
+        "method": {"backend": "Quantum Espresso"},
+        "values": [{"name": "band_gap", "value": 0.9, "unit": "eV"}],
+    }
+    mlip_evidence = {
+        "evidence_id": "mlip-ranking-001",
+        "evidence_level": "mlip_relaxation",
+        "outcome": "measured",
+        "method": {"backend": "MACE"},
+        "values": [{"name": "energy_above_hull", "value": 0.02, "unit": "eV/atom"}],
+    }
+    raw_reply = json.dumps(
+        {
+            "hypothesis": "SnSe may retain high thermoelectric ZT.",
+            "proposed_compositions": ["SnSe"],
+            "scientific_rationale": "The measured DFT gap is consistent with the target.",
+            "assumptions": [],
+            "scientific_hypotheses": [
+                {
+                    **previous_state[0],
+                    "status": "supported_by_dft",
+                    "reason": "The supplied DFT band-gap result supports this limited claim.",
+                    "evidence_ids": ["dft-gap-001"],
+                },
+                {
+                    "id": "mlip-energy-ranking",
+                    "claim": "The MLIP ranking may identify the lower-energy polymorph.",
+                    "prediction": "The converged MLIP relaxation will rank polymorph A lower.",
+                    "status": "supported_by_mlip",
+                    "reason": (
+                        "The supplied measured MLIP energy ranking supports this limited claim."
+                    ),
+                    "evidence_ids": ["mlip-ranking-001"],
+                },
+            ],
+        }
+    )
+    prompts = []
+
+    class FollowUpModel:
+        def invoke(self, messages):
+            prompts.extend(messages)
+            return SimpleNamespace(content=raw_reply)
+
+    hypothesis = build_hypothesis_from_discussion(
+        "Find a high-ZT material.",
+        HypothesisDiscussionConfig(
+            mode="single_llm",
+            single_llm=SingleLLMDiscussionConfig(provider="vllm", model="proposal"),
+        ),
+        output_root=str(tmp_path),
+        previous={
+            "hypothesis": {"scientific_hypotheses": previous_state},
+            "evidence_records": [evidence, mlip_evidence],
+            "explorations": [
+                {
+                    "composition": {"formula": "SnSe"},
+                    "initial": {
+                        "relaxations": [
+                            {
+                                "converged": True,
+                                "final_energy_eV": -1.25,
+                                "final_max_force_eV_per_A": 0.01,
+                            },
+                            {"converged": False, "final_energy_eV": -1.0},
+                        ]
+                    },
+                }
+            ],
+        },
+        model_factory=lambda **_kwargs: FollowUpModel(),
+    )
+
+    assert hypothesis.scientific_hypotheses[0]["id"] == "thermoelectric-claim"
+    assert hypothesis.scientific_hypotheses[0]["status"] == "supported_by_dft"
+    assert hypothesis.scientific_hypotheses[1]["status"] == "supported_by_mlip"
+    assert "thermoelectric-claim" in prompts[-1].content
+    assert "dft-gap-001" in prompts[-1].content
+    assert "prior-mlip-" in prompts[-1].content
+    assert "measured converged MLIP relaxation; not DFT" in prompts[-1].content
+    audit = tmp_path / hypothesis.discussion_run_id
+    assert json.loads((audit / "contributions.jsonl").read_text())["text"] == raw_reply
+    saved_prompt = json.loads((audit / "prompts" / "proposal-001.json").read_text())
+    assert "Previous investigation results and evidence" in saved_prompt[1]["content"]
+
+
+def test_invalid_single_llm_reply_is_audited_before_it_fails(tmp_path):
+    class InvalidModel:
+        def invoke(self, _messages):
+            return SimpleNamespace(content="not JSON")
+
+    with pytest.raises(json.JSONDecodeError):
+        build_hypothesis_from_discussion(
+            "Find a high-ZT material.",
+            HypothesisDiscussionConfig(
+                mode="single_llm",
+                single_llm=SingleLLMDiscussionConfig(provider="vllm", model="proposal"),
+            ),
+            output_root=str(tmp_path),
+            model_factory=lambda **_kwargs: InvalidModel(),
+        )
+
+    [run] = list(tmp_path.glob("hypothesis-*"))
+    [contribution] = (run / "contributions.jsonl").read_text().splitlines()
+    assert json.loads(contribution)["text"] == "not JSON"
+    assert (run / "prompts" / "proposal-001.json").is_file()
+    events = [json.loads(line)["event"] for line in (run / "events.jsonl").read_text().splitlines()]
+    assert "hypothesis_validation_failed" in events
 
 
 def test_agentic_investigation_can_use_equal_multi_llm_debate(tmp_path):

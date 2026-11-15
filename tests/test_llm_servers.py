@@ -94,6 +94,24 @@ def _managed(script, name="proposer", **extra):
     }
 
 
+def _debate_reply():
+    return json.dumps(
+        {
+            "response": "The claim remains unresolved pending measurements.",
+            "scientific_hypotheses": [
+                {
+                    "id": "silicon-stability",
+                    "claim": "Silicon may be stable in the diamond structure.",
+                    "prediction": "The measured phase energy will be competitive.",
+                    "status": "proposed",
+                    "reason": "No numerical evidence has been supplied.",
+                    "evidence_ids": ["debate-hypothesis"],
+                }
+            ],
+        }
+    )
+
+
 def test_managed_server_starts_waits_and_stops(stub, tmp_path):
     script, record = stub
     plan = _plan(
@@ -657,7 +675,7 @@ def test_debate_participant_key_is_used_but_not_recorded(tmp_path, monkeypatch):
 
     class Model:
         def invoke(self, _messages):
-            return type("Response", (), {"content": "claim: yes\nconfidence: 0.5"})()
+            return type("Response", (), {"content": _debate_reply()})()
 
     def factory(**kwargs):
         calls.append(kwargs)
@@ -689,7 +707,7 @@ def test_debate_participants_resolve_servers(tmp_path, monkeypatch):
             calls.append(kwargs)
 
         def invoke(self, _messages):
-            return type("Response", (), {"content": "claim: yes\nconfidence: 0.5"})()
+            return type("Response", (), {"content": _debate_reply()})()
 
     cfg = ScientificDebateConfig(
         hypothesis="Is Si stable?",
@@ -869,7 +887,7 @@ def test_saved_configs_with_plan_servers_reload(tmp_path, monkeypatch):
 
     class Model:
         def invoke(self, _messages):
-            return type("Response", (), {"content": "claim: yes\nconfidence: 0.5"})()
+            return type("Response", (), {"content": _debate_reply()})()
 
     debate = run_scientific_debate(
         ScientificDebateConfig(

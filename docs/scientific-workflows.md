@@ -38,6 +38,13 @@ receive either the first-turn or last-turn advantage. In equal mode, every
 participant produces an independent final verdict; no designated model is
 allowed to reinterpret the panel or manufacture consensus.
 
+Every round and final verdict also returns validated stable-ID scientific
+hypotheses with separate claim, prediction, status, reason, and evidence IDs.
+Peer critiques are not numerical evidence; MLIP- or DFT-supported statuses
+require explicit evidence of the matching scope. Exact prompts are persisted
+before calls and raw replies before validation. Invalid or incomplete states
+fail closed rather than producing a successful debate result.
+
 ```yaml
 hypothesis: "Pressure stabilizes a metastable silicon phase at room temperature."
 rounds: 3
@@ -933,6 +940,12 @@ scientific hypothesis, explicit property tasks, each phase-exploration result,
 and subsequent hypothesis revisions. A new interaction can consume a previous
 result without overwriting it. Run identifiers combine a UTC timestamp and a
 random suffix, preventing concurrent studies from sharing a directory.
+
+Single-LLM proposals and multi-LLM debate stages preserve exact prompts and
+raw replies before parsing. Follow-up prompts include prior stable hypothesis
+IDs and explicitly scoped evidence; a revision must retain every prior ID.
+LLM-only discussion does not turn model opinions into numerical or DFT
+evidence.
 
 LLM proposals have `hypothesis` evidence. They do not become DFT or
 experimental claims merely because a lower-level workflow was dispatched.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 from typing import Any, Literal
@@ -9,15 +10,19 @@ from typing import Any, Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, model_validator
 
+from matsim_agents.backends.llm.hypotheses import INSTRUCTIONS as HYPOTHESIS_INSTRUCTIONS
+from matsim_agents.backends.llm.hypotheses import validate_hypotheses
 from matsim_agents.backends.llm.provider import get_chat_model
 from matsim_agents.backends.llm.replies import invoke_model
 from matsim_agents.backends.llm.servers import api_key_from_env, llm_endpoints
-from matsim_agents.backends.llm.transcript import Contribution, Transcript
+from matsim_agents.backends.llm.transcript import Contribution, Transcript, prompt_messages
 from matsim_agents.execution.contracts import EvidenceLevel, ProvenanceRecord, WorkflowStatus
 from matsim_agents.execution.placement import ResourcePlan
 from matsim_agents.execution.run_directory import ScientificRunDirectory
 
 log = logging.getLogger(__name__)
+
+ResponseValidator = Callable[[Contribution, list[dict[str, Any]]], None]
 
 
 class DebateParticipant(BaseModel):
@@ -84,6 +89,11 @@ class ScientificDebateConfig(BaseModel):
         ),
     )
     final_response_instruction: str | None = None
+    round_response_instruction: str | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+    mlip_evidence_ids: list[str] = Field(default_factory=list)
+    dft_evidence_ids: list[str] = Field(default_factory=list)
+    initial_hypotheses: list[dict[str, Any]] = Field(default_factory=list)
     single_call: bool = False
     resources: ResourcePlan | None = Field(
         None,
@@ -117,6 +127,7 @@ class DebateTurn(BaseModel):
     provider: str
     model: str
     response: str = Field(description="The answer, without the model's reasoning.")
+    scientific_hypotheses: list[dict[str, Any]] = Field(default_factory=list)
     incomplete: bool = Field(
         False, description="The token limit cut the reply off, or it has no answer."
     )
@@ -128,6 +139,7 @@ class DebateVerdict(BaseModel):
     provider: str
     model: str
     response: str = Field(description="The answer, without the model's reasoning.")
+    scientific_hypotheses: list[dict[str, Any]] = Field(default_factory=list)
     incomplete: bool = Field(
         False, description="The token limit cut the reply off, or it has no answer."
     )
@@ -142,6 +154,7 @@ class ScientificDebateResult(BaseModel):
     turns: list[DebateTurn]
     verdicts: list[DebateVerdict]
     synthesis: str
+    scientific_hypotheses: list[dict[str, Any]] = Field(default_factory=list)
     synthesis_turn_id: str | None = None
     incomplete_contributions: list[str] = Field(default_factory=list)
     transcript_path: str
@@ -157,6 +170,16 @@ def _contribution_block(contribution_id: str, speaker: str, text: str, incomplet
     if incomplete and text.strip():
         body += f"\n{_CUT_OFF}"
     return f'<contribution id="{contribution_id}" speaker="{speaker}">\n{body}\n</contribution>'
+
+
+def _display_response(text: str) -> str:
+    """Use a JSON response field for prose while keeping the full reply in the transcript."""
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+    response = payload.get("response") if isinstance(payload, dict) else None
+    return response if isinstance(response, str) else text
 
 
 def _peer_context(turns: list[DebateTurn], limit: int) -> tuple[str, list[str], list[str]]:
@@ -193,6 +216,8 @@ def run_scientific_debate(
     cfg: ScientificDebateConfig,
     *,
     model_factory: Callable[..., Any] = get_chat_model,
+    round_response_validator: ResponseValidator | None = None,
+    final_response_validator: ResponseValidator | None = None,
 ) -> ScientificDebateResult:
     """Run the debate; participants that name a server use its endpoint.
 
@@ -201,7 +226,12 @@ def run_scientific_debate(
     """
 
     if not any(participant.server is not None for participant in cfg.participants):
-        return _run_scientific_debate(cfg, model_factory=model_factory)
+        return _run_scientific_debate(
+            cfg,
+            model_factory=model_factory,
+            round_response_validator=round_response_validator,
+            final_response_validator=final_response_validator,
+        )
     with llm_endpoints(cfg.resources, output_dir=cfg.output_root) as services:
         participants = []
         for participant in cfg.participants:
@@ -222,7 +252,12 @@ def run_scientific_debate(
                 )
             )
         resolved = cfg.model_copy(update={"participants": participants, "resources": None})
-        return _run_scientific_debate(resolved, model_factory=model_factory)
+        return _run_scientific_debate(
+            resolved,
+            model_factory=model_factory,
+            round_response_validator=round_response_validator,
+            final_response_validator=final_response_validator,
+        )
 
 
 _EQUAL_INSTRUCTION = (
@@ -242,6 +277,15 @@ _OWN_WORDS = (
     "Peer contributions are quoted between <contribution> tags. Write only your own "
     "statement: refer to peers by name, and do not copy or continue their text."
 )
+_HYPOTHESIS_OUTPUT = (
+    f"{HYPOTHESIS_INSTRUCTIONS}\n"
+    "Return a single JSON object with scientific_hypotheses. When no workflow-specific "
+    "response format is requested, also include a concise `response` string. For a custom "
+    "round or final format, include its required fields alongside scientific_hypotheses "
+    "without adding unrequested keys. Cite only supplied "
+    "evidence IDs. Peer opinions are context, never evidence. Do not claim "
+    "MLIP or DFT support/challenge without supplied numerical evidence."
+)
 
 
 def _turn_instruction(cfg: ScientificDebateConfig, participant: DebateParticipant) -> str:
@@ -257,14 +301,26 @@ def _turn_instruction(cfg: ScientificDebateConfig, participant: DebateParticipan
         )
     if cfg.single_call and cfg.final_response_instruction:
         instruction += f"\n\nRequired response format:\n{cfg.final_response_instruction}"
+    if cfg.round_response_instruction:
+        instruction += f"\n\nRequired round response format:\n{cfg.round_response_instruction}"
+    instruction += f"\n\n{_HYPOTHESIS_OUTPUT}"
     return instruction
 
 
 class _Debate:
     """One debate run: its run directory, transcript, and participant models."""
 
-    def __init__(self, cfg: ScientificDebateConfig, model_factory: Callable[..., Any]) -> None:
+    def __init__(
+        self,
+        cfg: ScientificDebateConfig,
+        model_factory: Callable[..., Any],
+        *,
+        round_response_validator: ResponseValidator | None,
+        final_response_validator: ResponseValidator | None,
+    ) -> None:
         self.cfg = cfg
+        self.round_response_validator = round_response_validator
+        self.final_response_validator = final_response_validator
         provenance = ProvenanceRecord(
             workflow="scientific_hypothesis_debate",
             evidence_level=EvidenceLevel.HYPOTHESIS,
@@ -290,6 +346,15 @@ class _Debate:
             preamble=f"Run `{self.run.run_id}`.\n\n**Hypothesis.** {cfg.hypothesis}",
         )
         self.models = {}
+        self.current_hypotheses = []
+        if cfg.initial_hypotheses:
+            self.current_hypotheses = validate_hypotheses(
+                cfg.initial_hypotheses,
+                {"debate-hypothesis", *cfg.evidence_ids},
+                [],
+                mlip_evidence=set(cfg.mlip_evidence_ids),
+                dft_evidence=set(cfg.dft_evidence_ids),
+            )
         for participant in cfg.participants:
             key = api_key_from_env(
                 participant.api_key_env, owner=f"participant {participant.name!r}"
@@ -316,7 +381,16 @@ class _Debate:
         """Ask one participant, record the contribution at once, and return it."""
 
         _, shown, omitted = context
-        reply = invoke_model(self.models[participant.name], messages)
+        prompt_path = self.run.path / "prompts" / f"{contribution_id}.json"
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        prompt_path.write_text(
+            json.dumps(prompt_messages(messages), indent=2) + "\n", encoding="utf-8"
+        )
+        try:
+            reply = invoke_model(self.models[participant.name], messages)
+        except Exception as error:
+            self.run.append_event("model_call_failed", {"id": contribution_id, "error": str(error)})
+            raise
         contribution = self.transcript.add(
             Contribution.from_reply(
                 reply,
@@ -332,6 +406,47 @@ class _Debate:
             prompt=messages,
         )
         self.run.append_event("contribution_completed", {"id": contribution_id})
+        if contribution.incomplete:
+            self.run.append_event(
+                "hypothesis_validation_failed",
+                {"id": contribution_id, "error": "reply is incomplete"},
+            )
+            raise ValueError(f"incomplete scientific hypothesis reply in {contribution_id}")
+        try:
+            payload = json.loads(contribution.text)
+            if not isinstance(payload, dict) or "scientific_hypotheses" not in payload:
+                raise ValueError("reply must be a JSON object with scientific_hypotheses")
+            self.current_hypotheses = validate_hypotheses(
+                payload["scientific_hypotheses"],
+                {"debate-hypothesis", *self.cfg.evidence_ids},
+                self.current_hypotheses,
+                mlip_evidence=set(self.cfg.mlip_evidence_ids),
+                dft_evidence=set(self.cfg.dft_evidence_ids),
+            )
+        except (json.JSONDecodeError, ValueError, TypeError) as error:
+            self.run.append_event(
+                "hypothesis_validation_failed",
+                {"id": contribution_id, "error": str(error)},
+            )
+            raise ValueError(
+                f"invalid scientific hypothesis state in {contribution_id}: {error}"
+            ) from error
+        validator = (
+            self.final_response_validator
+            if self.cfg.single_call or kind in {"verdict", "synthesis"}
+            else self.round_response_validator
+        )
+        if validator is not None:
+            try:
+                validator(contribution, [dict(row) for row in self.current_hypotheses])
+            except Exception as error:
+                self.run.append_event(
+                    "custom_response_validation_failed",
+                    {"id": contribution_id, "error": str(error)},
+                )
+                raise ValueError(
+                    f"custom response validation failed in {contribution_id}: {error}"
+                ) from error
         if contribution.incomplete:
             log.warning(
                 "Debate %s: %s's %s is incomplete (finish reason %s, %d answer characters)",
@@ -365,6 +480,11 @@ class _Debate:
                         HumanMessage(
                             content=(
                                 f"Hypothesis:\n{cfg.hypothesis}\n\n"
+                                "Previous scientific hypothesis state:\n"
+                                f"{json.dumps(self.current_hypotheses, sort_keys=True)}\n\n"
+                                f"Available evidence IDs (MLIP: {self.cfg.mlip_evidence_ids}; "
+                                f"DFT: {self.cfg.dft_evidence_ids}): "
+                                f"{['debate-hypothesis', *self.cfg.evidence_ids]}\n\n"
                                 "Panel contributions so far:\n"
                                 f"{context[0] or 'No peer has spoken yet.'}"
                             )
@@ -380,7 +500,12 @@ class _Debate:
                         participant=participant.name,
                         provider=participant.provider,
                         model=participant.model,
-                        response=contribution.text,
+                        response=(
+                            contribution.text
+                            if cfg.single_call and cfg.final_response_instruction
+                            else _display_response(contribution.text)
+                        ),
+                        scientific_hypotheses=[dict(row) for row in self.current_hypotheses],
                         incomplete=contribution.incomplete,
                     )
                 )
@@ -398,6 +523,7 @@ class _Debate:
                     provider=turn.provider,
                     model=turn.model,
                     response=turn.response,
+                    scientific_hypotheses=[dict(row) for row in turn.scientific_hypotheses],
                     incomplete=turn.incomplete,
                 )
             ]
@@ -406,7 +532,7 @@ class _Debate:
         else:
             name = cfg.synthesis_participant or cfg.participants[0].name
             judges = [next(p for p in cfg.participants if p.name == name)]
-        instruction = f"{_VERDICT_INSTRUCTION}\n\n{_OWN_WORDS}"
+        instruction = f"{_VERDICT_INSTRUCTION}\n\n{_OWN_WORDS}\n\n{_HYPOTHESIS_OUTPUT}"
         if cfg.final_response_instruction:
             instruction += f"\n\nRequired response format:\n{cfg.final_response_instruction}"
         context = _peer_context(turns, cfg.max_transcript_chars)
@@ -421,6 +547,11 @@ class _Debate:
                     HumanMessage(
                         content=(
                             f"Hypothesis:\n{cfg.hypothesis}\n\nDebate contributions:\n{context[0]}"
+                            f"\n\nPrevious scientific hypothesis state:\n"
+                            f"{json.dumps(self.current_hypotheses, sort_keys=True)}"
+                            f"\n\nAvailable evidence IDs (MLIP: {cfg.mlip_evidence_ids}; "
+                            f"DFT: {cfg.dft_evidence_ids}): "
+                            f"{['debate-hypothesis', *cfg.evidence_ids]}"
                         )
                     ),
                 ],
@@ -433,7 +564,12 @@ class _Debate:
                     participant=participant.name,
                     provider=participant.provider,
                     model=participant.model,
-                    response=contribution.text,
+                    response=(
+                        contribution.text
+                        if cfg.final_response_instruction
+                        else _display_response(contribution.text)
+                    ),
+                    scientific_hypotheses=[dict(row) for row in self.current_hypotheses],
                     incomplete=contribution.incomplete,
                 )
             )
@@ -461,6 +597,7 @@ class _Debate:
                 f"[{verdict.participant} independent verdict]\n{verdict.response}"
                 for verdict in verdicts
             ),
+            scientific_hypotheses=[dict(row) for row in self.current_hypotheses],
             synthesis_turn_id=(
                 verdicts[0].contribution_id if cfg.synthesis_method == "designated_model" else None
             ),
@@ -484,6 +621,8 @@ def _run_scientific_debate(
     cfg: ScientificDebateConfig,
     *,
     model_factory: Callable[..., Any],
+    round_response_validator: ResponseValidator | None,
+    final_response_validator: ResponseValidator | None,
 ) -> ScientificDebateResult:
     """Run round-robin critique rounds and record every contribution as it is made.
 
@@ -494,7 +633,12 @@ def _run_scientific_debate(
     other's answers only, never their reasoning.
     """
 
-    debate = _Debate(cfg, model_factory)
+    debate = _Debate(
+        cfg,
+        model_factory,
+        round_response_validator=round_response_validator,
+        final_response_validator=final_response_validator,
+    )
     turns = debate.argue()
     return debate.finish(turns, debate.judge(turns))
 
