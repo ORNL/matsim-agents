@@ -86,6 +86,26 @@ directory: `hypothesis-assessment.json` for a completed round, and
 the hypotheses it assessed, and the evidence it cited; the campaign summary
 and report reference the assessment of the stopping round.
 
+To audit hypothesis records after a campaign (read-only on the run data):
+
+```bash
+.venv/bin/python -m benchmarks.e3.hypothesis_audit runs/<campaign> \
+  --output runs/<campaign>/hypothesis-audit
+```
+
+The command writes `interaction-index.csv`, `hypothesis-evolution.csv`,
+`review-flags.csv` and a SHA-256 `manifest.json`. The revision types are
+mechanical field diffs. The flags mark rows that need human review:
+
+- hypotheses resolved on introduction;
+- status changes without new converged data;
+- resolved statuses that cite several compositions;
+- changes to claim or prediction text;
+- rounds with no converged structures;
+- records that were not accepted.
+
+The tool does not judge whether a change is a scientific revision.
+
 Generator revision 3 retains the 0.08 Angstrom phosphorene reconstruction bound
 but samples collective in-plane displacements with zero net translation.
 Formate proton variants rotate all C-H vectors independently by at most
