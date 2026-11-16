@@ -413,7 +413,12 @@ def test_prepare_records_missing_previous_assessment_before_next_round(tmp_path,
     monkeypatch.setattr(production, "_validate_saved_hypothesis_proposal", lambda *args: None)
     monkeypatch.setattr(production, "_preflight_receipt", lambda *args: {"ok": True})
 
-    production.record_missing_assessments(tmp_path / "runs", "phosphorene", 2)
+    with pytest.raises(FileNotFoundError):
+        production.record_missing_assessments(
+            tmp_path / "missing.json", tmp_path / "runs", "phosphorene", 2
+        )
+    assert not chat.prompts
+    production.record_missing_assessments(manifest_path, tmp_path / "runs", "phosphorene", 2)
     record = json.loads((stream / "round-01" / "hypothesis-assessment.json").read_text())
     assert record["status"] == "accepted"
     assert len(chat.prompts) == 1

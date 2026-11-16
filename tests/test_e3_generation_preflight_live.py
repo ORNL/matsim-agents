@@ -51,6 +51,7 @@ def test_actual_full_round_generation_for_both_policy_paths(tmp_path, material):
     )
     llm = production._read_tasks(llm_tasks)
     assert len(llm) == 64
+    assert all(row["optimizer"] == production.OPTIMIZER_SETTINGS for row in llm)
     assert len({row["structure_sha256"] for row in llm}) == 64
     assert {row["structure_sha256"] for row in llm} == {
         row["structure_sha256"] for row in deterministic

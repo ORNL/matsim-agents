@@ -1508,6 +1508,7 @@ def _materialize_selection(
                 "structure_file_sha256": file_digest,
                 "action_id": action_id,
                 "action": action,
+                "optimizer": OPTIMIZER_SETTINGS,
                 "status": "pending",
             }
             candidate_records.append(row)
@@ -1619,6 +1620,7 @@ def _materialize_selection(
                     "structure_file_sha256": file_digest,
                     "action_id": control_action["action_id"],
                     "action": control_action,
+                    "optimizer": OPTIMIZER_SETTINGS,
                     "status": "pending",
                 }
             )
@@ -2150,8 +2152,16 @@ def _record_missing_assessments(
         _round_hypothesis_assessment(stream_dir, material, BOUNDED_SEED, index, chat)
 
 
-def record_missing_assessments(output_root: Path, material: str, round_index: int) -> None:
+def record_missing_assessments(
+    manifest_path: Path,
+    output_root: Path,
+    material: str,
+    round_index: int,
+) -> None:
     """Record prior-round assessments before the next round's generation deadline starts."""
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validate_campaign_manifest(manifest)
+    _find_round(manifest, material, "llm_guided_adaptation", BOUNDED_SEED, round_index)
     stream_dir = (
         output_root.resolve() / material / "llm_guided_adaptation" / f"seed-{BOUNDED_SEED}"
     )
@@ -2159,6 +2169,25 @@ def record_missing_assessments(output_root: Path, material: str, round_index: in
         return
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
         _record_missing_assessments(stream_dir, material, round_index, _chat_model())
+
+
+def assess_generation_stop(output_root: Path, material: str, round_index: int) -> None:
+    """Assess a generation-exhausted round after its generation deadline has ended."""
+    stream_dir = (
+        output_root.resolve() / material / "llm_guided_adaptation" / f"seed-{BOUNDED_SEED}"
+    )
+    outcome_path = stream_dir / f"round-{round_index:02d}" / "acquisition" / "outcome.json"
+    outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
+    with exclusive_lock(stream_dir / ".run.lock", timeout=0):
+        _round_hypothesis_assessment(
+            stream_dir,
+            material,
+            BOUNDED_SEED,
+            round_index,
+            _chat_model(),
+            outcome="stopped_generation_exhausted",
+            additional_history=[outcome],
+        )
 
 
 def prepare_round(
@@ -2192,12 +2221,7 @@ def prepare_round(
                     manifest, spec, output_root, history, chat,
                 )
             except AcquisitionExhausted as error:
-                outcome = _record_acquisition_stop(round_dir, error)
-                _round_hypothesis_assessment(
-                    stream_dir, material, seed, round_index, chat,
-                    outcome="stopped_generation_exhausted", additional_history=[outcome],
-                )
-                return outcome
+                return _record_acquisition_stop(round_dir, error)
             tasks = _read_tasks(tasks_path)
             if len(tasks) != int(spec["main_target"]):
                 raise ScientificCapacityError(f"preflight yielded {len(tasks)}/{spec['main_target']} tasks")
@@ -2575,12 +2599,7 @@ def _run_replicate(
                 manifest, spec, output_root, history, chat
             )
         except AcquisitionExhausted as error:
-            outcome = _record_acquisition_stop(round_dir, error)
-            _round_hypothesis_assessment(
-                stream_dir, material, seed, round_index, chat,
-                outcome="stopped_generation_exhausted", additional_history=[outcome],
-            )
-            return outcome
+            return _record_acquisition_stop(round_dir, error)
         tasks = _read_tasks(tasks_path)
         if any(task.get("optimizer") != OPTIMIZER_SETTINGS for task in tasks):
             raise ValueError("Task optimizer policy differs from the current protocol")
@@ -2763,13 +2782,22 @@ def _record_stopped_round(
     )
     _atomic_json(stream_dir / "campaign-summary.json", summary)
     _write_campaign_report(stream_dir, summary)
+    round_dir = stream_dir / f"round-{round_index:02d}"
+    tasks_path = round_dir / "tasks.jsonl"
+    tasks = _read_tasks(tasks_path) if tasks_path.is_file() else []
+    finished = [
+        task
+        for task in tasks
+        if _task_result(round_dir / "tasks" / task["candidate_id"], task) is not None
+    ]
+    partial = _round_action_outcomes(finished, round_dir / "tasks")
     with exclusive_lock(stream_dir / ".run.lock", timeout=0):
         _round_hypothesis_assessment(
             stream_dir, material, seed, round_index, _chat_model(), outcome=outcome,
-            additional_history=[{
+            additional_history=[*partial, {
                 "evidence_id": f"round-{round_index:02d}-{outcome}",
                 "round": round_index, "category": outcome,
-                "new_optimization_evidence": False,
+                "new_optimization_evidence": bool(partial),
             }],
         )
 
@@ -2987,6 +3015,7 @@ def run_campaign(
             outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
             if outcome.get("status") != "stopped_generation_exhausted":
                 raise ValueError(f"unrecognized acquisition outcome: {outcome_path}")
+            assess_generation_stop(output_root, material, round_index)
             _read_hypothesis_assessment(
                 _assessment_path(round_dir, "stopped_generation_exhausted"),
                 material=material, seed=seed, round_index=round_index,
@@ -3154,7 +3183,12 @@ def main(argv: list[str] | None = None) -> int:
             f"seed-{BOUNDED_SEED}" / f"round-{args.round_index:02d}"
         )
         if args.command == "prepare":
-            record_missing_assessments(args.output_root, args.material, args.round_index)
+            record_missing_assessments(
+                args.manifest,
+                args.output_root,
+                args.material,
+                args.round_index,
+            )
             command = [
                 sys.executable, "-m", "benchmarks.e3.production", "prepare-round",
                 "--manifest", str(args.manifest), "--output-root", str(args.output_root),
@@ -3179,6 +3213,7 @@ def main(argv: list[str] | None = None) -> int:
             ):
                 outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
                 if outcome.get("status") == "stopped_generation_exhausted":
+                    assess_generation_stop(args.output_root, args.material, args.round_index)
                     print(json.dumps(outcome, sort_keys=True))
                     return 3
             result = _preflight_receipt(round_dir, args.manifest)

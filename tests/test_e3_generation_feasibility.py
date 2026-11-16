@@ -525,6 +525,8 @@ def test_generation_exhaustion_records_llm_ingestible_outcome_without_dispatch(
     assert outcome["status"] == "stopped_generation_exhausted"
     assert outcome["round_complete"] is False
     assert outcome["new_optimization_evidence"] is False
+    assert all(row[1] == "completed" for row in assessments)
+    production.assess_generation_stop(tmp_path, "phosphorene", 3)
     assert assessments[-1] == (3, "stopped_generation_exhausted", [outcome])
     assert outcome["optimizations_attempted"] == 0
     assert outcome["requested"] == 64 and outcome["accepted_unique"] == 2
@@ -576,6 +578,9 @@ def test_prepare_cli_exhaustion_blocks_submission_without_traceback(tmp_path, mo
         production._atomic_json(round_dir / "acquisition/outcome.json", outcome)
 
     monkeypatch.setattr(production, "_run_supervised_round", supervise)
+    monkeypatch.setattr(production, "record_missing_assessments", lambda *args: None)
+    stops = []
+    monkeypatch.setattr(production, "assess_generation_stop", lambda *args: stops.append(args))
     monkeypatch.setattr(
         production,
         "_preflight_receipt",
@@ -596,6 +601,7 @@ def test_prepare_cli_exhaustion_blocks_submission_without_traceback(tmp_path, mo
         == 3
     )
     assert json.loads(capsys.readouterr().out) == outcome
+    assert stops == [(tmp_path, "phosphorene", 1)]
 
 
 def test_internal_prepare_reports_scientific_stop_to_supervisor(tmp_path, monkeypatch, capsys):

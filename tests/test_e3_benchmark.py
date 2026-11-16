@@ -339,8 +339,17 @@ def test_campaign_generation_exhaustion_records_hypothesis_assessment(campaign, 
                     ],
                 },
             )
-            _write_test_assessment(round_dir, "stopped_generation_exhausted")
 
+    stops = []
+
+    def assess_stop(root, material, index):
+        stops.append(index)
+        _write_test_assessment(
+            root / f"{material}/llm_guided_adaptation/seed-20261113/round-{index:02d}",
+            "stopped_generation_exhausted",
+        )
+
+    monkeypatch.setattr(production, "assess_generation_stop", assess_stop)
     monkeypatch.setattr(production, "_run_supervised_round", run_round)
     summary = production.run_campaign(
         manifest_path,
@@ -349,6 +358,7 @@ def test_campaign_generation_exhaustion_records_hypothesis_assessment(campaign, 
         "worker-python",
     )
     assert calls == [1, 2, 3]
+    assert stops == [3]
     assert summary["status"] == "stopped_generation_exhausted"
     assert summary["rounds_completed"] == 2
     assert summary["stopped_round"] == 3
@@ -383,6 +393,44 @@ def test_campaign_infrastructure_failure_still_raises(campaign, monkeypatch):
         == "round_failed"
     )
     assert assessments == [(1, "round_failed")]
+
+
+def test_failed_round_assessment_includes_terminal_results(campaign, monkeypatch):
+    manifest_path, output_root = campaign
+    round_dir = output_root / "phosphorene/llm_guided_adaptation/seed-20261113/round-01"
+    task = {
+        "candidate_id": "done",
+        "structure_sha256": "sha",
+        "candidate_kind": "unique_configuration",
+        "structure_path": "initial.extxyz",
+        "optimizer": production.OPTIMIZER_SETTINGS,
+        "action_id": "action",
+        "action": {"size_tier": 4, "family": "test", "generator": "test"},
+        "formula": "P",
+        "formula_units": 1,
+        "num_atoms": 1,
+    }
+    pending = {**task, "candidate_id": "pending", "structure_sha256": "other"}
+    production._write_jsonl(round_dir / "tasks.jsonl", [task, pending])
+    production._timeout_result(task, round_dir / "tasks", time.monotonic(), time.time())
+    histories = []
+    monkeypatch.setattr(production, "_chat_model", lambda: "chat")
+    monkeypatch.setattr(
+        production,
+        "_round_hypothesis_assessment",
+        lambda *args, **kwargs: histories.append(kwargs["additional_history"]),
+    )
+
+    def fail(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, ["worker-failure"])
+
+    monkeypatch.setattr(production, "_run_supervised_round", fail)
+    with pytest.raises(subprocess.CalledProcessError):
+        production.run_campaign(manifest_path, output_root, "phosphorene", "worker-python")
+    (history,) = histories
+    assert history[0]["action_id"] == "action" and history[0]["attempted"] == 1
+    assert history[-1]["category"] == "round_failed"
+    assert history[-1]["new_optimization_evidence"] is True
 
 
 def test_budget_ledger_uses_cfs_compatible_lock(tmp_path, monkeypatch):
